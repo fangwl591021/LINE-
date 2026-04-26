@@ -10,21 +10,7 @@ window.LIMITS = {
   user:  { activities: 1, cards: 30 }
 };
 
-// Tailwind 設定
-tailwind.config = {
-  darkMode: "class",
-  theme: {
-    extend: {
-      colors: {
-        primary: "#06C755",
-        "primary-light": "#e6f9ed",
-        background: "#f8fafc",
-        "input-bg": "#f0f2f8",
-        "text-main": "#0f172a",
-      }
-    },
-  },
-};
+// 注意:tailwind.config 已移到 index.html 內聯腳本中,確保 Tailwind CDN 解析時序正確
 
 // 全域狀態變數
 window.urlRef = '';
