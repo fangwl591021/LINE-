@@ -1,6 +1,6 @@
 /* ==================== 全域設定 ==================== */
 
-const LIFF_ID = "2009886448-orTpVfgu";
+const LIFF_ID = "2009886448-2UHnJgyT";
 const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/";
 
 // 用量限制(依角色權限)
