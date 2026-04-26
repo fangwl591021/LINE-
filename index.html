@@ -102,9 +102,15 @@
 
     <!-- ==================== 系統參數頁面 ==================== -->
     <div id="page-admin-settings" class="hidden animate-in fade-in pb-10 mx-1 pt-2">
-      <div class="flex items-center gap-3 mb-6 px-1">
+      <div class="flex items-center gap-3 mb-4 px-1">
         <h2 class="text-2xl font-black text-slate-800 tracking-tight">設定與參數</h2>
       </div>
+
+      <!-- 邀約連結按鈕(放在最上方) -->
+      <button onclick="window.showInviteLink()" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-4 rounded-2xl font-bold mb-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
+        <span class="material-symbols-outlined text-[22px]">share</span>
+        產生我的專屬邀約連結
+      </button>
 
       <!-- Box 1: 個人資料 -->
       <details class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
@@ -787,12 +793,45 @@
     </div>
 
     <!-- ==================== CRM 管理頁面 ==================== -->
-    <div id="page-admin-crm" class="hidden animate-in fade-in pb-10">
-      <div class="bg-white p-8 rounded-[2rem] text-center shadow-sm border border-slate-100 mx-2 mt-4">
-        <span class="material-symbols-outlined text-[48px] text-slate-300 mb-3">groups</span>
-        <h3 class="text-lg font-black text-slate-800">CRM 系統建置中</h3>
-        <p class="text-sm text-slate-500 mt-2">即將開放客戶關係管理功能</p>
+    <div id="page-admin-crm" class="hidden animate-in fade-in pb-10 mx-1 pt-2">
+      <div class="flex justify-between items-center mb-4 px-1">
+        <div>
+          <h2 class="text-2xl font-black text-slate-800 tracking-tight">CRM 客戶管理</h2>
+          <p class="text-[12px] text-slate-400 font-medium mt-0.5">共 <span id="crm-count" class="font-bold text-slate-600">0</span> 位聯絡人</p>
+        </div>
+        <button onclick="window.loadCrm()" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
+          <span class="material-symbols-outlined text-[18px]">refresh</span>
+        </button>
       </div>
+
+      <!-- 搜尋框 -->
+      <div class="mb-3">
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+          <input id="crm-search-input" type="text" placeholder="搜尋姓名、手機、Email、公司、標籤..." oninput="window.crmSearch()" class="custom-input !pl-11 !py-3 shadow-sm border border-slate-100">
+        </div>
+      </div>
+
+      <!-- Store 篩選器(僅 admin 可見) -->
+      <div id="crm-store-filter-wrapper" class="hidden mb-3">
+        <select id="crm-store-filter" onchange="window.crmFilterByStore()" class="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-[14px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer" style="-webkit-appearance:none;appearance:none;">
+          <option value="">所有商家</option>
+        </select>
+      </div>
+
+      <!-- 列表 -->
+      <div id="crm-list" class="space-y-0"></div>
+    </div>
+
+    <!-- ==================== CRM 個人詳細頁 ==================== -->
+    <div id="page-crm-person" class="hidden animate-in slide-in-from-right-8 mx-1 pb-10 pt-2">
+      <div class="flex items-center gap-3 mb-4 px-1">
+        <button onclick="window.goPage('admin-crm')" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
+          <span class="material-symbols-outlined text-[20px]">arrow_back</span>
+        </button>
+        <h2 class="text-xl font-black text-slate-800 tracking-tight">客戶資料</h2>
+      </div>
+      <div id="crm-person-content"></div>
     </div>
 
   </main>
@@ -832,6 +871,42 @@
     </div>
     <p class="text-[13px] text-slate-500 font-medium text-center leading-relaxed">請邀請對方使用 LINE 掃描上方條碼<br>立即互換名片並綁定商機推薦</p>
     <button onclick="document.getElementById('qr-modal').classList.add('hidden'); window.shareMyCard(this);" class="mt-5 w-full py-3.5 bg-[#06C755] text-white rounded-xl font-bold text-[15px] shadow-sm active:scale-95 transition-transform flex justify-center items-center gap-2"><span class="material-symbols-outlined text-[20px]">send</span> 轉發名片連結</button>
+  </div>
+</div>
+
+<!-- 邀約連結 Modal -->
+<div id="invite-link-modal" class="hidden fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-center items-center z-[2000] p-4">
+  <div class="bg-white rounded-3xl p-6 flex flex-col items-center w-full max-w-[340px] shadow-2xl animate-in zoom-in-95">
+    <div class="w-full flex justify-between items-center mb-4">
+      <h3 class="font-black text-slate-800 text-lg flex items-center gap-2">
+        <span class="material-symbols-outlined text-blue-500 icon-filled">share</span> 我的邀約連結
+      </h3>
+      <button onclick="window.closeInviteModal()" class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 active:scale-95"><span class="material-symbols-outlined">close</span></button>
+    </div>
+
+    <p class="text-[12px] text-slate-500 font-medium text-center mb-3 leading-relaxed">分享此連結邀請朋友加入<br>對方註冊後將自動歸到您的下線</p>
+
+    <!-- QR Code -->
+    <div class="bg-slate-50 p-2 rounded-2xl border border-slate-100 mb-3 w-full aspect-square max-w-[220px] flex items-center justify-center">
+      <img id="invite-qr-img" src="" class="w-full h-full object-contain" alt="QR Code">
+    </div>
+
+    <p id="invite-tracking-info" class="text-[10px] text-slate-400 font-mono mb-3"></p>
+
+    <!-- 連結 -->
+    <div class="w-full mb-3">
+      <input id="invite-link-input" type="text" readonly class="w-full bg-slate-50 border-none rounded-lg p-2.5 text-[11px] font-mono text-slate-600 outline-none">
+    </div>
+
+    <!-- 按鈕 -->
+    <div class="flex gap-2 w-full">
+      <button onclick="window.copyInviteLink()" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1">
+        <span class="material-symbols-outlined text-[16px]">content_copy</span> 複製
+      </button>
+      <button onclick="window.shareInviteLink()" class="flex-[2] bg-[#06C755] text-white py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1 shadow-sm">
+        <span class="material-symbols-outlined text-[16px]">send</span> 分享至 LINE
+      </button>
+    </div>
   </div>
 </div>
 
@@ -895,6 +970,7 @@
 <script src="js/modules/admin.js"></script>
 <script src="js/modules/home.js"></script>
 <script src="js/modules/settings.js"></script>
+<script src="js/modules/crm.js"></script>
 
 <!-- 3. 最後載入 auth.js,因為它包含 init() + DOMContentLoaded 啟動器 -->
 <script src="js/auth.js"></script>
