@@ -1,5 +1,139 @@
 /* ==================== 活動建立模組 ==================== */
 
+// 當前編輯中的活動 ID(null 代表新建,有值代表編輯)
+window.currentEditingActId = null;
+
+// 開啟編輯活動頁(從核銷頁卡片點擊編輯按鈕觸發)
+window.openEditActivity = async function(actId) {
+  // 從快取中找到該活動
+  const acts = (window._adminActsCache && window._adminActsCache.data) || [];
+  const act = acts.find(a => String(a['活動ID'] || a.rowId) === String(actId));
+
+  if (!act) {
+    window.showToast('找不到該活動資料,請重新整理', true);
+    return;
+  }
+
+  // 系列梯次活動不允許編輯結構(只能改頂層資訊),提示用戶
+  const isBatch = act['是否系列'] === true || String(act['是否系列']).toUpperCase() === 'TRUE';
+  if (isBatch) {
+    if (!confirm('此活動為系列梯次活動,您只能編輯總標題、說明與封面圖,無法增刪梯次。\n如需修改梯次,請下架後重建。\n\n確定要繼續編輯嗎?')) return;
+  }
+
+  // 設定編輯模式
+  window.currentEditingActId = actId;
+  window._currentEditingAct = act;
+
+  // 切換到「完整發佈」Tab(系列也用此 Tab 編輯頂層欄位)
+  window.goPage('active');
+  window.switchActiveTab('full');
+
+  // 把現有資料填入完整發佈表單
+  setTimeout(() => {
+    document.getElementById('f-name').value = act['活動名稱'] || '';
+    document.getElementById('f-type').value = act['活動類型'] || '例會';
+    document.getElementById('f-identity').value = act['預設身份'] || '會員';
+
+    // 時間格式:後端可能存 'YYYY-MM-DD HH:mm' 或 ISO,要還原成 datetime-local 接受的格式
+    const fmtForInput = (val) => {
+      if (!val) return '';
+      const s = String(val).replace(' ', 'T').substring(0, 16);
+      return s;
+    };
+    document.getElementById('f-start').value = fmtForInput(act['開始時間']);
+    document.getElementById('f-end').value = fmtForInput(act['結束時間']);
+
+    // 收費
+    const price = parseInt(act['金額']) || 0;
+    if (price > 0) {
+      document.querySelector('input[name="f-fee-type"][value="收費"]').checked = true;
+      document.getElementById('f-price').value = price;
+      window.toggleFeeInput('f');
+    } else {
+      document.querySelector('input[name="f-fee-type"][value="免費"]').checked = true;
+      window.toggleFeeInput('f');
+    }
+
+    // 活動說明
+    document.getElementById('f-desc').value = act['活動說明'] || '';
+
+    // 封面圖
+    const imgUrl = act['宣傳圖'] || '';
+    if (imgUrl) {
+      document.getElementById('in-image-url-full').value = imgUrl;
+      const previewImg = document.getElementById('image-preview-full');
+      const placeholder = document.getElementById('preview-placeholder-full');
+      if (previewImg) {
+        previewImg.src = imgUrl;
+        previewImg.classList.remove('hidden');
+      }
+      if (placeholder) placeholder.classList.add('hidden');
+    }
+
+    // 改變按鈕文字為「儲存變更」
+    const submitBtn = document.getElementById('btn-submit-full');
+    if (submitBtn) {
+      submitBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> 儲存變更';
+      submitBtn.classList.remove('bg-[#06C755]');
+      submitBtn.classList.add('bg-amber-500');
+    }
+
+    // 在表單上方顯示「編輯模式」提示條
+    let banner = document.getElementById('edit-mode-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'edit-mode-banner';
+      banner.className = 'mx-1 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-2';
+      const tabsContainer = document.querySelector('#page-active > div.flex.p-1\\.5');
+      if (tabsContainer) tabsContainer.parentNode.insertBefore(banner, tabsContainer.nextSibling);
+    }
+    banner.innerHTML =
+      '<div class="flex items-center gap-2 text-amber-700">' +
+        '<span class="material-symbols-outlined text-[18px]">edit</span>' +
+        '<span class="text-[13px] font-bold">編輯模式:' + window.escapeJS(act['活動名稱'] || '') + '</span>' +
+      '</div>' +
+      '<button onclick="window.cancelEditActivity()" class="text-[12px] font-bold text-slate-500 hover:text-red-500 px-2 py-1 active:scale-95">取消編輯</button>';
+    banner.classList.remove('hidden');
+
+    window.showToast('已載入活動資料,可開始編輯');
+  }, 100);
+};
+
+// 取消編輯,回到新建模式
+window.cancelEditActivity = function() {
+  window.currentEditingActId = null;
+  window._currentEditingAct = null;
+
+  // 清空表單
+  ['f-name','f-start','f-end','f-desc','f-price'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('f-type').value = '例會';
+  document.getElementById('f-identity').value = '會員';
+  document.querySelector('input[name="f-fee-type"][value="免費"]').checked = true;
+  window.toggleFeeInput('f');
+
+  document.getElementById('in-image-url-full').value = '';
+  document.getElementById('image-preview-full').classList.add('hidden');
+  document.getElementById('preview-placeholder-full').classList.remove('hidden');
+
+  // 還原按鈕
+  const submitBtn = document.getElementById('btn-submit-full');
+  if (submitBtn) {
+    submitBtn.innerHTML = '確認建立並發佈';
+    submitBtn.classList.add('bg-[#06C755]');
+    submitBtn.classList.remove('bg-amber-500');
+  }
+
+  // 隱藏提示條
+  const banner = document.getElementById('edit-mode-banner');
+  if (banner) banner.remove();
+
+  window.showToast('已取消編輯');
+  window.goPage('admin-activities');
+};
+
 // 切換收費 / 免費輸入框
 window.toggleFeeInput = function(prefix) {
   const feeRadio = document.querySelector('input[name="' + prefix + '-fee-type"]:checked');
@@ -183,13 +317,57 @@ window.submitActivityForm = async function(mode) {
   }
 
   try {
-    const res = await window.fetchAPI('bulkAddRegistrants', p, true);
-    if (!res || res.error) throw new Error(res.error || '未知的錯誤');
+    let res;
 
-    alert('🎉 活動建立成功！即將跳轉...');
-    setTimeout(() => { window.goPage('admin-activities'); }, 1500);
+    // 🎯 編輯模式:呼叫 updateActivity API
+    if (window.currentEditingActId) {
+      res = await window.fetchAPI('updateActivity', {
+        activityId: window.currentEditingActId,
+        data: {
+          '活動名稱': p.activityName,
+          '活動類型': p.activityType,
+          '預設身份': p.defaultIdentity,
+          '開始時間': p.startTime,
+          '結束時間': p.endTime,
+          '金額': parseInt(p.price) || 0,
+          '收費方式': p.feeType,
+          '活動說明': p.description,
+          '宣傳圖': p.imageUrl
+        }
+      }, true);
+
+      if (!res || res.error) throw new Error(res.error || '更新失敗');
+
+      alert('✅ 活動已更新!即將返回核銷頁...');
+
+      // 清快取並重設編輯狀態
+      window.currentEditingActId = null;
+      window._currentEditingAct = null;
+      window._adminActsCache = { data: null, time: 0 };
+
+      // 還原表單與按鈕
+      const banner = document.getElementById('edit-mode-banner');
+      if (banner) banner.remove();
+      if (btn) {
+        btn.innerHTML = '確認建立並發佈';
+        btn.classList.add('bg-[#06C755]');
+        btn.classList.remove('bg-amber-500');
+      }
+
+      setTimeout(() => { window.goPage('admin-activities'); }, 1000);
+    }
+    // 🆕 新建模式:走原本的批次建立路徑
+    else {
+      res = await window.fetchAPI('bulkAddRegistrants', p, true);
+      if (!res || res.error) throw new Error(res.error || '未知的錯誤');
+
+      alert('🎉 活動建立成功!即將跳轉...');
+      // 清快取讓核銷頁能看到新活動
+      window._adminActsCache = { data: null, time: 0 };
+      setTimeout(() => { window.goPage('admin-activities'); }, 1500);
+    }
   } catch(e) {
-    alert('⚠️ 建立失敗:' + e.message);
+    alert('⚠️ 操作失敗:' + e.message);
   } finally {
     if (btn) { btn.innerHTML = oriText; btn.disabled = false; btn.classList.remove('opacity-70'); }
   }
