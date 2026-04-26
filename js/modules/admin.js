@@ -64,12 +64,15 @@ window._renderAdminActivities = function(res) {
           '<div class="text-[12px] text-slate-500 mb-3 flex items-center gap-1">' +
             '<span class="material-symbols-outlined text-[14px]">schedule</span>' + time +
           '</div>' +
-          '<div class="grid grid-cols-2 gap-2">' +
-            '<button onclick="window.openCheckinPage(\'' + actId + '\', \'' + title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[13px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
-              '<span class="material-symbols-outlined text-[16px]">fact_check</span> 核銷名單' +
+          '<div class="grid grid-cols-3 gap-2">' +
+            '<button onclick="window.openCheckinPage(\'' + actId + '\', \'' + title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
+              '<span class="material-symbols-outlined text-[15px]">fact_check</span> 核銷' +
             '</button>' +
-            '<button onclick="window.unpublishActivity(\'' + actId + '\', this)" class="py-2.5 bg-red-50 text-red-500 rounded-xl text-[13px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
-              '<span class="material-symbols-outlined text-[16px]">delete</span> 下架活動' +
+            '<button onclick="window.openEditActivity(\'' + actId + '\')" class="py-2.5 bg-amber-50 text-amber-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
+              '<span class="material-symbols-outlined text-[15px]">edit</span> 編輯' +
+            '</button>' +
+            '<button onclick="window.unpublishActivity(\'' + actId + '\', this)" class="py-2.5 bg-red-50 text-red-500 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
+              '<span class="material-symbols-outlined text-[15px]">delete</span> 下架' +
             '</button>' +
           '</div>' +
         '</div>' +
