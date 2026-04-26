@@ -1,51 +1,82 @@
 /* ==================== 管理員模組(核銷、統計、用戶管理) ==================== */
 
+// 快取機制:活動列表 30 秒內不重新打 API
+window._adminActsCache = { data: null, time: 0 };
+const ADMIN_CACHE_TTL = 30 * 1000; // 30 秒
+
 // 載入管理員活動列表(核銷頁面)
-window.loadAdminActivities = async function() {
+window.loadAdminActivities = async function(forceRefresh = false) {
   const container = document.getElementById('admin-activities-list');
   if (!container) return;
-  container.innerHTML = '<div class="text-center py-10"><span class="material-symbols-outlined animate-spin text-3xl text-slate-300">refresh</span><p class="text-sm text-slate-400 font-bold mt-2">載入活動中...</p></div>';
+
+  const now = Date.now();
+  const cache = window._adminActsCache;
+
+  // 1. 若有有效快取,先立即渲染快取資料(秒開)
+  if (!forceRefresh && cache.data && (now - cache.time) < ADMIN_CACHE_TTL) {
+    window._renderAdminActivities(cache.data);
+    return;
+  }
+
+  // 2. 沒快取才顯示 loading
+  if (!cache.data) {
+    container.innerHTML = '<div class="text-center py-10"><span class="material-symbols-outlined animate-spin text-3xl text-slate-300">refresh</span><p class="text-sm text-slate-400 font-bold mt-2">載入活動中...</p></div>';
+  }
 
   try {
     const res = await window.fetchAPI('getPublicActivities', {}, true);
-    if (res && Array.isArray(res) && res.length > 0) {
-      const acts = res.reverse();
-      container.innerHTML = acts.map(act => {
-        const title = window.escapeJS(act['活動名稱'] || '未命名活動');
-        const time = window.formatDisplayTime(act['開始時間']);
-        const status = act['狀態'] || '上架';
-        const fee = parseInt(act['金額']) > 0 ? 'NT$ ' + act['金額'] : '免費';
-        const img = act['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
-        const actId = window.escapeJS(act['活動ID'] || act.rowId || '');
-        const statusColor = status === '上架' ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500';
-
-        return '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">' +
-          '<div class="w-full aspect-[16/9] bg-slate-100 relative">' +
-            '<img src="' + img + '" class="w-full h-full object-cover">' +
-            '<div class="absolute top-3 left-3 ' + statusColor + ' text-[11px] px-2 py-1 rounded-full font-bold">' + status + '</div>' +
-            '<div class="absolute top-3 right-3 bg-black/60 text-white text-[11px] px-2 py-1 rounded-full font-bold">' + fee + '</div>' +
-          '</div>' +
-          '<div class="p-4">' +
-            '<h4 class="text-[15px] font-black text-slate-800 leading-snug mb-1">' + title + '</h4>' +
-            '<div class="text-[12px] text-slate-500 mb-3 flex items-center gap-1">' +
-              '<span class="material-symbols-outlined text-[14px]">schedule</span>' + time +
-            '</div>' +
-            '<div class="grid grid-cols-2 gap-2">' +
-              '<button onclick="window.openCheckinPage(\'' + actId + '\', \'' + title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[13px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
-                '<span class="material-symbols-outlined text-[16px]">fact_check</span> 核銷名單' +
-              '</button>' +
-              '<button onclick="window.unpublishActivity(\'' + actId + '\', this)" class="py-2.5 bg-red-50 text-red-500 rounded-xl text-[13px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
-                '<span class="material-symbols-outlined text-[16px]">delete</span> 下架活動' +
-              '</button>' +
-            '</div>' +
-          '</div>' +
-        '</div>';
-      }).join('');
+    if (res && Array.isArray(res)) {
+      // 寫入快取
+      window._adminActsCache = { data: res, time: now };
+      window._renderAdminActivities(res);
     } else {
-      container.innerHTML = '<div class="bg-white p-8 rounded-3xl text-center shadow-sm border border-slate-100"><span class="material-symbols-outlined text-4xl text-slate-300 mb-2">event_busy</span><p class="text-sm text-slate-400 font-bold mt-2">目前沒有活動</p></div>';
+      throw new Error('無法取得活動列表');
     }
   } catch (e) {
     container.innerHTML = '<div class="text-center py-10 text-red-400 text-sm font-bold">載入失敗:' + e.message + '</div>';
+  }
+};
+
+// 將「渲染邏輯」獨立出來,讓快取與 API 都能重用
+window._renderAdminActivities = function(res) {
+  const container = document.getElementById('admin-activities-list');
+  if (!container) return;
+
+  if (res && Array.isArray(res) && res.length > 0) {
+    const acts = [...res].reverse();
+    container.innerHTML = acts.map(act => {
+      const title = window.escapeJS(act['活動名稱'] || '未命名活動');
+      const time = window.formatDisplayTime(act['開始時間']);
+      const status = act['狀態'] || '上架';
+      const fee = parseInt(act['金額']) > 0 ? 'NT$ ' + act['金額'] : '免費';
+      const img = act['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
+      const actId = window.escapeJS(act['活動ID'] || act.rowId || '');
+      const statusColor = status === '上架' ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500';
+
+      return '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">' +
+        '<div class="w-full aspect-[16/9] bg-slate-100 relative">' +
+          '<img src="' + img + '" class="w-full h-full object-cover" loading="lazy">' +
+          '<div class="absolute top-3 left-3 ' + statusColor + ' text-[11px] px-2 py-1 rounded-full font-bold">' + status + '</div>' +
+          '<div class="absolute top-3 right-3 bg-black/60 text-white text-[11px] px-2 py-1 rounded-full font-bold">' + fee + '</div>' +
+        '</div>' +
+        '<div class="p-4">' +
+          '<h4 class="text-[15px] font-black text-slate-800 leading-snug mb-1">' + title + '</h4>' +
+          '<div class="text-[12px] text-slate-500 mb-3 flex items-center gap-1">' +
+            '<span class="material-symbols-outlined text-[14px]">schedule</span>' + time +
+          '</div>' +
+          '<div class="grid grid-cols-2 gap-2">' +
+            '<button onclick="window.openCheckinPage(\'' + actId + '\', \'' + title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[13px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
+              '<span class="material-symbols-outlined text-[16px]">fact_check</span> 核銷名單' +
+            '</button>' +
+            '<button onclick="window.unpublishActivity(\'' + actId + '\', this)" class="py-2.5 bg-red-50 text-red-500 rounded-xl text-[13px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
+              '<span class="material-symbols-outlined text-[16px]">delete</span> 下架活動' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } else {
+    container.innerHTML = '<div class="bg-white p-8 rounded-3xl text-center shadow-sm border border-slate-100"><span class="material-symbols-outlined text-4xl text-slate-300 mb-2">event_busy</span><p class="text-sm text-slate-400 font-bold mt-2">目前沒有活動</p></div>';
   }
 };
 
@@ -162,7 +193,9 @@ window.unpublishActivity = async function(actId, btnEl) {
     const res = await window.fetchAPI('removeAct', { activityId: actId }, true);
     if (res && !res.error) {
       window.showToast('✅ 活動已成功下架！');
-      window.loadAdminActivities();
+      // 清快取讓下次進核銷頁時重新從 API 拉
+      window._adminActsCache = { data: null, time: 0 };
+      window.loadAdminActivities(true);
       window.loadUserActivities();
     } else {
       throw new Error(res.error || '下架失敗');
@@ -299,7 +332,7 @@ window.renderStoreManagement = function() {
           '</div>' +
           '<div class="text-[12px] text-slate-500 font-mono mt-0.5">' + window.escapeJS(u.phone || '無設定電話') + '</div>' +
         '</div>' +
-        '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value)" ' + (isMe ? 'disabled' : '') + ' class="bg-slate-50 border-none rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;">' +
+        '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value)" ' + (isMe ? 'disabled' : '') + ' class="bg-slate-50 border-none rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(u.role || 'user') + '">' +
           '<option value="user" ' + (u.role === 'user' ? 'selected' : '') + '>一般 User</option>' +
           '<option value="store" ' + (u.role === 'store' ? 'selected' : '') + '>商家 Store</option>' +
           '<option value="admin" ' + (u.role === 'admin' ? 'selected' : '') + '>管理 Admin</option>' +
@@ -315,18 +348,45 @@ window.renderStoreManagement = function() {
 
 // 變更用戶角色
 window.changeUserRole = async function(userId, newRole) {
+  // 找到下拉選單元素並暫時 disable,給視覺反饋
+  const selectEl = event && event.target;
+  const oldRole = (allSystemUsers.find(u => u.userId === userId) || {}).role || 'user';
+
+  if (selectEl) selectEl.disabled = true;
   window.showToast('更新權限中...');
+
   try {
-    const res = await window.fetchAPI('updateUserRole', { userId, newRole }, true);
-    if (res && !res.error) {
-      window.showToast('✅ 用戶權限已成功更新為:' + newRole);
+    // 注意:這裡用獨立物件,不依賴 fetchAPI 自動帶入的 userId(那是操作者自己)
+    // 改用 targetUserId 明確標示要修改的對象,Worker 端會以此優先
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'updateUserRole',
+        payload: {
+          userId: userId,           // 目標用戶 ID(Worker 會用此清快取)
+          targetUserId: userId,     // 雙保險欄位
+          newRole: newRole,
+          operatorId: currentUserProfile?.userId,  // 操作者 ID
+          role: userRole,
+          networkId: currentNetworkId
+        }
+      })
+    });
+    const data = await res.json();
+
+    if (data && data.success) {
+      window.showToast('✅ ' + (allSystemUsers.find(u=>u.userId===userId)?.name || '用戶') + ' 權限已更新為:' + newRole);
       const user = allSystemUsers.find(u => u.userId === userId);
       if (user) user.role = newRole;
     } else {
-      throw new Error(res.error || '更新失敗');
+      throw new Error((data && data.error) || '更新失敗');
     }
   } catch(e) {
     window.showToast('⚠️ ' + e.message, true);
-    window.renderStoreManagement();
+    // 失敗時還原下拉選單為原本的角色
+    if (selectEl) selectEl.value = oldRole;
+  } finally {
+    if (selectEl) selectEl.disabled = false;
   }
 };
