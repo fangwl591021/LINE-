@@ -25,7 +25,8 @@ window.submitRegistration = async function() {
       '權限': 'user',
       'storeid': generatedStoreId,
       '推薦人': window.urlRef,
-      'networkId': window.urlNet || 'admin'
+      'networkId': window.urlNet || 'admin',
+      'inviteVia': window.urlVia || ''
     };
     const res = await window.fetchAPI('registerUser', {
       userId: profile.userId,
@@ -116,6 +117,7 @@ async function init() {
     const urlParams = new URLSearchParams(window.location.search);
     window.urlRef = urlParams.get('ref') || '';
     window.urlNet = urlParams.get('net') || '';
+    window.urlVia = urlParams.get('via') || '';
 
     if (!liff.isLoggedIn()) {
       liff.login({ redirectUri: window.location.href });
