@@ -7,6 +7,25 @@
 
   <!-- 外部資源 -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+  <!-- Tailwind 主題設定(必須在 CDN 之後立即執行,不能放外部檔) -->
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#06C755",
+            "primary-light": "#e6f9ed",
+            background: "#f8fafc",
+            "input-bg": "#f0f2f8",
+            "text-main": "#0f172a",
+          }
+        },
+      },
+    };
+  </script>
+
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet"/>
@@ -16,7 +35,7 @@
   <!-- 自訂樣式 -->
   <link rel="stylesheet" href="css/styles.css">
 
-  <!-- 全域設定(必須最先載入,因為包含 tailwind.config) -->
+  <!-- 全域常數與狀態變數 -->
   <script src="js/config.js"></script>
 
   <!-- Tailwind 任意值樣式(必須留在 HTML,因為 cdn.tailwindcss.com 才能解析 @apply) -->
