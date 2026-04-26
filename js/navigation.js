@@ -12,6 +12,7 @@ window.goPage = function(page, isInitLoad = false) {
     else if (page === 'home') window.loadUserActivities();
     else if (page === 'admin-stats') window.loadAdminStats();
     else if (page === 'my-activities') window.loadMyActivities();
+    else if (page === 'admin-crm') window.loadCrm();
     else if (page === 'admin-settings') {
       if (currentUser) {
         const pn = document.getElementById('profile-name');
