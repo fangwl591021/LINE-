@@ -34,17 +34,20 @@ window.generateCardFromProfile = async function(event) {
 
   try {
     const defaultBtns = [
-      {l:'撥打電話', u:'tel:' + (currentUser?.phone || '').replace(/[^0-9+]/g, ''), c:'#06C755'},
-      {l:'加為好友', u:'https://line.me/R/', c:'#3b82f6'}
+      {l:'加LINE好友', u:'https://line.me/R/', c:'#06C755'},
+      {l:'行動電話', u:'tel:' + (currentUser?.phone || '').replace(/[^0-9+]/g, ''), c:'#3b82f6'}
     ];
+    
+    const templateDesc = "⭐請填寫公司/店家介紹\n⭐請填寫公司/店家服務項目\n⭐請填寫公司/店家特色\n⭐請填寫〔優惠資訊〕\n⭐建議4-～5行，每行16字內";
+
     const config = {
       cardType: 'v1',
       imgUrl: currentUserProfile?.pictureUrl || '',
       title: currentUser?.name || '我的名片',
-      desc: currentUser?.industry || '商務人士',
+      desc: templateDesc,
       buttons: defaultBtns,
       isPrivate: false,
-      descAlign: 'center',
+      descAlign: 'start', // 條列式模板建議預設靠左對齊
       descColor: '#666666'
     };
 
@@ -52,7 +55,7 @@ window.generateCardFromProfile = async function(event) {
       userId: currentUserProfile.userId,
       姓名: currentUser?.name || '',
       手機號碼: currentUser?.phone || '',
-      服務項目: currentUser?.industry || '',
+      服務項目: templateDesc,
       自訂名片設定: JSON.stringify(config),
       名片圖檔: config.imgUrl || ''
     };
@@ -66,6 +69,13 @@ window.generateCardFromProfile = async function(event) {
       currentUserCard = newCardPayload;
       window.initMyECard();
       window.renderCardList(allCards);
+      
+      // 自動捲動並提示使用者可以開始編輯文字
+      const detailBtn = document.querySelector('#my-ecard-edit-state button[onclick^="window.openCardDetail"]');
+      if (detailBtn) {
+        detailBtn.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2', 'animate-pulse');
+        setTimeout(() => detailBtn.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2', 'animate-pulse'), 3000);
+      }
     } else {
       throw new Error('建立失敗');
     }
@@ -190,7 +200,7 @@ window.shareMyCard = async function(btn) {
       config: config,
       referrerId: currentUserProfile.userId,
       networkId: currentNetworkId,
-      liffId: LIFF_ID // 🚀 動態傳遞當前最新的 LIFF_ID
+      liffId: LIFF_ID 
     }, true);
     if (flexMsg) {
       await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
