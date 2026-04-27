@@ -59,7 +59,7 @@ window.saveUserSettings = async function(event) {
   }
 };
 
-// 儲存 Store Banner / YouTube / 系統名稱
+// 儲存 Store Banner / YouTube / 系統名稱 (新增開關儲存)
 window.saveStoreBanner = async function(event) {
   const btn = event.currentTarget || document.getElementById('btn-save-store-banner');
 
@@ -113,6 +113,10 @@ window.saveStoreBanner = async function(event) {
     cfg.siteName = newName || 'LINE商機引擎';
   }
 
+  // 🚀 新增：儲存開關狀態
+  cfg.showBanner = document.getElementById('toggle-show-banner').checked;
+  cfg.showYoutube = document.getElementById('toggle-show-youtube').checked;
+
   try {
     await window.fetchAPI('updateCard', {
       rowId: currentUserCard.rowId,
@@ -120,15 +124,17 @@ window.saveStoreBanner = async function(event) {
     }, true);
     currentUserCard['自訂名片設定'] = JSON.stringify(cfg);
 
-    // 🚀 新增：儲存成功後立即寫入快取，確保下次進入不會跳回預設
+    // 同時更新本地快取
     const cacheKey = 'store_banner_' + currentNetworkId;
     localStorage.setItem(cacheKey, JSON.stringify({
-      homeBanner: cfg.homeBanner || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1000&q=80',
-      homeYoutube: cfg.homeYoutube || '',
-      siteName: cfg.siteName || 'LINE商機引擎'
+      homeBanner: cfg.homeBanner,
+      homeYoutube: cfg.homeYoutube,
+      siteName: cfg.siteName,
+      showBanner: cfg.showBanner,
+      showYoutube: cfg.showYoutube
     }));
 
-    window.showToast('✅ 首頁 Banner 與影片已更新！');
+    window.showToast('✅ 設定已更新！');
     window.updateHomeBanner();
   } catch(e) {
     window.showToast('⚠️ 儲存失敗:' + e.message, true);
