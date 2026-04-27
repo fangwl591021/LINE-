@@ -37,9 +37,14 @@ window.addV1Button = function() {
 // 產生名片預覽 HTML
 window.getPreviewHTML = function(card, style, configParams) {
   const name = window.escapeJS(card['姓名'] || '姓名');
-  const title = window.escapeJS(card['職稱'] || '');
-  const company = window.escapeJS(card['公司名稱'] || '');
-  const service = window.escapeJS(card['服務項目'] || card['職稱'] || card['公司名稱'] || '');
+  
+  // 🚀 修正：將服務項目的文字獨立處理，將 literal \n 或 真實換行 替換為 <br> 標籤
+  const rawService = card['服務項目'] || card['職稱'] || card['公司名稱'] || '';
+  const service = String(rawService)
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\\n/g, '<br>')
+    .replace(/\n/g, '<br>');
 
   const imgUrl = configParams.imgUrl || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   const buttons = configParams.buttons || [];
@@ -59,7 +64,7 @@ window.getPreviewHTML = function(card, style, configParams) {
     heroImageHtml +
     '<div class="p-6 text-center">' +
       '<div class="font-black text-[22px] text-slate-800 leading-tight mb-2">' + name + '</div>' +
-      '<div class="text-[14px] font-medium whitespace-pre-wrap" style="color: ' + textColor + '; text-align: ' + textAlign + ';">' + service + '</div>' +
+      '<div class="text-[14px] font-medium leading-relaxed" style="color: ' + textColor + '; text-align: ' + textAlign + ';">' + service + '</div>' +
     '</div>' +
     (btnsHtml ? '<div class="px-6">' + btnsHtml + '</div>' : '') +
   '</div>';
