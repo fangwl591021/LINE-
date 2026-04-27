@@ -142,7 +142,8 @@ window.shareECardToLine = async function(btnId) {
       card: currentCard,
       config: config,
       referrerId: currentUserProfile.userId,
-      networkId: currentNetworkId
+      networkId: currentNetworkId,
+      liffId: LIFF_ID // 🚀 動態傳遞當前最新的 LIFF_ID
     }, true);
     if (flexMsg) {
       await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
@@ -188,7 +189,8 @@ window.shareReadOnlyCardToLine = async function(btn) {
       card: window.roCardData,
       config: config,
       referrerId: currentUserProfile.userId,
-      networkId: currentNetworkId
+      networkId: currentNetworkId,
+      liffId: LIFF_ID // 🚀 動態傳遞當前最新的 LIFF_ID
     }, true);
     if (flexMsg) await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
   } catch (e) {
