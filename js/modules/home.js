@@ -102,7 +102,7 @@ window.loadUserActivities = async function(forceRefresh = false) {
   window.renderHomeActivities();
 };
 
-// 渲染活動列表 (標籤 + 一排兩個 Grid)
+// 渲染活動列表 (標籤 + 一排兩個 Grid + 雙按鈕)
 window.renderHomeActivities = function() {
   const container = document.getElementById('user-activities-list');
   if (!container) return;
@@ -130,7 +130,7 @@ window.renderHomeActivities = function() {
     ? validActs
     : validActs.filter(a => (a['活動類型'] || '其他') === window._currentActTag);
 
-  // 4. 構建 2 Column Grid HTML (模擬 LINE OA 極簡卡片)
+  // 4. 構建 2 Column Grid HTML (模擬 LINE OA 極簡卡片，拆分詳情與報名)
   let gridHtml = '';
   if (filteredActs.length === 0) {
     gridHtml = '<div class="text-center py-8 text-slate-400 text-[13px]">此分類目前無活動</div>';
@@ -153,9 +153,15 @@ window.renderHomeActivities = function() {
             <div class="text-[11px] text-slate-400 mb-2 flex items-center gap-0.5 mt-auto pt-1">
               <span class="material-symbols-outlined text-[12px]">schedule</span> ${time ? time.substring(5,16) : '時間未定'}
             </div>
-            <button type="button" onclick="window.userJoinActivity('${actId}', '${title}', event)" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[12px] font-medium active:scale-95 transition-all flex justify-center items-center gap-1 shrink-0 mt-1">
-              報名
-            </button>
+            
+            <div class="flex gap-1.5 mt-1 shrink-0">
+              <button type="button" onclick="window.showPublicActivityDetail('${actId}')" class="flex-1 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-[12px] font-medium active:scale-95 transition-all flex justify-center items-center">
+                詳情
+              </button>
+              <button type="button" onclick="window.userJoinActivity('${actId}', '${title}', event)" class="flex-1 py-1.5 bg-blue-50 border border-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-[12px] font-medium active:scale-95 transition-all flex justify-center items-center">
+                報名
+              </button>
+            </div>
           </div>
         </div>`;
       }).join('')}
@@ -171,6 +177,60 @@ window.filterHomeActivities = function(tag) {
   window.renderHomeActivities();
 };
 
+// 顯示公開活動詳情彈出視窗
+window.showPublicActivityDetail = function(actId) {
+  const act = window._homeActivitiesCache.find(a => String(a['活動ID'] || a.rowId) === String(actId));
+  if (!act) return;
+
+  const title = window.escapeJS(act['活動名稱'] || '未命名活動');
+  const time = window.formatDisplayTime(act['開始時間']);
+  const fee = parseInt(act['金額']) > 0 ? 'NT$ ' + act['金額'] : '免費';
+  const img = act['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
+  let rawDesc = act['活動說明'] || '尚無詳細說明';
+  const desc = String(rawDesc).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
+
+  let modal = document.getElementById('public-act-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'public-act-modal';
+    modal.className = 'fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-end animate-in fade-in duration-300 z-[2050] w-full max-w-md mx-auto left-0 right-0';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="bg-white rounded-t-3xl overflow-hidden flex flex-col max-h-[85vh] shadow-2xl animate-in slide-in-from-bottom-8">
+      <div class="px-5 py-4 flex justify-between items-center border-b border-slate-100 shrink-0 bg-white">
+        <h3 class="text-lg font-black text-slate-800 truncate pr-4">${title}</h3>
+        <button onclick="document.getElementById('public-act-modal').classList.add('hidden')" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shrink-0"><span class="material-symbols-outlined">close</span></button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-0 flex flex-col bg-slate-50">
+        <div class="w-full aspect-[16/9] bg-slate-100 relative shrink-0 border-b border-slate-100">
+          <img src="${img}" class="w-full h-full object-cover">
+          <div class="absolute top-3 left-3 bg-black/50 backdrop-blur-sm text-white text-[11px] px-2 py-1 rounded font-medium">${fee}</div>
+        </div>
+        <div class="p-5 bg-white">
+          <div class="flex items-center gap-2 text-[13px] text-slate-600 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span class="material-symbols-outlined text-[18px] text-blue-500">schedule</span>
+            <span class="font-bold">${time ? time : '時間未定'}</span>
+          </div>
+          <div class="text-[14px] text-slate-700 leading-relaxed font-medium">
+            ${desc}
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white border-t border-slate-100 p-4 pb-safe flex justify-center shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.03)]">
+        <button onclick="document.getElementById('public-act-modal').classList.add('hidden'); window.userJoinActivity('${window.escapeJS(actId)}', '${title}', event);" class="w-[90%] py-3.5 bg-[#06C755] text-white rounded-2xl font-bold text-[15px] shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2">
+          立即報名
+        </button>
+      </div>
+    </div>
+  `;
+  
+  modal.classList.remove('hidden');
+};
+
 // 用戶報名活動
 window.userJoinActivity = async function(actId, actName, event) {
   if (!currentUser || !currentUser.name || !currentUser.phone) {
@@ -182,10 +242,14 @@ window.userJoinActivity = async function(actId, actName, event) {
   }
 
   if (!confirm('確定要報名「' + actName + '」嗎？')) return;
-  const btn = event.currentTarget;
-  const oriHtml = btn.innerHTML;
-  btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[14px]">refresh</span>';
-  btn.disabled = true;
+  
+  // 處理按鈕動畫狀態
+  let btn = event ? event.currentTarget : null;
+  let oriHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[14px]">refresh</span>';
+    btn.disabled = true;
+  }
   
   try {
     const res = await window.fetchAPI('joinActivity', {
@@ -199,15 +263,19 @@ window.userJoinActivity = async function(actId, actName, event) {
     
     if (res && !res.error) {
       window.showToast('🎉 報名成功！');
-      btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check_circle</span> 已報名';
-      btn.className = 'w-full py-1.5 bg-slate-200 text-slate-400 rounded-lg text-[12px] font-medium cursor-not-allowed flex justify-center items-center gap-1 shrink-0 mt-1';
+      if (btn) {
+        btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check_circle</span> 已報名';
+        btn.className = 'flex-1 py-1.5 bg-slate-200 text-slate-400 rounded-lg text-[12px] font-medium cursor-not-allowed flex justify-center items-center gap-1 border border-transparent';
+      }
     } else {
       throw new Error(res.error || '報名失敗');
     }
   } catch (e) {
     window.showToast('⚠️ ' + e.message, true);
-    btn.innerHTML = oriHtml;
-    btn.disabled = false;
+    if (btn) {
+      btn.innerHTML = oriHtml;
+      btn.disabled = false;
+    }
   }
 };
 
