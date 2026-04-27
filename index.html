@@ -910,6 +910,7 @@
   </div>
 </div>
 
+<!-- ... existing code ... -->
 <!-- 唯讀名片彈出視窗 -->
 <div id="readonly-card-modal" class="hidden fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-end animate-in fade-in duration-300 w-full max-w-md mx-auto left-0 right-0 z-[1050]">
   <div class="bg-white rounded-t-3xl overflow-hidden flex flex-col max-h-[85vh] shadow-2xl animate-in slide-in-from-bottom-8">
@@ -918,17 +919,21 @@
       <button onclick="window.closeReadOnlyCard()" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform"><span class="material-symbols-outlined">close</span></button>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-5 pb-8 flex flex-col items-center bg-slate-50">
-      <div id="ro-card-container" class="w-full max-w-[340px]"></div>
-    </div>
-
-    <div class="bg-white border-t border-slate-100 p-4 pb-safe flex justify-center shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.03)]">
-      <button id="btn-share-ro" onclick="window.shareReadOnlyCardToLine(this)" class="w-[90%] py-4 bg-[#06C755] text-white rounded-2xl font-bold text-[16px] shadow-lg shadow-green-500/30 active:scale-95 transition-all flex items-center justify-center gap-2">
+    <!-- 將分享按鈕移至最上方，並改為藍色 -->
+    <div class="bg-white border-b border-slate-100 p-4 flex justify-center shrink-0 z-10 shadow-sm">
+      <button id="btn-share-ro" onclick="window.shareReadOnlyCardToLine(this)" class="w-[90%] py-3.5 bg-blue-600 text-white rounded-2xl font-bold text-[16px] shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2">
         🚀 轉發名片至 LINE
       </button>
     </div>
+
+    <div class="flex-1 overflow-y-auto p-5 pb-12 flex flex-col items-center bg-slate-50">
+      <div id="ro-card-container" class="w-full max-w-[340px]"></div>
+    </div>
   </div>
 </div>
+
+<!-- 裁切彈窗 (Cropper Modal) -->
+<!-- ... existing code ... -->
 
 <!-- 裁切彈窗 (Cropper Modal) -->
 <div id="cropper-modal" class="hidden fixed inset-0 bg-black/90 z-[2000] flex flex-col w-full max-w-md mx-auto left-0 right-0">
