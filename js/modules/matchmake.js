@@ -35,12 +35,12 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
   }
 };
 
-// 啟動 AI 配對 (加入每日次數限制邏輯)
+// 啟動 AI 配對 (加入本機防護與接收後端阻擋同步)
 window.startMatchmaking = async function() {
   const query = document.getElementById('match-query').value.trim();
   if (!query) return window.showToast('請輸入您的配對需求', true);
 
-  // 1. 檢查每日配對額度
+  // 1. 檢查本地配對額度
   const role = currentUser?.role || 'user';
   const limit = window.LIMITS[role].matchmake;
   
@@ -78,8 +78,9 @@ window.startMatchmaking = async function() {
       }))
     }, true);
 
+    // ✅ 成功接收到陣列格式的配對資料
     if (res && Array.isArray(res)) {
-      // 2. 配對成功，扣除額度 (增加使用次數)
+      // 配對成功，扣除額度 (增加本地使用次數)
       localStorage.setItem(usageKey, currentUsage + 1);
       
       const resultsList = document.getElementById('results-list');
@@ -105,7 +106,6 @@ window.startMatchmaking = async function() {
       const limitNotice = limit === Infinity ? '無限制' : `剩餘 ${remaining} 次`;
       
       const resultsContainer = document.getElementById('match-results');
-      // 插入剩餘次數提示
       if(!document.getElementById('match-limit-notice')) {
         resultsContainer.insertAdjacentHTML('afterbegin', `<div id="match-limit-notice" class="text-[11px] text-slate-400 font-bold mb-2 text-right px-1">今日配對額度: ${limitNotice}</div>`);
       } else {
@@ -113,7 +113,17 @@ window.startMatchmaking = async function() {
       }
       
       resultsContainer.classList.remove('hidden');
-    } else {
+
+    } 
+    // 🚨 處理包含 error 物件的狀況 (伺服器端拒絕)
+    else if (res && res.error) {
+      if (res.error.includes('上限')) {
+        // 同步把本地鎖死，防止下次再打後端
+        localStorage.setItem(usageKey, limit); 
+      }
+      throw new Error(res.error);
+    } 
+    else {
       throw new Error('無法取得配對結果');
     }
   } catch(e) {
