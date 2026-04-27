@@ -1,12 +1,26 @@
 /* ==================== 前端共用函式 ==================== */
 
-// 安全跳脫函式：保護 Inline JS 參數
+// 嚴格安全跳脫函式：防範 XSS 跨站腳本攻擊 (用於 innerHTML 渲染內容)
+window.escapeHTML = function(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+// 安全跳脫函式：保護 Inline JS 參數 (用於 html 屬性內的腳本，例如 onclick)
 window.escapeJS = function(str) {
   return String(str || '')
+    .replace(/\\/g, "\\\\") // 加入反斜線跳脫
     .replace(/'/g, "\\'")
     .replace(/"/g, "&quot;")
     .replace(/\n/g, "\\n")
-    .replace(/\r/g, "");
+    .replace(/\r/g, "")
+    .replace(/</g, "\\x3c") // 防止閉合標籤攻擊
+    .replace(/>/g, "\\x3e");
 };
 
 // 時間格式化
