@@ -35,10 +35,23 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
   }
 };
 
-// 啟動 AI 配對
+// 啟動 AI 配對 (加入每日次數限制邏輯)
 window.startMatchmaking = async function() {
   const query = document.getElementById('match-query').value.trim();
   if (!query) return window.showToast('請輸入您的配對需求', true);
+
+  // 1. 檢查每日配對額度
+  const role = currentUser?.role || 'user';
+  const limit = window.LIMITS[role].matchmake;
+  
+  // 產生今日的專屬 Key (例如: matchmake_usage_2026-04-27)
+  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD 格式
+  const usageKey = `matchmake_usage_${today}`;
+  let currentUsage = parseInt(localStorage.getItem(usageKey) || '0');
+
+  if (currentUsage >= limit) {
+    return window.showToast(`⚠️ 用量限制：您的方案 (${role.toUpperCase()}) 每日最多配對 ${limit} 次，請明日再試。`, true);
+  }
 
   const btn = document.getElementById('btn-match');
   const oriHtml = btn.innerHTML;
@@ -66,6 +79,9 @@ window.startMatchmaking = async function() {
     }, true);
 
     if (res && Array.isArray(res)) {
+      // 2. 配對成功，扣除額度 (增加使用次數)
+      localStorage.setItem(usageKey, currentUsage + 1);
+      
       const resultsList = document.getElementById('results-list');
       if (res.length === 0) {
         resultsList.innerHTML = '<div class="text-center py-6 text-slate-500">目前沒有合適的人選</div>';
@@ -83,7 +99,20 @@ window.startMatchmaking = async function() {
           '</div>';
         }).join('');
       }
-      document.getElementById('match-results').classList.remove('hidden');
+      
+      // 顯示剩餘次數提示
+      const remaining = limit - (currentUsage + 1);
+      const limitNotice = limit === Infinity ? '無限制' : `剩餘 ${remaining} 次`;
+      
+      const resultsContainer = document.getElementById('match-results');
+      // 插入剩餘次數提示
+      if(!document.getElementById('match-limit-notice')) {
+        resultsContainer.insertAdjacentHTML('afterbegin', `<div id="match-limit-notice" class="text-[11px] text-slate-400 font-bold mb-2 text-right px-1">今日配對額度: ${limitNotice}</div>`);
+      } else {
+        document.getElementById('match-limit-notice').textContent = `今日配對額度: ${limitNotice}`;
+      }
+      
+      resultsContainer.classList.remove('hidden');
     } else {
       throw new Error('無法取得配對結果');
     }
