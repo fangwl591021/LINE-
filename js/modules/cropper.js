@@ -1,6 +1,6 @@
 /* ==================== 圖片裁切共用模組 ==================== */
 
-// 取消裁切
+// 取消裁切 (修正：確保關閉時重置按鈕狀態，避免第二次開啟時卡住)
 window.cancelCrop = function() {
   document.getElementById('cropper-modal').classList.add('hidden');
   if (cropperInstance) {
@@ -8,7 +8,12 @@ window.cancelCrop = function() {
     cropperInstance = null;
   }
   const confirmBtn = document.getElementById('btn-confirm-crop');
-  if (confirmBtn) confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
+  if (confirmBtn) {
+    confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
+    // 確保重置按鈕為可用狀態與預設文字
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML = '確認裁切';
+  }
 };
 
 // 一般名片庫掃描的確認裁切 + OCR
