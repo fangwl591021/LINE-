@@ -189,7 +189,8 @@ window.shareMyCard = async function(btn) {
       card: currentUserCard,
       config: config,
       referrerId: currentUserProfile.userId,
-      networkId: currentNetworkId
+      networkId: currentNetworkId,
+      liffId: LIFF_ID // 🚀 動態傳遞當前最新的 LIFF_ID
     }, true);
     if (flexMsg) {
       await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
