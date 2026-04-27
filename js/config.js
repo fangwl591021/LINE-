@@ -4,13 +4,12 @@ const LIFF_ID = "2009886448-2UHnJgyT";
 const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/";
 
 // 用量限制(依角色權限)
+// 邏輯: 名片無限制(Infinity), 加入 AI每日配對限制(matchmake)
 window.LIMITS = {
-  admin: { activities: Infinity, cards: Infinity },
-  store: { activities: 10, cards: Infinity },
-  user:  { activities: 1, cards: 30 }
+  admin: { activities: Infinity, cards: Infinity, matchmake: Infinity },
+  store: { activities: 10, cards: Infinity, matchmake: 50 },
+  user:  { activities: 1, cards: Infinity, matchmake: 5 }
 };
-
-// 注意:tailwind.config 已移到 index.html 內聯腳本中,確保 Tailwind CDN 解析時序正確
 
 // 全域狀態變數
 window.urlRef = '';
