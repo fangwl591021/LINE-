@@ -23,8 +23,8 @@ window.confirmCrop = async function() {
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 1200;
-  let quality = 0.85;
+  let size = 1000; // 降低預設解析度至 1000px (確保 OCR 清晰又不過大)
+  let quality = 0.8;
   let base64Image = cropperInstance.getCroppedCanvas({
     maxWidth: size,
     maxHeight: size,
@@ -32,9 +32,15 @@ window.confirmCrop = async function() {
     imageSmoothingQuality: 'high',
   }).toDataURL('image/jpeg', quality);
 
-  while (base64Image.length > 800000 && quality > 0.3) {
-    quality -= 0.1;
+  // 強制壓縮至約 500KB (Base64 長度 660,000)
+  while (base64Image.length > 660000 && quality > 0.3) {
+    quality -= 0.15;
     base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+  }
+  // 防呆：如果品質降到底還是太大，強制再次縮小解析度至 800px
+  if (base64Image.length > 660000) {
+    size = 800;
+    base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', 0.5);
   }
 
   window.cancelCrop();
@@ -72,8 +78,8 @@ window.confirmMyCardCrop = async function() {
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 1200;
-  let quality = 0.85;
+  let size = 1000; // 降低預設解析度至 1000px
+  let quality = 0.8;
   let base64Image = cropperInstance.getCroppedCanvas({
     maxWidth: size,
     maxHeight: size,
@@ -81,9 +87,15 @@ window.confirmMyCardCrop = async function() {
     imageSmoothingQuality: 'high',
   }).toDataURL('image/jpeg', quality);
 
-  while (base64Image.length > 800000 && quality > 0.3) {
-    quality -= 0.1;
+  // 強制壓縮至約 500KB (Base64 長度 660,000)
+  while (base64Image.length > 660000 && quality > 0.3) {
+    quality -= 0.15;
     base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+  }
+  // 防呆：強制再次縮小解析度
+  if (base64Image.length > 660000) {
+    size = 800;
+    base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', 0.5);
   }
 
   window.cancelCrop();
@@ -162,8 +174,8 @@ window.confirmCustomImageCrop = async function() {
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 1200;
-  let quality = 0.85;
+  let size = 800; // 介面顯示用圖片 800px 即可
+  let quality = 0.8;
   let base64Image = cropperInstance.getCroppedCanvas({
     maxWidth: size,
     maxHeight: size,
@@ -171,8 +183,8 @@ window.confirmCustomImageCrop = async function() {
     imageSmoothingQuality: 'high',
   }).toDataURL('image/jpeg', quality);
 
-  while (base64Image.length > 500000 && quality > 0.3) {
-    quality -= 0.1;
+  while (base64Image.length > 660000 && quality > 0.3) {
+    quality -= 0.15;
     base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
   }
 
@@ -264,17 +276,17 @@ window.cancelActiveCrop = function() {
 
 window.confirmActiveCrop = function() {
   if (!activeCropperInstance) return;
-  let size = 800;
-  let quality = 0.85;
+  let size = 800; // 活動宣傳圖 800px 即可
+  let quality = 0.8;
   let base64 = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
 
-  while (base64.length > 500000 && quality > 0.3) {
-    quality -= 0.1;
+  while (base64.length > 660000 && quality > 0.3) {
+    quality -= 0.15;
     base64 = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
   }
   if (base64.length > 800000) {
     window.cancelActiveCrop();
-    return alert("⚠️ 圖片檔案過大無法壓縮,請選擇其他圖片");
+    return window.showToast("⚠️ 圖片檔案過大無法壓縮,請選擇其他圖片", true);
   }
 
   window.cancelActiveCrop();
