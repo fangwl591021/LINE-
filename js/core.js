@@ -85,6 +85,15 @@ window.fetchAPI = async function(action, payload = {}, silent = false) {
     payload.role = userRole;
     payload.userId = currentUserProfile?.userId;
 
+    // 自動夾帶 LINE Access Token 供 Worker 進行嚴格安全驗證
+    try {
+      if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+        payload.lineAccessToken = liff.getAccessToken();
+      }
+    } catch (e) {
+      console.warn("LIFF token fetch failed:", e);
+    }
+
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
