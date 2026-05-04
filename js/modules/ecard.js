@@ -54,7 +54,11 @@ window.getPreviewHTML = function(card, style, configParams) {
     window.escapeJS(btn.l||'按鈕') + '</div>'
   ).join('');
 
-  const heroImageHtml = '<div class="relative aspect-[20/13] bg-slate-100 bg-cover bg-center" style="background-image:url(' + imgUrl + ');"><div class="absolute top-4 left-4 bg-[#FF0000] text-white text-[11px] font-black px-3 py-1 rounded-full shadow-sm tracking-widest">分享</div></div>';
+  // 🚀 新增：依據 configParams.layoutStyle 動態切換預覽框的比例 (20:13 或 2:3)
+  const layoutStyle = configParams.layoutStyle || 'landscape';
+  const aspectClass = layoutStyle === 'portrait' ? 'aspect-[2/3]' : 'aspect-[20/13]';
+
+  const heroImageHtml = '<div class="relative ' + aspectClass + ' bg-slate-100 bg-cover bg-center transition-all duration-300" style="background-image:url(' + imgUrl + ');"><div class="absolute top-4 left-4 bg-[#FF0000] text-white text-[11px] font-black px-3 py-1 rounded-full shadow-sm tracking-widest">分享</div></div>';
 
   const alignMap = { 'start': 'left', 'center': 'center', 'end': 'right' };
   const textAlign = alignMap[configParams.descAlign || 'center'] || 'center';
@@ -75,11 +79,17 @@ window.updateECardPreview = function() {
   if (!currentCard) return;
   const area = document.getElementById('ecard-preview-area');
   const colorInput = document.getElementById('edit-desc-color');
+  
+  // 取得畫面上選擇的版型
+  const layoutRadio = document.querySelector('input[name="ecard-layout"]:checked');
+  const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
+
   let configParams = {
     imgUrl: document.getElementById('v1-img-url').value || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80',
     buttons: v1Buttons,
     descAlign: window.currentDescAlign || 'center',
-    descColor: colorInput ? colorInput.value : '#666666'
+    descColor: colorInput ? colorInput.value : '#666666',
+    layoutStyle: layoutStyle
   };
   area.innerHTML = window.getPreviewHTML(currentCard, currentECardStyle, configParams);
 };
@@ -100,6 +110,9 @@ window.saveECardConfig = async function(isSilent = false) {
   v1Buttons.forEach(b => { b.u = window.cleanURI(b.u); });
 
   const colorInput = document.getElementById('edit-desc-color');
+  const layoutRadio = document.querySelector('input[name="ecard-layout"]:checked');
+  const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
+
   const config = {
     cardType: 'v1',
     imgUrl: document.getElementById('v1-img-url').value,
@@ -108,7 +121,8 @@ window.saveECardConfig = async function(isSilent = false) {
     buttons: v1Buttons,
     isPrivate: prevIsPrivate,
     descAlign: window.currentDescAlign || 'center',
-    descColor: colorInput ? colorInput.value : '#666666'
+    descColor: colorInput ? colorInput.value : '#666666',
+    layoutStyle: layoutStyle
   };
 
   try {
