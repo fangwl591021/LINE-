@@ -131,11 +131,28 @@ window.confirmMyCardCrop = async function() {
 };
 
 // 上傳自訂圖片到 R2
-window.uploadCustomImageToR2 = function(inputEl, targetInputId) {
+window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = null) {
   const file = inputEl.files[0];
   if (!file) return;
 
   window.currentUploadTargetId = targetInputId;
+
+  // ====== 動態版型比例鎖定邏輯 ======
+  // 第一次/預設都強制為 20:13 (Mega版型)
+  let ratio = 20 / 13; 
+
+  if (forcedRatio !== null) {
+    ratio = forcedRatio;
+  } else if (targetInputId === 'input-store-banner') {
+    ratio = 16 / 9; // 首頁大圖強制 16:9
+  } else if (targetInputId === 'v1-img-url' || targetInputId === 'my-v1-img-url') {
+    // Giga版本後續變更：若畫面上有選擇 portrait，則切換為 2:3
+    let radioName = targetInputId === 'my-v1-img-url' ? 'my-ecard-layout' : 'ecard-layout';
+    let layoutRadio = document.querySelector(`input[name="${radioName}"]:checked`);
+    if (layoutRadio && layoutRadio.value === 'portrait') {
+      ratio = 2 / 3;
+    }
+  }
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -150,7 +167,7 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId) {
     if (cropperInstance) cropperInstance.destroy();
 
     cropperInstance = new Cropper(cropperImage, {
-      aspectRatio: NaN,
+      aspectRatio: ratio,
       viewMode: 1,
       dragMode: 'move',
       autoCropArea: 0.9,
