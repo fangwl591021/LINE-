@@ -225,6 +225,21 @@
                   <input type="file" id="file-my-v1-img" accept="image/*" class="hidden" onchange="window.uploadCustomImageToR2(this, 'my-v1-img-url')">
                 </div>
               </div>
+
+              <div class="pt-2 border-t border-slate-200">
+                <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">view_quilt</span> 名片版型</p>
+                <div class="flex items-center gap-2 bg-slate-200/50 p-1 rounded-xl">
+                  <label class="flex-1 text-center cursor-pointer">
+                    <input type="radio" name="my-ecard-layout" value="landscape" class="peer sr-only" checked onchange="window.updateMyECardPreview()">
+                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">標準橫式 (Mega)</div>
+                  </label>
+                  <label class="flex-1 text-center cursor-pointer">
+                    <input type="radio" name="my-ecard-layout" value="portrait" class="peer sr-only" onchange="window.updateMyECardPreview()">
+                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">滿版直式 (Giga)</div>
+                  </label>
+                </div>
+              </div>
+
               <div class="pt-2 border-t border-slate-200">
                 <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-3"><span class="material-symbols-outlined text-[18px]">smart_button</span> 底部按鈕設定</p>
                 <div id="my-v1-buttons-list" class="space-y-2 mb-3"></div>
@@ -478,6 +493,21 @@
                 <input type="file" id="file-v1-img" accept="image/*" class="hidden" onchange="window.uploadCustomImageToR2(this, 'v1-img-url')">
               </div>
             </div>
+
+            <div class="pt-2 border-t border-slate-100">
+              <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">view_quilt</span> 名片版型</p>
+              <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                <label class="flex-1 text-center cursor-pointer">
+                  <input type="radio" name="ecard-layout" value="landscape" class="peer sr-only" checked onchange="window.updateECardPreview()">
+                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">標準橫式 (Mega)</div>
+                </label>
+                <label class="flex-1 text-center cursor-pointer">
+                  <input type="radio" name="ecard-layout" value="portrait" class="peer sr-only" onchange="window.updateECardPreview()">
+                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">滿版直式 (Giga)</div>
+                </label>
+              </div>
+            </div>
+
             <div class="pt-2 border-t border-slate-100">
               <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-3"><span class="material-symbols-outlined text-[18px]">smart_button</span> 底部按鈕設定</p>
               <div id="v1-buttons-list" class="space-y-2 mb-3"></div>
