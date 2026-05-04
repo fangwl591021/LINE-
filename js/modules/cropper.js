@@ -137,22 +137,15 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
 
   window.currentUploadTargetId = targetInputId;
 
-  // ====== 動態版型比例鎖定邏輯 ======
-  // 第一次/預設都強制為 20:13 (Mega版型)
-  let ratio = 20 / 13; 
+  // ====== 裁切比例邏輯修改：解除限制，改為自由裁切 ======
+  let ratio = NaN; // 預設自由裁切 (不限制)
 
   if (forcedRatio !== null) {
     ratio = forcedRatio;
   } else if (targetInputId === 'input-store-banner') {
-    ratio = 16 / 9; // 首頁大圖強制 16:9
-  } else if (targetInputId === 'v1-img-url' || targetInputId === 'my-v1-img-url') {
-    // Giga版本後續變更：若畫面上有選擇 portrait，則切換為 2:3
-    let radioName = targetInputId === 'my-v1-img-url' ? 'my-ecard-layout' : 'ecard-layout';
-    let layoutRadio = document.querySelector(`input[name="${radioName}"]:checked`);
-    if (layoutRadio && layoutRadio.value === 'portrait') {
-      ratio = 2 / 3;
-    }
+    ratio = 16 / 9; // 首頁大圖維持 16:9 以免首頁排版壞掉
   }
+  // 其餘名片圖片 (v1-img-url, my-v1-img-url) 皆套用 NaN 自由裁切
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -167,7 +160,7 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
     if (cropperInstance) cropperInstance.destroy();
 
     cropperInstance = new Cropper(cropperImage, {
-      aspectRatio: ratio,
+      aspectRatio: ratio, // 傳入 NaN 即為自由框
       viewMode: 1,
       dragMode: 'move',
       autoCropArea: 0.9,
