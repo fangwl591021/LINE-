@@ -1,7 +1,59 @@
 /**
- * ACTMASTER v5.5 - 邊緣快取極速驗證版 (Edge Auth)
- * 特點：導入 Cloudflare KV 進行毫秒級身分驗證，徹底解決 GAS 延遲與權限錯亂問題
+ * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
+ * 特點：導入 Cloudflare KV 進行毫秒級身分驗證，並新增 LINE Token 強制核對與 OpenAI 流量防護機制
  */
+
+// ==================== 模組 0: 資安防護 (Security Module) ====================
+const SecurityModule = {
+  // 驗證 LIFF Token，確保 userId 未被偽造
+  async verifyLineAuth(userId, token, env) {
+    if (!token || !userId) return false;
+    if (!env.ACTMASTER_KV) return true; // 若未綁定 KV 則暫時放行(避免癱瘓系統)
+
+    const cacheKey = `AUTH_${token.substring(0, 30)}`; // 避免 Key 過長
+    const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
+    if (cachedUserId === userId) return true;
+
+    try {
+      const res = await fetch('https://api.line.me/v2/profile', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status !== 200) return false;
+      const data = await res.json();
+      
+      if (data.userId === userId) {
+        // 驗證成功，快取 1 小時，大幅降低 LINE API 呼叫延遲
+        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
+        return true;
+      }
+      return false;
+    } catch(e) {
+      return false;
+    }
+  },
+
+  // 防刷機制 (Rate Limiting)
+  async checkRateLimit(userId, action, env) {
+    if (!env.ACTMASTER_KV || !userId) return true;
+    
+    const date = new Date().toISOString().split('T')[0];
+    const key = `RL_${action}_${userId}_${date}`;
+    
+    // 定義各項 AI 功能的每日上限
+    const limits = { 
+      recognizeCardWithGPT4o: 10, 
+      fateTags: 10, 
+      matchmakeContacts: 20 
+    };
+    const max = limits[action] || 50;
+
+    let count = parseInt(await env.ACTMASTER_KV.get(key)) || 0;
+    if (count >= max) return false;
+
+    await env.ACTMASTER_KV.put(key, (count + 1).toString(), { expirationTtl: 86400 });
+    return true;
+  }
+};
 
 // ==================== 模組 1: 核心工具 (Core Utils) ====================
 const Utils = {
@@ -73,10 +125,11 @@ const StorageModule = {
         if (r2Data.url) return r2Data.url;
       }
 
-      // ImgBB 備援
+      // ImgBB 備援 
+      if (!env.IMGBB_API_KEY) throw new Error("Missing IMGBB_API_KEY in environment variables");
       const formData = new URLSearchParams();
       formData.append('image', base64Image.replace(/^data:image\/[a-z]+;base64,/, ''));
-      const bbRes = await fetch('https://api.imgbb.com/1/upload?key=8d867c2941b2c4bf200236a28d546ea3', {
+      const bbRes = await fetch(`https://api.imgbb.com/1/upload?key=${env.IMGBB_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString()
@@ -144,42 +197,9 @@ const AIModule = {
     }
   },
 
-  // 🚀 核心升級：導入後端 KV 次數計算與真實權限查核
   async matchmaking(payload, env) {
     try {
-      const { currentUser, query, contacts, userId } = payload;
-      if (!userId) throw new Error("Missing userId for rate limit check.");
-
-      // 1. 從 KV 取得真實權限 (Zero Trust 基礎防護：防止前端偽造 admin)
-      let role = 'user';
-      if (env.ACTMASTER_KV) {
-        const cachedUser = await env.ACTMASTER_KV.get(`USER_${userId}`, 'json');
-        if (cachedUser && cachedUser.role) {
-          role = cachedUser.role;
-        } else {
-          role = currentUser?.role || payload.role || 'user';
-        }
-      }
-
-      // 2. 定義伺服器端額度限制
-      const limits = { admin: Infinity, store: 50, user: 5 };
-      const limit = limits[role] || 5;
-
-      // 3. 檢查 KV 每日配對次數 (防護清除本機快取的白嫖行為)
-      const today = new Date().toISOString().split('T')[0]; // UTC 日期 YYYY-MM-DD
-      const usageKey = `MATCHMAKE_USAGE_${userId}_${today}`;
-      let currentUsage = 0;
-
-      if (limit !== Infinity && env.ACTMASTER_KV) {
-        const usageStr = await env.ACTMASTER_KV.get(usageKey);
-        currentUsage = usageStr ? parseInt(usageStr) : 0;
-        
-        if (currentUsage >= limit) {
-          return { success: false, error: `🚨 您的方案 (${role.toUpperCase()}) 今日 AI 配對已達伺服器上限 (${limit}次)，請明日再試。` };
-        }
-      }
-
-      // 4. 執行 OpenAI API 呼叫
+      const { currentUser, query, contacts } = payload;
       const contactsList = contacts.map((c, i) => `${i+1}. ${c.Name||'未知'} (${c.Company||'無'}) \n標籤: ${c.Tags||'無'}`).join('\n');
       const prompt = `尋求者：${currentUser.name}，需求：${query}\n候選人：\n${contactsList}\n請選前3位，返回純 JSON 陣列: [{"index":0,"score":95,"reason":"結合標籤與需求，給出20字內的推薦理由"}]`;
       
@@ -189,17 +209,8 @@ const AIModule = {
         body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] })
       });
       const result = await response.json();
-      
-      if (result.error) throw new Error("OpenAI API Error: " + result.error.message);
-      
       const jsonMatch = result.choices[0].message.content.match(/\[[\s\S]*\]/);
       const matches = jsonMatch ? JSON.parse(jsonMatch[0]).map(item => ({ rowId: contacts[item.index]?.rowId, score: item.score, reason: item.reason })) : [];
-      
-      // 5. 配對成功，寫入 KV 增加次數 (TTL 設為 24 小時 = 86400 秒)
-      if (limit !== Infinity && env.ACTMASTER_KV) {
-        await env.ACTMASTER_KV.put(usageKey, (currentUsage + 1).toString(), { expirationTtl: 86400 });
-      }
-
       return { success: true, data: matches };
     } catch (e) { return { success: false, error: e.message }; }
   },
@@ -242,7 +253,6 @@ const MessagingModule = {
   buildFlex(payload) {
     const { card, config, referrerId, networkId, liffId } = payload;
     
-    // 動態取得 liffId，若前端沒傳則使用最新的預設值
     const activeLiffId = liffId || '2009886448-2UHnJgyT';
     let badgeUrl = 'https://liff.line.me/' + activeLiffId + '?shareCardId=' + card.rowId;
     if (referrerId) badgeUrl += '&ref=' + referrerId;
@@ -309,38 +319,34 @@ const DBModule = {
 
 // ==================== 模組 6: 邊緣快取驗證 (Edge Auth KV Module) ====================
 const AuthModule = {
-  // 驗證使用者 (極速 50ms 方案)
   async check(payload, env) {
     const userId = payload.userId;
     if (!userId) return { success: false, error: "Missing userId" };
 
-    // 1. 嘗試從 Cloudflare KV 讀取快取
     if (env.ACTMASTER_KV) {
       try {
-        const cached = await env.ACTMASTER_KV.get(`USER_${userId}`, 'json');
+        // 🚨 修正：變更 Cache Key 前綴，瞬間作廢所有舊記憶
+        const cached = await env.ACTMASTER_KV.get(`U_PROFILE_${userId}`, 'json');
         if (cached) {
           return { success: true, data: { isRegistered: true, info: cached } };
         }
       } catch (e) { console.error("KV Read Error", e); }
     }
 
-    // 2. 若 KV 無資料,轉向 GAS 查詢 (慢速 fallback)
     const result = await DBModule.forward('checkUser', payload, env);
 
-    // 3. 將查詢結果寫回 KV,快取一天 (86400秒)
     if (result && result.success && result.data && result.data.isRegistered && env.ACTMASTER_KV) {
       try {
-        await env.ACTMASTER_KV.put(`USER_${userId}`, JSON.stringify(result.data.info), { expirationTtl: 86400 });
+        // 🚨 修正：縮短快取為 600 秒 (10 分鐘)，避免資料庫變更卡住
+        await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(result.data.info), { expirationTtl: 600 });
       } catch (e) { console.error("KV Write Error", e); }
     }
     return result;
   },
 
-  // 更新使用者資料,並清除/刷新快取
   async updateAndClearCache(action, payload, env) {
     const result = await DBModule.forward(action, payload, env);
 
-    // 若寫入 GAS 成功,必須刪除舊快取,強迫下次讀取時拿到最新權限與資料
     if (result && result.success && env.ACTMASTER_KV) {
       try {
         let targetUserId = null;
@@ -351,8 +357,8 @@ const AuthModule = {
         }
 
         if (targetUserId) {
-          await env.ACTMASTER_KV.delete(`USER_${targetUserId}`);
-          console.log(`[KV] Cleared cache for ${targetUserId} (action=${action})`);
+          // 🚨 修正：連帶修改清除指令的前綴
+          await env.ACTMASTER_KV.delete(`U_PROFILE_${targetUserId}`);
         }
       } catch(e) { console.error("KV Delete Error", e); }
     }
@@ -361,7 +367,34 @@ const AuthModule = {
 };
 
 // ==================== 請求分發器 (Action Dispatcher) ====================
-async function dispatchAction(action, payload, env) {
+async function dispatchAction(action, payload, request, env) {
+  // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
+  if (payload.userId) {
+    const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      // 若前端有傳 Token，則嚴格驗證是否被偽造
+      const isValid = await SecurityModule.verifyLineAuth(payload.userId, token, env);
+      if (!isValid) {
+        return { success: false, error: "Access Denied: Invalid or Expired LINE Token" };
+      }
+    } else {
+      // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
+      const strictActions = ['updateUserRole']; 
+      if (strictActions.includes(action)) {
+        return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
+      }
+    }
+  }
+
+  // 2. 資安防護：OpenAI 限流機制
+  const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags'];
+  if (aiActions.includes(action) && payload.userId) {
+    const allowed = await SecurityModule.checkRateLimit(payload.userId, action, env);
+    if (!allowed) {
+      return { success: false, error: "Daily AI quota exceeded for this action. Please try again tomorrow." };
+    }
+  }
+
   // 格式校正沙盒
   const writeActions = ['registerUser', 'updateUserProfile', 'saveCard', 'updateCard'];
   if (writeActions.includes(action)) {
@@ -377,7 +410,6 @@ async function dispatchAction(action, payload, env) {
     case 'updateUserProfile':      
     case 'updateUserRole':         return await AuthModule.updateAndClearCache(action, payload, env);
     
-    // 其他保留原有邏輯
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
     case 'calculateFateTags':      return await AIModule.fateTags(payload, env);
@@ -391,12 +423,12 @@ async function dispatchAction(action, payload, env) {
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } });
+      return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });
     }
     try {
-      if (request.method !== 'POST') return Utils.jsonResponse({ status: "ACTMASTER API v5.5 Running with Edge Auth" });
+      if (request.method !== 'POST') return Utils.jsonResponse({ status: "ACTMASTER API v6.0 Running with Edge Security (Compatibility Mode)" });
       const body = await request.json();
-      const result = await dispatchAction(body.action, body.payload || {}, env);
+      const result = await dispatchAction(body.action, body.payload || {}, request, env);
       return Utils.jsonResponse(result);
     } catch (err) {
       return Utils.jsonResponse({ success: false, error: "Critical Error: " + err.message }, 500);
