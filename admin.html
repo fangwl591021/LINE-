@@ -268,7 +268,7 @@
 
   <!-- 🎨 所見即所得：名片編輯彈窗 Modal (寬廣雙欄式) -->
   <div id="modal-card-edit" class="fixed inset-0 bg-slate-900/60 z-[1000] hidden flex items-center justify-center backdrop-blur-sm transition-opacity p-4">
-    <!-- ✅ 修改點：加大最大寬度到 1200px，高度拉滿至 95vh，確保不擠壓 -->
+    <!-- 加大最大寬度到 1200px，高度拉滿至 95vh -->
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1200px] h-[95vh] overflow-hidden flex flex-col animate-[fade-in_0.2s_ease-out]">
       
       <!-- 頂部頁籤切換 -->
@@ -286,7 +286,7 @@
       <div class="flex flex-col md:flex-row flex-1 overflow-hidden bg-slate-50">
         
         <!-- 左側：設定表單區 (自適應填滿剩餘寬度) -->
-        <div class="flex-1 flex flex-col bg-white border-r border-slate-200 overflow-y-auto p-6 md:p-8 no-scrollbar">
+        <div class="flex-1 flex flex-col bg-white overflow-y-auto p-6 md:p-8 no-scrollbar">
           <input type="hidden" id="edit-c-rowid">
           
           <!-- 頁籤內容 1：CRM 基本資料 -->
@@ -328,7 +328,6 @@
           <!-- 頁籤內容 2：數位名片設定 -->
           <div id="modal-body-visual" class="hidden space-y-6">
             <div class="grid grid-cols-2 gap-5">
-              
               <!-- 完美移植手機版的膠囊切換選單 -->
               <div>
                 <label class="block text-sm font-bold text-slate-500 mb-2">名片版型</label>
@@ -391,13 +390,19 @@
           </div>
         </div>
 
-        <!-- 右側：手機預覽區 (Live Preview) ✅ 修改點：固定寬度 450px 絕對不擠壓 -->
-        <div class="w-full md:w-[450px] bg-slate-100 p-6 md:p-8 flex flex-col items-center justify-start overflow-y-auto shrink-0 border-l border-slate-200/50">
-           <p class="text-xs font-bold text-slate-400 mb-4 tracking-widest uppercase">LINE 聊天室呈現預覽</p>
+        <!-- 右側：手機預覽區 (Live Preview) -->
+        <!-- ✅ 修正：改為 LINE 聊天室藍底，釋放 Padding，讓卡片真實呈現滿版張力 -->
+        <div class="w-full md:w-[480px] bg-[#8baccc] flex flex-col items-center justify-start overflow-y-auto shrink-0 border-l border-slate-200/50 shadow-inner">
+           <!-- 頂部模擬狀態列 -->
+           <div class="w-full bg-black/5 text-center py-2 text-white/90 text-xs tracking-widest sticky top-0 z-10 font-bold backdrop-blur-sm shadow-sm">
+             LINE 聊天室呈現預覽
+           </div>
            
-           <!-- ✅ 修改點：模擬器固定為 320px，完美比例 -->
-           <div id="admin-card-preview-area" class="w-[320px] bg-white rounded-[24px] shadow-xl overflow-hidden border border-slate-200/60 relative shrink-0 ring-4 ring-slate-900/5">
-              <!-- 預覽畫面將由 JS 動態注入 -->
+           <!-- ✅ 修正：移除多餘邊界，放大卡片寬度至 400px，保證不失真、不擁擠 -->
+           <div class="w-full px-6 py-8 flex justify-center pb-16">
+              <div id="admin-card-preview-area" class="w-full max-w-[400px] bg-white rounded-[24px] shadow-xl overflow-hidden relative shrink-0 border border-black/5">
+                 <!-- 預覽畫面將由 JS 動態注入 -->
+              </div>
            </div>
         </div>
 
@@ -745,6 +750,7 @@
         `<div class="block py-3 rounded-xl text-white text-center text-[14px] font-black mb-2.5 shadow-sm" style="background:${btn.c||'#06C755'}">${escapeHTML(btn.l||'按鈕')}</div>`
       ).join('');
 
+      // ✅ 將外框與 Padding 完全移除，呈現真實的邊到邊 (Edge-to-Edge) 視覺
       area.innerHTML = `
         <div class="flex flex-col w-full h-full bg-white pb-6">
           <div class="relative bg-slate-100 bg-cover bg-center transition-all duration-300 shadow-sm" style="aspect-ratio: ${ratioCSS}; background-image:url('${imgUrl}');">
