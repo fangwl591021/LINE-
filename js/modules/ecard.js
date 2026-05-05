@@ -38,7 +38,6 @@ window.addV1Button = function() {
 window.getPreviewHTML = function(card, style, configParams) {
   const name = window.escapeJS(card['姓名'] || '姓名');
   
-  // 🚀 修正：將服務項目的文字獨立處理，將 literal \n 或 真實換行 替換為 <br> 標籤
   const rawService = card['服務項目'] || card['職稱'] || card['公司名稱'] || '';
   const service = String(rawService)
     .replace(/</g, '&lt;')
@@ -54,7 +53,6 @@ window.getPreviewHTML = function(card, style, configParams) {
     window.escapeJS(btn.l||'按鈕') + '</div>'
   ).join('');
 
-  // 🚀 新增：依據 configParams.layoutStyle 動態切換預覽框的比例 (20:13 或 2:3)
   const layoutStyle = configParams.layoutStyle || 'landscape';
   const aspectClass = layoutStyle === 'portrait' ? 'aspect-[2/3]' : 'aspect-[20/13]';
 
@@ -196,7 +194,7 @@ window.shareECardToLine = async function(btnId) {
       config: config,
       referrerId: currentUserProfile.userId,
       networkId: currentNetworkId,
-      liffId: LIFF_ID // 🚀 動態傳遞當前最新的 LIFF_ID
+      liffId: LIFF_ID 
     }, true);
     if (flexMsg) {
       await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
@@ -243,7 +241,7 @@ window.shareReadOnlyCardToLine = async function(btn) {
       config: config,
       referrerId: currentUserProfile.userId,
       networkId: currentNetworkId,
-      liffId: LIFF_ID // 🚀 動態傳遞當前最新的 LIFF_ID
+      liffId: LIFF_ID 
     }, true);
     if (flexMsg) await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
   } catch (e) {
