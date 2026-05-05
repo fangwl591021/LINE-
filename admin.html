@@ -20,9 +20,9 @@
     .nav-item { transition: all 0.2s ease; }
     .nav-item:hover:not(.active) { background-color: #f1f5f9; }
     
-    /* 簡潔的表格樣式 */
+    /* 簡潔的表格樣式，無多餘包框 */
     .data-table { width: 100%; border-collapse: collapse; text-align: left; }
-    .data-table th { background-color: #f1f5f9; padding: 12px 16px; font-size: 13px; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+    .data-table th { background-color: #f8fafc; padding: 12px 16px; font-size: 13px; color: #64748b; font-weight: normal; border-bottom: 1px solid #e2e8f0; }
     .data-table td { padding: 12px 16px; font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
     .data-table tr:hover { background-color: #f8fafc; }
   </style>
@@ -103,16 +103,16 @@
         </div>
         
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex items-center justify-center h-64">
-          <p class="text-slate-400 text-sm">此處未來可擴充圖表 (如：每月報名趨勢圖)</p>
+          <p class="text-slate-400 text-sm">此處未來可擴充全站營收與趨勢圖表</p>
         </div>
       </div>
 
       <!-- Tab: Users -->
       <div id="tab-users" class="tab-content hidden">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
+          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
             <h3 class="font-bold text-slate-700">全站會員名單</h3>
-            <button onclick="loadUsers()" class="text-sm bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded flex items-center gap-1 hover:bg-slate-50"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
+            <button onclick="loadUsers()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
           </div>
           <div class="overflow-x-auto">
             <table class="data-table">
@@ -135,11 +135,58 @@
       </div>
 
       <!-- Tab: Activities -->
-      <div id="tab-activities" class="tab-content hidden">
-         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center h-64 text-slate-400">
-           <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">construction</span>
-           <p>活動與對帳管理介面建置中...</p>
-         </div>
+      <div id="tab-activities" class="tab-content hidden space-y-6">
+        
+        <!-- 頂部租戶篩選區 -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <span class="text-slate-500 font-bold text-sm">篩選租戶 (歸屬網)：</span>
+            <select id="act-tenant-filter" onchange="renderActivities()" class="border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-[#06C755]">
+              <option value="all">全站所有活動</option>
+            </select>
+          </div>
+          <button onclick="loadActivities()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1">
+            <span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理
+          </button>
+        </div>
+
+        <!-- 該租戶統計數據 -->
+        <div class="grid grid-cols-3 gap-6">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">上架活動數</p>
+            <h3 class="text-3xl font-black text-[#06C755]" id="tenant-stat-acts">-</h3>
+          </div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">累積報名總數</p>
+            <h3 class="text-3xl font-black text-slate-700" id="tenant-stat-regs">-</h3>
+          </div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">實際報到數</p>
+            <h3 class="text-3xl font-black text-slate-700" id="tenant-stat-checkins">-</h3>
+          </div>
+        </div>
+
+        <!-- 活動列表 -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>活動名稱</th>
+                  <th>所屬租戶</th>
+                  <th>活動時間</th>
+                  <th>費用</th>
+                  <th>報名狀況</th>
+                  <th>狀態</th>
+                </tr>
+              </thead>
+              <tbody id="acts-table-body">
+                <tr><td colspan="6" class="text-center py-8 text-slate-400">請稍候，載入資料中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
 
       <!-- Tab: Settings -->
@@ -154,14 +201,14 @@
   </div>
 
   <!-- Scripts -->
-  <!-- 請將 LIFF_ID 與 WORKER_URL 換成您的真實參數 -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
-    const LIFF_ID = "2009886448-2UHnJgyT"; // 您的 LIFF ID
-    const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/"; // 您的 Worker 網址
+    const LIFF_ID = "2009886448-2UHnJgyT"; 
+    const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/"; 
     
     let adminProfile = null;
     let allUsersData = [];
+    let allActivitiesData = [];
 
     // 統一 API 呼叫
     async function fetchAPI(action, payload = {}) {
@@ -193,11 +240,12 @@
       document.getElementById('nav-' + tabId).classList.add('active');
       document.getElementById('page-title').innerText = document.getElementById('nav-' + tabId).innerText;
 
-      // 切換時載入對應資料
+      // 切換時智慧載入對應資料
       if (tabId === 'users' && allUsersData.length === 0) loadUsers();
+      if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
     }
 
-    // 載入會員名單
+    // ================== 會員管理區塊 ==================
     async function loadUsers() {
       const tbody = document.getElementById('users-table-body');
       tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>';
@@ -205,7 +253,7 @@
       const res = await fetchAPI('getAllUsers');
       if (res && Array.isArray(res)) {
         allUsersData = res;
-        document.getElementById('stat-users').innerText = res.length; // 更新總覽數字
+        document.getElementById('stat-users').innerText = res.length; 
         
         if (res.length === 0) {
           tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">尚無會員資料</td></tr>';
@@ -213,15 +261,15 @@
         }
 
         tbody.innerHTML = res.map(u => {
-          let roleBadge = u.role === 'admin' ? '<span class="bg-red-100 text-red-600 px-2 py-1 rounded text-xs font-bold">管理員</span>' : 
-                          (u.role === 'store' ? '<span class="bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs font-bold">店長</span>' : 
-                          '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs">一般</span>');
+          let roleBadge = u.role === 'admin' ? '<span class="text-red-500 font-bold">管理員</span>' : 
+                          (u.role === 'store' ? '<span class="text-blue-500 font-bold">店長</span>' : 
+                          '<span class="text-slate-400">一般</span>');
           return `
             <tr>
-              <td class="font-bold">${escapeHTML(u.name || '未命名')}</td>
-              <td class="font-mono text-xs text-slate-400">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
-              <td class="font-mono">${escapeHTML(u.phone || '-')}</td>
-              <td>${escapeHTML(u.networkId || 'admin')} <span class="text-xs text-slate-400 block">${escapeHTML(u.storeid || '')}</span></td>
+              <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
+              <td class="text-xs text-slate-400">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
+              <td>${escapeHTML(u.phone || '-')}</td>
+              <td class="text-sm">${escapeHTML(u.networkId || 'admin')} <span class="text-xs text-slate-400 ml-1">${escapeHTML(u.storeid || '')}</span></td>
               <td>${roleBadge}</td>
               <td class="text-right">
                 <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border border-slate-200 rounded px-2 py-1 bg-white outline-none">
@@ -233,19 +281,140 @@
             </tr>
           `;
         }).join('');
+        
+        // 若活動區塊已載入過，同步更新下拉選單名字
+        if(allActivitiesData.length > 0) updateTenantFilter(); 
       }
     }
 
-    // 變更權限
     async function updateRole(targetUserId, newRole) {
       if(!confirm(`確定要將此用戶變更為 ${newRole} 嗎？`)) {
-        loadUsers(); // 復原選單
+        loadUsers(); 
         return;
       }
       const res = await fetchAPI('updateUserRole', { targetUserId: targetUserId, newRole: newRole });
       if (res) {
         alert('權限已更新');
         loadUsers();
+      }
+    }
+
+    // ================== 活動統治區塊 ==================
+    async function loadActivities() {
+      const tbody = document.getElementById('acts-table-body');
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">資料撈取中，請稍候...</td></tr>';
+      
+      // 取得全站活動 (管理員權限會回傳全部)
+      const res = await fetchAPI('getPublicActivities');
+      if (res && Array.isArray(res)) {
+        allActivitiesData = res;
+        document.getElementById('stat-acts').innerText = res.length;
+        updateTenantFilter();
+        renderActivities();
+      } else {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-400">無法取得活動資料，請重新整理</td></tr>';
+      }
+    }
+
+    // 更新租戶下拉選單 (利用 allUsersData 來對應真實姓名)
+    function updateTenantFilter() {
+      const filter = document.getElementById('act-tenant-filter');
+      const currentVal = filter.value;
+      
+      const tenants = new Set();
+      allActivitiesData.forEach(act => {
+         let creator = String(act['建立者ID'] || '').trim();
+         if (creator === '') creator = 'admin';
+         tenants.add(creator);
+      });
+
+      let html = '<option value="all">全站所有活動</option>';
+      Array.from(tenants).sort().forEach(t => {
+         let tenantName = t;
+         if (allUsersData && allUsersData.length > 0) {
+             const userObj = allUsersData.find(u => u.networkId === t || u.userId === t);
+             if (userObj && userObj.name) {
+                 tenantName = `${userObj.name} (${t.substring(0,6)}...)`;
+             } else if (t === 'admin') {
+                 tenantName = `官方直營 (admin)`;
+             }
+         } else if (t === 'admin') {
+             tenantName = `官方直營 (admin)`;
+         }
+         html += `<option value="${t}">${escapeHTML(tenantName)}</option>`;
+      });
+
+      filter.innerHTML = html;
+      
+      // 保持原本選擇的租戶 (如果存在的話)
+      let hasValue = false;
+      for (let i = 0; i < filter.options.length; i++) {
+        if (filter.options[i].value === currentVal) hasValue = true;
+      }
+      if (hasValue) filter.value = currentVal;
+    }
+
+    // 渲染特定租戶的活動與統計
+    function renderActivities() {
+      const filterVal = document.getElementById('act-tenant-filter').value;
+      const tbody = document.getElementById('acts-table-body');
+      
+      let filtered = allActivitiesData;
+      if (filterVal !== 'all') {
+          filtered = allActivitiesData.filter(act => {
+              let creator = String(act['建立者ID'] || '').trim();
+              if (creator === '') creator = 'admin';
+              return creator === filterVal;
+          });
+      }
+
+      let totalActs = filtered.length;
+      let totalRegs = 0;
+      let totalCheckins = 0;
+
+      const rows = filtered.map(act => {
+          const regs = parseInt(act['報名人數']) || 0;
+          const checkins = parseInt(act['已到人數']) || 0;
+          
+          totalRegs += regs;
+          totalCheckins += checkins;
+
+          const price = parseInt(act['金額']) || 0;
+          const priceText = price === 0 ? '<span class="text-[#06C755]">免費</span>' : `$${price}`;
+          const timeText = (act['開始時間'] || '').substring(0, 16);
+          
+          let statusText = (act['狀態'] === '上架' || !act['狀態']) ? 
+              '<span class="text-blue-500">上架中</span>' : '<span class="text-slate-400">已下架</span>';
+
+          let creatorStr = String(act['建立者ID'] || '').trim() || 'admin';
+          if(creatorStr.length > 10) creatorStr = creatorStr.substring(0,8) + '...';
+
+          return `
+            <tr>
+              <td class="font-bold text-slate-700">${escapeHTML(act['活動名稱'] || '未命名')}</td>
+              <td class="text-xs text-slate-400">${escapeHTML(creatorStr)}</td>
+              <td class="text-sm">${escapeHTML(timeText)}</td>
+              <td>${priceText}</td>
+              <td class="text-sm"><span class="font-bold text-slate-700">${regs}</span> 報名 / ${checkins} 報到</td>
+              <td>${statusText}</td>
+            </tr>
+          `;
+      });
+
+      // 更新畫面上方統計數字
+      document.getElementById('tenant-stat-acts').innerText = totalActs;
+      document.getElementById('tenant-stat-regs').innerText = totalRegs;
+      document.getElementById('tenant-stat-checkins').innerText = totalCheckins;
+
+      // 更新首頁大盤統計
+      if(filterVal === 'all') {
+        document.getElementById('stat-regs').innerText = totalRegs;
+      }
+
+      if (filtered.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400">該租戶目前沒有建立任何活動</td></tr>`;
+      } else {
+          tbody.innerHTML = rows.join('');
       }
     }
 
@@ -269,32 +438,27 @@
         document.getElementById('admin-name').innerText = adminProfile.displayName;
         document.getElementById('admin-avatar').src = adminProfile.pictureUrl || 'https://via.placeholder.com/150';
 
-        // 驗證是否為管理員
         const userCheck = await fetchAPI('checkUser', { userId: adminProfile.userId });
         
         if (userCheck && userCheck.isRegistered && (userCheck.info.role === 'admin' || userCheck.info.role === 'store')) {
-          // 權限通過，隱藏遮罩
           document.getElementById('loading-screen').style.opacity = '0';
           setTimeout(() => document.getElementById('loading-screen').classList.add('hidden'), 300);
           
-          // 預載總覽數據 (未來可串接 getAdminStats)
+          // 預載資料
           loadUsers(); 
 
         } else {
-          // 無權限阻擋
           document.getElementById('loading-text').innerText = "權限不足，您不是系統管理員。";
           document.getElementById('loading-screen').querySelector('span').innerText = "block";
           document.getElementById('loading-screen').querySelector('span').classList.remove('animate-spin');
           document.getElementById('loading-screen').querySelector('span').classList.add('text-red-500');
         }
-
       } catch (err) {
         document.getElementById('loading-text').innerText = "系統連線錯誤，請重新整理。";
         console.error(err);
       }
     }
 
-    // 啟動
     document.addEventListener("DOMContentLoaded", initAdmin);
   </script>
 </body>
