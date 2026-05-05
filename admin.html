@@ -14,6 +14,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
 
+  <!-- 引入 Cropper.js -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
   <style>
     body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f8f9fa; }
     
@@ -29,6 +33,20 @@
     
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* 後台專用裁切器修正 */
+    #admin-cropper-modal {
+      position: fixed !important;
+      inset: 0 !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+    }
+    #admin-cropper-container {
+      flex: 1 1 0% !important;
+      min-height: 0 !important;
+      height: 0 !important;
+      position: relative !important;
+    }
   </style>
 </head>
 <body class="text-slate-800 h-screen flex overflow-hidden relative">
@@ -38,6 +56,9 @@
     <span class="material-symbols-outlined animate-spin text-5xl text-blue-600 mb-4">refresh</span>
     <p id="loading-text" class="text-slate-500 font-bold tracking-widest text-sm">系統初始化與安全驗證中...</p>
   </div>
+
+  <!-- Toast 通知容器 -->
+  <div id="toast-container" class="fixed top-6 left-1/2 -translate-x-1/2 z-[10000] flex flex-col gap-2 pointer-events-none w-max"></div>
 
   <!-- 左側邊欄 (Sidebar) -->
   <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative shrink-0">
@@ -170,7 +191,6 @@
       <!-- Tab: Cards (全站名片庫) -->
       <div id="tab-cards" class="tab-content hidden space-y-6">
         
-        <!-- 頂部搜尋與篩選列 -->
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
             <!-- 文字搜尋 -->
@@ -329,10 +349,20 @@
                 </div>
               </div>
             </div>
+
+            <!-- ✅ 補齊：圖片上傳與裁切區塊 -->
             <div>
               <label class="block text-xs font-bold text-slate-500 mb-1">封面圖片網址</label>
-              <input type="text" id="edit-v-img" oninput="updateAdminCardPreview()" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
+              <div class="flex gap-2">
+                <input type="text" id="edit-v-img" oninput="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
+                <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
+                  <span class="material-symbols-outlined text-[18px]">upload</span> 上傳圖片
+                  <!-- 觸發後台專用裁切器 -->
+                  <input type="file" class="hidden" accept="image/*" onchange="openAdminCropper(this)">
+                </label>
+              </div>
             </div>
+
             <div>
               <label class="block text-xs font-bold text-slate-500 mb-1">名片服務說明 (支援換行)</label>
               <textarea id="edit-v-desc" oninput="updateAdminCardPreview()" rows="4" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="請填寫公司介紹與服務項目..."></textarea>
@@ -354,7 +384,6 @@
         <div class="w-full md:w-[45%] bg-slate-100 p-6 flex flex-col items-center justify-start overflow-y-auto">
            <p class="text-[11px] font-bold text-slate-400 mb-3 tracking-widest">LINE 聊天室呈現預覽</p>
            
-           <!-- 模擬手機畫面 -->
            <div id="admin-card-preview-area" class="w-[300px] bg-white rounded-[24px] shadow-lg overflow-hidden border border-slate-200 relative shrink-0">
               <!-- 預覽畫面將由 JS 動態注入 -->
            </div>
@@ -369,6 +398,21 @@
           <span class="material-symbols-outlined text-[18px]">save</span> 儲存變更
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ✂️ 後台專用圖片裁切彈窗 -->
+  <div id="admin-cropper-modal" class="fixed inset-0 bg-slate-900/95 z-[2000] hidden flex flex-col transition-opacity duration-300">
+    <!-- 裁切操作區 -->
+    <div id="admin-cropper-container" class="flex-1 relative flex items-center justify-center p-4">
+      <img id="admin-cropper-image" class="block max-w-full max-h-full mx-auto shadow-2xl">
+    </div>
+    <!-- 底部控制列 -->
+    <div class="h-20 bg-black flex items-center justify-between px-8 shrink-0 border-t border-slate-800">
+      <button onclick="closeAdminCropper()" class="text-white hover:text-slate-300 font-bold text-sm px-4 py-2 transition-colors">取消</button>
+      <button id="btn-admin-confirm-crop" class="bg-[#06C755] text-white px-8 py-2.5 rounded-full font-bold text-sm shadow-lg shadow-[#06C755]/30 hover:bg-[#05b34c] transition-colors flex items-center gap-1">
+        <span class="material-symbols-outlined text-[18px]">crop</span> 確認裁切
+      </button>
     </div>
   </div>
 
@@ -390,6 +434,30 @@
     let allCardsData = [];
     let allActivitiesData = [];
     let currentEditButtons = []; 
+    let adminCropperInstance = null;
+
+    // 統一 Toast 提示 (取代 alert)
+    function showToast(msg, isError = false) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = `px-5 py-3 rounded-full shadow-xl text-sm font-bold text-white transition-all duration-300 flex items-center gap-2 ${isError ? 'bg-red-500' : 'bg-slate-800'}`;
+      toast.innerHTML = `<span class="material-symbols-outlined text-[18px]">${isError ? 'error' : 'check_circle'}</span> ${msg}`;
+      container.appendChild(toast);
+      
+      toast.animate([
+        { opacity: 0, transform: 'translateY(-20px)' },
+        { opacity: 1, transform: 'translateY(0)' }
+      ], { duration: 300, fill: 'forwards' });
+
+      setTimeout(() => {
+        const anim = toast.animate([
+          { opacity: 1, transform: 'translateY(0)' },
+          { opacity: 0, transform: 'translateY(-20px)' }
+        ], { duration: 300, fill: 'forwards' });
+        anim.onfinish = () => toast.remove();
+      }, 3000);
+    }
 
     async function fetchAPI(action, payload = {}) {
       try {
@@ -407,7 +475,7 @@
         return data.data || data;
       } catch (err) {
         console.error("API Error:", err);
-        alert("系統錯誤: " + err.message);
+        showToast(err.message, true);
         return null;
       }
     }
@@ -474,7 +542,7 @@
       }
       const res = await fetchAPI('updateUserRole', { targetUserId: targetUserId, newRole: newRole });
       if (res) {
-        alert('權限已更新');
+        showToast('權限已更新');
         loadUsers();
       }
     }
@@ -631,7 +699,7 @@
 
       switchModalTab('crm'); 
       document.getElementById('modal-card-edit').classList.remove('hidden');
-      updateAdminCardPreview(); // 觸發首次預覽渲染
+      updateAdminCardPreview(); 
     }
 
     // 🎨 所見即所得：即時更新右側手機預覽
@@ -693,7 +761,7 @@
           </div>
         `).join('');
       }
-      updateAdminCardPreview(); // 新增或刪除按鈕時也要更新預覽
+      updateAdminCardPreview(); 
     }
 
     function addAdminCardButton() {
@@ -705,11 +773,115 @@
       document.getElementById('modal-card-edit').classList.add('hidden');
     }
 
+    // ✂️ 開啟後台專用圖片裁切器
+    function openAdminCropper(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const layout = document.getElementById('edit-v-layout').value;
+      let uploadRatio = NaN;
+      if (layout === 'landscape') uploadRatio = 20 / 13;
+      else if (layout === 'portrait') uploadRatio = 2 / 3;
+      else if (layout === 'square') uploadRatio = 1 / 1;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const modal = document.getElementById('admin-cropper-modal');
+        const img = document.getElementById('admin-cropper-image');
+        
+        img.style.display = 'block';
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '100%';
+        
+        modal.classList.remove('hidden');
+
+        img.onload = () => {
+          const confirmBtn = document.getElementById('btn-admin-confirm-crop');
+          confirmBtn.setAttribute('onclick', 'confirmAdminCrop()');
+          confirmBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">crop</span> 確認裁切';
+          confirmBtn.disabled = false;
+
+          if (adminCropperInstance) adminCropperInstance.destroy();
+          
+          setTimeout(() => {
+            adminCropperInstance = new Cropper(img, {
+              aspectRatio: uploadRatio,
+              viewMode: 1,
+              dragMode: 'move',
+              autoCropArea: 0.95,
+              guides: true,
+              center: true,
+              highlight: false
+            });
+          }, 150);
+        };
+        img.src = e.target.result;
+        input.value = ''; 
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function closeAdminCropper() {
+      document.getElementById('admin-cropper-modal').classList.add('hidden');
+      if (adminCropperInstance) {
+        adminCropperInstance.destroy();
+        adminCropperInstance = null;
+      }
+    }
+
+    async function confirmAdminCrop() {
+      if (!adminCropperInstance) return;
+      const btn = document.getElementById('btn-admin-confirm-crop');
+      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 處理中...';
+      btn.disabled = true;
+
+      let size = 800;
+      let quality = 0.8;
+      
+      const canvas = adminCropperInstance.getCroppedCanvas({
+        maxWidth: size,
+        maxHeight: size,
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+      });
+      
+      let base64Image = canvas.toDataURL('image/jpeg', quality);
+
+      while (base64Image.length > 660000 && quality > 0.3) {
+        quality -= 0.15;
+        base64Image = adminCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+      }
+
+      closeAdminCropper();
+
+      const targetInput = document.getElementById('edit-v-img');
+      const originalVal = targetInput.value;
+      targetInput.value = '圖片上傳中...';
+      showToast('⏳ 圖片上傳中...');
+      
+      try {
+        const res = await fetchAPI('uploadImageToR2', { base64Image: base64Image });
+        if (res && res.url) {
+          targetInput.value = res.url;
+          updateAdminCardPreview(); 
+          showToast('✅ 圖片已成功上傳');
+        } else {
+          throw new Error('上傳失敗');
+        }
+      } catch (err) {
+        targetInput.value = originalVal;
+        showToast('⚠️ ' + err.message, true);
+      }
+    }
+
     // 📋 儲存雙層編修的變更
     async function saveCardEdit() {
       const rowId = document.getElementById('edit-c-rowid').value;
       const name = document.getElementById('edit-c-name').value.trim();
-      if (!name) return alert('姓名為必填欄位！');
+      if (!name) {
+        showToast('姓名為必填欄位！', true);
+        return;
+      }
 
       const btn = document.getElementById('btn-save-card');
       const originalBtnHTML = btn.innerHTML;
@@ -754,6 +926,7 @@
         }
         closeEditCardModal();
         renderCards();
+        showToast('✅ 數位名片儲存成功！');
       }
     }
 
