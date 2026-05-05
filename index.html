@@ -214,10 +214,24 @@
             <div class="flex justify-end mb-2">
               <button onclick="window.openCardDetail(currentUserCard)" class="text-blue-500 text-[12px] underline font-bold px-2 py-1 bg-blue-50 rounded-lg active:scale-95 transition-transform w-full text-center">編輯名片詳細文字資料</button>
             </div>
-            <div id="my-ecard-preview-area" class="rounded-2xl overflow-hidden shadow-lg border border-slate-100 mb-4 scale-[0.85] origin-top"></div>
 
-            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4 -mt-6">
+            <!-- 版型與圖片設定移至上方 -->
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4">
               <div>
+                <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">view_quilt</span> 名片版型</p>
+                <div class="flex items-center gap-2 bg-slate-200/50 p-1 rounded-xl">
+                  <label class="flex-1 text-center cursor-pointer">
+                    <input type="radio" name="my-ecard-layout" value="landscape" class="peer sr-only" checked onchange="window.changeMyLayout()">
+                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">標準橫式 (Mega)</div>
+                  </label>
+                  <label class="flex-1 text-center cursor-pointer">
+                    <input type="radio" name="my-ecard-layout" value="portrait" class="peer sr-only" onchange="window.changeMyLayout()">
+                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">滿版直式 (Giga)</div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="pt-2 border-t border-slate-200">
                 <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">image</span> 封面圖片</p>
                 <div class="flex gap-2 items-center">
                   <input id="my-v1-img-url" class="custom-input !py-2.5 !px-3 font-mono text-[13px] !bg-white" placeholder="https://" oninput="window.updateMyECardPreview()">
@@ -225,22 +239,14 @@
                   <input type="file" id="file-my-v1-img" accept="image/*" class="hidden" onchange="window.uploadCustomImageToR2(this, 'my-v1-img-url')">
                 </div>
               </div>
+            </div>
 
-              <div class="pt-2 border-t border-slate-200">
-                <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">view_quilt</span> 名片版型</p>
-                <div class="flex items-center gap-2 bg-slate-200/50 p-1 rounded-xl">
-                  <label class="flex-1 text-center cursor-pointer">
-                    <input type="radio" name="my-ecard-layout" value="landscape" class="peer sr-only" checked onchange="window.updateMyECardPreview()">
-                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">標準橫式 (Mega)</div>
-                  </label>
-                  <label class="flex-1 text-center cursor-pointer">
-                    <input type="radio" name="my-ecard-layout" value="portrait" class="peer sr-only" onchange="window.updateMyECardPreview()">
-                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">滿版直式 (Giga)</div>
-                  </label>
-                </div>
-              </div>
+            <!-- 預覽區塊 -->
+            <div id="my-ecard-preview-area" class="rounded-2xl overflow-hidden shadow-lg border border-slate-100 mb-4 scale-[0.85] origin-top"></div>
 
-              <div class="pt-2 border-t border-slate-200">
+            <!-- 按鈕設定保留在下方 -->
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4 -mt-6">
+              <div>
                 <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-3"><span class="material-symbols-outlined text-[18px]">smart_button</span> 底部按鈕設定</p>
                 <div id="my-v1-buttons-list" class="space-y-2 mb-3"></div>
                 <button onclick="window.addMyV1Button()" class="w-full border-2 border-dashed border-slate-300 py-2.5 rounded-xl text-slate-500 text-sm font-bold hover:bg-slate-100 transition-colors">+ 新增按鈕</button>
@@ -482,10 +488,24 @@
 
         <!-- Tab: 數位名片 -->
         <div id="tab-content-ecard" class="hidden p-5 space-y-5 bg-slate-50/30">
-          <div id="ecard-preview-area" class="rounded-2xl overflow-hidden shadow-lg border border-slate-100"></div>
-
-          <div id="ecard-v1-settings" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+          
+          <!-- 版型與圖片設定移至上方 -->
+          <div id="ecard-v1-settings-top" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
             <div>
+              <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">view_quilt</span> 名片版型</p>
+              <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                <label class="flex-1 text-center cursor-pointer">
+                  <input type="radio" name="ecard-layout" value="landscape" class="peer sr-only" checked onchange="window.changeOtherLayout()">
+                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">標準橫式 (Mega)</div>
+                </label>
+                <label class="flex-1 text-center cursor-pointer">
+                  <input type="radio" name="ecard-layout" value="portrait" class="peer sr-only" onchange="window.changeOtherLayout()">
+                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">滿版直式 (Giga)</div>
+                </label>
+              </div>
+            </div>
+
+            <div class="pt-2 border-t border-slate-100">
               <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">image</span> 封面圖片</p>
               <div class="flex gap-2 items-center">
                 <input id="v1-img-url" class="custom-input !py-2.5 !px-3 font-mono text-[13px]" placeholder="https://" oninput="window.updateECardPreview()">
@@ -493,22 +513,14 @@
                 <input type="file" id="file-v1-img" accept="image/*" class="hidden" onchange="window.uploadCustomImageToR2(this, 'v1-img-url')">
               </div>
             </div>
+          </div>
 
-            <div class="pt-2 border-t border-slate-100">
-              <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">view_quilt</span> 名片版型</p>
-              <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
-                <label class="flex-1 text-center cursor-pointer">
-                  <input type="radio" name="ecard-layout" value="landscape" class="peer sr-only" checked onchange="window.updateECardPreview()">
-                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">標準橫式 (Mega)</div>
-                </label>
-                <label class="flex-1 text-center cursor-pointer">
-                  <input type="radio" name="ecard-layout" value="portrait" class="peer sr-only" onchange="window.updateECardPreview()">
-                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all">滿版直式 (Giga)</div>
-                </label>
-              </div>
-            </div>
+          <!-- 預覽區塊 -->
+          <div id="ecard-preview-area" class="rounded-2xl overflow-hidden shadow-lg border border-slate-100"></div>
 
-            <div class="pt-2 border-t border-slate-100">
+          <!-- 按鈕設定保留在下方 -->
+          <div id="ecard-v1-settings-bottom" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+            <div>
               <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-3"><span class="material-symbols-outlined text-[18px]">smart_button</span> 底部按鈕設定</p>
               <div id="v1-buttons-list" class="space-y-2 mb-3"></div>
               <button onclick="window.addV1Button()" class="w-full border-2 border-dashed border-slate-200 py-2.5 rounded-xl text-slate-500 text-sm font-bold hover:bg-slate-50 transition-colors">+ 新增按鈕</button>
