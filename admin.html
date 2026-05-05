@@ -252,65 +252,102 @@
     </main>
   </div>
 
-  <!-- 🖋️ 名片編輯彈窗 Modal (無框、原生感) -->
+  <!-- 🖋️ 名片編輯彈窗 Modal (支援 CRM 與 名片設定 雙頁籤) -->
   <div id="modal-card-edit" class="fixed inset-0 bg-slate-900/60 z-[1000] hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
-    <div class="bg-white rounded-2xl shadow-2xl w-[480px] max-w-[90%] overflow-hidden flex flex-col max-h-[90vh] animate-[fade-in_0.2s_ease-out]">
-      <!-- 標題列 -->
-      <div class="px-6 py-4 flex justify-between items-center border-b border-slate-100 bg-slate-50">
-        <h3 class="font-bold text-slate-800 flex items-center gap-2">
-          <span class="material-symbols-outlined text-blue-600">edit_document</span> 編輯客戶資料
-        </h3>
-        <button onclick="closeEditCardModal()" class="text-slate-400 hover:text-slate-700 transition-colors">
+    <div class="bg-white rounded-2xl shadow-2xl w-[600px] max-w-[95%] overflow-hidden flex flex-col max-h-[90vh] animate-[fade-in_0.2s_ease-out]">
+      
+      <!-- 頂部頁籤切換 -->
+      <div class="px-6 flex justify-between items-center border-b border-slate-200 bg-slate-50 pt-3 shrink-0">
+        <div class="flex gap-6">
+          <button id="tab-btn-crm" onclick="switchModalTab('crm')" class="pb-3 border-b-2 border-blue-600 font-bold text-blue-600 outline-none">客戶基本資料</button>
+          <button id="tab-btn-visual" onclick="switchModalTab('visual')" class="pb-3 border-b-2 border-transparent font-bold text-slate-500 hover:text-slate-700 outline-none transition-colors">數位名片設定</button>
+        </div>
+        <button onclick="closeEditCardModal()" class="text-slate-400 hover:text-slate-700 transition-colors pb-3 outline-none">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
       
-      <!-- 編輯表單區 -->
-      <div class="p-6 overflow-y-auto space-y-4 no-scrollbar">
+      <!-- 主表單區 -->
+      <div class="p-6 overflow-y-auto space-y-4 no-scrollbar bg-white flex-1">
         <input type="hidden" id="edit-c-rowid">
         
-        <div>
-          <label class="block text-xs font-bold text-slate-500 mb-1">姓名 <span class="text-red-500">*</span></label>
-          <input type="text" id="edit-c-name" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="請輸入姓名">
-        </div>
-        
-        <div class="grid grid-cols-2 gap-4">
+        <!-- 頁籤內容 1：CRM 基本資料 -->
+        <div id="modal-body-crm" class="space-y-4">
           <div>
-            <label class="block text-xs font-bold text-slate-500 mb-1">公司名稱</label>
-            <input type="text" id="edit-c-company" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
+            <label class="block text-xs font-bold text-slate-500 mb-1">姓名 <span class="text-red-500">*</span></label>
+            <input type="text" id="edit-c-name" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="請輸入姓名">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">公司名稱</label>
+              <input type="text" id="edit-c-company" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">職稱</label>
+              <input type="text" id="edit-c-title" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">聯絡電話</label>
+              <input type="text" id="edit-c-phone" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1 flex justify-between">歸屬網 (擁有者) <span class="text-[10px] font-normal text-blue-500">轉移客戶</span></label>
+              <input type="text" id="edit-c-network" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="填寫 admin 或 店代碼">
+            </div>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-500 mb-1">職稱</label>
-            <input type="text" id="edit-c-title" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
+            <label class="block text-xs font-bold text-slate-500 mb-1">自訂標籤 (多個請用空格分開)</label>
+            <input type="text" id="edit-c-tags" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-blue-600 font-bold outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="#VIP #潛在客戶">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">內部備註</label>
+            <textarea id="edit-c-notes" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="寫下對此客戶的備註..."></textarea>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-bold text-slate-500 mb-1">聯絡電話</label>
-            <input type="text" id="edit-c-phone" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono">
+        <!-- 頁籤內容 2：數位名片設定 -->
+        <div id="modal-body-visual" class="hidden space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">名片版型</label>
+              <select id="edit-v-layout" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 transition-colors">
+                <option value="landscape">標準 (Mega)</option>
+                <option value="portrait">滿版 (Giga)</option>
+                <option value="square">正方 (1:1)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">封面圖片網址 (可略)</label>
+              <input type="text" id="edit-v-img" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="https://...">
+            </div>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-500 mb-1 flex justify-between">歸屬網 (擁有者) <span class="text-[10px] font-normal text-blue-500">轉移客戶</span></label>
-            <input type="text" id="edit-c-network" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="填寫 admin 或 店代碼">
+            <label class="block text-xs font-bold text-slate-500 mb-1">名片服務說明 (支援換行)</label>
+            <textarea id="edit-v-desc" rows="4" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="請填寫公司介紹與服務項目..."></textarea>
+          </div>
+          
+          <!-- 按鈕編輯器 -->
+          <div class="pt-2 border-t border-slate-100">
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-xs font-bold text-slate-500">自訂按鈕設定</label>
+              <button type="button" onclick="addAdminCardButton()" class="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition-colors font-bold">+ 新增按鈕</button>
+            </div>
+            <div id="admin-edit-buttons-list" class="space-y-2">
+              <!-- 按鈕列表動態渲染 -->
+            </div>
           </div>
         </div>
 
-        <div>
-          <label class="block text-xs font-bold text-slate-500 mb-1">自訂標籤 (多個請用空格分開)</label>
-          <input type="text" id="edit-c-tags" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-blue-600 font-bold outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="#VIP #潛在客戶">
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-500 mb-1">內部備註</label>
-          <textarea id="edit-c-notes" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="寫下對此客戶的備註..."></textarea>
-        </div>
       </div>
 
-      <!-- 按鈕區 -->
+      <!-- 儲存按鈕區 -->
       <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
         <button onclick="closeEditCardModal()" class="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">取消</button>
-        <button id="btn-save-card" onclick="saveCardEdit()" class="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all active:scale-95">儲存變更</button>
+        <button id="btn-save-card" onclick="saveCardEdit()" class="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-md hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-1">
+          <span class="material-symbols-outlined text-[18px]">save</span> 儲存變更
+        </button>
       </div>
     </div>
   </div>
@@ -332,6 +369,7 @@
     let allUsersData = [];
     let allCardsData = [];
     let allActivitiesData = [];
+    let currentEditButtons = []; // 管理員編輯名片時的按鈕暫存
 
     async function fetchAPI(action, payload = {}) {
       try {
@@ -437,7 +475,6 @@
       }
     }
 
-    // 更新名片庫的「歸屬網」下拉選單
     function updateCardTenantFilter() {
       const filter = document.getElementById('card-tenant-filter');
       const currentVal = filter.value;
@@ -471,7 +508,6 @@
       }
     }
 
-    // 渲染名片清單 (包含文字搜尋與下拉篩選)
     function renderCards() {
       const tbody = document.getElementById('cards-table-body');
       const searchStr = document.getElementById('card-search-input').value.toLowerCase().trim();
@@ -479,7 +515,6 @@
       
       let filtered = allCardsData;
 
-      // 1. 歸屬網篩選
       if (filterNet !== 'all') {
           filtered = filtered.filter(c => {
               let net = String(c['歸屬網'] || '').trim();
@@ -488,7 +523,6 @@
           });
       }
 
-      // 2. 文字模糊搜尋
       if (searchStr !== '') {
           filtered = filtered.filter(c => {
              const str = [
@@ -507,7 +541,6 @@
         const company = escapeHTML(c['公司名稱'] || '');
         const title = escapeHTML(c['職稱'] || '');
         const companyTitle = [company, title].filter(Boolean).join(' / ') || '<span class="text-slate-300">-</span>';
-        
         const phone = escapeHTML(c['手機號碼'] || c['公司電話'] || '-');
         const network = escapeHTML(c['歸屬網'] || 'admin');
         
@@ -526,7 +559,7 @@
             <td class="text-sm text-blue-600 font-bold">${network}</td>
             <td class="text-xs text-slate-500 leading-relaxed">${tagNote}</td>
             <td class="text-center">
-               <button onclick="openEditCardModal('${c.rowId}')" class="text-slate-400 hover:text-blue-600 transition-colors p-1" title="編輯資料">
+               <button onclick="openEditCardModal('${c.rowId}')" class="text-slate-400 hover:text-blue-600 transition-colors p-1" title="名片編輯設定">
                  <span class="material-symbols-outlined text-[20px]">edit_note</span>
                </button>
             </td>
@@ -535,11 +568,27 @@
       }).join('');
     }
 
-    // 打開編修彈窗
+    // 📋 名片編輯器切換 Modal Tabs
+    function switchModalTab(tabType) {
+      if (tabType === 'crm') {
+        document.getElementById('tab-btn-crm').className = "pb-3 border-b-2 border-blue-600 font-bold text-blue-600 outline-none";
+        document.getElementById('tab-btn-visual').className = "pb-3 border-b-2 border-transparent font-bold text-slate-500 hover:text-slate-700 outline-none transition-colors";
+        document.getElementById('modal-body-crm').classList.remove('hidden');
+        document.getElementById('modal-body-visual').classList.add('hidden');
+      } else {
+        document.getElementById('tab-btn-visual').className = "pb-3 border-b-2 border-blue-600 font-bold text-blue-600 outline-none";
+        document.getElementById('tab-btn-crm').className = "pb-3 border-b-2 border-transparent font-bold text-slate-500 hover:text-slate-700 outline-none transition-colors";
+        document.getElementById('modal-body-visual').classList.remove('hidden');
+        document.getElementById('modal-body-crm').classList.add('hidden');
+      }
+    }
+
+    // 📋 打開名片雙層編修彈窗
     function openEditCardModal(rowId) {
       const card = allCardsData.find(c => String(c.rowId) === String(rowId));
       if (!card) return;
 
+      // 載入 CRM 欄位
       document.getElementById('edit-c-rowid').value = card.rowId;
       document.getElementById('edit-c-name').value = card['姓名'] || '';
       document.getElementById('edit-c-company').value = card['公司名稱'] || '';
@@ -549,25 +598,61 @@
       document.getElementById('edit-c-tags').value = card['標籤'] || '';
       document.getElementById('edit-c-notes').value = card['建檔人/備註'] || '';
 
+      // 解析並載入 數位名片設定 欄位
+      let cfg = {};
+      try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
+      
+      document.getElementById('edit-v-layout').value = cfg.layoutStyle || 'landscape';
+      document.getElementById('edit-v-img').value = cfg.imgUrl || card['名片圖檔'] || '';
+      document.getElementById('edit-v-desc').value = cfg.desc || card['服務項目'] || '';
+      
+      currentEditButtons = cfg.buttons || [];
+      renderAdminCardButtons();
+
+      switchModalTab('crm'); // 預設停在基本資料
       document.getElementById('modal-card-edit').classList.remove('hidden');
     }
 
-    // 關閉編修彈窗
+    // 📋 渲染管理員彈窗內的按鈕清單
+    function renderAdminCardButtons() {
+      const container = document.getElementById('admin-edit-buttons-list');
+      if (currentEditButtons.length === 0) {
+        container.innerHTML = '<p class="text-xs text-slate-400">目前沒有設定任何按鈕</p>';
+        return;
+      }
+      container.innerHTML = currentEditButtons.map((b, i) => `
+        <div class="flex gap-2 items-center bg-white p-2 rounded border border-slate-200 shadow-sm">
+          <input type="color" value="${b.c || '#06C755'}" class="w-8 h-8 p-0 cursor-pointer rounded shrink-0 border-none" onchange="currentEditButtons[${i}].c=this.value">
+          <div class="flex-1 flex flex-col gap-1">
+            <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-xs font-bold bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-1" oninput="currentEditButtons[${i}].l=this.value">
+            <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://..." class="w-full text-xs font-mono bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-1" oninput="currentEditButtons[${i}].u=this.value">
+          </div>
+          <button onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons()" class="text-red-400 hover:bg-red-50 p-1.5 rounded shrink-0"><span class="material-symbols-outlined text-[16px]">delete</span></button>
+        </div>
+      `).join('');
+    }
+
+    function addAdminCardButton() {
+      currentEditButtons.push({ l: '新按鈕', u: '', c: '#06C755' });
+      renderAdminCardButtons();
+    }
+
     function closeEditCardModal() {
       document.getElementById('modal-card-edit').classList.add('hidden');
     }
 
-    // 儲存編修變更
+    // 📋 儲存雙層編修的變更
     async function saveCardEdit() {
       const rowId = document.getElementById('edit-c-rowid').value;
       const name = document.getElementById('edit-c-name').value.trim();
-      
       if (!name) return alert('姓名為必填欄位！');
 
       const btn = document.getElementById('btn-save-card');
+      const originalBtnHTML = btn.innerHTML;
       btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[16px]">refresh</span> 儲存中...';
       btn.disabled = true;
 
+      // 1. 抓取 CRM 基本資料
       const updateData = {
         '姓名': name,
         '公司名稱': document.getElementById('edit-c-company').value.trim(),
@@ -578,19 +663,33 @@
         '建檔人/備註': document.getElementById('edit-c-notes').value.trim()
       };
 
+      // 2. 抓取並重組 數位名片設定 JSON
+      let cfg = {};
+      const cardIndex = allCardsData.findIndex(c => String(c.rowId) === String(rowId));
+      if (cardIndex !== -1) {
+        try { cfg = JSON.parse(allCardsData[cardIndex]['自訂名片設定'] || '{}'); } catch(e){}
+      }
+      
+      cfg.layoutStyle = document.getElementById('edit-v-layout').value;
+      cfg.imgUrl = document.getElementById('edit-v-img').value.trim();
+      cfg.desc = document.getElementById('edit-v-desc').value;
+      cfg.buttons = currentEditButtons;
+
+      updateData['名片圖檔'] = cfg.imgUrl;
+      updateData['服務項目'] = cfg.desc; // 同步服務項目
+      updateData['自訂名片設定'] = JSON.stringify(cfg);
+
+      // 送出 API
       const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData });
       
-      btn.innerHTML = '儲存變更';
+      btn.innerHTML = originalBtnHTML;
       btn.disabled = false;
 
       if (res) {
-        // 在本地端更新資料，不用重新撈 API，加速體驗
-        const idx = allCardsData.findIndex(c => String(c.rowId) === String(rowId));
-        if (idx !== -1) {
-          allCardsData[idx] = { ...allCardsData[idx], ...updateData };
+        if (cardIndex !== -1) {
+          allCardsData[cardIndex] = { ...allCardsData[cardIndex], ...updateData };
         }
         closeEditCardModal();
-        updateCardTenantFilter();
         renderCards();
       }
     }
@@ -698,14 +797,12 @@
       }
     }
 
-    // 防禦 XSS
     function escapeHTML(str) {
       return String(str || '').replace(/[&<>'"]/g, tag => ({
           '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
         }[tag] || tag));
     }
 
-    // 系統初始化與安全認證
     async function initAdmin() {
       try {
         await liff.init({ liffId: LIFF_ID });
