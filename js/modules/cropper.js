@@ -137,41 +137,49 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
 
   window.currentUploadTargetId = targetInputId;
 
-  // ====== 裁切比例邏輯修改：解除限制，改為自由裁切 ======
   let ratio = NaN; // 預設自由裁切 (不限制)
 
   if (forcedRatio !== null) {
     ratio = forcedRatio;
   } else if (targetInputId === 'input-store-banner') {
-    ratio = 16 / 9; // 首頁大圖維持 16:9 以免首頁排版壞掉
+    ratio = 16 / 9; // 首頁大圖維持 16:9
   }
-  // 其餘名片圖片 (v1-img-url, my-v1-img-url) 皆套用 NaN 自由裁切
 
   const reader = new FileReader();
   reader.onload = (e) => {
     const cropperModal = document.getElementById('cropper-modal');
     const cropperImage = document.getElementById('cropper-image');
-    cropperImage.src = e.target.result;
+    
+    // 🚀 關鍵修復 1：先解除隱藏，讓 modal 擁有真實的 DOM 寬高
     cropperModal.classList.remove('hidden');
 
-    const confirmBtn = document.getElementById('btn-confirm-crop');
-    if (confirmBtn) confirmBtn.setAttribute('onclick', 'window.confirmCustomImageCrop()');
+    // 🚀 關鍵修復 2：必須等待圖片完全載入後，才能精準計算比例
+    cropperImage.onload = () => {
+      const confirmBtn = document.getElementById('btn-confirm-crop');
+      if (confirmBtn) confirmBtn.setAttribute('onclick', 'window.confirmCustomImageCrop()');
 
-    if (cropperInstance) cropperInstance.destroy();
+      if (cropperInstance) cropperInstance.destroy();
 
-    cropperInstance = new Cropper(cropperImage, {
-      aspectRatio: ratio, // 傳入 NaN 即為自由框
-      viewMode: 1,
-      dragMode: 'move',
-      autoCropArea: 0.9,
-      restore: false,
-      guides: true,
-      center: true,
-      highlight: false,
-      cropBoxMovable: true,
-      cropBoxResizable: true,
-      toggleDragModeOnDblclick: false,
-    });
+      // 🚀 關鍵修復 3：給予 50ms 讓瀏覽器完成 CSS reflow，避免抓錯螢幕大小
+      setTimeout(() => {
+        cropperInstance = new Cropper(cropperImage, {
+          aspectRatio: ratio,
+          viewMode: 1, // 限制裁切框不能超出畫布
+          dragMode: 'move', // 手機端建議使用 move 拖曳圖片
+          autoCropArea: 1,  // 將初始選取框放大到 100% 貼齊邊緣
+          restore: false,
+          guides: true,
+          center: true,
+          highlight: false,
+          cropBoxMovable: true,
+          cropBoxResizable: true,
+          toggleDragModeOnDblclick: false,
+        });
+      }, 50);
+    };
+    
+    // 寫入 src 觸發 onload
+    cropperImage.src = e.target.result;
   };
   reader.readAsDataURL(file);
   inputEl.value = '';
@@ -245,26 +253,32 @@ window.openActiveCropper = function(input, targetMode) {
 
   const reader = new FileReader();
   reader.onload = (e) => {
+    const modal = document.getElementById('section-image-cropper');
     const img = document.getElementById('active-cropper-image');
-    if (!img) return;
+    if (!img || !modal) return;
+
+    // 先顯示 Modal 取得寬高
+    modal.classList.remove('hidden');
 
     img.onload = () => {
-      document.getElementById('section-image-cropper').classList.remove('hidden');
       if (activeCropperInstance) activeCropperInstance.destroy();
       img.style.opacity = '1';
 
-      activeCropperInstance = new Cropper(img, {
-        aspectRatio: NaN,
-        viewMode: 1,
-        dragMode: 'crop',
-        autoCropArea: 0.9,
-        guides: true,
-        center: true,
-        highlight: false
-      });
+      setTimeout(() => {
+        activeCropperInstance = new Cropper(img, {
+          aspectRatio: NaN,
+          viewMode: 1,
+          dragMode: 'move', // 改為 move 更適合手機
+          autoCropArea: 1,  // 最大化裁切框
+          guides: true,
+          center: true,
+          highlight: false
+        });
+      }, 50);
     };
+    
     img.src = e.target.result;
-    img.style.opacity = '0';
+    img.style.opacity = '0'; // 避免閃爍
     input.value = "";
   };
   reader.readAsDataURL(file);
