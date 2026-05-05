@@ -193,12 +193,10 @@
         
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
-            <!-- 文字搜尋 -->
             <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full md:w-80 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
               <span class="material-symbols-outlined text-slate-400 text-[18px] mr-2">search</span>
               <input type="text" id="card-search-input" oninput="renderCards()" placeholder="搜尋姓名、電話、公司或標籤..." class="bg-transparent border-none outline-none text-sm w-full text-slate-700">
             </div>
-            <!-- 歸屬網篩選 -->
             <div class="flex items-center gap-2">
               <span class="text-slate-500 font-bold text-sm">歸屬網：</span>
               <select id="card-tenant-filter" onchange="renderCards()" class="border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all">
@@ -329,35 +327,47 @@
           <!-- 頁籤內容 2：數位名片設定 -->
           <div id="modal-body-visual" class="hidden space-y-5">
             <div class="grid grid-cols-2 gap-4">
+              
+              <!-- 修正：完美移植手機版的膠囊切換選單 -->
               <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1">名片版型</label>
-                <select id="edit-v-layout" onchange="updateAdminCardPreview()" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 transition-colors">
-                  <option value="landscape">標準 (Mega)</option>
-                  <option value="portrait">滿版 (Giga)</option>
-                  <option value="square">正方 (1:1)</option>
-                </select>
+                <label class="block text-xs font-bold text-slate-500 mb-2">名片版型</label>
+                <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl h-[42px]">
+                  <label class="flex-1 text-center cursor-pointer m-0">
+                    <input type="radio" name="edit-v-layout" value="landscape" class="peer sr-only" onchange="updateAdminCardPreview()">
+                    <div class="py-1.5 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all h-full flex items-center justify-center">標準(Mega)</div>
+                  </label>
+                  <label class="flex-1 text-center cursor-pointer m-0">
+                    <input type="radio" name="edit-v-layout" value="portrait" class="peer sr-only" onchange="updateAdminCardPreview()">
+                    <div class="py-1.5 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all h-full flex items-center justify-center">滿版(Giga)</div>
+                  </label>
+                  <label class="flex-1 text-center cursor-pointer m-0">
+                    <input type="radio" name="edit-v-layout" value="square" class="peer sr-only" onchange="updateAdminCardPreview()">
+                    <div class="py-1.5 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all h-full flex items-center justify-center">正方(1:1)</div>
+                  </label>
+                </div>
               </div>
+
+              <!-- 對齊與顏色 -->
               <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1">排版與顏色</label>
-                <div class="flex gap-2">
+                <label class="block text-xs font-bold text-slate-500 mb-2">排版與顏色</label>
+                <div class="flex gap-2 h-[42px]">
                   <select id="edit-v-align" onchange="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm text-slate-800 outline-none focus:border-blue-500">
                     <option value="center">置中對齊</option>
                     <option value="start">靠左對齊</option>
                     <option value="end">靠右對齊</option>
                   </select>
-                  <input type="color" id="edit-v-color" onchange="updateAdminCardPreview()" value="#666666" class="w-10 h-[38px] p-0 border border-slate-200 rounded-lg cursor-pointer bg-white">
+                  <input type="color" id="edit-v-color" onchange="updateAdminCardPreview()" value="#666666" class="w-[42px] h-full p-0 border border-slate-200 rounded-lg cursor-pointer bg-white">
                 </div>
               </div>
             </div>
 
-            <!-- ✅ 補齊：圖片上傳與裁切區塊 -->
+            <!-- 圖片上傳區 -->
             <div>
               <label class="block text-xs font-bold text-slate-500 mb-1">封面圖片網址</label>
               <div class="flex gap-2">
                 <input type="text" id="edit-v-img" oninput="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
                 <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
                   <span class="material-symbols-outlined text-[18px]">upload</span> 上傳圖片
-                  <!-- 觸發後台專用裁切器 -->
                   <input type="file" class="hidden" accept="image/*" onchange="openAdminCropper(this)">
                 </label>
               </div>
@@ -436,7 +446,7 @@
     let currentEditButtons = []; 
     let adminCropperInstance = null;
 
-    // 統一 Toast 提示 (取代 alert)
+    // 統一 Toast 提示
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
       if (!container) return;
@@ -688,7 +698,11 @@
       let cfg = {};
       try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
       
-      document.getElementById('edit-v-layout').value = cfg.layoutStyle || 'landscape';
+      // ✅ 完美同步手機版的膠囊按鈕狀態
+      let layoutVal = cfg.layoutStyle || 'landscape';
+      let layoutRadio = document.querySelector(`input[name="edit-v-layout"][value="${layoutVal}"]`);
+      if (layoutRadio) layoutRadio.checked = true;
+
       document.getElementById('edit-v-img').value = cfg.imgUrl || card['名片圖檔'] || '';
       document.getElementById('edit-v-desc').value = cfg.desc || card['服務項目'] || '';
       document.getElementById('edit-v-align').value = cfg.descAlign || 'center';
@@ -714,7 +728,9 @@
       if (!rawService) rawService = [company, title].filter(Boolean).join(' / ');
       const service = String(rawService).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
-      const layoutStyle = document.getElementById('edit-v-layout').value;
+      const layoutEl = document.querySelector('input[name="edit-v-layout"]:checked');
+      const layoutStyle = layoutEl ? layoutEl.value : 'landscape';
+
       const imgUrl = document.getElementById('edit-v-img').value || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
       const align = document.getElementById('edit-v-align').value || 'center';
       const color = document.getElementById('edit-v-color').value || '#666666';
@@ -778,7 +794,8 @@
       const file = input.files[0];
       if (!file) return;
 
-      const layout = document.getElementById('edit-v-layout').value;
+      const layoutEl = document.querySelector('input[name="edit-v-layout"]:checked');
+      const layout = layoutEl ? layoutEl.value : 'landscape';
       let uploadRatio = NaN;
       if (layout === 'landscape') uploadRatio = 20 / 13;
       else if (layout === 'portrait') uploadRatio = 2 / 3;
@@ -904,7 +921,9 @@
         try { cfg = JSON.parse(allCardsData[cardIndex]['自訂名片設定'] || '{}'); } catch(e){}
       }
       
-      cfg.layoutStyle = document.getElementById('edit-v-layout').value;
+      const layoutEl = document.querySelector('input[name="edit-v-layout"]:checked');
+      cfg.layoutStyle = layoutEl ? layoutEl.value : 'landscape';
+      
       cfg.imgUrl = document.getElementById('edit-v-img').value.trim();
       cfg.desc = document.getElementById('edit-v-desc').value;
       cfg.descAlign = document.getElementById('edit-v-align').value;
