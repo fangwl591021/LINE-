@@ -74,18 +74,48 @@ window.getPreviewHTML = function(card, style, configParams) {
   '</div>';
 };
 
+// 版型切換事件
+window.changeOtherLayout = function() {
+  const layoutRadio = document.querySelector('input[name="ecard-layout"]:checked');
+  const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
+  window.otherEcardImages = window.otherEcardImages || { landscape: '', portrait: '' };
+  // 切換時還原對應的圖片網址
+  document.getElementById('v1-img-url').value = window.otherEcardImages[layoutStyle] || '';
+  window.updateECardPreview();
+};
+
 // 更新名片預覽
 window.updateECardPreview = function() {
   if (!currentCard) return;
   const area = document.getElementById('ecard-preview-area');
   const colorInput = document.getElementById('edit-desc-color');
   
+  // 若為初次載入此名片，初始化雙圖片記憶庫與預設版型
+  if (window.currentLoadedCardId !== currentCard.rowId) {
+    window.currentLoadedCardId = currentCard.rowId;
+    let cfg = {};
+    try { cfg = JSON.parse(currentCard['自訂名片設定'] || '{}'); } catch(e){}
+    window.otherEcardImages = {
+      landscape: cfg.imgUrl || currentCard['名片圖檔'] || '',
+      portrait: cfg.imgUrlPortrait || ''
+    };
+    // 嚴格確保預設值為 landscape
+    const layoutStyle = cfg.layoutStyle === 'portrait' ? 'portrait' : 'landscape';
+    const layoutRadio = document.querySelector(`input[name="ecard-layout"][value="${layoutStyle}"]`);
+    if (layoutRadio) layoutRadio.checked = true;
+    document.getElementById('v1-img-url').value = window.otherEcardImages[layoutStyle] || '';
+  }
+
   // 取得畫面上選擇的版型
   const layoutRadio = document.querySelector('input[name="ecard-layout"]:checked');
   const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
 
+  // 即時儲存目前網址到記憶庫
+  window.otherEcardImages = window.otherEcardImages || { landscape: '', portrait: '' };
+  window.otherEcardImages[layoutStyle] = document.getElementById('v1-img-url').value;
+
   let configParams = {
-    imgUrl: document.getElementById('v1-img-url').value || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80',
+    imgUrl: window.otherEcardImages[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80',
     buttons: v1Buttons,
     descAlign: window.currentDescAlign || 'center',
     descColor: colorInput ? colorInput.value : '#666666',
@@ -112,10 +142,14 @@ window.saveECardConfig = async function(isSilent = false) {
   const colorInput = document.getElementById('edit-desc-color');
   const layoutRadio = document.querySelector('input[name="ecard-layout"]:checked');
   const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
+  
+  window.otherEcardImages = window.otherEcardImages || { landscape: '', portrait: '' };
+  window.otherEcardImages[layoutStyle] = document.getElementById('v1-img-url').value;
 
   const config = {
     cardType: 'v1',
-    imgUrl: document.getElementById('v1-img-url').value,
+    imgUrl: window.otherEcardImages['landscape'], // 獨立存 Mega 圖
+    imgUrlPortrait: window.otherEcardImages['portrait'], // 獨立存 Giga 圖
     title: currentCard['姓名'],
     desc: currentCard['服務項目'] || currentCard['職稱'],
     buttons: v1Buttons,
