@@ -194,12 +194,19 @@ window.confirmCustomImageCrop = async function() {
 
   let size = 800; // 介面顯示用圖片 800px 即可
   let quality = 0.8;
-  let base64Image = cropperInstance.getCroppedCanvas({
+  
+  // 🚀 取得裁切後的真實畫布
+  const canvas = cropperInstance.getCroppedCanvas({
     maxWidth: size,
     maxHeight: size,
     imageSmoothingEnabled: true,
     imageSmoothingQuality: 'high',
-  }).toDataURL('image/jpeg', quality);
+  });
+  
+  // 🚀 計算出這張圖的真實寬高比 (交給後端 Flex 渲染用)
+  const imgRatio = canvas.width + ':' + canvas.height;
+
+  let base64Image = canvas.toDataURL('image/jpeg', quality);
 
   while (base64Image.length > 660000 && quality > 0.3) {
     quality -= 0.15;
@@ -227,12 +234,13 @@ window.confirmCustomImageCrop = async function() {
       targetInput.value = res.url;
       window.showToast('✅ 圖片已成功上傳');
 
+      // 🚀 將真實比例 (imgRatio) 傳遞給前端設定
       if (targetInputId === 'my-v1-img-url') {
-        if (typeof window.updateMyECardPreview === 'function') window.updateMyECardPreview();
+        if (typeof window.setMyUploadImage === 'function') window.setMyUploadImage(res.url, imgRatio);
+      } else if (targetInputId === 'v1-img-url') {
+        if (typeof window.setOtherUploadImage === 'function') window.setOtherUploadImage(res.url, imgRatio);
       } else if (targetInputId === 'input-store-banner') {
         document.getElementById('setting-preview-banner').src = res.url;
-      } else {
-        if (typeof window.updateECardPreview === 'function') window.updateECardPreview();
       }
     } else {
       throw new Error(res.error || '上傳失敗');
