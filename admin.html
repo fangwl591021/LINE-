@@ -17,20 +17,24 @@
   <style>
     body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f8f9fa; }
     
-    /* 側邊欄導航樣式 (對齊您的截圖風格) */
+    /* 側邊欄導航樣式 */
     .nav-item { transition: all 0.2s ease; }
-    .nav-item.active { background-color: #eff6ff; color: #2563eb; } /* bg-blue-50, text-blue-600 */
-    .nav-item:not(.active) { color: #64748b; } /* text-slate-500 */
-    .nav-item:not(.active):hover { background-color: #f8fafc; color: #475569; } /* bg-slate-50 */
+    .nav-item.active { background-color: #eff6ff; color: #2563eb; } 
+    .nav-item:not(.active) { color: #64748b; } 
+    .nav-item:not(.active):hover { background-color: #f8fafc; color: #475569; } 
     
-    /* 簡潔的表格樣式，無多餘包框 (符合 LINE OA 原生感) */
+    /* 簡潔的表格樣式，無多餘包框 */
     .data-table { width: 100%; border-collapse: collapse; text-align: left; }
-    .data-table th { background-color: #f8fafc; padding: 12px 16px; font-size: 13px; color: #64748b; font-weight: normal; border-bottom: 1px solid #e2e8f0; }
+    .data-table th { background-color: #f8fafc; padding: 12px 16px; font-size: 13px; color: #64748b; font-weight: normal; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
     .data-table td { padding: 12px 16px; font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
     .data-table tr:hover { background-color: #f8fafc; }
+    
+    /* 隱藏卷軸但可滾動 */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
-<body class="text-slate-800 h-screen flex overflow-hidden">
+<body class="text-slate-800 h-screen flex overflow-hidden relative">
 
   <!-- 全域載入遮罩 -->
   <div id="loading-screen" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center transition-opacity duration-300">
@@ -40,7 +44,6 @@
 
   <!-- 左側邊欄 (Sidebar) -->
   <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative shrink-0">
-    <!-- Logo 區塊 -->
     <div class="h-24 flex items-center px-6 border-b border-slate-100 shrink-0">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/30 shrink-0">
@@ -53,10 +56,7 @@
       </div>
     </div>
 
-    <!-- 導航選單 -->
-    <nav class="flex-1 py-6 px-4 flex flex-col gap-6 overflow-y-auto">
-      
-      <!-- 系統管理 -->
+    <nav class="flex-1 py-6 px-4 flex flex-col gap-6 overflow-y-auto no-scrollbar">
       <div>
         <p class="text-xs font-bold text-slate-400 mb-2 px-2">系統管理</p>
         <div class="flex flex-col gap-1">
@@ -68,7 +68,6 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
             全站活動監控
           </a>
-          <!-- ✅ 新增：全站名片庫 -->
           <a href="#" onclick="switchTab('cards')" id="nav-cards" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">badge</span>
             全站名片庫
@@ -76,7 +75,6 @@
         </div>
       </div>
 
-      <!-- 數據中心 -->
       <div>
         <p class="text-xs font-bold text-slate-400 mb-2 px-2">數據中心</p>
         <div class="flex flex-col gap-1">
@@ -90,14 +88,12 @@
           </a>
         </div>
       </div>
-      
     </nav>
   </aside>
 
   <!-- 右側主內容區 -->
   <div class="flex-1 flex flex-col overflow-hidden">
     
-    <!-- 頂部導航 (Top Bar) -->
     <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-0 shrink-0">
       <h2 id="page-title" class="text-lg font-bold text-slate-700">用戶與商家權限</h2>
       
@@ -110,10 +106,9 @@
       </div>
     </header>
 
-    <!-- 內容切換區 -->
-    <main class="flex-1 overflow-y-auto p-8">
+    <main class="flex-1 overflow-y-auto p-8 bg-[#f8f9fa]">
       
-      <!-- Tab: Users (用戶與商家權限) -->
+      <!-- Tab: Users -->
       <div id="tab-users" class="tab-content">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
@@ -140,7 +135,7 @@
         </div>
       </div>
 
-      <!-- Tab: Activities (全站活動監控) -->
+      <!-- Tab: Activities -->
       <div id="tab-activities" class="tab-content hidden space-y-6">
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div class="flex items-center gap-4">
@@ -176,25 +171,44 @@
       </div>
 
       <!-- Tab: Cards (全站名片庫) -->
-      <div id="tab-cards" class="tab-content hidden">
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
-            <h3 class="font-bold text-slate-700">全站名片與客戶資料庫</h3>
-            <button onclick="loadCards()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
+      <div id="tab-cards" class="tab-content hidden space-y-6">
+        
+        <!-- 頂部搜尋與篩選列 -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
+            <!-- 文字搜尋 -->
+            <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full md:w-80 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
+              <span class="material-symbols-outlined text-slate-400 text-[18px] mr-2">search</span>
+              <input type="text" id="card-search-input" oninput="renderCards()" placeholder="搜尋姓名、電話、公司或標籤..." class="bg-transparent border-none outline-none text-sm w-full text-slate-700">
+            </div>
+            <!-- 歸屬網篩選 -->
+            <div class="flex items-center gap-2">
+              <span class="text-slate-500 font-bold text-sm">歸屬網：</span>
+              <select id="card-tenant-filter" onchange="renderCards()" class="border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all">
+                <option value="all">全站名單</option>
+              </select>
+            </div>
           </div>
+          <button onclick="loadCards()" class="text-sm border border-slate-200 text-slate-600 bg-white px-4 py-2 rounded-lg hover:bg-slate-50 flex items-center gap-1 shrink-0 shadow-sm">
+            <span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="data-table">
               <thead>
                 <tr>
                   <th>姓名</th>
-                  <th>公司名稱 / 職稱</th>
+                  <th>公司與職稱</th>
                   <th>聯絡電話</th>
                   <th>歸屬網</th>
                   <th>標籤 / 備註</th>
+                  <th class="text-center w-20">操作</th>
                 </tr>
               </thead>
               <tbody id="cards-table-body">
-                <tr><td colspan="5" class="text-center py-8 text-slate-400">載入中...</td></tr>
+                <tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>
               </tbody>
             </table>
           </div>
@@ -227,7 +241,7 @@
         </div>
       </div>
 
-      <!-- Tab: Import (批次名單匯入) -->
+      <!-- Tab: Import -->
       <div id="tab-import" class="tab-content hidden">
          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center h-64 text-slate-400">
            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">upload_file</span>
@@ -237,6 +251,76 @@
 
     </main>
   </div>
+
+  <!-- 🖋️ 名片編輯彈窗 Modal (無框、原生感) -->
+  <div id="modal-card-edit" class="fixed inset-0 bg-slate-900/60 z-[1000] hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+    <div class="bg-white rounded-2xl shadow-2xl w-[480px] max-w-[90%] overflow-hidden flex flex-col max-h-[90vh] animate-[fade-in_0.2s_ease-out]">
+      <!-- 標題列 -->
+      <div class="px-6 py-4 flex justify-between items-center border-b border-slate-100 bg-slate-50">
+        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+          <span class="material-symbols-outlined text-blue-600">edit_document</span> 編輯客戶資料
+        </h3>
+        <button onclick="closeEditCardModal()" class="text-slate-400 hover:text-slate-700 transition-colors">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      
+      <!-- 編輯表單區 -->
+      <div class="p-6 overflow-y-auto space-y-4 no-scrollbar">
+        <input type="hidden" id="edit-c-rowid">
+        
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">姓名 <span class="text-red-500">*</span></label>
+          <input type="text" id="edit-c-name" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="請輸入姓名">
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">公司名稱</label>
+            <input type="text" id="edit-c-company" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">職稱</label>
+            <input type="text" id="edit-c-title" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">聯絡電話</label>
+            <input type="text" id="edit-c-phone" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1 flex justify-between">歸屬網 (擁有者) <span class="text-[10px] font-normal text-blue-500">轉移客戶</span></label>
+            <input type="text" id="edit-c-network" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="填寫 admin 或 店代碼">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">自訂標籤 (多個請用空格分開)</label>
+          <input type="text" id="edit-c-tags" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-blue-600 font-bold outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="#VIP #潛在客戶">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">內部備註</label>
+          <textarea id="edit-c-notes" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="寫下對此客戶的備註..."></textarea>
+        </div>
+      </div>
+
+      <!-- 按鈕區 -->
+      <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+        <button onclick="closeEditCardModal()" class="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">取消</button>
+        <button id="btn-save-card" onclick="saveCardEdit()" class="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all active:scale-95">儲存變更</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(10px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+  </style>
 
   <!-- Scripts -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -249,7 +333,6 @@
     let allCardsData = [];
     let allActivitiesData = [];
 
-    // 統一 API 呼叫
     async function fetchAPI(action, payload = {}) {
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
@@ -271,7 +354,6 @@
       }
     }
 
-    // 介面切換邏輯 (套用新的藍色高亮 CSS)
     function switchTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -280,7 +362,6 @@
       document.getElementById('nav-' + tabId).classList.add('active');
       document.getElementById('page-title').innerText = document.getElementById('nav-' + tabId).innerText.trim();
 
-      // 切換時智慧載入對應資料
       if (tabId === 'users' && allUsersData.length === 0) loadUsers();
       if (tabId === 'cards' && allCardsData.length === 0) loadCards();
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
@@ -324,6 +405,7 @@
         }).join('');
         
         if(allActivitiesData.length > 0) updateTenantFilter(); 
+        if(allCardsData.length > 0) updateCardTenantFilter();
       }
     }
 
@@ -339,45 +421,180 @@
       }
     }
 
-    // ================== 全站名片庫區塊 ==================
+    // ================== 📇 全站名片庫 (CRM) 區塊 ==================
     async function loadCards() {
       const tbody = document.getElementById('cards-table-body');
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">資料撈取中，請稍候...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">資料撈取中，請稍候...</td></tr>';
 
       const res = await fetchAPI('getCardContacts');
       if (res && Array.isArray(res)) {
         allCardsData = res;
         document.getElementById('stat-cards').innerText = res.length;
-
-        if (res.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">尚無名片資料</td></tr>';
-          return;
-        }
-
-        tbody.innerHTML = res.map(c => {
-          const company = escapeHTML(c['公司名稱'] || '');
-          const title = escapeHTML(c['職稱'] || '');
-          const companyTitle = [company, title].filter(Boolean).join(' / ') || '-';
-          const phone = escapeHTML(c['手機號碼'] || c['公司電話'] || '-');
-          const network = escapeHTML(c['歸屬網'] || 'admin');
-          const tags = escapeHTML(c['標籤'] || '');
-          const notes = escapeHTML(c['建檔人/備註'] || '');
-          const tagNote = [tags, notes].filter(Boolean).join(' | ') || '-';
-
-          return `
-            <tr>
-              <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
-              <td class="text-sm text-slate-600">${companyTitle}</td>
-              <td class="font-mono text-sm">${phone}</td>
-              <td class="text-sm text-blue-600 font-bold">${network}</td>
-              <td class="text-xs text-slate-500">${tagNote}</td>
-            </tr>
-          `;
-        }).join('');
+        updateCardTenantFilter();
+        renderCards();
       } else {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-red-400">無法取得名片資料，請重新整理</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-400">無法取得名片資料，請重新整理</td></tr>';
       }
     }
+
+    // 更新名片庫的「歸屬網」下拉選單
+    function updateCardTenantFilter() {
+      const filter = document.getElementById('card-tenant-filter');
+      const currentVal = filter.value;
+      
+      const tenants = new Set();
+      allCardsData.forEach(c => {
+         let net = String(c['歸屬網'] || '').trim();
+         if (net === '') net = 'admin';
+         tenants.add(net);
+      });
+
+      let html = '<option value="all">全站所有名單</option>';
+      Array.from(tenants).sort().forEach(t => {
+         let tenantName = t;
+         if (allUsersData && allUsersData.length > 0) {
+             const userObj = allUsersData.find(u => u.networkId === t || u.userId === t);
+             if (userObj && userObj.name) {
+                 tenantName = `${userObj.name} (${t.substring(0,6)}...)`;
+             } else if (t === 'admin') {
+                 tenantName = `官方直營 (admin)`;
+             }
+         } else if (t === 'admin') {
+             tenantName = `官方直營 (admin)`;
+         }
+         html += `<option value="${t}">${escapeHTML(tenantName)}</option>`;
+      });
+
+      filter.innerHTML = html;
+      if (Array.from(filter.options).some(opt => opt.value === currentVal)) {
+        filter.value = currentVal;
+      }
+    }
+
+    // 渲染名片清單 (包含文字搜尋與下拉篩選)
+    function renderCards() {
+      const tbody = document.getElementById('cards-table-body');
+      const searchStr = document.getElementById('card-search-input').value.toLowerCase().trim();
+      const filterNet = document.getElementById('card-tenant-filter').value;
+      
+      let filtered = allCardsData;
+
+      // 1. 歸屬網篩選
+      if (filterNet !== 'all') {
+          filtered = filtered.filter(c => {
+              let net = String(c['歸屬網'] || '').trim();
+              if (net === '') net = 'admin';
+              return net === filterNet;
+          });
+      }
+
+      // 2. 文字模糊搜尋
+      if (searchStr !== '') {
+          filtered = filtered.filter(c => {
+             const str = [
+               c['姓名'], c['公司名稱'], c['職稱'], c['手機號碼'], c['公司電話'], c['標籤'], c['建檔人/備註']
+             ].join(' ').toLowerCase();
+             return str.includes(searchStr);
+          });
+      }
+
+      if (filtered.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">找不到符合的名單</td></tr>';
+          return;
+      }
+
+      tbody.innerHTML = filtered.map(c => {
+        const company = escapeHTML(c['公司名稱'] || '');
+        const title = escapeHTML(c['職稱'] || '');
+        const companyTitle = [company, title].filter(Boolean).join(' / ') || '<span class="text-slate-300">-</span>';
+        
+        const phone = escapeHTML(c['手機號碼'] || c['公司電話'] || '-');
+        const network = escapeHTML(c['歸屬網'] || 'admin');
+        
+        let tagHtml = '';
+        if (c['標籤']) {
+          tagHtml += String(c['標籤']).split(' ').map(t => `<span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-1">${escapeHTML(t)}</span>`).join('');
+        }
+        const notes = escapeHTML(c['建檔人/備註'] || '');
+        const tagNote = [tagHtml, notes].filter(Boolean).join('<br>') || '<span class="text-slate-300">-</span>';
+
+        return `
+          <tr>
+            <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
+            <td class="text-sm text-slate-600">${companyTitle}</td>
+            <td class="font-mono text-sm">${phone}</td>
+            <td class="text-sm text-blue-600 font-bold">${network}</td>
+            <td class="text-xs text-slate-500 leading-relaxed">${tagNote}</td>
+            <td class="text-center">
+               <button onclick="openEditCardModal('${c.rowId}')" class="text-slate-400 hover:text-blue-600 transition-colors p-1" title="編輯資料">
+                 <span class="material-symbols-outlined text-[20px]">edit_note</span>
+               </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 打開編修彈窗
+    function openEditCardModal(rowId) {
+      const card = allCardsData.find(c => String(c.rowId) === String(rowId));
+      if (!card) return;
+
+      document.getElementById('edit-c-rowid').value = card.rowId;
+      document.getElementById('edit-c-name').value = card['姓名'] || '';
+      document.getElementById('edit-c-company').value = card['公司名稱'] || '';
+      document.getElementById('edit-c-title').value = card['職稱'] || '';
+      document.getElementById('edit-c-phone').value = card['手機號碼'] || card['公司電話'] || '';
+      document.getElementById('edit-c-network').value = card['歸屬網'] || '';
+      document.getElementById('edit-c-tags').value = card['標籤'] || '';
+      document.getElementById('edit-c-notes').value = card['建檔人/備註'] || '';
+
+      document.getElementById('modal-card-edit').classList.remove('hidden');
+    }
+
+    // 關閉編修彈窗
+    function closeEditCardModal() {
+      document.getElementById('modal-card-edit').classList.add('hidden');
+    }
+
+    // 儲存編修變更
+    async function saveCardEdit() {
+      const rowId = document.getElementById('edit-c-rowid').value;
+      const name = document.getElementById('edit-c-name').value.trim();
+      
+      if (!name) return alert('姓名為必填欄位！');
+
+      const btn = document.getElementById('btn-save-card');
+      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[16px]">refresh</span> 儲存中...';
+      btn.disabled = true;
+
+      const updateData = {
+        '姓名': name,
+        '公司名稱': document.getElementById('edit-c-company').value.trim(),
+        '職稱': document.getElementById('edit-c-title').value.trim(),
+        '手機號碼': document.getElementById('edit-c-phone').value.trim(),
+        '歸屬網': document.getElementById('edit-c-network').value.trim(),
+        '標籤': document.getElementById('edit-c-tags').value.trim(),
+        '建檔人/備註': document.getElementById('edit-c-notes').value.trim()
+      };
+
+      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData });
+      
+      btn.innerHTML = '儲存變更';
+      btn.disabled = false;
+
+      if (res) {
+        // 在本地端更新資料，不用重新撈 API，加速體驗
+        const idx = allCardsData.findIndex(c => String(c.rowId) === String(rowId));
+        if (idx !== -1) {
+          allCardsData[idx] = { ...allCardsData[idx], ...updateData };
+        }
+        closeEditCardModal();
+        updateCardTenantFilter();
+        renderCards();
+      }
+    }
+
 
     // ================== 活動統計區塊 ==================
     async function loadActivities() {
@@ -507,7 +724,6 @@
           document.getElementById('loading-screen').style.opacity = '0';
           setTimeout(() => document.getElementById('loading-screen').classList.add('hidden'), 300);
           
-          // 預設載入首頁 Tab
           switchTab('users');
           loadCards();
           loadActivities();
