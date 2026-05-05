@@ -1,6 +1,38 @@
 /* ==================== 圖片裁切共用模組 ==================== */
 
-// 取消裁切 (修正：確保關閉時重置按鈕狀態，避免第二次開啟時卡住)
+// 🚀 注入全域 CSS 修復：徹底解決 Flexbox 容器被長圖片撐破、導致裁切框超出螢幕的 Bug
+(function injectCropperFix() {
+  if (!document.getElementById('cropper-fix-style')) {
+    const style = document.createElement('style');
+    style.id = 'cropper-fix-style';
+    style.innerHTML = `
+      /* 強制 Modal 絕對貼齊螢幕邊界，使用 100dvh 適應手機網址列縮放 */
+      #cropper-modal, #section-image-cropper {
+        position: fixed !important;
+        inset: 0 !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+      }
+      /* 鎖死圖片父容器高度： flex: 1 1 0% 加上 height: 0 強制其向內收縮，絕對不允許被圖片撐破 */
+      #cropper-modal > div:nth-child(1), 
+      #section-image-cropper > div:nth-child(2) {
+        flex: 1 1 0% !important;
+        min-height: 0 !important;
+        height: 0 !important;
+        position: relative !important;
+      }
+      /* 限制圖片本身渲染尺寸 */
+      #cropper-modal img, #section-image-cropper img {
+        display: block !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+})();
+
+// 取消裁切
 window.cancelCrop = function() {
   document.getElementById('cropper-modal').classList.add('hidden');
   if (cropperInstance) {
@@ -10,7 +42,6 @@ window.cancelCrop = function() {
   const confirmBtn = document.getElementById('btn-confirm-crop');
   if (confirmBtn) {
     confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
-    // 確保重置按鈕為可用狀態與預設文字
     confirmBtn.disabled = false;
     confirmBtn.innerHTML = '確認裁切';
   }
@@ -23,7 +54,7 @@ window.confirmCrop = async function() {
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 1000; // 降低預設解析度至 1000px (確保 OCR 清晰又不過大)
+  let size = 1000;
   let quality = 0.8;
   let base64Image = cropperInstance.getCroppedCanvas({
     maxWidth: size,
@@ -32,12 +63,10 @@ window.confirmCrop = async function() {
     imageSmoothingQuality: 'high',
   }).toDataURL('image/jpeg', quality);
 
-  // 強制壓縮至約 500KB (Base64 長度 660,000)
   while (base64Image.length > 660000 && quality > 0.3) {
     quality -= 0.15;
     base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
   }
-  // 防呆：如果品質降到底還是太大，強制再次縮小解析度至 800px
   if (base64Image.length > 660000) {
     size = 800;
     base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', 0.5);
@@ -47,10 +76,7 @@ window.confirmCrop = async function() {
   window.showToast('🤖 AI 正在辨識名片,請稍候 8-15 秒...');
 
   try {
-    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', {
-      base64Image: base64Image
-    }, true);
-
+    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image: base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
 
     const cardPayload = {
@@ -71,14 +97,14 @@ window.confirmCrop = async function() {
   }
 };
 
-// 我的專屬名片掃描的確認裁切(綁定到自己的 userId)
+// 我的專屬名片掃描的確認裁切
 window.confirmMyCardCrop = async function() {
   if (!cropperInstance) return;
   const btn = document.getElementById('btn-confirm-crop');
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 1000; // 降低預設解析度至 1000px
+  let size = 1000;
   let quality = 0.8;
   let base64Image = cropperInstance.getCroppedCanvas({
     maxWidth: size,
@@ -87,12 +113,10 @@ window.confirmMyCardCrop = async function() {
     imageSmoothingQuality: 'high',
   }).toDataURL('image/jpeg', quality);
 
-  // 強制壓縮至約 500KB (Base64 長度 660,000)
   while (base64Image.length > 660000 && quality > 0.3) {
     quality -= 0.15;
     base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
   }
-  // 防呆：強制再次縮小解析度
   if (base64Image.length > 660000) {
     size = 800;
     base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', 0.5);
@@ -102,10 +126,7 @@ window.confirmMyCardCrop = async function() {
   window.showToast('🤖 AI 正在辨識名片,請稍候 8-15 秒...');
 
   try {
-    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', {
-      base64Image: base64Image
-    }, true);
-
+    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image: base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
 
     const cardPayload = {
@@ -130,19 +151,18 @@ window.confirmMyCardCrop = async function() {
   }
 };
 
-// 上傳自訂圖片到 R2
+// 上傳自訂圖片到 R2 (含 Flexbox 溢出防護)
 window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = null) {
   const file = inputEl.files[0];
   if (!file) return;
 
   window.currentUploadTargetId = targetInputId;
 
-  let ratio = NaN; // 預設自由裁切 (不限制)
-
+  let ratio = NaN; 
   if (forcedRatio !== null) {
     ratio = forcedRatio;
   } else if (targetInputId === 'input-store-banner') {
-    ratio = 16 / 9; // 首頁大圖維持 16:9
+    ratio = 16 / 9; 
   }
 
   const reader = new FileReader();
@@ -150,23 +170,27 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
     const cropperModal = document.getElementById('cropper-modal');
     const cropperImage = document.getElementById('cropper-image');
     
-    // 🚀 關鍵修復 1：先解除隱藏，讓 modal 擁有真實的 DOM 寬高
+    if (cropperImage.parentElement) {
+      cropperImage.parentElement.style.minHeight = '0';
+    }
+    cropperImage.style.display = 'block';
+    cropperImage.style.maxWidth = '100%';
+    cropperImage.style.maxHeight = '100%';
+
     cropperModal.classList.remove('hidden');
 
-    // 🚀 關鍵修復 2：必須等待圖片完全載入後，才能精準計算比例
     cropperImage.onload = () => {
       const confirmBtn = document.getElementById('btn-confirm-crop');
       if (confirmBtn) confirmBtn.setAttribute('onclick', 'window.confirmCustomImageCrop()');
 
       if (cropperInstance) cropperInstance.destroy();
 
-      // 🚀 關鍵修復 3：給予 50ms 讓瀏覽器完成 CSS reflow，避免抓錯螢幕大小
       setTimeout(() => {
         cropperInstance = new Cropper(cropperImage, {
           aspectRatio: ratio,
-          viewMode: 1, // 限制裁切框不能超出畫布
-          dragMode: 'move', // 手機端建議使用 move 拖曳圖片
-          autoCropArea: 1,  // 將初始選取框放大到 100% 貼齊邊緣
+          viewMode: 1, // 嚴格限制裁切框不准超出畫布
+          dragMode: 'move',
+          autoCropArea: 0.95, // 不要 100% 貼邊，預留 5% 邊距讓操作更順手
           restore: false,
           guides: true,
           center: true,
@@ -175,10 +199,9 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
           cropBoxResizable: true,
           toggleDragModeOnDblclick: false,
         });
-      }, 50);
+      }, 150);
     };
     
-    // 寫入 src 觸發 onload
     cropperImage.src = e.target.result;
   };
   reader.readAsDataURL(file);
@@ -192,10 +215,10 @@ window.confirmCustomImageCrop = async function() {
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 800; // 介面顯示用圖片 800px 即可
+  let size = 800; 
   let quality = 0.8;
   
-  // 🚀 取得裁切後的真實畫布
+  // 取得裁切後的真實畫布
   const canvas = cropperInstance.getCroppedCanvas({
     maxWidth: size,
     maxHeight: size,
@@ -203,7 +226,7 @@ window.confirmCustomImageCrop = async function() {
     imageSmoothingQuality: 'high',
   });
   
-  // 🚀 計算出這張圖的真實寬高比 (交給後端 Flex 渲染用)
+  // 計算出這張圖的真實寬高比 (交給後端 Flex 渲染用)
   const imgRatio = canvas.width + ':' + canvas.height;
 
   let base64Image = canvas.toDataURL('image/jpeg', quality);
@@ -234,7 +257,7 @@ window.confirmCustomImageCrop = async function() {
       targetInput.value = res.url;
       window.showToast('✅ 圖片已成功上傳');
 
-      // 🚀 將真實比例 (imgRatio) 傳遞給前端設定
+      // 將真實比例 (imgRatio) 傳遞給前端設定
       if (targetInputId === 'my-v1-img-url') {
         if (typeof window.setMyUploadImage === 'function') window.setMyUploadImage(res.url, imgRatio);
       } else if (targetInputId === 'v1-img-url') {
@@ -253,7 +276,7 @@ window.confirmCustomImageCrop = async function() {
   }
 };
 
-// 建立活動專用裁切器
+// 建立活動專用裁切器 (含 Flexbox 溢出防護)
 window.openActiveCropper = function(input, targetMode) {
   const file = input.files[0];
   if (!file) return;
@@ -265,24 +288,31 @@ window.openActiveCropper = function(input, targetMode) {
     const img = document.getElementById('active-cropper-image');
     if (!img || !modal) return;
 
-    // 先顯示 Modal 取得寬高
+    // 🚀 強制約束
+    if (img.parentElement) {
+      img.parentElement.style.minHeight = '0';
+    }
+    img.style.display = 'block';
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '100%';
+
     modal.classList.remove('hidden');
 
     img.onload = () => {
       if (activeCropperInstance) activeCropperInstance.destroy();
-      img.style.opacity = '1';
 
       setTimeout(() => {
         activeCropperInstance = new Cropper(img, {
           aspectRatio: NaN,
           viewMode: 1,
           dragMode: 'move', // 改為 move 更適合手機
-          autoCropArea: 1,  // 最大化裁切框
+          autoCropArea: 0.95,  // 最大化裁切框
           guides: true,
           center: true,
           highlight: false
         });
-      }, 50);
+        img.style.opacity = '1';
+      }, 150);
     };
     
     img.src = e.target.result;
@@ -308,7 +338,7 @@ window.cancelActiveCrop = function() {
 
 window.confirmActiveCrop = function() {
   if (!activeCropperInstance) return;
-  let size = 800; // 活動宣傳圖 800px 即可
+  let size = 800; 
   let quality = 0.8;
   let base64 = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
 
