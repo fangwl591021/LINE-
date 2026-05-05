@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACTMASTER - 系統管理後台</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+  <style>
+    body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f8f9fa; }
+    .nav-item.active { background-color: #ebfbee; color: #06C755; font-weight: 700; border-right: 4px solid #06C755; }
+    .nav-item { transition: all 0.2s ease; }
+    .nav-item:hover:not(.active) { background-color: #f1f5f9; }
+    
+    /* 簡潔的表格樣式 */
+    .data-table { width: 100%; border-collapse: collapse; text-align: left; }
+    .data-table th { background-color: #f1f5f9; padding: 12px 16px; font-size: 13px; color: #64748b; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+    .data-table td { padding: 12px 16px; font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .data-table tr:hover { background-color: #f8fafc; }
+  </style>
+</head>
+<body class="text-slate-800 h-screen flex overflow-hidden">
+
+  <!-- 全域載入遮罩 -->
+  <div id="loading-screen" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center transition-opacity duration-300">
+    <span class="material-symbols-outlined animate-spin text-5xl text-[#06C755] mb-4">refresh</span>
+    <p id="loading-text" class="text-slate-500 font-bold tracking-widest text-sm">系統初始化與安全驗證中...</p>
+  </div>
+
+  <!-- 左側邊欄 (Sidebar) -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative">
+    <div class="h-16 flex items-center px-6 border-b border-slate-100">
+      <span class="material-symbols-outlined text-[#06C755] text-2xl mr-2">shield_person</span>
+      <h1 class="font-black text-lg tracking-wider text-slate-800">ACTMASTER</h1>
+    </div>
+
+    <nav class="flex-1 py-4 flex flex-col gap-1">
+      <a href="#" onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active flex items-center px-6 py-3 text-sm text-slate-600">
+        <span class="material-symbols-outlined mr-3 text-[20px]">dashboard</span>
+        總覽儀表板
+      </a>
+      <a href="#" onclick="switchTab('users')" id="nav-users" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600">
+        <span class="material-symbols-outlined mr-3 text-[20px]">group</span>
+        會員與權限管理
+      </a>
+      <a href="#" onclick="switchTab('activities')" id="nav-activities" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600">
+        <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
+        活動與報名對帳
+      </a>
+      <a href="#" onclick="switchTab('settings')" id="nav-settings" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600 mt-auto border-t border-slate-100">
+        <span class="material-symbols-outlined mr-3 text-[20px]">settings</span>
+        系統參數設定
+      </a>
+    </nav>
+  </aside>
+
+  <!-- 右側主內容區 -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    
+    <!-- 頂部導航 (Top Bar) -->
+    <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-0">
+      <h2 id="page-title" class="text-lg font-bold text-slate-700">總覽儀表板</h2>
+      
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2">
+          <img id="admin-avatar" src="https://via.placeholder.com/150" class="w-8 h-8 rounded-full border border-slate-200 object-cover">
+          <span id="admin-name" class="text-sm font-bold text-slate-600">管理員</span>
+        </div>
+        <button onclick="liff.logout(); window.location.reload();" class="text-sm text-red-500 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition-colors">登出</button>
+      </div>
+    </header>
+
+    <!-- 內容切換區 -->
+    <main class="flex-1 overflow-y-auto p-8">
+      
+      <!-- Tab: Dashboard -->
+      <div id="tab-dashboard" class="tab-content space-y-6">
+        <div class="grid grid-cols-4 gap-6">
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">總註冊人數</p>
+            <h3 class="text-3xl font-black text-slate-700" id="stat-users">-</h3>
+          </div>
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">總名片數</p>
+            <h3 class="text-3xl font-black text-slate-700" id="stat-cards">-</h3>
+          </div>
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">上架活動數</p>
+            <h3 class="text-3xl font-black text-slate-700" id="stat-acts">-</h3>
+          </div>
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">累積報名總數</p>
+            <h3 class="text-3xl font-black text-slate-700" id="stat-regs">-</h3>
+          </div>
+        </div>
+        
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex items-center justify-center h-64">
+          <p class="text-slate-400 text-sm">此處未來可擴充圖表 (如：每月報名趨勢圖)</p>
+        </div>
+      </div>
+
+      <!-- Tab: Users -->
+      <div id="tab-users" class="tab-content hidden">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
+            <h3 class="font-bold text-slate-700">全站會員名單</h3>
+            <button onclick="loadUsers()" class="text-sm bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded flex items-center gap-1 hover:bg-slate-50"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>LINE ID</th>
+                  <th>手機</th>
+                  <th>所屬網 / 店代碼</th>
+                  <th>權限級別</th>
+                  <th class="text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="users-table-body">
+                <tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Activities -->
+      <div id="tab-activities" class="tab-content hidden">
+         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center h-64 text-slate-400">
+           <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">construction</span>
+           <p>活動與對帳管理介面建置中...</p>
+         </div>
+      </div>
+
+      <!-- Tab: Settings -->
+      <div id="tab-settings" class="tab-content hidden">
+         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center h-64 text-slate-400">
+           <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">settings_applications</span>
+           <p>系統參數設定建置中...</p>
+         </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <!-- 請將 LIFF_ID 與 WORKER_URL 換成您的真實參數 -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script>
+    const LIFF_ID = "2009886448-2UHnJgyT"; // 您的 LIFF ID
+    const WORKER_URL = "https://backend.fangwl591021.workers.dev"; // 您的 Worker 網址
+    
+    let adminProfile = null;
+    let allUsersData = [];
+
+    // 統一 API 呼叫
+    async function fetchAPI(action, payload = {}) {
+      try {
+        if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
+        payload.userId = adminProfile?.userId || '';
+        
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, payload })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+        return data.data || data;
+      } catch (err) {
+        console.error("API Error:", err);
+        alert("系統錯誤: " + err.message);
+        return null;
+      }
+    }
+
+    // 介面切換邏輯
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      
+      document.getElementById('tab-' + tabId).classList.remove('hidden');
+      document.getElementById('nav-' + tabId).classList.add('active');
+      document.getElementById('page-title').innerText = document.getElementById('nav-' + tabId).innerText;
+
+      // 切換時載入對應資料
+      if (tabId === 'users' && allUsersData.length === 0) loadUsers();
+    }
+
+    // 載入會員名單
+    async function loadUsers() {
+      const tbody = document.getElementById('users-table-body');
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>';
+      
+      const res = await fetchAPI('getAllUsers');
+      if (res && Array.isArray(res)) {
+        allUsersData = res;
+        document.getElementById('stat-users').innerText = res.length; // 更新總覽數字
+        
+        if (res.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">尚無會員資料</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = res.map(u => {
+          let roleBadge = u.role === 'admin' ? '<span class="bg-red-100 text-red-600 px-2 py-1 rounded text-xs font-bold">管理員</span>' : 
+                          (u.role === 'store' ? '<span class="bg-blue-100 text-blue-600 px-2 py-1 rounded text-xs font-bold">店長</span>' : 
+                          '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs">一般</span>');
+          return `
+            <tr>
+              <td class="font-bold">${escapeHTML(u.name || '未命名')}</td>
+              <td class="font-mono text-xs text-slate-400">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
+              <td class="font-mono">${escapeHTML(u.phone || '-')}</td>
+              <td>${escapeHTML(u.networkId || 'admin')} <span class="text-xs text-slate-400 block">${escapeHTML(u.storeid || '')}</span></td>
+              <td>${roleBadge}</td>
+              <td class="text-right">
+                <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border border-slate-200 rounded px-2 py-1 bg-white outline-none">
+                  <option value="user" ${u.role==='user'?'selected':''}>設為一般</option>
+                  <option value="store" ${u.role==='store'?'selected':''}>設為店長</option>
+                  <option value="admin" ${u.role==='admin'?'selected':''}>設為總管</option>
+                </select>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    // 變更權限
+    async function updateRole(targetUserId, newRole) {
+      if(!confirm(`確定要將此用戶變更為 ${newRole} 嗎？`)) {
+        loadUsers(); // 復原選單
+        return;
+      }
+      const res = await fetchAPI('updateUserRole', { targetUserId: targetUserId, newRole: newRole });
+      if (res) {
+        alert('權限已更新');
+        loadUsers();
+      }
+    }
+
+    // 防禦 XSS
+    function escapeHTML(str) {
+      return String(str || '').replace(/[&<>'"]/g, tag => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+        }[tag] || tag));
+    }
+
+    // 系統初始化與安全認證
+    async function initAdmin() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+
+        adminProfile = await liff.getProfile();
+        document.getElementById('admin-name').innerText = adminProfile.displayName;
+        document.getElementById('admin-avatar').src = adminProfile.pictureUrl || 'https://via.placeholder.com/150';
+
+        // 驗證是否為管理員
+        const userCheck = await fetchAPI('checkUser', { userId: adminProfile.userId });
+        
+        if (userCheck && userCheck.isRegistered && (userCheck.info.role === 'admin' || userCheck.info.role === 'store')) {
+          // 權限通過，隱藏遮罩
+          document.getElementById('loading-screen').style.opacity = '0';
+          setTimeout(() => document.getElementById('loading-screen').classList.add('hidden'), 300);
+          
+          // 預載總覽數據 (未來可串接 getAdminStats)
+          loadUsers(); 
+
+        } else {
+          // 無權限阻擋
+          document.getElementById('loading-text').innerText = "權限不足，您不是系統管理員。";
+          document.getElementById('loading-screen').querySelector('span').innerText = "block";
+          document.getElementById('loading-screen').querySelector('span').classList.remove('animate-spin');
+          document.getElementById('loading-screen').querySelector('span').classList.add('text-red-500');
+        }
+
+      } catch (err) {
+        document.getElementById('loading-text').innerText = "系統連線錯誤，請重新整理。";
+        console.error(err);
+      }
+    }
+
+    // 啟動
+    document.addEventListener("DOMContentLoaded", initAdmin);
+  </script>
+</body>
+</html>
