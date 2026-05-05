@@ -12,10 +12,24 @@ window.initMyECard = function() {
     try {
       const cfg = JSON.parse(currentUserCard['自訂名片設定'] || '{}');
       myV1Buttons = cfg.buttons || [{l:'加為好友', u:'https://line.me/R/', c:'#06C755'}];
-      document.getElementById('my-v1-img-url').value = cfg.imgUrl || currentUserCard['名片圖檔'] || '';
+      
+      // 初始化雙圖片記憶庫
+      window.myEcardImages = {
+        landscape: cfg.imgUrl || currentUserCard['名片圖檔'] || '',
+        portrait: cfg.imgUrlPortrait || '' // 預設讀取 Giga 專屬圖片
+      };
+
+      // 嚴格確保預設值為 landscape
+      const layoutStyle = cfg.layoutStyle === 'portrait' ? 'portrait' : 'landscape';
+      const layoutRadio = document.querySelector(`input[name="my-ecard-layout"][value="${layoutStyle}"]`);
+      if (layoutRadio) layoutRadio.checked = true;
+
+      document.getElementById('my-v1-img-url').value = window.myEcardImages[layoutStyle] || '';
+
     } catch(e) {
       myV1Buttons = [{l:'加為好友', u:'https://line.me/R/', c:'#06C755'}];
-      document.getElementById('my-v1-img-url').value = currentUserCard['名片圖檔'] || '';
+      window.myEcardImages = { landscape: currentUserCard['名片圖檔'] || '', portrait: '' };
+      document.getElementById('my-v1-img-url').value = window.myEcardImages['landscape'];
     }
     window.renderMyECardSettings();
     window.updateMyECardPreview();
@@ -48,7 +62,8 @@ window.generateCardFromProfile = async function(event) {
       buttons: defaultBtns,
       isPrivate: false,
       descAlign: 'start', // 條列式模板建議預設靠左對齊
-      descColor: '#666666'
+      descColor: '#666666',
+      layoutStyle: 'landscape' // 預設使用標準橫式
     };
 
     const newCardPayload = {
@@ -105,15 +120,35 @@ window.addMyV1Button = function() {
   window.renderMyECardSettings();
 };
 
+// 版型切換事件
+window.changeMyLayout = function() {
+  const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
+  const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
+  
+  window.myEcardImages = window.myEcardImages || { landscape: '', portrait: '' };
+  // 切換時，將輸入框內容替換為記憶庫中對應的圖片
+  document.getElementById('my-v1-img-url').value = window.myEcardImages[layoutStyle] || '';
+  window.updateMyECardPreview();
+};
+
 // 更新我的名片預覽
 window.updateMyECardPreview = function() {
   const area = document.getElementById('my-ecard-preview-area');
   if (!area) return;
+
+  const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
+  const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
+
+  // 即時將使用者目前輸入或上傳的網址，存入對應版型的記憶庫
+  window.myEcardImages = window.myEcardImages || { landscape: '', portrait: '' };
+  window.myEcardImages[layoutStyle] = document.getElementById('my-v1-img-url').value;
+
   let configParams = {
-    imgUrl: document.getElementById('my-v1-img-url').value || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80',
+    imgUrl: window.myEcardImages[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80',
     buttons: myV1Buttons,
     descAlign: 'center',
-    descColor: '#666666'
+    descColor: '#666666',
+    layoutStyle: layoutStyle
   };
 
   if (currentUserCard && currentUserCard['自訂名片設定']) {
@@ -145,20 +180,25 @@ window.saveMyECardConfig = async function() {
   if (currentUserCard['自訂名片設定']) {
     try {
       let c = JSON.parse(currentUserCard['自訂名片設定']);
-      prevAlign = c.descAlign || 'center';
-      prevColor = c.descColor || '#666666';
-    } catch(e){}
-  }
+  // 取得畫面上選擇的版型準備儲存
+  const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
+  const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
+  
+  // 確保當前輸入框的值有寫入記憶庫
+  window.myEcardImages = window.myEcardImages || { landscape: '', portrait: '' };
+  window.myEcardImages[layoutStyle] = document.getElementById('my-v1-img-url').value;
 
   const config = {
     cardType: 'v1',
-    imgUrl: document.getElementById('my-v1-img-url').value,
+    imgUrl: window.myEcardImages['landscape'], // 獨立存 Mega 圖
+    imgUrlPortrait: window.myEcardImages['portrait'], // 獨立存 Giga 圖
     title: currentUserCard['姓名'] || currentUser?.name || '我的名片',
     desc: currentUserCard['服務項目'] || currentUserCard['職稱'] || currentUser?.industry || '',
     buttons: myV1Buttons,
     isPrivate: false,
     descAlign: prevAlign,
-    descColor: prevColor
+    descColor: prevColor,
+    layoutStyle: layoutStyle
   };
 
   try {
