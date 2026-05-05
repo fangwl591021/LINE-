@@ -13,23 +13,32 @@ window.initMyECard = function() {
       const cfg = JSON.parse(currentUserCard['自訂名片設定'] || '{}');
       myV1Buttons = cfg.buttons || [{l:'加為好友', u:'https://line.me/R/', c:'#06C755'}];
       
-      // 初始化雙圖片記憶庫
+      // 🚀 初始化三圖片記憶庫，並保留各自的比例
       window.myEcardImages = {
-        landscape: cfg.imgUrl || currentUserCard['名片圖檔'] || '',
-        portrait: cfg.imgUrlPortrait || '' // 預設讀取 Giga 專屬圖片
+        landscape: { url: cfg.imgUrl || currentUserCard['名片圖檔'] || '', ratio: cfg.imgRatioLandscape || '20:13' },
+        portrait: { url: cfg.imgUrlPortrait || '', ratio: cfg.imgRatioPortrait || '2:3' },
+        square: { url: cfg.imgUrlSquare || '', ratio: cfg.imgRatioSquare || '1:1' }
       };
 
-      // 嚴格確保預設值為 landscape
-      const layoutStyle = cfg.layoutStyle === 'portrait' ? 'portrait' : 'landscape';
+      // 嚴格確保預設值，支援三種版型
+      let layoutStyle = 'landscape';
+      if (cfg.layoutStyle === 'portrait' || cfg.layoutStyle === 'square') {
+        layoutStyle = cfg.layoutStyle;
+      }
+      
       const layoutRadio = document.querySelector(`input[name="my-ecard-layout"][value="${layoutStyle}"]`);
       if (layoutRadio) layoutRadio.checked = true;
 
-      document.getElementById('my-v1-img-url').value = window.myEcardImages[layoutStyle] || '';
+      document.getElementById('my-v1-img-url').value = window.myEcardImages[layoutStyle].url || '';
 
     } catch(e) {
       myV1Buttons = [{l:'加為好友', u:'https://line.me/R/', c:'#06C755'}];
-      window.myEcardImages = { landscape: currentUserCard['名片圖檔'] || '', portrait: '' };
-      document.getElementById('my-v1-img-url').value = window.myEcardImages['landscape'];
+      window.myEcardImages = { 
+        landscape: { url: currentUserCard['名片圖檔'] || '', ratio: '20:13' },
+        portrait: { url: '', ratio: '2:3' },
+        square: { url: '', ratio: '1:1' }
+      };
+      document.getElementById('my-v1-img-url').value = window.myEcardImages['landscape'].url;
     }
     window.renderMyECardSettings();
     window.updateMyECardPreview();
@@ -57,14 +66,14 @@ window.generateCardFromProfile = async function(event) {
     const config = {
       cardType: 'v1',
       imgUrl: currentUserProfile?.pictureUrl || '',
-      imgUrlPortrait: '',
+      imgRatioLandscape: '1:1', // LINE頭貼是方形的
       title: currentUser?.name || '我的名片',
       desc: templateDesc,
       buttons: defaultBtns,
       isPrivate: false,
-      descAlign: 'start', // 條列式模板建議預設靠左對齊
+      descAlign: 'start',
       descColor: '#666666',
-      layoutStyle: 'landscape' // 預設使用標準橫式
+      layoutStyle: 'landscape'
     };
 
     const newCardPayload = {
@@ -86,7 +95,6 @@ window.generateCardFromProfile = async function(event) {
       window.initMyECard();
       window.renderCardList(allCards);
       
-      // 自動捲動並提示使用者可以開始編輯文字
       const detailBtn = document.querySelector('#my-ecard-edit-state button[onclick^="window.openCardDetail"]');
       if (detailBtn) {
         detailBtn.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2', 'animate-pulse');
@@ -102,7 +110,6 @@ window.generateCardFromProfile = async function(event) {
   }
 };
 
-// 渲染我的專屬名片按鈕設定
 window.renderMyECardSettings = function() {
   document.getElementById('my-v1-buttons-list').innerHTML = myV1Buttons.map((btn, i) =>
     '<div class="bg-white p-3 rounded-xl border border-slate-200 space-y-2">' +
@@ -121,14 +128,38 @@ window.addMyV1Button = function() {
   window.renderMyECardSettings();
 };
 
+// 🚀 接收並儲存裁切好的真實比例
+window.setMyUploadImage = function(url, ratio) {
+  const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
+  const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
+  
+  if (!window.myEcardImages || !window.myEcardImages[layoutStyle]) {
+     window.myEcardImages = {
+       landscape: { url: '', ratio: '20:13' },
+       portrait: { url: '', ratio: '2:3' },
+       square: { url: '', ratio: '1:1' }
+     };
+  }
+  
+  window.myEcardImages[layoutStyle] = { url: url, ratio: ratio };
+  document.getElementById('my-v1-img-url').value = url;
+  window.updateMyECardPreview();
+};
+
 // 版型切換事件
 window.changeMyLayout = function() {
   const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
   const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
   
-  window.myEcardImages = window.myEcardImages || { landscape: '', portrait: '' };
-  // 切換時，將輸入框內容替換為記憶庫中對應的圖片
-  document.getElementById('my-v1-img-url').value = window.myEcardImages[layoutStyle] || '';
+  if (!window.myEcardImages || !window.myEcardImages[layoutStyle]) {
+     window.myEcardImages = {
+       landscape: { url: '', ratio: '20:13' },
+       portrait: { url: '', ratio: '2:3' },
+       square: { url: '', ratio: '1:1' }
+     };
+  }
+  
+  document.getElementById('my-v1-img-url').value = window.myEcardImages[layoutStyle].url || '';
   window.updateMyECardPreview();
 };
 
@@ -140,12 +171,20 @@ window.updateMyECardPreview = function() {
   const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
   const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
 
-  // 即時將使用者目前輸入或上傳的網址，存入對應版型的記憶庫
-  window.myEcardImages = window.myEcardImages || { landscape: '', portrait: '' };
-  window.myEcardImages[layoutStyle] = document.getElementById('my-v1-img-url').value;
+  if (!window.myEcardImages || !window.myEcardImages[layoutStyle]) {
+     window.myEcardImages = {
+       landscape: { url: '', ratio: '20:13' },
+       portrait: { url: '', ratio: '2:3' },
+       square: { url: '', ratio: '1:1' }
+     };
+  }
+
+  // 僅更新網址 (若使用者自己貼上網址, 則沿用舊的 ratio)
+  window.myEcardImages[layoutStyle].url = document.getElementById('my-v1-img-url').value;
 
   let configParams = {
-    imgUrl: window.myEcardImages[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80',
+    imgUrl: window.myEcardImages[layoutStyle].url || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80',
+    imgRatio: window.myEcardImages[layoutStyle].ratio,
     buttons: myV1Buttons,
     descAlign: 'center',
     descColor: '#666666',
@@ -186,18 +225,27 @@ window.saveMyECardConfig = async function() {
     } catch(e){}
   }
 
-  // 取得畫面上選擇的版型準備儲存
   const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
   const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
   
-  // 確保當前輸入框的值有寫入記憶庫
-  window.myEcardImages = window.myEcardImages || { landscape: '', portrait: '' };
-  window.myEcardImages[layoutStyle] = document.getElementById('my-v1-img-url').value;
+  if (!window.myEcardImages || !window.myEcardImages[layoutStyle]) {
+     window.myEcardImages = {
+       landscape: { url: '', ratio: '20:13' },
+       portrait: { url: '', ratio: '2:3' },
+       square: { url: '', ratio: '1:1' }
+     };
+  }
+  
+  window.myEcardImages[layoutStyle].url = document.getElementById('my-v1-img-url').value;
 
   const config = {
     cardType: 'v1',
-    imgUrl: window.myEcardImages['landscape'], // 獨立存 Mega 圖
-    imgUrlPortrait: window.myEcardImages['portrait'], // 獨立存 Giga 圖
+    imgUrl: window.myEcardImages['landscape'].url,
+    imgRatioLandscape: window.myEcardImages['landscape'].ratio,
+    imgUrlPortrait: window.myEcardImages['portrait'].url,
+    imgRatioPortrait: window.myEcardImages['portrait'].ratio,
+    imgUrlSquare: window.myEcardImages['square'].url,
+    imgRatioSquare: window.myEcardImages['square'].ratio,
     title: currentUserCard['姓名'] || currentUser?.name || '我的名片',
     desc: currentUserCard['服務項目'] || currentUserCard['職稱'] || currentUser?.industry || '',
     buttons: myV1Buttons,
@@ -212,8 +260,22 @@ window.saveMyECardConfig = async function() {
       rowId: currentUserCard.rowId,
       data: { '自訂名片設定': JSON.stringify(config), '名片圖檔': config.imgUrl || '' }
     }, true);
+    
     currentUserCard['自訂名片設定'] = JSON.stringify(config);
     currentUserCard['名片圖檔'] = config.imgUrl || '';
+
+    if (typeof allCards !== 'undefined') {
+      const match = allCards.find(c => String(c.rowId) === String(currentUserCard.rowId));
+      if (match) {
+        match['自訂名片設定'] = JSON.stringify(config);
+        match['名片圖檔'] = config.imgUrl || '';
+      }
+    }
+    if (typeof currentCard !== 'undefined' && currentCard && String(currentCard.rowId) === String(currentUserCard.rowId)) {
+      currentCard['自訂名片設定'] = JSON.stringify(config);
+      currentCard['名片圖檔'] = config.imgUrl || '';
+      if (typeof window.updateECardPreview === 'function') window.updateECardPreview();
+    }
 
     window.showToast('✅ 專屬名片已儲存！您現在可以在首頁發送名片了。');
   } catch(e) {
@@ -225,7 +287,6 @@ window.saveMyECardConfig = async function() {
   }
 };
 
-// 分享我的名片
 window.shareMyCard = async function(btn) {
   if (!currentUserCard) {
     window.showToast('尚未建立專屬名片,為您導向設定頁面', true);
@@ -258,7 +319,6 @@ window.shareMyCard = async function(btn) {
   }
 };
 
-// 顯示專屬 QR Code
 window.showMyQRCode = function() {
   if (!currentUserCard) {
     window.showToast('請先建立專屬名片', true);
