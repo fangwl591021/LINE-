@@ -1,40 +1,36 @@
 /* ==================== 圖片裁切共用模組 ==================== */
 
-// 🚀 徹底修正：移除會導致 Cropper 抓錯高度的 height:0，改用 flex 滿版與 overflow-hidden
-(function injectCropperFix() {
-  if (!document.getElementById('cropper-fix-style')) {
-    const style = document.createElement('style');
-    style.id = 'cropper-fix-style';
-    style.innerHTML = `
-      #cropper-modal, #section-image-cropper {
-        position: fixed !important;
-        inset: 0 !important;
-        height: 100dvh !important;
-        max-height: 100dvh !important;
-        z-index: 9999 !important;
-      }
-      /* 確保圖片父容器精準佔滿剩餘空間，且不溢出 */
-      #cropper-modal > div:first-child, 
-      #section-image-cropper > div:nth-child(2) {
-        flex: 1 1 0% !important;
-        width: 100% !important;
-        position: relative !important;
-        overflow: hidden !important;
-        background-color: #000 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-      }
-      #cropper-modal img, #section-image-cropper img {
-        display: block !important;
-        max-width: 100% !important;
-        max-height: 100% !important;
-        object-fit: contain;
-      }
-    `;
-    document.head.appendChild(style);
+// 🚀 輔助函式：安全初始化 Cropper，徹底移除會干擾高度計算的 Flexbox，回歸原生 Block 排版
+function createSafeCropper(imgElement, ratio) {
+  if (!imgElement) return null;
+  
+  // 清除父容器的 Tailwind flex 屬性，改為 block，讓 Cropper.js 完美讀取畫布邊界
+  const parent = imgElement.parentElement;
+  if (parent) {
+    parent.classList.remove('flex', 'items-center', 'justify-center', 'p-4');
+    parent.style.display = 'block';
+    parent.style.width = '100%';
+    parent.style.height = '100%';
+    parent.style.position = 'relative';
   }
-})();
+
+  imgElement.style.display = 'block';
+  imgElement.style.maxWidth = '100%';
+  imgElement.style.maxHeight = '100%';
+
+  return new Cropper(imgElement, {
+    aspectRatio: ratio,
+    viewMode: 1, // 關鍵：嚴格限制裁切框絕對不能超出圖片實體範圍
+    dragMode: 'move',
+    autoCropArea: 0.95,
+    cropBoxMovable: true,
+    cropBoxResizable: true,
+    guides: true,
+    center: true,
+    highlight: false,
+    background: false
+  });
+}
 
 window.cancelCrop = function() {
   const modal = document.getElementById('cropper-modal');
@@ -46,6 +42,8 @@ window.cancelCrop = function() {
     cropperInstance.destroy();
     cropperInstance = null;
   }
+  const img = document.getElementById('cropper-image');
+  if (img) img.src = '';
 };
 
 // ==========================================
@@ -61,7 +59,7 @@ window.openCropper = function(input) {
     const img = document.getElementById('cropper-image');
 
     modal.classList.remove('hidden');
-    modal.classList.add('flex'); // 確保 Flexbox 佈局生效
+    modal.classList.add('flex'); 
 
     img.onload = () => {
       const confirmBtn = document.getElementById('btn-confirm-crop');
@@ -73,19 +71,9 @@ window.openCropper = function(input) {
 
       if (cropperInstance) cropperInstance.destroy();
       
+      // 給予 DOM 渲染時間後，啟動安全裁切器 (NaN 代表自由拉伸)
       setTimeout(() => {
-        cropperInstance = new Cropper(img, {
-          aspectRatio: NaN, // 自由裁切
-          viewMode: 1,
-          dragMode: 'move',
-          autoCropArea: 0.95,
-          cropBoxMovable: true,
-          cropBoxResizable: true,
-          guides: true,
-          center: true,
-          highlight: false,
-          background: false
-        });
+        cropperInstance = createSafeCropper(img, NaN);
       }, 150);
     };
     img.src = e.target.result;
@@ -166,18 +154,7 @@ window.openMyCardCropper = function(input) {
       if (cropperInstance) cropperInstance.destroy();
       
       setTimeout(() => {
-        cropperInstance = new Cropper(img, {
-          aspectRatio: NaN, // 自由裁切
-          viewMode: 1,
-          dragMode: 'move',
-          autoCropArea: 0.95,
-          cropBoxMovable: true,
-          cropBoxResizable: true,
-          guides: true,
-          center: true,
-          highlight: false,
-          background: false
-        });
+        cropperInstance = createSafeCropper(img, NaN);
       }, 150);
     };
     img.src = e.target.result;
@@ -245,7 +222,7 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
   window.currentUploadTargetId = targetInputId;
 
   // 🚀 關鍵邏輯：依據版型自動判斷是否要鎖定比例
-  let uploadRatio = NaN; // 預設滿版與正方為「完全自由拉伸」
+  let uploadRatio = NaN; // 預設滿版與正方為「完全自由拉伸 (NaN)」
   
   if (forcedRatio !== null) {
     uploadRatio = forcedRatio;
@@ -278,20 +255,7 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
       if (cropperInstance) cropperInstance.destroy();
 
       setTimeout(() => {
-        cropperInstance = new Cropper(img, {
-          aspectRatio: uploadRatio, // 這裡會動態套用 NaN 或 20/13
-          viewMode: 1, 
-          dragMode: 'move',
-          autoCropArea: 0.95, 
-          cropBoxMovable: true, 
-          cropBoxResizable: true, 
-          restore: false,
-          guides: true,
-          center: true,
-          highlight: false,
-          toggleDragModeOnDblclick: false,
-          background: false
-        });
+        cropperInstance = createSafeCropper(img, uploadRatio);
       }, 150);
     };
     
@@ -353,7 +317,8 @@ window.confirmCustomImageCrop = async function() {
       } else if (targetInputId === 'v1-img-url') {
         if (typeof window.setOtherUploadImage === 'function') window.setOtherUploadImage(res.url, imgRatio);
       } else if (targetInputId === 'input-store-banner') {
-        document.getElementById('setting-preview-banner').src = res.url;
+        const preview = document.getElementById('setting-preview-banner');
+        if (preview) preview.src = res.url;
       }
     } else {
       throw new Error(res.error || '上傳失敗');
@@ -387,18 +352,7 @@ window.openActiveCropper = function(input, targetMode) {
       if (activeCropperInstance) activeCropperInstance.destroy();
 
       setTimeout(() => {
-        activeCropperInstance = new Cropper(img, {
-          aspectRatio: NaN, // 自由裁切
-          viewMode: 1,
-          dragMode: 'move', 
-          autoCropArea: 0.95,  
-          cropBoxMovable: true,
-          cropBoxResizable: true,
-          guides: true,
-          center: true,
-          highlight: false,
-          background: false
-        });
+        activeCropperInstance = createSafeCropper(img, NaN);
         img.style.opacity = '1';
       }, 150);
     };
@@ -422,7 +376,7 @@ window.cancelActiveCrop = function() {
   }
   const img = document.getElementById('active-cropper-image');
   if (img) {
-    img.removeAttribute('src');
+    img.src = '';
     img.style.opacity = '0';
   }
 };
