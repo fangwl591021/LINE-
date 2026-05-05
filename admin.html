@@ -34,18 +34,10 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-    /* 後台專用裁切器修正 */
+    /* ✅ 徹底修正的後台專用裁切器樣式 */
     #admin-cropper-modal {
-      position: fixed !important;
-      inset: 0 !important;
       height: 100dvh !important;
       max-height: 100dvh !important;
-    }
-    #admin-cropper-container {
-      flex: 1 1 0% !important;
-      min-height: 0 !important;
-      height: 0 !important;
-      position: relative !important;
     }
   </style>
 </head>
@@ -266,9 +258,8 @@
     </main>
   </div>
 
-  <!-- 🎨 所見即所得：名片編輯彈窗 Modal (寬廣雙欄式) -->
+  <!-- 🎨 所見即所得：名片編輯彈窗 Modal -->
   <div id="modal-card-edit" class="fixed inset-0 bg-slate-900/60 z-[1000] hidden flex items-center justify-center backdrop-blur-sm transition-opacity p-4">
-    <!-- 加大最大寬度到 1200px，高度拉滿至 95vh -->
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1200px] h-[95vh] overflow-hidden flex flex-col animate-[fade-in_0.2s_ease-out]">
       
       <!-- 頂部頁籤切換 -->
@@ -285,7 +276,7 @@
       <!-- 左右雙欄版面 -->
       <div class="flex flex-col md:flex-row flex-1 overflow-hidden bg-slate-50">
         
-        <!-- 左側：設定表單區 (自適應填滿剩餘寬度) -->
+        <!-- 左側：設定表單區 -->
         <div class="flex-1 flex flex-col bg-white overflow-y-auto p-6 md:p-8 no-scrollbar">
           <input type="hidden" id="edit-c-rowid">
           
@@ -328,7 +319,6 @@
           <!-- 頁籤內容 2：數位名片設定 -->
           <div id="modal-body-visual" class="hidden space-y-6">
             <div class="grid grid-cols-2 gap-5">
-              <!-- 完美移植手機版的膠囊切換選單 -->
               <div>
                 <label class="block text-sm font-bold text-slate-500 mb-2">名片版型</label>
                 <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl h-[46px]">
@@ -347,7 +337,6 @@
                 </div>
               </div>
 
-              <!-- 對齊與顏色 -->
               <div>
                 <label class="block text-sm font-bold text-slate-500 mb-2">排版與顏色</label>
                 <div class="flex gap-2 h-[46px]">
@@ -361,11 +350,10 @@
               </div>
             </div>
 
-            <!-- 圖片上傳區 -->
             <div>
               <label class="block text-sm font-bold text-slate-500 mb-1.5">封面圖片網址</label>
               <div class="flex gap-2">
-                <input type="text" id="edit-v-img" oninput="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
+                <input type="text" id="edit-v-img" oninput="window.currentAdminCropRatio=null; updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
                 <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
                   <span class="material-symbols-outlined text-[18px]">upload</span> 上傳圖片
                   <input type="file" class="hidden" accept="image/*" onchange="openAdminCropper(this)">
@@ -390,18 +378,14 @@
           </div>
         </div>
 
-        <!-- 右側：手機預覽區 (Live Preview) -->
-        <!-- ✅ 修正：改為 LINE 聊天室藍底，釋放 Padding，讓卡片真實呈現滿版張力 -->
+        <!-- 右側：手機預覽區 -->
         <div class="w-full md:w-[480px] bg-[#8baccc] flex flex-col items-center justify-start overflow-y-auto shrink-0 border-l border-slate-200/50 shadow-inner">
-           <!-- 頂部模擬狀態列 -->
            <div class="w-full bg-black/5 text-center py-2 text-white/90 text-xs tracking-widest sticky top-0 z-10 font-bold backdrop-blur-sm shadow-sm">
              LINE 聊天室呈現預覽
            </div>
-           
-           <!-- ✅ 修正：移除多餘邊界，放大卡片寬度至 400px，保證不失真、不擁擠 -->
            <div class="w-full px-6 py-8 flex justify-center pb-16">
               <div id="admin-card-preview-area" class="w-full max-w-[400px] bg-white rounded-[24px] shadow-xl overflow-hidden relative shrink-0 border border-black/5">
-                 <!-- 預覽畫面將由 JS 動態注入 -->
+                 <!-- 預覽畫面動態注入 -->
               </div>
            </div>
         </div>
@@ -418,12 +402,12 @@
     </div>
   </div>
 
-  <!-- ✂️ 後台專用圖片裁切彈窗 -->
+  <!-- ✅ 徹底修復的後台專用圖片裁切彈窗 (移除會造成凍結的高度限制) -->
   <div id="admin-cropper-modal" class="fixed inset-0 bg-slate-900/95 z-[2000] hidden flex flex-col transition-opacity duration-300">
-    <div id="admin-cropper-container" class="flex-1 relative flex items-center justify-center p-4">
-      <img id="admin-cropper-image" class="block max-w-full max-h-full mx-auto shadow-2xl">
+    <div id="admin-cropper-container" class="flex-1 w-full relative overflow-hidden bg-black/50">
+      <img id="admin-cropper-image" class="block max-w-full max-h-full mx-auto">
     </div>
-    <div class="h-20 bg-black flex items-center justify-between px-8 shrink-0 border-t border-slate-800">
+    <div class="h-20 bg-slate-900 flex items-center justify-between px-8 shrink-0 border-t border-slate-800">
       <button onclick="closeAdminCropper()" class="text-white hover:text-slate-300 font-bold text-sm px-4 py-2 transition-colors">取消</button>
       <button id="btn-admin-confirm-crop" class="bg-[#06C755] text-white px-8 py-2.5 rounded-full font-bold text-sm shadow-lg shadow-[#06C755]/30 hover:bg-[#05b34c] transition-colors flex items-center gap-1">
         <span class="material-symbols-outlined text-[18px]">crop</span> 確認裁切
@@ -450,8 +434,9 @@
     let allActivitiesData = [];
     let currentEditButtons = []; 
     let adminCropperInstance = null;
+    
+    window.currentAdminCropRatio = null;
 
-    // 統一 Toast 提示
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
       if (!container) return;
@@ -688,6 +673,8 @@
 
     // 📋 打開名片雙層編修彈窗
     function openEditCardModal(rowId) {
+      window.currentAdminCropRatio = null; // 重置比例暫存
+
       const card = allCardsData.find(c => String(c.rowId) === String(rowId));
       if (!card) return;
 
@@ -739,9 +726,25 @@
       const align = document.getElementById('edit-v-align').value || 'center';
       const color = document.getElementById('edit-v-color').value || '#666666';
 
-      let ratioCSS = '20/13';
-      if (layoutStyle === 'portrait') ratioCSS = '2/3';
-      if (layoutStyle === 'square') ratioCSS = '1/1';
+      let ratioStr = '20:13';
+      if (layoutStyle === 'portrait') ratioStr = '2:3';
+      if (layoutStyle === 'square') ratioStr = '1:1';
+
+      const rowId = document.getElementById('edit-c-rowid').value;
+      const card = allCardsData.find(c => String(c.rowId) === String(rowId));
+      if (card) {
+        try {
+          let cfg = JSON.parse(card['自訂名片設定'] || '{}');
+          if (layoutStyle === 'landscape' && cfg.imgRatioLandscape) ratioStr = cfg.imgRatioLandscape;
+          if (layoutStyle === 'portrait' && cfg.imgRatioPortrait) ratioStr = cfg.imgRatioPortrait;
+          if (layoutStyle === 'square' && cfg.imgRatioSquare) ratioStr = cfg.imgRatioSquare;
+        } catch(e){}
+      }
+
+      if (window.currentAdminCropRatio) {
+         ratioStr = window.currentAdminCropRatio;
+      }
+      const ratioCSS = ratioStr.replace(':', '/');
 
       const alignMap = { 'start': 'left', 'center': 'center', 'end': 'right' };
       const textAlign = alignMap[align];
@@ -750,7 +753,6 @@
         `<div class="block py-3 rounded-xl text-white text-center text-[14px] font-black mb-2.5 shadow-sm" style="background:${btn.c||'#06C755'}">${escapeHTML(btn.l||'按鈕')}</div>`
       ).join('');
 
-      // ✅ 將外框與 Padding 完全移除，呈現真實的邊到邊 (Edge-to-Edge) 視覺
       area.innerHTML = `
         <div class="flex flex-col w-full h-full bg-white pb-6">
           <div class="relative bg-slate-100 bg-cover bg-center transition-all duration-300 shadow-sm" style="aspect-ratio: ${ratioCSS}; background-image:url('${imgUrl}');">
@@ -794,17 +796,18 @@
       document.getElementById('modal-card-edit').classList.add('hidden');
     }
 
-    // ✂️ 開啟後台專用圖片裁切器
+    // ✅ 修正：精準條件判斷版型比例，Mega 鎖定 20:13，其餘皆為自由裁切
     function openAdminCropper(input) {
       const file = input.files[0];
       if (!file) return;
 
       const layoutEl = document.querySelector('input[name="edit-v-layout"]:checked');
       const layout = layoutEl ? layoutEl.value : 'landscape';
-      let uploadRatio = NaN;
-      if (layout === 'landscape') uploadRatio = 20 / 13;
-      else if (layout === 'portrait') uploadRatio = 2 / 3;
-      else if (layout === 'square') uploadRatio = 1 / 1;
+      
+      let uploadRatio = NaN; // 預設自由裁切 (Giga 與 Square)
+      if (layout === 'landscape') {
+        uploadRatio = 20 / 13; // 若為標準版，強制鎖定比例防變形
+      }
 
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -831,6 +834,8 @@
               viewMode: 1,
               dragMode: 'move',
               autoCropArea: 0.95,
+              cropBoxMovable: true, // 確保裁切框可移動
+              cropBoxResizable: true, // 確保裁切框可縮放
               guides: true,
               center: true,
               highlight: false
@@ -851,13 +856,14 @@
       }
     }
 
+    // 智慧捕捉機制：抓取真實裁切比例
     async function confirmAdminCrop() {
       if (!adminCropperInstance) return;
       const btn = document.getElementById('btn-admin-confirm-crop');
       btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 處理中...';
       btn.disabled = true;
 
-      let size = 800;
+      let size = 1000;
       let quality = 0.8;
       
       const canvas = adminCropperInstance.getCroppedCanvas({
@@ -866,6 +872,8 @@
         imageSmoothingEnabled: true,
         imageSmoothingQuality: 'high',
       });
+      
+      window.currentAdminCropRatio = canvas.width + ':' + canvas.height;
       
       let base64Image = canvas.toDataURL('image/jpeg', quality);
 
@@ -929,6 +937,12 @@
       const layoutEl = document.querySelector('input[name="edit-v-layout"]:checked');
       cfg.layoutStyle = layoutEl ? layoutEl.value : 'landscape';
       
+      if (window.currentAdminCropRatio) {
+        if (cfg.layoutStyle === 'landscape') cfg.imgRatioLandscape = window.currentAdminCropRatio;
+        if (cfg.layoutStyle === 'portrait') cfg.imgRatioPortrait = window.currentAdminCropRatio;
+        if (cfg.layoutStyle === 'square') cfg.imgRatioSquare = window.currentAdminCropRatio;
+      }
+      
       cfg.imgUrl = document.getElementById('edit-v-img').value.trim();
       cfg.desc = document.getElementById('edit-v-desc').value;
       cfg.descAlign = document.getElementById('edit-v-align').value;
@@ -948,6 +962,7 @@
         if (cardIndex !== -1) {
           allCardsData[cardIndex] = { ...allCardsData[cardIndex], ...updateData };
         }
+        window.currentAdminCropRatio = null; 
         closeEditCardModal();
         renderCards();
         showToast('✅ 數位名片儲存成功！');
