@@ -1,19 +1,16 @@
 /* ==================== 圖片裁切共用模組 ==================== */
 
-// 🚀 注入全域 CSS 修復：徹底解決 Flexbox 容器被長圖片撐破、導致裁切框超出螢幕的 Bug
 (function injectCropperFix() {
   if (!document.getElementById('cropper-fix-style')) {
     const style = document.createElement('style');
     style.id = 'cropper-fix-style';
     style.innerHTML = `
-      /* 強制 Modal 絕對貼齊螢幕邊界，使用 100dvh 適應手機網址列縮放 */
       #cropper-modal, #section-image-cropper {
         position: fixed !important;
         inset: 0 !important;
         height: 100dvh !important;
         max-height: 100dvh !important;
       }
-      /* 鎖死圖片父容器高度： flex: 1 1 0% 加上 height: 0 強制其向內收縮，絕對不允許被圖片撐破 */
       #cropper-modal > div:nth-child(1), 
       #section-image-cropper > div:nth-child(2) {
         flex: 1 1 0% !important;
@@ -21,7 +18,6 @@
         height: 0 !important;
         position: relative !important;
       }
-      /* 限制圖片本身渲染尺寸 */
       #cropper-modal img, #section-image-cropper img {
         display: block !important;
         max-width: 100% !important;
@@ -32,22 +28,61 @@
   }
 })();
 
-// 取消裁切
 window.cancelCrop = function() {
   document.getElementById('cropper-modal').classList.add('hidden');
   if (cropperInstance) {
     cropperInstance.destroy();
     cropperInstance = null;
   }
-  const confirmBtn = document.getElementById('btn-confirm-crop');
-  if (confirmBtn) {
-    confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
-    confirmBtn.disabled = false;
-    confirmBtn.innerHTML = '確認裁切';
-  }
 };
 
-// 一般名片庫掃描的確認裁切 + OCR
+// ==========================================
+// 1. 一般客戶名片 (CRM 名片庫掃描)
+// ==========================================
+window.openCropper = function(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const modal = document.getElementById('cropper-modal');
+    const img = document.getElementById('cropper-image');
+    
+    if (img.parentElement) img.parentElement.style.minHeight = '0';
+    img.style.display = 'block';
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '100%';
+
+    modal.classList.remove('hidden');
+
+    img.onload = () => {
+      // 嚴格綁定：一般名片庫掃描
+      const confirmBtn = document.getElementById('btn-confirm-crop');
+      if (confirmBtn) {
+          confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
+          confirmBtn.innerHTML = '確認裁切';
+          confirmBtn.disabled = false;
+      }
+
+      if (cropperInstance) cropperInstance.destroy();
+      setTimeout(() => {
+        cropperInstance = new Cropper(img, {
+          aspectRatio: NaN,
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 0.95,
+          guides: true,
+          center: true,
+          highlight: false
+        });
+      }, 150);
+    };
+    img.src = e.target.result;
+    input.value = "";
+  };
+  reader.readAsDataURL(file);
+};
+
 window.confirmCrop = async function() {
   if (!cropperInstance) return;
   const btn = document.getElementById('btn-confirm-crop');
@@ -73,7 +108,7 @@ window.confirmCrop = async function() {
   }
 
   window.cancelCrop();
-  window.showToast('🤖 AI 正在辨識名片,請稍候 8-15 秒...');
+  window.showToast('🤖 AI 正在辨識客戶名片...');
 
   try {
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image: base64Image }, true);
@@ -81,14 +116,15 @@ window.confirmCrop = async function() {
 
     const cardPayload = {
       ...ocrRes,
-      userId: '',
+      userId: '', // 確保客戶名片不綁定給自己
       '建檔人/備註': '掃描建立 by ' + (currentUser?.name || '')
     };
 
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
-      window.showToast('✅ 名片建立成功！');
-      await window.loadAllData();
+      window.showToast('✅ 客戶名片建立成功！');
+      if (typeof window.loadAllData === 'function') await window.loadAllData();
+      if (typeof window.goPage === 'function') window.goPage('card'); // 強制切換回名片庫
     } else {
       throw new Error('儲存失敗');
     }
@@ -97,7 +133,53 @@ window.confirmCrop = async function() {
   }
 };
 
-// 我的專屬名片掃描的確認裁切
+// ==========================================
+// 2. 我的專屬名片掃描
+// ==========================================
+window.openMyCardCropper = function(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const modal = document.getElementById('cropper-modal');
+    const img = document.getElementById('cropper-image');
+    
+    if (img.parentElement) img.parentElement.style.minHeight = '0';
+    img.style.display = 'block';
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '100%';
+
+    modal.classList.remove('hidden');
+
+    img.onload = () => {
+      // 嚴格綁定：我的專屬名片掃描
+      const confirmBtn = document.getElementById('btn-confirm-crop');
+      if (confirmBtn) {
+          confirmBtn.setAttribute('onclick', 'window.confirmMyCardCrop()');
+          confirmBtn.innerHTML = '確認裁切';
+          confirmBtn.disabled = false;
+      }
+
+      if (cropperInstance) cropperInstance.destroy();
+      setTimeout(() => {
+        cropperInstance = new Cropper(img, {
+          aspectRatio: NaN,
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 0.95,
+          guides: true,
+          center: true,
+          highlight: false
+        });
+      }, 150);
+    };
+    img.src = e.target.result;
+    input.value = "";
+  };
+  reader.readAsDataURL(file);
+};
+
 window.confirmMyCardCrop = async function() {
   if (!cropperInstance) return;
   const btn = document.getElementById('btn-confirm-crop');
@@ -123,7 +205,7 @@ window.confirmMyCardCrop = async function() {
   }
 
   window.cancelCrop();
-  window.showToast('🤖 AI 正在辨識名片,請稍候 8-15 秒...');
+  window.showToast('🤖 AI 正在辨識專屬名片...');
 
   try {
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image: base64Image }, true);
@@ -131,18 +213,18 @@ window.confirmMyCardCrop = async function() {
 
     const cardPayload = {
       ...ocrRes,
-      userId: currentUserProfile.userId,
+      userId: currentUserProfile.userId, // 嚴格綁定為個人卡片
       '建檔人/備註': '我的專屬名片'
     };
 
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
-      window.showToast('✅ 專屬名片建立成功！');
+      window.showToast('✅ 專屬名片覆蓋成功！');
       cardPayload.rowId = saveRes.rowId;
       allCards.unshift(cardPayload);
       currentUserCard = cardPayload;
-      window.initMyECard();
-      window.renderCardList(allCards);
+      if (typeof window.initMyECard === 'function') window.initMyECard();
+      if (typeof window.renderCardList === 'function') window.renderCardList(allCards);
     } else {
       throw new Error('儲存失敗');
     }
@@ -151,7 +233,9 @@ window.confirmMyCardCrop = async function() {
   }
 };
 
-// 上傳自訂圖片到 R2 (含 Flexbox 溢出防護)
+// ==========================================
+// 3. 上傳封面圖片 (版型背景圖無OCR)
+// ==========================================
 window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = null) {
   const file = inputEl.files[0];
   if (!file) return;
@@ -180,17 +264,22 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
     cropperModal.classList.remove('hidden');
 
     cropperImage.onload = () => {
+      // 嚴格綁定：上傳背景圖
       const confirmBtn = document.getElementById('btn-confirm-crop');
-      if (confirmBtn) confirmBtn.setAttribute('onclick', 'window.confirmCustomImageCrop()');
+      if (confirmBtn) {
+          confirmBtn.setAttribute('onclick', 'window.confirmCustomImageCrop()');
+          confirmBtn.innerHTML = '確認裁切';
+          confirmBtn.disabled = false;
+      }
 
       if (cropperInstance) cropperInstance.destroy();
 
       setTimeout(() => {
         cropperInstance = new Cropper(cropperImage, {
           aspectRatio: ratio,
-          viewMode: 1, // 嚴格限制裁切框不准超出畫布
+          viewMode: 1, 
           dragMode: 'move',
-          autoCropArea: 0.95, // 不要 100% 貼邊，預留 5% 邊距讓操作更順手
+          autoCropArea: 0.95, 
           restore: false,
           guides: true,
           center: true,
@@ -208,7 +297,6 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
   inputEl.value = '';
 };
 
-// 確認上傳的自訂圖片裁切
 window.confirmCustomImageCrop = async function() {
   if (!cropperInstance) return;
   const btn = document.getElementById('btn-confirm-crop');
@@ -218,7 +306,6 @@ window.confirmCustomImageCrop = async function() {
   let size = 800; 
   let quality = 0.8;
   
-  // 取得裁切後的真實畫布
   const canvas = cropperInstance.getCroppedCanvas({
     maxWidth: size,
     maxHeight: size,
@@ -226,7 +313,6 @@ window.confirmCustomImageCrop = async function() {
     imageSmoothingQuality: 'high',
   });
   
-  // 計算出這張圖的真實寬高比 (交給後端 Flex 渲染用)
   const imgRatio = canvas.width + ':' + canvas.height;
 
   let base64Image = canvas.toDataURL('image/jpeg', quality);
@@ -257,7 +343,6 @@ window.confirmCustomImageCrop = async function() {
       targetInput.value = res.url;
       window.showToast('✅ 圖片已成功上傳');
 
-      // 將真實比例 (imgRatio) 傳遞給前端設定
       if (targetInputId === 'my-v1-img-url') {
         if (typeof window.setMyUploadImage === 'function') window.setMyUploadImage(res.url, imgRatio);
       } else if (targetInputId === 'v1-img-url') {
@@ -276,7 +361,9 @@ window.confirmCustomImageCrop = async function() {
   }
 };
 
-// 建立活動專用裁切器 (含 Flexbox 溢出防護)
+// ==========================================
+// 4. 活動宣傳圖掃描
+// ==========================================
 window.openActiveCropper = function(input, targetMode) {
   const file = input.files[0];
   if (!file) return;
@@ -288,7 +375,6 @@ window.openActiveCropper = function(input, targetMode) {
     const img = document.getElementById('active-cropper-image');
     if (!img || !modal) return;
 
-    // 🚀 強制約束
     if (img.parentElement) {
       img.parentElement.style.minHeight = '0';
     }
@@ -305,8 +391,8 @@ window.openActiveCropper = function(input, targetMode) {
         activeCropperInstance = new Cropper(img, {
           aspectRatio: NaN,
           viewMode: 1,
-          dragMode: 'move', // 改為 move 更適合手機
-          autoCropArea: 0.95,  // 最大化裁切框
+          dragMode: 'move', 
+          autoCropArea: 0.95,  
           guides: true,
           center: true,
           highlight: false
@@ -316,7 +402,7 @@ window.openActiveCropper = function(input, targetMode) {
     };
     
     img.src = e.target.result;
-    img.style.opacity = '0'; // 避免閃爍
+    img.style.opacity = '0'; 
     input.value = "";
   };
   reader.readAsDataURL(file);
