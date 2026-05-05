@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ACTMASTER - 系統管理後台</title>
+  <title>商機引擎後台 ADMIN DASHBOARD</title>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -16,11 +16,14 @@
 
   <style>
     body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background-color: #f8f9fa; }
-    .nav-item.active { background-color: #ebfbee; color: #06C755; font-weight: 700; border-right: 4px solid #06C755; }
-    .nav-item { transition: all 0.2s ease; }
-    .nav-item:hover:not(.active) { background-color: #f1f5f9; }
     
-    /* 簡潔的表格樣式，無多餘包框 */
+    /* 側邊欄導航樣式 (對齊您的截圖風格) */
+    .nav-item { transition: all 0.2s ease; }
+    .nav-item.active { background-color: #eff6ff; color: #2563eb; } /* bg-blue-50, text-blue-600 */
+    .nav-item:not(.active) { color: #64748b; } /* text-slate-500 */
+    .nav-item:not(.active):hover { background-color: #f8fafc; color: #475569; } /* bg-slate-50 */
+    
+    /* 簡潔的表格樣式，無多餘包框 (符合 LINE OA 原生感) */
     .data-table { width: 100%; border-collapse: collapse; text-align: left; }
     .data-table th { background-color: #f8fafc; padding: 12px 16px; font-size: 13px; color: #64748b; font-weight: normal; border-bottom: 1px solid #e2e8f0; }
     .data-table td { padding: 12px 16px; font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
@@ -31,38 +34,63 @@
 
   <!-- 全域載入遮罩 -->
   <div id="loading-screen" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center transition-opacity duration-300">
-    <span class="material-symbols-outlined animate-spin text-5xl text-[#06C755] mb-4">refresh</span>
+    <span class="material-symbols-outlined animate-spin text-5xl text-blue-600 mb-4">refresh</span>
     <p id="loading-text" class="text-slate-500 font-bold tracking-widest text-sm">系統初始化與安全驗證中...</p>
   </div>
 
   <!-- 左側邊欄 (Sidebar) -->
   <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative shrink-0">
-    <div class="h-16 flex items-center px-6 border-b border-slate-100">
-      <span class="material-symbols-outlined text-[#06C755] text-2xl mr-2">shield_person</span>
-      <h1 class="font-black text-lg tracking-wider text-slate-800">ACTMASTER</h1>
+    <!-- Logo 區塊 -->
+    <div class="h-24 flex items-center px-6 border-b border-slate-100 shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/30 shrink-0">
+          <span class="material-symbols-outlined text-[24px]">shield_person</span>
+        </div>
+        <div>
+          <h1 class="font-black text-slate-800 text-lg leading-tight tracking-wide">商機引擎後台</h1>
+          <p class="text-[10px] font-bold text-slate-400 tracking-wider">ADMIN DASHBOARD</p>
+        </div>
+      </div>
     </div>
 
-    <nav class="flex-1 py-4 flex flex-col gap-1 overflow-y-auto">
-      <a href="#" onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active flex items-center px-6 py-3 text-sm text-slate-600">
-        <span class="material-symbols-outlined mr-3 text-[20px]">dashboard</span>
-        總覽儀表板
-      </a>
-      <a href="#" onclick="switchTab('users')" id="nav-users" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600">
-        <span class="material-symbols-outlined mr-3 text-[20px]">group</span>
-        會員與權限管理
-      </a>
-      <a href="#" onclick="switchTab('cards')" id="nav-cards" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600">
-        <span class="material-symbols-outlined mr-3 text-[20px]">badge</span>
-        全站名片庫
-      </a>
-      <a href="#" onclick="switchTab('activities')" id="nav-activities" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600">
-        <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
-        活動與報名對帳
-      </a>
-      <a href="#" onclick="switchTab('settings')" id="nav-settings" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600 mt-auto border-t border-slate-100">
-        <span class="material-symbols-outlined mr-3 text-[20px]">settings</span>
-        系統參數設定
-      </a>
+    <!-- 導航選單 -->
+    <nav class="flex-1 py-6 px-4 flex flex-col gap-6 overflow-y-auto">
+      
+      <!-- 系統管理 -->
+      <div>
+        <p class="text-xs font-bold text-slate-400 mb-2 px-2">系統管理</p>
+        <div class="flex flex-col gap-1">
+          <a href="#" onclick="switchTab('users')" id="nav-users" class="nav-item active flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">manage_accounts</span>
+            用戶與商家權限
+          </a>
+          <a href="#" onclick="switchTab('activities')" id="nav-activities" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
+            全站活動監控
+          </a>
+          <!-- ✅ 新增：全站名片庫 -->
+          <a href="#" onclick="switchTab('cards')" id="nav-cards" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">badge</span>
+            全站名片庫
+          </a>
+        </div>
+      </div>
+
+      <!-- 數據中心 -->
+      <div>
+        <p class="text-xs font-bold text-slate-400 mb-2 px-2">數據中心</p>
+        <div class="flex flex-col gap-1">
+          <a href="#" onclick="switchTab('finance')" id="nav-finance" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">insights</span>
+            營運財務報表
+          </a>
+          <a href="#" onclick="switchTab('import')" id="nav-import" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">upload_file</span>
+            批次名單匯入
+          </a>
+        </div>
+      </div>
+      
     </nav>
   </aside>
 
@@ -71,7 +99,7 @@
     
     <!-- 頂部導航 (Top Bar) -->
     <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-0 shrink-0">
-      <h2 id="page-title" class="text-lg font-bold text-slate-700">總覽儀表板</h2>
+      <h2 id="page-title" class="text-lg font-bold text-slate-700">用戶與商家權限</h2>
       
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
@@ -85,37 +113,11 @@
     <!-- 內容切換區 -->
     <main class="flex-1 overflow-y-auto p-8">
       
-      <!-- Tab: Dashboard -->
-      <div id="tab-dashboard" class="tab-content space-y-6">
-        <div class="grid grid-cols-4 gap-6">
-          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">總註冊人數</p>
-            <h3 class="text-3xl font-black text-slate-700" id="stat-users">-</h3>
-          </div>
-          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">總名片數</p>
-            <h3 class="text-3xl font-black text-slate-700" id="stat-cards">-</h3>
-          </div>
-          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">上架活動數</p>
-            <h3 class="text-3xl font-black text-slate-700" id="stat-acts">-</h3>
-          </div>
-          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">累積報名總數</p>
-            <h3 class="text-3xl font-black text-slate-700" id="stat-regs">-</h3>
-          </div>
-        </div>
-        
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex items-center justify-center h-64">
-          <p class="text-slate-400 text-sm">此處未來可擴充全站營收與趨勢圖表</p>
-        </div>
-      </div>
-
-      <!-- Tab: Users (會員管理) -->
-      <div id="tab-users" class="tab-content hidden">
+      <!-- Tab: Users (用戶與商家權限) -->
+      <div id="tab-users" class="tab-content">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
-            <h3 class="font-bold text-slate-700">全站會員名單</h3>
+            <h3 class="font-bold text-slate-700">全站會員與商家名單</h3>
             <button onclick="loadUsers()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
           </div>
           <div class="overflow-x-auto">
@@ -132,6 +134,41 @@
               </thead>
               <tbody id="users-table-body">
                 <tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Activities (全站活動監控) -->
+      <div id="tab-activities" class="tab-content hidden space-y-6">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <span class="text-slate-500 font-bold text-sm">篩選租戶 (歸屬網)：</span>
+            <select id="act-tenant-filter" onchange="renderActivities()" class="border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-blue-500">
+              <option value="all">全站所有活動</option>
+            </select>
+          </div>
+          <button onclick="loadActivities()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1">
+            <span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>活動名稱</th>
+                  <th>所屬租戶</th>
+                  <th>活動時間</th>
+                  <th>費用</th>
+                  <th>報名狀況</th>
+                  <th>狀態</th>
+                </tr>
+              </thead>
+              <tbody id="acts-table-body">
+                <tr><td colspan="6" class="text-center py-8 text-slate-400">請稍候，載入資料中...</td></tr>
               </tbody>
             </table>
           </div>
@@ -164,66 +201,37 @@
         </div>
       </div>
 
-      <!-- Tab: Activities (活動與對帳) -->
-      <div id="tab-activities" class="tab-content hidden space-y-6">
-        
-        <!-- 頂部租戶篩選區 -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div class="flex items-center gap-4">
-            <span class="text-slate-500 font-bold text-sm">篩選租戶 (歸屬網)：</span>
-            <select id="act-tenant-filter" onchange="renderActivities()" class="border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-[#06C755]">
-              <option value="all">全站所有活動</option>
-            </select>
+      <!-- Tab: Finance (營運財務報表) -->
+      <div id="tab-finance" class="tab-content hidden space-y-6">
+        <div class="grid grid-cols-4 gap-6">
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">總註冊人數</p>
+            <h3 class="text-3xl font-black text-slate-700" id="stat-users">-</h3>
           </div>
-          <button onclick="loadActivities()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1">
-            <span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理
-          </button>
-        </div>
-
-        <!-- 該租戶統計數據 -->
-        <div class="grid grid-cols-3 gap-6">
-          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">總名片數</p>
+            <h3 class="text-3xl font-black text-slate-700" id="stat-cards">-</h3>
+          </div>
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
             <p class="text-slate-400 text-xs font-bold mb-1">上架活動數</p>
-            <h3 class="text-3xl font-black text-[#06C755]" id="tenant-stat-acts">-</h3>
+            <h3 class="text-3xl font-black text-slate-700" id="stat-acts">-</h3>
           </div>
-          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
             <p class="text-slate-400 text-xs font-bold mb-1">累積報名總數</p>
-            <h3 class="text-3xl font-black text-slate-700" id="tenant-stat-regs">-</h3>
-          </div>
-          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">實際報到數</p>
-            <h3 class="text-3xl font-black text-slate-700" id="tenant-stat-checkins">-</h3>
+            <h3 class="text-3xl font-black text-slate-700" id="stat-regs">-</h3>
           </div>
         </div>
-
-        <!-- 活動列表 -->
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>活動名稱</th>
-                  <th>所屬租戶</th>
-                  <th>活動時間</th>
-                  <th>費用</th>
-                  <th>報名狀況</th>
-                  <th>狀態</th>
-                </tr>
-              </thead>
-              <tbody id="acts-table-body">
-                <tr><td colspan="6" class="text-center py-8 text-slate-400">請稍候，載入資料中...</td></tr>
-              </tbody>
-            </table>
-          </div>
+        
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex items-center justify-center h-64">
+          <p class="text-slate-400 text-sm">此處未來可擴充財務對帳圖表與匯出功能</p>
         </div>
-
       </div>
 
-      <!-- Tab: Settings -->
-      <div id="tab-settings" class="tab-content hidden">
+      <!-- Tab: Import (批次名單匯入) -->
+      <div id="tab-import" class="tab-content hidden">
          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center h-64 text-slate-400">
-           <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">settings_applications</span>
-           <p>系統參數設定建置中...</p>
+           <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">upload_file</span>
+           <p>批次名單匯入功能建置中...</p>
          </div>
       </div>
 
@@ -246,7 +254,7 @@
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         payload.userId = adminProfile?.userId || '';
-        payload.role = 'admin'; // 在後台明確宣告發送者為 admin
+        payload.role = 'admin'; 
         
         const res = await fetch(WORKER_URL, {
           method: 'POST',
@@ -263,14 +271,14 @@
       }
     }
 
-    // 介面切換邏輯
+    // 介面切換邏輯 (套用新的藍色高亮 CSS)
     function switchTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       
       document.getElementById('tab-' + tabId).classList.remove('hidden');
       document.getElementById('nav-' + tabId).classList.add('active');
-      document.getElementById('page-title').innerText = document.getElementById('nav-' + tabId).innerText;
+      document.getElementById('page-title').innerText = document.getElementById('nav-' + tabId).innerText.trim();
 
       // 切換時智慧載入對應資料
       if (tabId === 'users' && allUsersData.length === 0) loadUsers();
@@ -295,7 +303,7 @@
 
         tbody.innerHTML = res.map(u => {
           let roleBadge = u.role === 'admin' ? '<span class="text-red-500 font-bold">管理員</span>' : 
-                          (u.role === 'store' ? '<span class="text-blue-500 font-bold">店長</span>' : 
+                          (u.role === 'store' ? '<span class="text-blue-600 font-bold">店長</span>' : 
                           '<span class="text-slate-400">一般</span>');
           return `
             <tr>
@@ -315,7 +323,6 @@
           `;
         }).join('');
         
-        // 若活動區塊已載入過，同步更新下拉選單名字
         if(allActivitiesData.length > 0) updateTenantFilter(); 
       }
     }
@@ -362,7 +369,7 @@
               <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
               <td class="text-sm text-slate-600">${companyTitle}</td>
               <td class="font-mono text-sm">${phone}</td>
-              <td class="text-sm">${network}</td>
+              <td class="text-sm text-blue-600 font-bold">${network}</td>
               <td class="text-xs text-slate-500">${tagNote}</td>
             </tr>
           `;
@@ -429,6 +436,11 @@
       const tbody = document.getElementById('acts-table-body');
       
       let filtered = allActivitiesData;
+      let totalRegs = 0;
+
+      allActivitiesData.forEach(act => { totalRegs += (parseInt(act['報名人數']) || 0); });
+      document.getElementById('stat-regs').innerText = totalRegs;
+
       if (filterVal !== 'all') {
           filtered = allActivitiesData.filter(act => {
               let creator = String(act['建立者ID'] || '').trim();
@@ -437,23 +449,15 @@
           });
       }
 
-      let totalActs = filtered.length;
-      let totalRegs = 0;
-      let totalCheckins = 0;
-
       const rows = filtered.map(act => {
           const regs = parseInt(act['報名人數']) || 0;
           const checkins = parseInt(act['已到人數']) || 0;
-          
-          totalRegs += regs;
-          totalCheckins += checkins;
-
           const price = parseInt(act['金額']) || 0;
-          const priceText = price === 0 ? '<span class="text-[#06C755]">免費</span>' : `$${price}`;
+          const priceText = price === 0 ? '<span class="text-blue-600 font-bold">免費</span>' : `$${price}`;
           const timeText = (act['開始時間'] || '').substring(0, 16);
           
           let statusText = (act['狀態'] === '上架' || !act['狀態']) ? 
-              '<span class="text-blue-500">上架中</span>' : '<span class="text-slate-400">已下架</span>';
+              '<span class="text-blue-500 font-bold">上架中</span>' : '<span class="text-slate-400">已下架</span>';
 
           let creatorStr = String(act['建立者ID'] || '').trim() || 'admin';
           if(creatorStr.length > 10) creatorStr = creatorStr.substring(0,8) + '...';
@@ -461,7 +465,7 @@
           return `
             <tr>
               <td class="font-bold text-slate-700">${escapeHTML(act['活動名稱'] || '未命名')}</td>
-              <td class="text-xs text-slate-400">${escapeHTML(creatorStr)}</td>
+              <td class="text-xs text-blue-600 font-bold">${escapeHTML(creatorStr)}</td>
               <td class="text-sm">${escapeHTML(timeText)}</td>
               <td>${priceText}</td>
               <td class="text-sm"><span class="font-bold text-slate-700">${regs}</span> 報名 / ${checkins} 報到</td>
@@ -470,16 +474,8 @@
           `;
       });
 
-      document.getElementById('tenant-stat-acts').innerText = totalActs;
-      document.getElementById('tenant-stat-regs').innerText = totalRegs;
-      document.getElementById('tenant-stat-checkins').innerText = totalCheckins;
-
-      if(filterVal === 'all') {
-        document.getElementById('stat-regs').innerText = totalRegs;
-      }
-
       if (filtered.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400">該租戶目前沒有建立任何活動</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400">目前沒有建立任何活動</td></tr>`;
       } else {
           tbody.innerHTML = rows.join('');
       }
@@ -511,8 +507,8 @@
           document.getElementById('loading-screen').style.opacity = '0';
           setTimeout(() => document.getElementById('loading-screen').classList.add('hidden'), 300);
           
-          // 一次性預載所有儀表板需要呈現的資料
-          loadUsers(); 
+          // 預設載入首頁 Tab
+          switchTab('users');
           loadCards();
           loadActivities();
 
