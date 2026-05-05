@@ -266,9 +266,10 @@
     </main>
   </div>
 
-  <!-- 🎨 所見即所得：名片編輯彈窗 Modal (雙欄式) -->
+  <!-- 🎨 所見即所得：名片編輯彈窗 Modal (寬廣雙欄式) -->
   <div id="modal-card-edit" class="fixed inset-0 bg-slate-900/60 z-[1000] hidden flex items-center justify-center backdrop-blur-sm transition-opacity p-4">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1000px] h-[90vh] max-h-[800px] overflow-hidden flex flex-col animate-[fade-in_0.2s_ease-out]">
+    <!-- ✅ 修改點：加大最大寬度到 1200px，高度拉滿至 95vh，確保不擠壓 -->
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1200px] h-[95vh] overflow-hidden flex flex-col animate-[fade-in_0.2s_ease-out]">
       
       <!-- 頂部頁籤切換 -->
       <div class="px-6 flex justify-between items-center border-b border-slate-200 bg-white pt-3 shrink-0">
@@ -284,89 +285,89 @@
       <!-- 左右雙欄版面 -->
       <div class="flex flex-col md:flex-row flex-1 overflow-hidden bg-slate-50">
         
-        <!-- 左側：設定表單區 -->
-        <div class="w-full md:w-[55%] flex flex-col bg-white border-r border-slate-200 overflow-y-auto p-6 no-scrollbar">
+        <!-- 左側：設定表單區 (自適應填滿剩餘寬度) -->
+        <div class="flex-1 flex flex-col bg-white border-r border-slate-200 overflow-y-auto p-6 md:p-8 no-scrollbar">
           <input type="hidden" id="edit-c-rowid">
           
           <!-- 頁籤內容 1：CRM 基本資料 -->
-          <div id="modal-body-crm" class="space-y-5">
+          <div id="modal-body-crm" class="space-y-6">
             <div>
-              <label class="block text-xs font-bold text-slate-500 mb-1">姓名 <span class="text-red-500">*</span></label>
-              <input type="text" id="edit-c-name" oninput="updateAdminCardPreview()" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="請輸入姓名">
+              <label class="block text-sm font-bold text-slate-500 mb-1.5">姓名 <span class="text-red-500">*</span></label>
+              <input type="text" id="edit-c-name" oninput="updateAdminCardPreview()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="請輸入姓名">
             </div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-2 gap-5">
               <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1">公司名稱</label>
-                <input type="text" id="edit-c-company" oninput="updateAdminCardPreview()" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
+                <label class="block text-sm font-bold text-slate-500 mb-1.5">公司名稱</label>
+                <input type="text" id="edit-c-company" oninput="updateAdminCardPreview()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
               </div>
               <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1">職稱</label>
-                <input type="text" id="edit-c-title" oninput="updateAdminCardPreview()" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1">聯絡電話</label>
-                <input type="text" id="edit-c-phone" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono">
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1 flex justify-between">歸屬網 <span class="text-[10px] font-normal text-blue-500">轉移擁有者</span></label>
-                <input type="text" id="edit-c-network" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="填寫 admin 或 店代碼">
+                <label class="block text-sm font-bold text-slate-500 mb-1.5">職稱</label>
+                <input type="text" id="edit-c-title" oninput="updateAdminCardPreview()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors">
               </div>
             </div>
-            <div>
-              <label class="block text-xs font-bold text-slate-500 mb-1">自訂標籤 (多個請用空格分開)</label>
-              <input type="text" id="edit-c-tags" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-blue-600 font-bold outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="#VIP #潛在客戶">
+            <div class="grid grid-cols-2 gap-5">
+              <div>
+                <label class="block text-sm font-bold text-slate-500 mb-1.5">聯絡電話</label>
+                <input type="text" id="edit-c-phone" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono">
+              </div>
+              <div>
+                <label class="block text-sm font-bold text-slate-500 mb-1.5 flex justify-between">歸屬網 <span class="text-[11px] font-normal text-blue-500">轉移擁有者</span></label>
+                <input type="text" id="edit-c-network" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="填寫 admin 或 店代碼">
+              </div>
             </div>
             <div>
-              <label class="block text-xs font-bold text-slate-500 mb-1">內部備註</label>
-              <textarea id="edit-c-notes" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="寫下對此客戶的備註..."></textarea>
+              <label class="block text-sm font-bold text-slate-500 mb-1.5">自訂標籤 (多個請用空格分開)</label>
+              <input type="text" id="edit-c-tags" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-blue-600 font-bold outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="#VIP #潛在客戶">
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-slate-500 mb-1.5">內部備註</label>
+              <textarea id="edit-c-notes" rows="4" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="寫下對此客戶的備註..."></textarea>
             </div>
           </div>
 
           <!-- 頁籤內容 2：數位名片設定 -->
-          <div id="modal-body-visual" class="hidden space-y-5">
-            <div class="grid grid-cols-2 gap-4">
+          <div id="modal-body-visual" class="hidden space-y-6">
+            <div class="grid grid-cols-2 gap-5">
               
-              <!-- 修正：完美移植手機版的膠囊切換選單 -->
+              <!-- 完美移植手機版的膠囊切換選單 -->
               <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2">名片版型</label>
-                <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl h-[42px]">
-                  <label class="flex-1 text-center cursor-pointer m-0">
+                <label class="block text-sm font-bold text-slate-500 mb-2">名片版型</label>
+                <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl h-[46px]">
+                  <label class="flex-1 text-center cursor-pointer m-0 h-full">
                     <input type="radio" name="edit-v-layout" value="landscape" class="peer sr-only" onchange="updateAdminCardPreview()">
-                    <div class="py-1.5 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all h-full flex items-center justify-center">標準(Mega)</div>
+                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] tracking-tight transition-all h-full flex items-center justify-center">標準(Mega)</div>
                   </label>
-                  <label class="flex-1 text-center cursor-pointer m-0">
+                  <label class="flex-1 text-center cursor-pointer m-0 h-full">
                     <input type="radio" name="edit-v-layout" value="portrait" class="peer sr-only" onchange="updateAdminCardPreview()">
-                    <div class="py-1.5 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all h-full flex items-center justify-center">滿版(Giga)</div>
+                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] tracking-tight transition-all h-full flex items-center justify-center">滿版(Giga)</div>
                   </label>
-                  <label class="flex-1 text-center cursor-pointer m-0">
+                  <label class="flex-1 text-center cursor-pointer m-0 h-full">
                     <input type="radio" name="edit-v-layout" value="square" class="peer sr-only" onchange="updateAdminCardPreview()">
-                    <div class="py-1.5 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all h-full flex items-center justify-center">正方(1:1)</div>
+                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] tracking-tight transition-all h-full flex items-center justify-center">正方(1:1)</div>
                   </label>
                 </div>
               </div>
 
               <!-- 對齊與顏色 -->
               <div>
-                <label class="block text-xs font-bold text-slate-500 mb-2">排版與顏色</label>
-                <div class="flex gap-2 h-[42px]">
-                  <select id="edit-v-align" onchange="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm text-slate-800 outline-none focus:border-blue-500">
+                <label class="block text-sm font-bold text-slate-500 mb-2">排版與顏色</label>
+                <div class="flex gap-2 h-[46px]">
+                  <select id="edit-v-align" onchange="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-slate-800 outline-none focus:border-blue-500">
                     <option value="center">置中對齊</option>
                     <option value="start">靠左對齊</option>
                     <option value="end">靠右對齊</option>
                   </select>
-                  <input type="color" id="edit-v-color" onchange="updateAdminCardPreview()" value="#666666" class="w-[42px] h-full p-0 border border-slate-200 rounded-lg cursor-pointer bg-white">
+                  <input type="color" id="edit-v-color" onchange="updateAdminCardPreview()" value="#666666" class="w-[46px] h-full p-0 border border-slate-200 rounded-xl cursor-pointer bg-white">
                 </div>
               </div>
             </div>
 
             <!-- 圖片上傳區 -->
             <div>
-              <label class="block text-xs font-bold text-slate-500 mb-1">封面圖片網址</label>
+              <label class="block text-sm font-bold text-slate-500 mb-1.5">封面圖片網址</label>
               <div class="flex gap-2">
-                <input type="text" id="edit-v-img" oninput="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
-                <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
+                <input type="text" id="edit-v-img" oninput="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
+                <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
                   <span class="material-symbols-outlined text-[18px]">upload</span> 上傳圖片
                   <input type="file" class="hidden" accept="image/*" onchange="openAdminCropper(this)">
                 </label>
@@ -374,27 +375,28 @@
             </div>
 
             <div>
-              <label class="block text-xs font-bold text-slate-500 mb-1">名片服務說明 (支援換行)</label>
-              <textarea id="edit-v-desc" oninput="updateAdminCardPreview()" rows="4" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="請填寫公司介紹與服務項目..."></textarea>
+              <label class="block text-sm font-bold text-slate-500 mb-1.5">名片服務說明 (支援換行)</label>
+              <textarea id="edit-v-desc" oninput="updateAdminCardPreview()" rows="5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="請填寫公司介紹與服務項目..."></textarea>
             </div>
             
-            <div class="pt-4 border-t border-slate-100">
-              <div class="flex justify-between items-center mb-3">
-                <label class="block text-xs font-bold text-slate-500">LINE 動作按鈕設定</label>
-                <button type="button" onclick="addAdminCardButton()" class="text-xs text-blue-600 bg-blue-50 px-2 py-1.5 rounded-lg hover:bg-blue-100 transition-colors font-bold">+ 新增按鈕</button>
+            <div class="pt-6 border-t border-slate-100">
+              <div class="flex justify-between items-center mb-4">
+                <label class="block text-sm font-bold text-slate-500">LINE 動作按鈕設定</label>
+                <button type="button" onclick="addAdminCardButton()" class="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors font-bold">+ 新增按鈕</button>
               </div>
-              <div id="admin-edit-buttons-list" class="space-y-2">
+              <div id="admin-edit-buttons-list" class="space-y-3">
                 <!-- 按鈕列表動態渲染 -->
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 右側：手機預覽區 (Live Preview) -->
-        <div class="w-full md:w-[45%] bg-slate-100 p-6 flex flex-col items-center justify-start overflow-y-auto">
-           <p class="text-[11px] font-bold text-slate-400 mb-3 tracking-widest">LINE 聊天室呈現預覽</p>
+        <!-- 右側：手機預覽區 (Live Preview) ✅ 修改點：固定寬度 450px 絕對不擠壓 -->
+        <div class="w-full md:w-[450px] bg-slate-100 p-6 md:p-8 flex flex-col items-center justify-start overflow-y-auto shrink-0 border-l border-slate-200/50">
+           <p class="text-xs font-bold text-slate-400 mb-4 tracking-widest uppercase">LINE 聊天室呈現預覽</p>
            
-           <div id="admin-card-preview-area" class="w-[300px] bg-white rounded-[24px] shadow-lg overflow-hidden border border-slate-200 relative shrink-0">
+           <!-- ✅ 修改點：模擬器固定為 320px，完美比例 -->
+           <div id="admin-card-preview-area" class="w-[320px] bg-white rounded-[24px] shadow-xl overflow-hidden border border-slate-200/60 relative shrink-0 ring-4 ring-slate-900/5">
               <!-- 預覽畫面將由 JS 動態注入 -->
            </div>
         </div>
@@ -402,9 +404,9 @@
       </div>
 
       <!-- 底部儲存按鈕區 -->
-      <div class="px-6 py-4 bg-white border-t border-slate-200 flex justify-end gap-3 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <button onclick="closeEditCardModal()" class="px-4 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">取消</button>
-        <button id="btn-save-card" onclick="saveCardEdit()" class="px-6 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-2">
+      <div class="px-8 py-5 bg-white border-t border-slate-200 flex justify-end gap-3 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
+        <button onclick="closeEditCardModal()" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">取消</button>
+        <button id="btn-save-card" onclick="saveCardEdit()" class="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-2">
           <span class="material-symbols-outlined text-[18px]">save</span> 儲存變更
         </button>
       </div>
@@ -413,11 +415,9 @@
 
   <!-- ✂️ 後台專用圖片裁切彈窗 -->
   <div id="admin-cropper-modal" class="fixed inset-0 bg-slate-900/95 z-[2000] hidden flex flex-col transition-opacity duration-300">
-    <!-- 裁切操作區 -->
     <div id="admin-cropper-container" class="flex-1 relative flex items-center justify-center p-4">
       <img id="admin-cropper-image" class="block max-w-full max-h-full mx-auto shadow-2xl">
     </div>
-    <!-- 底部控制列 -->
     <div class="h-20 bg-black flex items-center justify-between px-8 shrink-0 border-t border-slate-800">
       <button onclick="closeAdminCropper()" class="text-white hover:text-slate-300 font-bold text-sm px-4 py-2 transition-colors">取消</button>
       <button id="btn-admin-confirm-crop" class="bg-[#06C755] text-white px-8 py-2.5 rounded-full font-bold text-sm shadow-lg shadow-[#06C755]/30 hover:bg-[#05b34c] transition-colors flex items-center gap-1">
@@ -428,7 +428,7 @@
 
   <style>
     @keyframes fade-in {
-      from { opacity: 0; transform: translateY(10px) scale(0.98); }
+      from { opacity: 0; transform: translateY(15px) scale(0.98); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
   </style>
@@ -698,7 +698,6 @@
       let cfg = {};
       try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
       
-      // ✅ 完美同步手機版的膠囊按鈕狀態
       let layoutVal = cfg.layoutStyle || 'landscape';
       let layoutRadio = document.querySelector(`input[name="edit-v-layout"][value="${layoutVal}"]`);
       if (layoutRadio) layoutRadio.checked = true;
@@ -767,13 +766,13 @@
         container.innerHTML = '<p class="text-xs text-slate-400">目前沒有設定任何按鈕</p>';
       } else {
         container.innerHTML = currentEditButtons.map((b, i) => `
-          <div class="flex gap-2 items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-            <input type="color" value="${b.c || '#06C755'}" class="w-9 h-9 p-0.5 cursor-pointer rounded-lg shrink-0 border border-slate-200 bg-white" onchange="currentEditButtons[${i}].c=this.value; updateAdminCardPreview()">
+          <div class="flex gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+            <input type="color" value="${b.c || '#06C755'}" class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200 bg-white" onchange="currentEditButtons[${i}].c=this.value; updateAdminCardPreview()">
             <div class="flex-1 flex flex-col gap-1.5">
-              <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-slate-50 border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2 py-1" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
-              <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://..." class="w-full text-xs font-mono bg-slate-50 border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2 py-1" oninput="currentEditButtons[${i}].u=this.value">
+              <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-slate-50 border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
+              <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://..." class="w-full text-xs font-mono bg-slate-50 border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="currentEditButtons[${i}].u=this.value">
             </div>
-            <button onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+            <button onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
           </div>
         `).join('');
       }
