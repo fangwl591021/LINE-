@@ -57,6 +57,7 @@ window.generateCardFromProfile = async function(event) {
     const config = {
       cardType: 'v1',
       imgUrl: currentUserProfile?.pictureUrl || '',
+      imgUrlPortrait: '',
       title: currentUser?.name || '我的名片',
       desc: templateDesc,
       buttons: defaultBtns,
@@ -180,6 +181,11 @@ window.saveMyECardConfig = async function() {
   if (currentUserCard['自訂名片設定']) {
     try {
       let c = JSON.parse(currentUserCard['自訂名片設定']);
+      prevAlign = c.descAlign || 'center';
+      prevColor = c.descColor || '#666666';
+    } catch(e){}
+  }
+
   // 取得畫面上選擇的版型準備儲存
   const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
   const layoutStyle = layoutRadio ? layoutRadio.value : 'landscape';
