@@ -36,13 +36,13 @@
   </div>
 
   <!-- 左側邊欄 (Sidebar) -->
-  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative">
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative shrink-0">
     <div class="h-16 flex items-center px-6 border-b border-slate-100">
       <span class="material-symbols-outlined text-[#06C755] text-2xl mr-2">shield_person</span>
       <h1 class="font-black text-lg tracking-wider text-slate-800">ACTMASTER</h1>
     </div>
 
-    <nav class="flex-1 py-4 flex flex-col gap-1">
+    <nav class="flex-1 py-4 flex flex-col gap-1 overflow-y-auto">
       <a href="#" onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active flex items-center px-6 py-3 text-sm text-slate-600">
         <span class="material-symbols-outlined mr-3 text-[20px]">dashboard</span>
         總覽儀表板
@@ -50,6 +50,10 @@
       <a href="#" onclick="switchTab('users')" id="nav-users" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600">
         <span class="material-symbols-outlined mr-3 text-[20px]">group</span>
         會員與權限管理
+      </a>
+      <a href="#" onclick="switchTab('cards')" id="nav-cards" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600">
+        <span class="material-symbols-outlined mr-3 text-[20px]">badge</span>
+        全站名片庫
       </a>
       <a href="#" onclick="switchTab('activities')" id="nav-activities" class="nav-item flex items-center px-6 py-3 text-sm text-slate-600">
         <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
@@ -66,7 +70,7 @@
   <div class="flex-1 flex flex-col overflow-hidden">
     
     <!-- 頂部導航 (Top Bar) -->
-    <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-0">
+    <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-0 shrink-0">
       <h2 id="page-title" class="text-lg font-bold text-slate-700">總覽儀表板</h2>
       
       <div class="flex items-center gap-4">
@@ -107,7 +111,7 @@
         </div>
       </div>
 
-      <!-- Tab: Users -->
+      <!-- Tab: Users (會員管理) -->
       <div id="tab-users" class="tab-content hidden">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
@@ -134,7 +138,33 @@
         </div>
       </div>
 
-      <!-- Tab: Activities -->
+      <!-- Tab: Cards (全站名片庫) -->
+      <div id="tab-cards" class="tab-content hidden">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
+            <h3 class="font-bold text-slate-700">全站名片與客戶資料庫</h3>
+            <button onclick="loadCards()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>姓名</th>
+                  <th>公司名稱 / 職稱</th>
+                  <th>聯絡電話</th>
+                  <th>歸屬網</th>
+                  <th>標籤 / 備註</th>
+                </tr>
+              </thead>
+              <tbody id="cards-table-body">
+                <tr><td colspan="5" class="text-center py-8 text-slate-400">載入中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Activities (活動與對帳) -->
       <div id="tab-activities" class="tab-content hidden space-y-6">
         
         <!-- 頂部租戶篩選區 -->
@@ -208,6 +238,7 @@
     
     let adminProfile = null;
     let allUsersData = [];
+    let allCardsData = [];
     let allActivitiesData = [];
 
     // 統一 API 呼叫
@@ -215,6 +246,7 @@
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         payload.userId = adminProfile?.userId || '';
+        payload.role = 'admin'; // 在後台明確宣告發送者為 admin
         
         const res = await fetch(WORKER_URL, {
           method: 'POST',
@@ -242,6 +274,7 @@
 
       // 切換時智慧載入對應資料
       if (tabId === 'users' && allUsersData.length === 0) loadUsers();
+      if (tabId === 'cards' && allCardsData.length === 0) loadCards();
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
     }
 
@@ -299,12 +332,51 @@
       }
     }
 
-    // ================== 活動統治區塊 ==================
+    // ================== 全站名片庫區塊 ==================
+    async function loadCards() {
+      const tbody = document.getElementById('cards-table-body');
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">資料撈取中，請稍候...</td></tr>';
+
+      const res = await fetchAPI('getCardContacts');
+      if (res && Array.isArray(res)) {
+        allCardsData = res;
+        document.getElementById('stat-cards').innerText = res.length;
+
+        if (res.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">尚無名片資料</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = res.map(c => {
+          const company = escapeHTML(c['公司名稱'] || '');
+          const title = escapeHTML(c['職稱'] || '');
+          const companyTitle = [company, title].filter(Boolean).join(' / ') || '-';
+          const phone = escapeHTML(c['手機號碼'] || c['公司電話'] || '-');
+          const network = escapeHTML(c['歸屬網'] || 'admin');
+          const tags = escapeHTML(c['標籤'] || '');
+          const notes = escapeHTML(c['建檔人/備註'] || '');
+          const tagNote = [tags, notes].filter(Boolean).join(' | ') || '-';
+
+          return `
+            <tr>
+              <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
+              <td class="text-sm text-slate-600">${companyTitle}</td>
+              <td class="font-mono text-sm">${phone}</td>
+              <td class="text-sm">${network}</td>
+              <td class="text-xs text-slate-500">${tagNote}</td>
+            </tr>
+          `;
+        }).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-red-400">無法取得名片資料，請重新整理</td></tr>';
+      }
+    }
+
+    // ================== 活動統計區塊 ==================
     async function loadActivities() {
       const tbody = document.getElementById('acts-table-body');
       tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">資料撈取中，請稍候...</td></tr>';
       
-      // 取得全站活動 (管理員權限會回傳全部)
       const res = await fetchAPI('getPublicActivities');
       if (res && Array.isArray(res)) {
         allActivitiesData = res;
@@ -316,7 +388,6 @@
       }
     }
 
-    // 更新租戶下拉選單 (利用 allUsersData 來對應真實姓名)
     function updateTenantFilter() {
       const filter = document.getElementById('act-tenant-filter');
       const currentVal = filter.value;
@@ -346,7 +417,6 @@
 
       filter.innerHTML = html;
       
-      // 保持原本選擇的租戶 (如果存在的話)
       let hasValue = false;
       for (let i = 0; i < filter.options.length; i++) {
         if (filter.options[i].value === currentVal) hasValue = true;
@@ -354,7 +424,6 @@
       if (hasValue) filter.value = currentVal;
     }
 
-    // 渲染特定租戶的活動與統計
     function renderActivities() {
       const filterVal = document.getElementById('act-tenant-filter').value;
       const tbody = document.getElementById('acts-table-body');
@@ -401,12 +470,10 @@
           `;
       });
 
-      // 更新畫面上方統計數字
       document.getElementById('tenant-stat-acts').innerText = totalActs;
       document.getElementById('tenant-stat-regs').innerText = totalRegs;
       document.getElementById('tenant-stat-checkins').innerText = totalCheckins;
 
-      // 更新首頁大盤統計
       if(filterVal === 'all') {
         document.getElementById('stat-regs').innerText = totalRegs;
       }
@@ -444,8 +511,10 @@
           document.getElementById('loading-screen').style.opacity = '0';
           setTimeout(() => document.getElementById('loading-screen').classList.add('hidden'), 300);
           
-          // 預載資料
+          // 一次性預載所有儀表板需要呈現的資料
           loadUsers(); 
+          loadCards();
+          loadActivities();
 
         } else {
           document.getElementById('loading-text').innerText = "權限不足，您不是系統管理員。";
