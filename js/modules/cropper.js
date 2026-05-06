@@ -1,10 +1,8 @@
 /* ==================== 圖片裁切共用模組 ==================== */
 
-// 🚀 輔助函式：安全初始化 Cropper，徹底移除會干擾高度計算的 Flexbox，回歸原生 Block 排版
 function createSafeCropper(imgElement, ratio) {
   if (!imgElement) return null;
-  
-  // 清除父容器的 Tailwind flex 屬性，改為 block，讓 Cropper.js 完美讀取畫布邊界
+
   const parent = imgElement.parentElement;
   if (parent) {
     parent.classList.remove('flex', 'items-center', 'justify-center', 'p-4');
@@ -18,13 +16,16 @@ function createSafeCropper(imgElement, ratio) {
   imgElement.style.maxWidth = '100%';
   imgElement.style.maxHeight = '100%';
 
+  const freeRatio = ratio === null || ratio === undefined || Number.isNaN(Number(ratio));
+
   return new Cropper(imgElement, {
-    aspectRatio: ratio,
-    viewMode: 1, // 關鍵：嚴格限制裁切框絕對不能超出圖片實體範圍
-    dragMode: 'move',
+    aspectRatio: freeRatio ? NaN : ratio,
+    viewMode: 1,
+    dragMode: 'crop',
     autoCropArea: 0.95,
     cropBoxMovable: true,
     cropBoxResizable: true,
+    toggleDragModeOnDblclick: true,
     guides: true,
     center: true,
     highlight: false,
@@ -46,9 +47,6 @@ window.cancelCrop = function() {
   if (img) img.src = '';
 };
 
-// ==========================================
-// 1. 一般客戶名片 (CRM 名片庫掃描) - 自由裁切
-// ==========================================
 window.openCropper = function(input) {
   const file = input.files[0];
   if (!file) return;
@@ -59,25 +57,24 @@ window.openCropper = function(input) {
     const img = document.getElementById('cropper-image');
 
     modal.classList.remove('hidden');
-    modal.classList.add('flex'); 
+    modal.classList.add('flex');
 
     img.onload = () => {
       const confirmBtn = document.getElementById('btn-confirm-crop');
       if (confirmBtn) {
-          confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
-          confirmBtn.innerHTML = '確認裁切';
-          confirmBtn.disabled = false;
+        confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
+        confirmBtn.innerHTML = '確認裁切';
+        confirmBtn.disabled = false;
       }
 
       if (cropperInstance) cropperInstance.destroy();
-      
-      // 給予 DOM 渲染時間後，啟動安全裁切器 (NaN 代表自由拉伸)
       setTimeout(() => {
         cropperInstance = createSafeCropper(img, NaN);
       }, 150);
     };
+
     img.src = e.target.result;
-    input.value = "";
+    input.value = '';
   };
   reader.readAsDataURL(file);
 };
@@ -94,7 +91,7 @@ window.confirmCrop = async function() {
     maxWidth: size,
     maxHeight: size,
     imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high',
+    imageSmoothingQuality: 'high'
   }).toDataURL('image/jpeg', quality);
 
   while (base64Image.length > 660000 && quality > 0.3) {
@@ -103,34 +100,31 @@ window.confirmCrop = async function() {
   }
 
   window.cancelCrop();
-  window.showToast('🤖 AI 正在辨識客戶名片...');
+  window.showToast('AI 正在辨識客戶名片...');
 
   try {
-    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image: base64Image }, true);
+    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
 
     const cardPayload = {
       ...ocrRes,
-      userId: '', 
+      userId: '',
       '建檔人/備註': '掃描建立 by ' + (currentUser?.name || '')
     };
 
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
-      window.showToast('✅ 客戶名片建立成功！');
+      window.showToast('客戶名片建立成功！');
       if (typeof window.loadAllData === 'function') await window.loadAllData();
-      if (typeof window.goPage === 'function') window.goPage('card'); 
+      if (typeof window.goPage === 'function') window.goPage('card');
     } else {
       throw new Error('儲存失敗');
     }
   } catch (err) {
-    window.showToast('⚠️ ' + err.message, true);
+    window.showToast(err.message, true);
   }
 };
 
-// ==========================================
-// 2. 我的專屬名片掃描 - 自由裁切
-// ==========================================
 window.openMyCardCropper = function(input) {
   const file = input.files[0];
   if (!file) return;
@@ -141,24 +135,24 @@ window.openMyCardCropper = function(input) {
     const img = document.getElementById('cropper-image');
 
     modal.classList.remove('hidden');
-    modal.classList.add('flex'); 
+    modal.classList.add('flex');
 
     img.onload = () => {
       const confirmBtn = document.getElementById('btn-confirm-crop');
       if (confirmBtn) {
-          confirmBtn.setAttribute('onclick', 'window.confirmMyCardCrop()');
-          confirmBtn.innerHTML = '確認裁切';
-          confirmBtn.disabled = false;
+        confirmBtn.setAttribute('onclick', 'window.confirmMyCardCrop()');
+        confirmBtn.innerHTML = '確認裁切';
+        confirmBtn.disabled = false;
       }
 
       if (cropperInstance) cropperInstance.destroy();
-      
       setTimeout(() => {
         cropperInstance = createSafeCropper(img, NaN);
       }, 150);
     };
+
     img.src = e.target.result;
-    input.value = "";
+    input.value = '';
   };
   reader.readAsDataURL(file);
 };
@@ -175,7 +169,7 @@ window.confirmMyCardCrop = async function() {
     maxWidth: size,
     maxHeight: size,
     imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high',
+    imageSmoothingQuality: 'high'
   }).toDataURL('image/jpeg', quality);
 
   while (base64Image.length > 660000 && quality > 0.3) {
@@ -184,21 +178,21 @@ window.confirmMyCardCrop = async function() {
   }
 
   window.cancelCrop();
-  window.showToast('🤖 AI 正在辨識專屬名片...');
+  window.showToast('AI 正在辨識專屬名片...');
 
   try {
-    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image: base64Image }, true);
+    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
 
     const cardPayload = {
       ...ocrRes,
-      userId: currentUserProfile.userId, 
+      userId: currentUserProfile.userId,
       '建檔人/備註': '我的專屬名片'
     };
 
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
-      window.showToast('✅ 專屬名片覆蓋成功！');
+      window.showToast('專屬名片覆蓋成功！');
       cardPayload.rowId = saveRes.rowId;
       allCards.unshift(cardPayload);
       currentUserCard = cardPayload;
@@ -208,41 +202,18 @@ window.confirmMyCardCrop = async function() {
       throw new Error('儲存失敗');
     }
   } catch (err) {
-    window.showToast('⚠️ ' + err.message, true);
+    window.showToast(err.message, true);
   }
 };
 
-// ==========================================
-// 3. 上傳封面圖片 (版型背景圖) - 🚀 智慧解除比例鎖定
-// ==========================================
 window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = null) {
   const file = inputEl.files[0];
   if (!file) return;
 
   window.currentUploadTargetId = targetInputId;
 
-  // 🚀 關鍵邏輯：依據版型自動判斷是否要鎖定比例
-  let uploadRatio = NaN; // 預設滿版與正方為「完全自由拉伸 (NaN)」
-  
-  if (forcedRatio !== null) {
-    uploadRatio = forcedRatio;
-  } else if (targetInputId === 'my-v1-img-url') {
-    const layoutRadio = document.querySelector('input[name="my-ecard-layout"]:checked');
-    if (layoutRadio) {
-      if (layoutRadio.value === 'landscape') uploadRatio = 20 / 13;
-      else if (layoutRadio.value === 'portrait') uploadRatio = NaN; // 滿版改為自由比例
-      else if (layoutRadio.value === 'square') uploadRatio = 1 / 1;
-    }
-  } else if (targetInputId === 'v1-img-url') {
-    const layoutRadio = document.querySelector('input[name="ecard-layout"]:checked');
-    if (layoutRadio) {
-      if (layoutRadio.value === 'landscape') uploadRatio = 20 / 13;
-      else if (layoutRadio.value === 'portrait') uploadRatio = NaN; // 滿版改為自由比例
-      else if (layoutRadio.value === 'square') uploadRatio = 1 / 1;
-    }
-  } else if (targetInputId === 'input-store-banner') {
-    uploadRatio = 16 / 9; 
-  }
+  // 預設不鎖比例，讓 Banner、名片封面、活動圖都能自由拉伸裁切框。
+  const uploadRatio = forcedRatio !== null ? forcedRatio : NaN;
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -255,18 +226,17 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
     img.onload = () => {
       const confirmBtn = document.getElementById('btn-confirm-crop');
       if (confirmBtn) {
-          confirmBtn.setAttribute('onclick', 'window.confirmCustomImageCrop()');
-          confirmBtn.innerHTML = '確認裁切';
-          confirmBtn.disabled = false;
+        confirmBtn.setAttribute('onclick', 'window.confirmCustomImageCrop()');
+        confirmBtn.innerHTML = '確認裁切';
+        confirmBtn.disabled = false;
       }
 
       if (cropperInstance) cropperInstance.destroy();
-
       setTimeout(() => {
         cropperInstance = createSafeCropper(img, uploadRatio);
       }, 150);
     };
-    
+
     img.src = e.target.result;
     inputEl.value = '';
   };
@@ -279,19 +249,17 @@ window.confirmCustomImageCrop = async function() {
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 800; 
+  let size = 800;
   let quality = 0.8;
-  
+
   const canvas = cropperInstance.getCroppedCanvas({
     maxWidth: size,
     maxHeight: size,
     imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high',
+    imageSmoothingQuality: 'high'
   });
-  
-  // 記錄使用者裁切出的真實比例，交給預覽引擎渲染
-  const imgRatio = Math.round(canvas.width) + ':' + Math.round(canvas.height);
 
+  const imgRatio = Math.round(canvas.width) + ':' + Math.round(canvas.height);
   let base64Image = canvas.toDataURL('image/jpeg', quality);
 
   while (base64Image.length > 660000 && quality > 0.3) {
@@ -301,7 +269,7 @@ window.confirmCustomImageCrop = async function() {
 
   if (base64Image.length > 800000) {
     window.cancelCrop();
-    return window.showToast("⚠️ 圖片檔案過大無法壓縮,請選擇其他圖片", true);
+    return window.showToast('圖片檔案過大無法壓縮，請選擇其他圖片', true);
   }
 
   window.cancelCrop();
@@ -312,13 +280,13 @@ window.confirmCustomImageCrop = async function() {
   targetInput.value = '圖片上傳中...';
   targetInput.disabled = true;
 
-  window.showToast('⏳ 圖片上傳中...');
+  window.showToast('圖片上傳中...');
 
   try {
-    const res = await window.fetchAPI('uploadImageToR2', { base64Image: base64Image }, true);
+    const res = await window.fetchAPI('uploadImageToR2', { base64Image }, true);
     if (res && res.url) {
       targetInput.value = res.url;
-      window.showToast('✅ 圖片已成功上傳');
+      window.showToast('圖片已成功上傳');
 
       if (targetInputId === 'my-v1-img-url') {
         if (typeof window.setMyUploadImage === 'function') window.setMyUploadImage(res.url, imgRatio);
@@ -333,15 +301,12 @@ window.confirmCustomImageCrop = async function() {
     }
   } catch (err) {
     targetInput.value = originalVal;
-    window.showToast('⚠️ ' + err.message, true);
+    window.showToast(err.message, true);
   } finally {
     targetInput.disabled = false;
   }
 };
 
-// ==========================================
-// 4. 活動宣傳圖掃描
-// ==========================================
 window.openActiveCropper = function(input, targetMode) {
   const file = input.files[0];
   if (!file) return;
@@ -358,16 +323,15 @@ window.openActiveCropper = function(input, targetMode) {
 
     img.onload = () => {
       if (activeCropperInstance) activeCropperInstance.destroy();
-
       setTimeout(() => {
         activeCropperInstance = createSafeCropper(img, NaN);
         img.style.opacity = '1';
       }, 150);
     };
-    
+
     img.src = e.target.result;
-    img.style.opacity = '0'; 
-    input.value = "";
+    img.style.opacity = '0';
+    input.value = '';
   };
   reader.readAsDataURL(file);
 };
@@ -391,7 +355,8 @@ window.cancelActiveCrop = function() {
 
 window.confirmActiveCrop = function() {
   if (!activeCropperInstance) return;
-  let size = 800; 
+
+  let size = 800;
   let quality = 0.8;
   let base64 = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
 
@@ -399,9 +364,10 @@ window.confirmActiveCrop = function() {
     quality -= 0.15;
     base64 = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
   }
+
   if (base64.length > 800000) {
     window.cancelActiveCrop();
-    return window.showToast("⚠️ 圖片檔案過大無法壓縮,請選擇其他圖片", true);
+    return window.showToast('圖片檔案過大無法壓縮，請選擇其他圖片', true);
   }
 
   window.cancelActiveCrop();
@@ -417,6 +383,6 @@ window.confirmActiveCrop = function() {
     placeholder.classList.add('hidden');
     urlInput.value = base64;
   } else {
-    alert('⚠️ 系統找不到對應的預覽區塊 (' + modeId + '),請重新整理');
+    alert('系統找不到對應的預覽區塊 (' + modeId + ')，請重新整理');
   }
 };
