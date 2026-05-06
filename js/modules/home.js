@@ -6,6 +6,27 @@ window.normalizeStoreSettings = window.normalizeStoreSettings || function(raw) {
   return raw;
 };
 
+window.getStoreSettingsCacheKey = window.getStoreSettingsCacheKey || function(networkId) {
+  return 'ACTMASTER_STORE_SETTINGS_' + String(networkId || window.currentNetworkId || 'admin');
+};
+
+window.readCachedStoreSettings = window.readCachedStoreSettings || function(networkId) {
+  try {
+    const raw = localStorage.getItem(window.getStoreSettingsCacheKey(networkId));
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+window.writeCachedStoreSettings = window.writeCachedStoreSettings || function(settings, networkId) {
+  const d = window.normalizeStoreSettings(settings);
+  if (!d) return;
+  try {
+    localStorage.setItem(window.getStoreSettingsCacheKey(networkId || d.networkId), JSON.stringify(d));
+  } catch (e) {}
+};
+
 window.isStoreToggleOn = window.isStoreToggleOn || function(value, fallback = true) {
   if (value === undefined || value === null || value === '') return fallback;
   return String(value).toLowerCase() !== 'false';
@@ -42,7 +63,7 @@ window.applyStoreSettingsToHome = window.applyStoreSettingsToHome || function(se
       bannerImg.parentElement.classList.add('hidden');
     } else {
       bannerImg.parentElement.classList.remove('hidden');
-      if (d.bannerUrl) bannerImg.src = d.bannerUrl;
+      if (d.bannerUrl && bannerImg.src !== d.bannerUrl) bannerImg.src = d.bannerUrl;
     }
   }
 
@@ -52,7 +73,7 @@ window.applyStoreSettingsToHome = window.applyStoreSettingsToHome || function(se
     const embedUrl = window.getYoutubeEmbedUrl(d.youtubeUrl);
     if (window.isStoreToggleOn(d.showYoutube, true) && embedUrl) {
       ytContainer.classList.remove('hidden');
-      ytIframe.src = embedUrl;
+      if (ytIframe.src !== embedUrl) ytIframe.src = embedUrl;
     } else {
       ytContainer.classList.add('hidden');
       ytIframe.src = '';
@@ -60,42 +81,153 @@ window.applyStoreSettingsToHome = window.applyStoreSettingsToHome || function(se
   }
 };
 
-/**
- * 載入首頁內容 (含系統設定同步與活動列表)
- */
-window.loadUserActivities = async function() {
-  // 1. 同步讀取系統 Banner 與 名稱
+window.refreshStoreSettingsInBackground = window.refreshStoreSettingsInBackground || async function() {
   try {
-    const settingsRes = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId });
-    window.applyStoreSettingsToHome(settingsRes);
+    const settingsRes = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId }, true);
+    const d = window.normalizeStoreSettings(settingsRes);
+    if (d) {
+      window.writeCachedStoreSettings(d, window.currentNetworkId);
+      window.applyStoreSettingsToHome(d);
+    }
   } catch (e) {
-    console.error("系統設定同步失敗", e);
+    console.error('系統設定同步失敗', e);
   }
+};
 
-  // 2. 既有的活動列表渲染邏輯
+function getPublicActivityId_(activity) {
+  return String(activity['活動ID'] || activity.rowId || '').trim();
+}
+
+function getPublicActivityStatus_(activity) {
+  return String(activity['狀態'] || '上架').trim();
+}
+
+window.renderHomeActivities = function() {
   const list = document.getElementById('user-activities-list');
   if (!list) return;
 
-  // 假設資料已在 loadAllData 中取得
-  if (!window.allActivities || window.allActivities.length === 0) {
-    list.innerHTML = '<p class="text-center text-slate-400 py-10 text-sm">目前暫無開放中的活動</p>';
+  const activities = Array.isArray(window.allActivities) ? window.allActivities : [];
+  const activeActs = activities
+    .filter(a => getPublicActivityStatus_(a) === '上架')
+    .slice()
+    .reverse();
+
+  list.className = 'grid grid-cols-2 gap-3';
+
+  if (activeActs.length === 0) {
+    list.className = 'space-y-4';
+    list.innerHTML = '<p class="text-center text-slate-400 py-8 text-sm">目前暫無開放中的活動</p>';
     return;
   }
 
-  // 僅顯示狀態為「上架」的活動
-  const activeActs = window.allActivities.filter(a => a['狀態'] === '上架');
-  
-  list.innerHTML = activeActs.map(a => `
-    <div class="bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 mb-4" onclick="window.openActivityDetail('${a['活動ID']}')">
-      ${a['宣傳圖'] ? `<img src="${a['宣傳圖']}" class="w-full aspect-video object-cover">` : ''}
-      <div class="p-5">
-        <div class="flex justify-between items-start mb-2">
-          <span class="bg-primary-light text-primary text-[10px] px-2 py-0.5 rounded-full font-bold">${a['活動類型'] || '活動'}</span>
-          <span class="text-slate-400 text-[11px] font-mono">${window.formatDisplayTime(a['開始時間'])}</span>
-        </div>
-        <h4 class="font-black text-slate-800 text-[17px] mb-1">${a['活動名稱']}</h4>
-        <p class="text-slate-500 text-[13px] line-clamp-2 leading-relaxed">${a['活動說明'] || ''}</p>
-      </div>
-    </div>
-  `).join('');
+  list.innerHTML = activeActs.map(a => {
+    const actId = window.escapeJS(getPublicActivityId_(a));
+    const title = window.escapeHTML(a['活動名稱'] || '未命名活動');
+    const type = window.escapeHTML(a['活動類型'] || '活動');
+    const time = window.escapeHTML(window.formatDisplayTime(a['開始時間']));
+    const desc = window.escapeHTML(a['活動說明'] || '');
+    const img = window.escapeHTML(a['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80');
+
+    return '' +
+      '<div class="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 flex flex-col min-h-[250px]">' +
+        '<div class="w-full aspect-[4/3] bg-slate-100 overflow-hidden">' +
+          '<img src="' + img + '" class="w-full h-full object-cover" loading="lazy">' +
+        '</div>' +
+        '<div class="p-3 flex flex-col flex-1">' +
+          '<div class="flex items-center justify-between gap-1 mb-2">' +
+            '<span class="bg-primary-light text-primary text-[10px] px-2 py-0.5 rounded-full font-bold truncate">' + type + '</span>' +
+            '<span class="text-slate-400 text-[10px] font-mono shrink-0">' + time + '</span>' +
+          '</div>' +
+          '<h4 class="font-black text-slate-800 text-[14px] leading-snug line-clamp-2 mb-1">' + title + '</h4>' +
+          '<p class="text-slate-500 text-[12px] line-clamp-2 leading-relaxed mb-3">' + desc + '</p>' +
+          '<div class="grid grid-cols-2 gap-2 mt-auto">' +
+            '<button type="button" onclick="event.stopPropagation(); window.openActivityDetail(&quot;' + actId + '&quot;)" class="py-2 bg-slate-100 text-slate-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform">詳細</button>' +
+            '<button type="button" onclick="event.stopPropagation(); window.joinPublicActivity(&quot;' + actId + '&quot;, this)" class="py-2 bg-[#06C755] text-white rounded-xl text-[12px] font-bold active:scale-95 transition-transform">報名</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+};
+
+window.openActivityDetail = function(activityId) {
+  const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId));
+  if (!activity) return window.showToast('找不到活動資料，請稍後再試', true);
+
+  const backBtn = document.querySelector('#page-my-act-detail button');
+  if (backBtn) backBtn.setAttribute('onclick', "window.goPage('home')");
+
+  const content = document.getElementById('my-act-detail-content');
+  if (!content) return;
+
+  const title = window.escapeHTML(activity['活動名稱'] || '未命名活動');
+  const type = window.escapeHTML(activity['活動類型'] || '活動');
+  const startTime = window.escapeHTML(window.formatDisplayTime(activity['開始時間']));
+  const endTime = window.escapeHTML(window.formatDisplayTime(activity['結束時間']));
+  const desc = window.escapeHTML(activity['活動說明'] || '尚無活動說明');
+  const img = window.escapeHTML(activity['宣傳圖'] || '');
+  const price = parseInt(activity['金額']) || 0;
+  const fee = price > 0 ? 'NT$ ' + price.toLocaleString() : '免費';
+  const safeId = window.escapeJS(activityId);
+
+  content.innerHTML = '' +
+    '<div class="bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100">' +
+      (img ? '<img src="' + img + '" class="w-full aspect-video object-cover">' : '') +
+      '<div class="p-5 space-y-4">' +
+        '<div class="flex items-center justify-between gap-2">' +
+          '<span class="bg-primary-light text-primary text-[12px] px-2.5 py-1 rounded-full font-bold">' + type + '</span>' +
+          '<span class="bg-slate-100 text-slate-600 text-[12px] px-2.5 py-1 rounded-full font-bold">' + fee + '</span>' +
+        '</div>' +
+        '<h3 class="text-[22px] font-black text-slate-800 leading-tight">' + title + '</h3>' +
+        '<div class="text-[13px] text-slate-500 font-medium leading-relaxed">' +
+          '<div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[17px]">schedule</span>' + startTime + (endTime ? ' - ' + endTime : '') + '</div>' +
+        '</div>' +
+        '<p class="text-[14px] text-slate-600 leading-relaxed whitespace-pre-wrap">' + desc + '</p>' +
+        '<button onclick="window.joinPublicActivity(&quot;' + safeId + '&quot;, this)" class="w-full py-4 bg-[#06C755] text-white rounded-2xl font-black text-[16px] active:scale-95 transition-transform">我要報名</button>' +
+      '</div>' +
+    '</div>';
+
+  window.goPage('my-act-detail', true);
+};
+
+window.joinPublicActivity = async function(activityId, btn) {
+  const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId));
+  if (!activity) return window.showToast('找不到活動資料，請稍後再試', true);
+
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[15px] align-middle">refresh</span>';
+  }
+
+  try {
+    const res = await window.fetchAPI('joinActivity', {
+      activityId: getPublicActivityId_(activity),
+      activityName: activity['活動名稱'] || '',
+      userName: window.currentUser?.name || window.currentUserProfile?.displayName || '',
+      userPhone: window.currentUser?.phone || '',
+      defaultIdentity: activity['預設身份'] || '會員'
+    }, true);
+
+    if (res && !res.error) {
+      window.showToast('報名成功');
+      if (typeof window.loadMyActivities === 'function') window.loadMyActivities();
+    } else {
+      throw new Error(res?.error || '報名失敗');
+    }
+  } catch (e) {
+    window.showToast(e.message || '報名失敗', true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+};
+
+window.loadUserActivities = function() {
+  const cachedSettings = window.readCachedStoreSettings(window.currentNetworkId);
+  if (cachedSettings) window.applyStoreSettingsToHome(cachedSettings);
+
+  window.renderHomeActivities();
+  window.refreshStoreSettingsInBackground();
 };
