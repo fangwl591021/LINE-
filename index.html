@@ -30,8 +30,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
-  <link rel="stylesheet" href="css/styles.css">
-  <script src="js/config.js"></script>
+  <!-- 🚀 加入版本號 ?v=7.0 強制破解所有裝置的舊快取 -->
+  <link rel="stylesheet" href="css/styles.css?v=7.0">
+  <script src="js/config.js?v=7.0"></script>
 
   <style type="text/tailwindcss">
     .custom-input { @apply w-full py-4 px-5 bg-slate-100 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-medium text-text-main; }
@@ -428,13 +429,12 @@
       <div id="card-list" class="space-y-3 mt-4 mx-1"></div>
     </div>
 
-    <!-- ==================== 名片詳細頁 (加上嚴格編輯權限保護) ==================== -->
+    <!-- ==================== 名片詳細頁 ==================== -->
     <div id="page-card-detail" class="hidden animate-in slide-in-from-right-8 mx-1">
       <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
 
         <div class="flex border-b border-slate-100">
           <button class="flex-1 py-4 font-bold text-sm text-blue-600 border-b-2 border-blue-600 transition-colors" id="tab-info" onclick="window.switchTab('info')">📋 聯絡資料</button>
-          <!-- ✅ 被鎖定的編輯頁籤 (權限不足時自動隱藏) -->
           <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-edit" onclick="window.switchTab('edit')">✏️ 編輯內容</button>
           <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-ecard" onclick="window.switchTab('ecard')">🪪 數位名片</button>
         </div>
@@ -456,7 +456,7 @@
           </div>
         </div>
 
-        <!-- Tab: 編輯 (16 個欄位) -->
+        <!-- Tab: 編輯 -->
         <div id="tab-content-edit" class="hidden p-5 space-y-3 bg-slate-50/50">
           <div><label class="text-xs text-slate-500 font-bold ml-1">姓名</label><input id="edit-姓名" class="custom-input !py-3 mt-1" type="text"></div>
           <div><label class="text-xs text-slate-500 font-bold ml-1">英文名</label><input id="edit-英文名" class="custom-input !py-3 mt-1" type="text"></div>
@@ -1020,19 +1020,20 @@
   </div>
 </div>
 
-<script src="js/core.js"></script>
-<script src="js/navigation.js"></script>
-<script src="js/modules/cropper.js"></script>
-<script src="js/modules/cards.js"></script>
-<script src="js/modules/ecard.js"></script>
-<script src="js/modules/mycard.js"></script>
-<script src="js/modules/matchmake.js"></script>
-<script src="js/modules/activities.js"></script>
-<script src="js/modules/admin.js"></script>
-<script src="js/modules/home.js"></script>
-<script src="js/modules/settings.js"></script>
-<script src="js/modules/crm.js"></script>
-<script src="js/auth.js"></script>
+<!-- 🚀 加入版本號 ?v=7.0 強制破解所有裝置的舊快取 -->
+<script src="js/core.js?v=7.0"></script>
+<script src="js/navigation.js?v=7.0"></script>
+<script src="js/modules/cropper.js?v=7.0"></script>
+<script src="js/modules/cards.js?v=7.0"></script>
+<script src="js/modules/ecard.js?v=7.0"></script>
+<script src="js/modules/mycard.js?v=7.0"></script>
+<script src="js/modules/matchmake.js?v=7.0"></script>
+<script src="js/modules/activities.js?v=7.0"></script>
+<script src="js/modules/admin.js?v=7.0"></script>
+<script src="js/modules/home.js?v=7.0"></script>
+<script src="js/modules/settings.js?v=7.0"></script>
+<script src="js/modules/crm.js?v=7.0"></script>
+<script src="js/auth.js?v=7.0"></script>
 
 </body>
 </html>
