@@ -19,25 +19,25 @@ window.currentDescAlign = 'center';
 window.currentUploadTargetId = null;
 
 // 共用狀態(原本散落在 script 區的全域變數)
-let currentNetworkId = '';
-let allSystemUsers = [];
-let currentUser = null;
-let currentUserProfile = null;
-let allCards = [];
-let currentCard = null;
-let currentUserCard = null;
-let isProcessing = false;
-let cropperInstance = null;
-let activeCropperInstance = null;
-let currentActiveCropTarget = '';
-let activeBatchCount = 0;
+var currentNetworkId = '';
+var allSystemUsers = [];
+var currentUser = null;
+var currentUserProfile = null;
+var allCards = [];
+var currentCard = null;
+var currentUserCard = null;
+var isProcessing = false;
+var cropperInstance = null;
+var activeCropperInstance = null;
+var currentActiveCropTarget = '';
+var activeBatchCount = 0;
 
-let userRole = 'user';
-let hasAdminRights = false;
-let currentViewMode = 'user';
+var userRole = 'user';
+var hasAdminRights = false;
+var currentViewMode = 'user';
 
-let currentECardStyle = 'v1';
-let v1Buttons = [];
-let myV1Buttons = [];
+var currentECardStyle = 'v1';
+var v1Buttons = [];
+var myV1Buttons = [];
 window.userSocials = [];
 window.myActivitiesData = [];
