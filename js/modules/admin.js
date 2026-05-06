@@ -359,24 +359,14 @@ window.changeUserRole = async function(userId, newRole) {
   window.showToast('更新權限中...');
 
   try {
-    // 注意:這裡用獨立物件,不依賴 fetchAPI 自動帶入的 userId(那是操作者自己)
-    // 改用 targetUserId 明確標示要修改的對象,Worker 端會以此優先
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'updateUserRole',
-        payload: {
-          userId: userId,           // 目標用戶 ID(Worker 會用此清快取)
-          targetUserId: userId,     // 雙保險欄位
-          newRole: newRole,
-          operatorId: currentUserProfile?.userId,  // 操作者 ID
-          role: userRole,
-          networkId: currentNetworkId
-        }
-      })
-    });
-    const data = await res.json();
+    const data = await window.fetchAPI('updateUserRole', {
+      userId: userId,
+      targetUserId: userId,
+      newRole: newRole,
+      operatorId: window.currentUserProfile?.userId,
+      role: window.userRole,
+      networkId: window.currentNetworkId
+    }, true);
 
     if (data && data.success) {
       window.showToast('✅ ' + (allSystemUsers.find(u=>u.userId===userId)?.name || '用戶') + ' 權限已更新為:' + newRole);
