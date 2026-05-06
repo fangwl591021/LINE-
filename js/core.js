@@ -93,10 +93,11 @@ window.showToast = function(msg, isError = false) {
 // 統一 API 呼叫
 window.fetchAPI = async function(action, payload = {}, silent = false) {
   try {
-    // ✅ 修正：如果 payload 裡面已經有值，就不要強制用全域變數覆蓋它，防止洗掉 LINE ID
-    payload.networkId = payload.networkId || window.currentNetworkId;
-    payload.role = payload.role || window.userRole;
-    payload.userId = payload.userId || window.currentUserProfile?.userId;
+    // ✅ 核心修正：使用 !== undefined 避免「空字串 ''」被全域變數覆蓋，
+    // 保證掃描客戶名片時，LINE ID 維持空白，不會綁到掃描者自己身上
+    payload.networkId = payload.networkId !== undefined ? payload.networkId : window.currentNetworkId;
+    payload.role = payload.role !== undefined ? payload.role : window.userRole;
+    payload.userId = payload.userId !== undefined ? payload.userId : window.currentUserProfile?.userId;
 
     try {
       if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
@@ -175,7 +176,9 @@ window.applyUserPermissions = function() {
 window.loadAllData = async function() {
   try {
     const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
-    window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
+    
+    // ✅ 核心修正：加入 reverse() 將名片陣列反轉，讓最新建立的名片永遠出現在最上面！
+    window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes.reverse() : [];
     
     if (typeof window.currentUserProfile !== 'undefined' && window.currentUserProfile) {
       window.currentUserCard = window.allCards.find(c => c['LINE ID'] === window.currentUserProfile.userId);
