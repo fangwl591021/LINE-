@@ -84,20 +84,17 @@ window.updateECardPreview = function() {
   const name = document.getElementById('edit-姓名')?.value || '姓名';
   const imgUrl = document.getElementById('v1-img-url')?.value || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   
-  // 服務項目與顏色通常綁定在 edit tab，此處同步讀取
   const descRaw = document.getElementById('edit-服務項目')?.value || '';
   const desc = descRaw.replace(/\n/g, '<br>');
   const color = document.getElementById('edit-desc-color')?.value || '#666666';
   
-  // 版型與對齊方式
   const layoutStyle = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
   let align = 'center';
   
-  // 判斷按鈕狀態以決定對齊 (對應前台按鈕樣式判斷)
-  if(document.getElementById('align-start')?.classList.contains('bg-white')) align = 'left';
-  if(document.getElementById('align-end')?.classList.contains('bg-white')) align = 'right';
-  if(window.currentDescAlign === 'start') align = 'left';
-  if(window.currentDescAlign === 'end') align = 'right';
+  if (document.getElementById('align-start')?.classList.contains('bg-white')) align = 'left';
+  if (document.getElementById('align-end')?.classList.contains('bg-white')) align = 'right';
+  if (window.currentDescAlign === 'start') align = 'left';
+  if (window.currentDescAlign === 'end') align = 'right';
 
   let ratio = '20/13';
   if (layoutStyle === 'portrait') ratio = '2/3';
@@ -126,7 +123,6 @@ function escapeHTML(str) {
 
 /**
  * 儲存數位名片設定
- * 將目前的圖片網址、按鈕、排版，寫回資料庫的「自訂名片設定」
  */
 window.saveECardConfig = async function() {
   if (!window.currentCard) return;
@@ -158,7 +154,6 @@ window.saveECardConfig = async function() {
     if (res) {
       window.showToast('✅ 數位名片設定已成功儲存');
       
-      // 同步更新本地端快取資料
       window.currentCard['自訂名片設定'] = payloadData['自訂名片設定'];
       window.currentCard['名片圖檔'] = payloadData['名片圖檔'];
       window.currentCard['服務項目'] = payloadData['服務項目'];
@@ -177,6 +172,63 @@ window.saveECardConfig = async function() {
   } finally {
     if (btn) {
       btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> 儲存';
+      btn.disabled = false;
+    }
+  }
+};
+
+/**
+ * 傳送數位名片至 LINE
+ * @param {string} btnId - 觸發按鈕的 ID
+ */
+window.shareECardToLine = async function(btnId) {
+  if (!window.currentCard) {
+    window.showToast('找不到名片資料', true);
+    return;
+  }
+
+  const btn = document.getElementById(btnId);
+  const oriHtml = btn?.innerHTML;
+  if (btn) {
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 傳送中...';
+    btn.disabled = true;
+  }
+
+  try {
+    const layoutVal = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
+    const cfg = {
+      layoutStyle: layoutVal,
+      imgUrl: document.getElementById('v1-img-url')?.value || window.currentCard['名片圖檔'] || '',
+      desc: document.getElementById('edit-服務項目')?.value || window.currentCard['服務項目'] || '',
+      descAlign: window.currentDescAlign || 'center',
+      descColor: document.getElementById('edit-desc-color')?.value || '#666666',
+      buttons: window.currentEcardButtons
+    };
+
+    // 若在「聯絡資料」tab 點擊（ecard UI 可能未初始化），改用已存的設定
+    if (!document.getElementById('v1-img-url')?.value) {
+      try {
+        const saved = JSON.parse(window.currentCard['自訂名片設定'] || '{}');
+        Object.assign(cfg, saved);
+      } catch(e) {}
+    }
+
+    const flexMsg = await window.fetchAPI('buildFlexMessage', {
+      card: window.currentCard,
+      config: cfg,
+      referrerId: window.currentUserProfile?.userId,
+      networkId: window.currentNetworkId,
+      liffId: window.LIFF_ID
+    }, true);
+
+    if (flexMsg) {
+      await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
+    }
+  } catch(e) {
+    window.showToast('⚠️ 傳送失敗: ' + e.message, true);
+  } finally {
+    if (btn) {
+      btn.innerHTML = oriHtml;
       btn.disabled = false;
     }
   }
