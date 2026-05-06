@@ -204,8 +204,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.goPage('home');
     }
 
-    // ✅ 背景非同步載入，不阻塞首頁第一幀
-    const startBackgroundDataLoad = () => window.loadAllData().then(() => {
+    // ✅ 背景非同步載入，不阻塞首頁第一幀；一般首頁只載活動，不碰名片庫圖片。
+    const startBackgroundDataLoad = () => {
+      const dataLoad = (shareCardId || claimCardId)
+        ? window.loadAllData()
+        : window.loadHomeData();
+
+      dataLoad.then(() => {
       if (shareCardId) {
         const sc = window.allCards.find(c => String(c.rowId) === String(shareCardId));
         if (sc) {
@@ -231,7 +236,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           window.goPage('home');
         });
       }
-    });
+      });
+    };
 
     setTimeout(startBackgroundDataLoad, (shareCardId || claimCardId) ? 0 : 120);
 
