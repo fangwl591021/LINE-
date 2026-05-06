@@ -1,5 +1,65 @@
 /* ==================== 首頁資訊流模組 ==================== */
 
+window.normalizeStoreSettings = window.normalizeStoreSettings || function(raw) {
+  if (!raw || raw.success === false) return null;
+  if (raw.data && typeof raw.data === 'object') return raw.data;
+  return raw;
+};
+
+window.isStoreToggleOn = window.isStoreToggleOn || function(value, fallback = true) {
+  if (value === undefined || value === null || value === '') return fallback;
+  return String(value).toLowerCase() !== 'false';
+};
+
+window.getYoutubeEmbedUrl = window.getYoutubeEmbedUrl || function(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+
+  let videoId = '';
+  if (raw.includes('v=')) {
+    videoId = raw.split('v=')[1].split('&')[0];
+  } else if (raw.includes('youtu.be/')) {
+    videoId = raw.split('youtu.be/')[1].split('?')[0];
+  } else if (raw.includes('/embed/')) {
+    videoId = raw.split('/embed/')[1].split('?')[0];
+  }
+
+  return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+};
+
+window.applyStoreSettingsToHome = window.applyStoreSettingsToHome || function(settings) {
+  const d = window.normalizeStoreSettings(settings);
+  if (!d) return;
+
+  const headerName = document.getElementById('header-site-name');
+  if (headerName && d.siteName !== undefined) {
+    headerName.innerText = d.siteName || 'LINE商機引擎';
+  }
+
+  const bannerImg = document.getElementById('home-main-banner');
+  if (bannerImg && bannerImg.parentElement) {
+    if (!window.isStoreToggleOn(d.showBanner, true)) {
+      bannerImg.parentElement.classList.add('hidden');
+    } else {
+      bannerImg.parentElement.classList.remove('hidden');
+      if (d.bannerUrl) bannerImg.src = d.bannerUrl;
+    }
+  }
+
+  const ytContainer = document.getElementById('home-youtube-container');
+  const ytIframe = document.getElementById('home-youtube-iframe');
+  if (ytContainer && ytIframe) {
+    const embedUrl = window.getYoutubeEmbedUrl(d.youtubeUrl);
+    if (window.isStoreToggleOn(d.showYoutube, true) && embedUrl) {
+      ytContainer.classList.remove('hidden');
+      ytIframe.src = embedUrl;
+    } else {
+      ytContainer.classList.add('hidden');
+      ytIframe.src = '';
+    }
+  }
+};
+
 /**
  * 載入首頁內容 (含系統設定同步與活動列表)
  */
@@ -7,45 +67,7 @@ window.loadUserActivities = async function() {
   // 1. 同步讀取系統 Banner 與 名稱
   try {
     const settingsRes = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId });
-    if (settingsRes && settingsRes.data) {
-      const d = settingsRes.data;
-      
-      // 更新頂部標題
-      if (d.siteName) {
-        document.getElementById('header-site-name').innerText = d.siteName;
-      }
-
-      // 更新 Banner 大圖顯示邏輯
-      const bannerImg = document.getElementById('home-main-banner');
-      if (String(d.showBanner) === 'false') {
-        bannerImg.parentElement.classList.add('hidden');
-      } else {
-        bannerImg.parentElement.classList.remove('hidden');
-        if (d.bannerUrl) bannerImg.src = d.bannerUrl;
-      }
-
-      // 更新 YouTube 影片顯示邏輯
-      const ytContainer = document.getElementById('home-youtube-container');
-      const ytIframe = document.getElementById('home-youtube-iframe');
-      if (String(d.showYoutube) === 'true' && d.youtubeUrl) {
-        ytContainer.classList.remove('hidden');
-        
-        // 解析 YouTube URL 轉為嵌入格式 (Embed)
-        let videoId = '';
-        if (d.youtubeUrl.includes('v=')) {
-          videoId = d.youtubeUrl.split('v=')[1].split('&')[0];
-        } else if (d.youtubeUrl.includes('youtu.be/')) {
-          videoId = d.youtubeUrl.split('youtu.be/')[1].split('?')[0];
-        }
-        
-        if (videoId) {
-          ytIframe.src = `https://www.youtube.com/embed/${videoId}`;
-        }
-      } else {
-        ytContainer.classList.add('hidden');
-        ytIframe.src = '';
-      }
-    }
+    window.applyStoreSettingsToHome(settingsRes);
   } catch (e) {
     console.error("系統設定同步失敗", e);
   }
