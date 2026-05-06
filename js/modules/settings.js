@@ -154,12 +154,31 @@ window.loadStoreBannerSettings = function() {
     window.syncUserCardMatch();
   }
 
-  if (!window.currentUserCard) return;
-  
   let cfg = {};
-  try { 
-    cfg = JSON.parse(window.currentUserCard['自訂名片設定'] || '{}'); 
-  } catch(e) {}
+
+  // 1. 嘗試從當前名片資料讀取設定
+  if (window.currentUserCard) {
+    try { 
+      cfg = JSON.parse(window.currentUserCard['自訂名片設定'] || '{}'); 
+    } catch(e) {}
+  }
+  
+  // 💡 救援機制：如果資料庫紀錄為空 (可能被意外覆蓋)，則從本機快取救援上次成功的設定
+  if (!cfg.homeBanner) {
+    const cacheKey = 'store_banner_' + window.currentNetworkId;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // 僅當資料庫確實遺失資料時才進行救援填補
+        cfg.homeBanner = parsed.homeBanner || cfg.homeBanner;
+        cfg.siteName = parsed.siteName || cfg.siteName;
+        cfg.homeYoutube = parsed.homeYoutube || cfg.homeYoutube;
+        if (parsed.showBanner !== undefined) cfg.showBanner = parsed.showBanner;
+        if (parsed.showYoutube !== undefined) cfg.showYoutube = parsed.showYoutube;
+      }
+    } catch(e) {}
+  }
 
   const siteNameEl = document.getElementById('input-site-name');
   if (siteNameEl) siteNameEl.value = cfg.siteName || '';
@@ -217,6 +236,7 @@ window.saveStoreBanner = async function(event) {
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
   btn.disabled = true;
 
+  // 讀取現有設定，避免洗掉名片的其他設定(如按鈕、滿版圖比例等)
   let cfg = {};
   try { cfg = JSON.parse(window.currentUserCard['自訂名片設定'] || '{}'); } catch(e){}
 
@@ -246,6 +266,7 @@ window.saveStoreBanner = async function(event) {
     
     window.currentUserCard['自訂名片設定'] = JSON.stringify(cfg);
 
+    // 更新本機快取，確保下次進入時即便是離線或延遲也能顯示
     const cacheKey = 'store_banner_' + window.currentNetworkId;
     localStorage.setItem(cacheKey, JSON.stringify({
       homeBanner: cfg.homeBanner,
