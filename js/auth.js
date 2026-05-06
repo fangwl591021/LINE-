@@ -25,11 +25,21 @@ window.submitRegistration = async function() {
     };
 
     const res = await window.fetchAPI('registerUser', payload, true);
-    if (res && res.rowId) {
-      window.showToast('✅ 註冊成功！');
-      setTimeout(() => window.location.reload(), 1000);
+    if (res && (res.rowId || res.success !== false)) {
+      // SaaS 版流程：LINE LOGIN 註冊完成後，立即建立一張基礎名片，重新載入後直接顯示名片。
+      if (typeof window.ensureCardAfterRegistration === 'function') {
+        btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 建立名片中...';
+        await window.ensureCardAfterRegistration(payload, res);
+      }
+
+      try {
+        localStorage.setItem('SAAS_SHOW_CARD_AFTER_REGISTER', '1');
+      } catch(e) {}
+
+      window.showToast('✅ 註冊成功，正在開啟您的名片');
+      setTimeout(() => window.location.reload(), 900);
     } else {
-      throw new Error('註冊失敗');
+      throw new Error(res?.error || '註冊失敗');
     }
   } catch(e) {
     window.showToast('系統錯誤:' + e.message, true);
@@ -62,8 +72,9 @@ window.submitClaimRegistration = async function() {
 
     const res = await window.fetchAPI('claimCardAndRegister', payload, true);
     if (res) {
+      try { localStorage.setItem('SAAS_SHOW_CARD_AFTER_REGISTER', '1'); } catch(e) {}
       window.showToast('✅ 名片認領並註冊成功！');
-      setTimeout(() => window.location.replace(window.location.pathname), 1500);
+      setTimeout(() => window.location.replace(window.location.pathname), 1200);
     }
   } catch(e) {
     window.showToast('綁定失敗:' + e.message, true);
@@ -107,6 +118,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.showToast("連線異常，請重新整理", true);
         return;
       }
+
+      window.currentNetworkId = netId || 'admin';
+      if (typeof window.loadSaasFeatures === 'function') window.loadSaasFeatures();
 
       if (claimCardId) {
         try {
@@ -169,11 +183,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔓 已註冊用戶邏輯
     window.currentUser = checkRes.info;
     window.userRole = window.currentUser.role || 'user';
-    window.currentNetworkId = window.currentUser.networkId || 'admin';
+    window.currentNetworkId = window.currentUser.networkId || netId || 'admin';
     window.currentStoreId = window.currentUser.storeid || '';
+
+    if (typeof window.loadSaasFeatures === 'function') {
+      await window.loadSaasFeatures();
+    }
 
     document.getElementById('bottom-nav').classList.remove('hidden');
     window.applyUserPermissions();
+    if (typeof window.initSaasFeaturePanel === 'function') window.initSaasFeaturePanel();
+    if (typeof window.applySaasFeatureUI === 'function') window.applySaasFeatureUI();
+    if (typeof window.installSaasGoPageGuard === 'function') window.installSaasGoPageGuard();
 
     document.getElementById('profile-name').value = window.currentUser.name || '';
     document.getElementById('profile-phone').value = window.currentUser.phone || '';
@@ -199,6 +220,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ✅ 背景非同步載入，不阻塞畫面
     window.loadAllData().then(() => {
+      if (typeof window.handleAfterRegisterCardDisplay === 'function') {
+        window.handleAfterRegisterCardDisplay();
+      }
+      if (typeof window.applySaasFeatureUI === 'function') {
+        window.applySaasFeatureUI();
+      }
+
       if (shareCardId) {
         const sc = window.allCards.find(c => String(c.rowId) === String(shareCardId));
         if (sc) {
@@ -216,8 +244,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.showToast('認領失敗: ' + claimRes.error, true);
             window.goPage('home');
           } else if (claimRes) {
+            try { localStorage.setItem('SAAS_SHOW_CARD_AFTER_REGISTER', '1'); } catch(e) {}
             window.showToast('✅ 成功認領名片並綁定您的帳號！');
-            setTimeout(() => window.location.replace(window.location.pathname), 1500);
+            setTimeout(() => window.location.replace(window.location.pathname), 1200);
           }
         }).catch(e => {
           window.showToast(e.message || '該名片已被認領或無法存取', true);
