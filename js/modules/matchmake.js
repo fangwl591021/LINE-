@@ -1,5 +1,90 @@
 /* ==================== AI 智能配對模組 ==================== */
 
+function showMatchStatus_(html) {
+  const ui = document.getElementById('matchmaker-ui');
+  if (!ui) return;
+
+  let status = document.getElementById('match-status-card');
+  if (!status) {
+    status = document.createElement('div');
+    status.id = 'match-status-card';
+    status.className = 'mb-4 rounded-2xl bg-slate-50 border border-slate-100 p-5';
+    ui.parentNode.insertBefore(status, ui);
+  }
+
+  status.innerHTML = html;
+  status.classList.remove('hidden');
+}
+
+function hideMatchStatus_() {
+  const status = document.getElementById('match-status-card');
+  if (status) status.classList.add('hidden');
+}
+
+window.initMatchmakePage = async function() {
+  const lock = document.getElementById('privacy-lock-container');
+  const ui = document.getElementById('matchmaker-ui');
+  const results = document.getElementById('match-results');
+  const adminTools = document.getElementById('admin-tools-container');
+
+  if (lock) lock.classList.add('hidden');
+  if (ui) ui.classList.add('hidden');
+  if (results) results.classList.add('hidden');
+  if (adminTools) adminTools.classList.toggle('hidden', !window.hasAdminRights);
+
+  if (typeof window.checkDatabaseStatus === 'function') window.checkDatabaseStatus();
+
+  if (!window.allCards || window.allCards.length === 0) {
+    showMatchStatus_(
+      '<div class="text-center text-slate-400 font-bold text-sm">' +
+        '<span class="material-symbols-outlined animate-spin text-3xl mb-2">refresh</span>' +
+        '<p>名片資料載入中...</p>' +
+      '</div>'
+    );
+
+    try {
+      if (typeof window.loadAllData === 'function') await window.loadAllData();
+    } catch (e) {}
+  }
+
+  if (!window.currentUserCard && typeof window.syncUserCardMatch === 'function') {
+    window.syncUserCardMatch();
+  }
+
+  const isAdmin = window.hasAdminRights || window.userRole === 'admin';
+  if (!window.currentUserCard && !isAdmin) {
+    if (ui) ui.classList.add('hidden');
+    showMatchStatus_(
+      '<div class="text-center">' +
+        '<span class="material-symbols-outlined text-4xl text-slate-300 mb-3">badge</span>' +
+        '<h3 class="font-black text-slate-800 mb-2">尚未找到您的專屬名片</h3>' +
+        '<p class="text-[13px] text-slate-500 leading-relaxed">請先在設定中建立或認領您的名片，再使用智能配對。</p>' +
+      '</div>'
+    );
+    return;
+  }
+
+  let config = {};
+  try {
+    config = JSON.parse(window.currentUserCard?.['自訂名片設定'] || '{}');
+  } catch (e) {}
+
+  const isPrivate = !!config.isPrivate;
+  const toggleEl = document.getElementById('fate-privacy-toggle');
+  if (toggleEl) toggleEl.checked = !isPrivate;
+
+  if (isPrivate && !isAdmin) {
+    hideMatchStatus_();
+    if (lock) lock.classList.remove('hidden');
+    return;
+  }
+
+  if (ui) {
+    hideMatchStatus_();
+    ui.classList.remove('hidden');
+  }
+};
+
 // 切換配對隱私
 window.toggleFatePrivacy = async function(forceOpen = false) {
   if (!window.currentUserCard) return window.showToast('找不到您的名片資料', true);
@@ -37,11 +122,18 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
 
 // 啟動 AI 配對
 window.startMatchmaking = async function() {
-  const query = document.getElementById('match-query').value.trim();
+  const queryEl = document.getElementById('match-query');
+  const query = queryEl ? queryEl.value.trim() : '';
   if (!query) return window.showToast('請輸入您的配對需求', true);
 
+  if (!window.allCards || window.allCards.length === 0) {
+    window.showToast('名片資料仍在載入，請稍後再試', true);
+    if (typeof window.loadAllData === 'function') window.loadAllData();
+    return;
+  }
+
   const role = window.currentUser?.role || 'user';
-  const limit = window.LIMITS[role].matchmake;
+  const limit = (window.LIMITS[role] || window.LIMITS.user).matchmake;
 
   const today = new Date().toLocaleDateString('en-CA');
   const usageKey = `matchmake_usage_${today}`;
@@ -52,6 +144,8 @@ window.startMatchmaking = async function() {
   }
 
   const btn = document.getElementById('btn-match');
+  if (!btn) return window.showToast('配對按鈕尚未載入，請重新進入智能配對頁', true);
+
   const oriHtml = btn.innerHTML;
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> AI 正在尋找...';
   btn.disabled = true;
@@ -63,6 +157,10 @@ window.startMatchmaking = async function() {
       try { isPriv = JSON.parse(c['自訂名片設定']||'{}').isPrivate; } catch(e){}
       return !isPriv;
     });
+
+    if (pool.length === 0) {
+      throw new Error('目前沒有可配對的公開名片');
+    }
 
     const res = await window.fetchAPI('matchmakeContacts', {
       currentUser: window.currentUser,
@@ -76,14 +174,19 @@ window.startMatchmaking = async function() {
       }))
     }, true);
 
-    if (res && Array.isArray(res)) {
+    const matches = Array.isArray(res) ? res : (res && Array.isArray(res.data) ? res.data : null);
+
+    if (matches) {
       localStorage.setItem(usageKey, currentUsage + 1);
 
       const resultsList = document.getElementById('results-list');
-      if (res.length === 0) {
+      const resultsContainer = document.getElementById('match-results');
+      if (!resultsList || !resultsContainer) throw new Error('配對結果區塊尚未載入');
+
+      if (matches.length === 0) {
         resultsList.innerHTML = '<div class="text-center py-6 text-slate-500">目前沒有合適的人選</div>';
       } else {
-        resultsList.innerHTML = res.map(match => {
+        resultsList.innerHTML = matches.map(match => {
           const c = window.allCards.find(card => String(card.rowId) === String(match.rowId));
           if (!c) return '';
           return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2">' +
@@ -100,7 +203,6 @@ window.startMatchmaking = async function() {
       const remaining = limit - (currentUsage + 1);
       const limitNotice = limit === Infinity ? '無限制' : `剩餘 ${remaining} 次`;
 
-      const resultsContainer = document.getElementById('match-results');
       if (!document.getElementById('match-limit-notice')) {
         resultsContainer.insertAdjacentHTML('afterbegin', `<div id="match-limit-notice" class="text-[11px] text-slate-400 font-bold mb-2 text-right px-1">今日配對額度: ${limitNotice}</div>`);
       } else {
