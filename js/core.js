@@ -208,7 +208,15 @@ window.syncUserCardMatch = function() {
 // 初始化載入
 window.loadAllData = async function() {
   try {
-    const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
+    const cardsPromise = window.fetchAPI('getCardContacts', {}, true);
+    const activitiesPromise = window.fetchAPI('getPublicActivities', {}, true);
+
+    const actsRes = await activitiesPromise;
+    window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
+    if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
+    if (typeof window.renderActivities === 'function') window.renderActivities();
+
+    const cardsRes = await cardsPromise;
 
     console.log('[loadAllData] getCardContacts 回傳:', cardsRes);
 
@@ -231,14 +239,9 @@ window.loadAllData = async function() {
     window.syncUserCardMatch();
     console.log('[loadAllData] currentUserCard:', window.currentUserCard ? window.currentUserCard['姓名'] : '未找到');
 
-    const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
-    window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
-
     if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
     if (typeof window.initMyECard === 'function') window.initMyECard();
     if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
-    if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
-    if (typeof window.renderActivities === 'function') window.renderActivities();
 
   } catch (err) {
     console.error('[loadAllData] 嚴重錯誤:', err);
