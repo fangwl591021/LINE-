@@ -72,6 +72,46 @@ window.submitClaimRegistration = async function() {
   }
 };
 
+window.applyRegisteredUserSession = function(info) {
+  if (!info) return;
+
+  window.currentUser = info;
+  window.userRole = window.currentUser.role || 'user';
+  window.currentNetworkId = window.currentUser.networkId || 'admin';
+  window.currentStoreId = window.currentUser.storeid || '';
+
+  const bottomNav = document.getElementById('bottom-nav');
+  if (bottomNav) bottomNav.classList.remove('hidden');
+  window.applyUserPermissions();
+
+  const profileName = document.getElementById('profile-name');
+  const profilePhone = document.getElementById('profile-phone');
+  const profileIndustry = document.getElementById('profile-industry');
+  const profileBirthday = document.getElementById('profile-birthday');
+  if (profileName) profileName.value = window.currentUser.name || '';
+  if (profilePhone) profilePhone.value = window.currentUser.phone || '';
+  if (profileIndustry) profileIndustry.value = window.currentUser.industry || '';
+  if (profileBirthday) profileBirthday.value = window.currentUser.birthday || '';
+
+  window.userSocials = [];
+  const socialsList = document.getElementById('user-socials-list');
+  if (socialsList) socialsList.innerHTML = '';
+
+  if (window.currentUser.socials) {
+    try {
+      const arr = JSON.parse(window.currentUser.socials);
+      arr.forEach(s => window.addUserSocial(s.t, s.u));
+    } catch(e){}
+  } else {
+    window.addUserSocial('LINE', '');
+  }
+
+  const tgToken = document.getElementById('setting-tg-token');
+  const tgChatId = document.getElementById('setting-tg-chatid');
+  if (tgToken && window.currentUser.tgToken) tgToken.value = window.currentUser.tgToken;
+  if (tgChatId && window.currentUser.tgChatId) tgChatId.value = window.currentUser.tgChatId;
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     await liff.init({ liffId: LIFF_ID });
@@ -96,13 +136,30 @@ document.addEventListener('DOMContentLoaded', async () => {
       loadingScreen.classList.add('hidden');
     }
 
-    const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
-
     const urlParams = new URLSearchParams(window.location.search);
     const shareCardId = urlParams.get('shareCardId');
     const claimCardId = urlParams.get('claim');
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
+    const authCacheKey = 'ACTMASTER_USER_' + window.currentUserProfile.userId;
+    let usedCachedUser = false;
+
+    if (!shareCardId && !claimCardId) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(authCacheKey) || 'null');
+        const isFresh = cached && cached.info && cached.savedAt && (Date.now() - cached.savedAt < 6 * 60 * 60 * 1000);
+        if (isFresh) {
+          window.applyRegisteredUserSession(cached.info);
+          window.goPage('home');
+          setTimeout(() => {
+            if (typeof window.loadHomeData === 'function') window.loadHomeData();
+          }, 40);
+          usedCachedUser = true;
+        }
+      } catch (e) {}
+    }
+
+    const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
 
     document.getElementById('loading-screen').classList.add('hidden');
 
@@ -111,6 +168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (checkRes && checkRes.error) {
         console.error("Auth check failed:", checkRes.error);
+        if (usedCachedUser) return;
         window.showToast("連線異常，請重新整理", true);
         return;
       }
@@ -174,33 +232,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 🔓 已註冊用戶邏輯
-    window.currentUser = checkRes.info;
-    window.userRole = window.currentUser.role || 'user';
-    window.currentNetworkId = window.currentUser.networkId || 'admin';
-    window.currentStoreId = window.currentUser.storeid || '';
-
-    document.getElementById('bottom-nav').classList.remove('hidden');
-    window.applyUserPermissions();
-
-    document.getElementById('profile-name').value = window.currentUser.name || '';
-    document.getElementById('profile-phone').value = window.currentUser.phone || '';
-    document.getElementById('profile-industry').value = window.currentUser.industry || '';
-    document.getElementById('profile-birthday').value = window.currentUser.birthday || '';
-
-    if (window.currentUser.socials) {
-      try {
-        const arr = JSON.parse(window.currentUser.socials);
-        arr.forEach(s => window.addUserSocial(s.t, s.u));
-      } catch(e){}
-    } else {
-      window.addUserSocial('LINE', '');
-    }
-
-    if (window.currentUser.tgToken) document.getElementById('setting-tg-token').value = window.currentUser.tgToken;
-    if (window.currentUser.tgChatId) document.getElementById('setting-tg-chatid').value = window.currentUser.tgChatId;
+    window.applyRegisteredUserSession(checkRes.info);
+    try {
+      localStorage.setItem(authCacheKey, JSON.stringify({ info: checkRes.info, savedAt: Date.now() }));
+    } catch (e) {}
 
     // ✅ 先顯示首頁，不等資料載入
-    if (!shareCardId && !claimCardId) {
+    if (!shareCardId && !claimCardId && !usedCachedUser) {
       window.goPage('home');
     }
 
@@ -239,7 +277,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     };
 
-    setTimeout(startBackgroundDataLoad, (shareCardId || claimCardId) ? 0 : 120);
+    if (!usedCachedUser || shareCardId || claimCardId) {
+      setTimeout(startBackgroundDataLoad, (shareCardId || claimCardId) ? 0 : 120);
+    }
 
   } catch (err) {
     document.getElementById('loading-text').innerText = "系統連線失敗";
