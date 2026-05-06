@@ -147,7 +147,6 @@ window.updateUserProfile = async function(event) {
 
 // ==================== 首頁 Banner 管理 (PRO) ====================
 
-// 載入 Store Banner 邏輯
 window.loadStoreBannerSettings = function() {
   if (!window.currentUserCard && typeof window.syncUserCardMatch === 'function') {
     window.syncUserCardMatch();
@@ -247,15 +246,19 @@ window.saveStoreBanner = async function(event) {
       // 1. 更新前端當前的名片暫存物件
       window.currentUserCard['自訂名片設定'] = updateData['自訂名片設定'];
       
-      // 2. ✅ 同步更新全域 allCards 陣列中的對應資料（解決同步問題）
+      // 2. 同步更新全域 allCards 陣列中的對應資料
       if (window.allCards && window.allCards.length > 0) {
         const match = window.allCards.find(c => String(c.rowId) === String(window.currentUserCard.rowId));
         if (match) {
           match['自訂名片設定'] = updateData['自訂名片設定'];
+          // 確保 LINE ID 欄位存在，讓 updateHomeBanner 能找到這張卡
+          if (!match['LINE ID'] && window.currentNetworkId) {
+            match['LINE ID'] = window.currentNetworkId;
+          }
         }
       }
 
-      // 3. 更新 LocalStorage 快取
+      // 3. 更新 LocalStorage 快取（確保即時生效）
       const cacheKey = 'store_banner_' + window.currentNetworkId;
       localStorage.setItem(cacheKey, JSON.stringify({
         homeBanner: cfg.homeBanner,
@@ -266,11 +269,40 @@ window.saveStoreBanner = async function(event) {
       }));
 
       window.showToast('✅ 設定已成功儲存至雲端！');
-      
-      // 4. 即時更新首頁 UI
+
+      // 4. 強制直接操作 DOM，不依賴 allCards 查找邏輯
+      const headerEl = document.getElementById('header-site-name');
+      if (headerEl && cfg.siteName) headerEl.textContent = cfg.siteName;
+
+      const bannerImg = document.getElementById('home-main-banner');
+      if (bannerImg) {
+        if (cfg.homeBanner) bannerImg.src = cfg.homeBanner;
+        bannerImg.parentElement.classList.toggle('hidden', cfg.showBanner === false);
+      }
+
+      const ytContainer = document.getElementById('home-youtube-container');
+      const ytIframe = document.getElementById('home-youtube-iframe');
+      if (ytContainer && ytIframe) {
+        if (cfg.showYoutube !== false && cfg.homeYoutube) {
+          const ytMatch = cfg.homeYoutube.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+          const videoId = ytMatch ? ytMatch[1] : null;
+          if (videoId) {
+            ytIframe.src = 'https://www.youtube.com/embed/' + videoId + '?rel=0&modestbranding=1';
+            ytContainer.classList.remove('hidden');
+          } else {
+            ytContainer.classList.add('hidden');
+          }
+        } else {
+          ytContainer.classList.add('hidden');
+          ytIframe.src = '';
+        }
+      }
+
+      // 5. 額外呼叫 updateHomeBanner 做全面同步（以防有其他 UI 元素）
       if (typeof window.updateHomeBanner === 'function') {
         window.updateHomeBanner();
       }
+
     } else {
       throw new Error(res.error || 'API 儲存失敗');
     }
