@@ -31,7 +31,13 @@ window.saveStoreBanner = async function(e) {
       window.showToast('✅ 系統設定已同步至雲端');
       
       const savedSettings = window.normalizeStoreSettings(res) || settings;
-      window.applyStoreSettingsToHome({ ...settings, ...savedSettings });
+      const mergedSettings = {
+        ...settings,
+        ...savedSettings,
+        networkId: window.currentNetworkId || 'admin'
+      };
+      window.writeCachedStoreSettings(mergedSettings, mergedSettings.networkId);
+      window.applyStoreSettingsToHome(mergedSettings);
       
       // 重新觸發首頁資料載入以確保 Banner 同步
       if (typeof window.loadUserActivities === 'function') {
@@ -56,6 +62,7 @@ window.loadStoreBannerSettings = async function() {
     const res = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId });
     const d = window.normalizeStoreSettings(res);
     if (d) {
+      window.writeCachedStoreSettings(d, window.currentNetworkId);
       document.getElementById('input-site-name').value = d.siteName || '';
       document.getElementById('input-store-banner').value = d.bannerUrl || '';
       if (d.bannerUrl) document.getElementById('setting-preview-banner').src = d.bannerUrl;
