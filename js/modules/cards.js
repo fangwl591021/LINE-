@@ -172,33 +172,55 @@ window.applyUserPermissions = function() {
   }
 };
 
-// 🚀 核心修復：強制配對綁定邏輯
+// 🚀 強效配對機制：如果 ID 找不到，用「手機號碼」強制抓回使用者的名片！
+window.syncUserCardMatch = function() {
+  if (!window.currentUserProfile || !window.allCards || window.allCards.length === 0) {
+    return false;
+  }
+
+  const uid = String(window.currentUserProfile.userId).trim();
+  const uPhone = window.currentUser?.phone ? String(window.currentUser.phone).replace(/[^0-9]/g, '') : null;
+
+  window.currentUserCard = window.allCards.find(c => {
+    // 1. 常規 ID 配對
+    if (c['LINE ID'] && String(c['LINE ID']).trim() === uid) return true;
+    if (c['userId'] && String(c['userId']).trim() === uid) return true;
+    if (c['User ID'] && String(c['User ID']).trim() === uid) return true;
+
+    // 2. 終極備援配對：ID 遺失或對不上時，用「手機號碼」強制配對
+    if (uPhone && c['手機號碼']) {
+      const cPhone = String(c['手機號碼']).replace(/[^0-9]/g, '');
+      if (cPhone === uPhone && cPhone.length >= 9) {
+        // 自動幫他把遺失的 ID 補回去
+        c['LINE ID'] = uid; 
+        return true;
+      }
+    }
+    return false;
+  });
+
+  return !!window.currentUserCard;
+};
+
+// 初始化載入
 window.loadAllData = async function() {
   try {
     const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
     window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
     
-    if (typeof window.currentUserProfile !== 'undefined' && window.currentUserProfile) {
-      const uid = String(window.currentUserProfile.userId).trim();
-      
-      // 擴大搜尋範圍：不論資料庫欄位名稱是 LINE ID、userId 還是 User ID，全部強制比對
-      window.currentUserCard = window.allCards.find(c => 
-        (c['LINE ID'] && String(c['LINE ID']).trim() === uid) ||
-        (c['userId'] && String(c['userId']).trim() === uid) ||
-        (c['User ID'] && String(c['User ID']).trim() === uid)
-      );
-    }
+    // 執行強效配對
+    window.syncUserCardMatch();
 
     const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
     window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
 
     if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
+    
+    // 同步重啟所有 UI 確保畫面更新
     if (typeof window.initMyECard === 'function') window.initMyECard();
+    if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
     if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
     if (typeof window.renderActivities === 'function') window.renderActivities();
-    
-    // 確保設定頁面同步載入，找回遺失的 Banner 畫面
-    if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
     
   } catch (err) {
     console.error("資料載入失敗:", err);
