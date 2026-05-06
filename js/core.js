@@ -5,13 +5,14 @@ window.allCards = [];
 window.currentUserCard = null;
 window.allActivities = [];
 window.allSystemUsers = [];
+window.currentUserProfile = null; // ✅ 補齊 LIFF Profile 全域宣告
 window.currentUser = null;
 window.userRole = 'user';
 window.currentNetworkId = 'admin';
 window.currentStoreId = '';
 window.hasAdminRights = false;
 
-// 嚴格安全跳脫函式：防範 XSS 跨站腳本攻擊 (用於 innerHTML 渲染內容)
+// 嚴格安全跳脫函式：防範 XSS 跨站腳本攻擊
 window.escapeHTML = function(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -22,7 +23,7 @@ window.escapeHTML = function(str) {
     .replace(/'/g, '&#039;');
 };
 
-// 安全跳脫函式：保護 Inline JS 參數 (用於 html 屬性內的腳本，例如 onclick)
+// 安全跳脫函式：保護 Inline JS 參數
 window.escapeJS = function(str) {
   return String(str || '')
     .replace(/\\/g, "\\\\") 
@@ -92,11 +93,11 @@ window.showToast = function(msg, isError = false) {
 // 統一 API 呼叫
 window.fetchAPI = async function(action, payload = {}, silent = false) {
   try {
-    payload.networkId = window.currentNetworkId;
-    payload.role = window.userRole;
-    payload.userId = window.currentUserProfile?.userId;
+    // ✅ 修正：如果 payload 裡面已經有值，就不要強制用全域變數覆蓋它，防止洗掉 LINE ID
+    payload.networkId = payload.networkId || window.currentNetworkId;
+    payload.role = payload.role || window.userRole;
+    payload.userId = payload.userId || window.currentUserProfile?.userId;
 
-    // 自動夾帶 LINE Access Token 供 Worker 進行嚴格安全驗證
     try {
       if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
         payload.lineAccessToken = liff.getAccessToken();
@@ -171,23 +172,18 @@ window.applyUserPermissions = function() {
   }
 };
 
-// 🚀 核心資料載入引擎 (修復 loadAllData is not a function 錯誤)
 window.loadAllData = async function() {
   try {
-    // 1. 載入全站名片庫 (後端會依據權限與歸屬網自動過濾)
     const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
     window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
     
-    // 從名片庫中抓取「屬於目前登入者」的專屬名片
     if (typeof window.currentUserProfile !== 'undefined' && window.currentUserProfile) {
       window.currentUserCard = window.allCards.find(c => c['LINE ID'] === window.currentUserProfile.userId);
     }
 
-    // 2. 載入活動列表
     const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
     window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
 
-    // 3. 觸發各模組的畫面更新 (依賴注入)
     if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
     if (typeof window.initMyECard === 'function') window.initMyECard();
     if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
