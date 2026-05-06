@@ -330,7 +330,7 @@
                   <select id="edit-v-align" onchange="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-slate-800 outline-none focus:border-blue-500">
                     <option value="center">置中對齊</option>
                     <option value="start">靠左對齊</option>
-                    <option value="end">靠裝右對齊</option>
+                    <option value="end">靠右對齊</option>
                   </select>
                   <input type="color" id="edit-v-color" onchange="updateAdminCardPreview()" value="#666666" class="w-[46px] h-full p-0 border border-slate-200 rounded-xl cursor-pointer bg-white">
                 </div>
@@ -405,6 +405,8 @@
     let currentEditButtons = []; 
     let adminCropperInstance = null;
     let adminRole = 'store';
+    let currentAdminEcardImgs = { landscape: '', portrait: '', square: '' };
+    let currentAdminEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
     
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
@@ -496,10 +498,6 @@
         </tr>`).join('');
     }
 
-    /**
-     * ✅ 修復重點：openEditCardModal
-     * 強化資料映射，確保 JSON 與平鋪欄位同步。
-     */
     function openEditCardModal(rowId) {
       window.currentAdminCropRatio = null;
       const card = allCardsData.find(c => String(c.rowId) === String(rowId));
@@ -521,13 +519,31 @@
       let cfg = {};
       try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){ console.error("JSON Parse Error", e); }
       
+      currentAdminEcardImgs = {
+        landscape: cfg.imgUrl || card['名片圖檔'] || '',
+        portrait: cfg.imgUrlPortrait || '',
+        square: cfg.imgUrlSquare || ''
+      };
+      
+      currentAdminEcardRatios = {
+        landscape: cfg.imgRatioLandscape || '20:13',
+        portrait: cfg.imgRatioPortrait || '2:3',
+        square: cfg.imgRatioSquare || '1:1'
+      };
+
       // 1. 版型 (優先取 cfg，其次預設 landscape)
       let layoutVal = cfg.layoutStyle || cfg.layout || 'landscape';
       let layoutRadio = document.querySelector(`input[name="edit-v-layout"][value="${layoutVal}"]`);
       if (layoutRadio) layoutRadio.checked = true;
 
       // 2. 封面圖 (優先取 cfg，其次取資料庫獨立欄位)
-      document.getElementById('edit-v-img').value = cfg.imgUrl || card['名片圖檔'] || '';
+      const imgInput = document.getElementById('edit-v-img');
+      imgInput.value = currentAdminEcardImgs[layoutVal];
+      imgInput.oninput = function() {
+         const l = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
+         currentAdminEcardImgs[l] = this.value;
+         updateAdminCardPreview();
+      };
       
       // 3. 描述內容 (優先取 cfg，其次取資料庫獨立欄位)
       document.getElementById('edit-v-desc').value = cfg.desc || card['服務項目'] || '';
@@ -551,15 +567,22 @@
     function updateAdminCardPreview() {
       const area = document.getElementById('admin-card-preview-area');
       const name = document.getElementById('edit-c-name').value || '姓名';
-      const imgUrl = document.getElementById('edit-v-img').value || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+      const layoutStyle = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
+      const imgUrl = currentAdminEcardImgs[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+      
+      const imgInput = document.getElementById('edit-v-img');
+      if (imgInput && imgInput.value !== currentAdminEcardImgs[layoutStyle]) {
+         imgInput.value = currentAdminEcardImgs[layoutStyle] || '';
+      }
+      
       const desc = (document.getElementById('edit-v-desc').value || '').replace(/\n/g, '<br>');
       const color = document.getElementById('edit-v-color').value || '#666666';
       const align = document.getElementById('edit-v-align').value || 'center';
-      const layoutStyle = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
 
       let ratio = '20/13';
-      if (layoutStyle === 'portrait') ratio = '2/3';
+      if (layoutStyle === 'portrait') ratio = currentAdminEcardRatios.portrait.replace(':', '/') || '2/3';
       if (layoutStyle === 'square') ratio = '1/1';
+      if (layoutStyle === 'landscape') ratio = '20/13';
 
       area.innerHTML = `
         <div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px]">
@@ -580,7 +603,12 @@
       const layoutVal = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
       const cfg = {
         layoutStyle: layoutVal,
-        imgUrl: document.getElementById('edit-v-img').value,
+        imgUrl: currentAdminEcardImgs.landscape,
+        imgUrlPortrait: currentAdminEcardImgs.portrait,
+        imgUrlSquare: currentAdminEcardImgs.square,
+        imgRatioLandscape: '20:13',
+        imgRatioPortrait: currentAdminEcardRatios.portrait.replace('/', ':'),
+        imgRatioSquare: '1:1',
         desc: document.getElementById('edit-v-desc').value,
         descAlign: document.getElementById('edit-v-align').value,
         descColor: document.getElementById('edit-v-color').value,
@@ -636,6 +664,72 @@
     function closeEditCardModal() { document.getElementById('modal-card-edit').classList.add('hidden'); }
 
     function escapeHTML(str) { return String(str || '').replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t])); }
+
+    function openAdminCropper(inputEl) {
+      const file = inputEl.files[0];
+      if (!file) return;
+
+      let uploadRatio = 20 / 13;
+      const layoutStyle = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
+      if (layoutStyle === 'portrait') uploadRatio = NaN; // 滿版改為自由比例
+      if (layoutStyle === 'square') uploadRatio = 1 / 1;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('admin-cropper-modal').classList.remove('hidden');
+        const img = document.getElementById('admin-cropper-image');
+        img.onload = () => {
+          if (adminCropperInstance) adminCropperInstance.destroy();
+          adminCropperInstance = new Cropper(img, {
+            aspectRatio: uploadRatio,
+            viewMode: 1,
+            autoCropArea: 0.95
+          });
+        };
+        img.src = e.target.result;
+        inputEl.value = '';
+      };
+      reader.readAsDataURL(file);
+      
+      document.getElementById('btn-admin-confirm-crop').onclick = async function() {
+        if (!adminCropperInstance) return;
+        const btn = this;
+        btn.innerText = '處理中...';
+        btn.disabled = true;
+        
+        const canvas = adminCropperInstance.getCroppedCanvas({ maxWidth: 800, maxHeight: 800, imageSmoothingEnabled: true, imageSmoothingQuality: 'high' });
+        const imgRatio = Math.round(canvas.width) + ':' + Math.round(canvas.height);
+        const base64Image = canvas.toDataURL('image/jpeg', 0.8);
+        
+        closeAdminCropper();
+        showToast('圖片上傳中...');
+        
+        try {
+          const res = await fetchAPI('uploadImageToR2', { base64Image });
+          if (res && res.url) {
+            currentAdminEcardImgs[layoutStyle] = res.url;
+            if (layoutStyle === 'portrait') currentAdminEcardRatios.portrait = imgRatio; // 儲存真實比例
+            updateAdminCardPreview();
+            showToast('✅ 圖片上傳成功');
+          } else {
+            throw new Error('上傳失敗');
+          }
+        } catch(err) {
+          showToast('⚠️ ' + err.message, true);
+        } finally {
+          btn.innerText = '確認裁切';
+          btn.disabled = false;
+        }
+      };
+    }
+
+    function closeAdminCropper() {
+      document.getElementById('admin-cropper-modal').classList.add('hidden');
+      if (adminCropperInstance) {
+        adminCropperInstance.destroy();
+        adminCropperInstance = null;
+      }
+    }
 
     async function initAdmin() {
       await liff.init({ liffId: LIFF_ID });
