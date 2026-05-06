@@ -89,6 +89,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       avatarImg.classList.remove('hidden');
     }
 
+    // 先把首頁框架顯示出來，後續身分與資料用背景載入補上。
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      window.goPage('home', true);
+      loadingScreen.classList.add('hidden');
+    }
+
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -197,8 +204,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.goPage('home');
     }
 
-    // ✅ 背景非同步載入，不阻塞畫面
-    window.loadAllData().then(() => {
+    // ✅ 背景非同步載入，不阻塞首頁第一幀
+    const startBackgroundDataLoad = () => window.loadAllData().then(() => {
       if (shareCardId) {
         const sc = window.allCards.find(c => String(c.rowId) === String(shareCardId));
         if (sc) {
@@ -225,6 +232,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       }
     });
+
+    setTimeout(startBackgroundDataLoad, (shareCardId || claimCardId) ? 0 : 120);
 
   } catch (err) {
     document.getElementById('loading-text').innerText = "系統連線失敗";
