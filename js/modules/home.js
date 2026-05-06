@@ -8,49 +8,36 @@ window.updateHomeBanner = function() {
   let showBanner = true;
   let showYoutube = true;
 
-  // 1. 嘗試從 localStorage 拿快取 (避免首頁延遲跳動)
-  const cacheKey = 'store_banner_' + currentNetworkId;
-  try {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (parsed.homeBanner) bannerUrl = parsed.homeBanner;
-      if (parsed.homeYoutube) ytUrl = parsed.homeYoutube;
-      if (parsed.siteName) siteName = parsed.siteName;
-      if (parsed.showBanner !== undefined) showBanner = parsed.showBanner;
-      if (parsed.showYoutube !== undefined) showYoutube = parsed.showYoutube;
-    }
-  } catch(e) {}
-
-  // 2. 如果名片庫已載入，則以資料庫為準，並更新快取
-  if (allCards && allCards.length > 0) {
-    const ownerCard = allCards.find(c => String(c['LINE ID']).trim() === currentNetworkId);
-    if (ownerCard && ownerCard['自訂名片設定']) {
-      try {
-        const cfg = JSON.parse(ownerCard['自訂名片設定']);
-        if (cfg.homeBanner) bannerUrl = cfg.homeBanner;
-        if (cfg.homeYoutube) ytUrl = cfg.homeYoutube;
-        if (cfg.siteName) siteName = cfg.siteName;
-        if (cfg.showBanner !== undefined) showBanner = cfg.showBanner;
-        if (cfg.showYoutube !== undefined) showYoutube = cfg.showYoutube;
-        
-        // 更新快取
-        localStorage.setItem(cacheKey, JSON.stringify({
-          homeBanner: bannerUrl,
-          homeYoutube: ytUrl,
-          siteName: siteName,
-          showBanner: showBanner,
-          showYoutube: showYoutube
-        }));
-      } catch(e){}
-    }
+  // ✅ 優先從 currentUserCard 讀取（最新資料）
+  if (window.currentUserCard && window.currentUserCard['自訂名片設定']) {
+    try {
+      const cfg = JSON.parse(window.currentUserCard['自訂名片設定']);
+      if (cfg.homeBanner) bannerUrl = cfg.homeBanner;
+      if (cfg.homeYoutube) ytUrl = cfg.homeYoutube;
+      if (cfg.siteName) siteName = cfg.siteName;
+      if (cfg.showBanner !== undefined) showBanner = cfg.showBanner;
+      if (cfg.showYoutube !== undefined) showYoutube = cfg.showYoutube;
+    } catch(e) {}
+  } else {
+    // fallback: 從 localStorage 拿快取
+    const cacheKey = 'store_banner_' + currentNetworkId;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.homeBanner) bannerUrl = parsed.homeBanner;
+        if (parsed.homeYoutube) ytUrl = parsed.homeYoutube;
+        if (parsed.siteName) siteName = parsed.siteName;
+        if (parsed.showBanner !== undefined) showBanner = parsed.showBanner;
+        if (parsed.showYoutube !== undefined) showYoutube = parsed.showYoutube;
+      }
+    } catch(e) {}
   }
 
   // --- 執行渲染 ---
   const headerEl = document.getElementById('header-site-name');
   if (headerEl) headerEl.textContent = siteName;
-  
-  // 更新設定頁控制項
+
   const inputEl = document.getElementById('input-site-name');
   if (inputEl && !inputEl.value) inputEl.value = siteName === 'LINE商機引擎' ? '' : siteName;
 
@@ -63,20 +50,19 @@ window.updateHomeBanner = function() {
   const settingPreviewBanner = document.getElementById('setting-preview-banner');
   if (settingPreviewBanner && bannerUrl) settingPreviewBanner.src = bannerUrl;
 
-  // 設定頁開關同步
   const toggleB = document.getElementById('toggle-show-banner');
   if (toggleB) toggleB.checked = showBanner;
   const toggleY = document.getElementById('toggle-show-youtube');
   if (toggleY) toggleY.checked = showYoutube;
 
-  // 首頁 Banner 顯示/隱藏
+  // 首頁 Banner
   const bannerImg = document.getElementById('home-main-banner');
   if (bannerImg) {
     bannerImg.src = bannerUrl;
     bannerImg.parentElement.classList.toggle('hidden', !showBanner);
   }
 
-  // 首頁 YouTube 顯示/隱藏
+  // 首頁 YouTube
   const ytContainer = document.getElementById('home-youtube-container');
   const ytIframe = document.getElementById('home-youtube-iframe');
   if (ytContainer && ytIframe) {
