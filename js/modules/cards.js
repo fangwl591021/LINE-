@@ -1,108 +1,243 @@
-/* ==================== 名片庫模組 ==================== */
+/* ==================== 名片庫模組 (Cards) ==================== */
 
-// 由 ID 開啟名片詳細頁
-window.openCardDetailById = function(rowId) {
-  const card = allCards.find(c => String(c.rowId) === String(rowId));
-  if (card) window.openCardDetail(card);
-};
-
-// 開啟名片詳細頁
-window.openCardDetail = function(card) {
-  currentCard = card;
-  const fields = [
-    { label: '姓名', key: '姓名' }, { label: '英文名', key: '英文名' },
-    { label: '職稱', key: '職稱' }, { label: '公司', key: '公司名稱' },
-    { label: '手機', key: '手機號碼' }, { label: '公司電話', key: '公司電話' },
-    { label: 'Email', key: '電子郵件' }, { label: '網址', key: '公司網址' },
-    { label: '地址', key: '公司地址' }, { label: '部門', key: '部門' },
-    { label: '統編', key: '統一編號' }, { label: '分機', key: '分機' },
-    { label: '傳真', key: '傳真' }, { label: '社群', key: '社群帳號' },
-    { label: '服務項目', key: '服務項目' }, { label: '備註', key: '建檔人/備註' }
-  ];
-
-  document.getElementById('detail-fields').innerHTML = fields
-    .filter(f => card[f.key] !== undefined && card[f.key] !== null && card[f.key] !== '')
-    .map(f => {
-      const val = window.escapeJS(String(card[f.key]).replaceAll(String.fromCharCode(8203), '').replaceAll("'", ""));
-      if (!val) return '';
-      const isLink = f.key === '公司網址' || f.key === '電子郵件';
-      const href = f.key === '電子郵件' ? 'mailto:' + val : (val.startsWith('http') ? val : 'https://' + val);
-      const valueHtml = isLink
-        ? '<a href="' + href + '" class="text-blue-500 font-bold underline truncate block">' + val + '</a>'
-        : '<span class="font-medium text-slate-700 break-all">' + val + '</span>';
-      return '<div class="bg-slate-50 p-3 rounded-xl flex flex-col gap-1 border border-slate-100"><span class="text-[11px] font-black text-slate-400 uppercase tracking-wide">' + f.label + '</span>' + valueHtml + '</div>';
-    }).join('') || '<div class="text-center py-6 text-slate-400 font-medium">尚無資料,請點擊「編輯內容」補充</div>';
-
-  fields.forEach(f => {
-    const el = document.getElementById('edit-' + f.key);
-    if (el) el.value = String(card[f.key] || '').replaceAll(String.fromCharCode(8203), '').replaceAll("'", "");
-  });
-
-  try {
-    const cfg = card['自訂名片設定'] ? JSON.parse(card['自訂名片設定']) : {};
-    currentECardStyle = 'v1';
-    v1Buttons = cfg.buttons || [{l:'加為好友', u:'', c:'#06C755'}];
-    document.getElementById('v1-img-url').value = cfg.imgUrl || card['名片圖檔'] || '';
-
-    window.setDescAlign(cfg.descAlign || 'center');
-    const colorInput = document.getElementById('edit-desc-color');
-    if (colorInput) colorInput.value = cfg.descColor || '#666666';
-  } catch(e) {
-    currentECardStyle = 'v1';
-    v1Buttons = [{l:'加為好友', u:'', c:'#06C755'}];
-    document.getElementById('v1-img-url').value = card['名片圖檔'] || '';
-    window.setDescAlign('center');
-    const colorInput = document.getElementById('edit-desc-color');
-    if (colorInput) colorInput.value = '#666666';
+window.renderCardList = function(cards) {
+  const list = document.getElementById('card-list');
+  if (!cards || cards.length === 0) {
+    list.innerHTML = '<div class="bg-white p-8 rounded-3xl text-center text-slate-400 border border-slate-100 shadow-sm"><span class="material-symbols-outlined text-4xl mb-2 text-slate-300">search_off</span><p class="font-bold text-[13px]">目前沒有找到任何名片</p></div>';
+    return;
   }
 
-  window.switchTab('info');
+  const html = cards.map(c => {
+    let rawService = c['服務項目'] || c['職稱'] || c['公司名稱'] || '';
+    let serviceStr = String(rawService).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, ' ');
+    if (serviceStr.length > 25) serviceStr = serviceStr.substring(0, 25) + '...';
+    
+    let tagHtml = '';
+    if (c['標籤']) {
+      tagHtml = String(c['標籤']).split(' ').map(t => `<span class="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-bold mr-1">${window.escapeHTML(t)}</span>`).join('');
+    }
+
+    let imgHtml = '';
+    let cfg = {};
+    try { cfg = JSON.parse(c['自訂名片設定'] || '{}'); } catch(e){}
+    let imgUrl = cfg.imgUrl || c['名片圖檔'] || '';
+    if (imgUrl) {
+      imgHtml = `<img src="${window.escapeHTML(imgUrl)}" class="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-100 shadow-sm">`;
+    } else {
+      imgHtml = `<div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-300 flex items-center justify-center shrink-0 shadow-sm"><span class="material-symbols-outlined">person</span></div>`;
+    }
+
+    return `
+      <div class="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm active:scale-[0.98] transition-all cursor-pointer flex gap-3 items-center" onclick="window.openCardDetailByRowId('${c.rowId}')">
+        ${imgHtml}
+        <div class="flex-1 min-w-0">
+          <div class="font-black text-slate-800 text-[16px] leading-tight flex items-center gap-1">
+             ${window.escapeHTML(c['姓名'] || '未知')}
+             ${c['LINE ID'] === currentUserProfile.userId ? '<span class="bg-primary-light text-primary text-[9px] px-1.5 py-0.5 rounded font-black tracking-wider">我的</span>' : ''}
+          </div>
+          <div class="text-[12px] text-slate-500 font-medium truncate mt-0.5">${serviceStr}</div>
+          ${tagHtml ? `<div class="mt-1.5 truncate">${tagHtml}</div>` : ''}
+        </div>
+        <span class="material-symbols-outlined text-slate-300 text-[20px] shrink-0">chevron_right</span>
+      </div>
+    `;
+  }).join('');
+  list.innerHTML = html;
+};
+
+window.filterCards = function() {
+  const keyword = document.getElementById('search-card-input').value.toLowerCase().trim();
+  if (!keyword) {
+    window.renderCardList(allCards);
+    return;
+  }
+  const filtered = allCards.filter(c => {
+    const str = [c['姓名'], c['公司名稱'], c['手機號碼'], c['公司電話'], c['標籤']].join(' ').toLowerCase();
+    return str.includes(keyword);
+  });
+  window.renderCardList(filtered);
+};
+
+window.openCardDetailByRowId = function(rowId) {
+  const c = allCards.find(card => String(card.rowId) === String(rowId));
+  if (c) window.openCardDetail(c);
+};
+
+// ✅ 嚴格權限鎖定機制
+window.openCardDetail = function(card) {
+  if (!card) return;
+  currentCard = card;
+  
+  // 鎖定判斷：是否為名片擁有人，或是系統總管
+  const isOwner = (card['LINE ID'] === currentUserProfile.userId);
+  const isAdminOrStore = (userRole === 'admin' || userRole === 'store');
+  const canEdit = isOwner || isAdminOrStore;
+
+  // 根據權限顯示/隱藏 Tab
+  const tabEdit = document.getElementById('tab-edit');
+  const tabEcard = document.getElementById('tab-ecard');
+  const btnDelete = document.getElementById('btn-delete-card');
+
+  if (canEdit) {
+    tabEdit.classList.remove('hidden');
+    tabEcard.classList.remove('hidden');
+    if (btnDelete) btnDelete.classList.remove('hidden');
+  } else {
+    // 權限不足，強制鎖定只能看第一頁「聯絡資料」
+    tabEdit.classList.add('hidden');
+    tabEcard.classList.add('hidden');
+    if (btnDelete) btnDelete.classList.add('hidden');
+    window.switchTab('info'); 
+  }
+
+  // 1. 填寫聯絡資料 Tab
+  let infoHtml = '';
+  const skipFields = ['rowId', 'LINE ID', '時間戳', '名片圖檔', '自訂名片設定', '推薦人', '歸屬網'];
+  
+  const displayFields = [
+    { label: '公司名稱', icon: 'business', key: '公司名稱' },
+    { label: '職稱', icon: 'badge', key: '職稱' },
+    { label: '手機號碼', icon: 'smartphone', key: '手機號碼', isPhone: true },
+    { label: '公司電話', icon: 'call', key: '公司電話', isPhone: true },
+    { label: '電子郵件', icon: 'mail', key: '電子郵件' },
+    { label: '公司網址', icon: 'language', key: '公司網址' },
+    { label: '公司地址', icon: 'location_on', key: '公司地址' },
+    { label: '服務項目', icon: 'design_services', key: '服務項目' },
+    { label: '標籤', icon: 'label', key: '標籤' },
+  ];
+
+  displayFields.forEach(f => {
+    let val = card[f.key];
+    if (val) {
+      let displayVal = window.escapeHTML(val);
+      if (f.key === '服務項目') displayVal = displayVal.replace(/\n/g, '<br>');
+      if (f.key === '標籤') displayVal = val.split(' ').map(t => `<span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold text-[11px] mr-1">${window.escapeHTML(t)}</span>`).join('');
+      
+      let actionHtml = '';
+      if (f.isPhone) actionHtml = `<a href="tel:${val.replace(/[^0-9+]/g, '')}" class="text-[#06C755] bg-green-50 p-1.5 rounded-lg active:scale-90 transition-transform"><span class="material-symbols-outlined text-[18px]">call</span></a>`;
+      else if (f.key === '公司地址') actionHtml = `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(val)}" target="_blank" class="text-blue-500 bg-blue-50 p-1.5 rounded-lg active:scale-90 transition-transform"><span class="material-symbols-outlined text-[18px]">map</span></a>`;
+      else if (f.key === '電子郵件') actionHtml = `<a href="mailto:${val}" class="text-orange-500 bg-orange-50 p-1.5 rounded-lg active:scale-90 transition-transform"><span class="material-symbols-outlined text-[18px]">mail</span></a>`;
+
+      infoHtml += `
+        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex gap-3">
+          <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-400 shrink-0 shadow-sm border border-slate-100">
+            <span class="material-symbols-outlined text-[16px]">${f.icon}</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-[11px] font-bold text-slate-400 mb-0.5">${f.label}</p>
+            <p class="text-[14px] text-slate-700 font-medium leading-relaxed">${displayVal}</p>
+          </div>
+          ${actionHtml}
+        </div>
+      `;
+    }
+  });
+  
+  if (!infoHtml) infoHtml = '<div class="text-center text-slate-400 py-8 text-sm">無詳細資料</div>';
+  document.getElementById('detail-fields').innerHTML = infoHtml;
+
+  // 2. 如果有權限，填寫編輯 Tab
+  if (canEdit) {
+    const editableFields = ['姓名','英文名','職稱','部門','公司名稱','統一編號','手機號碼','公司電話','分機','傳真','電子郵件','公司網址','社群帳號','公司地址','服務項目','建檔人/備註'];
+    editableFields.forEach(f => {
+      const el = document.getElementById('edit-' + f);
+      if (el) el.value = card[f] || '';
+    });
+
+    let cfg = {};
+    try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
+    v1Buttons = cfg.buttons || [];
+    window.currentDescAlign = cfg.descAlign || 'center';
+    const colorInput = document.getElementById('edit-desc-color');
+    if(colorInput) colorInput.value = cfg.descColor || '#666666';
+
+    window.setDescAlign(window.currentDescAlign);
+    window.renderECardSettings();
+
+    // 如果沒有自訂名片設定，給它預設值以便預覽
+    if (!cfg.layoutStyle) {
+      document.getElementById('v1-img-url').value = card['名片圖檔'] || '';
+      const layoutRadio = document.querySelector(`input[name="ecard-layout"][value="landscape"]`);
+      if (layoutRadio) layoutRadio.checked = true;
+    }
+
+    // 觸發預覽更新
+    window.currentLoadedCardId = null; // 重置，讓 updateECardPreview 強制重繪
+    window.updateECardPreview();
+  }
+
+  // 是否顯示「發送認領」按鈕
+  const btnClaim = document.getElementById('btn-send-claim');
+  if (btnClaim) {
+    if (card['LINE ID']) {
+      btnClaim.classList.add('hidden'); // 已被認領，隱藏按鈕
+    } else {
+      btnClaim.classList.remove('hidden'); // 未被認領，可發送邀請
+    }
+  }
+
   window.goPage('card-detail');
 };
 
-// 儲存名片編輯
+window.switchTab = function(tab) {
+  // 如果要切換到編輯/數位名片，再檢查一次權限
+  if (tab !== 'info') {
+    const isOwner = (currentCard['LINE ID'] === currentUserProfile.userId);
+    const isAdminOrStore = (userRole === 'admin' || userRole === 'store');
+    if (!isOwner && !isAdminOrStore) {
+      window.showToast('權限不足，無法編輯此名片', true);
+      return;
+    }
+  }
+
+  ['info', 'edit', 'ecard'].forEach(t => {
+    document.getElementById('tab-content-' + t).classList.add('hidden');
+    const btn = document.getElementById('tab-' + t);
+    btn.classList.remove('text-blue-600', 'border-blue-600');
+    btn.classList.add('text-slate-400', 'border-transparent');
+  });
+
+  document.getElementById('tab-content-' + tab).classList.remove('hidden');
+  const activeBtn = document.getElementById('tab-' + tab);
+  activeBtn.classList.remove('text-slate-400', 'border-transparent');
+  activeBtn.classList.add('text-blue-600', 'border-blue-600');
+};
+
 window.saveCardEdit = async function() {
+  if (!currentCard) return;
   const btn = document.getElementById('btn-save');
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
   btn.disabled = true;
-  const fields = ['姓名','英文名','職稱','部門','公司名稱','統一編號','手機號碼','公司電話','分機','傳真','電子郵件','公司網址','社群帳號','公司地址','服務項目','建檔人/備註'];
-  const updated = { ...currentCard };
-  fields.forEach(f => {
+
+  const editableFields = ['姓名','英文名','職稱','部門','公司名稱','統一編號','手機號碼','公司電話','分機','傳真','電子郵件','公司網址','社群帳號','公司地址','服務項目','建檔人/備註'];
+  let payloadData = {};
+  editableFields.forEach(f => {
     const el = document.getElementById('edit-' + f);
-    if (el) updated[f] = el.value;
+    if (el) payloadData[f] = el.value.trim();
   });
 
-  let cfg = {};
-  try { cfg = JSON.parse(currentCard['自訂名片設定'] || '{}'); } catch(e){}
-  cfg.descAlign = window.currentDescAlign;
-  const colorInput = document.getElementById('edit-desc-color');
-  cfg.descColor = colorInput ? colorInput.value : '#666666';
-  updated['自訂名片設定'] = JSON.stringify(cfg);
-
   try {
-    await window.fetchAPI('updateCard', { rowId: currentCard.rowId, data: updated }, true);
-    currentCard = { ...currentCard, ...updated };
-    window.showToast('✅ 資料已更新！');
-
-    if (currentUserProfile && currentUserCard && currentCard.rowId === currentUserCard.rowId) {
-      const newName = updated['姓名'] || '';
-      const newPhone = updated['手機號碼'] || '';
-      if (newName !== currentUser?.name || newPhone !== currentUser?.phone) {
-        window.fetchAPI('updateUserProfile', {
-          userId: currentUserProfile.userId,
-          data: { '姓名': newName, '手機': newPhone }
-        }, true);
-        if (currentUser) {
-          currentUser.name = newName;
-          currentUser.phone = newPhone;
-          const elUserName = document.getElementById('user-name');
-          if (elUserName) elUserName.textContent = '歡迎回來,' + newName;
+    const res = await window.fetchAPI('updateCard', { rowId: currentCard.rowId, data: payloadData }, true);
+    if (res) {
+      window.showToast('✅ 變更已儲存');
+      Object.keys(payloadData).forEach(k => { currentCard[k] = payloadData[k]; });
+      
+      if (typeof allCards !== 'undefined') {
+        const match = allCards.find(c => String(c.rowId) === String(currentCard.rowId));
+        if (match) {
+           Object.keys(payloadData).forEach(k => { match[k] = payloadData[k]; });
         }
       }
-    }
+      if (typeof currentUserCard !== 'undefined' && currentUserCard && String(currentUserCard.rowId) === String(currentCard.rowId)) {
+         Object.keys(payloadData).forEach(k => { currentUserCard[k] = payloadData[k]; });
+      }
 
-    window.openCardDetail(currentCard);
-    await window.loadAllData();
+      // 儲存文字資料後，順便觸發右邊的預覽更新
+      if (typeof window.updateECardPreview === 'function') window.updateECardPreview();
+      
+      // 切回 info Tab 以呈現最新資料
+      window.openCardDetail(currentCard); 
+    }
   } catch(e) {
     window.showToast('⚠️ 儲存失敗:' + e.message, true);
   } finally {
@@ -111,139 +246,24 @@ window.saveCardEdit = async function() {
   }
 };
 
-// 刪除名片
 window.deleteCard = async function() {
-  if (!confirm('確定要永久刪除這張名片嗎？')) return;
+  if (!currentCard) return;
+  if (!confirm("確定要刪除這張名片嗎？此操作無法還原！")) return;
+  
   try {
-    await window.fetchAPI('deleteCard', { rowId: currentCard.rowId }, true);
-    window.showToast('🗑 名片已刪除');
-    await window.loadAllData();
-    window.goPage('card');
+    const res = await window.fetchAPI('deleteCard', { rowId: currentCard.rowId }, true);
+    if (res) {
+      window.showToast('✅ 已刪除名片');
+      if (typeof allCards !== 'undefined') {
+        const idx = allCards.findIndex(c => String(c.rowId) === String(currentCard.rowId));
+        if (idx !== -1) {
+          allCards.splice(idx, 1);
+          window.renderCardList(allCards);
+        }
+      }
+      window.goPage('card');
+    }
   } catch(e) {
     window.showToast('⚠️ 刪除失敗:' + e.message, true);
   }
-};
-
-// 渲染名片列表
-window.renderCardList = function(cards) {
-  const container = document.getElementById('card-list');
-  if (!container) return;
-
-  container.innerHTML = cards.length === 0
-    ? '<div class="text-center py-10 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200"><span class="material-symbols-outlined text-4xl text-slate-300 mb-2">inventory_2</span><p class="text-slate-400 font-bold text-sm">找不到名片</p></div>'
-    : cards.map((c, i) =>
-      '<div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between cursor-pointer active:bg-slate-50 transition-colors mb-3 animate-in fade-in" style="animation-delay: ' + (i*30) + 'ms" onclick="window.openCardDetailById(\'' + window.escapeJS(c.rowId) + '\')">' +
-        '<div class="flex items-center gap-3">' +
-          '<div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-black text-lg shrink-0 border border-blue-100">' + (window.escapeJS(c['姓名']?.[0]) || '未') + '</div>' +
-          '<div>' +
-            '<p class="font-black text-slate-800">' + window.escapeJS(c['姓名']||'未知') + '</p>' +
-            '<p class="text-[12px] text-slate-500 font-medium">' + window.escapeJS(c['公司名稱']||'自由工作者') + (c['職稱'] ? ' · ' + window.escapeJS(c['職稱']) : '') + '</p>' +
-          '</div>' +
-        '</div>' +
-        '<span class="material-symbols-outlined text-slate-300">chevron_right</span>' +
-      '</div>'
-    ).join('');
-};
-
-// 名片搜尋
-window.filterCards = function() {
-  const query = document.getElementById('search-card-input').value.toLowerCase().trim();
-  if (!query) {
-    window.renderCardList(allCards);
-    return;
-  }
-  const filtered = allCards.filter(c => {
-    const name = String(c['姓名'] || '').toLowerCase();
-    const comp = String(c['公司名稱'] || '').toLowerCase();
-    const phone1 = String(c['手機號碼'] || '').toLowerCase();
-    const phone2 = String(c['公司電話'] || '').toLowerCase();
-    const title = String(c['職稱'] || '').toLowerCase();
-    return name.includes(query) || comp.includes(query) || phone1.includes(query) || phone2.includes(query) || title.includes(query);
-  });
-  window.renderCardList(filtered);
-};
-
-// 載入所有名片資料
-window.loadAllData = async function() {
-  const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
-  if (cardsRes && !cardsRes.error) {
-    allCards = (cardsRes || []).reverse();
-    window.renderCardList(allCards);
-    window.updateHomeBanner();
-  }
-};
-
-// 啟動名片掃描(一般名片庫)
-window.recognizeCard = async function(inputEl) {
-  window.cropTarget = 'general';
-  const file = inputEl.files[0];
-  if (!file) return;
-
-  const role = currentUser?.role || 'user';
-  const limit = window.LIMITS[role].cards;
-  if (allCards.length >= limit) {
-    inputEl.value = '';
-    return window.showToast('用量限制:您的方案 (' + role + ') 最多只能掃描 ' + limit + ' 張名片,請聯絡管理員升級。', true);
-  }
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const cropperModal = document.getElementById('cropper-modal');
-    const cropperImage = document.getElementById('cropper-image');
-    cropperImage.src = e.target.result;
-    cropperModal.classList.remove('hidden');
-
-    if (cropperInstance) cropperInstance.destroy();
-    cropperInstance = new Cropper(cropperImage, {
-      aspectRatio: NaN,
-      viewMode: 1,
-      dragMode: 'move',
-      autoCropArea: 0.9,
-      restore: false,
-      guides: true,
-      center: true,
-      highlight: false,
-      cropBoxMovable: true,
-      cropBoxResizable: true,
-      toggleDragModeOnDblclick: false,
-    });
-  };
-  reader.readAsDataURL(file);
-  inputEl.value = '';
-};
-
-// 啟動名片掃描(我的專屬名片)
-window.recognizeMyCard = async function(inputEl) {
-  window.cropTarget = 'mycard';
-  const file = inputEl.files[0];
-  if (!file) return;
-
-  const role = currentUser?.role || 'user';
-  const limit = window.LIMITS[role].cards;
-  if (allCards.length >= limit) {
-    inputEl.value = '';
-    return window.showToast('用量限制:您的方案 (' + role + ') 最多只能掃描 ' + limit + ' 張名片,請聯絡管理員升級。', true);
-  }
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const cropperModal = document.getElementById('cropper-modal');
-    const cropperImage = document.getElementById('cropper-image');
-    cropperImage.src = e.target.result;
-    cropperModal.classList.remove('hidden');
-
-    // 切換確認按鈕指向專屬版本
-    const confirmBtn = document.getElementById('btn-confirm-crop');
-    if (confirmBtn) confirmBtn.setAttribute('onclick', 'window.confirmMyCardCrop()');
-
-    if (cropperInstance) cropperInstance.destroy();
-    cropperInstance = new Cropper(cropperImage, {
-      aspectRatio: NaN,
-      viewMode: 1, dragMode: 'move', autoCropArea: 0.9, restore: false,
-      guides: true, center: true, highlight: false, cropBoxMovable: true,
-      cropBoxResizable: true, toggleDragModeOnDblclick: false,
-    });
-  };
-  reader.readAsDataURL(file);
-  inputEl.value = '';
 };
