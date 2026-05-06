@@ -10,6 +10,7 @@ window.goPage = function(page, isInitLoad = false) {
   if (!isInitLoad) {
     if (page === 'admin-activities') window.loadAdminActivities();
     else if (page === 'home') window.loadUserActivities();
+    else if (page === 'card' && typeof window.loadCardData === 'function') window.loadCardData({ render: true });
     else if (page === 'matchmake' && typeof window.initMatchmakePage === 'function') window.initMatchmakePage();
     else if (page === 'admin-stats') window.loadAdminStats();
     else if (page === 'my-activities') window.loadMyActivities();
@@ -31,6 +32,13 @@ window.goPage = function(page, isInitLoad = false) {
       } catch(e){}
 
       window.applyUserPermissions();
+
+      if (typeof window.loadCardData === 'function') {
+        window.loadCardData({ render: false }).then(() => {
+          if (typeof window.initMyECard === 'function') window.initMyECard();
+          if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
+        });
+      }
 
       if (userRole === 'admin' && allSystemUsers.length === 0) window.loadAllUsers();
     }
