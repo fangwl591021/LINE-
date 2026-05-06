@@ -22,18 +22,16 @@ window.saveStoreBanner = async function(e) {
 
   try {
     // 呼叫 Worker 並轉發至 GAS 的 saveStoreSettings
-    const res = await window.fetchAPI('saveStoreSettings', { 
-      settings,
-      networkId: window.currentNetworkId 
+    const res = await window.fetchAPI('saveStoreSettings', {
+      ...settings,
+      networkId: window.currentNetworkId || 'admin'
     });
     
     if (res && res.success !== false) {
       window.showToast('✅ 系統設定已同步至雲端');
       
-      // 即時更新畫面的頂部標題
-      if (settings.siteName) {
-        document.getElementById('header-site-name').innerText = settings.siteName;
-      }
+      const savedSettings = window.normalizeStoreSettings(res) || settings;
+      window.applyStoreSettingsToHome({ ...settings, ...savedSettings });
       
       // 重新觸發首頁資料載入以確保 Banner 同步
       if (typeof window.loadUserActivities === 'function') {
@@ -56,17 +54,16 @@ window.saveStoreBanner = async function(e) {
 window.loadStoreBannerSettings = async function() {
   try {
     const res = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId });
-    if (res && res.data) {
-      const d = res.data;
-      if (d.siteName) document.getElementById('input-site-name').value = d.siteName;
-      if (d.bannerUrl) {
-        document.getElementById('input-store-banner').value = d.bannerUrl;
-        document.getElementById('setting-preview-banner').src = d.bannerUrl;
-      }
+    const d = window.normalizeStoreSettings(res);
+    if (d) {
+      document.getElementById('input-site-name').value = d.siteName || '';
+      document.getElementById('input-store-banner').value = d.bannerUrl || '';
+      if (d.bannerUrl) document.getElementById('setting-preview-banner').src = d.bannerUrl;
       // 注意：從 Sheets 讀回來的布林值可能是字串 "true"
-      document.getElementById('toggle-show-banner').checked = (String(d.showBanner) === 'true');
-      if (d.youtubeUrl) document.getElementById('input-store-youtube').value = d.youtubeUrl;
-      document.getElementById('toggle-show-youtube').checked = (String(d.showYoutube) === 'true');
+      document.getElementById('toggle-show-banner').checked = window.isStoreToggleOn(d.showBanner, true);
+      document.getElementById('input-store-youtube').value = d.youtubeUrl || '';
+      document.getElementById('toggle-show-youtube').checked = window.isStoreToggleOn(d.showYoutube, true);
+      window.applyStoreSettingsToHome(d);
     }
   } catch (e) {
     console.warn("無法加載系統設定值", e);
