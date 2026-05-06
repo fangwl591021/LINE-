@@ -1,10 +1,8 @@
 /* ==================== 設定與參數管理 (Settings) ==================== */
 
-// 初始化設定頁面的資料 (綁定到已存在的 window.currentUserProfile 與 window.currentUserCard)
 window.initSettingsPage = function() {
   if (!window.currentUserProfile) return;
 
-  // 1. 綁定基本資料 Input (來自 currentUser 物件)
   const bindInput = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.value = val || '';
@@ -16,11 +14,9 @@ window.initSettingsPage = function() {
     bindInput('profile-industry', window.currentUser.industry);
     bindInput('profile-birthday', window.currentUser.birthday);
 
-    // 載入 Telegram 設定
     bindInput('setting-tg-token', window.currentUser.tgToken);
     bindInput('setting-tg-chatid', window.currentUser.tgChatId);
 
-    // 載入社群連結
     window.userSocials = [];
     if (window.currentUser.socials) {
       try {
@@ -35,13 +31,11 @@ window.initSettingsPage = function() {
   
   window.renderUserSocials();
 
-  // 2. 如果是管理員或店長，載入 Store Banner 設定 (來自 currentUserCard)
   if (window.hasAdminRights) {
     window.loadStoreBannerSettings();
   }
 };
 
-// ==================== 社群連結管理 ====================
 window.renderUserSocials = function() {
   const container = document.getElementById('user-socials-list');
   if (!container) return;
@@ -153,8 +147,13 @@ window.updateUserProfile = async function(event) {
 
 // ==================== 首頁 Banner 管理 (PRO) ====================
 
-// 載入 Store Banner 邏輯：從 currentUserCard 中解析 JSON 顯示到欄位
+// 載入 Store Banner 邏輯
 window.loadStoreBannerSettings = function() {
+  // 🚀 防呆機制：如果打開 Banner 設定時發現名片遺失，再次執行強制配對
+  if (!window.currentUserCard && typeof window.syncUserCardMatch === 'function') {
+    window.syncUserCardMatch();
+  }
+
   if (!window.currentUserCard) return;
   
   let cfg = {};
@@ -162,32 +161,27 @@ window.loadStoreBannerSettings = function() {
     cfg = JSON.parse(window.currentUserCard['自訂名片設定'] || '{}'); 
   } catch(e) {}
 
-  // 1. 系統顯示名稱
   const siteNameEl = document.getElementById('input-site-name');
   if (siteNameEl) siteNameEl.value = cfg.siteName || '';
 
-  // 2. Banner 圖片設定
   const bannerImgEl = document.getElementById('input-store-banner');
   const toggleBannerEl = document.getElementById('toggle-show-banner');
   const previewBannerEl = document.getElementById('setting-preview-banner');
   
   if (bannerImgEl) bannerImgEl.value = cfg.homeBanner || '';
-  if (toggleBannerEl) toggleBannerEl.checked = cfg.showBanner !== false; // 若未設定過，預設為 true (開啟)
+  if (toggleBannerEl) toggleBannerEl.checked = cfg.showBanner !== false; 
   if (previewBannerEl && cfg.homeBanner) previewBannerEl.src = cfg.homeBanner;
 
-  // 3. YouTube 影片設定
   const ytEl = document.getElementById('input-store-youtube');
   const toggleYtEl = document.getElementById('toggle-show-youtube');
   
   if (ytEl) ytEl.value = cfg.homeYoutube || '';
-  if (toggleYtEl) toggleYtEl.checked = cfg.showYoutube !== false; // 若未設定過，預設為 true (開啟)
+  if (toggleYtEl) toggleYtEl.checked = cfg.showYoutube !== false; 
 };
 
-// 儲存 Store Banner：寫回 currentUserCard 
 window.saveStoreBanner = async function(event) {
   const btn = event.currentTarget || document.getElementById('btn-save-store-banner');
 
-  // 若 currentUserCard 遺失，嘗試從 allCards 找回
   if (!window.currentUserCard && window.currentUserProfile) {
     window.currentUserCard = window.allCards.find(c =>
       String(c['LINE ID']).trim() === window.currentUserProfile.userId ||
@@ -195,7 +189,6 @@ window.saveStoreBanner = async function(event) {
     );
   }
 
-  // 自動為店家生成名片（如果還沒有的話）
   if (!window.currentUserCard) {
     window.showToast('正在初始化您的商家專屬檔案...', false);
     try {
@@ -239,7 +232,6 @@ window.saveStoreBanner = async function(event) {
     cfg.siteName = newName || 'LINE商機引擎';
   }
 
-  // 🚀 儲存開關狀態
   const toggleBanner = document.getElementById('toggle-show-banner');
   if (toggleBanner) cfg.showBanner = toggleBanner.checked;
 
@@ -254,7 +246,6 @@ window.saveStoreBanner = async function(event) {
     
     window.currentUserCard['自訂名片設定'] = JSON.stringify(cfg);
 
-    // 同時更新本地快取，以便首頁立刻抓到最新設定
     const cacheKey = 'store_banner_' + window.currentNetworkId;
     localStorage.setItem(cacheKey, JSON.stringify({
       homeBanner: cfg.homeBanner,
@@ -266,7 +257,6 @@ window.saveStoreBanner = async function(event) {
 
     window.showToast('✅ 設定已更新！');
     
-    // 如果全域有定義更新首頁畫面的函式，呼叫它
     if (typeof window.updateHomeBanner === 'function') {
       window.updateHomeBanner();
     }
@@ -280,7 +270,6 @@ window.saveStoreBanner = async function(event) {
   }
 };
 
-// ==================== 邀約連結功能 ====================
 window.showInviteLink = function() {
   if (!window.currentUserProfile) {
     window.showToast('請先完成登入與註冊', true);
