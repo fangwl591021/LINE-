@@ -2,9 +2,9 @@
 
 // 切換配對隱私
 window.toggleFatePrivacy = async function(forceOpen = false) {
-  if (!currentUserCard) return window.showToast('找不到您的名片資料', true);
+  if (!window.currentUserCard) return window.showToast('找不到您的名片資料', true);
   let config = {};
-  try { config = JSON.parse(currentUserCard['自訂名片設定']); } catch(e){}
+  try { config = JSON.parse(window.currentUserCard['自訂名片設定']); } catch(e){}
 
   const toggleEl = document.getElementById('fate-privacy-toggle');
   if (forceOpen) {
@@ -16,16 +16,16 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
 
   try {
     await window.fetchAPI('updateCard', {
-      rowId: currentUserCard.rowId,
+      rowId: window.currentUserCard.rowId,
       data: { '自訂名片設定': JSON.stringify(config) }
     }, true);
-    currentUserCard['自訂名片設定'] = JSON.stringify(config);
+    window.currentUserCard['自訂名片設定'] = JSON.stringify(config);
     window.showToast(config.isPrivate ? '已切換為私人模式' : '✅ 已公開名片,解鎖配對功能');
 
     if (!config.isPrivate) {
       document.getElementById('privacy-lock-container').classList.add('hidden');
       document.getElementById('matchmaker-ui').classList.remove('hidden');
-    } else if (!hasAdminRights) {
+    } else if (!window.hasAdminRights) {
       document.getElementById('privacy-lock-container').classList.remove('hidden');
       document.getElementById('matchmaker-ui').classList.add('hidden');
     }
@@ -35,17 +35,15 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
   }
 };
 
-// 啟動 AI 配對 (加入本機防護與接收後端阻擋同步)
+// 啟動 AI 配對
 window.startMatchmaking = async function() {
   const query = document.getElementById('match-query').value.trim();
   if (!query) return window.showToast('請輸入您的配對需求', true);
 
-  // 1. 檢查本地配對額度
-  const role = currentUser?.role || 'user';
+  const role = window.currentUser?.role || 'user';
   const limit = window.LIMITS[role].matchmake;
-  
-  // 產生今日的專屬 Key (例如: matchmake_usage_2026-04-27)
-  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD 格式
+
+  const today = new Date().toLocaleDateString('en-CA');
   const usageKey = `matchmake_usage_${today}`;
   let currentUsage = parseInt(localStorage.getItem(usageKey) || '0');
 
@@ -59,15 +57,15 @@ window.startMatchmaking = async function() {
   btn.disabled = true;
 
   try {
-    const pool = allCards.filter(c => {
-      if (c.rowId === currentUserCard?.rowId) return false;
+    const pool = window.allCards.filter(c => {
+      if (c.rowId === window.currentUserCard?.rowId) return false;
       let isPriv = false;
       try { isPriv = JSON.parse(c['自訂名片設定']||'{}').isPrivate; } catch(e){}
       return !isPriv;
     });
 
     const res = await window.fetchAPI('matchmakeContacts', {
-      currentUser: currentUser,
+      currentUser: window.currentUser,
       query: query,
       contacts: pool.map(c => ({
         rowId: c.rowId,
@@ -78,17 +76,15 @@ window.startMatchmaking = async function() {
       }))
     }, true);
 
-    // ✅ 成功接收到陣列格式的配對資料
     if (res && Array.isArray(res)) {
-      // 配對成功，扣除額度 (增加本地使用次數)
       localStorage.setItem(usageKey, currentUsage + 1);
-      
+
       const resultsList = document.getElementById('results-list');
       if (res.length === 0) {
         resultsList.innerHTML = '<div class="text-center py-6 text-slate-500">目前沒有合適的人選</div>';
       } else {
         resultsList.innerHTML = res.map(match => {
-          const c = allCards.find(card => String(card.rowId) === String(match.rowId));
+          const c = window.allCards.find(card => String(card.rowId) === String(match.rowId));
           if (!c) return '';
           return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2">' +
             '<div class="flex justify-between items-center">' +
@@ -100,30 +96,25 @@ window.startMatchmaking = async function() {
           '</div>';
         }).join('');
       }
-      
-      // 顯示剩餘次數提示
+
       const remaining = limit - (currentUsage + 1);
       const limitNotice = limit === Infinity ? '無限制' : `剩餘 ${remaining} 次`;
-      
+
       const resultsContainer = document.getElementById('match-results');
-      if(!document.getElementById('match-limit-notice')) {
+      if (!document.getElementById('match-limit-notice')) {
         resultsContainer.insertAdjacentHTML('afterbegin', `<div id="match-limit-notice" class="text-[11px] text-slate-400 font-bold mb-2 text-right px-1">今日配對額度: ${limitNotice}</div>`);
       } else {
         document.getElementById('match-limit-notice').textContent = `今日配對額度: ${limitNotice}`;
       }
-      
+
       resultsContainer.classList.remove('hidden');
 
-    } 
-    // 🚨 處理包含 error 物件的狀況 (伺服器端拒絕)
-    else if (res && res.error) {
+    } else if (res && res.error) {
       if (res.error.includes('上限')) {
-        // 同步把本地鎖死，防止下次再打後端
-        localStorage.setItem(usageKey, limit); 
+        localStorage.setItem(usageKey, limit);
       }
       throw new Error(res.error);
-    } 
-    else {
+    } else {
       throw new Error('無法取得配對結果');
     }
   } catch(e) {
@@ -133,21 +124,21 @@ window.startMatchmaking = async function() {
   }
 };
 
-// 檢查資料庫狀態(管理員工具)
+// 檢查資料庫狀態
 window.checkDatabaseStatus = function() {
-  if (allCards.length === 0) return;
-  const missingCount = allCards.filter(c =>
+  if (window.allCards.length === 0) return;
+  const missingCount = window.allCards.filter(c =>
     !c['個性'] || String(c['個性']).trim() === '' || String(c['個性']) === '待分析'
   ).length;
-  if (document.getElementById('total-count')) document.getElementById('total-count').innerText = allCards.length;
+  if (document.getElementById('total-count')) document.getElementById('total-count').innerText = window.allCards.length;
   if (document.getElementById('missing-count')) document.getElementById('missing-count').innerText = missingCount;
 };
 
-// 同步舊標籤(批次補漏 / 全庫重算)
+// 同步舊標籤
 window.syncOldTags = async function(forceAll = false) {
   const targetContacts = forceAll
-    ? allCards
-    : allCards.filter(c =>
+    ? window.allCards
+    : window.allCards.filter(c =>
         !c['個性'] || String(c['個性']).trim() === '' ||
         String(c['個性']) === '待分析' || String(c['個性']) === 'undefined'
       );
