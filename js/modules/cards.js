@@ -172,13 +172,21 @@ window.applyUserPermissions = function() {
   }
 };
 
+// 🚀 核心修復：強制配對綁定邏輯
 window.loadAllData = async function() {
   try {
     const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
     window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
     
     if (typeof window.currentUserProfile !== 'undefined' && window.currentUserProfile) {
-      window.currentUserCard = window.allCards.find(c => c['LINE ID'] === window.currentUserProfile.userId);
+      const uid = String(window.currentUserProfile.userId).trim();
+      
+      // 擴大搜尋範圍：不論資料庫欄位名稱是 LINE ID、userId 還是 User ID，全部強制比對
+      window.currentUserCard = window.allCards.find(c => 
+        (c['LINE ID'] && String(c['LINE ID']).trim() === uid) ||
+        (c['userId'] && String(c['userId']).trim() === uid) ||
+        (c['User ID'] && String(c['User ID']).trim() === uid)
+      );
     }
 
     const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
@@ -188,6 +196,9 @@ window.loadAllData = async function() {
     if (typeof window.initMyECard === 'function') window.initMyECard();
     if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
     if (typeof window.renderActivities === 'function') window.renderActivities();
+    
+    // 確保設定頁面同步載入，找回遺失的 Banner 畫面
+    if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
     
   } catch (err) {
     console.error("資料載入失敗:", err);
@@ -261,12 +272,10 @@ window.openCardDetailByRowId = function(rowId) {
   if (c) window.openCardDetail(c);
 };
 
-// 嚴格權限鎖定機制與資料綁定
 window.openCardDetail = function(card) {
   if (!card) return;
   window.currentCard = card;
   
-  // 鎖定判斷：本人、系統總管/店長、或同一歸屬網的成員
   const isOwner = (card['LINE ID'] === window.currentUserProfile?.userId);
   const isAdminOrStore = (window.userRole === 'admin' || window.userRole === 'store');
   const isSameNetwork = (card['歸屬網'] === window.currentNetworkId);
@@ -281,14 +290,12 @@ window.openCardDetail = function(card) {
     tabEcard.classList.remove('hidden');
     if (btnDelete) btnDelete.classList.remove('hidden');
   } else {
-    // 權限不足，強制鎖定只能看第一頁「聯絡資料」
     tabEdit.classList.add('hidden');
     tabEcard.classList.add('hidden');
     if (btnDelete) btnDelete.classList.add('hidden');
     window.switchTab('info'); 
   }
 
-  // 1. 填寫聯絡資料 Tab
   let infoHtml = '';
   const displayFields = [
     { label: '公司名稱', icon: 'business', key: '公司名稱' },
@@ -332,7 +339,6 @@ window.openCardDetail = function(card) {
   if (!infoHtml) infoHtml = '<div class="text-center text-slate-400 py-8 text-sm">無詳細資料</div>';
   document.getElementById('detail-fields').innerHTML = infoHtml;
 
-  // 2. 如果有權限，填寫編輯 Tab 與數位名片 Tab
   if (canEdit) {
     const editableFields = ['姓名','英文名','職稱','部門','公司名稱','統一編號','手機號碼','公司電話','分機','傳真','電子郵件','公司網址','社群帳號','公司地址','服務項目','建檔人/備註'];
     editableFields.forEach(f => {
@@ -340,12 +346,10 @@ window.openCardDetail = function(card) {
       if (el) el.value = card[f] || '';
     });
 
-    // ✅ 重點：同步呼叫 ecard.js 的初始化函式，載入圖片與按鈕設定
     if (typeof window.initECardSettings === 'function') {
       window.initECardSettings(card);
     }
 
-    // 處理「編輯內容」分頁中的對齊與顏色按鈕狀態
     let cfg = {};
     try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
     const colorInput = document.getElementById('edit-desc-color');
@@ -358,7 +362,6 @@ window.openCardDetail = function(card) {
     window.currentLoadedCardId = null; 
   }
 
-  // 發送認領按鈕
   const btnClaim = document.getElementById('btn-send-claim');
   if (btnClaim) {
     if (card['LINE ID']) {
@@ -371,7 +374,6 @@ window.openCardDetail = function(card) {
   window.goPage('card-detail');
 };
 
-// 處理文字對齊按鈕的視覺切換與綁定
 window.setDescAlign = function(align) {
   window.currentDescAlign = align;
   ['start', 'center', 'end'].forEach(a => {
