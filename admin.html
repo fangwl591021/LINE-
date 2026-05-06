@@ -33,14 +33,21 @@
     
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* 修復空轉閃爍 */
+    #loading-screen.fade-out { opacity: 0; pointer-events: none; }
   </style>
 </head>
 <body class="text-slate-800 h-screen flex overflow-hidden relative">
 
   <!-- 全域載入遮罩 -->
-  <div id="loading-screen" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center transition-opacity duration-300">
-    <span class="material-symbols-outlined animate-spin text-5xl text-blue-600 mb-4">refresh</span>
-    <p id="loading-text" class="text-slate-500 font-bold tracking-widest text-sm">系統初始化與安全驗證中...</p>
+  <div id="loading-screen" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center transition-opacity duration-500">
+    <span id="loading-icon" class="material-symbols-outlined animate-spin text-5xl text-blue-600 mb-4">refresh</span>
+    <p id="loading-text" class="text-slate-500 font-bold tracking-widest text-sm text-center px-6">系統初始化與安全驗證中...</p>
+    <div id="error-actions" class="hidden mt-6 flex gap-3">
+      <button onclick="liff.logout(); window.location.reload();" class="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">重新登入</button>
+      <button onclick="window.location.href='index.html'" class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm">回首頁</button>
+    </div>
   </div>
 
   <!-- Toast 通知容器 -->
@@ -428,7 +435,7 @@
           body: JSON.stringify({ action, payload })
         });
         const data = await res.json();
-        if (!data.success) throw new Error(data.error);
+        if (!data.success) throw new Error(data.error || "未知後端錯誤");
         return data.data || data;
       } catch (err) {
         showToast(err.message, true);
@@ -439,9 +446,13 @@
     function switchTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-      document.getElementById('tab-' + tabId).classList.remove('hidden');
-      document.getElementById('nav-' + tabId).classList.add('active');
-      document.getElementById('page-title').innerText = document.getElementById('nav-' + tabId).innerText.trim();
+      const target = document.getElementById('tab-' + tabId);
+      if(target) target.classList.remove('hidden');
+      
+      const navBtn = document.getElementById('nav-' + tabId);
+      if(navBtn) navBtn.classList.add('active');
+      
+      document.getElementById('page-title').innerText = navBtn ? navBtn.innerText.trim() : "管理後台";
       
       if (tabId === 'users' && allUsersData.length === 0) loadUsers();
       if (tabId === 'cards' && allCardsData.length === 0) loadCards();
@@ -459,12 +470,16 @@
         tbody.innerHTML = res.map(u => `
           <tr>
             <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
-            <td class="text-xs text-slate-400">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
+            <td class="text-xs text-slate-400 font-mono">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
             <td>${escapeHTML(u.phone || '-')}</td>
             <td class="text-sm">${escapeHTML(u.networkId || 'admin')}</td>
-            <td>${u.role}</td>
+            <td>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
+                ${u.role.toUpperCase()}
+              </span>
+            </td>
             <td class="text-right">
-              <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border rounded px-2 py-1 bg-white">
+              <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="user" ${u.role==='user'?'selected':''}>一般</option>
                 <option value="store" ${u.role==='store'?'selected':''}>店長</option>
                 <option value="admin" ${u.role==='admin'?'selected':''}>總管</option>
@@ -495,12 +510,11 @@
           <td class="text-sm text-blue-600 font-bold">${escapeHTML(c['歸屬網'] || 'admin')}</td>
           <td class="text-xs text-slate-500">${escapeHTML(c['標籤'] || '')}</td>
           <td class="text-center">
-             <button onclick="openEditCardModal('${c.rowId}')" class="text-slate-400 hover:text-blue-600 p-1"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
+             <button onclick="openEditCardModal('${c.rowId}')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
           </td>
         </tr>`).join('');
     }
 
-    // ✅ 修正 loadActivities 缺失問題
     async function loadActivities() {
       const tbody = document.getElementById('acts-table-body');
       tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入活動中...</td></tr>';
@@ -521,9 +535,9 @@
         <tr>
           <td class="font-bold text-slate-700">${escapeHTML(a['活動名稱'])}</td>
           <td class="text-sm text-slate-500">${escapeHTML(a['建立者ID'] || 'admin')}</td>
-          <td class="text-xs text-slate-500">${escapeHTML(a['開始時間'])}</td>
+          <td class="text-[12px] text-slate-500 font-mono">${escapeHTML(a['開始時間'])}</td>
           <td class="text-sm">${a['金額'] > 0 ? 'NT$ ' + a['金額'] : '<span class="text-green-600 font-bold">免費</span>'}</td>
-          <td class="text-sm"><span class="font-bold">${a['報名人數'] || 0}</span> 人報名</td>
+          <td class="text-sm"><span class="font-bold text-blue-600">${a['報名人數'] || 0}</span> 人報名</td>
           <td>
             <span class="px-2 py-1 rounded-full text-[10px] font-bold ${a['狀態'] === '上架' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}">
               ${a['狀態'] || '下架'}
@@ -535,8 +549,8 @@
     async function loadFinanceStats() {
       const stats = await fetchAPI('getAdminStats');
       if (stats) {
-        document.getElementById('stat-users').innerText = allUsersData.length;
-        document.getElementById('stat-cards').innerText = allCardsData.length;
+        document.getElementById('stat-users').innerText = allUsersData.length || "-";
+        document.getElementById('stat-cards').innerText = allCardsData.length || "-";
         document.getElementById('stat-acts').innerText = stats.activeActivitiesCount || 0;
         document.getElementById('stat-regs').innerText = stats.totalRegistrants || 0;
       }
@@ -619,7 +633,9 @@
     async function saveCardEdit() {
       const rowId = document.getElementById('edit-c-rowid').value;
       const btn = document.getElementById('btn-save-card');
+      const originalText = btn.innerHTML;
       btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
 
       const layoutVal = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
       const cfg = {
@@ -651,6 +667,7 @@
 
       const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData });
       btn.disabled = false;
+      btn.innerHTML = originalText;
       if (res) {
         showToast('儲存成功');
         loadCards();
@@ -661,10 +678,10 @@
     function renderAdminCardButtons() {
       const container = document.getElementById('admin-edit-buttons-list');
       container.innerHTML = currentEditButtons.map((b, i) => `
-        <div class="flex gap-2 items-center bg-white p-2 border rounded-xl">
-          <input type="color" value="${b.c}" class="w-8 h-8 rounded shrink-0" onchange="currentEditButtons[${i}].c=this.value; updateAdminCardPreview()">
-          <input type="text" value="${escapeHTML(b.l)}" class="flex-1 text-sm font-bold border-none outline-none" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
-          <button onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 p-1"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+        <div class="flex gap-2 items-center bg-white p-2 border rounded-xl shadow-sm">
+          <input type="color" value="${b.c}" class="w-8 h-8 rounded shrink-0 border-none cursor-pointer" onchange="currentEditButtons[${i}].c=this.value; updateAdminCardPreview()">
+          <input type="text" value="${escapeHTML(b.l)}" placeholder="標題" class="flex-1 text-sm font-bold border-none outline-none focus:ring-0" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
+          <button onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 hover:text-red-600 p-1 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>`).join('');
     }
 
@@ -676,10 +693,12 @@
     function switchModalTab(type) {
       document.getElementById('modal-body-crm').classList.toggle('hidden', type !== 'crm');
       document.getElementById('modal-body-visual').classList.toggle('hidden', type !== 'visual');
-      document.getElementById('tab-btn-crm').classList.toggle('border-blue-600', type === 'crm');
-      document.getElementById('tab-btn-crm').classList.toggle('text-blue-600', type === 'crm');
-      document.getElementById('tab-btn-visual').classList.toggle('border-blue-600', type === 'visual');
-      document.getElementById('tab-btn-visual').classList.toggle('text-blue-600', type === 'visual');
+      const tabs = { crm: 'tab-btn-crm', visual: 'tab-btn-visual' };
+      Object.keys(tabs).forEach(k => {
+        const el = document.getElementById(tabs[k]);
+        if(k === type) el.className = "pb-3 border-b-2 border-blue-600 font-bold text-blue-600 outline-none";
+        else el.className = "pb-3 border-b-2 border-transparent font-bold text-slate-500 hover:text-slate-700 outline-none transition-colors";
+      });
     }
 
     function closeEditCardModal() { document.getElementById('modal-card-edit').classList.add('hidden'); }
@@ -727,18 +746,43 @@
     }
 
     async function initAdmin() {
-      await liff.init({ liffId: LIFF_ID });
-      if (!liff.isLoggedIn()) { liff.login(); return; }
-      adminProfile = await liff.getProfile();
-      document.getElementById('admin-name').innerText = adminProfile.displayName;
-      const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
-      if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
-        document.getElementById('loading-screen').remove();
-        switchTab('users');
-      } else {
-        document.getElementById('loading-text').innerText = "權限不足";
+      const loadingText = document.getElementById('loading-text');
+      const loadingIcon = document.getElementById('loading-icon');
+      const errorActions = document.getElementById('error-actions');
+
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+
+        adminProfile = await liff.getProfile();
+        document.getElementById('admin-name').innerText = adminProfile.displayName;
+        document.getElementById('admin-avatar').src = adminProfile.pictureUrl;
+
+        loadingText.innerText = "驗證管理權限中...";
+        const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
+
+        if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
+          document.getElementById('loading-screen').classList.add('fade-out');
+          setTimeout(() => document.getElementById('loading-screen').remove(), 500);
+          switchTab('users');
+        } else {
+          loadingIcon.innerText = "lock_person";
+          loadingIcon.classList.remove('animate-spin', 'text-blue-600');
+          loadingIcon.classList.add('text-red-500');
+          loadingText.innerHTML = "權限不足<br><span class='text-[12px] font-normal text-slate-400 mt-2 block'>您目前的身份為 [" + (check?.info?.role || "GUEST") + "]，無法進入後台。</span>";
+          errorActions.classList.remove('hidden');
+        }
+      } catch (err) {
+        loadingIcon.innerText = "running_with_errors";
+        loadingIcon.classList.remove('animate-spin');
+        loadingText.innerText = "初始化失敗: " + err.message;
+        errorActions.classList.remove('hidden');
       }
     }
+
     document.addEventListener("DOMContentLoaded", initAdmin);
   </script>
 </body>
