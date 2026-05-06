@@ -285,7 +285,7 @@ window.submitActivityForm = async function(mode) {
       p.names = namesStr.split(String.fromCharCode(10)).filter(n=>n.trim());
     }
   } else if (mode === 'series') {
-    const cards = document.querySelectorAll('[id^="batch-item-"]');
+    const cards = document.querySelectorAll('[id^="batch-"]');
     p.batches = Array.from(cards).map(card => ({
       name: card.querySelector('.batch-name-input').value.trim(),
       startTime: formatDT(card.querySelector('.batch-start-input').value),
