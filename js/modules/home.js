@@ -102,15 +102,53 @@ function getPublicActivityStatus_(activity) {
   return String(activity['狀態'] || '上架').trim();
 }
 
+window.homeActivityFilter = window.homeActivityFilter || '全部';
+
+window.setHomeActivityFilter = function(type) {
+  window.homeActivityFilter = type || '全部';
+  window.renderHomeActivities();
+};
+
+function renderHomeActivityFilters_(types) {
+  const list = document.getElementById('user-activities-list');
+  if (!list || !list.parentElement) return;
+
+  let filterBar = document.getElementById('home-activity-filters');
+  if (!filterBar) {
+    filterBar = document.createElement('div');
+    filterBar.id = 'home-activity-filters';
+    list.parentElement.insertBefore(filterBar, list);
+  }
+
+  const categories = ['全部'].concat(types.filter(Boolean));
+  if (categories.indexOf(window.homeActivityFilter) === -1) window.homeActivityFilter = '全部';
+
+  filterBar.className = 'flex gap-2 overflow-x-auto hide-scrollbar pb-2 mb-3';
+  filterBar.innerHTML = categories.map(type => {
+    const active = type === window.homeActivityFilter;
+    const safeType = window.escapeHTML(type);
+    const jsType = window.escapeJS(type);
+    return '<button type="button" onclick="window.setHomeActivityFilter(&quot;' + jsType + '&quot;)" class="shrink-0 px-4 py-2 rounded-full text-[13px] font-black transition-all active:scale-95 ' +
+      (active ? 'bg-[#ff5a1f] text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-100') +
+      '">' + safeType + '</button>';
+  }).join('');
+}
+
 window.renderHomeActivities = function() {
   const list = document.getElementById('user-activities-list');
   if (!list) return;
 
   const activities = Array.isArray(window.allActivities) ? window.allActivities : [];
-  const activeActs = activities
+  const allActiveActs = activities
     .filter(a => getPublicActivityStatus_(a) === '上架')
     .slice()
     .reverse();
+  const types = Array.from(new Set(allActiveActs.map(a => String(a['活動類型'] || '活動').trim()).filter(Boolean)));
+  renderHomeActivityFilters_(types);
+
+  const activeActs = window.homeActivityFilter === '全部'
+    ? allActiveActs
+    : allActiveActs.filter(a => String(a['活動類型'] || '活動').trim() === window.homeActivityFilter);
 
   list.className = 'grid grid-cols-2 gap-3';
 
@@ -130,12 +168,12 @@ window.renderHomeActivities = function() {
 
     return '' +
       '<div class="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 flex flex-col min-h-[250px]">' +
-        '<div class="w-full aspect-[4/3] bg-slate-100 overflow-hidden">' +
+        '<div class="w-full aspect-[4/3] bg-slate-100 overflow-hidden relative">' +
           '<img src="' + img + '" class="w-full h-full object-cover" loading="lazy">' +
+          '<span class="absolute top-2 left-2 bg-[#ff5a1f] text-white text-[11px] px-2.5 py-1 rounded-lg font-black shadow-sm">' + type + '</span>' +
         '</div>' +
         '<div class="p-3 flex flex-col flex-1">' +
-          '<div class="flex items-center justify-between gap-1 mb-2">' +
-            '<span class="bg-primary-light text-primary text-[10px] px-2 py-0.5 rounded-full font-bold truncate">' + type + '</span>' +
+          '<div class="flex justify-end mb-2">' +
             '<span class="text-slate-400 text-[10px] font-mono shrink-0">' + time + '</span>' +
           '</div>' +
           '<h4 class="font-black text-slate-800 text-[14px] leading-snug line-clamp-2 mb-1">' + title + '</h4>' +
