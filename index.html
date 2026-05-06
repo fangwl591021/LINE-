@@ -5,10 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>LINE 商業名片智能系統</title>
 
-  <!-- 外部資源 -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 
-  <!-- Tailwind 主題設定(必須在 CDN 之後立即執行,不能放外部檔) -->
   <script>
     tailwind.config = {
       darkMode: "class",
@@ -32,13 +30,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
-  <!-- 自訂樣式 -->
   <link rel="stylesheet" href="css/styles.css">
-
-  <!-- 全域常數與狀態變數 -->
   <script src="js/config.js"></script>
 
-  <!-- Tailwind 任意值樣式(必須留在 HTML,因為 cdn.tailwindcss.com 才能解析 @apply) -->
   <style type="text/tailwindcss">
     .custom-input { @apply w-full py-4 px-5 bg-slate-100 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-medium text-text-main; }
     .textarea-block { @apply w-full p-4 bg-slate-100 border-none rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all text-[15px] text-slate-800 resize-none leading-relaxed placeholder-slate-400; }
@@ -52,18 +46,15 @@
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
 
-<!-- ==================== 登入與 Loading 遮罩 ==================== -->
 <div id="loading-screen" class="fixed inset-0 bg-white z-[1000] flex flex-col items-center justify-center transition-opacity duration-300">
     <span class="material-symbols-outlined animate-spin text-5xl text-[#06C755] mb-4">autorenew</span>
     <h2 id="loading-text" class="text-xl font-black text-slate-800">系統驗證中...</h2>
 </div>
 
-<!-- Toast 容器 -->
 <div id="toast-container" class="fixed top-16 left-0 right-0 z-[10000] flex flex-col items-center gap-2 pointer-events-none"></div>
 
 <div id="app" class="w-full max-w-md bg-background h-screen relative flex flex-col shadow-2xl overflow-hidden">
 
-  <!-- 頂部導航列 -->
   <nav class="fixed top-0 w-full max-w-md z-40 bg-white/90 backdrop-blur-xl px-5 py-4 flex justify-between items-center left-1/2 -translate-x-1/2 border-b border-slate-100">
     <div class="flex items-center gap-1.5">
       <span id="header-site-name" class="text-[20px] font-black text-slate-800 tracking-tight">LINE商機引擎</span>
@@ -80,7 +71,7 @@
 
   <main id="main" class="flex-1 overflow-y-auto pb-32 pt-20 px-4 space-y-6">
 
-    <!-- ==================== 註冊頁面 ==================== -->
+    <!-- ==================== 一般註冊頁面 ==================== -->
     <div id="page-register" class="hidden h-full flex-col items-center justify-center animate-in fade-in pb-10">
       <div class="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 w-full space-y-5">
         <div class="w-16 h-16 bg-primary-light text-primary rounded-full flex items-center justify-center mx-auto mb-2">
@@ -100,19 +91,43 @@
       </div>
     </div>
 
+    <!-- ==================== 🏆 名片認領與註冊整合頁面 ==================== -->
+    <div id="page-claim-register" class="hidden h-full flex-col items-center justify-center animate-in zoom-in-95 pb-10 mt-4">
+      <div class="bg-white rounded-3xl p-8 shadow-xl shadow-blue-500/10 border border-blue-100 w-full space-y-5 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-400 to-[#06C755]"></div>
+        <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-2 border border-blue-100">
+          <span class="material-symbols-outlined text-3xl icon-filled">card_membership</span>
+        </div>
+        <h2 class="text-xl font-black text-center text-slate-800">認領專屬名片</h2>
+        <p class="text-[13px] text-center text-slate-500 mb-6 font-medium leading-relaxed">您的推薦人已經為您建好名片檔案了！<br>請確認下方資料無誤，即可完成綁定與註冊。</p>
+
+        <!-- 隱藏的參照與來源 -->
+        <input type="hidden" id="claim-row-id">
+        <input type="hidden" id="claim-ref-id">
+        <input type="hidden" id="claim-net-id">
+
+        <div><label class="text-xs text-slate-500 font-bold ml-1">您的姓名 <span class="text-red-500">*</span></label><input id="claim-name" class="custom-input mt-1 !bg-blue-50/30 !border !border-blue-100" type="text"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼 <span class="text-red-500">*</span></label><input id="claim-phone" class="custom-input mt-1 font-mono !bg-blue-50/30 !border !border-blue-100" type="tel"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">公司名稱</label><input id="claim-company" class="custom-input mt-1" type="text"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">職稱</label><input id="claim-title" class="custom-input mt-1" type="text"></div>
+
+        <button id="btn-claim-register" onclick="window.submitClaimRegistration()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-[16px] mt-6 shadow-lg shadow-blue-500/30 active:scale-95 transition-transform flex justify-center items-center gap-2">
+          確認認領並啟用名片 <span class="material-symbols-outlined">how_to_reg</span>
+        </button>
+      </div>
+    </div>
+
     <!-- ==================== 系統參數頁面 ==================== -->
     <div id="page-admin-settings" class="hidden animate-in fade-in pb-10 mx-1 pt-2">
       <div class="flex items-center gap-3 mb-4 px-1">
         <h2 class="text-2xl font-black text-slate-800 tracking-tight">設定與參數</h2>
       </div>
 
-      <!-- 邀約連結按鈕(放在最上方) -->
       <button onclick="window.showInviteLink()" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-4 rounded-2xl font-bold mb-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
         <span class="material-symbols-outlined text-[22px]">share</span>
         產生我的專屬邀約連結
       </button>
 
-      <!-- Box 1: 個人資料 -->
       <details class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">person</span> 個人資料設定</div>
@@ -131,7 +146,6 @@
         </div>
       </details>
 
-      <!-- Box 2: 社群網址 -->
       <details class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-[#06C755] icon-filled">share</span> 個人社群連結</div>
@@ -148,7 +162,6 @@
         </div>
       </details>
 
-      <!-- Box 3: TG 參數 -->
       <details class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-400 icon-filled">send</span> Telegram 接收設定</div>
@@ -171,15 +184,12 @@
         </div>
       </details>
 
-      <!-- Box 4: 我的專屬名片 -->
       <details id="details-my-ecard" class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-6 group">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-[#06C755] icon-filled">badge</span> 我的專屬名片</div>
           <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
         </summary>
         <div class="p-5 pt-0 border-t border-slate-50 space-y-4">
-
-          <!-- Empty State -->
           <div id="my-ecard-empty-state" class="hidden space-y-4">
             <p class="text-[13px] text-slate-500 font-medium mt-2 leading-relaxed">您尚未建立專屬名片。<br>請直接拍照掃描實體名片,讓 AI 自動建檔綁定;或一鍵使用 LINE 資料產生。</p>
             <div class="flex gap-3">
@@ -205,7 +215,6 @@
             </button>
           </div>
 
-          <!-- Edit State -->
           <div id="my-ecard-edit-state" class="hidden space-y-4">
             <div class="flex justify-between items-center mb-2 mt-2">
               <p class="text-xs text-slate-500 font-bold">設定後即可在首頁一鍵發送數位名片</p>
@@ -215,7 +224,6 @@
               <button onclick="window.openCardDetail(currentUserCard)" class="text-blue-500 text-[12px] underline font-bold px-2 py-1 bg-blue-50 rounded-lg active:scale-95 transition-transform w-full text-center">編輯名片詳細文字資料</button>
             </div>
 
-            <!-- 版型與圖片設定移至上方 -->
             <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4">
               <div>
                 <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">view_quilt</span> 名片版型</p>
@@ -245,10 +253,8 @@
               </div>
             </div>
 
-            <!-- 預覽區塊 -->
             <div id="my-ecard-preview-area" class="rounded-2xl overflow-hidden shadow-lg border border-slate-100 mb-4 scale-[0.85] origin-top"></div>
 
-            <!-- 按鈕設定保留在下方 -->
             <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4 -mt-6">
               <div>
                 <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-3"><span class="material-symbols-outlined text-[18px]">smart_button</span> 底部按鈕設定</p>
@@ -265,7 +271,6 @@
         </div>
       </details>
 
-      <!-- Box 5: 首頁 Banner 管理 (Admin/Store Only) -->
       <details id="details-store-banner" class="hidden group bg-white rounded-2xl border border-slate-100 overflow-hidden transition-all duration-300 shadow-sm mb-4">
         <summary class="flex items-center justify-between p-5 cursor-pointer list-none">
           <div class="flex items-center gap-3">
@@ -333,7 +338,6 @@
         </div>
       </details>
 
-      <!-- Box 6: 商家權限管理 (Admin Only) -->
       <details id="details-store-management" class="hidden bg-white rounded-3xl shadow-sm border border-slate-100 mb-6 group" ontoggle="if(this.open && allSystemUsers.length === 0) window.loadAllUsers()">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-purple-500 icon-filled">storefront</span> 商家權限管理 <span class="bg-[#1e293b] text-white text-[9px] px-1.5 py-0.5 rounded-full tracking-wider font-bold ml-1">ADMIN</span></div>
@@ -424,12 +428,13 @@
       <div id="card-list" class="space-y-3 mt-4 mx-1"></div>
     </div>
 
-    <!-- ==================== 名片詳細頁 ==================== -->
+    <!-- ==================== 名片詳細頁 (加上嚴格編輯權限保護) ==================== -->
     <div id="page-card-detail" class="hidden animate-in slide-in-from-right-8 mx-1">
       <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
 
         <div class="flex border-b border-slate-100">
           <button class="flex-1 py-4 font-bold text-sm text-blue-600 border-b-2 border-blue-600 transition-colors" id="tab-info" onclick="window.switchTab('info')">📋 聯絡資料</button>
+          <!-- ✅ 被鎖定的編輯頁籤 (權限不足時自動隱藏) -->
           <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-edit" onclick="window.switchTab('edit')">✏️ 編輯內容</button>
           <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-ecard" onclick="window.switchTab('ecard')">🪪 數位名片</button>
         </div>
@@ -442,10 +447,10 @@
             <button id="btn-share-line-info" onclick="window.shareECardToLine('btn-share-line-info')" class="w-full bg-[#06C755] text-white py-3 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">send</span> 傳送名片
             </button>
-            <button onclick="window.sendClaimInvitation()" class="w-full bg-blue-500 text-white py-3 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
+            <button id="btn-send-claim" onclick="window.sendClaimInvitation()" class="w-full bg-blue-500 text-white py-3 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">card_membership</span> 發送認領
             </button>
-            <button onclick="window.deleteCard()" class="col-span-2 w-full bg-red-50 text-red-600 py-3 rounded-xl font-bold border border-red-100 active:scale-95 transition-transform flex justify-center items-center gap-1 mt-2">
+            <button id="btn-delete-card" onclick="window.deleteCard()" class="col-span-2 w-full bg-red-50 text-red-600 py-3 rounded-xl font-bold border border-red-100 active:scale-95 transition-transform flex justify-center items-center gap-1 mt-2">
               <span class="material-symbols-outlined text-[18px]">delete</span> 刪除此名片
             </button>
           </div>
@@ -493,7 +498,6 @@
         <!-- Tab: 數位名片 -->
         <div id="tab-content-ecard" class="hidden p-5 space-y-5 bg-slate-50/30">
           
-          <!-- 版型與圖片設定移至上方 -->
           <div id="ecard-v1-settings-top" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
             <div>
               <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">view_quilt</span> 名片版型</p>
@@ -523,10 +527,8 @@
             </div>
           </div>
 
-          <!-- 預覽區塊 -->
           <div id="ecard-preview-area" class="rounded-2xl overflow-hidden shadow-lg border border-slate-100"></div>
 
-          <!-- 按鈕設定保留在下方 -->
           <div id="ecard-v1-settings-bottom" class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
             <div>
               <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-3"><span class="material-symbols-outlined text-[18px]">smart_button</span> 底部按鈕設定</p>
@@ -635,7 +637,6 @@
         <button id="tab-btn-series" onclick="window.switchActiveTab('series')" class="flex-1 py-2.5 rounded-xl text-[14px] font-bold text-slate-500 transition-all hover:text-slate-700 bg-transparent">系列梯次</button>
       </div>
 
-      <!-- Tab 1: 快速匯入 -->
       <div id="tab-content-quick" class="space-y-5 bg-white p-5 rounded-[2rem] shadow-sm mx-1">
         <div class="flex flex-col">
           <label class="block text-[13px] text-slate-500 mb-1.5 font-bold tracking-wide pl-1">活動名稱</label>
@@ -709,7 +710,6 @@
         </div>
       </div>
 
-      <!-- Tab 2: 完整發佈 -->
       <div id="tab-content-full" class="hidden space-y-5 bg-white p-5 rounded-[2rem] shadow-sm mx-1">
 
         <div class="flex flex-col">
@@ -784,7 +784,6 @@
         </div>
       </div>
 
-      <!-- Tab 3: 系列梯次 -->
       <div id="tab-content-series" class="hidden space-y-5 bg-white p-5 rounded-[2rem] shadow-sm mx-1">
 
         <div class="flex flex-col">
@@ -885,7 +884,6 @@
         </button>
       </div>
 
-      <!-- 搜尋框 -->
       <div class="mb-3">
         <div class="relative">
           <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
@@ -893,14 +891,12 @@
         </div>
       </div>
 
-      <!-- Store 篩選器(僅 admin 可見) -->
       <div id="crm-store-filter-wrapper" class="hidden mb-3">
         <select id="crm-store-filter" onchange="window.crmFilterByStore()" class="w-full bg-white border border-slate-100 rounded-xl px-4 py-3 text-[14px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer" style="-webkit-appearance:none;appearance:none;">
           <option value="">所有商家</option>
         </select>
       </div>
 
-      <!-- 列表 -->
       <div id="crm-list" class="space-y-0"></div>
     </div>
 
@@ -917,7 +913,6 @@
 
   </main>
 
-  <!-- 一般底部導航列 -->
   <nav id="bottom-nav" class="fixed bottom-0 w-full max-w-md bg-white/95 backdrop-blur-xl flex justify-evenly items-center px-1 py-2 z-40 pb-safe shadow-[0_-10px_20px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl border-t border-slate-100 hidden transition-all">
     <button onclick="window.goPage('home')"        id="nav-btn-home"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">home</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">首頁</span></button>
     <button onclick="window.goPage('card')"        id="nav-btn-card"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">recent_patient</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">名片庫</span></button>
@@ -925,7 +920,6 @@
     <button onclick="window.goPage('admin-settings')" id="nav-btn-admin-settings" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">person</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">設定</span></button>
   </nav>
 
-  <!-- 管理員底部導航列 -->
   <nav id="bottom-nav-admin" class="fixed bottom-0 w-full max-w-md bg-white border-t border-slate-100 flex justify-evenly items-center px-2 py-2 z-[80] pb-safe shadow-[0_-4px_15px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl hidden">
     <button onclick="window.goPage('admin-activities')" id="admin-nav-btn-admin-activities" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">fact_check</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">核銷</span></button>
     <button onclick="window.goPage('active')"           id="admin-nav-btn-active" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">add_circle</span></div><span class="text-[10px] mt-1 font-bold whitespace-nowrap">建立</span></button>
@@ -937,7 +931,6 @@
 
 </div>
 
-<!-- 專屬 QR Code 彈出視窗 -->
 <div id="qr-modal" class="hidden fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-center items-center z-[2000] p-4">
   <div class="bg-white rounded-3xl p-6 flex flex-col items-center w-full max-w-[300px] shadow-2xl animate-in zoom-in-95">
     <div class="w-full flex justify-between items-center mb-4">
@@ -955,7 +948,6 @@
   </div>
 </div>
 
-<!-- 邀約連結 Modal -->
 <div id="invite-link-modal" class="hidden fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-center items-center z-[2000] p-4">
   <div class="bg-white rounded-3xl p-6 flex flex-col items-center w-full max-w-[340px] shadow-2xl animate-in zoom-in-95">
     <div class="w-full flex justify-between items-center mb-4">
@@ -967,19 +959,16 @@
 
     <p class="text-[12px] text-slate-500 font-medium text-center mb-3 leading-relaxed">分享此連結邀請朋友加入<br>對方註冊後將自動歸到您的下線</p>
 
-    <!-- QR Code -->
     <div class="bg-slate-50 p-2 rounded-2xl border border-slate-100 mb-3 w-full aspect-square max-w-[220px] flex items-center justify-center">
       <img id="invite-qr-img" src="" class="w-full h-full object-contain" alt="QR Code">
     </div>
 
     <p id="invite-tracking-info" class="text-[10px] text-slate-400 font-mono mb-3"></p>
 
-    <!-- 連結 -->
     <div class="w-full mb-3">
       <input id="invite-link-input" type="text" readonly class="w-full bg-slate-50 border-none rounded-lg p-2.5 text-[11px] font-mono text-slate-600 outline-none">
     </div>
 
-    <!-- 按鈕 -->
     <div class="flex gap-2 w-full">
       <button onclick="window.copyInviteLink()" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1">
         <span class="material-symbols-outlined text-[16px]">content_copy</span> 複製
@@ -991,7 +980,6 @@
   </div>
 </div>
 
-<!-- 唯讀名片彈出視窗 -->
 <div id="readonly-card-modal" class="hidden fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-end animate-in fade-in duration-300 w-full max-w-md mx-auto left-0 right-0 z-[1050]">
   <div class="bg-white rounded-t-3xl overflow-hidden flex flex-col max-h-[85vh] shadow-2xl animate-in slide-in-from-bottom-8">
     <div class="px-5 py-4 flex justify-between items-center border-b border-slate-100 shrink-0 bg-white">
@@ -999,7 +987,6 @@
       <button onclick="window.closeReadOnlyCard()" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform"><span class="material-symbols-outlined">close</span></button>
     </div>
 
-    <!-- 將分享按鈕移至最上方，並改為藍色 -->
     <div class="bg-white border-b border-slate-100 p-4 flex justify-center shrink-0 z-10 shadow-sm">
       <button id="btn-share-ro" onclick="window.shareReadOnlyCardToLine(this)" class="w-[90%] py-3.5 bg-blue-600 text-white rounded-2xl font-bold text-[16px] shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2">
         🚀 轉發名片至 LINE
@@ -1012,7 +999,6 @@
   </div>
 </div>
 
-<!-- 裁切彈窗 (Cropper Modal) -->
 <div id="cropper-modal" class="hidden fixed inset-0 bg-black/90 z-[2000] flex flex-col w-full max-w-md mx-auto left-0 right-0">
   <div class="flex-1 w-full h-full overflow-hidden flex items-center justify-center p-4">
     <img id="cropper-image" class="max-w-full max-h-full">
@@ -1023,7 +1009,6 @@
   </div>
 </div>
 
-<!-- 建立活動專用裁切彈窗 -->
 <div id="section-image-cropper" class="hidden fixed inset-0 bg-slate-900 flex flex-col animate-in fade-in duration-200 w-full max-w-md mx-auto z-[2000]">
   <div class="flex justify-between items-center p-4 bg-slate-900 text-white shrink-0 z-10 shadow-sm border-b border-slate-800">
     <button onclick="window.cancelActiveCrop()" class="px-3 py-2 font-bold text-slate-400 active:scale-90 transition-transform text-[15px]">取消</button>
@@ -1035,14 +1020,8 @@
   </div>
 </div>
 
-<!-- ==================== JavaScript 模組載入 ==================== -->
-<!-- 載入順序很重要:核心工具 → 模組 → 啟動器 -->
-
-<!-- 1. 共用工具(被所有模組依賴) -->
 <script src="js/core.js"></script>
 <script src="js/navigation.js"></script>
-
-<!-- 2. 功能模組(可以無序,因為都是 window.* 函式註冊) -->
 <script src="js/modules/cropper.js"></script>
 <script src="js/modules/cards.js"></script>
 <script src="js/modules/ecard.js"></script>
@@ -1053,8 +1032,6 @@
 <script src="js/modules/home.js"></script>
 <script src="js/modules/settings.js"></script>
 <script src="js/modules/crm.js"></script>
-
-<!-- 3. 最後載入 auth.js,因為它包含 init() + DOMContentLoaded 啟動器 -->
 <script src="js/auth.js"></script>
 
 </body>
