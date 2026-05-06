@@ -103,7 +103,7 @@
       
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
-          <img id="admin-avatar" src="https://via.placeholder.com/150" class="w-8 h-8 rounded-full border border-slate-200 object-cover">
+          <img id="admin-avatar" src="https://ui-avatars.com/api/?name=Admin&background=random" class="w-8 h-8 rounded-full border border-slate-200 object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'">
           <span id="admin-name" class="text-sm font-bold text-slate-600">管理員</span>
         </div>
         <button onclick="liff.logout(); window.location.reload();" class="text-sm text-red-500 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition-colors">登出</button>
@@ -442,9 +442,11 @@
       document.getElementById('tab-' + tabId).classList.remove('hidden');
       document.getElementById('nav-' + tabId).classList.add('active');
       document.getElementById('page-title').innerText = document.getElementById('nav-' + tabId).innerText.trim();
+      
       if (tabId === 'users' && allUsersData.length === 0) loadUsers();
       if (tabId === 'cards' && allCardsData.length === 0) loadCards();
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
+      if (tabId === 'finance') loadFinanceStats();
     }
 
     async function loadUsers() {
@@ -498,14 +500,53 @@
         </tr>`).join('');
     }
 
+    // ✅ 修正 loadActivities 缺失問題
+    async function loadActivities() {
+      const tbody = document.getElementById('acts-table-body');
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入活動中...</td></tr>';
+      const res = await fetchAPI('getPublicActivities');
+      if (res && Array.isArray(res)) {
+        allActivitiesData = res;
+        document.getElementById('stat-acts').innerText = res.length;
+        renderActivities();
+      }
+    }
+
+    function renderActivities() {
+      const tbody = document.getElementById('acts-table-body');
+      const filter = document.getElementById('act-tenant-filter').value;
+      const filtered = filter === 'all' ? allActivitiesData : allActivitiesData.filter(a => a['建立者ID'] === filter);
+      
+      tbody.innerHTML = filtered.map(a => `
+        <tr>
+          <td class="font-bold text-slate-700">${escapeHTML(a['活動名稱'])}</td>
+          <td class="text-sm text-slate-500">${escapeHTML(a['建立者ID'] || 'admin')}</td>
+          <td class="text-xs text-slate-500">${escapeHTML(a['開始時間'])}</td>
+          <td class="text-sm">${a['金額'] > 0 ? 'NT$ ' + a['金額'] : '<span class="text-green-600 font-bold">免費</span>'}</td>
+          <td class="text-sm"><span class="font-bold">${a['報名人數'] || 0}</span> 人報名</td>
+          <td>
+            <span class="px-2 py-1 rounded-full text-[10px] font-bold ${a['狀態'] === '上架' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}">
+              ${a['狀態'] || '下架'}
+            </span>
+          </td>
+        </tr>`).join('');
+    }
+
+    async function loadFinanceStats() {
+      const stats = await fetchAPI('getAdminStats');
+      if (stats) {
+        document.getElementById('stat-users').innerText = allUsersData.length;
+        document.getElementById('stat-cards').innerText = allCardsData.length;
+        document.getElementById('stat-acts').innerText = stats.activeActivitiesCount || 0;
+        document.getElementById('stat-regs').innerText = stats.totalRegistrants || 0;
+      }
+    }
+
     function openEditCardModal(rowId) {
       window.currentAdminCropRatio = null;
       const card = allCardsData.find(c => String(c.rowId) === String(rowId));
       if (!card) return;
 
-      console.log("Loading Card Data:", card);
-
-      // CRM 基本資料
       document.getElementById('edit-c-rowid').value = card.rowId;
       document.getElementById('edit-c-name').value = card['姓名'] || '';
       document.getElementById('edit-c-company').value = card['公司名稱'] || '';
@@ -515,9 +556,8 @@
       document.getElementById('edit-c-tags').value = card['標籤'] || '';
       document.getElementById('edit-c-notes').value = card['建檔人/備註'] || '';
 
-      // 數位名片設定 (優先讀取 JSON，若無則讀取獨立欄位作為備援)
       let cfg = {};
-      try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){ console.error("JSON Parse Error", e); }
+      try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
       
       currentAdminEcardImgs = {
         landscape: cfg.imgUrl || card['名片圖檔'] || '',
@@ -531,36 +571,23 @@
         square: cfg.imgRatioSquare || '1:1'
       };
 
-      // 1. 版型 (優先取 cfg，其次預設 landscape)
-      let layoutVal = cfg.layoutStyle || cfg.layout || 'landscape';
+      let layoutVal = cfg.layoutStyle || 'landscape';
       let layoutRadio = document.querySelector(`input[name="edit-v-layout"][value="${layoutVal}"]`);
       if (layoutRadio) layoutRadio.checked = true;
 
-      // 2. 封面圖 (優先取 cfg，其次取資料庫獨立欄位)
       const imgInput = document.getElementById('edit-v-img');
       imgInput.value = currentAdminEcardImgs[layoutVal];
-      imgInput.oninput = function() {
-         const l = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
-         currentAdminEcardImgs[l] = this.value;
-         updateAdminCardPreview();
-      };
       
-      // 3. 描述內容 (優先取 cfg，其次取資料庫獨立欄位)
       document.getElementById('edit-v-desc').value = cfg.desc || card['服務項目'] || '';
-      
-      // 4. 樣式設定
       document.getElementById('edit-v-align').value = cfg.descAlign || 'center';
       document.getElementById('edit-v-color').value = cfg.descColor || '#666666';
       
-      // 5. 按鈕設定
       currentEditButtons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
       renderAdminCardButtons();
 
       switchModalTab('crm');
       document.getElementById('modal-card-edit').classList.remove('hidden');
       document.getElementById('modal-card-edit').classList.add('flex');
-      
-      // 強制觸發一次預覽刷新
       updateAdminCardPreview();
     }
 
@@ -570,11 +597,6 @@
       const layoutStyle = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
       const imgUrl = currentAdminEcardImgs[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
       
-      const imgInput = document.getElementById('edit-v-img');
-      if (imgInput && imgInput.value !== currentAdminEcardImgs[layoutStyle]) {
-         imgInput.value = currentAdminEcardImgs[layoutStyle] || '';
-      }
-      
       const desc = (document.getElementById('edit-v-desc').value || '').replace(/\n/g, '<br>');
       const color = document.getElementById('edit-v-color').value || '#666666';
       const align = document.getElementById('edit-v-align').value || 'center';
@@ -582,7 +604,6 @@
       let ratio = '20/13';
       if (layoutStyle === 'portrait') ratio = currentAdminEcardRatios.portrait.replace(':', '/') || '2/3';
       if (layoutStyle === 'square') ratio = '1/1';
-      if (layoutStyle === 'landscape') ratio = '20/13';
 
       area.innerHTML = `
         <div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px]">
@@ -662,73 +683,47 @@
     }
 
     function closeEditCardModal() { document.getElementById('modal-card-edit').classList.add('hidden'); }
-
     function escapeHTML(str) { return String(str || '').replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t])); }
 
     function openAdminCropper(inputEl) {
       const file = inputEl.files[0];
       if (!file) return;
-
       let uploadRatio = 20 / 13;
       const layoutStyle = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
-      if (layoutStyle === 'portrait') uploadRatio = NaN; // 滿版改為自由比例
+      if (layoutStyle === 'portrait') uploadRatio = NaN;
       if (layoutStyle === 'square') uploadRatio = 1 / 1;
-
       const reader = new FileReader();
       reader.onload = (e) => {
         document.getElementById('admin-cropper-modal').classList.remove('hidden');
         const img = document.getElementById('admin-cropper-image');
         img.onload = () => {
           if (adminCropperInstance) adminCropperInstance.destroy();
-          adminCropperInstance = new Cropper(img, {
-            aspectRatio: uploadRatio,
-            viewMode: 1,
-            autoCropArea: 0.95
-          });
+          adminCropperInstance = new Cropper(img, { aspectRatio: uploadRatio, viewMode: 1, autoCropArea: 0.95 });
         };
         img.src = e.target.result;
         inputEl.value = '';
       };
       reader.readAsDataURL(file);
-      
       document.getElementById('btn-admin-confirm-crop').onclick = async function() {
         if (!adminCropperInstance) return;
-        const btn = this;
-        btn.innerText = '處理中...';
-        btn.disabled = true;
-        
-        const canvas = adminCropperInstance.getCroppedCanvas({ maxWidth: 800, maxHeight: 800, imageSmoothingEnabled: true, imageSmoothingQuality: 'high' });
+        const canvas = adminCropperInstance.getCroppedCanvas({ maxWidth: 800, maxHeight: 800 });
         const imgRatio = Math.round(canvas.width) + ':' + Math.round(canvas.height);
         const base64Image = canvas.toDataURL('image/jpeg', 0.8);
-        
         closeAdminCropper();
         showToast('圖片上傳中...');
-        
-        try {
-          const res = await fetchAPI('uploadImageToR2', { base64Image });
-          if (res && res.url) {
-            currentAdminEcardImgs[layoutStyle] = res.url;
-            if (layoutStyle === 'portrait') currentAdminEcardRatios.portrait = imgRatio; // 儲存真實比例
-            updateAdminCardPreview();
-            showToast('✅ 圖片上傳成功');
-          } else {
-            throw new Error('上傳失敗');
-          }
-        } catch(err) {
-          showToast('⚠️ ' + err.message, true);
-        } finally {
-          btn.innerText = '確認裁切';
-          btn.disabled = false;
+        const res = await fetchAPI('uploadImageToR2', { base64Image });
+        if (res && res.url) {
+          currentAdminEcardImgs[layoutStyle] = res.url;
+          if (layoutStyle === 'portrait') currentAdminEcardRatios.portrait = imgRatio;
+          updateAdminCardPreview();
+          showToast('✅ 圖片上傳成功');
         }
       };
     }
 
     function closeAdminCropper() {
       document.getElementById('admin-cropper-modal').classList.add('hidden');
-      if (adminCropperInstance) {
-        adminCropperInstance.destroy();
-        adminCropperInstance = null;
-      }
+      if (adminCropperInstance) adminCropperInstance.destroy();
     }
 
     async function initAdmin() {
@@ -736,7 +731,6 @@
       if (!liff.isLoggedIn()) { liff.login(); return; }
       adminProfile = await liff.getProfile();
       document.getElementById('admin-name').innerText = adminProfile.displayName;
-      document.getElementById('admin-avatar').src = adminProfile.pictureUrl;
       const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
       if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
         document.getElementById('loading-screen').remove();
