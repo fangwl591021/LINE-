@@ -93,7 +93,6 @@ window.showToast = function(msg, isError = false) {
 // 統一 API 呼叫
 window.fetchAPI = async function(action, payload = {}, silent = false) {
   try {
-    // ✅ 安全拷貝：絕不直接改動原始 payload，防止參數污染
     const safePayload = { ...payload };
     safePayload.networkId = safePayload.networkId !== undefined ? safePayload.networkId : window.currentNetworkId;
     safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
@@ -173,22 +172,52 @@ window.applyUserPermissions = function() {
   }
 };
 
+// 🚀 強效配對機制：如果 ID 找不到，用「手機號碼」強制抓回使用者的名片！
+window.syncUserCardMatch = function() {
+  if (!window.currentUserProfile || !window.allCards || window.allCards.length === 0) {
+    return false;
+  }
+
+  const uid = String(window.currentUserProfile.userId).trim();
+  const uPhone = window.currentUser?.phone ? String(window.currentUser.phone).replace(/[^0-9]/g, '') : null;
+
+  window.currentUserCard = window.allCards.find(c => {
+    // 1. 常規 ID 配對
+    if (c['LINE ID'] && String(c['LINE ID']).trim() === uid) return true;
+    if (c['userId'] && String(c['userId']).trim() === uid) return true;
+    if (c['User ID'] && String(c['User ID']).trim() === uid) return true;
+
+    // 2. 終極備援配對：ID 遺失或對不上時，用「手機號碼」強制配對
+    if (uPhone && c['手機號碼']) {
+      const cPhone = String(c['手機號碼']).replace(/[^0-9]/g, '');
+      if (cPhone === uPhone && cPhone.length >= 9) {
+        // 自動幫他把遺失的 ID 補回去，以利後續更新寫回資料庫
+        c['LINE ID'] = uid; 
+        return true;
+      }
+    }
+    return false;
+  });
+
+  return !!window.currentUserCard;
+};
+
+// 初始化載入
 window.loadAllData = async function() {
   try {
     const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
-    
-    // ✅ 恢復原狀：絕對不可以直接反轉(reverse)底層陣列，否則 find 會抓到錯誤的名片！
     window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
     
-    if (typeof window.currentUserProfile !== 'undefined' && window.currentUserProfile) {
-      window.currentUserCard = window.allCards.find(c => c['LINE ID'] === window.currentUserProfile.userId);
-    }
+    // 🚀 在這裡執行強效配對！(取代舊的簡單 ID 判斷)
+    window.syncUserCardMatch();
 
     const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
     window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
 
+    // 依序呼叫各模組的渲染邏輯
     if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
     if (typeof window.initMyECard === 'function') window.initMyECard();
+    if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
     if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
     if (typeof window.renderActivities === 'function') window.renderActivities();
     
