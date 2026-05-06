@@ -5,7 +5,7 @@ window.allCards = [];
 window.currentUserCard = null;
 window.allActivities = [];
 window.allSystemUsers = [];
-window.currentUserProfile = null; // ✅ 補齊 LIFF Profile 全域宣告
+window.currentUserProfile = null;
 window.currentUser = null;
 window.userRole = 'user';
 window.currentNetworkId = 'admin';
@@ -93,15 +93,15 @@ window.showToast = function(msg, isError = false) {
 // 統一 API 呼叫
 window.fetchAPI = async function(action, payload = {}, silent = false) {
   try {
-    // ✅ 核心修正：使用 !== undefined 避免「空字串 ''」被全域變數覆蓋，
-    // 保證掃描客戶名片時，LINE ID 維持空白，不會綁到掃描者自己身上
-    payload.networkId = payload.networkId !== undefined ? payload.networkId : window.currentNetworkId;
-    payload.role = payload.role !== undefined ? payload.role : window.userRole;
-    payload.userId = payload.userId !== undefined ? payload.userId : window.currentUserProfile?.userId;
+    // ✅ 安全拷貝：絕不直接改動原始 payload，防止參數污染
+    const safePayload = { ...payload };
+    safePayload.networkId = safePayload.networkId !== undefined ? safePayload.networkId : window.currentNetworkId;
+    safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
+    safePayload.userId = safePayload.userId !== undefined ? safePayload.userId : window.currentUserProfile?.userId;
 
     try {
       if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
-        payload.lineAccessToken = liff.getAccessToken();
+        safePayload.lineAccessToken = liff.getAccessToken();
       }
     } catch (e) {
       console.warn("LIFF token fetch failed:", e);
@@ -110,7 +110,7 @@ window.fetchAPI = async function(action, payload = {}, silent = false) {
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, payload })
+      body: JSON.stringify({ action, payload: safePayload })
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error);
@@ -177,8 +177,8 @@ window.loadAllData = async function() {
   try {
     const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
     
-    // ✅ 核心修正：加入 reverse() 將名片陣列反轉，讓最新建立的名片永遠出現在最上面！
-    window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes.reverse() : [];
+    // ✅ 恢復原狀：絕對不可以直接反轉(reverse)底層陣列，否則 find 會抓到錯誤的名片！
+    window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
     
     if (typeof window.currentUserProfile !== 'undefined' && window.currentUserProfile) {
       window.currentUserCard = window.allCards.find(c => c['LINE ID'] === window.currentUserProfile.userId);
