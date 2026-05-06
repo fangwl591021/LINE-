@@ -43,7 +43,8 @@ window.initMatchmakePage = async function() {
     );
 
     try {
-      if (typeof window.loadAllData === 'function') await window.loadAllData();
+      if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false });
+      else if (typeof window.loadAllData === 'function') await window.loadAllData();
     } catch (e) {}
   }
 
@@ -128,7 +129,8 @@ window.startMatchmaking = async function() {
 
   if (!window.allCards || window.allCards.length === 0) {
     window.showToast('名片資料仍在載入，請稍後再試', true);
-    if (typeof window.loadAllData === 'function') window.loadAllData();
+    if (typeof window.loadCardData === 'function') window.loadCardData({ render: false });
+    else if (typeof window.loadAllData === 'function') window.loadAllData();
     return;
   }
 
