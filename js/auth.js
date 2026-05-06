@@ -108,7 +108,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (claimCardId) {
          try {
            const claimRes = await window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true);
-           if (claimRes && claimRes.姓名) {
+           
+           // ✅ 修正：精準捕捉後端回傳的真實錯誤訊息
+           if (claimRes && claimRes.error) {
+             window.showToast('後端拒絕: ' + claimRes.error, true);
+             window.goPage('register');
+             return;
+           }
+
+           if (claimRes && claimRes['姓名']) {
               // 把後端抓回來的名片資料塞進認領表單
               document.getElementById('claim-row-id').value = claimCardId;
               document.getElementById('claim-ref-id').value = refId;
@@ -117,12 +125,12 @@ document.addEventListener('DOMContentLoaded', async () => {
               document.getElementById('claim-name').value = claimRes.姓名 || '';
               document.getElementById('claim-phone').value = claimRes.手機號碼 || claimRes.公司電話 || '';
               document.getElementById('claim-company').value = claimRes.公司名稱 || '';
-              document.getElementById('claim-title').value = claimRes.職稱 || '';
+              document.getElementById('claim-title').value = claimRes['職稱'] || '';
               
               window.goPage('claim-register');
               return;
            } else {
-             window.showToast('無法取得待認領的名片', true);
+             window.showToast('無效的名片資料格式', true);
              window.goPage('register');
            }
          } catch(e) {
@@ -197,7 +205,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                claimRowId: claimCardId, 
                userId: currentUserProfile.userId 
            }, true);
-           if (claimRes) {
+
+           // ✅ 修正：捕捉已註冊用戶認領時的真實錯誤
+           if (claimRes && claimRes.error) {
+               window.showToast('認領失敗: ' + claimRes.error, true);
+           } else if (claimRes) {
                window.showToast('✅ 成功認領名片並綁定您的帳號！');
                setTimeout(() => window.location.replace(window.location.pathname), 1500);
                return;
