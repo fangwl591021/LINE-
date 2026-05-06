@@ -7,7 +7,10 @@ window.renderCardList = function(cards) {
     return;
   }
 
-  const html = cards.map(c => {
+  // ✅ 安全反轉：我們只在「畫面上」把最新的名片排在最上面，絕對不破壞原本的資料順序
+  const displayCards = [...cards].reverse();
+
+  const html = displayCards.map(c => {
     let rawService = c['服務項目'] || c['職稱'] || c['公司名稱'] || '';
     let serviceStr = String(rawService).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, ' ');
     if (serviceStr.length > 25) serviceStr = serviceStr.substring(0, 25) + '...';
@@ -63,7 +66,7 @@ window.openCardDetailByRowId = function(rowId) {
   if (c) window.openCardDetail(c);
 };
 
-// ✅ 嚴格權限鎖定機制 (修正：讓同歸屬網的使用者也能編輯自己建立的客戶名片)
+// 嚴格權限鎖定機制
 window.openCardDetail = function(card) {
   if (!card) return;
   window.currentCard = card;
