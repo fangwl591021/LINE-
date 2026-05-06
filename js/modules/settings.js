@@ -197,7 +197,6 @@ window.loadStoreBannerSettings = function() {
 window.saveStoreBanner = async function(event) {
   const btn = event.currentTarget || document.getElementById('btn-save-store-banner');
 
-  // 強制再次嘗試配對
   if (!window.currentUserCard && window.currentUserProfile) {
     if (typeof window.syncUserCardMatch === 'function') {
        window.syncUserCardMatch();
@@ -245,8 +244,18 @@ window.saveStoreBanner = async function(event) {
     }, true);
     
     if (res && !res.error) {
+      // 1. 更新前端當前的名片暫存物件
       window.currentUserCard['自訂名片設定'] = updateData['自訂名片設定'];
+      
+      // 2. ✅ 同步更新全域 allCards 陣列中的對應資料（解決同步問題）
+      if (window.allCards && window.allCards.length > 0) {
+        const match = window.allCards.find(c => String(c.rowId) === String(window.currentUserCard.rowId));
+        if (match) {
+          match['自訂名片設定'] = updateData['自訂名片設定'];
+        }
+      }
 
+      // 3. 更新 LocalStorage 快取
       const cacheKey = 'store_banner_' + window.currentNetworkId;
       localStorage.setItem(cacheKey, JSON.stringify({
         homeBanner: cfg.homeBanner,
@@ -257,7 +266,11 @@ window.saveStoreBanner = async function(event) {
       }));
 
       window.showToast('✅ 設定已成功儲存至雲端！');
-      if (typeof window.updateHomeBanner === 'function') window.updateHomeBanner();
+      
+      // 4. 即時更新首頁 UI
+      if (typeof window.updateHomeBanner === 'function') {
+        window.updateHomeBanner();
+      }
     } else {
       throw new Error(res.error || 'API 儲存失敗');
     }
@@ -278,7 +291,7 @@ window.showInviteLink = function() {
   }
   
   const uid = window.currentUserProfile.userId;
-  const inviteUrl = `https://liff.line.me/${LIFF_ID}?ref=${uid}&net=${window.currentNetworkId}`;
+  const inviteUrl = `https://liff.me/${LIFF_ID}?ref=${uid}&net=${window.currentNetworkId}`;
   
   document.getElementById('invite-link-input').value = inviteUrl;
   document.getElementById('invite-qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(inviteUrl)}&color=000000&bgcolor=FFFFFF`;
