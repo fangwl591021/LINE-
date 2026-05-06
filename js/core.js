@@ -205,46 +205,106 @@ window.syncUserCardMatch = function() {
   return !!window.currentUserCard;
 };
 
-// 初始化載入
-window.loadAllData = async function() {
-  try {
-    const cardsPromise = window.fetchAPI('getCardContacts', {}, true);
-    const activitiesPromise = window.fetchAPI('getPublicActivities', {}, true);
+window.homeDataPromise = null;
+window.cardDataPromise = null;
 
-    const actsRes = await activitiesPromise;
-    window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
-    if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
-    if (typeof window.renderActivities === 'function') window.renderActivities();
+window.normalizeArrayResult = function(result) {
+  if (Array.isArray(result)) return result;
+  if (result && Array.isArray(result.data)) return result.data;
+  return null;
+};
 
-    const cardsRes = await cardsPromise;
+// 首頁只需要活動資料，不要在首屏載入整個名片庫。
+window.loadHomeData = async function(force = false) {
+  if (window.homeDataPromise && !force) return window.homeDataPromise;
 
-    console.log('[loadAllData] getCardContacts 回傳:', cardsRes);
+  window.homeDataPromise = (async () => {
+    try {
+      const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
+      const acts = window.normalizeArrayResult(actsRes);
 
-    if (cardsRes && Array.isArray(cardsRes)) {
-      window.allCards = cardsRes;
-    } else if (cardsRes && cardsRes.data && Array.isArray(cardsRes.data)) {
-      window.allCards = cardsRes.data;
-    } else if (cardsRes && cardsRes.error) {
-      console.error('[loadAllData] 名片庫載入失敗:', cardsRes.error);
-      window.showToast('名片庫載入失敗: ' + cardsRes.error, true);
-      window.allCards = [];
-    } else {
-      console.warn('[loadAllData] 回傳格式非預期:', cardsRes);
-      window.allCards = [];
+      if (acts) {
+        window.allActivities = acts;
+      } else if (actsRes && actsRes.error) {
+        console.error('[loadHomeData] 活動載入失敗:', actsRes.error);
+        window.allActivities = [];
+      } else {
+        console.warn('[loadHomeData] 回傳格式非預期:', actsRes);
+        window.allActivities = [];
+      }
+
+      if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
+      if (typeof window.renderActivities === 'function') window.renderActivities();
+      return window.allActivities;
+    } catch (err) {
+      console.error('[loadHomeData] 嚴重錯誤:', err);
+      window.allActivities = [];
+      if (typeof window.renderHomeActivities === 'function') window.renderHomeActivities();
+      return window.allActivities;
+    } finally {
+      window.homeDataPromise = null;
     }
+  })();
 
-    console.log('[loadAllData] allCards 數量:', window.allCards.length);
-    console.log('[loadAllData] allCards 第一筆欄位:', window.allCards[0] ? Object.keys(window.allCards[0]) : '無資料');
+  return window.homeDataPromise;
+};
 
-    window.syncUserCardMatch();
-    console.log('[loadAllData] currentUserCard:', window.currentUserCard ? window.currentUserCard['姓名'] : '未找到');
+// 名片資料改成按需載入，避免首頁一開始抓大量名片圖片。
+window.loadCardData = async function(options = {}) {
+  const shouldRender = options.render !== false;
+  const shouldInitPanels = options.initPanels !== false;
 
-    if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
-    if (typeof window.initMyECard === 'function') window.initMyECard();
-    if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
-
-  } catch (err) {
-    console.error('[loadAllData] 嚴重錯誤:', err);
-    window.showToast('資料載入失敗: ' + err.message, true);
+  if (window.allCards && window.allCards.length > 0 && !options.force) {
+    if (shouldRender && typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
+    if (shouldInitPanels) {
+      if (typeof window.initMyECard === 'function') window.initMyECard();
+      if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
+    }
+    return window.allCards;
   }
+
+  if (window.cardDataPromise && !options.force) return window.cardDataPromise;
+
+  window.cardDataPromise = (async () => {
+    try {
+      const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
+      const cards = window.normalizeArrayResult(cardsRes);
+
+      if (cards) {
+        window.allCards = cards;
+      } else if (cardsRes && cardsRes.error) {
+        console.error('[loadCardData] 名片庫載入失敗:', cardsRes.error);
+        window.showToast('名片庫載入失敗: ' + cardsRes.error, true);
+        window.allCards = [];
+      } else {
+        console.warn('[loadCardData] 回傳格式非預期:', cardsRes);
+        window.allCards = [];
+      }
+
+      window.syncUserCardMatch();
+
+      if (shouldRender && typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
+      if (shouldInitPanels) {
+        if (typeof window.initMyECard === 'function') window.initMyECard();
+        if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
+      }
+
+      return window.allCards;
+    } catch (err) {
+      console.error('[loadCardData] 嚴重錯誤:', err);
+      window.showToast('名片庫載入失敗: ' + err.message, true);
+      window.allCards = [];
+      return window.allCards;
+    } finally {
+      window.cardDataPromise = null;
+    }
+  })();
+
+  return window.cardDataPromise;
+};
+
+// 只有分享名片、認領名片或明確需要完整資料時才使用。
+window.loadAllData = async function() {
+  await window.loadHomeData();
+  await window.loadCardData();
 };
