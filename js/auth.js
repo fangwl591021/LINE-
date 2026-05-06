@@ -15,7 +15,7 @@ window.submitRegistration = async function() {
     const netId = urlParams.get('net') || 'admin';
 
     const payload = {
-      userId: currentUserProfile.userId,
+      userId: window.currentUserProfile.userId, // ✅ 確保使用 window
       name: name,
       phone: phone,
       industry: document.getElementById('reg-industry').value.trim(),
@@ -38,7 +38,6 @@ window.submitRegistration = async function() {
   }
 };
 
-// ✅ 新增：送出認領綁定與註冊
 window.submitClaimRegistration = async function() {
   const name = document.getElementById('claim-name').value.trim();
   const phone = document.getElementById('claim-phone').value.trim();
@@ -51,7 +50,7 @@ window.submitClaimRegistration = async function() {
   try {
     const rowId = document.getElementById('claim-row-id').value;
     const payload = {
-      userId: currentUserProfile.userId,
+      userId: window.currentUserProfile.userId, // ✅ 確保使用 window
       claimRowId: rowId,
       '姓名': name,
       '手機號碼': phone,
@@ -64,7 +63,7 @@ window.submitClaimRegistration = async function() {
     const res = await window.fetchAPI('claimCardAndRegister', payload, true);
     if (res) {
       window.showToast('✅ 名片認領並註冊成功！');
-      setTimeout(() => window.location.replace(window.location.pathname), 1500); // 拿掉網址參數並重整
+      setTimeout(() => window.location.replace(window.location.pathname), 1500); 
     }
   } catch(e) {
     window.showToast('綁定失敗:' + e.message, true);
@@ -82,34 +81,39 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    currentUserProfile = await liff.getProfile();
+    // ✅ 明確賦值給全域變數，防止其他模組找不到
+    window.currentUserProfile = await liff.getProfile();
+    
     const avatarImg = document.getElementById('avatar');
-    if (avatarImg) {
-      avatarImg.src = currentUserProfile.pictureUrl || 'https://via.placeholder.com/150';
+    if (avatarImg && window.currentUserProfile.pictureUrl) {
+      avatarImg.src = window.currentUserProfile.pictureUrl;
       avatarImg.classList.remove('hidden');
     }
 
-    const checkRes = await window.fetchAPI('checkUser', { userId: currentUserProfile.userId }, true);
+    // 發送驗證請求
+    const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
     
-    // 解析網址上的邀請參數
     const urlParams = new URLSearchParams(window.location.search);
     const shareCardId = urlParams.get('shareCardId');
     const claimCardId = urlParams.get('claim'); 
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
 
-    // 隱藏載入遮罩
     document.getElementById('loading-screen').classList.add('hidden');
 
-    // 🔒 未註冊用戶邏輯
-    if (!checkRes || !checkRes.isRegistered) {
+    // 🔒 未註冊用戶邏輯 (或是 API 回傳失敗時)
+    if (!checkRes || checkRes.error || !checkRes.isRegistered) {
       
-      // ✅ 判斷是否為「認領名片」流程
+      if (checkRes && checkRes.error) {
+        console.error("Auth check failed:", checkRes.error);
+        window.showToast("連線異常，請重新整理", true);
+        return; // 若是系統斷線，不要把老用戶導向註冊
+      }
+
       if (claimCardId) {
          try {
            const claimRes = await window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true);
            
-           // ✅ 修正：精準捕捉後端回傳的真實錯誤訊息
            if (claimRes && claimRes.error) {
              window.showToast('後端拒絕: ' + claimRes.error, true);
              window.goPage('register');
@@ -117,14 +121,12 @@ document.addEventListener('DOMContentLoaded', async () => {
            }
 
            if (claimRes && claimRes['姓名']) {
-              // 把後端抓回來的名片資料塞進認領表單
               document.getElementById('claim-row-id').value = claimCardId;
               document.getElementById('claim-ref-id').value = refId;
               document.getElementById('claim-net-id').value = netId;
-              
-              document.getElementById('claim-name').value = claimRes.姓名 || '';
-              document.getElementById('claim-phone').value = claimRes.手機號碼 || claimRes.公司電話 || '';
-              document.getElementById('claim-company').value = claimRes.公司名稱 || '';
+              document.getElementById('claim-name').value = claimRes['姓名'] || '';
+              document.getElementById('claim-phone').value = claimRes['手機號碼'] || claimRes['公司電話'] || '';
+              document.getElementById('claim-company').value = claimRes['公司名稱'] || '';
               document.getElementById('claim-title').value = claimRes['職稱'] || '';
               
               window.goPage('claim-register');
@@ -138,7 +140,6 @@ document.addEventListener('DOMContentLoaded', async () => {
            window.goPage('register');
          }
       } else {
-        // 一般註冊流程
         window.goPage('register');
       }
 
@@ -161,37 +162,36 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    // 🔓 已註冊用戶邏輯
-    currentUser = checkRes.info;
-    userRole = currentUser.role || 'user';
-    currentNetworkId = currentUser.networkId || 'admin';
-    currentStoreId = currentUser.storeid || '';
+    // 🔓 已註冊用戶邏輯 (綁定回 window 全域變數)
+    window.currentUser = checkRes.info;
+    window.userRole = window.currentUser.role || 'user';
+    window.currentNetworkId = window.currentUser.networkId || 'admin';
+    window.currentStoreId = window.currentUser.storeid || '';
     
     document.getElementById('bottom-nav').classList.remove('hidden');
     window.applyUserPermissions();
     
-    // 初始化設定頁面的個人資料
-    document.getElementById('profile-name').value = currentUser.name || '';
-    document.getElementById('profile-phone').value = currentUser.phone || '';
-    document.getElementById('profile-industry').value = currentUser.industry || '';
-    document.getElementById('profile-birthday').value = currentUser.birthday || '';
+    document.getElementById('profile-name').value = window.currentUser.name || '';
+    document.getElementById('profile-phone').value = window.currentUser.phone || '';
+    document.getElementById('profile-industry').value = window.currentUser.industry || '';
+    document.getElementById('profile-birthday').value = window.currentUser.birthday || '';
     
-    if (currentUser.socials) {
+    if (window.currentUser.socials) {
       try {
-        const arr = JSON.parse(currentUser.socials);
+        const arr = JSON.parse(window.currentUser.socials);
         arr.forEach(s => window.addUserSocial(s.t, s.u));
       } catch(e){}
     } else {
       window.addUserSocial('LINE', '');
     }
 
-    if (currentUser.tgToken) document.getElementById('setting-tg-token').value = currentUser.tgToken;
-    if (currentUser.tgChatId) document.getElementById('setting-tg-chatid').value = currentUser.tgChatId;
+    if (window.currentUser.tgToken) document.getElementById('setting-tg-token').value = window.currentUser.tgToken;
+    if (window.currentUser.tgChatId) document.getElementById('setting-tg-chatid').value = window.currentUser.tgChatId;
 
     await window.loadAllData();
 
     if (shareCardId) {
-      const sc = allCards.find(c => String(c.rowId) === String(shareCardId));
+      const sc = window.allCards.find(c => String(c.rowId) === String(shareCardId));
       if (sc) {
         window.openCardDetail(sc);
       } else {
@@ -199,14 +199,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.goPage('home');
       }
     } else if (claimCardId) {
-       // 如果已註冊用戶點了認領連結，直接幫他綁定該名片
        try {
            const claimRes = await window.fetchAPI('claimCardAndRegister', { 
                claimRowId: claimCardId, 
-               userId: currentUserProfile.userId 
+               userId: window.currentUserProfile.userId 
            }, true);
 
-           // ✅ 修正：捕捉已註冊用戶認領時的真實錯誤
            if (claimRes && claimRes.error) {
                window.showToast('認領失敗: ' + claimRes.error, true);
            } else if (claimRes) {
@@ -223,7 +221,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
   } catch (err) {
-    document.getElementById('loading-text').innerText = "系統初始化失敗";
+    document.getElementById('loading-text').innerText = "系統連線失敗";
     console.error(err);
   }
 });
