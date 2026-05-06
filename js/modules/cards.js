@@ -1,232 +1,3 @@
-/* ==================== 前端共用函式與全域狀態 ==================== */
-
-// 宣告全域狀態變數，確保各模組呼叫時不會報錯
-window.allCards = [];
-window.currentUserCard = null;
-window.allActivities = [];
-window.allSystemUsers = [];
-window.currentUserProfile = null;
-window.currentUser = null;
-window.userRole = 'user';
-window.currentNetworkId = 'admin';
-window.currentStoreId = '';
-window.hasAdminRights = false;
-
-// 嚴格安全跳脫函式：防範 XSS 跨站腳本攻擊
-window.escapeHTML = function(str) {
-  if (str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-};
-
-// 安全跳脫函式：保護 Inline JS 參數
-window.escapeJS = function(str) {
-  return String(str || '')
-    .replace(/\\/g, "\\\\") 
-    .replace(/'/g, "\\'")
-    .replace(/"/g, "&quot;")
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "")
-    .replace(/</g, "\\x3c") 
-    .replace(/>/g, "\\x3e");
-};
-
-// 時間格式化
-window.formatDisplayTime = function(val) {
-  if (!val) return '';
-  try {
-    let d = new Date(val);
-    if (isNaN(d.getTime())) {
-      return String(val).replace('T', ' ').replace('.000Z', '').substring(0, 16);
-    }
-    const pad = (n) => n.toString().padStart(2, '0');
-    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
-         + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  } catch(e) {
-    return String(val);
-  }
-};
-
-// 圖示對應
-window.getIconUrl = function(type) {
-  const icons = {
-    "LINE": "https://aiwe.cc/wp-content/uploads/2026/02/b75a5831fd553c7130aeafbb9783cf79.png",
-    "FB":   "https://aiwe.cc/wp-content/uploads/2026/02/3986d1fd62384c8cdaa0e7c82f2740d1.png",
-    "IG":   "https://aiwe.cc/wp-content/uploads/2026/02/a33306edcecd1ebdfd14baea6718cf23.png",
-    "YT":   "https://aiwe.cc/wp-content/uploads/2026/02/87e6f8054bd3672f2885e38bddb112e2.png",
-    "TEL":  "https://aiwe.cc/wp-content/uploads/2026/02/7254567388850a6b4d77b75208ebd4b8.png",
-    "WEB":  "https://cdn-icons-png.flaticon.com/512/1006/1006771.png"
-  };
-  return icons[type] || icons['WEB'];
-};
-
-// 清理 URI
-window.cleanURI = function(uri) {
-  if (!uri) return '';
-  uri = uri.trim();
-  if (uri === 'http://' || uri === 'https://') return '';
-  if (!uri.match(/^(http|https|tel|mailto|line):/i)) return 'https://' + uri;
-  return uri;
-};
-
-// Toast 通知
-window.showToast = function(msg, isError = false) {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-  const toast = document.createElement('div');
-  toast.className = 'px-4 py-3 rounded-full shadow-lg text-[13px] font-bold text-white transition-all duration-300 toast-enter flex items-center gap-2 max-w-[90%] text-center';
-  toast.classList.add(isError ? 'bg-red-500' : 'bg-slate-800');
-  toast.innerHTML = '<span class="material-symbols-outlined icon-filled text-[18px]">'
-    + (isError ? 'error' : 'info') + '</span> ' + msg;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-20px)';
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
-};
-
-// 統一 API 呼叫
-window.fetchAPI = async function(action, payload = {}, silent = false) {
-  try {
-    const safePayload = { ...payload };
-    safePayload.networkId = safePayload.networkId !== undefined ? safePayload.networkId : window.currentNetworkId;
-    safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
-    safePayload.userId = safePayload.userId !== undefined ? safePayload.userId : window.currentUserProfile?.userId;
-
-    try {
-      if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
-        safePayload.lineAccessToken = liff.getAccessToken();
-      }
-    } catch (e) {
-      console.warn("LIFF token fetch failed:", e);
-    }
-
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, payload: safePayload })
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error);
-    return data.data || data;
-  } catch (err) {
-    if (!silent) window.showToast(err.message, true);
-    return { success: false, error: err.message };
-  }
-};
-
-// LIFF Flex Message 分享
-window.triggerFlexSharing = async function(flexMsg, altText) {
-  if (!liff.isLoggedIn()) {
-    liff.login({ redirectUri: window.location.href });
-    return;
-  }
-  try {
-    if (!liff.isApiAvailable('shareTargetPicker')) {
-      window.showToast('您的環境不支援分享功能', true);
-      return;
-    }
-    const message = {
-      type: "flex",
-      altText: altText || "您收到一則訊息",
-      contents: flexMsg
-    };
-    await liff.shareTargetPicker([message]);
-    window.showToast('✅ 已成功發送！');
-  } catch (err) {
-    window.showToast('發送失敗：' + (err.message || '未知錯誤'), true);
-  }
-};
-
-// 統一處理畫面權限解鎖(防止閃爍)
-window.applyUserPermissions = function() {
-  window.hasAdminRights = (window.userRole === 'admin' || window.userRole === 'store');
-
-  const adminBadge = document.getElementById('header-admin-badge');
-  const adminSwitch = document.getElementById('admin-switch-container');
-  const topNavSwitch = document.getElementById('top-nav-switch');
-  const bannerMgmtBlock = document.getElementById('details-store-banner');
-  const storeMgmtBlock = document.getElementById('details-store-management');
-
-  if (window.hasAdminRights) {
-    if (adminBadge) adminBadge.classList.remove('hidden');
-    if (adminSwitch) adminSwitch.classList.remove('hidden');
-    if (topNavSwitch) topNavSwitch.classList.remove('hidden');
-    if (bannerMgmtBlock) bannerMgmtBlock.classList.remove('hidden');
-  } else {
-    if (adminBadge) adminBadge.classList.add('hidden');
-    if (adminSwitch) adminSwitch.classList.add('hidden');
-    if (topNavSwitch) topNavSwitch.classList.add('hidden');
-    if (bannerMgmtBlock) bannerMgmtBlock.classList.add('hidden');
-  }
-
-  if (window.userRole === 'admin') {
-    if (storeMgmtBlock) storeMgmtBlock.classList.remove('hidden');
-  } else {
-    if (storeMgmtBlock) storeMgmtBlock.classList.add('hidden');
-  }
-};
-
-// 🚀 強效配對機制：如果 ID 找不到，用「手機號碼」強制抓回使用者的名片！
-window.syncUserCardMatch = function() {
-  if (!window.currentUserProfile || !window.allCards || window.allCards.length === 0) {
-    return false;
-  }
-
-  const uid = String(window.currentUserProfile.userId).trim();
-  const uPhone = window.currentUser?.phone ? String(window.currentUser.phone).replace(/[^0-9]/g, '') : null;
-
-  window.currentUserCard = window.allCards.find(c => {
-    // 1. 常規 ID 配對
-    if (c['LINE ID'] && String(c['LINE ID']).trim() === uid) return true;
-    if (c['userId'] && String(c['userId']).trim() === uid) return true;
-    if (c['User ID'] && String(c['User ID']).trim() === uid) return true;
-
-    // 2. 終極備援配對：ID 遺失或對不上時，用「手機號碼」強制配對
-    if (uPhone && c['手機號碼']) {
-      const cPhone = String(c['手機號碼']).replace(/[^0-9]/g, '');
-      if (cPhone === uPhone && cPhone.length >= 9) {
-        // 自動幫他把遺失的 ID 補回去
-        c['LINE ID'] = uid; 
-        return true;
-      }
-    }
-    return false;
-  });
-
-  return !!window.currentUserCard;
-};
-
-// 初始化載入
-window.loadAllData = async function() {
-  try {
-    const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
-    window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
-    
-    // 執行強效配對
-    window.syncUserCardMatch();
-
-    const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
-    window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
-
-    if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
-    
-    // 同步重啟所有 UI 確保畫面更新
-    if (typeof window.initMyECard === 'function') window.initMyECard();
-    if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
-    if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
-    if (typeof window.renderActivities === 'function') window.renderActivities();
-    
-  } catch (err) {
-    console.error("資料載入失敗:", err);
-  }
-};
-
 /* ==================== 名片庫模組 (Cards) ==================== */
 
 window.renderCardList = function(cards) {
@@ -236,6 +7,7 @@ window.renderCardList = function(cards) {
     return;
   }
 
+  // 安全反轉：畫面上最新的名片排在最上面
   const displayCards = [...cards].reverse();
 
   const html = displayCards.map(c => {
@@ -252,10 +24,22 @@ window.renderCardList = function(cards) {
     let cfg = {};
     try { cfg = JSON.parse(c['自訂名片設定'] || '{}'); } catch(e){}
     let imgUrl = cfg.imgUrl || c['名片圖檔'] || '';
+    
     if (imgUrl) {
       imgHtml = `<img src="${window.escapeHTML(imgUrl)}" class="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-100 shadow-sm">`;
     } else {
       imgHtml = `<div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-300 flex items-center justify-center shrink-0 shadow-sm"><span class="material-symbols-outlined">person</span></div>`;
+    }
+
+    // 檢查是否為自己的名片
+    let isMyCard = false;
+    if (window.currentUserProfile && window.currentUserProfile.userId) {
+       const uid = String(window.currentUserProfile.userId).trim();
+       if ((c['LINE ID'] && String(c['LINE ID']).trim() === uid) || 
+           (c['userId'] && String(c['userId']).trim() === uid) || 
+           (c['User ID'] && String(c['User ID']).trim() === uid)) {
+          isMyCard = true;
+       }
     }
 
     return `
@@ -264,7 +48,7 @@ window.renderCardList = function(cards) {
         <div class="flex-1 min-w-0">
           <div class="font-black text-slate-800 text-[16px] leading-tight flex items-center gap-1">
              ${window.escapeHTML(c['姓名'] || '未知')}
-             ${c['LINE ID'] === window.currentUserProfile?.userId ? '<span class="bg-primary-light text-primary text-[9px] px-1.5 py-0.5 rounded font-black tracking-wider">我的</span>' : ''}
+             ${isMyCard ? '<span class="bg-primary-light text-primary text-[9px] px-1.5 py-0.5 rounded font-black tracking-wider">我的</span>' : ''}
           </div>
           <div class="text-[12px] text-slate-500 font-medium truncate mt-0.5">${serviceStr}</div>
           ${tagHtml ? `<div class="mt-1.5 truncate">${tagHtml}</div>` : ''}
@@ -298,7 +82,16 @@ window.openCardDetail = function(card) {
   if (!card) return;
   window.currentCard = card;
   
-  const isOwner = (card['LINE ID'] === window.currentUserProfile?.userId);
+  let isOwner = false;
+  if (window.currentUserProfile && window.currentUserProfile.userId) {
+     const uid = String(window.currentUserProfile.userId).trim();
+     if ((card['LINE ID'] && String(card['LINE ID']).trim() === uid) || 
+         (card['userId'] && String(card['userId']).trim() === uid) || 
+         (card['User ID'] && String(card['User ID']).trim() === uid)) {
+        isOwner = true;
+     }
+  }
+
   const isAdminOrStore = (window.userRole === 'admin' || window.userRole === 'store');
   const isSameNetwork = (card['歸屬網'] === window.currentNetworkId);
   const canEdit = isOwner || isAdminOrStore || isSameNetwork;
@@ -415,7 +208,15 @@ window.setDescAlign = function(align) {
 
 window.switchTab = function(tab) {
   if (tab !== 'info') {
-    const isOwner = (window.currentCard['LINE ID'] === window.currentUserProfile?.userId);
+    let isOwner = false;
+    if (window.currentUserProfile && window.currentUserProfile.userId) {
+       const uid = String(window.currentUserProfile.userId).trim();
+       if ((window.currentCard['LINE ID'] && String(window.currentCard['LINE ID']).trim() === uid) || 
+           (window.currentCard['userId'] && String(window.currentCard['userId']).trim() === uid) || 
+           (window.currentCard['User ID'] && String(window.currentCard['User ID']).trim() === uid)) {
+          isOwner = true;
+       }
+    }
     const isAdminOrStore = (window.userRole === 'admin' || window.userRole === 'store');
     const isSameNetwork = (window.currentCard['歸屬網'] === window.currentNetworkId);
     if (!isOwner && !isAdminOrStore && !isSameNetwork) {
