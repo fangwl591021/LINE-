@@ -174,9 +174,8 @@
         </div>
       </div>
 
-      <!-- Tab: Cards (全站名片庫) -->
+      <!-- Tab: Cards -->
       <div id="tab-cards" class="tab-content hidden space-y-6">
-        
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
             <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full md:w-80 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
@@ -252,29 +251,24 @@
     </main>
   </div>
 
-  <!-- 🎨 所見即所得：名片編輯彈窗 Modal (寬廣雙欄式) -->
+  <!-- 名片編輯彈窗 Modal -->
   <div id="modal-card-edit" class="fixed inset-0 bg-slate-900/60 z-[1000] hidden items-center justify-center backdrop-blur-sm transition-opacity p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1200px] h-[95vh] overflow-hidden flex flex-col animate-[fade-in_0.2s_ease-out]">
       
-      <!-- 頂部頁籤切換 -->
       <div class="px-6 flex justify-between items-center border-b border-slate-200 bg-white pt-3 shrink-0">
         <div class="flex gap-6">
           <button id="tab-btn-crm" onclick="switchModalTab('crm')" class="pb-3 border-b-2 border-blue-600 font-bold text-blue-600 outline-none">客戶 CRM 資料</button>
-          <button id="tab-btn-visual" onclick="switchModalTab('visual')" class="pb-3 border-b-2 border-transparent font-bold text-slate-500 hover:text-slate-700 outline-none transition-colors">✨ 視覺與版型設定</button>
+          <button id="tab-btn-visual" onclick="switchModalTab('visual')" class="pb-3 border-b-2 border-transparent font-bold text-slate-500 hover:text-slate-700 outline-none transition-colors">✨ 數位名片設定</button>
         </div>
         <button onclick="closeEditCardModal()" class="text-slate-400 hover:text-slate-700 transition-colors pb-3 outline-none">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
       
-      <!-- 左右雙欄版面 -->
       <div class="flex flex-col md:flex-row flex-1 overflow-hidden bg-slate-50">
-        
-        <!-- 左側：設定表單區 (自適應填滿剩餘寬度) -->
         <div class="flex-1 flex flex-col bg-white overflow-y-auto p-6 md:p-8 no-scrollbar">
           <input type="hidden" id="edit-c-rowid">
           
-          <!-- 頁籤內容 1：CRM 基本資料 -->
           <div id="modal-body-crm" class="space-y-6">
             <div>
               <label class="block text-sm font-bold text-slate-500 mb-1.5">姓名 <span class="text-red-500">*</span></label>
@@ -296,7 +290,7 @@
                 <input type="text" id="edit-c-phone" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono">
               </div>
               <div>
-                <label class="block text-sm font-bold text-slate-500 mb-1.5 flex justify-between">歸屬網 <span class="text-[11px] font-normal text-blue-500">轉移擁有者</span></label>
+                <label class="block text-sm font-bold text-slate-500 mb-1.5 flex justify-between">歸屬網</label>
                 <input type="text" id="edit-c-network" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="填寫 admin 或 店代碼">
               </div>
             </div>
@@ -310,43 +304,39 @@
             </div>
           </div>
 
-          <!-- 頁籤內容 2：數位名片設定 -->
           <div id="modal-body-visual" class="hidden space-y-6">
             <div class="grid grid-cols-2 gap-5">
-              <!-- 版型選擇 -->
               <div>
                 <label class="block text-sm font-bold text-slate-500 mb-2">名片版型</label>
                 <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl h-[46px]">
                   <label class="flex-1 text-center cursor-pointer m-0 h-full">
                     <input type="radio" name="edit-v-layout" value="landscape" class="peer sr-only" onchange="updateAdminCardPreview()">
-                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] tracking-tight transition-all h-full flex items-center justify-center">標準(Mega)</div>
+                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all h-full flex items-center justify-center">標準(Mega)</div>
                   </label>
                   <label class="flex-1 text-center cursor-pointer m-0 h-full">
                     <input type="radio" name="edit-v-layout" value="portrait" class="peer sr-only" onchange="updateAdminCardPreview()">
-                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] tracking-tight transition-all h-full flex items-center justify-center">滿版(Giga)</div>
+                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all h-full flex items-center justify-center">滿版(Giga)</div>
                   </label>
                   <label class="flex-1 text-center cursor-pointer m-0 h-full">
                     <input type="radio" name="edit-v-layout" value="square" class="peer sr-only" onchange="updateAdminCardPreview()">
-                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] tracking-tight transition-all h-full flex items-center justify-center">正方(1:1)</div>
+                    <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all h-full flex items-center justify-center">正方(1:1)</div>
                   </label>
                 </div>
               </div>
 
-              <!-- 對齊與顏色 -->
               <div>
                 <label class="block text-sm font-bold text-slate-500 mb-2">排版與顏色</label>
                 <div class="flex gap-2 h-[46px]">
                   <select id="edit-v-align" onchange="updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 text-sm text-slate-800 outline-none focus:border-blue-500">
                     <option value="center">置中對齊</option>
                     <option value="start">靠左對齊</option>
-                    <option value="end">靠右對齊</option>
+                    <option value="end">靠裝右對齊</option>
                   </select>
                   <input type="color" id="edit-v-color" onchange="updateAdminCardPreview()" value="#666666" class="w-[46px] h-full p-0 border border-slate-200 rounded-xl cursor-pointer bg-white">
                 </div>
               </div>
             </div>
 
-            <!-- 圖片上傳區 -->
             <div>
               <label class="block text-sm font-bold text-slate-500 mb-1.5">封面圖片網址</label>
               <div class="flex gap-2">
@@ -360,7 +350,7 @@
 
             <div>
               <label class="block text-sm font-bold text-slate-500 mb-1.5">名片服務說明 (支援換行)</label>
-              <textarea id="edit-v-desc" oninput="updateAdminCardPreview()" rows="5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="請填寫公司介紹與服務項目..."></textarea>
+              <textarea id="edit-v-desc" oninput="updateAdminCardPreview()" rows="5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors resize-none" placeholder="請填寫服務項目..."></textarea>
             </div>
             
             <div class="pt-6 border-t border-slate-100">
@@ -368,61 +358,39 @@
                 <label class="block text-sm font-bold text-slate-500">LINE 動作按鈕設定</label>
                 <button type="button" onclick="addAdminCardButton()" class="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors font-bold">+ 新增按鈕</button>
               </div>
-              <div id="admin-edit-buttons-list" class="space-y-3">
-                <!-- 按鈕列表動態渲染 -->
-              </div>
+              <div id="admin-edit-buttons-list" class="space-y-3"></div>
             </div>
           </div>
         </div>
 
-        <!-- 右側：手機預覽區 (Live Preview) -->
-        <!-- ✅ 徹底無邊界化，放大卡片至 400px -->
         <div class="w-full md:w-[460px] bg-[#8baccc] flex flex-col items-center justify-start overflow-y-auto shrink-0 shadow-inner relative">
-           <div class="w-full bg-[#8baccc] text-center py-2 text-white/80 text-xs tracking-widest sticky top-0 z-10 font-bold border-b border-white/20">
-             LINE 聊天室呈現預覽
-           </div>
-           <!-- 移除多餘 padding，讓卡片完美滿滿呈現 -->
+           <div class="w-full bg-[#8baccc] text-center py-2 text-white/80 text-xs tracking-widest sticky top-0 z-10 font-bold border-b border-white/20">LINE 預覽</div>
            <div class="w-full p-4 flex justify-center pb-20">
-              <div id="admin-card-preview-area" class="w-full max-w-[400px] bg-white rounded-2xl shadow-xl overflow-hidden relative shrink-0">
-                 <!-- 預覽畫面動態注入 -->
-              </div>
+              <div id="admin-card-preview-area" class="w-full max-w-[400px] bg-white rounded-2xl shadow-xl overflow-hidden relative shrink-0"></div>
            </div>
         </div>
-
       </div>
 
-      <!-- 底部儲存按鈕區 -->
-      <div class="px-8 py-5 bg-white border-t border-slate-200 flex justify-end gap-3 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
-        <button onclick="closeEditCardModal()" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">取消</button>
-        <button id="btn-save-card" onclick="saveCardEdit()" class="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-2">
+      <div class="px-8 py-5 bg-white border-t border-slate-200 flex justify-end gap-3 shrink-0 shadow-md">
+        <button onclick="closeEditCardModal()" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">取消</button>
+        <button id="btn-save-card" onclick="saveCardEdit()" class="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 flex items-center gap-2">
           <span class="material-symbols-outlined text-[18px]">save</span> 儲存變更
         </button>
       </div>
     </div>
   </div>
 
-  <!-- ✂️ ✅ 徹底修復的後台專用圖片裁切彈窗 (移除高度鎖定，改為 flex-1 填滿) -->
   <div id="admin-cropper-modal" class="fixed inset-0 bg-slate-900/95 z-[2000] hidden transition-opacity duration-300">
     <div class="flex flex-col w-full h-full">
       <div id="admin-cropper-container" class="flex-1 w-full relative flex items-center justify-center overflow-hidden p-4">
-        <!-- 保證內部 img 可被 Cropper.js 正確讀取真實長寬 -->
         <img id="admin-cropper-image" class="block max-w-full max-h-full mx-auto shadow-2xl">
       </div>
       <div class="h-20 bg-slate-950 flex items-center justify-between px-8 shrink-0 border-t border-slate-800">
-        <button onclick="closeAdminCropper()" class="text-white hover:text-slate-300 font-bold text-sm px-4 py-2 transition-colors">取消</button>
-        <button id="btn-admin-confirm-crop" class="bg-[#06C755] text-white px-8 py-2.5 rounded-full font-bold text-sm shadow-lg shadow-[#06C755]/30 hover:bg-[#05b34c] transition-colors flex items-center gap-1">
-          <span class="material-symbols-outlined text-[18px]">crop</span> 確認裁切
-        </button>
+        <button onclick="closeAdminCropper()" class="text-white hover:text-slate-300 font-bold text-sm px-4 py-2">取消</button>
+        <button id="btn-admin-confirm-crop" class="bg-[#06C755] text-white px-8 py-2.5 rounded-full font-bold text-sm hover:bg-[#05b34c]">確認裁切</button>
       </div>
     </div>
   </div>
-
-  <style>
-    @keyframes fade-in {
-      from { opacity: 0; transform: translateY(15px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-  </style>
 
   <!-- Scripts -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -436,30 +404,15 @@
     let allActivitiesData = [];
     let currentEditButtons = []; 
     let adminCropperInstance = null;
-    let adminRole = 'store'; // ✅ 儲存當下登入者的全域權限
+    let adminRole = 'store';
     
-    window.currentAdminCropRatio = null;
-
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
-      if (!container) return;
       const toast = document.createElement('div');
       toast.className = `px-5 py-3 rounded-full shadow-xl text-sm font-bold text-white transition-all duration-300 flex items-center gap-2 ${isError ? 'bg-red-500' : 'bg-slate-800'}`;
       toast.innerHTML = `<span class="material-symbols-outlined text-[18px]">${isError ? 'error' : 'check_circle'}</span> ${msg}`;
       container.appendChild(toast);
-      
-      toast.animate([
-        { opacity: 0, transform: 'translateY(-20px)' },
-        { opacity: 1, transform: 'translateY(0)' }
-      ], { duration: 300, fill: 'forwards' });
-
-      setTimeout(() => {
-        const anim = toast.animate([
-          { opacity: 1, transform: 'translateY(0)' },
-          { opacity: 0, transform: 'translateY(-20px)' }
-        ], { duration: 300, fill: 'forwards' });
-        anim.onfinish = () => toast.remove();
-      }, 3000);
+      setTimeout(() => { toast.remove(); }, 3000);
     }
 
     async function fetchAPI(action, payload = {}) {
@@ -467,7 +420,6 @@
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         payload.userId = adminProfile?.userId || '';
         payload.role = 'admin'; 
-        
         const res = await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -477,7 +429,6 @@
         if (!data.success) throw new Error(data.error);
         return data.data || data;
       } catch (err) {
-        console.error("API Error:", err);
         showToast(err.message, true);
         return null;
       }
@@ -486,219 +437,77 @@
     function switchTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-      
       document.getElementById('tab-' + tabId).classList.remove('hidden');
       document.getElementById('nav-' + tabId).classList.add('active');
       document.getElementById('page-title').innerText = document.getElementById('nav-' + tabId).innerText.trim();
-
       if (tabId === 'users' && allUsersData.length === 0) loadUsers();
       if (tabId === 'cards' && allCardsData.length === 0) loadCards();
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
     }
 
-    // ================== 會員管理區塊 ==================
     async function loadUsers() {
       const tbody = document.getElementById('users-table-body');
       tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>';
-      
       const res = await fetchAPI('getAllUsers');
       if (res && Array.isArray(res)) {
         allUsersData = res;
-        document.getElementById('stat-users').innerText = res.length; 
-        
-        if (res.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">尚無會員資料</td></tr>';
-          return;
-        }
-
-        tbody.innerHTML = res.map(u => {
-          let roleBadge = u.role === 'admin' ? '<span class="text-red-500 font-bold">管理員</span>' : 
-                          (u.role === 'store' ? '<span class="text-blue-600 font-bold">店長</span>' : 
-                          '<span class="text-slate-400">一般</span>');
-          return `
-            <tr>
-              <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
-              <td class="text-xs text-slate-400">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
-              <td>${escapeHTML(u.phone || '-')}</td>
-              <td class="text-sm">${escapeHTML(u.networkId || 'admin')} <span class="text-xs text-slate-400 ml-1">${escapeHTML(u.storeid || '')}</span></td>
-              <td>${roleBadge}</td>
-              <td class="text-right">
-                <div class="flex items-center justify-end gap-2">
-                  <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border border-slate-200 rounded px-2 py-1 bg-white outline-none">
-                    <option value="user" ${u.role==='user'?'selected':''}>設為一般</option>
-                    <option value="store" ${u.role==='store'?'selected':''}>設為店長</option>
-                    <option value="admin" ${u.role==='admin'?'selected':''}>設為總管</option>
-                  </select>
-                  <!-- ✅ 僅有 admin 可以看到刪除按鈕，且不能刪除自己 -->
-                  ${adminRole === 'admin' && u.userId !== adminProfile.userId ? `
-                    <button onclick="deleteSystemUser('${u.userId}', '${escapeHTML(u.name)}')" class="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors flex items-center justify-center" title="永久刪除此用戶">
-                      <span class="material-symbols-outlined text-[18px]">delete</span>
-                    </button>
-                  ` : '<div class="w-8"></div>'}
-                </div>
-              </td>
-            </tr>
-          `;
-        }).join('');
-        
-        if(allActivitiesData.length > 0) updateTenantFilter(); 
-        if(allCardsData.length > 0) updateCardTenantFilter();
+        document.getElementById('stat-users').innerText = res.length;
+        tbody.innerHTML = res.map(u => `
+          <tr>
+            <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
+            <td class="text-xs text-slate-400">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
+            <td>${escapeHTML(u.phone || '-')}</td>
+            <td class="text-sm">${escapeHTML(u.networkId || 'admin')}</td>
+            <td>${u.role}</td>
+            <td class="text-right">
+              <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border rounded px-2 py-1 bg-white">
+                <option value="user" ${u.role==='user'?'selected':''}>一般</option>
+                <option value="store" ${u.role==='store'?'selected':''}>店長</option>
+                <option value="admin" ${u.role==='admin'?'selected':''}>總管</option>
+              </select>
+            </td>
+          </tr>`).join('');
       }
     }
 
-    async function updateRole(targetUserId, newRole) {
-      if(!confirm(`確定要將此用戶變更為 ${newRole} 嗎？`)) {
-        loadUsers(); 
-        return;
-      }
-      const res = await fetchAPI('updateUserRole', { targetUserId: targetUserId, newRole: newRole });
-      if (res) {
-        showToast('權限已更新');
-        loadUsers();
-      }
-    }
-
-    // ✅ 新增：刪除系統用戶邏輯
-    async function deleteSystemUser(targetUserId, name) {
-      if(!confirm(`⚠️ 警告：確定要永久刪除用戶「${name}」嗎？\n此操作無法復原，該用戶將會失去登入與操作權限，需重新註冊。`)) {
-        return;
-      }
-      const res = await fetchAPI('deleteSystemUser', { targetUserId: targetUserId });
-      if (res) {
-        showToast('✅ 系統用戶已徹底刪除');
-        loadUsers();
-      }
-    }
-
-    // ================== 📇 全站名片庫 ==================
     async function loadCards() {
       const tbody = document.getElementById('cards-table-body');
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">資料撈取中，請稍候...</td></tr>';
-
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>';
       const res = await fetchAPI('getCardContacts');
       if (res && Array.isArray(res)) {
         allCardsData = res;
         document.getElementById('stat-cards').innerText = res.length;
-        updateCardTenantFilter();
         renderCards();
-      } else {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-400">無法取得名片資料，請重新整理</td></tr>';
-      }
-    }
-
-    function updateCardTenantFilter() {
-      const filter = document.getElementById('card-tenant-filter');
-      const currentVal = filter.value;
-      
-      const tenants = new Set();
-      allCardsData.forEach(c => {
-         let net = String(c['歸屬網'] || '').trim();
-         if (net === '') net = 'admin';
-         tenants.add(net);
-      });
-
-      let html = '<option value="all">全站所有名單</option>';
-      Array.from(tenants).sort().forEach(t => {
-         let tenantName = t;
-         if (allUsersData && allUsersData.length > 0) {
-             const userObj = allUsersData.find(u => u.networkId === t || u.userId === t);
-             if (userObj && userObj.name) {
-                 tenantName = `${userObj.name} (${t.substring(0,6)}...)`;
-             } else if (t === 'admin') {
-                 tenantName = `官方直營 (admin)`;
-             }
-         } else if (t === 'admin') {
-             tenantName = `官方直營 (admin)`;
-         }
-         html += `<option value="${t}">${escapeHTML(tenantName)}</option>`;
-      });
-
-      filter.innerHTML = html;
-      if (Array.from(filter.options).some(opt => opt.value === currentVal)) {
-        filter.value = currentVal;
       }
     }
 
     function renderCards() {
       const tbody = document.getElementById('cards-table-body');
-      const searchStr = document.getElementById('card-search-input').value.toLowerCase().trim();
-      const filterNet = document.getElementById('card-tenant-filter').value;
-      
-      let filtered = allCardsData;
-
-      if (filterNet !== 'all') {
-          filtered = filtered.filter(c => {
-              let net = String(c['歸屬網'] || '').trim();
-              if (net === '') net = 'admin';
-              return net === filterNet;
-          });
-      }
-
-      if (searchStr !== '') {
-          filtered = filtered.filter(c => {
-             const str = [
-               c['姓名'], c['公司名稱'], c['職稱'], c['手機號碼'], c['公司電話'], c['標籤'], c['建檔人/備註']
-             ].join(' ').toLowerCase();
-             return str.includes(searchStr);
-          });
-      }
-
-      if (filtered.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">找不到符合的名單</td></tr>';
-          return;
-      }
-
-      tbody.innerHTML = filtered.map(c => {
-        const company = escapeHTML(c['公司名稱'] || '');
-        const title = escapeHTML(c['職稱'] || '');
-        const companyTitle = [company, title].filter(Boolean).join(' / ') || '<span class="text-slate-300">-</span>';
-        const phone = escapeHTML(c['手機號碼'] || c['公司電話'] || '-');
-        const network = escapeHTML(c['歸屬網'] || 'admin');
-        
-        let tagHtml = '';
-        if (c['標籤']) {
-          tagHtml += String(c['標籤']).split(' ').map(t => `<span class="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-1">${escapeHTML(t)}</span>`).join('');
-        }
-        const notes = escapeHTML(c['建檔人/備註'] || '');
-        const tagNote = [tagHtml, notes].filter(Boolean).join('<br>') || '<span class="text-slate-300">-</span>';
-
-        return `
-          <tr>
-            <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
-            <td class="text-sm text-slate-600">${companyTitle}</td>
-            <td class="font-mono text-sm">${phone}</td>
-            <td class="text-sm text-blue-600 font-bold">${network}</td>
-            <td class="text-xs text-slate-500 leading-relaxed">${tagNote}</td>
-            <td class="text-center">
-               <button onclick="openEditCardModal('${c.rowId}')" class="text-slate-400 hover:text-blue-600 transition-colors p-1" title="名片編輯設定">
-                 <span class="material-symbols-outlined text-[20px]">edit_note</span>
-               </button>
-            </td>
-          </tr>
-        `;
-      }).join('');
+      tbody.innerHTML = allCardsData.map(c => `
+        <tr>
+          <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
+          <td class="text-sm text-slate-600">${escapeHTML(c['公司名稱'] || '')}</td>
+          <td class="font-mono text-sm">${escapeHTML(c['手機號碼'] || '')}</td>
+          <td class="text-sm text-blue-600 font-bold">${escapeHTML(c['歸屬網'] || 'admin')}</td>
+          <td class="text-xs text-slate-500">${escapeHTML(c['標籤'] || '')}</td>
+          <td class="text-center">
+             <button onclick="openEditCardModal('${c.rowId}')" class="text-slate-400 hover:text-blue-600 p-1"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
+          </td>
+        </tr>`).join('');
     }
 
-    function switchModalTab(tabType) {
-      if (tabType === 'crm') {
-        document.getElementById('tab-btn-crm').className = "pb-3 border-b-2 border-blue-600 font-bold text-blue-600 outline-none";
-        document.getElementById('tab-btn-visual').className = "pb-3 border-b-2 border-transparent font-bold text-slate-500 hover:text-slate-700 outline-none transition-colors";
-        document.getElementById('modal-body-crm').classList.remove('hidden');
-        document.getElementById('modal-body-visual').classList.add('hidden');
-      } else {
-        document.getElementById('tab-btn-visual').className = "pb-3 border-b-2 border-blue-600 font-bold text-blue-600 outline-none";
-        document.getElementById('tab-btn-crm').className = "pb-3 border-b-2 border-transparent font-bold text-slate-500 hover:text-slate-700 outline-none transition-colors";
-        document.getElementById('modal-body-visual').classList.remove('hidden');
-        document.getElementById('modal-body-crm').classList.add('hidden');
-      }
-    }
-
+    /**
+     * ✅ 修復重點：openEditCardModal
+     * 強化資料映射，確保 JSON 與平鋪欄位同步。
+     */
     function openEditCardModal(rowId) {
       window.currentAdminCropRatio = null;
-
       const card = allCardsData.find(c => String(c.rowId) === String(rowId));
       if (!card) return;
 
+      console.log("Loading Card Data:", card);
+
+      // CRM 基本資料
       document.getElementById('edit-c-rowid').value = card.rowId;
       document.getElementById('edit-c-name').value = card['姓名'] || '';
       document.getElementById('edit-c-company').value = card['公司名稱'] || '';
@@ -708,104 +517,106 @@
       document.getElementById('edit-c-tags').value = card['標籤'] || '';
       document.getElementById('edit-c-notes').value = card['建檔人/備註'] || '';
 
+      // 數位名片設定 (優先讀取 JSON，若無則讀取獨立欄位作為備援)
       let cfg = {};
-      try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
+      try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){ console.error("JSON Parse Error", e); }
       
-      let layoutVal = cfg.layoutStyle || 'landscape';
+      // 1. 版型 (優先取 cfg，其次預設 landscape)
+      let layoutVal = cfg.layoutStyle || cfg.layout || 'landscape';
       let layoutRadio = document.querySelector(`input[name="edit-v-layout"][value="${layoutVal}"]`);
       if (layoutRadio) layoutRadio.checked = true;
 
+      // 2. 封面圖 (優先取 cfg，其次取資料庫獨立欄位)
       document.getElementById('edit-v-img').value = cfg.imgUrl || card['名片圖檔'] || '';
+      
+      // 3. 描述內容 (優先取 cfg，其次取資料庫獨立欄位)
       document.getElementById('edit-v-desc').value = cfg.desc || card['服務項目'] || '';
+      
+      // 4. 樣式設定
       document.getElementById('edit-v-align').value = cfg.descAlign || 'center';
       document.getElementById('edit-v-color').value = cfg.descColor || '#666666';
       
-      currentEditButtons = cfg.buttons || [];
+      // 5. 按鈕設定
+      currentEditButtons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
       renderAdminCardButtons();
 
-      switchModalTab('crm'); 
+      switchModalTab('crm');
       document.getElementById('modal-card-edit').classList.remove('hidden');
       document.getElementById('modal-card-edit').classList.add('flex');
-      updateAdminCardPreview(); 
+      
+      // 強制觸發一次預覽刷新
+      updateAdminCardPreview();
     }
 
     function updateAdminCardPreview() {
       const area = document.getElementById('admin-card-preview-area');
-      
       const name = document.getElementById('edit-c-name').value || '姓名';
-      const company = document.getElementById('edit-c-company').value;
-      const title = document.getElementById('edit-c-title').value;
-      
-      let rawService = document.getElementById('edit-v-desc').value;
-      if (!rawService) rawService = [company, title].filter(Boolean).join(' / ');
-      const service = String(rawService).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-
-      const layoutEl = document.querySelector('input[name="edit-v-layout"]:checked');
-      const layoutStyle = layoutEl ? layoutEl.value : 'landscape';
-
       const imgUrl = document.getElementById('edit-v-img').value || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
-      const align = document.getElementById('edit-v-align').value || 'center';
+      const desc = (document.getElementById('edit-v-desc').value || '').replace(/\n/g, '<br>');
       const color = document.getElementById('edit-v-color').value || '#666666';
+      const align = document.getElementById('edit-v-align').value || 'center';
+      const layoutStyle = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
 
-      let ratioStr = '20:13';
-      if (layoutStyle === 'portrait') ratioStr = '2:3';
-      if (layoutStyle === 'square') ratioStr = '1:1';
+      let ratio = '20/13';
+      if (layoutStyle === 'portrait') ratio = '2/3';
+      if (layoutStyle === 'square') ratio = '1/1';
 
-      const rowId = document.getElementById('edit-c-rowid').value;
-      const card = allCardsData.find(c => String(c.rowId) === String(rowId));
-      if (card) {
-        try {
-          let cfg = JSON.parse(card['自訂名片設定'] || '{}');
-          if (layoutStyle === 'landscape' && cfg.imgRatioLandscape) ratioStr = cfg.imgRatioLandscape;
-          if (layoutStyle === 'portrait' && cfg.imgRatioPortrait) ratioStr = cfg.imgRatioPortrait;
-          if (layoutStyle === 'square' && cfg.imgRatioSquare) ratioStr = cfg.imgRatioSquare;
-        } catch(e){}
-      }
-
-      if (window.currentAdminCropRatio) {
-         ratioStr = window.currentAdminCropRatio;
-      }
-      const ratioCSS = ratioStr.replace(':', '/');
-
-      const alignMap = { 'start': 'left', 'center': 'center', 'end': 'right' };
-      const textAlign = alignMap[align];
-
-      const btnsHtml = currentEditButtons.map(btn =>
-        `<div class="block py-3 rounded-xl text-white text-center text-[14px] font-black mb-2.5 shadow-sm" style="background:${btn.c||'#06C755'}">${escapeHTML(btn.l||'按鈕')}</div>`
-      ).join('');
-
-      // ✅ 完美無邊界滿版呈現
       area.innerHTML = `
-        <div class="flex flex-col w-full h-full bg-white pb-6 rounded-b-[24px]">
-          <div class="relative bg-slate-100 bg-cover bg-center transition-all duration-300 shadow-sm w-full" style="aspect-ratio: ${ratioCSS}; background-image:url('${imgUrl}');">
-            <div class="absolute top-4 left-4 bg-[#FF0000] text-white text-[11px] font-black px-3 py-1 rounded-full shadow-sm tracking-widest">分享</div>
-          </div>
+        <div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px]">
+          <div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
           <div class="p-6 text-center">
-            <div class="font-black text-[22px] text-slate-800 leading-tight mb-2">${escapeHTML(name)}</div>
-            <div class="text-[14px] font-medium leading-relaxed" style="color: ${color}; text-align: ${textAlign};">${service}</div>
+            <div class="font-black text-[22px] text-slate-800 mb-2">${escapeHTML(name)}</div>
+            <div class="text-[14px]" style="color: ${color}; text-align: ${align};">${desc}</div>
           </div>
-          ${btnsHtml ? `<div class="px-6">${btnsHtml}</div>` : ''}
-        </div>
-      `;
+          <div class="px-6">${currentEditButtons.map(b => `<div class="py-3 rounded-xl text-white text-center text-sm font-black mb-2" style="background:${b.c}">${escapeHTML(b.l)}</div>`).join('')}</div>
+        </div>`;
+    }
+
+    async function saveCardEdit() {
+      const rowId = document.getElementById('edit-c-rowid').value;
+      const btn = document.getElementById('btn-save-card');
+      btn.disabled = true;
+
+      const layoutVal = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
+      const cfg = {
+        layoutStyle: layoutVal,
+        imgUrl: document.getElementById('edit-v-img').value,
+        desc: document.getElementById('edit-v-desc').value,
+        descAlign: document.getElementById('edit-v-align').value,
+        descColor: document.getElementById('edit-v-color').value,
+        buttons: currentEditButtons
+      };
+
+      const updateData = {
+        '姓名': document.getElementById('edit-c-name').value,
+        '公司名稱': document.getElementById('edit-c-company').value,
+        '職稱': document.getElementById('edit-c-title').value,
+        '手機號碼': document.getElementById('edit-c-phone').value,
+        '歸屬網': document.getElementById('edit-c-network').value,
+        '標籤': document.getElementById('edit-c-tags').value,
+        '建檔人/備註': document.getElementById('edit-c-notes').value,
+        '名片圖檔': cfg.imgUrl,
+        '服務項目': cfg.desc,
+        '自訂名片設定': JSON.stringify(cfg)
+      };
+
+      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData });
+      btn.disabled = false;
+      if (res) {
+        showToast('儲存成功');
+        loadCards();
+        closeEditCardModal();
+      }
     }
 
     function renderAdminCardButtons() {
       const container = document.getElementById('admin-edit-buttons-list');
-      if (currentEditButtons.length === 0) {
-        container.innerHTML = '<p class="text-xs text-slate-400">目前沒有設定任何按鈕</p>';
-      } else {
-        container.innerHTML = currentEditButtons.map((b, i) => `
-          <div class="flex gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
-            <input type="color" value="${b.c || '#06C755'}" class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200 bg-white" onchange="currentEditButtons[${i}].c=this.value; updateAdminCardPreview()">
-            <div class="flex-1 flex flex-col gap-1.5">
-              <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-slate-50 border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
-              <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://..." class="w-full text-xs font-mono bg-slate-50 border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="currentEditButtons[${i}].u=this.value">
-            </div>
-            <button onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
-          </div>
-        `).join('');
-      }
-      updateAdminCardPreview(); 
+      container.innerHTML = currentEditButtons.map((b, i) => `
+        <div class="flex gap-2 items-center bg-white p-2 border rounded-xl">
+          <input type="color" value="${b.c}" class="w-8 h-8 rounded shrink-0" onchange="currentEditButtons[${i}].c=this.value; updateAdminCardPreview()">
+          <input type="text" value="${escapeHTML(b.l)}" class="flex-1 text-sm font-bold border-none outline-none" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
+          <button onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 p-1"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+        </div>`).join('');
     }
 
     function addAdminCardButton() {
@@ -813,337 +624,33 @@
       renderAdminCardButtons();
     }
 
-    function closeEditCardModal() {
-      const modal = document.getElementById('modal-card-edit');
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
+    function switchModalTab(type) {
+      document.getElementById('modal-body-crm').classList.toggle('hidden', type !== 'crm');
+      document.getElementById('modal-body-visual').classList.toggle('hidden', type !== 'visual');
+      document.getElementById('tab-btn-crm').classList.toggle('border-blue-600', type === 'crm');
+      document.getElementById('tab-btn-crm').classList.toggle('text-blue-600', type === 'crm');
+      document.getElementById('tab-btn-visual').classList.toggle('border-blue-600', type === 'visual');
+      document.getElementById('tab-btn-visual').classList.toggle('text-blue-600', type === 'visual');
     }
 
-    // ✂️ 開啟後台專用圖片裁切器：✅ 徹底解除比例鎖定，解決 PC 畫面凍結與比例錯誤
-    function openAdminCropper(input) {
-      const file = input.files[0];
-      if (!file) return;
+    function closeEditCardModal() { document.getElementById('modal-card-edit').classList.add('hidden'); }
 
-      const layoutEl = document.querySelector('input[name="edit-v-layout"]:checked');
-      const layout = layoutEl ? layoutEl.value : 'landscape';
-      
-      let uploadRatio = NaN; // 預設自由裁切 (滿版與正方)
-      if (layout === 'landscape') {
-        uploadRatio = 20 / 13; // 僅標準版鎖定 20:13 防止變形
-      }
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const modal = document.getElementById('admin-cropper-modal');
-        const img = document.getElementById('admin-cropper-image');
-        
-        modal.classList.remove('hidden');
-        modal.classList.add('flex'); // 強制以 flex 顯示，確保抓到真實高度
-
-        if (adminCropperInstance) {
-          adminCropperInstance.destroy();
-          adminCropperInstance = null;
-        }
-
-        // 清除舊圖樣式，重新載入
-        img.style.display = 'block';
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = '100%';
-        img.src = e.target.result;
-
-        img.onload = () => {
-          const confirmBtn = document.getElementById('btn-admin-confirm-crop');
-          confirmBtn.setAttribute('onclick', 'confirmAdminCrop()');
-          confirmBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">crop</span> 確認裁切';
-          confirmBtn.disabled = false;
-
-          // 給予瀏覽器時間完成重繪，再啟動 Cropper
-          setTimeout(() => {
-            adminCropperInstance = new Cropper(img, {
-              aspectRatio: uploadRatio,
-              viewMode: 1,
-              dragMode: 'move',
-              autoCropArea: 0.95,
-              cropBoxMovable: true, 
-              cropBoxResizable: true, 
-              guides: true,
-              center: true,
-              highlight: false,
-              background: true
-            });
-          }, 150);
-        };
-        input.value = ''; 
-      };
-      reader.readAsDataURL(file);
-    }
-
-    function closeAdminCropper() {
-      const modal = document.getElementById('admin-cropper-modal');
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-      if (adminCropperInstance) {
-        adminCropperInstance.destroy();
-        adminCropperInstance = null;
-      }
-      document.getElementById('admin-cropper-image').src = '';
-    }
-
-    async function confirmAdminCrop() {
-      if (!adminCropperInstance) return;
-      const btn = document.getElementById('btn-admin-confirm-crop');
-      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 處理中...';
-      btn.disabled = true;
-
-      let size = 1000;
-      let quality = 0.8;
-      
-      const canvas = adminCropperInstance.getCroppedCanvas({
-        maxWidth: size,
-        maxHeight: size,
-        imageSmoothingEnabled: true,
-        imageSmoothingQuality: 'high',
-      });
-      
-      window.currentAdminCropRatio = canvas.width + ':' + canvas.height;
-      
-      let base64Image = canvas.toDataURL('image/jpeg', quality);
-
-      while (base64Image.length > 660000 && quality > 0.3) {
-        quality -= 0.15;
-        base64Image = adminCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
-      }
-
-      closeAdminCropper();
-
-      const targetInput = document.getElementById('edit-v-img');
-      const originalVal = targetInput.value;
-      targetInput.value = '圖片上傳中...';
-      showToast('⏳ 圖片上傳中...');
-      
-      try {
-        const res = await fetchAPI('uploadImageToR2', { base64Image: base64Image });
-        if (res && res.url) {
-          targetInput.value = res.url;
-          updateAdminCardPreview(); 
-          showToast('✅ 圖片已成功上傳');
-        } else {
-          throw new Error('上傳失敗');
-        }
-      } catch (err) {
-        targetInput.value = originalVal;
-        showToast('⚠️ ' + err.message, true);
-      }
-    }
-
-    async function saveCardEdit() {
-      const rowId = document.getElementById('edit-c-rowid').value;
-      const name = document.getElementById('edit-c-name').value.trim();
-      if (!name) {
-        showToast('姓名為必填欄位！', true);
-        return;
-      }
-
-      const btn = document.getElementById('btn-save-card');
-      const originalBtnHTML = btn.innerHTML;
-      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[16px]">refresh</span> 儲存中...';
-      btn.disabled = true;
-
-      const updateData = {
-        '姓名': name,
-        '公司名稱': document.getElementById('edit-c-company').value.trim(),
-        '職稱': document.getElementById('edit-c-title').value.trim(),
-        '手機號碼': document.getElementById('edit-c-phone').value.trim(),
-        '歸屬網': document.getElementById('edit-c-network').value.trim(),
-        '標籤': document.getElementById('edit-c-tags').value.trim(),
-        '建檔人/備註': document.getElementById('edit-c-notes').value.trim()
-      };
-
-      let cfg = {};
-      const cardIndex = allCardsData.findIndex(c => String(c.rowId) === String(rowId));
-      if (cardIndex !== -1) {
-        try { cfg = JSON.parse(allCardsData[cardIndex]['自訂名片設定'] || '{}'); } catch(e){}
-      }
-      
-      const layoutEl = document.querySelector('input[name="edit-v-layout"]:checked');
-      cfg.layoutStyle = layoutEl ? layoutEl.value : 'landscape';
-      
-      if (window.currentAdminCropRatio) {
-        if (cfg.layoutStyle === 'landscape') cfg.imgRatioLandscape = window.currentAdminCropRatio;
-        if (cfg.layoutStyle === 'portrait') cfg.imgRatioPortrait = window.currentAdminCropRatio;
-        if (cfg.layoutStyle === 'square') cfg.imgRatioSquare = window.currentAdminCropRatio;
-      }
-      
-      cfg.imgUrl = document.getElementById('edit-v-img').value.trim();
-      cfg.desc = document.getElementById('edit-v-desc').value;
-      cfg.descAlign = document.getElementById('edit-v-align').value;
-      cfg.descColor = document.getElementById('edit-v-color').value;
-      cfg.buttons = currentEditButtons;
-
-      updateData['名片圖檔'] = cfg.imgUrl;
-      updateData['服務項目'] = cfg.desc; 
-      updateData['自訂名片設定'] = JSON.stringify(cfg);
-
-      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData });
-      
-      btn.innerHTML = originalBtnHTML;
-      btn.disabled = false;
-
-      if (res) {
-        if (cardIndex !== -1) {
-          allCardsData[cardIndex] = { ...allCardsData[cardIndex], ...updateData };
-        }
-        window.currentAdminCropRatio = null; 
-        closeEditCardModal();
-        renderCards();
-        showToast('✅ 數位名片儲存成功！');
-      }
-    }
-
-    // ================== 活動統計區塊 ==================
-    async function loadActivities() {
-      const tbody = document.getElementById('acts-table-body');
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">資料撈取中，請稍候...</td></tr>';
-      
-      const res = await fetchAPI('getPublicActivities');
-      if (res && Array.isArray(res)) {
-        allActivitiesData = res;
-        document.getElementById('stat-acts').innerText = res.length;
-        updateTenantFilter();
-        renderActivities();
-      } else {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-400">無法取得活動資料，請重新整理</td></tr>';
-      }
-    }
-
-    function updateTenantFilter() {
-      const filter = document.getElementById('act-tenant-filter');
-      const currentVal = filter.value;
-      
-      const tenants = new Set();
-      allActivitiesData.forEach(act => {
-         let creator = String(act['建立者ID'] || '').trim();
-         if (creator === '') creator = 'admin';
-         tenants.add(creator);
-      });
-
-      let html = '<option value="all">全站所有活動</option>';
-      Array.from(tenants).sort().forEach(t => {
-         let tenantName = t;
-         if (allUsersData && allUsersData.length > 0) {
-             const userObj = allUsersData.find(u => u.networkId === t || u.userId === t);
-             if (userObj && userObj.name) {
-                 tenantName = `${userObj.name} (${t.substring(0,6)}...)`;
-             } else if (t === 'admin') {
-                 tenantName = `官方直營 (admin)`;
-             }
-         } else if (t === 'admin') {
-             tenantName = `官方直營 (admin)`;
-         }
-         html += `<option value="${t}">${escapeHTML(tenantName)}</option>`;
-      });
-
-      filter.innerHTML = html;
-      
-      let hasValue = false;
-      for (let i = 0; i < filter.options.length; i++) {
-        if (filter.options[i].value === currentVal) hasValue = true;
-      }
-      if (hasValue) filter.value = currentVal;
-    }
-
-    function renderActivities() {
-      const filterVal = document.getElementById('act-tenant-filter').value;
-      const tbody = document.getElementById('acts-table-body');
-      
-      let filtered = allActivitiesData;
-      let totalRegs = 0;
-
-      allActivitiesData.forEach(act => { totalRegs += (parseInt(act['報名人數']) || 0); });
-      document.getElementById('stat-regs').innerText = totalRegs;
-
-      if (filterVal !== 'all') {
-          filtered = allActivitiesData.filter(act => {
-              let creator = String(act['建立者ID'] || '').trim();
-              if (creator === '') creator = 'admin';
-              return creator === filterVal;
-          });
-      }
-
-      const rows = filtered.map(act => {
-          const regs = parseInt(act['報名人數']) || 0;
-          const checkins = parseInt(act['已到人數']) || 0;
-          const price = parseInt(act['金額']) || 0;
-          const priceText = price === 0 ? '<span class="text-blue-600 font-bold">免費</span>' : `$${price}`;
-          const timeText = (act['開始時間'] || '').substring(0, 16);
-          
-          let statusText = (act['狀態'] === '上架' || !act['狀態']) ? 
-              '<span class="text-blue-500 font-bold">上架中</span>' : '<span class="text-slate-400">已下架</span>';
-
-          let creatorStr = String(act['建立者ID'] || '').trim() || 'admin';
-          if(creatorStr.length > 10) creatorStr = creatorStr.substring(0,8) + '...';
-
-          return `
-            <tr>
-              <td class="font-bold text-slate-700">${escapeHTML(act['活動名稱'] || '未命名')}</td>
-              <td class="text-xs text-blue-600 font-bold">${escapeHTML(creatorStr)}</td>
-              <td class="text-sm">${escapeHTML(timeText)}</td>
-              <td>${priceText}</td>
-              <td class="text-sm"><span class="font-bold text-slate-700">${regs}</span> 報名 / ${checkins} 報到</td>
-              <td>${statusText}</td>
-            </tr>
-          `;
-      });
-
-      if (filtered.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400">目前沒有建立任何活動</td></tr>`;
-      } else {
-          tbody.innerHTML = rows.join('');
-      }
-    }
-
-    function escapeHTML(str) {
-      return String(str || '').replace(/[&<>'"]/g, tag => ({
-          '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-        }[tag] || tag));
-    }
+    function escapeHTML(str) { return String(str || '').replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t])); }
 
     async function initAdmin() {
-      try {
-        await liff.init({ liffId: LIFF_ID });
-        if (!liff.isLoggedIn()) {
-          liff.login({ redirectUri: window.location.href });
-          return;
-        }
-
-        adminProfile = await liff.getProfile();
-        document.getElementById('admin-name').innerText = adminProfile.displayName;
-        document.getElementById('admin-avatar').src = adminProfile.pictureUrl || 'https://via.placeholder.com/150';
-
-        const userCheck = await fetchAPI('checkUser', { userId: adminProfile.userId });
-        
-        if (userCheck && userCheck.isRegistered && (userCheck.info.role === 'admin' || userCheck.info.role === 'store')) {
-          adminRole = userCheck.info.role; // ✅ 記錄當下登入者的權限，供畫面渲染判斷使用
-
-          document.getElementById('loading-screen').style.opacity = '0';
-          setTimeout(() => document.getElementById('loading-screen').classList.add('hidden'), 300);
-          
-          switchTab('users');
-          loadCards();
-          loadActivities();
-
-        } else {
-          document.getElementById('loading-text').innerText = "權限不足，您不是系統管理員。";
-          document.getElementById('loading-screen').querySelector('span').innerText = "block";
-          document.getElementById('loading-screen').querySelector('span').classList.remove('animate-spin');
-          document.getElementById('loading-screen').querySelector('span').classList.add('text-red-500');
-        }
-      } catch (err) {
-        document.getElementById('loading-text').innerText = "系統連線錯誤，請重新整理。";
-        console.error(err);
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      adminProfile = await liff.getProfile();
+      document.getElementById('admin-name').innerText = adminProfile.displayName;
+      document.getElementById('admin-avatar').src = adminProfile.pictureUrl;
+      const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
+      if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
+        document.getElementById('loading-screen').remove();
+        switchTab('users');
+      } else {
+        document.getElementById('loading-text').innerText = "權限不足";
       }
     }
-
     document.addEventListener("DOMContentLoaded", initAdmin);
   </script>
 </body>
