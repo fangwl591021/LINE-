@@ -30,9 +30,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
-  <!-- 🚀 加入版本號 ?v=7.0 強制破解所有裝置的舊快取 -->
-  <link rel="stylesheet" href="css/styles.css?v=7.0">
-  <script src="js/config.js?v=7.0"></script>
+  <link rel="stylesheet" href="css/styles.css?v=7.1">
+  <script src="js/config.js?v=7.1"></script>
 
   <style type="text/tailwindcss">
     .custom-input { @apply w-full py-4 px-5 bg-slate-100 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-medium text-text-main; }
@@ -102,7 +101,6 @@
         <h2 class="text-xl font-black text-center text-slate-800">認領專屬名片</h2>
         <p class="text-[13px] text-center text-slate-500 mb-6 font-medium leading-relaxed">您的推薦人已經為您建好名片檔案了！<br>請確認下方資料無誤，即可完成綁定與註冊。</p>
 
-        <!-- 隱藏的參照與來源 -->
         <input type="hidden" id="claim-row-id">
         <input type="hidden" id="claim-ref-id">
         <input type="hidden" id="claim-net-id">
@@ -185,7 +183,7 @@
         </div>
       </details>
 
-      <details id="details-my-ecard" class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-6 group">
+      <details id="details-my-ecard" class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-[#06C755] icon-filled">badge</span> 我的專屬名片</div>
           <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
@@ -272,21 +270,18 @@
         </div>
       </details>
 
-      <details id="details-store-banner" class="hidden group bg-white rounded-2xl border border-slate-100 overflow-hidden transition-all duration-300 shadow-sm mb-4">
-        <summary class="flex items-center justify-between p-5 cursor-pointer list-none">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-pink-500">
-              <span class="material-symbols-outlined">view_carousel</span>
-            </div>
-            <div>
-              <div class="font-black text-slate-800 flex items-center gap-2">首頁 Banner 管理 <span class="bg-pink-100 text-pink-600 text-[10px] px-1.5 py-0.5 rounded-md font-bold tracking-tighter">PRO</span></div>
-              <p class="text-[11px] text-slate-400 font-medium">設定系統名稱、大圖與影片</p>
-            </div>
+      <!-- ✅ 完美修正破圖：移除會導致破版的 overflow-hidden -->
+      <details id="details-store-banner" class="hidden bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
+        <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-pink-500 icon-filled">view_carousel</span> 
+            <span class="flex items-center gap-2">首頁 Banner 管理 <span class="bg-pink-100 text-pink-600 text-[10px] px-1.5 py-0.5 rounded-md font-bold tracking-tighter">PRO</span></span>
           </div>
-          <span class="material-symbols-outlined text-slate-300 group-open:rotate-180 transition-transform">expand_more</span>
+          <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
         </summary>
         
-        <div class="px-5 pb-6 space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div class="p-5 pt-0 border-t border-slate-50 space-y-5">
+          <p class="text-[11px] text-slate-400 font-medium -mt-1 mb-3">設定系統名稱、大圖與影片</p>
           <div>
             <label class="block text-[12px] font-bold text-slate-500 mb-2 ml-1">系統顯示名稱 <span class="text-slate-300 font-normal">(顯示於頂部,建議 4-10 字)</span></label>
             <input type="text" id="input-site-name" placeholder="例如：智能名片交流站" class="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[14px] font-bold text-slate-700 focus:ring-2 focus:ring-pink-500/20 outline-none transition-all">
@@ -1020,20 +1015,19 @@
   </div>
 </div>
 
-<!-- 🚀 加入版本號 ?v=7.0 強制破解所有裝置的舊快取 -->
-<script src="js/core.js?v=7.0"></script>
-<script src="js/navigation.js?v=7.0"></script>
-<script src="js/modules/cropper.js?v=7.0"></script>
-<script src="js/modules/cards.js?v=7.0"></script>
-<script src="js/modules/ecard.js?v=7.0"></script>
-<script src="js/modules/mycard.js?v=7.0"></script>
-<script src="js/modules/matchmake.js?v=7.0"></script>
-<script src="js/modules/activities.js?v=7.0"></script>
-<script src="js/modules/admin.js?v=7.0"></script>
-<script src="js/modules/home.js?v=7.0"></script>
-<script src="js/modules/settings.js?v=7.0"></script>
-<script src="js/modules/crm.js?v=7.0"></script>
-<script src="js/auth.js?v=7.0"></script>
+<script src="js/core.js?v=7.1"></script>
+<script src="js/navigation.js?v=7.1"></script>
+<script src="js/modules/cropper.js?v=7.1"></script>
+<script src="js/modules/cards.js?v=7.1"></script>
+<script src="js/modules/ecard.js?v=7.1"></script>
+<script src="js/modules/mycard.js?v=7.1"></script>
+<script src="js/modules/matchmake.js?v=7.1"></script>
+<script src="js/modules/activities.js?v=7.1"></script>
+<script src="js/modules/admin.js?v=7.1"></script>
+<script src="js/modules/home.js?v=7.1"></script>
+<script src="js/modules/settings.js?v=7.1"></script>
+<script src="js/modules/crm.js?v=7.1"></script>
+<script src="js/auth.js?v=7.1"></script>
 
 </body>
 </html>
