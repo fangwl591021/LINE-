@@ -19,7 +19,7 @@ window.escapeHTML = function(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/\"/g, '&quot;')
     .replace(/'/g, '&#039;');
 };
 
@@ -28,7 +28,7 @@ window.escapeJS = function(str) {
   return String(str || '')
     .replace(/\\/g, "\\\\")
     .replace(/'/g, "\\'")
-    .replace(/"/g, "&quot;")
+    .replace(/\"/g, "&quot;")
     .replace(/\n/g, "\\n")
     .replace(/\r/g, "")
     .replace(/</g, "\\x3c")
@@ -93,6 +93,11 @@ window.showToast = function(msg, isError = false) {
 // 統一 API 呼叫
 window.fetchAPI = async function(action, payload = {}, silent = false) {
   try {
+    const featureKey = typeof window.getFeatureByAction === 'function' ? window.getFeatureByAction(action) : '';
+    if (featureKey && typeof window.requireSaasFeature === 'function' && !window.requireSaasFeature(featureKey, silent)) {
+      return { success: false, error: 'FEATURE_DISABLED', featureKey };
+    }
+
     const safePayload = { ...payload };
     safePayload.networkId = safePayload.networkId !== undefined ? safePayload.networkId : window.currentNetworkId;
     safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
@@ -170,6 +175,9 @@ window.applyUserPermissions = function() {
   } else {
     if (storeMgmtBlock) storeMgmtBlock.classList.add('hidden');
   }
+
+  if (typeof window.initSaasFeaturePanel === 'function') window.initSaasFeaturePanel();
+  if (typeof window.applySaasFeatureUI === 'function') window.applySaasFeatureUI();
 };
 
 // 強效配對機制
@@ -209,7 +217,10 @@ window.syncUserCardMatch = function() {
 window.loadAllData = async function() {
   try {
     const cardsPromise = window.fetchAPI('getCardContacts', {}, true);
-    const activitiesPromise = window.fetchAPI('getPublicActivities', {}, true);
+    const activityOn = typeof window.isSaasFeatureEnabled === 'function'
+      ? window.isSaasFeatureEnabled('activityBuilder')
+      : true;
+    const activitiesPromise = activityOn ? window.fetchAPI('getPublicActivities', {}, true) : Promise.resolve([]);
 
     const actsRes = await activitiesPromise;
     window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
@@ -242,6 +253,7 @@ window.loadAllData = async function() {
     if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
     if (typeof window.initMyECard === 'function') window.initMyECard();
     if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
+    if (typeof window.applySaasFeatureUI === 'function') window.applySaasFeatureUI();
 
   } catch (err) {
     console.error('[loadAllData] 嚴重錯誤:', err);
