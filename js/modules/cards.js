@@ -1,301 +1,157 @@
-/* ==================== 名片庫模組 (Cards) ==================== */
+/* ==================== 我的專屬名片管理 (My E-Card) ==================== */
 
-window.renderCardList = function(cards) {
-  const list = document.getElementById('card-list');
-  if (!cards || cards.length === 0) {
-    list.innerHTML = '<div class="bg-white p-8 rounded-3xl text-center text-slate-400 border border-slate-100 shadow-sm"><span class="material-symbols-outlined text-4xl mb-2 text-slate-300">search_off</span><p class="font-bold text-[13px]">目前沒有找到任何名片</p></div>';
+window.myEcardButtons = [];
+
+// 初始化「我的專屬名片」區塊的顯示狀態
+window.initMyECard = function() {
+  const emptyState = document.getElementById('my-ecard-empty-state');
+  const editState = document.getElementById('my-ecard-edit-state');
+
+  // 若經過暴力配對後，還是找不到，顯示「尚未建立名片」
+  if (!window.currentUserCard) {
+    if (emptyState) emptyState.classList.remove('hidden');
+    if (editState) editState.classList.add('hidden');
     return;
   }
 
-  // 安全反轉：畫面上最新的名片排在最上面
-  const displayCards = [...cards].reverse();
+  // 成功找到名片，隱藏空白狀態，顯示編輯介面
+  if (emptyState) emptyState.classList.add('hidden');
+  if (editState) editState.classList.remove('hidden');
 
-  const html = displayCards.map(c => {
-    let rawService = c['服務項目'] || c['職稱'] || c['公司名稱'] || '';
-    let serviceStr = String(rawService).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, ' ');
-    if (serviceStr.length > 25) serviceStr = serviceStr.substring(0, 25) + '...';
-    
-    let tagHtml = '';
-    if (c['標籤']) {
-      tagHtml = String(c['標籤']).split(' ').map(t => `<span class="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px] font-bold mr-1">${window.escapeHTML(t)}</span>`).join('');
-    }
+  // 解析存放在資料庫的 JSON 設定
+  let cfg = {};
+  try { cfg = JSON.parse(window.currentUserCard['自訂名片設定'] || '{}'); } catch(e){}
 
-    let imgHtml = '';
-    let cfg = {};
-    try { cfg = JSON.parse(c['自訂名片設定'] || '{}'); } catch(e){}
-    let imgUrl = cfg.imgUrl || c['名片圖檔'] || '';
-    
-    if (imgUrl) {
-      imgHtml = `<img src="${window.escapeHTML(imgUrl)}" class="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-100 shadow-sm">`;
-    } else {
-      imgHtml = `<div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-300 flex items-center justify-center shrink-0 shadow-sm"><span class="material-symbols-outlined">person</span></div>`;
-    }
+  // 1. 寫入版型選項
+  let layoutVal = cfg.layoutStyle || cfg.layout || 'landscape';
+  let layoutRadio = document.querySelector(`input[name="my-ecard-layout"][value="${layoutVal}"]`);
+  if (layoutRadio) layoutRadio.checked = true;
 
-    // 檢查是否為自己的名片
-    let isMyCard = false;
-    if (window.currentUserProfile && window.currentUserProfile.userId) {
-       const uid = String(window.currentUserProfile.userId).trim();
-       if ((c['LINE ID'] && String(c['LINE ID']).trim() === uid) || 
-           (c['userId'] && String(c['userId']).trim() === uid) || 
-           (c['User ID'] && String(c['User ID']).trim() === uid)) {
-          isMyCard = true;
-       }
-    }
+  // 2. 寫入圖片網址
+  const imgInput = document.getElementById('my-v1-img-url');
+  if (imgInput) imgInput.value = cfg.imgUrl || window.currentUserCard['名片圖檔'] || '';
 
-    return `
-      <div class="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm active:scale-[0.98] transition-all cursor-pointer flex gap-3 items-center" onclick="window.openCardDetailByRowId('${c.rowId}')">
-        ${imgHtml}
-        <div class="flex-1 min-w-0">
-          <div class="font-black text-slate-800 text-[16px] leading-tight flex items-center gap-1">
-             ${window.escapeHTML(c['姓名'] || '未知')}
-             ${isMyCard ? '<span class="bg-primary-light text-primary text-[9px] px-1.5 py-0.5 rounded font-black tracking-wider">我的</span>' : ''}
-          </div>
-          <div class="text-[12px] text-slate-500 font-medium truncate mt-0.5">${serviceStr}</div>
-          ${tagHtml ? `<div class="mt-1.5 truncate">${tagHtml}</div>` : ''}
-        </div>
-        <span class="material-symbols-outlined text-slate-300 text-[20px] shrink-0">chevron_right</span>
-      </div>
-    `;
-  }).join('');
-  list.innerHTML = html;
+  // 3. 寫入按鈕
+  window.myEcardButtons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+  window.renderMyV1Buttons();
+
+  // 4. 立即更新預覽畫面
+  window.updateMyECardPreview();
 };
 
-window.filterCards = function() {
-  const keyword = document.getElementById('search-card-input').value.toLowerCase().trim();
-  if (!keyword) {
-    window.renderCardList(window.allCards);
-    return;
-  }
-  const filtered = window.allCards.filter(c => {
-    const str = [c['姓名'], c['公司名稱'], c['手機號碼'], c['公司電話'], c['標籤']].join(' ').toLowerCase();
-    return str.includes(keyword);
-  });
-  window.renderCardList(filtered);
-};
+// 渲染按鈕列表
+window.renderMyV1Buttons = function() {
+  const container = document.getElementById('my-v1-buttons-list');
+  if (!container) return;
 
-window.openCardDetailByRowId = function(rowId) {
-  const c = window.allCards.find(card => String(card.rowId) === String(rowId));
-  if (c) window.openCardDetail(c);
-};
-
-window.openCardDetail = function(card) {
-  if (!card) return;
-  window.currentCard = card;
-  
-  let isOwner = false;
-  if (window.currentUserProfile && window.currentUserProfile.userId) {
-     const uid = String(window.currentUserProfile.userId).trim();
-     if ((card['LINE ID'] && String(card['LINE ID']).trim() === uid) || 
-         (card['userId'] && String(card['userId']).trim() === uid) || 
-         (card['User ID'] && String(card['User ID']).trim() === uid)) {
-        isOwner = true;
-     }
-  }
-
-  const isAdminOrStore = (window.userRole === 'admin' || window.userRole === 'store');
-  const isSameNetwork = (card['歸屬網'] === window.currentNetworkId);
-  const canEdit = isOwner || isAdminOrStore || isSameNetwork;
-
-  const tabEdit = document.getElementById('tab-edit');
-  const tabEcard = document.getElementById('tab-ecard');
-  const btnDelete = document.getElementById('btn-delete-card');
-
-  if (canEdit) {
-    tabEdit.classList.remove('hidden');
-    tabEcard.classList.remove('hidden');
-    if (btnDelete) btnDelete.classList.remove('hidden');
+  if (window.myEcardButtons.length === 0) {
+    container.innerHTML = '<p class="text-[12px] text-slate-400 pb-2">尚未設定任何按鈕</p>';
   } else {
-    tabEdit.classList.add('hidden');
-    tabEcard.classList.add('hidden');
-    if (btnDelete) btnDelete.classList.add('hidden');
-    window.switchTab('info'); 
-  }
-
-  let infoHtml = '';
-  const displayFields = [
-    { label: '公司名稱', icon: 'business', key: '公司名稱' },
-    { label: '職稱', icon: 'badge', key: '職稱' },
-    { label: '手機號碼', icon: 'smartphone', key: '手機號碼', isPhone: true },
-    { label: '公司電話', icon: 'call', key: '公司電話', isPhone: true },
-    { label: '電子郵件', icon: 'mail', key: '電子郵件' },
-    { label: '公司網址', icon: 'language', key: '公司網址' },
-    { label: '公司地址', icon: 'location_on', key: '公司地址' },
-    { label: '服務項目', icon: 'design_services', key: '服務項目' },
-    { label: '標籤', icon: 'label', key: '標籤' },
-  ];
-
-  displayFields.forEach(f => {
-    let val = card[f.key];
-    if (val) {
-      let displayVal = window.escapeHTML(val);
-      if (f.key === '服務項目') displayVal = displayVal.replace(/\n/g, '<br>');
-      if (f.key === '標籤') displayVal = val.split(' ').map(t => `<span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold text-[11px] mr-1">${window.escapeHTML(t)}</span>`).join('');
-      
-      let actionHtml = '';
-      if (f.isPhone) actionHtml = `<a href="tel:${val.replace(/[^0-9+]/g, '')}" class="text-[#06C755] bg-green-50 p-1.5 rounded-lg active:scale-90 transition-transform"><span class="material-symbols-outlined text-[18px]">call</span></a>`;
-      else if (f.key === '公司地址') actionHtml = `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(val)}" target="_blank" class="text-blue-500 bg-blue-50 p-1.5 rounded-lg active:scale-90 transition-transform"><span class="material-symbols-outlined text-[18px]">map</span></a>`;
-      else if (f.key === '電子郵件') actionHtml = `<a href="mailto:${val}" class="text-orange-500 bg-orange-50 p-1.5 rounded-lg active:scale-90 transition-transform"><span class="material-symbols-outlined text-[18px]">mail</span></a>`;
-
-      infoHtml += `
-        <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex gap-3">
-          <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-400 shrink-0 shadow-sm border border-slate-100">
-            <span class="material-symbols-outlined text-[16px]">${f.icon}</span>
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-[11px] font-bold text-slate-400 mb-0.5">${f.label}</p>
-            <p class="text-[14px] text-slate-700 font-medium leading-relaxed">${displayVal}</p>
-          </div>
-          ${actionHtml}
+    container.innerHTML = window.myEcardButtons.map((b, i) => `
+      <div class="flex gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+        <input type="color" value="${b.c || '#06C755'}" class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200" onchange="window.myEcardButtons[${i}].c=this.value; window.updateMyECardPreview()">
+        <div class="flex-1 flex flex-col gap-1.5">
+          <input type="text" value="${window.escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="window.myEcardButtons[${i}].l=this.value; window.updateMyECardPreview()">
+          <input type="text" value="${window.escapeHTML(b.u || '')}" placeholder="https://..." class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="window.myEcardButtons[${i}].u=this.value">
         </div>
-      `;
-    }
-  });
+        <button onclick="window.myEcardButtons.splice(${i},1); window.renderMyV1Buttons(); window.updateMyECardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+      </div>
+    `).join('');
+  }
+};
+
+window.addMyV1Button = function() {
+  window.myEcardButtons.push({ l: '新按鈕', u: '', c: '#06C755' });
+  window.renderMyV1Buttons();
+  window.updateMyECardPreview();
+};
+
+window.changeMyLayout = function() {
+  window.updateMyECardPreview();
+};
+
+// 預覽名片產生器
+window.updateMyECardPreview = function() {
+  const area = document.getElementById('my-ecard-preview-area');
+  if (!area) return;
+
+  const name = window.currentUserCard?.['姓名'] || window.currentUserProfile?.displayName || '姓名';
+  const imgUrl = document.getElementById('my-v1-img-url')?.value || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   
-  if (!infoHtml) infoHtml = '<div class="text-center text-slate-400 py-8 text-sm">無詳細資料</div>';
-  document.getElementById('detail-fields').innerHTML = infoHtml;
+  let desc = window.currentUserCard ? (window.currentUserCard['服務項目'] || window.currentUserCard['職稱'] || window.currentUserCard['公司名稱'] || '') : '';
+  desc = desc.replace(/\n/g, '<br>');
+  
+  let cfg = {};
+  try { cfg = JSON.parse(window.currentUserCard?.['自訂名片設定'] || '{}'); } catch(e){}
+  
+  // 若 JSON 有存，優先吃 JSON
+  const color = cfg.descColor || '#666666';
+  const align = cfg.descAlign || 'center';
 
-  if (canEdit) {
-    const editableFields = ['姓名','英文名','職稱','部門','公司名稱','統一編號','手機號碼','公司電話','分機','傳真','電子郵件','公司網址','社群帳號','公司地址','服務項目','建檔人/備註'];
-    editableFields.forEach(f => {
-      const el = document.getElementById('edit-' + f);
-      if (el) el.value = card[f] || '';
-    });
+  const layoutStyle = document.querySelector('input[name="my-ecard-layout"]:checked')?.value || 'landscape';
+  let ratio = '20/13';
+  if (layoutStyle === 'portrait') ratio = '2/3';
+  if (layoutStyle === 'square') ratio = '1/1';
 
-    if (typeof window.initECardSettings === 'function') {
-      window.initECardSettings(card);
-    }
+  const btnsHtml = window.myEcardButtons.map(b => 
+    `<div class="block py-3 rounded-xl text-white text-center text-[14px] font-black mb-2.5 shadow-sm" style="background:${b.c||'#06C755'}">${window.escapeHTML(b.l||'按鈕')}</div>`
+  ).join('');
 
-    let cfg = {};
-    try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
-    const colorInput = document.getElementById('edit-desc-color');
-    if(colorInput) colorInput.value = cfg.descColor || '#666666';
-
-    if (typeof window.setDescAlign === 'function') {
-      window.setDescAlign(cfg.descAlign || 'center');
-    }
-
-    window.currentLoadedCardId = null; 
-  }
-
-  const btnClaim = document.getElementById('btn-send-claim');
-  if (btnClaim) {
-    if (card['LINE ID']) {
-      btnClaim.classList.add('hidden'); 
-    } else {
-      btnClaim.classList.remove('hidden'); 
-    }
-  }
-
-  window.goPage('card-detail');
+  area.innerHTML = `
+    <div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px]">
+      <div class="w-full bg-slate-100 bg-cover bg-center shadow-sm" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
+      <div class="p-6 text-center">
+        <div class="font-black text-[22px] text-slate-800 mb-2">${window.escapeHTML(name)}</div>
+        <div class="text-[14px] leading-relaxed" style="color: ${color}; text-align: ${align};">${desc}</div>
+      </div>
+      ${btnsHtml ? `<div class="px-6">${btnsHtml}</div>` : ''}
+    </div>
+  `;
 };
 
-window.setDescAlign = function(align) {
-  window.currentDescAlign = align;
-  ['start', 'center', 'end'].forEach(a => {
-    const btn = document.getElementById('align-' + a);
-    if (btn) {
-      if (a === align) {
-        btn.classList.add('bg-white', 'shadow-sm');
-      } else {
-        btn.classList.remove('bg-white', 'shadow-sm');
-      }
-    }
-  });
-  if (typeof window.updateECardPreview === 'function') {
-    window.updateECardPreview();
-  }
-};
-
-window.switchTab = function(tab) {
-  if (tab !== 'info') {
-    let isOwner = false;
-    if (window.currentUserProfile && window.currentUserProfile.userId) {
-       const uid = String(window.currentUserProfile.userId).trim();
-       if ((window.currentCard['LINE ID'] && String(window.currentCard['LINE ID']).trim() === uid) || 
-           (window.currentCard['userId'] && String(window.currentCard['userId']).trim() === uid) || 
-           (window.currentCard['User ID'] && String(window.currentCard['User ID']).trim() === uid)) {
-          isOwner = true;
-       }
-    }
-    const isAdminOrStore = (window.userRole === 'admin' || window.userRole === 'store');
-    const isSameNetwork = (window.currentCard['歸屬網'] === window.currentNetworkId);
-    if (!isOwner && !isAdminOrStore && !isSameNetwork) {
-      window.showToast('權限不足，無法編輯此名片', true);
-      return;
-    }
+// 儲存設定
+window.saveMyECardConfig = async function() {
+  if (!window.currentUserCard) return;
+  const btn = document.getElementById('btn-save-my-ecard');
+  if (btn) {
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
+    btn.disabled = true;
   }
 
-  ['info', 'edit', 'ecard'].forEach(t => {
-    document.getElementById('tab-content-' + t).classList.add('hidden');
-    const btn = document.getElementById('tab-' + t);
-    btn.classList.remove('text-blue-600', 'border-blue-600');
-    btn.classList.add('text-slate-400', 'border-transparent');
-  });
+  const layoutVal = document.querySelector('input[name="my-ecard-layout"]:checked')?.value || 'landscape';
+  let cfg = {};
+  try { cfg = JSON.parse(window.currentUserCard['自訂名片設定'] || '{}'); } catch(e){}
+  
+  cfg.layoutStyle = layoutVal;
+  cfg.imgUrl = document.getElementById('my-v1-img-url')?.value || '';
+  cfg.buttons = window.myEcardButtons;
 
-  document.getElementById('tab-content-' + tab).classList.remove('hidden');
-  const activeBtn = document.getElementById('tab-' + tab);
-  activeBtn.classList.remove('text-slate-400', 'border-transparent');
-  activeBtn.classList.add('text-blue-600', 'border-blue-600');
-};
-
-window.saveCardEdit = async function() {
-  if (!window.currentCard) return;
-  const btn = document.getElementById('btn-save');
-  btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
-  btn.disabled = true;
-
-  const editableFields = ['姓名','英文名','職稱','部門','公司名稱','統一編號','手機號碼','公司電話','分機','傳真','電子郵件','公司網址','社群帳號','公司地址','服務項目','建檔人/備註'];
-  let payloadData = {};
-  editableFields.forEach(f => {
-    const el = document.getElementById('edit-' + f);
-    if (el) payloadData[f] = el.value.trim();
-  });
+  const payloadData = {
+    '名片圖檔': cfg.imgUrl,
+    '自訂名片設定': JSON.stringify(cfg)
+  };
 
   try {
-    const res = await window.fetchAPI('updateCard', { rowId: window.currentCard.rowId, data: payloadData }, true);
+    const res = await window.fetchAPI('updateCard', { rowId: window.currentUserCard.rowId, data: payloadData }, false);
     if (res) {
-      window.showToast('✅ 變更已儲存');
-      Object.keys(payloadData).forEach(k => { window.currentCard[k] = payloadData[k]; });
+      window.showToast('✅ 專屬名片設定已儲存');
+      window.currentUserCard['自訂名片設定'] = payloadData['自訂名片設定'];
+      window.currentUserCard['名片圖檔'] = payloadData['名片圖檔'];
       
-      if (typeof window.allCards !== 'undefined') {
-        const match = window.allCards.find(c => String(c.rowId) === String(window.currentCard.rowId));
+      if (window.allCards) {
+        const match = window.allCards.find(c => String(c.rowId) === String(window.currentUserCard.rowId));
         if (match) {
-           Object.keys(payloadData).forEach(k => { match[k] = payloadData[k]; });
+           match['自訂名片設定'] = payloadData['自訂名片設定'];
+           match['名片圖檔'] = payloadData['名片圖檔'];
         }
       }
-      if (typeof window.currentUserCard !== 'undefined' && window.currentUserCard && String(window.currentUserCard.rowId) === String(window.currentCard.rowId)) {
-         Object.keys(payloadData).forEach(k => { window.currentUserCard[k] = payloadData[k]; });
-      }
-
-      if (typeof window.updateECardPreview === 'function') window.updateECardPreview();
-      window.openCardDetail(window.currentCard); 
     }
   } catch(e) {
-    window.showToast('⚠️ 儲存失敗:' + e.message, true);
+    window.showToast('⚠️ 儲存失敗: ' + e.message, true);
   } finally {
-    btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> 儲存變更';
-    btn.disabled = false;
-  }
-};
-
-window.deleteCard = async function() {
-  if (!window.currentCard) return;
-  if (!confirm("確定要刪除這張名片嗎？此操作無法還原！")) return;
-  
-  try {
-    const res = await window.fetchAPI('deleteCard', { rowId: window.currentCard.rowId }, true);
-    if (res) {
-      window.showToast('✅ 已刪除名片');
-      if (typeof window.allCards !== 'undefined') {
-        const idx = window.allCards.findIndex(c => String(c.rowId) === String(window.currentCard.rowId));
-        if (idx !== -1) {
-          window.allCards.splice(idx, 1);
-          window.renderCardList(window.allCards);
-        }
-      }
-      window.goPage('card');
+    if (btn) {
+      btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> 儲存名片設定';
+      btn.disabled = false;
     }
-  } catch(e) {
-    window.showToast('⚠️ 刪除失敗:' + e.message, true);
   }
 };
