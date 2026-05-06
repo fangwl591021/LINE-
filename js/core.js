@@ -26,12 +26,12 @@ window.escapeHTML = function(str) {
 // 安全跳脫函式：保護 Inline JS 參數
 window.escapeJS = function(str) {
   return String(str || '')
-    .replace(/\\/g, "\\\\") 
+    .replace(/\\/g, "\\\\")
     .replace(/'/g, "\\'")
     .replace(/"/g, "&quot;")
     .replace(/\n/g, "\\n")
     .replace(/\r/g, "")
-    .replace(/</g, "\\x3c") 
+    .replace(/</g, "\\x3c")
     .replace(/>/g, "\\x3e");
 };
 
@@ -143,7 +143,7 @@ window.triggerFlexSharing = async function(flexMsg, altText) {
   }
 };
 
-// 統一處理畫面權限解鎖(防止閃爍)
+// 統一處理畫面權限解鎖
 window.applyUserPermissions = function() {
   window.hasAdminRights = (window.userRole === 'admin' || window.userRole === 'store');
 
@@ -172,33 +172,36 @@ window.applyUserPermissions = function() {
   }
 };
 
-// 🚀 強效配對機制：如果 ID 找不到，用「手機號碼」強制抓回使用者的名片！
+// 強效配對機制
 window.syncUserCardMatch = function() {
   if (!window.currentUserProfile || !window.allCards || window.allCards.length === 0) {
+    console.warn('[syncUserCardMatch] 條件不足，跳過配對');
     return false;
   }
 
   const uid = String(window.currentUserProfile.userId).trim();
-  const uPhone = window.currentUser?.phone ? String(window.currentUser.phone).replace(/[^0-9]/g, '') : null;
+  const uPhone = window.currentUser?.phone
+    ? String(window.currentUser.phone).replace(/[^0-9]/g, '')
+    : null;
+
+  console.log('[syncUserCardMatch] 嘗試配對 UID:', uid, '手機:', uPhone);
 
   window.currentUserCard = window.allCards.find(c => {
-    // 1. 常規 ID 配對
     if (c['LINE ID'] && String(c['LINE ID']).trim() === uid) return true;
     if (c['userId'] && String(c['userId']).trim() === uid) return true;
     if (c['User ID'] && String(c['User ID']).trim() === uid) return true;
 
-    // 2. 終極備援配對：ID 遺失或對不上時，用「手機號碼」強制配對
     if (uPhone && c['手機號碼']) {
       const cPhone = String(c['手機號碼']).replace(/[^0-9]/g, '');
       if (cPhone === uPhone && cPhone.length >= 9) {
-        // 自動幫他把遺失的 ID 補回去，以利後續更新寫回資料庫
-        c['LINE ID'] = uid; 
+        c['LINE ID'] = uid;
         return true;
       }
     }
     return false;
   });
 
+  console.log('[syncUserCardMatch] 配對結果:', window.currentUserCard ? '找到: ' + window.currentUserCard['姓名'] : '未找到');
   return !!window.currentUserCard;
 };
 
@@ -206,22 +209,39 @@ window.syncUserCardMatch = function() {
 window.loadAllData = async function() {
   try {
     const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
-    window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
-    
-    // 🚀 在這裡執行強效配對！(取代舊的簡單 ID 判斷)
+
+    console.log('[loadAllData] getCardContacts 回傳:', cardsRes);
+
+    if (cardsRes && Array.isArray(cardsRes)) {
+      window.allCards = cardsRes;
+    } else if (cardsRes && cardsRes.data && Array.isArray(cardsRes.data)) {
+      window.allCards = cardsRes.data;
+    } else if (cardsRes && cardsRes.error) {
+      console.error('[loadAllData] 名片庫載入失敗:', cardsRes.error);
+      window.showToast('名片庫載入失敗: ' + cardsRes.error, true);
+      window.allCards = [];
+    } else {
+      console.warn('[loadAllData] 回傳格式非預期:', cardsRes);
+      window.allCards = [];
+    }
+
+    console.log('[loadAllData] allCards 數量:', window.allCards.length);
+    console.log('[loadAllData] allCards 第一筆欄位:', window.allCards[0] ? Object.keys(window.allCards[0]) : '無資料');
+
     window.syncUserCardMatch();
+    console.log('[loadAllData] currentUserCard:', window.currentUserCard ? window.currentUserCard['姓名'] : '未找到');
 
     const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
     window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
 
-    // 依序呼叫各模組的渲染邏輯
     if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
     if (typeof window.initMyECard === 'function') window.initMyECard();
     if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
     if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
     if (typeof window.renderActivities === 'function') window.renderActivities();
-    
+
   } catch (err) {
-    console.error("資料載入失敗:", err);
+    console.error('[loadAllData] 嚴重錯誤:', err);
+    window.showToast('資料載入失敗: ' + err.message, true);
   }
 };
