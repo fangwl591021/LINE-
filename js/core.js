@@ -1,4 +1,15 @@
-/* ==================== 前端共用函式 ==================== */
+/* ==================== 前端共用函式與全域狀態 ==================== */
+
+// 宣告全域狀態變數，確保各模組呼叫時不會報錯
+window.allCards = [];
+window.currentUserCard = null;
+window.allActivities = [];
+window.allSystemUsers = [];
+window.currentUser = null;
+window.userRole = 'user';
+window.currentNetworkId = 'admin';
+window.currentStoreId = '';
+window.hasAdminRights = false;
 
 // 嚴格安全跳脫函式：防範 XSS 跨站腳本攻擊 (用於 innerHTML 渲染內容)
 window.escapeHTML = function(str) {
@@ -14,12 +25,12 @@ window.escapeHTML = function(str) {
 // 安全跳脫函式：保護 Inline JS 參數 (用於 html 屬性內的腳本，例如 onclick)
 window.escapeJS = function(str) {
   return String(str || '')
-    .replace(/\\/g, "\\\\") // 加入反斜線跳脫
+    .replace(/\\/g, "\\\\") 
     .replace(/'/g, "\\'")
     .replace(/"/g, "&quot;")
     .replace(/\n/g, "\\n")
     .replace(/\r/g, "")
-    .replace(/</g, "\\x3c") // 防止閉合標籤攻擊
+    .replace(/</g, "\\x3c") 
     .replace(/>/g, "\\x3e");
 };
 
@@ -81,9 +92,9 @@ window.showToast = function(msg, isError = false) {
 // 統一 API 呼叫
 window.fetchAPI = async function(action, payload = {}, silent = false) {
   try {
-    payload.networkId = currentNetworkId;
-    payload.role = userRole;
-    payload.userId = currentUserProfile?.userId;
+    payload.networkId = window.currentNetworkId;
+    payload.role = window.userRole;
+    payload.userId = window.currentUserProfile?.userId;
 
     // 自動夾帶 LINE Access Token 供 Worker 進行嚴格安全驗證
     try {
@@ -133,7 +144,7 @@ window.triggerFlexSharing = async function(flexMsg, altText) {
 
 // 統一處理畫面權限解鎖(防止閃爍)
 window.applyUserPermissions = function() {
-  hasAdminRights = (userRole === 'admin' || userRole === 'store');
+  window.hasAdminRights = (window.userRole === 'admin' || window.userRole === 'store');
 
   const adminBadge = document.getElementById('header-admin-badge');
   const adminSwitch = document.getElementById('admin-switch-container');
@@ -141,7 +152,7 @@ window.applyUserPermissions = function() {
   const bannerMgmtBlock = document.getElementById('details-store-banner');
   const storeMgmtBlock = document.getElementById('details-store-management');
 
-  if (hasAdminRights) {
+  if (window.hasAdminRights) {
     if (adminBadge) adminBadge.classList.remove('hidden');
     if (adminSwitch) adminSwitch.classList.remove('hidden');
     if (topNavSwitch) topNavSwitch.classList.remove('hidden');
@@ -153,9 +164,36 @@ window.applyUserPermissions = function() {
     if (bannerMgmtBlock) bannerMgmtBlock.classList.add('hidden');
   }
 
-  if (userRole === 'admin') {
+  if (window.userRole === 'admin') {
     if (storeMgmtBlock) storeMgmtBlock.classList.remove('hidden');
   } else {
     if (storeMgmtBlock) storeMgmtBlock.classList.add('hidden');
+  }
+};
+
+// 🚀 核心資料載入引擎 (修復 loadAllData is not a function 錯誤)
+window.loadAllData = async function() {
+  try {
+    // 1. 載入全站名片庫 (後端會依據權限與歸屬網自動過濾)
+    const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
+    window.allCards = (cardsRes && Array.isArray(cardsRes)) ? cardsRes : [];
+    
+    // 從名片庫中抓取「屬於目前登入者」的專屬名片
+    if (typeof window.currentUserProfile !== 'undefined' && window.currentUserProfile) {
+      window.currentUserCard = window.allCards.find(c => c['LINE ID'] === window.currentUserProfile.userId);
+    }
+
+    // 2. 載入活動列表
+    const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
+    window.allActivities = (actsRes && Array.isArray(actsRes)) ? actsRes : [];
+
+    // 3. 觸發各模組的畫面更新 (依賴注入)
+    if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
+    if (typeof window.initMyECard === 'function') window.initMyECard();
+    if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
+    if (typeof window.renderActivities === 'function') window.renderActivities();
+    
+  } catch (err) {
+    console.error("資料載入失敗:", err);
   }
 };
