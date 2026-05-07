@@ -1,5 +1,25 @@
 /* ==================== 系統參數與設定模組 ==================== */
 
+// 安全版 SaaS 顯示/隱藏控制：避免把原本由 goPage() 控制的隱藏頁面誤打開
+window.toggleFeatureElements = function(selectors, enabled) {
+  (selectors || []).forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      if (enabled) {
+        if (el.getAttribute('data-feature-hidden') === 'true' && el.getAttribute('data-feature-was-visible') === 'true') {
+          el.classList.remove('hidden');
+        }
+        el.removeAttribute('data-feature-hidden');
+        el.removeAttribute('data-feature-was-visible');
+      } else {
+        const wasVisible = !el.classList.contains('hidden');
+        el.setAttribute('data-feature-hidden', 'true');
+        el.setAttribute('data-feature-was-visible', wasVisible ? 'true' : 'false');
+        el.classList.add('hidden');
+      }
+    });
+  });
+};
+
 /**
  * 儲存後台 Banner、系統名稱與 SaaS 功能開關設定
  */
