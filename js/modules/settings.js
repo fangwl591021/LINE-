@@ -1,7 +1,7 @@
 /* ==================== 系統參數與設定模組 ==================== */
 
 /**
- * 儲存後台 Banner 與 系統名稱設定
+ * 儲存後台 Banner、系統名稱與 SaaS 功能開關設定
  */
 window.saveStoreBanner = async function(e) {
   if (e) e.preventDefault();
@@ -17,7 +17,10 @@ window.saveStoreBanner = async function(e) {
     bannerUrl: document.getElementById('input-store-banner').value.trim(),
     showBanner: document.getElementById('toggle-show-banner').checked,
     youtubeUrl: document.getElementById('input-store-youtube').value.trim(),
-    showYoutube: document.getElementById('toggle-show-youtube').checked
+    showYoutube: document.getElementById('toggle-show-youtube').checked,
+    ...(typeof window.getSaasFeatureSettingsPayload === 'function'
+      ? window.getSaasFeatureSettingsPayload(window.currentSaasFeatures)
+      : {})
   };
 
   try {
@@ -38,6 +41,10 @@ window.saveStoreBanner = async function(e) {
       };
       window.writeCachedStoreSettings(mergedSettings, mergedSettings.networkId);
       window.applyStoreSettingsToHome(mergedSettings);
+
+      if (typeof window.setSaasFeatureStateFromSettings === 'function') {
+        window.setSaasFeatureStateFromSettings(mergedSettings, mergedSettings.networkId);
+      }
       
       // 重新觸發首頁資料載入以確保 Banner 同步
       if (typeof window.loadUserActivities === 'function') {
@@ -71,6 +78,13 @@ window.loadStoreBannerSettings = async function() {
       document.getElementById('input-store-youtube').value = d.youtubeUrl || '';
       document.getElementById('toggle-show-youtube').checked = window.isStoreToggleOn(d.showYoutube, true);
       window.applyStoreSettingsToHome(d);
+
+      if (typeof window.setSaasFeatureStateFromSettings === 'function') {
+        window.setSaasFeatureStateFromSettings(d, window.currentNetworkId);
+      }
+      if (typeof window.refreshSaasFeatureToggles === 'function') {
+        window.refreshSaasFeatureToggles();
+      }
     }
   } catch (e) {
     console.warn("無法加載系統設定值", e);
