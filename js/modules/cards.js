@@ -112,19 +112,21 @@
   function canEditCard(card) {
     if (!card) return false;
 
+    const role = safeText(window.userRole || "user");
     const cardLineId = safeText(card["LINE ID"]).trim();
     const cardNetwork = safeText(card["歸屬網"]).trim();
+    const creatorId = safeText(card["建檔者ID"]).trim();
     const userId = getCurrentUserId();
-    const userRole = safeText(window.userRole || "user");
     const currentNetworkId = safeText(window.currentNetworkId || "admin").trim();
 
-    const isOwner = cardLineId && cardLineId === userId;
-    const isAdminOrStore = userRole === "admin" || userRole === "store";
-    const isSameNetwork = cardNetwork && cardNetwork === currentNetworkId;
-
-    return isOwner || isAdminOrStore || isSameNetwork;
+    if (cardLineId) return cardLineId === userId;
+    if (creatorId) return creatorId === userId || role === "admin";
+    if (role === "admin") return true;
+    if (role === "store") return cardNetwork === currentNetworkId || cardNetwork === "";
+    return cardNetwork === currentNetworkId || cardNetwork === "";
   }
 
+  window.canEditCardRecord = canEditCard;
   function getCardTitle(card) {
     return safeText(card["姓名"] || card["英文名"] || "未知");
   }
@@ -398,6 +400,54 @@
 
     if (typeof window.goPage === "function") {
       window.goPage("card-detail");
+    }
+  };
+
+  window.getClaimUrlForCard = function (card) {
+    const liffId = window.LIFF_ID || (typeof LIFF_ID !== "undefined" ? LIFF_ID : "");
+    const cardId = card?.rowId || card?.["rowId"] || "";
+    let url = "https://liff.line.me/" + encodeURIComponent(liffId) + "?claim=" + encodeURIComponent(cardId);
+
+    if (window.currentUserProfile?.userId) {
+      url += "&ref=" + encodeURIComponent(window.currentUserProfile.userId);
+    }
+    if (window.currentNetworkId) {
+      url += "&net=" + encodeURIComponent(window.currentNetworkId);
+    }
+
+    return url;
+  };
+
+  window.sendClaimInvitation = async function () {
+    const card = window.currentCard;
+    if (!card || !(card.rowId || card["rowId"])) {
+      showToast("找不到名片資料", true);
+      return;
+    }
+    if (safeText(card["LINE ID"]).trim()) {
+      showToast("此名片已綁定，不能再次發送認領", true);
+      return;
+    }
+
+    const claimUrl = window.getClaimUrlForCard(card);
+    const text = "這是您的數位名片認領連結，請點擊後綁定您的 LINE 帳號：\n" + claimUrl;
+
+    try {
+      if (typeof liff !== "undefined" && liff.isLoggedIn() && liff.isApiAvailable("shareTargetPicker")) {
+        const result = await liff.shareTargetPicker([{ type: "text", text }]);
+        if (result) showToast("已送出認領邀約");
+        return;
+      }
+
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(claimUrl);
+        showToast("已複製認領連結");
+        return;
+      }
+
+      window.prompt("請複製認領連結", claimUrl);
+    } catch (e) {
+      showToast("發送失敗：" + (e.message || "請稍後再試"), true);
     }
   };
 
