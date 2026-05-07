@@ -109,6 +109,8 @@ window.confirmCrop = async function() {
     const cardPayload = {
       ...ocrRes,
       userId: '',
+      creatorId: window.currentUserProfile?.userId || '',
+      '建檔者ID': window.currentUserProfile?.userId || '',
       '建檔人/備註': '掃描建立 by ' + (currentUser?.name || '')
     };
 
@@ -187,6 +189,8 @@ window.confirmMyCardCrop = async function() {
     const cardPayload = {
       ...ocrRes,
       userId: currentUserProfile.userId,
+      creatorId: currentUserProfile.userId,
+      '建檔者ID': currentUserProfile.userId,
       '建檔人/備註': '我的專屬名片'
     };
 
