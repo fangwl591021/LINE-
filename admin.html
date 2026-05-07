@@ -166,6 +166,7 @@
               <thead>
                 <tr>
                   <th>活動名稱</th>
+                  <th>活動ID</th>
                   <th>所屬租戶</th>
                   <th>活動時間</th>
                   <th>費用</th>
@@ -174,7 +175,7 @@
                 </tr>
               </thead>
               <tbody id="acts-table-body">
-                <tr><td colspan="6" class="text-center py-8 text-slate-400">請稍候，載入資料中...</td></tr>
+                <tr><td colspan="7" class="text-center py-8 text-slate-400">請稍候，載入資料中...</td></tr>
               </tbody>
             </table>
           </div>
@@ -534,6 +535,11 @@
       tbody.innerHTML = filtered.map(a => `
         <tr>
           <td class="font-bold text-slate-700">${escapeHTML(a['活動名稱'])}</td>
+          <td>
+            <button type="button" onclick="copyActivityId('${escapeHTML(a['活動ID'] || a.rowId || '')}')" class="font-mono text-[12px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors">
+              ${escapeHTML(a['活動ID'] || a.rowId || '')}
+            </button>
+          </td>
           <td class="text-sm text-slate-500">${escapeHTML(a['建立者ID'] || 'admin')}</td>
           <td class="text-[12px] text-slate-500 font-mono">${escapeHTML(a['開始時間'])}</td>
           <td class="text-sm">${a['金額'] > 0 ? 'NT$ ' + a['金額'] : '<span class="text-green-600 font-bold">免費</span>'}</td>
@@ -544,6 +550,16 @@
             </span>
           </td>
         </tr>`).join('');
+    }
+
+    async function copyActivityId(activityId) {
+      if (!activityId) return;
+      try {
+        await navigator.clipboard.writeText(activityId);
+        showToast('活動 ID 已複製');
+      } catch(e) {
+        window.prompt('請複製活動 ID', activityId);
+      }
     }
 
     async function loadFinanceStats() {
