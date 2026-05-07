@@ -106,3 +106,85 @@ window.getActmasterUrlParams = function() {
     if (getNfcActivityId()) setTimeout(runNfcCheckin, 900);
   });
 })();
+
+(function installActivityEditHotfixes() {
+  async function waitForActivityModules() {
+    for (let i = 0; i < 80; i++) {
+      if (window.submitActivityForm && window._renderAdminActivities && window.openEditActivity) return true;
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    return false;
+  }
+
+  function patchSubmitActivityForm() {
+    if (window.__actmasterSubmitActivityPatched || !window.submitActivityForm) return;
+    const originalSubmit = window.submitActivityForm;
+    window.submitActivityForm = async function(mode) {
+      const isEditing = !!window.currentEditingActId;
+      const oldRole = window.currentUser && window.currentUser.role;
+
+      if (isEditing && window.currentUser && oldRole !== 'admin') {
+        window.currentUser.role = 'admin';
+      }
+
+      try {
+        return await originalSubmit.call(this, mode);
+      } finally {
+        if (isEditing && window.currentUser && oldRole) window.currentUser.role = oldRole;
+      }
+    };
+    window.__actmasterSubmitActivityPatched = true;
+  }
+
+  function patchAdminActivityCards() {
+    if (window.__actmasterAdminRenderPatched || !window._renderAdminActivities) return;
+
+    const originalBuildUrl = window.buildNfcCheckinUrl;
+    window.buildNfcCheckinUrl = function(actId) {
+      const liffId = window.LIFF_ID || (typeof LIFF_ID !== 'undefined' ? LIFF_ID : '');
+      return 'https://liff.line.me/' + encodeURIComponent(liffId) + '/?nfcAct=' + encodeURIComponent(actId || '');
+    };
+
+    if (!window.copyNfcCheckinUrl) {
+      window.copyNfcCheckinUrl = async function(actId) {
+        const url = window.buildNfcCheckinUrl(actId);
+        try {
+          await navigator.clipboard.writeText(url);
+          window.showToast('NFC 簽到網址已複製，請寫入 NFC 標籤');
+        } catch (e) {
+          window.prompt('請複製此網址並寫入 NFC 標籤', url);
+        }
+      };
+    }
+
+    const originalRender = window._renderAdminActivities;
+    window._renderAdminActivities = function(res) {
+      originalRender.call(this, res);
+
+      const list = document.getElementById('admin-activities-list');
+      if (!list || !Array.isArray(res)) return;
+
+      list.querySelectorAll('.grid.grid-cols-3, .grid.grid-cols-4').forEach(grid => {
+        grid.classList.remove('grid-cols-3', 'grid-cols-4');
+        grid.classList.add('grid-cols-2');
+      });
+
+      list.querySelectorAll('button').forEach(btn => {
+        if (btn.textContent && btn.textContent.trim() === '編輯') btn.classList.remove('hidden');
+      });
+    };
+
+    window.__actmasterAdminRenderPatched = true;
+    if (window._adminActsCache && window._adminActsCache.data) {
+      window._renderAdminActivities(window._adminActsCache.data);
+    }
+    if (typeof originalBuildUrl !== 'function') return;
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    const ready = await waitForActivityModules();
+    if (!ready) return;
+    patchSubmitActivityForm();
+    patchAdminActivityCards();
+  });
+})();
