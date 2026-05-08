@@ -122,9 +122,12 @@
       <!-- Tab: Users -->
       <div id="tab-users" class="tab-content">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
+          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white gap-3">
             <h3 class="font-bold text-slate-700">全站會員與商家名單</h3>
-            <button onclick="loadUsers()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
+            <div class="flex items-center gap-2">
+              <button id="btn-sync-bound-cards" onclick="syncBoundCardsToUsers()" class="text-sm border border-blue-200 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-50 flex items-center gap-1 font-bold"><span class="material-symbols-outlined text-[16px]">sync</span> 同步已綁名片</button>
+              <button onclick="loadUsers()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
+            </div>
           </div>
           <div class="overflow-x-auto">
             <table class="data-table">
@@ -487,8 +490,9 @@
     async function fetchAPI(action, payload = {}) {
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
-        payload.userId = adminProfile?.userId || '';
-        payload.role = adminRole || 'store';
+        if (!payload.userId) payload.userId = adminProfile?.userId || '';
+        payload.operatorId = payload.operatorId || adminProfile?.userId || '';
+        payload.role = payload.role || adminRole || 'store';
         payload.networkId = payload.networkId || adminNetworkId || 'admin';
         const res = await fetch(WORKER_URL, {
           method: 'POST',
@@ -527,26 +531,122 @@
       const res = await fetchAPI('getAllUsers');
       if (res && Array.isArray(res)) {
         allUsersData = res;
-        document.getElementById('stat-users').innerText = res.length;
-        tbody.innerHTML = res.map(u => `
-          <tr>
-            <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
-            <td class="text-xs text-slate-400 font-mono">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
-            <td>${escapeHTML(u.phone || '-')}</td>
-            <td class="text-sm">${escapeHTML(u.networkId || 'admin')}</td>
-            <td>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
-                ${u.role.toUpperCase()}
-              </span>
-            </td>
-            <td class="text-right">
-              <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
-                <option value="user" ${u.role==='user'?'selected':''}>一般</option>
-                <option value="store" ${u.role==='store'?'selected':''}>店長</option>
-                <option value="admin" ${u.role==='admin'?'selected':''}>總管</option>
-              </select>
-            </td>
-          </tr>`).join('');
+        renderUsersTable(res);
+      }
+    }
+
+    function renderUsersTable(users) {
+      const tbody = document.getElementById('users-table-body');
+      document.getElementById('stat-users').innerText = users.length;
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
+          <td class="text-xs text-slate-400 font-mono">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
+          <td>${escapeHTML(u.phone || '-')}</td>
+          <td class="text-sm">${escapeHTML(u.networkId || 'admin')}</td>
+          <td>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
+              ${(u.role || 'user').toUpperCase()}
+            </span>
+          </td>
+          <td class="text-right">
+            <select onchange="updateRole('${escapeHTML(u.userId || '')}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
+              <option value="user" ${u.role==='user'?'selected':''}>一般</option>
+              <option value="store" ${u.role==='store'?'selected':''}>店長</option>
+              <option value="admin" ${u.role==='admin'?'selected':''}>總管</option>
+            </select>
+          </td>
+        </tr>`).join('');
+    }
+
+    function normalizeLineId(value) {
+      return String(value || '').trim();
+    }
+
+    function buildUserPayloadFromBoundCard(card) {
+      const userId = normalizeLineId(card['LINE ID'] || card.lineId);
+      const name = String(card['姓名'] || '').trim();
+      const phone = String(card['手機號碼'] || card['公司電話'] || '').trim();
+      const company = String(card['公司名稱'] || '').trim();
+      const title = String(card['職稱'] || '').trim();
+
+      if (!userId || !name || !phone) return null;
+      return {
+        userId,
+        name,
+        phone,
+        industry: title || company,
+        birthday: '',
+        role: 'user',
+        networkId: card['歸屬網'] || 'admin',
+        claimedCardRowId: card.rowId || '',
+        companyName: company,
+        title
+      };
+    }
+
+    async function syncBoundCardsToUsers() {
+      if (adminRole !== 'admin') {
+        showToast('只有總管 admin 可以同步全站會員', true);
+        return;
+      }
+
+      const btn = document.getElementById('btn-sync-bound-cards');
+      const originalHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> 偵測中';
+      }
+
+      try {
+        const usersRes = await fetchAPI('getAllUsers');
+        const cardsRes = await fetchAPI('getCardContacts');
+        const users = Array.isArray(usersRes) ? usersRes : [];
+        const cards = Array.isArray(cardsRes) ? cardsRes : [];
+        const userIdSet = new Set(users.map(u => normalizeLineId(u.userId)).filter(Boolean));
+        const payloads = [];
+        const seen = new Set();
+
+        cards.forEach(card => {
+          const payload = buildUserPayloadFromBoundCard(card);
+          if (!payload || userIdSet.has(payload.userId) || seen.has(payload.userId)) return;
+          seen.add(payload.userId);
+          payloads.push(payload);
+        });
+
+        if (payloads.length === 0) {
+          showToast('偵測完成：沒有已綁名片缺會員資料');
+          allUsersData = users;
+          renderUsersTable(users);
+          return;
+        }
+
+        const preview = payloads.slice(0, 8).map(p => `${p.name} / ${p.phone}`).join('\n');
+        if (!window.confirm(`偵測到 ${payloads.length} 筆已綁名片但沒有會員資料，要補寫入個人設定嗎？\n\n${preview}${payloads.length > 8 ? '\n...' : ''}`)) {
+          showToast('已取消同步');
+          return;
+        }
+
+        let ok = 0;
+        let fail = 0;
+        for (const payload of payloads) {
+          if (btn) btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> ${ok + fail + 1}/${payloads.length}`;
+          try {
+            const res = await fetchAPI('registerUser', payload);
+            if (res && !res.error) ok++;
+            else fail++;
+          } catch (e) {
+            fail++;
+          }
+        }
+
+        showToast(`同步完成：成功 ${ok} 筆${fail ? `，失敗 ${fail} 筆` : ''}`, !!fail);
+        await loadUsers();
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
       }
     }
 
