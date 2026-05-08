@@ -331,6 +331,8 @@ const MyCardModule = (function() {
     return {
         init,
         load,
+        shareMyCard,
+        showMyQRCode,
         // 公開給 HTML onclick 使用
         updateButton: (i, field, val) => {
             myEcardButtons[i][field] = val;
@@ -343,6 +345,18 @@ const MyCardModule = (function() {
         }
     };
 })();
+
+window.initMyECard = function() {
+    MyCardModule.init();
+    MyCardModule.load();
+};
+window.showMyQRCode = function() {
+    return MyCardModule.showMyQRCode();
+};
+window.shareMyCard = function(btn) {
+    const $btn = btn && btn.jquery ? btn : $(btn || '#btn-share-my-card');
+    return MyCardModule.shareMyCard($btn);
+};
 
 // 為了讓 HTML 中的 onclick 能存取，將模組掛載到 window (或您可以使用事件委派)
 window.MyCardModule = MyCardModule;
