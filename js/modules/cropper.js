@@ -53,6 +53,7 @@ window.openCropper = function(input) {
 
   const reader = new FileReader();
   reader.onload = (e) => {
+    window.lastCardUploadImage = e.target.result;
     const modal = document.getElementById('cropper-modal');
     const img = document.getElementById('cropper-image');
 
@@ -69,7 +70,13 @@ window.openCropper = function(input) {
 
       if (cropperInstance) cropperInstance.destroy();
       setTimeout(() => {
-        cropperInstance = createSafeCropper(img, NaN);
+        try {
+          cropperInstance = createSafeCropper(img, NaN);
+        } catch (err) {
+          console.error('[openCropper] Cropper init failed:', err);
+          cropperInstance = null;
+          window.showToast('裁切器載入失敗，可直接按確認進行辨識', true);
+        }
       }, 150);
     };
 
@@ -84,23 +91,32 @@ window.recognizeCard = function(input) {
 };
 
 window.confirmCrop = async function() {
-  if (!cropperInstance) return;
   const btn = document.getElementById('btn-confirm-crop');
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 1000;
-  let quality = 0.8;
-  let base64Image = cropperInstance.getCroppedCanvas({
-    maxWidth: size,
-    maxHeight: size,
-    imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high'
-  }).toDataURL('image/jpeg', quality);
+  let base64Image = window.lastCardUploadImage || '';
 
-  while (base64Image.length > 660000 && quality > 0.3) {
-    quality -= 0.15;
-    base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+  if (cropperInstance) {
+    let size = 1000;
+    let quality = 0.8;
+    base64Image = cropperInstance.getCroppedCanvas({
+      maxWidth: size,
+      maxHeight: size,
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high'
+    }).toDataURL('image/jpeg', quality);
+
+    while (base64Image.length > 660000 && quality > 0.3) {
+      quality -= 0.15;
+      base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+    }
+  }
+
+  if (!base64Image) {
+    btn.innerHTML = '確認裁切';
+    btn.disabled = false;
+    return window.showToast('找不到可辨識的圖片，請重新選擇照片', true);
   }
 
   window.cancelCrop();
@@ -137,6 +153,7 @@ window.openMyCardCropper = function(input) {
 
   const reader = new FileReader();
   reader.onload = (e) => {
+    window.lastMyCardUploadImage = e.target.result;
     const modal = document.getElementById('cropper-modal');
     const img = document.getElementById('cropper-image');
 
@@ -153,7 +170,13 @@ window.openMyCardCropper = function(input) {
 
       if (cropperInstance) cropperInstance.destroy();
       setTimeout(() => {
-        cropperInstance = createSafeCropper(img, NaN);
+        try {
+          cropperInstance = createSafeCropper(img, NaN);
+        } catch (err) {
+          console.error('[openMyCardCropper] Cropper init failed:', err);
+          cropperInstance = null;
+          window.showToast('裁切器載入失敗，可直接按確認進行辨識', true);
+        }
       }, 150);
     };
 
@@ -168,23 +191,32 @@ window.recognizeMyCard = function(input) {
 };
 
 window.confirmMyCardCrop = async function() {
-  if (!cropperInstance) return;
   const btn = document.getElementById('btn-confirm-crop');
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 處理中...';
   btn.disabled = true;
 
-  let size = 1000;
-  let quality = 0.8;
-  let base64Image = cropperInstance.getCroppedCanvas({
-    maxWidth: size,
-    maxHeight: size,
-    imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high'
-  }).toDataURL('image/jpeg', quality);
+  let base64Image = window.lastMyCardUploadImage || '';
 
-  while (base64Image.length > 660000 && quality > 0.3) {
-    quality -= 0.15;
-    base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+  if (cropperInstance) {
+    let size = 1000;
+    let quality = 0.8;
+    base64Image = cropperInstance.getCroppedCanvas({
+      maxWidth: size,
+      maxHeight: size,
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high'
+    }).toDataURL('image/jpeg', quality);
+
+    while (base64Image.length > 660000 && quality > 0.3) {
+      quality -= 0.15;
+      base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+    }
+  }
+
+  if (!base64Image) {
+    btn.innerHTML = '確認裁切';
+    btn.disabled = false;
+    return window.showToast('找不到可辨識的圖片，請重新選擇照片', true);
   }
 
   window.cancelCrop();
