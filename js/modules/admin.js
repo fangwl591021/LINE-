@@ -29,11 +29,20 @@ window.loadAdminActivities = async function(forceRefresh = false) {
       // 寫入快取
       window._adminActsCache = { data: res, time: now };
       window._renderAdminActivities(res);
+    } else if (cache.data && Array.isArray(cache.data)) {
+      window._renderAdminActivities(cache.data);
+      window.showToast((res && res.error) ? res.error + '，已顯示暫存活動' : '連線失敗，已顯示暫存活動', true);
     } else {
-      throw new Error('無法取得活動列表');
+      throw new Error((res && res.error) ? res.error : '無法取得活動列表');
     }
   } catch (e) {
-    container.innerHTML = '<div class="text-center py-10 text-red-400 text-sm font-bold">載入失敗:' + e.message + '</div>';
+    const msg = window.escapeHTML ? window.escapeHTML(e.message || '無法取得活動列表') : String(e.message || '無法取得活動列表');
+    container.innerHTML =
+      '<div class="text-center py-10 px-6 text-red-400 text-sm font-bold">' +
+        '<span class="material-symbols-outlined text-4xl mb-2">wifi_off</span>' +
+        '<div>載入失敗：' + msg + '</div>' +
+        '<button onclick="window.loadAdminActivities(true)" class="mt-4 px-5 py-2 rounded-xl bg-slate-900 text-white text-xs font-black active:scale-95 transition-transform">重新載入</button>' +
+      '</div>';
   }
 };
 

@@ -106,6 +106,10 @@ const Core = (function() {
     // 統一 API 呼叫 (整合您提供的 fetchAPI 邏輯)
     window.fetchAPI = async function(action, payload = {}, silent = false) {
         try {
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                throw new Error('目前裝置沒有網路連線，請確認 Wi-Fi 或行動網路後重試');
+            }
+
             const safePayload = { ...payload };
             safePayload.networkId = safePayload.networkId !== undefined ? safePayload.networkId : window.currentNetworkId;
             safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
@@ -126,12 +130,20 @@ const Core = (function() {
                 body: JSON.stringify({ action, payload: safePayload })
             });
 
+            if (!res.ok) {
+                throw new Error('伺服器暫時無法連線 (' + res.status + ')，請稍後重試');
+            }
+
             const data = await res.json();
             if (!data.success) throw new Error(data.error || 'API 請求失敗');
             return data.data || data;
         } catch (err) {
-            if (!silent) window.showToast(err.message, true);
-            return { success: false, error: err.message };
+            let message = err && err.message ? err.message : '連線失敗';
+            if (message === 'Failed to fetch' || message.includes('NetworkError')) {
+                message = '無法連線到伺服器，請確認網路狀態後重試';
+            }
+            if (!silent) window.showToast(message, true);
+            return { success: false, error: message };
         }
     };
 
