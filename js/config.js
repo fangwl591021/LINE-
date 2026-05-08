@@ -61,6 +61,16 @@ var myV1Buttons = [];
 window.userSocials = [];
 window.myActivitiesData = [];
 
+window.recognizeCard = function(input) {
+  if (typeof window.openCropper === 'function') return window.openCropper(input);
+  window.showToast?.('圖片裁切模組尚未載入，請重新整理後再試', true);
+};
+
+window.recognizeMyCard = function(input) {
+  if (typeof window.openMyCardCropper === 'function') return window.openMyCardCropper(input);
+  window.showToast?.('圖片裁切模組尚未載入，請重新整理後再試', true);
+};
+
 window.getActmasterUrlParams = function() {
   const params = new URLSearchParams(window.location.search);
   const state = params.get('liff.state');
