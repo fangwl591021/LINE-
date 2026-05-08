@@ -28,7 +28,7 @@
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
-  var templateCoverUrl = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1000&q=80';
+  var templateCoverUrl = 'assets/rental-template-cover.png';
 
   function getTemplateButtons(phone) {
     var cleanPhone = String(phone || '').replace(/[^0-9+]/g, '');
