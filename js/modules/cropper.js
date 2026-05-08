@@ -79,6 +79,10 @@ window.openCropper = function(input) {
   reader.readAsDataURL(file);
 };
 
+window.recognizeCard = function(input) {
+  return window.openCropper(input);
+};
+
 window.confirmCrop = async function() {
   if (!cropperInstance) return;
   const btn = document.getElementById('btn-confirm-crop');
@@ -159,6 +163,10 @@ window.openMyCardCropper = function(input) {
   reader.readAsDataURL(file);
 };
 
+window.recognizeMyCard = function(input) {
+  return window.openMyCardCropper(input);
+};
+
 window.confirmMyCardCrop = async function() {
   if (!cropperInstance) return;
   const btn = document.getElementById('btn-confirm-crop');
@@ -215,8 +223,6 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
   if (!file) return;
 
   window.currentUploadTargetId = targetInputId;
-
-  // 預設不鎖比例，讓 Banner、名片封面、活動圖都能自由拉伸裁切框。
   const uploadRatio = forcedRatio !== null ? forcedRatio : NaN;
 
   const reader = new FileReader();
