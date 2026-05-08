@@ -63,7 +63,9 @@ window.submitClaimRegistration = async function() {
     const res = await window.fetchAPI('claimCardAndRegister', payload, true);
     if (res) {
       window.showToast('✅ 名片認領並註冊成功！');
-      setTimeout(() => window.location.replace(window.location.pathname), 1500);
+      await window.loadAllData();
+      window.goPage('admin-settings');
+      if (typeof window.focusMyECardSection === 'function') window.focusMyECardSection();
     }
   } catch(e) {
     window.showToast('綁定失敗:' + e.message, true);
@@ -267,7 +269,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.goPage('home');
           } else if (claimRes) {
             window.showToast('✅ 成功認領名片並綁定您的帳號！');
-            setTimeout(() => window.location.replace(window.location.pathname), 1500);
+            window.loadAllData().then(() => {
+              window.goPage('admin-settings');
+              if (typeof window.focusMyECardSection === 'function') window.focusMyECardSection();
+            });
           }
         }).catch(e => {
           window.showToast(e.message || '該名片已被認領或無法存取', true);

@@ -136,6 +136,16 @@
     updatePreview();
   }
 
+  function focusMyECardSection() {
+    var details = document.getElementById('details-my-ecard');
+    if (details) {
+      details.open = true;
+      setTimeout(function() {
+        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+    }
+  }
+
   function renderButtons() {
     var list = $('#my-v1-buttons-list');
     if (!list) return;
@@ -312,6 +322,8 @@
 
   window.MyCardModule = api;
   window.initMyECard = function() { api.init(); api.load(); };
+  window.changeMyLayout = handleLayoutChange;
+  window.focusMyECardSection = focusMyECardSection;
   window.addMyV1Button = addV1Button;
   window.updateMyV1Button = updateButton;
   window.removeMyV1Button = removeButton;
