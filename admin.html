@@ -213,7 +213,7 @@
                   <th>聯絡電話</th>
                   <th>歸屬網</th>
                   <th>標籤 / 備註</th>
-                  <th class="text-center w-20">操作</th>
+                  <th class="text-center w-28">操作</th>
                 </tr>
               </thead>
               <tbody id="cards-table-body">
@@ -515,9 +515,52 @@
           <td class="text-xs text-slate-500">${escapeHTML(c['標籤'] || '')}</td>
           <td class="text-center whitespace-nowrap">
              <button onclick="openEditCardModal('${encodeURIComponent(c.rowId || '')}')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="編輯名片"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
+             ${adminRole === 'admin' && (c['LINE ID'] || c.lineId) ? `<button onclick="unbindAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-amber-600 p-1 transition-colors" title="解除 LINE 綁定"><span class="material-symbols-outlined text-[20px]">link_off</span></button>` : ''}
              ${adminRole === 'admin' ? `<button onclick="deleteAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-red-600 p-1 transition-colors" title="刪除名片"><span class="material-symbols-outlined text-[20px]">delete</span></button>` : ''}
           </td>
         </tr>`).join('');
+    }
+
+    async function unbindAdminCard(encodedRowId) {
+      if (adminRole !== 'admin') {
+        showToast('只有總管 admin 可以解除綁定', true);
+        return;
+      }
+
+      const rowId = decodeURIComponent(encodedRowId || '');
+      const card = allCardsData.find(c => String(c.rowId) === String(rowId));
+      if (!card) return showToast('找不到名片資料，請重新整理', true);
+
+      const name = card['姓名'] || '未命名';
+      const company = card['公司名稱'] || '';
+      const lineId = card['LINE ID'] || card.lineId || '';
+      const label = company ? `${name} / ${company}` : name;
+
+      if (!lineId) {
+        showToast('這張名片目前沒有 LINE 綁定');
+        return;
+      }
+
+      if (!window.confirm(`確定要解除這張名片的 LINE 綁定？\n\n${label}\n目前 LINE ID：${lineId}\n\n解除後此名片會回到未認領狀態。`)) return;
+
+      const doubleCheck = window.prompt(`二次確認：請輸入「解除」才會解除綁定\n\n${label}`);
+      if (doubleCheck !== '解除') {
+        showToast('已取消解除綁定');
+        return;
+      }
+
+      const res = await fetchAPI('updateCard', {
+        rowId,
+        data: {
+          'LINE ID': ''
+        }
+      });
+      if (!res) return;
+
+      card['LINE ID'] = '';
+      card.lineId = '';
+      renderCards();
+      showToast('已解除 LINE 綁定');
     }
 
     async function deleteAdminCard(encodedRowId) {
