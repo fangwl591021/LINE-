@@ -47,6 +47,89 @@ window.cancelCrop = function() {
   if (img) img.src = '';
 };
 
+function parseMaybeJson(value) {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch (e) {
+    return value;
+  }
+}
+
+function pickFirstValue(source, keys) {
+  if (!source || typeof source !== 'object') return '';
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return '';
+}
+
+function unwrapOcrCardData(ocrRes) {
+  const candidates = [
+    ocrRes?.data?.cardData,
+    ocrRes?.data?.card,
+    ocrRes?.data,
+    ocrRes?.cardData,
+    ocrRes?.card,
+    ocrRes?.result,
+    ocrRes
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = parseMaybeJson(candidate);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  }
+  return {};
+}
+
+function normalizeOcrCardData(ocrRes) {
+  const source = unwrapOcrCardData(ocrRes);
+  const normalized = {};
+  const fieldMap = {
+    '姓名': ['姓名', 'name', 'Name', 'fullName', 'full_name'],
+    '英文名': ['英文名', 'englishName', 'english_name', 'EnglishName'],
+    '職稱': ['職稱', 'title', 'Title', 'jobTitle', 'job_title'],
+    '部門': ['部門', 'department', 'Department'],
+    '公司名稱': ['公司名稱', 'companyName', 'company_name', 'company', 'Company', 'organization'],
+    '統一編號': ['統一編號', 'taxId', 'tax_id', 'vatNumber'],
+    '手機號碼': ['手機號碼', '手機', 'mobile', 'mobilePhone', 'phone', 'Phone'],
+    '公司電話': ['公司電話', '電話', 'officePhone', 'office_phone', 'tel', 'telephone'],
+    '分機': ['分機', 'extension', 'ext'],
+    '傳真': ['傳真', 'fax', 'Fax'],
+    '電子郵件': ['電子郵件', 'email', 'Email', 'mail'],
+    '公司網址': ['公司網址', 'website', 'Website', 'url', 'companyUrl'],
+    '社群帳號': ['社群帳號', 'socials', 'social', 'socialMedia'],
+    '公司地址': ['公司地址', 'address', 'Address', 'companyAddress'],
+    '生日': ['生日', 'birthday', 'Birthday'],
+    '服務項目': ['服務項目', 'services', 'service', 'description', 'desc'],
+    '名片圖檔': ['名片圖檔', 'imageUrl', 'image_url', 'uploadedImgUrl', 'imgUrl'],
+    '自訂名片設定': ['自訂名片設定', 'customConfig', 'custom_config', 'config']
+  };
+
+  Object.entries(fieldMap).forEach(([target, aliases]) => {
+    let value = pickFirstValue(source, aliases);
+    if (target === '名片圖檔' && !value) value = pickFirstValue(ocrRes, aliases);
+    if (target === '自訂名片設定' && value && typeof value === 'object') value = JSON.stringify(value);
+    if (value !== undefined && value !== null && String(value).trim() !== '') normalized[target] = value;
+  });
+
+  Object.entries(source).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '' && normalized[key] === undefined) {
+      normalized[key] = value;
+    }
+  });
+
+  return normalized;
+}
+
+function hasOcrContent(cardData) {
+  return ['姓名', '英文名', '公司名稱', '職稱', '手機號碼', '公司電話', '電子郵件', '公司地址', '服務項目']
+    .some((key) => String(cardData?.[key] || '').trim() !== '');
+}
+
 window.openCropper = function(input) {
   const file = input.files[0];
   if (!file) return;
@@ -125,9 +208,16 @@ window.confirmCrop = async function() {
   try {
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
+    console.log('[confirmCrop] OCR result:', ocrRes);
+
+    const cardData = normalizeOcrCardData(ocrRes);
+    if (!hasOcrContent(cardData)) {
+      console.warn('[confirmCrop] OCR returned no usable card fields:', ocrRes);
+      throw new Error('AI 有回應，但沒有辨識到姓名、公司或聯絡資料，請換一張更清楚的名片照片');
+    }
 
     const cardPayload = {
-      ...ocrRes,
+      ...cardData,
       userId: '',
       creatorId: window.currentUserProfile?.userId || '',
       '建檔者ID': window.currentUserProfile?.userId || '',
@@ -225,9 +315,16 @@ window.confirmMyCardCrop = async function() {
   try {
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
+    console.log('[confirmMyCardCrop] OCR result:', ocrRes);
+
+    const cardData = normalizeOcrCardData(ocrRes);
+    if (!hasOcrContent(cardData)) {
+      console.warn('[confirmMyCardCrop] OCR returned no usable card fields:', ocrRes);
+      throw new Error('AI 有回應，但沒有辨識到姓名、公司或聯絡資料，請換一張更清楚的名片照片');
+    }
 
     const cardPayload = {
-      ...ocrRes,
+      ...cardData,
       userId: currentUserProfile.userId,
       creatorId: currentUserProfile.userId,
       '建檔者ID': currentUserProfile.userId,
