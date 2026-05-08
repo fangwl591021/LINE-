@@ -73,9 +73,12 @@ window._renderAdminActivities = function(res) {
           '<div class="text-[12px] text-slate-500 mb-3 flex items-center gap-1">' +
             '<span class="material-symbols-outlined text-[14px]">schedule</span>' + time +
           '</div>' +
-          '<div class="grid grid-cols-3 gap-2">' +
+          '<div class="grid grid-cols-4 gap-2">' +
             '<button onclick="window.openCheckinPage(\'' + actId + '\', \'' + title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
               '<span class="material-symbols-outlined text-[15px]">fact_check</span> 核銷' +
+            '</button>' +
+            '<button onclick="window.copyNfcCheckinUrl(\'' + actId + '\')" class="py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
+              '<span class="material-symbols-outlined text-[15px]">nfc</span> NFC' +
             '</button>' +
             '<button onclick="window.openEditActivity(\'' + actId + '\')" class="py-2.5 bg-amber-50 text-amber-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
               '<span class="material-symbols-outlined text-[15px]">edit</span> 編輯' +

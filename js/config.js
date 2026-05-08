@@ -193,11 +193,6 @@ window.getActmasterUrlParams = function() {
       const list = document.getElementById('admin-activities-list');
       if (!list || !Array.isArray(res)) return;
 
-      list.querySelectorAll('.grid.grid-cols-3, .grid.grid-cols-4').forEach(grid => {
-        grid.classList.remove('grid-cols-3', 'grid-cols-4');
-        grid.classList.add('grid-cols-2');
-      });
-
       list.querySelectorAll('button').forEach(btn => {
         if (btn.textContent && btn.textContent.trim() === '編輯') btn.classList.remove('hidden');
       });
