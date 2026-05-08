@@ -111,24 +111,49 @@
       : "";
   }
 
-  function canEditCard(card) {
-    if (!card) return false;
+  function getCreatorId(card) {
+    return safeText(card && (card["建檔者ID"] || card.creatorId || card["creatorId"])).trim();
+  }
 
+  function getCardLineId(card) {
+    return safeText(card && (card["LINE ID"] || card.lineId || card["User ID"] || card.userId)).trim();
+  }
+
+  function isVisibleCard(card) {
+    if (!card) return false;
     const role = safeText(window.userRole || "user");
-    const cardLineId = safeText(card["LINE ID"]).trim();
+    const cardLineId = getCardLineId(card);
+    const creatorId = getCreatorId(card);
     const cardNetwork = safeText(card["歸屬網"]).trim();
-    const creatorId = safeText(card["建檔者ID"]).trim();
     const userId = getCurrentUserId();
     const currentNetworkId = safeText(window.currentNetworkId || "admin").trim();
 
-    if (cardLineId) return cardLineId === userId;
-    if (creatorId) return creatorId === userId || role === "admin";
     if (role === "admin") return true;
-    if (role === "store") return cardNetwork === currentNetworkId || cardNetwork === "";
-    return cardNetwork === currentNetworkId || cardNetwork === "";
+    if (cardLineId === userId) return true;
+    if (creatorId === userId) return true;
+    if (role === "store") return !!cardNetwork && cardNetwork === currentNetworkId;
+    return false;
+  }
+
+  function getVisibleCards(cards) {
+    return (Array.isArray(cards) ? cards : []).filter(isVisibleCard);
+  }
+
+  function canEditCard(card) {
+    if (!card) return false;
+
+    const cardLineId = getCardLineId(card);
+    const creatorId = getCreatorId(card);
+    const userId = getCurrentUserId();
+
+    // Once the invitee claims a card, the scanner keeps read access only.
+    if (cardLineId) return cardLineId === userId;
+    if (creatorId) return creatorId === userId;
+    return false;
   }
 
   window.canEditCardRecord = canEditCard;
+  window.getVisibleCardsForCurrentUser = getVisibleCards;
   function getCardTitle(card) {
     return safeText(card["姓名"] || card["英文名"] || "未知");
   }
@@ -214,13 +239,14 @@
   window.renderCardList = function (cards, options = {}) {
     const list = $("card-list");
     if (!list) return;
+    const visibleSource = getVisibleCards(cards);
 
     if (!options.keepPage) {
       window.cardListPage = 1;
-      window.cardListRenderSource = cards;
+      window.cardListRenderSource = visibleSource;
     }
 
-    if (!Array.isArray(cards) || cards.length === 0) {
+    if (!Array.isArray(visibleSource) || visibleSource.length === 0) {
       list.innerHTML = `
         <div class="bg-white p-8 rounded-3xl text-center text-slate-400 border border-slate-100 shadow-sm">
           <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">search_off</span>
@@ -231,7 +257,7 @@
     }
 
     const page = Math.max(1, Number(window.cardListPage || 1));
-    const displayCards = sortCardsNewestFirst(cards);
+    const displayCards = sortCardsNewestFirst(visibleSource);
     const visibleCards = displayCards.slice(0, page * CARD_PAGE_SIZE);
 
     const html = visibleCards.map(card => {
@@ -304,7 +330,7 @@
       return;
     }
 
-    const sourceCards = Array.isArray(window.allCards) ? window.allCards : [];
+    const sourceCards = getVisibleCards(window.allCards);
     const filtered = sourceCards.filter(card => {
       const str = [
         card["姓名"],
@@ -325,7 +351,7 @@
   };
 
   window.openCardDetailByRowId = function (rowId) {
-    const sourceCards = Array.isArray(window.allCards) ? window.allCards : [];
+    const sourceCards = getVisibleCards(window.allCards);
     const card = sourceCards.find(c => String(c.rowId || c["rowId"]) === String(rowId));
 
     if (card) {

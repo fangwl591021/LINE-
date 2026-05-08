@@ -155,24 +155,16 @@ const Core = (function() {
         }
 
         const uid = String(window.currentUserProfile.userId).trim();
-        const uPhone = window.currentUser?.phone
-            ? String(window.currentUser.phone).replace(/[^0-9]/g, '')
-            : null;
+        console.log('[syncUserCardMatch] 嘗試配對 UID:', uid);
 
-        console.log('[syncUserCardMatch] 嘗試配對 UID:', uid, '手機:', uPhone);
+        const sourceCards = typeof window.getVisibleCardsForCurrentUser === 'function'
+            ? window.getVisibleCardsForCurrentUser(window.allCards)
+            : window.allCards;
 
-        window.currentUserCard = window.allCards.find(c => {
+        window.currentUserCard = sourceCards.find(c => {
             if (c['LINE ID'] && String(c['LINE ID']).trim() === uid) return true;
             if (c['userId'] && String(c['userId']).trim() === uid) return true;
             if (c['User ID'] && String(c['User ID']).trim() === uid) return true;
-
-            if (uPhone && c['手機號碼']) {
-                const cPhone = String(c['手機號碼']).replace(/[^0-9]/g, '');
-                if (cPhone === uPhone && cPhone.length >= 9) {
-                    c['LINE ID'] = uid; // 成功配對後補回欄位
-                    return true;
-                }
-            }
             return false;
         });
 
