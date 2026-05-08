@@ -1,10 +1,25 @@
 // js/modules/mycard.js
 // 整合數位名片管理：支援多版型、自訂按鈕、圖片裁切、分享與 QR Code 功能
 
-import { Config } from '../config.js';
-import { Auth } from '../auth.js';
-import { Core } from '../core.js';
-import { CropperModule } from './cropper.js';
+const Config = window.Config || {
+    LIFF_ID: window.LIFF_ID || (typeof LIFF_ID !== 'undefined' ? LIFF_ID : ''),
+    WORKER_URL: window.WORKER_URL || (typeof WORKER_URL !== 'undefined' ? WORKER_URL : ''),
+    API_URL: (window.WORKER_URL || (typeof WORKER_URL !== 'undefined' ? WORKER_URL : '')).replace(/\/$/, '')
+};
+const Core = window.Core || {
+    showLoading: function(show) {
+        const loader = document.getElementById('global-loader');
+        if (!loader) return;
+        loader.classList.toggle('hidden', !show);
+        loader.classList.toggle('flex', !!show);
+    },
+    showToast: function(msg, type) { window.showToast && window.showToast(msg, type === true || type === 'error'); },
+    ajax: window.fetchAPI
+};
+const Auth = window.Auth || {
+    getUserId: function() { return window.currentUserProfile?.userId || window.currentUser?.userId || ''; },
+    getUserProfile: function() { return window.currentUserProfile || null; }
+};
 
 const MyCardModule = (function() {
     // === 模組變數 ===
@@ -57,13 +72,12 @@ const MyCardModule = (function() {
             $('#edit-card-image-input').click();
         });
 
-        $(document).on('change', '#edit-card-image-input', function(e) {
-            const file = e.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = (event) => CropperModule.startCropping(event.target.result);
-                reader.readAsDataURL(file);
+        $(document).on('change', '#edit-card-image-input', function() {
+            if (typeof window.openMyCardCropper === 'function') {
+                window.openMyCardCropper(this);
+                return;
             }
+            window.showToast('圖片裁切模組尚未載入', true);
         });
 
         // 7. 監聽裁切完成事件 (整合至當前版型圖片)
@@ -86,10 +100,7 @@ const MyCardModule = (function() {
         console.log('[MyCardModule] Loading data...');
         Core.showLoading(true);
 
-        // 模擬從資料庫獲取資料，實際應呼叫 Core.ajax
-        const userId = Auth.getUserId();
         // 這裡暫時假設 currentUserCard 已在全域或透過 Core 取得
-        // 若您的環境中 currentUserCard 是全域變數，直接讀取
         const card = window.currentUserCard;
 
         if (!card) {
@@ -241,21 +252,22 @@ const MyCardModule = (function() {
         };
 
         try {
-            // 使用 Core.ajax 替代 window.fetchAPI
-            const res = await Core.ajax(Config.API_URL + '/updateCard', 'POST', { 
+            const res = await window.fetchAPI('updateCard', { 
                 rowId: currentCardData.rowId, 
                 data: payloadData 
-            });
+            }, true);
 
-            if (res) {
-                Core.showToast('✅ 專屬名片設定已儲存', 'success');
+            if (res && !res.error) {
+                window.showToast('✅ 專屬名片設定已儲存');
                 // 更新本地暫存
                 currentCardData['自訂名片設定'] = payloadData['自訂名片設定'];
                 currentCardData['名片圖檔'] = payloadData['名片圖檔'];
                 window.currentUserCard = currentCardData; // 同步回全域供其他模組使用
+            } else {
+                throw new Error(res?.error || '儲存失敗');
             }
         } catch(e) {
-            Core.showToast('⚠️ 儲存失敗: ' + e.message, 'error');
+            window.showToast('⚠️ 儲存失敗: ' + e.message, true);
         } finally {
             $btn.html(originalHtml).prop('disabled', false);
         }
@@ -263,7 +275,7 @@ const MyCardModule = (function() {
 
     async function shareMyCard($btn) {
         if (!currentCardData) {
-            Core.showToast('尚未建立專屬名片', 'warning');
+            window.showToast('尚未建立專屬名片', true);
             return;
         }
         const oriHtml = $btn.html();
@@ -271,18 +283,20 @@ const MyCardModule = (function() {
         
         try {
             let config = JSON.parse(currentCardData['自訂名片設定'] || '{}');
-            // 這裡呼叫後端建立 Flex Message 並觸發 LINE 分享
-            const flexMsg = await Core.ajax(Config.API_URL + '/buildFlexMessage', 'POST', {
+            const flexMsg = await window.fetchAPI('buildFlexMessage', {
                 card: currentCardData,
                 config: config,
-                referrerId: Auth.getUserId()
-            });
-            if (flexMsg && window.liff) {
-                await liff.shareTargetPicker([flexMsg]);
-                Core.showToast('分享成功');
+                referrerId: Auth.getUserId(),
+                networkId: window.currentNetworkId,
+                liffId: Config.LIFF_ID
+            }, true);
+            if (flexMsg && !flexMsg.error) {
+                await window.triggerFlexSharing(flexMsg, currentCardData['姓名'] || '數位名片');
+            } else {
+                throw new Error(flexMsg?.error || '建立分享訊息失敗');
             }
         } catch(e) {
-            Core.showToast('發送失敗: ' + e.message, 'error');
+            window.showToast('發送失敗: ' + e.message, true);
         } finally {
             $btn.html(oriHtml).prop('disabled', false);
         }
@@ -309,8 +323,8 @@ const MyCardModule = (function() {
 
     // 輔助函式
     function escapeHTML(str) {
-        return str.replace(/[&<>"']/g, m => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        return String(str || '').replace(/[&<>\"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;'
         })[m]);
     }
 
@@ -332,5 +346,3 @@ const MyCardModule = (function() {
 
 // 為了讓 HTML 中的 onclick 能存取，將模組掛載到 window (或您可以使用事件委派)
 window.MyCardModule = MyCardModule;
-
-export { MyCardModule };
