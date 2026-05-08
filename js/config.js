@@ -3,6 +3,25 @@
 const LIFF_ID = "2009886448-2UHnJgyT";
 const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/";
 
+window.LIFF_ID = LIFF_ID;
+window.WORKER_URL = WORKER_URL;
+window.Config = {
+  LIFF_ID,
+  WORKER_URL,
+  API_URL: WORKER_URL.replace(/\/$/, '')
+};
+
+// 舊版模組大量使用 $/jQuery；若頁面未事先載入，於 parser 階段同步補上。
+if (!window.jQuery && !window.$) {
+  if (document.readyState === 'loading') {
+    document.write('<script src="https://code.jquery.com/jquery-3.7.1.min.js"><\/script>');
+  } else {
+    const jq = document.createElement('script');
+    jq.src = 'https://code.jquery.com/jquery-3.7.1.min.js';
+    document.head.appendChild(jq);
+  }
+}
+
 // 用量限制(依角色權限)
 // 邏輯: 名片無限制(Infinity), 加入 AI每日配對限制(matchmake)
 window.LIMITS = {
