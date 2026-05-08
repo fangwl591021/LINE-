@@ -429,6 +429,49 @@ const AuthModule = {
   }
 };
 
+const TrackingModule = {
+  async recordShareCardVisit(payload, env) {
+    const visitorId = payload.visitorId || payload.userId;
+    const shareCardId = payload.shareCardId || '';
+    const referrerId = payload.referrerId || '';
+    const networkId = payload.networkId || 'admin';
+
+    if (!visitorId || !shareCardId) {
+      return { success: false, error: 'Missing visitorId or shareCardId' };
+    }
+    if (referrerId && referrerId === visitorId) {
+      return { success: true, data: { skipped: true, reason: 'self_referral' } };
+    }
+
+    const key = `FIRST_SHARE_TOUCH_${visitorId}`;
+    if (env.ACTMASTER_KV) {
+      const existing = await env.ACTMASTER_KV.get(key, 'json');
+      if (existing) {
+        return { success: true, data: { skipped: true, existing } };
+      }
+    }
+
+    const record = {
+      visitorId,
+      shareCardId,
+      referrerId,
+      networkId,
+      firstTouchOnly: true,
+      touchedAt: new Date().toISOString()
+    };
+
+    const result = await DBModule.forward('recordShareCardVisit', record, env);
+
+    if (env.ACTMASTER_KV && (!result || result.success !== false)) {
+      await env.ACTMASTER_KV.put(key, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
+    }
+
+    return result && result.success !== undefined
+      ? result
+      : { success: true, data: record };
+  }
+};
+
 // ==================== 請求分發器 (Action Dispatcher) ====================
 async function dispatchAction(action, payload, request, env) {
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
@@ -478,6 +521,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'calculateFateTags':      return await AIModule.fateTags(payload, env);
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
+    case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
     default:                       return await DBModule.forward(action, payload, env);

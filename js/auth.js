@@ -118,6 +118,44 @@ window.ensureClaimedCardUserProfile = async function(source) {
   return res;
 };
 
+window.recordShareCardVisitOnce = async function(params) {
+  if (!params || !params.shareCardId || !window.currentUserProfile?.userId) return null;
+
+  const visitorId = window.currentUserProfile.userId;
+  const referrerId = params.referrerId || '';
+  if (referrerId && referrerId === visitorId) return null;
+
+  const localKey = 'ACTMASTER_SHARE_VISIT_' + visitorId;
+  try {
+    if (localStorage.getItem(localKey)) return null;
+  } catch (e) {}
+
+  try {
+    const res = await window.fetchAPI('recordShareCardVisit', {
+      visitorId: visitorId,
+      shareCardId: params.shareCardId,
+      referrerId: referrerId,
+      networkId: params.networkId || 'admin',
+      firstTouchOnly: true
+    }, true);
+
+    if (res && !res.error) {
+      try {
+        localStorage.setItem(localKey, JSON.stringify({
+          shareCardId: params.shareCardId,
+          referrerId: referrerId,
+          networkId: params.networkId || 'admin',
+          savedAt: Date.now()
+        }));
+      } catch (e) {}
+    }
+    return res;
+  } catch (e) {
+    console.warn('[recordShareCardVisitOnce] skipped:', e.message || e);
+    return null;
+  }
+};
+
 window.applyRegisteredUserSession = function(info) {
   if (!info) return;
 
@@ -206,6 +244,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
+
+    if (shareCardId && typeof window.recordShareCardVisitOnce === 'function') {
+      window.recordShareCardVisitOnce({
+        shareCardId: shareCardId,
+        referrerId: refId,
+        networkId: netId
+      });
+    }
 
     document.getElementById('loading-screen').classList.add('hidden');
 
