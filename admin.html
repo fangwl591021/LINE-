@@ -172,10 +172,11 @@
                   <th>費用</th>
                   <th>報名狀況</th>
                   <th>狀態</th>
+                  <th class="text-right">操作</th>
                 </tr>
               </thead>
               <tbody id="acts-table-body">
-                <tr><td colspan="7" class="text-center py-8 text-slate-400">請稍候，載入資料中...</td></tr>
+                <tr><td colspan="8" class="text-center py-8 text-slate-400">請稍候，載入資料中...</td></tr>
               </tbody>
             </table>
           </div>
@@ -413,6 +414,7 @@
     let currentEditButtons = []; 
     let adminCropperInstance = null;
     let adminRole = 'store';
+    let adminNetworkId = 'admin';
     let currentAdminEcardImgs = { landscape: '', portrait: '', square: '' };
     let currentAdminEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
     
@@ -429,7 +431,8 @@
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         payload.userId = adminProfile?.userId || '';
-        payload.role = 'admin'; 
+        payload.role = adminRole || 'store';
+        payload.networkId = payload.networkId || adminNetworkId || 'admin';
         const res = await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -510,15 +513,46 @@
           <td class="font-mono text-sm">${escapeHTML(c['手機號碼'] || '')}</td>
           <td class="text-sm text-blue-600 font-bold">${escapeHTML(c['歸屬網'] || 'admin')}</td>
           <td class="text-xs text-slate-500">${escapeHTML(c['標籤'] || '')}</td>
-          <td class="text-center">
-             <button onclick="openEditCardModal('${c.rowId}')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
+          <td class="text-center whitespace-nowrap">
+             <button onclick="openEditCardModal('${encodeURIComponent(c.rowId || '')}')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="編輯名片"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
+             ${adminRole === 'admin' ? `<button onclick="deleteAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-red-600 p-1 transition-colors" title="刪除名片"><span class="material-symbols-outlined text-[20px]">delete</span></button>` : ''}
           </td>
         </tr>`).join('');
     }
 
+    async function deleteAdminCard(encodedRowId) {
+      if (adminRole !== 'admin') {
+        showToast('只有總管 admin 可以刪除名片', true);
+        return;
+      }
+
+      const rowId = decodeURIComponent(encodedRowId || '');
+      const card = allCardsData.find(c => String(c.rowId) === String(rowId));
+      if (!card) return showToast('找不到名片資料，請重新整理', true);
+
+      const name = card['姓名'] || '未命名';
+      const company = card['公司名稱'] || '';
+      const label = company ? `${name} / ${company}` : name;
+
+      if (!window.confirm(`確定要刪除這張名片？\n\n${label}\n\n此操作無法還原。`)) return;
+
+      const doubleCheck = window.prompt(`二次確認：請輸入「刪除」才會刪除\n\n${label}`);
+      if (doubleCheck !== '刪除') {
+        showToast('已取消刪除');
+        return;
+      }
+
+      const res = await fetchAPI('deleteCard', { rowId, confirmDelete: true });
+      if (!res) return;
+
+      allCardsData = allCardsData.filter(c => String(c.rowId) !== String(rowId));
+      renderCards();
+      showToast('名片已刪除');
+    }
+
     async function loadActivities() {
       const tbody = document.getElementById('acts-table-body');
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入活動中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入活動中...</td></tr>';
       const res = await fetchAPI('getPublicActivities');
       if (res && Array.isArray(res)) {
         allActivitiesData = res;
@@ -549,6 +583,11 @@
               ${a['狀態'] || '下架'}
             </span>
           </td>
+          <td class="text-right">
+            <button type="button" onclick="editActivityFromMonitor('${encodeURIComponent(a['活動ID'] || a.rowId || '')}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 text-xs font-bold transition-colors">
+              <span class="material-symbols-outlined text-[16px]">edit</span> 編輯
+            </button>
+          </td>
         </tr>`).join('');
     }
 
@@ -562,6 +601,63 @@
       }
     }
 
+    async function editActivityFromMonitor(encodedActivityId) {
+      const activityId = decodeURIComponent(encodedActivityId || "");
+      const act = allActivitiesData.find(a => String(a["活動ID"] || a.rowId || "") === activityId);
+      if (!act) return showToast("找不到活動資料，請重新整理", true);
+
+      const nextName = window.prompt("活動名稱", act["活動名稱"] || "");
+      if (nextName === null) return;
+
+      const nextType = window.prompt("活動類型", act["活動類型"] || "例會");
+      if (nextType === null) return;
+
+      const nextStart = window.prompt("開始時間，例如 2026-05-07 19:00", safeStringForPrompt_(act["開始時間"]));
+      if (nextStart === null) return;
+
+      const nextEnd = window.prompt("結束時間，例如 2026-05-07 21:00", safeStringForPrompt_(act["結束時間"]));
+      if (nextEnd === null) return;
+
+      const nextPriceText = window.prompt("金額，免費請填 0", safeStringForPrompt_(act["金額"] || 0));
+      if (nextPriceText === null) return;
+
+      const nextRewardText = window.prompt("NFC 簽到獎勵點數，無獎勵請填 0", safeStringForPrompt_(act["獎勵點數"] || 0));
+      if (nextRewardText === null) return;
+
+      const nextDesc = window.prompt("活動說明", act["活動說明"] || "");
+      if (nextDesc === null) return;
+
+      const nextImage = window.prompt("宣傳圖網址", act["宣傳圖"] || "");
+      if (nextImage === null) return;
+
+      const price = parseInt(nextPriceText, 10) || 0;
+      const rewardPoints = parseInt(nextRewardText, 10) || 0;
+
+      const result = await fetchAPI("updateActivity", {
+        activityId,
+        data: {
+          "活動名稱": nextName.trim(),
+          "活動類型": nextType.trim(),
+          "開始時間": nextStart.trim(),
+          "結束時間": nextEnd.trim(),
+          "金額": price,
+          "收費類型": price > 0 ? "收費" : "免費",
+          "獎勵點數": rewardPoints,
+          "活動說明": nextDesc,
+          "宣傳圖": nextImage.trim()
+        }
+      });
+
+      if (result) {
+        showToast("活動已更新");
+        await loadActivities();
+      }
+    }
+
+    function safeStringForPrompt_(value) {
+      return value === null || value === undefined ? "" : String(value);
+    }
+
     async function loadFinanceStats() {
       const stats = await fetchAPI('getAdminStats');
       if (stats) {
@@ -572,8 +668,9 @@
       }
     }
 
-    function openEditCardModal(rowId) {
+    function openEditCardModal(encodedRowId) {
       window.currentAdminCropRatio = null;
+      const rowId = decodeURIComponent(encodedRowId || '');
       const card = allCardsData.find(c => String(c.rowId) === String(rowId));
       if (!card) return;
 
@@ -781,6 +878,8 @@
         const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
 
         if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
+          adminRole = check.info.role || 'store';
+          adminNetworkId = check.info.networkId || check.info.storeId || 'admin';
           document.getElementById('loading-screen').classList.add('fade-out');
           setTimeout(() => document.getElementById('loading-screen').remove(), 500);
           switchTab('users');
