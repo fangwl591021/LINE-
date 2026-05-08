@@ -29,6 +29,13 @@ const HomeModule = (function() {
         } catch (e) {}
     };
 
+    window.clearCachedStoreSettings = function(networkId) {
+        try {
+            localStorage.removeItem(window.getStoreSettingsCacheKey(networkId));
+            localStorage.removeItem(window.getStoreSettingsCacheKey('admin'));
+        } catch (e) {}
+    };
+
     window.isStoreToggleOn = function(value, fallback = true) {
         if (value === undefined || value === null || value === '') return fallback;
         return String(value).toLowerCase() !== 'false';
@@ -92,6 +99,13 @@ const HomeModule = (function() {
         } catch (e) {
             console.error('系統設定同步失敗', e);
         }
+    };
+
+    window.syncStoreSettingsToHome = function() {
+        const cachedSettings = window.readCachedStoreSettings(window.currentNetworkId)
+            || window.readCachedStoreSettings('admin');
+        if (cachedSettings) window.applyStoreSettingsToHome(cachedSettings);
+        window.refreshStoreSettingsInBackground();
     };
 
     // === 2. 活動渲染邏輯 ===
@@ -189,6 +203,10 @@ const HomeModule = (function() {
     };
 
     window.loadUserActivities = async function() {
+        if (typeof window.syncStoreSettingsToHome === 'function') {
+            window.syncStoreSettingsToHome();
+        }
+
         try {
             const acts = await window.fetchAPI('getPublicActivities', {}, true);
             window.allActivities = Array.isArray(acts) ? acts : [];
@@ -283,11 +301,8 @@ const HomeModule = (function() {
 
     // === 模組初始化入口 ===
     function init() {
-        const cachedSettings = window.readCachedStoreSettings(window.currentNetworkId);
-        if (cachedSettings) window.applyStoreSettingsToHome(cachedSettings);
-        
+        window.syncStoreSettingsToHome();
         window.renderHomeActivities();
-        window.refreshStoreSettingsInBackground();
     }
 
     return { init };

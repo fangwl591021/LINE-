@@ -36,8 +36,14 @@ window.saveStoreBanner = async function(e) {
         ...savedSettings,
         networkId: window.currentNetworkId || 'admin'
       };
+      if (typeof window.clearCachedStoreSettings === 'function') {
+        window.clearCachedStoreSettings(mergedSettings.networkId);
+      }
       window.writeCachedStoreSettings(mergedSettings, mergedSettings.networkId);
       window.applyStoreSettingsToHome(mergedSettings);
+      if (typeof window.refreshStoreSettingsInBackground === 'function') {
+        window.refreshStoreSettingsInBackground();
+      }
       
       // 重新觸發首頁資料載入以確保 Banner 同步
       if (typeof window.loadUserActivities === 'function') {
