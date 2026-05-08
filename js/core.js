@@ -1,6 +1,9 @@
-/* ==================== 前端共用函式與全域狀態 ==================== */
+// js/core.js
+// 核心工具模組：整合全域狀態、API 請求、UI 通知與安全機制
 
-// 宣告全域狀態變數，確保各模組呼叫時不會報錯
+import { Config } from './config.js';
+
+// === 全域狀態初始化 (掛載於 window 確保全域相容) ===
 window.allCards = [];
 window.currentUserCard = null;
 window.allActivities = [];
@@ -12,299 +15,231 @@ window.currentNetworkId = 'admin';
 window.currentStoreId = '';
 window.hasAdminRights = false;
 
-// 嚴格安全跳脫函式：防範 XSS 跨站腳本攻擊
-window.escapeHTML = function(str) {
-  if (str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-};
-
-// 安全跳脫函式：保護 Inline JS 參數
-window.escapeJS = function(str) {
-  return String(str || '')
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'")
-    .replace(/"/g, "&quot;")
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "")
-    .replace(/</g, "\\x3c")
-    .replace(/>/g, "\\x3e");
-};
-
-// 時間格式化
-window.formatDisplayTime = function(val) {
-  if (!val) return '';
-  try {
-    let d = new Date(val);
-    if (isNaN(d.getTime())) {
-      return String(val).replace('T', ' ').replace('.000Z', '').substring(0, 16);
-    }
-    const pad = (n) => n.toString().padStart(2, '0');
-    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
-         + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-  } catch(e) {
-    return String(val);
-  }
-};
-
-// 圖示對應
-window.getIconUrl = function(type) {
-  const icons = {
-    "LINE": "https://aiwe.cc/wp-content/uploads/2026/02/b75a5831fd553c7130aeafbb9783cf79.png",
-    "FB":   "https://aiwe.cc/wp-content/uploads/2026/02/3986d1fd62384c8cdaa0e7c82f2740d1.png",
-    "IG":   "https://aiwe.cc/wp-content/uploads/2026/02/a33306edcecd1ebdfd14baea6718cf23.png",
-    "YT":   "https://aiwe.cc/wp-content/uploads/2026/02/87e6f8054bd3672f2885e38bddb112e2.png",
-    "TEL":  "https://aiwe.cc/wp-content/uploads/2026/02/7254567388850a6b4d77b75208ebd4b8.png",
-    "WEB":  "https://cdn-icons-png.flaticon.com/512/1006/1006771.png"
-  };
-  return icons[type] || icons['WEB'];
-};
-
-// 清理 URI
-window.cleanURI = function(uri) {
-  if (!uri) return '';
-  uri = uri.trim();
-  if (uri === 'http://' || uri === 'https://') return '';
-  if (!uri.match(/^(http|https|tel|mailto|line):/i)) return 'https://' + uri;
-  return uri;
-};
-
-// Toast 通知
-window.showToast = function(msg, isError = false) {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-  const toast = document.createElement('div');
-  toast.className = 'px-4 py-3 rounded-full shadow-lg text-[13px] font-bold text-white transition-all duration-300 toast-enter flex items-center gap-2 max-w-[90%] text-center';
-  toast.classList.add(isError ? 'bg-red-500' : 'bg-slate-800');
-  toast.innerHTML = '<span class="material-symbols-outlined icon-filled text-[18px]">'
-    + (isError ? 'error' : 'info') + '</span> ' + msg;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-20px)';
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
-};
-
-// 統一 API 呼叫
-window.fetchAPI = async function(action, payload = {}, silent = false) {
-  try {
-    const safePayload = { ...payload };
-    safePayload.networkId = safePayload.networkId !== undefined ? safePayload.networkId : window.currentNetworkId;
-    safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
-    safePayload.userId = safePayload.userId !== undefined ? safePayload.userId : window.currentUserProfile?.userId;
-
-    try {
-      if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
-        safePayload.lineAccessToken = liff.getAccessToken();
-      }
-    } catch (e) {
-      console.warn("LIFF token fetch failed:", e);
-    }
-
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, payload: safePayload })
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error);
-    return data.data || data;
-  } catch (err) {
-    if (!silent) window.showToast(err.message, true);
-    return { success: false, error: err.message };
-  }
-};
-
-// LIFF Flex Message 分享
-window.triggerFlexSharing = async function(flexMsg, altText) {
-  if (!liff.isLoggedIn()) {
-    liff.login({ redirectUri: window.location.href });
-    return;
-  }
-  try {
-    if (!liff.isApiAvailable('shareTargetPicker')) {
-      window.showToast('您的環境不支援分享功能', true);
-      return;
-    }
-    const message = {
-      type: "flex",
-      altText: altText || "您收到一則訊息",
-      contents: flexMsg
+const Core = (function() {
+    
+    // === 1. 安全工具 ===
+    
+    // 嚴格安全跳脫：防範 XSS
+    window.escapeHTML = function(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     };
-    await liff.shareTargetPicker([message]);
-    window.showToast('✅ 已成功發送！');
-  } catch (err) {
-    window.showToast('發送失敗：' + (err.message || '未知錯誤'), true);
-  }
-};
 
-// 統一處理畫面權限解鎖
-window.applyUserPermissions = function() {
-  window.hasAdminRights = (window.userRole === 'admin' || window.userRole === 'store');
+    // 安全跳脫：保護 Inline JS
+    window.escapeJS = function(str) {
+        return String(str || '')
+            .replace(/\\/g, "\\\\")
+            .replace(/'/g, "\\'")
+            .replace(/"/g, "&quot;")
+            .replace(/\n/g, "\\n")
+            .replace(/\r/g, "")
+            .replace(/</g, "\\x3c")
+            .replace(/>/g, "\\x3e");
+    };
 
-  const adminBadge = document.getElementById('header-admin-badge');
-  const adminSwitch = document.getElementById('admin-switch-container');
-  const topNavSwitch = document.getElementById('top-nav-switch');
-  const bannerMgmtBlock = document.getElementById('details-store-banner');
-  const storeMgmtBlock = document.getElementById('details-store-management');
+    // === 2. UI 工具 ===
 
-  if (window.hasAdminRights) {
-    if (adminBadge) adminBadge.classList.remove('hidden');
-    if (adminSwitch) adminSwitch.classList.remove('hidden');
-    if (topNavSwitch) topNavSwitch.classList.remove('hidden');
-    if (bannerMgmtBlock) bannerMgmtBlock.classList.remove('hidden');
-  } else {
-    if (adminBadge) adminBadge.classList.add('hidden');
-    if (adminSwitch) adminSwitch.classList.add('hidden');
-    if (topNavSwitch) topNavSwitch.classList.add('hidden');
-    if (bannerMgmtBlock) bannerMgmtBlock.classList.add('hidden');
-  }
+    // Toast 通知
+    window.showToast = function(msg, isError = false) {
+        const container = document.getElementById('toast-container');
+        if (!container) {
+            console.log(`[Toast] ${isError ? 'ERR' : 'INFO'}: ${msg}`);
+            return;
+        }
+        const toast = document.createElement('div');
+        toast.className = 'px-4 py-3 rounded-full shadow-lg text-[13px] font-bold text-white transition-all duration-300 toast-enter flex items-center gap-2 max-w-[90%] text-center mb-2';
+        toast.classList.add(isError ? 'bg-red-500' : 'bg-slate-800');
+        
+        const icon = isError ? 'error' : 'info';
+        toast.innerHTML = `<span class="material-symbols-outlined icon-filled text-[18px]">${icon}</span> ${msg}`;
+        
+        container.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-20px)';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    };
 
-  if (window.userRole === 'admin') {
-    if (storeMgmtBlock) storeMgmtBlock.classList.remove('hidden');
-  } else {
-    if (storeMgmtBlock) storeMgmtBlock.classList.add('hidden');
-  }
-};
-
-// 強效配對機制
-window.syncUserCardMatch = function() {
-  if (!window.currentUserProfile || !window.allCards || window.allCards.length === 0) {
-    console.warn('[syncUserCardMatch] 條件不足，跳過配對');
-    return false;
-  }
-
-  const uid = String(window.currentUserProfile.userId).trim();
-  const uPhone = window.currentUser?.phone
-    ? String(window.currentUser.phone).replace(/[^0-9]/g, '')
-    : null;
-
-  console.log('[syncUserCardMatch] 嘗試配對 UID:', uid, '手機:', uPhone);
-
-  window.currentUserCard = window.allCards.find(c => {
-    if (c['LINE ID'] && String(c['LINE ID']).trim() === uid) return true;
-    if (c['userId'] && String(c['userId']).trim() === uid) return true;
-    if (c['User ID'] && String(c['User ID']).trim() === uid) return true;
-
-    if (uPhone && c['手機號碼']) {
-      const cPhone = String(c['手機號碼']).replace(/[^0-9]/g, '');
-      if (cPhone === uPhone && cPhone.length >= 9) {
-        c['LINE ID'] = uid;
-        return true;
-      }
+    // 載入動畫
+    function showLoading(show) {
+        const $loader = $('#global-loader');
+        if (show) $loader.removeClass('hidden').addClass('flex');
+        else $loader.removeClass('flex').addClass('hidden');
     }
-    return false;
-  });
 
-  console.log('[syncUserCardMatch] 配對結果:', window.currentUserCard ? '找到: ' + window.currentUserCard['姓名'] : '未找到');
-  return !!window.currentUserCard;
-};
+    // 時間格式化
+    window.formatDisplayTime = function(val) {
+        if (!val) return '';
+        try {
+            let d = new Date(val);
+            if (isNaN(d.getTime())) {
+                return String(val).replace('T', ' ').replace('.000Z', '').substring(0, 16);
+            }
+            const pad = (n) => n.toString().padStart(2, '0');
+            return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+                 + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        } catch(e) {
+            return String(val);
+        }
+    };
 
-window.homeDataPromise = null;
-window.cardDataPromise = null;
+    // === 3. API 與 資料處理 ===
 
-window.normalizeArrayResult = function(result) {
-  if (Array.isArray(result)) return result;
-  if (result && Array.isArray(result.data)) return result.data;
-  return null;
-};
+    // 統一 API 呼叫 (整合您提供的 fetchAPI 邏輯)
+    window.fetchAPI = async function(action, payload = {}, silent = false) {
+        try {
+            const safePayload = { ...payload };
+            safePayload.networkId = safePayload.networkId !== undefined ? safePayload.networkId : window.currentNetworkId;
+            safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
+            safePayload.userId = safePayload.userId !== undefined ? safePayload.userId : window.currentUserProfile?.userId;
 
-// 首頁只需要活動資料，不要在首屏載入整個名片庫。
-window.loadHomeData = async function(force = false) {
-  if (window.homeDataPromise && !force) return window.homeDataPromise;
+            // 嘗試取得 LIFF Token
+            try {
+                if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+                    safePayload.lineAccessToken = liff.getAccessToken();
+                }
+            } catch (e) {
+                console.warn("LIFF token fetch failed:", e);
+            }
 
-  window.homeDataPromise = (async () => {
-    try {
-      const actsRes = await window.fetchAPI('getPublicActivities', {}, true);
-      const acts = window.normalizeArrayResult(actsRes);
+            const res = await fetch(Config.WORKER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, payload: safePayload })
+            });
 
-      if (acts) {
-        window.allActivities = acts;
-      } else if (actsRes && actsRes.error) {
-        console.error('[loadHomeData] 活動載入失敗:', actsRes.error);
-        window.allActivities = [];
-      } else {
-        console.warn('[loadHomeData] 回傳格式非預期:', actsRes);
-        window.allActivities = [];
-      }
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'API 請求失敗');
+            return data.data || data;
+        } catch (err) {
+            if (!silent) window.showToast(err.message, true);
+            return { success: false, error: err.message };
+        }
+    };
 
-      if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
-      if (typeof window.renderActivities === 'function') window.renderActivities();
-      return window.allActivities;
-    } catch (err) {
-      console.error('[loadHomeData] 嚴重錯誤:', err);
-      window.allActivities = [];
-      if (typeof window.renderHomeActivities === 'function') window.renderHomeActivities();
-      return window.allActivities;
-    } finally {
-      window.homeDataPromise = null;
-    }
-  })();
+    // 強效配對機制：將 User 與 名片庫 資料連結
+    window.syncUserCardMatch = function() {
+        if (!window.currentUserProfile || !window.allCards || window.allCards.length === 0) {
+            console.warn('[syncUserCardMatch] 條件不足，跳過配對');
+            return false;
+        }
 
-  return window.homeDataPromise;
-};
+        const uid = String(window.currentUserProfile.userId).trim();
+        const uPhone = window.currentUser?.phone
+            ? String(window.currentUser.phone).replace(/[^0-9]/g, '')
+            : null;
 
-// 名片資料改成按需載入，避免首頁一開始抓大量名片圖片。
-window.loadCardData = async function(options = {}) {
-  const shouldRender = options.render !== false;
-  const shouldInitPanels = options.initPanels !== false;
+        console.log('[syncUserCardMatch] 嘗試配對 UID:', uid, '手機:', uPhone);
 
-  if (window.allCards && window.allCards.length > 0 && !options.force) {
-    if (shouldRender && typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
-    if (shouldInitPanels) {
-      if (typeof window.initMyECard === 'function') window.initMyECard();
-      if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
-    }
-    return window.allCards;
-  }
+        window.currentUserCard = window.allCards.find(c => {
+            if (c['LINE ID'] && String(c['LINE ID']).trim() === uid) return true;
+            if (c['userId'] && String(c['userId']).trim() === uid) return true;
+            if (c['User ID'] && String(c['User ID']).trim() === uid) return true;
 
-  if (window.cardDataPromise && !options.force) return window.cardDataPromise;
+            if (uPhone && c['手機號碼']) {
+                const cPhone = String(c['手機號碼']).replace(/[^0-9]/g, '');
+                if (cPhone === uPhone && cPhone.length >= 9) {
+                    c['LINE ID'] = uid; // 成功配對後補回欄位
+                    return true;
+                }
+            }
+            return false;
+        });
 
-  window.cardDataPromise = (async () => {
-    try {
-      const cardsRes = await window.fetchAPI('getCardContacts', {}, true);
-      const cards = window.normalizeArrayResult(cardsRes);
+        console.log('[syncUserCardMatch] 配對結果:', window.currentUserCard ? '找到: ' + window.currentUserCard['姓名'] : '未找到');
+        return !!window.currentUserCard;
+    };
 
-      if (cards) {
-        window.allCards = cards;
-      } else if (cardsRes && cardsRes.error) {
-        console.error('[loadCardData] 名片庫載入失敗:', cardsRes.error);
-        window.showToast('名片庫載入失敗: ' + cardsRes.error, true);
-        window.allCards = [];
-      } else {
-        console.warn('[loadCardData] 回傳格式非預期:', cardsRes);
-        window.allCards = [];
-      }
+    // === 4. 權限與流程 ===
 
-      window.syncUserCardMatch();
+    window.applyUserPermissions = function() {
+        window.hasAdminRights = (window.userRole === 'admin' || window.userRole === 'store');
+        
+        const selectors = {
+            '#header-admin-badge': window.hasAdminRights,
+            '#admin-switch-container': window.hasAdminRights,
+            '#top-nav-switch': window.hasAdminRights,
+            '#details-store-banner': window.hasAdminRights,
+            '#details-store-management': window.userRole === 'admin'
+        };
 
-      if (shouldRender && typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
-      if (shouldInitPanels) {
-        if (typeof window.initMyECard === 'function') window.initMyECard();
-        if (typeof window.initSettingsPage === 'function') window.initSettingsPage();
-      }
+        for (const [selector, show] of Object.entries(selectors)) {
+            const el = document.querySelector(selector);
+            if (el) el.classList.toggle('hidden', !show);
+        }
+    };
 
-      return window.allCards;
-    } catch (err) {
-      console.error('[loadCardData] 嚴重錯誤:', err);
-      window.showToast('名片庫載入失敗: ' + err.message, true);
-      window.allCards = [];
-      return window.allCards;
-    } finally {
-      window.cardDataPromise = null;
-    }
-  })();
+    // 名片資料載入 (按需載入)
+    window.loadCardData = async function(options = {}) {
+        if (window.allCards && window.allCards.length > 0 && !options.force) {
+            if (options.render !== false && typeof window.renderCardList === 'function') {
+                window.renderCardList(window.allCards);
+            }
+            return window.allCards;
+        }
 
-  return window.cardDataPromise;
-};
+        try {
+            const cards = await window.fetchAPI('getCardContacts', {}, true);
+            if (Array.isArray(cards)) {
+                window.allCards = cards;
+            } else if (cards.data && Array.isArray(cards.data)) {
+                window.allCards = cards.data;
+            }
 
-// 只有分享名片、認領名片或明確需要完整資料時才使用。
-window.loadAllData = async function() {
-  await window.loadHomeData();
-  await window.loadCardData();
-};
+            window.syncUserCardMatch();
+
+            if (options.render !== false && typeof window.renderCardList === 'function') {
+                window.renderCardList(window.allCards);
+            }
+            if (options.initPanels !== false) {
+                if (typeof window.initMyECard === 'function') window.initMyECard();
+            }
+
+            return window.allCards;
+        } catch (err) {
+            console.error('[loadCardData] Error:', err);
+            return [];
+        }
+    };
+
+    // === 5. LIFF 分享 ===
+    window.triggerFlexSharing = async function(flexMsg, altText) {
+        if (!liff.isLoggedIn()) {
+            liff.login({ redirectUri: window.location.href });
+            return;
+        }
+        try {
+            if (!liff.isApiAvailable('shareTargetPicker')) {
+                window.showToast('您的環境不支援分享功能', true);
+                return;
+            }
+            const message = {
+                type: "flex",
+                altText: altText || "您收到一則訊息",
+                contents: flexMsg
+            };
+            await liff.shareTargetPicker([message]);
+            window.showToast('✅ 已成功發送！');
+        } catch (err) {
+            window.showToast('發送失敗：' + (err.message || '未知錯誤'), true);
+        }
+    };
+
+    // 模組公開介面 (供模組化程式碼使用)
+    return {
+        showLoading,
+        showToast: window.showToast,
+        ajax: window.fetchAPI,
+        syncMatch: window.syncUserCardMatch
+    };
+
+})();
+
+export { Core };
