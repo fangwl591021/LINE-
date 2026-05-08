@@ -62,6 +62,7 @@ window.submitClaimRegistration = async function() {
 
     const res = await window.fetchAPI('claimCardAndRegister', payload, true);
     if (res) {
+      await window.ensureClaimedCardUserProfile(payload);
       window.showToast('✅ 名片認領並註冊成功！');
       await window.loadAllData();
       window.goPage('admin-settings');
@@ -72,6 +73,49 @@ window.submitClaimRegistration = async function() {
     btn.innerHTML = '確認認領並啟用名片 <span class="material-symbols-outlined">how_to_reg</span>';
     btn.disabled = false;
   }
+};
+
+window.buildUserProfileFromClaimCard = function(card, fallback = {}) {
+  card = card || {};
+  fallback = fallback || {};
+  const name = fallback.name || fallback['姓名'] || card['姓名'] || window.currentUserProfile?.displayName || '';
+  const phone = fallback.phone || fallback['手機號碼'] || card['手機號碼'] || card['公司電話'] || '';
+  const company = fallback.company || fallback['公司名稱'] || card['公司名稱'] || '';
+  const title = fallback.title || fallback['職稱'] || card['職稱'] || '';
+
+  return {
+    userId: window.currentUserProfile?.userId || fallback.userId || '',
+    name: name,
+    phone: phone,
+    industry: title || company,
+    birthday: fallback.birthday || '',
+    '推薦人': fallback.referrerId || fallback['推薦人'] || '',
+    networkId: fallback.networkId || card['歸屬網'] || 'admin',
+    claimedCardRowId: fallback.claimRowId || card.rowId || '',
+    companyName: company,
+    title: title
+  };
+};
+
+window.ensureClaimedCardUserProfile = async function(source) {
+  const profile = window.buildUserProfileFromClaimCard(source, source);
+  if (!profile.userId || !profile.name || !profile.phone) return null;
+
+  const check = await window.fetchAPI('checkUser', { userId: profile.userId }, true);
+  const action = (check && check.isRegistered) ? 'updateUserProfile' : 'registerUser';
+  const res = await window.fetchAPI(action, profile, true);
+
+  if (res && !res.error) {
+    const refreshed = await window.fetchAPI('checkUser', { userId: profile.userId }, true);
+    if (refreshed && refreshed.isRegistered && refreshed.info) {
+      window.applyRegisteredUserSession(refreshed.info);
+      try {
+        localStorage.setItem('ACTMASTER_USER_' + profile.userId, JSON.stringify({ info: refreshed.info, savedAt: Date.now() }));
+      } catch (e) {}
+    }
+  }
+
+  return res;
 };
 
 window.applyRegisteredUserSession = function(info) {
@@ -260,16 +304,30 @@ document.addEventListener('DOMContentLoaded', async () => {
           window.goPage('home');
         }
       } else if (claimCardId) {
-        window.fetchAPI('claimCardAndRegister', {
-          claimRowId: claimCardId,
-          userId: window.currentUserProfile.userId
-        }, true).then(claimRes => {
+        window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true).then(cardForClaim => {
+          if (cardForClaim && cardForClaim.error) throw new Error(cardForClaim.error);
+          return window.fetchAPI('claimCardAndRegister', {
+            claimRowId: claimCardId,
+            userId: window.currentUserProfile.userId,
+            '姓名': cardForClaim?.['姓名'] || window.currentUser?.name || window.currentUserProfile.displayName || '',
+            '手機號碼': cardForClaim?.['手機號碼'] || cardForClaim?.['公司電話'] || window.currentUser?.phone || '',
+            '公司名稱': cardForClaim?.['公司名稱'] || '',
+            '職稱': cardForClaim?.['職稱'] || '',
+            referrerId: refId,
+            networkId: netId || cardForClaim?.['歸屬網'] || 'admin'
+          }, true).then(claimRes => ({ claimRes, cardForClaim }));
+        }).then(({ claimRes, cardForClaim }) => {
           if (claimRes && claimRes.error) {
             window.showToast('認領失敗: ' + claimRes.error, true);
             window.goPage('home');
           } else if (claimRes) {
-            window.showToast('✅ 成功認領名片並綁定您的帳號！');
-            window.loadAllData().then(() => {
+            window.ensureClaimedCardUserProfile(window.buildUserProfileFromClaimCard(cardForClaim, {
+              userId: window.currentUserProfile.userId,
+              claimRowId: claimCardId,
+              referrerId: refId,
+              networkId: netId || cardForClaim?.['歸屬網'] || 'admin'
+            })).then(() => window.loadAllData()).then(() => {
+              window.showToast('✅ 成功認領名片並同步會員資料！');
               window.goPage('admin-settings');
               if (typeof window.focusMyECardSection === 'function') window.focusMyECardSection();
             });
