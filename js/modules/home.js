@@ -188,6 +188,33 @@ const HomeModule = (function() {
         }).join('');
     };
 
+    window.loadUserActivities = async function() {
+        try {
+            const acts = await window.fetchAPI('getPublicActivities', {}, true);
+            window.allActivities = Array.isArray(acts) ? acts : [];
+            window.renderHomeActivities();
+            return window.allActivities;
+        } catch (e) {
+            console.error('活動載入失敗', e);
+            window.allActivities = [];
+            window.renderHomeActivities();
+            return [];
+        }
+    };
+
+    window.loadHomeData = async function() {
+        const tasks = [window.loadUserActivities()];
+        if (typeof window.loadCardData === 'function') tasks.push(window.loadCardData({ render: false }));
+        await Promise.all(tasks);
+        return true;
+    };
+
+    window.loadAllData = async function() {
+        await window.loadHomeData();
+        if (typeof window.initMyECard === 'function') window.initMyECard();
+        return true;
+    };
+
     // === 3. 活動互動邏輯 ===
 
     window.openActivityDetail = function(activityId) {
