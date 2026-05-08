@@ -1,7 +1,12 @@
 // js/core.js
 // 核心工具模組：整合全域狀態、API 請求、UI 通知與安全機制
 
-import { Config } from './config.js';
+const Config = window.Config || {
+    LIFF_ID: window.LIFF_ID || (typeof LIFF_ID !== 'undefined' ? LIFF_ID : ''),
+    WORKER_URL: window.WORKER_URL || (typeof WORKER_URL !== 'undefined' ? WORKER_URL : ''),
+    API_URL: (window.WORKER_URL || (typeof WORKER_URL !== 'undefined' ? WORKER_URL : '')).replace(/\/$/, '')
+};
+window.Config = Config;
 
 // === 全域狀態初始化 (掛載於 window 確保全域相容) ===
 window.allCards = [];
@@ -26,7 +31,7 @@ const Core = (function() {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
+            .replace(/\"/g, '&quot;')
             .replace(/'/g, '&#039;');
     };
 
@@ -35,7 +40,7 @@ const Core = (function() {
         return String(str || '')
             .replace(/\\/g, "\\\\")
             .replace(/'/g, "\\'")
-            .replace(/"/g, "&quot;")
+            .replace(/\"/g, "&quot;")
             .replace(/\n/g, "\\n")
             .replace(/\r/g, "")
             .replace(/</g, "\\x3c")
@@ -69,9 +74,15 @@ const Core = (function() {
 
     // 載入動畫
     function showLoading(show) {
-        const $loader = $('#global-loader');
-        if (show) $loader.removeClass('hidden').addClass('flex');
-        else $loader.removeClass('flex').addClass('hidden');
+        const loader = document.getElementById('global-loader');
+        if (!loader) return;
+        if (show) {
+            loader.classList.remove('hidden');
+            loader.classList.add('flex');
+        } else {
+            loader.classList.remove('flex');
+            loader.classList.add('hidden');
+        }
     }
 
     // 時間格式化
@@ -242,4 +253,4 @@ const Core = (function() {
 
 })();
 
-export { Core };
+window.Core = Core;
