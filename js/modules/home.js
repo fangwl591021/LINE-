@@ -1,10 +1,6 @@
 // js/modules/home.js
 // 首頁資訊流模組：處理活動列表、商店設定、YouTube 嵌入與報名邏輯
 
-import { Core } from '../core.js';
-import { Config } from '../config.js';
-import { Auth } from '../auth.js';
-
 const HomeModule = (function() {
     // === 1. 商店設定與快取邏輯 ===
 
@@ -270,4 +266,4 @@ const HomeModule = (function() {
     return { init };
 })();
 
-export { HomeModule };
+window.HomeModule = HomeModule;
