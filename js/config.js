@@ -25,9 +25,10 @@ if (!window.jQuery && !window.$) {
 // 用量限制(依角色權限)
 // 邏輯: 名片無限制(Infinity), 加入 AI每日配對限制(matchmake)
 window.LIMITS = {
-  admin: { activities: Infinity, cards: Infinity, matchmake: Infinity },
-  store: { activities: 10, cards: Infinity, matchmake: 50 },
-  user:  { activities: 1, cards: Infinity, matchmake: 5 }
+  admin: { activities: Infinity, cards: Infinity, matchmake: Infinity, cardmaster: Infinity },
+  tenant:{ activities: 10, cards: Infinity, matchmake: 50, cardmaster: 50 },
+  store: { activities: 10, cards: Infinity, matchmake: 50, cardmaster: 50 },
+  user:  { activities: 1, cards: Infinity, matchmake: 5, cardmaster: 5 }
 };
 
 // 全域狀態變數

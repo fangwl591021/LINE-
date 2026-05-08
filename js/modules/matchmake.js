@@ -103,6 +103,18 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
     return;
   }
 
+  if (wantsPublic && typeof window.ensureCardCanGoPublic === 'function') {
+    if (toggleEl) toggleEl.checked = false;
+    window.showToast('AI 正在健檢名片，通過後才會公開搜尋...');
+    const canGoPublic = await window.ensureCardCanGoPublic(window.currentUserCard);
+    if (!canGoPublic) {
+      config.isPrivate = true;
+      if (toggleEl) toggleEl.checked = false;
+      return;
+    }
+    if (toggleEl) toggleEl.checked = true;
+  }
+
   if (forceOpen) {
     config.isPrivate = false;
     if (toggleEl) toggleEl.checked = true;

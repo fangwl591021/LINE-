@@ -33,7 +33,7 @@ const SecurityModule = {
   },
 
   // 防刷機制 (Rate Limiting)
-  async checkRateLimit(userId, action, env) {
+  async checkRateLimit(userId, action, env, role) {
     if (!env.ACTMASTER_KV || !userId) return true;
     
     const date = new Date().toISOString().split('T')[0];
@@ -43,9 +43,15 @@ const SecurityModule = {
     const limits = { 
       recognizeCardWithGPT4o: 10, 
       fateTags: 10, 
-      matchmakeContacts: 20 
+      matchmakeContacts: 20,
+      reviewCardSafety: 50,
+      generateCardCopy: 50
     };
-    const max = limits[action] || 50;
+    let max = limits[action] || 50;
+    if (action === 'generateCardCopy' || action === 'reviewCardSafety') {
+      if (role === 'admin') return true;
+      max = (role === 'store' || role === 'tenant') ? 50 : 5;
+    }
 
     let count = parseInt(await env.ACTMASTER_KV.get(key)) || 0;
     if (count >= max) return false;
@@ -213,6 +219,63 @@ const AIModule = {
       const matches = jsonMatch ? JSON.parse(jsonMatch[0]).map(item => ({ rowId: contacts[item.index]?.rowId, score: item.score, reason: item.reason })) : [];
       return { success: true, data: matches };
     } catch (e) { return { success: false, error: e.message }; }
+  },
+
+  async reviewCardSafety(payload, env) {
+    try {
+      const card = payload.card || {};
+      const prompt = `你是名片公開搜尋前的安全審核員。請檢查文字與圖片是否包含色情、性交易、裸露暗示、犯罪、詐騙、毒品、武器、賭博、暴力或其他高風險內容。
+只回傳純 JSON，不要解釋在 JSON 外。
+格式：{"pass":true,"riskLevel":"low","reasons":[],"suggestions":[]}
+若有疑慮 pass=false，reasons 用繁體中文列出原因，suggestions 提供可修改方向。
+名片資料：${JSON.stringify(card).slice(0, 6000)}`;
+      const content = [{ type: 'text', text: prompt }];
+      if (card.imageUrl && /^https?:\/\//i.test(card.imageUrl)) {
+        content.push({ type: 'image_url', image_url: { url: card.imageUrl, detail: 'low' } });
+      }
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content }], temperature: 0 })
+      });
+      const result = await response.json();
+      const text = result.choices?.[0]?.message?.content || '{}';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const data = jsonMatch ? JSON.parse(jsonMatch[0]) : { pass: false, reasons: ['AI 健檢沒有回傳有效結果'], suggestions: ['請稍後再試'] };
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: 'AI 名片健檢失敗: ' + e.message };
+    }
+  },
+
+  async generateCardCopy(payload, env) {
+    try {
+      const card = payload.card || {};
+      const brief = payload.brief || '';
+      const prompt = `你是商務名片文案顧問。請根據名片資料與使用者補充，產生適合數位名片的服務介紹。
+要求：
+1. 使用繁體中文。
+2. 4 到 5 行，每行盡量 16 字內。
+3. 具體、可信、不要誇大療效或保證收益。
+4. 不得產生色情、犯罪、詐騙、賭博、毒品、武器等違規內容。
+只回傳純 JSON：{"service":"第一行\\n第二行\\n第三行","headline":"","tips":[]}
+名片資料：${JSON.stringify(card).slice(0, 5000)}
+補充需求：${brief}`;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7 })
+      });
+      const result = await response.json();
+      const text = result.choices?.[0]?.message?.content || '{}';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const data = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: 'AI 名片代寫失敗: ' + e.message };
+    }
   },
 
   async fateTags(payload, env) {
@@ -387,9 +450,9 @@ async function dispatchAction(action, payload, request, env) {
   }
 
   // 2. 資安防護：OpenAI 限流機制
-  const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags'];
+  const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy'];
   if (aiActions.includes(action) && payload.userId) {
-    const allowed = await SecurityModule.checkRateLimit(payload.userId, action, env);
+    const allowed = await SecurityModule.checkRateLimit(payload.userId, action, env, payload.role);
     if (!allowed) {
       return { success: false, error: "Daily AI quota exceeded for this action. Please try again tomorrow." };
     }
@@ -413,6 +476,8 @@ async function dispatchAction(action, payload, request, env) {
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
     case 'calculateFateTags':      return await AIModule.fateTags(payload, env);
+    case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
+    case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
     default:                       return await DBModule.forward(action, payload, env);
