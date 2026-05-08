@@ -28,6 +28,8 @@
     { label: "標籤", icon: "label", key: "標籤" }
   ];
 
+  const CARD_PAGE_SIZE = 10;
+
   function $(id) {
     return document.getElementById(id);
   }
@@ -152,6 +154,38 @@
       .join("");
   }
 
+  function getCardSortTime(card) {
+    const candidates = [
+      card && card.updated_at,
+      card && card.created_at,
+      card && card["更新時間"],
+      card && card["建立時間"],
+      card && card["updatedAt"],
+      card && card["createdAt"]
+    ];
+
+    for (const value of candidates) {
+      const text = safeText(value).trim();
+      if (!text) continue;
+      const time = Date.parse(text.replace(" ", "T"));
+      if (!Number.isNaN(time)) return time;
+    }
+
+    const rowId = safeText(card && (card.rowId || card["rowId"]));
+    const match = rowId.match(/(\d{10,})/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  function sortCardsNewestFirst(cards) {
+    return cards
+      .map((card, index) => ({ card, index, time: getCardSortTime(card) }))
+      .sort((a, b) => {
+        if (b.time !== a.time) return b.time - a.time;
+        return a.index - b.index;
+      })
+      .map(item => item.card);
+  }
+
   function updateLocalCard(rowId, payloadData) {
     if (!rowId || !payloadData) return;
 
@@ -177,9 +211,14 @@
     }
   }
 
-  window.renderCardList = function (cards) {
+  window.renderCardList = function (cards, options = {}) {
     const list = $("card-list");
     if (!list) return;
+
+    if (!options.keepPage) {
+      window.cardListPage = 1;
+      window.cardListRenderSource = cards;
+    }
 
     if (!Array.isArray(cards) || cards.length === 0) {
       list.innerHTML = `
@@ -191,9 +230,11 @@
       return;
     }
 
-    const displayCards = [...cards].reverse();
+    const page = Math.max(1, Number(window.cardListPage || 1));
+    const displayCards = sortCardsNewestFirst(cards);
+    const visibleCards = displayCards.slice(0, page * CARD_PAGE_SIZE);
 
-    const html = displayCards.map(card => {
+    const html = visibleCards.map(card => {
       const rowId = safeText(card.rowId || card["rowId"]);
       const rawService = card["服務項目"] || card["職稱"] || card["公司名稱"] || "";
       let serviceStr = escapeHTML(rawService).replace(/\n/g, " ");
@@ -232,7 +273,26 @@
       `;
     }).join("");
 
-    list.innerHTML = html;
+    const hasMore = visibleCards.length < displayCards.length;
+    const footerHtml = `
+      <div class="text-center py-2">
+        <div class="text-[12px] font-bold text-slate-400 mb-3">顯示 ${visibleCards.length} / ${displayCards.length} 張名片</div>
+        ${hasMore ? `
+          <button type="button"
+                  onclick="window.loadMoreCards()"
+                  class="w-full bg-white border border-slate-100 rounded-2xl py-3 text-[13px] font-black text-primary shadow-sm active:scale-[0.98] transition-all">
+            載入更多
+          </button>
+        ` : ""}
+      </div>
+    `;
+
+    list.innerHTML = html + footerHtml;
+  };
+
+  window.loadMoreCards = function () {
+    window.cardListPage = Math.max(1, Number(window.cardListPage || 1)) + 1;
+    window.renderCardList(Array.isArray(window.cardListRenderSource) ? window.cardListRenderSource : window.allCards, { keepPage: true });
   };
 
   window.filterCards = function () {
