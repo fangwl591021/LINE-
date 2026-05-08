@@ -79,7 +79,6 @@ window.toggleAdminMode = function() {
     currentViewMode = 'admin';
     window.showToast('已切換至【後台管理模式】');
     document.getElementById('header-admin-badge').classList.remove('hidden');
-    if (activeBatchCount === 0) window.addBatchRow();
     window.goPage('admin-activities');
   }
 
