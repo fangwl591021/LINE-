@@ -341,6 +341,7 @@
     if (!card) return;
 
     window.currentCard = card;
+    window.cardDetailReturnPage = window.currentPage || "card";
 
     const canEdit = canEditCard(card);
     const tabEdit = $("tab-edit");
@@ -460,6 +461,14 @@
 
     if (typeof window.goPage === "function") {
       window.goPage("card-detail");
+    }
+  };
+
+  window.returnFromCardDetail = function () {
+    const returnPage = window.cardDetailReturnPage || "card";
+    if (typeof window.goPage === "function") window.goPage(returnPage);
+    if (returnPage === "admin-settings" && typeof window.focusMyECardSection === "function") {
+      setTimeout(() => window.focusMyECardSection(), 120);
     }
   };
 
