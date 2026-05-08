@@ -93,6 +93,16 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
   try { config = JSON.parse(window.currentUserCard['自訂名片設定']); } catch(e){}
 
   const toggleEl = document.getElementById('fate-privacy-toggle');
+  const templateDesc = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
+  const isTemplateContent = String(window.currentUserCard['服務項目'] || '').trim() === templateDesc;
+  const wantsPublic = forceOpen || (toggleEl && toggleEl.checked);
+  if (wantsPublic && isTemplateContent) {
+    if (toggleEl) toggleEl.checked = false;
+    config.isPrivate = true;
+    window.showToast('請先編輯名片介紹內容，再公開上架到配對池', true);
+    return;
+  }
+
   if (forceOpen) {
     config.isPrivate = false;
     if (toggleEl) toggleEl.checked = true;

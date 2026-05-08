@@ -28,6 +28,16 @@
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
+  var templateCoverUrl = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1000&q=80';
+
+  function getTemplateButtons(phone) {
+    var cleanPhone = String(phone || '').replace(/[^0-9+]/g, '');
+    return [
+      { l: '加LINE好友', u: 'https://lin.ee/y7h8BUF', c: '#06C755' },
+      { l: '行動電話', u: cleanPhone ? 'tel:' + cleanPhone : 'tel:XXXXXXXXXX', c: '#3b82f6' },
+      { l: '數位包租公簡介', u: 'https://lihi2.me/yXhCf', c: '#1e293b' }
+    ];
+  }
 
   function $(selector) {
     return document.querySelector(selector);
@@ -292,7 +302,7 @@
     }
 
     try {
-      var coverUrl = profile.pictureUrl || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+      var coverUrl = templateCoverUrl;
       var cfg = {
         layoutStyle: 'landscape',
         imgUrl: coverUrl,
@@ -304,7 +314,10 @@
         desc: introTemplate,
         descAlign: 'start',
         descColor: '#666666',
-        buttons: [{ l: '加 LINE', u: 'https://line.me/R/ti/p/~' + encodeURIComponent(name), c: '#06C755' }]
+        buttons: getTemplateButtons(phone),
+        isPrivate: true,
+        templateDraft: true,
+        templateVersion: 'rental-intro-1'
       };
       var cardPayload = {
         '姓名': name,
@@ -356,6 +369,11 @@
     cfg.desc = introTemplate;
     cfg.descAlign = 'start';
     cfg.descColor = cfg.descColor || '#666666';
+    cfg.imgUrl = templateCoverUrl;
+    cfg.buttons = getTemplateButtons(currentCardData['手機號碼'] || (window.currentUser && window.currentUser.phone));
+    cfg.isPrivate = true;
+    cfg.templateDraft = true;
+    cfg.templateVersion = 'rental-intro-1';
 
     if (btn) {
       btn.disabled = true;
@@ -367,14 +385,19 @@
         rowId: currentCardData.rowId,
         data: {
           '服務項目': introTemplate,
+          '名片圖檔': cfg.imgUrl,
           '自訂名片設定': JSON.stringify(cfg)
         }
       }, true);
 
       if (!res || res.error) throw new Error((res && res.error) || '套用失敗');
       currentCardData['服務項目'] = introTemplate;
+      currentCardData['名片圖檔'] = cfg.imgUrl;
       currentCardData['自訂名片設定'] = JSON.stringify(cfg);
       window.currentUserCard = currentCardData;
+      myEcardImgs.landscape = cfg.imgUrl;
+      myEcardButtons = cfg.buttons.slice();
+      renderButtons();
       updatePreview();
       if (window.showToast) window.showToast('✅ 已套用介紹模板');
     } catch (e) {
