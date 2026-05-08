@@ -260,6 +260,85 @@
     }
   }
 
+  async function generateCardFromProfile(evt) {
+    var btn = evt && (evt.currentTarget || evt.target);
+    var originalHtml = btn ? btn.innerHTML : '';
+    var profile = moduleAuth.getUserProfile() || {};
+    var user = window.currentUser || {};
+    var userId = moduleAuth.getUserId();
+    var name = user.name || profile.displayName || '';
+    var phone = user.phone || user.mobile || '';
+    var company = user.companyName || user.company || '';
+    var title = user.industry || user.title || '';
+
+    if (!userId) {
+      if (window.showToast) window.showToast('尚未取得 LINE 登入資料，請重新整理後再試', true);
+      return;
+    }
+    if (!name) {
+      if (window.showToast) window.showToast('找不到姓名，請先完成個人資料設定', true);
+      return;
+    }
+    if (!phone) {
+      if (window.showToast) window.showToast('找不到手機號碼，請先在個人資料設定填寫手機', true);
+      focusMyECardSection();
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 生成中...';
+    }
+
+    try {
+      var coverUrl = profile.pictureUrl || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+      var cfg = {
+        layoutStyle: 'landscape',
+        imgUrl: coverUrl,
+        imgUrlPortrait: '',
+        imgUrlSquare: '',
+        imgRatioLandscape: '20:13',
+        imgRatioPortrait: '2:3',
+        imgRatioSquare: '1:1',
+        buttons: [{ l: '加 LINE', u: 'https://line.me/R/ti/p/~' + encodeURIComponent(name), c: '#06C755' }]
+      };
+      var cardPayload = {
+        '姓名': name,
+        '手機號碼': phone,
+        '公司名稱': company,
+        '職稱': title,
+        '名片圖檔': coverUrl,
+        'LINE ID': userId,
+        '歸屬網': window.currentNetworkId || user.networkId || 'admin',
+        '建檔者ID': userId,
+        '建檔人/備註': '使用 LINE 資料生成',
+        '自訂名片設定': JSON.stringify(cfg),
+        userId: userId,
+        creatorId: userId
+      };
+
+      var saveRes = await window.fetchAPI('saveCard', cardPayload, true);
+      if (!saveRes || saveRes.error) throw new Error((saveRes && saveRes.error) || '建立名片失敗');
+
+      cardPayload.rowId = saveRes.rowId || saveRes.id || saveRes.RowID || '';
+      window.currentUserCard = cardPayload;
+      currentCardData = cardPayload;
+      if (Array.isArray(window.allCards)) window.allCards.unshift(cardPayload);
+      if (window.showToast) window.showToast('✅ 已使用 LINE 資料建立專屬名片');
+      if (typeof window.loadAllData === 'function') await window.loadAllData({ render: false });
+      load();
+      focusMyECardSection();
+      if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards || []);
+    } catch (e) {
+      if (window.showToast) window.showToast('生成名片失敗：' + (e.message || '請稍後再試'), true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    }
+  }
+
   async function shareMyCard(btn) {
     if (!currentCardData) {
       if (window.showToast) window.showToast('尚未建立專屬名片', true);
@@ -328,6 +407,7 @@
   window.updateMyV1Button = updateButton;
   window.removeMyV1Button = removeButton;
   window.saveMyECardConfig = saveMyECardConfig;
+  window.generateCardFromProfile = generateCardFromProfile;
   window.showMyQRCode = showMyQRCode;
   window.shareMyCard = shareMyCard;
 })();
