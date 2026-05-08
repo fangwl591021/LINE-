@@ -389,6 +389,63 @@
     </div>
   </div>
 
+  <div id="modal-activity-edit" class="fixed inset-0 bg-slate-900/60 z-[1200] hidden items-center justify-center backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[720px] max-h-[92vh] overflow-hidden flex flex-col">
+      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-black text-slate-800">編輯活動</h3>
+          <p id="edit-a-id-label" class="text-xs text-slate-400 font-mono mt-1"></p>
+        </div>
+        <button type="button" onclick="closeActivityEditModal()" class="text-slate-400 hover:text-slate-700 transition-colors">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto bg-slate-50">
+        <input type="hidden" id="edit-a-id">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">活動名稱</label>
+            <input id="edit-a-name" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">活動類型</label>
+            <input id="edit-a-type" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">金額</label>
+            <input id="edit-a-price" type="number" min="0" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">開始時間</label>
+            <input id="edit-a-start" type="text" placeholder="2026-05-07 19:00" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">結束時間</label>
+            <input id="edit-a-end" type="text" placeholder="2026-05-07 21:00" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">NFC 獎勵點數</label>
+            <input id="edit-a-reward" type="number" min="0" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">宣傳圖網址</label>
+            <input id="edit-a-image" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">活動說明</label>
+            <textarea id="edit-a-desc" rows="4" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 resize-none"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="px-6 py-4 bg-white border-t border-slate-200 flex justify-end gap-3">
+        <button type="button" onclick="closeActivityEditModal()" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">取消</button>
+        <button id="btn-save-activity" type="button" onclick="saveActivityFromMonitor()" class="px-7 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">save</span> 儲存變更
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="admin-cropper-modal" class="fixed inset-0 bg-slate-900/95 z-[2000] hidden transition-opacity duration-300">
     <div class="flex flex-col w-full h-full">
       <div id="admin-cropper-container" class="flex-1 w-full relative flex items-center justify-center overflow-hidden p-4">
@@ -644,56 +701,83 @@
       }
     }
 
-    async function editActivityFromMonitor(encodedActivityId) {
+    function editActivityFromMonitor(encodedActivityId) {
       const activityId = decodeURIComponent(encodedActivityId || "");
       const act = allActivitiesData.find(a => String(a["活動ID"] || a.rowId || "") === activityId);
       if (!act) return showToast("找不到活動資料，請重新整理", true);
 
-      const nextName = window.prompt("活動名稱", act["活動名稱"] || "");
-      if (nextName === null) return;
+      document.getElementById("edit-a-id").value = activityId;
+      document.getElementById("edit-a-id-label").textContent = activityId;
+      document.getElementById("edit-a-name").value = safeStringForPrompt_(act["活動名稱"]);
+      document.getElementById("edit-a-type").value = safeStringForPrompt_(act["活動類型"] || "例會");
+      document.getElementById("edit-a-start").value = safeStringForPrompt_(act["開始時間"]);
+      document.getElementById("edit-a-end").value = safeStringForPrompt_(act["結束時間"]);
+      document.getElementById("edit-a-price").value = safeStringForPrompt_(act["金額"] || 0);
+      document.getElementById("edit-a-reward").value = safeStringForPrompt_(act["獎勵點數"] || 0);
+      document.getElementById("edit-a-desc").value = safeStringForPrompt_(act["活動說明"]);
+      document.getElementById("edit-a-image").value = safeStringForPrompt_(act["宣傳圖"]);
 
-      const nextType = window.prompt("活動類型", act["活動類型"] || "例會");
-      if (nextType === null) return;
+      const modal = document.getElementById("modal-activity-edit");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
 
-      const nextStart = window.prompt("開始時間，例如 2026-05-07 19:00", safeStringForPrompt_(act["開始時間"]));
-      if (nextStart === null) return;
+    function closeActivityEditModal() {
+      const modal = document.getElementById("modal-activity-edit");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
 
-      const nextEnd = window.prompt("結束時間，例如 2026-05-07 21:00", safeStringForPrompt_(act["結束時間"]));
-      if (nextEnd === null) return;
+    async function saveActivityFromMonitor() {
+      const btn = document.getElementById("btn-save-activity");
+      const originalHtml = btn ? btn.innerHTML : "";
+      const activityId = document.getElementById("edit-a-id").value;
+      const nextName = document.getElementById("edit-a-name").value.trim();
+      const nextType = document.getElementById("edit-a-type").value.trim();
+      const nextStart = document.getElementById("edit-a-start").value.trim();
+      const nextEnd = document.getElementById("edit-a-end").value.trim();
+      const nextPriceText = document.getElementById("edit-a-price").value;
+      const nextRewardText = document.getElementById("edit-a-reward").value;
+      const nextDesc = document.getElementById("edit-a-desc").value;
+      const nextImage = document.getElementById("edit-a-image").value.trim();
 
-      const nextPriceText = window.prompt("金額，免費請填 0", safeStringForPrompt_(act["金額"] || 0));
-      if (nextPriceText === null) return;
-
-      const nextRewardText = window.prompt("NFC 簽到獎勵點數，無獎勵請填 0", safeStringForPrompt_(act["獎勵點數"] || 0));
-      if (nextRewardText === null) return;
-
-      const nextDesc = window.prompt("活動說明", act["活動說明"] || "");
-      if (nextDesc === null) return;
-
-      const nextImage = window.prompt("宣傳圖網址", act["宣傳圖"] || "");
-      if (nextImage === null) return;
+      if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
+      if (!nextName) return showToast("請輸入活動名稱", true);
 
       const price = parseInt(nextPriceText, 10) || 0;
       const rewardPoints = parseInt(nextRewardText, 10) || 0;
 
-      const result = await fetchAPI("updateActivity", {
-        activityId,
-        data: {
-          "活動名稱": nextName.trim(),
-          "活動類型": nextType.trim(),
-          "開始時間": nextStart.trim(),
-          "結束時間": nextEnd.trim(),
-          "金額": price,
-          "收費類型": price > 0 ? "收費" : "免費",
-          "獎勵點數": rewardPoints,
-          "活動說明": nextDesc,
-          "宣傳圖": nextImage.trim()
-        }
-      });
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span> 儲存中';
+      }
 
-      if (result) {
-        showToast("活動已更新");
-        await loadActivities();
+      try {
+        const result = await fetchAPI("updateActivity", {
+          activityId,
+          data: {
+            "活動名稱": nextName,
+            "活動類型": nextType,
+            "開始時間": nextStart,
+            "結束時間": nextEnd,
+            "金額": price,
+            "收費類型": price > 0 ? "收費" : "免費",
+            "獎勵點數": rewardPoints,
+            "活動說明": nextDesc,
+            "宣傳圖": nextImage
+          }
+        });
+
+        if (result) {
+          showToast("活動已更新");
+          closeActivityEditModal();
+          await loadActivities();
+        }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
       }
     }
 
