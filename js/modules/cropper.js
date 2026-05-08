@@ -130,6 +130,85 @@ function hasOcrContent(cardData) {
     .some((key) => String(cardData?.[key] || '').trim() !== '');
 }
 
+let cardOcrProgressTimer = null;
+let cardOcrProgressValue = 0;
+let cardOcrProgressCap = 92;
+
+function ensureCardOcrProgressPopup() {
+  let popup = document.getElementById('card-ocr-progress-popup');
+  if (popup) return popup;
+
+  popup = document.createElement('div');
+  popup.id = 'card-ocr-progress-popup';
+  popup.className = 'fixed inset-0 z-[9999] hidden items-center justify-center bg-slate-950/55 backdrop-blur-sm px-6';
+  popup.innerHTML = `
+    <div class="w-full max-w-[360px] rounded-[28px] bg-white shadow-2xl p-6 text-center border border-slate-100">
+      <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+        <span class="material-symbols-outlined animate-spin text-[28px]">progress_activity</span>
+      </div>
+      <div id="card-ocr-progress-title" class="text-[18px] font-black text-slate-900">名片辨識中</div>
+      <div id="card-ocr-progress-message" class="mt-2 text-[13px] font-bold text-slate-500">正在準備圖片...</div>
+      <div class="mt-5 h-3 w-full overflow-hidden rounded-full bg-slate-100">
+        <div id="card-ocr-progress-bar" class="h-full rounded-full bg-blue-600 transition-all duration-500 ease-out" style="width: 0%"></div>
+      </div>
+      <div id="card-ocr-progress-percent" class="mt-3 text-[28px] font-black tabular-nums text-slate-900">0%</div>
+      <div class="mt-2 text-[12px] font-bold text-slate-400">請勿重複上傳或關閉頁面</div>
+    </div>
+  `;
+  document.body.appendChild(popup);
+  return popup;
+}
+
+function updateCardOcrProgress(percent, message, title) {
+  const popup = ensureCardOcrProgressPopup();
+  cardOcrProgressValue = Math.max(cardOcrProgressValue, Math.min(100, Math.round(percent)));
+  popup.classList.remove('hidden');
+  popup.classList.add('flex');
+
+  const titleEl = document.getElementById('card-ocr-progress-title');
+  const messageEl = document.getElementById('card-ocr-progress-message');
+  const barEl = document.getElementById('card-ocr-progress-bar');
+  const percentEl = document.getElementById('card-ocr-progress-percent');
+
+  if (titleEl && title) titleEl.textContent = title;
+  if (messageEl && message) messageEl.textContent = message;
+  if (barEl) barEl.style.width = cardOcrProgressValue + '%';
+  if (percentEl) percentEl.textContent = cardOcrProgressValue + '%';
+}
+
+function showCardOcrProgress(title) {
+  clearInterval(cardOcrProgressTimer);
+  cardOcrProgressValue = 3;
+  cardOcrProgressCap = 92;
+  updateCardOcrProgress(3, '正在壓縮並上傳名片照片...', title || '名片辨識中');
+
+  cardOcrProgressTimer = setInterval(() => {
+    if (cardOcrProgressValue < cardOcrProgressCap) {
+      const step = cardOcrProgressValue < 45 ? 3 : 1;
+      updateCardOcrProgress(cardOcrProgressValue + step);
+    }
+  }, 900);
+}
+
+function setCardOcrProgressStage(percent, message) {
+  updateCardOcrProgress(percent, message);
+}
+
+function hideCardOcrProgress(doneMessage) {
+  clearInterval(cardOcrProgressTimer);
+  cardOcrProgressTimer = null;
+
+  if (doneMessage) updateCardOcrProgress(100, doneMessage);
+
+  setTimeout(() => {
+    const popup = document.getElementById('card-ocr-progress-popup');
+    if (popup) {
+      popup.classList.add('hidden');
+      popup.classList.remove('flex');
+    }
+  }, doneMessage ? 500 : 0);
+}
+
 window.openCropper = function(input) {
   const file = input.files[0];
   if (!file) return;
@@ -203,12 +282,15 @@ window.confirmCrop = async function() {
   }
 
   window.cancelCrop();
+  showCardOcrProgress('客戶名片建立中');
   window.showToast('AI 正在辨識客戶名片...');
 
   try {
+    setCardOcrProgressStage(18, '正在上傳照片並送入 OCR...');
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
     console.log('[confirmCrop] OCR result:', ocrRes);
+    setCardOcrProgressStage(72, 'OCR 完成，正在整理名片欄位...');
 
     const cardData = normalizeOcrCardData(ocrRes);
     if (!hasOcrContent(cardData)) {
@@ -224,8 +306,10 @@ window.confirmCrop = async function() {
       '建檔人/備註': '掃描建立 by ' + (currentUser?.name || '')
     };
 
+    setCardOcrProgressStage(86, '正在產生名片並寫入資料庫...');
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
+      hideCardOcrProgress('名片建立完成');
       window.showToast('客戶名片建立成功！');
       if (typeof window.loadAllData === 'function') await window.loadAllData();
       if (typeof window.goPage === 'function') window.goPage('card');
@@ -233,6 +317,7 @@ window.confirmCrop = async function() {
       throw new Error('儲存失敗');
     }
   } catch (err) {
+    hideCardOcrProgress();
     window.showToast(err.message, true);
   }
 };
@@ -310,12 +395,15 @@ window.confirmMyCardCrop = async function() {
   }
 
   window.cancelCrop();
+  showCardOcrProgress('專屬名片建立中');
   window.showToast('AI 正在辨識專屬名片...');
 
   try {
+    setCardOcrProgressStage(18, '正在上傳照片並送入 OCR...');
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
     console.log('[confirmMyCardCrop] OCR result:', ocrRes);
+    setCardOcrProgressStage(72, 'OCR 完成，正在整理名片欄位...');
 
     const cardData = normalizeOcrCardData(ocrRes);
     if (!hasOcrContent(cardData)) {
@@ -331,8 +419,10 @@ window.confirmMyCardCrop = async function() {
       '建檔人/備註': '我的專屬名片'
     };
 
+    setCardOcrProgressStage(86, '正在產生名片並寫入資料庫...');
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
+      hideCardOcrProgress('專屬名片建立完成');
       window.showToast('專屬名片覆蓋成功！');
       cardPayload.rowId = saveRes.rowId;
       allCards.unshift(cardPayload);
@@ -343,6 +433,7 @@ window.confirmMyCardCrop = async function() {
       throw new Error('儲存失敗');
     }
   } catch (err) {
+    hideCardOcrProgress();
     window.showToast(err.message, true);
   }
 };
@@ -352,6 +443,8 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
   if (!file) return;
 
   window.currentUploadTargetId = targetInputId;
+
+  // 預設不鎖比例，讓 Banner、名片封面、活動圖都能自由拉伸裁切框。
   const uploadRatio = forcedRatio !== null ? forcedRatio : NaN;
 
   const reader = new FileReader();
