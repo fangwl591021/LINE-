@@ -1,250 +1,336 @@
-/* ==================== 我的專屬名片管理 (My E-Card) ==================== */
+// js/modules/mycard.js
+// 整合數位名片管理：支援多版型、自訂按鈕、圖片裁切、分享與 QR Code 功能
 
-window.myEcardButtons = [];
-window.myEcardImgs = { landscape: '', portrait: '', square: '' };
-window.myEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' }; // 預設比例
+import { Config } from '../config.js';
+import { Auth } from '../auth.js';
+import { Core } from '../core.js';
+import { CropperModule } from './cropper.js';
 
-window.initMyECard = function() {
-  const emptyState = document.getElementById('my-ecard-empty-state');
-  const editState = document.getElementById('my-ecard-edit-state');
+const MyCardModule = (function() {
+    // === 模組變數 ===
+    let currentCardData = null; // 原始名片資料 (來自資料庫)
+    let myEcardButtons = [];    // 自訂按鈕列表
+    let myEcardImgs = { landscape: '', portrait: '', square: '' }; // 不同版型的圖片
+    let myEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' }; // 比例設定
 
-  // 確保 currentUserCard 已就緒
-  if (!window.currentUserCard) {
-    if (emptyState) emptyState.classList.remove('hidden');
-    if (editState) editState.classList.add('hidden');
-    return;
-  }
+    // === DOM 快取 ===
+    const $container = $('#mycard-container');
+    const $emptyState = $('#my-ecard-empty-state');
+    const $editState = $('#my-ecard-edit-state');
+    const $previewArea = $('#my-ecard-preview-area');
+    const $buttonsList = $('#my-v1-buttons-list');
+    const $imgUrlInput = $('#my-v1-img-url');
 
-  if (emptyState) emptyState.classList.add('hidden');
-  if (editState) editState.classList.remove('hidden');
+    function init() {
+        console.log('[MyCardModule] Initializing...');
+        initListeners();
+    }
 
-  let cfg = {};
-  try { cfg = JSON.parse(window.currentUserCard['自訂名片設定'] || '{}'); } catch(e){}
+    function initListeners() {
+        // 1. 版型切換
+        $(document).on('change', 'input[name="my-ecard-layout"]', function() {
+            handleLayoutChange();
+        });
 
-  window.myEcardImgs = {
-    landscape: cfg.imgUrl || window.currentUserCard['名片圖檔'] || '',
-    portrait: cfg.imgUrlPortrait || '',
-    square: cfg.imgUrlSquare || ''
-  };
-  
-  window.myEcardRatios = {
-    landscape: cfg.imgRatioLandscape || '20:13',
-    portrait: cfg.imgRatioPortrait || '2:3',
-    square: cfg.imgRatioSquare || '1:1'
-  };
+        // 2. 新增按鈕
+        $(document).on('click', '#btn-add-v1-button', function() {
+            addV1Button();
+        });
 
-  let layoutVal = cfg.layoutStyle || cfg.layout || 'landscape';
-  let layoutRadio = document.querySelector(`input[name="my-ecard-layout"][value="${layoutVal}"]`);
-  if (layoutRadio) layoutRadio.checked = true;
+        // 3. 儲存設定
+        $(document).on('click', '#btn-save-my-ecard', function() {
+            saveMyECardConfig();
+        });
 
-  const imgInput = document.getElementById('my-v1-img-url');
-  if (imgInput) {
-    imgInput.value = window.myEcardImgs[layoutVal];
-    imgInput.oninput = function() {
-       window.myEcardImgs[layoutVal] = this.value;
-       window.updateMyECardPreview();
-    };
-  }
+        // 4. 分享名片
+        $(document).on('click', '#btn-share-my-card', function() {
+            shareMyCard($(this));
+        });
 
-  window.myEcardButtons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
-  window.renderMyV1Buttons();
-  window.updateMyECardPreview();
-};
+        // 5. 顯示 QR Code
+        $(document).on('click', '#btn-show-qrcode', function() {
+            showMyQRCode();
+        });
 
-window.renderMyV1Buttons = function() {
-  const container = document.getElementById('my-v1-buttons-list');
-  if (!container) return;
+        // 6. 處理圖片上傳按鈕 (觸發隱藏的 input)
+        $(document).on('click', '#edit-card-image-btn', function() {
+            $('#edit-card-image-input').click();
+        });
 
-  if (window.myEcardButtons.length === 0) {
-    container.innerHTML = '<p class="text-[12px] text-slate-400 pb-2">尚未設定任何按鈕</p>';
-  } else {
-    container.innerHTML = window.myEcardButtons.map((b, i) => `
-      <div class="flex gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-        <input type="color" value="${b.c || '#06C755'}" class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200" onchange="window.myEcardButtons[${i}].c=this.value; window.updateMyECardPreview()">
-        <div class="flex-1 flex flex-col gap-1.5">
-          <input type="text" value="${window.escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="window.myEcardButtons[${i}].l=this.value; window.updateMyECardPreview()">
-          <input type="text" value="${window.escapeHTML(b.u || '')}" placeholder="https://..." class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="window.myEcardButtons[${i}].u=this.value">
-        </div>
-        <button onclick="window.myEcardButtons.splice(${i},1); window.renderMyV1Buttons(); window.updateMyECardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
-      </div>
-    `).join('');
-  }
-};
+        $(document).on('change', '#edit-card-image-input', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => CropperModule.startCropping(event.target.result);
+                reader.readAsDataURL(file);
+            }
+        });
 
-window.addMyV1Button = function() {
-  window.myEcardButtons.push({ l: '新按鈕', u: '', c: '#06C755' });
-  window.renderMyV1Buttons();
-  window.updateMyECardPreview();
-};
+        // 7. 監聽裁切完成事件 (整合至當前版型圖片)
+        $(document).on('cropper-completed', function(event, croppedImageData) {
+            console.log('[MyCard] Cropper completed.');
+            const layoutStyle = $('input[name="my-ecard-layout"]:checked').val() || 'landscape';
+            
+            // 更新圖片資料
+            myEcardImgs[layoutStyle] = croppedImageData;
+            
+            // 更新 UI
+            if ($imgUrlInput.length) $imgUrlInput.val(croppedImageData);
+            updatePreview();
+        });
+    }
 
-window.changeMyLayout = function() {
-  const layoutStyle = document.querySelector('input[name="my-ecard-layout"]:checked')?.value || 'landscape';
-  const imgInput = document.getElementById('my-v1-img-url');
-  if (imgInput) {
-    imgInput.value = window.myEcardImgs[layoutStyle] || '';
-    imgInput.oninput = function() {
-       window.myEcardImgs[layoutStyle] = this.value;
-       window.updateMyECardPreview();
-    };
-  }
-  window.updateMyECardPreview();
-};
+    // === 核心邏輯 ===
 
-window.setMyUploadImage = function(url, ratio) {
-    const layoutStyle = document.querySelector('input[name="my-ecard-layout"]:checked')?.value || 'landscape';
-    window.myEcardImgs[layoutStyle] = url;
-    if (ratio) window.myEcardRatios[layoutStyle] = ratio.replace(':', '/'); // 將 100:200 轉為 css 的 aspect-ratio 格式 100/200
-    const imgInput = document.getElementById('my-v1-img-url');
-    if (imgInput) imgInput.value = url;
-    window.updateMyECardPreview();
-};
+    function load() {
+        console.log('[MyCardModule] Loading data...');
+        Core.showLoading(true);
 
-window.updateMyECardPreview = function() {
-  const area = document.getElementById('my-ecard-preview-area');
-  if (!area) return;
+        // 模擬從資料庫獲取資料，實際應呼叫 Core.ajax
+        const userId = Auth.getUserId();
+        // 這裡暫時假設 currentUserCard 已在全域或透過 Core 取得
+        // 若您的環境中 currentUserCard 是全域變數，直接讀取
+        const card = window.currentUserCard;
 
-  const layoutStyle = document.querySelector('input[name="my-ecard-layout"]:checked')?.value || 'landscape';
-  const name = window.currentUserCard?.['姓名'] || window.currentUserProfile?.displayName || '姓名';
-  const imgUrl = window.myEcardImgs[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
-  
-  let desc = window.currentUserCard ? (window.currentUserCard['服務項目'] || window.currentUserCard['職稱'] || window.currentUserCard['公司名稱'] || '') : '';
-  desc = desc.replace(/\n/g, '<br>');
-  
-  let cfg = {};
-  try { cfg = JSON.parse(window.currentUserCard?.['自訂名片設定'] || '{}'); } catch(e){}
-  
-  const color = cfg.descColor || '#666666';
-  const align = cfg.descAlign || 'center';
-
-  let ratio = '20/13';
-  if (layoutStyle === 'portrait') ratio = window.myEcardRatios.portrait.replace(':', '/') || '2/3';
-  if (layoutStyle === 'square') ratio = '1/1';
-  if (layoutStyle === 'landscape') ratio = '20/13';
-
-  const btnsHtml = window.myEcardButtons.map(b => 
-    `<div class="block py-3 rounded-xl text-white text-center text-[14px] font-black mb-2.5 shadow-sm" style="background:${b.c||'#06C755'}">${window.escapeHTML(b.l||'按鈕')}</div>`
-  ).join('');
-
-  area.innerHTML = `
-    <div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px]">
-      <div class="w-full bg-slate-100 bg-cover bg-center shadow-sm" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
-      <div class="p-6 text-center">
-        <div class="font-black text-[22px] text-slate-800 mb-2">${window.escapeHTML(name)}</div>
-        <div class="text-[14px] leading-relaxed" style="color: ${color}; text-align: ${align};">${desc}</div>
-      </div>
-      ${btnsHtml ? `<div class="px-6">${btnsHtml}</div>` : ''}
-    </div>
-  `;
-};
-
-window.saveMyECardConfig = async function() {
-  if (!window.currentUserCard) return;
-  const btn = document.getElementById('btn-save-my-ecard');
-  if (btn) {
-    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
-    btn.disabled = true;
-  }
-
-  const layoutVal = document.querySelector('input[name="my-ecard-layout"]:checked')?.value || 'landscape';
-  let cfg = {};
-  try { cfg = JSON.parse(window.currentUserCard['自訂名片設定'] || '{}'); } catch(e){}
-  
-  cfg.layoutStyle = layoutVal;
-  cfg.imgUrl = window.myEcardImgs.landscape;
-  cfg.imgUrlPortrait = window.myEcardImgs.portrait;
-  cfg.imgUrlSquare = window.myEcardImgs.square;
-  
-  // 儲存實際比例 (轉回 LINE Flex 需要的 '寬:高' 格式)
-  cfg.imgRatioLandscape = '20:13';
-  cfg.imgRatioPortrait = window.myEcardRatios.portrait.replace('/', ':');
-  cfg.imgRatioSquare = '1:1';
-  
-  cfg.buttons = window.myEcardButtons;
-
-  const payloadData = {
-    '名片圖檔': cfg.imgUrl,
-    '自訂名片設定': JSON.stringify(cfg)
-  };
-
-  try {
-    const res = await window.fetchAPI('updateCard', { rowId: window.currentUserCard.rowId, data: payloadData }, false);
-    if (res) {
-      window.showToast('✅ 專屬名片設定已儲存');
-      window.currentUserCard['自訂名片設定'] = payloadData['自訂名片設定'];
-      window.currentUserCard['名片圖檔'] = payloadData['名片圖檔'];
-      
-      if (window.allCards) {
-        const match = window.allCards.find(c => String(c.rowId) === String(window.currentUserCard.rowId));
-        if (match) {
-           match['自訂名片設定'] = payloadData['自訂名片設定'];
-           match['名片圖檔'] = payloadData['名片圖檔'];
+        if (!card) {
+            $emptyState.removeClass('hidden');
+            $editState.addClass('hidden');
+            Core.showLoading(false);
+            return;
         }
-      }
+
+        currentCardData = card;
+        $emptyState.addClass('hidden');
+        $editState.removeClass('hidden');
+
+        // 解析自訂設定
+        let cfg = {};
+        try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e) { cfg = {}; }
+
+        // 初始化圖片與比例
+        myEcardImgs = {
+            landscape: cfg.imgUrl || card['名片圖檔'] || '',
+            portrait: cfg.imgUrlPortrait || '',
+            square: cfg.imgUrlSquare || ''
+        };
+        
+        myEcardRatios = {
+            landscape: cfg.imgRatioLandscape || '20:13',
+            portrait: cfg.imgRatioPortrait || '2:3',
+            square: cfg.imgRatioSquare || '1:1'
+        };
+
+        // 設定版型 Radio
+        const layoutVal = cfg.layoutStyle || 'landscape';
+        $(`input[name="my-ecard-layout"][value="${layoutVal}"]`).prop('checked', true);
+
+        // 設定圖片 Input
+        if ($imgUrlInput.length) $imgUrlInput.val(myEcardImgs[layoutVal]);
+
+        // 初始化按鈕
+        myEcardButtons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+        
+        renderButtons();
+        updatePreview();
+        Core.showLoading(false);
     }
-  } catch(e) {
-    window.showToast('⚠️ 儲存失敗: ' + e.message, true);
-  } finally {
-    if (btn) {
-      btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> 儲存名片設定';
-      btn.disabled = false;
+
+    function handleLayoutChange() {
+        const layoutStyle = $('input[name="my-ecard-layout"]:checked').val() || 'landscape';
+        if ($imgUrlInput.length) {
+            $imgUrlInput.val(myEcardImgs[layoutStyle] || '');
+        }
+        updatePreview();
     }
-  }
-};
 
-window.shareMyCard = async function(btn) {
-  if (!window.currentUserCard) {
-    window.showToast('尚未建立專屬名片，為您導向設定頁面', true);
-    window.goPage('admin-settings');
-    const detailEl = document.getElementById('details-my-ecard');
-    if (detailEl) detailEl.open = true;
-    setTimeout(() => detailEl?.scrollIntoView({behavior: 'smooth'}), 300);
-    return;
-  }
-  const oriHtml = btn.innerHTML;
-  btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-4xl text-[#06C755]">refresh</span><span class="font-bold text-slate-700">準備中...</span>';
-  btn.disabled = true;
-  try {
-    let config = {};
-    try { config = JSON.parse(window.currentUserCard['自訂名片設定']); } catch(e){}
-    const flexMsg = await window.fetchAPI('buildFlexMessage', {
-      card: window.currentUserCard,
-      config: config,
-      referrerId: window.currentUserProfile.userId,
-      networkId: window.currentNetworkId,
-      liffId: window.LIFF_ID
-    }, true);
-    if (flexMsg) {
-      await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
+    function renderButtons() {
+        if (!$buttonsList.length) return;
+
+        if (myEcardButtons.length === 0) {
+            $buttonsList.html('<p class="text-[12px] text-slate-400 pb-2">尚未設定任何按鈕</p>');
+            return;
+        }
+
+        const html = myEcardButtons.map((b, i) => `
+            <div class="flex gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100 mb-2">
+                <input type="color" value="${b.c || '#06C755'}" 
+                    class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200" 
+                    onchange="MyCardModule.updateButton(${i}, 'c', this.value)">
+                <div class="flex-1 flex flex-col gap-1.5">
+                    <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" 
+                        class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" 
+                        oninput="MyCardModule.updateButton(${i}, 'l', this.value)">
+                    <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://..." 
+                        class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" 
+                        oninput="MyCardModule.updateButton(${i}, 'u', this.value)">
+                </div>
+                <button onclick="MyCardModule.removeButton(${i})" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors">
+                    <span class="material-symbols-outlined text-[18px]">delete</span>
+                </button>
+            </div>
+        `).join('');
+        $buttonsList.html(html);
     }
-  } catch(e) {
-    window.showToast('發送失敗: ' + e.message, true);
-  } finally {
-    if (btn) { btn.innerHTML = oriHtml; btn.disabled = false; }
-  }
-};
 
-window.showMyQRCode = function() {
-  if (!window.currentUserCard) {
-    window.showToast('請先建立專屬名片', true);
-    return;
-  }
-  const modal = document.getElementById('qr-modal');
-  const img = document.getElementById('qr-code-img');
-  const loading = document.getElementById('qr-loading');
+    function addV1Button() {
+        myEcardButtons.push({ l: '新按鈕', u: '', c: '#06C755' });
+        renderButtons();
+        updatePreview();
+    }
 
-  modal.classList.remove('hidden');
-  img.classList.add('hidden');
-  loading.classList.remove('hidden');
+    function updatePreview() {
+        if (!$previewArea.length) return;
 
-  let badgeUrl = 'https://liff.line.me/' + window.LIFF_ID + '?shareCardId=' + window.currentUserCard.rowId;
-  badgeUrl += '&ref=' + window.currentUserProfile.userId;
-  badgeUrl += '&net=' + window.currentNetworkId;
+        const layoutStyle = $('input[name="my-ecard-layout"]:checked').val() || 'landscape';
+        const name = currentCardData?.['姓名'] || Auth.getUserProfile()?.displayName || '姓名';
+        const imgUrl = myEcardImgs[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+        
+        let desc = currentCardData ? (currentCardData['服務項目'] || currentCardData['職稱'] || currentCardData['公司名稱'] || '') : '';
+        desc = desc.replace(/\n/g, '<br>');
+        
+        let cfg = {};
+        try { cfg = JSON.parse(currentCardData?.['自訂名片設定'] || '{}'); } catch(e){}
+        const color = cfg.descColor || '#666666';
+        const align = cfg.descAlign || 'center';
 
-  const qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(badgeUrl) + '&size=300&margin=2';
+        // 計算比例
+        let ratio = '20/13';
+        if (layoutStyle === 'portrait') ratio = myEcardRatios.portrait.replace(':', '/') || '2/3';
+        else if (layoutStyle === 'square') ratio = '1/1';
 
-  img.onload = () => {
-    loading.classList.add('hidden');
-    img.classList.remove('hidden');
-  };
-  img.src = qrUrl;
-};
+        const btnsHtml = myEcardButtons.map(b => 
+            `<div class="block py-3 rounded-xl text-white text-center text-[14px] font-black mb-2.5 shadow-sm" style="background:${b.c || '#06C755'}">${escapeHTML(b.l || '按鈕')}</div>`
+        ).join('');
+
+        $previewArea.html(`
+            <div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px] shadow-lg overflow-hidden">
+                <div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
+                <div class="p-6 text-center">
+                    <div class="font-black text-[22px] text-slate-800 mb-2">${escapeHTML(name)}</div>
+                    <div class="text-[14px] leading-relaxed" style="color: ${color}; text-align: ${align};">${desc}</div>
+                </div>
+                ${btnsHtml ? `<div class="px-6">${btnsHtml}</div>` : ''}
+            </div>
+        `);
+    }
+
+    async function saveMyECardConfig() {
+        if (!currentCardData) return;
+        const $btn = $('#btn-save-my-ecard');
+        const originalHtml = $btn.html();
+        
+        $btn.html('<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...').prop('disabled', true);
+
+        const layoutVal = $('input[name="my-ecard-layout"]:checked').val() || 'landscape';
+        let cfg = {};
+        try { cfg = JSON.parse(currentCardData['自訂名片設定'] || '{}'); } catch(e){}
+        
+        cfg.layoutStyle = layoutVal;
+        cfg.imgUrl = myEcardImgs.landscape;
+        cfg.imgUrlPortrait = myEcardImgs.portrait;
+        cfg.imgUrlSquare = myEcardImgs.square;
+        
+        cfg.imgRatioLandscape = '20:13';
+        cfg.imgRatioPortrait = myEcardRatios.portrait.replace('/', ':');
+        cfg.imgRatioSquare = '1:1';
+        cfg.buttons = myEcardButtons;
+
+        const payloadData = {
+            '名片圖檔': cfg.imgUrl,
+            '自訂名片設定': JSON.stringify(cfg)
+        };
+
+        try {
+            // 使用 Core.ajax 替代 window.fetchAPI
+            const res = await Core.ajax(Config.API_URL + '/updateCard', 'POST', { 
+                rowId: currentCardData.rowId, 
+                data: payloadData 
+            });
+
+            if (res) {
+                Core.showToast('✅ 專屬名片設定已儲存', 'success');
+                // 更新本地暫存
+                currentCardData['自訂名片設定'] = payloadData['自訂名片設定'];
+                currentCardData['名片圖檔'] = payloadData['名片圖檔'];
+                window.currentUserCard = currentCardData; // 同步回全域供其他模組使用
+            }
+        } catch(e) {
+            Core.showToast('⚠️ 儲存失敗: ' + e.message, 'error');
+        } finally {
+            $btn.html(originalHtml).prop('disabled', false);
+        }
+    }
+
+    async function shareMyCard($btn) {
+        if (!currentCardData) {
+            Core.showToast('尚未建立專屬名片', 'warning');
+            return;
+        }
+        const oriHtml = $btn.html();
+        $btn.html('<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span>').prop('disabled', true);
+        
+        try {
+            let config = JSON.parse(currentCardData['自訂名片設定'] || '{}');
+            // 這裡呼叫後端建立 Flex Message 並觸發 LINE 分享
+            const flexMsg = await Core.ajax(Config.API_URL + '/buildFlexMessage', 'POST', {
+                card: currentCardData,
+                config: config,
+                referrerId: Auth.getUserId()
+            });
+            if (flexMsg && window.liff) {
+                await liff.shareTargetPicker([flexMsg]);
+                Core.showToast('分享成功');
+            }
+        } catch(e) {
+            Core.showToast('發送失敗: ' + e.message, 'error');
+        } finally {
+            $btn.html(oriHtml).prop('disabled', false);
+        }
+    }
+
+    function showMyQRCode() {
+        if (!currentCardData) return;
+        const $modal = $('#qr-modal');
+        const $img = $('#qr-code-img');
+        const $loading = $('#qr-loading');
+
+        $modal.removeClass('hidden');
+        $img.addClass('hidden');
+        $loading.removeClass('hidden');
+
+        const badgeUrl = `https://liff.line.me/${Config.LIFF_ID}?shareCardId=${currentCardData.rowId}&ref=${Auth.getUserId()}`;
+        const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(badgeUrl)}&size=300&margin=2`;
+
+        $img.on('load', () => {
+            $loading.addClass('hidden');
+            $img.removeClass('hidden');
+        }).attr('src', qrUrl);
+    }
+
+    // 輔助函式
+    function escapeHTML(str) {
+        return str.replace(/[&<>"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[m]);
+    }
+
+    return {
+        init,
+        load,
+        // 公開給 HTML onclick 使用
+        updateButton: (i, field, val) => {
+            myEcardButtons[i][field] = val;
+            updatePreview();
+        },
+        removeButton: (i) => {
+            myEcardButtons.splice(i, 1);
+            renderButtons();
+            updatePreview();
+        }
+    };
+})();
+
+// 為了讓 HTML 中的 onclick 能存取，將模組掛載到 window (或您可以使用事件委派)
+window.MyCardModule = MyCardModule;
+
+export { MyCardModule };
