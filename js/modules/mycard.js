@@ -27,6 +27,7 @@
   var myEcardButtons = [];
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
+  var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
 
   function $(selector) {
     return document.querySelector(selector);
@@ -300,6 +301,9 @@
         imgRatioLandscape: '20:13',
         imgRatioPortrait: '2:3',
         imgRatioSquare: '1:1',
+        desc: introTemplate,
+        descAlign: 'start',
+        descColor: '#666666',
         buttons: [{ l: '加 LINE', u: 'https://line.me/R/ti/p/~' + encodeURIComponent(name), c: '#06C755' }]
       };
       var cardPayload = {
@@ -307,6 +311,7 @@
         '手機號碼': phone,
         '公司名稱': company,
         '職稱': title,
+        '服務項目': introTemplate,
         '名片圖檔': coverUrl,
         'LINE ID': userId,
         '歸屬網': window.currentNetworkId || user.networkId || 'admin',
@@ -331,6 +336,49 @@
       if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards || []);
     } catch (e) {
       if (window.showToast) window.showToast('生成名片失敗：' + (e.message || '請稍後再試'), true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    }
+  }
+
+  async function applyMyCardTemplate(evt) {
+    if (!currentCardData) {
+      if (window.showToast) window.showToast('尚未建立專屬名片', true);
+      return;
+    }
+
+    var btn = evt && (evt.currentTarget || evt.target);
+    var originalHtml = btn ? btn.innerHTML : '';
+    var cfg = parseCardConfig(currentCardData);
+    cfg.desc = introTemplate;
+    cfg.descAlign = 'start';
+    cfg.descColor = cfg.descColor || '#666666';
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 套用中...';
+    }
+
+    try {
+      var res = await window.fetchAPI('updateCard', {
+        rowId: currentCardData.rowId,
+        data: {
+          '服務項目': introTemplate,
+          '自訂名片設定': JSON.stringify(cfg)
+        }
+      }, true);
+
+      if (!res || res.error) throw new Error((res && res.error) || '套用失敗');
+      currentCardData['服務項目'] = introTemplate;
+      currentCardData['自訂名片設定'] = JSON.stringify(cfg);
+      window.currentUserCard = currentCardData;
+      updatePreview();
+      if (window.showToast) window.showToast('✅ 已套用介紹模板');
+    } catch (e) {
+      if (window.showToast) window.showToast('套用模板失敗：' + (e.message || '請稍後再試'), true);
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -408,6 +456,7 @@
   window.removeMyV1Button = removeButton;
   window.saveMyECardConfig = saveMyECardConfig;
   window.generateCardFromProfile = generateCardFromProfile;
+  window.applyMyCardTemplate = applyMyCardTemplate;
   window.showMyQRCode = showMyQRCode;
   window.shareMyCard = shareMyCard;
 })();
