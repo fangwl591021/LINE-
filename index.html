@@ -127,6 +127,23 @@
         產生我的專屬邀約連結
       </button>
 
+      <section id="tenant-upgrade-card" class="bg-slate-900 text-white rounded-3xl shadow-lg shadow-slate-900/15 mb-4 overflow-hidden">
+        <div class="p-5 space-y-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-[12px] font-black text-blue-200 tracking-wide">經銷商租戶方案</p>
+              <h3 class="text-2xl font-black mt-1">NT$ 6,300 / 年</h3>
+              <p id="tenant-upgrade-status" class="text-[13px] text-slate-300 mt-2 font-bold leading-relaxed">開通後可使用活動、CRM、公開名片與推薦分潤資格。</p>
+            </div>
+            <span id="tenant-role-badge" class="px-3 py-1.5 rounded-full bg-white text-slate-900 text-[12px] font-black shrink-0">一般</span>
+          </div>
+          <button type="button" onclick="window.goPage('tenant-upgrade')" class="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-black shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
+            <span class="material-symbols-outlined text-[20px]">workspace_premium</span>
+            升級租戶並建立訂單
+          </button>
+        </div>
+      </section>
+
       <details class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">person</span> 個人資料設定</div>
@@ -388,6 +405,72 @@
           <span class="material-symbols-outlined text-[20px]">swap_horiz</span> <span id="admin-switch-text">切換至後台 (管理模式)</span>
         </button>
       </div>
+    </div>
+
+    <!-- ==================== 升級租戶購買頁 ==================== -->
+    <div id="page-tenant-upgrade" class="hidden animate-in slide-in-from-right-8 mx-1 pb-10">
+      <div class="flex items-center gap-3 mb-4 mt-2 px-1">
+        <button onclick="window.goPage('admin-settings')" class="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
+          <span class="material-symbols-outlined text-[22px]">arrow_back</span>
+        </button>
+        <h2 class="text-xl font-black text-slate-800 tracking-tight">升級租戶</h2>
+      </div>
+
+      <section class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="p-6 bg-slate-900 text-white">
+          <p class="text-[13px] text-blue-200 font-black tracking-wide">租戶年費方案</p>
+          <div class="flex items-end gap-2 mt-2">
+            <div class="text-4xl font-black">NT$ 6,300</div>
+            <div class="text-sm text-slate-300 font-bold mb-1">含稅 / 年</div>
+          </div>
+          <p class="text-[13px] text-slate-300 mt-3 leading-relaxed font-bold">付款後由後台確認收款，開通租戶資格、年費紀錄與推薦分潤流程。</p>
+        </div>
+
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+              <div class="text-blue-700 font-black text-[13px]">租戶權益</div>
+              <div class="text-slate-800 font-black text-lg mt-1">活動 + CRM</div>
+            </div>
+            <div class="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+              <div class="text-amber-700 font-black text-[13px]">獎金 BV</div>
+              <div class="text-slate-800 font-black text-lg mt-1">NT$ 3,000</div>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-3">
+            <div class="flex justify-between gap-3">
+              <span class="text-slate-500 font-bold text-[13px]">購買人</span>
+              <span id="tenant-order-buyer" class="text-slate-900 font-black text-right">-</span>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span class="text-slate-500 font-bold text-[13px]">推薦人</span>
+              <span id="tenant-order-sponsor" class="text-slate-900 font-black text-right">系統自動帶入</span>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span class="text-slate-500 font-bold text-[13px]">付款方式</span>
+              <span class="text-slate-900 font-black text-right">轉帳 / 後台確認</span>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <h3 class="font-black text-slate-800 mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-blue-600">receipt_long</span>購買後流程</h3>
+            <ol class="space-y-2 text-[14px] text-slate-600 font-bold leading-relaxed">
+              <li>1. 建立租戶年費訂單。</li>
+              <li>2. 依管理方提供方式完成付款。</li>
+              <li>3. 後台確認收款後，自動開通租戶資格。</li>
+              <li>4. 訂單進入獎金流水與 14 天凍結期。</li>
+            </ol>
+          </div>
+
+          <button id="btn-create-tenant-order" type="button" onclick="window.createTenantUpgradeOrder(event)" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-blue-500/25 active:scale-95 transition-transform flex justify-center items-center gap-2">
+            <span class="material-symbols-outlined text-[20px]">add_card</span>
+            建立 NT$6,300 租戶年費訂單
+          </button>
+
+          <div id="tenant-order-result" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[14px] text-slate-800 font-bold leading-relaxed"></div>
+        </div>
+      </section>
     </div>
 
     <!-- ==================== 首頁 ==================== -->
@@ -1056,7 +1139,7 @@
 </div>
 
 <script src="js/core.js?v=7.3"></script>
-<script src="js/navigation.js?v=7.3"></script>
+<script src="js/navigation.js?v=7.4"></script>
 <script src="js/modules/cropper.js?v=7.1"></script>
 <script src="js/modules/cards.js?v=7.3"></script>
 <script src="js/modules/ecard.js?v=7.2"></script>
@@ -1067,6 +1150,7 @@
 <script src="js/modules/admin.js?v=7.5"></script>
 <script src="js/modules/home.js?v=7.2"></script>
 <script src="js/modules/settings.js?v=7.1"></script>
+<script src="js/modules/purchase.js?v=1.0"></script>
 <script src="js/modules/crm.js?v=7.1"></script>
 <script src="js/auth.js?v=7.7"></script>
 

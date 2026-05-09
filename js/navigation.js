@@ -17,6 +17,7 @@ window.goPage = function(page, isInitLoad = false) {
     else if (page === 'admin-stats') window.loadAdminStats();
     else if (page === 'my-activities') window.loadMyActivities();
     else if (page === 'admin-crm') window.loadCrm();
+    else if (page === 'tenant-upgrade' && typeof window.initTenantUpgradePage === 'function') window.initTenantUpgradePage();
     else if (page === 'admin-settings') {
       if (currentUser) {
         const pn = document.getElementById('profile-name');
@@ -34,6 +35,7 @@ window.goPage = function(page, isInitLoad = false) {
       } catch(e){}
 
       window.applyUserPermissions();
+      if (typeof window.refreshTenantUpgradeCard === 'function') window.refreshTenantUpgradeCard();
 
       if (typeof window.loadCardData === 'function') {
         window.loadCardData({ render: false }).then(() => {

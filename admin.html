@@ -1438,6 +1438,13 @@
       };
     }
 
+    function getAnnualExpireDateFrom(dateValue) {
+      const d = dateValue ? new Date(dateValue) : new Date();
+      if (Number.isNaN(d.getTime())) return '';
+      d.setFullYear(d.getFullYear() + 1);
+      return d.toISOString().slice(0, 10);
+    }
+
     function renderBonusSystem() {
       const fee = Number(document.getElementById('bonus-year-fee')?.value || 6300);
       const bv = Number(document.getElementById('bonus-bv')?.value || 3000);
@@ -1633,7 +1640,7 @@
     async function markTenantOrderPaid(orderId) {
       const order = allBonusOrdersData.find(o => String(o.orderId) === String(orderId));
       if (!order) return showToast('找不到訂單', true);
-      if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n確認後會依制度產生獎金流水。`)) return;
+      if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n確認後會開通租戶資格，並依制度產生獎金流水。`)) return;
       const tenant = findAdminUser(order.tenantId) || order.raw || {};
       const baseRelation = buildBonusRelationshipPayload(tenant);
       const relation = {
@@ -1670,8 +1677,41 @@
         }
       });
       if (res) {
-        showToast('已確認收款，獎金流水已送出建立');
+        const paidAt = new Date().toISOString();
+        const expireAt = getAnnualExpireDateFrom(paidAt);
+        const roleRes = await fetchAPI('updateUserRole', {
+          userId: order.tenantId,
+          targetUserId: order.tenantId,
+          authUserId: adminProfile?.userId || '',
+          operatorId: adminProfile?.userId || '',
+          operatorRole: adminRole || 'admin',
+          role: 'store',
+          targetRole: 'store',
+          newRole: 'store',
+          annualFeePaidAt: paidAt,
+          annualFeeExpireAt: expireAt,
+          tenantActivatedAt: paidAt,
+          tenantOrderId: orderId
+        }, { silent: true });
+
+        await fetchAPI('updateUserProfile', {
+          userId: order.tenantId,
+          targetUserId: order.tenantId,
+          role: 'store',
+          annualFeePaidAt: paidAt,
+          annualFeeExpireAt: expireAt,
+          tenantActivatedAt: paidAt,
+          tenantOrderId: orderId,
+          updatedAt: paidAt
+        }, { silent: true });
+
+        if (roleRes && roleRes.error) {
+          showToast('已確認收款，但租戶權限開通失敗，請到 CRM 手動調整', true);
+        } else {
+          showToast('已確認收款，租戶資格已開通');
+        }
         await loadBonusOrders();
+        await loadUsers();
       }
     }
 
