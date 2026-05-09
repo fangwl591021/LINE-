@@ -262,20 +262,26 @@ const HomeModule = (function() {
                 return [];
             }
 
-            list.innerHTML = records.slice().reverse().map(r => {
+            window.myActivitiesData = records.slice();
+            list.innerHTML = records.slice().reverse().map((r, idx) => {
                 const title = window.escapeHTML(r['活動名稱'] || r.activityName || r.title || '未命名活動');
                 const time = window.escapeHTML(window.formatDisplayTime(r['開始時間'] || r.startTime || r.createdAt || r['報名時間'] || ''));
-                const status = window.escapeHTML(r['簽到'] || r.checkinStatus || r.status || r['報名狀態'] || '已報名');
+                const rawStatus = r['簽到'] || r.checkinStatus || r.status || r['報名狀態'] || '已報名';
+                const status = window.escapeHTML(rawStatus);
                 const fee = window.escapeHTML(r['繳費狀態'] || r.paymentStatus || '');
+                const recordIndex = records.length - 1 - idx;
+                const checked = rawStatus === true || String(rawStatus).toUpperCase() === 'TRUE' || String(rawStatus).includes('簽到');
+                const cancelled = String(rawStatus).includes('取消') || String(rawStatus).toLowerCase() === 'cancelled';
                 return `
                     <div class="p-4 flex items-center justify-between gap-3">
                         <div class="min-w-0">
                             <div class="font-black text-slate-800 text-[15px] truncate">${title}</div>
                             <div class="text-[12px] text-slate-400 mt-1">${time}</div>
                         </div>
-                        <div class="text-right shrink-0">
+                        <div class="text-right shrink-0 flex flex-col items-end gap-2">
                             <div class="inline-flex px-3 py-1 rounded-full bg-emerald-700 text-white text-[12px] font-black">${status}</div>
                             ${fee ? `<div class="text-[11px] text-slate-400 mt-1">${fee}</div>` : ''}
+                            ${(!checked && !cancelled) ? `<button type="button" onclick="window.cancelMyActivityRegistration(${recordIndex}, this)" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 border border-red-100 text-[12px] font-black active:scale-95 transition-transform">取消報名</button>` : ''}
                         </div>
                     </div>`;
             }).join('');
@@ -284,6 +290,50 @@ const HomeModule = (function() {
             console.error('活動紀錄載入失敗', e);
             list.innerHTML = '<div class="text-center py-10 text-red-400 text-sm font-bold">活動紀錄暫時無法讀取，請稍後再試</div>';
             return [];
+        }
+    };
+
+    window.cancelMyActivityRegistration = async function(index, btn) {
+        const record = (window.myActivitiesData || [])[index];
+        if (!record) return window.showToast('找不到活動紀錄，請重新整理後再試', true);
+        const title = record['活動名稱'] || record.activityName || record.title || '此活動';
+        if (!window.confirm('確定取消報名？\n\n' + title)) return;
+
+        const oriHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[14px]">refresh</span>';
+        }
+
+        const payload = {
+            rowId: record.rowId || record.registrationId || record.id || '',
+            registrationId: record.registrationId || record.rowId || record.id || '',
+            activityId: record.activityId || record['活動ID'] || record.actId || '',
+            userId: window.currentUserProfile?.userId || '',
+            phone: window.currentUser?.phone || '',
+            name: window.currentUser?.name || window.currentUserProfile?.displayName || ''
+        };
+
+        try {
+            const actions = ['cancelActivityRegistration', 'cancelRegistration', 'unregisterActivity', 'removeActivityRegistration'];
+            let lastError = '';
+            for (const action of actions) {
+                const res = await window.fetchAPI(action, payload, true);
+                if (res && !res.error) {
+                    window.showToast('已取消報名');
+                    await window.loadMyActivities();
+                    if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
+                    return;
+                }
+                lastError = res?.error || lastError;
+            }
+            throw new Error(lastError || '後端尚未提供取消報名操作');
+        } catch (e) {
+            window.showToast(e.message || '取消報名失敗', true);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = oriHtml;
+            }
         }
     };
 
