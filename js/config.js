@@ -4,6 +4,7 @@ const LIFF_ID = "2009886448-2UHnJgyT";
 const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/";
 
 window.LIFF_ID = LIFF_ID;
+window.NFC_LIFF_ID = window.NFC_LIFF_ID || '2009886448-Asc5tytD';
 window.WORKER_URL = WORKER_URL;
 window.Config = {
   LIFF_ID,
@@ -97,7 +98,7 @@ window.getActmasterUrlParams = function() {
 (function installNfcCheckinFallback() {
   function getNfcActivityId() {
     const params = window.getActmasterUrlParams();
-    return params.get('nfcAct') || params.get('nfcCheckin') || '';
+    return params.get('checkin') || params.get('nfcAct') || params.get('nfcCheckin') || '';
   }
 
   async function waitForAppReady() {
@@ -171,8 +172,8 @@ window.getActmasterUrlParams = function() {
 
     const originalBuildUrl = window.buildNfcCheckinUrl;
     window.buildNfcCheckinUrl = function(actId) {
-      const liffId = window.LIFF_ID || (typeof LIFF_ID !== 'undefined' ? LIFF_ID : '');
-      return 'https://liff.line.me/' + encodeURIComponent(liffId) + '/?nfcAct=' + encodeURIComponent(actId || '');
+      const liffId = window.NFC_LIFF_ID || '2009886448-Asc5tytD';
+      return 'https://liff.line.me/' + encodeURIComponent(liffId) + '?checkin=' + encodeURIComponent(actId || '');
     };
 
     if (!window.copyNfcCheckinUrl) {
