@@ -800,10 +800,17 @@
     }
 
     function getBonusTenantUsers() {
-      return (Array.isArray(allUsersData) ? allUsersData : []).filter(u => {
-        const role = String(u.role || '').toLowerCase();
-        return role === 'store' || role === 'tenant' || role === 'admin';
-      });
+      return (Array.isArray(allUsersData) ? allUsersData : [])
+        .filter(u => u && (u.userId || u.memberId || u.phone || u.name))
+        .sort((a, b) => {
+          const priority = role => {
+            role = String(role || '').toLowerCase();
+            if (role === 'store' || role === 'tenant') return 0;
+            if (role === 'admin') return 1;
+            return 2;
+          };
+          return priority(a.role) - priority(b.role);
+        });
     }
 
     function getUserSearchText(u) {
@@ -813,10 +820,36 @@
         u.name,
         u.phone,
         u.companyName,
+        u.industry,
+        u.title,
         u.networkId,
         u.storeId,
         u.role
       ].filter(Boolean).join(' ').toLowerCase();
+    }
+
+    function normalizeSearchValue(value) {
+      return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function resolveBonusTenantFromInput() {
+      const hiddenId = document.getElementById('bonus-order-tenant')?.value || selectedBonusTenantId || '';
+      if (hiddenId) {
+        const selected = allUsersData.find(u => String(u.userId || u.memberId || '') === String(hiddenId));
+        if (selected) return selected;
+      }
+
+      const raw = document.getElementById('bonus-tenant-search')?.value || '';
+      const q = normalizeSearchValue(raw.split('/')[0] || raw);
+      if (!q) return null;
+      const users = getBonusTenantUsers();
+      const exact = users.find(u => {
+        const ids = [u.userId, u.memberId, u.name, u.phone, u.companyName].map(normalizeSearchValue);
+        return ids.some(v => v && v === q);
+      });
+      if (exact) return exact;
+      const partial = users.filter(u => getUserSearchText(u).includes(q));
+      return partial.length === 1 ? partial[0] : null;
     }
 
     function searchBonusTenants() {
@@ -845,7 +878,7 @@
       }
 
       box.innerHTML = matches.map(u => {
-        const id = escapeHTML(u.userId || '');
+        const id = escapeHTML(u.userId || u.memberId || '');
         const name = escapeHTML(u.name || '未命名');
         const phone = escapeHTML(u.phone || '-');
         const network = escapeHTML(u.networkId || u.storeId || 'admin');
@@ -863,9 +896,9 @@
     }
 
     function selectBonusTenant(userId) {
-      const user = allUsersData.find(u => String(u.userId || '') === String(userId));
+      const user = allUsersData.find(u => String(u.userId || u.memberId || '') === String(userId));
       if (!user) return;
-      selectedBonusTenantId = user.userId || '';
+      selectedBonusTenantId = user.userId || user.memberId || '';
       const hidden = document.getElementById('bonus-order-tenant');
       const input = document.getElementById('bonus-tenant-search');
       const box = document.getElementById('bonus-tenant-results');
@@ -1076,9 +1109,13 @@
     }
 
     async function createTenantBonusOrder() {
-      const tenantId = selectedBonusTenantId || document.getElementById('bonus-order-tenant')?.value || '';
-      if (!tenantId) return showToast('請先選擇租戶', true);
-      const tenant = allUsersData.find(u => String(u.userId) === String(tenantId)) || {};
+      const tenant = resolveBonusTenantFromInput();
+      if (!tenant) return showToast('請先選擇租戶，或輸入完整姓名/電話/LINE ID', true);
+      const tenantId = tenant.userId || tenant.memberId || '';
+      if (!tenantId) return showToast('此租戶缺少會員 ID，請先同步用戶資料', true);
+      selectedBonusTenantId = tenantId;
+      const hidden = document.getElementById('bonus-order-tenant');
+      if (hidden) hidden.value = tenantId;
       const fee = Number(document.getElementById('bonus-order-fee')?.value || 6300);
       const bv = Number(document.getElementById('bonus-order-bv')?.value || 3000);
       if (fee <= 0 || bv <= 0) return showToast('訂單金額與 BV 必須大於 0', true);
