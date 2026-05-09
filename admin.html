@@ -258,7 +258,7 @@
 
       <!-- Tab: Bonus System -->
       <div id="tab-bonus" class="tab-content hidden space-y-6">
-        <div class="grid grid-cols-1 xl:grid-cols-4 gap-5">
+        <div id="bonus-kpi-row" class="grid grid-cols-1 xl:grid-cols-4 gap-5">
           <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <p class="text-slate-400 text-xs font-bold mb-1">租戶年費</p>
             <h3 class="text-3xl font-black text-slate-800">NT$ 6,300</h3>
@@ -281,7 +281,15 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6">
+        <details id="bonus-policy-summary" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <summary class="px-5 py-4 cursor-pointer list-none flex items-center justify-between gap-4">
+            <div>
+              <h3 class="font-black text-slate-800">制度規則與試算</h3>
+              <p class="text-[12px] text-slate-500 mt-1">展開查看 retire 分潤規則、BV、稅額與平台保留試算。</p>
+            </div>
+            <span class="material-symbols-outlined text-slate-400">expand_more</span>
+          </summary>
+          <div class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-0 border-t border-slate-100">
           <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
               <div>
@@ -375,7 +383,8 @@
               <span class="material-symbols-outlined text-[18px]">content_copy</span> 複製制度摘要
             </button>
           </div>
-        </div>
+          </div>
+        </details>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
@@ -723,6 +732,7 @@
 
     async function initBonusSystem() {
       if (allUsersData.length === 0) await loadUsers();
+      prioritizeBonusOrderPanel();
       const tenantCountInput = document.getElementById('bonus-tenant-count');
       if (tenantCountInput && (!tenantCountInput.value || Number(tenantCountInput.value) === 0)) {
         tenantCountInput.value = getTenantCountForBonus();
@@ -734,6 +744,17 @@
       if (searchInput && !searchInput.value) searchInput.placeholder = '搜尋姓名、電話、會員編號、LINE ID...';
       renderBonusSystem();
       await loadBonusOrders();
+    }
+
+    function prioritizeBonusOrderPanel() {
+      const tab = document.getElementById('tab-bonus');
+      const kpi = document.getElementById('bonus-kpi-row');
+      const body = document.getElementById('bonus-orders-body');
+      if (!tab || !kpi || !body) return;
+      const panel = body.closest('.bg-white.rounded-xl');
+      if (panel && panel.previousElementSibling !== kpi) {
+        kpi.insertAdjacentElement('afterend', panel);
+      }
     }
 
     function getBonusTenantUsers() {
