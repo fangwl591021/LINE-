@@ -429,7 +429,7 @@
 
     async function fetchAPI(action, payload = {}, options = {}) {
       try {
-        if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
+        if (!options.omitAuthToken && liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         const authUserId = adminProfile?.userId || '';
         if (!payload.userId) payload.userId = authUserId;
         payload.authUserId = payload.authUserId || authUserId;
@@ -503,6 +503,32 @@
       return merged;
     }
 
+    function getMissingBoundCardUsers(users, cards) {
+      const userIds = new Set((Array.isArray(users) ? users : []).map(u => String(u.userId || '').trim()).filter(Boolean));
+      const seen = new Set();
+      const missing = [];
+      (Array.isArray(cards) ? cards : []).forEach(card => {
+        const user = buildUserFromBoundCard(card);
+        if (!user || userIds.has(user.userId) || seen.has(user.userId)) return;
+        seen.add(user.userId);
+        missing.push(user);
+      });
+      return missing;
+    }
+
+    async function registerBoundCardUsers(users, cards) {
+      const missing = getMissingBoundCardUsers(users, cards);
+      if (missing.length === 0) return { created: 0, failed: 0 };
+      let created = 0;
+      let failed = 0;
+      for (const user of missing) {
+        const res = await fetchAPI('registerUser', user, { silent: true, omitAuthToken: true });
+        if (res && !res.error) created++;
+        else failed++;
+      }
+      return { created, failed };
+    }
+
     function renderUsersTable(users) {
       const tbody = document.getElementById('users-table-body');
       const list = Array.isArray(users) ? users : [];
@@ -547,7 +573,17 @@
         fetchAPI('getCardContacts', {}, { silent: true })
       ]);
       if (Array.isArray(usersRes) || Array.isArray(cardsRes)) {
-        allUsersData = mergeUsersWithBoundCards(usersRes || [], cardsRes || []);
+        let users = Array.isArray(usersRes) ? usersRes : [];
+        const cards = Array.isArray(cardsRes) ? cardsRes : [];
+        const sync = await registerBoundCardUsers(users, cards);
+        if (sync.created > 0) {
+          const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: true });
+          if (Array.isArray(refreshedUsers)) users = refreshedUsers;
+          showToast(`已補註冊 ${sync.created} 位已綁名片用戶`);
+        } else if (sync.failed > 0) {
+          showToast(`有 ${sync.failed} 位已綁名片用戶補註冊失敗`, true);
+        }
+        allUsersData = mergeUsersWithBoundCards(users, cards);
         renderUsersTable(allUsersData);
       } else {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-400">載入失敗，請重新整理</td></tr>';
@@ -557,6 +593,11 @@
 
     async function updateRole(userId, role) {
       if (!userId) return showToast('找不到用戶 ID', true);
+      const user = allUsersData.find(u => String(u.userId || '').trim() === String(userId).trim());
+      if (user && (user.source === 'bound_card' || user.profileStatus === 'bound_card')) {
+        const registered = await fetchAPI('registerUser', user, { silent: true, omitAuthToken: true });
+        if (!registered || registered.error) return showToast('此已綁名片用戶尚未完成補註冊，請重新整理後再試', true);
+      }
       const authUserId = adminProfile?.userId || '';
       const res = await fetchAPI('updateUserRole', {
         userId,
