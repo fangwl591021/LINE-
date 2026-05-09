@@ -383,16 +383,30 @@
               <h3 class="font-black text-slate-800">租戶年費訂單</h3>
               <p class="text-[12px] text-slate-500 mt-1">建立訂單後先待收款；確認收款或未來金流回調成功後，才產生獎金流水。</p>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-[220px_120px_120px_auto] gap-2 w-full xl:w-auto">
-              <select id="bonus-order-tenant" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white">
-                <option value="">選擇租戶...</option>
-              </select>
+            <div class="grid grid-cols-1 md:grid-cols-[minmax(260px,1fr)_120px_120px_auto] gap-2 w-full xl:w-[760px]">
+              <div class="relative">
+                <input id="bonus-tenant-search" type="text" oninput="searchBonusTenants()" onfocus="searchBonusTenants()" placeholder="搜尋姓名、電話、會員編號、LINE ID..." class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white">
+                <input id="bonus-order-tenant" type="hidden">
+                <div id="bonus-tenant-results" class="hidden absolute left-0 right-0 top-[42px] z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto"></div>
+              </div>
               <input id="bonus-order-fee" type="number" value="6300" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="訂單金額">
               <input id="bonus-order-bv" type="number" value="3000" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="獎金 BV">
               <button type="button" onclick="createTenantBonusOrder()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-transform">
                 <span class="material-symbols-outlined text-[17px]">add_card</span> 建立訂單
               </button>
             </div>
+          </div>
+          <div class="px-5 py-3 border-b border-slate-100 bg-slate-50/70 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <span class="text-[12px] text-slate-500 font-bold">訂單狀態</span>
+              <select id="bonus-order-status-filter" onchange="bonusOrderPage=1; renderBonusOrders()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="all">全部</option>
+                <option value="pending_payment">待收款</option>
+                <option value="paid">已收款</option>
+                <option value="cancelled">已取消</option>
+              </select>
+            </div>
+            <div id="bonus-order-pager" class="flex items-center justify-end gap-2 text-[12px] text-slate-500 font-bold"></div>
           </div>
           <div class="overflow-x-auto">
             <table class="data-table">
@@ -636,6 +650,9 @@
     let allCardsData = [];
     let allActivitiesData = [];
     let allBonusOrdersData = [];
+    let selectedBonusTenantId = '';
+    let bonusOrderPage = 1;
+    const BONUS_ORDER_PAGE_SIZE = 20;
     let currentEditButtons = []; 
     let adminCropperInstance = null;
     let adminRole = 'store';
@@ -706,11 +723,15 @@
 
     async function initBonusSystem() {
       if (allUsersData.length === 0) await loadUsers();
-      const tenantInput = document.getElementById('bonus-tenant-count');
-      if (tenantInput && (!tenantInput.value || Number(tenantInput.value) === 0)) {
-        tenantInput.value = getTenantCountForBonus();
+      const tenantCountInput = document.getElementById('bonus-tenant-count');
+      if (tenantCountInput && (!tenantCountInput.value || Number(tenantCountInput.value) === 0)) {
+        tenantCountInput.value = getTenantCountForBonus();
       }
-      populateBonusTenantSelect();
+      selectedBonusTenantId = '';
+      const tenantInput = document.getElementById('bonus-order-tenant');
+      const searchInput = document.getElementById('bonus-tenant-search');
+      if (tenantInput) tenantInput.value = '';
+      if (searchInput && !searchInput.value) searchInput.placeholder = '搜尋姓名、電話、會員編號、LINE ID...';
       renderBonusSystem();
       await loadBonusOrders();
     }
@@ -722,14 +743,72 @@
       });
     }
 
-    function populateBonusTenantSelect() {
-      const select = document.getElementById('bonus-order-tenant');
-      if (!select) return;
-      const tenants = getBonusTenantUsers();
-      select.innerHTML = '<option value="">選擇租戶...</option>' + tenants.map(u => {
-        const label = `${u.name || '未命名'} / ${u.networkId || u.storeId || 'admin'}`;
-        return `<option value="${escapeHTML(u.userId || '')}">${escapeHTML(label)}</option>`;
+    function getUserSearchText(u) {
+      return [
+        u.userId,
+        u.memberId,
+        u.name,
+        u.phone,
+        u.companyName,
+        u.networkId,
+        u.storeId,
+        u.role
+      ].filter(Boolean).join(' ').toLowerCase();
+    }
+
+    function searchBonusTenants() {
+      const input = document.getElementById('bonus-tenant-search');
+      const box = document.getElementById('bonus-tenant-results');
+      if (!input || !box) return;
+      selectedBonusTenantId = '';
+      const hidden = document.getElementById('bonus-order-tenant');
+      if (hidden) hidden.value = '';
+
+      const q = input.value.trim().toLowerCase();
+      if (q.length < 1) {
+        box.innerHTML = '<div class="p-4 text-[13px] text-slate-400 font-bold">輸入姓名、電話或 LINE ID 搜尋租戶</div>';
+        box.classList.remove('hidden');
+        return;
+      }
+
+      const matches = getBonusTenantUsers()
+        .filter(u => getUserSearchText(u).includes(q))
+        .slice(0, 20);
+
+      if (!matches.length) {
+        box.innerHTML = '<div class="p-4 text-[13px] text-slate-400 font-bold">找不到符合的租戶</div>';
+        box.classList.remove('hidden');
+        return;
+      }
+
+      box.innerHTML = matches.map(u => {
+        const id = escapeHTML(u.userId || '');
+        const name = escapeHTML(u.name || '未命名');
+        const phone = escapeHTML(u.phone || '-');
+        const network = escapeHTML(u.networkId || u.storeId || 'admin');
+        const role = escapeHTML((u.role || 'user').toUpperCase());
+        return `<button type="button" onclick="selectBonusTenant('${id}')" class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50">
+          <div class="flex items-center justify-between gap-3">
+            <div class="font-black text-slate-800 text-sm">${name}</div>
+            <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">${role}</span>
+          </div>
+          <div class="text-[12px] text-slate-500 mt-0.5">${phone} / ${network}</div>
+          <div class="text-[10px] text-slate-300 font-mono mt-1">${id}</div>
+        </button>`;
       }).join('');
+      box.classList.remove('hidden');
+    }
+
+    function selectBonusTenant(userId) {
+      const user = allUsersData.find(u => String(u.userId || '') === String(userId));
+      if (!user) return;
+      selectedBonusTenantId = user.userId || '';
+      const hidden = document.getElementById('bonus-order-tenant');
+      const input = document.getElementById('bonus-tenant-search');
+      const box = document.getElementById('bonus-tenant-results');
+      if (hidden) hidden.value = selectedBonusTenantId;
+      if (input) input.value = `${user.name || '未命名'} / ${user.phone || '-'} / ${user.networkId || user.storeId || 'admin'}`;
+      if (box) box.classList.add('hidden');
     }
 
     function renderBonusSystem() {
@@ -798,18 +877,32 @@
       if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入訂單中...</td></tr>';
       const res = await fetchAPI('getTenantBonusOrders');
       allBonusOrdersData = Array.isArray(res) ? res.map(normalizeBonusOrder) : [];
+      bonusOrderPage = 1;
       renderBonusOrders();
     }
 
     function renderBonusOrders() {
       const body = document.getElementById('bonus-orders-body');
       if (!body) return;
-      if (!allBonusOrdersData.length) {
+      const statusFilter = document.getElementById('bonus-order-status-filter')?.value || 'all';
+      const filtered = allBonusOrdersData.filter(order => {
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'paid') return order.status === 'paid' || order.status === 'completed';
+        if (statusFilter === 'cancelled') return order.status === 'cancelled' || order.status === 'void';
+        return order.status === statusFilter;
+      });
+
+      if (!filtered.length) {
         body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有租戶年費訂單</td></tr>';
+        renderBonusOrderPager(0);
         return;
       }
 
-      body.innerHTML = allBonusOrdersData.map(order => {
+      const totalPages = Math.max(1, Math.ceil(filtered.length / BONUS_ORDER_PAGE_SIZE));
+      bonusOrderPage = Math.min(Math.max(1, bonusOrderPage), totalPages);
+      const pageOrders = filtered.slice((bonusOrderPage - 1) * BONUS_ORDER_PAGE_SIZE, bonusOrderPage * BONUS_ORDER_PAGE_SIZE);
+
+      body.innerHTML = pageOrders.map(order => {
         const paid = order.status === 'paid' || order.status === 'completed';
         const cancelled = order.status === 'cancelled' || order.status === 'void';
         const statusClass = paid ? 'bg-emerald-50 text-emerald-700' : (cancelled ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700');
@@ -830,10 +923,30 @@
             <td class="text-right whitespace-nowrap">${action}</td>
           </tr>`;
       }).join('');
+      renderBonusOrderPager(filtered.length);
+    }
+
+    function renderBonusOrderPager(total) {
+      const pager = document.getElementById('bonus-order-pager');
+      if (!pager) return;
+      if (!total) {
+        pager.innerHTML = '<span>0 筆</span>';
+        return;
+      }
+      const totalPages = Math.max(1, Math.ceil(total / BONUS_ORDER_PAGE_SIZE));
+      pager.innerHTML = `
+        <span>第 ${bonusOrderPage} / ${totalPages} 頁，共 ${total} 筆</span>
+        <button type="button" onclick="changeBonusOrderPage(-1)" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-40" ${bonusOrderPage <= 1 ? 'disabled' : ''}>上一頁</button>
+        <button type="button" onclick="changeBonusOrderPage(1)" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-40" ${bonusOrderPage >= totalPages ? 'disabled' : ''}>下一頁</button>`;
+    }
+
+    function changeBonusOrderPage(delta) {
+      bonusOrderPage += delta;
+      renderBonusOrders();
     }
 
     async function createTenantBonusOrder() {
-      const tenantId = document.getElementById('bonus-order-tenant')?.value || '';
+      const tenantId = selectedBonusTenantId || document.getElementById('bonus-order-tenant')?.value || '';
       if (!tenantId) return showToast('請先選擇租戶', true);
       const tenant = allUsersData.find(u => String(u.userId) === String(tenantId)) || {};
       const fee = Number(document.getElementById('bonus-order-fee')?.value || 6300);
