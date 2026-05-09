@@ -650,7 +650,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" onerror="document.getElementById('loading-text').innerText='LINE LIFF SDK 載入失敗，請檢查網路後重新整理';document.getElementById('error-actions').classList.remove('hidden');"></script>
   <script>
     const LIFF_ID = "2009886448-2UHnJgyT"; 
     const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/"; 
@@ -676,6 +676,10 @@
       return window.location.origin + window.location.pathname;
     }
 
+    function getAdminRedirectUrl() {
+      return getCleanCurrentUrl();
+    }
+
     function withTimeout(promise, ms, label) {
       return Promise.race([
         promise,
@@ -699,8 +703,12 @@
     function reloginAdmin() {
       try {
         if (window.liff && liff.isLoggedIn()) liff.logout();
+        if (window.liff && typeof liff.login === 'function') {
+          liff.login({ redirectUri: getAdminRedirectUrl() });
+          return;
+        }
       } catch (e) {}
-      window.location.href = getCleanCurrentUrl();
+      window.location.href = getAdminRedirectUrl();
     }
     
     function showToast(msg, isError = false) {
@@ -1680,12 +1688,15 @@
 
       try {
         if (!window.liff) throw new Error('LINE LIFF SDK 載入失敗，請檢查網路後重新整理');
-        await liff.init({ liffId: LIFF_ID });
+        loadingText.innerText = "正在連線 LINE LIFF...";
+        await withTimeout(liff.init({ liffId: LIFF_ID }), 30000, 'LIFF 初始化');
         if (!liff.isLoggedIn()) {
-          liff.login({ redirectUri: getCleanCurrentUrl() });
+          loadingText.innerText = "正在前往 LINE 授權...";
+          liff.login({ redirectUri: getAdminRedirectUrl() });
           return;
         }
 
+        loadingText.innerText = "讀取 LINE 個人資料中...";
         adminProfile = await withTimeout(liff.getProfile(), 10000, '讀取 LINE 個人資料');
         document.getElementById('admin-name').innerText = adminProfile.displayName;
         document.getElementById('admin-avatar').src = adminProfile.pictureUrl;
