@@ -71,18 +71,117 @@
     .status-slate { background: #334155; color: #fff; }
     .status-gray { background: #e2e8f0; color: #0f172a; }
 
-    .crm-table { min-width: 1480px; }
-    .crm-table th {
-      padding: 18px 20px;
+    .crm-board {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .crm-hero {
+      border: 1px solid #dbe4f0;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+      overflow: hidden;
+    }
+    .crm-hero-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      padding: 24px 28px;
+      border-bottom: 1px solid #e5edf7;
+    }
+    .crm-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 14px;
+      padding: 18px 28px 22px;
+      background: #f8fbff;
+      border-bottom: 1px solid #e5edf7;
+    }
+    .crm-kpi-card {
+      min-height: 104px;
+      border: 1px solid #dbe4f0;
+      border-radius: 14px;
+      background: #fff;
+      padding: 18px;
+    }
+    .crm-kpi-label {
       font-size: 15px;
-      line-height: 1.35;
-      color: #475569;
+      font-weight: 900;
+      color: #64748b;
+    }
+    .crm-kpi-value {
+      margin-top: 8px;
+      font-size: 34px;
+      line-height: 1;
+      font-weight: 900;
+      color: #0f172a;
+    }
+    .crm-kpi-note {
+      margin-top: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+      font-weight: 700;
+      color: #64748b;
+    }
+    .crm-toolbar {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) 170px 170px 170px auto;
+      gap: 12px;
+      align-items: center;
+      padding: 18px 28px;
+      background: #fff;
+    }
+    .crm-filter-control {
+      min-height: 50px;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      background: #fff;
+      color: #0f172a;
+      font-size: 16px;
       font-weight: 800;
-      background: #f8fafc;
+      padding: 0 14px;
+      outline: none;
+    }
+    .crm-search-box {
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      background: #fff;
+      padding: 0 14px;
+    }
+    .crm-search-box input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: #0f172a;
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .crm-table-wrap {
+      border: 1px solid #dbe4f0;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+      overflow: hidden;
+    }
+    .crm-table { min-width: 1360px; }
+    .crm-table th {
+      padding: 20px 22px;
+      font-size: 16px;
+      line-height: 1.35;
+      color: #334155;
+      font-weight: 900;
+      background: #f4f7fb;
     }
     .crm-table td {
-      padding: 22px 20px;
-      font-size: 16px;
+      padding: 24px 22px;
+      font-size: 17px;
       line-height: 1.55;
       color: #1e293b;
       vertical-align: top;
@@ -90,22 +189,22 @@
     }
     .crm-table tr:hover { background: #f8fbff; }
     .crm-name {
-      font-size: 18px;
+      font-size: 21px;
       line-height: 1.35;
       font-weight: 900;
       color: #0f172a;
     }
     .crm-main-text {
-      font-size: 16px;
+      font-size: 17px;
       line-height: 1.45;
       color: #1e293b;
-      font-weight: 700;
+      font-weight: 850;
     }
     .crm-sub-text {
-      font-size: 14px;
+      font-size: 15px;
       line-height: 1.45;
       color: #64748b;
-      font-weight: 600;
+      font-weight: 750;
       margin-top: 4px;
     }
     .crm-code {
@@ -118,10 +217,11 @@
     .crm-pill {
       display: inline-flex;
       align-items: center;
-      min-height: 28px;
-      padding: 5px 11px;
+      gap: 6px;
+      min-height: 34px;
+      padding: 7px 13px;
       border-radius: 999px;
-      font-size: 14px;
+      font-size: 15px;
       line-height: 1;
       font-weight: 900;
       white-space: nowrap;
@@ -155,6 +255,49 @@
       color: #1e293b;
       font-size: 15px;
       font-weight: 800;
+    }
+    .crm-action-stack {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+    }
+    .crm-next-block {
+      min-width: 150px;
+    }
+    #modal-distributor-crm h3 { font-size: 24px; line-height: 1.25; }
+    #modal-distributor-crm h4 { font-size: 18px; line-height: 1.35; }
+    #modal-distributor-crm label {
+      font-size: 16px !important;
+      line-height: 1.35;
+      color: #475569;
+      font-weight: 900;
+    }
+    #modal-distributor-crm input,
+    #modal-distributor-crm select,
+    #modal-distributor-crm textarea {
+      min-height: 48px;
+      border-color: #cbd5e1 !important;
+      border-radius: 12px !important;
+      background: #fff !important;
+      color: #0f172a !important;
+      font-size: 16px !important;
+      font-weight: 750;
+      padding: 12px 14px !important;
+    }
+    #modal-distributor-crm textarea { min-height: 150px; line-height: 1.55; }
+    #modal-distributor-crm .crm-pill { min-height: 36px; font-size: 15px; }
+    @media (max-width: 1280px) {
+      .crm-kpi-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .crm-toolbar { grid-template-columns: 1fr 1fr; }
+      .crm-toolbar .crm-toolbar-actions { grid-column: 1 / -1; justify-content: flex-end; }
+    }
+    @media (max-width: 760px) {
+      main { padding: 18px !important; }
+      .crm-hero-header { flex-direction: column; padding: 20px; }
+      .crm-kpi-grid { grid-template-columns: 1fr; padding: 16px 20px; }
+      .crm-toolbar { grid-template-columns: 1fr; padding: 16px 20px; }
+      .crm-toolbar .crm-toolbar-actions { justify-content: stretch; }
     }
     
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -247,28 +390,90 @@
       
       <!-- Tab: Users -->
       <div id="tab-users" class="tab-content">
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-6 border-b border-slate-200 flex justify-between items-center bg-white gap-4">
-            <div>
-              <h3 class="font-black text-slate-900 text-2xl">經銷商 CRM</h3>
-              <p class="text-slate-500 text-base mt-1 font-medium">管理會員狀態、組織位置、年費、跟進紀錄與經銷商關係。</p>
+        <div class="crm-board">
+          <section class="crm-hero">
+            <div class="crm-hero-header">
+              <div>
+                <h3 class="font-black text-slate-950 text-3xl">經銷商 CRM</h3>
+                <p class="text-slate-600 text-lg mt-2 font-semibold">用客戶生命週期管理經銷商：狀態、意向、組織位置、年費與下一步跟進集中處理。</p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button id="btn-sync-bound-cards" onclick="syncBoundCardsToUsers()" class="text-base border border-blue-200 text-blue-700 px-5 py-3 rounded-xl hover:bg-blue-50 flex items-center gap-2 font-black"><span class="material-symbols-outlined text-[20px]">sync</span> 同步已綁名片</button>
+                <button onclick="loadUsers()" class="text-base border border-slate-200 text-slate-700 px-5 py-3 rounded-xl hover:bg-slate-50 flex items-center gap-2 font-black"><span class="material-symbols-outlined text-[20px]">refresh</span> 重新整理</button>
+              </div>
             </div>
-            <div class="flex items-center gap-2">
-              <button id="btn-sync-bound-cards" onclick="syncBoundCardsToUsers()" class="text-base border border-blue-200 text-blue-700 px-5 py-3 rounded-xl hover:bg-blue-50 flex items-center gap-2 font-black"><span class="material-symbols-outlined text-[20px]">sync</span> 同步已綁名片</button>
-              <button onclick="loadUsers()" class="text-base border border-slate-200 text-slate-700 px-5 py-3 rounded-xl hover:bg-slate-50 flex items-center gap-2 font-black"><span class="material-symbols-outlined text-[20px]">refresh</span> 重新整理</button>
+            <div class="crm-kpi-grid">
+              <div class="crm-kpi-card">
+                <div class="crm-kpi-label">CRM 總人數</div>
+                <div id="crm-kpi-total" class="crm-kpi-value">-</div>
+                <div id="crm-kpi-filtered" class="crm-kpi-note">目前顯示 - 筆</div>
+              </div>
+              <div class="crm-kpi-card">
+                <div class="crm-kpi-label">活躍 / 已綁名片</div>
+                <div id="crm-kpi-active" class="crm-kpi-value text-blue-700">-</div>
+                <div class="crm-kpi-note">可視為已註冊客戶池</div>
+              </div>
+              <div class="crm-kpi-card">
+                <div class="crm-kpi-label">年費成立</div>
+                <div id="crm-kpi-paid" class="crm-kpi-value text-emerald-800">-</div>
+                <div class="crm-kpi-note">已有付款或有效到期日</div>
+              </div>
+              <div class="crm-kpi-card">
+                <div class="crm-kpi-label">待跟進</div>
+                <div id="crm-kpi-follow" class="crm-kpi-value text-amber-600">-</div>
+                <div class="crm-kpi-note">今日以前應處理</div>
+              </div>
             </div>
-          </div>
-          <div class="overflow-x-auto">
+            <div class="crm-toolbar">
+              <div class="crm-search-box">
+                <span class="material-symbols-outlined text-slate-400 text-[22px]">search</span>
+                <input id="admin-crm-search" type="search" oninput="updateAdminCrmFilters()" placeholder="搜尋姓名、電話、公司、LINE ID、標籤">
+              </div>
+              <select id="admin-crm-status-filter" onchange="updateAdminCrmFilters()" class="crm-filter-control">
+                <option value="all">全部狀態</option>
+                <option value="lead">潛在</option>
+                <option value="contacted">已接觸</option>
+                <option value="interested">有興趣</option>
+                <option value="presentation">已說明</option>
+                <option value="pending_payment">待付款</option>
+                <option value="active">活躍</option>
+                <option value="incomplete">待補資料</option>
+                <option value="inactive">沉睡</option>
+                <option value="blocked">停權</option>
+              </select>
+              <select id="admin-crm-role-filter" onchange="updateAdminCrmFilters()" class="crm-filter-control">
+                <option value="all">全部角色</option>
+                <option value="user">一般</option>
+                <option value="store">店長</option>
+                <option value="tenant">租戶</option>
+                <option value="admin">總管</option>
+              </select>
+              <select id="admin-crm-fee-filter" onchange="updateAdminCrmFilters()" class="crm-filter-control">
+                <option value="all">年費全部</option>
+                <option value="paid">年費成立</option>
+                <option value="unpaid">尚未成立</option>
+                <option value="due">待跟進</option>
+              </select>
+              <div class="crm-toolbar-actions flex items-center gap-2">
+                <button onclick="resetAdminCrmFilters()" class="text-base border border-slate-200 text-slate-700 px-5 py-3 rounded-xl hover:bg-slate-50 flex items-center gap-2 font-black">
+                  <span class="material-symbols-outlined text-[20px]">filter_alt_off</span> 清除
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section class="crm-table-wrap">
+            <div class="overflow-x-auto">
             <table class="data-table crm-table">
               <thead>
                 <tr>
-                  <th>姓名 / 狀態</th>
-                  <th>聯絡資料</th>
-                  <th>角色 / 階級</th>
-                  <th>推薦 / 安置</th>
-                  <th>獨立進度</th>
-                  <th>年費</th>
-                  <th>最近互動</th>
+                  <th>客戶主檔</th>
+                  <th>聯絡 / 來源</th>
+                  <th>角色 / 歸屬</th>
+                  <th>組織位置</th>
+                  <th>獨立資格</th>
+                  <th>年費 / 訂單</th>
+                  <th>下一步</th>
                   <th class="text-right">操作</th>
                 </tr>
               </thead>
@@ -278,6 +483,7 @@
             </table>
           </div>
           <div id="users-pager" class="px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-end gap-3 text-sm font-bold text-slate-600"></div>
+          </section>
         </div>
 
       </div>
@@ -947,6 +1153,7 @@
     let userPage = 1;
     let cardPage = 1;
     let bonusOrderPage = 1;
+    let adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all' };
     let selectedOrgRootId = '';
     let organizationTreeData = null;
     let currentDistributorCrmUserId = '';
@@ -1896,18 +2103,95 @@
       }
     }
 
+    function hasAnnualFeeActive(user = {}) {
+      const order = getLatestBonusOrder(user);
+      const expire = user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '';
+      return Boolean((order && (order.status === 'paid' || order.status === 'completed')) || expire);
+    }
+
+    function isFollowUpDue(user = {}) {
+      const value = user.nextFollowUpAt || '';
+      if (!value) return false;
+      const due = new Date(value);
+      if (Number.isNaN(due.getTime())) return false;
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      return due <= today;
+    }
+
+    function getAdminCrmFilteredUsers(users = []) {
+      const filters = adminCrmFilters || {};
+      const query = String(filters.search || '').trim().toLowerCase();
+      return (Array.isArray(users) ? users : []).filter(u => {
+        const status = String(getCrmStatus(u) || '').toLowerCase();
+        const role = String(u.role || 'user').toLowerCase();
+        if (filters.status && filters.status !== 'all' && status !== filters.status) return false;
+        if (filters.role && filters.role !== 'all' && role !== filters.role) return false;
+        if (filters.fee === 'paid' && !hasAnnualFeeActive(u)) return false;
+        if (filters.fee === 'unpaid' && hasAnnualFeeActive(u)) return false;
+        if (filters.fee === 'due' && !isFollowUpDue(u)) return false;
+        if (!query) return true;
+        const haystack = [
+          u.name, u.phone, u.email, u.companyName, u.title, u.industry,
+          u.tags, u.crmTags, u.networkId, u.storeId, getUserId(u),
+          readSponsorId(u), readPlacementParentId(u)
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(query);
+      });
+    }
+
+    function updateCrmSummaryCards(totalList = [], visibleList = []) {
+      const total = totalList.length;
+      const active = totalList.filter(u => ['active', 'bound_card'].includes(String(getCrmStatus(u)).toLowerCase()) || u.source === 'bound_card').length;
+      const paid = totalList.filter(hasAnnualFeeActive).length;
+      const due = totalList.filter(isFollowUpDue).length;
+      const totalEl = document.getElementById('crm-kpi-total');
+      const filteredEl = document.getElementById('crm-kpi-filtered');
+      const activeEl = document.getElementById('crm-kpi-active');
+      const paidEl = document.getElementById('crm-kpi-paid');
+      const followEl = document.getElementById('crm-kpi-follow');
+      if (totalEl) totalEl.innerText = total;
+      if (filteredEl) filteredEl.innerText = `目前顯示 ${visibleList.length} 筆`;
+      if (activeEl) activeEl.innerText = active;
+      if (paidEl) paidEl.innerText = paid;
+      if (followEl) followEl.innerText = due;
+    }
+
+    function updateAdminCrmFilters() {
+      adminCrmFilters = {
+        search: document.getElementById('admin-crm-search')?.value || '',
+        status: document.getElementById('admin-crm-status-filter')?.value || 'all',
+        role: document.getElementById('admin-crm-role-filter')?.value || 'all',
+        fee: document.getElementById('admin-crm-fee-filter')?.value || 'all'
+      };
+      userPage = 1;
+      renderUsersTable(allUsersData);
+    }
+
+    function resetAdminCrmFilters() {
+      adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all' };
+      if (document.getElementById('admin-crm-search')) document.getElementById('admin-crm-search').value = '';
+      if (document.getElementById('admin-crm-status-filter')) document.getElementById('admin-crm-status-filter').value = 'all';
+      if (document.getElementById('admin-crm-role-filter')) document.getElementById('admin-crm-role-filter').value = 'all';
+      if (document.getElementById('admin-crm-fee-filter')) document.getElementById('admin-crm-fee-filter').value = 'all';
+      userPage = 1;
+      renderUsersTable(allUsersData);
+    }
+
     function renderUsersTable(users) {
       const tbody = document.getElementById('users-table-body');
       const list = Array.isArray(users) ? users : [];
       document.getElementById('stat-users').innerText = list.length;
-      if (list.length === 0) {
+      const filteredList = getAdminCrmFilteredUsers(list);
+      updateCrmSummaryCards(list, filteredList);
+      if (filteredList.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有用戶資料</td></tr>';
         renderAdminPager('users-pager', 0, 1, 'changeUserPage');
         return;
       }
-      const totalPages = Math.max(1, Math.ceil(list.length / ADMIN_PAGE_SIZE));
+      const totalPages = Math.max(1, Math.ceil(filteredList.length / ADMIN_PAGE_SIZE));
       userPage = Math.min(Math.max(1, userPage), totalPages);
-      const pageList = list.slice((userPage - 1) * ADMIN_PAGE_SIZE, userPage * ADMIN_PAGE_SIZE);
+      const pageList = filteredList.slice((userPage - 1) * ADMIN_PAGE_SIZE, userPage * ADMIN_PAGE_SIZE);
       tbody.innerHTML = pageList.map(u => {
         const role = u.role || 'user';
         const isBoundCard = u.source === 'bound_card' || u.profileStatus === 'bound_card';
@@ -1919,6 +2203,9 @@
         const progress = getQualificationProgress(u);
         const fee = getAnnualFeeStatus(u);
         const crmTitle = escapeHTML(u.name || '未命名');
+        const sourceText = u.source === 'bound_card' ? '名片綁定' : (u.source || 'LINE / 後台');
+        const nextFollow = u.nextFollowUpAt ? formatDisplayTime(u.nextFollowUpAt) : '尚未排程';
+        const lastInteraction = getLastInteraction(u);
         return `
         <tr>
           <td>
@@ -1931,14 +2218,17 @@
             <div class="crm-code">${escapeHTML(id ? id.substring(0, 12) + '...' : '-')}</div>
           </td>
           <td>
-            <div class="crm-main-text">${escapeHTML(u.phone || '-')}</div>
-            <div class="crm-sub-text">${escapeHTML(u.email || u.companyName || u.industry || '-')}</div>
+            <div class="crm-main-text">${escapeHTML(u.phone || '待補電話')}</div>
+            <div class="crm-sub-text">${escapeHTML(u.email || '尚無 Email')}</div>
+            <div class="crm-sub-text">${escapeHTML(u.companyName || u.industry || '尚無公司資料')}</div>
+            <div class="mt-3"><span class="crm-pill crm-pill-slate">${escapeHTML(sourceText)}</span></div>
           </td>
           <td>
             <span class="crm-pill ${role === 'admin' ? 'crm-pill-purple' : (role === 'store' || role === 'tenant' ? 'crm-pill-green' : 'crm-pill-blue')}">
               ${escapeHTML(getRoleLabel(role))}
             </span>
-            <div class="crm-sub-text">${escapeHTML(u.networkId || u.storeId || 'admin')}</div>
+            <div class="crm-sub-text mt-3">歸屬網：${escapeHTML(u.networkId || u.storeId || 'admin')}</div>
+            <div class="crm-sub-text">負責人：${escapeHTML(u.followOwner || u.crmOwner || '-')}</div>
           </td>
           <td>
             <div class="crm-main-text">薦：${escapeHTML(sponsor?.name || readSponsorId(u) || '-')}</div>
@@ -1953,20 +2243,25 @@
             <div class="crm-sub-text">${escapeHTML(fee.detail || '-')}</div>
           </td>
           <td>
-            <div class="crm-main-text">${escapeHTML(getLastInteraction(u))}</div>
-            <div class="crm-sub-text">下次 ${escapeHTML(u.nextFollowUpAt ? formatDisplayTime(u.nextFollowUpAt) : '-')}</div>
+            <div class="crm-next-block">
+              <div class="crm-main-text">${escapeHTML(lastInteraction)}</div>
+              <div class="crm-sub-text">下次：${escapeHTML(nextFollow)}</div>
+              <div class="crm-sub-text">狀態：${isFollowUpDue(u) ? '今天以前應處理' : '正常'}</div>
+            </div>
           </td>
           <td class="text-right whitespace-nowrap">
-            <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="crm-action-btn mr-3">CRM</button>
-            <select onchange="updateRole('${escapeHTML(id)}', this.value)" class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="user" ${role==='user'?'selected':''}>一般</option>
-              <option value="store" ${role==='store'?'selected':''}>店長</option>
-              <option value="admin" ${role==='admin'?'selected':''}>總管</option>
-            </select>
+            <div class="crm-action-stack">
+              <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="crm-action-btn">CRM</button>
+              <select onchange="updateRole('${escapeHTML(id)}', this.value)" class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="user" ${role==='user'?'selected':''}>一般</option>
+                <option value="store" ${role==='store'?'selected':''}>店長</option>
+                <option value="admin" ${role==='admin'?'selected':''}>總管</option>
+              </select>
+            </div>
           </td>
         </tr>`;
       }).join('');
-      renderAdminPager('users-pager', list.length, userPage, 'changeUserPage');
+      renderAdminPager('users-pager', filteredList.length, userPage, 'changeUserPage');
     }
 
     function changeUserPage(delta) {
