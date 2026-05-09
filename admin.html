@@ -183,10 +183,6 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">payments</span>
             獎金制度
           </a>
-          <a href="#" onclick="switchTab('import')" id="nav-import" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
-            <span class="material-symbols-outlined mr-3 text-[20px]">upload_file</span>
-            批次名單匯入
-          </a>
         </div>
       </div>
     </nav>
@@ -241,6 +237,7 @@
               </tbody>
             </table>
           </div>
+          <div id="users-pager" class="px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-end gap-3 text-sm font-bold text-slate-600"></div>
         </div>
 
       </div>
@@ -288,11 +285,11 @@
           <div class="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
             <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full md:w-80 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
               <span class="material-symbols-outlined text-slate-400 text-[18px] mr-2">search</span>
-              <input type="text" id="card-search-input" oninput="renderCards()" placeholder="搜尋姓名、電話、公司或標籤..." class="bg-transparent border-none outline-none text-sm w-full text-slate-700">
+              <input type="text" id="card-search-input" oninput="cardPage=1; renderCards()" placeholder="搜尋姓名、電話、公司或標籤..." class="bg-transparent border-none outline-none text-sm w-full text-slate-700">
             </div>
             <div class="flex items-center gap-2">
               <span class="text-slate-500 font-bold text-sm">歸屬網：</span>
-              <select id="card-tenant-filter" onchange="renderCards()" class="border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all">
+              <select id="card-tenant-filter" onchange="cardPage=1; renderCards()" class="border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all">
                 <option value="all">全站名單</option>
               </select>
             </div>
@@ -317,10 +314,11 @@
                 </tr>
               </thead>
               <tbody id="cards-table-body">
-                <tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>
+                <tr><td colspan="7" class="text-center py-8 text-slate-400">載入中...</td></tr>
               </tbody>
             </table>
           </div>
+          <div id="cards-pager" class="px-5 py-4 bg-white border-t border-slate-100 flex items-center justify-end gap-3 text-sm font-bold text-slate-600"></div>
         </div>
       </div>
 
@@ -562,14 +560,6 @@
             請選擇會員後查詢組織圖。
           </div>
         </div>
-      </div>
-
-      <!-- Tab: Import -->
-      <div id="tab-import" class="tab-content hidden">
-         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-8 flex flex-col items-center justify-center h-64 text-slate-400">
-           <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">upload_file</span>
-           <p>批次名單匯入功能建置中...</p>
-         </div>
       </div>
 
     </main>
@@ -914,11 +904,14 @@
     let allActivitiesData = [];
     let allBonusOrdersData = [];
     let selectedBonusTenantId = '';
+    let userPage = 1;
+    let cardPage = 1;
     let bonusOrderPage = 1;
     let selectedOrgRootId = '';
     let organizationTreeData = null;
     let currentDistributorCrmUserId = '';
     const BONUS_ORDER_PAGE_SIZE = 20;
+    const ADMIN_PAGE_SIZE = 10;
     const BONUS_POLICY_TYPE = 'left_right_independent_split';
     let boundCardAutoSyncDone = false;
     let boundCardSyncRunning = false;
@@ -982,6 +975,23 @@
 
     function formatCurrency(value) {
       return 'NT$ ' + Math.round(Number(value || 0)).toLocaleString();
+    }
+
+    function renderAdminPager(containerId, total, currentPage, onChangeName) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      if (!total) {
+        el.innerHTML = '<span>0 筆</span>';
+        return;
+      }
+      const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+      const start = (currentPage - 1) * ADMIN_PAGE_SIZE + 1;
+      const end = Math.min(total, currentPage * ADMIN_PAGE_SIZE);
+      el.innerHTML = `
+        <span class="mr-auto text-slate-500">每頁 10 筆，目前 ${start}-${end} / 共 ${total} 筆</span>
+        <button type="button" onclick="${onChangeName}(-1)" class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40" ${currentPage <= 1 ? 'disabled' : ''}>上一頁</button>
+        <span class="px-3 text-slate-500">第 ${currentPage} / ${totalPages} 頁</span>
+        <button type="button" onclick="${onChangeName}(1)" class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40" ${currentPage >= totalPages ? 'disabled' : ''}>下一頁</button>`;
     }
 
     function getTenantCountForBonus() {
@@ -1830,6 +1840,7 @@
           showToast(`有 ${sync.failed} 位已綁名片用戶補註冊失敗`, true);
         }
         allUsersData = mergeUsersWithBoundCards(users, cards);
+        userPage = 1;
         renderUsersTable(allUsersData);
       } else {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-400">載入失敗，請重新整理</td></tr>';
@@ -1843,9 +1854,13 @@
       document.getElementById('stat-users').innerText = list.length;
       if (list.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有用戶資料</td></tr>';
+        renderAdminPager('users-pager', 0, 1, 'changeUserPage');
         return;
       }
-      tbody.innerHTML = list.map(u => {
+      const totalPages = Math.max(1, Math.ceil(list.length / ADMIN_PAGE_SIZE));
+      userPage = Math.min(Math.max(1, userPage), totalPages);
+      const pageList = list.slice((userPage - 1) * ADMIN_PAGE_SIZE, userPage * ADMIN_PAGE_SIZE);
+      tbody.innerHTML = pageList.map(u => {
         const role = u.role || 'user';
         const isBoundCard = u.source === 'bound_card' || u.profileStatus === 'bound_card';
         const id = getUserId(u);
@@ -1903,6 +1918,12 @@
           </td>
         </tr>`;
       }).join('');
+      renderAdminPager('users-pager', list.length, userPage, 'changeUserPage');
+    }
+
+    function changeUserPage(delta) {
+      userPage += delta;
+      renderUsersTable(allUsersData);
     }
 
     function normalizeLineId(value) {
@@ -2075,18 +2096,64 @@
 
     async function loadCards() {
       const tbody = document.getElementById('cards-table-body');
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">載入中...</td></tr>';
       const res = await fetchAPI('getCardContacts');
       if (res && Array.isArray(res)) {
         allCardsData = res;
         document.getElementById('stat-cards').innerText = res.length;
+        populateCardTenantFilter(res);
+        cardPage = 1;
         renderCards();
       }
     }
 
+    function populateCardTenantFilter(cards) {
+      const select = document.getElementById('card-tenant-filter');
+      if (!select) return;
+      const current = select.value || 'all';
+      const networks = Array.from(new Set((Array.isArray(cards) ? cards : [])
+        .map(c => String(c['歸屬網'] || c.networkId || 'admin').trim())
+        .filter(Boolean))).sort();
+      select.innerHTML = '<option value="all">全站名單</option>' + networks.map(n => `<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join('');
+      select.value = networks.includes(current) ? current : 'all';
+    }
+
+    function getFilteredCards() {
+      const q = String(document.getElementById('card-search-input')?.value || '').trim().toLowerCase();
+      const network = document.getElementById('card-tenant-filter')?.value || 'all';
+      return (Array.isArray(allCardsData) ? allCardsData : []).filter(c => {
+        const cardNetwork = String(c['歸屬網'] || c.networkId || 'admin').trim();
+        if (network !== 'all' && cardNetwork !== network) return false;
+        if (!q) return true;
+        const text = [
+          c['姓名'],
+          c['英文名'],
+          c['手機號碼'],
+          c['公司電話'],
+          c['公司名稱'],
+          c['職稱'],
+          c['標籤'],
+          c['備註'],
+          c['LINE ID'],
+          c.lineId,
+          c.userId
+        ].filter(Boolean).join(' ').toLowerCase();
+        return text.includes(q);
+      });
+    }
+
     function renderCards() {
       const tbody = document.getElementById('cards-table-body');
-      tbody.innerHTML = allCardsData.map(c => {
+      const filtered = getFilteredCards();
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">目前沒有符合條件的名片</td></tr>';
+        renderAdminPager('cards-pager', 0, 1, 'changeCardPage');
+        return;
+      }
+      const totalPages = Math.max(1, Math.ceil(filtered.length / ADMIN_PAGE_SIZE));
+      cardPage = Math.min(Math.max(1, cardPage), totalPages);
+      const pageCards = filtered.slice((cardPage - 1) * ADMIN_PAGE_SIZE, cardPage * ADMIN_PAGE_SIZE);
+      tbody.innerHTML = pageCards.map(c => {
         const lineId = String(c['LINE ID'] || c.lineId || c.userId || '').trim();
         const bindBadge = lineId
           ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[13px] font-black whitespace-nowrap"><span class="material-symbols-outlined text-[17px]">verified_user</span>已綁定</span>'
@@ -2106,6 +2173,12 @@
           </td>
         </tr>`;
       }).join('');
+      renderAdminPager('cards-pager', filtered.length, cardPage, 'changeCardPage');
+    }
+
+    function changeCardPage(delta) {
+      cardPage += delta;
+      renderCards();
     }
 
     async function unbindAdminCard(encodedRowId) {
