@@ -1,13 +1,26 @@
 /* ==================== 全域設定 ==================== */
 
-const LIFF_ID = "2009886448-2UHnJgyT";
+const DEFAULT_LIFF_ID = "2009886448-2UHnJgyT";
+const NFC_LIFF_ID = "2009886448-Asc5tytD";
+function resolveActiveLiffId() {
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const fromLine = params.get('liffClientId') || params.get('liffId') || '';
+    if (fromLine) return fromLine;
+  } catch (e) {}
+  return DEFAULT_LIFF_ID;
+}
+const LIFF_ID = resolveActiveLiffId();
 const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/";
 
 window.LIFF_ID = LIFF_ID;
-window.NFC_LIFF_ID = window.NFC_LIFF_ID || '2009886448-Asc5tytD';
+window.DEFAULT_LIFF_ID = DEFAULT_LIFF_ID;
+window.NFC_LIFF_ID = window.NFC_LIFF_ID || NFC_LIFF_ID;
 window.WORKER_URL = WORKER_URL;
 window.Config = {
   LIFF_ID,
+  DEFAULT_LIFF_ID,
+  NFC_LIFF_ID: window.NFC_LIFF_ID,
   WORKER_URL,
   API_URL: WORKER_URL.replace(/\/$/, '')
 };
