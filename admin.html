@@ -31,6 +31,46 @@
     .data-table td { padding: 12px 16px; font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
     .data-table tr:hover { background-color: #f8fafc; }
 
+    .readable-table th {
+      padding: 18px 20px;
+      font-size: 16px;
+      line-height: 1.4;
+      color: #475569;
+      font-weight: 900;
+      background: #f8fafc;
+    }
+    .readable-table td {
+      padding: 20px;
+      font-size: 17px;
+      line-height: 1.5;
+      color: #1e293b;
+      font-weight: 650;
+      border-bottom: 1px solid #e5edf7;
+      vertical-align: middle;
+    }
+    .readable-table tr:hover { background: #f8fbff; }
+    .table-main-text { font-size: 17px; font-weight: 900; color: #0f172a; line-height: 1.4; }
+    .table-sub-text { font-size: 15px; font-weight: 650; color: #475569; line-height: 1.45; margin-top: 4px; }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 7px 13px;
+      border-radius: 999px;
+      font-size: 15px;
+      line-height: 1;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .status-pill .material-symbols-outlined { font-size: 18px; }
+    .status-green { background: #047857; color: #fff; }
+    .status-blue { background: #2563eb; color: #fff; }
+    .status-amber { background: #f59e0b; color: #111827; }
+    .status-red { background: #dc2626; color: #fff; }
+    .status-slate { background: #334155; color: #fff; }
+    .status-gray { background: #e2e8f0; color: #0f172a; }
+
     .crm-table { min-width: 1480px; }
     .crm-table th {
       padding: 18px 20px;
@@ -258,7 +298,7 @@
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
-            <table class="data-table">
+            <table class="data-table readable-table">
               <thead>
                 <tr>
                   <th>活動名稱</th>
@@ -301,7 +341,7 @@
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
-            <table class="data-table">
+            <table class="data-table readable-table">
               <thead>
                 <tr>
                   <th>姓名</th>
@@ -387,7 +427,7 @@
                 <h3 class="font-black text-slate-800">制度規則整合</h3>
                 <p class="text-[12px] text-slate-500 mt-1">推薦獎金與獨立資格分開處理，訂單收款後才產生 pending 流水。</p>
               </div>
-              <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[12px] font-black">6300 含稅版</span>
+              <span class="status-pill status-green">6300 含稅版</span>
             </div>
             <div class="overflow-x-auto">
               <table class="data-table">
@@ -1306,11 +1346,11 @@
       body.innerHTML = pageOrders.map(order => {
         const paid = order.status === 'paid' || order.status === 'completed';
         const cancelled = order.status === 'cancelled' || order.status === 'void';
-        const statusClass = paid ? 'bg-emerald-50 text-emerald-700' : (cancelled ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700');
+        const statusClass = paid ? 'status-green' : (cancelled ? 'status-red' : 'status-amber');
         const statusText = paid ? '已收款/已撥獎' : (cancelled ? '已取消' : '待收款');
         const action = paid || cancelled
           ? '<span class="text-slate-300 text-xs font-bold">無操作</span>'
-          : `<button type="button" onclick="markTenantOrderPaid('${escapeHTML(order.orderId)}')" class="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 text-xs font-bold">確認收款</button>
+          : `<button type="button" onclick="markTenantOrderPaid('${escapeHTML(order.orderId)}')" class="px-3 py-1.5 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 text-xs font-bold">確認收款</button>
              <button type="button" onclick="cancelTenantOrder('${escapeHTML(order.orderId)}')" class="ml-2 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 text-xs font-bold">取消</button>`;
         return `
           <tr>
@@ -1319,7 +1359,7 @@
             <td class="font-bold text-slate-700">${escapeHTML(order.tenantName || order.tenantId || '-')}</td>
             <td>${formatCurrency(order.fee)}</td>
             <td class="font-black text-emerald-600">${formatCurrency(order.bv)}</td>
-            <td><span class="px-2 py-1 rounded-full text-[11px] font-black ${statusClass}">${statusText}</span></td>
+            <td><span class="status-pill ${statusClass}">${statusText}</span></td>
             <td class="text-[12px] text-slate-500">${escapeHTML(order.paymentProvider)}${order.paymentNo ? '<br><span class="font-mono">' + escapeHTML(order.paymentNo) + '</span>' : ''}</td>
             <td class="text-right whitespace-nowrap">${action}</td>
           </tr>`;
@@ -1536,7 +1576,7 @@
             <div class="flex flex-wrap items-center gap-2 text-[12px] font-bold">
               ${role ? `<span class="px-2 py-1 rounded bg-blue-50 text-blue-600">${role}</span>` : ''}
               ${side ? `<span class="px-2 py-1 rounded bg-slate-100 text-slate-600">${side}</span>` : ''}
-              <span class="px-2 py-1 rounded ${independent === '已獨立' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">${independent}</span>
+              <span class="status-pill ${independent === '已獨立' ? 'status-green' : 'status-amber'}">${independent}</span>
             </div>
           </div>
         </div>
@@ -2164,20 +2204,23 @@
       tbody.innerHTML = pageCards.map(c => {
         const lineId = String(c['LINE ID'] || c.lineId || c.userId || '').trim();
         const bindBadge = lineId
-          ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[13px] font-black whitespace-nowrap"><span class="material-symbols-outlined text-[17px]">verified_user</span>已綁定</span>'
-          : '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100 text-[13px] font-black whitespace-nowrap"><span class="material-symbols-outlined text-[17px]">person_add</span>未綁定</span>';
+          ? '<span class="status-pill status-green"><span class="material-symbols-outlined">verified_user</span>已綁定</span>'
+          : '<span class="status-pill status-amber"><span class="material-symbols-outlined">person_add</span>未綁定</span>';
         return `
         <tr>
-          <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
-          <td class="text-sm text-slate-600">${escapeHTML(c['公司名稱'] || '')}</td>
-          <td class="font-mono text-sm">${escapeHTML(c['手機號碼'] || '')}</td>
-          <td class="text-sm text-blue-600 font-bold">${escapeHTML(c['歸屬網'] || 'admin')}</td>
+          <td><div class="table-main-text">${escapeHTML(c['姓名'] || '未命名')}</div></td>
+          <td>
+            <div class="table-main-text">${escapeHTML(c['公司名稱'] || '-')}</div>
+            <div class="table-sub-text">${escapeHTML(c['職稱'] || '')}</div>
+          </td>
+          <td class="font-mono"><div class="table-main-text">${escapeHTML(c['手機號碼'] || '-')}</div></td>
+          <td><span class="status-pill status-slate">${escapeHTML(c['歸屬網'] || 'admin')}</span></td>
           <td>${bindBadge}</td>
-          <td class="text-xs text-slate-500">${escapeHTML(c['標籤'] || '')}</td>
+          <td><div class="table-sub-text">${escapeHTML(c['標籤'] || c['備註'] || '-')}</div></td>
           <td class="text-center whitespace-nowrap">
-             <button onclick="openEditCardModal('${encodeURIComponent(c.rowId || '')}')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="編輯名片"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
-             ${adminRole === 'admin' && (c['LINE ID'] || c.lineId) ? `<button onclick="unbindAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-amber-600 p-1 transition-colors" title="解除 LINE 綁定"><span class="material-symbols-outlined text-[20px]">link_off</span></button>` : ''}
-             ${adminRole === 'admin' ? `<button onclick="deleteAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-red-600 p-1 transition-colors" title="刪除名片"><span class="material-symbols-outlined text-[20px]">delete</span></button>` : ''}
+             <button onclick="openEditCardModal('${encodeURIComponent(c.rowId || '')}')" class="text-slate-500 hover:text-blue-700 p-2 transition-colors" title="編輯名片"><span class="material-symbols-outlined text-[24px]">edit_note</span></button>
+             ${adminRole === 'admin' && (c['LINE ID'] || c.lineId) ? `<button onclick="unbindAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-400 hover:text-amber-700 p-2 transition-colors" title="解除 LINE 綁定"><span class="material-symbols-outlined text-[24px]">link_off</span></button>` : ''}
+             ${adminRole === 'admin' ? `<button onclick="deleteAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-400 hover:text-red-700 p-2 transition-colors" title="刪除名片"><span class="material-symbols-outlined text-[24px]">delete</span></button>` : ''}
           </td>
         </tr>`;
       }).join('');

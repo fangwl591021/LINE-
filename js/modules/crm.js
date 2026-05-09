@@ -172,7 +172,7 @@ window.openCrmPerson = function(phone) {
     : person.activities.map(a => {
         const time = window.formatDisplayTime(a.time);
         const statusBadge = a.checkedIn ?
-          '<span class="bg-green-50 text-green-600 text-[10px] px-2 py-0.5 rounded font-bold">已簽到</span>' :
+          '<span class="bg-emerald-700 text-white text-[10px] px-2 py-0.5 rounded font-bold">已簽到</span>' :
           (a.paid === '已繳費' ?
             '<span class="bg-blue-50 text-blue-600 text-[10px] px-2 py-0.5 rounded font-bold">已繳費</span>' :
             '<span class="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded font-bold">' + (a.paid || '已報名') + '</span>');

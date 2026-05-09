@@ -274,7 +274,7 @@ const HomeModule = (function() {
                             <div class="text-[12px] text-slate-400 mt-1">${time}</div>
                         </div>
                         <div class="text-right shrink-0">
-                            <div class="inline-flex px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[12px] font-black">${status}</div>
+                            <div class="inline-flex px-3 py-1 rounded-full bg-emerald-700 text-white text-[12px] font-black">${status}</div>
                             ${fee ? `<div class="text-[11px] text-slate-400 mt-1">${fee}</div>` : ''}
                         </div>
                     </div>`;

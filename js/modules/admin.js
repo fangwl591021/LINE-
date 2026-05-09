@@ -60,7 +60,7 @@ window._renderAdminActivities = function(res) {
       const fee = parseInt(act['金額']) > 0 ? 'NT$ ' + act['金額'] : '免費';
       const img = act['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
       const actId = window.escapeJS(act['活動ID'] || act.rowId || '');
-      const statusColor = status === '上架' ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500';
+      const statusColor = status === '上架' ? 'bg-emerald-700 text-white' : 'bg-slate-700 text-white';
 
       return '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">' +
         '<div class="w-full aspect-[16/9] bg-slate-100 relative">' +
@@ -77,7 +77,7 @@ window._renderAdminActivities = function(res) {
             '<button onclick="window.openCheckinPage(\'' + actId + '\', \'' + title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
               '<span class="material-symbols-outlined text-[15px]">fact_check</span> 核銷' +
             '</button>' +
-            '<button onclick="window.copyNfcCheckinUrl(\'' + actId + '\')" class="py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
+            '<button onclick="window.copyNfcCheckinUrl(\'' + actId + '\')" class="py-2.5 bg-emerald-700 text-white rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
               '<span class="material-symbols-outlined text-[15px]">nfc</span> NFC' +
             '</button>' +
             '<button onclick="window.openEditActivity(\'' + actId + '\')" class="py-2.5 bg-amber-50 text-amber-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
@@ -125,7 +125,7 @@ window.openCheckinPage = async function(actId, actTitle) {
 
           let statusBadge = '';
           if (isCheckedIn) statusBadge = '<span class="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded-full font-bold">已簽到</span>';
-          else if (payStatus === '已繳費') statusBadge = '<span class="bg-green-50 text-green-600 text-[10px] px-2 py-0.5 rounded-full font-bold">已繳費</span>';
+          else if (payStatus === '已繳費') statusBadge = '<span class="bg-emerald-700 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">已繳費</span>';
           else if (payStatus === '待對帳') statusBadge = '<span class="bg-orange-50 text-orange-500 text-[10px] px-2 py-0.5 rounded-full font-bold">待對帳</span>';
           else statusBadge = '<span class="bg-blue-50 text-blue-500 text-[10px] px-2 py-0.5 rounded-full font-bold">已報名</span>';
 
