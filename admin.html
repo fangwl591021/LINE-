@@ -376,6 +376,44 @@
             </button>
           </div>
         </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+            <div>
+              <h3 class="font-black text-slate-800">租戶年費訂單</h3>
+              <p class="text-[12px] text-slate-500 mt-1">建立訂單後先待收款；確認收款或未來金流回調成功後，才產生獎金流水。</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-[220px_120px_120px_auto] gap-2 w-full xl:w-auto">
+              <select id="bonus-order-tenant" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white">
+                <option value="">選擇租戶...</option>
+              </select>
+              <input id="bonus-order-fee" type="number" value="6300" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="訂單金額">
+              <input id="bonus-order-bv" type="number" value="3000" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="獎金 BV">
+              <button type="button" onclick="createTenantBonusOrder()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-transform">
+                <span class="material-symbols-outlined text-[17px]">add_card</span> 建立訂單
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>訂單時間</th>
+                  <th>訂單編號</th>
+                  <th>租戶</th>
+                  <th>年費</th>
+                  <th>BV</th>
+                  <th>狀態</th>
+                  <th>金流</th>
+                  <th class="text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="bonus-orders-body">
+                <tr><td colspan="8" class="text-center py-8 text-slate-400">尚未載入訂單</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- Tab: Import -->
@@ -597,6 +635,7 @@
     let allUsersData = [];
     let allCardsData = [];
     let allActivitiesData = [];
+    let allBonusOrdersData = [];
     let currentEditButtons = []; 
     let adminCropperInstance = null;
     let adminRole = 'store';
@@ -671,7 +710,26 @@
       if (tenantInput && (!tenantInput.value || Number(tenantInput.value) === 0)) {
         tenantInput.value = getTenantCountForBonus();
       }
+      populateBonusTenantSelect();
       renderBonusSystem();
+      await loadBonusOrders();
+    }
+
+    function getBonusTenantUsers() {
+      return (Array.isArray(allUsersData) ? allUsersData : []).filter(u => {
+        const role = String(u.role || '').toLowerCase();
+        return role === 'store' || role === 'tenant' || role === 'admin';
+      });
+    }
+
+    function populateBonusTenantSelect() {
+      const select = document.getElementById('bonus-order-tenant');
+      if (!select) return;
+      const tenants = getBonusTenantUsers();
+      select.innerHTML = '<option value="">選擇租戶...</option>' + tenants.map(u => {
+        const label = `${u.name || '未命名'} / ${u.networkId || u.storeId || 'admin'}`;
+        return `<option value="${escapeHTML(u.userId || '')}">${escapeHTML(label)}</option>`;
+      }).join('');
     }
 
     function renderBonusSystem() {
@@ -716,6 +774,121 @@
         showToast('獎金制度摘要已複製');
       } catch (e) {
         window.prompt('請複製制度摘要', text);
+      }
+    }
+
+    function normalizeBonusOrder(order) {
+      return {
+        orderId: order.orderId || order.id || order.rowId || '',
+        tenantId: order.tenantId || order.buyerId || order.userId || '',
+        tenantName: order.tenantName || order.buyerName || order.name || '',
+        fee: Number(order.fee || order.price || order.amount || 0),
+        bv: Number(order.bv || order.bonusBV || order.bonusAmount || 0),
+        status: order.status || 'pending_payment',
+        paymentProvider: order.paymentProvider || order.gateway || 'manual',
+        paymentNo: order.paymentNo || order.tradeNo || '',
+        createdAt: order.createdAt || order.date || order.created_at || '',
+        paidAt: order.paidAt || order.paid_at || '',
+        raw: order
+      };
+    }
+
+    async function loadBonusOrders() {
+      const body = document.getElementById('bonus-orders-body');
+      if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入訂單中...</td></tr>';
+      const res = await fetchAPI('getTenantBonusOrders');
+      allBonusOrdersData = Array.isArray(res) ? res.map(normalizeBonusOrder) : [];
+      renderBonusOrders();
+    }
+
+    function renderBonusOrders() {
+      const body = document.getElementById('bonus-orders-body');
+      if (!body) return;
+      if (!allBonusOrdersData.length) {
+        body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有租戶年費訂單</td></tr>';
+        return;
+      }
+
+      body.innerHTML = allBonusOrdersData.map(order => {
+        const paid = order.status === 'paid' || order.status === 'completed';
+        const cancelled = order.status === 'cancelled' || order.status === 'void';
+        const statusClass = paid ? 'bg-emerald-50 text-emerald-700' : (cancelled ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700');
+        const statusText = paid ? '已收款/已撥獎' : (cancelled ? '已取消' : '待收款');
+        const action = paid || cancelled
+          ? '<span class="text-slate-300 text-xs font-bold">無操作</span>'
+          : `<button type="button" onclick="markTenantOrderPaid('${escapeHTML(order.orderId)}')" class="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 text-xs font-bold">確認收款</button>
+             <button type="button" onclick="cancelTenantOrder('${escapeHTML(order.orderId)}')" class="ml-2 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 text-xs font-bold">取消</button>`;
+        return `
+          <tr>
+            <td class="text-[12px] text-slate-500 font-mono">${escapeHTML(formatDisplayTime(order.createdAt) || '-')}</td>
+            <td class="font-mono text-[12px] text-blue-600">${escapeHTML(order.orderId || '-')}</td>
+            <td class="font-bold text-slate-700">${escapeHTML(order.tenantName || order.tenantId || '-')}</td>
+            <td>${formatCurrency(order.fee)}</td>
+            <td class="font-black text-emerald-600">${formatCurrency(order.bv)}</td>
+            <td><span class="px-2 py-1 rounded-full text-[11px] font-black ${statusClass}">${statusText}</span></td>
+            <td class="text-[12px] text-slate-500">${escapeHTML(order.paymentProvider)}${order.paymentNo ? '<br><span class="font-mono">' + escapeHTML(order.paymentNo) + '</span>' : ''}</td>
+            <td class="text-right whitespace-nowrap">${action}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    async function createTenantBonusOrder() {
+      const tenantId = document.getElementById('bonus-order-tenant')?.value || '';
+      if (!tenantId) return showToast('請先選擇租戶', true);
+      const tenant = allUsersData.find(u => String(u.userId) === String(tenantId)) || {};
+      const fee = Number(document.getElementById('bonus-order-fee')?.value || 6300);
+      const bv = Number(document.getElementById('bonus-order-bv')?.value || 3000);
+      if (fee <= 0 || bv <= 0) return showToast('訂單金額與 BV 必須大於 0', true);
+
+      const res = await fetchAPI('createTenantBonusOrder', {
+        tenantId,
+        tenantName: tenant.name || tenant.companyName || tenantId,
+        networkId: tenant.networkId || tenant.storeId || 'admin',
+        productName: '租戶年費',
+        fee,
+        price: fee,
+        bv,
+        taxIncluded: true,
+        taxRate: Number(document.getElementById('bonus-tax-rate')?.value || 5),
+        status: 'pending_payment',
+        paymentProvider: 'manual'
+      });
+      if (res) {
+        showToast('租戶年費訂單已建立，等待收款');
+        await loadBonusOrders();
+      }
+    }
+
+    async function markTenantOrderPaid(orderId) {
+      const order = allBonusOrdersData.find(o => String(o.orderId) === String(orderId));
+      if (!order) return showToast('找不到訂單', true);
+      if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n確認後會依制度產生獎金流水。`)) return;
+
+      const res = await fetchAPI('markTenantOrderPaid', {
+        orderId,
+        tenantId: order.tenantId,
+        fee: order.fee,
+        bv: order.bv,
+        paymentProvider: 'manual',
+        paidAt: new Date().toISOString(),
+        bonusPolicy: {
+          freezeDays: 14,
+          independentBonus: order.bv,
+          splitBonus: Math.floor(order.bv / 2)
+        }
+      });
+      if (res) {
+        showToast('已確認收款，獎金流水已送出建立');
+        await loadBonusOrders();
+      }
+    }
+
+    async function cancelTenantOrder(orderId) {
+      if (!confirm('確定取消這筆租戶年費訂單？')) return;
+      const res = await fetchAPI('cancelTenantBonusOrder', { orderId });
+      if (res) {
+        showToast('訂單已取消');
+        await loadBonusOrders();
       }
     }
 

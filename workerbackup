@@ -472,6 +472,53 @@ const TrackingModule = {
   }
 };
 
+const TenantOrderModule = {
+  async createTenantBonusOrder(payload, env) {
+    const now = new Date().toISOString();
+    const order = {
+      orderId: payload.orderId || 'TEN-' + Date.now().toString() + Math.random().toString(36).substring(2, 6).toUpperCase(),
+      tenantId: payload.tenantId || payload.userId || '',
+      tenantName: payload.tenantName || '',
+      networkId: payload.networkId || 'admin',
+      productName: payload.productName || '租戶年費',
+      fee: Number(payload.fee || payload.price || 6300),
+      price: Number(payload.price || payload.fee || 6300),
+      bv: Number(payload.bv || 3000),
+      taxIncluded: payload.taxIncluded !== false,
+      taxRate: Number(payload.taxRate || 5),
+      status: payload.status || 'pending_payment',
+      paymentProvider: payload.paymentProvider || 'manual',
+      paymentNo: payload.paymentNo || '',
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const result = await DBModule.forward('createTenantBonusOrder', order, env);
+    return result && result.success !== false ? result : { success: true, data: order };
+  },
+
+  async markTenantOrderPaid(payload, env) {
+    const now = new Date().toISOString();
+    const paidPayload = {
+      ...payload,
+      status: 'paid',
+      paidAt: payload.paidAt || now,
+      updatedAt: now,
+      triggerBonus: true,
+      freezeDays: payload.bonusPolicy?.freezeDays || 14
+    };
+    return await DBModule.forward('markTenantOrderPaid', paidPayload, env);
+  },
+
+  async cancelTenantBonusOrder(payload, env) {
+    return await DBModule.forward('cancelTenantBonusOrder', {
+      ...payload,
+      status: 'cancelled',
+      updatedAt: new Date().toISOString()
+    }, env);
+  }
+};
+
 // ==================== 請求分發器 (Action Dispatcher) ====================
 async function dispatchAction(action, payload, request, env) {
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
@@ -522,6 +569,9 @@ async function dispatchAction(action, payload, request, env) {
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
+    case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);
+    case 'markTenantOrderPaid':    return await TenantOrderModule.markTenantOrderPaid(payload, env);
+    case 'cancelTenantBonusOrder': return await TenantOrderModule.cancelTenantBonusOrder(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
     default:                       return await DBModule.forward(action, payload, env);
