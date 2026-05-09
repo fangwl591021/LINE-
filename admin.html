@@ -30,6 +30,92 @@
     .data-table th { background-color: #f8fafc; padding: 12px 16px; font-size: 13px; color: #64748b; font-weight: normal; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
     .data-table td { padding: 12px 16px; font-size: 14px; color: #334155; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
     .data-table tr:hover { background-color: #f8fafc; }
+
+    .crm-table { min-width: 1480px; }
+    .crm-table th {
+      padding: 18px 20px;
+      font-size: 15px;
+      line-height: 1.35;
+      color: #475569;
+      font-weight: 800;
+      background: #f8fafc;
+    }
+    .crm-table td {
+      padding: 22px 20px;
+      font-size: 16px;
+      line-height: 1.55;
+      color: #1e293b;
+      vertical-align: top;
+      border-bottom: 1px solid #e5edf7;
+    }
+    .crm-table tr:hover { background: #f8fbff; }
+    .crm-name {
+      font-size: 18px;
+      line-height: 1.35;
+      font-weight: 900;
+      color: #0f172a;
+    }
+    .crm-main-text {
+      font-size: 16px;
+      line-height: 1.45;
+      color: #1e293b;
+      font-weight: 700;
+    }
+    .crm-sub-text {
+      font-size: 14px;
+      line-height: 1.45;
+      color: #64748b;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+    .crm-code {
+      font-size: 13px;
+      line-height: 1.35;
+      color: #64748b;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      margin-top: 8px;
+    }
+    .crm-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 14px;
+      line-height: 1;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .crm-pill-green { background: #047857; color: #fff; }
+    .crm-pill-blue { background: #2563eb; color: #fff; }
+    .crm-pill-cyan { background: #0891b2; color: #fff; }
+    .crm-pill-indigo { background: #4f46e5; color: #fff; }
+    .crm-pill-amber { background: #f59e0b; color: #111827; }
+    .crm-pill-red { background: #dc2626; color: #fff; }
+    .crm-pill-purple { background: #7e22ce; color: #fff; }
+    .crm-pill-slate { background: #334155; color: #fff; }
+    .crm-pill-gray { background: #e2e8f0; color: #0f172a; }
+    .crm-action-btn {
+      min-height: 42px;
+      padding: 0 18px;
+      border-radius: 12px;
+      background: #172033;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 900;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+    }
+    .crm-role-select {
+      min-height: 42px;
+      min-width: 96px;
+      padding: 0 12px;
+      border-radius: 12px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #1e293b;
+      font-size: 15px;
+      font-weight: 800;
+    }
     
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -126,15 +212,18 @@
       <!-- Tab: Users -->
       <div id="tab-users" class="tab-content">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white gap-3">
-            <h3 class="font-bold text-slate-700">經銷商 CRM</h3>
+          <div class="p-6 border-b border-slate-200 flex justify-between items-center bg-white gap-4">
+            <div>
+              <h3 class="font-black text-slate-900 text-2xl">經銷商 CRM</h3>
+              <p class="text-slate-500 text-base mt-1 font-medium">管理會員狀態、組織位置、年費、跟進紀錄與經銷商關係。</p>
+            </div>
             <div class="flex items-center gap-2">
-              <button id="btn-sync-bound-cards" onclick="syncBoundCardsToUsers()" class="text-sm border border-blue-200 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-50 flex items-center gap-1 font-bold"><span class="material-symbols-outlined text-[16px]">sync</span> 同步已綁名片</button>
-              <button onclick="loadUsers()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
+              <button id="btn-sync-bound-cards" onclick="syncBoundCardsToUsers()" class="text-base border border-blue-200 text-blue-700 px-5 py-3 rounded-xl hover:bg-blue-50 flex items-center gap-2 font-black"><span class="material-symbols-outlined text-[20px]">sync</span> 同步已綁名片</button>
+              <button onclick="loadUsers()" class="text-base border border-slate-200 text-slate-700 px-5 py-3 rounded-xl hover:bg-slate-50 flex items-center gap-2 font-black"><span class="material-symbols-outlined text-[20px]">refresh</span> 重新整理</button>
             </div>
           </div>
           <div class="overflow-x-auto">
-            <table class="data-table">
+            <table class="data-table crm-table">
               <thead>
                 <tr>
                   <th>姓名 / 狀態</th>
@@ -1466,26 +1555,26 @@
 
     function getCrmStatusMeta(status) {
       const map = {
-        lead: ['潛在', 'bg-slate-100 text-slate-600'],
-        contacted: ['已接觸', 'bg-blue-50 text-blue-600'],
-        interested: ['有興趣', 'bg-cyan-50 text-cyan-700'],
-        presentation: ['已說明', 'bg-indigo-50 text-indigo-600'],
-        pending_payment: ['待付款', 'bg-amber-50 text-amber-700'],
-        active: ['活躍', 'bg-emerald-50 text-emerald-700'],
-        incomplete: ['待補資料', 'bg-amber-50 text-amber-700'],
-        inactive: ['沉睡', 'bg-slate-100 text-slate-500'],
-        blocked: ['停權', 'bg-red-50 text-red-600'],
-        bound_card: ['已綁名片', 'bg-emerald-50 text-emerald-700']
+        lead: ['潛在', 'crm-pill-slate'],
+        contacted: ['已接觸', 'crm-pill-blue'],
+        interested: ['有興趣', 'crm-pill-cyan'],
+        presentation: ['已說明', 'crm-pill-indigo'],
+        pending_payment: ['待付款', 'crm-pill-amber'],
+        active: ['活躍', 'crm-pill-green'],
+        incomplete: ['待補資料', 'crm-pill-amber'],
+        inactive: ['沉睡', 'crm-pill-gray'],
+        blocked: ['停權', 'crm-pill-red'],
+        bound_card: ['已綁名片', 'crm-pill-green']
       };
-      return map[String(status || '').toLowerCase()] || [status || '未分類', 'bg-slate-100 text-slate-600'];
+      return map[String(status || '').toLowerCase()] || [status || '未分類', 'crm-pill-gray'];
     }
 
     function getIntentMeta(intent) {
       const map = {
-        cold: ['冷', 'bg-slate-100 text-slate-600'],
-        warm: ['溫', 'bg-amber-50 text-amber-700'],
-        hot: ['熱', 'bg-red-50 text-red-600'],
-        member: ['已成交', 'bg-emerald-50 text-emerald-700']
+        cold: ['冷', 'crm-pill-gray'],
+        warm: ['溫', 'crm-pill-amber'],
+        hot: ['熱', 'crm-pill-red'],
+        member: ['已成交', 'crm-pill-green']
       };
       return map[String(intent || 'cold').toLowerCase()] || map.cold;
     }
@@ -1538,11 +1627,11 @@
         return {
           text: paid ? '已收款' : (order.status === 'cancelled' || order.status === 'void' ? '已取消' : '待收款'),
           detail: expire ? `到期 ${formatDisplayTime(expire)}` : (order.orderId || ''),
-          className: paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+          className: paid ? 'crm-pill-green' : 'crm-pill-amber'
         };
       }
-      if (expire) return { text: '有到期日', detail: formatDisplayTime(expire), className: 'bg-blue-50 text-blue-700' };
-      return { text: '未建立', detail: '尚無年費訂單', className: 'bg-slate-100 text-slate-500' };
+      if (expire) return { text: '有到期日', detail: formatDisplayTime(expire), className: 'crm-pill-blue' };
+      return { text: '未建立', detail: '尚無年費訂單', className: 'crm-pill-gray' };
     }
 
     function getLastInteraction(user = {}) {
@@ -1605,11 +1694,11 @@
       document.getElementById('crm-summary-cards').innerHTML = [
         ['CRM 階段', statusMeta[0], statusMeta[1]],
         ['意向等級', intentMeta[0], intentMeta[1]],
-        ['獨立進度', progress.text, isUserIndependent(user) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'],
+        ['獨立進度', progress.text, isUserIndependent(user) ? 'crm-pill-green' : 'crm-pill-amber'],
         ['年費狀態', fee.text, fee.className]
       ].map(([label, value, cls]) => `<div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div class="text-[12px] text-slate-400 font-bold">${label}</div>
-        <div class="inline-flex mt-2 px-3 py-1 rounded-full text-sm font-black ${cls}">${value}</div>
+        <div class="crm-pill mt-2 ${cls}">${value}</div>
       </div>`).join('');
 
       document.getElementById('crm-org-grid').innerHTML = [
@@ -1770,43 +1859,43 @@
         return `
         <tr>
           <td>
-            <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="font-black text-slate-800 hover:text-blue-600">${crmTitle}</button>
-            <div class="mt-1 flex flex-wrap gap-1.5">
-              <span class="px-2 py-0.5 rounded-full text-[11px] font-black ${status[1]}">${status[0]}</span>
-              <span class="px-2 py-0.5 rounded-full text-[11px] font-black ${intent[1]}">意向 ${intent[0]}</span>
-              ${isBoundCard ? '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-black">已綁名片</span>' : ''}
+            <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="crm-name hover:text-blue-700">${crmTitle}</button>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <span class="crm-pill ${status[1]}">${status[0]}</span>
+              <span class="crm-pill ${intent[1]}">意向 ${intent[0]}</span>
+              ${isBoundCard ? '<span class="crm-pill crm-pill-green">已綁名片</span>' : ''}
             </div>
-            <div class="text-[11px] text-slate-400 font-mono mt-1">${escapeHTML(id ? id.substring(0, 10) + '...' : '-')}</div>
+            <div class="crm-code">${escapeHTML(id ? id.substring(0, 12) + '...' : '-')}</div>
           </td>
           <td>
-            <div class="text-sm text-slate-700">${escapeHTML(u.phone || '-')}</div>
-            <div class="text-[12px] text-slate-400">${escapeHTML(u.email || u.companyName || u.industry || '-')}</div>
+            <div class="crm-main-text">${escapeHTML(u.phone || '-')}</div>
+            <div class="crm-sub-text">${escapeHTML(u.email || u.companyName || u.industry || '-')}</div>
           </td>
           <td>
-            <span class="px-2 py-0.5 rounded-full text-[11px] font-black ${role === 'admin' ? 'bg-purple-100 text-purple-700' : (role === 'store' || role === 'tenant' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700')}">
+            <span class="crm-pill ${role === 'admin' ? 'crm-pill-purple' : (role === 'store' || role === 'tenant' ? 'crm-pill-green' : 'crm-pill-blue')}">
               ${escapeHTML(getRoleLabel(role))}
             </span>
-            <div class="text-[12px] text-slate-400 mt-1">${escapeHTML(u.networkId || u.storeId || 'admin')}</div>
+            <div class="crm-sub-text">${escapeHTML(u.networkId || u.storeId || 'admin')}</div>
           </td>
           <td>
-            <div class="text-[13px] text-slate-700">薦：${escapeHTML(sponsor?.name || readSponsorId(u) || '-')}</div>
-            <div class="text-[12px] text-slate-400 mt-1">置：${escapeHTML(placement?.name || readPlacementParentId(u) || '-')} ${readPlacementSide(u) ? '/' + escapeHTML(readPlacementSide(u)) : ''}</div>
+            <div class="crm-main-text">薦：${escapeHTML(sponsor?.name || readSponsorId(u) || '-')}</div>
+            <div class="crm-sub-text">置：${escapeHTML(placement?.name || readPlacementParentId(u) || '-')} ${readPlacementSide(u) ? '/' + escapeHTML(readPlacementSide(u)) : ''}</div>
           </td>
           <td>
-            <span class="px-2 py-1 rounded-lg text-[12px] font-black ${isUserIndependent(u) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${escapeHTML(progress.text)}</span>
-            <div class="text-[11px] text-slate-400 mt-1">直推 ${getDirectDownlineCount(u)} / 安置 ${getPlacementChildCount(u)}</div>
+            <span class="crm-pill ${isUserIndependent(u) ? 'crm-pill-green' : 'crm-pill-amber'}">${escapeHTML(progress.text)}</span>
+            <div class="crm-sub-text">直推 ${getDirectDownlineCount(u)} / 安置 ${getPlacementChildCount(u)}</div>
           </td>
           <td>
-            <span class="px-2 py-1 rounded-lg text-[12px] font-black ${fee.className}">${escapeHTML(fee.text)}</span>
-            <div class="text-[11px] text-slate-400 mt-1">${escapeHTML(fee.detail || '-')}</div>
+            <span class="crm-pill ${fee.className}">${escapeHTML(fee.text)}</span>
+            <div class="crm-sub-text">${escapeHTML(fee.detail || '-')}</div>
           </td>
           <td>
-            <div class="text-[13px] text-slate-700">${escapeHTML(getLastInteraction(u))}</div>
-            <div class="text-[11px] text-slate-400 mt-1">下次 ${escapeHTML(u.nextFollowUpAt ? formatDisplayTime(u.nextFollowUpAt) : '-')}</div>
+            <div class="crm-main-text">${escapeHTML(getLastInteraction(u))}</div>
+            <div class="crm-sub-text">下次 ${escapeHTML(u.nextFollowUpAt ? formatDisplayTime(u.nextFollowUpAt) : '-')}</div>
           </td>
           <td class="text-right whitespace-nowrap">
-            <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-700 text-xs font-bold mr-2">CRM</button>
-            <select onchange="updateRole('${escapeHTML(id)}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
+            <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="crm-action-btn mr-3">CRM</button>
+            <select onchange="updateRole('${escapeHTML(id)}', this.value)" class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
               <option value="user" ${role==='user'?'selected':''}>一般</option>
               <option value="store" ${role==='store'?'selected':''}>店長</option>
               <option value="admin" ${role==='admin'?'selected':''}>總管</option>
