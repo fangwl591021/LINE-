@@ -1108,6 +1108,14 @@
             <input id="edit-a-reward" type="number" min="0" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
           </div>
           <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">NFC 簽到開始</label>
+            <input id="edit-a-nfc-start" type="time" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">NFC 簽到結束</label>
+            <input id="edit-a-nfc-end" type="time" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+          </div>
+          <div>
             <label class="block text-sm font-bold text-slate-500 mb-1.5">宣傳圖網址</label>
             <input id="edit-a-image" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
           </div>
@@ -2726,6 +2734,8 @@
       document.getElementById("edit-a-end").value = safeStringForPrompt_(act["結束時間"]);
       document.getElementById("edit-a-price").value = safeStringForPrompt_(act["金額"] || 0);
       document.getElementById("edit-a-reward").value = safeStringForPrompt_(act["獎勵點數"] || 0);
+      document.getElementById("edit-a-nfc-start").value = safeStringForPrompt_(act["NFC簽到開始"] || act.nfcCheckinStart || "").slice(0, 5);
+      document.getElementById("edit-a-nfc-end").value = safeStringForPrompt_(act["NFC簽到結束"] || act.nfcCheckinEnd || "").slice(0, 5);
       document.getElementById("edit-a-desc").value = safeStringForPrompt_(act["活動說明"]);
       document.getElementById("edit-a-image").value = safeStringForPrompt_(act["宣傳圖"]);
 
@@ -2750,11 +2760,15 @@
       const nextEnd = document.getElementById("edit-a-end").value.trim();
       const nextPriceText = document.getElementById("edit-a-price").value;
       const nextRewardText = document.getElementById("edit-a-reward").value;
+      const nextNfcStart = document.getElementById("edit-a-nfc-start").value;
+      const nextNfcEnd = document.getElementById("edit-a-nfc-end").value;
       const nextDesc = document.getElementById("edit-a-desc").value;
       const nextImage = document.getElementById("edit-a-image").value.trim();
 
       if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
       if (!nextName) return showToast("請輸入活動名稱", true);
+      if ((nextNfcStart && !nextNfcEnd) || (!nextNfcStart && nextNfcEnd)) return showToast("NFC 簽到開始與結束時間需同時填寫", true);
+      if (nextNfcStart && nextNfcEnd && nextNfcStart >= nextNfcEnd) return showToast("NFC 簽到結束時間必須晚於開始時間", true);
 
       const price = parseInt(nextPriceText, 10) || 0;
       const rewardPoints = parseInt(nextRewardText, 10) || 0;
@@ -2775,6 +2789,9 @@
             "金額": price,
             "收費類型": price > 0 ? "收費" : "免費",
             "獎勵點數": rewardPoints,
+            "NFC簽到開始": nextNfcStart,
+            "NFC簽到結束": nextNfcEnd,
+            "NFC限當日": true,
             "活動說明": nextDesc,
             "宣傳圖": nextImage
           }

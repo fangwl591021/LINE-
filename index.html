@@ -791,6 +791,23 @@
           </div>
         </div>
 
+        <div class="bg-blue-50/70 border border-blue-100 rounded-2xl p-4 space-y-3">
+          <div>
+            <p class="font-black text-blue-700 text-[14px] flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">nfc</span>NFC 簽到有效時段</p>
+            <p class="text-[12px] text-slate-500 font-bold mt-1">限活動當日；未報名或不在時段內感應會失敗。</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[12px] text-slate-500 mb-1 font-bold pl-1">簽到開始</label>
+              <input type="time" id="q-nfc-start" class="custom-input !px-3 !py-3 !text-[14px]">
+            </div>
+            <div>
+              <label class="block text-[12px] text-slate-500 mb-1 font-bold pl-1">簽到結束</label>
+              <input type="time" id="q-nfc-end" class="custom-input !px-3 !py-3 !text-[14px]">
+            </div>
+          </div>
+        </div>
+
         <div class="grid grid-cols-2 gap-4">
           <div class="flex flex-col">
             <label class="block text-[13px] text-slate-500 mb-1.5 font-bold tracking-wide pl-1">活動類型</label>
@@ -880,6 +897,23 @@
           </div>
         </div>
 
+        <div class="bg-blue-50/70 border border-blue-100 rounded-2xl p-4 space-y-3">
+          <div>
+            <p class="font-black text-blue-700 text-[14px] flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">nfc</span>NFC 簽到有效時段</p>
+            <p class="text-[12px] text-slate-500 font-bold mt-1">限活動當日；未報名或不在時段內感應會失敗。</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[12px] text-slate-500 mb-1 font-bold pl-1">簽到開始</label>
+              <input type="time" id="f-nfc-start" class="custom-input !px-3 !py-3 !text-[14px]">
+            </div>
+            <div>
+              <label class="block text-[12px] text-slate-500 mb-1 font-bold pl-1">簽到結束</label>
+              <input type="time" id="f-nfc-end" class="custom-input !px-3 !py-3 !text-[14px]">
+            </div>
+          </div>
+        </div>
+
         <div class="grid grid-cols-2 gap-4">
           <div class="flex flex-col">
             <label class="block text-[13px] text-slate-500 mb-1.5 font-bold tracking-wide pl-1">活動類型</label>
@@ -946,6 +980,23 @@
         <div class="grid grid-cols-2 gap-4">
           <div><label class="block text-[13px] text-slate-500 mb-1.5 font-bold tracking-wide pl-1">活動類型</label><select id="s-type" class="custom-input cursor-pointer" style="-webkit-appearance:none;appearance:none;"><option>課程</option><option>教學</option><option>講座</option><option>例會</option><option>聯誼</option><option>參訪</option><option>其他</option></select></div>
           <div><label class="block text-[13px] text-slate-500 mb-1.5 font-bold tracking-wide pl-1">預設身份</label><select id="s-identity" class="custom-input cursor-pointer" style="-webkit-appearance:none;appearance:none;"><option>會員</option><option>來賓</option></select></div>
+        </div>
+
+        <div class="bg-blue-50/70 border border-blue-100 rounded-2xl p-4 space-y-3">
+          <div>
+            <p class="font-black text-blue-700 text-[14px] flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">nfc</span>NFC 簽到有效時段</p>
+            <p class="text-[12px] text-slate-500 font-bold mt-1">套用於各梯次當日；未報名或不在時段內感應會失敗。</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[12px] text-slate-500 mb-1 font-bold pl-1">簽到開始</label>
+              <input type="time" id="s-nfc-start" class="custom-input !px-3 !py-3 !text-[14px]">
+            </div>
+            <div>
+              <label class="block text-[12px] text-slate-500 mb-1 font-bold pl-1">簽到結束</label>
+              <input type="time" id="s-nfc-end" class="custom-input !px-3 !py-3 !text-[14px]">
+            </div>
+          </div>
         </div>
 
         <div class="flex flex-col">
@@ -1165,7 +1216,7 @@
 <script src="js/modules/mycard.js?v=8.2"></script>
 <script src="js/modules/matchmake.js?v=7.3"></script>
 <script src="js/modules/cardmaster.js?v=1.0"></script>
-<script src="js/modules/activities.js?v=7.1"></script>
+<script src="js/modules/activities.js?v=7.2"></script>
 <script src="js/modules/admin.js?v=7.5"></script>
 <script src="js/modules/home.js?v=7.3"></script>
 <script src="js/modules/settings.js?v=7.1"></script>

@@ -42,6 +42,10 @@ window.openEditActivity = async function(actId) {
     };
     document.getElementById('f-start').value = fmtForInput(act['開始時間']);
     document.getElementById('f-end').value = fmtForInput(act['結束時間']);
+    const nfcStart = act['NFC簽到開始'] || act.nfcCheckinStart || act.nfcStartTime || '';
+    const nfcEnd = act['NFC簽到結束'] || act.nfcCheckinEnd || act.nfcEndTime || '';
+    if (document.getElementById('f-nfc-start')) document.getElementById('f-nfc-start').value = String(nfcStart).slice(0, 5);
+    if (document.getElementById('f-nfc-end')) document.getElementById('f-nfc-end').value = String(nfcEnd).slice(0, 5);
 
     // 收費
     const price = parseInt(act['金額']) || 0;
@@ -105,7 +109,7 @@ window.cancelEditActivity = function() {
   window._currentEditingAct = null;
 
   // 清空表單
-  ['f-name','f-start','f-end','f-desc','f-price'].forEach(id => {
+  ['f-name','f-start','f-end','f-nfc-start','f-nfc-end','f-desc','f-price'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -254,6 +258,22 @@ window.submitActivityForm = async function(mode) {
     if (!val) return '';
     return val.replace('T', ' ');
   };
+  const getNfcWindow = () => {
+    const start = document.getElementById(pfx + '-nfc-start') ? document.getElementById(pfx + '-nfc-start').value : '';
+    const end = document.getElementById(pfx + '-nfc-end') ? document.getElementById(pfx + '-nfc-end').value : '';
+    if ((start && !end) || (!start && end)) throw new Error('NFC 簽到開始與結束時間需同時填寫');
+    if (start && end && start >= end) throw new Error('NFC 簽到結束時間必須晚於開始時間');
+    return { start, end };
+  };
+
+  let nfcWindow;
+  try {
+    nfcWindow = getNfcWindow();
+  } catch (e) {
+    if (btn) { btn.innerHTML = oriText; btn.disabled = false; btn.classList.remove('opacity-70'); }
+    alert('⚠️ ' + e.message);
+    return;
+  }
 
   let p = {
     activityName: name,
@@ -264,6 +284,9 @@ window.submitActivityForm = async function(mode) {
     endTime: formatDT(document.getElementById(pfx + '-end') ? document.getElementById(pfx + '-end').value : ''),
     description: document.getElementById(pfx + '-desc') ? document.getElementById(pfx + '-desc').value.trim() : '',
     imageUrl: finalImageUrl,
+    nfcCheckinStart: nfcWindow.start,
+    nfcCheckinEnd: nfcWindow.end,
+    nfcCheckinSameDayOnly: true,
     names: [],
     defaultIdentity: document.getElementById(pfx + '-identity') ? document.getElementById(pfx + '-identity').value : '來賓',
     isBatch: (mode === 'series'),
@@ -286,13 +309,16 @@ window.submitActivityForm = async function(mode) {
     }
   } else if (mode === 'series') {
     const cards = document.querySelectorAll('[id^="batch-"]');
-    p.batches = Array.from(cards).map(card => ({
-      name: card.querySelector('.batch-name-input').value.trim(),
-      startTime: formatDT(card.querySelector('.batch-start-input').value),
-      endTime: formatDT(card.querySelector('.batch-end-input').value),
-      price: card.querySelector('.batch-price-input').value,
-      limit: card.querySelector('.batch-limit-input').value
-    }));
+      p.batches = Array.from(cards).map(card => ({
+        name: card.querySelector('.batch-name-input').value.trim(),
+        startTime: formatDT(card.querySelector('.batch-start-input').value),
+        endTime: formatDT(card.querySelector('.batch-end-input').value),
+        price: card.querySelector('.batch-price-input').value,
+        limit: card.querySelector('.batch-limit-input').value,
+        nfcCheckinStart: nfcWindow.start,
+        nfcCheckinEnd: nfcWindow.end,
+        nfcCheckinSameDayOnly: true
+      }));
 
     if (p.batches.length === 0) {
       if (btn) { btn.innerHTML = oriText; btn.disabled = false; btn.classList.remove('opacity-70'); }
@@ -332,7 +358,10 @@ window.submitActivityForm = async function(mode) {
           '金額': parseInt(p.price) || 0,
           '收費方式': p.feeType,
           '活動說明': p.description,
-          '宣傳圖': p.imageUrl
+          '宣傳圖': p.imageUrl,
+          'NFC簽到開始': p.nfcCheckinStart,
+          'NFC簽到結束': p.nfcCheckinEnd,
+          'NFC限當日': p.nfcCheckinSameDayOnly
         }
       }, true);
 
