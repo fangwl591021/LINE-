@@ -663,6 +663,8 @@
     let selectedBonusTenantId = '';
     let bonusOrderPage = 1;
     const BONUS_ORDER_PAGE_SIZE = 20;
+    let boundCardAutoSyncDone = false;
+    let boundCardSyncRunning = false;
     let currentEditButtons = []; 
     let adminCropperInstance = null;
     let adminRole = 'store';
@@ -1051,7 +1053,10 @@
       if (res && Array.isArray(res)) {
         allUsersData = res;
         renderUsersTable(res);
-        setTimeout(() => syncBoundCardsToUsers({ auto: true }), 80);
+        if (!boundCardAutoSyncDone) {
+          boundCardAutoSyncDone = true;
+          setTimeout(() => syncBoundCardsToUsers({ auto: true }), 80);
+        }
       }
     }
 
@@ -1109,10 +1114,12 @@
 
     async function syncBoundCardsToUsers(options = {}) {
       const auto = !!options.auto;
+      if (boundCardSyncRunning) return;
       if (adminRole !== 'admin') {
         if (!auto) showToast('只有總管 admin 可以同步全站會員', true);
         return;
       }
+      boundCardSyncRunning = true;
 
       const btn = document.getElementById('btn-sync-bound-cards');
       const originalHtml = btn ? btn.innerHTML : '';
@@ -1169,8 +1176,13 @@
         }
 
         if (!auto || ok > 0) showToast(`已綁名片同步完成：成功 ${ok} 筆${fail ? `，失敗 ${fail} 筆` : ''}`, !!fail);
-        await loadUsers();
+        const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: auto });
+        if (Array.isArray(refreshedUsers)) {
+          allUsersData = refreshedUsers;
+          renderUsersTable(refreshedUsers);
+        }
       } finally {
+        boundCardSyncRunning = false;
         if (btn && !auto) {
           btn.disabled = false;
           btn.innerHTML = originalHtml;
