@@ -3,6 +3,7 @@
   const TENANT_FEE = 6300;
   const TENANT_BV = 3000;
   const POLICY_TYPE = 'left_right_independent_split';
+  let lastTenantOrderNotice = '';
 
   function getUser() {
     return window.currentUser || window.currentUserProfile || {};
@@ -78,7 +79,7 @@
     const buyerId = getUserId(user);
     if (!buyerId) return window.showToast('找不到會員 ID，請重新登入後再試', true);
     if (isTenantRole(user.role || window.userRole)) return window.showToast('你已經是租戶資格，不需要重複購買', true);
-    if (!window.confirm('確認建立 NT$6,300 租戶年費訂單？\n\n建立後請依管理方指示付款，後台確認收款後才會開通資格。')) return;
+    if (!window.confirm('確認建立 NT$6,300 租戶年費訂單？\n\n建立後請依管理方提供帳號匯款，後台確認收款後才會開通資格。')) return;
 
     setButtonLoading(btn, true, btnText);
     try {
@@ -100,7 +101,11 @@
         taxRate: 5,
         paymentStatus: 'pending_payment',
         status: 'pending_payment',
-        paymentProvider: 'manual',
+        paymentProvider: 'bank_transfer',
+        paymentMethod: 'bank_transfer',
+        paymentLabel: '匯款付款',
+        notifyAdmin: true,
+        notificationType: 'tenant_annual_fee_order_created',
         purchaseSource: 'frontend',
         bonusPolicyType: POLICY_TYPE,
         sponsorId: getSponsorId(user),
@@ -113,6 +118,15 @@
 
       if (!res || res.error) throw new Error(res?.error || '建立訂單失敗');
       const orderId = res.orderId || res.id || res.rowId || res.data?.orderId || '';
+      lastTenantOrderNotice = [
+        '租戶年費匯款通知',
+        `訂單編號：${orderId || '系統已建立'}`,
+        `姓名：${user.name || user.displayName || '未命名'}`,
+        `電話：${user.phone || '-'}`,
+        '金額：NT$ 6,300',
+        '付款方式：匯款付款',
+        '我已完成匯款，請協助確認收款並開通租戶功能。'
+      ].join('\n');
       const result = document.getElementById('tenant-order-result');
       if (result) {
         result.classList.remove('hidden');
@@ -120,13 +134,27 @@
           <div class="font-black text-slate-900 mb-1">訂單已建立，等待後台確認收款</div>
           <div>訂單編號：<span class="font-mono">${window.escapeHTML(orderId || '系統已建立')}</span></div>
           <div>金額：NT$ 6,300</div>
-          <div class="mt-2 text-slate-600">付款完成後，請通知管理方到後台按「確認收款」。</div>`;
+          <div>付款方式：匯款付款</div>
+          <div class="mt-2 text-slate-600">匯款完成後，請提供訂單編號與匯款後五碼或截圖，管理方確認後會開通功能。</div>
+          <button type="button" onclick="window.copyTenantPaymentNotice()" class="mt-3 w-full bg-slate-900 text-white py-3 rounded-xl font-black flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[18px]">content_copy</span> 複製付款通知
+          </button>`;
       }
       window.showToast('租戶年費訂單已建立');
     } catch (e) {
       window.showToast(e.message || '建立訂單失敗', true);
     } finally {
       setButtonLoading(btn, false, btnText);
+    }
+  };
+
+  window.copyTenantPaymentNotice = async function() {
+    if (!lastTenantOrderNotice) return window.showToast('目前沒有可複製的付款通知', true);
+    try {
+      await navigator.clipboard.writeText(lastTenantOrderNotice);
+      window.showToast('付款通知已複製');
+    } catch (e) {
+      window.prompt('請複製付款通知', lastTenantOrderNotice);
     }
   };
 
