@@ -2,10 +2,37 @@
 
 const DEFAULT_LIFF_ID = "2009886448-2UHnJgyT";
 const NFC_LIFF_ID = "2009886448-Asc5tytD";
+
+function readActmasterInitialParams() {
+  const params = new URLSearchParams(window.location.search || '');
+  const state = params.get('liff.state') || params.get('state') || '';
+
+  if (state) {
+    try {
+      const stateText = decodeURIComponent(state);
+      const queryText = stateText.includes('?')
+        ? stateText.split('?').slice(1).join('?')
+        : stateText.replace(/^\?/, '');
+      const stateParams = new URLSearchParams(queryText);
+      stateParams.forEach((value, key) => {
+        if (!params.has(key)) params.set(key, value);
+      });
+    } catch (e) {
+      console.warn('Unable to parse LIFF state:', e);
+    }
+  }
+
+  return params;
+}
+
+function hasNfcCheckinParams(params) {
+  return !!(params.get('checkin') || params.get('nfcAct') || params.get('nfcCheckin'));
+}
+
 function resolveActiveLiffId() {
   try {
-    const params = new URLSearchParams(window.location.search || '');
-    if (params.get('checkin') || params.get('nfcAct') || params.get('nfcCheckin')) return NFC_LIFF_ID;
+    const params = readActmasterInitialParams();
+    if (hasNfcCheckinParams(params)) return NFC_LIFF_ID;
     const explicitLiffId = params.get('liffId') || '';
     if (explicitLiffId && explicitLiffId.includes('-')) return explicitLiffId;
   } catch (e) {}
@@ -88,25 +115,7 @@ window.recognizeMyCard = function(input) {
 };
 
 window.getActmasterUrlParams = function() {
-  const params = new URLSearchParams(window.location.search);
-  const state = params.get('liff.state');
-
-  if (state) {
-    try {
-      const stateText = decodeURIComponent(state);
-      const queryText = stateText.includes('?')
-        ? stateText.split('?').slice(1).join('?')
-        : stateText.replace(/^\?/, '');
-      const stateParams = new URLSearchParams(queryText);
-      stateParams.forEach((value, key) => {
-        if (!params.has(key)) params.set(key, value);
-      });
-    } catch (e) {
-      console.warn('Unable to parse LIFF state:', e);
-    }
-  }
-
-  return params;
+  return readActmasterInitialParams();
 };
 
 (function installNfcCheckinFallback() {
