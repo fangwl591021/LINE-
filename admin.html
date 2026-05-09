@@ -73,7 +73,7 @@
         <div class="flex flex-col gap-1">
           <a href="#" onclick="switchTab('users')" id="nav-users" class="nav-item active flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">manage_accounts</span>
-            用戶與商家權限
+            經銷商 CRM
           </a>
           <a href="#" onclick="switchTab('activities')" id="nav-activities" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
@@ -110,7 +110,7 @@
   <div class="flex-1 flex flex-col overflow-hidden">
     
     <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-0 shrink-0">
-      <h2 id="page-title" class="text-lg font-bold text-slate-700">用戶與商家權限</h2>
+      <h2 id="page-title" class="text-lg font-bold text-slate-700">經銷商 CRM</h2>
       
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
@@ -127,7 +127,7 @@
       <div id="tab-users" class="tab-content">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white gap-3">
-            <h3 class="font-bold text-slate-700">全站會員與商家名單</h3>
+            <h3 class="font-bold text-slate-700">經銷商 CRM</h3>
             <div class="flex items-center gap-2">
               <button id="btn-sync-bound-cards" onclick="syncBoundCardsToUsers()" class="text-sm border border-blue-200 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-50 flex items-center gap-1 font-bold"><span class="material-symbols-outlined text-[16px]">sync</span> 同步已綁名片</button>
               <button onclick="loadUsers()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
@@ -137,16 +137,18 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>姓名</th>
-                  <th>LINE ID</th>
-                  <th>手機</th>
-                  <th>所屬網 / 店代碼</th>
-                  <th>權限級別</th>
+                  <th>姓名 / 狀態</th>
+                  <th>聯絡資料</th>
+                  <th>角色 / 階級</th>
+                  <th>推薦 / 安置</th>
+                  <th>獨立進度</th>
+                  <th>年費</th>
+                  <th>最近互動</th>
                   <th class="text-right">操作</th>
                 </tr>
               </thead>
               <tbody id="users-table-body">
-                <tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>
+                <tr><td colspan="8" class="text-center py-8 text-slate-400">載入中...</td></tr>
               </tbody>
             </table>
           </div>
@@ -484,6 +486,135 @@
     </main>
   </div>
 
+  <!-- 經銷商 CRM Modal -->
+  <div id="modal-distributor-crm" class="fixed inset-0 bg-slate-900/60 z-[1100] hidden items-center justify-center backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1180px] h-[92vh] overflow-hidden flex flex-col">
+      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white">
+        <div>
+          <h3 id="crm-modal-title" class="text-lg font-black text-slate-800">經銷商 CRM</h3>
+          <p id="crm-modal-subtitle" class="text-xs text-slate-400 font-mono mt-1"></p>
+        </div>
+        <button type="button" onclick="closeDistributorCrm()" class="text-slate-400 hover:text-slate-700 transition-colors">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-5">
+        <input type="hidden" id="crm-user-id">
+        <div id="crm-summary-cards" class="grid grid-cols-1 md:grid-cols-4 gap-4"></div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-blue-500 text-[20px]">badge</span>
+              <h4 class="font-black text-slate-800">基本資料</h4>
+            </div>
+            <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label class="text-sm font-bold text-slate-500">姓名<input id="crm-name" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="text-sm font-bold text-slate-500">手機<input id="crm-phone" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="text-sm font-bold text-slate-500">Email<input id="crm-email" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="text-sm font-bold text-slate-500">生日<input id="crm-birthday" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="text-sm font-bold text-slate-500">地區 / 城市<input id="crm-city" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="text-sm font-bold text-slate-500">公司 / 職稱<input id="crm-company-title" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="md:col-span-2 text-sm font-bold text-slate-500">地址<input id="crm-address" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            </div>
+          </section>
+
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-emerald-500 text-[20px]">groups</span>
+              <h4 class="font-black text-slate-800">經銷商身份</h4>
+            </div>
+            <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label class="text-sm font-bold text-slate-500">CRM 階段
+                <select id="crm-status" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500">
+                  <option value="lead">潛在</option>
+                  <option value="contacted">已接觸</option>
+                  <option value="interested">有興趣</option>
+                  <option value="presentation">已說明</option>
+                  <option value="pending_payment">待付款</option>
+                  <option value="active">成交 / 活躍</option>
+                  <option value="inactive">沉睡</option>
+                  <option value="blocked">停權</option>
+                </select>
+              </label>
+              <label class="text-sm font-bold text-slate-500">意向等級
+                <select id="crm-intent" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500">
+                  <option value="cold">冷</option>
+                  <option value="warm">溫</option>
+                  <option value="hot">熱</option>
+                  <option value="member">已成交</option>
+                </select>
+              </label>
+              <label class="text-sm font-bold text-slate-500">加入日期<input id="crm-joined-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="text-sm font-bold text-slate-500">年費到期日<input id="crm-expire-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="md:col-span-2 text-sm font-bold text-slate-500">標籤<input id="crm-tags" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-blue-600 font-bold outline-none focus:border-blue-500" placeholder="#待跟進 #租戶 #講師"></label>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-purple-500 text-[20px]">account_tree</span>
+              <h4 class="font-black text-slate-800">推薦與組織</h4>
+            </div>
+            <div id="crm-org-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
+          </section>
+
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-amber-500 text-[20px]">payments</span>
+              <h4 class="font-black text-slate-800">年費與獎金</h4>
+            </div>
+            <div id="crm-finance-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
+          </section>
+        </div>
+
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <span class="material-symbols-outlined text-blue-500 text-[20px]">event_note</span>
+            <h4 class="font-black text-slate-800">跟進紀錄</h4>
+          </div>
+          <div class="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <label class="text-sm font-bold text-slate-500">最近聯絡<input id="crm-last-contact" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">下次跟進<input id="crm-next-follow" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">負責人<input id="crm-owner" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="md:col-span-3 text-sm font-bold text-slate-500">跟進備註<textarea id="crm-notes" rows="5" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 resize-none" placeholder="說明狀態、反對問題、下次要追的重點..."></textarea></label>
+          </div>
+        </section>
+
+        <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-indigo-500 text-[20px]">style</span>
+              <h4 class="font-black text-slate-800">活動與名片</h4>
+            </div>
+            <div id="crm-activity-card-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
+          </section>
+
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-red-500 text-[20px]">security</span>
+              <h4 class="font-black text-slate-800">風控與系統</h4>
+            </div>
+            <div id="crm-system-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
+          </section>
+        </div>
+      </div>
+      <div class="px-6 py-4 bg-white border-t border-slate-200 flex justify-between gap-3">
+        <button type="button" onclick="openCrmOrganizationRoot()" class="px-5 py-2.5 text-sm font-bold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">account_tree</span> 查組織圖
+        </button>
+        <div class="flex gap-3">
+          <button type="button" onclick="closeDistributorCrm()" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">取消</button>
+          <button type="button" onclick="saveDistributorCrm()" class="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px]">save</span> 儲存 CRM
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 名片編輯彈窗 Modal -->
   <div id="modal-card-edit" class="fixed inset-0 bg-slate-900/60 z-[1000] hidden items-center justify-center backdrop-blur-sm transition-opacity p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1200px] h-[95vh] overflow-hidden flex flex-col animate-[fade-in_0.2s_ease-out]">
@@ -697,6 +828,7 @@
     let bonusOrderPage = 1;
     let selectedOrgRootId = '';
     let organizationTreeData = null;
+    let currentDistributorCrmUserId = '';
     const BONUS_ORDER_PAGE_SIZE = 20;
     const BONUS_POLICY_TYPE = 'left_right_independent_split';
     let boundCardAutoSyncDone = false;
@@ -1316,16 +1448,290 @@
       body.innerHTML = nodes.map(node => renderOrgNode(node)).join('');
     }
 
+    function getUserId(u = {}) {
+      return u.userId || u.memberId || u.lineId || '';
+    }
+
+    function getRoleLabel(role) {
+      role = String(role || 'user').toLowerCase();
+      if (role === 'admin') return '總管';
+      if (role === 'store') return '店長';
+      if (role === 'tenant') return '租戶';
+      return '一般';
+    }
+
+    function getCrmStatus(user = {}) {
+      return user.crmStatus || user.distributorStatus || user.profileStatus || (user.phone ? 'active' : 'lead');
+    }
+
+    function getCrmStatusMeta(status) {
+      const map = {
+        lead: ['潛在', 'bg-slate-100 text-slate-600'],
+        contacted: ['已接觸', 'bg-blue-50 text-blue-600'],
+        interested: ['有興趣', 'bg-cyan-50 text-cyan-700'],
+        presentation: ['已說明', 'bg-indigo-50 text-indigo-600'],
+        pending_payment: ['待付款', 'bg-amber-50 text-amber-700'],
+        active: ['活躍', 'bg-emerald-50 text-emerald-700'],
+        incomplete: ['待補資料', 'bg-amber-50 text-amber-700'],
+        inactive: ['沉睡', 'bg-slate-100 text-slate-500'],
+        blocked: ['停權', 'bg-red-50 text-red-600'],
+        bound_card: ['已綁名片', 'bg-emerald-50 text-emerald-700']
+      };
+      return map[String(status || '').toLowerCase()] || [status || '未分類', 'bg-slate-100 text-slate-600'];
+    }
+
+    function getIntentMeta(intent) {
+      const map = {
+        cold: ['冷', 'bg-slate-100 text-slate-600'],
+        warm: ['溫', 'bg-amber-50 text-amber-700'],
+        hot: ['熱', 'bg-red-50 text-red-600'],
+        member: ['已成交', 'bg-emerald-50 text-emerald-700']
+      };
+      return map[String(intent || 'cold').toLowerCase()] || map.cold;
+    }
+
+    function getSponsorUser(user = {}) {
+      return findAdminUser(readSponsorId(user)) || null;
+    }
+
+    function getPlacementUser(user = {}) {
+      return findAdminUser(readPlacementParentId(user)) || null;
+    }
+
+    function getDirectDownlineCount(user = {}) {
+      const id = normalizeLineId(getUserId(user));
+      if (!id) return 0;
+      return (Array.isArray(allUsersData) ? allUsersData : []).filter(u => normalizeLineId(readSponsorId(u)) === id).length;
+    }
+
+    function getPlacementChildCount(user = {}) {
+      const id = normalizeLineId(getUserId(user));
+      if (!id) return 0;
+      return (Array.isArray(allUsersData) ? allUsersData : []).filter(u => normalizeLineId(readPlacementParentId(u)) === id).length;
+    }
+
+    function getQualificationProgress(user = {}) {
+      const left = user.qualificationLeftMemberId || user.leftQualifiedMemberId || user.leftQualified || '';
+      const right = user.qualificationRightMemberId || user.rightQualifiedMemberId || user.rightQualified || '';
+      const count = Math.min(2, Number(user.qualificationCount || user.qualifiedCount || 0) || (left ? 1 : 0) + (right ? 1 : 0));
+      return {
+        count,
+        text: isUserIndependent(user) ? '2/2 已獨立' : `${count}/2`,
+        left,
+        right
+      };
+    }
+
+    function getLatestBonusOrder(user = {}) {
+      const id = normalizeLineId(getUserId(user));
+      if (!id || !Array.isArray(allBonusOrdersData)) return null;
+      return allBonusOrdersData
+        .filter(o => normalizeLineId(o.tenantId) === id || normalizeLineId(o.buyerId) === id)
+        .sort((a, b) => new Date(b.paidAt || b.createdAt || 0) - new Date(a.paidAt || a.createdAt || 0))[0] || null;
+    }
+
+    function getAnnualFeeStatus(user = {}) {
+      const order = getLatestBonusOrder(user);
+      const expire = user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '';
+      if (order) {
+        const paid = order.status === 'paid' || order.status === 'completed';
+        return {
+          text: paid ? '已收款' : (order.status === 'cancelled' || order.status === 'void' ? '已取消' : '待收款'),
+          detail: expire ? `到期 ${formatDisplayTime(expire)}` : (order.orderId || ''),
+          className: paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+        };
+      }
+      if (expire) return { text: '有到期日', detail: formatDisplayTime(expire), className: 'bg-blue-50 text-blue-700' };
+      return { text: '未建立', detail: '尚無年費訂單', className: 'bg-slate-100 text-slate-500' };
+    }
+
+    function getLastInteraction(user = {}) {
+      const value = user.lastContactAt || user.nextFollowUpAt || user.lastActivityAt || user.lastLoginAt || user.updatedAt || user.createdAt || '';
+      return value ? formatDisplayTime(value) : '-';
+    }
+
+    function getUserCards(user = {}) {
+      const id = normalizeLineId(getUserId(user));
+      if (!id) return [];
+      return (Array.isArray(allCardsData) ? allCardsData : []).filter(c => normalizeLineId(c['LINE ID'] || c.lineId || c.userId) === id);
+    }
+
+    function crmInfoItem(label, value) {
+      return `<div class="bg-slate-50 rounded-lg border border-slate-100 p-3">
+        <div class="text-[11px] text-slate-400 font-bold">${label}</div>
+        <div class="text-sm text-slate-800 font-bold mt-1 break-words">${escapeHTML(value || '-')}</div>
+      </div>`;
+    }
+
+    function setInputValue(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.value = value || '';
+    }
+
+    function fillDistributorCrm(user = {}) {
+      const id = getUserId(user);
+      const sponsor = getSponsorUser(user);
+      const placement = getPlacementUser(user);
+      const progress = getQualificationProgress(user);
+      const fee = getAnnualFeeStatus(user);
+      const cards = getUserCards(user);
+      const order = getLatestBonusOrder(user);
+      const statusMeta = getCrmStatusMeta(getCrmStatus(user));
+      const intentMeta = getIntentMeta(user.intentLevel || user.crmIntent);
+      const role = getRoleLabel(user.role);
+      const directCount = getDirectDownlineCount(user);
+      const placementCount = getPlacementChildCount(user);
+
+      document.getElementById('crm-modal-title').innerText = `${user.name || '未命名'} 的經銷商 CRM`;
+      document.getElementById('crm-modal-subtitle').innerText = id;
+      setInputValue('crm-user-id', id);
+      setInputValue('crm-name', user.name || '');
+      setInputValue('crm-phone', user.phone || '');
+      setInputValue('crm-email', user.email || '');
+      setInputValue('crm-birthday', String(user.birthday || '').slice(0, 10));
+      setInputValue('crm-city', user.city || user.area || '');
+      setInputValue('crm-address', user.address || '');
+      setInputValue('crm-company-title', [user.companyName, user.title || user.industry].filter(Boolean).join(' / '));
+      setInputValue('crm-status', getCrmStatus(user));
+      setInputValue('crm-intent', user.intentLevel || user.crmIntent || 'cold');
+      setInputValue('crm-joined-at', String(user.joinedAt || user.createdAt || '').slice(0, 10));
+      setInputValue('crm-expire-at', String(user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '').slice(0, 10));
+      setInputValue('crm-tags', user.tags || user.crmTags || '');
+      setInputValue('crm-last-contact', String(user.lastContactAt || '').slice(0, 10));
+      setInputValue('crm-next-follow', String(user.nextFollowUpAt || '').slice(0, 10));
+      setInputValue('crm-owner', user.followOwner || user.crmOwner || adminProfile?.displayName || adminProfile?.name || '');
+      setInputValue('crm-notes', user.crmNotes || user.notes || '');
+
+      document.getElementById('crm-summary-cards').innerHTML = [
+        ['CRM 階段', statusMeta[0], statusMeta[1]],
+        ['意向等級', intentMeta[0], intentMeta[1]],
+        ['獨立進度', progress.text, isUserIndependent(user) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'],
+        ['年費狀態', fee.text, fee.className]
+      ].map(([label, value, cls]) => `<div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div class="text-[12px] text-slate-400 font-bold">${label}</div>
+        <div class="inline-flex mt-2 px-3 py-1 rounded-full text-sm font-black ${cls}">${value}</div>
+      </div>`).join('');
+
+      document.getElementById('crm-org-grid').innerHTML = [
+        crmInfoItem('會員編號', id),
+        crmInfoItem('角色 / 階級', role),
+        crmInfoItem('推薦人', sponsor ? `${sponsor.name || '未命名'} / ${readSponsorId(user)}` : readSponsorId(user) || '未指定'),
+        crmInfoItem('安置上線', placement ? `${placement.name || '未命名'} / ${readPlacementParentId(user)}` : readPlacementParentId(user) || '未指定'),
+        crmInfoItem('安置位置', readPlacementSide(user) || '未指定'),
+        crmInfoItem('直推人數', `${directCount} 人`),
+        crmInfoItem('安置下線', `${placementCount} 人`),
+        crmInfoItem('左右資格', `左：${progress.left ? '完成' : '未完成'} / 右：${progress.right ? '完成' : '未完成'}`)
+      ].join('');
+
+      document.getElementById('crm-finance-grid').innerHTML = [
+        crmInfoItem('年費狀態', fee.text),
+        crmInfoItem('年費備註', fee.detail),
+        crmInfoItem('最近訂單', order?.orderId || '尚無'),
+        crmInfoItem('最近付款', order?.paidAt ? formatDisplayTime(order.paidAt) : '-'),
+        crmInfoItem('累計獎金', formatCurrency(user.totalBonus || user.bonusTotal || 0)),
+        crmInfoItem('待結算', formatCurrency(user.pendingBonus || 0)),
+        crmInfoItem('已結算', formatCurrency(user.settledBonus || 0)),
+        crmInfoItem('異常待審', user.bonusReviewRequired ? '是' : '否')
+      ].join('');
+
+      document.getElementById('crm-activity-card-grid').innerHTML = [
+        crmInfoItem('已綁名片', cards.length ? `${cards.length} 張` : '否'),
+        crmInfoItem('名片公開', user.cardPublicStatus || user.publicCardStatus || '未設定'),
+        crmInfoItem('名片健檢', user.cardReviewStatus || '未檢查'),
+        crmInfoItem('活動報名', user.activityCount ? `${user.activityCount} 次` : '待同步'),
+        crmInfoItem('最近活動', user.lastActivityAt ? formatDisplayTime(user.lastActivityAt) : '-'),
+        crmInfoItem('名片交換', user.cardExchangeCount ? `${user.cardExchangeCount} 次` : '待同步')
+      ].join('');
+
+      document.getElementById('crm-system-grid').innerHTML = [
+        crmInfoItem('資料來源', user.source || 'LINE / 後台'),
+        crmInfoItem('最後登入', user.lastLoginAt ? formatDisplayTime(user.lastLoginAt) : '-'),
+        crmInfoItem('最後同步', user.syncedAt || user.updatedAt ? formatDisplayTime(user.syncedAt || user.updatedAt) : '-'),
+        crmInfoItem('Token 狀態', user.tokenStatus || '未記錄'),
+        crmInfoItem('是否停權', user.blocked || user.isBlocked ? '是' : '否'),
+        crmInfoItem('建立時間', user.createdAt ? formatDisplayTime(user.createdAt) : '-')
+      ].join('');
+    }
+
+    function openDistributorCrm(userId) {
+      const user = findAdminUser(userId);
+      if (!user) return showToast('找不到 CRM 用戶', true);
+      currentDistributorCrmUserId = getUserId(user);
+      fillDistributorCrm(user);
+      const modal = document.getElementById('modal-distributor-crm');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeDistributorCrm() {
+      const modal = document.getElementById('modal-distributor-crm');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      currentDistributorCrmUserId = '';
+    }
+
+    async function saveDistributorCrm() {
+      const userId = document.getElementById('crm-user-id')?.value || currentDistributorCrmUserId;
+      if (!userId) return showToast('找不到 CRM 用戶 ID', true);
+      const companyTitle = String(document.getElementById('crm-company-title')?.value || '');
+      const companyParts = companyTitle.split('/').map(v => v.trim());
+      const payload = {
+        userId,
+        name: document.getElementById('crm-name')?.value || '',
+        phone: document.getElementById('crm-phone')?.value || '',
+        email: document.getElementById('crm-email')?.value || '',
+        birthday: document.getElementById('crm-birthday')?.value || '',
+        city: document.getElementById('crm-city')?.value || '',
+        address: document.getElementById('crm-address')?.value || '',
+        companyName: companyParts[0] || '',
+        title: companyParts.slice(1).join(' / '),
+        crmStatus: document.getElementById('crm-status')?.value || 'lead',
+        intentLevel: document.getElementById('crm-intent')?.value || 'cold',
+        joinedAt: document.getElementById('crm-joined-at')?.value || '',
+        annualFeeExpireAt: document.getElementById('crm-expire-at')?.value || '',
+        tags: document.getElementById('crm-tags')?.value || '',
+        lastContactAt: document.getElementById('crm-last-contact')?.value || '',
+        nextFollowUpAt: document.getElementById('crm-next-follow')?.value || '',
+        followOwner: document.getElementById('crm-owner')?.value || '',
+        crmNotes: document.getElementById('crm-notes')?.value || '',
+        updatedAt: new Date().toISOString()
+      };
+      const res = await fetchAPI('updateUserProfile', payload);
+      if (res) {
+        const idx = allUsersData.findIndex(u => normalizeLineId(getUserId(u)) === normalizeLineId(userId));
+        if (idx >= 0) allUsersData[idx] = { ...allUsersData[idx], ...payload };
+        renderUsersTable(allUsersData);
+        fillDistributorCrm(allUsersData[idx] || payload);
+        showToast('CRM 已儲存');
+      }
+    }
+
+    function openCrmOrganizationRoot() {
+      const user = findAdminUser(currentDistributorCrmUserId);
+      if (!user) return;
+      closeDistributorCrm();
+      switchTab('bonus');
+      setTimeout(() => {
+        selectOrgRoot(getUserId(user));
+        loadOrganizationTree();
+        document.getElementById('org-tree-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    }
+
     async function loadUsers() {
       const tbody = document.getElementById('users-table-body');
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>';
-      const [usersRes, cardsRes] = await Promise.all([
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入中...</td></tr>';
+      const [usersRes, cardsRes, ordersRes] = await Promise.all([
         fetchAPI('getAllUsers', {}, { silent: true }),
-        fetchAPI('getCardContacts', {}, { silent: true })
+        fetchAPI('getCardContacts', {}, { silent: true }),
+        fetchAPI('mlmListOrders', { orderType: 'tenant_annual_fee', page: 1, pageSize: 100, status: 'all' }, { silent: true })
       ]);
       if (Array.isArray(usersRes) || Array.isArray(cardsRes)) {
         let users = Array.isArray(usersRes) ? usersRes : [];
         const cards = Array.isArray(cardsRes) ? cardsRes : [];
+        const orders = Array.isArray(ordersRes) ? ordersRes : (Array.isArray(ordersRes?.orders) ? ordersRes.orders : (Array.isArray(ordersRes?.data) ? ordersRes.data : []));
+        allCardsData = cards;
+        if (orders.length) allBonusOrdersData = orders.map(normalizeBonusOrder);
         const sync = await registerBoundCardUsers(users, cards);
         if (sync.created > 0) {
           const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: true });
@@ -1337,7 +1743,7 @@
         allUsersData = mergeUsersWithBoundCards(users, cards);
         renderUsersTable(allUsersData);
       } else {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-400">載入失敗，請重新整理</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-400">載入失敗，請重新整理</td></tr>';
         showToast('無法取得用戶名冊', true);
       }
     }
@@ -1347,28 +1753,60 @@
       const list = Array.isArray(users) ? users : [];
       document.getElementById('stat-users').innerText = list.length;
       if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">目前沒有用戶資料</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有用戶資料</td></tr>';
         return;
       }
       tbody.innerHTML = list.map(u => {
         const role = u.role || 'user';
         const isBoundCard = u.source === 'bound_card' || u.profileStatus === 'bound_card';
+        const id = getUserId(u);
+        const status = getCrmStatusMeta(getCrmStatus(u));
+        const intent = getIntentMeta(u.intentLevel || u.crmIntent);
+        const sponsor = getSponsorUser(u);
+        const placement = getPlacementUser(u);
+        const progress = getQualificationProgress(u);
+        const fee = getAnnualFeeStatus(u);
+        const crmTitle = escapeHTML(u.name || '未命名');
         return `
         <tr>
-          <td class="font-bold text-slate-700">
-            ${escapeHTML(u.name || '未命名')}
-            ${isBoundCard ? '<span class="ml-2 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-black">已綁名片</span>' : ''}
-          </td>
-          <td class="text-xs text-slate-400 font-mono">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
-          <td>${escapeHTML(u.phone || '-')}</td>
-          <td class="text-sm">${escapeHTML(u.networkId || 'admin')}</td>
           <td>
-            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
-              ${role.toUpperCase()}
-            </span>
+            <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="font-black text-slate-800 hover:text-blue-600">${crmTitle}</button>
+            <div class="mt-1 flex flex-wrap gap-1.5">
+              <span class="px-2 py-0.5 rounded-full text-[11px] font-black ${status[1]}">${status[0]}</span>
+              <span class="px-2 py-0.5 rounded-full text-[11px] font-black ${intent[1]}">意向 ${intent[0]}</span>
+              ${isBoundCard ? '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-black">已綁名片</span>' : ''}
+            </div>
+            <div class="text-[11px] text-slate-400 font-mono mt-1">${escapeHTML(id ? id.substring(0, 10) + '...' : '-')}</div>
           </td>
-          <td class="text-right">
-            <select onchange="updateRole('${escapeHTML(u.userId || '')}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
+          <td>
+            <div class="text-sm text-slate-700">${escapeHTML(u.phone || '-')}</div>
+            <div class="text-[12px] text-slate-400">${escapeHTML(u.email || u.companyName || u.industry || '-')}</div>
+          </td>
+          <td>
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-black ${role === 'admin' ? 'bg-purple-100 text-purple-700' : (role === 'store' || role === 'tenant' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700')}">
+              ${escapeHTML(getRoleLabel(role))}
+            </span>
+            <div class="text-[12px] text-slate-400 mt-1">${escapeHTML(u.networkId || u.storeId || 'admin')}</div>
+          </td>
+          <td>
+            <div class="text-[13px] text-slate-700">薦：${escapeHTML(sponsor?.name || readSponsorId(u) || '-')}</div>
+            <div class="text-[12px] text-slate-400 mt-1">置：${escapeHTML(placement?.name || readPlacementParentId(u) || '-')} ${readPlacementSide(u) ? '/' + escapeHTML(readPlacementSide(u)) : ''}</div>
+          </td>
+          <td>
+            <span class="px-2 py-1 rounded-lg text-[12px] font-black ${isUserIndependent(u) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${escapeHTML(progress.text)}</span>
+            <div class="text-[11px] text-slate-400 mt-1">直推 ${getDirectDownlineCount(u)} / 安置 ${getPlacementChildCount(u)}</div>
+          </td>
+          <td>
+            <span class="px-2 py-1 rounded-lg text-[12px] font-black ${fee.className}">${escapeHTML(fee.text)}</span>
+            <div class="text-[11px] text-slate-400 mt-1">${escapeHTML(fee.detail || '-')}</div>
+          </td>
+          <td>
+            <div class="text-[13px] text-slate-700">${escapeHTML(getLastInteraction(u))}</div>
+            <div class="text-[11px] text-slate-400 mt-1">下次 ${escapeHTML(u.nextFollowUpAt ? formatDisplayTime(u.nextFollowUpAt) : '-')}</div>
+          </td>
+          <td class="text-right whitespace-nowrap">
+            <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-700 text-xs font-bold mr-2">CRM</button>
+            <select onchange="updateRole('${escapeHTML(id)}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
               <option value="user" ${role==='user'?'selected':''}>一般</option>
               <option value="store" ${role==='store'?'selected':''}>店長</option>
               <option value="admin" ${role==='admin'?'selected':''}>總管</option>
