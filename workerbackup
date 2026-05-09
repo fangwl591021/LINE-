@@ -567,6 +567,215 @@ const TrackingModule = {
   }
 };
 
+const BONUS_POLICY_TYPE = 'left_right_independent_split';
+
+const BonusPolicyModule = {
+  getPolicy(payload = {}) {
+    const bv = Number(payload.bv || payload.bonusBV || payload.bonusAmount || 3000);
+    const splitBonus = Number(payload.bonusPolicy?.splitBonus || payload.splitBonus || Math.floor(bv / 2));
+    return {
+      type: BONUS_POLICY_TYPE,
+      grossAmount: Number(payload.grossAmount || payload.price || payload.fee || payload.amount || 6300),
+      bv,
+      directFullBonus: Number(payload.bonusPolicy?.directFullBonus || payload.bonusPolicy?.independentBonus || payload.directFullBonus || bv),
+      directSplitBonus: splitBonus,
+      sponsorSplitBonus: Number(payload.bonusPolicy?.sponsorSplitBonus || payload.sponsorSplitBonus || (bv - splitBonus)),
+      renewalReferralBonus: Number(payload.bonusPolicy?.renewalReferralBonus || payload.renewalReferralBonus || splitBonus),
+      renewalPlacementBonus: Number(payload.bonusPolicy?.renewalPlacementBonus || payload.renewalPlacementBonus || splitBonus),
+      qualificationRequired: 2,
+      freezeDays: Number(payload.bonusPolicy?.freezeDays || payload.freezeDays || 14)
+    };
+  },
+
+  normalizeSide(side) {
+    const value = String(side || '').toLowerCase();
+    if (value === 'left' || value === 'l' || value === '左') return 'left';
+    if (value === 'right' || value === 'r' || value === '右') return 'right';
+    return '';
+  },
+
+  isIndependent(profile = {}) {
+    if (profile.isIndependent === true || profile.independent === true) return true;
+    if (profile.independentAt || profile.independenceAt) return true;
+    if (String(profile.qualificationStatus || '').toLowerCase() === 'independent') return true;
+    const leftDone = !!(profile.qualificationLeftMemberId || profile.leftQualifiedMemberId || profile.leftQualified);
+    const rightDone = !!(profile.qualificationRightMemberId || profile.rightQualifiedMemberId || profile.rightQualified);
+    if (leftDone && rightDone) return true;
+    return Number(profile.qualificationCount || profile.qualifiedCount || 0) >= 2;
+  },
+
+  getRecruiterProfile(payload = {}) {
+    return {
+      ...(payload.recruiter || {}),
+      isIndependent: payload.recruiterIsIndependent ?? payload.isRecruiterIndependent,
+      independentAt: payload.recruiterIndependentAt,
+      qualificationCount: payload.recruiterQualificationCount,
+      qualificationLeftMemberId: payload.recruiterQualificationLeftMemberId,
+      qualificationRightMemberId: payload.recruiterQualificationRightMemberId
+    };
+  },
+
+  resolveRecruiterId(payload = {}) {
+    return payload.recruiterId || payload.sponsorId || payload.referrerId || payload.introducerId || payload.recommenderId || '';
+  },
+
+  resolveRecruiterSponsorId(payload = {}) {
+    return payload.recruiterSponsorId || payload.sponsorSponsorId || payload.recruiterUplineId || payload.uplineSponsorId || '';
+  },
+
+  addTransaction(plan, item) {
+    if (!item.memberId || Number(item.amount || 0) <= 0) return;
+    const idSuffix = plan.transactions.length + 1;
+    plan.transactions.push({
+      transactionId: item.transactionId || `${plan.orderId}-${String(idSuffix).padStart(2, '0')}`,
+      orderId: plan.orderId,
+      memberId: item.memberId,
+      sourceMemberId: plan.sourceMemberId,
+      bonusType: item.bonusType,
+      amount: Number(item.amount),
+      currency: plan.currency,
+      status: 'pending',
+      freezeUntil: plan.freezeUntil,
+      note: item.note || ''
+    });
+  },
+
+  getEventTime(payload = {}) {
+    const raw = payload.paidAt || payload.createdAt || Date.now();
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? new Date() : date;
+  },
+
+  buildPlan(payload = {}) {
+    const policy = this.getPolicy(payload);
+    const now = this.getEventTime(payload);
+    const freezeUntil = new Date(now.getTime() + policy.freezeDays * 24 * 60 * 60 * 1000).toISOString();
+    const orderType = payload.orderType || 'tenant_annual_fee';
+    const orderId = payload.orderId || '';
+    const buyerId = payload.buyerId || payload.tenantId || payload.userId || '';
+    const recruiterId = this.resolveRecruiterId(payload);
+    const recruiterSponsorId = this.resolveRecruiterSponsorId(payload);
+    const placementParentId = payload.placementParentId || payload.placementOwnerId || payload.parentId || '';
+    const placementSide = this.normalizeSide(payload.placementSide || payload.qualificationSide);
+    const recruiterProfile = this.getRecruiterProfile(payload);
+    const recruiterIndependent = this.isIndependent(recruiterProfile);
+    const plan = {
+      policyType: policy.type,
+      orderId,
+      orderType,
+      sourceMemberId: buyerId,
+      currency: payload.currency || 'TWD',
+      status: 'pending',
+      freezeDays: policy.freezeDays,
+      freezeUntil,
+      policy,
+      relationships: {
+        recruiterId,
+        recruiterSponsorId,
+        placementParentId,
+        placementSide
+      },
+      qualificationUpdate: null,
+      transactions: [],
+      warnings: []
+    };
+
+    if (!orderId) plan.warnings.push('missing_order_id');
+    if (!buyerId) plan.warnings.push('missing_buyer_id');
+
+    if (orderType === 'tenant_renewal_fee') {
+      if (recruiterId) {
+        this.addTransaction(plan, {
+          memberId: recruiterId,
+          bonusType: 'renewal_referral',
+          amount: policy.renewalReferralBonus,
+          note: '年度續約：直接推薦獎金'
+        });
+      } else {
+        plan.warnings.push('missing_recruiter_for_renewal');
+      }
+
+      if (placementParentId) {
+        this.addTransaction(plan, {
+          memberId: placementParentId,
+          bonusType: 'renewal_placement',
+          amount: policy.renewalPlacementBonus,
+          note: '年度續約：當下安置獎金'
+        });
+      } else {
+        plan.warnings.push('missing_placement_parent_for_renewal');
+      }
+    } else {
+      if (!recruiterId) {
+        plan.warnings.push('missing_recruiter');
+      } else if (recruiterIndependent) {
+        this.addTransaction(plan, {
+          memberId: recruiterId,
+          bonusType: 'direct_full',
+          amount: policy.directFullBonus,
+          note: '推薦人已獨立，取得全額 BV'
+        });
+      } else {
+        this.addTransaction(plan, {
+          memberId: recruiterId,
+          bonusType: 'direct_split',
+          amount: policy.directSplitBonus,
+          note: '推薦人未獨立，推薦人取得半額'
+        });
+
+        if (recruiterSponsorId) {
+          this.addTransaction(plan, {
+            memberId: recruiterSponsorId,
+            bonusType: 'sponsor_split',
+            amount: policy.sponsorSplitBonus,
+            note: '推薦人未獨立，上線取得半額'
+          });
+        } else {
+          plan.warnings.push('missing_recruiter_sponsor');
+        }
+
+        plan.qualificationUpdate = {
+          ownerId: recruiterId,
+          sourceMemberId: buyerId,
+          side: placementSide,
+          requiredCount: policy.qualificationRequired,
+          countsTowardIndependence: true,
+          completesIndependence: this.wouldCompleteIndependence(recruiterProfile, placementSide)
+        };
+        if (!placementSide) plan.warnings.push('missing_qualification_side');
+      }
+    }
+
+    if (plan.warnings.length) plan.status = 'review_required';
+    return plan;
+  },
+
+  wouldCompleteIndependence(profile = {}, side = '') {
+    const normalizedSide = this.normalizeSide(side);
+    const leftDone = !!(profile.qualificationLeftMemberId || profile.leftQualifiedMemberId || profile.leftQualified);
+    const rightDone = !!(profile.qualificationRightMemberId || profile.rightQualifiedMemberId || profile.rightQualified);
+    if (this.isIndependent(profile)) return false;
+    if (normalizedSide === 'left') return rightDone;
+    if (normalizedSide === 'right') return leftDone;
+    return Number(profile.qualificationCount || profile.qualifiedCount || 0) >= 1;
+  },
+
+  preview(payload = {}) {
+    return { success: true, data: this.buildPlan(payload) };
+  },
+
+  buildTreeQuery(payload = {}) {
+    return {
+      memberId: payload.memberId || payload.userId || '',
+      treeType: payload.treeType || 'placement',
+      depth: Math.min(10, Math.max(1, Number(payload.depth || 3))),
+      includeBonusSummary: payload.includeBonusSummary !== false,
+      includeQualification: true,
+      policyType: BONUS_POLICY_TYPE
+    };
+  }
+};
+
 const TenantOrderModule = {
   async createTenantBonusOrder(payload, env) {
     const now = new Date().toISOString();
@@ -584,6 +793,12 @@ const TenantOrderModule = {
       status: payload.status || 'pending_payment',
       paymentProvider: payload.paymentProvider || 'manual',
       paymentNo: payload.paymentNo || '',
+      sponsorId: payload.sponsorId || payload.recruiterId || payload.referrerId || '',
+      recruiterId: payload.recruiterId || payload.sponsorId || payload.referrerId || '',
+      recruiterSponsorId: payload.recruiterSponsorId || payload.sponsorSponsorId || payload.recruiterUplineId || '',
+      placementParentId: payload.placementParentId || payload.placementOwnerId || payload.parentId || '',
+      placementSide: BonusPolicyModule.normalizeSide(payload.placementSide || payload.qualificationSide),
+      bonusPolicyType: BONUS_POLICY_TYPE,
       createdAt: now,
       updatedAt: now
     };
@@ -641,6 +856,18 @@ const MLMModule = {
       paymentProvider: payload.paymentProvider || 'manual',
       paymentNo: payload.paymentNo || payload.tradeNo || '',
       bonusStatus: payload.bonusStatus || 'not_generated',
+      bonusPolicyType: payload.bonusPolicyType || payload.bonusPolicy?.type || BONUS_POLICY_TYPE,
+      sponsorId: payload.sponsorId || payload.recruiterId || payload.referrerId || '',
+      recruiterId: payload.recruiterId || payload.sponsorId || payload.referrerId || '',
+      recruiterSponsorId: payload.recruiterSponsorId || payload.sponsorSponsorId || payload.recruiterUplineId || '',
+      placementParentId: payload.placementParentId || payload.placementOwnerId || payload.parentId || '',
+      placementSide: BonusPolicyModule.normalizeSide(payload.placementSide || payload.qualificationSide),
+      qualificationSide: BonusPolicyModule.normalizeSide(payload.qualificationSide || payload.placementSide),
+      recruiterIsIndependent: payload.recruiterIsIndependent ?? payload.isRecruiterIndependent ?? false,
+      recruiterIndependentAt: payload.recruiterIndependentAt || '',
+      recruiterQualificationCount: Number(payload.recruiterQualificationCount || 0),
+      recruiterQualificationLeftMemberId: payload.recruiterQualificationLeftMemberId || '',
+      recruiterQualificationRightMemberId: payload.recruiterQualificationRightMemberId || '',
       createdAt: payload.createdAt || now,
       updatedAt: now,
       source: payload.source || 'admin'
@@ -659,7 +886,10 @@ const MLMModule = {
       await env.ACTMASTER_KV.put(key, '1', { expirationTtl: 60 * 60 * 24 * 30 });
     }
 
-    return await DBModule.forward('mlmCreateOrder', order, env);
+    return await DBModule.forward('mlmCreateOrder', {
+      ...order,
+      bonusPlanPreview: BonusPolicyModule.buildPlan(order)
+    }, env);
   },
 
   async markOrderPaid(payload, env) {
@@ -676,19 +906,32 @@ const MLMModule = {
       await env.ACTMASTER_KV.put(paymentKey, orderId, { expirationTtl: 60 * 60 * 24 * 365 });
     }
 
+    const planInput = {
+      ...payload,
+      orderId,
+      paidAt: payload.paidAt || new Date().toISOString()
+    };
+    const bonusPlan = BonusPolicyModule.buildPlan(planInput);
     const paidPayload = {
       ...payload,
       paymentStatus: 'paid',
       status: 'paid',
-      paidAt: payload.paidAt || new Date().toISOString(),
+      paidAt: planInput.paidAt,
       triggerBonus: payload.triggerBonus !== false,
       freezeDays: Number(payload.freezeDays || payload.bonusPolicy?.freezeDays || 14),
       bonusPolicy: {
-        type: payload.bonusPolicy?.type || 'retire_binary_split',
-        independentBonus: Number(payload.bonusPolicy?.independentBonus || payload.bv || 3000),
-        splitBonus: Number(payload.bonusPolicy?.splitBonus || Math.floor(Number(payload.bv || 3000) / 2)),
+        type: BONUS_POLICY_TYPE,
+        directFullBonus: Number(payload.bonusPolicy?.directFullBonus || payload.bonusPolicy?.independentBonus || payload.bv || 3000),
+        directSplitBonus: Number(payload.bonusPolicy?.directSplitBonus || payload.bonusPolicy?.splitBonus || Math.floor(Number(payload.bv || 3000) / 2)),
+        sponsorSplitBonus: Number(payload.bonusPolicy?.sponsorSplitBonus || Math.ceil(Number(payload.bv || 3000) / 2)),
+        renewalReferralBonus: Number(payload.bonusPolicy?.renewalReferralBonus || Math.floor(Number(payload.bv || 3000) / 2)),
+        renewalPlacementBonus: Number(payload.bonusPolicy?.renewalPlacementBonus || Math.floor(Number(payload.bv || 3000) / 2)),
+        qualificationRequired: 2,
         freezeDays: Number(payload.bonusPolicy?.freezeDays || payload.freezeDays || 14)
       },
+      bonusPolicyType: BONUS_POLICY_TYPE,
+      bonusPlan,
+      bonusStatus: payload.triggerBonus === false ? 'not_generated' : bonusPlan.status,
       updatedAt: new Date().toISOString()
     };
 
@@ -724,7 +967,9 @@ const MLMModule = {
       status: payload.status || 'all',
       keyword: payload.keyword || '',
       buyerId: payload.buyerId || '',
-      networkId: payload.networkId || ''
+      networkId: payload.networkId || '',
+      orderType: payload.orderType || '',
+      bonusPolicyType: payload.bonusPolicyType || ''
     }, env);
   },
 
@@ -759,11 +1004,18 @@ const MLMModule = {
   },
 
   async getMemberTree(payload, env) {
-    return await DBModule.forward('mlmGetMemberTree', {
-      memberId: payload.memberId || payload.userId || '',
-      treeType: payload.treeType || 'sponsor',
-      depth: Math.min(10, Number(payload.depth || 3))
-    }, env);
+    return await DBModule.forward('mlmGetMemberTree', BonusPolicyModule.buildTreeQuery(payload), env);
+  },
+
+  async previewBonusPlan(payload, env) {
+    return BonusPolicyModule.preview(payload);
+  },
+
+  async getOrganizationTree(payload, env) {
+    const query = BonusPolicyModule.buildTreeQuery(payload);
+    const result = await DBModule.forward('mlmGetOrganizationTree', query, env);
+    if (result && result.success !== false) return result;
+    return await DBModule.forward('mlmGetMemberTree', query, env);
   }
 };
 
@@ -831,6 +1083,8 @@ async function dispatchAction(action, payload, request, env) {
     case 'mlmCreateSettlementBatch': return await MLMModule.createSettlementBatch(payload, env);
     case 'mlmLockSettlementBatch': return await MLMModule.lockSettlementBatch(payload, env);
     case 'mlmGetMemberTree':       return await MLMModule.getMemberTree(payload, env);
+    case 'mlmPreviewBonusPlan':     return await MLMModule.previewBonusPlan(payload, env);
+    case 'mlmGetOrganizationTree':  return await MLMModule.getOrganizationTree(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
     default:                       return await DBModule.forward(action, payload, env);

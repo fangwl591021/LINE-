@@ -151,6 +151,7 @@
             </table>
           </div>
         </div>
+
       </div>
 
       <!-- Tab: Activities -->
@@ -268,7 +269,7 @@
           <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <p class="text-slate-400 text-xs font-bold mb-1">建議提撥 BV</p>
             <h3 class="text-3xl font-black text-emerald-600">NT$ 3,000</h3>
-            <p class="text-[12px] text-slate-500 mt-2">沿用 retire 制度的入會/續約獎金基準</p>
+              <p class="text-[12px] text-slate-500 mt-2">左右雙位獨立分潤制的年費獎金基準</p>
           </div>
           <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
             <p class="text-slate-400 text-xs font-bold mb-1">平台保留</p>
@@ -286,7 +287,7 @@
           <summary class="px-5 py-4 cursor-pointer list-none flex items-center justify-between gap-4">
             <div>
               <h3 class="font-black text-slate-800">制度規則與試算</h3>
-              <p class="text-[12px] text-slate-500 mt-1">展開查看 retire 分潤規則、BV、稅額與平台保留試算。</p>
+              <p class="text-[12px] text-slate-500 mt-1">展開查看左右雙位獨立規則、BV、稅額與平台保留試算。</p>
             </div>
             <span class="material-symbols-outlined text-slate-400">expand_more</span>
           </summary>
@@ -295,7 +296,7 @@
             <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
               <div>
                 <h3 class="font-black text-slate-800">制度規則整合</h3>
-                <p class="text-[12px] text-slate-500 mt-1">依 retire 專案邏輯改為租戶年費版，先做後台制度控管與試算。</p>
+                <p class="text-[12px] text-slate-500 mt-1">推薦獎金與獨立資格分開處理，訂單收款後才產生 pending 流水。</p>
               </div>
               <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[12px] font-black">6300 含稅版</span>
             </div>
@@ -320,13 +321,13 @@
                     <td class="font-bold text-slate-700">推薦人未獨立</td>
                     <td>推薦人與上線各半</td>
                     <td class="font-black text-blue-600">1,500 / 1,500</td>
-                    <td class="text-slate-500">沿用 retire 的未獨立拆半制度。</td>
+                    <td class="text-slate-500">前兩位左右各一仍安置在自己底下，用來完成獨立資格。</td>
                   </tr>
                   <tr>
                     <td class="font-bold text-slate-700">年度續約</td>
-                    <td>依同一 BV 規則撥發</td>
-                    <td class="font-black text-slate-700">NT$ 3,000</td>
-                    <td class="text-slate-500">作為租戶每年續約獎金基準。</td>
+                    <td>推薦與安置各 1,500</td>
+                    <td class="font-black text-slate-700">1,500 / 1,500</td>
+                    <td class="text-slate-500">直接推薦與當下安置在自己底下的租戶續約，分別計算。</td>
                   </tr>
                   <tr>
                     <td class="font-bold text-slate-700">退款/退租</td>
@@ -436,6 +437,38 @@
                 <tr><td colspan="8" class="text-center py-8 text-slate-400">尚未載入訂單</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+            <div>
+              <h3 class="font-black text-slate-800">組織圖生成與查詢</h3>
+              <p class="text-[12px] text-slate-500 mt-1">可用推薦關係或安置關係查詢，搭配獨立資格與左右位狀態檢查。</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_130px_110px_auto] gap-2 w-full xl:w-[760px]">
+              <div class="relative">
+                <input id="org-root-search" type="text" oninput="searchOrgMembers()" onfocus="searchOrgMembers()" placeholder="搜尋根節點會員..." class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white">
+                <input id="org-root-member" type="hidden">
+                <div id="org-root-results" class="hidden absolute left-0 right-0 top-[42px] z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto"></div>
+              </div>
+              <select id="org-tree-type" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="placement">安置樹</option>
+                <option value="sponsor">推薦樹</option>
+              </select>
+              <select id="org-tree-depth" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="2">2 層</option>
+                <option value="3" selected>3 層</option>
+                <option value="5">5 層</option>
+                <option value="10">10 層</option>
+              </select>
+              <button type="button" onclick="loadOrganizationTree()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-transform">
+                <span class="material-symbols-outlined text-[17px]">account_tree</span> 查詢
+              </button>
+            </div>
+          </div>
+          <div id="org-tree-body" class="p-5 text-sm text-slate-500">
+            請選擇會員後查詢組織圖。
           </div>
         </div>
       </div>
@@ -662,7 +695,10 @@
     let allBonusOrdersData = [];
     let selectedBonusTenantId = '';
     let bonusOrderPage = 1;
+    let selectedOrgRootId = '';
+    let organizationTreeData = null;
     const BONUS_ORDER_PAGE_SIZE = 20;
+    const BONUS_POLICY_TYPE = 'left_right_independent_split';
     let boundCardAutoSyncDone = false;
     let boundCardSyncRunning = false;
     let currentEditButtons = []; 
@@ -838,6 +874,52 @@
       if (box) box.classList.add('hidden');
     }
 
+    function findAdminUser(userId) {
+      return (Array.isArray(allUsersData) ? allUsersData : []).find(u => String(u.userId || u.memberId || '') === String(userId || '')) || null;
+    }
+
+    function readSponsorId(user = {}) {
+      return user.sponsorId || user.recruiterId || user.referrerId || user.recommenderId || user.inviterId || user.parentSponsorId || '';
+    }
+
+    function readPlacementParentId(user = {}) {
+      return user.placementParentId || user.placementOwnerId || user.parentId || user.uplineId || readSponsorId(user) || '';
+    }
+
+    function readPlacementSide(user = {}) {
+      const side = String(user.placementSide || user.qualificationSide || user.side || '').toLowerCase();
+      if (side === 'left' || side === 'l' || side === '左') return 'left';
+      if (side === 'right' || side === 'r' || side === '右') return 'right';
+      return '';
+    }
+
+    function isUserIndependent(user = {}) {
+      if (user.isIndependent === true || user.independent === true) return true;
+      if (user.independentAt || user.independenceAt) return true;
+      if (String(user.qualificationStatus || '').toLowerCase() === 'independent') return true;
+      const hasLeft = !!(user.qualificationLeftMemberId || user.leftQualifiedMemberId || user.leftQualified);
+      const hasRight = !!(user.qualificationRightMemberId || user.rightQualifiedMemberId || user.rightQualified);
+      return (hasLeft && hasRight) || Number(user.qualificationCount || user.qualifiedCount || 0) >= 2;
+    }
+
+    function buildBonusRelationshipPayload(tenant = {}) {
+      const sponsorId = readSponsorId(tenant);
+      const recruiter = findAdminUser(sponsorId) || {};
+      return {
+        sponsorId,
+        recruiterId: sponsorId,
+        recruiterSponsorId: readSponsorId(recruiter),
+        placementParentId: readPlacementParentId(tenant),
+        placementSide: readPlacementSide(tenant),
+        qualificationSide: readPlacementSide(tenant),
+        recruiterIsIndependent: isUserIndependent(recruiter),
+        recruiterIndependentAt: recruiter.independentAt || recruiter.independenceAt || '',
+        recruiterQualificationCount: Number(recruiter.qualificationCount || recruiter.qualifiedCount || 0),
+        recruiterQualificationLeftMemberId: recruiter.qualificationLeftMemberId || recruiter.leftQualifiedMemberId || '',
+        recruiterQualificationRightMemberId: recruiter.qualificationRightMemberId || recruiter.rightQualifiedMemberId || ''
+      };
+    }
+
     function renderBonusSystem() {
       const fee = Number(document.getElementById('bonus-year-fee')?.value || 6300);
       const bv = Number(document.getElementById('bonus-bv')?.value || 3000);
@@ -867,12 +949,14 @@
       const bv = Number(document.getElementById('bonus-bv')?.value || 3000);
       const half = Math.floor(bv / 2);
       const text = [
-        '獎金制度摘要',
+        '左右雙位獨立分潤制摘要',
         `租戶年費：${formatCurrency(fee)} 含稅`,
-        `建議提撥 BV：${formatCurrency(bv)}`,
+        `入會 BV：${formatCurrency(bv)}`,
         `推薦人已獨立：推薦人取得 ${formatCurrency(bv)}`,
-        `推薦人未獨立：推薦人 ${formatCurrency(half)} / 上線 ${formatCurrency(bv - half)}`,
-        '獎金凍結期：14 天，退款或退租可作廢 pending 流水'
+        `推薦人未獨立：推薦人取得 ${formatCurrency(half)}，推薦人的上線取得 ${formatCurrency(bv - half)}`,
+        '獨立資格：每位租戶需完成左右各一位合格租戶，左右兩位仍先安置在自己底下',
+        `年度續約：直接推薦 ${formatCurrency(half)}，當下安置 ${formatCurrency(half)}`,
+        '獎金凍結期：14 天，退款、退租或爭議期內作廢 pending 流水'
       ].join('\n');
 
       try {
@@ -893,8 +977,16 @@
         status: order.status || 'pending_payment',
         paymentProvider: order.paymentProvider || order.gateway || 'manual',
         paymentNo: order.paymentNo || order.tradeNo || '',
+        sponsorId: order.sponsorId || order.recruiterId || order.referrerId || '',
+        recruiterId: order.recruiterId || order.sponsorId || order.referrerId || '',
+        recruiterSponsorId: order.recruiterSponsorId || order.sponsorSponsorId || order.recruiterUplineId || '',
+        placementParentId: order.placementParentId || order.placementOwnerId || order.parentId || '',
+        placementSide: order.placementSide || order.qualificationSide || '',
+        qualificationSide: order.qualificationSide || order.placementSide || '',
+        bonusPolicyType: order.bonusPolicyType || order.bonusPolicy?.type || BONUS_POLICY_TYPE,
         createdAt: order.createdAt || order.date || order.created_at || '',
         paidAt: order.paidAt || order.paid_at || '',
+        bonusPlan: order.bonusPlan || order.bonusPlanPreview || null,
         raw: order
       };
     }
@@ -990,6 +1082,7 @@
       const fee = Number(document.getElementById('bonus-order-fee')?.value || 6300);
       const bv = Number(document.getElementById('bonus-order-bv')?.value || 3000);
       if (fee <= 0 || bv <= 0) return showToast('訂單金額與 BV 必須大於 0', true);
+      const relation = buildBonusRelationshipPayload(tenant);
 
       const res = await fetchAPI('mlmCreateOrder', {
         buyerId: tenantId,
@@ -1002,6 +1095,8 @@
         productName: '租戶年費',
         grossAmount: fee,
         bv,
+        bonusPolicyType: BONUS_POLICY_TYPE,
+        ...relation,
         taxIncluded: true,
         taxRate: Number(document.getElementById('bonus-tax-rate')?.value || 5),
         paymentStatus: 'pending_payment',
@@ -1017,6 +1112,17 @@
       const order = allBonusOrdersData.find(o => String(o.orderId) === String(orderId));
       if (!order) return showToast('找不到訂單', true);
       if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n確認後會依制度產生獎金流水。`)) return;
+      const tenant = findAdminUser(order.tenantId) || order.raw || {};
+      const baseRelation = buildBonusRelationshipPayload(tenant);
+      const relation = {
+        ...baseRelation,
+        sponsorId: order.sponsorId || baseRelation.sponsorId,
+        recruiterId: order.recruiterId || baseRelation.recruiterId,
+        recruiterSponsorId: order.recruiterSponsorId || baseRelation.recruiterSponsorId,
+        placementParentId: order.placementParentId || baseRelation.placementParentId,
+        placementSide: order.placementSide || baseRelation.placementSide,
+        qualificationSide: order.qualificationSide || baseRelation.qualificationSide
+      };
 
       const res = await fetchAPI('mlmMarkOrderPaid', {
         orderId,
@@ -1024,14 +1130,21 @@
         tenantId: order.tenantId,
         grossAmount: order.fee,
         bv: order.bv,
+        orderType: order.raw?.orderType || 'tenant_annual_fee',
+        bonusPolicyType: BONUS_POLICY_TYPE,
+        ...relation,
         paymentProvider: 'manual',
         paymentNo: 'MANUAL-' + orderId,
         paidAt: new Date().toISOString(),
         bonusPolicy: {
-          type: 'retire_binary_split',
+          type: BONUS_POLICY_TYPE,
           freezeDays: 14,
-          independentBonus: order.bv,
-          splitBonus: Math.floor(order.bv / 2)
+          directFullBonus: order.bv,
+          directSplitBonus: Math.floor(order.bv / 2),
+          sponsorSplitBonus: order.bv - Math.floor(order.bv / 2),
+          renewalReferralBonus: Math.floor(order.bv / 2),
+          renewalPlacementBonus: Math.floor(order.bv / 2),
+          qualificationRequired: 2
         }
       });
       if (res) {
@@ -1047,6 +1160,123 @@
         showToast('訂單已取消');
         await loadBonusOrders();
       }
+    }
+
+    function searchOrgMembers() {
+      const input = document.getElementById('org-root-search');
+      const box = document.getElementById('org-root-results');
+      if (!input || !box) return;
+      selectedOrgRootId = '';
+      const hidden = document.getElementById('org-root-member');
+      if (hidden) hidden.value = '';
+
+      const q = input.value.trim().toLowerCase();
+      if (q.length < 1) {
+        box.innerHTML = '<div class="p-4 text-[13px] text-slate-400 font-bold">輸入姓名、電話或 LINE ID 搜尋會員</div>';
+        box.classList.remove('hidden');
+        return;
+      }
+
+      const matches = (Array.isArray(allUsersData) ? allUsersData : [])
+        .filter(u => getUserSearchText(u).includes(q))
+        .slice(0, 20);
+
+      if (!matches.length) {
+        box.innerHTML = '<div class="p-4 text-[13px] text-slate-400 font-bold">找不到符合的會員</div>';
+        box.classList.remove('hidden');
+        return;
+      }
+
+      box.innerHTML = matches.map(u => {
+        const id = escapeHTML(u.userId || u.memberId || '');
+        const name = escapeHTML(u.name || '未命名');
+        const phone = escapeHTML(u.phone || '-');
+        const independent = isUserIndependent(u) ? '已獨立' : '未獨立';
+        return `<button type="button" onclick="selectOrgRoot('${id}')" class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50">
+          <div class="flex items-center justify-between gap-3">
+            <div class="font-black text-slate-800 text-sm">${name}</div>
+            <span class="text-[11px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">${independent}</span>
+          </div>
+          <div class="text-[12px] text-slate-500 mt-0.5">${phone}</div>
+          <div class="text-[10px] text-slate-300 font-mono mt-1">${id}</div>
+        </button>`;
+      }).join('');
+      box.classList.remove('hidden');
+    }
+
+    function selectOrgRoot(userId) {
+      const user = findAdminUser(userId);
+      if (!user) return;
+      selectedOrgRootId = user.userId || user.memberId || '';
+      const hidden = document.getElementById('org-root-member');
+      const input = document.getElementById('org-root-search');
+      const box = document.getElementById('org-root-results');
+      if (hidden) hidden.value = selectedOrgRootId;
+      if (input) input.value = `${user.name || '未命名'} / ${user.phone || '-'} / ${selectedOrgRootId}`;
+      if (box) box.classList.add('hidden');
+    }
+
+    async function loadOrganizationTree() {
+      const body = document.getElementById('org-tree-body');
+      const memberId = selectedOrgRootId || document.getElementById('org-root-member')?.value || '';
+      if (!memberId) return showToast('請先選擇組織圖根節點', true);
+      if (body) body.innerHTML = '<div class="py-8 text-center text-slate-400 font-bold">正在查詢組織圖...</div>';
+      const res = await fetchAPI('mlmGetOrganizationTree', {
+        memberId,
+        treeType: document.getElementById('org-tree-type')?.value || 'placement',
+        depth: Number(document.getElementById('org-tree-depth')?.value || 3)
+      }, { silent: true });
+      organizationTreeData = res?.data || res?.tree || res || null;
+      renderOrganizationTree();
+    }
+
+    function normalizeOrgNodes(tree) {
+      if (!tree) return [];
+      if (Array.isArray(tree)) return tree;
+      if (Array.isArray(tree.nodes)) return tree.nodes;
+      if (Array.isArray(tree.members)) return tree.members;
+      if (tree.root) return [tree.root];
+      return [tree];
+    }
+
+    function getOrgChildren(node) {
+      return node.children || node.downlines || node.members || node.nodes || [];
+    }
+
+    function renderOrgNode(node, level = 0) {
+      const id = escapeHTML(node.memberId || node.userId || node.id || '');
+      const name = escapeHTML(node.name || node.displayName || node.memberName || id || '未命名');
+      const side = escapeHTML(node.placementSide || node.side || '');
+      const role = escapeHTML((node.role || node.memberRole || '').toString().toUpperCase());
+      const independent = isUserIndependent(node) ? '已獨立' : '未獨立';
+      const children = getOrgChildren(node);
+      const indent = Math.min(level * 18, 90);
+      return `
+        <div class="border border-slate-100 rounded-lg mb-2 overflow-hidden bg-white" style="margin-left:${indent}px">
+          <div class="p-3 flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <div>
+              <div class="font-black text-slate-800">${name}</div>
+              <div class="font-mono text-[11px] text-slate-400 mt-0.5">${id}</div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-[12px] font-bold">
+              ${role ? `<span class="px-2 py-1 rounded bg-blue-50 text-blue-600">${role}</span>` : ''}
+              ${side ? `<span class="px-2 py-1 rounded bg-slate-100 text-slate-600">${side}</span>` : ''}
+              <span class="px-2 py-1 rounded ${independent === '已獨立' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">${independent}</span>
+            </div>
+          </div>
+        </div>
+        ${children.map(child => renderOrgNode(child, level + 1)).join('')}`;
+    }
+
+    function renderOrganizationTree() {
+      const body = document.getElementById('org-tree-body');
+      if (!body) return;
+      const nodes = normalizeOrgNodes(organizationTreeData);
+      if (!nodes.length) {
+        body.innerHTML = '<div class="py-8 text-center text-slate-400 font-bold">查無組織圖資料</div>';
+        return;
+      }
+      body.innerHTML = nodes.map(node => renderOrgNode(node)).join('');
     }
 
     async function loadUsers() {

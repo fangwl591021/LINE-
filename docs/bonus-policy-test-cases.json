@@ -1,0 +1,99 @@
+[
+  {
+    "id": "T01",
+    "name": "independent recruiter receives full BV",
+    "input": {
+      "orderId": "ORD-T01",
+      "orderType": "tenant_annual_fee",
+      "buyerId": "B",
+      "recruiterId": "A",
+      "recruiterIsIndependent": true,
+      "bv": 3000
+    },
+    "expectedTransactions": [
+      { "memberId": "A", "bonusType": "direct_full", "amount": 3000 }
+    ],
+    "expectedStatus": "pending"
+  },
+  {
+    "id": "T02",
+    "name": "non-independent recruiter first left qualification",
+    "input": {
+      "orderId": "ORD-T02",
+      "orderType": "tenant_annual_fee",
+      "buyerId": "B",
+      "recruiterId": "A",
+      "recruiterSponsorId": "S",
+      "recruiterIsIndependent": false,
+      "placementSide": "left",
+      "bv": 3000
+    },
+    "expectedTransactions": [
+      { "memberId": "A", "bonusType": "direct_split", "amount": 1500 },
+      { "memberId": "S", "bonusType": "sponsor_split", "amount": 1500 }
+    ],
+    "expectedQualificationUpdate": {
+      "ownerId": "A",
+      "sourceMemberId": "B",
+      "side": "left",
+      "completesIndependence": false
+    },
+    "expectedStatus": "pending"
+  },
+  {
+    "id": "T03",
+    "name": "non-independent recruiter second right qualification completes independence",
+    "input": {
+      "orderId": "ORD-T03",
+      "orderType": "tenant_annual_fee",
+      "buyerId": "C",
+      "recruiterId": "A",
+      "recruiterSponsorId": "S",
+      "recruiterIsIndependent": false,
+      "recruiterQualificationLeftMemberId": "B",
+      "placementSide": "right",
+      "bv": 3000
+    },
+    "expectedTransactions": [
+      { "memberId": "A", "bonusType": "direct_split", "amount": 1500 },
+      { "memberId": "S", "bonusType": "sponsor_split", "amount": 1500 }
+    ],
+    "expectedQualificationUpdate": {
+      "ownerId": "A",
+      "sourceMemberId": "C",
+      "side": "right",
+      "completesIndependence": true
+    },
+    "expectedStatus": "pending"
+  },
+  {
+    "id": "T04",
+    "name": "renewal generates referral and placement bonuses",
+    "input": {
+      "orderId": "ORD-T04",
+      "orderType": "tenant_renewal_fee",
+      "buyerId": "B",
+      "recruiterId": "A",
+      "placementParentId": "P",
+      "bv": 3000
+    },
+    "expectedTransactions": [
+      { "memberId": "A", "bonusType": "renewal_referral", "amount": 1500 },
+      { "memberId": "P", "bonusType": "renewal_placement", "amount": 1500 }
+    ],
+    "expectedStatus": "pending"
+  },
+  {
+    "id": "T05",
+    "name": "missing recruiter requires review",
+    "input": {
+      "orderId": "ORD-T05",
+      "orderType": "tenant_annual_fee",
+      "buyerId": "B",
+      "bv": 3000
+    },
+    "expectedTransactions": [],
+    "expectedWarnings": ["missing_recruiter"],
+    "expectedStatus": "review_required"
+  }
+]
