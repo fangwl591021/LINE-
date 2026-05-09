@@ -93,10 +93,6 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">insights</span>
             營運財務報表
           </a>
-          <a href="#" onclick="switchTab('bonus')" id="nav-bonus" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
-            <span class="material-symbols-outlined mr-3 text-[20px]">payments</span>
-            獎金制度
-          </a>
           <a href="#" onclick="switchTab('import')" id="nav-import" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">upload_file</span>
             批次名單匯入
@@ -126,12 +122,9 @@
       <!-- Tab: Users -->
       <div id="tab-users" class="tab-content">
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white gap-3">
+          <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
             <h3 class="font-bold text-slate-700">全站會員與商家名單</h3>
-            <div class="flex items-center gap-2">
-              <button id="btn-sync-bound-cards" onclick="syncBoundCardsToUsers()" class="text-sm border border-blue-200 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-50 flex items-center gap-1 font-bold"><span class="material-symbols-outlined text-[16px]">sync</span> 同步已綁名片</button>
-              <button onclick="loadUsers()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
-            </div>
+            <button onclick="loadUsers()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理</button>
           </div>
           <div class="overflow-x-auto">
             <table class="data-table">
@@ -219,7 +212,6 @@
                   <th>公司與職稱</th>
                   <th>聯絡電話</th>
                   <th>歸屬網</th>
-                  <th>綁定狀態</th>
                   <th>標籤 / 備註</th>
                   <th class="text-center w-28">操作</th>
                 </tr>
@@ -254,189 +246,6 @@
         </div>
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex items-center justify-center h-64">
           <p class="text-slate-400 text-sm">此處未來可擴充財務對帳圖表與匯出功能</p>
-        </div>
-      </div>
-
-      <!-- Tab: Bonus System -->
-      <div id="tab-bonus" class="tab-content hidden space-y-6">
-        <div id="bonus-kpi-row" class="grid grid-cols-1 xl:grid-cols-4 gap-5">
-          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">租戶年費</p>
-            <h3 class="text-3xl font-black text-slate-800">NT$ 6,300</h3>
-            <p class="text-[12px] text-slate-500 mt-2">含 5% 營業稅，未稅收入 NT$ 6,000</p>
-          </div>
-          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">建議提撥 BV</p>
-            <h3 class="text-3xl font-black text-emerald-600">NT$ 3,000</h3>
-            <p class="text-[12px] text-slate-500 mt-2">沿用 retire 制度的入會/續約獎金基準</p>
-          </div>
-          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">平台保留</p>
-            <h3 class="text-3xl font-black text-blue-600">NT$ 3,000</h3>
-            <p class="text-[12px] text-slate-500 mt-2">未稅收入扣除 BV 後，用於系統、服務與營運</p>
-          </div>
-          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-slate-400 text-xs font-bold mb-1">凍結期</p>
-            <h3 class="text-3xl font-black text-amber-500">14 天</h3>
-            <p class="text-[12px] text-slate-500 mt-2">退租、退款或爭議期內可作廢獎金</p>
-          </div>
-        </div>
-
-        <details id="bonus-policy-summary" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <summary class="px-5 py-4 cursor-pointer list-none flex items-center justify-between gap-4">
-            <div>
-              <h3 class="font-black text-slate-800">制度規則與試算</h3>
-              <p class="text-[12px] text-slate-500 mt-1">展開查看 retire 分潤規則、BV、稅額與平台保留試算。</p>
-            </div>
-            <span class="material-symbols-outlined text-slate-400">expand_more</span>
-          </summary>
-          <div class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-0 border-t border-slate-100">
-          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
-              <div>
-                <h3 class="font-black text-slate-800">制度規則整合</h3>
-                <p class="text-[12px] text-slate-500 mt-1">依 retire 專案邏輯改為租戶年費版，先做後台制度控管與試算。</p>
-              </div>
-              <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[12px] font-black">6300 含稅版</span>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>情境</th>
-                    <th>撥發方式</th>
-                    <th>金額</th>
-                    <th>備註</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="font-bold text-slate-700">推薦人已獨立</td>
-                    <td>推薦人取得全額 BV</td>
-                    <td class="font-black text-emerald-600">NT$ 3,000</td>
-                    <td class="text-slate-500">適合已有完整左右腳/獨立資格的租戶。</td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold text-slate-700">推薦人未獨立</td>
-                    <td>推薦人與上線各半</td>
-                    <td class="font-black text-blue-600">1,500 / 1,500</td>
-                    <td class="text-slate-500">沿用 retire 的未獨立拆半制度。</td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold text-slate-700">年度續約</td>
-                    <td>依同一 BV 規則撥發</td>
-                    <td class="font-black text-slate-700">NT$ 3,000</td>
-                    <td class="text-slate-500">作為租戶每年續約獎金基準。</td>
-                  </tr>
-                  <tr>
-                    <td class="font-bold text-slate-700">退款/退租</td>
-                    <td>凍結期內作廢</td>
-                    <td class="font-black text-red-500">0</td>
-                    <td class="text-slate-500">14 天內取消 pending 流水，避免已領後追討。</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-            <div>
-              <h3 class="font-black text-slate-800">獎金試算</h3>
-              <p class="text-[12px] text-slate-500 mt-1">用目前租戶數或自行輸入件數，快速估算年費與獎金池。</p>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="text-[12px] text-slate-500 font-bold">租戶年費含稅</label>
-                <input id="bonus-year-fee" type="number" value="6300" oninput="renderBonusSystem()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
-              </div>
-              <div>
-                <label class="text-[12px] text-slate-500 font-bold">提撥 BV</label>
-                <input id="bonus-bv" type="number" value="3000" oninput="renderBonusSystem()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
-              </div>
-              <div>
-                <label class="text-[12px] text-slate-500 font-bold">租戶件數</label>
-                <input id="bonus-tenant-count" type="number" value="0" oninput="renderBonusSystem()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
-              </div>
-              <div>
-                <label class="text-[12px] text-slate-500 font-bold">稅率</label>
-                <input id="bonus-tax-rate" type="number" value="5" oninput="renderBonusSystem()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3 pt-2">
-              <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                <p class="text-[11px] text-slate-400 font-bold">年費總收入</p>
-                <div id="bonus-total-sales" class="text-xl font-black text-slate-800 mt-1">-</div>
-              </div>
-              <div class="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-                <p class="text-[11px] text-emerald-600 font-bold">獎金池</p>
-                <div id="bonus-total-pool" class="text-xl font-black text-emerald-700 mt-1">-</div>
-              </div>
-              <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                <p class="text-[11px] text-blue-600 font-bold">未稅平台保留</p>
-                <div id="bonus-platform-reserve" class="text-xl font-black text-blue-700 mt-1">-</div>
-              </div>
-              <div class="bg-amber-50 rounded-xl p-4 border border-amber-100">
-                <p class="text-[11px] text-amber-600 font-bold">預估稅額</p>
-                <div id="bonus-tax-total" class="text-xl font-black text-amber-700 mt-1">-</div>
-              </div>
-            </div>
-            <button type="button" onclick="copyBonusPolicy()" class="w-full mt-2 bg-slate-800 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-transform">
-              <span class="material-symbols-outlined text-[18px]">content_copy</span> 複製制度摘要
-            </button>
-          </div>
-          </div>
-        </details>
-
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
-            <div>
-              <h3 class="font-black text-slate-800">租戶年費訂單</h3>
-              <p class="text-[12px] text-slate-500 mt-1">建立訂單後先待收款；確認收款或未來金流回調成功後，才產生獎金流水。</p>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-[minmax(260px,1fr)_120px_120px_auto] gap-2 w-full xl:w-[760px]">
-              <div class="relative">
-                <input id="bonus-tenant-search" type="text" oninput="searchBonusTenants()" onfocus="searchBonusTenants()" placeholder="搜尋姓名、電話、會員編號、LINE ID..." class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white">
-                <input id="bonus-order-tenant" type="hidden">
-                <div id="bonus-tenant-results" class="hidden absolute left-0 right-0 top-[42px] z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto"></div>
-              </div>
-              <input id="bonus-order-fee" type="number" value="6300" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="訂單金額">
-              <input id="bonus-order-bv" type="number" value="3000" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="獎金 BV">
-              <button type="button" onclick="createTenantBonusOrder()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-transform">
-                <span class="material-symbols-outlined text-[17px]">add_card</span> 建立訂單
-              </button>
-            </div>
-          </div>
-          <div class="px-5 py-3 border-b border-slate-100 bg-slate-50/70 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <span class="text-[12px] text-slate-500 font-bold">訂單狀態</span>
-              <select id="bonus-order-status-filter" onchange="bonusOrderPage=1; renderBonusOrders()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
-                <option value="all">全部</option>
-                <option value="pending_payment">待收款</option>
-                <option value="paid">已收款</option>
-                <option value="cancelled">已取消</option>
-              </select>
-            </div>
-            <div id="bonus-order-pager" class="flex items-center justify-end gap-2 text-[12px] text-slate-500 font-bold"></div>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>訂單時間</th>
-                  <th>訂單編號</th>
-                  <th>租戶</th>
-                  <th>年費</th>
-                  <th>BV</th>
-                  <th>狀態</th>
-                  <th>金流</th>
-                  <th class="text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody id="bonus-orders-body">
-                <tr><td colspan="8" class="text-center py-8 text-slate-400">尚未載入訂單</td></tr>
-              </tbody>
-            </table>
-          </div>
         </div>
       </div>
 
@@ -580,63 +389,6 @@
     </div>
   </div>
 
-  <div id="modal-activity-edit" class="fixed inset-0 bg-slate-900/60 z-[1200] hidden items-center justify-center backdrop-blur-sm p-4">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[720px] max-h-[92vh] overflow-hidden flex flex-col">
-      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-        <div>
-          <h3 class="text-lg font-black text-slate-800">編輯活動</h3>
-          <p id="edit-a-id-label" class="text-xs text-slate-400 font-mono mt-1"></p>
-        </div>
-        <button type="button" onclick="closeActivityEditModal()" class="text-slate-400 hover:text-slate-700 transition-colors">
-          <span class="material-symbols-outlined">close</span>
-        </button>
-      </div>
-      <div class="p-6 overflow-y-auto bg-slate-50">
-        <input type="hidden" id="edit-a-id">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="md:col-span-2">
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">活動名稱</label>
-            <input id="edit-a-name" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">活動類型</label>
-            <input id="edit-a-type" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">金額</label>
-            <input id="edit-a-price" type="number" min="0" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">開始時間</label>
-            <input id="edit-a-start" type="text" placeholder="2026-05-07 19:00" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">結束時間</label>
-            <input id="edit-a-end" type="text" placeholder="2026-05-07 21:00" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">NFC 獎勵點數</label>
-            <input id="edit-a-reward" type="number" min="0" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">宣傳圖網址</label>
-            <input id="edit-a-image" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">活動說明</label>
-            <textarea id="edit-a-desc" rows="4" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 resize-none"></textarea>
-          </div>
-        </div>
-      </div>
-      <div class="px-6 py-4 bg-white border-t border-slate-200 flex justify-end gap-3">
-        <button type="button" onclick="closeActivityEditModal()" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">取消</button>
-        <button id="btn-save-activity" type="button" onclick="saveActivityFromMonitor()" class="px-7 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 flex items-center gap-2">
-          <span class="material-symbols-outlined text-[18px]">save</span> 儲存變更
-        </button>
-      </div>
-    </div>
-  </div>
-
   <div id="admin-cropper-modal" class="fixed inset-0 bg-slate-900/95 z-[2000] hidden transition-opacity duration-300">
     <div class="flex flex-col w-full h-full">
       <div id="admin-cropper-container" class="flex-1 w-full relative flex items-center justify-center overflow-hidden p-4">
@@ -659,12 +411,6 @@
     let allUsersData = [];
     let allCardsData = [];
     let allActivitiesData = [];
-    let allBonusOrdersData = [];
-    let selectedBonusTenantId = '';
-    let bonusOrderPage = 1;
-    const BONUS_ORDER_PAGE_SIZE = 20;
-    let boundCardAutoSyncDone = false;
-    let boundCardSyncRunning = false;
     let currentEditButtons = []; 
     let adminCropperInstance = null;
     let adminRole = 'store';
@@ -681,12 +427,11 @@
       setTimeout(() => { toast.remove(); }, 3000);
     }
 
-    async function fetchAPI(action, payload = {}, options = {}) {
+    async function fetchAPI(action, payload = {}) {
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
-        if (!payload.userId) payload.userId = adminProfile?.userId || '';
-        payload.operatorId = payload.operatorId || adminProfile?.userId || '';
-        payload.role = payload.role || adminRole || 'store';
+        payload.userId = adminProfile?.userId || '';
+        payload.role = adminRole || 'store';
         payload.networkId = payload.networkId || adminNetworkId || 'admin';
         const res = await fetch(WORKER_URL, {
           method: 'POST',
@@ -697,7 +442,7 @@
         if (!data.success) throw new Error(data.error || "未知後端錯誤");
         return data.data || data;
       } catch (err) {
-        if (!options.silent) showToast(err.message, true);
+        showToast(err.message, true);
         return null;
       }
     }
@@ -713,337 +458,10 @@
       
       document.getElementById('page-title').innerText = navBtn ? navBtn.innerText.trim() : "管理後台";
       
-      if (tabId === 'users') loadUsers();
+      if (tabId === 'users' && allUsersData.length === 0) loadUsers();
       if (tabId === 'cards' && allCardsData.length === 0) loadCards();
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'finance') loadFinanceStats();
-      if (tabId === 'bonus') initBonusSystem();
-    }
-
-    function formatCurrency(value) {
-      return 'NT$ ' + Math.round(Number(value || 0)).toLocaleString();
-    }
-
-    function getTenantCountForBonus() {
-      const users = Array.isArray(allUsersData) ? allUsersData : [];
-      const tenants = users.filter(u => {
-        const role = String(u.role || '').toLowerCase();
-        return role === 'store' || role === 'tenant';
-      });
-      return tenants.length;
-    }
-
-    async function initBonusSystem() {
-      if (allUsersData.length === 0) await loadUsers();
-      prioritizeBonusOrderPanel();
-      const tenantCountInput = document.getElementById('bonus-tenant-count');
-      if (tenantCountInput && (!tenantCountInput.value || Number(tenantCountInput.value) === 0)) {
-        tenantCountInput.value = getTenantCountForBonus();
-      }
-      selectedBonusTenantId = '';
-      const tenantInput = document.getElementById('bonus-order-tenant');
-      const searchInput = document.getElementById('bonus-tenant-search');
-      if (tenantInput) tenantInput.value = '';
-      if (searchInput && !searchInput.value) searchInput.placeholder = '搜尋姓名、電話、會員編號、LINE ID...';
-      renderBonusSystem();
-      await loadBonusOrders();
-    }
-
-    function prioritizeBonusOrderPanel() {
-      const tab = document.getElementById('tab-bonus');
-      const kpi = document.getElementById('bonus-kpi-row');
-      const body = document.getElementById('bonus-orders-body');
-      if (!tab || !kpi || !body) return;
-      const panel = body.closest('.bg-white.rounded-xl');
-      if (panel && panel.previousElementSibling !== kpi) {
-        kpi.insertAdjacentElement('afterend', panel);
-      }
-    }
-
-    function getBonusTenantUsers() {
-      return (Array.isArray(allUsersData) ? allUsersData : []).filter(u => {
-        const role = String(u.role || '').toLowerCase();
-        return role === 'store' || role === 'tenant' || role === 'admin';
-      });
-    }
-
-    function getUserSearchText(u) {
-      return [
-        u.userId,
-        u.memberId,
-        u.name,
-        u.phone,
-        u.companyName,
-        u.networkId,
-        u.storeId,
-        u.role
-      ].filter(Boolean).join(' ').toLowerCase();
-    }
-
-    function searchBonusTenants() {
-      const input = document.getElementById('bonus-tenant-search');
-      const box = document.getElementById('bonus-tenant-results');
-      if (!input || !box) return;
-      selectedBonusTenantId = '';
-      const hidden = document.getElementById('bonus-order-tenant');
-      if (hidden) hidden.value = '';
-
-      const q = input.value.trim().toLowerCase();
-      if (q.length < 1) {
-        box.innerHTML = '<div class="p-4 text-[13px] text-slate-400 font-bold">輸入姓名、電話或 LINE ID 搜尋租戶</div>';
-        box.classList.remove('hidden');
-        return;
-      }
-
-      const matches = getBonusTenantUsers()
-        .filter(u => getUserSearchText(u).includes(q))
-        .slice(0, 20);
-
-      if (!matches.length) {
-        box.innerHTML = '<div class="p-4 text-[13px] text-slate-400 font-bold">找不到符合的租戶</div>';
-        box.classList.remove('hidden');
-        return;
-      }
-
-      box.innerHTML = matches.map(u => {
-        const id = escapeHTML(u.userId || '');
-        const name = escapeHTML(u.name || '未命名');
-        const phone = escapeHTML(u.phone || '-');
-        const network = escapeHTML(u.networkId || u.storeId || 'admin');
-        const role = escapeHTML((u.role || 'user').toUpperCase());
-        return `<button type="button" onclick="selectBonusTenant('${id}')" class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-50">
-          <div class="flex items-center justify-between gap-3">
-            <div class="font-black text-slate-800 text-sm">${name}</div>
-            <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">${role}</span>
-          </div>
-          <div class="text-[12px] text-slate-500 mt-0.5">${phone} / ${network}</div>
-          <div class="text-[10px] text-slate-300 font-mono mt-1">${id}</div>
-        </button>`;
-      }).join('');
-      box.classList.remove('hidden');
-    }
-
-    function selectBonusTenant(userId) {
-      const user = allUsersData.find(u => String(u.userId || '') === String(userId));
-      if (!user) return;
-      selectedBonusTenantId = user.userId || '';
-      const hidden = document.getElementById('bonus-order-tenant');
-      const input = document.getElementById('bonus-tenant-search');
-      const box = document.getElementById('bonus-tenant-results');
-      if (hidden) hidden.value = selectedBonusTenantId;
-      if (input) input.value = `${user.name || '未命名'} / ${user.phone || '-'} / ${user.networkId || user.storeId || 'admin'}`;
-      if (box) box.classList.add('hidden');
-    }
-
-    function renderBonusSystem() {
-      const fee = Number(document.getElementById('bonus-year-fee')?.value || 6300);
-      const bv = Number(document.getElementById('bonus-bv')?.value || 3000);
-      const count = Number(document.getElementById('bonus-tenant-count')?.value || 0);
-      const taxRate = Number(document.getElementById('bonus-tax-rate')?.value || 5) / 100;
-      const divisor = 1 + taxRate;
-      const totalSales = fee * count;
-      const totalPreTax = divisor > 0 ? totalSales / divisor : totalSales;
-      const taxTotal = totalSales - totalPreTax;
-      const bonusPool = bv * count;
-      const platformReserve = totalPreTax - bonusPool;
-
-      const map = {
-        'bonus-total-sales': totalSales,
-        'bonus-total-pool': bonusPool,
-        'bonus-platform-reserve': platformReserve,
-        'bonus-tax-total': taxTotal
-      };
-      Object.keys(map).forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.innerText = formatCurrency(map[id]);
-      });
-    }
-
-    async function copyBonusPolicy() {
-      const fee = Number(document.getElementById('bonus-year-fee')?.value || 6300);
-      const bv = Number(document.getElementById('bonus-bv')?.value || 3000);
-      const half = Math.floor(bv / 2);
-      const text = [
-        '獎金制度摘要',
-        `租戶年費：${formatCurrency(fee)} 含稅`,
-        `建議提撥 BV：${formatCurrency(bv)}`,
-        `推薦人已獨立：推薦人取得 ${formatCurrency(bv)}`,
-        `推薦人未獨立：推薦人 ${formatCurrency(half)} / 上線 ${formatCurrency(bv - half)}`,
-        '獎金凍結期：14 天，退款或退租可作廢 pending 流水'
-      ].join('\n');
-
-      try {
-        await navigator.clipboard.writeText(text);
-        showToast('獎金制度摘要已複製');
-      } catch (e) {
-        window.prompt('請複製制度摘要', text);
-      }
-    }
-
-    function normalizeBonusOrder(order) {
-      return {
-        orderId: order.orderId || order.id || order.rowId || '',
-        tenantId: order.tenantId || order.buyerId || order.userId || '',
-        tenantName: order.tenantName || order.buyerName || order.name || '',
-        fee: Number(order.fee || order.price || order.amount || 0),
-        bv: Number(order.bv || order.bonusBV || order.bonusAmount || 0),
-        status: order.status || 'pending_payment',
-        paymentProvider: order.paymentProvider || order.gateway || 'manual',
-        paymentNo: order.paymentNo || order.tradeNo || '',
-        createdAt: order.createdAt || order.date || order.created_at || '',
-        paidAt: order.paidAt || order.paid_at || '',
-        raw: order
-      };
-    }
-
-    async function loadBonusOrders() {
-      const body = document.getElementById('bonus-orders-body');
-      if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入訂單中...</td></tr>';
-      let res = await fetchAPI('mlmListOrders', {
-        orderType: 'tenant_annual_fee',
-        page: 1,
-        pageSize: 100,
-        status: document.getElementById('bonus-order-status-filter')?.value || 'all'
-      }, { silent: true });
-
-      if (!res) {
-        res = await fetchAPI('getTenantBonusOrders', {}, { silent: true });
-      }
-
-      const list = Array.isArray(res) ? res : (Array.isArray(res?.orders) ? res.orders : (Array.isArray(res?.data) ? res.data : []));
-      allBonusOrdersData = list.map(normalizeBonusOrder);
-      bonusOrderPage = 1;
-      renderBonusOrders();
-    }
-
-    function renderBonusOrders() {
-      const body = document.getElementById('bonus-orders-body');
-      if (!body) return;
-      const statusFilter = document.getElementById('bonus-order-status-filter')?.value || 'all';
-      const filtered = allBonusOrdersData.filter(order => {
-        if (statusFilter === 'all') return true;
-        if (statusFilter === 'paid') return order.status === 'paid' || order.status === 'completed';
-        if (statusFilter === 'cancelled') return order.status === 'cancelled' || order.status === 'void';
-        return order.status === statusFilter;
-      });
-
-      if (!filtered.length) {
-        body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有租戶年費訂單</td></tr>';
-        renderBonusOrderPager(0);
-        return;
-      }
-
-      const totalPages = Math.max(1, Math.ceil(filtered.length / BONUS_ORDER_PAGE_SIZE));
-      bonusOrderPage = Math.min(Math.max(1, bonusOrderPage), totalPages);
-      const pageOrders = filtered.slice((bonusOrderPage - 1) * BONUS_ORDER_PAGE_SIZE, bonusOrderPage * BONUS_ORDER_PAGE_SIZE);
-
-      body.innerHTML = pageOrders.map(order => {
-        const paid = order.status === 'paid' || order.status === 'completed';
-        const cancelled = order.status === 'cancelled' || order.status === 'void';
-        const statusClass = paid ? 'bg-emerald-50 text-emerald-700' : (cancelled ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700');
-        const statusText = paid ? '已收款/已撥獎' : (cancelled ? '已取消' : '待收款');
-        const action = paid || cancelled
-          ? '<span class="text-slate-300 text-xs font-bold">無操作</span>'
-          : `<button type="button" onclick="markTenantOrderPaid('${escapeHTML(order.orderId)}')" class="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 text-xs font-bold">確認收款</button>
-             <button type="button" onclick="cancelTenantOrder('${escapeHTML(order.orderId)}')" class="ml-2 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 text-xs font-bold">取消</button>`;
-        return `
-          <tr>
-            <td class="text-[12px] text-slate-500 font-mono">${escapeHTML(formatDisplayTime(order.createdAt) || '-')}</td>
-            <td class="font-mono text-[12px] text-blue-600">${escapeHTML(order.orderId || '-')}</td>
-            <td class="font-bold text-slate-700">${escapeHTML(order.tenantName || order.tenantId || '-')}</td>
-            <td>${formatCurrency(order.fee)}</td>
-            <td class="font-black text-emerald-600">${formatCurrency(order.bv)}</td>
-            <td><span class="px-2 py-1 rounded-full text-[11px] font-black ${statusClass}">${statusText}</span></td>
-            <td class="text-[12px] text-slate-500">${escapeHTML(order.paymentProvider)}${order.paymentNo ? '<br><span class="font-mono">' + escapeHTML(order.paymentNo) + '</span>' : ''}</td>
-            <td class="text-right whitespace-nowrap">${action}</td>
-          </tr>`;
-      }).join('');
-      renderBonusOrderPager(filtered.length);
-    }
-
-    function renderBonusOrderPager(total) {
-      const pager = document.getElementById('bonus-order-pager');
-      if (!pager) return;
-      if (!total) {
-        pager.innerHTML = '<span>0 筆</span>';
-        return;
-      }
-      const totalPages = Math.max(1, Math.ceil(total / BONUS_ORDER_PAGE_SIZE));
-      pager.innerHTML = `
-        <span>第 ${bonusOrderPage} / ${totalPages} 頁，共 ${total} 筆</span>
-        <button type="button" onclick="changeBonusOrderPage(-1)" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-40" ${bonusOrderPage <= 1 ? 'disabled' : ''}>上一頁</button>
-        <button type="button" onclick="changeBonusOrderPage(1)" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-40" ${bonusOrderPage >= totalPages ? 'disabled' : ''}>下一頁</button>`;
-    }
-
-    function changeBonusOrderPage(delta) {
-      bonusOrderPage += delta;
-      renderBonusOrders();
-    }
-
-    async function createTenantBonusOrder() {
-      const tenantId = selectedBonusTenantId || document.getElementById('bonus-order-tenant')?.value || '';
-      if (!tenantId) return showToast('請先選擇租戶', true);
-      const tenant = allUsersData.find(u => String(u.userId) === String(tenantId)) || {};
-      const fee = Number(document.getElementById('bonus-order-fee')?.value || 6300);
-      const bv = Number(document.getElementById('bonus-order-bv')?.value || 3000);
-      if (fee <= 0 || bv <= 0) return showToast('訂單金額與 BV 必須大於 0', true);
-
-      const res = await fetchAPI('mlmCreateOrder', {
-        buyerId: tenantId,
-        buyerName: tenant.name || tenant.companyName || tenantId,
-        tenantId,
-        tenantName: tenant.name || tenant.companyName || tenantId,
-        networkId: tenant.networkId || tenant.storeId || 'admin',
-        orderType: 'tenant_annual_fee',
-        productCode: 'TENANT_ANNUAL',
-        productName: '租戶年費',
-        grossAmount: fee,
-        bv,
-        taxIncluded: true,
-        taxRate: Number(document.getElementById('bonus-tax-rate')?.value || 5),
-        paymentStatus: 'pending_payment',
-        paymentProvider: 'manual'
-      });
-      if (res) {
-        showToast('租戶年費訂單已建立，等待收款');
-        await loadBonusOrders();
-      }
-    }
-
-    async function markTenantOrderPaid(orderId) {
-      const order = allBonusOrdersData.find(o => String(o.orderId) === String(orderId));
-      if (!order) return showToast('找不到訂單', true);
-      if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n確認後會依制度產生獎金流水。`)) return;
-
-      const res = await fetchAPI('mlmMarkOrderPaid', {
-        orderId,
-        buyerId: order.tenantId,
-        tenantId: order.tenantId,
-        grossAmount: order.fee,
-        bv: order.bv,
-        paymentProvider: 'manual',
-        paymentNo: 'MANUAL-' + orderId,
-        paidAt: new Date().toISOString(),
-        bonusPolicy: {
-          type: 'retire_binary_split',
-          freezeDays: 14,
-          independentBonus: order.bv,
-          splitBonus: Math.floor(order.bv / 2)
-        }
-      });
-      if (res) {
-        showToast('已確認收款，獎金流水已送出建立');
-        await loadBonusOrders();
-      }
-    }
-
-    async function cancelTenantOrder(orderId) {
-      if (!confirm('確定取消這筆租戶年費訂單？')) return;
-      const res = await fetchAPI('mlmCancelOrder', { orderId });
-      if (res) {
-        showToast('訂單已取消');
-        await loadBonusOrders();
-      }
     }
 
     async function loadUsers() {
@@ -1052,141 +470,26 @@
       const res = await fetchAPI('getAllUsers');
       if (res && Array.isArray(res)) {
         allUsersData = res;
-        renderUsersTable(res);
-        if (!boundCardAutoSyncDone) {
-          boundCardAutoSyncDone = true;
-          setTimeout(() => syncBoundCardsToUsers({ auto: true }), 80);
-        }
-      }
-    }
-
-    function renderUsersTable(users) {
-      const tbody = document.getElementById('users-table-body');
-      document.getElementById('stat-users').innerText = users.length;
-      tbody.innerHTML = users.map(u => `
-        <tr>
-          <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
-          <td class="text-xs text-slate-400 font-mono">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
-          <td>${escapeHTML(u.phone || '-')}</td>
-          <td class="text-sm">${escapeHTML(u.networkId || 'admin')}</td>
-          <td>
-            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
-              ${(u.role || 'user').toUpperCase()}
-            </span>
-          </td>
-          <td class="text-right">
-            <select onchange="updateRole('${escapeHTML(u.userId || '')}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
-              <option value="user" ${u.role==='user'?'selected':''}>一般</option>
-              <option value="store" ${u.role==='store'?'selected':''}>店長</option>
-              <option value="admin" ${u.role==='admin'?'selected':''}>總管</option>
-            </select>
-          </td>
-        </tr>`).join('');
-    }
-
-    function normalizeLineId(value) {
-      return String(value || '').trim();
-    }
-
-    function buildUserPayloadFromBoundCard(card) {
-      const userId = normalizeLineId(card['LINE ID'] || card.lineId);
-      const name = String(card['姓名'] || card['英文名'] || '').trim() || '待補資料';
-      const phone = String(card['手機號碼'] || card['公司電話'] || '').trim();
-      const company = String(card['公司名稱'] || '').trim();
-      const title = String(card['職稱'] || '').trim();
-
-      if (!userId) return null;
-      return {
-        userId,
-        name,
-        phone,
-        industry: title || company || '待補資料',
-        birthday: '',
-        role: 'user',
-        networkId: card['歸屬網'] || 'admin',
-        claimedCardRowId: card.rowId || '',
-        companyName: company,
-        title,
-        profileStatus: phone ? 'active' : 'incomplete',
-        source: 'bound_card'
-      };
-    }
-
-    async function syncBoundCardsToUsers(options = {}) {
-      const auto = !!options.auto;
-      if (boundCardSyncRunning) return;
-      if (adminRole !== 'admin') {
-        if (!auto) showToast('只有總管 admin 可以同步全站會員', true);
-        return;
-      }
-      boundCardSyncRunning = true;
-
-      const btn = document.getElementById('btn-sync-bound-cards');
-      const originalHtml = btn ? btn.innerHTML : '';
-      if (btn && !auto) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> 偵測中';
-      }
-
-      try {
-        const usersRes = await fetchAPI('getAllUsers');
-        const cardsRes = await fetchAPI('getCardContacts');
-        const users = Array.isArray(usersRes) ? usersRes : [];
-        const cards = Array.isArray(cardsRes) ? cardsRes : [];
-        const userIdSet = new Set(users.map(u => normalizeLineId(u.userId)).filter(Boolean));
-        const payloads = [];
-        const seen = new Set();
-
-        cards.forEach(card => {
-          const payload = buildUserPayloadFromBoundCard(card);
-          if (!payload || userIdSet.has(payload.userId) || seen.has(payload.userId)) return;
-          seen.add(payload.userId);
-          payloads.push(payload);
-        });
-
-        if (payloads.length === 0) {
-          if (!auto) showToast('偵測完成：沒有已綁名片缺會員資料');
-          allUsersData = users;
-          renderUsersTable(users);
-          return;
-        }
-
-        if (!auto) {
-          const preview = payloads.slice(0, 8).map(p => `${p.name} / ${p.phone || '待補電話'}`).join('\n');
-          if (!window.confirm(`偵測到 ${payloads.length} 筆已綁名片但沒有會員資料，要補寫入個人設定嗎？\n\n${preview}${payloads.length > 8 ? '\n...' : ''}`)) {
-            showToast('已取消同步');
-            return;
-          }
-        }
-
-        let ok = 0;
-        let fail = 0;
-        for (const payload of payloads) {
-          if (btn && !auto) btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> ${ok + fail + 1}/${payloads.length}`;
-          try {
-            const res = await fetchAPI('adminSyncBoundCardUser', {
-              targetUserId: payload.userId,
-              profile: payload
-            }, { silent: auto });
-            if (res && !res.error) ok++;
-            else fail++;
-          } catch (e) {
-            fail++;
-          }
-        }
-
-        if (!auto || ok > 0) showToast(`已綁名片同步完成：成功 ${ok} 筆${fail ? `，失敗 ${fail} 筆` : ''}`, !!fail);
-        const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: auto });
-        if (Array.isArray(refreshedUsers)) {
-          allUsersData = refreshedUsers;
-          renderUsersTable(refreshedUsers);
-        }
-      } finally {
-        boundCardSyncRunning = false;
-        if (btn && !auto) {
-          btn.disabled = false;
-          btn.innerHTML = originalHtml;
-        }
+        document.getElementById('stat-users').innerText = res.length;
+        tbody.innerHTML = res.map(u => `
+          <tr>
+            <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
+            <td class="text-xs text-slate-400 font-mono">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
+            <td>${escapeHTML(u.phone || '-')}</td>
+            <td class="text-sm">${escapeHTML(u.networkId || 'admin')}</td>
+            <td>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
+                ${u.role.toUpperCase()}
+              </span>
+            </td>
+            <td class="text-right">
+              <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="user" ${u.role==='user'?'selected':''}>一般</option>
+                <option value="store" ${u.role==='store'?'selected':''}>店長</option>
+                <option value="admin" ${u.role==='admin'?'selected':''}>總管</option>
+              </select>
+            </td>
+          </tr>`).join('');
       }
     }
 
@@ -1203,26 +506,19 @@
 
     function renderCards() {
       const tbody = document.getElementById('cards-table-body');
-      tbody.innerHTML = allCardsData.map(c => {
-        const lineId = String(c['LINE ID'] || c.lineId || c.userId || '').trim();
-        const bindBadge = lineId
-          ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[13px] font-black whitespace-nowrap"><span class="material-symbols-outlined text-[17px]">verified_user</span>已綁定</span>'
-          : '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100 text-[13px] font-black whitespace-nowrap"><span class="material-symbols-outlined text-[17px]">person_add</span>未綁定</span>';
-        return `
+      tbody.innerHTML = allCardsData.map(c => `
         <tr>
           <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
           <td class="text-sm text-slate-600">${escapeHTML(c['公司名稱'] || '')}</td>
           <td class="font-mono text-sm">${escapeHTML(c['手機號碼'] || '')}</td>
           <td class="text-sm text-blue-600 font-bold">${escapeHTML(c['歸屬網'] || 'admin')}</td>
-          <td>${bindBadge}</td>
           <td class="text-xs text-slate-500">${escapeHTML(c['標籤'] || '')}</td>
           <td class="text-center whitespace-nowrap">
              <button onclick="openEditCardModal('${encodeURIComponent(c.rowId || '')}')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="編輯名片"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
              ${adminRole === 'admin' && (c['LINE ID'] || c.lineId) ? `<button onclick="unbindAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-amber-600 p-1 transition-colors" title="解除 LINE 綁定"><span class="material-symbols-outlined text-[20px]">link_off</span></button>` : ''}
              ${adminRole === 'admin' ? `<button onclick="deleteAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-red-600 p-1 transition-colors" title="刪除名片"><span class="material-symbols-outlined text-[20px]">delete</span></button>` : ''}
           </td>
-        </tr>`;
-      }).join('');
+        </tr>`).join('');
     }
 
     async function unbindAdminCard(encodedRowId) {
@@ -1348,83 +644,56 @@
       }
     }
 
-    function editActivityFromMonitor(encodedActivityId) {
+    async function editActivityFromMonitor(encodedActivityId) {
       const activityId = decodeURIComponent(encodedActivityId || "");
       const act = allActivitiesData.find(a => String(a["活動ID"] || a.rowId || "") === activityId);
       if (!act) return showToast("找不到活動資料，請重新整理", true);
 
-      document.getElementById("edit-a-id").value = activityId;
-      document.getElementById("edit-a-id-label").textContent = activityId;
-      document.getElementById("edit-a-name").value = safeStringForPrompt_(act["活動名稱"]);
-      document.getElementById("edit-a-type").value = safeStringForPrompt_(act["活動類型"] || "例會");
-      document.getElementById("edit-a-start").value = safeStringForPrompt_(act["開始時間"]);
-      document.getElementById("edit-a-end").value = safeStringForPrompt_(act["結束時間"]);
-      document.getElementById("edit-a-price").value = safeStringForPrompt_(act["金額"] || 0);
-      document.getElementById("edit-a-reward").value = safeStringForPrompt_(act["獎勵點數"] || 0);
-      document.getElementById("edit-a-desc").value = safeStringForPrompt_(act["活動說明"]);
-      document.getElementById("edit-a-image").value = safeStringForPrompt_(act["宣傳圖"]);
+      const nextName = window.prompt("活動名稱", act["活動名稱"] || "");
+      if (nextName === null) return;
 
-      const modal = document.getElementById("modal-activity-edit");
-      modal.classList.remove("hidden");
-      modal.classList.add("flex");
-    }
+      const nextType = window.prompt("活動類型", act["活動類型"] || "例會");
+      if (nextType === null) return;
 
-    function closeActivityEditModal() {
-      const modal = document.getElementById("modal-activity-edit");
-      modal.classList.add("hidden");
-      modal.classList.remove("flex");
-    }
+      const nextStart = window.prompt("開始時間，例如 2026-05-07 19:00", safeStringForPrompt_(act["開始時間"]));
+      if (nextStart === null) return;
 
-    async function saveActivityFromMonitor() {
-      const btn = document.getElementById("btn-save-activity");
-      const originalHtml = btn ? btn.innerHTML : "";
-      const activityId = document.getElementById("edit-a-id").value;
-      const nextName = document.getElementById("edit-a-name").value.trim();
-      const nextType = document.getElementById("edit-a-type").value.trim();
-      const nextStart = document.getElementById("edit-a-start").value.trim();
-      const nextEnd = document.getElementById("edit-a-end").value.trim();
-      const nextPriceText = document.getElementById("edit-a-price").value;
-      const nextRewardText = document.getElementById("edit-a-reward").value;
-      const nextDesc = document.getElementById("edit-a-desc").value;
-      const nextImage = document.getElementById("edit-a-image").value.trim();
+      const nextEnd = window.prompt("結束時間，例如 2026-05-07 21:00", safeStringForPrompt_(act["結束時間"]));
+      if (nextEnd === null) return;
 
-      if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
-      if (!nextName) return showToast("請輸入活動名稱", true);
+      const nextPriceText = window.prompt("金額，免費請填 0", safeStringForPrompt_(act["金額"] || 0));
+      if (nextPriceText === null) return;
+
+      const nextRewardText = window.prompt("NFC 簽到獎勵點數，無獎勵請填 0", safeStringForPrompt_(act["獎勵點數"] || 0));
+      if (nextRewardText === null) return;
+
+      const nextDesc = window.prompt("活動說明", act["活動說明"] || "");
+      if (nextDesc === null) return;
+
+      const nextImage = window.prompt("宣傳圖網址", act["宣傳圖"] || "");
+      if (nextImage === null) return;
 
       const price = parseInt(nextPriceText, 10) || 0;
       const rewardPoints = parseInt(nextRewardText, 10) || 0;
 
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span> 儲存中';
-      }
-
-      try {
-        const result = await fetchAPI("updateActivity", {
-          activityId,
-          data: {
-            "活動名稱": nextName,
-            "活動類型": nextType,
-            "開始時間": nextStart,
-            "結束時間": nextEnd,
-            "金額": price,
-            "收費類型": price > 0 ? "收費" : "免費",
-            "獎勵點數": rewardPoints,
-            "活動說明": nextDesc,
-            "宣傳圖": nextImage
-          }
-        });
-
-        if (result) {
-          showToast("活動已更新");
-          closeActivityEditModal();
-          await loadActivities();
+      const result = await fetchAPI("updateActivity", {
+        activityId,
+        data: {
+          "活動名稱": nextName.trim(),
+          "活動類型": nextType.trim(),
+          "開始時間": nextStart.trim(),
+          "結束時間": nextEnd.trim(),
+          "金額": price,
+          "收費類型": price > 0 ? "收費" : "免費",
+          "獎勵點數": rewardPoints,
+          "活動說明": nextDesc,
+          "宣傳圖": nextImage.trim()
         }
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalHtml;
-        }
+      });
+
+      if (result) {
+        showToast("活動已更新");
+        await loadActivities();
       }
     }
 
