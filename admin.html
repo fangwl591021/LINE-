@@ -714,7 +714,7 @@
 
     async function fetchAPI(action, payload = {}, options = {}) {
       try {
-        if (liff.isLoggedIn()) {
+        if (!options.omitAuthToken && liff.isLoggedIn()) {
           const token = liff.getAccessToken();
           if (token) payload.lineAccessToken = token;
         }
@@ -1208,7 +1208,7 @@
             const res = await fetchAPI('adminSyncBoundCardUser', {
               targetUserId: payload.userId,
               profile: payload
-            }, { silent: auto, reloginOnInvalidToken: true });
+            }, { silent: auto, omitAuthToken: true });
             if (res && !res.error) ok++;
             else fail++;
           } catch (e) {
