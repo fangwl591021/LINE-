@@ -967,7 +967,14 @@
       document.getElementById('page-title').innerText = navBtn ? navBtn.innerText.trim() : "管理後台";
       
       if (tabId === 'users') loadUsers();
-      if (tabId === 'cards' && allCardsData.length === 0) loadCards();
+      if (tabId === 'cards') {
+        if (allCardsData.length === 0) loadCards();
+        else {
+          populateCardTenantFilter(allCardsData);
+          cardPage = 1;
+          renderCards();
+        }
+      }
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'finance') loadFinanceStats();
       if (tabId === 'bonus') initBonusSystem();
@@ -1830,6 +1837,7 @@
         const cards = Array.isArray(cardsRes) ? cardsRes : [];
         const orders = Array.isArray(ordersRes) ? ordersRes : (Array.isArray(ordersRes?.orders) ? ordersRes.orders : (Array.isArray(ordersRes?.data) ? ordersRes.data : []));
         allCardsData = cards;
+        populateCardTenantFilter(cards);
         if (orders.length) allBonusOrdersData = orders.map(normalizeBonusOrder);
         const sync = await registerBoundCardUsers(users, cards);
         if (sync.created > 0) {
