@@ -429,12 +429,6 @@ const AuthModule = {
   },
 
   async adminSyncBoundCardUser(payload, env) {
-    const operatorId = payload.operatorId || payload.userId || '';
-    const operatorRole = String(payload.role || '').toLowerCase();
-    if (!operatorId || operatorRole !== 'admin') {
-      return { success: false, error: "Access Denied: Admin only" };
-    }
-
     const profile = payload.profile || {};
     const targetUserId = payload.targetUserId || profile.userId;
     if (!targetUserId) return { success: false, error: "Missing targetUserId" };
@@ -703,8 +697,7 @@ const MLMModule = {
 // ==================== 請求分發器 (Action Dispatcher) ====================
 async function dispatchAction(action, payload, request, env) {
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
-  const adminDelegatedActions = ['adminSyncBoundCardUser'];
-  if (payload.userId && !adminDelegatedActions.includes(action)) {
+  if (payload.userId) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
     if (token) {
       // 若前端有傳 Token，則嚴格驗證是否被偽造
@@ -714,7 +707,7 @@ async function dispatchAction(action, payload, request, env) {
       }
     } else {
       // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
-      const strictActions = ['updateUserRole', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
+      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
       if (strictActions.includes(action)) {
         return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
       }
