@@ -5,8 +5,9 @@ const NFC_LIFF_ID = "2009886448-Asc5tytD";
 function resolveActiveLiffId() {
   try {
     const params = new URLSearchParams(window.location.search || '');
-    const fromLine = params.get('liffClientId') || params.get('liffId') || '';
-    if (fromLine) return fromLine;
+    if (params.get('checkin') || params.get('nfcAct') || params.get('nfcCheckin')) return NFC_LIFF_ID;
+    const explicitLiffId = params.get('liffId') || '';
+    if (explicitLiffId && explicitLiffId.includes('-')) return explicitLiffId;
   } catch (e) {}
   return DEFAULT_LIFF_ID;
 }
