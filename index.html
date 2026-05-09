@@ -131,15 +131,15 @@
         <div class="p-5 space-y-4">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <p class="text-[12px] font-black text-blue-200 tracking-wide">經銷商租戶方案</p>
+              <p class="text-[12px] font-black text-blue-200 tracking-wide">租戶功能方案</p>
               <h3 class="text-2xl font-black mt-1">NT$ 6,300 / 年</h3>
-              <p id="tenant-upgrade-status" class="text-[13px] text-slate-300 mt-2 font-bold leading-relaxed">開通後可使用活動、CRM、公開名片與推薦分潤資格。</p>
+              <p id="tenant-upgrade-status" class="text-[13px] text-slate-300 mt-2 font-bold leading-relaxed">開通後可使用活動管理、名片收集、版面設定與較高額度的 AI 工具。</p>
             </div>
             <span id="tenant-role-badge" class="px-3 py-1.5 rounded-full bg-white text-slate-900 text-[12px] font-black shrink-0">一般</span>
           </div>
           <button type="button" onclick="window.goPage('tenant-upgrade')" class="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-black shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
             <span class="material-symbols-outlined text-[20px]">workspace_premium</span>
-            升級租戶並建立訂單
+            查看租戶功能
           </button>
         </div>
       </section>
@@ -423,18 +423,31 @@
             <div class="text-4xl font-black">NT$ 6,300</div>
             <div class="text-sm text-slate-300 font-bold mb-1">含稅 / 年</div>
           </div>
-          <p class="text-[13px] text-slate-300 mt-3 leading-relaxed font-bold">付款後由後台確認收款，開通租戶資格、年費紀錄與推薦分潤流程。</p>
+          <p class="text-[13px] text-slate-300 mt-3 leading-relaxed font-bold">適合需要經營活動、整理名片、維護客戶與佈置自己首頁的使用者。</p>
         </div>
 
         <div class="p-5 space-y-4">
           <div class="grid grid-cols-2 gap-3">
             <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-              <div class="text-blue-700 font-black text-[13px]">租戶權益</div>
-              <div class="text-slate-800 font-black text-lg mt-1">活動 + CRM</div>
+              <div class="text-blue-700 font-black text-[13px]">活動管理</div>
+              <div class="text-slate-800 font-black text-lg mt-1">10 個活動</div>
             </div>
-            <div class="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-              <div class="text-amber-700 font-black text-[13px]">獎金 BV</div>
-              <div class="text-slate-800 font-black text-lg mt-1">NT$ 3,000</div>
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+              <div class="text-slate-600 font-black text-[13px]">AI 配對</div>
+              <div class="text-slate-800 font-black text-lg mt-1">50 次 / 日</div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <h3 class="font-black text-slate-800 mb-3 flex items-center gap-2"><span class="material-symbols-outlined text-blue-600">verified</span>可使用功能</h3>
+            <div class="space-y-3 text-[14px] text-slate-700 font-bold leading-relaxed">
+              <div class="flex gap-2"><span class="material-symbols-outlined text-blue-500 text-[20px]">event_available</span><span>可開設活動 10 個，管理報名與核銷。</span></div>
+              <div class="flex gap-2"><span class="material-symbols-outlined text-blue-500 text-[20px]">badge</span><span>名片收割機數量不限，持續整理交換名片。</span></div>
+              <div class="flex gap-2"><span class="material-symbols-outlined text-blue-500 text-[20px]">view_carousel</span><span>可自行布置版面：系統名稱、Banner、宣傳影片。</span></div>
+              <div class="flex gap-2"><span class="material-symbols-outlined text-blue-500 text-[20px]">psychology</span><span>AI 配對額度提高為 50 次 / 日。</span></div>
+              <div class="flex gap-2"><span class="material-symbols-outlined text-blue-500 text-[20px]">groups</span><span>CRM 客戶名冊與跟進紀錄，方便整理聯絡進度。</span></div>
+              <div class="flex gap-2"><span class="material-symbols-outlined text-blue-500 text-[20px]">qr_code_scanner</span><span>支援活動 QR / NFC 簽到連結，現場核銷更快。</span></div>
+              <div class="flex gap-2"><span class="material-symbols-outlined text-blue-500 text-[20px]">storefront</span><span>擁有自己的展示首頁，適合放課程、活動或服務資訊。</span></div>
             </div>
           </div>
 
@@ -442,10 +455,6 @@
             <div class="flex justify-between gap-3">
               <span class="text-slate-500 font-bold text-[13px]">購買人</span>
               <span id="tenant-order-buyer" class="text-slate-900 font-black text-right">-</span>
-            </div>
-            <div class="flex justify-between gap-3">
-              <span class="text-slate-500 font-bold text-[13px]">推薦人</span>
-              <span id="tenant-order-sponsor" class="text-slate-900 font-black text-right">系統自動帶入</span>
             </div>
             <div class="flex justify-between gap-3">
               <span class="text-slate-500 font-bold text-[13px]">付款方式</span>
@@ -459,7 +468,7 @@
               <li>1. 建立租戶年費訂單。</li>
               <li>2. 依管理方提供方式完成付款。</li>
               <li>3. 後台確認收款後，自動開通租戶資格。</li>
-              <li>4. 訂單進入獎金流水與 14 天凍結期。</li>
+              <li>4. 系統更新年費紀錄與功能權限。</li>
             </ol>
           </div>
 
@@ -1150,7 +1159,7 @@
 <script src="js/modules/admin.js?v=7.5"></script>
 <script src="js/modules/home.js?v=7.2"></script>
 <script src="js/modules/settings.js?v=7.1"></script>
-<script src="js/modules/purchase.js?v=1.0"></script>
+<script src="js/modules/purchase.js?v=1.1"></script>
 <script src="js/modules/crm.js?v=7.1"></script>
 <script src="js/auth.js?v=7.7"></script>
 

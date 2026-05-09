@@ -58,18 +58,16 @@
     }
     if (status) {
       status.textContent = isTenant
-        ? '你已具備租戶資格，可使用租戶工具與推薦分潤流程。'
-        : '開通後可使用活動、CRM、公開名片與推薦分潤資格。';
+        ? '你已具備租戶資格，可使用活動管理、名片收集、首頁佈置與較高額度 AI 工具。'
+        : '開通後可使用活動管理、名片收集、版面設定與較高額度的 AI 工具。';
     }
   };
 
   window.initTenantUpgradePage = function() {
     const user = getUser();
     const buyer = document.getElementById('tenant-order-buyer');
-    const sponsor = document.getElementById('tenant-order-sponsor');
     const result = document.getElementById('tenant-order-result');
     if (buyer) buyer.textContent = `${user.name || '未命名'} / ${user.phone || getUserId(user) || '-'}`;
-    if (sponsor) sponsor.textContent = getSponsorId(user) || '尚未指定';
     if (result) result.classList.add('hidden');
   };
 
