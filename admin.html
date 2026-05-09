@@ -45,7 +45,7 @@
     <span id="loading-icon" class="material-symbols-outlined animate-spin text-5xl text-blue-600 mb-4">refresh</span>
     <p id="loading-text" class="text-slate-500 font-bold tracking-widest text-sm text-center px-6">系統初始化與安全驗證中...</p>
     <div id="error-actions" class="hidden mt-6 flex gap-3">
-      <button onclick="liff.logout(); window.location.reload();" class="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">重新登入</button>
+      <button onclick="reloginAdmin()" class="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">重新登入</button>
       <button onclick="window.location.href='index.html'" class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm">回首頁</button>
     </div>
   </div>
@@ -117,7 +117,7 @@
           <img id="admin-avatar" src="https://ui-avatars.com/api/?name=Admin&background=random" class="w-8 h-8 rounded-full border border-slate-200 object-cover" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3135/3135715.png'">
           <span id="admin-name" class="text-sm font-bold text-slate-600">管理員</span>
         </div>
-        <button onclick="liff.logout(); window.location.reload();" class="text-sm text-red-500 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition-colors">登出</button>
+        <button onclick="reloginAdmin()" class="text-sm text-red-500 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition-colors">登出</button>
       </div>
     </header>
 
@@ -671,6 +671,37 @@
     let adminNetworkId = 'admin';
     let currentAdminEcardImgs = { landscape: '', portrait: '', square: '' };
     let currentAdminEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
+
+    function getCleanCurrentUrl() {
+      return window.location.origin + window.location.pathname;
+    }
+
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} 逾時，請重新整理或重新登入`)), ms))
+      ]);
+    }
+
+    function showLoadingError(message) {
+      const loadingText = document.getElementById('loading-text');
+      const loadingIcon = document.getElementById('loading-icon');
+      const errorActions = document.getElementById('error-actions');
+      if (loadingIcon) {
+        loadingIcon.innerText = "running_with_errors";
+        loadingIcon.classList.remove('animate-spin', 'text-blue-600');
+        loadingIcon.classList.add('text-red-500');
+      }
+      if (loadingText) loadingText.innerText = message;
+      if (errorActions) errorActions.classList.remove('hidden');
+    }
+
+    function reloginAdmin() {
+      try {
+        if (window.liff && liff.isLoggedIn()) liff.logout();
+      } catch (e) {}
+      window.location.href = getCleanCurrentUrl();
+    }
     
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
@@ -683,7 +714,10 @@
 
     async function fetchAPI(action, payload = {}, options = {}) {
       try {
-        if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
+        if (liff.isLoggedIn()) {
+          const token = liff.getAccessToken();
+          if (token) payload.lineAccessToken = token;
+        }
         if (!payload.userId) payload.userId = adminProfile?.userId || '';
         payload.operatorId = payload.operatorId || adminProfile?.userId || '';
         payload.role = payload.role || adminRole || 'store';
@@ -697,7 +731,14 @@
         if (!data.success) throw new Error(data.error || "未知後端錯誤");
         return data.data || data;
       } catch (err) {
+        const isInvalidToken = /Invalid or Expired LINE Token/i.test(err.message || '');
         if (!options.silent) showToast(err.message, true);
+        if (isInvalidToken) {
+          showLoadingError('LINE 登入憑證已失效，請重新登入後再操作。');
+          if (options.reloginOnInvalidToken) {
+            setTimeout(reloginAdmin, 900);
+          }
+        }
         return null;
       }
     }
@@ -1167,7 +1208,7 @@
             const res = await fetchAPI('adminSyncBoundCardUser', {
               targetUserId: payload.userId,
               profile: payload
-            }, { silent: auto });
+            }, { silent: auto, reloginOnInvalidToken: true });
             if (res && !res.error) ok++;
             else fail++;
           } catch (e) {
@@ -1638,18 +1679,23 @@
       const errorActions = document.getElementById('error-actions');
 
       try {
-        await liff.init({ liffId: LIFF_ID });
+        if (!window.liff) throw new Error('LINE LIFF SDK 載入失敗，請檢查網路後重新整理');
+        await withTimeout(liff.init({ liffId: LIFF_ID }), 12000, 'LIFF 初始化');
         if (!liff.isLoggedIn()) {
-          liff.login({ redirectUri: window.location.href });
+          liff.login({ redirectUri: getCleanCurrentUrl() });
           return;
         }
 
-        adminProfile = await liff.getProfile();
+        adminProfile = await withTimeout(liff.getProfile(), 10000, '讀取 LINE 個人資料');
         document.getElementById('admin-name').innerText = adminProfile.displayName;
         document.getElementById('admin-avatar').src = adminProfile.pictureUrl;
 
         loadingText.innerText = "驗證管理權限中...";
-        const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
+        const check = await withTimeout(
+          fetchAPI('checkUser', { userId: adminProfile.userId }, { reloginOnInvalidToken: true }),
+          12000,
+          '驗證管理權限'
+        );
 
         if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
           adminRole = check.info.role || 'store';
@@ -1665,10 +1711,7 @@
           errorActions.classList.remove('hidden');
         }
       } catch (err) {
-        loadingIcon.innerText = "running_with_errors";
-        loadingIcon.classList.remove('animate-spin');
-        loadingText.innerText = "初始化失敗: " + err.message;
-        errorActions.classList.remove('hidden');
+        showLoadingError("初始化失敗: " + err.message);
       }
     }
 
