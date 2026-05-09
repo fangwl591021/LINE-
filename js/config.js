@@ -132,6 +132,24 @@ window.getActmasterUrlParams = function() {
     return false;
   }
 
+  function finishNfcCheckinFlow() {
+    setTimeout(() => {
+      try {
+        if (
+          window.liff &&
+          typeof window.liff.isInClient === 'function' &&
+          window.liff.isInClient() &&
+          typeof window.liff.closeWindow === 'function'
+        ) {
+          window.liff.closeWindow();
+          return;
+        }
+      } catch (e) {}
+
+      window.location.replace(window.location.pathname);
+    }, 1800);
+  }
+
   async function runNfcCheckin() {
     const activityId = getNfcActivityId();
     if (!activityId || window.__actmasterNfcStarted) return;
@@ -150,7 +168,7 @@ window.getActmasterUrlParams = function() {
       const pointText = data.awardedPoints > 0 ? '，獲得 ' + data.awardedPoints + ' 點' : '';
       const statusText = data.alreadyChecked ? '您已完成簽到' : '✅ NFC 簽到成功';
       window.showToast(statusText + pointText);
-      setTimeout(() => window.location.replace(window.location.pathname), 1800);
+      finishNfcCheckinFlow();
     } catch (e) {
       window.showToast('NFC 簽到失敗：' + (e.message || '請洽工作人員'), true);
     }
