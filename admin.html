@@ -953,17 +953,20 @@
       const bv = Number(document.getElementById('bonus-order-bv')?.value || 3000);
       if (fee <= 0 || bv <= 0) return showToast('訂單金額與 BV 必須大於 0', true);
 
-      const res = await fetchAPI('createTenantBonusOrder', {
+      const res = await fetchAPI('mlmCreateOrder', {
+        buyerId: tenantId,
+        buyerName: tenant.name || tenant.companyName || tenantId,
         tenantId,
         tenantName: tenant.name || tenant.companyName || tenantId,
         networkId: tenant.networkId || tenant.storeId || 'admin',
+        orderType: 'tenant_annual_fee',
+        productCode: 'TENANT_ANNUAL',
         productName: '租戶年費',
-        fee,
-        price: fee,
+        grossAmount: fee,
         bv,
         taxIncluded: true,
         taxRate: Number(document.getElementById('bonus-tax-rate')?.value || 5),
-        status: 'pending_payment',
+        paymentStatus: 'pending_payment',
         paymentProvider: 'manual'
       });
       if (res) {
@@ -977,14 +980,17 @@
       if (!order) return showToast('找不到訂單', true);
       if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n確認後會依制度產生獎金流水。`)) return;
 
-      const res = await fetchAPI('markTenantOrderPaid', {
+      const res = await fetchAPI('mlmMarkOrderPaid', {
         orderId,
+        buyerId: order.tenantId,
         tenantId: order.tenantId,
-        fee: order.fee,
+        grossAmount: order.fee,
         bv: order.bv,
         paymentProvider: 'manual',
+        paymentNo: 'MANUAL-' + orderId,
         paidAt: new Date().toISOString(),
         bonusPolicy: {
+          type: 'retire_binary_split',
           freezeDays: 14,
           independentBonus: order.bv,
           splitBonus: Math.floor(order.bv / 2)
@@ -998,7 +1004,7 @@
 
     async function cancelTenantOrder(orderId) {
       if (!confirm('確定取消這筆租戶年費訂單？')) return;
-      const res = await fetchAPI('cancelTenantBonusOrder', { orderId });
+      const res = await fetchAPI('mlmCancelOrder', { orderId });
       if (res) {
         showToast('訂單已取消');
         await loadBonusOrders();

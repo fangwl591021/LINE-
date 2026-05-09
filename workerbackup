@@ -519,6 +519,159 @@ const TenantOrderModule = {
   }
 };
 
+const MLMModule = {
+  normalizeOrder(payload) {
+    const now = new Date().toISOString();
+    const grossAmount = Number(payload.grossAmount || payload.price || payload.fee || payload.amount || 0);
+    const taxRate = Number(payload.taxRate || 5);
+    const netAmount = payload.netAmount !== undefined
+      ? Number(payload.netAmount)
+      : Math.round(grossAmount / (1 + taxRate / 100));
+
+    return {
+      orderId: payload.orderId || 'ORD-' + Date.now().toString() + Math.random().toString(36).substring(2, 8).toUpperCase(),
+      orderType: payload.orderType || 'tenant_annual_fee',
+      buyerId: payload.buyerId || payload.tenantId || payload.userId || '',
+      buyerName: payload.buyerName || payload.tenantName || '',
+      networkId: payload.networkId || 'admin',
+      productCode: payload.productCode || 'TENANT_ANNUAL',
+      productName: payload.productName || '租戶年費',
+      grossAmount,
+      netAmount,
+      taxAmount: Math.max(0, grossAmount - netAmount),
+      taxRate,
+      bv: Number(payload.bv || payload.bonusBV || 3000),
+      currency: payload.currency || 'TWD',
+      paymentStatus: payload.paymentStatus || payload.status || 'pending_payment',
+      paymentProvider: payload.paymentProvider || 'manual',
+      paymentNo: payload.paymentNo || payload.tradeNo || '',
+      bonusStatus: payload.bonusStatus || 'not_generated',
+      createdAt: payload.createdAt || now,
+      updatedAt: now,
+      source: payload.source || 'admin'
+    };
+  },
+
+  async createOrder(payload, env) {
+    const order = this.normalizeOrder(payload);
+    if (!order.buyerId) return { success: false, error: 'Missing buyerId' };
+    if (order.grossAmount <= 0 || order.bv < 0) return { success: false, error: 'Invalid order amount or BV' };
+
+    const key = `ORDER_LOCK_${order.orderId}`;
+    if (env.ACTMASTER_KV) {
+      const exists = await env.ACTMASTER_KV.get(key);
+      if (exists) return { success: false, error: 'Duplicate orderId' };
+      await env.ACTMASTER_KV.put(key, '1', { expirationTtl: 60 * 60 * 24 * 30 });
+    }
+
+    return await DBModule.forward('mlmCreateOrder', order, env);
+  },
+
+  async markOrderPaid(payload, env) {
+    const orderId = payload.orderId || '';
+    const paymentNo = payload.paymentNo || payload.tradeNo || '';
+    if (!orderId) return { success: false, error: 'Missing orderId' };
+
+    if (paymentNo && env.ACTMASTER_KV) {
+      const paymentKey = `PAYMENT_LOCK_${payload.paymentProvider || 'manual'}_${paymentNo}`;
+      const existing = await env.ACTMASTER_KV.get(paymentKey);
+      if (existing) {
+        return { success: true, data: { skipped: true, reason: 'duplicate_payment_callback' } };
+      }
+      await env.ACTMASTER_KV.put(paymentKey, orderId, { expirationTtl: 60 * 60 * 24 * 365 });
+    }
+
+    const paidPayload = {
+      ...payload,
+      paymentStatus: 'paid',
+      status: 'paid',
+      paidAt: payload.paidAt || new Date().toISOString(),
+      triggerBonus: payload.triggerBonus !== false,
+      freezeDays: Number(payload.freezeDays || payload.bonusPolicy?.freezeDays || 14),
+      bonusPolicy: {
+        type: payload.bonusPolicy?.type || 'retire_binary_split',
+        independentBonus: Number(payload.bonusPolicy?.independentBonus || payload.bv || 3000),
+        splitBonus: Number(payload.bonusPolicy?.splitBonus || Math.floor(Number(payload.bv || 3000) / 2)),
+        freezeDays: Number(payload.bonusPolicy?.freezeDays || payload.freezeDays || 14)
+      },
+      updatedAt: new Date().toISOString()
+    };
+
+    return await DBModule.forward('mlmMarkOrderPaid', paidPayload, env);
+  },
+
+  async cancelOrder(payload, env) {
+    if (!payload.orderId) return { success: false, error: 'Missing orderId' };
+    return await DBModule.forward('mlmCancelOrder', {
+      ...payload,
+      paymentStatus: 'cancelled',
+      status: 'cancelled',
+      bonusStatus: 'cancelled',
+      updatedAt: new Date().toISOString()
+    }, env);
+  },
+
+  async refundOrder(payload, env) {
+    if (!payload.orderId) return { success: false, error: 'Missing orderId' };
+    return await DBModule.forward('mlmRefundOrder', {
+      ...payload,
+      paymentStatus: 'refunded',
+      status: 'refunded',
+      reversalRequired: true,
+      updatedAt: new Date().toISOString()
+    }, env);
+  },
+
+  async listOrders(payload, env) {
+    return await DBModule.forward('mlmListOrders', {
+      page: Number(payload.page || 1),
+      pageSize: Math.min(100, Number(payload.pageSize || 20)),
+      status: payload.status || 'all',
+      keyword: payload.keyword || '',
+      buyerId: payload.buyerId || '',
+      networkId: payload.networkId || ''
+    }, env);
+  },
+
+  async listBonusTransactions(payload, env) {
+    return await DBModule.forward('mlmListBonusTransactions', {
+      page: Number(payload.page || 1),
+      pageSize: Math.min(100, Number(payload.pageSize || 20)),
+      status: payload.status || 'all',
+      memberId: payload.memberId || '',
+      batchId: payload.batchId || ''
+    }, env);
+  },
+
+  async createSettlementBatch(payload, env) {
+    return await DBModule.forward('mlmCreateSettlementBatch', {
+      batchId: payload.batchId || 'BAT-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+      periodStart: payload.periodStart || '',
+      periodEnd: payload.periodEnd || '',
+      status: 'draft',
+      createdBy: payload.operatorId || payload.userId || '',
+      createdAt: new Date().toISOString()
+    }, env);
+  },
+
+  async lockSettlementBatch(payload, env) {
+    if (!payload.batchId) return { success: false, error: 'Missing batchId' };
+    return await DBModule.forward('mlmLockSettlementBatch', {
+      ...payload,
+      status: 'locked',
+      lockedAt: new Date().toISOString()
+    }, env);
+  },
+
+  async getMemberTree(payload, env) {
+    return await DBModule.forward('mlmGetMemberTree', {
+      memberId: payload.memberId || payload.userId || '',
+      treeType: payload.treeType || 'sponsor',
+      depth: Math.min(10, Number(payload.depth || 3))
+    }, env);
+  }
+};
+
 // ==================== 請求分發器 (Action Dispatcher) ====================
 async function dispatchAction(action, payload, request, env) {
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
@@ -532,7 +685,7 @@ async function dispatchAction(action, payload, request, env) {
       }
     } else {
       // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
-      const strictActions = ['updateUserRole']; 
+      const strictActions = ['updateUserRole', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
       if (strictActions.includes(action)) {
         return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
       }
@@ -572,6 +725,15 @@ async function dispatchAction(action, payload, request, env) {
     case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);
     case 'markTenantOrderPaid':    return await TenantOrderModule.markTenantOrderPaid(payload, env);
     case 'cancelTenantBonusOrder': return await TenantOrderModule.cancelTenantBonusOrder(payload, env);
+    case 'mlmCreateOrder':         return await MLMModule.createOrder(payload, env);
+    case 'mlmMarkOrderPaid':       return await MLMModule.markOrderPaid(payload, env);
+    case 'mlmCancelOrder':         return await MLMModule.cancelOrder(payload, env);
+    case 'mlmRefundOrder':         return await MLMModule.refundOrder(payload, env);
+    case 'mlmListOrders':          return await MLMModule.listOrders(payload, env);
+    case 'mlmListBonusTransactions': return await MLMModule.listBonusTransactions(payload, env);
+    case 'mlmCreateSettlementBatch': return await MLMModule.createSettlementBatch(payload, env);
+    case 'mlmLockSettlementBatch': return await MLMModule.lockSettlementBatch(payload, env);
+    case 'mlmGetMemberTree':       return await MLMModule.getMemberTree(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
     default:                       return await DBModule.forward(action, payload, env);
