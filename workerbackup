@@ -382,6 +382,66 @@ const DBModule = {
 
 // ==================== 模組 6: 邊緣快取驗證 (Edge Auth KV Module) ====================
 const AuthModule = {
+  getCardLineId(card) {
+    return String((card && (card['LINE ID'] || card.lineId || card.userId)) || '').trim();
+  },
+
+  buildProfileFromBoundCard(card, userId) {
+    const company = String(card['公司名稱'] || '').trim();
+    const title = String(card['職稱'] || '').trim();
+    const phone = String(card['手機號碼'] || card['公司電話'] || '').trim();
+    return {
+      userId,
+      name: String(card['姓名'] || card['英文名'] || '待補資料').trim(),
+      phone,
+      industry: title || company || '已綁定名片',
+      birthday: '',
+      role: 'user',
+      networkId: String(card['歸屬網'] || 'admin').trim(),
+      claimedCardRowId: card.rowId || '',
+      companyName: company,
+      title,
+      profileStatus: phone ? 'active' : 'bound_card',
+      source: 'bound_card'
+    };
+  },
+
+  async ensureBoundCardUser(userId, env) {
+    const cardsResult = await DBModule.forward('getCardContacts', { role: 'admin', networkId: 'admin' }, env);
+    const cards = cardsResult && Array.isArray(cardsResult.data) ? cardsResult.data : (Array.isArray(cardsResult) ? cardsResult : []);
+    const card = cards.find(c => this.getCardLineId(c) === userId);
+    if (!card) return null;
+
+    const profile = this.buildProfileFromBoundCard(card, userId);
+    const result = await DBModule.forward('registerUser', profile, env);
+    if (!result || !result.success) return null;
+    if (env.ACTMASTER_KV) {
+      try {
+        await env.ACTMASTER_KV.delete(`U_PROFILE_${userId}`);
+        await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(profile), { expirationTtl: 600 });
+      } catch (e) { console.error("KV Write Error", e); }
+    }
+    return profile;
+  },
+
+  async getAllUsersWithBoundCards(payload, env) {
+    const usersResult = await DBModule.forward('getAllUsers', payload, env);
+    const cardsResult = await DBModule.forward('getCardContacts', { ...payload, role: 'admin', networkId: payload.networkId || 'admin' }, env);
+    const users = usersResult && Array.isArray(usersResult.data) ? usersResult.data : (Array.isArray(usersResult) ? usersResult : []);
+    const cards = cardsResult && Array.isArray(cardsResult.data) ? cardsResult.data : (Array.isArray(cardsResult) ? cardsResult : []);
+    const seen = new Set(users.map(u => String(u.userId || '').trim()).filter(Boolean));
+    const merged = [...users];
+
+    cards.forEach(card => {
+      const userId = this.getCardLineId(card);
+      if (!userId || seen.has(userId)) return;
+      seen.add(userId);
+      merged.push(this.buildProfileFromBoundCard(card, userId));
+    });
+
+    return { success: true, data: merged };
+  },
+
   async check(payload, env) {
     const userId = payload.userId;
     if (!userId) return { success: false, error: "Missing userId" };
@@ -403,6 +463,13 @@ const AuthModule = {
         // 🚨 修正：縮短快取為 600 秒 (10 分鐘)，避免資料庫變更卡住
         await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(result.data.info), { expirationTtl: 600 });
       } catch (e) { console.error("KV Write Error", e); }
+    }
+
+    if (result && result.success && result.data && !result.data.isRegistered) {
+      const boundProfile = await this.ensureBoundCardUser(userId, env);
+      if (boundProfile) {
+        return { success: true, data: { isRegistered: true, info: boundProfile, source: 'bound_card' } };
+      }
     }
     return result;
   },
@@ -734,6 +801,7 @@ async function dispatchAction(action, payload, request, env) {
 
   switch (action) {
     case 'checkUser':              return await AuthModule.check(payload, env);
+    case 'getAllUsers':            return await AuthModule.getAllUsersWithBoundCards(payload, env);
     case 'registerUser':           
     case 'updateUserProfile':      
     case 'updateUserRole':         return await AuthModule.updateAndClearCache(action, payload, env);

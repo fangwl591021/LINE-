@@ -427,7 +427,7 @@
       setTimeout(() => { toast.remove(); }, 3000);
     }
 
-    async function fetchAPI(action, payload = {}) {
+    async function fetchAPI(action, payload = {}, options = {}) {
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         payload.userId = adminProfile?.userId || '';
@@ -442,7 +442,7 @@
         if (!data.success) throw new Error(data.error || "未知後端錯誤");
         return data.data || data;
       } catch (err) {
-        showToast(err.message, true);
+        if (!options.silent) showToast(err.message, true);
         return null;
       }
     }
@@ -464,32 +464,99 @@
       if (tabId === 'finance') loadFinanceStats();
     }
 
-    async function loadUsers() {
+    function getCardLineId(card) {
+      return String((card && (card['LINE ID'] || card.lineId || card.userId)) || '').trim();
+    }
+
+    function buildUserFromBoundCard(card) {
+      const userId = getCardLineId(card);
+      if (!userId) return null;
+      const company = String(card['公司名稱'] || '').trim();
+      const title = String(card['職稱'] || '').trim();
+      return {
+        userId,
+        name: String(card['姓名'] || card['英文名'] || '待補資料').trim(),
+        phone: String(card['手機號碼'] || card['公司電話'] || '').trim(),
+        networkId: String(card['歸屬網'] || 'admin').trim(),
+        role: 'user',
+        source: 'bound_card',
+        profileStatus: 'bound_card',
+        companyName: company,
+        title,
+        industry: title || company || '已綁定名片'
+      };
+    }
+
+    function mergeUsersWithBoundCards(users, cards) {
+      const merged = Array.isArray(users) ? [...users] : [];
+      const userIds = new Set(merged.map(u => String(u.userId || '').trim()).filter(Boolean));
+      (Array.isArray(cards) ? cards : []).forEach(card => {
+        const user = buildUserFromBoundCard(card);
+        if (!user || userIds.has(user.userId)) return;
+        userIds.add(user.userId);
+        merged.push(user);
+      });
+      return merged;
+    }
+
+    function renderUsersTable(users) {
       const tbody = document.getElementById('users-table-body');
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>';
-      const res = await fetchAPI('getAllUsers');
-      if (res && Array.isArray(res)) {
-        allUsersData = res;
-        document.getElementById('stat-users').innerText = res.length;
-        tbody.innerHTML = res.map(u => `
+      const list = Array.isArray(users) ? users : [];
+      document.getElementById('stat-users').innerText = list.length;
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">目前沒有用戶資料</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(u => {
+        const role = u.role || 'user';
+        const isBoundCard = u.source === 'bound_card' || u.profileStatus === 'bound_card';
+        return `
           <tr>
-            <td class="font-bold text-slate-700">${escapeHTML(u.name || '未命名')}</td>
+            <td class="font-bold text-slate-700">
+              ${escapeHTML(u.name || '未命名')}
+              ${isBoundCard ? '<span class="ml-2 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-black">已綁名片</span>' : ''}
+            </td>
             <td class="text-xs text-slate-400 font-mono">${u.userId ? u.userId.substring(0,8)+'...' : ''}</td>
             <td>${escapeHTML(u.phone || '-')}</td>
             <td class="text-sm">${escapeHTML(u.networkId || 'admin')}</td>
             <td>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
-                ${u.role.toUpperCase()}
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}">
+                ${role.toUpperCase()}
               </span>
             </td>
             <td class="text-right">
-              <select onchange="updateRole('${u.userId}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
-                <option value="user" ${u.role==='user'?'selected':''}>一般</option>
-                <option value="store" ${u.role==='store'?'selected':''}>店長</option>
-                <option value="admin" ${u.role==='admin'?'selected':''}>總管</option>
+              <select onchange="updateRole('${escapeHTML(u.userId || '')}', this.value)" class="text-sm border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="user" ${role==='user'?'selected':''}>一般</option>
+                <option value="store" ${role==='store'?'selected':''}>店長</option>
+                <option value="admin" ${role==='admin'?'selected':''}>總管</option>
               </select>
             </td>
-          </tr>`).join('');
+          </tr>`;
+      }).join('');
+    }
+
+    async function loadUsers() {
+      const tbody = document.getElementById('users-table-body');
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">載入中...</td></tr>';
+      const [usersRes, cardsRes] = await Promise.all([
+        fetchAPI('getAllUsers', {}, { silent: true }),
+        fetchAPI('getCardContacts', {}, { silent: true })
+      ]);
+      if (Array.isArray(usersRes) || Array.isArray(cardsRes)) {
+        allUsersData = mergeUsersWithBoundCards(usersRes || [], cardsRes || []);
+        renderUsersTable(allUsersData);
+      } else {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-400">載入失敗，請重新整理</td></tr>';
+        showToast('無法取得用戶名冊', true);
+      }
+    }
+
+    async function updateRole(userId, role) {
+      if (!userId) return showToast('找不到用戶 ID', true);
+      const res = await fetchAPI('updateUserRole', { userId, role });
+      if (res) {
+        showToast('權限已更新');
+        await loadUsers();
       }
     }
 
@@ -593,14 +660,30 @@
       showToast('名片已刪除');
     }
 
+    function normalizeListResponse(res) {
+      if (Array.isArray(res)) return res;
+      if (res && Array.isArray(res.items)) return res.items;
+      if (res && Array.isArray(res.activities)) return res.activities;
+      if (res && Array.isArray(res.data)) return res.data;
+      return [];
+    }
+
     async function loadActivities() {
       const tbody = document.getElementById('acts-table-body');
       tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入活動中...</td></tr>';
-      const res = await fetchAPI('getPublicActivities');
-      if (res && Array.isArray(res)) {
-        allActivitiesData = res;
-        document.getElementById('stat-acts').innerText = res.length;
+      const actions = ['getPublicActivities', 'getAllActivities', 'getActivities'];
+      let loaded = [];
+      for (const action of actions) {
+        const res = await fetchAPI(action, {}, { silent: true });
+        loaded = normalizeListResponse(res);
+        if (loaded.length) break;
+      }
+      allActivitiesData = loaded;
+      document.getElementById('stat-acts').innerText = loaded.length;
+      if (loaded.length) {
         renderActivities();
+      } else {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有活動資料，或後端查詢暫時無回應</td></tr>';
       }
     }
 
@@ -608,6 +691,10 @@
       const tbody = document.getElementById('acts-table-body');
       const filter = document.getElementById('act-tenant-filter').value;
       const filtered = filter === 'all' ? allActivitiesData : allActivitiesData.filter(a => a['建立者ID'] === filter);
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">沒有符合條件的活動</td></tr>';
+        return;
+      }
       
       tbody.innerHTML = filtered.map(a => `
         <tr>

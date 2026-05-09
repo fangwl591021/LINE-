@@ -202,20 +202,87 @@ const HomeModule = (function() {
         }).join('');
     };
 
+    function normalizeActivityList_(res) {
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.data)) return res.data;
+        if (res && Array.isArray(res.activities)) return res.activities;
+        if (res && Array.isArray(res.items)) return res.items;
+        if (res && Array.isArray(res.registrations)) return res.registrations;
+        return [];
+    }
+
+    async function fetchActivitiesByFallback_(actions, payload) {
+        for (const action of actions) {
+            const res = await window.fetchAPI(action, payload || {}, true);
+            const list = normalizeActivityList_(res);
+            if (list.length) return list;
+        }
+        return [];
+    }
+
     window.loadUserActivities = async function() {
         if (typeof window.syncStoreSettingsToHome === 'function') {
             window.syncStoreSettingsToHome();
         }
 
         try {
-            const acts = await window.fetchAPI('getPublicActivities', {}, true);
-            window.allActivities = Array.isArray(acts) ? acts : [];
+            window.allActivities = await fetchActivitiesByFallback_(
+                ['getPublicActivities', 'getAllActivities', 'getActivities'],
+                {}
+            );
             window.renderHomeActivities();
             return window.allActivities;
         } catch (e) {
             console.error('活動載入失敗', e);
             window.allActivities = [];
             window.renderHomeActivities();
+            return [];
+        }
+    };
+
+    window.loadMyActivities = async function() {
+        const list = document.getElementById('my-activities-list');
+        if (!list) return [];
+        list.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm font-bold">活動紀錄載入中...</div>';
+
+        const payload = {
+            userId: window.currentUserProfile?.userId || '',
+            phone: window.currentUser?.phone || '',
+            name: window.currentUser?.name || window.currentUserProfile?.displayName || ''
+        };
+
+        try {
+            const records = await fetchActivitiesByFallback_(
+                ['getMyActivities', 'getUserActivities', 'getMyRegistrations', 'getUserRegistrations'],
+                payload
+            );
+
+            if (!records.length) {
+                list.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm font-bold">目前沒有活動紀錄</div>';
+                return [];
+            }
+
+            list.innerHTML = records.slice().reverse().map(r => {
+                const title = window.escapeHTML(r['活動名稱'] || r.activityName || r.title || '未命名活動');
+                const time = window.escapeHTML(window.formatDisplayTime(r['開始時間'] || r.startTime || r.createdAt || r['報名時間'] || ''));
+                const status = window.escapeHTML(r['簽到'] || r.checkinStatus || r.status || r['報名狀態'] || '已報名');
+                const fee = window.escapeHTML(r['繳費狀態'] || r.paymentStatus || '');
+                return `
+                    <div class="p-4 flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="font-black text-slate-800 text-[15px] truncate">${title}</div>
+                            <div class="text-[12px] text-slate-400 mt-1">${time}</div>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <div class="inline-flex px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[12px] font-black">${status}</div>
+                            ${fee ? `<div class="text-[11px] text-slate-400 mt-1">${fee}</div>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
+            return records;
+        } catch (e) {
+            console.error('活動紀錄載入失敗', e);
+            list.innerHTML = '<div class="text-center py-10 text-red-400 text-sm font-bold">活動紀錄暫時無法讀取，請稍後再試</div>';
             return [];
         }
     };
