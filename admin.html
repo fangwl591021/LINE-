@@ -434,7 +434,8 @@
         if (!payload.userId) payload.userId = authUserId;
         payload.authUserId = payload.authUserId || authUserId;
         payload.operatorId = payload.operatorId || authUserId;
-        payload.role = adminRole || 'store';
+        payload.role = payload.role || adminRole || 'store';
+        payload.operatorRole = payload.operatorRole || adminRole || 'store';
         payload.networkId = payload.networkId || adminNetworkId || 'admin';
         const res = await fetch(WORKER_URL, {
           method: 'POST',
@@ -556,7 +557,17 @@
 
     async function updateRole(userId, role) {
       if (!userId) return showToast('找不到用戶 ID', true);
-      const res = await fetchAPI('updateUserRole', { targetUserId: userId, role });
+      const authUserId = adminProfile?.userId || '';
+      const res = await fetchAPI('updateUserRole', {
+        userId,
+        targetUserId: userId,
+        authUserId,
+        operatorId: authUserId,
+        operatorRole: adminRole || 'store',
+        role,
+        targetRole: role,
+        newRole: role
+      });
       if (res) {
         showToast('權限已更新');
         await loadUsers();
