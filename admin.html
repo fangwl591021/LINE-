@@ -669,7 +669,7 @@
       setTimeout(() => { toast.remove(); }, 3000);
     }
 
-    async function fetchAPI(action, payload = {}) {
+    async function fetchAPI(action, payload = {}, options = {}) {
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         if (!payload.userId) payload.userId = adminProfile?.userId || '';
@@ -685,7 +685,7 @@
         if (!data.success) throw new Error(data.error || "未知後端錯誤");
         return data.data || data;
       } catch (err) {
-        showToast(err.message, true);
+        if (!options.silent) showToast(err.message, true);
         return null;
       }
     }
@@ -875,8 +875,19 @@
     async function loadBonusOrders() {
       const body = document.getElementById('bonus-orders-body');
       if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入訂單中...</td></tr>';
-      const res = await fetchAPI('getTenantBonusOrders');
-      allBonusOrdersData = Array.isArray(res) ? res.map(normalizeBonusOrder) : [];
+      let res = await fetchAPI('mlmListOrders', {
+        orderType: 'tenant_annual_fee',
+        page: 1,
+        pageSize: 100,
+        status: document.getElementById('bonus-order-status-filter')?.value || 'all'
+      }, { silent: true });
+
+      if (!res) {
+        res = await fetchAPI('getTenantBonusOrders', {}, { silent: true });
+      }
+
+      const list = Array.isArray(res) ? res : (Array.isArray(res?.orders) ? res.orders : (Array.isArray(res?.data) ? res.data : []));
+      allBonusOrdersData = list.map(normalizeBonusOrder);
       bonusOrderPage = 1;
       renderBonusOrders();
     }
