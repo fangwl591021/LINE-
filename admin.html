@@ -93,6 +93,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">insights</span>
             營運財務報表
           </a>
+          <a href="#" onclick="switchTab('bonus')" id="nav-bonus" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">payments</span>
+            獎金制度
+          </a>
           <a href="#" onclick="switchTab('import')" id="nav-import" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">upload_file</span>
             批次名單匯入
@@ -249,6 +253,128 @@
         </div>
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex items-center justify-center h-64">
           <p class="text-slate-400 text-sm">此處未來可擴充財務對帳圖表與匯出功能</p>
+        </div>
+      </div>
+
+      <!-- Tab: Bonus System -->
+      <div id="tab-bonus" class="tab-content hidden space-y-6">
+        <div class="grid grid-cols-1 xl:grid-cols-4 gap-5">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">租戶年費</p>
+            <h3 class="text-3xl font-black text-slate-800">NT$ 6,300</h3>
+            <p class="text-[12px] text-slate-500 mt-2">含 5% 營業稅，未稅收入 NT$ 6,000</p>
+          </div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">建議提撥 BV</p>
+            <h3 class="text-3xl font-black text-emerald-600">NT$ 3,000</h3>
+            <p class="text-[12px] text-slate-500 mt-2">沿用 retire 制度的入會/續約獎金基準</p>
+          </div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">平台保留</p>
+            <h3 class="text-3xl font-black text-blue-600">NT$ 3,000</h3>
+            <p class="text-[12px] text-slate-500 mt-2">未稅收入扣除 BV 後，用於系統、服務與營運</p>
+          </div>
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-slate-400 text-xs font-bold mb-1">凍結期</p>
+            <h3 class="text-3xl font-black text-amber-500">14 天</h3>
+            <p class="text-[12px] text-slate-500 mt-2">退租、退款或爭議期內可作廢獎金</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+              <div>
+                <h3 class="font-black text-slate-800">制度規則整合</h3>
+                <p class="text-[12px] text-slate-500 mt-1">依 retire 專案邏輯改為租戶年費版，先做後台制度控管與試算。</p>
+              </div>
+              <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[12px] font-black">6300 含稅版</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>情境</th>
+                    <th>撥發方式</th>
+                    <th>金額</th>
+                    <th>備註</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="font-bold text-slate-700">推薦人已獨立</td>
+                    <td>推薦人取得全額 BV</td>
+                    <td class="font-black text-emerald-600">NT$ 3,000</td>
+                    <td class="text-slate-500">適合已有完整左右腳/獨立資格的租戶。</td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold text-slate-700">推薦人未獨立</td>
+                    <td>推薦人與上線各半</td>
+                    <td class="font-black text-blue-600">1,500 / 1,500</td>
+                    <td class="text-slate-500">沿用 retire 的未獨立拆半制度。</td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold text-slate-700">年度續約</td>
+                    <td>依同一 BV 規則撥發</td>
+                    <td class="font-black text-slate-700">NT$ 3,000</td>
+                    <td class="text-slate-500">作為租戶每年續約獎金基準。</td>
+                  </tr>
+                  <tr>
+                    <td class="font-bold text-slate-700">退款/退租</td>
+                    <td>凍結期內作廢</td>
+                    <td class="font-black text-red-500">0</td>
+                    <td class="text-slate-500">14 天內取消 pending 流水，避免已領後追討。</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+            <div>
+              <h3 class="font-black text-slate-800">獎金試算</h3>
+              <p class="text-[12px] text-slate-500 mt-1">用目前租戶數或自行輸入件數，快速估算年費與獎金池。</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-[12px] text-slate-500 font-bold">租戶年費含稅</label>
+                <input id="bonus-year-fee" type="number" value="6300" oninput="renderBonusSystem()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="text-[12px] text-slate-500 font-bold">提撥 BV</label>
+                <input id="bonus-bv" type="number" value="3000" oninput="renderBonusSystem()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="text-[12px] text-slate-500 font-bold">租戶件數</label>
+                <input id="bonus-tenant-count" type="number" value="0" oninput="renderBonusSystem()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="text-[12px] text-slate-500 font-bold">稅率</label>
+                <input id="bonus-tax-rate" type="number" value="5" oninput="renderBonusSystem()" class="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-2">
+              <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <p class="text-[11px] text-slate-400 font-bold">年費總收入</p>
+                <div id="bonus-total-sales" class="text-xl font-black text-slate-800 mt-1">-</div>
+              </div>
+              <div class="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                <p class="text-[11px] text-emerald-600 font-bold">獎金池</p>
+                <div id="bonus-total-pool" class="text-xl font-black text-emerald-700 mt-1">-</div>
+              </div>
+              <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                <p class="text-[11px] text-blue-600 font-bold">未稅平台保留</p>
+                <div id="bonus-platform-reserve" class="text-xl font-black text-blue-700 mt-1">-</div>
+              </div>
+              <div class="bg-amber-50 rounded-xl p-4 border border-amber-100">
+                <p class="text-[11px] text-amber-600 font-bold">預估稅額</p>
+                <div id="bonus-tax-total" class="text-xl font-black text-amber-700 mt-1">-</div>
+              </div>
+            </div>
+            <button type="button" onclick="copyBonusPolicy()" class="w-full mt-2 bg-slate-800 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-transform">
+              <span class="material-symbols-outlined text-[18px]">content_copy</span> 複製制度摘要
+            </button>
+          </div>
         </div>
       </div>
 
@@ -523,6 +649,74 @@
       if (tabId === 'cards' && allCardsData.length === 0) loadCards();
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'finance') loadFinanceStats();
+      if (tabId === 'bonus') initBonusSystem();
+    }
+
+    function formatCurrency(value) {
+      return 'NT$ ' + Math.round(Number(value || 0)).toLocaleString();
+    }
+
+    function getTenantCountForBonus() {
+      const users = Array.isArray(allUsersData) ? allUsersData : [];
+      const tenants = users.filter(u => {
+        const role = String(u.role || '').toLowerCase();
+        return role === 'store' || role === 'tenant';
+      });
+      return tenants.length;
+    }
+
+    async function initBonusSystem() {
+      if (allUsersData.length === 0) await loadUsers();
+      const tenantInput = document.getElementById('bonus-tenant-count');
+      if (tenantInput && (!tenantInput.value || Number(tenantInput.value) === 0)) {
+        tenantInput.value = getTenantCountForBonus();
+      }
+      renderBonusSystem();
+    }
+
+    function renderBonusSystem() {
+      const fee = Number(document.getElementById('bonus-year-fee')?.value || 6300);
+      const bv = Number(document.getElementById('bonus-bv')?.value || 3000);
+      const count = Number(document.getElementById('bonus-tenant-count')?.value || 0);
+      const taxRate = Number(document.getElementById('bonus-tax-rate')?.value || 5) / 100;
+      const divisor = 1 + taxRate;
+      const totalSales = fee * count;
+      const totalPreTax = divisor > 0 ? totalSales / divisor : totalSales;
+      const taxTotal = totalSales - totalPreTax;
+      const bonusPool = bv * count;
+      const platformReserve = totalPreTax - bonusPool;
+
+      const map = {
+        'bonus-total-sales': totalSales,
+        'bonus-total-pool': bonusPool,
+        'bonus-platform-reserve': platformReserve,
+        'bonus-tax-total': taxTotal
+      };
+      Object.keys(map).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = formatCurrency(map[id]);
+      });
+    }
+
+    async function copyBonusPolicy() {
+      const fee = Number(document.getElementById('bonus-year-fee')?.value || 6300);
+      const bv = Number(document.getElementById('bonus-bv')?.value || 3000);
+      const half = Math.floor(bv / 2);
+      const text = [
+        '獎金制度摘要',
+        `租戶年費：${formatCurrency(fee)} 含稅`,
+        `建議提撥 BV：${formatCurrency(bv)}`,
+        `推薦人已獨立：推薦人取得 ${formatCurrency(bv)}`,
+        `推薦人未獨立：推薦人 ${formatCurrency(half)} / 上線 ${formatCurrency(bv - half)}`,
+        '獎金凍結期：14 天，退款或退租可作廢 pending 流水'
+      ].join('\n');
+
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('獎金制度摘要已複製');
+      } catch (e) {
+        window.prompt('請複製制度摘要', text);
+      }
     }
 
     async function loadUsers() {
