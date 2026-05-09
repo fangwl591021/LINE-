@@ -475,13 +475,19 @@ const AuthModule = {
   },
 
   async updateAndClearCache(action, payload, env) {
-    const result = await DBModule.forward(action, payload, env);
+    const forwardPayload = { ...payload };
+    if (action === 'updateUserRole' && payload.targetUserId) {
+      forwardPayload.userId = payload.targetUserId;
+      forwardPayload.operatorId = payload.operatorId || payload.authUserId || payload.userId || '';
+    }
+
+    const result = await DBModule.forward(action, forwardPayload, env);
 
     if (result && result.success && env.ACTMASTER_KV) {
       try {
         let targetUserId = null;
         if (action === 'updateUserRole') {
-          targetUserId = payload.userId;
+          targetUserId = payload.targetUserId || payload.userId;
         } else if (action === 'registerUser' || action === 'updateUserProfile') {
           targetUserId = payload.userId;
         }

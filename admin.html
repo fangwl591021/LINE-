@@ -430,7 +430,10 @@
     async function fetchAPI(action, payload = {}, options = {}) {
       try {
         if (liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
-        payload.userId = adminProfile?.userId || '';
+        const authUserId = adminProfile?.userId || '';
+        if (!payload.userId) payload.userId = authUserId;
+        payload.authUserId = payload.authUserId || authUserId;
+        payload.operatorId = payload.operatorId || authUserId;
         payload.role = adminRole || 'store';
         payload.networkId = payload.networkId || adminNetworkId || 'admin';
         const res = await fetch(WORKER_URL, {
@@ -553,7 +556,7 @@
 
     async function updateRole(userId, role) {
       if (!userId) return showToast('找不到用戶 ID', true);
-      const res = await fetchAPI('updateUserRole', { userId, role });
+      const res = await fetchAPI('updateUserRole', { targetUserId: userId, role });
       if (res) {
         showToast('權限已更新');
         await loadUsers();
