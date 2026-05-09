@@ -711,7 +711,7 @@
       
       document.getElementById('page-title').innerText = navBtn ? navBtn.innerText.trim() : "管理後台";
       
-      if (tabId === 'users' && allUsersData.length === 0) loadUsers();
+      if (tabId === 'users') loadUsers();
       if (tabId === 'cards' && allCardsData.length === 0) loadCards();
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'finance') loadFinanceStats();
@@ -1051,6 +1051,7 @@
       if (res && Array.isArray(res)) {
         allUsersData = res;
         renderUsersTable(res);
+        setTimeout(() => syncBoundCardsToUsers({ auto: true }), 80);
       }
     }
 
@@ -1084,35 +1085,38 @@
 
     function buildUserPayloadFromBoundCard(card) {
       const userId = normalizeLineId(card['LINE ID'] || card.lineId);
-      const name = String(card['姓名'] || '').trim();
+      const name = String(card['姓名'] || card['英文名'] || '').trim() || '待補資料';
       const phone = String(card['手機號碼'] || card['公司電話'] || '').trim();
       const company = String(card['公司名稱'] || '').trim();
       const title = String(card['職稱'] || '').trim();
 
-      if (!userId || !name || !phone) return null;
+      if (!userId) return null;
       return {
         userId,
         name,
         phone,
-        industry: title || company,
+        industry: title || company || '待補資料',
         birthday: '',
         role: 'user',
         networkId: card['歸屬網'] || 'admin',
         claimedCardRowId: card.rowId || '',
         companyName: company,
-        title
+        title,
+        profileStatus: phone ? 'active' : 'incomplete',
+        source: 'bound_card'
       };
     }
 
-    async function syncBoundCardsToUsers() {
+    async function syncBoundCardsToUsers(options = {}) {
+      const auto = !!options.auto;
       if (adminRole !== 'admin') {
-        showToast('只有總管 admin 可以同步全站會員', true);
+        if (!auto) showToast('只有總管 admin 可以同步全站會員', true);
         return;
       }
 
       const btn = document.getElementById('btn-sync-bound-cards');
       const originalHtml = btn ? btn.innerHTML : '';
-      if (btn) {
+      if (btn && !auto) {
         btn.disabled = true;
         btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> 偵測中';
       }
@@ -1134,22 +1138,24 @@
         });
 
         if (payloads.length === 0) {
-          showToast('偵測完成：沒有已綁名片缺會員資料');
+          if (!auto) showToast('偵測完成：沒有已綁名片缺會員資料');
           allUsersData = users;
           renderUsersTable(users);
           return;
         }
 
-        const preview = payloads.slice(0, 8).map(p => `${p.name} / ${p.phone}`).join('\n');
-        if (!window.confirm(`偵測到 ${payloads.length} 筆已綁名片但沒有會員資料，要補寫入個人設定嗎？\n\n${preview}${payloads.length > 8 ? '\n...' : ''}`)) {
-          showToast('已取消同步');
-          return;
+        if (!auto) {
+          const preview = payloads.slice(0, 8).map(p => `${p.name} / ${p.phone || '待補電話'}`).join('\n');
+          if (!window.confirm(`偵測到 ${payloads.length} 筆已綁名片但沒有會員資料，要補寫入個人設定嗎？\n\n${preview}${payloads.length > 8 ? '\n...' : ''}`)) {
+            showToast('已取消同步');
+            return;
+          }
         }
 
         let ok = 0;
         let fail = 0;
         for (const payload of payloads) {
-          if (btn) btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> ${ok + fail + 1}/${payloads.length}`;
+          if (btn && !auto) btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> ${ok + fail + 1}/${payloads.length}`;
           try {
             const res = await fetchAPI('registerUser', payload);
             if (res && !res.error) ok++;
@@ -1159,10 +1165,10 @@
           }
         }
 
-        showToast(`同步完成：成功 ${ok} 筆${fail ? `，失敗 ${fail} 筆` : ''}`, !!fail);
+        if (!auto || ok > 0) showToast(`已綁名片同步完成：成功 ${ok} 筆${fail ? `，失敗 ${fail} 筆` : ''}`, !!fail);
         await loadUsers();
       } finally {
-        if (btn) {
+        if (btn && !auto) {
           btn.disabled = false;
           btn.innerHTML = originalHtml;
         }
