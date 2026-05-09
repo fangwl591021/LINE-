@@ -48,3 +48,47 @@ details > summary::-webkit-details-marker {
 .toast-enter {
   animation: slideDown 0.3s ease-out forwards;
 }
+
+.fee-price-field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 64px;
+  padding: 0 1.25rem;
+  border-radius: 1rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.fee-price-prefix {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1;
+  font-weight: 900;
+  color: #64748b;
+  letter-spacing: 0;
+}
+
+.fee-price-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 60px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.fee-price-input::placeholder {
+  color: #94a3b8;
+}
+
+.fee-price-input::-webkit-outer-spin-button,
+.fee-price-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
