@@ -6,11 +6,22 @@
   let lastTenantOrderNotice = '';
 
   function getUser() {
-    return window.currentUser || window.currentUserProfile || {};
+    return {
+      ...(window.currentUserProfile || {}),
+      ...(window.currentUser || {})
+    };
   }
 
   function getUserId(user) {
-    return user.userId || user.memberId || user.lineId || '';
+    return user.userId ||
+      user.memberId ||
+      user.lineId ||
+      user.lineID ||
+      user.uid ||
+      user.sub ||
+      window.currentUserProfile?.userId ||
+      window.currentUser?.userId ||
+      '';
   }
 
   function getSponsorId(user) {
@@ -77,7 +88,13 @@
     const btnText = '<span class="material-symbols-outlined text-[20px]">add_card</span> 建立 NT$6,300 租戶年費訂單';
     const user = getUser();
     const buyerId = getUserId(user);
-    if (!buyerId) return window.showToast('找不到會員 ID，請重新登入後再試', true);
+    if (!buyerId) {
+      console.warn('[tenant purchase] missing user id', {
+        currentUser: window.currentUser,
+        currentUserProfile: window.currentUserProfile
+      });
+      return window.showToast('找不到 LINE 會員 ID，請重新整理或重新登入後再試', true);
+    }
     if (isTenantRole(user.role || window.userRole)) return window.showToast('你已經是租戶資格，不需要重複購買', true);
     if (!window.confirm('確認建立 NT$6,300 租戶年費訂單？\n\n建立後請依管理方提供帳號匯款，後台確認收款後才會開通資格。')) return;
 
