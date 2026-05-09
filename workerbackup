@@ -426,6 +426,28 @@ const AuthModule = {
       } catch(e) { console.error("KV Delete Error", e); }
     }
     return result;
+  },
+
+  async adminSyncBoundCardUser(payload, env) {
+    const profile = payload.profile || {};
+    const targetUserId = payload.targetUserId || profile.userId;
+    if (!targetUserId) return { success: false, error: "Missing targetUserId" };
+
+    const nextProfile = {
+      ...profile,
+      userId: targetUserId,
+      role: profile.role || 'user',
+      profileStatus: profile.profileStatus || 'incomplete',
+      source: profile.source || 'bound_card'
+    };
+
+    const result = await DBModule.forward('registerUser', nextProfile, env);
+    if (result && result.success && env.ACTMASTER_KV) {
+      try {
+        await env.ACTMASTER_KV.delete(`U_PROFILE_${targetUserId}`);
+      } catch(e) { console.error("KV Delete Error", e); }
+    }
+    return result;
   }
 };
 
@@ -685,7 +707,7 @@ async function dispatchAction(action, payload, request, env) {
       }
     } else {
       // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
-      const strictActions = ['updateUserRole', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
+      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
       if (strictActions.includes(action)) {
         return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
       }
@@ -715,6 +737,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'registerUser':           
     case 'updateUserProfile':      
     case 'updateUserRole':         return await AuthModule.updateAndClearCache(action, payload, env);
+    case 'adminSyncBoundCardUser': return await AuthModule.adminSyncBoundCardUser(payload, env);
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
