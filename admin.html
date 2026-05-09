@@ -219,6 +219,7 @@
                   <th>公司與職稱</th>
                   <th>聯絡電話</th>
                   <th>歸屬網</th>
+                  <th>綁定狀態</th>
                   <th>標籤 / 備註</th>
                   <th class="text-center w-28">操作</th>
                 </tr>
@@ -1181,19 +1182,26 @@
 
     function renderCards() {
       const tbody = document.getElementById('cards-table-body');
-      tbody.innerHTML = allCardsData.map(c => `
+      tbody.innerHTML = allCardsData.map(c => {
+        const lineId = String(c['LINE ID'] || c.lineId || c.userId || '').trim();
+        const bindBadge = lineId
+          ? '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[13px] font-black whitespace-nowrap"><span class="material-symbols-outlined text-[17px]">verified_user</span>已綁定</span>'
+          : '<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100 text-[13px] font-black whitespace-nowrap"><span class="material-symbols-outlined text-[17px]">person_add</span>未綁定</span>';
+        return `
         <tr>
           <td class="font-bold text-slate-700">${escapeHTML(c['姓名'] || '未命名')}</td>
           <td class="text-sm text-slate-600">${escapeHTML(c['公司名稱'] || '')}</td>
           <td class="font-mono text-sm">${escapeHTML(c['手機號碼'] || '')}</td>
           <td class="text-sm text-blue-600 font-bold">${escapeHTML(c['歸屬網'] || 'admin')}</td>
+          <td>${bindBadge}</td>
           <td class="text-xs text-slate-500">${escapeHTML(c['標籤'] || '')}</td>
           <td class="text-center whitespace-nowrap">
              <button onclick="openEditCardModal('${encodeURIComponent(c.rowId || '')}')" class="text-slate-400 hover:text-blue-600 p-1 transition-colors" title="編輯名片"><span class="material-symbols-outlined text-[20px]">edit_note</span></button>
              ${adminRole === 'admin' && (c['LINE ID'] || c.lineId) ? `<button onclick="unbindAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-amber-600 p-1 transition-colors" title="解除 LINE 綁定"><span class="material-symbols-outlined text-[20px]">link_off</span></button>` : ''}
              ${adminRole === 'admin' ? `<button onclick="deleteAdminCard('${encodeURIComponent(c.rowId || '')}')" class="text-slate-300 hover:text-red-600 p-1 transition-colors" title="刪除名片"><span class="material-symbols-outlined text-[20px]">delete</span></button>` : ''}
           </td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
     }
 
     async function unbindAdminCard(encodedRowId) {
