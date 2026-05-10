@@ -1775,8 +1775,288 @@ async function resolveOwnCardRowId(payload, env) {
   return card && (card.rowId || card['rowId'] || card['Row ID'] || card.id || '');
 }
 
+const D1FinanceModule = {
+  hasD1(env) {
+    return !!(env && env.ACTMASTER_DB);
+  },
+
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  pick(source, keys, fallback = '') {
+    for (const key of keys) {
+      const value = source && source[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+    }
+    return fallback;
+  },
+
+  orderRow(row) {
+    if (!row) return null;
+    let raw = {};
+    try { raw = row.raw_json ? JSON.parse(row.raw_json) : {}; } catch (e) {}
+    return {
+      ...raw,
+      orderId: this.text(row.order_id),
+      id: this.text(row.order_id),
+      rowId: this.text(row.order_id),
+      orderType: this.text(row.order_type),
+      buyerId: this.text(row.buyer_id),
+      tenantId: this.text(row.buyer_id),
+      buyerName: this.text(row.buyer_name),
+      tenantName: this.text(row.buyer_name),
+      networkId: this.text(row.network_id, 'admin'),
+      productCode: this.text(row.product_code),
+      productName: this.text(row.product_name),
+      grossAmount: Number(row.gross_amount || 0) || 0,
+      fee: Number(row.gross_amount || 0) || 0,
+      price: Number(row.gross_amount || 0) || 0,
+      netAmount: Number(row.net_amount || 0) || 0,
+      taxAmount: Number(row.tax_amount || 0) || 0,
+      taxRate: Number(row.tax_rate || 0) || 0,
+      bv: Number(row.bv || 0) || 0,
+      currency: this.text(row.currency, 'TWD'),
+      paymentStatus: this.text(row.payment_status),
+      status: this.text(row.payment_status),
+      paymentProvider: this.text(row.payment_provider),
+      paymentNo: this.text(row.payment_no),
+      paidAt: this.text(row.paid_at),
+      bonusStatus: this.text(row.bonus_status),
+      sponsorId: this.text(row.sponsor_id),
+      recruiterId: this.text(row.recruiter_id),
+      placementParentId: this.text(row.placement_parent_id),
+      placementSide: this.text(row.placement_side),
+      qualificationSide: this.text(row.placement_side),
+      bonusPolicyType: this.text(row.bonus_policy_type),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at)
+    };
+  },
+
+  bonusRow(row) {
+    if (!row) return null;
+    let raw = {};
+    try { raw = row.raw_json ? JSON.parse(row.raw_json) : {}; } catch (e) {}
+    return {
+      ...raw,
+      txId: this.text(row.tx_id),
+      transactionId: this.text(row.tx_id),
+      orderId: this.text(row.order_id),
+      beneficiaryId: this.text(row.beneficiary_id),
+      memberId: this.text(row.beneficiary_id),
+      sourceUserId: this.text(row.source_user_id),
+      networkId: this.text(row.network_id, 'admin'),
+      bonusType: this.text(row.bonus_type),
+      amount: Number(row.amount || 0) || 0,
+      bv: Number(row.bv || 0) || 0,
+      status: this.text(row.status),
+      freezeUntil: this.text(row.freeze_until),
+      settledAt: this.text(row.settled_at),
+      note: this.text(row.note),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at)
+    };
+  },
+
+  async upsertOrder(order, env) {
+    const raw = JSON.stringify(order || {});
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO orders (order_id,order_type,buyer_id,buyer_name,network_id,product_code,product_name,gross_amount,net_amount,tax_amount,tax_rate,bv,currency,payment_status,payment_provider,payment_no,paid_at,bonus_status,sponsor_id,recruiter_id,placement_parent_id,placement_side,bonus_policy_type,raw_json,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      ON CONFLICT(order_id) DO UPDATE SET
+        order_type=excluded.order_type,buyer_id=excluded.buyer_id,buyer_name=excluded.buyer_name,network_id=excluded.network_id,
+        product_code=excluded.product_code,product_name=excluded.product_name,gross_amount=excluded.gross_amount,net_amount=excluded.net_amount,
+        tax_amount=excluded.tax_amount,tax_rate=excluded.tax_rate,bv=excluded.bv,currency=excluded.currency,payment_status=excluded.payment_status,
+        payment_provider=excluded.payment_provider,payment_no=excluded.payment_no,paid_at=excluded.paid_at,bonus_status=excluded.bonus_status,
+        sponsor_id=excluded.sponsor_id,recruiter_id=excluded.recruiter_id,placement_parent_id=excluded.placement_parent_id,
+        placement_side=excluded.placement_side,bonus_policy_type=excluded.bonus_policy_type,raw_json=excluded.raw_json,updated_at=CURRENT_TIMESTAMP
+    `).bind(
+      order.orderId, order.orderType, order.buyerId, order.buyerName, order.networkId, order.productCode, order.productName,
+      order.grossAmount, order.netAmount, order.taxAmount, order.taxRate, order.bv, order.currency, order.paymentStatus,
+      order.paymentProvider, order.paymentNo, order.paidAt || '', order.bonusStatus, order.sponsorId, order.recruiterId,
+      order.placementParentId, order.placementSide, order.bonusPolicyType, raw
+    ).run();
+  },
+
+  async createOrder(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const order = MLMModule.normalizeOrder(payload || {});
+    if (!order.buyerId) return { success: false, error: 'Missing buyerId' };
+    if (order.grossAmount <= 0 || order.bv < 0) return { success: false, error: 'Invalid order amount or BV' };
+    order.bonusPlanPreview = BonusPolicyModule.buildPlan(order);
+    await this.upsertOrder(order, env);
+    return { success: true, data: this.orderRow(await D1ReadModule.first(env, 'SELECT * FROM orders WHERE order_id = ? LIMIT 1', [order.orderId])) };
+  },
+
+  async markOrderPaid(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const orderId = this.pick(payload, ['orderId']);
+    if (!orderId) return { success: false, error: 'Missing orderId' };
+    const row = await D1ReadModule.first(env, 'SELECT * FROM orders WHERE order_id = ? LIMIT 1', [orderId]);
+    if (!row) return { success: false, error: '找不到訂單' };
+    const current = this.orderRow(row);
+    const merged = MLMModule.normalizeOrder({ ...current, ...payload, paymentStatus: 'paid', status: 'paid', paidAt: payload.paidAt || new Date().toISOString() });
+    merged.bonusStatus = payload.triggerBonus === false ? 'not_generated' : 'generated';
+    const bonusPlan = BonusPolicyModule.buildPlan(merged);
+    merged.bonusPlan = bonusPlan;
+    await this.upsertOrder(merged, env);
+
+    if (payload.triggerBonus !== false) {
+      await env.ACTMASTER_DB.prepare('DELETE FROM bonus_transactions WHERE order_id = ?').bind(orderId).run();
+      for (let i = 0; i < bonusPlan.transactions.length; i++) {
+        const tx = bonusPlan.transactions[i];
+        const txId = tx.transactionId || `${orderId}-B${i + 1}`;
+        await env.ACTMASTER_DB.prepare(`
+          INSERT INTO bonus_transactions (tx_id,order_id,beneficiary_id,source_user_id,network_id,bonus_type,amount,bv,status,freeze_until,note,raw_json,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        `).bind(
+          txId, orderId, tx.memberId, bonusPlan.sourceMemberId, merged.networkId, tx.bonusType,
+          tx.amount, tx.amount, 'frozen', tx.freezeUntil || bonusPlan.freezeUntil, tx.note || '', JSON.stringify(tx)
+        ).run();
+      }
+    }
+
+    return { success: true, data: { ...this.orderRow(await D1ReadModule.first(env, 'SELECT * FROM orders WHERE order_id = ? LIMIT 1', [orderId])), bonusPlan } };
+  },
+
+  async updateOrderStatus(payload, env, status) {
+    if (!this.hasD1(env)) return null;
+    const orderId = this.pick(payload, ['orderId']);
+    if (!orderId) return { success: false, error: 'Missing orderId' };
+    const bonusStatus = status === 'refunded' ? 'reversed' : status;
+    await env.ACTMASTER_DB.prepare('UPDATE orders SET payment_status = ?, bonus_status = ?, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?')
+      .bind(status, bonusStatus, orderId).run();
+    await env.ACTMASTER_DB.prepare('UPDATE bonus_transactions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?')
+      .bind(status === 'refunded' ? 'reversed' : 'cancelled', orderId).run();
+    return { success: true, data: { orderId, status } };
+  },
+
+  async listOrders(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const page = Math.max(1, Number(payload.page || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(payload.pageSize || 20)));
+    const offset = (page - 1) * pageSize;
+    const status = this.text(payload.status || 'all');
+    const orderType = this.text(payload.orderType);
+    const buyerId = this.text(payload.buyerId);
+    const rows = await D1ReadModule.all(env, `
+      SELECT * FROM orders
+      WHERE (? = 'all' OR payment_status = ?)
+        AND (? = '' OR order_type = ?)
+        AND (? = '' OR buyer_id = ?)
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `, [status,status,orderType,orderType,buyerId,buyerId,pageSize,offset]);
+    const count = await D1ReadModule.first(env, `
+      SELECT COUNT(*) AS total FROM orders
+      WHERE (? = 'all' OR payment_status = ?)
+        AND (? = '' OR order_type = ?)
+        AND (? = '' OR buyer_id = ?)
+    `, [status,status,orderType,orderType,buyerId,buyerId]);
+    return { success: true, data: rows.map(row => this.orderRow(row)), orders: rows.map(row => this.orderRow(row)), total: Number(count?.total || 0), page, pageSize };
+  },
+
+  async listBonusTransactions(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const page = Math.max(1, Number(payload.page || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(payload.pageSize || 20)));
+    const offset = (page - 1) * pageSize;
+    const status = this.text(payload.status || 'all');
+    const memberId = this.text(payload.memberId || payload.beneficiaryId);
+    const rows = await D1ReadModule.all(env, `
+      SELECT * FROM bonus_transactions
+      WHERE (? = 'all' OR status = ?)
+        AND (? = '' OR beneficiary_id = ?)
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `, [status,status,memberId,memberId,pageSize,offset]);
+    return { success: true, data: rows.map(row => this.bonusRow(row)), transactions: rows.map(row => this.bonusRow(row)), page, pageSize };
+  },
+
+  async getOrganizationTree(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const rootId = this.text(payload.memberId || payload.userId);
+    if (!rootId) return { success: false, error: 'Missing memberId' };
+    const treeType = this.text(payload.treeType || 'placement');
+    const depth = Math.min(10, Math.max(1, Number(payload.depth || 3)));
+    const users = await D1ReadModule.all(env, 'SELECT * FROM users LIMIT 2000');
+    const orders = await D1ReadModule.all(env, "SELECT * FROM orders WHERE payment_status = 'paid' LIMIT 5000");
+    const bonuses = await D1ReadModule.all(env, "SELECT beneficiary_id, SUM(amount) AS total FROM bonus_transactions WHERE status IN ('frozen','payable','paid') GROUP BY beneficiary_id");
+    const userMap = new Map(users.map(row => [this.text(row.line_id || row.row_id), row]));
+    const bonusMap = new Map(bonuses.map(row => [this.text(row.beneficiary_id), Number(row.total || 0) || 0]));
+    const childrenMap = new Map();
+    const qualifiedSides = new Map();
+
+    const addChild = (parentId, childId, side, relation) => {
+      if (!parentId || !childId || parentId === childId) return;
+      if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
+      const list = childrenMap.get(parentId);
+      if (!list.some(item => item.memberId === childId && item.relation === relation)) list.push({ memberId: childId, placementSide: side || '', relation });
+    };
+
+    orders.forEach(order => {
+      const buyerId = this.text(order.buyer_id);
+      const recruiterId = this.text(order.recruiter_id || order.sponsor_id);
+      const parentId = treeType === 'sponsor' ? recruiterId : this.text(order.placement_parent_id || recruiterId);
+      const side = this.text(order.placement_side);
+      addChild(parentId, buyerId, side, treeType);
+      if (recruiterId && side) {
+        if (!qualifiedSides.has(recruiterId)) qualifiedSides.set(recruiterId, new Set());
+        qualifiedSides.get(recruiterId).add(side);
+      }
+    });
+
+    users.forEach(user => {
+      const childId = this.text(user.line_id || user.row_id);
+      const parentId = this.text(user.referrer_id);
+      if (treeType === 'sponsor') addChild(parentId, childId, '', 'referrer');
+    });
+
+    const buildNode = (memberId, level, side = '') => {
+      const user = userMap.get(memberId) || { line_id: memberId, name: memberId, role: 'user' };
+      const children = level >= depth ? [] : (childrenMap.get(memberId) || [])
+        .sort((a, b) => (a.placementSide || '').localeCompare(b.placementSide || '') || a.memberId.localeCompare(b.memberId))
+        .map(child => buildNode(child.memberId, level + 1, child.placementSide));
+      const sides = qualifiedSides.get(memberId) || new Set();
+      return {
+        memberId,
+        userId: memberId,
+        id: memberId,
+        name: this.text(user.name, memberId),
+        phone: this.text(user.phone),
+        role: this.text(user.role, 'user'),
+        networkId: this.text(user.network_id, 'admin'),
+        placementSide: side,
+        independent: sides.has('left') && sides.has('right'),
+        qualificationCount: sides.size,
+        qualificationLeftMemberId: sides.has('left') ? 'qualified' : '',
+        qualificationRightMemberId: sides.has('right') ? 'qualified' : '',
+        bonusTotal: bonusMap.get(memberId) || 0,
+        children
+      };
+    };
+
+    const root = buildNode(rootId, 0);
+    return { success: true, data: { root, nodes: [root], treeType, depth }, tree: root };
+  }
+};
+
 const TenantOrderModule = {
   async createTenantBonusOrder(payload, env) {
+    const d1Result = await D1FinanceModule.createOrder({
+      ...payload,
+      buyerId: payload.tenantId || payload.userId || payload.buyerId,
+      buyerName: payload.tenantName || payload.buyerName || '',
+      orderType: 'tenant_annual_fee',
+      productCode: 'TENANT_ANNUAL',
+      productName: payload.productName || '租戶年費',
+      grossAmount: Number(payload.fee || payload.price || payload.grossAmount || 6300),
+      bv: Number(payload.bv || 3000)
+    }, env);
+    if (d1Result) return d1Result;
+
     const now = new Date().toISOString();
     const order = {
       orderId: payload.orderId || 'TEN-' + Date.now().toString() + Math.random().toString(36).substring(2, 6).toUpperCase(),
@@ -1807,6 +2087,9 @@ const TenantOrderModule = {
   },
 
   async markTenantOrderPaid(payload, env) {
+    const d1Result = await D1FinanceModule.markOrderPaid(payload, env);
+    if (d1Result) return d1Result;
+
     const now = new Date().toISOString();
     const paidPayload = {
       ...payload,
@@ -1820,6 +2103,9 @@ const TenantOrderModule = {
   },
 
   async cancelTenantBonusOrder(payload, env) {
+    const d1Result = await D1FinanceModule.updateOrderStatus(payload, env, 'cancelled');
+    if (d1Result) return d1Result;
+
     return await DBModule.forward('cancelTenantBonusOrder', {
       ...payload,
       status: 'cancelled',
@@ -1874,6 +2160,9 @@ const MLMModule = {
   },
 
   async createOrder(payload, env) {
+    const d1Result = await D1FinanceModule.createOrder(payload, env);
+    if (d1Result) return d1Result;
+
     const order = this.normalizeOrder(payload);
     if (!order.buyerId) return { success: false, error: 'Missing buyerId' };
     if (order.grossAmount <= 0 || order.bv < 0) return { success: false, error: 'Invalid order amount or BV' };
@@ -1892,6 +2181,9 @@ const MLMModule = {
   },
 
   async markOrderPaid(payload, env) {
+    const d1Result = await D1FinanceModule.markOrderPaid(payload, env);
+    if (d1Result) return d1Result;
+
     const orderId = payload.orderId || '';
     const paymentNo = payload.paymentNo || payload.tradeNo || '';
     if (!orderId) return { success: false, error: 'Missing orderId' };
@@ -1939,6 +2231,9 @@ const MLMModule = {
 
   async cancelOrder(payload, env) {
     if (!payload.orderId) return { success: false, error: 'Missing orderId' };
+    const d1Result = await D1FinanceModule.updateOrderStatus(payload, env, 'cancelled');
+    if (d1Result) return d1Result;
+
     return await DBModule.forward('mlmCancelOrder', {
       ...payload,
       paymentStatus: 'cancelled',
@@ -1950,6 +2245,9 @@ const MLMModule = {
 
   async refundOrder(payload, env) {
     if (!payload.orderId) return { success: false, error: 'Missing orderId' };
+    const d1Result = await D1FinanceModule.updateOrderStatus(payload, env, 'refunded');
+    if (d1Result) return d1Result;
+
     return await DBModule.forward('mlmRefundOrder', {
       ...payload,
       paymentStatus: 'refunded',
@@ -1960,6 +2258,9 @@ const MLMModule = {
   },
 
   async listOrders(payload, env) {
+    const d1Result = await D1FinanceModule.listOrders(payload, env);
+    if (d1Result) return d1Result;
+
     return await DBModule.forward('mlmListOrders', {
       page: Number(payload.page || 1),
       pageSize: Math.min(100, Number(payload.pageSize || 20)),
@@ -1973,6 +2274,9 @@ const MLMModule = {
   },
 
   async listBonusTransactions(payload, env) {
+    const d1Result = await D1FinanceModule.listBonusTransactions(payload, env);
+    if (d1Result) return d1Result;
+
     return await DBModule.forward('mlmListBonusTransactions', {
       page: Number(payload.page || 1),
       pageSize: Math.min(100, Number(payload.pageSize || 20)),
@@ -2003,6 +2307,9 @@ const MLMModule = {
   },
 
   async getMemberTree(payload, env) {
+    const d1Result = await D1FinanceModule.getOrganizationTree(payload, env);
+    if (d1Result) return d1Result;
+
     return await DBModule.forward('mlmGetMemberTree', BonusPolicyModule.buildTreeQuery(payload), env);
   },
 
@@ -2011,6 +2318,9 @@ const MLMModule = {
   },
 
   async getOrganizationTree(payload, env) {
+    const d1Result = await D1FinanceModule.getOrganizationTree(payload, env);
+    if (d1Result) return d1Result;
+
     const query = BonusPolicyModule.buildTreeQuery(payload);
     const result = await DBModule.forward('mlmGetOrganizationTree', query, env);
     if (result && result.success !== false) return result;
