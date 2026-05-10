@@ -135,7 +135,7 @@
     box.innerHTML =
       '<div class="font-black mb-2 flex items-center gap-1">' +
         '<span class="material-symbols-outlined text-[18px]">' + (ok ? 'verified' : 'gpp_bad') + '</span>' +
-        (ok ? '健檢通過，可公開搜尋' : '健檢未通過，已維持私人') +
+        (review.basicFallback ? (ok ? '基本健檢通過' : '基本健檢未通過') : (ok ? 'AI 健檢通過，可公開搜尋' : 'AI 健檢未通過，已維持私人')) +
       '</div>' +
       (reasons.length ? '<div class="font-bold">原因：</div><ul class="list-disc pl-5 mb-2">' + reasons.map(function(r) { return '<li>' + escapeHTML(r) + '</li>'; }).join('') + '</ul>' : '') +
       (tips.length ? '<div class="font-bold">建議：</div><ul class="list-disc pl-5">' + tips.map(function(t) { return '<li>' + escapeHTML(t) + '</li>'; }).join('') + '</ul>' : '');
@@ -176,6 +176,32 @@
     }).join('\n');
   }
 
+  function localSafetyReview(card) {
+    var payload = collectCard(card);
+    var text = [
+      payload.name,
+      payload.company,
+      payload.title,
+      payload.service,
+      payload.website,
+      payload.buttons.map(function(btn) { return (btn && (btn.label || btn.url)) || ''; }).join(' ')
+    ].join(' ').toLowerCase();
+    var risky = [
+      '色情', '裸露', '援交', '性交易', '賭博', '博彩', '詐騙', '洗錢',
+      '毒品', '槍', '武器', '暴力', '破解', '盜版', '高利貸'
+    ];
+    var hits = risky.filter(function(word) {
+      return text.indexOf(word.toLowerCase()) >= 0;
+    });
+    return {
+      pass: hits.length === 0,
+      riskLevel: hits.length ? 'medium' : 'low',
+      reasons: hits.length ? ['偵測到高風險字詞：' + hits.join('、')] : ['基本內容檢查未發現明顯高風險字詞'],
+      suggestions: hits.length ? ['請移除或改寫有疑慮的文字，再重新健檢'] : ['後端 AI 恢復後，建議再做一次完整 AI 健檢'],
+      basicFallback: true
+    };
+  }
+
   async function updateCardConfig(card, cfg, extraData) {
     var data = extraData || {};
     data[CONFIG_FIELD] = stringifyConfig(card, cfg);
@@ -188,16 +214,24 @@
     if (!assertQuota()) throw new Error('今日額度已用完');
 
     var payload = collectCard(card);
-    var res = await window.fetchAPI('reviewCardSafety', { card: payload }, true);
-    var review = res && res.data ? res.data : res;
-    if (!review || review.error) throw new Error((review && review.error) || 'AI 健檢失敗');
+    var review;
+    try {
+      var res = await window.fetchAPI('reviewCardSafety', { card: payload }, true);
+      if (res && res.success === false) throw new Error(res.error || 'AI 健檢服務暫時無法使用');
+      review = res && res.data ? res.data : res;
+      if (!review || review.error) throw new Error((review && review.error) || 'AI 健檢失敗');
+    } catch (e) {
+      review = localSafetyReview(card);
+      review.reasons.unshift('完整 AI 健檢暫時無法使用，已先改用基本安全檢查。');
+    }
 
     bumpUsage();
     var cfg = parseConfig(card);
     cfg.safetyReview = {
       pass: !!review.pass,
       reasons: review.reasons || [],
-      reviewedAt: new Date().toISOString()
+      reviewedAt: new Date().toISOString(),
+      mode: review.basicFallback ? 'basic' : 'ai'
     };
     if (!review.pass) cfg.isPrivate = true;
     await updateCardConfig(card, cfg);
