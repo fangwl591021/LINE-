@@ -695,6 +695,222 @@ const D1BackfillModule = {
 };
 
 // ==================== 模組 6: 邊緣快取驗證 (Edge Auth KV Module) ====================
+const D1ReadModule = {
+  hasD1(env) {
+    return !!(env && env.ACTMASTER_DB);
+  },
+
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  role(value) {
+    const next = this.text(value, 'user').toLowerCase();
+    if (next === 'admin' || next === '總管') return 'admin';
+    if (next === 'store' || next === 'tenant' || next === '店長' || next === '租戶') return 'store';
+    return 'user';
+  },
+
+  async first(env, sql, binds = []) {
+    const stmt = env.ACTMASTER_DB.prepare(sql);
+    return binds.length ? await stmt.bind(...binds).first() : await stmt.first();
+  },
+
+  async all(env, sql, binds = []) {
+    const stmt = env.ACTMASTER_DB.prepare(sql);
+    const result = binds.length ? await stmt.bind(...binds).all() : await stmt.all();
+    return result && Array.isArray(result.results) ? result.results : [];
+  },
+
+  userRow(row, source = 'd1_user') {
+    if (!row) return null;
+    const userId = this.text(row.line_id || row.row_id);
+    if (!userId) return null;
+    const role = this.role(row.role);
+    return {
+      rowId: this.text(row.row_id, userId),
+      userId,
+      lineId: userId,
+      name: this.text(row.name, '未命名'),
+      phone: this.text(row.phone),
+      industry: this.text(row.industry || row.title || row.company_name),
+      birthday: this.text(row.birthday),
+      role,
+      roleLabel: role === 'admin' ? '總管' : (role === 'store' ? '店長' : '一般'),
+      storeid: this.text(row.store_id),
+      storeId: this.text(row.store_id),
+      referrerId: this.text(row.referrer_id),
+      networkId: this.text(row.network_id, 'admin'),
+      tgToken: this.text(row.tg_token),
+      tgChatId: this.text(row.tg_chat_id),
+      points: Number(row.points || 0) || 0,
+      source,
+      profileStatus: source === 'bound_card' ? 'bound_card' : 'active'
+    };
+  },
+
+  cardRow(row) {
+    if (!row) return null;
+    const config = this.text(row.custom_config);
+    return {
+      rowId: this.text(row.row_id),
+      id: this.text(row.row_id),
+      lineId: this.text(row.line_id),
+      userId: this.text(row.line_id),
+      creatorId: this.text(row.creator_id),
+      networkId: this.text(row.network_id, 'admin'),
+      name: this.text(row.name, '未命名'),
+      englishName: this.text(row.english_name),
+      companyName: this.text(row.company_name),
+      title: this.text(row.title),
+      department: this.text(row.department),
+      taxId: this.text(row.tax_id),
+      mobile: this.text(row.mobile),
+      officePhone: this.text(row.office_phone),
+      extension: this.text(row.extension),
+      fax: this.text(row.fax),
+      email: this.text(row.email),
+      website: this.text(row.website),
+      socials: this.text(row.socials),
+      address: this.text(row.address),
+      birthday: this.text(row.birthday),
+      services: this.text(row.services),
+      notes: this.text(row.notes),
+      imageUrl: this.text(row.image_url),
+      customConfig: config,
+      tags: this.text(row.tags),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at),
+      'LINE ID': this.text(row.line_id),
+      '姓名': this.text(row.name, '未命名'),
+      '英文名': this.text(row.english_name),
+      '公司名稱': this.text(row.company_name),
+      '職稱': this.text(row.title),
+      '部門': this.text(row.department),
+      '統一編號': this.text(row.tax_id),
+      '手機號碼': this.text(row.mobile),
+      '公司電話': this.text(row.office_phone),
+      '分機': this.text(row.extension),
+      '傳真': this.text(row.fax),
+      '電子郵件': this.text(row.email),
+      '公司網址': this.text(row.website),
+      '社群帳號': this.text(row.socials),
+      '公司地址': this.text(row.address),
+      '生日': this.text(row.birthday),
+      '服務項目': this.text(row.services),
+      '建檔人/備註': this.text(row.notes),
+      '建檔者ID': this.text(row.creator_id),
+      '名片圖檔': this.text(row.image_url),
+      '自訂名片設定': config,
+      '電子名片設定': config,
+      '歸屬網': this.text(row.network_id, 'admin'),
+      '標籤': this.text(row.tags)
+    };
+  },
+
+  userFromCard(row) {
+    if (!row || !this.text(row.line_id)) return null;
+    return {
+      user_id: this.text(row.line_id),
+      line_id: this.text(row.line_id),
+      name: this.text(row.name, '未命名'),
+      phone: this.text(row.mobile || row.office_phone),
+      industry: this.text(row.title || row.company_name, '名片會員'),
+      birthday: this.text(row.birthday),
+      socials_json: this.text(row.socials) || '[]',
+      role: 'user',
+      store_id: '',
+      referrer_id: '',
+      network_id: this.text(row.network_id, 'admin'),
+      telegram_token: '',
+      telegram_chat_id: ''
+    };
+  },
+
+  async upsertBoundUserFromCard(env, card) {
+    const user = this.userFromCard(card);
+    if (!user) return null;
+    await D1BackfillModule.upsertUser(env, user);
+    return this.userRow({
+      row_id: user.user_id,
+      line_id: user.line_id,
+      name: user.name,
+      phone: user.phone,
+      industry: user.industry,
+      birthday: user.birthday,
+      role: user.role,
+      network_id: user.network_id
+    }, 'bound_card');
+  },
+
+  async checkUser(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const userId = this.text(payload.userId || payload.lineId);
+    if (!userId) return { success: false, error: 'Missing userId' };
+
+    const user = await this.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
+    if (user) {
+      const profile = this.userRow(user);
+      if (env.ACTMASTER_KV) {
+        await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(profile), { expirationTtl: 600 });
+      }
+      return { success: true, data: { isRegistered: true, info: profile, source: 'd1_user' } };
+    }
+
+    const card = await this.first(env, 'SELECT * FROM card_contacts WHERE line_id = ? LIMIT 1', [userId]);
+    if (card) {
+      const profile = await this.upsertBoundUserFromCard(env, card);
+      if (profile && env.ACTMASTER_KV) {
+        await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(profile), { expirationTtl: 600 });
+      }
+      return { success: true, data: { isRegistered: true, info: profile, source: 'bound_card' } };
+    }
+
+    return { success: true, data: { isRegistered: false, info: null, source: 'd1' } };
+  },
+
+  async getAllUsers(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const users = await this.all(env, 'SELECT * FROM users ORDER BY created_at DESC, row_id DESC LIMIT 500');
+    const merged = [];
+    const seen = new Set();
+    users.forEach(row => {
+      const profile = this.userRow(row);
+      if (!profile || seen.has(profile.userId)) return;
+      seen.add(profile.userId);
+      merged.push(profile);
+    });
+
+    const cards = await this.all(env, "SELECT * FROM card_contacts WHERE line_id IS NOT NULL AND TRIM(line_id) <> '' ORDER BY created_at DESC LIMIT 500");
+    cards.forEach(row => {
+      const userId = this.text(row.line_id);
+      if (!userId || seen.has(userId)) return;
+      const profile = this.userRow({
+        row_id: userId,
+        line_id: userId,
+        name: row.name,
+        phone: row.mobile || row.office_phone,
+        industry: row.title || row.company_name,
+        role: 'user',
+        network_id: row.network_id
+      }, 'bound_card');
+      if (!profile) return;
+      seen.add(userId);
+      merged.push(profile);
+    });
+
+    return { success: true, data: merged };
+  },
+
+  async getCardContacts(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
+    const rows = await this.all(env, `SELECT * FROM card_contacts ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`);
+    return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
+  }
+};
+
 const AuthModule = {
   getCardLineId(card) {
     return String((card && (card['LINE ID'] || card.lineId || card.userId)) || '').trim();
@@ -739,6 +955,13 @@ const AuthModule = {
   },
 
   async getAllUsersWithBoundCards(payload, env) {
+    try {
+      const d1Result = await D1ReadModule.getAllUsers(payload || {}, env);
+      if (d1Result && d1Result.success && Array.isArray(d1Result.data)) return d1Result;
+    } catch (e) {
+      console.error("D1 getAllUsers fallback", e);
+    }
+
     const usersResult = await DBModule.forward('getAllUsers', payload, env);
     const cardsResult = await DBModule.forward('getCardContacts', { ...payload, role: 'admin', networkId: payload.networkId || 'admin' }, env);
     const users = usersResult && Array.isArray(usersResult.data) ? usersResult.data : (Array.isArray(usersResult) ? usersResult : []);
@@ -759,6 +982,13 @@ const AuthModule = {
   async check(payload, env) {
     const userId = payload.userId;
     if (!userId) return { success: false, error: "Missing userId" };
+
+    try {
+      const d1Result = await D1ReadModule.checkUser(payload || {}, env);
+      if (d1Result && d1Result.success && d1Result.data && d1Result.data.isRegistered) return d1Result;
+    } catch (e) {
+      console.error("D1 checkUser fallback", e);
+    }
 
     if (env.ACTMASTER_KV) {
       try {
@@ -1391,6 +1621,15 @@ async function dispatchAction(action, payload, request, env) {
   switch (action) {
     case 'checkUser':              return await AuthModule.check(payload, env);
     case 'getAllUsers':            return await AuthModule.getAllUsersWithBoundCards(payload, env);
+    case 'getCardContacts': {
+      try {
+        const d1Result = await D1ReadModule.getCardContacts(payload || {}, env);
+        if (d1Result && d1Result.success && Array.isArray(d1Result.data)) return d1Result;
+      } catch (e) {
+        console.error("D1 getCardContacts fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
     case 'registerUser':           
     case 'updateUserProfile':      
     case 'updateUserRole':         return await AuthModule.updateAndClearCache(action, payload, env);
