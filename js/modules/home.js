@@ -221,6 +221,41 @@ const HomeModule = (function() {
         return [];
     }
 
+    function isTruthy_(value) {
+        return value === true || String(value || '').toUpperCase() === 'TRUE' || String(value || '') === '1';
+    }
+
+    function getRegistrationId_(record) {
+        return record.rowId || record.registrationId || record.id || record['報名ID'] || '';
+    }
+
+    function getRegistrationActivityId_(record) {
+        return record.activityId || record['活動ID'] || record.actId || '';
+    }
+
+    function getRegistrationStatus_(record) {
+        const rawCheckin = record['簽到'] ?? record.checkinStatus ?? record.checkedIn;
+        const rawStatus = record.status || record['報名狀態'] || '';
+        const checked = isTruthy_(rawCheckin) || String(rawStatus).includes('簽到') || String(rawStatus).toLowerCase() === 'checkedin';
+        const cancelled = String(rawStatus).includes('取消') || String(rawStatus).toLowerCase() === 'cancelled';
+        if (cancelled) return { label: '已取消', checked, cancelled, className: 'bg-slate-100 text-slate-500 border border-slate-200' };
+        if (checked) return { label: '已核銷', checked, cancelled, className: 'bg-slate-800 text-white' };
+        return { label: '待核銷', checked, cancelled, className: 'bg-blue-50 text-blue-700 border border-blue-100' };
+    }
+
+    function buildActivityVerifyUrl_(record) {
+        const rowId = getRegistrationId_(record);
+        const activityId = getRegistrationActivityId_(record);
+        const liffId = window.DEFAULT_LIFF_ID || window.LIFF_ID || '';
+        const baseUrl = liffId
+            ? 'https://liff.line.me/' + encodeURIComponent(liffId)
+            : window.location.origin + window.location.pathname;
+        const params = new URLSearchParams();
+        params.set('verifyCheckin', rowId);
+        if (activityId) params.set('activityId', activityId);
+        return baseUrl + '?' + params.toString();
+    }
+
     window.loadUserActivities = async function() {
         if (typeof window.syncStoreSettingsToHome === 'function') {
             window.syncStoreSettingsToHome();
@@ -267,22 +302,20 @@ const HomeModule = (function() {
             list.innerHTML = records.slice().reverse().map((r, idx) => {
                 const title = window.escapeHTML(r['活動名稱'] || r.activityName || r.title || '未命名活動');
                 const time = window.escapeHTML(window.formatDisplayTime(r['開始時間'] || r.startTime || r.createdAt || r['報名時間'] || ''));
-                const rawStatus = r['簽到'] || r.checkinStatus || r.status || r['報名狀態'] || '已報名';
-                const status = window.escapeHTML(rawStatus);
+                const status = getRegistrationStatus_(r);
                 const fee = window.escapeHTML(r['繳費狀態'] || r.paymentStatus || '');
                 const recordIndex = records.length - 1 - idx;
-                const checked = rawStatus === true || String(rawStatus).toUpperCase() === 'TRUE' || String(rawStatus).includes('簽到');
-                const cancelled = String(rawStatus).includes('取消') || String(rawStatus).toLowerCase() === 'cancelled';
                 return `
-                    <div class="p-4 flex items-center justify-between gap-3">
+                    <div class="p-4 flex items-center justify-between gap-3 active:bg-slate-50 transition-colors cursor-pointer" onclick="window.showActivityCheckinQr(${recordIndex})">
                         <div class="min-w-0">
-                            <div class="font-black text-slate-800 text-[15px] truncate">${title}</div>
-                            <div class="text-[12px] text-slate-400 mt-1">${time}</div>
+                            <div class="font-black text-slate-800 text-[16px] truncate">${title}</div>
+                            <div class="text-[13px] text-slate-500 mt-1">${time}</div>
+                            <div class="text-[12px] text-blue-600 font-bold mt-1">點開出示核銷 QR</div>
                         </div>
                         <div class="text-right shrink-0 flex flex-col items-end gap-2">
-                            <div class="inline-flex px-3 py-1 rounded-full bg-emerald-700 text-white text-[12px] font-black">${status}</div>
+                            <div class="inline-flex px-3 py-1.5 rounded-full text-[13px] font-black ${status.className}">${status.label}</div>
                             ${fee ? `<div class="text-[11px] text-slate-400 mt-1">${fee}</div>` : ''}
-                            ${(!checked && !cancelled) ? `<button type="button" onclick="window.cancelMyActivityRegistration(${recordIndex}, this)" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 border border-red-100 text-[12px] font-black active:scale-95 transition-transform">取消報名</button>` : ''}
+                            ${(!status.checked && !status.cancelled) ? `<button type="button" onclick="event.stopPropagation(); window.cancelMyActivityRegistration(${recordIndex}, this)" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 border border-red-100 text-[12px] font-black active:scale-95 transition-transform">取消報名</button>` : ''}
                         </div>
                     </div>`;
             }).join('');
@@ -291,6 +324,38 @@ const HomeModule = (function() {
             console.error('活動紀錄載入失敗', e);
             list.innerHTML = '<div class="text-center py-10 text-red-400 text-sm font-bold">活動紀錄暫時無法讀取，請稍後再試</div>';
             return [];
+        }
+    };
+
+    window.showActivityCheckinQr = function(index) {
+        const record = (window.myActivitiesData || [])[index];
+        if (!record) return window.showToast('找不到活動紀錄，請重新整理後再試', true);
+
+        const rowId = getRegistrationId_(record);
+        if (!rowId) return window.showToast('這筆報名缺少核銷編號，請洽工作人員', true);
+
+        const modal = document.getElementById('qr-modal');
+        const img = document.getElementById('qr-code-img');
+        const loading = document.getElementById('qr-loading');
+        const titleEl = document.getElementById('qr-modal-title');
+        const descEl = document.getElementById('qr-modal-desc');
+        const shareBtn = document.getElementById('qr-modal-share-btn');
+        const title = record['活動名稱'] || record.activityName || record.title || '活動核銷';
+        const verifyUrl = buildActivityVerifyUrl_(record);
+
+        if (titleEl) titleEl.textContent = '活動核銷 QR';
+        if (descEl) descEl.innerHTML = window.escapeHTML(title) + '<br>請讓店家掃描此 QR 完成核銷';
+        if (shareBtn) shareBtn.classList.add('hidden');
+        if (modal) modal.classList.remove('hidden');
+        if (img) img.classList.add('hidden');
+        if (loading) loading.classList.remove('hidden');
+
+        if (img) {
+            img.onload = function() {
+                if (loading) loading.classList.add('hidden');
+                img.classList.remove('hidden');
+            };
+            img.src = 'https://quickchart.io/qr?text=' + encodeURIComponent(verifyUrl) + '&size=300&margin=2';
         }
     };
 

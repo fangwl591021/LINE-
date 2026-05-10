@@ -124,6 +124,11 @@ window.getActmasterUrlParams = function() {
     return params.get('checkin') || params.get('nfcAct') || params.get('nfcCheckin') || '';
   }
 
+  function getVerifyCheckinId() {
+    const params = window.getActmasterUrlParams();
+    return params.get('verifyCheckin') || params.get('checkinRowId') || params.get('registrationId') || '';
+  }
+
   async function waitForAppReady() {
     for (let i = 0; i < 80; i++) {
       if (window.fetchAPI && window.currentUserProfile && window.showToast && window.goPage) return true;
@@ -174,8 +179,29 @@ window.getActmasterUrlParams = function() {
     }
   }
 
+  async function runVerifyCheckin() {
+    const rowId = getVerifyCheckinId();
+    if (!rowId || window.__actmasterVerifyCheckinStarted) return;
+    window.__actmasterVerifyCheckinStarted = true;
+
+    const ready = await waitForAppReady();
+    if (!ready) return;
+
+    try {
+      window.goPage('home');
+      window.showToast('正在核銷活動報名...');
+      const res = await window.fetchAPI('toggleCheckin', { rowId }, true);
+      if (res && res.error) throw new Error(res.error);
+      window.showToast('活動核銷完成');
+      finishNfcCheckinFlow();
+    } catch (e) {
+      window.showToast('活動核銷失敗：' + (e.message || '請洽工作人員'), true);
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     if (getNfcActivityId()) setTimeout(runNfcCheckin, 900);
+    if (getVerifyCheckinId()) setTimeout(runVerifyCheckin, 900);
   });
 })();
 

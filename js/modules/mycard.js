@@ -446,6 +446,12 @@
     var modal = $('#qr-modal');
     var img = $('#qr-code-img');
     var loading = $('#qr-loading');
+    var title = $('#qr-modal-title');
+    var desc = $('#qr-modal-desc');
+    var shareBtn = $('#qr-modal-share-btn');
+    if (title) title.textContent = '我的專屬行動名片';
+    if (desc) desc.innerHTML = '請邀請對方使用 LINE 掃描上方條碼<br>立即互換名片並綁定商機推薦';
+    if (shareBtn) shareBtn.classList.remove('hidden');
     if (modal) modal.classList.remove('hidden');
     show(img, false);
     show(loading, true);
