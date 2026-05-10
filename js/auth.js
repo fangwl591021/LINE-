@@ -321,7 +321,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔒 未註冊用戶邏輯
     if (!checkRes || checkRes.error || !checkRes.isRegistered) {
-
       if (checkRes && checkRes.error) {
         console.error("Auth check failed:", checkRes.error);
         if (usedCachedUser) return;

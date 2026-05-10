@@ -1076,7 +1076,7 @@ const D1WriteModule = {
     return {
       row_id: this.pick(data, ['rowId', 'row_id'], `USR_${userId}`),
       line_id: userId,
-      name: this.pick(data, ['name', 'displayName', '姓名', '真實姓名'], '未命名'),
+      name: this.pick(data, ['name', 'displayName', '姓名', '真實姓名']),
       industry: this.pick(data, ['industry', 'title', '職稱', '主要業種', '公司名稱']),
       gender: this.pick(data, ['gender', '性別']),
       phone: this.pick(data, ['phone', 'mobile', '手機', '手機號碼']),
@@ -1100,7 +1100,7 @@ const D1WriteModule = {
     return {
       row_id: rowId || `CARD_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       line_id: this.pick(data, ['lineId', 'line_id', 'LINE ID', 'User ID']),
-      name: this.pick(data, ['name', '姓名'], '未命名'),
+      name: this.pick(data, ['name', '姓名']),
       english_name: this.pick(data, ['englishName', 'english_name', '英文名']),
       company_name: this.pick(data, ['companyName', 'company_name', '公司名稱']),
       title: this.pick(data, ['title', '職稱']),
@@ -1134,6 +1134,15 @@ const D1WriteModule = {
     if (!this.hasD1(env)) return null;
     const user = this.normalizeUser(payload);
     if (!user) return { success: false, error: 'Missing userId' };
+    const data = payload.data || payload.profile || payload;
+    const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [user.line_id, user.line_id]);
+    const hasRoleInput = ['role', '權限級別'].some(key => data && data[key] !== undefined && data[key] !== null && String(data[key]).trim() !== '');
+    if (existing) {
+      ['name','industry','gender','phone','birthday','region','address','socials','store_id','referrer_id','network_id','tg_token','tg_chat_id'].forEach(key => {
+        if (user[key] === '' || user[key] === undefined || user[key] === null || user[key] === '未命名') user[key] = existing[key] || '';
+      });
+      if (!hasRoleInput) user.role = existing.role || user.role;
+    }
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
