@@ -825,6 +825,18 @@ const BonusPolicyModule = {
   }
 };
 
+async function resolveOwnCardRowId(payload, env) {
+  const userId = String((payload && payload.userId) || '').trim();
+  if (!userId) return '';
+  const cardsResult = await DBModule.forward('getCardContacts', { role: 'admin', networkId: 'admin' }, env);
+  const cards = Array.isArray(cardsResult) ? cardsResult : (cardsResult && (cardsResult.data || cardsResult.cards)) || [];
+  const card = cards.find(c => {
+    const lineId = String(c['LINE ID'] || c.lineId || c.userId || '').trim();
+    return lineId && lineId === userId;
+  });
+  return card && (card.rowId || card['rowId'] || card['Row ID'] || card.id || '');
+}
+
 const TenantOrderModule = {
   async createTenantBonusOrder(payload, env) {
     const now = new Date().toISOString();
@@ -1104,6 +1116,11 @@ async function dispatchAction(action, payload, request, env) {
     ['手機', '手機號碼', '公司電話', '統一編號', '傳真'].forEach(k => {
       if (data[k]) data[k] = Utils.formatPhone(data[k]);
     });
+  }
+
+  if (action === 'updateCard' && (!payload.rowId || String(payload.rowId).trim() === '')) {
+    const rowId = await resolveOwnCardRowId(payload, env);
+    if (rowId) payload.rowId = rowId;
   }
 
   switch (action) {

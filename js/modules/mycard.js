@@ -157,6 +157,33 @@
     }
   }
 
+  function getCardRowId(card) {
+    return card && (
+      card.rowId ||
+      card['rowId'] ||
+      card['Row ID'] ||
+      card['列號'] ||
+      card._rowNumber ||
+      card.id ||
+      card.cardId ||
+      ''
+    );
+  }
+
+  async function ensureCurrentCardRowId() {
+    var rowId = getCardRowId(currentCardData);
+    if (rowId) return rowId;
+
+    if (typeof window.loadCardData === 'function') {
+      await window.loadCardData({ render: false });
+      if (typeof window.syncUserCardMatch === 'function') window.syncUserCardMatch();
+      currentCardData = window.currentUserCard || currentCardData;
+      rowId = getCardRowId(currentCardData);
+    }
+
+    return rowId;
+  }
+
   function renderButtons() {
     var list = $('#my-v1-buttons-list');
     if (!list) return;
@@ -246,8 +273,11 @@
     cfg.buttons = myEcardButtons;
 
     try {
+      var rowId = await ensureCurrentCardRowId();
+      if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
       var res = await window.fetchAPI('updateCard', {
-        rowId: currentCardData.rowId,
+        rowId: rowId,
+        userId: (window.currentUserProfile && window.currentUserProfile.userId) || '',
         data: {
           '名片圖檔': cfg.imgUrl,
           '自訂名片設定': JSON.stringify(cfg)

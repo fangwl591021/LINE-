@@ -78,6 +78,19 @@
     card[names[0]] = value;
   }
 
+  function getCardRowId(card) {
+    return card && (
+      card.rowId ||
+      card['rowId'] ||
+      card['Row ID'] ||
+      card['列號'] ||
+      card._rowNumber ||
+      card.id ||
+      card.cardId ||
+      ''
+    );
+  }
+
   function parseConfig(card) {
     var raw = getField(card, [CONFIG_FIELD, 'cardConfig', 'config']);
     try { return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
@@ -205,7 +218,11 @@
   async function updateCardConfig(card, cfg, extraData) {
     var data = extraData || {};
     data[CONFIG_FIELD] = stringifyConfig(card, cfg);
-    return window.fetchAPI('updateCard', { rowId: card.rowId, data: data }, true);
+    return window.fetchAPI('updateCard', {
+      rowId: getCardRowId(card),
+      userId: getUserId(),
+      data: data
+    }, true);
   }
 
   async function reviewCard(card, options) {
