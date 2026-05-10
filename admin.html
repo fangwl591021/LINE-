@@ -170,58 +170,70 @@
       box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
       overflow: hidden;
     }
-    .crm-table { min-width: 1360px; }
+    .crm-table {
+      min-width: 1320px;
+      table-layout: fixed;
+    }
     .crm-table th {
-      padding: 20px 22px;
-      font-size: 16px;
+      padding: 16px 20px;
+      font-size: 15px;
       line-height: 1.35;
-      color: #334155;
+      color: #475569;
       font-weight: 900;
-      background: #f4f7fb;
+      background: #f8fafc;
+      border-bottom: 1px solid #dbe4f0;
     }
     .crm-table td {
-      padding: 24px 22px;
-      font-size: 17px;
-      line-height: 1.55;
+      padding: 20px;
+      font-size: 16px;
+      line-height: 1.45;
       color: #1e293b;
       vertical-align: top;
       border-bottom: 1px solid #e5edf7;
     }
     .crm-table tr:hover { background: #f8fbff; }
+    .crm-table th:nth-child(1), .crm-table td:nth-child(1) { width: 210px; }
+    .crm-table th:nth-child(2), .crm-table td:nth-child(2) { width: 190px; }
+    .crm-table th:nth-child(3), .crm-table td:nth-child(3) { width: 165px; }
+    .crm-table th:nth-child(4), .crm-table td:nth-child(4) { width: 155px; }
+    .crm-table th:nth-child(5), .crm-table td:nth-child(5) { width: 150px; }
+    .crm-table th:nth-child(6), .crm-table td:nth-child(6) { width: 150px; }
+    .crm-table th:nth-child(7), .crm-table td:nth-child(7) { width: 185px; }
+    .crm-table th:nth-child(8), .crm-table td:nth-child(8) { width: 160px; }
     .crm-name {
-      font-size: 21px;
+      font-size: 20px;
       line-height: 1.35;
       font-weight: 900;
       color: #0f172a;
     }
     .crm-main-text {
-      font-size: 17px;
+      font-size: 16px;
       line-height: 1.45;
       color: #1e293b;
       font-weight: 850;
     }
     .crm-sub-text {
-      font-size: 15px;
+      font-size: 14px;
       line-height: 1.45;
       color: #64748b;
       font-weight: 750;
-      margin-top: 4px;
+      margin-top: 3px;
     }
     .crm-code {
-      font-size: 13px;
+      font-size: 12px;
       line-height: 1.35;
       color: #64748b;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      margin-top: 8px;
+      margin-top: 10px;
     }
     .crm-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      min-height: 34px;
-      padding: 7px 13px;
+      min-height: 28px;
+      padding: 5px 10px;
       border-radius: 999px;
-      font-size: 15px;
+      font-size: 13px;
       line-height: 1;
       font-weight: 900;
       white-space: nowrap;
@@ -235,25 +247,67 @@
     .crm-pill-purple { background: #7e22ce; color: #fff; }
     .crm-pill-slate { background: #334155; color: #fff; }
     .crm-pill-gray { background: #e2e8f0; color: #0f172a; }
+    .crm-source-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 9px;
+      border-radius: 8px;
+      border: 1px solid #dbe4f0;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 900;
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .crm-detail-list {
+      display: grid;
+      gap: 4px;
+    }
+    .crm-detail-row {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 8px;
+      align-items: baseline;
+      color: #64748b;
+      font-size: 14px;
+      font-weight: 750;
+    }
+    .crm-detail-label {
+      color: #94a3b8;
+      font-weight: 900;
+    }
+    .crm-detail-value {
+      color: #1e293b;
+      font-weight: 850;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .crm-action-btn {
-      min-height: 42px;
-      padding: 0 18px;
-      border-radius: 12px;
+      min-height: 40px;
+      padding: 0 16px;
+      border-radius: 10px;
       background: #172033;
       color: #fff;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 900;
       box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
     }
     .crm-role-select {
-      min-height: 42px;
-      min-width: 96px;
+      min-height: 40px;
+      min-width: 92px;
       padding: 0 12px;
-      border-radius: 12px;
+      border-radius: 10px;
       border: 1px solid #cbd5e1;
       background: #fff;
       color: #1e293b;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 800;
     }
     .crm-action-stack {
@@ -2274,22 +2328,26 @@
             <div class="crm-main-text">${escapeHTML(u.phone || '待補電話')}</div>
             <div class="crm-sub-text">${escapeHTML(u.email || '尚無 Email')}</div>
             <div class="crm-sub-text">${escapeHTML(u.companyName || u.industry || '尚無公司資料')}</div>
-            <div class="mt-3"><span class="crm-pill crm-pill-slate">${escapeHTML(sourceText)}</span></div>
+            <div class="mt-3"><span class="crm-source-chip">${escapeHTML(sourceText)}</span></div>
           </td>
           <td>
             <span class="crm-pill ${role === 'admin' ? 'crm-pill-purple' : (role === 'store' || role === 'tenant' ? 'crm-pill-green' : 'crm-pill-blue')}">
               ${escapeHTML(getRoleLabel(role))}
             </span>
-            <div class="crm-sub-text mt-3">歸屬網：${escapeHTML(u.networkId || u.storeId || 'admin')}</div>
-            <div class="crm-sub-text">負責人：${escapeHTML(u.followOwner || u.crmOwner || '-')}</div>
+            <div class="crm-detail-list mt-3">
+              <div class="crm-detail-row"><span class="crm-detail-label">歸屬</span><span class="crm-detail-value">${escapeHTML(u.networkId || u.storeId || 'admin')}</span></div>
+              <div class="crm-detail-row"><span class="crm-detail-label">負責</span><span class="crm-detail-value">${escapeHTML(u.followOwner || u.crmOwner || '-')}</span></div>
+            </div>
           </td>
           <td>
-            <div class="crm-main-text">薦：${escapeHTML(sponsor?.name || readSponsorId(u) || '-')}</div>
-            <div class="crm-sub-text">置：${escapeHTML(placement?.name || readPlacementParentId(u) || '-')} ${readPlacementSide(u) ? '/' + escapeHTML(readPlacementSide(u)) : ''}</div>
+            <div class="crm-detail-list">
+              <div class="crm-detail-row"><span class="crm-detail-label">推薦</span><span class="crm-detail-value">${escapeHTML(sponsor?.name || readSponsorId(u) || '-')}</span></div>
+              <div class="crm-detail-row"><span class="crm-detail-label">安置</span><span class="crm-detail-value">${escapeHTML(placement?.name || readPlacementParentId(u) || '-')}${readPlacementSide(u) ? ' / ' + escapeHTML(readPlacementSide(u)) : ''}</span></div>
+            </div>
           </td>
           <td>
             <span class="crm-pill ${isUserIndependent(u) ? 'crm-pill-green' : 'crm-pill-amber'}">${escapeHTML(progress.text)}</span>
-            <div class="crm-sub-text">直推 ${getDirectDownlineCount(u)} / 安置 ${getPlacementChildCount(u)}</div>
+            <div class="crm-sub-text">直推 ${getDirectDownlineCount(u)} · 安置 ${getPlacementChildCount(u)}</div>
           </td>
           <td>
             <span class="crm-pill ${fee.className}">${escapeHTML(fee.text)}</span>
@@ -2298,8 +2356,8 @@
           <td>
             <div class="crm-next-block">
               <div class="crm-main-text">${escapeHTML(lastInteraction)}</div>
-              <div class="crm-sub-text">下次：${escapeHTML(nextFollow)}</div>
-              <div class="crm-sub-text">狀態：${isFollowUpDue(u) ? '今天以前應處理' : '正常'}</div>
+              <div class="crm-sub-text">下次 ${escapeHTML(nextFollow)}</div>
+              <div class="crm-sub-text">${isFollowUpDue(u) ? '今天以前應處理' : '狀態正常'}</div>
             </div>
           </td>
           <td class="text-right whitespace-nowrap">
