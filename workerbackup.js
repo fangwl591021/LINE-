@@ -1065,6 +1065,287 @@ const D1WriteModule = {
   }
 };
 
+const D1ActivityModule = {
+  hasD1(env) {
+    return !!(env && env.ACTMASTER_DB);
+  },
+
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  pick(source, keys, fallback = '') {
+    for (const key of keys) {
+      const value = source && source[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+    }
+    return fallback;
+  },
+
+  bool(value) {
+    return value === true || String(value ?? '').toLowerCase() === 'true' || String(value ?? '') === '1';
+  },
+
+  activityRow(row) {
+    if (!row) return null;
+    return {
+      rowId: this.text(row.activity_id),
+      activityId: this.text(row.activity_id),
+      userId: this.text(row.creator_id),
+      name: this.text(row.name, '未命名活動'),
+      activityName: this.text(row.name, '未命名活動'),
+      activityType: this.text(row.type, '活動'),
+      feeType: this.text(row.fee_type, '免費'),
+      price: Number(row.price || 0) || 0,
+      startTime: this.text(row.start_time),
+      endTime: this.text(row.end_time),
+      description: this.text(row.description),
+      imageUrl: this.text(row.image_url),
+      status: this.text(row.status, '上架'),
+      nfcCheckinStart: this.text(row.nfc_checkin_start),
+      nfcCheckinEnd: this.text(row.nfc_checkin_end),
+      nfcCheckinSameDayOnly: row.nfc_same_day_only !== 0,
+      createdAt: this.text(row.created_at),
+      '活動ID': this.text(row.activity_id),
+      '活動名稱': this.text(row.name, '未命名活動'),
+      '活動類型': this.text(row.type, '活動'),
+      '收費方式': this.text(row.fee_type, '免費'),
+      '金額': Number(row.price || 0) || 0,
+      '開始時間': this.text(row.start_time),
+      '結束時間': this.text(row.end_time),
+      '活動說明': this.text(row.description),
+      '宣傳圖': this.text(row.image_url),
+      '狀態': this.text(row.status, '上架'),
+      'NFC簽到開始': this.text(row.nfc_checkin_start),
+      'NFC簽到結束': this.text(row.nfc_checkin_end),
+      'NFC限當日': row.nfc_same_day_only !== 0
+    };
+  },
+
+  registrantRow(row) {
+    if (!row) return null;
+    const checked = Number(row.checked_in || 0) === 1;
+    const cancelled = this.text(row.status) === 'cancelled';
+    return {
+      rowId: this.text(row.row_id),
+      registrationId: this.text(row.row_id),
+      lineId: this.text(row.line_id),
+      userId: this.text(row.line_id),
+      activityId: this.text(row.activity_id),
+      activityName: this.text(row.activity_name),
+      name: this.text(row.name, '未命名'),
+      phone: this.text(row.phone),
+      identity: this.text(row.identity, '會員'),
+      checkedIn: checked,
+      checkinStatus: checked,
+      paymentStatus: this.text(row.payment_status),
+      status: cancelled ? 'cancelled' : (checked ? 'checkedin' : 'active'),
+      amount: Number(row.amount || 0) || 0,
+      startTime: this.text(row.start_time),
+      description: this.text(row.description),
+      imageUrl: this.text(row.image_url),
+      nfcCheckinTime: this.text(row.nfc_checkin_time),
+      createdAt: this.text(row.created_at),
+      cancelledAt: this.text(row.cancelled_at),
+      '報名ID': this.text(row.row_id),
+      'LINE ID': this.text(row.line_id),
+      '活動ID': this.text(row.activity_id),
+      '活動名稱': this.text(row.activity_name),
+      '姓名': this.text(row.name, '未命名'),
+      '手機': this.text(row.phone),
+      '身份': this.text(row.identity, '會員'),
+      '簽到': checked,
+      '付款狀態': this.text(row.payment_status),
+      '報名狀態': cancelled ? '已取消' : '有效',
+      '金額': Number(row.amount || 0) || 0,
+      '開始時間': this.text(row.start_time),
+      '活動說明': this.text(row.description),
+      '宣傳圖': this.text(row.image_url),
+      '報名時間': this.text(row.created_at)
+    };
+  },
+
+  normalizeActivity(payload = {}) {
+    const data = payload.data || payload;
+    const activityId = this.pick(data, ['activityId', '活動ID'], this.pick(payload, ['activityId'])) || `ACT_${Date.now()}`;
+    return {
+      activity_id: activityId,
+      name: this.pick(data, ['activityName', 'name', '活動名稱'], '未命名活動'),
+      type: this.pick(data, ['activityType', 'type', '活動類型'], '活動'),
+      fee_type: this.pick(data, ['feeType', '收費方式'], '免費'),
+      price: Number(this.pick(data, ['price', '金額'], '0')) || 0,
+      start_time: this.pick(data, ['startTime', '開始時間']),
+      end_time: this.pick(data, ['endTime', '結束時間']),
+      description: this.pick(data, ['description', '活動說明']),
+      image_url: this.pick(data, ['imageUrl', '宣傳圖']),
+      creator_id: this.pick(data, ['userId', 'creatorId'], this.pick(payload, ['userId'], 'admin')),
+      status: this.pick(data, ['status', '狀態'], '上架'),
+      nfc_checkin_start: this.pick(data, ['nfcCheckinStart', 'NFC簽到開始']),
+      nfc_checkin_end: this.pick(data, ['nfcCheckinEnd', 'NFC簽到結束']),
+      nfc_same_day_only: this.bool(data.nfcCheckinSameDayOnly ?? data['NFC限當日'] ?? true) ? 1 : 0,
+      is_series: this.bool(data.isBatch || data.isSeries) ? 1 : 0
+    };
+  },
+
+  async listActivities(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const rows = await D1ReadModule.all(env, 'SELECT * FROM activities ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC LIMIT 500');
+    return { success: true, data: rows.map(row => this.activityRow(row)).filter(Boolean) };
+  },
+
+  async upsertActivity(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const activity = this.normalizeActivity(payload);
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,creator_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(activity_id) DO UPDATE SET
+        name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,status=excluded.status,
+        is_series=excluded.is_series,nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
+        nfc_same_day_only=excluded.nfc_same_day_only
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.creator_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
+    return activity;
+  },
+
+  async bulkAddRegistrants(payload, env) {
+    const activity = await this.upsertActivity(payload, env);
+    if (!activity) return null;
+    const names = Array.isArray(payload.names) ? payload.names : [];
+    for (let i = 0; i < names.length; i++) {
+      const name = this.text(names[i]);
+      if (!name) continue;
+      await this.insertRegistration({
+        activityId: activity.activity_id,
+        activityName: activity.name,
+        name,
+        identity: payload.defaultIdentity || '會員',
+        amount: activity.price,
+        paymentStatus: activity.price > 0 ? '待付款' : '免費',
+        startTime: activity.start_time,
+        description: activity.description,
+        imageUrl: activity.image_url
+      }, env);
+    }
+    return { success: true, data: { activityId: activity.activity_id, inserted: names.filter(Boolean).length } };
+  },
+
+  async insertRegistration(payload, env) {
+    const activityId = this.pick(payload, ['activityId', '活動ID']);
+    if (!activityId) return { success: false, error: 'Missing activityId' };
+    const lineId = this.pick(payload, ['userId', 'lineId', 'LINE ID']);
+    if (lineId) {
+      const existing = await D1ReadModule.first(env, "SELECT * FROM registrants WHERE activity_id = ? AND line_id = ? AND status <> 'cancelled' LIMIT 1", [activityId, lineId]);
+      if (existing) return { success: true, data: this.registrantRow(existing), existed: true };
+    }
+    const activity = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    const rowId = this.pick(payload, ['rowId', 'registrationId']) || `REG_${activityId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const activityName = this.pick(payload, ['activityName', '活動名稱'], activity ? activity.name : '');
+    const name = this.pick(payload, ['userName', 'name', '姓名'], '未命名');
+    const phone = this.pick(payload, ['userPhone', 'phone', '手機']);
+    const identity = this.pick(payload, ['defaultIdentity', 'identity', '身份'], '會員');
+    const amount = Number(this.pick(payload, ['amount', 'price', '金額'], activity ? activity.price : 0)) || 0;
+    const payment = this.pick(payload, ['paymentStatus', '付款狀態'], amount > 0 ? '待付款' : '免費');
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO registrants (row_id,line_id,activity_name,name,phone,identity,checked_in,payment_status,activity_id,amount,start_time,description,image_url,status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).bind(rowId,lineId,activityName,name,phone,identity,0,payment,activityId,amount,activity ? activity.start_time : '',activity ? activity.description : '',activity ? activity.image_url : '','active').run();
+    return { success: true, data: { rowId, activityId }, existed: false };
+  },
+
+  async listRegistrants(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const activityId = this.pick(payload, ['activityId', '活動ID']);
+    const rows = activityId
+      ? await D1ReadModule.all(env, 'SELECT * FROM registrants WHERE activity_id = ? ORDER BY created_at DESC LIMIT 500', [activityId])
+      : await D1ReadModule.all(env, 'SELECT * FROM registrants ORDER BY created_at DESC LIMIT 500');
+    return { success: true, data: rows.map(row => this.registrantRow(row)).filter(Boolean) };
+  },
+
+  async listMyRegistrations(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const userId = this.pick(payload, ['userId', 'lineId']);
+    const phone = this.pick(payload, ['phone', '手機']);
+    const name = this.pick(payload, ['name', '姓名']);
+    const rows = await D1ReadModule.all(env, `
+      SELECT * FROM registrants
+      WHERE (? <> '' AND line_id = ?) OR (? <> '' AND phone = ?) OR (? <> '' AND name = ?)
+      ORDER BY created_at DESC LIMIT 200
+    `, [userId,userId,phone,phone,name,name]);
+    return { success: true, data: rows.map(row => this.registrantRow(row)).filter(Boolean) };
+  },
+
+  async cancelRegistration(payload, env) {
+    const rowId = this.pick(payload, ['rowId', 'registrationId']);
+    if (!rowId) return { success: false, error: 'Missing registrationId' };
+    await env.ACTMASTER_DB.prepare("UPDATE registrants SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP WHERE row_id = ?").bind(rowId).run();
+    return { success: true, data: { rowId, status: 'cancelled' } };
+  },
+
+  async toggleCheckin(payload, env, source = 'manual') {
+    const rowId = this.pick(payload, ['rowId', 'registrationId', 'verifyCheckin']);
+    if (!rowId) return { success: false, error: 'Missing registrationId' };
+    const row = await D1ReadModule.first(env, "SELECT * FROM registrants WHERE row_id = ? AND status <> 'cancelled' LIMIT 1", [rowId]);
+    if (!row) return { success: false, error: '找不到有效報名資料' };
+    const next = Number(row.checked_in || 0) === 1 ? 0 : 1;
+    await env.ACTMASTER_DB.prepare('UPDATE registrants SET checked_in = ?, nfc_checkin_time = ?, nfc_checkin_source = ? WHERE row_id = ?')
+      .bind(next, next ? new Date().toISOString() : '', source, rowId).run();
+    return { success: true, data: { rowId, checkedIn: next === 1 } };
+  },
+
+  taipeiNow() {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(new Date()).reduce((acc, p) => {
+      acc[p.type] = p.value;
+      return acc;
+    }, {});
+    return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+  },
+
+  async nfcCheckin(payload, env) {
+    const activityId = this.pick(payload, ['activityId', 'checkin']);
+    const userId = this.pick(payload, ['userId', 'lineId']);
+    if (!activityId || !userId) return { success: false, error: '缺少活動或會員資料' };
+    const activity = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    if (!activity || this.text(activity.status) !== '上架') return { success: false, error: '活動不存在或已下架' };
+    const reg = await D1ReadModule.first(env, "SELECT * FROM registrants WHERE activity_id = ? AND line_id = ? AND status <> 'cancelled' LIMIT 1", [activityId, userId]);
+    if (!reg) return { success: false, error: '尚未報名，無法簽到' };
+
+    const start = this.text(activity.nfc_checkin_start);
+    const end = this.text(activity.nfc_checkin_end);
+    if (start && end) {
+      const now = this.taipeiNow();
+      const activityDate = this.text(activity.start_time).substring(0, 10);
+      if (activity.nfc_same_day_only !== 0 && activityDate && activityDate !== now.date) {
+        return { success: false, error: 'NFC 簽到限活動當日' };
+      }
+      if (now.time < start || now.time > end) return { success: false, error: '目前不在 NFC 簽到時段' };
+    }
+
+    if (Number(reg.checked_in || 0) === 1) return { success: true, data: { alreadyChecked: true, rowId: reg.row_id } };
+    await env.ACTMASTER_DB.prepare('UPDATE registrants SET checked_in = 1, nfc_checkin_time = ?, nfc_checkin_source = ? WHERE row_id = ?')
+      .bind(new Date().toISOString(), 'nfc', reg.row_id).run();
+    return { success: true, data: { alreadyChecked: false, rowId: reg.row_id, awardedPoints: Number(activity.reward_points || 0) || 0 } };
+  },
+
+  async confirmPayment(payload, env) {
+    const rowId = this.pick(payload, ['rowId', 'registrationId']);
+    if (!rowId) return { success: false, error: 'Missing registrationId' };
+    await env.ACTMASTER_DB.prepare("UPDATE registrants SET payment_status = '已付款' WHERE row_id = ?").bind(rowId).run();
+    return { success: true, data: { rowId, paymentStatus: '已付款' } };
+  },
+
+  async removeActivity(payload, env) {
+    const activityId = this.pick(payload, ['activityId', '活動ID']);
+    if (!activityId) return { success: false, error: 'Missing activityId' };
+    await env.ACTMASTER_DB.prepare("UPDATE activities SET status = '下架', ever_unpublished = 1 WHERE activity_id = ?").bind(activityId).run();
+    return { success: true, data: { activityId, status: '下架' } };
+  }
+};
+
 const AuthModule = {
   getCardLineId(card) {
     return String((card && (card['LINE ID'] || card.lineId || card.userId)) || '').trim();
@@ -1830,6 +2111,113 @@ async function dispatchAction(action, payload, request, env) {
         console.error("D1 adminSyncBoundCardUser fallback", e);
       }
       return await AuthModule.adminSyncBoundCardUser(payload, env);
+    }
+    case 'getPublicActivities':
+    case 'getAllActivities':
+    case 'getActivities': {
+      try {
+        const d1Result = await D1ActivityModule.listActivities(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 listActivities fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'bulkAddRegistrants': {
+      try {
+        const d1Result = await D1ActivityModule.bulkAddRegistrants(payload || {}, env);
+        if (d1Result && d1Result.success !== false) return d1Result;
+      } catch (e) {
+        console.error("D1 bulkAddRegistrants fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'updateActivity': {
+      try {
+        const d1Result = await D1ActivityModule.upsertActivity(payload || {}, env);
+        if (d1Result) return { success: true, data: { activityId: d1Result.activity_id } };
+      } catch (e) {
+        console.error("D1 updateActivity fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'joinActivity': {
+      try {
+        const d1Result = await D1ActivityModule.insertRegistration(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 joinActivity fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'getActivityRegistrants': {
+      try {
+        const d1Result = await D1ActivityModule.listRegistrants(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 listRegistrants fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'getMyActivities':
+    case 'getUserActivities':
+    case 'getMyRegistrations':
+    case 'getUserRegistrations': {
+      try {
+        const d1Result = await D1ActivityModule.listMyRegistrations(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 listMyRegistrations fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'cancelActivityRegistration':
+    case 'cancelRegistration':
+    case 'unregisterActivity':
+    case 'removeActivityRegistration': {
+      try {
+        const d1Result = await D1ActivityModule.cancelRegistration(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 cancelRegistration fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'toggleCheckin': {
+      try {
+        const d1Result = await D1ActivityModule.toggleCheckin(payload || {}, env, 'manual');
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 toggleCheckin fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'nfcCheckin': {
+      try {
+        const d1Result = await D1ActivityModule.nfcCheckin(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 nfcCheckin fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'confirmPayment': {
+      try {
+        const d1Result = await D1ActivityModule.confirmPayment(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 confirmPayment fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'removeAct': {
+      try {
+        const d1Result = await D1ActivityModule.removeActivity(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 removeAct fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
     }
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
