@@ -239,18 +239,22 @@
               <p class="text-xs text-slate-500 font-bold">設定後即可在首頁一鍵發送數位名片</p>
               <button onclick="window.showMyQRCode()" class="text-white text-[12px] font-bold px-2 py-1.5 bg-[#06C755] rounded-lg shadow-sm active:scale-95 transition-transform flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">qr_code_scanner</span> 顯示條碼</button>
             </div>
+            <div class="flex justify-end mb-2">
+              <button type="button" onclick="window.openCardDetail(window.currentUserCard)" class="text-blue-500 text-[12px] underline font-bold px-2 py-1 bg-blue-50 rounded-lg active:scale-95 transition-transform w-full text-center">編輯名片詳細文字資料</button>
+            </div>
             <button id="btn-apply-my-template" type="button" onclick="window.applyMyCardTemplate(event)" class="w-full bg-white border border-emerald-100 text-emerald-600 py-3 rounded-xl font-bold text-[13px] shadow-sm active:scale-95 transition-transform flex justify-center items-center gap-2">
               <span class="material-symbols-outlined text-[18px]">auto_fix_high</span> 套用介紹模板
             </button>
 
-            <div class="bg-white rounded-2xl border border-violet-100 shadow-sm overflow-hidden">
-              <div class="px-4 py-3 bg-violet-50/70 border-b border-violet-100 flex items-center justify-between gap-3">
+            <details class="bg-white rounded-2xl border border-violet-100 shadow-sm overflow-hidden group">
+              <summary class="px-4 py-3 bg-violet-50/70 border-b border-violet-100 flex items-center justify-between gap-3 cursor-pointer list-none">
                 <div class="font-black text-slate-800 text-[14px] flex items-center gap-2">
                   <span class="material-symbols-outlined text-violet-500 icon-filled">auto_awesome</span>
                   名片大師
                 </div>
                 <span id="cardmaster-quota" class="text-[11px] text-violet-500 font-black">今日額度</span>
-              </div>
+                <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+              </summary>
               <div class="p-4 space-y-3">
                 <textarea id="cardmaster-brief" class="custom-input h-28 resize-none !py-4 text-[15px] leading-relaxed" placeholder="沒靈感時可輸入：我的服務對象、特色、優惠或想強調的賣點。AI 會幫你整理成名片介紹。"></textarea>
                 <div class="grid grid-cols-2 gap-3">
@@ -263,7 +267,7 @@
                 </div>
                 <div id="cardmaster-result" class="hidden"></div>
               </div>
-            </div>
+            </details>
 
             <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4">
               <div>
@@ -294,17 +298,7 @@
               </div>
             </div>
 
-            <div class="bg-white border border-blue-100 rounded-2xl shadow-sm overflow-hidden mb-4">
-              <button type="button" onclick="window.openCardDetail(window.currentUserCard)" class="w-full px-4 py-3.5 flex items-center justify-between gap-3 text-blue-600 active:bg-blue-50 transition-colors">
-                <span class="flex items-center gap-2 text-[14px] font-black">
-                  <span class="material-symbols-outlined text-[20px]">edit_note</span>
-                  編輯名片詳細文字資料
-                </span>
-                <span class="material-symbols-outlined text-[20px]">chevron_right</span>
-              </button>
-            </div>
-
-            <div id="my-ecard-preview-area" class="rounded-2xl overflow-hidden shadow-lg border border-slate-100 mb-4 max-w-[420px] max-h-[360px] mx-auto pointer-events-none bg-white"></div>
+            <div id="my-ecard-preview-area" class="rounded-2xl overflow-hidden shadow-lg border border-slate-100 mb-4 max-w-[420px] mx-auto pointer-events-none bg-white"></div>
 
             <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4">
               <div>
