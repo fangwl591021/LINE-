@@ -429,6 +429,271 @@ const DBModule = {
   }
 };
 
+const D1BackfillModule = {
+  listFromResult(result, keys = []) {
+    if (Array.isArray(result)) return result;
+    if (!result || typeof result !== 'object') return [];
+    for (const key of ['data', 'rows', 'items', ...keys]) {
+      if (Array.isArray(result[key])) return result[key];
+    }
+    return [];
+  },
+
+  str(value) {
+    return String(value ?? '').trim();
+  },
+
+  boolInt(value) {
+    if (value === true) return 1;
+    const text = String(value ?? '').trim().toLowerCase();
+    return ['true', '1', 'yes', 'y', '已綁定', '已公開'].includes(text) ? 1 : 0;
+  },
+
+  json(value) {
+    try { return JSON.stringify(value ?? {}); } catch (e) { return '{}'; }
+  },
+
+  id(prefix, row, index) {
+    return this.str(row.rowId || row.id || row.ID || row[`${prefix}ID`] || row['活動ID'] || row['報名ID']) ||
+      `${prefix}_${Date.now()}_${index}`;
+  },
+
+  normalizeUser(row, index) {
+    const userId = this.str(row.userId || row['LINE ID'] || row.lineId || row['User ID']);
+    if (!userId) return null;
+    return {
+      user_id: userId,
+      line_id: userId,
+      name: this.str(row.name || row['姓名'] || row.displayName || '待補資料'),
+      phone: this.str(row.phone || row['手機'] || row['手機號碼']),
+      industry: this.str(row.industry || row['主要業種'] || row.title || row['職稱']),
+      birthday: this.str(row.birthday || row['出生年月日']),
+      company_name: this.str(row.companyName || row.company || row['公司名稱']),
+      title: this.str(row.title || row['職稱']),
+      role: this.str(row.role || row['權限級別'] || 'user').toLowerCase(),
+      network_id: this.str(row.networkId || row['歸屬網'] || 'admin') || 'admin',
+      store_id: this.str(row.storeid || row.storeId || row['店代碼']),
+      referrer_id: this.str(row.referrerId || row['推薦人']),
+      profile_status: this.str(row.profileStatus || row.status || 'active'),
+      source: this.str(row.source || 'gas_backfill'),
+      claimed_card_id: this.str(row.claimedCardRowId || row.claimRowId),
+      socials_json: this.str(row.socials) || '[]',
+      telegram_token: this.str(row.tgToken),
+      telegram_chat_id: this.str(row.tgChatId),
+      raw_json: this.json(row)
+    };
+  },
+
+  normalizeUserFromCard(card) {
+    const userId = this.str(card['LINE ID'] || card.userId || card.lineId || card['User ID']);
+    if (!userId) return null;
+    return this.normalizeUser({
+      userId,
+      name: card['姓名'] || card['英文名'] || '待補資料',
+      phone: card['手機號碼'] || card['公司電話'] || '',
+      industry: card['職稱'] || card['公司名稱'] || '已綁定名片',
+      companyName: card['公司名稱'] || '',
+      title: card['職稱'] || '',
+      role: 'user',
+      networkId: card['歸屬網'] || 'admin',
+      profileStatus: 'bound_card',
+      source: 'bound_card',
+      claimedCardRowId: card.rowId || card.id || ''
+    });
+  },
+
+  normalizeCard(row, index) {
+    const cfgRaw = this.str(row['自訂名片設定'] || row['電子名片設定'] || row.cardConfig || row.config);
+    let cfg = {};
+    try { cfg = cfgRaw ? JSON.parse(cfgRaw) : {}; } catch (e) {}
+    const cardId = this.str(row.rowId || row.id || row['Row ID']) || `CARD_${Date.now()}_${index}`;
+    const owner = this.str(row['LINE ID'] || row.userId || row.lineId || row['User ID']);
+    return {
+      card_id: cardId,
+      owner_user_id: owner,
+      creator_user_id: this.str(row.creatorId || row['建檔者ID']),
+      network_id: this.str(row.networkId || row['歸屬網'] || 'admin') || 'admin',
+      name: this.str(row['姓名'] || row.name),
+      english_name: this.str(row['英文名']),
+      company_name: this.str(row['公司名稱']),
+      title: this.str(row['職稱']),
+      department: this.str(row['部門']),
+      mobile: this.str(row['手機號碼'] || row['手機']),
+      company_phone: this.str(row['公司電話']),
+      extension: this.str(row['分機']),
+      fax: this.str(row['傳真']),
+      email: this.str(row['電子郵件']),
+      website: this.str(row['公司網址']),
+      address: this.str(row['公司地址']),
+      tax_id: this.str(row['統一編號']),
+      social_accounts: this.str(row['社群帳號']),
+      service: this.str(row['服務項目'] || cfg.desc),
+      note: this.str(row['建檔人/備註']),
+      image_url: this.str(row['名片圖檔'] || cfg.imgUrl),
+      config_json: cfgRaw || this.json(cfg),
+      tags: this.str(row['標籤']),
+      is_bound: owner ? 1 : 0,
+      is_private: this.boolInt(cfg.isPrivate),
+      template_draft: this.boolInt(cfg.templateDraft),
+      safety_status: cfg.safetyReview ? (cfg.safetyReview.pass ? 'passed' : 'failed') : 'pending',
+      source: this.str(row.source || 'gas_backfill'),
+      raw_json: this.json(row)
+    };
+  },
+
+  normalizeActivity(row, index) {
+    const activityId = this.str(row.activityId || row['活動ID'] || row.rowId || row.id) || `ACT_${Date.now()}_${index}`;
+    return {
+      activity_id: activityId,
+      owner_user_id: this.str(row.userId || row.ownerUserId || row['建立者ID']),
+      network_id: this.str(row.networkId || row['歸屬網'] || 'admin') || 'admin',
+      name: this.str(row.activityName || row['活動名稱'] || row.name || '未命名活動'),
+      type: this.str(row.activityType || row['活動類型'] || '例會'),
+      default_identity: this.str(row.defaultIdentity || row['預設身份'] || '會員'),
+      fee_type: this.str(row.feeType || row['收費方式'] || '免費'),
+      price: Number(row.price || row['金額'] || 0) || 0,
+      start_time: this.str(row.startTime || row['開始時間']),
+      end_time: this.str(row.endTime || row['結束時間']),
+      description: this.str(row.description || row['活動說明']),
+      image_url: this.str(row.imageUrl || row['宣傳圖']),
+      status: this.str(row.status || row['狀態'] || 'published'),
+      is_batch: this.boolInt(row.isBatch || row['是否系列']),
+      parent_activity_id: this.str(row.parentActivityId || row['父活動ID']),
+      nfc_checkin_start: this.str(row.nfcCheckinStart || row['NFC簽到開始']),
+      nfc_checkin_end: this.str(row.nfcCheckinEnd || row['NFC簽到結束']),
+      nfc_same_day_only: row.nfcCheckinSameDayOnly === false ? 0 : 1,
+      raw_json: this.json(row)
+    };
+  },
+
+  normalizeRegistration(row, activityId, index) {
+    const regId = this.str(row.registrationId || row.rowId || row.id || row['報名ID']) || `REG_${activityId}_${index}`;
+    return {
+      registration_id: regId,
+      activity_id: this.str(row.activityId || row['活動ID'] || activityId),
+      user_id: this.str(row.userId || row['LINE ID']),
+      name: this.str(row.name || row['姓名'] || row.userName),
+      phone: this.str(row.phone || row['手機'] || row['手機號碼'] || row.userPhone),
+      identity: this.str(row.identity || row['身份'] || row['預設身份'] || '會員'),
+      payment_status: this.str(row.paymentStatus || row['繳費狀態']),
+      checkin_status: this.boolInt(row.checkinStatus || row['簽到']),
+      checked_in_at: this.str(row.checkedInAt || row['簽到時間']),
+      cancelled_at: this.str(row.cancelledAt || row['取消時間']),
+      raw_json: this.json(row)
+    };
+  },
+
+  async upsertUser(env, user) {
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO users (row_id,line_id,name,industry,phone,birthday,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(line_id) DO UPDATE SET
+        name=excluded.name,industry=excluded.industry,phone=excluded.phone,birthday=excluded.birthday,socials=excluded.socials,
+        role=excluded.role,store_id=excluded.store_id,referrer_id=excluded.referrer_id,network_id=excluded.network_id,
+        tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
+    `).bind(user.user_id,user.line_id,user.name,user.industry,user.phone,user.birthday,user.socials_json,user.role,user.store_id,user.referrer_id,user.network_id,user.telegram_token,user.telegram_chat_id).run();
+  },
+
+  async upsertCard(env, card) {
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,services,notes,creator_id,image_url,custom_config,network_id,tags,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      ON CONFLICT(row_id) DO UPDATE SET
+        line_id=excluded.line_id,name=excluded.name,english_name=excluded.english_name,company_name=excluded.company_name,title=excluded.title,
+        department=excluded.department,tax_id=excluded.tax_id,mobile=excluded.mobile,office_phone=excluded.office_phone,
+        extension=excluded.extension,fax=excluded.fax,email=excluded.email,website=excluded.website,socials=excluded.socials,
+        address=excluded.address,services=excluded.services,notes=excluded.notes,creator_id=excluded.creator_id,
+        image_url=excluded.image_url,custom_config=excluded.custom_config,network_id=excluded.network_id,tags=excluded.tags,updated_at=CURRENT_TIMESTAMP
+    `).bind(card.card_id,card.owner_user_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.company_phone,card.extension,card.fax,card.email,card.website,card.social_accounts,card.address,card.service,card.note,card.creator_user_id,card.image_url,card.config_json,card.network_id,card.tags).run();
+  },
+
+  async upsertActivity(env, activity) {
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,creator_id,status,is_series)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(activity_id) DO UPDATE SET
+        name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,creator_id=excluded.creator_id,
+        status=excluded.status,is_series=excluded.is_series
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.owner_user_id,activity.status,activity.is_batch).run();
+  },
+
+  async upsertRegistration(env, reg) {
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO registrants (row_id,line_id,activity_name,name,phone,identity,checked_in,payment_status,activity_id,nfc_checkin_time)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(row_id) DO UPDATE SET
+        line_id=excluded.line_id,activity_name=excluded.activity_name,name=excluded.name,phone=excluded.phone,identity=excluded.identity,
+        checked_in=excluded.checked_in,payment_status=excluded.payment_status,activity_id=excluded.activity_id,nfc_checkin_time=excluded.nfc_checkin_time
+    `).bind(reg.registration_id,reg.user_id,'',reg.name,reg.phone,reg.identity,reg.checkin_status,reg.payment_status,reg.activity_id,reg.checked_in_at).run();
+  },
+
+  assertCanWrite(payload, env) {
+    if (payload.dryRun !== false) return;
+    if (!env.MIGRATION_TOKEN || payload.migrationToken !== env.MIGRATION_TOKEN) {
+      throw new Error('Missing or invalid MIGRATION_TOKEN');
+    }
+    if (payload.confirm !== 'BACKFILL_D1') throw new Error('Missing confirm=BACKFILL_D1');
+  },
+
+  async backfillFromGas(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    this.assertCanWrite(payload || {}, env);
+
+    const dryRun = payload.dryRun !== false;
+    const includeRegistrations = payload.includeRegistrations === true;
+    const summary = { dryRun, users: 0, boundUsers: 0, cards: 0, activities: 0, registrations: 0, errors: [] };
+
+    const users = this.listFromResult(await DBModule.forward('getAllUsers', {}, env));
+    for (let i = 0; i < users.length; i++) {
+      const user = this.normalizeUser(users[i], i);
+      if (!user) continue;
+      summary.users++;
+      if (!dryRun) await this.upsertUser(env, user);
+    }
+
+    const cards = this.listFromResult(await DBModule.forward('getCardContacts', { role: 'admin', networkId: 'admin' }, env));
+    const seenUsers = new Set(users.map(u => this.str(u.userId || u['LINE ID'] || u.lineId)).filter(Boolean));
+    for (let i = 0; i < cards.length; i++) {
+      const card = this.normalizeCard(cards[i], i);
+      if (!card.card_id) continue;
+      summary.cards++;
+      if (!dryRun) await this.upsertCard(env, card);
+
+      const boundUser = this.normalizeUserFromCard(cards[i]);
+      if (boundUser && !seenUsers.has(boundUser.user_id)) {
+        seenUsers.add(boundUser.user_id);
+        summary.boundUsers++;
+        if (!dryRun) await this.upsertUser(env, boundUser);
+      }
+    }
+
+    const activities = this.listFromResult(await DBModule.forward('getPublicActivities', {}, env), ['activities']);
+    for (let i = 0; i < activities.length; i++) {
+      const activity = this.normalizeActivity(activities[i], i);
+      if (!activity.activity_id) continue;
+      summary.activities++;
+      if (!dryRun) await this.upsertActivity(env, activity);
+
+      if (includeRegistrations) {
+        try {
+          const regs = this.listFromResult(await DBModule.forward('getActivityRegistrants', { activityId: activity.activity_id }, env), ['registrations']);
+          for (let r = 0; r < regs.length; r++) {
+            const reg = this.normalizeRegistration(regs[r], activity.activity_id, r);
+            if (!reg.registration_id || !reg.activity_id) continue;
+            summary.registrations++;
+            if (!dryRun) await this.upsertRegistration(env, reg);
+          }
+        } catch (e) {
+          summary.errors.push({ activityId: activity.activity_id, error: e.message });
+        }
+      }
+    }
+
+    return { success: true, data: summary };
+  }
+};
+
 // ==================== 模組 6: 邊緣快取驗證 (Edge Auth KV Module) ====================
 const AuthModule = {
   getCardLineId(card) {
@@ -1151,6 +1416,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'mlmGetMemberTree':       return await MLMModule.getMemberTree(payload, env);
     case 'mlmPreviewBonusPlan':     return await MLMModule.previewBonusPlan(payload, env);
     case 'mlmGetOrganizationTree':  return await MLMModule.getOrganizationTree(payload, env);
+    case 'd1BackfillFromGas':       return await D1BackfillModule.backfillFromGas(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
     default:                       return await DBModule.forward(action, payload, env);
