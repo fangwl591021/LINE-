@@ -911,6 +911,160 @@ const D1ReadModule = {
   }
 };
 
+const D1WriteModule = {
+  hasD1(env) {
+    return !!(env && env.ACTMASTER_DB);
+  },
+
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  pick(source, keys, fallback = '') {
+    for (const key of keys) {
+      const value = source && source[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+    }
+    return fallback;
+  },
+
+  role(value) {
+    const next = this.text(value, 'user').toLowerCase();
+    if (next === 'admin' || next === '總管') return 'admin';
+    if (next === 'store' || next === 'tenant' || next === '店長' || next === '租戶') return 'store';
+    return 'user';
+  },
+
+  async clearUserCache(env, userId) {
+    if (!env.ACTMASTER_KV || !userId) return;
+    try { await env.ACTMASTER_KV.delete(`U_PROFILE_${userId}`); } catch (e) { console.error('KV Delete Error', e); }
+  },
+
+  normalizeUser(payload = {}) {
+    const data = payload.data || payload.profile || payload;
+    const userId = this.pick(data, ['userId', 'lineId', 'line_id', 'LINE ID'], this.pick(payload, ['userId', 'lineId', 'targetUserId']));
+    if (!userId) return null;
+    return {
+      row_id: this.pick(data, ['rowId', 'row_id'], `USR_${userId}`),
+      line_id: userId,
+      name: this.pick(data, ['name', 'displayName', '姓名', '真實姓名'], '未命名'),
+      industry: this.pick(data, ['industry', 'title', '職稱', '主要業種', '公司名稱']),
+      gender: this.pick(data, ['gender', '性別']),
+      phone: this.pick(data, ['phone', 'mobile', '手機', '手機號碼']),
+      birthday: this.pick(data, ['birthday', 'birthdate', '出生年月日']),
+      region: this.pick(data, ['region', '地區']),
+      address: this.pick(data, ['address', '地址', '公司地址']),
+      socials: this.pick(data, ['socials', 'socials_json', '社群帳號'], '[]'),
+      role: this.role(this.pick(data, ['role', '權限級別'], 'user')),
+      store_id: this.pick(data, ['storeid', 'storeId', 'store_id', '店代碼']),
+      referrer_id: this.pick(data, ['referrerId', 'referrer_id', '推薦人']),
+      network_id: this.pick(data, ['networkId', 'network_id', '歸屬網'], 'admin'),
+      tg_token: this.pick(data, ['tgToken', 'tg_token']),
+      tg_chat_id: this.pick(data, ['tgChatId', 'tg_chat_id'])
+    };
+  },
+
+  normalizeCard(payload = {}) {
+    const data = payload.data || payload.card || payload;
+    const config = this.pick(data, ['customConfig', 'custom_config', 'cardConfig', '電子名片設定', '自訂名片設定'], '{}');
+    const rowId = this.pick(data, ['rowId', 'row_id', 'id'], this.pick(payload, ['rowId']));
+    return {
+      row_id: rowId || `CARD_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      line_id: this.pick(data, ['lineId', 'userId', 'LINE ID'], this.pick(payload, ['userId'])),
+      name: this.pick(data, ['name', '姓名'], '未命名'),
+      english_name: this.pick(data, ['englishName', 'english_name', '英文名']),
+      company_name: this.pick(data, ['companyName', 'company_name', '公司名稱']),
+      title: this.pick(data, ['title', '職稱']),
+      department: this.pick(data, ['department', '部門']),
+      tax_id: this.pick(data, ['taxId', 'tax_id', '統一編號']),
+      mobile: this.pick(data, ['mobile', 'phone', '手機號碼', '手機']),
+      office_phone: this.pick(data, ['officePhone', 'office_phone', '公司電話']),
+      extension: this.pick(data, ['extension', '分機']),
+      fax: this.pick(data, ['fax', '傳真']),
+      email: this.pick(data, ['email', '電子郵件']),
+      website: this.pick(data, ['website', '公司網址']),
+      socials: this.pick(data, ['socials', '社群帳號']),
+      address: this.pick(data, ['address', '公司地址']),
+      birthday: this.pick(data, ['birthday', '生日']),
+      personality: this.pick(data, ['personality', '個性']),
+      hobbies: this.pick(data, ['hobbies', '興趣']),
+      wealth: this.pick(data, ['wealth', '財富']),
+      health: this.pick(data, ['health', '健康']),
+      career: this.pick(data, ['career', '事業']),
+      services: this.pick(data, ['services', 'service', '服務項目']),
+      notes: this.pick(data, ['notes', '建檔人/備註']),
+      creator_id: this.pick(data, ['creatorId', 'creator_id', '建檔者ID'], this.pick(payload, ['creatorId', 'userId'])),
+      image_url: this.pick(data, ['imageUrl', 'image_url', '名片圖檔']),
+      custom_config: config,
+      network_id: this.pick(data, ['networkId', 'network_id', '歸屬網'], 'admin'),
+      tags: this.pick(data, ['tags', '標籤'])
+    };
+  },
+
+  async upsertUser(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const user = this.normalizeUser(payload);
+    if (!user) return { success: false, error: 'Missing userId' };
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(line_id) DO UPDATE SET
+        name=excluded.name,industry=excluded.industry,gender=excluded.gender,phone=excluded.phone,birthday=excluded.birthday,
+        region=excluded.region,address=excluded.address,socials=excluded.socials,role=excluded.role,store_id=excluded.store_id,
+        referrer_id=excluded.referrer_id,network_id=excluded.network_id,tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
+    `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id).run();
+    await this.clearUserCache(env, user.line_id);
+    const info = D1ReadModule.userRow({
+      row_id: user.row_id,
+      line_id: user.line_id,
+      name: user.name,
+      industry: user.industry,
+      phone: user.phone,
+      birthday: user.birthday,
+      role: user.role,
+      store_id: user.store_id,
+      referrer_id: user.referrer_id,
+      network_id: user.network_id,
+      tg_token: user.tg_token,
+      tg_chat_id: user.tg_chat_id
+    });
+    return { success: true, data: { isRegistered: true, info, source: 'd1_write' } };
+  },
+
+  async updateUserRole(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const targetUserId = this.pick(payload, ['targetUserId', 'targetLineId', 'lineId', 'userId']);
+    const role = this.role(this.pick(payload, ['role', 'newRole', 'permission']));
+    if (!targetUserId) return { success: false, error: 'Missing targetUserId' };
+    const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [targetUserId, targetUserId]);
+    if (!existing) return { success: false, error: '找不到指定用戶' };
+    await env.ACTMASTER_DB.prepare('UPDATE users SET role = ? WHERE line_id = ? OR row_id = ?').bind(role, targetUserId, targetUserId).run();
+    await this.clearUserCache(env, targetUserId);
+    return { success: true, data: { userId: targetUserId, role, source: 'd1_write' } };
+  },
+
+  async upsertCard(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const card = this.normalizeCard(payload);
+    if (!card.row_id) return { success: false, error: 'Missing card rowId' };
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      ON CONFLICT(row_id) DO UPDATE SET
+        line_id=excluded.line_id,name=excluded.name,english_name=excluded.english_name,company_name=excluded.company_name,title=excluded.title,
+        department=excluded.department,tax_id=excluded.tax_id,mobile=excluded.mobile,office_phone=excluded.office_phone,
+        extension=excluded.extension,fax=excluded.fax,email=excluded.email,website=excluded.website,socials=excluded.socials,
+        address=excluded.address,birthday=excluded.birthday,personality=excluded.personality,hobbies=excluded.hobbies,
+        wealth=excluded.wealth,health=excluded.health,career=excluded.career,services=excluded.services,notes=excluded.notes,
+        creator_id=excluded.creator_id,image_url=excluded.image_url,custom_config=excluded.custom_config,network_id=excluded.network_id,
+        tags=excluded.tags,updated_at=CURRENT_TIMESTAMP
+    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags).run();
+    if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
+    return { success: true, data: D1ReadModule.cardRow(card), rowId: card.row_id };
+  }
+};
+
 const AuthModule = {
   getCardLineId(card) {
     return String((card && (card['LINE ID'] || card.lineId || card.userId)) || '').trim();
@@ -1323,6 +1477,14 @@ const BonusPolicyModule = {
 async function resolveOwnCardRowId(payload, env) {
   const userId = String((payload && payload.userId) || '').trim();
   if (!userId) return '';
+  if (env.ACTMASTER_DB) {
+    try {
+      const card = await D1ReadModule.first(env, 'SELECT row_id FROM card_contacts WHERE line_id = ? ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 1', [userId]);
+      if (card && card.row_id) return card.row_id;
+    } catch (e) {
+      console.error('D1 resolveOwnCardRowId fallback', e);
+    }
+  }
   const cardsResult = await DBModule.forward('getCardContacts', { role: 'admin', networkId: 'admin' }, env);
   const cards = Array.isArray(cardsResult) ? cardsResult : (cardsResult && (cardsResult.data || cardsResult.cards)) || [];
   const card = cards.find(c => {
@@ -1630,10 +1792,45 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await DBModule.forward(action, payload, env);
     }
-    case 'registerUser':           
-    case 'updateUserProfile':      
-    case 'updateUserRole':         return await AuthModule.updateAndClearCache(action, payload, env);
-    case 'adminSyncBoundCardUser': return await AuthModule.adminSyncBoundCardUser(payload, env);
+    case 'registerUser':
+    case 'updateUserProfile': {
+      try {
+        const d1Result = await D1WriteModule.upsertUser(payload || {}, env);
+        if (d1Result && d1Result.success !== false) return d1Result;
+      } catch (e) {
+        console.error("D1 upsertUser fallback", e);
+      }
+      return await AuthModule.updateAndClearCache(action, payload, env);
+    }
+    case 'updateUserRole': {
+      try {
+        const d1Result = await D1WriteModule.updateUserRole(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 updateUserRole fallback", e);
+      }
+      return await AuthModule.updateAndClearCache(action, payload, env);
+    }
+    case 'saveCard':
+    case 'updateCard': {
+      try {
+        const d1Result = await D1WriteModule.upsertCard(payload || {}, env);
+        if (d1Result && d1Result.success !== false) return d1Result;
+      } catch (e) {
+        console.error("D1 upsertCard fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'adminSyncBoundCardUser': {
+      try {
+        const profile = { ...(payload.profile || {}), userId: payload.targetUserId || payload.profile?.userId, role: payload.profile?.role || 'user' };
+        const d1Result = await D1WriteModule.upsertUser(profile, env);
+        if (d1Result && d1Result.success !== false) return d1Result;
+      } catch (e) {
+        console.error("D1 adminSyncBoundCardUser fallback", e);
+      }
+      return await AuthModule.adminSyncBoundCardUser(payload, env);
+    }
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
