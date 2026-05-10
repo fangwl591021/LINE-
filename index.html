@@ -349,8 +349,8 @@
                 </label>
               </div>
             </div>
-            <div class="w-full aspect-[1340/223] bg-[#fff0f3] rounded-2xl overflow-hidden mb-3 border border-slate-100 relative group">
-              <img id="setting-preview-banner" src="assets/entry-banner.png" class="w-full h-full object-contain">
+            <div class="w-full aspect-video bg-[#fff0f3] rounded-2xl overflow-hidden mb-3 border border-slate-100 relative group">
+              <img id="setting-preview-banner" src="assets/entry-banner.png" class="w-full h-full object-cover">
               <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <span class="text-white text-[12px] font-bold">預覽畫面</span>
               </div>
@@ -358,7 +358,7 @@
             <div class="flex gap-2">
               <input type="text" id="input-store-banner" placeholder="圖片網址" class="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 text-[12px] font-mono text-slate-500 focus:ring-2 focus:ring-pink-500/20 outline-none transition-all" oninput="document.getElementById('setting-preview-banner').src=this.value">
               <button onclick="document.getElementById('hidden-banner-upload').click()" class="bg-slate-800 text-white px-5 rounded-xl font-bold text-[13px] active:scale-95 transition-transform shrink-0">上傳</button>
-              <input type="file" id="hidden-banner-upload" class="hidden" accept="image/*" onchange="window.uploadCustomImageToR2(this, 'input-store-banner')">
+              <input type="file" id="hidden-banner-upload" class="hidden" accept="image/*" onchange="window.uploadCustomImageToR2(this, 'input-store-banner', 16 / 9)">
             </div>
           </div>
 
@@ -496,8 +496,8 @@
     <div id="page-home" class="hidden space-y-6 animate-in fade-in pb-10">
 
       <div class="mx-1 mt-2 flex flex-col gap-3">
-        <div class="w-full aspect-[1340/223] rounded-none overflow-hidden shadow-sm border border-slate-100 bg-[#fff0f3] relative">
-          <img id="home-main-banner" src="assets/entry-banner.png" alt="Main Banner" class="w-full h-full object-contain">
+        <div class="w-full aspect-video rounded-none overflow-hidden shadow-sm border border-slate-100 bg-[#fff0f3] relative">
+          <img id="home-main-banner" src="assets/entry-banner.png" alt="Main Banner" class="w-full h-full object-cover">
         </div>
 
         <div id="home-youtube-container" class="hidden w-full aspect-video rounded-none overflow-hidden shadow-sm border border-slate-100 bg-slate-100">
