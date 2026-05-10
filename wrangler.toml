@@ -1,0 +1,16 @@
+name = "line-engine"
+main = "workerbackup.js"
+compatibility_date = "2026-04-23"
+
+[[kv_namespaces]]
+binding = "ACTMASTER_KV"
+id = "6785c24db6eb4080b48ce091c81d631c"
+
+[[d1_databases]]
+binding = "ACTMASTER_DB"
+database_name = "actmaster_db"
+database_id = "8a0107f9-000d-4810-b6bf-5d599b699195"
+
+[[r2_buckets]]
+binding = "IMG_BUCKET"
+bucket_name = "linengine"
