@@ -5,6 +5,134 @@
 
 // ==================== 模組 0: 資安防護 (Security Module) ====================
 const SecurityModule = {
+  text(value) {
+    return String(value ?? '').trim();
+  },
+
+  normalizeRole(value) {
+    const role = this.text(value).toLowerCase();
+    if (role === 'admin' || role === '總管') return 'admin';
+    if (role === 'store' || role === 'tenant' || role === '店長' || role === '租戶') return 'store';
+    return 'user';
+  },
+
+  async getLineUserIdFromToken(token, env) {
+    if (!token) return '';
+    const cacheKey = `AUTH_${token.substring(0, 30)}`;
+    if (env.ACTMASTER_KV) {
+      const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
+      if (cachedUserId) return cachedUserId;
+    }
+
+    const res = await fetch('https://api.line.me/v2/profile', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.status !== 200) return '';
+    const data = await res.json();
+    const userId = this.text(data.userId);
+    if (userId && env.ACTMASTER_KV) {
+      await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
+    }
+    return userId;
+  },
+
+  async getActor(payload, request, env) {
+    const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
+    if (!token) return null;
+    const userId = await this.getLineUserIdFromToken(token, env);
+    if (!userId) return null;
+
+    let role = 'user';
+    let networkId = 'admin';
+    if (env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined') {
+      const user = await D1ReadModule.first(env, 'SELECT role, network_id FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
+      if (user) {
+        role = this.normalizeRole(user.role);
+        networkId = this.text(user.network_id) || 'admin';
+      }
+    }
+    return { userId, role, networkId, token };
+  },
+
+  canManage(role) {
+    return role === 'admin' || role === 'store';
+  },
+
+  async authorizeAction(action, payload, request, env) {
+    const adminOnly = new Set([
+      'updateUserRole',
+      'adminSyncBoundCardUser',
+      'mlmMarkOrderPaid',
+      'mlmCancelOrder',
+      'mlmRefundOrder',
+      'mlmCreateSettlementBatch',
+      'mlmLockSettlementBatch',
+      'markTenantOrderPaid',
+      'cancelTenantBonusOrder',
+      'deleteCard',
+      'unlinkCard'
+    ]);
+    const managerOnly = new Set([
+      'bulkAddRegistrants',
+      'updateActivity',
+      'removeAct',
+      'getActivityRegistrants',
+      'confirmPayment',
+      'toggleCheckin',
+      'saveStoreSettings'
+    ]);
+    const ownTokenRequired = new Set([
+      'registerUser',
+      'updateUserProfile',
+      'saveCard',
+      'updateCard',
+      'mlmCreateOrder',
+      'createTenantBonusOrder',
+      'nfcCheckin',
+      'cancelActivityRegistration',
+      'cancelRegistration',
+      'unregisterActivity',
+      'removeActivityRegistration'
+    ]);
+
+    if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(action)) {
+      return { allowed: true, actor: null };
+    }
+
+    const actor = await this.getActor(payload, request, env);
+    if (!actor) return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' };
+
+    payload.authenticatedUserId = actor.userId;
+    payload.authenticatedRole = actor.role;
+    payload.authenticatedNetworkId = actor.networkId;
+
+    if (adminOnly.has(action) && actor.role !== 'admin') {
+      return { allowed: false, error: 'Access Denied: Admin only action' };
+    }
+
+    if (managerOnly.has(action) && !this.canManage(actor.role)) {
+      return { allowed: false, error: 'Access Denied: Manager role required' };
+    }
+
+    if (action === 'mlmCreateOrder' || action === 'createTenantBonusOrder') {
+      const buyerId = this.text(payload.buyerId || payload.tenantId || payload.userId);
+      if (!this.canManage(actor.role) && buyerId && buyerId !== actor.userId) {
+        return { allowed: false, error: 'Access Denied: Cannot create order for another user' };
+      }
+      if (!this.canManage(actor.role)) {
+        payload.buyerId = actor.userId;
+        payload.tenantId = actor.userId;
+        payload.paymentStatus = 'pending_payment';
+        payload.status = 'pending_payment';
+      }
+    }
+
+    if (action === 'updateUserProfile') {
+      payload.userId = actor.userId;
+    }
+
+    return { allowed: true, actor };
+  },
   // 驗證 LIFF Token，確保 userId 未被偽造
   async verifyLineAuth(userId, token, env) {
     if (!token || !userId) return false;
@@ -2330,8 +2458,13 @@ const MLMModule = {
 
 // ==================== 請求分發器 (Action Dispatcher) ====================
 async function dispatchAction(action, payload, request, env) {
+  const authz = await SecurityModule.authorizeAction(action, payload, request, env);
+  if (!authz.allowed) {
+    return { success: false, error: authz.error || 'Access Denied' };
+  }
+  const actor = authz.actor;
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
-  if (payload.userId) {
+  if (payload.userId && !actor) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
     if (token) {
       // 若前端有傳 Token，則嚴格驗證是否被偽造
@@ -2350,8 +2483,8 @@ async function dispatchAction(action, payload, request, env) {
 
   // 2. 資安防護：OpenAI 限流機制
   const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy'];
-  if (aiActions.includes(action) && payload.userId) {
-    const allowed = await SecurityModule.checkRateLimit(payload.userId, action, env, payload.role);
+  if (aiActions.includes(action) && (actor?.userId || payload.userId)) {
+    const allowed = await SecurityModule.checkRateLimit(actor?.userId || payload.userId, action, env, actor?.role || payload.role);
     if (!allowed) {
       return { success: false, error: "Daily AI quota exceeded for this action. Please try again tomorrow." };
     }
