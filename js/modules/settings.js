@@ -71,7 +71,7 @@ window.loadStoreBannerSettings = async function() {
       window.writeCachedStoreSettings(d, window.currentNetworkId);
       document.getElementById('input-site-name').value = d.siteName || '';
       document.getElementById('input-store-banner').value = d.bannerUrl || '';
-      if (d.bannerUrl) document.getElementById('setting-preview-banner').src = d.bannerUrl;
+      document.getElementById('setting-preview-banner').src = d.bannerUrl || 'assets/entry-banner.png';
       // 注意：從 Sheets 讀回來的布林值可能是字串 "true"
       document.getElementById('toggle-show-banner').checked = window.isStoreToggleOn(d.showBanner, true);
       document.getElementById('input-store-youtube').value = d.youtubeUrl || '';

@@ -70,7 +70,8 @@ const HomeModule = (function() {
                 bannerImg.parentElement.classList.add('hidden');
             } else {
                 bannerImg.parentElement.classList.remove('hidden');
-                if (d.bannerUrl && bannerImg.src !== d.bannerUrl) bannerImg.src = d.bannerUrl;
+                const nextBannerUrl = d.bannerUrl || 'assets/entry-banner.png';
+                if (bannerImg.getAttribute('src') !== nextBannerUrl) bannerImg.src = nextBannerUrl;
             }
         }
 
