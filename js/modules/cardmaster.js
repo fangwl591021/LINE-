@@ -142,6 +142,40 @@
     box.classList.remove('hidden');
   }
 
+  function renderNotice(message, isError) {
+    var box = $('cardmaster-result');
+    if (!box) return;
+    box.className = 'rounded-2xl p-4 border text-[14px] font-bold leading-relaxed ' +
+      (isError ? 'bg-red-50 border-red-100 text-red-700' : 'bg-blue-50 border-blue-100 text-blue-700');
+    box.innerHTML = escapeHTML(message);
+    box.classList.remove('hidden');
+  }
+
+  function buildLocalCopy(card, brief) {
+    var payload = collectCard(card);
+    var company = payload.company || payload.name || '專業服務';
+    var title = payload.title ? payload.title + '服務' : '專人服務';
+    var userBrief = String(brief || '').replace(/\s+/g, ' ').trim();
+    var base = userBrief || payload.service || TEMPLATE_DESC;
+    var parts = base
+      .split(/[，,。.\n]/)
+      .map(function(s) { return s.trim(); })
+      .filter(Boolean)
+      .slice(0, 3);
+
+    var lines = [
+      company,
+      title,
+      parts[0] || '提供清楚完整的諮詢',
+      parts[1] || '協助媒合適合資源',
+      parts[2] || '歡迎加入好友了解'
+    ];
+
+    return lines.map(function(line) {
+      return String(line).slice(0, 18);
+    }).join('\n');
+  }
+
   async function updateCardConfig(card, cfg, extraData) {
     var data = extraData || {};
     data[CONFIG_FIELD] = stringifyConfig(card, cfg);
@@ -222,6 +256,10 @@
     var briefEl = $('cardmaster-brief');
     var brief = briefEl ? briefEl.value.trim() : '';
     if (!window.currentUserCard) return window.showToast('請先建立名片。', true);
+    if (!brief && hasTemplateContent(window.currentUserCard)) {
+      renderNotice('請先輸入你的服務對象、特色或優惠，名片大師才知道要往哪個方向整理。', true);
+      return window.showToast('請先輸入一點方向，例如服務對象、特色或優惠。', true);
+    }
     if (!assertQuota()) return;
     if (btn) {
       btn.disabled = true;
@@ -233,6 +271,7 @@
         card: collectCard(window.currentUserCard),
         brief: brief
       }, true);
+      if (res && res.success === false) throw new Error(res.error || 'AI 代寫服務暫時無法使用');
       var data = res && res.data ? res.data : res;
       if (!data || data.error) throw new Error((data && data.error) || 'AI 代寫失敗');
 
@@ -249,7 +288,21 @@
       if (typeof window.initMyECard === 'function') window.initMyECard();
       if (window.showToast) window.showToast('名片文案已更新，公開前請再按健檢。');
     } catch (e) {
-      if (window.showToast) window.showToast('AI 代寫失敗：' + (e.message || '請稍後再試'), true);
+      try {
+        var fallbackText = buildLocalCopy(window.currentUserCard, brief);
+        var fallbackCfg = parseConfig(window.currentUserCard);
+        fallbackCfg.desc = fallbackText;
+        fallbackCfg.templateDraft = false;
+        fallbackCfg.safetyReview = null;
+        setField(window.currentUserCard, [SERVICE_FIELD, '服務內容', 'Service'], fallbackText);
+        await updateCardConfig(window.currentUserCard, fallbackCfg, { [SERVICE_FIELD]: fallbackText });
+        if (typeof window.initMyECard === 'function') window.initMyECard();
+        renderNotice('AI 暫時無法完成代寫，已先套用本機整理版文案；公開前請再按 AI 健檢。');
+        if (window.showToast) window.showToast('已先套用整理版文案，AI 服務稍後再試。');
+      } catch (fallbackError) {
+        renderNotice('AI 代寫失敗：' + (e.message || fallbackError.message || '請稍後再試'), true);
+        if (window.showToast) window.showToast('AI 代寫失敗：' + (e.message || '請稍後再試'), true);
+      }
     } finally {
       if (btn) {
         btn.disabled = false;

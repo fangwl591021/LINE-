@@ -252,13 +252,13 @@
                 <span id="cardmaster-quota" class="text-[11px] text-violet-500 font-black">今日額度</span>
               </div>
               <div class="p-4 space-y-3">
-                <textarea id="cardmaster-brief" class="custom-input h-24 resize-none !py-3 text-[13px]" placeholder="沒靈感時可輸入：我的服務對象、特色、優惠或想強調的賣點。AI 會幫你整理成名片介紹。"></textarea>
-                <div class="grid grid-cols-2 gap-2">
-                  <button type="button" onclick="window.generateMyCardCopy(event)" class="py-3 bg-violet-600 text-white rounded-xl font-black text-[13px] active:scale-95 transition-transform flex items-center justify-center gap-1.5">
-                    <span class="material-symbols-outlined text-[18px]">edit_magic</span> AI 代寫
+                <textarea id="cardmaster-brief" class="custom-input h-28 resize-none !py-4 text-[15px] leading-relaxed" placeholder="沒靈感時可輸入：我的服務對象、特色、優惠或想強調的賣點。AI 會幫你整理成名片介紹。"></textarea>
+                <div class="grid grid-cols-2 gap-3">
+                  <button type="button" onclick="window.generateMyCardCopy(event)" class="min-h-[56px] px-3 py-3 bg-violet-600 text-white rounded-xl font-black text-[15px] active:scale-95 transition-transform flex items-center justify-center gap-2 leading-none">
+                    <span class="material-symbols-outlined text-[22px]">auto_fix_high</span> AI 代寫
                   </button>
-                  <button type="button" onclick="window.runMyCardSafetyReview(event)" class="py-3 bg-slate-800 text-white rounded-xl font-black text-[13px] active:scale-95 transition-transform flex items-center justify-center gap-1.5">
-                    <span class="material-symbols-outlined text-[18px]">verified_user</span> AI 健檢
+                  <button type="button" onclick="window.runMyCardSafetyReview(event)" class="min-h-[56px] px-3 py-3 bg-slate-800 text-white rounded-xl font-black text-[15px] active:scale-95 transition-transform flex items-center justify-center gap-2 leading-none">
+                    <span class="material-symbols-outlined text-[22px]">verified_user</span> AI 健檢
                   </button>
                 </div>
                 <div id="cardmaster-result" class="hidden"></div>
@@ -1215,7 +1215,7 @@
 <script src="js/modules/ecard.js?v=7.2"></script>
 <script src="js/modules/mycard.js?v=8.3"></script>
 <script src="js/modules/matchmake.js?v=7.3"></script>
-<script src="js/modules/cardmaster.js?v=1.0"></script>
+<script src="js/modules/cardmaster.js?v=1.1"></script>
 <script src="js/modules/activities.js?v=7.2"></script>
 <script src="js/modules/admin.js?v=7.5"></script>
 <script src="js/modules/home.js?v=7.5"></script>
