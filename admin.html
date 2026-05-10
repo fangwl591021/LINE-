@@ -344,6 +344,20 @@
     }
     #modal-distributor-crm textarea { min-height: 150px; line-height: 1.55; }
     #modal-distributor-crm .crm-pill { min-height: 28px; font-size: 12px; font-weight: 700; }
+    #modal-distributor-crm section {
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      background: #fff !important;
+    }
+    #modal-distributor-crm section > div:first-child {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+    #modal-distributor-crm section > div:last-child {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
     @media (max-width: 1280px) {
       .crm-kpi-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
       .crm-toolbar { grid-template-columns: 1fr 1fr; }
@@ -869,8 +883,8 @@
   </div>
 
   <!-- 經銷商 CRM Modal -->
-  <div id="modal-distributor-crm" class="fixed inset-0 bg-slate-900/60 z-[1100] hidden items-center justify-center backdrop-blur-sm p-4">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1180px] h-[92vh] overflow-hidden flex flex-col">
+  <div id="modal-distributor-crm" class="fixed inset-0 bg-white z-[1100] hidden items-stretch justify-stretch">
+    <div class="bg-white w-full h-screen overflow-hidden flex flex-col">
       <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white">
         <div>
           <h3 id="crm-modal-title" class="text-lg font-black text-slate-800">經銷商 CRM</h3>
@@ -880,7 +894,7 @@
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
-      <div class="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-5">
+      <div class="flex-1 overflow-y-auto bg-white p-6 space-y-6">
         <input type="hidden" id="crm-user-id">
         <div id="crm-summary-cards" class="grid grid-cols-1 md:grid-cols-4 gap-4"></div>
 
@@ -951,6 +965,49 @@
             <div id="crm-finance-grid" class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm"></div>
           </section>
         </div>
+
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <span class="material-symbols-outlined text-emerald-600 text-[20px]">fact_check</span>
+            <h4 class="font-black text-slate-800">正式經銷商審核資料</h4>
+          </div>
+          <div class="p-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <label class="text-sm font-bold text-slate-500">審核狀態
+              <select id="crm-kyc-status" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500">
+                <option value="draft">草稿</option>
+                <option value="pending_review">待審核</option>
+                <option value="approved">已核准</option>
+                <option value="rejected">退件</option>
+                <option value="suspended">停權</option>
+              </select>
+            </label>
+            <label class="text-sm font-bold text-slate-500">稅務身分
+              <select id="crm-dealer-type" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500">
+                <option value="individual">個人</option>
+                <option value="sole_proprietor">行號</option>
+                <option value="company">公司</option>
+              </select>
+            </label>
+            <label class="text-sm font-bold text-slate-500">身分證字號 / 統編<input id="crm-tax-id" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">身分證正面 URL<input id="crm-id-front-url" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">身分證反面 URL<input id="crm-id-back-url" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">存摺封面 URL<input id="crm-passbook-url" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">公司 / 行號名稱<input id="crm-legal-company-name" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">負責人<input id="crm-legal-representative" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">營登文件 URL<input id="crm-business-registration-url" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="lg:col-span-3 text-sm font-bold text-slate-500">登記地址<input id="crm-business-address" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">銀行代碼<input id="crm-bank-code" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">分行<input id="crm-bank-branch" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">帳號<input id="crm-bank-account" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">戶名<input id="crm-bank-account-name" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">發票抬頭<input id="crm-invoice-title" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">發票 Email<input id="crm-invoice-email" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">載具 / 捐贈碼<input id="crm-invoice-carrier" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">契約版本<input id="crm-contract-version" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500" placeholder="例如：2026-v1"></label>
+            <label class="text-sm font-bold text-slate-500">簽署日期<input id="crm-contract-signed-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+            <label class="text-sm font-bold text-slate-500">審核備註<input id="crm-kyc-note" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+          </div>
+        </section>
 
         <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
@@ -1248,7 +1305,7 @@
       try {
         if (!options.omitAuthToken && liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         const authUserId = adminProfile?.userId || '';
-        if (!payload.userId) payload.userId = authUserId;
+        if (!options.omitDefaultUserId && !payload.userId) payload.userId = authUserId;
         payload.authUserId = payload.authUserId || authUserId;
         payload.operatorId = payload.operatorId || authUserId;
         payload.role = payload.role || adminRole || 'store';
@@ -1296,6 +1353,15 @@
 
     function formatCurrency(value) {
       return 'NT$ ' + Math.round(Number(value || 0)).toLocaleString();
+    }
+
+    function normalizeApiList(res, keys = []) {
+      if (Array.isArray(res)) return res;
+      if (!res || typeof res !== 'object') return [];
+      for (const key of ['data', 'items', 'rows', 'users', 'cards', ...keys]) {
+        if (Array.isArray(res[key])) return res[key];
+      }
+      return [];
     }
 
     function renderAdminPager(containerId, total, currentPage, onChangeName) {
@@ -2031,6 +2097,20 @@
       if (el) el.value = value || '';
     }
 
+    function readDealerProfile(user = {}) {
+      if (user.dealerProfile && typeof user.dealerProfile === 'object') return user.dealerProfile;
+      try {
+        const parsed = typeof user.socials === 'string' ? JSON.parse(user.socials || '{}') : (user.socials || {});
+        return parsed && parsed.dealerProfile && typeof parsed.dealerProfile === 'object' ? parsed.dealerProfile : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function getInputValue(id) {
+      return document.getElementById(id)?.value || '';
+    }
+
     function fillDistributorCrm(user = {}) {
       const id = getUserId(user);
       const sponsor = getSponsorUser(user);
@@ -2044,6 +2124,7 @@
       const role = getRoleLabel(user.role);
       const directCount = getDirectDownlineCount(user);
       const placementCount = getPlacementChildCount(user);
+      const dealerProfile = readDealerProfile(user);
 
       document.getElementById('crm-modal-title').innerText = `${user.name || '未命名'} 的經銷商 CRM`;
       document.getElementById('crm-modal-subtitle').innerText = id;
@@ -2064,6 +2145,26 @@
       setInputValue('crm-next-follow', String(user.nextFollowUpAt || '').slice(0, 10));
       setInputValue('crm-owner', user.followOwner || user.crmOwner || adminProfile?.displayName || adminProfile?.name || '');
       setInputValue('crm-notes', user.crmNotes || user.notes || '');
+      setInputValue('crm-kyc-status', dealerProfile.kycStatus || 'draft');
+      setInputValue('crm-dealer-type', dealerProfile.dealerType || 'individual');
+      setInputValue('crm-tax-id', dealerProfile.taxId || user.taxId || '');
+      setInputValue('crm-id-front-url', dealerProfile.idFrontUrl || '');
+      setInputValue('crm-id-back-url', dealerProfile.idBackUrl || '');
+      setInputValue('crm-passbook-url', dealerProfile.passbookUrl || '');
+      setInputValue('crm-legal-company-name', dealerProfile.legalCompanyName || user.legalCompanyName || user.companyName || '');
+      setInputValue('crm-legal-representative', dealerProfile.legalRepresentative || '');
+      setInputValue('crm-business-registration-url', dealerProfile.businessRegistrationUrl || '');
+      setInputValue('crm-business-address', dealerProfile.businessAddress || user.address || '');
+      setInputValue('crm-bank-code', dealerProfile.bankCode || '');
+      setInputValue('crm-bank-branch', dealerProfile.bankBranch || '');
+      setInputValue('crm-bank-account', dealerProfile.bankAccount || '');
+      setInputValue('crm-bank-account-name', dealerProfile.bankAccountName || user.name || '');
+      setInputValue('crm-invoice-title', dealerProfile.invoiceTitle || dealerProfile.legalCompanyName || user.companyName || '');
+      setInputValue('crm-invoice-email', dealerProfile.invoiceEmail || user.email || '');
+      setInputValue('crm-invoice-carrier', dealerProfile.invoiceCarrier || '');
+      setInputValue('crm-contract-version', dealerProfile.contractVersion || '');
+      setInputValue('crm-contract-signed-at', String(dealerProfile.contractSignedAt || '').slice(0, 10));
+      setInputValue('crm-kyc-note', dealerProfile.kycNote || '');
 
       document.getElementById('crm-summary-cards').innerHTML = [
         ['CRM 階段', statusMeta[0], statusMeta[1]],
@@ -2157,6 +2258,28 @@
         nextFollowUpAt: document.getElementById('crm-next-follow')?.value || '',
         followOwner: document.getElementById('crm-owner')?.value || '',
         crmNotes: document.getElementById('crm-notes')?.value || '',
+        dealerProfile: {
+          kycStatus: getInputValue('crm-kyc-status'),
+          dealerType: getInputValue('crm-dealer-type'),
+          taxId: getInputValue('crm-tax-id'),
+          idFrontUrl: getInputValue('crm-id-front-url'),
+          idBackUrl: getInputValue('crm-id-back-url'),
+          passbookUrl: getInputValue('crm-passbook-url'),
+          legalCompanyName: getInputValue('crm-legal-company-name'),
+          legalRepresentative: getInputValue('crm-legal-representative'),
+          businessRegistrationUrl: getInputValue('crm-business-registration-url'),
+          businessAddress: getInputValue('crm-business-address'),
+          bankCode: getInputValue('crm-bank-code'),
+          bankBranch: getInputValue('crm-bank-branch'),
+          bankAccount: getInputValue('crm-bank-account'),
+          bankAccountName: getInputValue('crm-bank-account-name'),
+          invoiceTitle: getInputValue('crm-invoice-title'),
+          invoiceEmail: getInputValue('crm-invoice-email'),
+          invoiceCarrier: getInputValue('crm-invoice-carrier'),
+          contractVersion: getInputValue('crm-contract-version'),
+          contractSignedAt: getInputValue('crm-contract-signed-at'),
+          kycNote: getInputValue('crm-kyc-note')
+        },
         updatedAt: new Date().toISOString()
       };
       const res = await fetchAPI('updateUserProfile', payload);
@@ -2185,21 +2308,24 @@
       const tbody = document.getElementById('users-table-body');
       tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入中...</td></tr>';
       const [usersRes, cardsRes, ordersRes] = await Promise.all([
-        fetchAPI('getAllUsers', {}, { silent: true }),
-        fetchAPI('getCardContacts', {}, { silent: true }),
+        fetchAPI('getAllUsers', {}, { silent: true, omitDefaultUserId: true }),
+        fetchAPI('getCardContacts', {}, { silent: true, omitDefaultUserId: true }),
         fetchAPI('mlmListOrders', { orderType: 'tenant_annual_fee', page: 1, pageSize: 100, status: 'all' }, { silent: true })
       ]);
-      if (Array.isArray(usersRes) || Array.isArray(cardsRes)) {
-        let users = Array.isArray(usersRes) ? usersRes : [];
-        const cards = Array.isArray(cardsRes) ? cardsRes : [];
-        const orders = Array.isArray(ordersRes) ? ordersRes : (Array.isArray(ordersRes?.orders) ? ordersRes.orders : (Array.isArray(ordersRes?.data) ? ordersRes.data : []));
+      const usersList = normalizeApiList(usersRes, ['members']);
+      const cardsList = normalizeApiList(cardsRes, ['contacts']);
+      if (usersList.length || cardsList.length || usersRes || cardsRes) {
+        let users = usersList;
+        const cards = cardsList;
+        const orders = normalizeApiList(ordersRes, ['orders']);
         allCardsData = cards;
         populateCardTenantFilter(cards);
         if (orders.length) allBonusOrdersData = orders.map(normalizeBonusOrder);
         const sync = await registerBoundCardUsers(users, cards);
         if (sync.created > 0) {
-          const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: true });
-          if (Array.isArray(refreshedUsers)) users = refreshedUsers;
+          const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: true, omitDefaultUserId: true });
+          const refreshedList = normalizeApiList(refreshedUsers, ['members']);
+          if (refreshedList.length) users = refreshedList;
           showToast(`已補註冊 ${sync.created} 位已綁名片用戶`);
         } else if (sync.failed > 0) {
           showToast(`有 ${sync.failed} 位已綁名片用戶補註冊失敗`, true);
@@ -2490,10 +2616,10 @@
       }
 
       try {
-        const usersRes = await fetchAPI('getAllUsers');
-        const cardsRes = await fetchAPI('getCardContacts');
-        const users = Array.isArray(usersRes) ? usersRes : [];
-        const cards = Array.isArray(cardsRes) ? cardsRes : [];
+        const usersRes = await fetchAPI('getAllUsers', {}, { silent: auto, omitDefaultUserId: true });
+        const cardsRes = await fetchAPI('getCardContacts', {}, { silent: auto, omitDefaultUserId: true });
+        const users = normalizeApiList(usersRes, ['members']);
+        const cards = normalizeApiList(cardsRes, ['contacts']);
         const userIdSet = new Set(users.map(u => normalizeLineId(u.userId)).filter(Boolean));
         const payloads = [];
         const seen = new Set();
@@ -2537,10 +2663,11 @@
         }
 
         if (!auto || ok > 0) showToast(`已綁名片同步完成：成功 ${ok} 筆${fail ? `，失敗 ${fail} 筆` : ''}`, !!fail);
-        const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: auto });
-        if (Array.isArray(refreshedUsers)) {
-          allUsersData = refreshedUsers;
-          renderUsersTable(refreshedUsers);
+        const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: auto, omitDefaultUserId: true });
+        const refreshedList = normalizeApiList(refreshedUsers, ['members']);
+        if (refreshedList.length || refreshedUsers) {
+          allUsersData = refreshedList;
+          renderUsersTable(refreshedList);
         }
       } finally {
         boundCardSyncRunning = false;
@@ -2668,11 +2795,12 @@
       ensureDuplicateBindingsPanel();
       const tbody = document.getElementById('cards-table-body');
       tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">載入中...</td></tr>';
-      const res = await fetchAPI('getCardContacts');
-      if (res && Array.isArray(res)) {
-        allCardsData = res;
-        document.getElementById('stat-cards').innerText = res.length;
-        populateCardTenantFilter(res);
+      const res = await fetchAPI('getCardContacts', {}, { omitDefaultUserId: true });
+      const cards = normalizeApiList(res, ['contacts']);
+      if (res) {
+        allCardsData = cards;
+        document.getElementById('stat-cards').innerText = cards.length;
+        populateCardTenantFilter(cards);
         cardPage = 1;
         renderCards();
       }

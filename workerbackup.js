@@ -844,6 +844,15 @@ const D1ReadModule = {
     return 'user';
   },
 
+  jsonObject(value) {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : (value || {});
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
   async first(env, sql, binds = []) {
     const stmt = env.ACTMASTER_DB.prepare(sql);
     return binds.length ? await stmt.bind(...binds).first() : await stmt.first();
@@ -860,6 +869,8 @@ const D1ReadModule = {
     const userId = this.text(row.line_id || row.row_id);
     if (!userId) return null;
     const role = this.role(row.role);
+    const socials = this.jsonObject(row.socials);
+    const dealerProfile = socials.dealerProfile && typeof socials.dealerProfile === 'object' ? socials.dealerProfile : {};
     return {
       rowId: this.text(row.row_id, userId),
       userId,
@@ -876,6 +887,12 @@ const D1ReadModule = {
       networkId: this.text(row.network_id, 'admin'),
       tgToken: this.text(row.tg_token),
       tgChatId: this.text(row.tg_chat_id),
+      socials: this.text(row.socials),
+      dealerProfile,
+      kycStatus: this.text(dealerProfile.kycStatus),
+      dealerType: this.text(dealerProfile.dealerType),
+      taxId: this.text(dealerProfile.taxId),
+      legalCompanyName: this.text(dealerProfile.legalCompanyName),
       points: Number(row.points || 0) || 0,
       source,
       profileStatus: source === 'bound_card' ? 'bound_card' : 'active'
@@ -1068,6 +1085,25 @@ const D1WriteModule = {
     return 'user';
   },
 
+  jsonObject(value) {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : (value || {});
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  buildSocials(data = {}) {
+    const raw = this.pick(data, ['socials', 'socials_json', '社群帳號']);
+    if (!raw && !(data.dealerProfile && typeof data.dealerProfile === 'object')) return '';
+    const socials = this.jsonObject(raw || '{}');
+    if (data.dealerProfile && typeof data.dealerProfile === 'object') {
+      socials.dealerProfile = data.dealerProfile;
+    }
+    return JSON.stringify(socials);
+  },
+
   async clearUserCache(env, userId) {
     if (!env.ACTMASTER_KV || !userId) return;
     try { await env.ACTMASTER_KV.delete(`U_PROFILE_${userId}`); } catch (e) { console.error('KV Delete Error', e); }
@@ -1087,7 +1123,7 @@ const D1WriteModule = {
       birthday: this.pick(data, ['birthday', 'birthdate', '出生年月日']),
       region: this.pick(data, ['region', '地區']),
       address: this.pick(data, ['address', '地址', '公司地址']),
-      socials: this.pick(data, ['socials', 'socials_json', '社群帳號'], '[]'),
+      socials: this.buildSocials(data),
       role: this.role(this.pick(data, ['role', '權限級別'], 'user')),
       store_id: this.pick(data, ['storeid', 'storeId', 'store_id', '店代碼']),
       referrer_id: this.pick(data, ['referrerId', 'referrer_id', '推薦人']),
