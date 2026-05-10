@@ -1,5 +1,30 @@
 /* ==================== 系統啟動與權限驗證 ==================== */
 
+if (typeof window.addUserSocial !== 'function') {
+  window.addUserSocial = function(type = 'LINE', url = '') {
+    window.userSocials = Array.isArray(window.userSocials) ? window.userSocials : [];
+    window.userSocials.push({ t: type, u: url });
+    const list = document.getElementById('user-socials-list');
+    if (!list) return;
+    const idx = window.userSocials.length - 1;
+    const row = document.createElement('div');
+    row.className = 'grid grid-cols-[86px_1fr_auto] gap-2 items-center';
+    row.innerHTML =
+      '<select class="bg-slate-50 rounded-xl px-2 py-2 text-[13px] font-bold text-slate-600">' +
+        ['LINE','FB','IG','YT','WEB'].map(v => '<option value="' + v + '"' + (v === type ? ' selected' : '') + '>' + v + '</option>').join('') +
+      '</select>' +
+      '<input type="text" class="bg-slate-50 rounded-xl px-3 py-2 text-[13px] text-slate-600 outline-none" value="' + String(url || '').replace(/"/g, '&quot;') + '" placeholder="連結網址">' +
+      '<button type="button" class="px-2 py-2 rounded-xl bg-red-50 text-red-500 font-bold">刪除</button>';
+    const select = row.querySelector('select');
+    const input = row.querySelector('input');
+    const remove = row.querySelector('button');
+    select.onchange = () => { if (window.userSocials[idx]) window.userSocials[idx].t = select.value; };
+    input.oninput = () => { if (window.userSocials[idx]) window.userSocials[idx].u = input.value; };
+    remove.onclick = () => { window.userSocials[idx] = null; row.remove(); };
+    list.appendChild(row);
+  };
+}
+
 window.submitRegistration = async function() {
   const name = document.getElementById('reg-name').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();

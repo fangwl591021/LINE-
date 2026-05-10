@@ -414,6 +414,8 @@ window.confirmMyCardCrop = async function() {
     const cardPayload = {
       ...cardData,
       userId: currentUserProfile.userId,
+      lineId: currentUserProfile.userId,
+      'LINE ID': currentUserProfile.userId,
       creatorId: currentUserProfile.userId,
       '建檔者ID': currentUserProfile.userId,
       '建檔人/備註': '我的專屬名片'

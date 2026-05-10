@@ -971,7 +971,7 @@ const D1WriteModule = {
     const rowId = this.pick(data, ['rowId', 'row_id', 'id'], this.pick(payload, ['rowId']));
     return {
       row_id: rowId || `CARD_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      line_id: this.pick(data, ['lineId', 'userId', 'LINE ID'], this.pick(payload, ['userId'])),
+      line_id: this.pick(data, ['lineId', 'line_id', 'LINE ID', 'User ID']),
       name: this.pick(data, ['name', '姓名'], '未命名'),
       english_name: this.pick(data, ['englishName', 'english_name', '英文名']),
       company_name: this.pick(data, ['companyName', 'company_name', '公司名稱']),
