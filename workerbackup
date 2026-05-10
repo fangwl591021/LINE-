@@ -1176,6 +1176,16 @@ const D1WriteModule = {
     if (!this.hasD1(env)) return null;
     const card = this.normalizeCard(payload);
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
+    const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
+    if (existing) {
+      [
+        'line_id','name','english_name','company_name','title','department','tax_id','mobile','office_phone',
+        'extension','fax','email','website','socials','address','birthday','personality','hobbies','wealth',
+        'health','career','services','notes','creator_id','image_url','custom_config','network_id','tags'
+      ].forEach(key => {
+        if (card[key] === '' || card[key] === undefined || card[key] === null) card[key] = existing[key] || '';
+      });
+    }
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
