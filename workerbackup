@@ -69,6 +69,8 @@ const SecurityModule = {
       'mlmLockSettlementBatch',
       'markTenantOrderPaid',
       'cancelTenantBonusOrder',
+      'auditDataConsistency',
+      'repairDataConsistency',
       'deleteCard',
       'unlinkCard'
     ]);
@@ -1209,6 +1211,185 @@ const D1WriteModule = {
     `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags).run();
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
     return { success: true, data: D1ReadModule.cardRow(card), rowId: card.row_id };
+  }
+};
+
+const D1ConsistencyModule = {
+  hasD1(env) {
+    return !!(env && env.ACTMASTER_DB);
+  },
+
+  text(value) {
+    return String(value ?? '').trim();
+  },
+
+  isPlaceholder(value) {
+    const next = this.text(value);
+    return !next || next === '未命名' || next === '姓名';
+  },
+
+  async first(env, sql, binds = []) {
+    return await D1ReadModule.first(env, sql, binds);
+  },
+
+  async all(env, sql, binds = []) {
+    return await D1ReadModule.all(env, sql, binds);
+  },
+
+  async ensureIndexes(env) {
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_users_line_id ON users(line_id)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_cards_line_id ON card_contacts(line_id)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_cards_creator_id ON card_contacts(creator_id)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_cards_updated_at ON card_contacts(updated_at)').run();
+  },
+
+  async audit(payload, env) {
+    if (!this.hasD1(env)) return { success: false, error: 'D1 is not configured' };
+    await this.ensureIndexes(env);
+    const missingUsers = await this.all(env, `
+      SELECT c.row_id AS card_row_id, c.line_id, c.name, c.mobile, c.office_phone, c.title, c.company_name, c.network_id
+      FROM card_contacts c
+      LEFT JOIN users u ON u.line_id = c.line_id
+      WHERE c.line_id IS NOT NULL AND TRIM(c.line_id) <> '' AND u.line_id IS NULL
+      ORDER BY c.updated_at DESC
+      LIMIT 200
+    `);
+    const duplicateCards = await this.all(env, `
+      SELECT line_id, COUNT(*) AS count, GROUP_CONCAT(row_id) AS card_row_ids
+      FROM card_contacts
+      WHERE line_id IS NOT NULL AND TRIM(line_id) <> ''
+      GROUP BY line_id
+      HAVING COUNT(*) > 1
+      LIMIT 200
+    `);
+    const placeholderUsers = await this.all(env, `
+      SELECT row_id, line_id, name, phone, role, network_id
+      FROM users
+      WHERE TRIM(COALESCE(name,'')) = '' OR name = '未命名' OR name = '姓名'
+      LIMIT 200
+    `);
+    const placeholderCards = await this.all(env, `
+      SELECT row_id, line_id, name, mobile, office_phone, network_id
+      FROM card_contacts
+      WHERE TRIM(COALESCE(name,'')) = '' OR name = '未命名' OR name = '姓名'
+      LIMIT 200
+    `);
+    const mismatches = await this.all(env, `
+      SELECT u.line_id, u.name AS user_name, c.name AS card_name, u.phone AS user_phone,
+             COALESCE(c.mobile, c.office_phone, '') AS card_phone, u.industry AS user_industry,
+             COALESCE(c.title, c.company_name, '') AS card_industry, u.role, c.row_id AS card_row_id
+      FROM users u
+      JOIN card_contacts c ON c.line_id = u.line_id
+      WHERE (
+        (TRIM(COALESCE(u.name,'')) = '' OR u.name = '未命名' OR u.name = '姓名') AND TRIM(COALESCE(c.name,'')) <> '' AND c.name NOT IN ('未命名','姓名')
+      ) OR (
+        (TRIM(COALESCE(c.name,'')) = '' OR c.name = '未命名' OR c.name = '姓名') AND TRIM(COALESCE(u.name,'')) <> '' AND u.name NOT IN ('未命名','姓名')
+      ) OR (
+        TRIM(COALESCE(u.phone,'')) = '' AND TRIM(COALESCE(c.mobile, c.office_phone, '')) <> ''
+      ) OR (
+        TRIM(COALESCE(c.mobile, c.office_phone, '')) = '' AND TRIM(COALESCE(u.phone,'')) <> ''
+      )
+      LIMIT 200
+    `);
+    return {
+      success: true,
+      data: {
+        counts: {
+          missingUsers: missingUsers.length,
+          duplicateCardLineIds: duplicateCards.length,
+          placeholderUsers: placeholderUsers.length,
+          placeholderCards: placeholderCards.length,
+          repairableMismatches: mismatches.length
+        },
+        missingUsers,
+        duplicateCards,
+        placeholderUsers,
+        placeholderCards,
+        mismatches
+      }
+    };
+  },
+
+  async clearUserCache(env, userId) {
+    if (!env.ACTMASTER_KV || !userId) return;
+    try { await env.ACTMASTER_KV.delete(`U_PROFILE_${userId}`); } catch (e) { console.error('KV consistency clear error', e); }
+  },
+
+  async repair(payload, env) {
+    if (!this.hasD1(env)) return { success: false, error: 'D1 is not configured' };
+    await this.ensureIndexes(env);
+    const before = await this.audit(payload, env);
+    const repaired = {
+      createdUsersFromBoundCards: 0,
+      updatedUsersFromCards: 0,
+      updatedCardsFromUsers: 0,
+      cacheCleared: 0
+    };
+    const touchedUsers = new Set();
+
+    const missingUsers = before.data.missingUsers || [];
+    for (const card of missingUsers) {
+      const lineId = this.text(card.line_id);
+      if (!lineId) continue;
+      await env.ACTMASTER_DB.prepare(`
+        INSERT INTO users (row_id,line_id,name,industry,phone,role,network_id)
+        VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(line_id) DO NOTHING
+      `).bind(
+        `USR_${lineId}`,
+        lineId,
+        this.text(card.name) || '未命名',
+        this.text(card.title || card.company_name),
+        this.text(card.mobile || card.office_phone),
+        'user',
+        this.text(card.network_id) || 'admin'
+      ).run();
+      repaired.createdUsersFromBoundCards += 1;
+      touchedUsers.add(lineId);
+    }
+
+    const mismatches = before.data.mismatches || [];
+    for (const row of mismatches) {
+      const lineId = this.text(row.line_id);
+      if (!lineId) continue;
+      const userName = this.text(row.user_name);
+      const cardName = this.text(row.card_name);
+      const userPhone = this.text(row.user_phone);
+      const cardPhone = this.text(row.card_phone);
+      const userIndustry = this.text(row.user_industry);
+      const cardIndustry = this.text(row.card_industry);
+
+      if ((this.isPlaceholder(userName) || !userPhone || !userIndustry) && (!this.isPlaceholder(cardName) || cardPhone || cardIndustry)) {
+        await env.ACTMASTER_DB.prepare(`
+          UPDATE users
+          SET name = CASE WHEN (TRIM(COALESCE(name,'')) = '' OR name IN ('未命名','姓名')) AND ? <> '' THEN ? ELSE name END,
+              phone = CASE WHEN TRIM(COALESCE(phone,'')) = '' AND ? <> '' THEN ? ELSE phone END,
+              industry = CASE WHEN TRIM(COALESCE(industry,'')) = '' AND ? <> '' THEN ? ELSE industry END
+          WHERE line_id = ?
+        `).bind(cardName, cardName, cardPhone, cardPhone, cardIndustry, cardIndustry, lineId).run();
+        repaired.updatedUsersFromCards += 1;
+        touchedUsers.add(lineId);
+      }
+
+      if ((this.isPlaceholder(cardName) || !cardPhone) && (!this.isPlaceholder(userName) || userPhone)) {
+        await env.ACTMASTER_DB.prepare(`
+          UPDATE card_contacts
+          SET name = CASE WHEN (TRIM(COALESCE(name,'')) = '' OR name IN ('未命名','姓名')) AND ? <> '' THEN ? ELSE name END,
+              mobile = CASE WHEN TRIM(COALESCE(mobile,'')) = '' AND TRIM(COALESCE(office_phone,'')) = '' AND ? <> '' THEN ? ELSE mobile END,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE row_id = ?
+        `).bind(userName, userName, userPhone, userPhone, row.card_row_id).run();
+        repaired.updatedCardsFromUsers += 1;
+        touchedUsers.add(lineId);
+      }
+    }
+
+    for (const userId of touchedUsers) {
+      await this.clearUserCache(env, userId);
+      repaired.cacheCleared += 1;
+    }
+    const after = await this.audit(payload, env);
+    return { success: true, data: { repaired, before: before.data.counts, after: after.data.counts } };
   }
 };
 
@@ -2493,7 +2674,7 @@ async function dispatchAction(action, payload, request, env) {
       }
     } else {
       // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
-      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
+      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
       if (strictActions.includes(action)) {
         return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
       }
@@ -2554,6 +2735,10 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await AuthModule.updateAndClearCache(action, payload, env);
     }
+    case 'auditDataConsistency':
+      return await D1ConsistencyModule.audit(payload || {}, env);
+    case 'repairDataConsistency':
+      return await D1ConsistencyModule.repair(payload || {}, env);
     case 'saveCard':
     case 'updateCard': {
       try {
