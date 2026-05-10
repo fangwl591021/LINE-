@@ -237,6 +237,11 @@
     var profile = moduleAuth.getUserProfile() || {};
     var name = (currentCardData && currentCardData['姓名']) || profile.displayName || '姓名';
     var imgUrl = myEcardImgs[layout] || '';
+    if (!imgUrl) {
+      preview.innerHTML = '';
+      preview.className = 'hidden';
+      return;
+    }
     var desc = currentCardData ? (currentCardData['服務項目'] || currentCardData['職稱'] || currentCardData['公司名稱'] || '') : '';
     var cfg = parseCardConfig(currentCardData);
     var color = cfg.descColor || '#666666';
