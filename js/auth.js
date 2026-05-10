@@ -118,6 +118,45 @@ window.ensureClaimedCardUserProfile = async function(source) {
   return res;
 };
 
+window.recoverRegisteredUserFromBoundCard = async function(userId) {
+  userId = userId || window.currentUserProfile?.userId || '';
+  if (!userId) return null;
+
+  try {
+    const cardsRes = await window.fetchAPI('getCardContacts', { networkId: 'admin', role: 'admin', userId: '' }, true);
+    const cards = Array.isArray(cardsRes) ? cardsRes : (cardsRes && (cardsRes.data || cardsRes.cards)) || [];
+    const boundCard = cards.find(card => {
+      const lineId = String(card['LINE ID'] || card.lineId || card.userId || card['User ID'] || '').trim();
+      return lineId && lineId === userId;
+    });
+    if (!boundCard) return null;
+
+    const profile = window.buildUserProfileFromClaimCard(boundCard, {
+      userId: userId,
+      claimRowId: boundCard.rowId || boundCard['rowId'] || boundCard['Row ID'] || '',
+      networkId: boundCard['歸屬網'] || boundCard.networkId || 'admin'
+    });
+
+    const res = await window.fetchAPI('registerUser', {
+      ...profile,
+      profileStatus: profile.phone ? 'active' : 'bound_card',
+      source: 'bound_card'
+    }, true);
+    if (res && res.error) throw new Error(res.error);
+
+    const refreshed = await window.fetchAPI('checkUser', { userId: userId }, true);
+    const info = (refreshed && refreshed.isRegistered && refreshed.info) ? refreshed.info : profile;
+    window.applyRegisteredUserSession(info);
+    try {
+      localStorage.setItem('ACTMASTER_USER_' + userId, JSON.stringify({ info: info, savedAt: Date.now() }));
+    } catch (e) {}
+    return info;
+  } catch (e) {
+    console.warn('Bound-card registration recovery failed:', e);
+    return null;
+  }
+};
+
 window.recordShareCardVisitOnce = async function(params) {
   if (!params || !params.shareCardId || !window.currentUserProfile?.userId) return null;
 
@@ -261,8 +300,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (checkRes && checkRes.error) {
         console.error("Auth check failed:", checkRes.error);
         if (usedCachedUser) return;
+        const recovered = await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
+        if (recovered) {
+          window.goPage('home');
+          if (typeof window.loadHomeData === 'function') window.loadHomeData();
+          return;
+        }
         window.showToast("連線異常，請重新整理", true);
         return;
+      }
+
+      if (!claimCardId) {
+        const recovered = await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
+        if (recovered) {
+          window.goPage('home');
+          if (typeof window.loadHomeData === 'function') window.loadHomeData();
+          return;
+        }
       }
 
       if (claimCardId) {

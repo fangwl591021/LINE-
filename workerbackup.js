@@ -514,7 +514,7 @@ const AuthModule = {
       } catch (e) { console.error("KV Write Error", e); }
     }
 
-    if (result && result.success && result.data && !result.data.isRegistered) {
+    if (!result || result.success === false || !result.data || !result.data.isRegistered) {
       const boundProfile = await this.ensureBoundCardUser(userId, env);
       if (boundProfile) {
         return { success: true, data: { isRegistered: true, info: boundProfile, source: 'bound_card' } };
