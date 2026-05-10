@@ -67,6 +67,9 @@ const SecurityModule = {
       'mlmRefundOrder',
       'mlmCreateSettlementBatch',
       'mlmLockSettlementBatch',
+      'mlmListSettlementBatches',
+      'mlmPreviewMonthlySettlement',
+      'mlmMarkSettlementPaid',
       'markTenantOrderPaid',
       'cancelTenantBonusOrder',
       'auditDataConsistency',
@@ -2423,6 +2426,279 @@ const D1FinanceModule = {
     return { success: true, data: rows.map(row => this.bonusRow(row)), transactions: rows.map(row => this.bonusRow(row)), page, pageSize };
   },
 
+  ym(value = '') {
+    const source = String(value || '').trim();
+    const match = source.match(/^(\d{4})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}`;
+    return new Date().toISOString().slice(0, 7);
+  },
+
+  periodEnd(period) {
+    const safePeriod = this.ym(period);
+    const [year, month] = safePeriod.split('-').map(Number);
+    return new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)).toISOString();
+  },
+
+  parseJson(value) {
+    try { return value ? JSON.parse(value) : {}; } catch (e) { return {}; }
+  },
+
+  async ensureSettlementSchema(env) {
+    if (!this.hasD1(env)) return false;
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS settlement_batches (
+        batch_id TEXT PRIMARY KEY,
+        period TEXT NOT NULL,
+        network_id TEXT DEFAULT 'admin',
+        status TEXT DEFAULT 'draft',
+        gross_amount REAL DEFAULT 0,
+        withholding_tax REAL DEFAULT 0,
+        nhi_fee REAL DEFAULT 0,
+        net_amount REAL DEFAULT 0,
+        item_count INTEGER DEFAULT 0,
+        created_by TEXT DEFAULT '',
+        locked_at TEXT DEFAULT '',
+        paid_at TEXT DEFAULT '',
+        raw_json TEXT DEFAULT '{}',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS settlement_items (
+        item_id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL,
+        tx_id TEXT NOT NULL UNIQUE,
+        beneficiary_id TEXT NOT NULL,
+        beneficiary_name TEXT DEFAULT '',
+        network_id TEXT DEFAULT 'admin',
+        gross_amount REAL DEFAULT 0,
+        withholding_tax REAL DEFAULT 0,
+        nhi_fee REAL DEFAULT 0,
+        net_amount REAL DEFAULT 0,
+        invoice_required INTEGER DEFAULT 0,
+        kyc_status TEXT DEFAULT '',
+        status TEXT DEFAULT 'draft',
+        raw_json TEXT DEFAULT '{}',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(batch_id) REFERENCES settlement_batches(batch_id)
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_settlement_batches_period ON settlement_batches(period, network_id, status)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_settlement_items_batch ON settlement_items(batch_id, beneficiary_id)').run();
+    return true;
+  },
+
+  settlementBatchRow(row) {
+    if (!row) return null;
+    const raw = this.parseJson(row.raw_json);
+    return {
+      ...raw,
+      batchId: this.text(row.batch_id),
+      period: this.text(row.period),
+      networkId: this.text(row.network_id, 'admin'),
+      status: this.text(row.status, 'draft'),
+      grossAmount: Number(row.gross_amount || 0) || 0,
+      withholdingTax: Number(row.withholding_tax || 0) || 0,
+      nhiFee: Number(row.nhi_fee || 0) || 0,
+      netAmount: Number(row.net_amount || 0) || 0,
+      itemCount: Number(row.item_count || 0) || 0,
+      createdBy: this.text(row.created_by),
+      lockedAt: this.text(row.locked_at),
+      paidAt: this.text(row.paid_at),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at)
+    };
+  },
+
+  async buildMonthlySettlement(payload, env) {
+    await this.ensureSettlementSchema(env);
+    const period = this.ym(payload.period || payload.month || payload.periodStart || '');
+    const endAt = payload.periodEnd || this.periodEnd(period);
+    const networkId = this.text(payload.networkId || 'admin');
+    const withholdingRate = Math.max(0, Number(payload.withholdingRate || 0)) / 100;
+    const nhiRate = Math.max(0, Number(payload.nhiRate || 0)) / 100;
+    const params = [endAt, endAt, networkId, networkId];
+    const rows = await D1ReadModule.all(env, `
+      SELECT
+        bt.*,
+        u.name AS beneficiary_name,
+        u.phone AS beneficiary_phone,
+        u.socials AS beneficiary_socials
+      FROM bonus_transactions bt
+      LEFT JOIN users u ON u.line_id = bt.beneficiary_id OR u.row_id = bt.beneficiary_id
+      LEFT JOIN settlement_items si ON si.tx_id = bt.tx_id
+      WHERE bt.status IN ('frozen','payable')
+        AND (bt.freeze_until = '' OR bt.freeze_until IS NULL OR bt.freeze_until <= ?)
+        AND (bt.created_at = '' OR bt.created_at IS NULL OR bt.created_at <= ?)
+        AND (? = 'all' OR ? = '' OR bt.network_id = ?)
+        AND si.tx_id IS NULL
+      ORDER BY bt.created_at ASC
+      LIMIT 5000
+    `, [params[0], params[1], params[2], params[3], params[3]]);
+
+    const grouped = new Map();
+    rows.forEach(row => {
+      const tx = this.bonusRow(row);
+      const beneficiaryId = tx.beneficiaryId;
+      if (!beneficiaryId) return;
+      const socials = this.parseJson(row.beneficiary_socials);
+      const dealer = socials.dealerProfile || socials.distributorProfile || {};
+      const dealerType = this.text(dealer.dealerType || dealer.businessType || '');
+      const invoiceRequired = dealerType === 'company' || dealerType === 'sole_proprietor' || !!dealer.taxId || !!dealer.uniformNo;
+      const gross = Number(tx.amount || 0) || 0;
+      const withholdingTax = Math.round(gross * withholdingRate);
+      const nhiFee = Math.round(gross * nhiRate);
+      const net = Math.max(0, gross - withholdingTax - nhiFee);
+      if (!grouped.has(beneficiaryId)) {
+        grouped.set(beneficiaryId, {
+          beneficiaryId,
+          beneficiaryName: this.text(row.beneficiary_name, beneficiaryId),
+          networkId: tx.networkId || networkId,
+          grossAmount: 0,
+          withholdingTax: 0,
+          nhiFee: 0,
+          netAmount: 0,
+          invoiceRequired,
+          kycStatus: this.text(dealer.kycStatus || dealer.status || ''),
+          taxId: this.text(dealer.taxId || dealer.uniformNo || ''),
+          transactions: []
+        });
+      }
+      const item = grouped.get(beneficiaryId);
+      item.grossAmount += gross;
+      item.withholdingTax += withholdingTax;
+      item.nhiFee += nhiFee;
+      item.netAmount += net;
+      item.invoiceRequired = item.invoiceRequired || invoiceRequired;
+      item.transactions.push({ ...tx, withholdingTax, nhiFee, netAmount: net });
+    });
+
+    const items = Array.from(grouped.values());
+    const totals = items.reduce((sum, item) => ({
+      grossAmount: sum.grossAmount + item.grossAmount,
+      withholdingTax: sum.withholdingTax + item.withholdingTax,
+      nhiFee: sum.nhiFee + item.nhiFee,
+      netAmount: sum.netAmount + item.netAmount,
+      transactionCount: sum.transactionCount + item.transactions.length
+    }), { grossAmount: 0, withholdingTax: 0, nhiFee: 0, netAmount: 0, transactionCount: 0 });
+
+    return {
+      period,
+      networkId,
+      periodEnd: endAt,
+      withholdingRate: withholdingRate * 100,
+      nhiRate: nhiRate * 100,
+      itemCount: items.length,
+      items,
+      totals
+    };
+  },
+
+  async previewMonthlySettlement(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const preview = await this.buildMonthlySettlement(payload || {}, env);
+    return { success: true, data: preview, preview };
+  },
+
+  async createSettlementBatch(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const preview = await this.buildMonthlySettlement(payload || {}, env);
+    if (!preview.items.length) return { success: false, error: '本期沒有可結算獎金', data: preview };
+    const existing = await D1ReadModule.first(env, `
+      SELECT * FROM settlement_batches
+      WHERE period = ? AND network_id = ? AND status IN ('draft','locked','paid')
+      ORDER BY created_at DESC LIMIT 1
+    `, [preview.period, preview.networkId]);
+    if (existing && !payload.force) {
+      return { success: false, error: '本月份已有結算批次', data: this.settlementBatchRow(existing), preview };
+    }
+
+    const batchId = payload.batchId || `SET-${preview.period.replace('-', '')}-${Date.now().toString(36).toUpperCase()}`;
+    const createdBy = this.text(payload.operatorId || payload.userId || '');
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO settlement_batches (batch_id, period, network_id, status, gross_amount, withholding_tax, nhi_fee, net_amount, item_count, created_by, raw_json, updated_at)
+      VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      batchId, preview.period, preview.networkId, preview.totals.grossAmount, preview.totals.withholdingTax,
+      preview.totals.nhiFee, preview.totals.netAmount, preview.itemCount, createdBy, JSON.stringify(preview)
+    ).run();
+
+    for (const item of preview.items) {
+      for (const tx of item.transactions) {
+        const itemId = `${batchId}-${tx.txId}`;
+        await env.ACTMASTER_DB.prepare(`
+          INSERT INTO settlement_items (item_id, batch_id, tx_id, beneficiary_id, beneficiary_name, network_id, gross_amount, withholding_tax, nhi_fee, net_amount, invoice_required, kyc_status, status, raw_json, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, CURRENT_TIMESTAMP)
+        `).bind(
+          itemId, batchId, tx.txId, item.beneficiaryId, item.beneficiaryName, item.networkId,
+          tx.amount, tx.withholdingTax, tx.nhiFee, tx.netAmount, item.invoiceRequired ? 1 : 0,
+          item.kycStatus, JSON.stringify({ item, transaction: tx })
+        ).run();
+      }
+    }
+
+    const row = await D1ReadModule.first(env, 'SELECT * FROM settlement_batches WHERE batch_id = ? LIMIT 1', [batchId]);
+    return { success: true, data: this.settlementBatchRow(row), preview };
+  },
+
+  async listSettlementBatches(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureSettlementSchema(env);
+    const period = this.text(payload.period || payload.month || '');
+    const networkId = this.text(payload.networkId || 'admin');
+    const rows = await D1ReadModule.all(env, `
+      SELECT * FROM settlement_batches
+      WHERE (? = '' OR period = ?)
+        AND (? = 'all' OR ? = '' OR network_id = ?)
+      ORDER BY period DESC, created_at DESC
+      LIMIT 100
+    `, [period, period, networkId, networkId, networkId]);
+    return { success: true, data: rows.map(row => this.settlementBatchRow(row)), batches: rows.map(row => this.settlementBatchRow(row)) };
+  },
+
+  async lockSettlementBatch(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureSettlementSchema(env);
+    const batchId = this.pick(payload, ['batchId']);
+    if (!batchId) return { success: false, error: 'Missing batchId' };
+    const batch = await D1ReadModule.first(env, 'SELECT * FROM settlement_batches WHERE batch_id = ? LIMIT 1', [batchId]);
+    if (!batch) return { success: false, error: '找不到結算批次' };
+    if (batch.status === 'paid') return { success: false, error: '已付款批次不能重新鎖定' };
+    await env.ACTMASTER_DB.prepare("UPDATE settlement_batches SET status = 'locked', locked_at = ?, updated_at = CURRENT_TIMESTAMP WHERE batch_id = ?")
+      .bind(new Date().toISOString(), batchId).run();
+    await env.ACTMASTER_DB.prepare("UPDATE settlement_items SET status = 'locked', updated_at = CURRENT_TIMESTAMP WHERE batch_id = ?")
+      .bind(batchId).run();
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE bonus_transactions SET status = 'payable', settled_at = COALESCE(NULLIF(settled_at, ''), ?), updated_at = CURRENT_TIMESTAMP
+      WHERE tx_id IN (SELECT tx_id FROM settlement_items WHERE batch_id = ?)
+    `).bind(new Date().toISOString(), batchId).run();
+    const row = await D1ReadModule.first(env, 'SELECT * FROM settlement_batches WHERE batch_id = ? LIMIT 1', [batchId]);
+    return { success: true, data: this.settlementBatchRow(row) };
+  },
+
+  async markSettlementPaid(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureSettlementSchema(env);
+    const batchId = this.pick(payload, ['batchId']);
+    if (!batchId) return { success: false, error: 'Missing batchId' };
+    const batch = await D1ReadModule.first(env, 'SELECT * FROM settlement_batches WHERE batch_id = ? LIMIT 1', [batchId]);
+    if (!batch) return { success: false, error: '找不到結算批次' };
+    if (batch.status !== 'locked') return { success: false, error: '請先鎖定結算批次再付款' };
+    const paidAt = payload.paidAt || new Date().toISOString();
+    await env.ACTMASTER_DB.prepare("UPDATE settlement_batches SET status = 'paid', paid_at = ?, updated_at = CURRENT_TIMESTAMP WHERE batch_id = ?")
+      .bind(paidAt, batchId).run();
+    await env.ACTMASTER_DB.prepare("UPDATE settlement_items SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE batch_id = ?")
+      .bind(batchId).run();
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE bonus_transactions SET status = 'paid', settled_at = COALESCE(NULLIF(settled_at, ''), ?), updated_at = CURRENT_TIMESTAMP
+      WHERE tx_id IN (SELECT tx_id FROM settlement_items WHERE batch_id = ?)
+    `).bind(paidAt, batchId).run();
+    const row = await D1ReadModule.first(env, 'SELECT * FROM settlement_batches WHERE batch_id = ? LIMIT 1', [batchId]);
+    return { success: true, data: this.settlementBatchRow(row) };
+  },
+
   async getOrganizationTree(payload, env) {
     if (!this.hasD1(env)) return null;
     const rootId = this.text(payload.memberId || payload.userId);
@@ -2735,6 +3011,9 @@ const MLMModule = {
   },
 
   async createSettlementBatch(payload, env) {
+    const d1Result = await D1FinanceModule.createSettlementBatch(payload, env);
+    if (d1Result) return d1Result;
+
     return await DBModule.forward('mlmCreateSettlementBatch', {
       batchId: payload.batchId || 'BAT-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
       periodStart: payload.periodStart || '',
@@ -2747,10 +3026,35 @@ const MLMModule = {
 
   async lockSettlementBatch(payload, env) {
     if (!payload.batchId) return { success: false, error: 'Missing batchId' };
+    const d1Result = await D1FinanceModule.lockSettlementBatch(payload, env);
+    if (d1Result) return d1Result;
+
     return await DBModule.forward('mlmLockSettlementBatch', {
       ...payload,
       status: 'locked',
       lockedAt: new Date().toISOString()
+    }, env);
+  },
+
+  async listSettlementBatches(payload, env) {
+    const d1Result = await D1FinanceModule.listSettlementBatches(payload, env);
+    if (d1Result) return d1Result;
+    return await DBModule.forward('mlmListSettlementBatches', payload, env);
+  },
+
+  async previewMonthlySettlement(payload, env) {
+    const d1Result = await D1FinanceModule.previewMonthlySettlement(payload, env);
+    if (d1Result) return d1Result;
+    return await DBModule.forward('mlmPreviewMonthlySettlement', payload, env);
+  },
+
+  async markSettlementPaid(payload, env) {
+    const d1Result = await D1FinanceModule.markSettlementPaid(payload, env);
+    if (d1Result) return d1Result;
+    return await DBModule.forward('mlmMarkSettlementPaid', {
+      ...payload,
+      status: 'paid',
+      paidAt: payload.paidAt || new Date().toISOString()
     }, env);
   },
 
@@ -2794,7 +3098,7 @@ async function dispatchAction(action, payload, request, env) {
       }
     } else {
       // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
-      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'listDuplicateCardBindings', 'resolveDuplicateCardBinding', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
+      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'listDuplicateCardBindings', 'resolveDuplicateCardBinding', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch', 'mlmListSettlementBatches', 'mlmPreviewMonthlySettlement', 'mlmMarkSettlementPaid'];
       if (strictActions.includes(action)) {
         return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
       }
@@ -3006,8 +3310,11 @@ async function dispatchAction(action, payload, request, env) {
     case 'mlmRefundOrder':         return await MLMModule.refundOrder(payload, env);
     case 'mlmListOrders':          return await MLMModule.listOrders(payload, env);
     case 'mlmListBonusTransactions': return await MLMModule.listBonusTransactions(payload, env);
+    case 'mlmListSettlementBatches': return await MLMModule.listSettlementBatches(payload, env);
+    case 'mlmPreviewMonthlySettlement': return await MLMModule.previewMonthlySettlement(payload, env);
     case 'mlmCreateSettlementBatch': return await MLMModule.createSettlementBatch(payload, env);
     case 'mlmLockSettlementBatch': return await MLMModule.lockSettlementBatch(payload, env);
+    case 'mlmMarkSettlementPaid': return await MLMModule.markSettlementPaid(payload, env);
     case 'mlmGetMemberTree':       return await MLMModule.getMemberTree(payload, env);
     case 'mlmPreviewBonusPlan':     return await MLMModule.previewBonusPlan(payload, env);
     case 'mlmGetOrganizationTree':  return await MLMModule.getOrganizationTree(payload, env);

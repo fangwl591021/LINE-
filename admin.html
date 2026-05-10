@@ -849,6 +849,43 @@
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
             <div>
+              <h3 class="text-[17px] font-semibold text-slate-800">每月獎金結算</h3>
+              <p class="text-[13px] text-slate-500 mt-1">從 D1 獎金流水產生月結批次；草稿可檢查，鎖定後才進入付款。</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-[150px_110px_110px_auto_auto_auto] gap-2 w-full xl:w-auto">
+              <input id="settlement-period" type="month" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white" title="結算月份">
+              <input id="settlement-withholding-rate" type="number" min="0" step="0.1" value="0" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="扣繳百分比">
+              <input id="settlement-nhi-rate" type="number" min="0" step="0.1" value="0" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="補充保費百分比">
+              <button type="button" onclick="previewMonthlySettlement()" class="border border-slate-200 bg-white text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">預覽</button>
+              <button type="button" onclick="createMonthlySettlement()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-semibold">建立草稿</button>
+              <button type="button" onclick="loadSettlementBatches()" class="border border-slate-200 bg-white text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold">重新整理</button>
+            </div>
+          </div>
+          <div id="settlement-preview-body" class="hidden px-5 py-4 border-b border-slate-100 bg-blue-50/60 text-[14px] text-slate-700"></div>
+          <div class="overflow-x-auto">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>月份</th>
+                  <th>批次編號</th>
+                  <th>狀態</th>
+                  <th>人數</th>
+                  <th>應付總額</th>
+                  <th>扣繳 / 保費</th>
+                  <th>實付</th>
+                  <th class="text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="settlement-batches-body">
+                <tr><td colspan="8" class="text-center py-8 text-slate-400">尚未載入結算批次</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+            <div>
               <h3 class="font-black text-slate-800">組織圖生成與查詢</h3>
               <p class="text-[12px] text-slate-500 mt-1">可用推薦關係或安置關係查詢，搭配獨立資格與左右位狀態檢查。</p>
             </div>
@@ -1272,6 +1309,7 @@
     let duplicateBindingData = [];
     let allActivitiesData = [];
     let allBonusOrdersData = [];
+    let settlementBatchesData = [];
     let selectedBonusTenantId = '';
     let userPage = 1;
     let cardPage = 1;
@@ -1404,6 +1442,8 @@
       if (searchInput && !searchInput.value) searchInput.placeholder = '搜尋姓名、電話、會員編號、LINE ID...';
       renderBonusSystem();
       await loadBonusOrders();
+      initSettlementPeriod();
+      await loadSettlementBatches();
     }
 
     function prioritizeBonusOrderPanel() {
@@ -1857,6 +1897,141 @@
       if (res) {
         showToast('訂單已取消');
         await loadBonusOrders();
+      }
+    }
+
+    function initSettlementPeriod() {
+      const input = document.getElementById('settlement-period');
+      if (input && !input.value) input.value = new Date().toISOString().slice(0, 7);
+    }
+
+    function settlementPayload() {
+      initSettlementPeriod();
+      return {
+        period: document.getElementById('settlement-period')?.value || new Date().toISOString().slice(0, 7),
+        networkId: 'admin',
+        withholdingRate: Number(document.getElementById('settlement-withholding-rate')?.value || 0),
+        nhiRate: Number(document.getElementById('settlement-nhi-rate')?.value || 0),
+        operatorId: adminProfile?.userId || ''
+      };
+    }
+
+    function normalizeSettlementBatch(batch = {}) {
+      return {
+        batchId: batch.batchId || batch.batch_id || '',
+        period: batch.period || '',
+        status: batch.status || 'draft',
+        grossAmount: Number(batch.grossAmount || batch.gross_amount || 0),
+        withholdingTax: Number(batch.withholdingTax || batch.withholding_tax || 0),
+        nhiFee: Number(batch.nhiFee || batch.nhi_fee || 0),
+        netAmount: Number(batch.netAmount || batch.net_amount || 0),
+        itemCount: Number(batch.itemCount || batch.item_count || 0),
+        lockedAt: batch.lockedAt || batch.locked_at || '',
+        paidAt: batch.paidAt || batch.paid_at || ''
+      };
+    }
+
+    function renderSettlementPreview(preview) {
+      const box = document.getElementById('settlement-preview-body');
+      if (!box) return;
+      if (!preview) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+      const totals = preview.totals || {};
+      const items = Array.isArray(preview.items) ? preview.items : [];
+      box.classList.remove('hidden');
+      box.innerHTML = `
+        <div class="grid grid-cols-2 xl:grid-cols-5 gap-3">
+          <div><span class="block text-xs text-slate-500">月份</span><strong class="text-slate-800">${escapeHTML(preview.period || '-')}</strong></div>
+          <div><span class="block text-xs text-slate-500">受款人</span><strong class="text-slate-800">${items.length} 人</strong></div>
+          <div><span class="block text-xs text-slate-500">流水</span><strong class="text-slate-800">${Number(totals.transactionCount || 0)} 筆</strong></div>
+          <div><span class="block text-xs text-slate-500">應付</span><strong class="text-slate-800">${formatCurrency(totals.grossAmount || 0)}</strong></div>
+          <div><span class="block text-xs text-slate-500">實付</span><strong class="text-slate-800">${formatCurrency(totals.netAmount || 0)}</strong></div>
+        </div>
+        <div class="mt-3 text-xs text-slate-500">預覽不會寫入資料；建立草稿後，同一筆獎金流水不可再進入其他批次。</div>`;
+    }
+
+    async function previewMonthlySettlement() {
+      const res = await fetchAPI('mlmPreviewMonthlySettlement', settlementPayload());
+      const preview = res?.preview || res?.data || res;
+      if (preview) {
+        renderSettlementPreview(preview);
+        showToast(`可結算 ${preview.itemCount || 0} 人，實付 ${formatCurrency(preview.totals?.netAmount || 0)}`);
+      }
+    }
+
+    async function createMonthlySettlement() {
+      const payload = settlementPayload();
+      if (!confirm(`建立 ${payload.period} 的月結草稿？\n\n建立後會鎖住本期可結算的獎金流水，避免重複結算。`)) return;
+      const res = await fetchAPI('mlmCreateSettlementBatch', payload);
+      if (res) {
+        showToast('月結草稿已建立');
+        renderSettlementPreview(res.preview || res.data?.preview || null);
+        await loadSettlementBatches();
+      }
+    }
+
+    async function loadSettlementBatches() {
+      initSettlementPeriod();
+      const body = document.getElementById('settlement-batches-body');
+      if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入結算批次...</td></tr>';
+      const res = await fetchAPI('mlmListSettlementBatches', settlementPayload(), { silent: true });
+      const list = Array.isArray(res) ? res : (Array.isArray(res?.batches) ? res.batches : (Array.isArray(res?.data) ? res.data : []));
+      settlementBatchesData = list.map(normalizeSettlementBatch);
+      renderSettlementBatches();
+    }
+
+    function settlementStatusLabel(status) {
+      if (status === 'paid') return { text: '已付款', cls: 'status-green' };
+      if (status === 'locked') return { text: '已鎖定', cls: 'status-blue' };
+      return { text: '草稿', cls: 'status-amber' };
+    }
+
+    function renderSettlementBatches() {
+      const body = document.getElementById('settlement-batches-body');
+      if (!body) return;
+      if (!settlementBatchesData.length) {
+        body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有月結批次</td></tr>';
+        return;
+      }
+      body.innerHTML = settlementBatchesData.map(batch => {
+        const status = settlementStatusLabel(batch.status);
+        const actions = batch.status === 'draft'
+          ? `<button type="button" onclick="lockSettlementBatch('${escapeHTML(batch.batchId)}')" class="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-semibold">鎖定</button>`
+          : (batch.status === 'locked'
+            ? `<button type="button" onclick="markSettlementPaid('${escapeHTML(batch.batchId)}')" class="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-semibold">標記已付</button>`
+            : '<span class="text-slate-400 text-xs">完成</span>');
+        return `
+          <tr>
+            <td class="text-slate-700">${escapeHTML(batch.period || '-')}</td>
+            <td class="font-mono text-[12px] text-blue-600">${escapeHTML(batch.batchId || '-')}</td>
+            <td><span class="status-pill ${status.cls}">${status.text}</span></td>
+            <td>${batch.itemCount}</td>
+            <td>${formatCurrency(batch.grossAmount)}</td>
+            <td class="text-[12px] text-slate-500">${formatCurrency(batch.withholdingTax)} / ${formatCurrency(batch.nhiFee)}</td>
+            <td class="text-slate-800 font-semibold">${formatCurrency(batch.netAmount)}</td>
+            <td class="text-right whitespace-nowrap">${actions}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    async function lockSettlementBatch(batchId) {
+      if (!confirm('鎖定後，本批次獎金會進入待付款狀態。確定鎖定？')) return;
+      const res = await fetchAPI('mlmLockSettlementBatch', { batchId, operatorId: adminProfile?.userId || '' });
+      if (res) {
+        showToast('月結批次已鎖定');
+        await loadSettlementBatches();
+      }
+    }
+
+    async function markSettlementPaid(batchId) {
+      if (!confirm('確認已完成付款？此動作會把本批次獎金流水標記為已付。')) return;
+      const res = await fetchAPI('mlmMarkSettlementPaid', { batchId, operatorId: adminProfile?.userId || '', paidAt: new Date().toISOString() });
+      if (res) {
+        showToast('月結批次已標記付款完成');
+        await loadSettlementBatches();
       }
     }
 
