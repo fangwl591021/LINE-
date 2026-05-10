@@ -1155,6 +1155,7 @@
     let adminProfile = null;
     let allUsersData = [];
     let allCardsData = [];
+    let duplicateBindingData = [];
     let allActivitiesData = [];
     let allBonusOrdersData = [];
     let selectedBonusTenantId = '';
@@ -1223,6 +1224,7 @@
       
       if (tabId === 'users') loadUsers();
       if (tabId === 'cards') {
+        ensureDuplicateBindingsPanel();
         if (allCardsData.length === 0) loadCards();
         else {
           populateCardTenantFilter(allCardsData);
@@ -2488,7 +2490,121 @@
       }
     }
 
+    function ensureDuplicateBindingsPanel() {
+      if (document.getElementById('duplicate-bindings-tool')) return;
+      const tab = document.getElementById('tab-cards');
+      const table = document.getElementById('cards-table-body')?.closest('.bg-white');
+      if (!tab || !table) return;
+      const panel = document.createElement('div');
+      panel.id = 'duplicate-bindings-tool';
+      panel.className = 'bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden';
+      panel.innerHTML = `
+        <div class="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-black text-slate-800 flex items-center gap-2">
+              <span class="material-symbols-outlined text-amber-600">rule</span>
+              重複歸屬人工確認
+            </h3>
+            <p class="mt-1 text-sm font-semibold text-slate-500">同一個 LINE ID 綁到多張名片時，請人工選定正確名片。系統只解除其他名片的 LINE 綁定，不會刪除名片。</p>
+          </div>
+          <button onclick="loadDuplicateBindings()" class="text-sm border border-amber-300 text-amber-800 bg-amber-50 px-4 py-2 rounded-lg hover:bg-amber-100 flex items-center gap-1 shrink-0 font-black">
+            <span class="material-symbols-outlined text-[18px]">manage_search</span> 載入重複歸屬
+          </button>
+        </div>
+        <div id="duplicate-bindings-panel" class="hidden border-t border-amber-100 p-5 bg-amber-50/40"></div>
+      `;
+      tab.insertBefore(panel, table);
+    }
+
+    function normalizeDuplicateGroups(res) {
+      if (Array.isArray(res)) return res;
+      if (res && Array.isArray(res.data)) return res.data;
+      if (res && res.data && Array.isArray(res.data.data)) return res.data.data;
+      return [];
+    }
+
+    async function loadDuplicateBindings() {
+      if (adminRole !== 'admin') return showToast('只有總管 admin 可以確認重複歸屬', true);
+      ensureDuplicateBindingsPanel();
+      const panel = document.getElementById('duplicate-bindings-panel');
+      if (!panel) return;
+      panel.classList.remove('hidden');
+      panel.innerHTML = '<div class="text-sm font-bold text-slate-500">正在載入重複歸屬...</div>';
+      const res = await fetchAPI('listDuplicateCardBindings', { limit: 100 });
+      duplicateBindingData = normalizeDuplicateGroups(res);
+      renderDuplicateBindings();
+    }
+
+    function renderDuplicateBindings() {
+      const panel = document.getElementById('duplicate-bindings-panel');
+      if (!panel) return;
+      const groups = Array.isArray(duplicateBindingData) ? duplicateBindingData : [];
+      if (!groups.length) {
+        panel.innerHTML = '<div class="text-sm font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">目前沒有重複歸屬。</div>';
+        return;
+      }
+      panel.innerHTML = groups.map(group => {
+        const lineId = String(group.lineId || group.line_id || '').trim();
+        const cards = Array.isArray(group.cards) ? group.cards : [];
+        const rows = cards.map(card => {
+          const rowId = String(card.row_id || card.rowId || '').trim();
+          const title = [card.name, card.company_name, card.title].filter(Boolean).join(' / ') || '(未命名名片)';
+          const phone = card.mobile || card.office_phone || '-';
+          const network = card.network_id || card.networkId || 'admin';
+          const creator = card.creator_id || card.creatorId || '-';
+          const updated = card.updated_at || card.updatedAt || card.created_at || '-';
+          return `
+            <div class="grid grid-cols-1 xl:grid-cols-[1fr_150px_160px_170px_auto] gap-3 items-center border border-amber-100 bg-white rounded-xl px-4 py-3">
+              <div>
+                <div class="font-black text-slate-800 text-base">${escapeHTML(title)}</div>
+                <div class="text-sm font-semibold text-slate-500 mt-1">row: ${escapeHTML(rowId)} · 電話: ${escapeHTML(phone)}</div>
+              </div>
+              <div class="text-sm font-bold text-slate-600">歸屬網<br><span class="text-slate-900">${escapeHTML(network)}</span></div>
+              <div class="text-sm font-bold text-slate-600">建立者<br><span class="font-mono text-xs text-slate-900">${escapeHTML(creator)}</span></div>
+              <div class="text-sm font-bold text-slate-600">更新時間<br><span class="text-slate-900">${escapeHTML(updated)}</span></div>
+              <button onclick="resolveDuplicateBinding('${encodeURIComponent(lineId)}','${encodeURIComponent(rowId)}')" class="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-black hover:bg-slate-700">保留這張</button>
+            </div>
+          `;
+        }).join('');
+        return `
+          <section class="mb-5 last:mb-0">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
+              <div class="font-black text-slate-900 text-base">LINE ID：<span class="font-mono">${escapeHTML(lineId)}</span></div>
+              <span class="self-start md:self-auto px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-sm font-black">${cards.length || group.count || 0} 張名片重複</span>
+            </div>
+            <div class="space-y-3">${rows}</div>
+          </section>
+        `;
+      }).join('');
+    }
+
+    async function resolveDuplicateBinding(encodedLineId, encodedKeepRowId) {
+      if (adminRole !== 'admin') return showToast('只有總管 admin 可以確認重複歸屬', true);
+      const lineId = decodeURIComponent(encodedLineId || '');
+      const keepRowId = decodeURIComponent(encodedKeepRowId || '');
+      const group = duplicateBindingData.find(item => String(item.lineId || item.line_id || '') === lineId);
+      const cards = Array.isArray(group?.cards) ? group.cards : [];
+      const keepCard = cards.find(card => String(card.row_id || card.rowId || '') === keepRowId);
+      const keepLabel = [keepCard?.name, keepCard?.company_name, keepCard?.title].filter(Boolean).join(' / ') || keepRowId;
+      const unlinkRowIds = cards.map(card => String(card.row_id || card.rowId || '').trim()).filter(id => id && id !== keepRowId);
+      if (!lineId || !keepRowId || !unlinkRowIds.length) return showToast('找不到可解除的重複歸屬', true);
+      if (!window.confirm(`確認保留這張名片的 LINE 綁定？\n\n${keepLabel}\n\n其他 ${unlinkRowIds.length} 張只會解除 LINE 綁定，不會刪除名片。`)) return;
+      const typed = window.prompt('請輸入「確認」以執行重複歸屬整理');
+      if (typed !== '確認') return showToast('已取消重複歸屬整理');
+      const res = await fetchAPI('resolveDuplicateCardBinding', {
+        lineId,
+        keepRowId,
+        unlinkRowIds,
+        confirmResolve: true
+      });
+      if (!res) return;
+      showToast(`已保留 1 張，解除 ${unlinkRowIds.length} 張重複綁定`);
+      await loadDuplicateBindings();
+      await loadCards();
+    }
+
     async function loadCards() {
+      ensureDuplicateBindingsPanel();
       const tbody = document.getElementById('cards-table-body');
       tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">載入中...</td></tr>';
       const res = await fetchAPI('getCardContacts');

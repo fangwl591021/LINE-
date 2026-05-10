@@ -71,6 +71,8 @@ const SecurityModule = {
       'cancelTenantBonusOrder',
       'auditDataConsistency',
       'repairDataConsistency',
+      'listDuplicateCardBindings',
+      'resolveDuplicateCardBinding',
       'deleteCard',
       'unlinkCard'
     ]);
@@ -1390,6 +1392,88 @@ const D1ConsistencyModule = {
     }
     const after = await this.audit(payload, env);
     return { success: true, data: { repaired, before: before.data.counts, after: after.data.counts } };
+  },
+
+  async listDuplicateBindings(payload, env) {
+    if (!this.hasD1(env)) return { success: false, error: 'D1 is not configured' };
+    await this.ensureIndexes(env);
+    const limit = Math.min(Math.max(Number(payload.limit || 100) || 100, 1), 300);
+    const groups = await this.all(env, `
+      SELECT line_id, COUNT(*) AS count
+      FROM card_contacts
+      WHERE line_id IS NOT NULL AND TRIM(line_id) <> ''
+      GROUP BY line_id
+      HAVING COUNT(*) > 1
+      ORDER BY count DESC, line_id
+      LIMIT ?
+    `, [limit]);
+    const data = [];
+    for (const group of groups) {
+      const lineId = this.text(group.line_id);
+      const cards = await this.all(env, `
+        SELECT row_id, line_id, name, company_name, title, mobile, office_phone,
+               creator_id, network_id, created_at, updated_at
+        FROM card_contacts
+        WHERE line_id = ?
+        ORDER BY
+          CASE WHEN creator_id = line_id THEN 0 ELSE 1 END,
+          updated_at DESC,
+          created_at DESC,
+          row_id DESC
+      `, [lineId]);
+      data.push({ lineId, count: Number(group.count || cards.length), cards });
+    }
+    return { success: true, data };
+  },
+
+  async resolveDuplicateBinding(payload, env) {
+    if (!this.hasD1(env)) return { success: false, error: 'D1 is not configured' };
+    await this.ensureIndexes(env);
+    const lineId = this.text(payload.lineId);
+    const keepRowId = this.text(payload.keepRowId);
+    const confirmed = payload.confirmResolve === true || String(payload.confirmResolve || '').toLowerCase() === 'true';
+    if (!confirmed) return { success: false, error: 'Missing duplicate binding confirmation' };
+    if (!lineId || !keepRowId) return { success: false, error: 'Missing lineId or keepRowId' };
+
+    const cards = await this.all(env, `
+      SELECT row_id, line_id, name, company_name, title, mobile, office_phone, creator_id, network_id
+      FROM card_contacts
+      WHERE line_id = ?
+      ORDER BY updated_at DESC, created_at DESC
+    `, [lineId]);
+    if (cards.length <= 1) return { success: false, error: 'This LINE ID is not duplicated' };
+    if (!cards.some(card => this.text(card.row_id) === keepRowId)) {
+      return { success: false, error: 'Keep card is not in this duplicate group' };
+    }
+
+    const requested = Array.isArray(payload.unlinkRowIds)
+      ? payload.unlinkRowIds.map(id => this.text(id)).filter(Boolean)
+      : cards.map(card => this.text(card.row_id)).filter(id => id && id !== keepRowId);
+    const unlinkRowIds = Array.from(new Set(requested)).filter(id => id !== keepRowId && cards.some(card => this.text(card.row_id) === id));
+    if (!unlinkRowIds.length) return { success: false, error: 'No duplicate card selected to unlink' };
+
+    const placeholders = unlinkRowIds.map(() => '?').join(',');
+    const result = await env.ACTMASTER_DB.prepare(`
+      UPDATE card_contacts
+      SET line_id = '', updated_at = CURRENT_TIMESTAMP
+      WHERE line_id = ? AND row_id IN (${placeholders}) AND row_id <> ?
+    `).bind(lineId, ...unlinkRowIds, keepRowId).run();
+    await this.clearUserCache(env, lineId);
+    const remaining = await this.first(env, `
+      SELECT COUNT(*) AS count
+      FROM card_contacts
+      WHERE line_id = ?
+    `, [lineId]);
+    return {
+      success: true,
+      data: {
+        lineId,
+        keepRowId,
+        unlinkedRowIds,
+        changed: result?.meta?.changes || unlinkRowIds.length,
+        remainingCount: Number(remaining?.count || 0)
+      }
+    };
   }
 };
 
@@ -2674,7 +2758,7 @@ async function dispatchAction(action, payload, request, env) {
       }
     } else {
       // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
-      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
+      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'listDuplicateCardBindings', 'resolveDuplicateCardBinding', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch'];
       if (strictActions.includes(action)) {
         return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
       }
@@ -2739,6 +2823,10 @@ async function dispatchAction(action, payload, request, env) {
       return await D1ConsistencyModule.audit(payload || {}, env);
     case 'repairDataConsistency':
       return await D1ConsistencyModule.repair(payload || {}, env);
+    case 'listDuplicateCardBindings':
+      return await D1ConsistencyModule.listDuplicateBindings(payload || {}, env);
+    case 'resolveDuplicateCardBinding':
+      return await D1ConsistencyModule.resolveDuplicateBinding(payload || {}, env);
     case 'saveCard':
     case 'updateCard': {
       try {
