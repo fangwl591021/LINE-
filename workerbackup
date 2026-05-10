@@ -151,15 +151,52 @@ const StorageModule = {
 
 // ==================== 模組 3: AI 服務 (AI Module) ====================
 const AIModule = {
+  getOpenAIKeys(env) {
+    return [
+      env.OPENAI_API_KEY,
+      env.OPENAI_API_KEY_2,
+      env.OPENAI_API_KEY_BACKUP,
+      env.OPENAI_BACKUP_API_KEY
+    ].filter((key, index, list) => key && list.indexOf(key) === index);
+  },
+
+  async callOpenAI(env, body) {
+    const keys = this.getOpenAIKeys(env);
+    if (!keys.length) throw new Error("Missing OPENAI_API_KEY");
+
+    let lastError = '';
+    for (let i = 0; i < keys.length; i++) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + keys[i], 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.error) {
+          lastError = result.error?.message || ('OpenAI HTTP ' + response.status);
+          console.warn('[OpenAI fallback]', 'key', i + 1, lastError);
+          continue;
+        }
+        if (!result.choices?.[0]?.message) {
+          lastError = 'OpenAI did not return choices';
+          continue;
+        }
+        return result;
+      } catch (e) {
+        lastError = e.message || String(e);
+        console.warn('[OpenAI fallback]', 'key', i + 1, lastError);
+      }
+    }
+
+    throw new Error(lastError || 'OpenAI request failed');
+  },
+
   async recognize(payload, env) {
     try {
-      if (!env.OPENAI_API_KEY) throw new Error("Missing OPENAI_API_KEY");
       const uploadedImgUrl = await StorageModule.upload(payload.base64Image, env);
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const result = await this.callOpenAI(env, {
           model: 'gpt-4o',
           messages: [{
             role: 'user',
@@ -168,10 +205,8 @@ const AIModule = {
               { type: 'text', text: '請解析這張名片並提取資訊。支援多國語言（如英文、日文等），若無中文請直接保留原文。輸出JSON格式：{"姓名":"","英文名":"","職稱":"","公司名稱":"","手機號碼":"","公司電話":"","電子郵件":"","公司網址":"","公司地址":"","統一編號":"","分機":"","傳真":"","部門":"","社群帳號":"","服務項目":""}\n所有欄位必須是字串，保留開頭的 0。' }
             ]
           }]
-        })
-      });
+        });
       
-      const result = await response.json();
       const text = result.choices[0].message.content;
       let cardData = {};
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -209,12 +244,7 @@ const AIModule = {
       const contactsList = contacts.map((c, i) => `${i+1}. ${c.Name||'未知'} (${c.Company||'無'}) \n標籤: ${c.Tags||'無'}`).join('\n');
       const prompt = `尋求者：${currentUser.name}，需求：${query}\n候選人：\n${contactsList}\n請選前3位，返回純 JSON 陣列: [{"index":0,"score":95,"reason":"結合標籤與需求，給出20字內的推薦理由"}]`;
       
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] })
-      });
-      const result = await response.json();
+      const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] });
       const jsonMatch = result.choices[0].message.content.match(/\[[\s\S]*\]/);
       const matches = jsonMatch ? JSON.parse(jsonMatch[0]).map(item => ({ rowId: contacts[item.index]?.rowId, score: item.score, reason: item.reason })) : [];
       return { success: true, data: matches };
@@ -234,12 +264,7 @@ const AIModule = {
         content.push({ type: 'image_url', image_url: { url: card.imageUrl, detail: 'low' } });
       }
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content }], temperature: 0 })
-      });
-      const result = await response.json();
+      const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content }], temperature: 0 });
       const text = result.choices?.[0]?.message?.content || '{}';
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const data = jsonMatch ? JSON.parse(jsonMatch[0]) : { pass: false, reasons: ['AI 健檢沒有回傳有效結果'], suggestions: ['請稍後再試'] };
@@ -263,12 +288,7 @@ const AIModule = {
 名片資料：${JSON.stringify(card).slice(0, 5000)}
 補充需求：${brief}`;
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7 })
-      });
-      const result = await response.json();
+      const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7 });
       const text = result.choices?.[0]?.message?.content || '{}';
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const data = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
@@ -299,12 +319,7 @@ const AIModule = {
 【強制要求】：請輸出純 JSON 格式。五大維度（Personality, Hobbies, Wealth, Health, Career）的值，每個都「必須」是一段 20 到 40 字的完整情境描述，請直接給出具體特徵與商務應對建議（例如：此人為視覺數據型，決策保守，建議提供圖表數據...），絕對不要只給單詞。
 JSON格式：{"Personality":"","Hobbies":"","Wealth":"","Health":"","Career":""}`;
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] })
-      });
-      const result = await response.json();
+      const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] });
       const jsonMatch = result.choices[0].message.content.match(/\{[\s\S]*\}/);
       return { success: true, data: jsonMatch ? JSON.parse(jsonMatch[0]) : {} };
     } catch (e) { return { success: false, error: e.message }; }
