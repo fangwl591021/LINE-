@@ -100,7 +100,6 @@ const SecurityModule = {
       'cancelRegistration',
       'unregisterActivity',
       'removeActivityRegistration',
-      'mlmListOrders',
       'mlmListBonusTransactions',
       'mlmGetMemberTree',
       'mlmGetOrganizationTree'
