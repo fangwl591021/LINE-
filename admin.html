@@ -1696,21 +1696,43 @@
       };
     }
 
+    async function fetchTenantOrdersDirect(status) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      try {
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            action: 'mlmListOrders',
+            payload: {
+              orderType: 'tenant_annual_fee',
+              page: 1,
+              pageSize: 100,
+              status: status || 'all',
+              networkId: 'admin',
+              role: 'admin'
+            }
+          })
+        });
+        const data = await res.json();
+        if (!data || data.success === false) throw new Error(data?.error || '訂單 API 回傳失敗');
+        return data.data || data.orders || data;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     async function loadBonusOrders() {
       const body = document.getElementById('bonus-orders-body');
       if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入訂單中...</td></tr>';
+      const status = document.getElementById('bonus-order-status-filter')?.value || 'all';
       let res = null;
       try {
-        res = await fetchAPI('mlmListOrders', {
-          orderType: 'tenant_annual_fee',
-          page: 1,
-          pageSize: 100,
-          status: document.getElementById('bonus-order-status-filter')?.value || 'all',
-          networkId: 'admin',
-          role: 'admin'
-        }, { silent: true, omitDefaultUserId: true, omitAuthToken: true, timeoutMs: 12000 });
+        res = await fetchTenantOrdersDirect(status);
       } catch (e) {
-        console.warn('[bonus orders] D1 list failed', e);
+        console.warn('[bonus orders] direct D1 list failed', e);
       }
 
       if (!res) {
@@ -1730,7 +1752,13 @@
       const list = Array.isArray(res) ? res : (Array.isArray(res?.orders) ? res.orders : (Array.isArray(res?.data) ? res.data : []));
       allBonusOrdersData = list.map(normalizeBonusOrder);
       bonusOrderPage = 1;
-      renderBonusOrders();
+      try {
+        renderBonusOrders();
+      } catch (e) {
+        console.error('[bonus orders] render failed', e);
+        if (body) body.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-red-500">訂單已讀取，但畫面渲染失敗：${escapeHTML(e.message || e)}</td></tr>`;
+        renderBonusOrderPager(0);
+      }
     }
 
     function renderBonusOrders() {
@@ -1758,20 +1786,24 @@
         const paid = order.status === 'paid' || order.status === 'completed';
         const cancelled = order.status === 'cancelled' || order.status === 'void';
         const statusClass = paid ? 'status-green' : (cancelled ? 'status-red' : 'status-amber');
-        const statusText = paid ? '已收款/已撥獎' : (cancelled ? '已取消' : '待收款');
+        const statusText = paid ? '已收款' : (cancelled ? '已取消' : '待收款');
+        const fee = Number(order.fee || order.price || order.grossAmount || 0);
+        const bv = Number(order.bv || order.bonusBV || 0);
+        const createdAt = formatDisplayTime(order.createdAt) || '-';
+        const paymentProvider = order.paymentProvider || order.paymentMethod || 'bank_transfer';
         const action = paid || cancelled
           ? '<span class="text-slate-300 text-xs font-bold">無操作</span>'
           : `<button type="button" onclick="markTenantOrderPaid('${escapeHTML(order.orderId)}')" class="px-3 py-1.5 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 text-xs font-bold">確認收款</button>
              <button type="button" onclick="cancelTenantOrder('${escapeHTML(order.orderId)}')" class="ml-2 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 text-xs font-bold">取消</button>`;
         return `
           <tr>
-            <td class="text-[12px] text-slate-500 font-mono">${escapeHTML(formatDisplayTime(order.createdAt) || '-')}</td>
+            <td class="text-[12px] text-slate-500 font-mono">${escapeHTML(createdAt)}</td>
             <td class="font-mono text-[12px] text-blue-600">${escapeHTML(order.orderId || '-')}</td>
             <td class="font-bold text-slate-700">${escapeHTML(order.tenantName || order.tenantId || '-')}</td>
-            <td>${formatCurrency(order.fee)}</td>
-            <td class="font-black text-emerald-600">${formatCurrency(order.bv)}</td>
+            <td>${formatCurrency(fee)}</td>
+            <td class="font-black text-emerald-600">${formatCurrency(bv)}</td>
             <td><span class="status-pill ${statusClass}">${statusText}</span></td>
-            <td class="text-[12px] text-slate-500">${escapeHTML(order.paymentProvider)}${order.paymentNo ? '<br><span class="font-mono">' + escapeHTML(order.paymentNo) + '</span>' : ''}</td>
+            <td class="text-[12px] text-slate-500">${escapeHTML(paymentProvider)}${order.paymentNo ? '<br><span class="font-mono">' + escapeHTML(order.paymentNo) + '</span>' : ''}</td>
             <td class="text-right whitespace-nowrap">${action}</td>
           </tr>`;
       }).join('');
