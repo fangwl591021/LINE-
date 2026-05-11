@@ -1699,15 +1699,32 @@
     async function loadBonusOrders() {
       const body = document.getElementById('bonus-orders-body');
       if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入訂單中...</td></tr>';
-      let res = await fetchAPI('mlmListOrders', {
-        orderType: 'tenant_annual_fee',
-        page: 1,
-        pageSize: 100,
-        status: document.getElementById('bonus-order-status-filter')?.value || 'all'
-      }, { silent: true });
+      let res = null;
+      try {
+        res = await fetchAPI('mlmListOrders', {
+          orderType: 'tenant_annual_fee',
+          page: 1,
+          pageSize: 100,
+          status: document.getElementById('bonus-order-status-filter')?.value || 'all',
+          networkId: 'admin',
+          role: 'admin'
+        }, { silent: true, omitDefaultUserId: true, omitAuthToken: true, timeoutMs: 12000 });
+      } catch (e) {
+        console.warn('[bonus orders] D1 list failed', e);
+      }
 
       if (!res) {
-        res = await fetchAPI('getTenantBonusOrders', {}, { silent: true });
+        res = await fetchAPI('getTenantBonusOrders', {
+          networkId: 'admin',
+          role: 'admin'
+        }, { silent: true, omitDefaultUserId: true, omitAuthToken: true, timeoutMs: 12000 });
+      }
+
+      if (!res) {
+        allBonusOrdersData = [];
+        if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-500">訂單紀錄讀取失敗，請重新整理或稍後再試。</td></tr>';
+        renderBonusOrderPager(0);
+        return;
       }
 
       const list = Array.isArray(res) ? res : (Array.isArray(res?.orders) ? res.orders : (Array.isArray(res?.data) ? res.data : []));
