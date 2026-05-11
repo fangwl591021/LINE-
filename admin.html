@@ -1400,6 +1400,15 @@
       return 'NT$ ' + Math.round(Number(value || 0)).toLocaleString();
     }
 
+    function formatDisplayTime(value) {
+      if (!value) return '';
+      const raw = String(value);
+      const d = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+      if (Number.isNaN(d.getTime())) return raw.replace('T', ' ').replace('.000Z', '').slice(0, 16);
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
     function normalizeApiList(res, keys = []) {
       if (Array.isArray(res)) return res;
       if (!res || typeof res !== 'object') return [];
