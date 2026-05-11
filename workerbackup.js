@@ -3,6 +3,60 @@
  * 特點：導入 Cloudflare KV 進行毫秒級身分驗證，並新增 LINE Token 強制核對與 OpenAI 流量防護機制
  */
 
+// ==================== 金流加密工具 (NewebPay MPG) ====================
+const NewebPayCrypto = {
+  encoder: new TextEncoder(),
+
+  bytesToHex(bytes) {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  },
+
+  hexToBytes(hex) {
+    const clean = String(hex || '').trim();
+    const bytes = new Uint8Array(clean.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
+    return bytes;
+  },
+
+  pkcs7Pad(bytes) {
+    const blockSize = 16;
+    let padding = blockSize - (bytes.length % blockSize);
+    if (padding === 0) padding = blockSize;
+    const out = new Uint8Array(bytes.length + padding);
+    out.set(bytes);
+    out.fill(padding, bytes.length);
+    return out;
+  },
+
+  pkcs7Unpad(bytes) {
+    const padding = bytes[bytes.length - 1];
+    if (!padding || padding > 16) return bytes;
+    return bytes.slice(0, bytes.length - padding);
+  },
+
+  async importAesKey(hashKey) {
+    return await crypto.subtle.importKey('raw', this.encoder.encode(hashKey), { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+  },
+
+  async aesEncrypt(text, hashKey, hashIv) {
+    const key = await this.importAesKey(hashKey);
+    const padded = this.pkcs7Pad(this.encoder.encode(text));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-CBC', iv: this.encoder.encode(hashIv) }, key, padded);
+    return this.bytesToHex(new Uint8Array(encrypted));
+  },
+
+  async aesDecrypt(hex, hashKey, hashIv) {
+    const key = await this.importAesKey(hashKey);
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-CBC', iv: this.encoder.encode(hashIv) }, key, this.hexToBytes(hex));
+    return new TextDecoder().decode(this.pkcs7Unpad(new Uint8Array(decrypted)));
+  },
+
+  async sha256(text) {
+    const hash = await crypto.subtle.digest('SHA-256', this.encoder.encode(text));
+    return this.bytesToHex(new Uint8Array(hash)).toUpperCase();
+  }
+};
+
 // ==================== 模組 0: 資安防護 (Security Module) ====================
 const SecurityModule = {
   text(value) {
@@ -2387,6 +2441,23 @@ const D1FinanceModule = {
     return { success: true, data: { orderId, status } };
   },
 
+  async updateOrderPaymentProvider(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const orderId = this.pick(payload, ['orderId']);
+    if (!orderId) return { success: false, error: 'Missing orderId' };
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE orders
+      SET payment_provider = ?, payment_no = ?, raw_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE order_id = ?
+    `).bind(
+      payload.paymentProvider || 'newebpay',
+      payload.paymentNo || '',
+      JSON.stringify(payload.raw || {}),
+      orderId
+    ).run();
+    return { success: true, data: this.orderRow(await D1ReadModule.first(env, 'SELECT * FROM orders WHERE order_id = ? LIMIT 1', [orderId])) };
+  },
+
   async listOrders(payload, env) {
     if (!this.hasD1(env)) return null;
     const page = Math.max(1, Number(payload.page || 1));
@@ -2785,6 +2856,146 @@ const D1FinanceModule = {
 
     const root = buildNode(rootId, 0);
     return { success: true, data: { root, nodes: [root], treeType, depth }, tree: root };
+  }
+};
+
+const PaymentModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  gatewayUrl(merchantId) {
+    const id = String(merchantId || '').toUpperCase();
+    return id.includes('TEST') || id.includes('DUMMY')
+      ? 'https://ccore.newebpay.com/MPG/mpg_gateway'
+      : 'https://core.newebpay.com/MPG/mpg_gateway';
+  },
+
+  credentials(env) {
+    return {
+      merchantId: this.text(env.NEWEBPAY_MERCHANT_ID || env.NEWEBPAY_MERCHANTID),
+      hashKey: this.text(env.NEWEBPAY_HASH_KEY),
+      hashIv: this.text(env.NEWEBPAY_HASH_IV)
+    };
+  },
+
+  merchantOrderNo(orderId) {
+    const base = String(orderId || '').replace(/[^A-Za-z0-9]/g, '').slice(-20);
+    return `LC${Date.now().toString().slice(-8)}${base}`.slice(0, 30);
+  },
+
+  buildReturnUrl(payload) {
+    return this.text(payload.returnUrl || payload.clientBackUrl || 'https://fangwl591021.github.io/LINE-/?payment=tenant');
+  },
+
+  buildNotifyUrl(env, payload) {
+    return this.text(payload.notifyUrl || env.NEWEBPAY_NOTIFY_URL || 'https://line-engine.fangwl591021.workers.dev/newebpay/notify');
+  },
+
+  async prepareTenantCardPayment(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const orderId = this.text(payload.orderId);
+    if (!orderId) return { success: false, error: 'Missing orderId' };
+    const orderRow = await D1ReadModule.first(env, 'SELECT * FROM orders WHERE order_id = ? LIMIT 1', [orderId]);
+    if (!orderRow) return { success: false, error: '找不到訂單' };
+    const order = D1FinanceModule.orderRow(orderRow);
+    const actorId = this.text(payload.authenticatedUserId);
+    const actorRole = this.text(payload.authenticatedRole || payload.role).toLowerCase();
+    if (actorId && actorRole !== 'admin' && actorRole !== 'store' && order.buyerId !== actorId) {
+      return { success: false, error: 'Access Denied: Cannot pay another user order' };
+    }
+    if (!['pending_payment', 'pending', ''].includes(String(order.paymentStatus || '').toLowerCase())) {
+      return { success: false, error: '此訂單不是待付款狀態' };
+    }
+
+    const creds = this.credentials(env);
+    if (!creds.merchantId || !creds.hashKey || !creds.hashIv) {
+      return { success: false, error: '尚未設定藍新刷卡 MerchantID / HashKey / HashIV' };
+    }
+    if (creds.hashKey.length !== 32 || creds.hashIv.length !== 16) {
+      return { success: false, error: '藍新 HashKey 或 HashIV 長度不正確' };
+    }
+
+    const merchantOrderNo = this.merchantOrderNo(orderId);
+    const amount = Math.max(1, Math.round(Number(order.grossAmount || payload.amount || 0)));
+    const tradeInfo = {
+      MerchantID: creds.merchantId,
+      RespondType: 'JSON',
+      TimeStamp: Math.floor(Date.now() / 1000).toString(),
+      Version: '2.0',
+      MerchantOrderNo: merchantOrderNo,
+      Amt: amount,
+      ItemDesc: String(order.productName || '租戶年費').replace(/[^\u4e00-\u9fa5A-Za-z0-9 _-]/g, '').slice(0, 45),
+      ReturnURL: this.buildReturnUrl(payload),
+      NotifyURL: this.buildNotifyUrl(env, payload),
+      Email: this.text(payload.email || ''),
+      LoginType: 0
+    };
+    const tradeInfoStr = Object.keys(tradeInfo).map(key => `${key}=${encodeURIComponent(tradeInfo[key])}`).join('&');
+    const encrypted = await NewebPayCrypto.aesEncrypt(tradeInfoStr, creds.hashKey, creds.hashIv);
+    const tradeSha = await NewebPayCrypto.sha256(`HashKey=${creds.hashKey}&${encrypted}&HashIV=${creds.hashIv}`);
+    const raw = {
+      ...D1FinanceModule.parseJson(orderRow.raw_json),
+      newebpay: {
+        merchantOrderNo,
+        amount,
+        preparedAt: new Date().toISOString(),
+        gateway: this.gatewayUrl(creds.merchantId)
+      }
+    };
+    await D1FinanceModule.updateOrderPaymentProvider({
+      orderId,
+      paymentProvider: 'newebpay',
+      paymentNo: merchantOrderNo,
+      raw
+    }, env);
+
+    return {
+      success: true,
+      data: {
+        GatewayUrl: this.gatewayUrl(creds.merchantId),
+        MerchantID: creds.merchantId,
+        TradeInfo: encrypted,
+        TradeSha: tradeSha,
+        Version: '2.0',
+        MerchantOrderNo: merchantOrderNo,
+        orderId,
+        amount
+      }
+    };
+  },
+
+  async handleNewebpayNotify(request, env, ctx) {
+    const rawText = await request.text();
+    const form = new URLSearchParams(rawText);
+    const tradeInfo = form.get('TradeInfo');
+    if (!tradeInfo) return new Response('OK', { status: 200 });
+    ctx.waitUntil((async () => {
+      try {
+        const creds = this.credentials(env);
+        if (!creds.hashKey || !creds.hashIv) throw new Error('Missing NewebPay credentials');
+        const decrypted = await NewebPayCrypto.aesDecrypt(tradeInfo, creds.hashKey, creds.hashIv);
+        const data = JSON.parse(decrypted);
+        const result = data.Result || {};
+        const merchantOrderNo = result.MerchantOrderNo || '';
+        if (data.Status === 'SUCCESS' && merchantOrderNo) {
+          const order = await D1ReadModule.first(env, "SELECT * FROM orders WHERE payment_provider = 'newebpay' AND payment_no = ? LIMIT 1", [merchantOrderNo]);
+          if (order) {
+            await MLMModule.markOrderPaid({
+              orderId: order.order_id,
+              paymentProvider: 'newebpay',
+              paymentNo: result.TradeNo || merchantOrderNo,
+              paidAt: result.PayTime || new Date().toISOString(),
+              triggerBonus: true
+            }, env);
+          }
+        }
+      } catch (e) {
+        console.error('NewebPay notify error', e);
+      }
+    })());
+    return new Response('OK', { status: 200 });
   }
 };
 
@@ -3323,6 +3534,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
+    case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
     case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);
     case 'markTenantOrderPaid':    return await TenantOrderModule.markTenantOrderPaid(payload, env);
     case 'cancelTenantBonusOrder': return await TenantOrderModule.cancelTenantBonusOrder(payload, env);
@@ -3349,11 +3561,15 @@ async function dispatchAction(action, payload, request, env) {
 
 // ==================== 主入口 (Worker Entry) ====================
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });
     }
     try {
+      const url = new URL(request.url);
+      if (url.pathname === '/newebpay/notify') {
+        return await PaymentModule.handleNewebpayNotify(request, env, ctx || { waitUntil: promise => promise });
+      }
       if (request.method !== 'POST') return Utils.jsonResponse({ status: "ACTMASTER API v6.0 Running with Edge Security (Compatibility Mode)" });
       const body = await request.json();
       const result = await dispatchAction(body.action, body.payload || {}, request, env);
