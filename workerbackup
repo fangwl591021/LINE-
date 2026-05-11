@@ -577,6 +577,7 @@ const MessagingModule = {
     const aspectRatio = layoutStyle === 'portrait'
       ? (config.imgRatioPortrait || '2:3')
       : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
+    const bubbleSize = layoutStyle === 'portrait' ? 'giga' : 'mega';
     
     let buttons = (config.buttons || []).map(b => ({ l: b.l, u: Utils.cleanURI(b.u), c: b.c }))
       .filter(b => b.l && b.u)
@@ -594,7 +595,7 @@ const MessagingModule = {
     const descText = (config.desc || card['服務項目'] || ' ').trim() || ' ';
 
     return {
-      type: "bubble", size: "mega",
+      type: "bubble", size: bubbleSize,
       header: {
         type: "box", layout: "horizontal", justifyContent: "flex-end", paddingAll: "8px",
         contents: [{
