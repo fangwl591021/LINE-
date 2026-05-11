@@ -3,6 +3,22 @@
 // 當前編輯中的活動 ID(null 代表新建,有值代表編輯)
 window.currentEditingActId = null;
 
+function normalizeDateTimeLocal(value) {
+  if (!value) return '';
+  return String(value).replace(' ', 'T').substring(0, 16);
+}
+
+function normalizeNfcDateTimeLocal(value, activityStart) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(raw)) return normalizeDateTimeLocal(raw);
+  if (/^\d{2}:\d{2}$/.test(raw)) {
+    const date = normalizeDateTimeLocal(activityStart).substring(0, 10);
+    return date ? `${date}T${raw}` : '';
+  }
+  return normalizeDateTimeLocal(raw);
+}
+
 // 開啟編輯活動頁(從核銷頁卡片點擊編輯按鈕觸發)
 window.openEditActivity = async function(actId) {
   // 從快取中找到該活動
@@ -35,17 +51,13 @@ window.openEditActivity = async function(actId) {
     document.getElementById('f-identity').value = act['預設身份'] || '會員';
 
     // 時間格式:後端可能存 'YYYY-MM-DD HH:mm' 或 ISO,要還原成 datetime-local 接受的格式
-    const fmtForInput = (val) => {
-      if (!val) return '';
-      const s = String(val).replace(' ', 'T').substring(0, 16);
-      return s;
-    };
+    const fmtForInput = normalizeDateTimeLocal;
     document.getElementById('f-start').value = fmtForInput(act['開始時間']);
     document.getElementById('f-end').value = fmtForInput(act['結束時間']);
     const nfcStart = act['NFC簽到開始'] || act.nfcCheckinStart || act.nfcStartTime || '';
     const nfcEnd = act['NFC簽到結束'] || act.nfcCheckinEnd || act.nfcEndTime || '';
-    if (document.getElementById('f-nfc-start')) document.getElementById('f-nfc-start').value = String(nfcStart).slice(0, 5);
-    if (document.getElementById('f-nfc-end')) document.getElementById('f-nfc-end').value = String(nfcEnd).slice(0, 5);
+    if (document.getElementById('f-nfc-start')) document.getElementById('f-nfc-start').value = normalizeNfcDateTimeLocal(nfcStart, act['開始時間']);
+    if (document.getElementById('f-nfc-end')) document.getElementById('f-nfc-end').value = normalizeNfcDateTimeLocal(nfcEnd, act['開始時間']);
 
     // 收費
     const price = parseInt(act['金額']) || 0;

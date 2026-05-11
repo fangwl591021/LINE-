@@ -53,6 +53,34 @@
       : text;
   }
 
+  function getTenantPaymentMethod() {
+    return document.querySelector('input[name="tenant-payment-method"]:checked')?.value || 'newebpay';
+  }
+
+  function submitNewebpayForm(payRes) {
+    if (!payRes || !payRes.GatewayUrl) throw new Error('刷卡參數產生失敗');
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = payRes.GatewayUrl;
+    form.target = '_top';
+    form.style.display = 'none';
+    const params = {
+      MerchantID: payRes.MerchantID,
+      TradeInfo: payRes.TradeInfo,
+      TradeSha: payRes.TradeSha,
+      Version: payRes.Version
+    };
+    Object.keys(params).forEach(key => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = params[key];
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }
+
   window.refreshTenantUpgradeCard = function() {
     const user = getUser();
     const role = user.role || window.userRole || 'user';
@@ -96,7 +124,9 @@
       return window.showToast('找不到 LINE 會員 ID，請重新整理或重新登入後再試', true);
     }
     if (isTenantRole(user.role || window.userRole)) return window.showToast('你已經是租戶資格，不需要重複購買', true);
-    if (!window.confirm('確認建立 NT$6,300 租戶年費訂單？\n\n建立後請依管理方提供帳號匯款，後台確認收款後才會開通資格。')) return;
+    const paymentMethod = getTenantPaymentMethod();
+    const paymentLabel = paymentMethod === 'newebpay' ? '線上刷卡' : '匯款付款';
+    if (!window.confirm(`確認建立 NT$6,300 租戶年費訂單？\n\n付款方式：${paymentLabel}`)) return;
 
     setButtonLoading(btn, true, btnText);
     try {
@@ -118,9 +148,9 @@
         taxRate: 5,
         paymentStatus: 'pending_payment',
         status: 'pending_payment',
-        paymentProvider: 'bank_transfer',
-        paymentMethod: 'bank_transfer',
-        paymentLabel: '匯款付款',
+        paymentProvider: paymentMethod,
+        paymentMethod,
+        paymentLabel,
         notifyAdmin: true,
         notificationType: 'tenant_annual_fee_order_created',
         purchaseSource: 'frontend',
@@ -135,6 +165,23 @@
 
       if (!res || res.error) throw new Error(res?.error || '建立訂單失敗');
       const orderId = res.orderId || res.id || res.rowId || res.data?.orderId || '';
+      if (!orderId) throw new Error('訂單已建立但未回傳訂單編號，請重新整理後查看訂單紀錄');
+      if (paymentMethod === 'newebpay') {
+        const payRes = await window.fetchAPI('prepareTenantCardPayment', {
+          userId: '',
+          orderId,
+          buyerId,
+          amount: TENANT_FEE,
+          email: user.email || '',
+          returnUrl: location.origin + location.pathname + '?payment=tenant',
+          notifyUrl: (window.Config?.WORKER_URL || '').replace(/\/$/, '') + '/newebpay/notify'
+        });
+        if (!payRes || payRes.error) throw new Error(payRes?.error || '刷卡參數產生失敗');
+        const paymentPayload = payRes?.data || payRes;
+        window.showToast('即將前往刷卡頁');
+        submitNewebpayForm(paymentPayload);
+        return;
+      }
       lastTenantOrderNotice = [
         '租戶年費匯款通知',
         `訂單編號：${orderId || '系統已建立'}`,

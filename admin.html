@@ -1259,12 +1259,12 @@
             <input id="edit-a-reward" type="number" min="0" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
           </div>
           <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">NFC 簽到開始</label>
-            <input id="edit-a-nfc-start" type="time" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">NFC 簽到開始日期/時間</label>
+            <input id="edit-a-nfc-start" type="datetime-local" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
           </div>
           <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">NFC 簽到結束</label>
-            <input id="edit-a-nfc-end" type="time" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">NFC 簽到結束日期/時間</label>
+            <input id="edit-a-nfc-end" type="datetime-local" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
           </div>
           <div>
             <label class="block text-sm font-bold text-slate-500 mb-1.5">宣傳圖網址</label>
@@ -3279,8 +3279,8 @@
       document.getElementById("edit-a-end").value = safeStringForPrompt_(act["結束時間"]);
       document.getElementById("edit-a-price").value = safeStringForPrompt_(act["金額"] || 0);
       document.getElementById("edit-a-reward").value = safeStringForPrompt_(act["獎勵點數"] || 0);
-      document.getElementById("edit-a-nfc-start").value = safeStringForPrompt_(act["NFC簽到開始"] || act.nfcCheckinStart || "").slice(0, 5);
-      document.getElementById("edit-a-nfc-end").value = safeStringForPrompt_(act["NFC簽到結束"] || act.nfcCheckinEnd || "").slice(0, 5);
+      document.getElementById("edit-a-nfc-start").value = toNfcDateTimeLocal_(act["NFC簽到開始"] || act.nfcCheckinStart || "", act["開始時間"]);
+      document.getElementById("edit-a-nfc-end").value = toNfcDateTimeLocal_(act["NFC簽到結束"] || act.nfcCheckinEnd || "", act["開始時間"]);
       document.getElementById("edit-a-desc").value = safeStringForPrompt_(act["活動說明"]);
       document.getElementById("edit-a-image").value = safeStringForPrompt_(act["宣傳圖"]);
 
@@ -3357,6 +3357,22 @@
 
     function safeStringForPrompt_(value) {
       return value === null || value === undefined ? "" : String(value);
+    }
+
+    function toDateTimeLocal_(value) {
+      if (!value) return "";
+      return String(value).replace(" ", "T").substring(0, 16);
+    }
+
+    function toNfcDateTimeLocal_(value, activityStart) {
+      const raw = safeStringForPrompt_(value).trim();
+      if (!raw) return "";
+      if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(raw)) return toDateTimeLocal_(raw);
+      if (/^\d{2}:\d{2}$/.test(raw)) {
+        const date = toDateTimeLocal_(activityStart).substring(0, 10);
+        return date ? `${date}T${raw}` : "";
+      }
+      return toDateTimeLocal_(raw);
     }
 
     async function loadFinanceStats() {

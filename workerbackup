@@ -1810,7 +1810,19 @@ const D1ActivityModule = {
       acc[p.type] = p.value;
       return acc;
     }, {});
-    return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+    const date = `${parts.year}-${parts.month}-${parts.day}`;
+    const time = `${parts.hour}:${parts.minute}`;
+    return { date, time, localDateTime: `${date}T${time}` };
+  },
+
+  normalizeNfcWindowValue(value) {
+    const raw = this.text(value).trim();
+    if (!raw) return '';
+    return raw.replace(' ', 'T').substring(0, 16);
+  },
+
+  isFullNfcDateTime(value) {
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(this.normalizeNfcWindowValue(value));
   },
 
   async nfcCheckin(payload, env) {
@@ -1826,11 +1838,20 @@ const D1ActivityModule = {
     const end = this.text(activity.nfc_checkin_end);
     if (start && end) {
       const now = this.taipeiNow();
-      const activityDate = this.text(activity.start_time).substring(0, 10);
-      if (activity.nfc_same_day_only !== 0 && activityDate && activityDate !== now.date) {
-        return { success: false, error: 'NFC 簽到限活動當日' };
+      const startWindow = this.normalizeNfcWindowValue(start);
+      const endWindow = this.normalizeNfcWindowValue(end);
+      if (this.isFullNfcDateTime(startWindow) || this.isFullNfcDateTime(endWindow)) {
+        if (!this.isFullNfcDateTime(startWindow) || !this.isFullNfcDateTime(endWindow)) {
+          return { success: false, error: 'NFC 簽到起訖需同時包含日期與時間' };
+        }
+        if (now.localDateTime < startWindow || now.localDateTime > endWindow) return { success: false, error: '目前不在 NFC 簽到時段' };
+      } else {
+        const activityDate = this.text(activity.start_time).substring(0, 10);
+        if (activity.nfc_same_day_only !== 0 && activityDate && activityDate !== now.date) {
+          return { success: false, error: 'NFC 簽到限活動當日' };
+        }
+        if (now.time < startWindow || now.time > endWindow) return { success: false, error: '目前不在 NFC 簽到時段' };
       }
-      if (now.time < start || now.time > end) return { success: false, error: '目前不在 NFC 簽到時段' };
     }
 
     if (Number(reg.checked_in || 0) === 1) return { success: true, data: { alreadyChecked: true, rowId: reg.row_id } };
@@ -3320,7 +3341,7 @@ async function dispatchAction(action, payload, request, env) {
   }
   const actor = authz.actor;
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
-  const legacyAuthSkipActions = new Set(['mlmListOrders', 'getTenantBonusOrders']);
+  const legacyAuthSkipActions = new Set(['mlmListOrders', 'getTenantBonusOrders', 'prepareTenantCardPayment']);
   if (payload.userId && !actor && !legacyAuthSkipActions.has(action)) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
     if (token) {
