@@ -789,7 +789,8 @@ const D1BackfillModule = {
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(line_id) DO UPDATE SET
         name=excluded.name,industry=excluded.industry,phone=excluded.phone,birthday=excluded.birthday,socials=excluded.socials,
-        role=excluded.role,store_id=excluded.store_id,referrer_id=excluded.referrer_id,network_id=excluded.network_id,
+        role=CASE WHEN users.role IN ('admin','store') AND excluded.role = 'user' THEN users.role ELSE excluded.role END,
+        store_id=excluded.store_id,referrer_id=excluded.referrer_id,network_id=excluded.network_id,
         tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
     `).bind(user.user_id,user.line_id,user.name,user.industry,user.phone,user.birthday,user.socials_json,user.role,user.store_id,user.referrer_id,user.network_id,user.telegram_token,user.telegram_chat_id).run();
   },
@@ -1262,7 +1263,9 @@ const D1WriteModule = {
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(line_id) DO UPDATE SET
         name=excluded.name,industry=excluded.industry,gender=excluded.gender,phone=excluded.phone,birthday=excluded.birthday,
-        region=excluded.region,address=excluded.address,socials=excluded.socials,role=excluded.role,store_id=excluded.store_id,
+        region=excluded.region,address=excluded.address,socials=excluded.socials,
+        role=CASE WHEN users.role IN ('admin','store') AND excluded.role = 'user' THEN users.role ELSE excluded.role END,
+        store_id=excluded.store_id,
         referrer_id=excluded.referrer_id,network_id=excluded.network_id,tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
     `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id).run();
     await this.clearUserCache(env, user.line_id);
