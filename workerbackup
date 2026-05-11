@@ -1254,6 +1254,7 @@ const D1WriteModule = {
         user.network_id = existing.network_id || user.network_id;
       }
       if (user.referrer_id && user.referrer_id === user.line_id) user.referrer_id = existing.referrer_id || '';
+      if ((existing.role === 'admin' || existing.role === 'store') && user.role === 'user') user.role = existing.role;
       if (!hasRoleInput) user.role = existing.role || user.role;
     }
     await env.ACTMASTER_DB.prepare(`
