@@ -2,6 +2,52 @@
 
 // 快取機制:活動列表 30 秒內不重新打 API
 window._adminActsCache = { data: null, time: 0 };
+window._currentCheckinExport = { activityId: '', activityTitle: '', rows: [] };
+
+function csvCell(value) {
+  const text = value === null || value === undefined ? '' : String(value);
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+
+function csvValue(row, keys, fallback = '') {
+  for (const key of keys) {
+    if (row && row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return row[key];
+  }
+  return fallback;
+}
+
+window.downloadCurrentRegistrantsCsv = function() {
+  const state = window._currentCheckinExport || {};
+  const rows = Array.isArray(state.rows) ? state.rows : [];
+  if (!rows.length) return window.showToast('目前沒有可下載的報名名單', true);
+
+  const headers = ['活動名稱', '姓名', '電話', '身份', '付款狀態', '簽到狀態', '簽到時間', '報名編號'];
+  const lines = [headers.map(csvCell).join(',')];
+  rows.forEach(row => {
+    const checked = csvValue(row, ['簽到', 'checkinStatus', 'checkedIn'], false);
+    lines.push([
+      state.activityTitle || csvValue(row, ['活動名稱', 'activityName']),
+      csvValue(row, ['姓名', 'name']),
+      csvValue(row, ['電話', 'phone']),
+      csvValue(row, ['身份', 'identity']),
+      csvValue(row, ['付款狀態', 'paymentStatus']),
+      (checked === true || String(checked).toUpperCase() === 'TRUE' || String(checked) === '1') ? '已簽到' : '未簽到',
+      csvValue(row, ['nfcCheckinTime', '簽到時間', 'checkedInAt']),
+      csvValue(row, ['rowId', 'registrationId', '報名ID'])
+    ].map(csvCell).join(','));
+  });
+
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safeTitle = String(state.activityTitle || 'activity').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40);
+  a.href = url;
+  a.download = `${safeTitle}_報名名單.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
 const ADMIN_CACHE_TTL = 30 * 1000; // 30 秒
 
 // 載入管理員活動列表(核銷頁面)
@@ -98,6 +144,7 @@ window._renderAdminActivities = function(res) {
 // 開啟核銷名單頁
 window.openCheckinPage = async function(actId, actTitle) {
   window.goPage('admin-checkin');
+  window._currentCheckinExport = { activityId: actId || '', activityTitle: actTitle || '', rows: [] };
   const titleEl = document.getElementById('checkin-act-title');
   const countEl = document.getElementById('checkin-count-display');
   const listEl = document.getElementById('admin-checkin-list');
@@ -109,6 +156,7 @@ window.openCheckinPage = async function(actId, actTitle) {
   try {
     const res = await window.fetchAPI('getActivityRegistrants', { activityId: actId }, true);
     if (res && Array.isArray(res)) {
+      window._currentCheckinExport = { activityId: actId || '', activityTitle: actTitle || (titleEl ? titleEl.textContent : ''), rows: res };
       if (countEl) countEl.textContent = res.length;
       if (res.length === 0) {
         if (listEl) listEl.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm font-bold">尚無報名者</div>';
