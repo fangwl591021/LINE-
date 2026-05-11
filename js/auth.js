@@ -25,6 +25,38 @@ if (typeof window.addUserSocial !== 'function') {
   };
 }
 
+function getReferralStorageKey(userId) {
+  return 'ACTMASTER_FIRST_REF_' + String(userId || 'guest');
+}
+
+function readFirstReferral(userId) {
+  try {
+    return JSON.parse(localStorage.getItem(getReferralStorageKey(userId)) || 'null') || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeFirstReferral(userId, referrerId, networkId) {
+  if (!userId || !referrerId || referrerId === userId) return readFirstReferral(userId);
+  const existing = readFirstReferral(userId);
+  if (existing && existing.referrerId) return existing;
+  const data = { referrerId, networkId: networkId || 'admin', savedAt: Date.now() };
+  try {
+    localStorage.setItem(getReferralStorageKey(userId), JSON.stringify(data));
+  } catch (e) {}
+  return data;
+}
+
+function resolveReferralForRegistration(urlRef, urlNet) {
+  const userId = window.currentUserProfile?.userId || '';
+  const first = readFirstReferral(userId) || writeFirstReferral(userId, urlRef || '', urlNet || 'admin') || {};
+  return {
+    referrerId: first.referrerId || urlRef || '',
+    networkId: first.networkId || urlNet || 'admin'
+  };
+}
+
 window.submitRegistration = async function() {
   const name = document.getElementById('reg-name').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
@@ -38,6 +70,7 @@ window.submitRegistration = async function() {
     const urlParams = new URLSearchParams(window.location.search);
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
+    const referral = resolveReferralForRegistration(refId, netId);
 
     const payload = {
       userId: window.currentUserProfile.userId,
@@ -46,7 +79,8 @@ window.submitRegistration = async function() {
       industry: document.getElementById('reg-industry').value.trim(),
       birthday: document.getElementById('reg-birthday').value,
       '推薦人': refId,
-      networkId: netId
+      referrerId: referral.referrerId,
+      networkId: referral.networkId
     };
 
     const res = await window.fetchAPI('registerUser', payload, true);
@@ -74,6 +108,10 @@ window.submitClaimRegistration = async function() {
 
   try {
     const rowId = document.getElementById('claim-row-id').value;
+    const referral = resolveReferralForRegistration(
+      document.getElementById('claim-ref-id').value || '',
+      document.getElementById('claim-net-id').value || 'admin'
+    );
     const payload = {
       userId: window.currentUserProfile.userId,
       claimRowId: rowId,
@@ -81,8 +119,8 @@ window.submitClaimRegistration = async function() {
       '手機號碼': phone,
       '公司名稱': document.getElementById('claim-company').value.trim(),
       '職稱': document.getElementById('claim-title').value.trim(),
-      referrerId: document.getElementById('claim-ref-id').value || '',
-      networkId: document.getElementById('claim-net-id').value || 'admin'
+      referrerId: referral.referrerId,
+      networkId: referral.networkId
     };
 
     const res = await window.fetchAPI('claimCardAndRegister', payload, true);
@@ -141,6 +179,45 @@ window.ensureClaimedCardUserProfile = async function(source) {
   }
 
   return res;
+};
+
+window.autoClaimCardFromLink = async function(claimCardId, refId, netId) {
+  if (!claimCardId || !window.currentUserProfile?.userId) throw new Error('Missing claim context');
+
+  const cardForClaim = await window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true);
+  if (!cardForClaim || cardForClaim.error) throw new Error((cardForClaim && cardForClaim.error) || '找不到名片');
+
+  const referral = resolveReferralForRegistration(refId || '', netId || cardForClaim.networkId || cardForClaim['甇詨惇蝬?'] || 'admin');
+  const payload = {
+    claimRowId: claimCardId,
+    userId: window.currentUserProfile.userId,
+    name: cardForClaim.name || cardForClaim['憪?'] || window.currentUserProfile.displayName || '',
+    phone: cardForClaim.mobile || cardForClaim.phone || cardForClaim['???Ⅳ'] || cardForClaim.officePhone || cardForClaim['?砍?餉店'] || '',
+    companyName: cardForClaim.companyName || cardForClaim['?砍?迂'] || '',
+    title: cardForClaim.title || cardForClaim['?瑞迂'] || '',
+    referrerId: referral.referrerId,
+    networkId: referral.networkId
+  };
+
+  const claimRes = await window.fetchAPI('claimCardAndRegister', payload, true);
+  if (!claimRes || claimRes.error) throw new Error((claimRes && claimRes.error) || '名片綁定失敗');
+
+  const profileSource = window.buildUserProfileFromClaimCard(cardForClaim, {
+    ...payload,
+    referrerId: referral.referrerId,
+    networkId: referral.networkId
+  });
+  await window.ensureClaimedCardUserProfile(profileSource);
+
+  const refreshed = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
+  if (refreshed && refreshed.isRegistered && refreshed.info) {
+    window.applyRegisteredUserSession(refreshed.info);
+    try {
+      localStorage.setItem('ACTMASTER_USER_' + window.currentUserProfile.userId, JSON.stringify({ info: refreshed.info, savedAt: Date.now() }));
+    } catch (e) {}
+  }
+
+  return { claimRes, cardForClaim };
 };
 
 window.recoverRegisteredUserFromBoundCard = async function(userId) {
@@ -289,6 +366,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const claimCardId = urlParams.get('claim');
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
+    if (refId) writeFirstReferral(window.currentUserProfile.userId, refId, netId);
     const authCacheKey = 'ACTMASTER_USER_' + window.currentUserProfile.userId;
     let usedCachedUser = false;
 
@@ -345,30 +423,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (claimCardId) {
         try {
-          const claimRes = await window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true);
-
-          if (claimRes && claimRes.error) {
-            window.showToast('後端拒絕: ' + claimRes.error, true);
-            window.goPage('register');
-            return;
-          }
-
-          if (claimRes && claimRes['姓名']) {
-            document.getElementById('claim-row-id').value = claimCardId;
-            document.getElementById('claim-ref-id').value = refId;
-            document.getElementById('claim-net-id').value = netId;
-            document.getElementById('claim-name').value = claimRes['姓名'] || '';
-            document.getElementById('claim-phone').value = claimRes['手機號碼'] || claimRes['公司電話'] || '';
-            document.getElementById('claim-company').value = claimRes['公司名稱'] || '';
-            document.getElementById('claim-title').value = claimRes['職稱'] || '';
-            window.goPage('claim-register');
-            return;
-          } else {
-            window.showToast('無效的名片資料格式', true);
-            window.goPage('register');
-          }
+          await window.autoClaimCardFromLink(claimCardId, refId, netId);
+          window.showToast('名片已綁定，資料之後可再補');
+          window.goPage('admin-settings');
+          if (typeof window.focusMyECardSection === 'function') window.focusMyECardSection();
+          return;
         } catch(e) {
-          window.showToast(e.message || '該名片無法認領', true);
+          window.showToast(e.message || '名片綁定失敗', true);
           window.goPage('register');
         }
       } else {
@@ -430,6 +491,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else if (claimCardId) {
         window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true).then(cardForClaim => {
           if (cardForClaim && cardForClaim.error) throw new Error(cardForClaim.error);
+          const claimReferral = resolveReferralForRegistration(refId, netId || cardForClaim?.['歸屬網'] || 'admin');
           return window.fetchAPI('claimCardAndRegister', {
             claimRowId: claimCardId,
             userId: window.currentUserProfile.userId,
@@ -437,8 +499,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             '手機號碼': cardForClaim?.['手機號碼'] || cardForClaim?.['公司電話'] || window.currentUser?.phone || '',
             '公司名稱': cardForClaim?.['公司名稱'] || '',
             '職稱': cardForClaim?.['職稱'] || '',
-            referrerId: refId,
-            networkId: netId || cardForClaim?.['歸屬網'] || 'admin'
+            referrerId: claimReferral.referrerId,
+            networkId: claimReferral.networkId
           }, true).then(claimRes => ({ claimRes, cardForClaim }));
         }).then(({ claimRes, cardForClaim }) => {
           if (claimRes && claimRes.error) {
@@ -448,8 +510,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.ensureClaimedCardUserProfile(window.buildUserProfileFromClaimCard(cardForClaim, {
               userId: window.currentUserProfile.userId,
               claimRowId: claimCardId,
-              referrerId: refId,
-              networkId: netId || cardForClaim?.['歸屬網'] || 'admin'
+              referrerId: resolveReferralForRegistration(refId, netId || cardForClaim?.['歸屬網'] || 'admin').referrerId,
+              networkId: resolveReferralForRegistration(refId, netId || cardForClaim?.['歸屬網'] || 'admin').networkId
             })).then(() => window.loadAllData()).then(() => {
               window.showToast('✅ 成功認領名片並同步會員資料！');
               window.goPage('admin-settings');

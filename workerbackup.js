@@ -153,6 +153,7 @@ const SecurityModule = {
       'updateUserProfile',
       'saveCard',
       'updateCard',
+      'claimCardAndRegister',
       'mlmCreateOrder',
       'createTenantBonusOrder',
       'nfcCheckin',
@@ -198,6 +199,10 @@ const SecurityModule = {
     }
 
     if (action === 'updateUserProfile') {
+      payload.userId = actor.userId;
+    }
+
+    if (action === 'claimCardAndRegister') {
       payload.userId = actor.userId;
     }
 
@@ -2056,6 +2061,74 @@ const AuthModule = {
   }
 };
 
+const ClaimModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  pick(payload, keys, fallback = '') {
+    for (const key of keys) {
+      const value = payload && payload[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+    }
+    return fallback;
+  },
+
+  async getCardForClaim(payload, env) {
+    const rowId = this.pick(payload, ['claimRowId', 'rowId', 'cardId', 'claim']);
+    if (!rowId) return { success: false, error: 'Missing claimRowId' };
+    const card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    if (!card) return { success: false, error: 'Card not found' };
+    return { success: true, data: D1ReadModule.cardRow(card) };
+  },
+
+  async claimCardAndRegister(payload, env) {
+    const rowId = this.pick(payload, ['claimRowId', 'rowId', 'cardId', 'claim']);
+    const userId = this.pick(payload, ['authenticatedUserId', 'userId', 'lineId']);
+    if (!rowId || !userId) return { success: false, error: 'Missing claimRowId or userId' };
+
+    const card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    if (!card) return { success: false, error: 'Card not found' };
+    const existingOwner = this.text(card.line_id);
+    if (existingOwner && existingOwner !== userId) return { success: false, error: 'Card already claimed by another user' };
+
+    const networkId = this.pick(payload, ['networkId', 'network_id'], this.text(card.network_id, 'admin'));
+    await env.ACTMASTER_DB.prepare('UPDATE card_contacts SET line_id = ?, network_id = ?, updated_at = CURRENT_TIMESTAMP WHERE row_id = ?')
+      .bind(userId, networkId, rowId).run();
+
+    const profile = {
+      userId,
+      name: this.pick(payload, ['name', '姓名', '憪?'], this.text(card.name, userId)),
+      phone: this.pick(payload, ['phone', '手機號碼', '???Ⅳ'], this.text(card.mobile || card.office_phone)),
+      industry: this.pick(payload, ['industry', 'title', '職稱', '?瑞迂'], this.text(card.title || card.company_name)),
+      companyName: this.pick(payload, ['companyName', 'company', '公司名稱', '?砍?迂'], this.text(card.company_name)),
+      title: this.pick(payload, ['title', '職稱', '?瑞迂'], this.text(card.title)),
+      networkId,
+      referrerId: this.pick(payload, ['referrerId', '推薦人', '?刻鈭?']),
+      claimedCardRowId: rowId,
+      profileStatus: 'bound_card',
+      source: 'claim_link'
+    };
+
+    const userResult = await D1WriteModule.upsertUser(profile, env);
+    if (env.ACTMASTER_KV) {
+      try { await env.ACTMASTER_KV.delete(`U_PROFILE_${userId}`); } catch (e) {}
+    }
+    const updatedCard = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    return {
+      success: true,
+      data: {
+        claimed: true,
+        rowId,
+        userId,
+        card: D1ReadModule.cardRow(updatedCard || card),
+        user: userResult && userResult.data ? userResult.data : profile
+      }
+    };
+  }
+};
+
 const TrackingModule = {
   async recordShareCardVisit(payload, env) {
     const visitorId = payload.visitorId || payload.userId;
@@ -3408,6 +3481,8 @@ async function dispatchAction(action, payload, request, env) {
 
   switch (action) {
     case 'checkUser':              return await AuthModule.check(payload, env);
+    case 'getCardForClaim':        return await ClaimModule.getCardForClaim(payload || {}, env);
+    case 'claimCardAndRegister':   return await ClaimModule.claimCardAndRegister(payload || {}, env);
     case 'getAllUsers':            return await AuthModule.getAllUsersWithBoundCards(payload, env);
     case 'getCardContacts': {
       try {
