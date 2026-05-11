@@ -411,8 +411,11 @@
     }
 
     try {
+      var rowId = await ensureCurrentCardRowId();
+      if (!rowId) throw new Error('找不到名片，請重新整理後再試');
       var res = await window.fetchAPI('updateCard', {
-        rowId: currentCardData.rowId,
+        rowId: rowId,
+        userId: (window.currentUserProfile && window.currentUserProfile.userId) || '',
         data: {
           '服務項目': introTemplate,
           '名片圖檔': cfg.imgUrl,
@@ -424,6 +427,7 @@
       currentCardData['服務項目'] = introTemplate;
       currentCardData['名片圖檔'] = cfg.imgUrl;
       currentCardData['自訂名片設定'] = JSON.stringify(cfg);
+      currentCardData.rowId = currentCardData.rowId || rowId;
       window.currentUserCard = currentCardData;
       myEcardImgs.landscape = cfg.imgUrl;
       myEcardButtons = cfg.buttons.slice();
