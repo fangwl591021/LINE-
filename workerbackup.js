@@ -99,7 +99,11 @@ const SecurityModule = {
       'cancelActivityRegistration',
       'cancelRegistration',
       'unregisterActivity',
-      'removeActivityRegistration'
+      'removeActivityRegistration',
+      'mlmListOrders',
+      'mlmListBonusTransactions',
+      'mlmGetMemberTree',
+      'mlmGetOrganizationTree'
     ]);
 
     if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(action)) {
@@ -2391,7 +2395,13 @@ const D1FinanceModule = {
     const offset = (page - 1) * pageSize;
     const status = this.text(payload.status || 'all');
     const orderType = this.text(payload.orderType);
-    const buyerId = this.text(payload.buyerId);
+    const actorRole = this.text(payload.authenticatedRole || payload.role || '').toLowerCase();
+    const actorId = this.text(payload.authenticatedUserId || '');
+    let buyerId = this.text(payload.buyerId);
+    if (actorId && actorRole !== 'admin' && buyerId && buyerId !== actorId) {
+      return { success: false, error: 'Access Denied: Cannot query another user order' };
+    }
+    if (actorId && actorRole !== 'admin' && !buyerId) buyerId = actorId;
     const rows = await D1ReadModule.all(env, `
       SELECT * FROM orders
       WHERE (? = 'all' OR payment_status = ?)
@@ -2415,7 +2425,13 @@ const D1FinanceModule = {
     const pageSize = Math.min(100, Math.max(1, Number(payload.pageSize || 20)));
     const offset = (page - 1) * pageSize;
     const status = this.text(payload.status || 'all');
-    const memberId = this.text(payload.memberId || payload.beneficiaryId);
+    const actorRole = this.text(payload.authenticatedRole || payload.role || '').toLowerCase();
+    const actorId = this.text(payload.authenticatedUserId || '');
+    let memberId = this.text(payload.memberId || payload.beneficiaryId);
+    if (actorId && actorRole !== 'admin' && memberId && memberId !== actorId) {
+      return { success: false, error: 'Access Denied: Cannot query another user bonus' };
+    }
+    if (actorId && actorRole !== 'admin' && !memberId) memberId = actorId;
     const rows = await D1ReadModule.all(env, `
       SELECT * FROM bonus_transactions
       WHERE (? = 'all' OR status = ?)
@@ -2701,7 +2717,13 @@ const D1FinanceModule = {
 
   async getOrganizationTree(payload, env) {
     if (!this.hasD1(env)) return null;
-    const rootId = this.text(payload.memberId || payload.userId);
+    const actorRole = this.text(payload.authenticatedRole || payload.role || '').toLowerCase();
+    const actorId = this.text(payload.authenticatedUserId || '');
+    let rootId = this.text(payload.memberId || payload.userId);
+    if (actorId && actorRole !== 'admin' && rootId && rootId !== actorId) {
+      return { success: false, error: 'Access Denied: Cannot query another user organization' };
+    }
+    if (actorId && actorRole !== 'admin' && !rootId) rootId = actorId;
     if (!rootId) return { success: false, error: 'Missing memberId' };
     const treeType = this.text(payload.treeType || 'placement');
     const depth = Math.min(10, Math.max(1, Number(payload.depth || 3)));

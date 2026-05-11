@@ -144,6 +144,48 @@
         </div>
       </section>
 
+      <details id="details-dealer-performance" class="hidden bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group" ontoggle="if(this.open) window.loadDealerPerformance()">
+        <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
+          <div class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">query_stats</span> 分享成效</div>
+          <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+        </summary>
+        <div class="p-5 pt-0 border-t border-slate-50 space-y-4">
+          <div id="dealer-performance-summary" class="grid grid-cols-2 gap-3 mt-4">
+            <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+              <p class="text-[12px] text-slate-500">累積獎金</p>
+              <div id="dealer-bonus-total" class="text-xl font-black text-slate-900 mt-1">-</div>
+            </div>
+            <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+              <p class="text-[12px] text-slate-500">待結 / 凍結</p>
+              <div id="dealer-bonus-pending" class="text-xl font-black text-slate-900 mt-1">-</div>
+            </div>
+            <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+              <p class="text-[12px] text-slate-500">已付款</p>
+              <div id="dealer-bonus-paid" class="text-xl font-black text-slate-900 mt-1">-</div>
+            </div>
+            <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+              <p class="text-[12px] text-slate-500">組織人數</p>
+              <div id="dealer-org-count" class="text-xl font-black text-slate-900 mt-1">-</div>
+            </div>
+          </div>
+          <div class="rounded-2xl border border-slate-100 overflow-hidden">
+            <div class="px-4 py-3 bg-slate-50 text-[13px] text-slate-500 font-bold flex items-center justify-between">
+              <span>最近獎金流水</span>
+              <button type="button" onclick="window.loadDealerPerformance(true)" class="text-blue-600 text-[12px] font-bold">重新整理</button>
+            </div>
+            <div id="dealer-bonus-list" class="divide-y divide-slate-100 text-[14px]">
+              <div class="p-4 text-slate-400">尚未載入</div>
+            </div>
+          </div>
+          <div class="rounded-2xl border border-slate-100 overflow-hidden">
+            <div class="px-4 py-3 bg-slate-50 text-[13px] text-slate-500 font-bold">我的組織圖</div>
+            <div id="dealer-org-tree" class="p-4 text-[14px] text-slate-600">
+              尚未載入
+            </div>
+          </div>
+        </div>
+      </details>
+
       <details class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">person</span> 個人資料設定</div>
