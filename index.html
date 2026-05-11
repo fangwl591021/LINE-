@@ -42,6 +42,9 @@
     .nav-active { @apply text-slate-800 font-bold; }
     .nav-active .icon-box { @apply bg-slate-100 text-slate-800; }
     .nav-active .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
+    .home-quick-circle { @apply flex flex-col items-center justify-start gap-1.5 active:scale-95 transition-transform; width: 20%; min-width: 0; }
+    .home-quick-icon { @apply w-14 h-14 rounded-full bg-[#06C755] text-white flex items-center justify-center shadow-md shadow-emerald-200 text-[28px]; font-variation-settings: 'FILL' 1; }
+    .home-quick-label { @apply text-[12px] font-bold text-slate-700 leading-tight text-center whitespace-nowrap; }
   </style>
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
@@ -540,23 +543,29 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-4 mx-1">
-        <button onclick="window.goPage('card')" class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-          <span class="material-symbols-outlined text-4xl text-blue-500">contact_mail</span>
-          <span class="font-bold text-slate-700">我的名片庫</span>
-        </button>
-        <button onclick="window.shareMyCard(this)" class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-          <span class="material-symbols-outlined text-4xl text-[#06C755]">send_to_mobile</span>
-          <span class="font-bold text-slate-700">發送我的名片</span>
-        </button>
-        <button onclick="window.goPage('matchmake')" class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-          <span class="material-symbols-outlined text-4xl text-primary">psychology</span>
-          <span class="font-bold text-slate-700">AI 智能配對</span>
-        </button>
-        <button onclick="window.goPage('my-activities')" class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
-          <span class="material-symbols-outlined text-4xl text-orange-500">receipt_long</span>
-          <span class="font-bold text-slate-700">活動紀錄</span>
-        </button>
+      <div class="mx-1">
+        <div class="flex items-start justify-between gap-2">
+          <button onclick="window.goPage('card')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">contact_mail</span>
+            <span class="home-quick-label">&#21517;&#29255;&#24235;</span>
+          </button>
+          <button onclick="window.shareMyCard(this)" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">send_to_mobile</span>
+            <span class="home-quick-label">&#30332;&#21517;&#29255;</span>
+          </button>
+          <button onclick="window.goPage('matchmake')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">psychology</span>
+            <span class="home-quick-label">AI&#37197;&#23565;</span>
+          </button>
+          <button onclick="window.goPage('my-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">receipt_long</span>
+            <span class="home-quick-label">&#27963;&#21205;&#32000;&#37636;</span>
+          </button>
+          <button onclick="window.location.href='https://lin.ee/NxFMl6L'" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">person_add</span>
+            <span class="home-quick-label">&#21152;&#22909;&#21451;</span>
+          </button>
+        </div>
       </div>
 
       <div class="mx-1 mt-8">
