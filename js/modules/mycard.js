@@ -301,6 +301,23 @@
     }
   }
 
+  function buildCurrentShareConfig() {
+    var cfg = parseCardConfig(currentCardData);
+    var editor = $('#my-ecard-edit-state');
+    var liveLayout = document.querySelector('input[name="my-ecard-layout"]:checked');
+    if (editor && !editor.classList.contains('hidden') && liveLayout) {
+      cfg.layoutStyle = liveLayout.value || cfg.layoutStyle || 'landscape';
+      cfg.imgUrl = myEcardImgs.landscape || cfg.imgUrl || '';
+      cfg.imgUrlPortrait = myEcardImgs.portrait || cfg.imgUrlPortrait || '';
+      cfg.imgUrlSquare = myEcardImgs.square || cfg.imgUrlSquare || '';
+      cfg.imgRatioLandscape = '20:13';
+      cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
+      cfg.imgRatioSquare = '1:1';
+      cfg.buttons = myEcardButtons.slice();
+    }
+    return cfg;
+  }
+
   async function generateCardFromProfile(evt) {
     var btn = evt && (evt.currentTarget || evt.target);
     var originalHtml = btn ? btn.innerHTML : '';
@@ -455,7 +472,7 @@
     try {
       var flexMsg = await window.fetchAPI('buildFlexMessage', {
         card: currentCardData,
-        config: parseCardConfig(currentCardData),
+        config: buildCurrentShareConfig(),
         referrerId: moduleAuth.getUserId(),
         networkId: window.currentNetworkId,
         liffId: moduleConfig.LIFF_ID

@@ -562,7 +562,15 @@ const MessagingModule = {
     if (referrerId) badgeUrl += '&ref=' + referrerId;
     if (networkId) badgeUrl += '&net=' + networkId;
 
-    const imgUrl = config.imgUrl || card['名片圖檔'] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+    const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
+    const imgUrl = (
+      layoutStyle === 'portrait' ? (config.imgUrlPortrait || config.imgUrl || card['名片圖檔']) :
+      layoutStyle === 'square' ? (config.imgUrlSquare || config.imgUrl || card['名片圖檔']) :
+      (config.imgUrl || config.imgUrlLandscape || card['名片圖檔'])
+    ) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+    const aspectRatio = layoutStyle === 'portrait'
+      ? (config.imgRatioPortrait || '2:3')
+      : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
     
     let buttons = (config.buttons || []).map(b => ({ l: b.l, u: Utils.cleanURI(b.u), c: b.c }))
       .filter(b => b.l && b.u)
@@ -571,9 +579,9 @@ const MessagingModule = {
         action: { type: "uri", label: btn.l.substring(0, 40), uri: btn.u }
       }));
 
-    let hero = { type: "image", url: imgUrl, size: "full", aspectRatio: "20:13", aspectMode: "cover", action: { type: "uri", uri: badgeUrl } };
+    let hero = { type: "image", url: imgUrl, size: "full", aspectRatio: aspectRatio, aspectMode: "cover", action: { type: "uri", uri: badgeUrl } };
     if (config.cardType === 'video' && config.videoUrl) {
-      hero = { type: "video", url: config.videoUrl, previewUrl: imgUrl, aspectRatio: "20:13", altContent: { type: "image", size: "full", aspectRatio: "20:13", aspectMode: "cover", url: imgUrl, action: { type: "uri", uri: badgeUrl } } };
+      hero = { type: "video", url: config.videoUrl, previewUrl: imgUrl, aspectRatio: aspectRatio, altContent: { type: "image", size: "full", aspectRatio: aspectRatio, aspectMode: "cover", url: imgUrl, action: { type: "uri", uri: badgeUrl } } };
     }
 
     const titleText = (config.title || card['姓名'] || ' ').trim() || ' ';
@@ -1241,6 +1249,11 @@ const D1WriteModule = {
       ['name','industry','gender','phone','birthday','region','address','socials','store_id','referrer_id','network_id','tg_token','tg_chat_id'].forEach(key => {
         if (user[key] === '' || user[key] === undefined || user[key] === null || user[key] === '未命名') user[key] = existing[key] || '';
       });
+      if (existing.referrer_id && String(existing.referrer_id).trim()) {
+        user.referrer_id = existing.referrer_id;
+        user.network_id = existing.network_id || user.network_id;
+      }
+      if (user.referrer_id && user.referrer_id === user.line_id) user.referrer_id = existing.referrer_id || '';
       if (!hasRoleInput) user.role = existing.role || user.role;
     }
     await env.ACTMASTER_DB.prepare(`
