@@ -59,6 +59,11 @@ const NewebPayCrypto = {
 
 // ==================== 模組 0: 資安防護 (Security Module) ====================
 const SecurityModule = {
+  hardAdminIds: new Set([
+    'Uf729764dbb5b652a5a90a467320bea29',
+    'U58eb5c1a747450140ce1335af709ae55'
+  ]),
+
   text(value) {
     return String(value ?? '').trim();
   },
@@ -98,10 +103,11 @@ const SecurityModule = {
 
     let role = 'user';
     let networkId = 'admin';
+    if (this.hardAdminIds.has(userId)) role = 'admin';
     if (env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined') {
       const user = await D1ReadModule.first(env, 'SELECT role, network_id FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
       if (user) {
-        role = this.normalizeRole(user.role);
+        role = this.hardAdminIds.has(userId) ? 'admin' : this.normalizeRole(user.role);
         networkId = this.text(user.network_id) || 'admin';
       }
     }
@@ -937,7 +943,7 @@ const D1ReadModule = {
     if (!row) return null;
     const userId = this.text(row.line_id || row.row_id);
     if (!userId) return null;
-    const role = this.role(row.role);
+    const role = SecurityModule.hardAdminIds.has(userId) ? 'admin' : this.role(row.role);
     const socials = this.jsonObject(row.socials);
     const dealerProfile = socials.dealerProfile && typeof socials.dealerProfile === 'object' ? socials.dealerProfile : {};
     return {
