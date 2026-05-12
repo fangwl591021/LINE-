@@ -1302,11 +1302,26 @@ const D1ReadModule = {
     const users = await this.all(env, 'SELECT * FROM users ORDER BY created_at DESC, row_id DESC LIMIT 500');
     const merged = [];
     const seen = new Set();
+    const seenIdentity = new Set();
+    const identityKey = (profile) => {
+      const phone = this.text(profile.phone).replace(/\D/g, '');
+      if (phone.length >= 7) return `phone:${phone}`;
+      const name = this.text(profile.name).toLowerCase();
+      const network = this.text(profile.networkId, 'admin').toLowerCase();
+      return name ? `name:${network}:${name}` : '';
+    };
+    const addProfile = (profile) => {
+      if (!profile || seen.has(profile.userId)) return;
+      const key = identityKey(profile);
+      if (key && seenIdentity.has(key)) return;
+      seen.add(profile.userId);
+      if (key) seenIdentity.add(key);
+      merged.push(profile);
+    };
+
     users.forEach(row => {
       const profile = this.userRow(row);
-      if (!profile || seen.has(profile.userId)) return;
-      seen.add(profile.userId);
-      merged.push(profile);
+      addProfile(profile);
     });
 
     const cards = await this.all(env, "SELECT * FROM card_contacts WHERE line_id IS NOT NULL AND TRIM(line_id) <> '' ORDER BY created_at DESC LIMIT 500");
@@ -1322,9 +1337,7 @@ const D1ReadModule = {
         role: 'user',
         network_id: row.network_id
       }, 'bound_card');
-      if (!profile) return;
-      seen.add(userId);
-      merged.push(profile);
+      addProfile(profile);
     });
 
     return { success: true, data: merged };
