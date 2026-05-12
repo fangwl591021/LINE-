@@ -382,6 +382,17 @@ const PointModule = {
     return this.number(sorted[0].point_balance);
   },
 
+  maxBalance(list) {
+    return (Array.isArray(list) ? list : []).reduce((max, item) => {
+      if (item.point_balance === undefined || item.point_balance === null || String(item.point_balance).trim() === '') return max;
+      return Math.max(max, this.number(item.point_balance));
+    }, 0);
+  },
+
+  summedPoints(list) {
+    return (Array.isArray(list) ? list : []).reduce((sum, item) => sum + this.number(item.get_point), 0);
+  },
+
   async fetchPointPage(body) {
     const res = await fetch(this.apiUrl, {
       method: 'POST',
@@ -422,18 +433,37 @@ const PointModule = {
     let combinedList = Array.isArray(data.data?.list) ? data.data.list.slice() : [];
 
     if (totalPages > 1) {
-      const lastPage = await this.fetchPointPage({ ...body, page: totalPages });
-      if (!lastPage.error && Array.isArray(lastPage.data?.data?.list)) {
-        combinedList = combinedList.concat(lastPage.data.data.list);
+      const seenPages = new Set([1]);
+      const pages = [];
+      for (let page = 2; page <= Math.min(totalPages, 20); page++) pages.push(page);
+      if (totalPages > 20) {
+        const tailStart = Math.max(21, totalPages - 4);
+        for (let page = tailStart; page <= totalPages; page++) pages.push(page);
+      }
+
+      for (const page of pages) {
+        if (seenPages.has(page)) continue;
+        seenPages.add(page);
+        const pageResult = await this.fetchPointPage({ ...body, page });
+        if (!pageResult.error && Array.isArray(pageResult.data?.data?.list)) {
+          combinedList = combinedList.concat(pageResult.data.data.list);
+        }
       }
     }
 
-    const balance = this.latestBalance(combinedList);
+    const latestBalance = this.latestBalance(combinedList);
+    const maxBalance = this.maxBalance(combinedList);
+    const summedPoints = this.summedPoints(combinedList);
+    const balance = Math.max(latestBalance, maxBalance, summedPoints);
 
     return {
       success: true,
       data: {
         balance,
+        latestBalance,
+        maxBalance,
+        summedPoints,
+        sampledRows: combinedList.length,
         total: this.number(pagination.total),
         pagination,
         list: combinedList.slice(0, body.per_page)
