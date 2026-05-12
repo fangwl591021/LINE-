@@ -382,17 +382,6 @@ const PointModule = {
     return this.number(sorted[0].point_balance);
   },
 
-  maxBalance(list) {
-    return (Array.isArray(list) ? list : []).reduce((max, item) => {
-      if (item.point_balance === undefined || item.point_balance === null || String(item.point_balance).trim() === '') return max;
-      return Math.max(max, this.number(item.point_balance));
-    }, 0);
-  },
-
-  summedPoints(list) {
-    return (Array.isArray(list) ? list : []).reduce((sum, item) => sum + this.number(item.get_point), 0);
-  },
-
   async fetchPointPage(body) {
     const res = await fetch(this.apiUrl, {
       method: 'POST',
@@ -420,7 +409,7 @@ const PointModule = {
       per_page: 100
     };
     if (payload.shop_id || payload.shopId) body.shop_id = Number(payload.shop_id || payload.shopId);
-    if (payload.point_type || payload.pointType) body.point_type = String(payload.point_type || payload.pointType);
+    body.point_type = String(payload.point_type || payload.pointType || 'system_point');
     if (payload.date_start || payload.dateStart) body.date_start = String(payload.date_start || payload.dateStart);
     if (payload.date_end || payload.dateEnd) body.date_end = String(payload.date_end || payload.dateEnd);
 
@@ -452,18 +441,15 @@ const PointModule = {
     }
 
     const latestBalance = this.latestBalance(combinedList);
-    const maxBalance = this.maxBalance(combinedList);
-    const summedPoints = this.summedPoints(combinedList);
-    const balance = Math.max(latestBalance, maxBalance, summedPoints);
+    const balance = latestBalance;
 
     return {
       success: true,
       data: {
         balance,
         latestBalance,
-        maxBalance,
-        summedPoints,
         sampledRows: combinedList.length,
+        pointType: body.point_type,
         total: this.number(pagination.total),
         pagination,
         list: combinedList.slice(0, body.per_page)
