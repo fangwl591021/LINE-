@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>點數通導流</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root {
+      --green: #06c755;
+      --ink: #172033;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --bg: #f6f8fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+    }
+    .card {
+      width: min(420px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, .08);
+      text-align: center;
+    }
+    .mark {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 18px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(6, 199, 85, .12);
+      color: var(--green);
+      font-size: 34px;
+      font-weight: 800;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 22px;
+      line-height: 1.3;
+      font-weight: 700;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+      font-weight: 500;
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    button, a {
+      appearance: none;
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .primary { background: var(--green); color: #fff; }
+    .secondary { background: #eef2f7; color: #263247; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark" id="status-mark">↻</div>
+    <h1 id="status-title">正在確認點數通好友狀態</h1>
+    <p id="status-desc">完成後會自動進入商機引擎。</p>
+    <div class="actions">
+      <button type="button" id="continue-btn" class="primary hidden">繼續進入</button>
+      <a id="add-friend-link" class="secondary hidden" href="https://lin.ee/sDW7u4T">加入點數通好友</a>
+    </div>
+  </main>
+
+  <script>
+    const POINT_LIFF_ID = '1660923784-vViMTZ1y';
+    const BUSINESS_LIFF_ID = '2009886448-2UHnJgyT';
+    const POINT_OA_URL = 'https://lin.ee/sDW7u4T';
+
+    const titleEl = document.getElementById('status-title');
+    const descEl = document.getElementById('status-desc');
+    const markEl = document.getElementById('status-mark');
+    const continueBtn = document.getElementById('continue-btn');
+    const addFriendLink = document.getElementById('add-friend-link');
+
+    function readParams() {
+      const params = new URLSearchParams(window.location.search || '');
+      const state = params.get('liff.state') || params.get('state') || '';
+      if (state) {
+        try {
+          const stateText = decodeURIComponent(state);
+          const queryText = stateText.includes('?')
+            ? stateText.split('?').slice(1).join('?')
+            : stateText.replace(/^\?/, '');
+          const stateParams = new URLSearchParams(queryText);
+          stateParams.forEach((value, key) => {
+            if (!params.has(key)) params.set(key, value);
+          });
+        } catch (e) {}
+      }
+      return params;
+    }
+
+    function buildBusinessUrl(profile, friendFlag) {
+      const source = readParams();
+      const dropKeys = new Set([
+        'code', 'state', 'liff.state', 'liffClientId', 'liffRedirectUri',
+        'liffIsEscapedFromApp', 'from'
+      ]);
+      const next = new URLSearchParams();
+      source.forEach((value, key) => {
+        if (!dropKeys.has(key)) next.set(key, value);
+      });
+      if (profile && profile.userId) next.set('pt_uid', profile.userId);
+      next.set('point_friend', friendFlag ? '1' : '0');
+      next.set('point_from', 'point-liff');
+      return 'https://liff.line.me/' + encodeURIComponent(BUSINESS_LIFF_ID) + '?' + next.toString();
+    }
+
+    function goNext(profile, friendFlag) {
+      window.location.replace(buildBusinessUrl(profile, friendFlag));
+    }
+
+    function showManualContinue(profile) {
+      markEl.textContent = '!';
+      titleEl.textContent = '請先加入點數通好友';
+      descEl.textContent = '加入後按「繼續進入」，系統會帶您回商機引擎。';
+      addFriendLink.classList.remove('hidden');
+      continueBtn.classList.remove('hidden');
+      continueBtn.onclick = async function() {
+        let friendFlag = false;
+        try {
+          const latest = await liff.getFriendship();
+          friendFlag = !!latest.friendFlag;
+        } catch (e) {}
+        goNext(profile, friendFlag);
+      };
+    }
+
+    async function main() {
+      addFriendLink.href = POINT_OA_URL;
+
+      await liff.init({ liffId: POINT_LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        liff.login({ redirectUri: window.location.href });
+        return;
+      }
+
+      const profile = await liff.getProfile();
+      let friendFlag = false;
+
+      try {
+        const friendship = await liff.getFriendship();
+        friendFlag = !!friendship.friendFlag;
+      } catch (e) {}
+
+      if (!friendFlag && typeof liff.requestFriendship === 'function') {
+        try {
+          await liff.requestFriendship();
+          const latest = await liff.getFriendship();
+          friendFlag = !!latest.friendFlag;
+        } catch (e) {}
+      }
+
+      if (friendFlag) {
+        markEl.textContent = '✓';
+        titleEl.textContent = '已完成好友確認';
+        descEl.textContent = '正在進入商機引擎。';
+        setTimeout(() => goNext(profile, true), 350);
+      } else {
+        showManualContinue(profile);
+      }
+    }
+
+    main().catch(error => {
+      markEl.textContent = '!';
+      titleEl.textContent = '導流失敗';
+      descEl.textContent = error && error.message ? error.message : '請重新開啟連結。';
+      continueBtn.textContent = '重新整理';
+      continueBtn.classList.remove('hidden');
+      continueBtn.onclick = () => window.location.reload();
+    });
+  </script>
+</body>
+</html>

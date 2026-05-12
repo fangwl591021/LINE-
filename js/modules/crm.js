@@ -282,10 +282,11 @@ window.showInviteLink = function() {
   // - via=storeid_userid(完整追蹤碼,讓 store 知道是誰下的單)
   const tracking = (myStoreId ? myStoreId + '_' : '') + myUserId.substring(0, 10);
 
-  let inviteUrl = 'https://liff.line.me/' + LIFF_ID;
-  inviteUrl += '?ref=' + encodeURIComponent(myUserId);
-  inviteUrl += '&net=' + encodeURIComponent(currentNetworkId);
-  inviteUrl += '&via=' + encodeURIComponent(tracking);
+  let inviteUrl = window.buildPointLiffUrl ? window.buildPointLiffUrl({
+    ref: myUserId,
+    net: currentNetworkId,
+    via: tracking
+  }) : ('https://liff.line.me/' + LIFF_ID + '?ref=' + encodeURIComponent(myUserId) + '&net=' + encodeURIComponent(currentNetworkId) + '&via=' + encodeURIComponent(tracking));
 
   // 顯示 modal
   const modal = document.getElementById('invite-link-modal');

@@ -265,7 +265,7 @@ window.shareECardToLine = async function(btnId) {
       config: cfg,
       referrerId: window.currentUserProfile?.userId,
       networkId: window.currentNetworkId,
-      liffId: window.LIFF_ID
+      liffId: window.POINT_LIFF_ID || window.LIFF_ID
     }, true);
 
     if (flexMsg) {

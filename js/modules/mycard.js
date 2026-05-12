@@ -475,7 +475,7 @@
         config: buildCurrentShareConfig(),
         referrerId: moduleAuth.getUserId(),
         networkId: window.currentNetworkId,
-        liffId: moduleConfig.LIFF_ID
+        liffId: moduleConfig.POINT_LIFF_ID || window.POINT_LIFF_ID || moduleConfig.LIFF_ID
       }, true);
       if (flexMsg && !flexMsg.error) {
         await window.triggerFlexSharing(flexMsg, currentCardData['姓名'] || '數位名片');
@@ -507,7 +507,11 @@
     show(img, false);
     show(loading, true);
 
-    var badgeUrl = 'https://liff.line.me/' + encodeURIComponent(moduleConfig.LIFF_ID) + '?shareCardId=' + encodeURIComponent(currentCardData.rowId || '') + '&ref=' + encodeURIComponent(moduleAuth.getUserId());
+    var badgeUrl = window.buildPointLiffUrl ? window.buildPointLiffUrl({
+      shareCardId: currentCardData.rowId || '',
+      ref: moduleAuth.getUserId(),
+      net: window.currentNetworkId || 'admin'
+    }) : ('https://liff.line.me/' + encodeURIComponent(moduleConfig.LIFF_ID) + '?shareCardId=' + encodeURIComponent(currentCardData.rowId || '') + '&ref=' + encodeURIComponent(moduleAuth.getUserId()));
     var qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(badgeUrl) + '&size=300&margin=2';
     if (img) {
       img.onload = function() {

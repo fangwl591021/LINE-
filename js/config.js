@@ -2,6 +2,8 @@
 
 const DEFAULT_LIFF_ID = "2009886448-2UHnJgyT";
 const NFC_LIFF_ID = "2009886448-Asc5tytD";
+const POINT_LIFF_ID = "1660923784-vViMTZ1y";
+const POINT_OA_URL = "https://lin.ee/sDW7u4T";
 
 function readActmasterInitialParams() {
   const params = new URLSearchParams(window.location.search || '');
@@ -44,13 +46,29 @@ const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/";
 window.LIFF_ID = LIFF_ID;
 window.DEFAULT_LIFF_ID = DEFAULT_LIFF_ID;
 window.NFC_LIFF_ID = window.NFC_LIFF_ID || NFC_LIFF_ID;
+window.POINT_LIFF_ID = window.POINT_LIFF_ID || POINT_LIFF_ID;
+window.POINT_OA_URL = window.POINT_OA_URL || POINT_OA_URL;
 window.WORKER_URL = WORKER_URL;
 window.Config = {
   LIFF_ID,
   DEFAULT_LIFF_ID,
   NFC_LIFF_ID: window.NFC_LIFF_ID,
+  POINT_LIFF_ID: window.POINT_LIFF_ID,
+  POINT_OA_URL: window.POINT_OA_URL,
   WORKER_URL,
   API_URL: WORKER_URL.replace(/\/$/, '')
+};
+
+window.buildPointLiffUrl = function(params) {
+  const targetParams = new URLSearchParams();
+  Object.keys(params || {}).forEach(key => {
+    const value = params[key];
+    if (value !== undefined && value !== null && String(value) !== '') {
+      targetParams.set(key, String(value));
+    }
+  });
+  targetParams.set('from', targetParams.get('from') || 'business-engine');
+  return 'https://liff.line.me/' + encodeURIComponent(window.POINT_LIFF_ID || POINT_LIFF_ID) + '?' + targetParams.toString();
 };
 
 // 舊版模組大量使用 $/jQuery；若頁面未事先載入，於 parser 階段同步補上。

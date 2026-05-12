@@ -501,15 +501,19 @@
   window.getClaimUrlForCard = function (card) {
     const liffId = window.LIFF_ID || (typeof LIFF_ID !== "undefined" ? LIFF_ID : "");
     const cardId = card?.rowId || card?.["rowId"] || "";
+    const params = {
+      claim: cardId,
+      ref: window.currentUserProfile?.userId || "",
+      net: window.currentNetworkId || ""
+    };
+
+    if (window.buildPointLiffUrl) {
+      return window.buildPointLiffUrl(params);
+    }
+
     let url = "https://liff.line.me/" + encodeURIComponent(liffId) + "?claim=" + encodeURIComponent(cardId);
-
-    if (window.currentUserProfile?.userId) {
-      url += "&ref=" + encodeURIComponent(window.currentUserProfile.userId);
-    }
-    if (window.currentNetworkId) {
-      url += "&net=" + encodeURIComponent(window.currentNetworkId);
-    }
-
+    if (params.ref) url += "&ref=" + encodeURIComponent(params.ref);
+    if (params.net) url += "&net=" + encodeURIComponent(params.net);
     return url;
   };
 
