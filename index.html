@@ -131,7 +131,17 @@
         產生我的專屬邀約連結
       </button>
 
-      <section id="tenant-upgrade-card" class="bg-slate-900 text-white rounded-3xl shadow-lg shadow-slate-900/15 mb-4 overflow-hidden">
+      <details id="tenant-upgrade-card" class="bg-slate-900 text-white rounded-3xl shadow-lg shadow-slate-900/15 mb-4 overflow-hidden group">
+        <summary class="list-none cursor-pointer p-5 flex items-center justify-between gap-3">
+          <div>
+            <p class="text-[12px] font-black text-blue-200 tracking-wide">租戶功能方案</p>
+            <h3 class="text-xl font-black mt-1">租戶付費與功能</h3>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="tenant-role-badge" class="px-3 py-1.5 rounded-full bg-white text-slate-900 text-[12px] font-black shrink-0">一般</span>
+            <span class="material-symbols-outlined text-slate-300 group-open:rotate-180 transition-transform">expand_more</span>
+          </div>
+        </summary>
         <div class="p-5 space-y-4">
           <div class="flex items-start justify-between gap-3">
             <div>
@@ -139,14 +149,13 @@
               <h3 class="text-2xl font-black mt-1">NT$ 6,300 / 年</h3>
               <p id="tenant-upgrade-status" class="text-[13px] text-slate-300 mt-2 font-bold leading-relaxed">開通後可使用活動管理、名片收集、版面設定與較高額度的 AI 工具。</p>
             </div>
-            <span id="tenant-role-badge" class="px-3 py-1.5 rounded-full bg-white text-slate-900 text-[12px] font-black shrink-0">一般</span>
           </div>
           <button type="button" onclick="window.goPage('tenant-upgrade')" class="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-black shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
             <span class="material-symbols-outlined text-[20px]">workspace_premium</span>
             查看租戶功能
           </button>
         </div>
-      </section>
+      </details>
 
       <details id="details-dealer-performance" class="hidden bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group" ontoggle="if(this.open) window.loadDealerPerformance()">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
@@ -196,13 +205,22 @@
           <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
         </summary>
         <div class="p-5 pt-0 border-t border-slate-50">
+          <div class="rounded-2xl bg-blue-50 border border-blue-100 p-4 mt-4 mb-4">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-outlined text-blue-600 icon-filled mt-0.5">how_to_reg</span>
+              <div>
+                <p class="text-[15px] font-black text-slate-900">事後註冊 / 補完會員資料</p>
+                <p class="text-[13px] text-slate-600 font-medium leading-relaxed mt-1">如果一開始跳過註冊，之後可在這裡補填。送出後會建立或更新你的會員主檔。</p>
+              </div>
+            </div>
+          </div>
           <div class="space-y-3 mt-3">
             <div><label class="text-xs text-slate-500 font-bold ml-1">真實姓名</label><input id="profile-name" class="custom-input mt-1" type="text"></div>
             <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼</label><input id="profile-phone" class="custom-input mt-1 font-mono" type="tel"></div>
             <div><label class="text-xs text-slate-500 font-bold ml-1">主要業種</label><input id="profile-industry" class="custom-input mt-1" type="text"></div>
             <div><label class="text-xs text-slate-500 font-bold ml-1">出生年月日</label><input id="profile-birthday" class="custom-input mt-1 font-mono text-slate-500" type="date"></div>
-            <button onclick="window.updateUserProfile(event)" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mt-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
-              <span class="material-symbols-outlined text-[18px]">save</span> 儲存基本資料
+            <button id="btn-save-profile-registration" onclick="window.saveProfileRegistration(event)" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mt-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
+              <span class="material-symbols-outlined text-[18px]">save</span> 建立 / 儲存會員資料
             </button>
           </div>
         </div>
@@ -1270,7 +1288,7 @@
 <script src="js/modules/settings.js?v=7.2"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.2"></script>
-<script src="js/auth.js?v=8.7"></script>
+<script src="js/auth.js?v=8.8"></script>
 
 </body>
 </html>

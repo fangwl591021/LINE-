@@ -97,6 +97,60 @@ window.submitRegistration = async function() {
   }
 };
 
+window.saveProfileRegistration = async function(event) {
+  const btn = event?.currentTarget || document.getElementById('btn-save-profile-registration');
+  const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+  const name = (document.getElementById('profile-name')?.value || '').trim();
+  const phone = (document.getElementById('profile-phone')?.value || '').trim();
+  const industry = (document.getElementById('profile-industry')?.value || '').trim();
+  const birthday = document.getElementById('profile-birthday')?.value || '';
+
+  if (!userId) return window.showToast('請先重新登入後再補完資料', true);
+  if (!name || !phone) return window.showToast('真實姓名與手機號碼必填', true);
+
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
+  }
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const referral = resolveReferralForRegistration(urlParams.get('ref') || '', urlParams.get('net') || window.currentNetworkId || 'admin');
+    const payload = {
+      userId,
+      name,
+      phone,
+      industry,
+      birthday,
+      referrerId: window.currentUser?.referrerId || referral.referrerId || '',
+      networkId: window.currentUser?.networkId || referral.networkId || window.currentNetworkId || 'admin'
+    };
+
+    const check = await window.fetchAPI('checkUser', { userId }, true);
+    const action = check && check.isRegistered ? 'updateUserProfile' : 'registerUser';
+    const saved = await window.fetchAPI(action, payload, true);
+    if (!saved || saved.error) throw new Error(saved?.error || '儲存失敗');
+
+    const refreshed = await window.fetchAPI('checkUser', { userId }, true);
+    const info = refreshed && refreshed.isRegistered && refreshed.info
+      ? refreshed.info
+      : { ...(window.currentUser || {}), ...payload, role: window.userRole || 'user' };
+    window.applyRegisteredUserSession(info);
+    try {
+      localStorage.setItem('ACTMASTER_USER_' + userId, JSON.stringify({ info, savedAt: Date.now() }));
+    } catch (e) {}
+    window.showToast(action === 'registerUser' ? '會員資料已建立' : '會員資料已更新');
+  } catch (e) {
+    window.showToast(e.message || '會員資料儲存失敗', true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml || '<span class="material-symbols-outlined text-[18px]">save</span> 建立 / 儲存會員資料';
+    }
+  }
+};
+
 window.submitClaimRegistration = async function() {
   const name = document.getElementById('claim-name').value.trim();
   const phone = document.getElementById('claim-phone').value.trim();
