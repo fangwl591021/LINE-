@@ -1303,6 +1303,8 @@ const D1WriteModule = {
     const targetUserId = this.pick(payload, ['targetUserId', 'targetLineId', 'lineId', 'userId']);
     const role = this.role(this.pick(payload, ['role', 'newRole', 'permission']));
     if (!targetUserId) return { success: false, error: 'Missing targetUserId' };
+    if (role === 'admin') return { success: false, error: 'Admin role cannot be assigned from role editor' };
+    if (SecurityModule.hardAdminIds.has(targetUserId)) return { success: false, error: 'Hard admin role cannot be modified' };
     const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [targetUserId, targetUserId]);
     if (!existing) return { success: false, error: '找不到指定用戶' };
     await env.ACTMASTER_DB.prepare('UPDATE users SET role = ? WHERE line_id = ? OR row_id = ?').bind(role, targetUserId, targetUserId).run();

@@ -398,7 +398,6 @@ window.renderStoreManagement = function() {
         '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value)" ' + (isMe ? 'disabled' : '') + ' class="bg-slate-50 border-none rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(u.role || 'user') + '">' +
           '<option value="user" ' + (u.role === 'user' ? 'selected' : '') + '>一般 User</option>' +
           '<option value="store" ' + (u.role === 'store' ? 'selected' : '') + '>商家 Store</option>' +
-          '<option value="admin" ' + (u.role === 'admin' ? 'selected' : '') + '>管理 Admin</option>' +
         '</select>' +
       '</div>' +
       '<div class="text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-50 px-2 py-1.5 rounded-lg w-fit">' +
@@ -414,6 +413,10 @@ window.changeUserRole = async function(userId, newRole) {
   // 找到下拉選單元素並暫時 disable,給視覺反饋
   const selectEl = event && event.target;
   const oldRole = (allSystemUsers.find(u => u.userId === userId) || {}).role || 'user';
+  if (newRole === 'admin') {
+    if (selectEl) selectEl.value = oldRole === 'store' ? 'store' : 'user';
+    return window.showToast('Admin 權限不可在此調整', true);
+  }
 
   if (selectEl) selectEl.disabled = true;
   window.showToast('更新權限中...');

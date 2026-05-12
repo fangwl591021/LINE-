@@ -300,7 +300,11 @@ window.recordShareCardVisitOnce = async function(params) {
 window.applyRegisteredUserSession = function(info) {
   if (!info) return;
 
-  window.currentUser = info;
+  window.currentUser = { ...info };
+  if (typeof window.isHardAdminUser === 'function' && window.isHardAdminUser(window.currentUserProfile?.userId || window.currentUser.userId)) {
+    window.currentUser.role = 'admin';
+    window.currentUser.networkId = window.currentUser.networkId || 'admin';
+  }
   window.userRole = window.currentUser.role || 'user';
   window.currentNetworkId = window.currentUser.networkId || 'admin';
   window.currentStoreId = window.currentUser.storeid || '';

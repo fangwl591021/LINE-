@@ -1304,6 +1304,10 @@
     const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/"; 
     
     let adminProfile = null;
+    const HARD_ADMIN_IDS = new Set([
+      'Uf729764dbb5b652a5a90a467320bea29',
+      'U58eb5c1a747450140ce1335af709ae55'
+    ]);
     let allUsersData = [];
     let allCardsData = [];
     let duplicateBindingData = [];
@@ -2735,7 +2739,6 @@
               <select onchange="updateRole('${escapeHTML(id)}', this.value)" class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="user" ${role==='user'?'selected':''}>一般</option>
                 <option value="store" ${role==='store'?'selected':''}>店長</option>
-                <option value="admin" ${role==='admin'?'selected':''}>總管</option>
               </select>
             </div>
           </td>
@@ -2816,6 +2819,7 @@
     }
 
     async function updateRole(userId, role) {
+      if (role === 'admin') return showToast('Admin 權限不可在此調整', true);
       if (!userId) return showToast('找不到用戶 ID', true);
       const user = allUsersData.find(u => normalizeLineId(u.userId) === normalizeLineId(userId));
       if (user && (user.source === 'bound_card' || user.profileStatus === 'bound_card')) {
@@ -3594,6 +3598,11 @@
         loadingText.innerText = "驗證管理權限中...";
         const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
 
+        if (check && HARD_ADMIN_IDS.has(adminProfile.userId)) {
+          check.info = check.info || {};
+          check.info.role = 'admin';
+          check.info.networkId = check.info.networkId || 'admin';
+        }
         if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
           adminRole = check.info.role || 'store';
           adminNetworkId = check.info.networkId || check.info.storeId || 'admin';

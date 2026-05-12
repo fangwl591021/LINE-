@@ -4,6 +4,10 @@ const DEFAULT_LIFF_ID = "2009886448-2UHnJgyT";
 const NFC_LIFF_ID = "2009886448-Asc5tytD";
 const POINT_LIFF_ID = "1660923784-vViMTZ1y";
 const POINT_OA_URL = "https://lin.ee/sDW7u4T";
+const HARD_ADMIN_IDS = [
+  "Uf729764dbb5b652a5a90a467320bea29",
+  "U58eb5c1a747450140ce1335af709ae55"
+];
 
 function readActmasterInitialParams() {
   const params = new URLSearchParams(window.location.search || '');
@@ -48,6 +52,10 @@ window.DEFAULT_LIFF_ID = DEFAULT_LIFF_ID;
 window.NFC_LIFF_ID = window.NFC_LIFF_ID || NFC_LIFF_ID;
 window.POINT_LIFF_ID = window.POINT_LIFF_ID || POINT_LIFF_ID;
 window.POINT_OA_URL = window.POINT_OA_URL || POINT_OA_URL;
+window.HARD_ADMIN_IDS = window.HARD_ADMIN_IDS || HARD_ADMIN_IDS;
+window.isHardAdminUser = function(userId) {
+  return (window.HARD_ADMIN_IDS || []).includes(String(userId || '').trim());
+};
 window.WORKER_URL = WORKER_URL;
 window.Config = {
   LIFF_ID,
@@ -55,6 +63,7 @@ window.Config = {
   NFC_LIFF_ID: window.NFC_LIFF_ID,
   POINT_LIFF_ID: window.POINT_LIFF_ID,
   POINT_OA_URL: window.POINT_OA_URL,
+  HARD_ADMIN_IDS: window.HARD_ADMIN_IDS,
   WORKER_URL,
   API_URL: WORKER_URL.replace(/\/$/, '')
 };
