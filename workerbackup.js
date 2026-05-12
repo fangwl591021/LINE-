@@ -136,6 +136,7 @@ const SecurityModule = {
       'repairDataConsistency',
       'listDuplicateCardBindings',
       'resolveDuplicateCardBinding',
+      'deployRichMenu',
       'deleteCard',
       'unlinkCard'
     ]);
@@ -146,7 +147,8 @@ const SecurityModule = {
       'getActivityRegistrants',
       'confirmPayment',
       'toggleCheckin',
-      'saveStoreSettings'
+      'saveStoreSettings',
+      'extractLineVoomMedia'
     ]);
     const ownTokenRequired = new Set([
       'registerUser',
@@ -273,6 +275,10 @@ const SecurityModule = {
 // ==================== 模組 1: 核心工具 (Core Utils) ====================
 const Utils = {
   zwsp: String.fromCharCode(8203),
+
+  text(value) {
+    return String(value ?? '').trim();
+  },
   
   getIconUrl(type) {
     const icons = {
@@ -359,6 +365,137 @@ const StorageModule = {
 };
 
 // ==================== 模組 3: AI 服務 (AI Module) ====================
+// ==================== LINE OA Tools Module ====================
+const LineOAModule = {
+  cleanMenu(menu) {
+    const source = menu || {};
+    const size = source.size || {};
+    const cleaned = {
+      size: { width: 2500, height: Number(size.height) === 1686 ? 1686 : 843 },
+      selected: source.selected !== false,
+      name: Utils.text(source.name || 'New Rich Menu').slice(0, 300),
+      chatBarText: Utils.text(source.chatBarText || '選單').slice(0, 14),
+      areas: []
+    };
+    cleaned.areas = (Array.isArray(source.areas) ? source.areas : []).map(area => {
+      const bounds = area.bounds || {};
+      const action = area.action || {};
+      const type = Utils.text(action.type || 'uri').toLowerCase();
+      const pure = { type };
+      if (type === 'uri') pure.uri = Utils.cleanURI(action.uri || '');
+      else if (type === 'message') pure.text = Utils.text(action.text);
+      else if (type === 'postback') {
+        pure.data = Utils.text(action.data);
+        if (action.displayText) pure.displayText = Utils.text(action.displayText);
+      } else if (type === 'richmenuswitch') {
+        pure.richMenuAliasId = Utils.text(action.richMenuAliasId);
+        pure.data = Utils.text(action.data);
+      } else {
+        pure.type = 'uri';
+        pure.uri = '';
+      }
+      return {
+        bounds: {
+          x: Math.max(0, Math.round(Number(bounds.x) || 0)),
+          y: Math.max(0, Math.round(Number(bounds.y) || 0)),
+          width: Math.max(1, Math.round(Number(bounds.width) || 1)),
+          height: Math.max(1, Math.round(Number(bounds.height) || 1))
+        },
+        action: pure
+      };
+    });
+    return cleaned;
+  },
+
+  validateMenu(menu, imageBase64) {
+    if (!menu.name) throw new Error('Rich Menu name is required');
+    if (!menu.chatBarText) throw new Error('Rich Menu chatBarText is required');
+    if (!Array.isArray(menu.areas) || menu.areas.length === 0) throw new Error('Rich Menu requires at least one tappable area');
+    if (!imageBase64 || !String(imageBase64).startsWith('data:image')) throw new Error('Rich Menu image is required');
+    menu.areas.forEach((area, index) => {
+      const action = area.action || {};
+      if (action.type === 'uri' && !action.uri) throw new Error(`Area #${index + 1} missing URI`);
+      if (action.type === 'message' && !action.text) throw new Error(`Area #${index + 1} missing message text`);
+      if (action.type === 'postback' && !action.data) throw new Error(`Area #${index + 1} missing postback data`);
+      if (action.type === 'richmenuswitch' && (!action.richMenuAliasId || !action.data)) throw new Error(`Area #${index + 1} missing switch alias or data`);
+    });
+  },
+
+  base64ToBytes(imageBase64) {
+    const body = String(imageBase64).split(',')[1] || '';
+    const binary = atob(body);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  },
+
+  async deployRichMenu(payload, env) {
+    if (!env.LINE_CHANNEL_ACCESS_TOKEN) throw new Error('Missing LINE_CHANNEL_ACCESS_TOKEN');
+    const menu = this.cleanMenu(payload.menuObject || payload.richMenuConfig || payload);
+    const imageBase64 = payload.imageBase64 || payload.image || payload.base64Image;
+    this.validateMenu(menu, imageBase64);
+
+    const createRes = await fetch('https://api.line.me/v2/bot/richmenu', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(menu)
+    });
+    if (!createRes.ok) throw new Error('Create LINE rich menu failed: ' + await createRes.text());
+    const richMenuId = (await createRes.json()).richMenuId;
+
+    const uploadRes = await fetch(`https://api-data.line.me/v2/bot/richmenu/${richMenuId}/content`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`, 'Content-Type': 'image/jpeg' },
+      body: this.base64ToBytes(imageBase64)
+    });
+    if (!uploadRes.ok) throw new Error('Upload rich menu image failed: ' + await uploadRes.text());
+
+    const defaultRes = await fetch(`https://api.line.me/v2/bot/user/all/richmenu/${richMenuId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` }
+    });
+    if (!defaultRes.ok) throw new Error('Set default rich menu failed: ' + await defaultRes.text());
+
+    return { success: true, data: { richMenuId, menu } };
+  },
+
+  extractUrls(text) {
+    const found = new Set();
+    const pattern = /https?:\/\/[^\s"'<>)\]]+/gi;
+    let match;
+    while ((match = pattern.exec(String(text || '')))) {
+      found.add(match[0].replace(/\\u002F/g, '/').replace(/\\\//g, '/').replace(/[),.;]+$/g, ''));
+    }
+    return Array.from(found);
+  },
+
+  classifyMedia(urls) {
+    const images = [];
+    let video = null;
+    urls.forEach(url => {
+      if (/(\.mp4|\/video\/|videoUrl|videoplayback)/i.test(url)) video = video || { videoUrl: url };
+      else if (/(\.jpg|\.jpeg|\.png|\.webp|\/image\/|\/photo\/|thumbnail)/i.test(url)) images.push({ url });
+    });
+    return { video, images };
+  },
+
+  async extractLineVoomMedia(payload) {
+    const target = Utils.text(payload.url);
+    if (!/^https:\/\/(linevoom\.line\.me|line\.me)\//i.test(target)) throw new Error('Only LINE VOOM URLs are supported');
+    const res = await fetch(target, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LINEOA-Extractor/1.0)', 'Accept': 'text/html,application/xhtml+xml,application/json' } });
+    if (!res.ok) throw new Error(`Fetch LINE VOOM failed: HTTP ${res.status}`);
+    const html = await res.text();
+    const urls = this.extractUrls(html);
+    const media = this.classifyMedia(urls);
+    const ogImage = html.match(/property=["']og:image["'][^>]+content=["']([^"']+)/i)?.[1] || html.match(/content=["']([^"']+)["'][^>]+property=["']og:image["']/i)?.[1];
+    const ogVideo = html.match(/property=["']og:video(?::url)?["'][^>]+content=["']([^"']+)/i)?.[1] || html.match(/content=["']([^"']+)["'][^>]+property=["']og:video(?::url)?["']/i)?.[1];
+    if (ogImage && !media.images.some(img => img.url === ogImage)) media.images.unshift({ url: ogImage });
+    if (ogVideo && !media.video) media.video = { videoUrl: ogVideo, thumbnailUrl: ogImage || '' };
+    if (media.video && ogImage && !media.video.thumbnailUrl) media.video.thumbnailUrl = ogImage;
+    const type = media.video && media.images.length ? 'MIXED' : media.video ? 'VIDEO' : media.images.length ? 'IMAGE' : 'UNKNOWN';
+    return { success: true, data: { success: true, sourceUrl: target, type, video: media.video, images: media.images.slice(0, 20), urls: urls.slice(0, 100) } };
+  }
+};
 // ==================== Point Service Module ====================
 const PointModule = {
   apiUrl: 'https://aiwe.cc/index.php/wp-json/wetw-point/v1/query-user-point-list',
@@ -3897,6 +4034,8 @@ async function dispatchAction(action, payload, request, env) {
     case 'd1BackfillFromGas':       return await D1BackfillModule.backfillFromGas(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
+    case 'deployRichMenu':         return await LineOAModule.deployRichMenu(payload, env);
+    case 'extractLineVoomMedia':    return await LineOAModule.extractLineVoomMedia(payload, env);
     default:                       return await DBModule.forward(action, payload, env);
   }
 }
@@ -3921,3 +4060,4 @@ export default {
     }
   }
 };
+

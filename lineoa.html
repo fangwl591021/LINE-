@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LINE OA 選單工具</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .tool-tab.active { background: #0f172a; color: #fff; }
+    .panel-card { border: 1px solid #e2e8f0; background: #fff; border-radius: 18px; box-shadow: 0 8px 24px rgba(15, 23, 42, .06); }
+    .input { width: 100%; border: 1px solid #cbd5e1; border-radius: 12px; padding: 11px 13px; outline: none; background: #fff; color: #0f172a; }
+    .input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .1); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <div class="h-full flex flex-col">
+    <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold">LINE OA 選單區</h1>
+        <p class="text-sm text-slate-500 mt-1">整合圖文選單與 LINE VOOM 網址擷取器</p>
+      </div>
+      <div class="flex rounded-xl bg-slate-100 p-1">
+        <button id="tab-richmenu" class="tool-tab active px-5 py-2 rounded-lg text-sm font-semibold" onclick="switchTool('richmenu')">圖文選單</button>
+        <button id="tab-capture" class="tool-tab px-5 py-2 rounded-lg text-sm font-semibold" onclick="switchTool('capture')">網址擷取器</button>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-hidden">
+      <section id="tool-richmenu" class="h-full grid grid-cols-[360px_1fr] overflow-hidden">
+        <aside class="bg-white border-r border-slate-200 overflow-y-auto">
+          <div class="p-5 space-y-5">
+            <div>
+              <label class="block text-sm font-semibold text-slate-600 mb-2">1. 選單底圖 JPG / PNG</label>
+              <input id="rich-image-file" type="file" accept="image/jpeg,image/png" class="hidden">
+              <button type="button" onclick="document.getElementById('rich-image-file').click()" class="w-full py-3 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 font-semibold hover:bg-blue-100">選擇圖片</button>
+              <p class="text-xs text-slate-500 mt-2 leading-relaxed">LINE 規格為 2500 x 1686 或 2500 x 843。系統會檢查比例，部署時使用目前圖片。</p>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-600 mb-2">2. 選單名稱</label>
+              <input id="rich-menu-name" class="input" value="New Rich Menu" maxlength="300" oninput="MenuModule.updateOutput()">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-600 mb-2">3. 選單列文字</label>
+              <input id="rich-menu-chatbar" class="input" value="選單" maxlength="14" oninput="MenuModule.updateOutput()">
+            </div>
+          </div>
+          <div class="px-5 pb-5">
+            <div id="area-editor" class="space-y-3"></div>
+          </div>
+          <div class="p-5 border-t border-slate-200 bg-slate-50">
+            <label class="block text-sm font-semibold text-slate-600 mb-2">Rich Menu JSON</label>
+            <textarea id="json-output" class="input h-32 font-mono text-xs resize-none" readonly></textarea>
+          </div>
+        </aside>
+
+        <div class="h-full flex flex-col overflow-hidden">
+          <div class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
+            <div class="flex gap-2">
+              <button id="draw-btn" type="button" onclick="MenuModule.toggleDrawMode()" class="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold">開始劃定區域</button>
+              <button type="button" onclick="MenuModule.clearAreas()" class="px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-semibold">清空區域</button>
+            </div>
+            <div class="flex gap-2">
+              <button type="button" onclick="StorageModule.toggle()" class="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold">本機紀錄</button>
+              <button type="button" onclick="MenuModule.deploy()" class="px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold">發布到 LINE</button>
+            </div>
+          </div>
+          <div class="flex-1 overflow-auto p-8 flex justify-center">
+            <div id="canvas-shell" class="relative bg-white border border-slate-200 rounded-2xl shadow-xl p-4 min-w-[620px] min-h-[420px] flex items-center justify-center">
+              <canvas id="menu-canvas"></canvas>
+              <div id="canvas-placeholder" class="absolute inset-4 rounded-xl bg-slate-50 flex flex-col items-center justify-center text-slate-400 pointer-events-none">
+                <span class="material-symbols-outlined text-6xl mb-3">image</span>
+                <p class="text-lg font-semibold">請先上傳圖文選單底圖</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tool-capture" class="hidden h-full overflow-y-auto p-6">
+        <div class="panel-card max-w-5xl mx-auto p-6">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
+              <span class="material-symbols-outlined">link</span>
+            </div>
+            <div>
+              <h2 class="text-xl font-semibold">LINE VOOM 貼文抓取工具</h2>
+              <p class="text-sm text-slate-500 mt-1">貼上 LINE VOOM 貼文網址，擷取影片、縮圖與圖片網址。</p>
+            </div>
+          </div>
+          <div class="flex flex-col md:flex-row gap-3">
+            <input id="voom-url" class="input font-mono" placeholder="https://linevoom.line.me/...">
+            <button id="voom-fetch-btn" type="button" onclick="VoomModule.fetch()" class="px-7 py-3 rounded-xl bg-emerald-600 text-white font-semibold whitespace-nowrap">解析貼文</button>
+          </div>
+          <div id="voom-error" class="hidden mt-4 p-4 rounded-xl bg-red-50 text-red-700 border border-red-100 font-semibold"></div>
+          <div id="voom-result" class="hidden mt-6 space-y-6">
+            <div class="border-t border-slate-100 pt-5 flex items-center gap-3">
+              <span id="voom-type" class="px-3 py-1 rounded-lg bg-blue-50 text-blue-700 text-sm font-semibold">類型</span>
+              <h3 class="text-lg font-semibold">解析結果</h3>
+            </div>
+            <div id="voom-video" class="hidden rounded-2xl bg-slate-50 border border-slate-200 p-5"></div>
+            <div id="voom-images" class="grid grid-cols-1 md:grid-cols-2 gap-5"></div>
+            <details class="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+              <summary class="cursor-pointer px-4 py-3 font-semibold">查看原始 JSON</summary>
+              <pre id="voom-json" class="p-4 bg-white border-t border-slate-200 text-xs overflow-auto whitespace-pre-wrap"></pre>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="save-drawer" class="hidden fixed inset-0 z-50">
+    <div class="absolute inset-0 bg-slate-900/30" onclick="StorageModule.toggle()"></div>
+    <aside class="absolute right-0 top-0 h-full w-[360px] bg-white shadow-2xl flex flex-col">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-lg font-semibold">本機紀錄</h2>
+        <button onclick="StorageModule.toggle()" class="text-slate-400 hover:text-slate-700"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="p-5 flex gap-2 border-b border-slate-200">
+        <button onclick="StorageModule.save(true)" class="flex-1 py-3 rounded-xl bg-slate-900 text-white font-semibold">另存新檔</button>
+        <button onclick="StorageModule.save(false)" class="flex-1 py-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold">覆蓋目前</button>
+      </div>
+      <div id="save-list" class="flex-1 overflow-y-auto p-5 space-y-3"></div>
+    </aside>
+  </div>
+
+  <script>
+    const WORKER_URL = (window.parent && window.parent.WORKER_URL) || 'https://line-engine.fangwl591021.workers.dev/';
+
+    function switchTool(name) {
+      document.getElementById('tool-richmenu').classList.toggle('hidden', name !== 'richmenu');
+      document.getElementById('tool-capture').classList.toggle('hidden', name !== 'capture');
+      document.getElementById('tab-richmenu').classList.toggle('active', name === 'richmenu');
+      document.getElementById('tab-capture').classList.toggle('active', name === 'capture');
+    }
+
+    async function callWorker(action, payload = {}, timeoutMs = 60000) {
+      if (window.parent && typeof window.parent.fetchAPI === 'function') {
+        const data = await window.parent.fetchAPI(action, payload, { timeoutMs });
+        if (!data) throw new Error('後台 API 沒有回傳資料，請確認登入權限或 Worker 狀態');
+        return data;
+      }
+      const token = window.parent?.liff?.isLoggedIn?.() ? window.parent.liff.getAccessToken() : '';
+      if (token) payload.lineAccessToken = token;
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, payload })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || data.message || 'API 執行失敗');
+      return data.data || data;
+    }
+
+    function copyText(text, btn) {
+      navigator.clipboard?.writeText(text).then(() => {
+        if (!btn) return;
+        const old = btn.textContent;
+        btn.textContent = '已複製';
+        setTimeout(() => btn.textContent = old, 1200);
+      });
+    }
+
+    const MenuModule = (() => {
+      let canvas, isDrawing = false, isDown = false, rect, startX, startY;
+      let currentHeight = 843;
+      let currentImage = '';
+      let currentSaveId = '';
+
+      function rects() {
+        return canvas.getObjects().filter(o => o.type === 'rect');
+      }
+
+      function normalizeAction(action) {
+        const type = action?.type || 'uri';
+        if (type === 'uri') return { type, uri: action.uri || '' };
+        if (type === 'message') return { type, text: action.text || '' };
+        if (type === 'postback') return { type, data: action.data || '', displayText: action.displayText || '' };
+        if (type === 'richmenuswitch') return { type, richMenuAliasId: action.richMenuAliasId || '', data: action.data || '' };
+        return { type: 'uri', uri: '' };
+      }
+
+      return {
+        init() {
+          canvas = new fabric.Canvas('menu-canvas', { selection: true, preserveObjectStacking: true });
+          canvas.on('mouse:down', o => {
+            if (!isDrawing || canvas.findTarget(o.e)) return;
+            isDown = true;
+            const p = canvas.getPointer(o.e);
+            startX = p.x; startY = p.y;
+            rect = new fabric.Rect({ left: startX, top: startY, width: 0, height: 0, fill: 'rgba(5, 150, 105, .24)', stroke: '#059669', strokeWidth: 2 });
+            rect.action = { type: 'uri', uri: '' };
+            canvas.add(rect);
+          });
+          canvas.on('mouse:move', o => {
+            if (!isDown) return;
+            const p = canvas.getPointer(o.e);
+            rect.set({ left: Math.min(startX, p.x), top: Math.min(startY, p.y), width: Math.abs(startX - p.x), height: Math.abs(startY - p.y) });
+            canvas.renderAll();
+          });
+          canvas.on('mouse:up', () => {
+            if (!isDown) return;
+            isDown = false; isDrawing = false;
+            document.getElementById('draw-btn').textContent = '開始劃定區域';
+            this.updateOutput();
+          });
+          canvas.on('object:modified', () => this.updateOutput());
+          window.addEventListener('keydown', e => {
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+              const active = canvas.getActiveObject();
+              if (active) { canvas.remove(active); this.updateOutput(); }
+            }
+          });
+          document.getElementById('rich-image-file').addEventListener('change', e => this.loadFile(e.target.files[0]));
+          this.updateOutput();
+        },
+        toggleDrawMode() {
+          if (!currentImage) return alert('請先上傳選單底圖');
+          isDrawing = true;
+          document.getElementById('draw-btn').textContent = '拖曳畫布劃定中';
+        },
+        clearAreas() {
+          rects().forEach(o => canvas.remove(o));
+          this.updateOutput();
+        },
+        loadFile(file) {
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = e => {
+            const img = new Image();
+            img.onload = () => {
+              const c = document.createElement('canvas');
+              c.width = img.width; c.height = img.height;
+              c.getContext('2d').drawImage(img, 0, 0);
+              let quality = 0.92;
+              let b64 = c.toDataURL('image/jpeg', quality);
+              while (b64.length > 1200000 && quality > 0.45) {
+                quality -= 0.08;
+                b64 = c.toDataURL('image/jpeg', quality);
+              }
+              this.load(file.name, {}, b64);
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+        },
+        load(name, data = {}, image) {
+          currentImage = image || currentImage;
+          if (name) document.getElementById('rich-menu-name').value = name.replace(/\.(jpg|jpeg|png)$/i, '');
+          if (data.chatBarText) document.getElementById('rich-menu-chatbar').value = data.chatBarText;
+          document.getElementById('canvas-placeholder').style.display = currentImage ? 'none' : 'flex';
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const ratio = img.height / img.width;
+            currentHeight = Math.round(2500 * ratio);
+            const displayWidth = 600;
+            const displayHeight = Math.round(displayWidth * ratio);
+            canvas.setWidth(displayWidth);
+            canvas.setHeight(displayHeight);
+            canvas.clear();
+            fabric.Image.fromURL(currentImage, bg => {
+              canvas.setBackgroundImage(bg, canvas.renderAll.bind(canvas), { scaleX: displayWidth / bg.width, scaleY: displayHeight / bg.height });
+              this.importAreas(data.areas || [], displayWidth / 2500);
+            }, { crossOrigin: 'anonymous' });
+          };
+          img.onerror = () => alert('圖片載入失敗，請確認圖片網址或檔案格式');
+          img.src = currentImage;
+        },
+        importAreas(areas, scale) {
+          rects().forEach(o => canvas.remove(o));
+          areas.forEach(a => {
+            const r = new fabric.Rect({
+              left: a.bounds.x * scale,
+              top: a.bounds.y * scale,
+              width: a.bounds.width * scale,
+              height: a.bounds.height * scale,
+              fill: 'rgba(5, 150, 105, .24)',
+              stroke: '#059669',
+              strokeWidth: 2
+            });
+            r.action = normalizeAction(a.action);
+            canvas.add(r);
+          });
+          this.updateOutput();
+        },
+        updateOutput() {
+          const width = canvas?.getWidth?.() || 600;
+          const scale = 2500 / width;
+          const areas = rects().map(o => {
+            let x = Math.max(0, Math.round(o.left * scale));
+            let y = Math.max(0, Math.round(o.top * scale));
+            let w = Math.round(o.getScaledWidth() * scale);
+            let h = Math.round(o.getScaledHeight() * scale);
+            if (x + w > 2500) w = 2500 - x;
+            if (y + h > currentHeight) h = currentHeight - y;
+            return { bounds: { x, y, width: w, height: h }, action: normalizeAction(o.action) };
+          });
+          const menu = {
+            size: { width: 2500, height: currentHeight },
+            selected: true,
+            name: document.getElementById('rich-menu-name').value || 'New Rich Menu',
+            chatBarText: document.getElementById('rich-menu-chatbar').value || '選單',
+            areas
+          };
+          document.getElementById('json-output').value = JSON.stringify(menu, null, 2);
+          this.renderEditor(areas);
+        },
+        renderEditor(areas) {
+          const box = document.getElementById('area-editor');
+          if (!areas.length) {
+            box.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-300 p-5 text-sm text-slate-500 leading-relaxed">尚未劃定熱區。點「開始劃定區域」後，在圖片上拖曳即可建立按鈕。</div>';
+            return;
+          }
+          box.innerHTML = areas.map((a, i) => {
+            const action = a.action || {};
+            const type = action.type || 'uri';
+            const field = type === 'uri'
+              ? `<input class="input font-mono text-xs" value="${action.uri || ''}" placeholder="https://" onchange="MenuModule.updateAction(${i}, 'uri', this.value)">`
+              : type === 'message'
+                ? `<input class="input text-sm" value="${action.text || ''}" placeholder="點擊後送出的文字" onchange="MenuModule.updateAction(${i}, 'text', this.value)">`
+                : type === 'postback'
+                  ? `<div class="space-y-2"><input class="input font-mono text-xs" value="${action.data || ''}" placeholder="回傳 Data" onchange="MenuModule.updateAction(${i}, 'data', this.value)"><input class="input text-sm" value="${action.displayText || ''}" placeholder="畫面顯示文字" onchange="MenuModule.updateAction(${i}, 'displayText', this.value)"></div>`
+                  : `<div class="space-y-2"><input class="input font-mono text-xs" value="${action.richMenuAliasId || ''}" placeholder="Alias ID" onchange="MenuModule.updateAction(${i}, 'richMenuAliasId', this.value)"><input class="input font-mono text-xs" value="${action.data || ''}" placeholder="data" onchange="MenuModule.updateAction(${i}, 'data', this.value)"></div>`;
+            return `<div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div class="flex items-center justify-between mb-3">
+                <div class="text-sm font-semibold text-slate-700">熱區 #${i + 1}</div>
+                <button onclick="MenuModule.removeArea(${i})" class="text-red-500 text-sm font-semibold">刪除</button>
+              </div>
+              <select class="input mb-3" onchange="MenuModule.updateAction(${i}, 'type', this.value)">
+                <option value="uri" ${type === 'uri' ? 'selected' : ''}>開啟網址 URI</option>
+                <option value="message" ${type === 'message' ? 'selected' : ''}>傳送文字 Message</option>
+                <option value="postback" ${type === 'postback' ? 'selected' : ''}>回傳資料 Postback</option>
+                <option value="richmenuswitch" ${type === 'richmenuswitch' ? 'selected' : ''}>切換選單 Switch</option>
+              </select>
+              ${field}
+            </div>`;
+          }).join('');
+        },
+        updateAction(index, prop, value) {
+          const target = rects()[index];
+          if (!target) return;
+          if (prop === 'type') target.action = normalizeAction({ type: value });
+          else target.action = { ...(target.action || { type: 'uri' }), [prop]: value };
+          this.updateOutput();
+        },
+        removeArea(index) {
+          const target = rects()[index];
+          if (target) canvas.remove(target);
+          this.updateOutput();
+        },
+        validate(menu) {
+          if (!currentImage) throw new Error('請先上傳選單底圖');
+          if (!menu.name) throw new Error('選單名稱不可為空');
+          if (!menu.chatBarText) throw new Error('選單列文字不可為空');
+          if (!menu.areas.length) throw new Error('請至少劃定一個熱區');
+          const h = menu.size.height;
+          if (Math.abs(h - 1686) < 100) menu.size.height = 1686;
+          else if (Math.abs(h - 843) < 100) menu.size.height = 843;
+          else throw new Error(`圖片比例不符合 LINE 規格：目前換算 2500 x ${h}，請使用 2500 x 1686 或 2500 x 843。`);
+          menu.areas.forEach((area, i) => {
+            const a = area.action || {};
+            if (a.type === 'uri' && !a.uri) throw new Error(`熱區 #${i + 1} 尚未填寫網址`);
+            if (a.type === 'message' && !a.text) throw new Error(`熱區 #${i + 1} 尚未填寫文字`);
+            if (a.type === 'postback' && !a.data) throw new Error(`熱區 #${i + 1} 尚未填寫 Data`);
+            if (a.type === 'richmenuswitch' && (!a.richMenuAliasId || !a.data)) throw new Error(`熱區 #${i + 1} 尚未填寫 Alias ID 或 data`);
+          });
+        },
+        async deploy() {
+          try {
+            const menu = JSON.parse(document.getElementById('json-output').value || '{}');
+            this.validate(menu);
+            if (!confirm('確定要發布此選單嗎？這會覆蓋官方帳號目前的預設圖文選單。')) return;
+            await callWorker('deployRichMenu', { menuObject: menu, imageBase64: currentImage }, 90000);
+            alert('發布成功，請至 LINE 官方帳號確認。');
+          } catch (err) {
+            alert('發布失敗：' + err.message);
+          }
+        },
+        getSaveData() {
+          return { data: JSON.parse(document.getElementById('json-output').value || '{}'), image: currentImage, name: document.getElementById('rich-menu-name').value };
+        },
+        setCurrentSaveId(id) { currentSaveId = id; },
+        getCurrentSaveId() { return currentSaveId; }
+      };
+    })();
+
+    const StorageModule = {
+      toggle() {
+        document.getElementById('save-drawer').classList.toggle('hidden');
+        this.render();
+      },
+      list() {
+        try { return JSON.parse(localStorage.getItem('lineoa_rich_menu_saves') || '[]'); } catch (_) { return []; }
+      },
+      save(isNew) {
+        const current = MenuModule.getSaveData();
+        if (!current.image) return alert('請先上傳圖片');
+        let saves = this.list();
+        const id = isNew || !MenuModule.getCurrentSaveId() ? String(Date.now()) : MenuModule.getCurrentSaveId();
+        const item = { id, name: current.name || '未命名選單', date: new Date().toLocaleString(), data: current.data, image: current.image };
+        const idx = saves.findIndex(x => x.id === id);
+        if (idx >= 0) saves[idx] = item; else saves.unshift(item);
+        localStorage.setItem('lineoa_rich_menu_saves', JSON.stringify(saves.slice(0, 8)));
+        MenuModule.setCurrentSaveId(id);
+        this.render();
+        alert('已儲存到本機紀錄');
+      },
+      load(index) {
+        const item = this.list()[index];
+        if (!item) return;
+        MenuModule.setCurrentSaveId(item.id);
+        MenuModule.load(item.name, item.data, item.image);
+        this.toggle();
+      },
+      remove(index) {
+        if (!confirm('確定刪除此本機紀錄？')) return;
+        const saves = this.list();
+        saves.splice(index, 1);
+        localStorage.setItem('lineoa_rich_menu_saves', JSON.stringify(saves));
+        this.render();
+      },
+      render() {
+        const box = document.getElementById('save-list');
+        const saves = this.list();
+        if (!saves.length) {
+          box.innerHTML = '<div class="text-slate-500 text-sm">目前沒有本機紀錄。</div>';
+          return;
+        }
+        box.innerHTML = saves.map((item, i) => `<div class="rounded-2xl border border-slate-200 p-4">
+          <div class="font-semibold">${item.name}</div>
+          <div class="text-xs text-slate-500 mt-1">${item.date}</div>
+          <div class="grid grid-cols-2 gap-2 mt-3">
+            <button onclick="StorageModule.load(${i})" class="py-2 rounded-xl bg-blue-50 text-blue-700 font-semibold">載入</button>
+            <button onclick="StorageModule.remove(${i})" class="py-2 rounded-xl bg-red-50 text-red-600 font-semibold">刪除</button>
+          </div>
+        </div>`).join('');
+      }
+    };
+
+    const VoomModule = {
+      async fetch() {
+        const url = document.getElementById('voom-url').value.trim();
+        if (!url) return this.error('請輸入網址');
+        document.getElementById('voom-fetch-btn').disabled = true;
+        document.getElementById('voom-error').classList.add('hidden');
+        document.getElementById('voom-result').classList.add('hidden');
+        try {
+          const data = await callWorker('extractLineVoomMedia', { url }, 60000);
+          this.render(data);
+        } catch (err) {
+          this.error(err.message);
+        } finally {
+          document.getElementById('voom-fetch-btn').disabled = false;
+        }
+      },
+      error(msg) {
+        const box = document.getElementById('voom-error');
+        box.textContent = msg;
+        box.classList.remove('hidden');
+      },
+      render(data) {
+        document.getElementById('voom-result').classList.remove('hidden');
+        document.getElementById('voom-json').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('voom-type').textContent = ({ VIDEO: '影片貼文', IMAGE: '圖片貼文', MIXED: '圖影混合', UNKNOWN: '未知類型' })[data.type] || data.type || '未知類型';
+        const videoBox = document.getElementById('voom-video');
+        if (data.video?.videoUrl) {
+          videoBox.classList.remove('hidden');
+          videoBox.innerHTML = `<h3 class="font-semibold mb-3">影片內容</h3>
+            <video controls class="w-full max-h-[420px] bg-black rounded-xl mb-4" src="${data.video.videoUrl}"></video>
+            ${this.linkRow('影片網址', data.video.videoUrl)}
+            ${this.linkRow('縮圖網址', data.video.thumbnailUrl || '')}`;
+        } else {
+          videoBox.classList.add('hidden');
+          videoBox.innerHTML = '';
+        }
+        const images = data.images || [];
+        document.getElementById('voom-images').innerHTML = images.map((img, i) => `<div class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div class="bg-slate-900 min-h-[220px] flex items-center justify-center p-3">
+            <img src="${img.url}" class="max-h-72 object-contain rounded" alt="VOOM image ${i + 1}">
+          </div>
+          <div class="p-4">
+            <div class="text-sm font-semibold text-slate-700 mb-2">圖片 #${i + 1}${img.width || img.height ? ` (${img.width || '?'} x ${img.height || '?'})` : ''}</div>
+            ${this.linkRow('圖片網址', img.url)}
+          </div>
+        </div>`).join('');
+        if (!data.video?.videoUrl && !images.length) this.error('沒有解析到影片或圖片網址。');
+      },
+      linkRow(label, url) {
+        if (!url) return `<div class="text-sm text-slate-400">${label}：無</div>`;
+        return `<div class="flex items-center gap-2 text-sm mb-2">
+          <span class="shrink-0 text-slate-500">${label}</span>
+          <a class="flex-1 truncate text-blue-600 font-mono" href="${url}" target="_blank">${url}</a>
+          <button class="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold" onclick="copyText('${url.replace(/'/g, "\\'")}', this)">複製</button>
+        </div>`;
+      }
+    };
+
+    MenuModule.init();
+  </script>
+</body>
+</html>
