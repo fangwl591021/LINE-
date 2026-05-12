@@ -347,7 +347,8 @@ window.refreshPointBalanceBadge = async function() {
   if (!badge || !userId || typeof window.fetchAPI !== 'function') return;
 
   try {
-    const pointUserId = localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || '';
+    const samePointLiff = String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '');
+    const pointUserId = samePointLiff ? '' : (localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || '');
     const res = await window.fetchAPI('queryUserPoints', {
       userId,
       pointUserId,
@@ -401,7 +402,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const pointUid = urlParams.get('pt_uid') || '';
     if (pointUid) {
       try {
-        localStorage.setItem('ACTMASTER_POINT_UID_' + window.currentUserProfile.userId, pointUid);
+        if (String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '')) {
+          localStorage.removeItem('ACTMASTER_POINT_UID_' + window.currentUserProfile.userId);
+        } else {
+          localStorage.setItem('ACTMASTER_POINT_UID_' + window.currentUserProfile.userId, pointUid);
+        }
       } catch (e) {}
       setTimeout(() => window.refreshPointBalanceBadge?.(), 200);
     }
