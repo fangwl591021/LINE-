@@ -92,7 +92,7 @@
 
   <script>
     const POINT_LIFF_ID = '1660923784-vViMTZ1y';
-    const BUSINESS_LIFF_ID = '2009886448-2UHnJgyT';
+    const BUSINESS_APP_URL = 'https://fangwl591021.github.io/LINE-/';
     const POINT_OA_URL = 'https://lin.ee/sDW7u4T';
 
     const titleEl = document.getElementById('status-title');
@@ -132,7 +132,7 @@
       if (profile && profile.userId) next.set('pt_uid', profile.userId);
       next.set('point_friend', friendFlag ? '1' : '0');
       next.set('point_from', 'point-liff');
-      return 'https://liff.line.me/' + encodeURIComponent(BUSINESS_LIFF_ID) + '?' + next.toString();
+      return BUSINESS_APP_URL + '?' + next.toString();
     }
 
     function goNext(profile, friendFlag) {

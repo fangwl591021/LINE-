@@ -1,6 +1,6 @@
 /* ==================== 全域設定 ==================== */
 
-const DEFAULT_LIFF_ID = "2009886448-2UHnJgyT";
+const DEFAULT_LIFF_ID = "1660923784-vViMTZ1y";
 const NFC_LIFF_ID = "2009886448-Asc5tytD";
 const POINT_LIFF_ID = "1660923784-vViMTZ1y";
 const POINT_OA_URL = "https://lin.ee/sDW7u4T";

@@ -673,7 +673,7 @@ const MessagingModule = {
   buildFlex(payload) {
     const { card, config, referrerId, networkId, liffId } = payload;
     
-    const activeLiffId = liffId || '2009886448-2UHnJgyT';
+    const activeLiffId = liffId || '1660923784-vViMTZ1y';
     let badgeUrl = 'https://liff.line.me/' + activeLiffId + '?shareCardId=' + card.rowId;
     if (referrerId) badgeUrl += '&ref=' + referrerId;
     if (networkId) badgeUrl += '&net=' + networkId;
