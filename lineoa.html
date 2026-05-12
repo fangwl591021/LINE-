@@ -18,9 +18,14 @@
 <body class="bg-slate-50 text-slate-900 min-h-screen">
   <div class="h-full flex flex-col">
     <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-      <div>
+      <div class="flex items-center gap-4">
+        <button type="button" onclick="goBackToAdmin()" class="w-11 h-11 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center justify-center" title="返回後台">
+          <span class="material-symbols-outlined">arrow_back</span>
+        </button>
+        <div>
         <h1 class="text-2xl font-semibold">LINE OA 選單區</h1>
         <p class="text-sm text-slate-500 mt-1">整合圖文選單與 LINE VOOM 網址擷取器</p>
+        </div>
       </div>
       <div class="flex rounded-xl bg-slate-100 p-1">
         <button id="tab-richmenu" class="tool-tab active px-5 py-2 rounded-lg text-sm font-semibold" onclick="switchTool('richmenu')">圖文選單</button>
@@ -137,32 +142,51 @@
       document.getElementById('tab-capture').classList.toggle('active', name === 'capture');
     }
 
-    async function callWorker(action, payload = {}, timeoutMs = 60000) {
-      if (window.parent && typeof window.parent.fetchAPI === 'function') {
-        const data = await window.parent.fetchAPI(action, payload, { timeoutMs });
-        if (!data) throw new Error('後台 API 沒有回傳資料，請確認登入權限或 Worker 狀態');
-        return data;
+    function goBackToAdmin() {
+      if (window.opener && !window.opener.closed) {
+        window.close();
+        return;
       }
-      const token = window.parent?.liff?.isLoggedIn?.() ? window.parent.liff.getAccessToken() : '';
+      window.location.href = './admin.html';
+    }
+
+    async function callWorker(action, payload = {}, timeoutMs = 60000) {
+      const token = localStorage.getItem('lineoa_access_token') || '';
       if (token) payload.lineAccessToken = token;
-      const res = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, payload })
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || data.message || 'API 執行失敗');
-      return data.data || data;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, payload }),
+          signal: controller.signal
+        });
+        const raw = await res.text();
+        let data = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch (_) {
+          throw new Error(`API returned invalid JSON: ${raw.slice(0, 120)}`);
+        }
+        if (!res.ok || data.success === false) {
+          throw new Error(data.error || data.message || `API failed (${res.status})`);
+        }
+        return data.data || data;
+      } finally {
+        clearTimeout(timer);
+      }
     }
 
     function copyText(text, btn) {
       navigator.clipboard?.writeText(text).then(() => {
         if (!btn) return;
         const old = btn.textContent;
-        btn.textContent = '已複製';
+        btn.textContent = 'Copied';
         setTimeout(() => btn.textContent = old, 1200);
       });
     }
+
 
     const MenuModule = (() => {
       let canvas, isDrawing = false, isDown = false, rect, startX, startY;
