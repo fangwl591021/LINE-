@@ -407,57 +407,77 @@ const PointModule = {
     const lineUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || payload.authenticatedUserId || payload.userId || '').trim();
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
-    const body = {
+    const baseBody = {
       api_key: apiKey,
       LINE_user_id: lineUserId,
       page: Math.max(1, Number(payload.page || 1)),
       per_page: 100
     };
-    if (payload.shop_id || payload.shopId) body.shop_id = Number(payload.shop_id || payload.shopId);
-    body.point_type = String(payload.point_type || payload.pointType || 'system_point');
-    if (payload.date_start || payload.dateStart) body.date_start = String(payload.date_start || payload.dateStart);
-    if (payload.date_end || payload.dateEnd) body.date_end = String(payload.date_end || payload.dateEnd);
+    if (payload.shop_id || payload.shopId) baseBody.shop_id = Number(payload.shop_id || payload.shopId);
+    if (payload.date_start || payload.dateStart) baseBody.date_start = String(payload.date_start || payload.dateStart);
+    if (payload.date_end || payload.dateEnd) baseBody.date_end = String(payload.date_end || payload.dateEnd);
 
-    const firstPage = await this.fetchPointPage(body);
-    if (firstPage.error) return { success: false, error: firstPage.error, code: firstPage.code };
+    const collectPages = async (body) => {
+      const firstPage = await this.fetchPointPage(body);
+      if (firstPage.error) return { error: firstPage.error, code: firstPage.code };
 
-    const data = firstPage.data;
-    const pagination = data.data?.pagination || {};
-    const totalPages = Math.max(1, this.number(pagination.total_pages));
-    let combinedList = Array.isArray(data.data?.list) ? data.data.list.slice() : [];
+      const data = firstPage.data;
+      const pagination = data.data?.pagination || {};
+      const totalPages = Math.max(1, this.number(pagination.total_pages));
+      let combinedList = Array.isArray(data.data?.list) ? data.data.list.slice() : [];
 
-    if (totalPages > 1) {
-      const seenPages = new Set([1]);
-      const pages = [];
-      for (let page = 2; page <= Math.min(totalPages, 20); page++) pages.push(page);
-      if (totalPages > 20) {
-        const tailStart = Math.max(21, totalPages - 4);
-        for (let page = tailStart; page <= totalPages; page++) pages.push(page);
-      }
+      if (totalPages > 1) {
+        const seenPages = new Set([1]);
+        const pages = [];
+        for (let page = 2; page <= Math.min(totalPages, 20); page++) pages.push(page);
+        if (totalPages > 20) {
+          const tailStart = Math.max(21, totalPages - 4);
+          for (let page = tailStart; page <= totalPages; page++) pages.push(page);
+        }
 
-      for (const page of pages) {
-        if (seenPages.has(page)) continue;
-        seenPages.add(page);
-        const pageResult = await this.fetchPointPage({ ...body, page });
-        if (!pageResult.error && Array.isArray(pageResult.data?.data?.list)) {
-          combinedList = combinedList.concat(pageResult.data.data.list);
+        for (const page of pages) {
+          if (seenPages.has(page)) continue;
+          seenPages.add(page);
+          const pageResult = await this.fetchPointPage({ ...body, page });
+          if (!pageResult.error && Array.isArray(pageResult.data?.data?.list)) {
+            combinedList = combinedList.concat(pageResult.data.data.list);
+          }
         }
       }
-    }
 
-    const latestBalance = this.latestBalance(combinedList);
-    const balance = latestBalance;
+      return {
+        body,
+        pagination,
+        total: this.number(pagination.total),
+        list: combinedList,
+        latestBalance: this.latestBalance(combinedList)
+      };
+    };
+
+    const requestedType = String(payload.point_type || payload.pointType || '').trim();
+    const typedBody = { ...baseBody, point_type: requestedType || 'system_point' };
+    const typedResult = await collectPages(typedBody);
+    if (typedResult.error) return { success: false, error: typedResult.error, code: typedResult.code };
+
+    const allTypeResult = await collectPages(baseBody);
+    const useAllType = !allTypeResult.error && allTypeResult.latestBalance !== typedResult.latestBalance;
+    const selected = useAllType ? allTypeResult : typedResult;
+    const balance = selected.latestBalance;
 
     return {
       success: true,
       data: {
         balance,
-        latestBalance,
-        sampledRows: combinedList.length,
-        pointType: body.point_type,
-        total: this.number(pagination.total),
-        pagination,
-        list: combinedList.slice(0, body.per_page)
+        latestBalance: selected.latestBalance,
+        typedBalance: typedResult.latestBalance,
+        allTypeBalance: allTypeResult.error ? null : allTypeResult.latestBalance,
+        queriedLineUserId: lineUserId,
+        sampledRows: selected.list.length,
+        pointType: selected.body.point_type || 'all',
+        requestedPointType: typedBody.point_type,
+        total: selected.total,
+        pagination: selected.pagination,
+        list: selected.list.slice(0, baseBody.per_page)
       }
     };
   }
