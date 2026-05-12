@@ -151,6 +151,7 @@ const SecurityModule = {
     const ownTokenRequired = new Set([
       'registerUser',
       'updateUserProfile',
+      'linkUserIdentity',
       'saveCard',
       'updateCard',
       'claimCardAndRegister',
@@ -201,6 +202,10 @@ const SecurityModule = {
 
     if (action === 'updateUserProfile') {
       payload.userId = actor.userId;
+    }
+
+    if (action === 'linkUserIdentity') {
+      payload.newUserId = actor.userId;
     }
 
     if (action === 'claimCardAndRegister') {
@@ -1203,6 +1208,73 @@ const D1ReadModule = {
     }
 
     return { success: true, data: { isRegistered: false, info: null, source: 'd1' } };
+  },
+
+  async linkUserIdentity(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const oldUserId = this.text(payload.oldUserId || payload.previousUserId || payload.legacyUserId);
+    const newUserId = this.text(payload.newUserId || payload.authenticatedUserId || payload.userId);
+    if (!oldUserId || !newUserId) return { success: false, error: 'Missing identity ids' };
+    if (oldUserId === newUserId) return await this.checkUser({ userId: newUserId }, env);
+
+    const existingNew = await this.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [newUserId, newUserId]);
+    if (existingNew) {
+      const profile = this.userRow(existingNew);
+      if (env.ACTMASTER_KV) await env.ACTMASTER_KV.put(`U_PROFILE_${newUserId}`, JSON.stringify(profile), { expirationTtl: 600 });
+      return { success: true, data: { isRegistered: true, info: profile, source: 'identity_existing' } };
+    }
+
+    const oldUser = await this.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [oldUserId, oldUserId]);
+    if (!oldUser) return { success: false, error: '找不到舊會員資料' };
+
+    const cachedName = this.text(payload.name || payload.cachedName);
+    const cachedPhone = this.text(payload.phone || payload.cachedPhone);
+    const oldName = this.text(oldUser.name);
+    const oldPhone = this.text(oldUser.phone);
+    const isHardAdmin = SecurityModule.hardAdminIds.has(oldUserId);
+    const nameOk = cachedName && oldName && cachedName === oldName;
+    const phoneOk = cachedPhone && oldPhone && cachedPhone === oldPhone;
+    if (!isHardAdmin && !nameOk && !phoneOk) {
+      return { success: false, error: '舊帳號驗證不足，請由管理員合併身份' };
+    }
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(line_id) DO UPDATE SET
+        name=excluded.name,industry=excluded.industry,gender=excluded.gender,phone=excluded.phone,birthday=excluded.birthday,
+        region=excluded.region,address=excluded.address,socials=excluded.socials,role=excluded.role,store_id=excluded.store_id,
+        referrer_id=excluded.referrer_id,network_id=excluded.network_id,tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
+    `).bind(
+      `USR_${newUserId}`,
+      newUserId,
+      oldUser.name || cachedName || '',
+      oldUser.industry || '',
+      oldUser.gender || '',
+      oldUser.phone || cachedPhone || '',
+      oldUser.birthday || '',
+      oldUser.region || '',
+      oldUser.address || '',
+      oldUser.socials || '',
+      isHardAdmin ? 'admin' : (oldUser.role || 'user'),
+      oldUser.store_id || '',
+      oldUser.referrer_id || '',
+      oldUser.network_id || 'admin',
+      oldUser.tg_token || '',
+      oldUser.tg_chat_id || ''
+    ).run();
+
+    await env.ACTMASTER_DB.prepare('UPDATE card_contacts SET line_id = ?, updated_at = CURRENT_TIMESTAMP WHERE line_id = ?').bind(newUserId, oldUserId).run();
+    await env.ACTMASTER_DB.prepare('UPDATE registrants SET line_id = ? WHERE line_id = ?').bind(newUserId, oldUserId).run().catch(() => null);
+    if (env.ACTMASTER_KV) {
+      await env.ACTMASTER_KV.delete(`U_PROFILE_${oldUserId}`).catch(() => null);
+      await env.ACTMASTER_KV.delete(`U_PROFILE_${newUserId}`).catch(() => null);
+    }
+
+    const migrated = await this.first(env, 'SELECT * FROM users WHERE line_id = ? LIMIT 1', [newUserId]);
+    const profile = this.userRow(migrated);
+    if (env.ACTMASTER_KV) await env.ACTMASTER_KV.put(`U_PROFILE_${newUserId}`, JSON.stringify(profile), { expirationTtl: 600 });
+    return { success: true, data: { isRegistered: true, info: profile, oldUserId, newUserId, source: 'identity_linked' } };
   },
 
   async getAllUsers(payload, env) {
@@ -3609,6 +3681,15 @@ async function dispatchAction(action, payload, request, env) {
         console.error("D1 upsertUser fallback", e);
       }
       return await AuthModule.updateAndClearCache(action, payload, env);
+    }
+    case 'linkUserIdentity': {
+      try {
+        const d1Result = await D1ReadModule.linkUserIdentity(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 linkUserIdentity fallback", e);
+      }
+      return { success: false, error: '身份合併失敗' };
     }
     case 'updateUserRole': {
       try {

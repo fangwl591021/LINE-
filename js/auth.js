@@ -259,6 +259,56 @@ window.recoverRegisteredUserFromBoundCard = async function(userId) {
   }
 };
 
+window.findCachedLegacyUser = function(currentUserId) {
+  try {
+    const candidates = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('ACTMASTER_USER_')) continue;
+      const oldUserId = key.replace('ACTMASTER_USER_', '');
+      if (!oldUserId || oldUserId === currentUserId) continue;
+      const cached = JSON.parse(localStorage.getItem(key) || 'null');
+      if (!cached || !cached.info) continue;
+      candidates.push({
+        oldUserId,
+        info: cached.info,
+        savedAt: Number(cached.savedAt || 0)
+      });
+    }
+    candidates.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+    return candidates[0] || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+window.recoverRegisteredUserFromLegacyCache = async function(userId) {
+  userId = userId || window.currentUserProfile?.userId || '';
+  if (!userId || typeof window.fetchAPI !== 'function') return null;
+  const cached = window.findCachedLegacyUser(userId);
+  if (!cached || !cached.oldUserId || !cached.info) return null;
+
+  try {
+    const res = await window.fetchAPI('linkUserIdentity', {
+      oldUserId: cached.oldUserId,
+      name: cached.info.name || '',
+      phone: cached.info.phone || ''
+    }, true);
+    const info = res && (res.info || res.data?.info);
+    if (!info) return null;
+
+    window.applyRegisteredUserSession(info);
+    try {
+      localStorage.setItem('ACTMASTER_USER_' + userId, JSON.stringify({ info, savedAt: Date.now() }));
+      localStorage.removeItem('ACTMASTER_USER_' + cached.oldUserId);
+    } catch (e) {}
+    return info;
+  } catch (e) {
+    console.warn('Legacy identity recovery failed:', e);
+    return null;
+  }
+};
+
 window.recordShareCardVisitOnce = async function(params) {
   if (!params || !params.shareCardId || !window.currentUserProfile?.userId) return null;
 
@@ -457,7 +507,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       if (!claimCardId) {
-        const recovered = await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
+        const recovered = await window.recoverRegisteredUserFromLegacyCache(window.currentUserProfile.userId)
+          || await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
         if (recovered) {
           window.goPage('home');
           if (typeof window.loadHomeData === 'function') window.loadHomeData();
