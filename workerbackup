@@ -399,7 +399,7 @@ const PointModule = {
     const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
 
-    const lineUserId = String(payload.authenticatedUserId || payload.userId || payload.LINE_user_id || '').trim();
+    const lineUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || payload.authenticatedUserId || payload.userId || '').trim();
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
     const body = {

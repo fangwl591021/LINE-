@@ -347,8 +347,10 @@ window.refreshPointBalanceBadge = async function() {
   if (!badge || !userId || typeof window.fetchAPI !== 'function') return;
 
   try {
+    const pointUserId = localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || '';
     const res = await window.fetchAPI('queryUserPoints', {
       userId,
+      pointUserId,
       page: 1,
       per_page: 100
     }, true);
@@ -396,6 +398,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const claimCardId = urlParams.get('claim');
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
+    const pointUid = urlParams.get('pt_uid') || '';
+    if (pointUid) {
+      try {
+        localStorage.setItem('ACTMASTER_POINT_UID_' + window.currentUserProfile.userId, pointUid);
+      } catch (e) {}
+      setTimeout(() => window.refreshPointBalanceBadge?.(), 200);
+    }
     if (refId) writeFirstReferral(window.currentUserProfile.userId, refId, netId);
     const authCacheKey = 'ACTMASTER_USER_' + window.currentUserProfile.userId;
     let usedCachedUser = false;
