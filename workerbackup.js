@@ -363,6 +363,25 @@ const PointModule = {
     return Number.isFinite(n) ? n : 0;
   },
 
+  time(value) {
+    const text = String(value || '').trim();
+    if (!text) return 0;
+    const parsed = Date.parse(text.replace(' ', 'T'));
+    return Number.isFinite(parsed) ? parsed : 0;
+  },
+
+  latestBalance(list) {
+    if (!Array.isArray(list) || !list.length) return 0;
+    const rowsWithBalance = list.filter(item => item.point_balance !== undefined && item.point_balance !== null && String(item.point_balance).trim() !== '');
+    if (!rowsWithBalance.length) return list.reduce((sum, item) => sum + this.number(item.get_point), 0);
+    const sorted = rowsWithBalance.slice().sort((a, b) => {
+      const byTime = this.time(b.created_at) - this.time(a.created_at);
+      if (byTime !== 0) return byTime;
+      return this.number(b.id) - this.number(a.id);
+    });
+    return this.number(sorted[0].point_balance);
+  },
+
   async queryUserPoints(payload, env) {
     const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
@@ -392,12 +411,7 @@ const PointModule = {
     }
 
     const list = Array.isArray(data.data?.list) ? data.data.list : [];
-    let balance = 0;
-    if (list.length && list[0].point_balance !== undefined && list[0].point_balance !== null) {
-      balance = this.number(list[0].point_balance);
-    } else {
-      balance = list.reduce((sum, item) => sum + this.number(item.get_point), 0);
-    }
+    const balance = this.latestBalance(list);
 
     return {
       success: true,

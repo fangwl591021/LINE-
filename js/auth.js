@@ -350,7 +350,7 @@ window.refreshPointBalanceBadge = async function() {
     const res = await window.fetchAPI('queryUserPoints', {
       userId,
       page: 1,
-      per_page: 20
+      per_page: 100
     }, true);
     if (!res || res.error) {
       badge.classList.add('hidden');
