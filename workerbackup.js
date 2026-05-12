@@ -382,6 +382,19 @@ const PointModule = {
     return this.number(sorted[0].point_balance);
   },
 
+  async fetchPointPage(body) {
+    const res = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      return { error: data.message || data.code || ('Point API HTTP ' + res.status), code: data.code || '', data };
+    }
+    return { data };
+  },
+
   async queryUserPoints(payload, env) {
     const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
@@ -393,33 +406,37 @@ const PointModule = {
       api_key: apiKey,
       LINE_user_id: lineUserId,
       page: Math.max(1, Number(payload.page || 1)),
-      per_page: Math.min(100, Math.max(1, Number(payload.per_page || payload.perPage || 20)))
+      per_page: 100
     };
     if (payload.shop_id || payload.shopId) body.shop_id = Number(payload.shop_id || payload.shopId);
     if (payload.point_type || payload.pointType) body.point_type = String(payload.point_type || payload.pointType);
     if (payload.date_start || payload.dateStart) body.date_start = String(payload.date_start || payload.dateStart);
     if (payload.date_end || payload.dateEnd) body.date_end = String(payload.date_end || payload.dateEnd);
 
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.success === false) {
-      return { success: false, error: data.message || data.code || ('Point API HTTP ' + res.status), code: data.code || '' };
+    const firstPage = await this.fetchPointPage(body);
+    if (firstPage.error) return { success: false, error: firstPage.error, code: firstPage.code };
+
+    const data = firstPage.data;
+    const pagination = data.data?.pagination || {};
+    const totalPages = Math.max(1, this.number(pagination.total_pages));
+    let combinedList = Array.isArray(data.data?.list) ? data.data.list.slice() : [];
+
+    if (totalPages > 1) {
+      const lastPage = await this.fetchPointPage({ ...body, page: totalPages });
+      if (!lastPage.error && Array.isArray(lastPage.data?.data?.list)) {
+        combinedList = combinedList.concat(lastPage.data.data.list);
+      }
     }
 
-    const list = Array.isArray(data.data?.list) ? data.data.list : [];
-    const balance = this.latestBalance(list);
+    const balance = this.latestBalance(combinedList);
 
     return {
       success: true,
       data: {
         balance,
-        total: this.number(data.data?.pagination?.total),
-        pagination: data.data?.pagination || {},
-        list: list.slice(0, body.per_page)
+        total: this.number(pagination.total),
+        pagination,
+        list: combinedList.slice(0, body.per_page)
       }
     };
   }
