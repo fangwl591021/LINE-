@@ -154,6 +154,7 @@ const SecurityModule = {
       'saveCard',
       'updateCard',
       'claimCardAndRegister',
+      'queryUserPoints',
       'mlmCreateOrder',
       'createTenantBonusOrder',
       'nfcCheckin',
@@ -353,6 +354,63 @@ const StorageModule = {
 };
 
 // ==================== 模組 3: AI 服務 (AI Module) ====================
+// ==================== Point Service Module ====================
+const PointModule = {
+  apiUrl: 'https://aiwe.cc/index.php/wp-json/wetw-point/v1/query-user-point-list',
+
+  number(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  },
+
+  async queryUserPoints(payload, env) {
+    const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
+    if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
+
+    const lineUserId = String(payload.authenticatedUserId || payload.userId || payload.LINE_user_id || '').trim();
+    if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
+
+    const body = {
+      api_key: apiKey,
+      LINE_user_id: lineUserId,
+      page: Math.max(1, Number(payload.page || 1)),
+      per_page: Math.min(100, Math.max(1, Number(payload.per_page || payload.perPage || 20)))
+    };
+    if (payload.shop_id || payload.shopId) body.shop_id = Number(payload.shop_id || payload.shopId);
+    if (payload.point_type || payload.pointType) body.point_type = String(payload.point_type || payload.pointType);
+    if (payload.date_start || payload.dateStart) body.date_start = String(payload.date_start || payload.dateStart);
+    if (payload.date_end || payload.dateEnd) body.date_end = String(payload.date_end || payload.dateEnd);
+
+    const res = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      return { success: false, error: data.message || data.code || ('Point API HTTP ' + res.status), code: data.code || '' };
+    }
+
+    const list = Array.isArray(data.data?.list) ? data.data.list : [];
+    let balance = 0;
+    if (list.length && list[0].point_balance !== undefined && list[0].point_balance !== null) {
+      balance = this.number(list[0].point_balance);
+    } else {
+      balance = list.reduce((sum, item) => sum + this.number(item.get_point), 0);
+    }
+
+    return {
+      success: true,
+      data: {
+        balance,
+        total: this.number(data.data?.pagination?.total),
+        pagination: data.data?.pagination || {},
+        list: list.slice(0, body.per_page)
+      }
+    };
+  }
+};
+
 const AIModule = {
   getOpenAIKeys(env) {
     return [
@@ -3655,6 +3713,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'calculateFateTags':      return await AIModule.fateTags(payload, env);
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
+    case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
     case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);

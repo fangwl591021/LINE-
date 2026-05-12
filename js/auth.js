@@ -341,6 +341,31 @@ window.applyRegisteredUserSession = function(info) {
   if (tgChatId && window.currentUser.tgChatId) tgChatId.value = window.currentUser.tgChatId;
 };
 
+window.refreshPointBalanceBadge = async function() {
+  const badge = document.getElementById('point-balance-badge');
+  const userId = window.currentUserProfile?.userId || '';
+  if (!badge || !userId || typeof window.fetchAPI !== 'function') return;
+
+  try {
+    const res = await window.fetchAPI('queryUserPoints', {
+      userId,
+      page: 1,
+      per_page: 20
+    }, true);
+    if (!res || res.error) {
+      badge.classList.add('hidden');
+      return;
+    }
+    const data = res.data || res;
+    const balance = Number(data.balance || 0);
+    badge.textContent = balance.toLocaleString('zh-TW') + ' 點';
+    badge.classList.remove('hidden');
+  } catch (e) {
+    badge.classList.add('hidden');
+    console.warn('[points] query skipped:', e.message || e);
+  }
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     await liff.init({ liffId: LIFF_ID });
@@ -357,6 +382,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       avatarImg.src = window.currentUserProfile.pictureUrl;
       avatarImg.classList.remove('hidden');
     }
+    setTimeout(() => window.refreshPointBalanceBadge?.(), 300);
 
     // 先把首頁框架顯示出來，後續身分與資料用背景載入補上。
     const loadingScreen = document.getElementById('loading-screen');
