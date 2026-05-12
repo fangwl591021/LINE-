@@ -2825,9 +2825,15 @@
       let created = 0;
       let failed = 0;
       for (const user of missing) {
-        const res = await fetchAPI('registerUser', user, { silent: true, omitAuthToken: true });
+        const res = await fetchAPI('adminSyncBoundCardUser', {
+          targetUserId: user.userId,
+          profile: user
+        }, { silent: true });
         if (res && !res.error) created++;
-        else failed++;
+        else {
+          console.warn('Bound card user sync failed:', user);
+          failed++;
+        }
       }
       return { created, failed };
     }
