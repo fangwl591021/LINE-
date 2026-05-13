@@ -156,6 +156,53 @@ function getCardAwardedPoints(saveRes) {
   return Number((saveRes && saveRes.awardedPoints) || (award && award.awarded ? award.points : 0) || 0);
 }
 
+function parsePointBalanceText(text) {
+  const num = Number(String(text || '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(num) ? num : null;
+}
+
+function readCurrentPointBalance() {
+  const badge = document.getElementById('point-balance-badge');
+  return badge ? parsePointBalanceText(badge.textContent) : null;
+}
+
+async function queryCurrentPointBalance() {
+  const badge = document.getElementById('point-balance-badge');
+  const userId = window.currentUserProfile?.userId || '';
+  if (!userId || typeof window.fetchAPI !== 'function') return null;
+
+  const samePointLiff = String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '');
+  const pointUserId = samePointLiff ? '' : (localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || '');
+  const res = await window.fetchAPI('queryUserPoints', {
+    userId,
+    pointUserId,
+    page: 1,
+    per_page: 100
+  }, true);
+  const data = res && (res.data || res);
+  const balance = Number(data && data.balance);
+  if (!Number.isFinite(balance)) return null;
+  if (badge) {
+    badge.textContent = balance.toLocaleString('zh-TW') + ' \u9ede';
+    badge.classList.remove('hidden');
+  }
+  return balance;
+}
+
+function showAwardFromBalanceChange(beforeBalance) {
+  if (beforeBalance === null || beforeBalance === undefined) return;
+  setTimeout(async () => {
+    try {
+      const afterBalance = await queryCurrentPointBalance();
+      if (afterBalance === null) return;
+      const diff = Math.round(afterBalance - Number(beforeBalance));
+      if (diff >= 10) showPointAwardCelebration(10);
+    } catch (err) {
+      console.warn('[showAwardFromBalanceChange] point check skipped:', err);
+    }
+  }, 700);
+}
+
 function showPointAwardCelebration(points) {
   const amount = Number(points) || 0;
   if (amount <= 0) return;
@@ -405,6 +452,7 @@ window.confirmCrop = async function() {
     };
 
     setCardOcrProgressStage(86, '正在產生名片並寫入資料庫...');
+    const pointBalanceBeforeSave = readCurrentPointBalance();
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
       const savedCard = putSavedCardOnTop(saveRes, cardPayload);
@@ -412,6 +460,7 @@ window.confirmCrop = async function() {
       hideCardOcrProgress('名片建立完成');
       window.showToast(describeCardSaveResult(saveRes, '客戶名片建立成功'));
       if (awardedPoints > 0) showPointAwardCelebration(awardedPoints);
+      else showAwardFromBalanceChange(pointBalanceBeforeSave);
       refreshPointsAfterCardSave();
       if (typeof window.goPage === 'function') window.goPage('card');
       refreshCardsAfterSave(savedCard);
