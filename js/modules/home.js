@@ -24,8 +24,9 @@ const HomeModule = (function() {
     window.writeCachedStoreSettings = function(settings, networkId) {
         const d = window.normalizeStoreSettings(settings);
         if (!d) return;
+        d.networkId = networkId || d.networkId || window.currentNetworkId || 'admin';
         try {
-            localStorage.setItem(window.getStoreSettingsCacheKey(networkId || d.networkId), JSON.stringify(d));
+            localStorage.setItem(window.getStoreSettingsCacheKey(d.networkId), JSON.stringify(d));
         } catch (e) {}
     };
 
@@ -58,6 +59,9 @@ const HomeModule = (function() {
     window.applyStoreSettingsToHome = function(settings) {
         const d = window.normalizeStoreSettings(settings);
         if (!d) return;
+        const currentNetwork = String(window.currentNetworkId || 'admin');
+        const settingsNetwork = String(d.networkId || currentNetwork);
+        if (settingsNetwork !== currentNetwork) return;
 
         const headerName = document.getElementById('header-site-name');
         if (headerName && d.siteName !== undefined) {
@@ -103,8 +107,8 @@ const HomeModule = (function() {
     };
 
     window.syncStoreSettingsToHome = function() {
-        const cachedSettings = window.readCachedStoreSettings(window.currentNetworkId)
-            || window.readCachedStoreSettings('admin');
+        const networkId = window.currentNetworkId || 'admin';
+        const cachedSettings = window.readCachedStoreSettings(networkId);
         if (cachedSettings) window.applyStoreSettingsToHome(cachedSettings);
         window.refreshStoreSettingsInBackground();
     };
