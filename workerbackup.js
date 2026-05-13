@@ -135,6 +135,7 @@ const SecurityModule = {
       'auditDataConsistency',
       'repairDataConsistency',
       'previewIdentityMigration',
+      'confirmIdentityMerge',
       'listDuplicateCardBindings',
       'resolveDuplicateCardBinding',
       'deployRichMenu',
@@ -1825,6 +1826,165 @@ const D1WriteModule = {
     await env.ACTMASTER_DB.prepare('UPDATE users SET role = ? WHERE line_id = ? OR row_id = ?').bind(role, targetUserId, targetUserId).run();
     await this.clearUserCache(env, targetUserId);
     return { success: true, data: { userId: targetUserId, role, source: 'd1_write' } };
+  },
+
+  async runCount(env, sql, binds = []) {
+    const res = await env.ACTMASTER_DB.prepare(sql).bind(...binds).run();
+    return Number(res && res.meta && res.meta.changes) || 0;
+  },
+
+  bestRole(...roles) {
+    const normalized = roles.map(role => this.role(role));
+    if (normalized.includes('admin')) return 'admin';
+    if (normalized.includes('store')) return 'store';
+    return 'user';
+  },
+
+  firstText(...values) {
+    for (const value of values) {
+      const next = this.text(value);
+      if (next) return next;
+    }
+    return '';
+  },
+
+  async confirmIdentityMerge(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const oldLineId = this.pick(payload, ['oldLineId', 'oldUserId', 'legacyLineId']);
+    const newLineId = this.pick(payload, ['newLineId', 'newUserId', 'pointLineId']);
+    const confirm = this.pick(payload, ['confirm']);
+    if (!oldLineId || !newLineId) return { success: false, error: 'Missing oldLineId or newLineId' };
+    if (oldLineId === newLineId) return { success: false, error: 'Old and new LINE IDs are the same' };
+    if (confirm !== 'MERGE_IDENTITY') return { success: false, error: 'Missing merge confirmation' };
+
+    const activeOld = await D1ReadModule.first(env, `
+      SELECT * FROM user_identity_links
+      WHERE old_line_id = ? AND status = 'active'
+      LIMIT 1
+    `, [oldLineId]).catch(() => null);
+    if (activeOld && this.text(activeOld.new_line_id) && this.text(activeOld.new_line_id) !== newLineId) {
+      return { success: false, error: 'Old LINE ID is already linked to another point UID' };
+    }
+    const activeNew = await D1ReadModule.first(env, `
+      SELECT * FROM user_identity_links
+      WHERE new_line_id = ? AND status = 'active'
+      LIMIT 1
+    `, [newLineId]).catch(() => null);
+    if (activeNew && this.text(activeNew.old_line_id) && this.text(activeNew.old_line_id) !== oldLineId) {
+      return { success: false, error: 'Point UID is already linked to another old LINE ID' };
+    }
+
+    const oldUser = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? OR legacy_line_id = ? OR point_line_id = ? LIMIT 1', [oldLineId, oldLineId, oldLineId, oldLineId]).catch(() => null);
+    const newUser = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? OR legacy_line_id = ? OR point_line_id = ? LIMIT 1', [newLineId, newLineId, newLineId, newLineId]).catch(() => null);
+    const oldCard = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE line_id = ? OR creator_id = ? ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 1', [oldLineId, oldLineId]).catch(() => null);
+    const newCard = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE line_id = ? OR creator_id = ? ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 1', [newLineId, newLineId]).catch(() => null);
+
+    if (!oldUser && !newUser && !oldCard && !newCard) {
+      return { success: false, error: 'No matching user or card found for either LINE ID' };
+    }
+
+    const canonical = {
+      row_id: this.firstText(newUser && newUser.row_id, `USR_${newLineId}`),
+      line_id: newLineId,
+      name: this.firstText(newUser && newUser.name, oldUser && oldUser.name, newCard && newCard.name, oldCard && oldCard.name),
+      industry: this.firstText(newUser && newUser.industry, oldUser && oldUser.industry, newCard && (newCard.title || newCard.company_name), oldCard && (oldCard.title || oldCard.company_name)),
+      gender: this.firstText(newUser && newUser.gender, oldUser && oldUser.gender),
+      phone: this.firstText(newUser && newUser.phone, oldUser && oldUser.phone, newCard && (newCard.mobile || newCard.office_phone), oldCard && (oldCard.mobile || oldCard.office_phone)),
+      birthday: this.firstText(newUser && newUser.birthday, oldUser && oldUser.birthday),
+      region: this.firstText(newUser && newUser.region, oldUser && oldUser.region),
+      address: this.firstText(newUser && newUser.address, oldUser && oldUser.address, newCard && newCard.address, oldCard && oldCard.address),
+      socials: this.firstText(newUser && newUser.socials, oldUser && oldUser.socials),
+      role: this.bestRole(newUser && newUser.role, oldUser && oldUser.role, SecurityModule.hardAdminIds.has(oldLineId) || SecurityModule.hardAdminIds.has(newLineId) ? 'admin' : ''),
+      store_id: this.firstText(newUser && newUser.store_id, oldUser && oldUser.store_id),
+      referrer_id: this.firstText(newUser && newUser.referrer_id, oldUser && oldUser.referrer_id),
+      network_id: this.firstText(newUser && newUser.network_id, oldUser && oldUser.network_id, newCard && newCard.network_id, oldCard && oldCard.network_id, 'admin'),
+      tg_token: this.firstText(newUser && newUser.tg_token, oldUser && oldUser.tg_token),
+      tg_chat_id: this.firstText(newUser && newUser.tg_chat_id, oldUser && oldUser.tg_chat_id)
+    };
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id,legacy_line_id,point_line_id,identity_source,migrated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      ON CONFLICT(line_id) DO UPDATE SET
+        name=CASE WHEN users.name <> '' THEN users.name ELSE excluded.name END,
+        industry=CASE WHEN users.industry <> '' THEN users.industry ELSE excluded.industry END,
+        gender=CASE WHEN users.gender <> '' THEN users.gender ELSE excluded.gender END,
+        phone=CASE WHEN users.phone <> '' THEN users.phone ELSE excluded.phone END,
+        birthday=CASE WHEN users.birthday <> '' THEN users.birthday ELSE excluded.birthday END,
+        region=CASE WHEN users.region <> '' THEN users.region ELSE excluded.region END,
+        address=CASE WHEN users.address <> '' THEN users.address ELSE excluded.address END,
+        socials=CASE WHEN users.socials <> '' THEN users.socials ELSE excluded.socials END,
+        role=CASE
+          WHEN users.role = 'admin' OR excluded.role = 'admin' THEN 'admin'
+          WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store'
+          ELSE 'user'
+        END,
+        store_id=CASE WHEN users.store_id <> '' THEN users.store_id ELSE excluded.store_id END,
+        referrer_id=CASE WHEN users.referrer_id <> '' THEN users.referrer_id ELSE excluded.referrer_id END,
+        network_id=CASE WHEN users.network_id <> '' THEN users.network_id ELSE excluded.network_id END,
+        tg_token=CASE WHEN users.tg_token <> '' THEN users.tg_token ELSE excluded.tg_token END,
+        tg_chat_id=CASE WHEN users.tg_chat_id <> '' THEN users.tg_chat_id ELSE excluded.tg_chat_id END,
+        legacy_line_id=excluded.legacy_line_id,
+        point_line_id=excluded.point_line_id,
+        identity_source='manual_confirm',
+        migrated_at=CURRENT_TIMESTAMP
+    `).bind(
+      canonical.row_id,
+      canonical.line_id,
+      canonical.name,
+      canonical.industry,
+      canonical.gender,
+      canonical.phone,
+      canonical.birthday,
+      canonical.region,
+      canonical.address,
+      canonical.socials,
+      canonical.role,
+      canonical.store_id,
+      canonical.referrer_id,
+      canonical.network_id,
+      canonical.tg_token,
+      canonical.tg_chat_id,
+      oldLineId,
+      newLineId,
+      'manual_confirm'
+    ).run();
+
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE user_identity_links
+      SET status = 'replaced', note = 'replaced by manual merge', updated_at = CURRENT_TIMESTAMP
+      WHERE status = 'active' AND (old_line_id = ? OR new_line_id = ?)
+    `).bind(oldLineId, newLineId).run().catch(() => null);
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO user_identity_links (old_line_id,new_line_id,match_method,confidence,status,note,updated_at)
+      VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+    `).bind(oldLineId, newLineId, 'manual_confirm', 'confirmed', 'active', this.firstText(payload.note, 'admin confirmed identity merge')).run();
+
+    const updated = {};
+    updated.cardsLineId = await this.runCount(env, 'UPDATE card_contacts SET line_id = ?, updated_at = CURRENT_TIMESTAMP WHERE line_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.cardsCreatorId = await this.runCount(env, 'UPDATE card_contacts SET creator_id = ?, updated_at = CURRENT_TIMESTAMP WHERE creator_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.registrants = await this.runCount(env, 'UPDATE registrants SET line_id = ? WHERE line_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.userReferrers = await this.runCount(env, 'UPDATE users SET referrer_id = ? WHERE referrer_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.ordersBuyer = await this.runCount(env, 'UPDATE orders SET buyer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE buyer_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.ordersSponsor = await this.runCount(env, 'UPDATE orders SET sponsor_id = ?, updated_at = CURRENT_TIMESTAMP WHERE sponsor_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.ordersRecruiter = await this.runCount(env, 'UPDATE orders SET recruiter_id = ?, updated_at = CURRENT_TIMESTAMP WHERE recruiter_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.ordersPlacement = await this.runCount(env, 'UPDATE orders SET placement_parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE placement_parent_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.bonusBeneficiary = await this.runCount(env, 'UPDATE bonus_transactions SET beneficiary_id = ?, updated_at = CURRENT_TIMESTAMP WHERE beneficiary_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.bonusSource = await this.runCount(env, 'UPDATE bonus_transactions SET source_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE source_user_id = ?', [newLineId, oldLineId]).catch(() => 0);
+    updated.removedLegacyUsers = await this.runCount(env, 'DELETE FROM users WHERE (line_id = ? OR row_id = ?) AND line_id <> ?', [oldLineId, oldLineId, newLineId]).catch(() => 0);
+
+    await this.clearUserCache(env, oldLineId);
+    await this.clearUserCache(env, newLineId);
+    const merged = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? LIMIT 1', [newLineId]);
+    return {
+      success: true,
+      data: {
+        oldLineId,
+        newLineId,
+        updated,
+        info: D1ReadModule.userRow(merged, 'identity_merged')
+      }
+    };
   },
 
   async upsertCard(payload, env) {
@@ -3967,7 +4127,7 @@ async function dispatchAction(action, payload, request, env) {
       }
     } else {
       // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
-      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'previewIdentityMigration', 'listDuplicateCardBindings', 'resolveDuplicateCardBinding', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch', 'mlmListSettlementBatches', 'mlmPreviewMonthlySettlement', 'mlmMarkSettlementPaid'];
+      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'previewIdentityMigration', 'confirmIdentityMerge', 'listDuplicateCardBindings', 'resolveDuplicateCardBinding', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch', 'mlmListSettlementBatches', 'mlmPreviewMonthlySettlement', 'mlmMarkSettlementPaid'];
       if (strictActions.includes(action)) {
         return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
       }
@@ -4045,6 +4205,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1ConsistencyModule.repair(payload || {}, env);
     case 'previewIdentityMigration':
       return await D1ReadModule.previewIdentityMigration(payload || {}, env);
+    case 'confirmIdentityMerge':
+      return await D1WriteModule.confirmIdentityMerge(payload || {}, env);
     case 'listDuplicateCardBindings':
       return await D1ConsistencyModule.listDuplicateBindings(payload || {}, env);
     case 'resolveDuplicateCardBinding':

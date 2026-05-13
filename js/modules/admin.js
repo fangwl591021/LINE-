@@ -424,6 +424,100 @@ window.previewIdentityMigration = async function() {
   }
 };
 
+window.previewIdentityMigration = async function() {
+  const box = document.getElementById('identity-migration-preview');
+  if (!box) return;
+  box.className = 'bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3';
+  box.innerHTML = '<div class="text-sm font-bold text-slate-500 animate-pulse">正在檢查身份對照...</div>';
+
+  try {
+    const res = await window.fetchAPI('previewIdentityMigration', { limit: 120 }, true);
+    const data = res && (res.data || res);
+    if (!data || res.error) throw new Error((res && res.error) || '無法取得身份預覽');
+    window.identityMigrationPreviewData = data;
+
+    const counts = data.counts || {};
+    const stat = (label, value) =>
+      '<div class="bg-white border border-slate-100 rounded-xl p-3">' +
+        '<div class="text-[11px] text-slate-500 font-bold">' + window.escapeJS(label) + '</div>' +
+        '<div class="text-xl text-slate-900 font-black mt-1">' + window.escapeJS(value) + '</div>' +
+      '</div>';
+    const listUsers = (data.usersWithoutPointId || []).slice(0, 5).map(u =>
+      '<div class="flex justify-between gap-3 text-[12px] py-2 border-t border-slate-100">' +
+        '<span class="font-bold text-slate-800">' + window.escapeJS(u.name || '未命名') + '</span>' +
+        '<span class="font-mono text-slate-500 truncate max-w-[150px]">' + window.escapeJS(u.userId || '') + '</span>' +
+      '</div>'
+    ).join('');
+    const listDuplicates = (data.duplicatePhones || []).slice(0, 8).map((item, idx) => {
+      const ids = Array.from(new Set((item.items || []).map(x => x.userId).filter(Boolean)));
+      const options = ids.map(id => '<option value="' + window.escapeJS(id) + '">' + window.escapeJS(id.slice(0, 12) + '...') + '</option>').join('');
+      const names = (item.items || []).map(x => (x.name || '未命名') + ' / ' + (x.userId || x.cardId || '')).join('；');
+      const mergeTools = ids.length >= 2
+        ? '<div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 mt-3">' +
+            '<label class="text-[11px] font-bold text-slate-500">舊 UID<select id="identity-old-' + idx + '" class="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-[12px] font-mono">' + options + '</select></label>' +
+            '<label class="text-[11px] font-bold text-slate-500">新 UID<select id="identity-new-' + idx + '" class="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-[12px] font-mono">' + options + '</select></label>' +
+            '<button onclick="window.confirmIdentityMergeFromPreview(' + idx + ')" class="self-end bg-slate-900 text-white rounded-lg px-3 py-2 text-[12px] font-bold hover:bg-slate-700">確認合併</button>' +
+          '</div>'
+        : '<div class="text-[12px] text-amber-600 mt-2">可疑資料不足，暫不提供合併。</div>';
+      return '<div class="text-[12px] py-3 border-t border-amber-100">' +
+        '<div class="flex items-center justify-between gap-2">' +
+          '<div class="font-black text-amber-800">手機疑似重複：' + window.escapeJS(item.phone || '') + '</div>' +
+          '<span class="bg-white text-amber-700 border border-amber-200 rounded-full px-2 py-1 text-[11px] font-bold">' + ids.length + ' 組 UID</span>' +
+        '</div>' +
+        '<div class="text-slate-600 mt-1 leading-5">' + window.escapeJS(names) + '</div>' +
+        mergeTools +
+      '</div>';
+    }).join('');
+
+    box.innerHTML =
+      '<div class="flex items-start justify-between gap-3">' +
+        '<div><div class="text-base font-black text-slate-900">身份遷移預覽</div><div class="text-[12px] text-slate-500 mt-1">先檢查，不自動改資料；合併需要人工確認。</div></div>' +
+        '<span class="px-2 py-1 rounded-full text-[11px] font-black ' + (data.linksTableReady ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100') + '">' + (data.linksTableReady ? 'D1 對照表可用' : 'D1 對照表異常') + '</span>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 gap-2">' +
+        stat('既有對照', counts.existingLinks || 0) +
+        stat('缺 point UID', counts.usersWithoutPointId || 0) +
+        stat('綁名片未入會員', counts.boundCardsWithoutUser || 0) +
+        stat('手機疑似重複', counts.duplicatePhones || 0) +
+      '</div>' +
+      '<div class="bg-white rounded-2xl border border-slate-100 p-3"><div class="text-[13px] font-black text-slate-800 mb-1">缺 point UID 的會員</div>' + (listUsers || '<div class="text-[12px] text-slate-400 py-2">目前沒有需要處理的資料</div>') + '</div>' +
+      '<div class="bg-amber-50 rounded-2xl border border-amber-100 p-3"><div class="text-[13px] font-black text-amber-800 mb-1">手機疑似重複，需要人工確認</div>' + (listDuplicates || '<div class="text-[12px] text-amber-600 py-2">目前沒有疑似重複</div>') + '</div>';
+  } catch(e) {
+    box.className = 'bg-red-50 border border-red-100 rounded-2xl p-4';
+    box.innerHTML = '<div class="text-sm font-black text-red-600">身份預覽失敗：' + window.escapeJS(e.message || '請稍後再試') + '</div>';
+  }
+};
+
+window.confirmIdentityMergeFromPreview = async function(idx) {
+  const data = window.identityMigrationPreviewData || {};
+  const item = (data.duplicatePhones || [])[idx];
+  const oldEl = document.getElementById('identity-old-' + idx);
+  const newEl = document.getElementById('identity-new-' + idx);
+  const oldLineId = oldEl && oldEl.value;
+  const newLineId = newEl && newEl.value;
+  if (!item || !oldLineId || !newLineId) return window.showToast('請先選擇舊 UID 與新 UID', true);
+  if (oldLineId === newLineId) return window.showToast('舊 UID 與新 UID 不能相同', true);
+  const ok = window.confirm('確認合併這兩個身份？\n\n舊 UID：' + oldLineId + '\n新 UID：' + newLineId + '\n\n系統會把名片、報名、訂單與獎金流水歸到新 UID。');
+  if (!ok) return;
+  const ok2 = window.confirm('最後確認：這會寫入 D1，並刪除舊 UID 的重複會員列。確定執行？');
+  if (!ok2) return;
+  try {
+    window.showToast('正在合併身份...');
+    const res = await window.fetchAPI('confirmIdentityMerge', {
+      oldLineId,
+      newLineId,
+      phone: item.phone || '',
+      confirm: 'MERGE_IDENTITY'
+    }, true);
+    if (!res || res.error || res.success === false) throw new Error((res && res.error) || '合併失敗');
+    window.showToast('身份合併完成');
+    await window.previewIdentityMigration();
+    if (typeof window.loadAllUsers === 'function') await window.loadAllUsers();
+  } catch (e) {
+    window.showToast('合併失敗：' + (e.message || '請稍後再試'), true);
+  }
+};
+
 window.renderStoreManagement = function() {
   const container = document.getElementById('store-management-list');
   if (!container) return;
