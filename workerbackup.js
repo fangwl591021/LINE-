@@ -528,6 +528,25 @@ const PointModule = {
     return this.number(sorted[0].point_balance);
   },
 
+  balancesByType(list) {
+    const groups = {};
+    (Array.isArray(list) ? list : []).forEach(item => {
+      const type = String(item.point_type || 'unknown').trim() || 'unknown';
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(item);
+    });
+    return Object.keys(groups).reduce((acc, type) => {
+      acc[type] = this.latestBalance(groups[type]);
+      return acc;
+    }, {});
+  },
+
+  displayBalanceFromTypes(balanceByType, fallback) {
+    const balances = Object.values(balanceByType || {}).map(value => this.number(value));
+    if (!balances.length) return this.number(fallback);
+    return Math.max(...balances, this.number(fallback));
+  },
+
   async fetchPointPage(body) {
     const res = await fetch(this.apiUrl, {
       method: 'POST',
@@ -624,7 +643,8 @@ const PointModule = {
         pagination,
         total: this.number(pagination.total),
         list: combinedList,
-        latestBalance: this.latestBalance(combinedList)
+        latestBalance: this.latestBalance(combinedList),
+        balanceByType: this.balancesByType(combinedList)
       };
     };
 
@@ -636,7 +656,8 @@ const PointModule = {
     const allTypeResult = await collectPages(baseBody);
     const useAllType = !allTypeResult.error && allTypeResult.latestBalance !== typedResult.latestBalance;
     const selected = useAllType ? allTypeResult : typedResult;
-    const balance = selected.latestBalance;
+    const balanceByType = allTypeResult.error ? typedResult.balanceByType : allTypeResult.balanceByType;
+    const balance = this.displayBalanceFromTypes(balanceByType, selected.latestBalance);
 
     return {
       success: true,
@@ -645,6 +666,7 @@ const PointModule = {
         latestBalance: selected.latestBalance,
         typedBalance: typedResult.latestBalance,
         allTypeBalance: allTypeResult.error ? null : allTypeResult.latestBalance,
+        balanceByType,
         queriedLineUserId: lineUserId,
         sampledRows: selected.list.length,
         pointType: selected.body.point_type || 'all',
