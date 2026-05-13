@@ -541,12 +541,6 @@ const PointModule = {
     }, {});
   },
 
-  displayBalanceFromTypes(balanceByType, fallback) {
-    const balances = Object.values(balanceByType || {}).map(value => this.number(value));
-    if (!balances.length) return this.number(fallback);
-    return Math.max(...balances, this.number(fallback));
-  },
-
   async fetchPointPage(body) {
     const res = await fetch(this.apiUrl, {
       method: 'POST',
@@ -649,31 +643,29 @@ const PointModule = {
     };
 
     const requestedType = String(payload.point_type || payload.pointType || '').trim();
-    const typedBody = { ...baseBody, point_type: requestedType || 'system_point' };
+    const typedBody = { ...baseBody, point_type: requestedType || 'gift_money' };
     const typedResult = await collectPages(typedBody);
     if (typedResult.error) return { success: false, error: typedResult.error, code: typedResult.code };
 
     const allTypeResult = await collectPages(baseBody);
-    const useAllType = !allTypeResult.error && allTypeResult.latestBalance !== typedResult.latestBalance;
-    const selected = useAllType ? allTypeResult : typedResult;
     const balanceByType = allTypeResult.error ? typedResult.balanceByType : allTypeResult.balanceByType;
-    const balance = this.displayBalanceFromTypes(balanceByType, selected.latestBalance);
+    const balance = typedResult.latestBalance;
 
     return {
       success: true,
       data: {
         balance,
-        latestBalance: selected.latestBalance,
+        latestBalance: typedResult.latestBalance,
         typedBalance: typedResult.latestBalance,
         allTypeBalance: allTypeResult.error ? null : allTypeResult.latestBalance,
         balanceByType,
         queriedLineUserId: lineUserId,
-        sampledRows: selected.list.length,
-        pointType: selected.body.point_type || 'all',
+        sampledRows: typedResult.list.length,
+        pointType: typedResult.body.point_type || 'gift_money',
         requestedPointType: typedBody.point_type,
-        total: selected.total,
-        pagination: selected.pagination,
-        list: selected.list.slice(0, baseBody.per_page)
+        total: typedResult.total,
+        pagination: typedResult.pagination,
+        list: typedResult.list.slice(0, baseBody.per_page)
       }
     };
   }
@@ -1995,7 +1987,7 @@ const D1WriteModule = {
         card_id TEXT NOT NULL DEFAULT '',
         award_type TEXT NOT NULL DEFAULT 'card_scan_create',
         points REAL NOT NULL DEFAULT 0,
-        point_type TEXT NOT NULL DEFAULT 'system_point',
+        point_type TEXT NOT NULL DEFAULT 'gift_money',
         status TEXT NOT NULL DEFAULT 'pending',
         response_json TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2036,7 +2028,7 @@ const D1WriteModule = {
     const inserted = await env.ACTMASTER_DB.prepare(`
       INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
       VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)
-    `).bind(awardId, userId, cardId, 'card_scan_create', 10, 'system_point', 'pending').run();
+    `).bind(awardId, userId, cardId, 'card_scan_create', 10, 'gift_money', 'pending').run();
     if (!inserted || !inserted.meta || Number(inserted.meta.changes || 0) === 0) {
       return { awarded: false, reason: 'already_awarded' };
     }
@@ -2044,7 +2036,7 @@ const D1WriteModule = {
     const result = await PointModule.insertUserPoint({
       userId,
       points: 10,
-      pointType: 'system_point',
+      pointType: 'gift_money',
       eventName: '掃描名片贈點',
       eventContent: '新增不重複名片：' + (this.text(card.name) || cardId),
       shop_remark: 'cardId=' + cardId
