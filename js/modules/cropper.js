@@ -151,6 +151,83 @@ function refreshPointsAfterCardSave() {
   }
 }
 
+function getCardAwardedPoints(saveRes) {
+  const award = saveRes && saveRes.pointAward ? saveRes.pointAward : null;
+  return Number((saveRes && saveRes.awardedPoints) || (award && award.awarded ? award.points : 0) || 0);
+}
+
+function showPointAwardCelebration(points) {
+  const amount = Number(points) || 0;
+  if (amount <= 0) return;
+
+  const oldPopup = document.getElementById('point-award-celebration');
+  if (oldPopup) oldPopup.remove();
+
+  const popup = document.createElement('div');
+  popup.id = 'point-award-celebration';
+  popup.className = 'fixed inset-0 z-[10050] flex items-center justify-center bg-slate-950/45 backdrop-blur-sm px-6';
+  popup.innerHTML = `
+    <div class="w-full max-w-[340px] rounded-[28px] bg-white p-6 text-center shadow-2xl border border-emerald-100">
+      <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+        <span class="material-symbols-outlined text-[34px]">redeem</span>
+      </div>
+      <div class="text-[24px] font-black text-slate-900">${'\u606d\u559c\u7372\u5f97 ' + amount + ' \u9ede'}</div>
+      <div class="mt-2 text-[14px] font-bold leading-6 text-slate-500">${'\u65b0\u589e\u4e0d\u91cd\u8907\u540d\u7247\u6210\u529f'}</div>
+      <button id="point-award-close" type="button" class="mt-5 w-full rounded-2xl bg-emerald-600 py-3 text-[16px] font-black text-white shadow-lg active:scale-[0.98] transition-transform">
+        ${'\u592a\u597d\u4e86'}
+      </button>
+    </div>
+  `;
+
+  const closePopup = () => {
+    clearTimeout(timer);
+    popup.remove();
+  };
+  const timer = setTimeout(closePopup, 3200);
+  popup.addEventListener('click', (event) => {
+    if (event.target === popup) closePopup();
+  });
+  document.body.appendChild(popup);
+  const closeBtn = document.getElementById('point-award-close');
+  if (closeBtn) closeBtn.addEventListener('click', closePopup);
+}
+
+function normalizeSavedCard(saveRes, cardPayload) {
+  const merged = {
+    ...(cardPayload && typeof cardPayload === 'object' ? cardPayload : {}),
+    ...(saveRes && typeof saveRes === 'object' ? saveRes : {})
+  };
+  if (saveRes && saveRes.data && typeof saveRes.data === 'object') Object.assign(merged, saveRes.data);
+
+  const rowId = merged.rowId || merged.row_id || merged["rowId"] || (cardPayload && (cardPayload.rowId || cardPayload["rowId"]));
+  if (rowId) {
+    merged.rowId = rowId;
+    merged["rowId"] = rowId;
+  }
+  if (!merged.updated_at && !merged.created_at && !merged.updatedAt) merged.updatedAt = new Date().toISOString();
+  return merged;
+}
+
+function putSavedCardOnTop(saveRes, cardPayload) {
+  const savedCard = normalizeSavedCard(saveRes, cardPayload);
+  const rowId = savedCard.rowId || savedCard["rowId"];
+  if (!rowId) return savedCard;
+
+  if (!Array.isArray(window.allCards)) window.allCards = [];
+  window.allCards = window.allCards.filter(card => String(card && (card.rowId || card["rowId"])) !== String(rowId));
+  window.allCards.unshift(savedCard);
+  if (typeof allCards !== 'undefined') allCards = window.allCards;
+  if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards);
+  return savedCard;
+}
+
+function refreshCardsAfterSave(savedCard) {
+  if (typeof window.loadCardData !== 'function') return;
+  window.loadCardData({ force: true, render: false })
+    .then(() => putSavedCardOnTop(savedCard, savedCard))
+    .catch(err => console.warn('[refreshCardsAfterSave] refresh skipped:', err));
+}
+
 let cardOcrProgressTimer = null;
 let cardOcrProgressValue = 0;
 let cardOcrProgressCap = 92;
@@ -330,11 +407,14 @@ window.confirmCrop = async function() {
     setCardOcrProgressStage(86, '正在產生名片並寫入資料庫...');
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
+      const savedCard = putSavedCardOnTop(saveRes, cardPayload);
+      const awardedPoints = getCardAwardedPoints(saveRes);
       hideCardOcrProgress('名片建立完成');
       window.showToast(describeCardSaveResult(saveRes, '客戶名片建立成功'));
+      if (awardedPoints > 0) showPointAwardCelebration(awardedPoints);
       refreshPointsAfterCardSave();
-      if (typeof window.loadAllData === 'function') await window.loadAllData();
       if (typeof window.goPage === 'function') window.goPage('card');
+      refreshCardsAfterSave(savedCard);
     } else {
       throw new Error('儲存失敗');
     }
@@ -446,14 +526,13 @@ window.confirmMyCardCrop = async function() {
     setCardOcrProgressStage(86, '正在產生名片並寫入資料庫...');
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
+      const savedCard = putSavedCardOnTop(saveRes, cardPayload);
       hideCardOcrProgress('專屬名片建立完成');
       window.showToast(describeCardSaveResult(saveRes, '專屬名片建立成功'));
       refreshPointsAfterCardSave();
-      cardPayload.rowId = saveRes.rowId;
-      allCards.unshift(cardPayload);
-      currentUserCard = cardPayload;
+      currentUserCard = savedCard;
       if (typeof window.initMyECard === 'function') window.initMyECard();
-      if (typeof window.renderCardList === 'function') window.renderCardList(allCards);
+      refreshCardsAfterSave(savedCard);
     } else {
       throw new Error('儲存失敗');
     }

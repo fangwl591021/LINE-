@@ -2301,11 +2301,16 @@ const D1WriteModule = {
     `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags).run();
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
     const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward && !isOwnCard);
+    const awardedPoints = pointAward && pointAward.awarded ? pointAward.points : 0;
+    const responseCard = D1ReadModule.cardRow(card);
+    responseCard.awardedPoints = awardedPoints;
+    responseCard.pointAward = pointAward;
+    responseCard.rowId = card.row_id;
     return {
       success: true,
-      data: D1ReadModule.cardRow(card),
+      data: responseCard,
       rowId: card.row_id,
-      awardedPoints: pointAward && pointAward.awarded ? pointAward.points : 0,
+      awardedPoints,
       pointAward
     };
   },
