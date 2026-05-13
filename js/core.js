@@ -239,14 +239,18 @@ const Core = (function() {
 
     // === 5. LIFF 分享 ===
     window.triggerFlexSharing = async function(flexMsg, altText) {
-        if (!liff.isLoggedIn()) {
-            liff.login({ redirectUri: window.location.href });
-            return;
-        }
         try {
+            if (typeof liff === 'undefined' || !liff) {
+                window.showToast('目前不在 LINE LIFF 環境，改用連結分享', true);
+                return false;
+            }
+            if (!liff.isLoggedIn()) {
+                liff.login({ redirectUri: window.location.href });
+                return false;
+            }
             if (!liff.isApiAvailable('shareTargetPicker')) {
                 window.showToast('您的環境不支援分享功能', true);
-                return;
+                return false;
             }
             const message = {
                 type: "flex",
@@ -255,8 +259,10 @@ const Core = (function() {
             };
             await liff.shareTargetPicker([message]);
             window.showToast('✅ 已成功發送！');
+            return true;
         } catch (err) {
             window.showToast('發送失敗：' + (err.message || '未知錯誤'), true);
+            return false;
         }
     };
 

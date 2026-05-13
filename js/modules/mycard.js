@@ -191,6 +191,54 @@
     return rowId;
   }
 
+  function buildMyCardShareUrl(rowId) {
+    var cardId = rowId || getCardRowId(currentCardData);
+    var referrerId = moduleAuth.getUserId();
+    var networkId = window.currentNetworkId || 'admin';
+    if (window.buildPointLiffUrl) {
+      return window.buildPointLiffUrl({
+        shareCardId: cardId,
+        ref: referrerId,
+        net: networkId
+      });
+    }
+
+    var liffId = moduleConfig.POINT_LIFF_ID || window.POINT_LIFF_ID || moduleConfig.LIFF_ID;
+    var url = 'https://liff.line.me/' + encodeURIComponent(liffId) + '?shareCardId=' + encodeURIComponent(cardId || '');
+    if (referrerId) url += '&ref=' + encodeURIComponent(referrerId);
+    if (networkId) url += '&net=' + encodeURIComponent(networkId);
+    return url;
+  }
+
+  async function sharePlainCardLink(shareUrl, cardName) {
+    var text = '這是我的數位名片';
+    if (cardName) text += '：' + cardName;
+    text += '\n' + shareUrl;
+
+    try {
+      if (typeof liff !== 'undefined' && liff && liff.isLoggedIn && liff.isLoggedIn() && liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')) {
+        await liff.shareTargetPicker([{ type: 'text', text: text }]);
+        if (window.showToast) window.showToast('✅ 已用連結發送名片');
+        return true;
+      }
+    } catch (e) {
+      console.warn('[sharePlainCardLink] LIFF text share failed:', e);
+    }
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        if (window.showToast) window.showToast('✅ 名片連結已複製');
+        return true;
+      }
+    } catch (e) {
+      console.warn('[sharePlainCardLink] Clipboard failed:', e);
+    }
+
+    window.prompt('請複製名片連結', shareUrl);
+    return true;
+  }
+
   function renderButtons() {
     var list = $('#my-v1-buttons-list');
     if (!list) return;
@@ -480,13 +528,24 @@
 
   async function shareMyCard(btn) {
     if (!currentCardData) {
-      if (window.showToast) window.showToast('尚未建立專屬名片', true);
-      return;
+      if (typeof window.loadCardData === 'function') {
+        await window.loadCardData({ render: false });
+        if (typeof window.syncUserCardMatch === 'function') window.syncUserCardMatch();
+      }
+      currentCardData = window.currentUserCard || null;
+      if (!currentCardData) {
+        if (window.showToast) window.showToast('尚未建立專屬名片', true);
+        return;
+      }
     }
 
     var originalHtml = btn ? btn.innerHTML : '';
     if (btn) btn.disabled = true;
     try {
+      var rowId = await ensureCurrentCardRowId();
+      if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
+      currentCardData.rowId = currentCardData.rowId || rowId;
+      var shareUrl = buildMyCardShareUrl(rowId);
       var flexMsg = await window.fetchAPI('buildFlexMessage', {
         card: currentCardData,
         config: buildCurrentShareConfig(),
@@ -495,12 +554,19 @@
         liffId: moduleConfig.POINT_LIFF_ID || window.POINT_LIFF_ID || moduleConfig.LIFF_ID
       }, true);
       if (flexMsg && !flexMsg.error) {
-        await window.triggerFlexSharing(flexMsg, currentCardData['姓名'] || '數位名片');
+        var shared = await window.triggerFlexSharing(flexMsg, currentCardData['姓名'] || '數位名片');
+        if (shared === false) await sharePlainCardLink(shareUrl, currentCardData['姓名'] || '');
       } else {
         throw new Error((flexMsg && flexMsg.error) || '建立分享訊息失敗');
       }
     } catch (e) {
-      if (window.showToast) window.showToast('發送失敗: ' + e.message, true);
+      console.warn('[shareMyCard] Flex share failed, fallback to URL:', e);
+      var fallbackRowId = getCardRowId(currentCardData) || await ensureCurrentCardRowId();
+      if (fallbackRowId) {
+        await sharePlainCardLink(buildMyCardShareUrl(fallbackRowId), currentCardData['姓名'] || '');
+      } else if (window.showToast) {
+        window.showToast('發送失敗: ' + e.message, true);
+      }
     } finally {
       if (btn) {
         btn.innerHTML = originalHtml;
@@ -524,11 +590,7 @@
     show(img, false);
     show(loading, true);
 
-    var badgeUrl = window.buildPointLiffUrl ? window.buildPointLiffUrl({
-      shareCardId: currentCardData.rowId || '',
-      ref: moduleAuth.getUserId(),
-      net: window.currentNetworkId || 'admin'
-    }) : ('https://liff.line.me/' + encodeURIComponent(moduleConfig.LIFF_ID) + '?shareCardId=' + encodeURIComponent(currentCardData.rowId || '') + '&ref=' + encodeURIComponent(moduleAuth.getUserId()));
+    var badgeUrl = buildMyCardShareUrl(currentCardData.rowId || '');
     var qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(badgeUrl) + '&size=300&margin=2';
     if (img) {
       img.onload = function() {

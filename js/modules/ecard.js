@@ -237,6 +237,8 @@ window.shareECardToLine = async function(btnId) {
   }
 
   try {
+    const rowId = window.currentCard.rowId || window.currentCard["rowId"] || window.currentCard.id || "";
+    const fallbackUrl = buildECardShareUrl(rowId);
     const layoutVal = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
     const cfg = {
       layoutStyle: layoutVal,
@@ -269,10 +271,25 @@ window.shareECardToLine = async function(btnId) {
     }, true);
 
     if (flexMsg) {
-      await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
+      const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
+      if (shared === false && fallbackUrl) {
+        await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
+      }
+    } else if (fallbackUrl) {
+      await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
     }
   } catch(e) {
-    window.showToast('⚠️ 傳送失敗: ' + e.message, true);
+    try {
+      const rowId = window.currentCard.rowId || window.currentCard["rowId"] || window.currentCard.id || "";
+      const fallbackUrl = buildECardShareUrl(rowId);
+      if (fallbackUrl) {
+        await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
+      } else {
+        window.showToast('⚠️ 傳送失敗: ' + e.message, true);
+      }
+    } catch (fallbackErr) {
+      window.showToast('⚠️ 傳送失敗: ' + (fallbackErr.message || e.message), true);
+    }
   } finally {
     if (btn) {
       btn.innerHTML = oriHtml;
@@ -280,3 +297,41 @@ window.shareECardToLine = async function(btnId) {
     }
   }
 };
+
+function buildECardShareUrl(rowId) {
+  if (!rowId) return "";
+  const params = {
+    shareCardId: rowId,
+    ref: window.currentUserProfile?.userId || "",
+    net: window.currentNetworkId || "admin"
+  };
+  if (window.buildPointLiffUrl) return window.buildPointLiffUrl(params);
+
+  let url = "https://liff.line.me/" + encodeURIComponent(window.POINT_LIFF_ID || window.LIFF_ID || "") +
+    "?shareCardId=" + encodeURIComponent(rowId);
+  if (params.ref) url += "&ref=" + encodeURIComponent(params.ref);
+  if (params.net) url += "&net=" + encodeURIComponent(params.net);
+  return url;
+}
+
+async function shareECardPlainLink(url, name) {
+  const text = (name ? `這是 ${name} 的數位名片` : "這是我的數位名片") + "\n" + url;
+
+  try {
+    if (typeof liff !== "undefined" && liff && liff.isLoggedIn && liff.isLoggedIn() && liff.isApiAvailable && liff.isApiAvailable("shareTargetPicker")) {
+      await liff.shareTargetPicker([{ type: "text", text }]);
+      window.showToast("✅ 已用連結發送名片");
+      return true;
+    }
+  } catch (e) {
+    console.warn("[shareECardPlainLink] LIFF text share failed:", e);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(url);
+    window.showToast("✅ 名片連結已複製");
+    return true;
+  }
+  window.prompt("請複製名片連結", url);
+  return true;
+}
