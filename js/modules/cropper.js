@@ -130,6 +130,27 @@ function hasOcrContent(cardData) {
     .some((key) => String(cardData?.[key] || '').trim() !== '');
 }
 
+function describeCardSaveResult(saveRes, baseMessage) {
+  const award = saveRes && saveRes.pointAward ? saveRes.pointAward : null;
+  const points = Number((saveRes && saveRes.awardedPoints) || (award && award.awarded ? award.points : 0) || 0);
+  let message = baseMessage || '名片已儲存';
+  if (points > 0) {
+    message += '，已贈送 ' + points + ' 點';
+  } else if (award && award.reason === 'already_awarded') {
+    message += '，此名片已領過贈點';
+  } else if (award && award.error) {
+    message += '，贈點暫未完成';
+  }
+  return message;
+}
+
+function refreshPointsAfterCardSave() {
+  if (typeof window.refreshPointBalanceBadge === 'function') {
+    setTimeout(() => window.refreshPointBalanceBadge(), 500);
+    setTimeout(() => window.refreshPointBalanceBadge(), 1800);
+  }
+}
+
 let cardOcrProgressTimer = null;
 let cardOcrProgressValue = 0;
 let cardOcrProgressCap = 92;
@@ -310,7 +331,8 @@ window.confirmCrop = async function() {
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
       hideCardOcrProgress('名片建立完成');
-      window.showToast('客戶名片建立成功！');
+      window.showToast(describeCardSaveResult(saveRes, '客戶名片建立成功'));
+      refreshPointsAfterCardSave();
       if (typeof window.loadAllData === 'function') await window.loadAllData();
       if (typeof window.goPage === 'function') window.goPage('card');
     } else {
@@ -425,7 +447,8 @@ window.confirmMyCardCrop = async function() {
     const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
     if (saveRes && saveRes.rowId) {
       hideCardOcrProgress('專屬名片建立完成');
-      window.showToast('專屬名片覆蓋成功！');
+      window.showToast(describeCardSaveResult(saveRes, '專屬名片建立成功'));
+      refreshPointsAfterCardSave();
       cardPayload.rowId = saveRes.rowId;
       allCards.unshift(cardPayload);
       currentUserCard = cardPayload;

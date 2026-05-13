@@ -139,9 +139,7 @@ const SecurityModule = {
       'confirmIdentityMerge',
       'listDuplicateCardBindings',
       'resolveDuplicateCardBinding',
-      'deployRichMenu',
-      'deleteCard',
-      'unlinkCard'
+      'deployRichMenu'
     ]);
     const managerOnly = new Set([
       'bulkAddRegistrants',
@@ -160,6 +158,8 @@ const SecurityModule = {
       'saveCard',
       'updateCard',
       'claimCardAndRegister',
+      'deleteCard',
+      'unlinkCard',
       'queryUserPoints',
       'mlmCreateOrder',
       'createTenantBonusOrder',
@@ -1979,6 +1979,26 @@ const D1WriteModule = {
     return this.text(value).replace(/\D/g, '');
   },
 
+  jsonSafe(value) {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : (value || {});
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  async resolvePointAwardUserId(env, userId) {
+    const id = this.text(userId);
+    if (!id || !env || !env.ACTMASTER_DB) return id;
+    const identity = await D1ReadModule.findUserByIdentity(env, id).catch(() => null);
+    const row = identity && identity.user;
+    return this.text(row && row.point_line_id)
+      || this.text(identity && identity.canonicalId)
+      || this.text(row && row.line_id)
+      || id;
+  },
+
   async ensurePointAwardTable(env) {
     await env.ACTMASTER_DB.prepare(`
       CREATE TABLE IF NOT EXISTS point_awards (
@@ -2024,21 +2044,68 @@ const D1WriteModule = {
   async awardCardScanPoints(env, userId, cardId, card, eligible) {
     if (!eligible || !userId || !cardId) return null;
     await this.ensurePointAwardTable(env);
-    const awardId = 'AWD_CARD_SCAN_' + userId + '_' + cardId;
+    const awardUserId = await this.resolvePointAwardUserId(env, userId);
+    if (!awardUserId) return null;
+    const awardId = 'AWD_CARD_SCAN_' + awardUserId + '_' + cardId;
+    const eventName = '\u6383\u63cf\u540d\u7247\u8d08\u9ede';
+    const correctionEventName = '\u6383\u63cf\u540d\u7247\u8d08\u9ede\u88dc\u6b63';
+    const eventContent = '\u65b0\u589e\u4e0d\u91cd\u8907\u540d\u7247\uff1a' + (this.text(card.name) || cardId);
+    const existingAward = await D1ReadModule.first(env, `
+      SELECT * FROM point_awards
+      WHERE user_id = ? AND card_id = ? AND award_type = 'card_scan_create'
+      LIMIT 1
+    `, [awardUserId, cardId]).catch(() => null);
+
+    if (existingAward) {
+      const existingJson = this.jsonSafe(existingAward.response_json);
+      const insertRow = existingJson && existingJson.data && existingJson.data.data && existingJson.data.data.insert_row;
+      const alreadyGiftMoney = this.text(existingAward.point_type) === 'gift_money'
+        && this.text(existingAward.status) === 'sent';
+      const alreadyCorrected = !!(existingJson.correctedGiftMoneyInsertId || (insertRow && this.text(insertRow.point_type) === 'gift_money'));
+      if (alreadyGiftMoney || alreadyCorrected) {
+        return { awarded: false, reason: 'already_awarded' };
+      }
+
+      const retryResult = await PointModule.insertUserPoint({
+        userId: awardUserId,
+        points: 10,
+        pointType: 'gift_money',
+        eventName: this.text(existingAward.point_type) === 'system_point' ? correctionEventName : eventName,
+        eventContent,
+        shop_remark: 'cardId=' + cardId + ';correct=' + (this.text(existingAward.point_type) || 'retry')
+      }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
+
+      const nextJson = {
+        previous: existingJson,
+        correctedGiftMoneyInsertId: retryResult && retryResult.data && retryResult.data.data && retryResult.data.data.insert_id,
+        correctedAt: new Date().toISOString(),
+        retryResult
+      };
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE point_awards
+        SET user_id = ?, point_type = 'gift_money', status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE award_id = ?
+      `).bind(awardUserId, retryResult && retryResult.success ? 'sent' : 'failed', JSON.stringify(nextJson), existingAward.award_id).run();
+
+      return retryResult && retryResult.success
+        ? { awarded: true, points: 10, corrected: true, response: retryResult.data }
+        : { awarded: false, points: 10, error: (retryResult && retryResult.error) || 'Point award failed' };
+    }
+
     const inserted = await env.ACTMASTER_DB.prepare(`
       INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
       VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)
-    `).bind(awardId, userId, cardId, 'card_scan_create', 10, 'gift_money', 'pending').run();
+    `).bind(awardId, awardUserId, cardId, 'card_scan_create', 10, 'gift_money', 'pending').run();
     if (!inserted || !inserted.meta || Number(inserted.meta.changes || 0) === 0) {
       return { awarded: false, reason: 'already_awarded' };
     }
 
     const result = await PointModule.insertUserPoint({
-      userId,
+      userId: awardUserId,
       points: 10,
       pointType: 'gift_money',
-      eventName: '掃描名片贈點',
-      eventContent: '新增不重複名片：' + (this.text(card.name) || cardId),
+      eventName,
+      eventContent,
       shop_remark: 'cardId=' + cardId
     }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
 
@@ -2206,8 +2273,11 @@ const D1WriteModule = {
     const card = this.normalizeCard(payload);
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
     const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
-    const awardUserId = this.text(payload.authenticatedUserId || card.creator_id || payload.creatorId || payload.userId);
-    const duplicateForAward = !existing && await this.hasDuplicateCardForOwner(env, awardUserId, card, card.row_id);
+    const rawAwardUserId = this.text(payload.authenticatedUserId || card.creator_id || payload.creatorId || payload.userId);
+    const awardUserId = await this.resolvePointAwardUserId(env, rawAwardUserId);
+    const cardLineId = await this.resolvePointAwardUserId(env, card.line_id);
+    const isOwnCard = !!(cardLineId && awardUserId && cardLineId === awardUserId);
+    const duplicateForAward = !existing && !isOwnCard && await this.hasDuplicateCardForOwner(env, awardUserId, card, card.row_id);
     if (existing) {
       [
         'line_id','name','english_name','company_name','title','department','tax_id','mobile','office_phone',
@@ -2230,7 +2300,7 @@ const D1WriteModule = {
         tags=excluded.tags,updated_at=CURRENT_TIMESTAMP
     `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags).run();
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
-    const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward);
+    const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward && !isOwnCard);
     return {
       success: true,
       data: D1ReadModule.cardRow(card),
@@ -2238,6 +2308,40 @@ const D1WriteModule = {
       awardedPoints: pointAward && pointAward.awarded ? pointAward.points : 0,
       pointAward
     };
+  },
+
+  async deleteCard(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const rowId = this.pick(payload, ['rowId', 'row_id', 'id']);
+    if (!rowId) return { success: false, error: 'Missing card rowId' };
+    const card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    if (!card) return { success: false, error: 'Card not found' };
+    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const role = this.role(payload.authenticatedRole || payload.role);
+    const networkId = this.text(payload.authenticatedNetworkId || payload.networkId);
+    const isOwner = actorId && (actorId === this.text(card.creator_id) || actorId === this.text(card.line_id));
+    const isStoreManager = role === 'store' && networkId && networkId === this.text(card.network_id);
+    if (role !== 'admin' && !isStoreManager && !isOwner) {
+      return { success: false, error: 'Access Denied: cannot delete this card' };
+    }
+    await env.ACTMASTER_DB.prepare('DELETE FROM card_contacts WHERE row_id = ?').bind(rowId).run();
+    return { success: true, rowId, deleted: true };
+  },
+
+  async unlinkCard(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const rowId = this.pick(payload, ['rowId', 'row_id', 'id']);
+    if (!rowId) return { success: false, error: 'Missing card rowId' };
+    const card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    if (!card) return { success: false, error: 'Card not found' };
+    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const role = this.role(payload.authenticatedRole || payload.role);
+    const isOwner = actorId && (actorId === this.text(card.creator_id) || actorId === this.text(card.line_id));
+    if (role !== 'admin' && !isOwner) {
+      return { success: false, error: 'Access Denied: cannot unlink this card' };
+    }
+    await env.ACTMASTER_DB.prepare('UPDATE card_contacts SET line_id = "", updated_at = CURRENT_TIMESTAMP WHERE row_id = ?').bind(rowId).run();
+    return { success: true, rowId, unlinked: true };
   }
 };
 
@@ -4441,6 +4545,24 @@ async function dispatchAction(action, payload, request, env) {
         if (d1Result && d1Result.success !== false) return d1Result;
       } catch (e) {
         console.error("D1 upsertCard fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'deleteCard': {
+      try {
+        const d1Result = await D1WriteModule.deleteCard(payload || {}, env);
+        if (d1Result && d1Result.success !== false) return d1Result;
+      } catch (e) {
+        console.error("D1 deleteCard fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'unlinkCard': {
+      try {
+        const d1Result = await D1WriteModule.unlinkCard(payload || {}, env);
+        if (d1Result && d1Result.success !== false) return d1Result;
+      } catch (e) {
+        console.error("D1 unlinkCard fallback", e);
       }
       return await DBModule.forward(action, payload, env);
     }
