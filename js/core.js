@@ -112,7 +112,11 @@ const Core = (function() {
 
             const safePayload = { ...payload };
             safePayload.networkId = safePayload.networkId !== undefined ? safePayload.networkId : window.currentNetworkId;
-            safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
+            if (action === 'updateUserRole') {
+                safePayload.actorRole = safePayload.actorRole !== undefined ? safePayload.actorRole : window.userRole;
+            } else {
+                safePayload.role = safePayload.role !== undefined ? safePayload.role : window.userRole;
+            }
             safePayload.userId = safePayload.userId !== undefined ? safePayload.userId : window.currentUserProfile?.userId;
 
             // 嘗試取得 LIFF Token
@@ -124,11 +128,16 @@ const Core = (function() {
                 console.warn("LIFF token fetch failed:", e);
             }
 
+            const controller = new AbortController();
+            const timeoutMs = action === 'checkUser' ? 10000 : 18000;
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             const res = await fetch(Config.WORKER_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, payload: safePayload })
+                body: JSON.stringify({ action, payload: safePayload }),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
 
             if (!res.ok) {
                 throw new Error('伺服器暫時無法連線 (' + res.status + ')，請稍後重試');
@@ -139,6 +148,9 @@ const Core = (function() {
             return data.data || data;
         } catch (err) {
             let message = err && err.message ? err.message : '連線失敗';
+            if (err && err.name === 'AbortError') {
+                message = '系統連線逾時，請重新進入或稍後再試';
+            }
             if (message === 'Failed to fetch' || message.includes('NetworkError')) {
                 message = '無法連線到伺服器，請確認網路狀態後重試';
             }

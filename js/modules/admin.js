@@ -375,6 +375,55 @@ window.loadAllUsers = async function() {
 };
 
 // 渲染商家管理列表
+window.previewIdentityMigration = async function() {
+  const box = document.getElementById('identity-migration-preview');
+  if (!box) return;
+  box.className = 'bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3';
+  box.innerHTML = '<div class="text-sm font-bold text-slate-500 animate-pulse">正在檢查身份遷移狀態...</div>';
+
+  try {
+    const res = await window.fetchAPI('previewIdentityMigration', { limit: 120 }, true);
+    const data = res && (res.data || res);
+    if (!data || res.error) throw new Error((res && res.error) || '無法取得身份遷移預覽');
+
+    const counts = data.counts || {};
+    const stat = (label, value) =>
+      '<div class="bg-white border border-slate-100 rounded-xl p-3">' +
+        '<div class="text-[11px] text-slate-500 font-bold">' + window.escapeJS(label) + '</div>' +
+        '<div class="text-xl text-slate-900 font-black mt-1">' + window.escapeJS(value) + '</div>' +
+      '</div>';
+    const listUsers = (data.usersWithoutPointId || []).slice(0, 5).map(u =>
+      '<div class="flex justify-between gap-3 text-[12px] py-2 border-t border-slate-100">' +
+        '<span class="font-bold text-slate-800">' + window.escapeJS(u.name || '未命名') + '</span>' +
+        '<span class="font-mono text-slate-500 truncate max-w-[150px]">' + window.escapeJS(u.userId || '') + '</span>' +
+      '</div>'
+    ).join('');
+    const listDuplicates = (data.duplicatePhones || []).slice(0, 5).map(item =>
+      '<div class="text-[12px] py-2 border-t border-amber-100">' +
+        '<div class="font-black text-amber-700">' + window.escapeJS(item.phone || '') + '</div>' +
+        '<div class="text-slate-500">' + window.escapeJS((item.items || []).map(x => x.name || x.userId || x.cardId).join(' / ')) + '</div>' +
+      '</div>'
+    ).join('');
+
+    box.innerHTML =
+      '<div class="flex items-start justify-between gap-3">' +
+        '<div><div class="text-base font-black text-slate-900">身份遷移預覽</div><div class="text-[12px] text-slate-500 mt-1">只讀檢查，不會合併或改寫任何資料。</div></div>' +
+        '<span class="px-2 py-1 rounded-full text-[11px] font-black ' + (data.linksTableReady ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100') + '">' + (data.linksTableReady ? 'D1 已就緒' : 'D1 未就緒') + '</span>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 gap-2">' +
+        stat('既有對照', counts.existingLinks || 0) +
+        stat('未綁 point UID', counts.usersWithoutPointId || 0) +
+        stat('名片待補用戶', counts.boundCardsWithoutUser || 0) +
+        stat('手機疑似重複', counts.duplicatePhones || 0) +
+      '</div>' +
+      '<div class="bg-white rounded-2xl border border-slate-100 p-3"><div class="text-[13px] font-black text-slate-800 mb-1">未綁 point UID</div>' + (listUsers || '<div class="text-[12px] text-slate-400 py-2">目前沒有明顯項目</div>') + '</div>' +
+      '<div class="bg-amber-50 rounded-2xl border border-amber-100 p-3"><div class="text-[13px] font-black text-amber-800 mb-1">手機疑似重複</div>' + (listDuplicates || '<div class="text-[12px] text-amber-500 py-2">目前沒有明顯重複</div>') + '</div>';
+  } catch(e) {
+    box.className = 'bg-red-50 border border-red-100 rounded-2xl p-4';
+    box.innerHTML = '<div class="text-sm font-black text-red-600">身份預覽失敗：' + window.escapeJS(e.message || '請稍後再試') + '</div>';
+  }
+};
+
 window.renderStoreManagement = function() {
   const container = document.getElementById('store-management-list');
   if (!container) return;
@@ -386,7 +435,7 @@ window.renderStoreManagement = function() {
 
   container.innerHTML = allSystemUsers.map(u => {
     const isMe = u.userId === currentUserProfile?.userId;
-    return '<div class="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col gap-3 shadow-sm">' +
+    return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col gap-3 shadow-sm">' +
       '<div class="flex justify-between items-center">' +
         '<div>' +
           '<div class="font-black text-[15px] text-slate-800 flex items-center gap-1.5">' +
@@ -395,12 +444,12 @@ window.renderStoreManagement = function() {
           '</div>' +
           '<div class="text-[12px] text-slate-500 font-mono mt-0.5">' + window.escapeJS(u.phone || '無設定電話') + '</div>' +
         '</div>' +
-        '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value)" ' + (isMe ? 'disabled' : '') + ' class="bg-slate-50 border-none rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(u.role || 'user') + '">' +
+        '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value)" ' + (isMe ? 'disabled' : '') + ' class="bg-white border border-slate-200 rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(u.role || 'user') + '">' +
           '<option value="user" ' + (u.role === 'user' ? 'selected' : '') + '>一般 User</option>' +
           '<option value="store" ' + (u.role === 'store' ? 'selected' : '') + '>商家 Store</option>' +
         '</select>' +
       '</div>' +
-      '<div class="text-[11px] text-slate-400 flex items-center gap-1.5 bg-slate-50 px-2 py-1.5 rounded-lg w-fit">' +
+      '<div class="text-[11px] text-slate-500 flex items-center gap-1.5 bg-white border border-slate-100 px-2 py-1.5 rounded-lg w-fit">' +
         '<span class="material-symbols-outlined text-[14px]">storefront</span> ' +
         'StoreID: <span class="font-mono text-slate-700 font-bold">' + window.escapeJS(u.storeid || '尚未生成') + '</span>' +
       '</div>' +
@@ -413,9 +462,10 @@ window.changeUserRole = async function(userId, newRole) {
   // 找到下拉選單元素並暫時 disable,給視覺反饋
   const selectEl = event && event.target;
   const oldRole = (allSystemUsers.find(u => u.userId === userId) || {}).role || 'user';
-  if (newRole === 'admin') {
+  const allowedRoles = new Set(['user', 'store']);
+  if (!allowedRoles.has(String(newRole || ''))) {
     if (selectEl) selectEl.value = oldRole === 'store' ? 'store' : 'user';
-    return window.showToast('Admin 權限不可在此調整', true);
+    return window.showToast('此區只能調整一般或店長，總管權限不可在手機端變更。', true);
   }
 
   if (selectEl) selectEl.disabled = true;
@@ -427,7 +477,7 @@ window.changeUserRole = async function(userId, newRole) {
       targetUserId: userId,
       newRole: newRole,
       operatorId: window.currentUserProfile?.userId,
-      role: window.userRole,
+      actorRole: window.userRole,
       networkId: window.currentNetworkId
     }, true);
 

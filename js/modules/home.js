@@ -37,6 +37,17 @@ const HomeModule = (function() {
         } catch (e) {}
     };
 
+    window.purgeLegacyStoreSettingsCache = function() {
+        try {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+                const key = localStorage.key(i);
+                if (!key || !key.startsWith('ACTMASTER_STORE_SETTINGS_')) continue;
+                const raw = localStorage.getItem(key) || '';
+                if (raw.includes('4-27')) localStorage.removeItem(key);
+            }
+        } catch (e) {}
+    };
+
     window.isStoreToggleOn = function(value, fallback = true) {
         if (value === undefined || value === null || value === '') return fallback;
         return String(value).toLowerCase() !== 'false';
@@ -107,6 +118,7 @@ const HomeModule = (function() {
     };
 
     window.syncStoreSettingsToHome = function() {
+        if (typeof window.purgeLegacyStoreSettingsCache === 'function') window.purgeLegacyStoreSettingsCache();
         const networkId = window.currentNetworkId || 'admin';
         const cachedSettings = window.readCachedStoreSettings(networkId);
         if (cachedSettings) window.applyStoreSettingsToHome(cachedSettings);

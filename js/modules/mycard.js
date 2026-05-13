@@ -62,6 +62,13 @@
     return checked ? checked.value : 'landscape';
   }
 
+  function syncCurrentImageInput() {
+    var imgInput = $('#my-v1-img-url');
+    if (!imgInput) return;
+    var layout = getLayout();
+    myEcardImgs[layout] = imgInput.value || '';
+  }
+
   function parseCardConfig(card) {
     try {
       return JSON.parse((card && card['自訂名片設定']) || '{}') || {};
@@ -229,6 +236,7 @@
     var preview = $('#my-ecard-preview-area');
     if (!preview) return;
 
+    syncCurrentImageInput();
     var layout = getLayout();
     var profile = moduleAuth.getUserProfile() || {};
     var name = (currentCardData && currentCardData['姓名']) || profile.displayName || '姓名';
@@ -261,6 +269,7 @@
       btn.disabled = true;
     }
 
+    syncCurrentImageInput();
     var layout = getLayout();
     var cfg = parseCardConfig(currentCardData);
     cfg.layoutStyle = layout;
@@ -303,9 +312,9 @@
 
   function buildCurrentShareConfig() {
     var cfg = parseCardConfig(currentCardData);
-    var editor = $('#my-ecard-edit-state');
     var liveLayout = document.querySelector('input[name="my-ecard-layout"]:checked');
-    if (editor && !editor.classList.contains('hidden') && liveLayout) {
+    syncCurrentImageInput();
+    if (liveLayout) {
       cfg.layoutStyle = liveLayout.value || cfg.layoutStyle || 'landscape';
       cfg.imgUrl = myEcardImgs.landscape || cfg.imgUrl || '';
       cfg.imgUrlPortrait = myEcardImgs.portrait || cfg.imgUrlPortrait || '';

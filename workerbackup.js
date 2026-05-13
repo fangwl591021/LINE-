@@ -134,6 +134,7 @@ const SecurityModule = {
       'cancelTenantBonusOrder',
       'auditDataConsistency',
       'repairDataConsistency',
+      'previewIdentityMigration',
       'listDuplicateCardBindings',
       'resolveDuplicateCardBinding',
       'deployRichMenu',
@@ -1212,6 +1213,51 @@ const D1ReadModule = {
     return result && Array.isArray(result.results) ? result.results : [];
   },
 
+  async getIdentityLink(env, userId) {
+    const id = this.text(userId);
+    if (!id) return null;
+    try {
+      return await this.first(env, `
+        SELECT * FROM user_identity_links
+        WHERE status = 'active' AND (new_line_id = ? OR old_line_id = ?)
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 1
+      `, [id, id]);
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async findUserByIdentity(env, userId) {
+    const id = this.text(userId);
+    if (!id) return { user: null, link: null, canonicalId: '' };
+    const link = await this.getIdentityLink(env, id);
+    const ids = [];
+    const addId = value => {
+      const next = this.text(value);
+      if (next && !ids.includes(next)) ids.push(next);
+    };
+    addId(link && link.new_line_id);
+    addId(id);
+    addId(link && link.old_line_id);
+
+    for (const candidate of ids) {
+      const user = await this.first(env, `
+        SELECT * FROM users
+        WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
+        LIMIT 1
+      `, [candidate, candidate, candidate, candidate]);
+      if (user) {
+        return {
+          user,
+          link,
+          canonicalId: this.text(link && link.new_line_id, this.text(user.line_id || user.row_id, candidate))
+        };
+      }
+    }
+    return { user: null, link, canonicalId: this.text(link && link.new_line_id, id) };
+  },
+
   userRow(row, source = 'd1_user') {
     if (!row) return null;
     const userId = this.text(row.line_id || row.row_id);
@@ -1235,6 +1281,10 @@ const D1ReadModule = {
       networkId: this.text(row.network_id, 'admin'),
       tgToken: this.text(row.tg_token),
       tgChatId: this.text(row.tg_chat_id),
+      legacyLineId: this.text(row.legacy_line_id),
+      pointLineId: this.text(row.point_line_id),
+      identitySource: this.text(row.identity_source),
+      migratedAt: this.text(row.migrated_at),
       socials: this.text(row.socials),
       dealerProfile,
       kycStatus: this.text(dealerProfile.kycStatus),
@@ -1346,13 +1396,24 @@ const D1ReadModule = {
     const userId = this.text(payload.userId || payload.lineId);
     if (!userId) return { success: false, error: 'Missing userId' };
 
-    const user = await this.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
+    const identity = await this.findUserByIdentity(env, userId);
+    const user = identity.user;
     if (user) {
       const profile = this.userRow(user);
+      profile.requestedUserId = userId;
+      profile.canonicalUserId = identity.canonicalId || profile.userId;
+      if (identity.link) {
+        profile.identityLink = {
+          oldLineId: this.text(identity.link.old_line_id),
+          newLineId: this.text(identity.link.new_line_id),
+          matchMethod: this.text(identity.link.match_method),
+          confidence: this.text(identity.link.confidence)
+        };
+      }
       if (env.ACTMASTER_KV) {
         await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(profile), { expirationTtl: 600 });
       }
-      return { success: true, data: { isRegistered: true, info: profile, source: 'd1_user' } };
+      return { success: true, data: { isRegistered: true, info: profile, source: identity.link ? 'identity_link' : 'd1_user' } };
     }
 
     const card = await this.first(env, 'SELECT * FROM card_contacts WHERE line_id = ? LIMIT 1', [userId]);
@@ -1395,6 +1456,23 @@ const D1ReadModule = {
       return { success: false, error: '舊帳號驗證不足，請由管理員合併身份' };
     }
 
+    try {
+      await env.ACTMASTER_DB.prepare('DELETE FROM user_identity_links WHERE old_line_id = ? OR new_line_id = ?').bind(oldUserId, newUserId).run();
+      await env.ACTMASTER_DB.prepare(`
+        INSERT INTO user_identity_links (old_line_id,new_line_id,match_method,confidence,status,note,updated_at)
+        VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      `).bind(
+        oldUserId,
+        newUserId,
+        phoneOk ? 'phone_cache' : (nameOk ? 'name_cache' : 'hard_admin'),
+        phoneOk || isHardAdmin ? 'high' : 'medium',
+        'active',
+        'linked during LIFF identity recovery'
+      ).run();
+    } catch (e) {
+      console.error('identity link write skipped', e);
+    }
+
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -1420,6 +1498,16 @@ const D1ReadModule = {
       oldUser.tg_token || '',
       oldUser.tg_chat_id || ''
     ).run();
+
+    try {
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE users
+        SET legacy_line_id = ?, point_line_id = ?, identity_source = 'point_liff', migrated_at = CURRENT_TIMESTAMP
+        WHERE line_id = ? OR row_id = ?
+      `).bind(oldUserId, newUserId, newUserId, `USR_${newUserId}`).run();
+    } catch (e) {
+      console.error('identity columns update skipped', e);
+    }
 
     await env.ACTMASTER_DB.prepare('UPDATE card_contacts SET line_id = ?, updated_at = CURRENT_TIMESTAMP WHERE line_id = ?').bind(newUserId, oldUserId).run();
     await env.ACTMASTER_DB.prepare('UPDATE registrants SET line_id = ? WHERE line_id = ?').bind(newUserId, oldUserId).run().catch(() => null);
@@ -1485,6 +1573,86 @@ const D1ReadModule = {
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
     const rows = await this.all(env, `SELECT * FROM card_contacts ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`);
     return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
+  },
+
+  async previewIdentityMigration(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const limit = Math.min(Math.max(Number(payload.limit || 100) || 100, 1), 500);
+    let links = [];
+    let linksTableReady = true;
+    try {
+      links = await this.all(env, 'SELECT * FROM user_identity_links ORDER BY updated_at DESC, id DESC LIMIT ?', [limit]);
+    } catch (e) {
+      linksTableReady = false;
+    }
+
+    const users = await this.all(env, 'SELECT * FROM users ORDER BY created_at DESC, row_id DESC LIMIT ?', [limit]);
+    const cards = await this.all(env, `
+      SELECT * FROM card_contacts
+      WHERE line_id IS NOT NULL AND TRIM(line_id) <> ''
+      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+      LIMIT ?
+    `, [limit]);
+
+    const linkedOld = new Set(links.map(row => this.text(row.old_line_id)).filter(Boolean));
+    const linkedNew = new Set(links.map(row => this.text(row.new_line_id)).filter(Boolean));
+    const phoneMap = new Map();
+    const normalizePhone = value => this.text(value).replace(/\D/g, '');
+    users.forEach(row => {
+      const phone = normalizePhone(row.phone);
+      if (phone.length < 7) return;
+      if (!phoneMap.has(phone)) phoneMap.set(phone, []);
+      phoneMap.get(phone).push({ type: 'user', userId: this.text(row.line_id || row.row_id), name: this.text(row.name), phone });
+    });
+    cards.forEach(row => {
+      const phone = normalizePhone(row.mobile || row.office_phone);
+      if (phone.length < 7) return;
+      if (!phoneMap.has(phone)) phoneMap.set(phone, []);
+      phoneMap.get(phone).push({ type: 'card', userId: this.text(row.line_id), cardId: this.text(row.row_id), name: this.text(row.name), phone });
+    });
+
+    const duplicatePhones = Array.from(phoneMap.entries())
+      .filter(([, items]) => new Set(items.map(item => item.userId).filter(Boolean)).size > 1)
+      .slice(0, 50)
+      .map(([phone, items]) => ({ phone, items }));
+
+    const usersWithoutPointId = users
+      .map(row => this.userRow(row))
+      .filter(profile => profile && !this.text(profile.pointLineId) && !linkedNew.has(profile.userId))
+      .slice(0, 50);
+
+    const boundCardsWithoutUser = cards
+      .filter(card => !users.some(user => this.text(user.line_id || user.row_id) === this.text(card.line_id)))
+      .slice(0, 50)
+      .map(row => this.cardRow(row));
+
+    return {
+      success: true,
+      data: {
+        linksTableReady,
+        existingLinks: links.map(row => ({
+          oldLineId: this.text(row.old_line_id),
+          newLineId: this.text(row.new_line_id),
+          matchMethod: this.text(row.match_method),
+          confidence: this.text(row.confidence),
+          status: this.text(row.status),
+          note: this.text(row.note),
+          updatedAt: this.text(row.updated_at)
+        })),
+        counts: {
+          sampledUsers: users.length,
+          sampledBoundCards: cards.length,
+          existingLinks: links.length,
+          usersWithoutPointId: usersWithoutPointId.length,
+          boundCardsWithoutUser: boundCardsWithoutUser.length,
+          duplicatePhones: duplicatePhones.length
+        },
+        usersWithoutPointId,
+        boundCardsWithoutUser,
+        duplicatePhones,
+        hardAdminIds: Array.from(SecurityModule.hardAdminIds || [])
+      }
+    };
   }
 };
 
@@ -1648,7 +1816,7 @@ const D1WriteModule = {
   async updateUserRole(payload, env) {
     if (!this.hasD1(env)) return null;
     const targetUserId = this.pick(payload, ['targetUserId', 'targetLineId', 'lineId', 'userId']);
-    const role = this.role(this.pick(payload, ['role', 'newRole', 'permission']));
+    const role = this.role(this.pick(payload, ['newRole', 'targetRole', 'permission', 'role']));
     if (!targetUserId) return { success: false, error: 'Missing targetUserId' };
     if (role === 'admin') return { success: false, error: 'Admin role cannot be assigned from role editor' };
     if (SecurityModule.hardAdminIds.has(targetUserId)) return { success: false, error: 'Hard admin role cannot be modified' };
@@ -2364,6 +2532,7 @@ const AuthModule = {
     const forwardPayload = { ...payload };
     if (action === 'updateUserRole' && payload.targetUserId) {
       forwardPayload.userId = payload.targetUserId;
+      forwardPayload.role = payload.newRole || payload.targetRole || payload.permission || payload.role;
       forwardPayload.operatorId = payload.operatorId || payload.authUserId || payload.userId || '';
     }
 
@@ -3798,7 +3967,7 @@ async function dispatchAction(action, payload, request, env) {
       }
     } else {
       // 【過渡期處理】若前端程式還沒更新傳送 Token，暫時放行非高敏感操作，讓舊系統能登入
-      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'listDuplicateCardBindings', 'resolveDuplicateCardBinding', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch', 'mlmListSettlementBatches', 'mlmPreviewMonthlySettlement', 'mlmMarkSettlementPaid'];
+      const strictActions = ['updateUserRole', 'adminSyncBoundCardUser', 'auditDataConsistency', 'repairDataConsistency', 'previewIdentityMigration', 'listDuplicateCardBindings', 'resolveDuplicateCardBinding', 'mlmCreateOrder', 'mlmMarkOrderPaid', 'mlmCancelOrder', 'mlmRefundOrder', 'mlmCreateSettlementBatch', 'mlmLockSettlementBatch', 'mlmListSettlementBatches', 'mlmPreviewMonthlySettlement', 'mlmMarkSettlementPaid'];
       if (strictActions.includes(action)) {
         return { success: false, error: "Access Denied: Missing LINE Token for sensitive action" };
       }
@@ -3874,6 +4043,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1ConsistencyModule.audit(payload || {}, env);
     case 'repairDataConsistency':
       return await D1ConsistencyModule.repair(payload || {}, env);
+    case 'previewIdentityMigration':
+      return await D1ReadModule.previewIdentityMigration(payload || {}, env);
     case 'listDuplicateCardBindings':
       return await D1ConsistencyModule.listDuplicateBindings(payload || {}, env);
     case 'resolveDuplicateCardBinding':
