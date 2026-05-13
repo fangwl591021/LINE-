@@ -61,6 +61,7 @@ const NewebPayCrypto = {
 const SecurityModule = {
   hardAdminIds: new Set([
     'Uf729764dbb5b652a5a90a467320bea29',
+    'U050397a077bef628b317b0bbedeb2187',
     'U58eb5c1a747450140ce1335af709ae55'
   ]),
 
@@ -501,6 +502,7 @@ const LineOAModule = {
 // ==================== Point Service Module ====================
 const PointModule = {
   apiUrl: 'https://aiwe.cc/index.php/wp-json/wetw-point/v1/query-user-point-list',
+  insertApiUrl: 'https://aiwe.cc/index.php/wp-json/wetw-point/v1/insert-user-point',
 
   number(value) {
     const n = Number(value);
@@ -537,6 +539,39 @@ const PointModule = {
       return { error: data.message || data.code || ('Point API HTTP ' + res.status), code: data.code || '', data };
     }
     return { data };
+  },
+
+  async insertUserPoint(payload, env) {
+    const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
+    if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
+    const lineUserId = String(payload.LINE_user_id || payload.lineUserId || payload.userId || '').trim();
+    if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
+
+    const body = {
+      api_key: apiKey,
+      LINE_user_id: lineUserId,
+      shop_id: Number(payload.shop_id || payload.shopId || env.POINT_SHOP_ID || 35),
+      event_name: String(payload.event_name || payload.eventName || '掃描名片贈點'),
+      event_content: String(payload.event_content || payload.eventContent || '新增不重複名片，系統自動贈點'),
+      point_type: String(payload.point_type || payload.pointType || 'system_point'),
+      get_point: Number(payload.get_point || payload.points || 0),
+      shop_user_lineid: String(payload.shop_user_lineid || ''),
+      child_shop_name: String(payload.child_shop_name || ''),
+      child_shop_renew: Number(payload.child_shop_renew || 0),
+      shop_remark: String(payload.shop_remark || '')
+    };
+    if (!body.get_point) return { success: false, error: 'Missing point amount' };
+
+    const res = await fetch(this.insertApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      return { success: false, error: data.message || data.code || ('Point insert API HTTP ' + res.status), data };
+    }
+    return { success: true, data };
   },
 
   async queryUserPoints(payload, env) {
@@ -1220,8 +1255,9 @@ const D1ReadModule = {
     try {
       return await this.first(env, `
         SELECT * FROM user_identity_links
-        WHERE status = 'active' AND (new_line_id = ? OR old_line_id = ?)
-        ORDER BY updated_at DESC, id DESC
+        WHERE (new_line_id = ? OR old_line_id = ?)
+          AND status IN ('active', 'replaced')
+        ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, updated_at DESC, id DESC
         LIMIT 1
       `, [id, id]);
     } catch (e) {
@@ -1597,33 +1633,73 @@ const D1ReadModule = {
 
     const linkedOld = new Set(links.map(row => this.text(row.old_line_id)).filter(Boolean));
     const linkedNew = new Set(links.map(row => this.text(row.new_line_id)).filter(Boolean));
+    const canonicalMap = new Map();
+    const setCanonical = (from, to) => {
+      const source = this.text(from);
+      const target = this.text(to);
+      if (source && target) canonicalMap.set(source, target);
+    };
+    links.forEach(row => {
+      setCanonical(row.old_line_id, row.new_line_id);
+      setCanonical(row.new_line_id, row.new_line_id);
+    });
+    users.forEach(row => {
+      const lineId = this.text(row.line_id || row.row_id);
+      const pointId = this.text(row.point_line_id);
+      const legacyId = this.text(row.legacy_line_id);
+      if (pointId) {
+        setCanonical(lineId, pointId);
+        setCanonical(pointId, pointId);
+        setCanonical(legacyId, pointId);
+      }
+    });
+    const canonicalId = value => {
+      let id = this.text(value);
+      const seen = new Set();
+      for (let i = 0; i < 8 && id && canonicalMap.has(id) && !seen.has(id); i++) {
+        seen.add(id);
+        id = canonicalMap.get(id);
+      }
+      return id;
+    };
     const phoneMap = new Map();
+    const phoneItemKeys = new Map();
     const normalizePhone = value => this.text(value).replace(/\D/g, '');
+    const pushPhoneItem = (phone, item) => {
+      const canonicalUserId = canonicalId(item.userId);
+      const key = [canonicalUserId || item.userId || item.cardId, item.type].join(':');
+      if (!phoneMap.has(phone)) {
+        phoneMap.set(phone, []);
+        phoneItemKeys.set(phone, new Set());
+      }
+      const keys = phoneItemKeys.get(phone);
+      if (keys.has(key)) return;
+      keys.add(key);
+      phoneMap.get(phone).push({ ...item, canonicalUserId });
+    };
     users.forEach(row => {
       const phone = normalizePhone(row.phone);
       if (phone.length < 7) return;
-      if (!phoneMap.has(phone)) phoneMap.set(phone, []);
-      phoneMap.get(phone).push({ type: 'user', userId: this.text(row.line_id || row.row_id), name: this.text(row.name), phone });
+      pushPhoneItem(phone, { type: 'user', userId: this.text(row.line_id || row.row_id), name: this.text(row.name), phone });
     });
     cards.forEach(row => {
       const phone = normalizePhone(row.mobile || row.office_phone);
       if (phone.length < 7) return;
-      if (!phoneMap.has(phone)) phoneMap.set(phone, []);
-      phoneMap.get(phone).push({ type: 'card', userId: this.text(row.line_id), cardId: this.text(row.row_id), name: this.text(row.name), phone });
+      pushPhoneItem(phone, { type: 'card', userId: this.text(row.line_id), cardId: this.text(row.row_id), name: this.text(row.name), phone });
     });
 
     const duplicatePhones = Array.from(phoneMap.entries())
-      .filter(([, items]) => new Set(items.map(item => item.userId).filter(Boolean)).size > 1)
+      .filter(([, items]) => new Set(items.map(item => item.canonicalUserId || item.userId).filter(Boolean)).size > 1)
       .slice(0, 50)
       .map(([phone, items]) => ({ phone, items }));
 
     const usersWithoutPointId = users
       .map(row => this.userRow(row))
-      .filter(profile => profile && !this.text(profile.pointLineId) && !linkedNew.has(profile.userId))
+      .filter(profile => profile && !this.text(profile.pointLineId) && !linkedNew.has(profile.userId) && !linkedOld.has(profile.userId) && canonicalId(profile.userId) === profile.userId)
       .slice(0, 50);
 
     const boundCardsWithoutUser = cards
-      .filter(card => !users.some(user => this.text(user.line_id || user.row_id) === this.text(card.line_id)))
+      .filter(card => !users.some(user => canonicalId(user.line_id || user.row_id) === canonicalId(card.line_id)))
       .slice(0, 50)
       .map(row => this.cardRow(row));
 
@@ -1885,6 +1961,84 @@ const D1WriteModule = {
     return '';
   },
 
+  normalizePhone(value) {
+    return this.text(value).replace(/\D/g, '');
+  },
+
+  async ensurePointAwardTable(env) {
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS point_awards (
+        award_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT '',
+        card_id TEXT NOT NULL DEFAULT '',
+        award_type TEXT NOT NULL DEFAULT 'card_scan_create',
+        points REAL NOT NULL DEFAULT 0,
+        point_type TEXT NOT NULL DEFAULT 'system_point',
+        status TEXT NOT NULL DEFAULT 'pending',
+        response_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_point_awards_unique_card_scan
+      ON point_awards(user_id, card_id, award_type)
+      WHERE user_id <> '' AND card_id <> ''
+    `).run();
+  },
+
+  async hasDuplicateCardForOwner(env, ownerId, card, rowId) {
+    if (!ownerId) return false;
+    const phone = this.normalizePhone(card.mobile || card.office_phone);
+    const name = this.text(card.name).toLowerCase();
+    if (!phone && !name) return false;
+    const rows = await D1ReadModule.all(env, `
+      SELECT row_id,name,mobile,office_phone
+      FROM card_contacts
+      WHERE creator_id = ? AND row_id <> ?
+      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+      LIMIT 300
+    `, [ownerId, rowId]).catch(() => []);
+    return rows.some(row => {
+      const rowPhone = this.normalizePhone(row.mobile || row.office_phone);
+      if (phone && rowPhone && phone === rowPhone) return true;
+      const rowName = this.text(row.name).toLowerCase();
+      return !!(name && rowName && name === rowName);
+    });
+  },
+
+  async awardCardScanPoints(env, userId, cardId, card, eligible) {
+    if (!eligible || !userId || !cardId) return null;
+    await this.ensurePointAwardTable(env);
+    const awardId = 'AWD_CARD_SCAN_' + userId + '_' + cardId;
+    const inserted = await env.ACTMASTER_DB.prepare(`
+      INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
+      VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)
+    `).bind(awardId, userId, cardId, 'card_scan_create', 10, 'system_point', 'pending').run();
+    if (!inserted || !inserted.meta || Number(inserted.meta.changes || 0) === 0) {
+      return { awarded: false, reason: 'already_awarded' };
+    }
+
+    const result = await PointModule.insertUserPoint({
+      userId,
+      points: 10,
+      pointType: 'system_point',
+      eventName: '掃描名片贈點',
+      eventContent: '新增不重複名片：' + (this.text(card.name) || cardId),
+      shop_remark: 'cardId=' + cardId
+    }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
+
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE point_awards
+      SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE award_id = ?
+    `).bind(result && result.success ? 'sent' : 'failed', JSON.stringify(result || {}), awardId).run();
+
+    return result && result.success
+      ? { awarded: true, points: 10, response: result.data }
+      : { awarded: false, points: 10, error: (result && result.error) || 'Point award failed' };
+  },
+
   async confirmIdentityMerge(payload, env) {
     if (!this.hasD1(env)) return null;
     const oldLineId = this.pick(payload, ['oldLineId', 'oldUserId', 'legacyLineId']);
@@ -1990,12 +2144,21 @@ const D1WriteModule = {
     await env.ACTMASTER_DB.prepare(`
       UPDATE user_identity_links
       SET status = 'replaced', note = 'replaced by manual merge', updated_at = CURRENT_TIMESTAMP
-      WHERE status = 'active' AND (old_line_id = ? OR new_line_id = ?)
-    `).bind(oldLineId, newLineId).run().catch(() => null);
-    await env.ACTMASTER_DB.prepare(`
-      INSERT INTO user_identity_links (old_line_id,new_line_id,match_method,confidence,status,note,updated_at)
-      VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
-    `).bind(oldLineId, newLineId, 'manual_confirm', 'confirmed', 'active', this.firstText(payload.note, 'admin confirmed identity merge')).run();
+      WHERE (old_line_id = ? OR new_line_id = ?)
+        AND NOT (old_line_id = ? AND new_line_id = ?)
+    `).bind(oldLineId, newLineId, oldLineId, newLineId).run().catch(() => null);
+    const linkUpdate = await env.ACTMASTER_DB.prepare(`
+      UPDATE user_identity_links
+      SET match_method = ?, confidence = ?, status = 'active', note = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE old_line_id = ? AND new_line_id = ?
+    `).bind('manual_confirm', 'confirmed', this.firstText(payload.note, 'admin confirmed identity merge'), oldLineId, newLineId).run().catch(() => null);
+    const linkUpdated = Number(linkUpdate && linkUpdate.meta && linkUpdate.meta.changes || 0);
+    if (!linkUpdated) {
+      await env.ACTMASTER_DB.prepare(`
+        INSERT INTO user_identity_links (old_line_id,new_line_id,match_method,confidence,status,note,updated_at)
+        VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      `).bind(oldLineId, newLineId, 'manual_confirm', 'confirmed', 'active', this.firstText(payload.note, 'admin confirmed identity merge')).run();
+    }
 
     const updated = {};
     updated.cardsLineId = await this.runCount(env, 'UPDATE card_contacts SET line_id = ?, updated_at = CURRENT_TIMESTAMP WHERE line_id = ?', [newLineId, oldLineId]).catch(() => 0);
@@ -2029,6 +2192,8 @@ const D1WriteModule = {
     const card = this.normalizeCard(payload);
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
     const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
+    const awardUserId = this.text(payload.authenticatedUserId || card.creator_id || payload.creatorId || payload.userId);
+    const duplicateForAward = !existing && await this.hasDuplicateCardForOwner(env, awardUserId, card, card.row_id);
     if (existing) {
       [
         'line_id','name','english_name','company_name','title','department','tax_id','mobile','office_phone',
@@ -2051,7 +2216,14 @@ const D1WriteModule = {
         tags=excluded.tags,updated_at=CURRENT_TIMESTAMP
     `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags).run();
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
-    return { success: true, data: D1ReadModule.cardRow(card), rowId: card.row_id };
+    const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward);
+    return {
+      success: true,
+      data: D1ReadModule.cardRow(card),
+      rowId: card.row_id,
+      awardedPoints: pointAward && pointAward.awarded ? pointAward.points : 0,
+      pointAward
+    };
   }
 };
 
