@@ -119,6 +119,9 @@ window._renderAdminActivities = function(res) {
           '<div class="text-[12px] text-slate-500 mb-3 flex items-center gap-1">' +
             '<span class="material-symbols-outlined text-[14px]">schedule</span>' + time +
           '</div>' +
+          '<button onclick="window.openActivityShareModal(\'' + actId + '\', \'' + title + '\')" class="w-full mb-2 py-3 bg-blue-600 text-white rounded-xl text-[13px] font-black active:scale-95 transition-transform flex justify-center items-center gap-1.5">' +
+            '<span class="material-symbols-outlined text-[17px]">ios_share</span> 分享活動' +
+          '</button>' +
           '<div class="grid grid-cols-4 gap-2">' +
             '<button onclick="window.openCheckinPage(\'' + actId + '\', \'' + title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
               '<span class="material-symbols-outlined text-[15px]">fact_check</span> 核銷' +

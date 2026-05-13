@@ -272,6 +272,28 @@ const HomeModule = (function() {
         return baseUrl + '?' + params.toString();
     }
 
+    function getInitialActivityId_() {
+        try {
+            const params = typeof readActmasterInitialParams === 'function'
+                ? readActmasterInitialParams()
+                : new URLSearchParams(window.location.search || '');
+            return String(params.get('activityId') || params.get('act') || params.get('event') || '').trim();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    window.openActivityFromUrlParam = function(force = false) {
+        const activityId = getInitialActivityId_();
+        if (!activityId) return false;
+        if (window.__openedActivityParam === activityId && !force) return true;
+        const found = (window.allActivities || []).some(a => getPublicActivityId_(a) === String(activityId));
+        if (!found) return false;
+        window.__openedActivityParam = activityId;
+        setTimeout(() => window.openActivityDetail(activityId), 120);
+        return true;
+    };
+
     window.loadUserActivities = async function() {
         if (typeof window.syncStoreSettingsToHome === 'function') {
             window.syncStoreSettingsToHome();
@@ -283,6 +305,7 @@ const HomeModule = (function() {
                 {}
             );
             window.renderHomeActivities();
+            window.openActivityFromUrlParam();
             return window.allActivities;
         } catch (e) {
             console.error('活動載入失敗', e);
@@ -462,7 +485,12 @@ const HomeModule = (function() {
                         <span class="material-symbols-outlined text-[17px]">schedule</span> ${startTime}
                     </div>
                     <p class="text-[14px] text-slate-600 whitespace-pre-wrap">${desc}</p>
-                    <button onclick="window.joinPublicActivity('${window.escapeJS(activityId)}', this)" class="w-full py-4 bg-[#06C755] text-white rounded-2xl font-black text-[16px]">我要報名</button>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="window.joinPublicActivity('${window.escapeJS(activityId)}', this)" class="py-4 bg-[#06C755] text-white rounded-2xl font-black text-[16px]">我要報名</button>
+                        <button onclick="window.openActivityShareModal('${window.escapeJS(activityId)}', '${window.escapeJS(activity['活動名稱'] || activity['瘣餃??迂'] || '活動報名')}')" class="py-4 bg-blue-600 text-white rounded-2xl font-black text-[16px] flex justify-center items-center gap-1">
+                            <span class="material-symbols-outlined text-[18px]">ios_share</span> 分享
+                        </button>
+                    </div>
                 </div>
             </div>`;
         window.goPage('my-act-detail', true);

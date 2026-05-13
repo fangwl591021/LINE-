@@ -19,6 +19,145 @@ function normalizeNfcDateTimeLocal(value, activityStart) {
   return normalizeDateTimeLocal(raw);
 }
 
+function activityShareText(value, fallback = '') {
+  const text = String(value ?? '').trim();
+  return text || fallback;
+}
+
+function getActivityIdValue(activity) {
+  return activityShareText(activity && (
+    activity.activityId ||
+    activity.activity_id ||
+    activity.rowId ||
+    activity.id ||
+    activity['活動ID'] ||
+    activity['瘣餃?ID']
+  ));
+}
+
+function getActivityTitleValue(activity, fallback = '活動報名') {
+  return activityShareText(activity && (
+    activity.activityName ||
+    activity.name ||
+    activity.title ||
+    activity['活動名稱'] ||
+    activity['瘣餃??迂']
+  ), fallback);
+}
+
+function getActivityNetworkValue(activity) {
+  return activityShareText(activity && (
+    activity.networkId ||
+    activity.network_id ||
+    activity.net ||
+    activity['歸屬網'] ||
+    activity['networkId']
+  ), window.currentNetworkId || 'admin');
+}
+
+function findActivityForShare(activityId) {
+  const id = String(activityId || '').trim();
+  const pools = [
+    window.allActivities,
+    window._adminActsCache && window._adminActsCache.data
+  ];
+  for (const pool of pools) {
+    if (!Array.isArray(pool)) continue;
+    const match = pool.find(act => String(getActivityIdValue(act)) === id);
+    if (match) return match;
+  }
+  return null;
+}
+
+function getCreatedActivityId(res, payload) {
+  return activityShareText(
+    (res && (res.activityId || res.activity_id || res.rowId || res.id)) ||
+    (res && res.data && (res.data.activityId || res.data.activity_id || res.data.rowId || res.data.id)) ||
+    (payload && (payload.activityId || payload.activity_id))
+  );
+}
+
+window.buildActivityShareUrl = function(activityId, activity) {
+  const id = String(activityId || '').trim();
+  if (!id) return '';
+  const liffId = window.DEFAULT_LIFF_ID || window.POINT_LIFF_ID || window.LIFF_ID || '';
+  const baseUrl = liffId
+    ? 'https://liff.line.me/' + encodeURIComponent(liffId)
+    : window.location.origin + window.location.pathname;
+  const params = new URLSearchParams();
+  params.set('activityId', id);
+  const ref = activityShareText(window.currentUserProfile && window.currentUserProfile.userId);
+  const net = getActivityNetworkValue(activity);
+  if (ref) params.set('ref', ref);
+  if (net) params.set('net', net);
+  params.set('via', 'activity');
+  return baseUrl + '?' + params.toString();
+};
+
+window.openActivityShareModal = function(activityId, title, options = {}) {
+  const activity = findActivityForShare(activityId) || {};
+  const id = String(activityId || getActivityIdValue(activity)).trim();
+  if (!id) return window.showToast('找不到活動 ID，請重新整理後再試', true);
+
+  const shareTitle = activityShareText(title, getActivityTitleValue(activity, '活動報名'));
+  const url = window.buildActivityShareUrl(id, activity);
+  const modal = document.getElementById('activity-share-modal');
+  const titleEl = document.getElementById('activity-share-title');
+  const input = document.getElementById('activity-share-url');
+  const qr = document.getElementById('activity-share-qr');
+
+  window.currentActivityShare = { activityId: id, title: shareTitle, url, returnToAdmin: !!options.returnToAdmin };
+  if (titleEl) titleEl.textContent = shareTitle;
+  if (input) input.value = url;
+  if (qr) qr.src = 'https://quickchart.io/qr?text=' + encodeURIComponent(url) + '&size=300&margin=2';
+  if (modal) modal.classList.remove('hidden');
+};
+
+window.closeActivityShareModal = function() {
+  const modal = document.getElementById('activity-share-modal');
+  const shouldReturn = !!(window.currentActivityShare && window.currentActivityShare.returnToAdmin);
+  if (modal) modal.classList.add('hidden');
+  if (shouldReturn && typeof window.goPage === 'function') window.goPage('admin-activities');
+  window.currentActivityShare = null;
+};
+
+window.copyActivityShareLink = async function() {
+  const input = document.getElementById('activity-share-url');
+  const url = input ? input.value : (window.currentActivityShare && window.currentActivityShare.url) || '';
+  if (!url) return window.showToast('沒有可複製的活動連結', true);
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+    } else if (input) {
+      input.focus();
+      input.select();
+      document.execCommand('copy');
+    }
+    window.showToast('活動連結已複製');
+  } catch (e) {
+    window.showToast('複製失敗，請手動長按複製', true);
+  }
+};
+
+window.shareActivityLinkToLine = async function() {
+  const share = window.currentActivityShare || {};
+  const title = share.title || '活動報名';
+  const url = share.url || '';
+  if (!url) return window.showToast('沒有可分享的活動連結', true);
+  const text = title + '\n' + url;
+  try {
+    if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
+      await liff.shareTargetPicker([{ type: 'text', text }]);
+      window.showToast('已開啟 LINE 分享');
+    } else {
+      await window.copyActivityShareLink();
+      window.showToast('目前環境不支援 LINE 分享，已改為複製連結');
+    }
+  } catch (e) {
+    window.showToast(e.message || '分享失敗，請改用複製連結', true);
+  }
+};
+
 // 開啟編輯活動頁(從核銷頁卡片點擊編輯按鈕觸發)
 window.openEditActivity = async function(actId) {
   // 從快取中找到該活動
@@ -402,10 +541,17 @@ window.submitActivityForm = async function(mode) {
       res = await window.fetchAPI('bulkAddRegistrants', p, true);
       if (!res || res.error) throw new Error(res.error || '未知的錯誤');
 
-      alert('🎉 活動建立成功!即將跳轉...');
       // 清快取讓核銷頁能看到新活動
+      const createdActivityId = getCreatedActivityId(res, p);
+      window.showToast('活動建立成功，可以分享給朋友報名');
       window._adminActsCache = { data: null, time: 0 };
-      setTimeout(() => { window.goPage('admin-activities'); }, 1500);
+      setTimeout(() => {
+        if (createdActivityId && typeof window.openActivityShareModal === 'function') {
+          window.openActivityShareModal(createdActivityId, p.activityName, { returnToAdmin: true });
+        } else {
+          window.goPage('admin-activities');
+        }
+      }, 500);
     }
   } catch(e) {
     alert('⚠️ 操作失敗:' + e.message);
