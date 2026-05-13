@@ -250,13 +250,21 @@
       return '<a href="' + escapeHTML(button.u || '#') + '" class="block py-3 rounded-xl text-white text-center text-[14px] font-black mb-2.5 shadow-sm" style="background:' + escapeHTML(button.c || '#06C755') + '">' + escapeHTML(button.l || '按鈕') + '</a>';
     }).join('');
 
-    preview.innerHTML = '<div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px] shadow-lg overflow-hidden">' +
-      '<div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio:' + ratio + ';background-image:url(\'' + escapeHTML(imgUrl) + '\');"></div>' +
-      '<div class="p-6 text-center">' +
+    var imageClass = layout === 'portrait'
+      ? 'w-full max-h-[520px] object-contain bg-slate-50 rounded-2xl'
+      : 'w-full object-cover bg-slate-50 rounded-2xl';
+    var imageStyle = layout === 'portrait'
+      ? ''
+      : 'aspect-ratio:' + ratio + ';';
+
+    preview.innerHTML =
+      '<div class="w-full">' +
+      '<img src="' + escapeHTML(imgUrl) + '" alt="名片封面" class="' + imageClass + '" style="' + imageStyle + '">' +
+      '<div class="px-4 pt-4 pb-2 text-center">' +
         '<div class="font-black text-[22px] text-slate-800 mb-2">' + escapeHTML(name) + '</div>' +
         '<div class="text-[14px] leading-relaxed" style="color:' + escapeHTML(color) + ';text-align:' + escapeHTML(align) + ';">' + escapeHTML(desc).replace(/\n/g, '<br>') + '</div>' +
       '</div>' +
-      (buttonHtml ? '<div class="px-6">' + buttonHtml + '</div>' : '') +
+      (buttonHtml ? '<div class="px-4 pb-2">' + buttonHtml + '</div>' : '') +
     '</div>';
   }
 
