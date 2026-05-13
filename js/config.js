@@ -1,7 +1,7 @@
 /* ==================== 全域設定 ==================== */
 
 const DEFAULT_LIFF_ID = "2009886448-2UHnJgyT";
-const NFC_LIFF_ID = "2009886448-Asc5tytD";
+const NFC_LIFF_ID = "1660923784-cOH9Hvsv";
 const POINT_LIFF_ID = "1660923784-vViMTZ1y";
 const POINT_OA_URL = "https://lin.ee/sDW7u4T";
 const HARD_ADMIN_IDS = [
@@ -266,7 +266,7 @@ window.getActmasterUrlParams = function() {
 
     const originalBuildUrl = window.buildNfcCheckinUrl;
     window.buildNfcCheckinUrl = function(actId) {
-      const liffId = window.NFC_LIFF_ID || '2009886448-Asc5tytD';
+      const liffId = window.NFC_LIFF_ID || '1660923784-cOH9Hvsv';
       return 'https://liff.line.me/' + encodeURIComponent(liffId) + '?checkin=' + encodeURIComponent(actId || '');
     };
 
