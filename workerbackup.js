@@ -1814,7 +1814,7 @@ const D1WriteModule = {
     return { success: true, data: { isRegistered: true, info, source: 'd1_write' } };
   },
 
-  async updateUserRole(payload, env) {
+  async updateUserRoleLegacy(payload, env) {
     if (!this.hasD1(env)) return null;
     const targetUserId = this.pick(payload, ['targetUserId', 'targetLineId', 'lineId', 'userId']);
     const role = this.role(this.pick(payload, ['newRole', 'targetRole', 'permission', 'role']));
@@ -1826,6 +1826,43 @@ const D1WriteModule = {
     await env.ACTMASTER_DB.prepare('UPDATE users SET role = ? WHERE line_id = ? OR row_id = ?').bind(role, targetUserId, targetUserId).run();
     await this.clearUserCache(env, targetUserId);
     return { success: true, data: { userId: targetUserId, role, source: 'd1_write' } };
+  },
+
+  async updateUserRole(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const targetUserId = this.pick(payload, ['targetUserId', 'targetLineId', 'lineId', 'userId']);
+    const role = this.role(this.pick(payload, ['newRole', 'targetRole', 'permission', 'role']));
+    if (!targetUserId) return { success: false, error: 'Missing targetUserId' };
+    if (role === 'admin') return { success: false, error: 'Admin role cannot be assigned from role editor' };
+    if (SecurityModule.hardAdminIds.has(targetUserId)) return { success: false, error: 'Hard admin role cannot be modified' };
+
+    let existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ? LIMIT 1', [targetUserId, targetUserId, targetUserId, targetUserId]).catch(() => null);
+    if (!existing) {
+      const card = await D1ReadModule.first(env, `
+        SELECT * FROM card_contacts
+        WHERE line_id = ? OR creator_id = ?
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT 1
+      `, [targetUserId, targetUserId]).catch(() => null);
+      if (card) {
+        await this.upsertUser({
+          userId: targetUserId,
+          name: card.name || '',
+          phone: card.mobile || card.office_phone || '',
+          industry: card.title || card.company_name || '',
+          networkId: card.network_id || 'admin',
+          role: 'user'
+        }, env);
+        existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [targetUserId, targetUserId]).catch(() => null);
+      }
+    }
+    if (!existing) return { success: false, error: '找不到指定用戶' };
+
+    const targetLineId = this.text(existing.line_id || targetUserId);
+    await env.ACTMASTER_DB.prepare('UPDATE users SET role = ? WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?').bind(role, targetLineId, targetUserId, targetUserId, targetUserId).run();
+    await this.clearUserCache(env, targetLineId);
+    await this.clearUserCache(env, targetUserId);
+    return { success: true, data: { userId: targetLineId, role, source: 'd1_write' } };
   },
 
   async runCount(env, sql, binds = []) {

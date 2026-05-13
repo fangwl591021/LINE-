@@ -590,3 +590,42 @@ window.changeUserRole = async function(userId, newRole) {
     if (selectEl) selectEl.disabled = false;
   }
 };
+
+// Clean override: fetchAPI unwraps successful Worker replies to { userId, role },
+// so role updates must not require data.success here.
+window.changeUserRole = async function(userId, newRole, evt) {
+  const selectEl = (evt && evt.target) || (typeof event !== 'undefined' && event.target) || document.activeElement;
+  const user = allSystemUsers.find(u => u.userId === userId);
+  const oldRole = (user || {}).role || 'user';
+  const allowedRoles = new Set(['user', 'store']);
+  if (!allowedRoles.has(String(newRole || ''))) {
+    if (selectEl) selectEl.value = oldRole === 'store' ? 'store' : 'user';
+    return window.showToast('此區只能調整一般或店長，總管權限不可在手機端變更。', true);
+  }
+
+  if (selectEl) selectEl.disabled = true;
+  window.showToast('更新權限中...');
+
+  try {
+    const data = await window.fetchAPI('updateUserRole', {
+      userId,
+      targetUserId: userId,
+      newRole,
+      operatorId: window.currentUserProfile?.userId,
+      actorRole: window.userRole,
+      networkId: window.currentNetworkId
+    }, true);
+
+    if (data && (data.success || data.userId || data.role)) {
+      if (user) user.role = newRole;
+      window.showToast('已更新 ' + ((user && user.name) || '用戶') + ' 身分：' + (newRole === 'store' ? '店長' : '一般'));
+    } else {
+      throw new Error((data && data.error) || '更新失敗');
+    }
+  } catch(e) {
+    window.showToast('更新失敗：' + (e.message || '請稍後再試'), true);
+    if (selectEl) selectEl.value = oldRole;
+  } finally {
+    if (selectEl) selectEl.disabled = false;
+  }
+};
