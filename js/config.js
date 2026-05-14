@@ -137,10 +137,8 @@ window.ensureActmasterLiffLogin = function(options = {}) {
 window.actmasterShareTargetPicker = async function(messages) {
   if (!window.liff || typeof window.liff.isLoggedIn !== 'function' || !window.liff.isLoggedIn()) return { ok: false, reason: 'not_logged_in' };
   if (typeof window.liff.isApiAvailable !== 'function' || !window.liff.isApiAvailable('shareTargetPicker')) return { ok: false, reason: 'share_unavailable' };
-  const result = await window.liff.shareTargetPicker(messages);
-  if (!result) return { ok: false, reason: 'cancelled' };
-  if (result.status && result.status !== 'success') return { ok: false, reason: result.status };
-  return { ok: true, result };
+  await window.liff.shareTargetPicker(messages);
+  return { ok: true };
 };
 
 window.closeActmasterLiffOrHome = function(delayMs = 1800) {
