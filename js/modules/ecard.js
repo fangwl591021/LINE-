@@ -434,16 +434,15 @@ window.shareECardToLine = async function(btnId) {
       } catch(e) {}
     }
 
-    const flexMsg = buildLocalECardFlexMessage(window.currentCard, cfg, fallbackUrl);
-
-    if (flexMsg) {
-      routeECardFlexHeaderShareToPicker(flexMsg, fallbackUrl);
-      const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
-      if (shared === false && fallbackUrl) {
-        await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
-      }
-    } else if (fallbackUrl) {
+    if (fallbackUrl) {
       await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
+    } else {
+      const flexMsg = buildLocalECardFlexMessage(window.currentCard, cfg, fallbackUrl);
+      if (flexMsg) {
+        routeECardFlexHeaderShareToPicker(flexMsg, fallbackUrl);
+        const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
+        if (shared === false) window.showToast('⚠️ 傳送失敗：找不到名片連結', true);
+      }
     }
   } catch(e) {
     try {
