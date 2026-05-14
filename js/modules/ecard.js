@@ -271,6 +271,7 @@ window.shareECardToLine = async function(btnId) {
     }, true);
 
     if (flexMsg) {
+      routeECardFlexHeaderShareToPicker(flexMsg, fallbackUrl);
       const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
       if (shared === false && fallbackUrl) {
         await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
@@ -312,6 +313,30 @@ function buildECardShareUrl(rowId) {
   if (params.ref) url += "&ref=" + encodeURIComponent(params.ref);
   if (params.net) url += "&net=" + encodeURIComponent(params.net);
   return url;
+}
+
+function appendECardShareMode(url) {
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set("share", "1");
+    return parsed.toString();
+  } catch (e) {
+    return url + (url.includes("?") ? "&" : "?") + "share=1";
+  }
+}
+
+function routeECardFlexHeaderShareToPicker(flexMsg, shareUrl) {
+  const actionUrl = appendECardShareMode(shareUrl);
+  if (!flexMsg || !actionUrl) return flexMsg;
+  try {
+    if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
+      flexMsg.header.contents[0].action = { type: "uri", uri: actionUrl };
+    }
+  } catch (e) {
+    console.warn("[routeECardFlexHeaderShareToPicker] failed:", e);
+  }
+  return flexMsg;
 }
 
 async function shareECardPlainLink(url, name) {

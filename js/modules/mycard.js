@@ -210,6 +210,30 @@
     return url;
   }
 
+  function appendShareMode(url) {
+    if (!url) return '';
+    try {
+      var parsed = new URL(url);
+      parsed.searchParams.set('share', '1');
+      return parsed.toString();
+    } catch (e) {
+      return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'share=1';
+    }
+  }
+
+  function routeFlexHeaderShareToPicker(flexMsg, shareUrl) {
+    var actionUrl = appendShareMode(shareUrl);
+    if (!flexMsg || !actionUrl) return flexMsg;
+    try {
+      if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
+        flexMsg.header.contents[0].action = { type: 'uri', uri: actionUrl };
+      }
+    } catch (e) {
+      console.warn('[routeFlexHeaderShareToPicker] failed:', e);
+    }
+    return flexMsg;
+  }
+
   async function sharePlainCardLink(shareUrl, cardName) {
     var text = '這是我的數位名片';
     if (cardName) text += '：' + cardName;
@@ -554,6 +578,7 @@
         liffId: moduleConfig.POINT_LIFF_ID || window.POINT_LIFF_ID || moduleConfig.LIFF_ID
       }, true);
       if (flexMsg && !flexMsg.error) {
+        routeFlexHeaderShareToPicker(flexMsg, shareUrl);
         var shared = await window.triggerFlexSharing(flexMsg, currentCardData['姓名'] || '數位名片');
         if (shared === false) await sharePlainCardLink(shareUrl, currentCardData['姓名'] || '');
       } else {
