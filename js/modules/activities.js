@@ -106,7 +106,7 @@ window.openActivityShareModal = function(activityId, title, options = {}) {
   const input = document.getElementById('activity-share-url');
   const qr = document.getElementById('activity-share-qr');
 
-  window.currentActivityShare = { activityId: id, title: shareTitle, url, returnToAdmin: !!options.returnToAdmin };
+  window.currentActivityShare = { activityId: id, title: shareTitle, url, activity, returnToAdmin: !!options.returnToAdmin };
   if (titleEl) titleEl.textContent = shareTitle;
   if (input) input.value = url;
   if (qr) qr.src = 'https://quickchart.io/qr?text=' + encodeURIComponent(url) + '&size=300&margin=2';
@@ -139,6 +139,75 @@ window.copyActivityShareLink = async function() {
   }
 };
 
+function clipActivityFlexText(value, max = 120) {
+  const text = activityShareText(value);
+  if (!text) return '';
+  return text.length > max ? text.slice(0, max - 1) + '...' : text;
+}
+
+function activityFlexField(activity, keys, fallback = '') {
+  if (!activity) return fallback;
+  for (const key of keys) {
+    const value = activity[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+  }
+  return fallback;
+}
+
+function buildActivityFlexMessage(share) {
+  const activity = share.activity || {};
+  const title = clipActivityFlexText(share.title || getActivityTitleValue(activity, '活動報名'), 60);
+  const url = share.url || '';
+  const imageUrl = activityFlexField(activity, ['imageUrl', 'image_url', '宣傳圖']);
+  const rawTime = activityFlexField(activity, ['startTime', 'start_time', '開始時間']);
+  const startTime = clipActivityFlexText(
+    typeof window.formatDisplayTime === 'function' ? window.formatDisplayTime(rawTime) : rawTime,
+    48
+  );
+  const description = clipActivityFlexText(activityFlexField(activity, ['description', '活動說明']), 150);
+  const price = Number(activityFlexField(activity, ['price', 'amount', '金額'], 0)) || 0;
+  const feeText = price > 0 ? 'NT$ ' + price.toLocaleString() : '免費';
+  const infoContents = [];
+  if (startTime) infoContents.push({ type: 'text', text: '時間：' + startTime, size: 'sm', color: '#64748b', wrap: true });
+  infoContents.push({ type: 'text', text: '費用：' + feeText, size: 'sm', color: '#64748b', wrap: true });
+  if (description) infoContents.push({ type: 'text', text: description, size: 'sm', color: '#334155', wrap: true, margin: 'md' });
+
+  const contents = {
+    type: 'bubble',
+    size: 'mega',
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'md',
+      contents: [
+        { type: 'text', text: title || '活動報名', weight: 'bold', size: 'xl', color: '#0f172a', wrap: true },
+        { type: 'box', layout: 'vertical', spacing: 'sm', contents: infoContents }
+      ]
+    },
+    footer: {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      contents: [
+        { type: 'button', style: 'primary', color: '#06C755', action: { type: 'uri', label: '我要報名', uri: url } },
+        { type: 'button', style: 'secondary', action: { type: 'uri', label: '查看活動', uri: url } }
+      ],
+      flex: 0
+    }
+  };
+  if (/^https:\/\//i.test(imageUrl)) {
+    contents.hero = {
+      type: 'image',
+      url: imageUrl,
+      size: 'full',
+      aspectRatio: '16:9',
+      aspectMode: 'cover',
+      action: { type: 'uri', uri: url }
+    };
+  }
+  return { type: 'flex', altText: (title || '活動報名') + ' - 我要報名', contents };
+}
+
 window.shareActivityLinkToLine = async function() {
   const share = window.currentActivityShare || {};
   const title = share.title || '活動報名';
@@ -147,7 +216,7 @@ window.shareActivityLinkToLine = async function() {
   const text = title + '\n' + url;
   try {
     if (typeof liff !== 'undefined' && liff.isLoggedIn() && liff.isApiAvailable('shareTargetPicker')) {
-      await liff.shareTargetPicker([{ type: 'text', text }]);
+      await liff.shareTargetPicker([buildActivityFlexMessage(share)]);
       window.showToast('已開啟 LINE 分享');
     } else {
       await window.copyActivityShareLink();
