@@ -145,10 +145,22 @@ const HomeModule = (function() {
         ).trim();
     }
 
+    function getCurrentEffectiveNetwork_() {
+        const role = String(window.userRole || window.currentUser?.role || '').toLowerCase();
+        const userId = String(window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '').trim();
+        const networkId = String(window.currentNetworkId || window.currentUser?.networkId || 'admin').trim();
+        const referrerId = String(window.currentUser?.referrerId || window.currentUser?.referrer_id || '').trim();
+        if (role === 'admin') return 'admin';
+        if (role === 'store' || role === 'tenant') return userId || networkId || 'admin';
+        if (networkId && networkId !== 'admin') return networkId;
+        if (referrerId) return referrerId;
+        return networkId || 'admin';
+    }
+
     function canSeePublicActivity_(activity) {
         const role = String(window.userRole || '').toLowerCase();
         if (role === 'admin') return true;
-        const currentNetwork = String(window.currentNetworkId || 'admin').trim();
+        const currentNetwork = getCurrentEffectiveNetwork_();
         const activityNetwork = getPublicActivityNetwork_(activity);
         if (!activityNetwork) return currentNetwork === 'admin';
         return activityNetwork === currentNetwork;
@@ -326,7 +338,7 @@ const HomeModule = (function() {
         try {
             window.allActivities = await fetchActivitiesByFallback_(
                 ['getPublicActivities', 'getAllActivities', 'getActivities'],
-                { networkId: window.currentNetworkId || 'admin', role: window.userRole || 'user' }
+                { networkId: getCurrentEffectiveNetwork_(), role: window.userRole || 'user' }
             );
             window.renderHomeActivities();
             window.openActivityFromUrlParam();

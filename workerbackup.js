@@ -76,6 +76,18 @@ const SecurityModule = {
     return 'user';
   },
 
+  effectiveNetworkId(userId, role, user = {}) {
+    const normalizedRole = this.normalizeRole(role);
+    const currentUserId = this.text(userId || user.line_id || user.row_id);
+    if (normalizedRole === 'admin') return 'admin';
+    if (normalizedRole === 'store') return currentUserId || this.text(user.network_id, 'admin');
+    const explicitNetwork = this.text(user.network_id);
+    if (explicitNetwork && explicitNetwork !== 'admin') return explicitNetwork;
+    const referrerId = this.text(user.referrer_id);
+    if (referrerId) return referrerId;
+    return explicitNetwork || 'admin';
+  },
+
   async getLineUserIdFromToken(token, env) {
     if (!token) return '';
     const cacheKey = `AUTH_${token.substring(0, 30)}`;
@@ -106,10 +118,10 @@ const SecurityModule = {
     let networkId = 'admin';
     if (this.hardAdminIds.has(userId)) role = 'admin';
     if (env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined') {
-      const user = await D1ReadModule.first(env, 'SELECT role, network_id FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
+      const user = await D1ReadModule.first(env, 'SELECT role, network_id, referrer_id FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
       if (user) {
         role = this.hardAdminIds.has(userId) ? 'admin' : this.normalizeRole(user.role);
-        networkId = this.text(user.network_id) || 'admin';
+        networkId = this.effectiveNetworkId(userId, role, user);
       }
     }
     return { userId, role, networkId, token };
@@ -1315,6 +1327,7 @@ const D1ReadModule = {
     const userId = this.text(row.line_id || row.row_id);
     if (!userId) return null;
     const role = SecurityModule.hardAdminIds.has(userId) ? 'admin' : this.role(row.role);
+    const networkId = SecurityModule.effectiveNetworkId(userId, role, row);
     const socials = this.jsonObject(row.socials);
     const dealerProfile = socials.dealerProfile && typeof socials.dealerProfile === 'object' ? socials.dealerProfile : {};
     return {
@@ -1330,7 +1343,7 @@ const D1ReadModule = {
       storeid: this.text(row.store_id),
       storeId: this.text(row.store_id),
       referrerId: this.text(row.referrer_id),
-      networkId: this.text(row.network_id, 'admin'),
+      networkId,
       tgToken: this.text(row.tg_token),
       tgChatId: this.text(row.tg_chat_id),
       legacyLineId: this.text(row.legacy_line_id),
@@ -2746,7 +2759,12 @@ const D1ActivityModule = {
       UPDATE activities
       SET network_id = COALESCE(
         (
-          SELECT NULLIF(users.network_id, '')
+          SELECT CASE
+            WHEN LOWER(COALESCE(users.role, '')) IN ('store','tenant') OR users.role IN ('店長','租戶') THEN users.line_id
+            WHEN NULLIF(users.network_id, '') IS NOT NULL AND users.network_id <> 'admin' THEN users.network_id
+            WHEN NULLIF(users.referrer_id, '') IS NOT NULL THEN users.referrer_id
+            ELSE 'admin'
+          END
           FROM users
           WHERE users.line_id = activities.creator_id
              OR users.row_id = activities.creator_id
