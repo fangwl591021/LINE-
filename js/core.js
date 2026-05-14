@@ -247,59 +247,6 @@ const Core = (function() {
         }
     };
 
-    function sanitizeLineUri(uri) {
-        const value = String(uri || '').trim();
-        if (!value) return '';
-        if (/^(https?:\/\/|line:\/\/|tel:)/i.test(value)) return value;
-        return '';
-    }
-
-    function sanitizeFlexComponent(component) {
-        if (Array.isArray(component)) return component.map(sanitizeFlexComponent).filter(Boolean);
-        if (!component || typeof component !== 'object') return component;
-
-        const clean = {};
-        Object.keys(component).forEach(key => {
-            const value = component[key];
-            if (value === undefined || value === null) return;
-            clean[key] = sanitizeFlexComponent(value);
-        });
-
-        if (clean.action && typeof clean.action === 'object') {
-            if (clean.action.label) clean.action.label = String(clean.action.label).slice(0, 20);
-            if (clean.action.type === 'uri') {
-                const uri = sanitizeLineUri(clean.action.uri);
-                if (uri) clean.action.uri = uri;
-                else delete clean.action;
-            }
-        }
-
-        if (clean.type === 'button' && clean.action && clean.action.label) {
-            clean.action.label = String(clean.action.label).slice(0, 20);
-        }
-
-        return clean;
-    }
-
-    function normalizeLineShareMessage(flexMsg, altText) {
-        const safeAltText = String(altText || '您收到一則訊息').slice(0, 400);
-        if (flexMsg && flexMsg.type === 'flex' && flexMsg.contents) {
-            return {
-                ...flexMsg,
-                altText: String(flexMsg.altText || safeAltText).slice(0, 400),
-                contents: sanitizeFlexComponent(flexMsg.contents)
-            };
-        }
-        if (flexMsg && (flexMsg.type === 'bubble' || flexMsg.type === 'carousel')) {
-            return {
-                type: 'flex',
-                altText: safeAltText,
-                contents: sanitizeFlexComponent(flexMsg)
-            };
-        }
-        throw new Error('名片訊息格式異常，無法發送');
-    }
-
     // === 5. LIFF 分享 ===
     window.triggerFlexSharing = async function(flexMsg, altText) {
         try {
@@ -322,9 +269,12 @@ const Core = (function() {
                 }
                 return null;
             }
-            const message = normalizeLineShareMessage(flexMsg, altText);
             if (typeof window.actmasterShareTargetPicker === 'function') {
-                const result = await window.actmasterShareTargetPicker([message]);
+                const result = await window.actmasterShareTargetPicker([{
+                    type: "flex",
+                    altText: altText || "您收到一則訊息",
+                    contents: flexMsg
+                }]);
                 if (!result.ok) {
                     const reasonText = result.reason === 'share_unavailable'
                         ? '您的環境不支援分享功能'
@@ -339,6 +289,11 @@ const Core = (function() {
                 window.showToast('您的環境不支援分享功能', true);
                 return false;
             }
+            const message = {
+                type: "flex",
+                altText: altText || "您收到一則訊息",
+                contents: flexMsg
+            };
             await liff.shareTargetPicker([message]);
             window.showToast('✅ 已開啟 LINE 分享');
             return true;
