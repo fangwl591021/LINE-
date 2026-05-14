@@ -117,6 +117,22 @@ function bindECardFieldAutoSync() {
   });
 }
 
+function assertUsableFlexMessage(flexMsg, cfg) {
+  if (!flexMsg || flexMsg.error) {
+    throw new Error((flexMsg && flexMsg.error) || '後端沒有產生名片訊息');
+  }
+  if (flexMsg.type !== 'bubble' || !flexMsg.hero || !flexMsg.body) {
+    console.warn('[shareECardToLine] invalid flex payload:', flexMsg);
+    throw new Error('名片訊息格式異常');
+  }
+  const footerButtons = Array.isArray(flexMsg.footer?.contents) ? flexMsg.footer.contents : [];
+  if (!footerButtons.length && Array.isArray(cfg?.buttons) && cfg.buttons.length) {
+    console.warn('[shareECardToLine] flex footer missing, cfg:', cfg);
+    throw new Error('名片按鈕沒有寫入發送訊息');
+  }
+  return true;
+}
+
 /**
  * 載入名片設定到 UI (請確保在 cards.js 的 openCardDetail 中呼叫此函數)
  * 範例呼叫: window.initECardSettings(cardData);
@@ -361,13 +377,15 @@ window.shareECardToLine = async function(btnId) {
       liffId: window.POINT_LIFF_ID || window.LIFF_ID
     }, true);
 
-    if (flexMsg) {
+    if (flexMsg && !flexMsg.error) {
+      assertUsableFlexMessage(flexMsg, cfg);
       routeECardFlexHeaderShareToPicker(flexMsg, fallbackUrl);
       const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
       if (shared === false && fallbackUrl) {
         await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
       }
     } else if (fallbackUrl) {
+      if (flexMsg && flexMsg.error) console.warn('[shareECardToLine] buildFlexMessage failed:', flexMsg.error);
       await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
     }
   } catch(e) {

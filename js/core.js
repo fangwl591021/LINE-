@@ -276,7 +276,10 @@ const Core = (function() {
                     contents: flexMsg
                 }]);
                 if (!result.ok) {
-                    window.showToast(result.reason === 'share_unavailable' ? '您的環境不支援分享功能' : '請先登入 LINE LIFF', true);
+                    const reasonText = result.reason === 'share_unavailable'
+                        ? '您的環境不支援分享功能'
+                        : (result.reason === 'cancelled' ? '尚未完成發送' : '請先登入 LINE LIFF');
+                    window.showToast(reasonText, true);
                     return false;
                 }
                 window.showToast('✅ 已成功發送！');
@@ -291,7 +294,11 @@ const Core = (function() {
                 altText: altText || "您收到一則訊息",
                 contents: flexMsg
             };
-            await liff.shareTargetPicker([message]);
+            const result = await liff.shareTargetPicker([message]);
+            if (!result || (result.status && result.status !== 'success')) {
+                window.showToast('尚未完成發送', true);
+                return false;
+            }
             window.showToast('✅ 已成功發送！');
             return true;
         } catch (err) {
