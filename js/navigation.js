@@ -18,6 +18,7 @@ window.goPage = function(page, isInitLoad = false) {
     else if (page === 'my-activities') window.loadMyActivities();
     else if (page === 'admin-crm') window.loadCrm();
     else if (page === 'tenant-upgrade' && typeof window.initTenantUpgradePage === 'function') window.initTenantUpgradePage();
+    else if (page === 'points-wallet' && typeof window.loadPointsWallet === 'function') window.loadPointsWallet();
     else if (page === 'admin-settings') {
       if (currentUser) {
         const pn = document.getElementById('profile-name');
@@ -51,7 +52,7 @@ window.goPage = function(page, isInitLoad = false) {
   const bottomNav = document.getElementById('bottom-nav');
   const bottomNavAdmin = document.getElementById('bottom-nav-admin');
 
-  if (page === 'register' || page === 'admin-stats' || page === 'my-act-detail' || page === 'admin-checkin') {
+  if (page === 'register' || page === 'admin-stats' || page === 'my-act-detail' || page === 'admin-checkin' || page === 'points-wallet') {
     if (bottomNav) bottomNav.classList.add('hidden');
     if (bottomNavAdmin) bottomNavAdmin.classList.add('hidden');
   } else {

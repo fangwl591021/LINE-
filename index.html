@@ -65,7 +65,7 @@
     </div>
 
     <div class="flex items-center gap-3">
-      <span id="point-balance-badge" class="hidden bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2.5 py-1 text-[11px] font-black whitespace-nowrap">0 點</span>
+      <button id="point-balance-badge" type="button" onclick="window.openPointsWallet()" class="hidden bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2.5 py-1 text-[11px] font-black whitespace-nowrap active:scale-95 transition-transform">0 點</button>
       <img id="avatar" src="" class="w-8 h-8 rounded-full border border-slate-200 hidden object-cover shadow-sm">
       <button id="top-nav-switch" onclick="window.toggleAdminMode()" class="hidden w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
         <span class="material-symbols-outlined text-[18px]">swap_horiz</span>
@@ -564,6 +564,42 @@
           <div id="tenant-order-result" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[14px] text-slate-800 font-bold leading-relaxed"></div>
         </div>
       </section>
+    </div>
+
+    <!-- ==================== 點數錢包 ==================== -->
+    <div id="page-points-wallet" class="hidden animate-in slide-in-from-right-8 -mx-4 pb-10">
+      <div class="bg-white h-[64px] flex items-center justify-center relative border-b border-slate-100">
+        <button onclick="window.goPage(window.previousPage || 'home')" class="absolute left-5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center text-slate-900 active:scale-90 transition-transform">
+          <span class="material-symbols-outlined text-[28px]">arrow_back</span>
+        </button>
+        <h2 class="text-[20px] font-black text-slate-900 tracking-tight">紅包 ACTION</h2>
+      </div>
+
+      <div class="px-5 pt-7 space-y-7">
+        <section class="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-red-600 to-red-800 text-white shadow-xl shadow-red-900/20 min-h-[170px] flex flex-col items-center justify-center">
+          <div class="absolute -right-4 bottom-0 text-red-900/25">
+            <span class="material-symbols-outlined text-[104px]" style="font-variation-settings:'FILL' 1;">redeem</span>
+          </div>
+          <p class="text-[15px] font-black opacity-95 relative z-10">目前紅包餘額</p>
+          <div class="relative z-10 mt-6 flex items-end justify-center gap-3">
+            <span id="points-wallet-balance" class="text-[64px] leading-none font-black tracking-tight">0</span>
+            <span class="text-[22px] font-black mb-2">點</span>
+          </div>
+        </section>
+
+        <section>
+          <div class="flex items-center justify-between mb-4 px-1">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-red-500 text-[22px]">history</span>
+              <h3 class="text-[17px] font-black text-slate-900">點數異動紀錄</h3>
+            </div>
+            <button type="button" onclick="window.loadPointsWallet(true)" class="text-[12px] font-black text-slate-500 px-3 py-1.5 rounded-full bg-white border border-slate-100 active:scale-95">重新整理</button>
+          </div>
+          <div id="points-wallet-list" class="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm">
+            <div class="py-10 text-center text-slate-400 text-sm font-bold">載入點數紀錄中...</div>
+          </div>
+        </section>
+      </div>
     </div>
 
     <!-- ==================== 首頁 ==================== -->
@@ -1324,7 +1360,7 @@
 </div>
 
 <script src="js/core.js?v=7.9"></script>
-<script src="js/navigation.js?v=7.4"></script>
+<script src="js/navigation.js?v=7.5"></script>
 <script src="js/modules/cropper.js?v=7.5"></script>
 <script src="js/modules/cards.js?v=7.3"></script>
 <script src="js/modules/ecard.js?v=7.5"></script>
@@ -1337,7 +1373,7 @@
 <script src="js/modules/settings.js?v=7.2"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.2"></script>
-<script src="js/auth.js?v=9.4"></script>
+<script src="js/auth.js?v=9.5"></script>
 
 </body>
 </html>

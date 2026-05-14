@@ -557,25 +557,99 @@ window.refreshPointBalanceBadge = async function() {
   if (!badge || !userId || typeof window.fetchAPI !== 'function') return;
 
   try {
-    const samePointLiff = String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '');
-    const pointUserId = samePointLiff ? '' : (localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || '');
-    const res = await window.fetchAPI('queryUserPoints', {
-      userId,
-      pointUserId,
-      page: 1,
-      per_page: 100
-    }, true);
-    if (!res || res.error) {
+    const data = await window.fetchPointWalletData_();
+    if (!data) {
       badge.classList.add('hidden');
       return;
     }
-    const data = res.data || res;
     const balance = Number(data.balance || 0);
     badge.textContent = balance.toLocaleString('zh-TW') + ' 點';
     badge.classList.remove('hidden');
   } catch (e) {
     badge.classList.add('hidden');
     console.warn('[points] query skipped:', e.message || e);
+  }
+};
+
+window.fetchPointWalletData_ = async function(force = false) {
+  const userId = window.currentUserProfile?.userId || '';
+  if (!userId || typeof window.fetchAPI !== 'function') return null;
+  if (!force && window.pointWalletData && Date.now() - (window.pointWalletData.loadedAt || 0) < 60000) {
+    return window.pointWalletData;
+  }
+  const samePointLiff = String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '');
+  const pointUserId = samePointLiff ? '' : (localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || '');
+  const res = await window.fetchAPI('queryUserPoints', {
+    userId,
+    pointUserId,
+    page: 1,
+    per_page: 100,
+    point_type: 'gift_money'
+  }, true);
+  if (!res || res.error) return null;
+  const data = res.data || res;
+  window.pointWalletData = {
+    ...data,
+    balance: Number(data.balance || data.latestBalance || data.typedBalance || 0) || 0,
+    list: Array.isArray(data.list) ? data.list : [],
+    loadedAt: Date.now()
+  };
+  return window.pointWalletData;
+};
+
+window.openPointsWallet = function() {
+  if (typeof window.goPage === 'function') window.goPage('points-wallet');
+};
+
+window.loadPointsWallet = async function(force = false) {
+  const balanceEl = document.getElementById('points-wallet-balance');
+  const listEl = document.getElementById('points-wallet-list');
+  if (!balanceEl || !listEl) return;
+
+  if (force) window.pointWalletData = null;
+  listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">載入點數紀錄中...</div>';
+
+  const data = await window.fetchPointWalletData_(force);
+  if (!data) {
+    balanceEl.textContent = '0';
+    listEl.innerHTML = '<div class="py-10 text-center text-red-400 text-sm font-bold">暫時無法取得點數紀錄</div>';
+    return;
+  }
+
+  balanceEl.textContent = Number(data.balance || 0).toLocaleString('zh-TW');
+  const rows = (Array.isArray(data.list) ? data.list : []).slice(0, 30);
+  if (!rows.length) {
+    listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">目前沒有點數異動紀錄</div>';
+    return;
+  }
+
+  const formatTime = (value) => {
+    if (typeof window.formatDisplayTime === 'function') return window.formatDisplayTime(value);
+    return String(value || '').replace('T', ' ').slice(0, 16);
+  };
+  const getAmount = (row) => Number(row.get_point ?? row.point ?? row.amount ?? row.points ?? 0) || 0;
+  const getTitle = (row) => String(row.event_name || row.eventName || row.title || row.name || '點數異動').trim();
+  const getTime = (row) => row.created_at || row.createdAt || row.time || row.date || '';
+
+  listEl.innerHTML = rows.map(row => {
+    const amount = getAmount(row);
+    const positive = amount >= 0;
+    const amountText = (positive ? '+' : '') + Number(amount).toLocaleString('zh-TW');
+    return `
+      <div class="flex items-center justify-between gap-4 px-5 py-5 border-b border-slate-100 last:border-b-0">
+        <div class="min-w-0">
+          <div class="text-[16px] font-black text-slate-900 leading-snug">${window.escapeHTML(getTitle(row))}</div>
+          <div class="text-[13px] text-slate-400 font-medium mt-2">${window.escapeHTML(formatTime(getTime(row)))}</div>
+        </div>
+        <div class="shrink-0 text-[22px] font-black ${positive ? 'text-[#06C755]' : 'text-slate-400'}">${window.escapeHTML(amountText)}</div>
+      </div>
+    `;
+  }).join('');
+
+  const badge = document.getElementById('point-balance-badge');
+  if (badge) {
+    badge.textContent = Number(data.balance || 0).toLocaleString('zh-TW') + ' 點';
+    badge.classList.remove('hidden');
   }
 };
 
