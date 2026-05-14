@@ -105,6 +105,87 @@ window.buildECardConfigFromFields = function() {
   };
 };
 
+function cleanECardFlexUri(uri) {
+  const value = String(uri || '').trim();
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^line:\/\//i.test(value)) return value;
+  if (/^tel:/i.test(value)) {
+    const phone = value.replace(/^tel:/i, '').replace(/[^0-9+]/g, '');
+    return phone ? 'tel:' + phone : '';
+  }
+  if (/^(line\.me|lin\.ee)/i.test(value)) return 'https://' + value;
+  return '';
+}
+
+function buildLocalECardFlexMessage(card, config, shareUrl) {
+  const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
+  const imgUrl = (
+    layoutStyle === 'portrait' ? (config.imgUrlPortrait || config.imgUrl || card['名片圖檔']) :
+    layoutStyle === 'square' ? (config.imgUrlSquare || config.imgUrl || card['名片圖檔']) :
+    (config.imgUrl || config.imgUrlLandscape || card['名片圖檔'])
+  ) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+  const aspectRatio = layoutStyle === 'portrait'
+    ? (config.imgRatioPortrait || '2:3')
+    : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
+  const badgeUrl = shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || '');
+  const shareActionUrl = appendECardShareMode(badgeUrl);
+
+  const buttons = (Array.isArray(config.buttons) ? config.buttons : [])
+    .map(btn => ({
+      label: String(btn?.l || '').trim(),
+      uri: cleanECardFlexUri(btn?.u),
+      color: btn?.c || '#06C755'
+    }))
+    .filter(btn => btn.label && btn.uri)
+    .map(btn => ({
+      type: 'button',
+      style: 'primary',
+      color: btn.color,
+      height: 'sm',
+      action: { type: 'uri', label: btn.label.substring(0, 40), uri: btn.uri }
+    }));
+
+  return {
+    type: 'bubble',
+    size: layoutStyle === 'portrait' ? 'giga' : 'mega',
+    header: {
+      type: 'box',
+      layout: 'horizontal',
+      justifyContent: 'flex-end',
+      paddingAll: '8px',
+      contents: [{
+        type: 'box',
+        layout: 'vertical',
+        justifyContent: 'center',
+        backgroundColor: '#FF0000',
+        width: '65px',
+        height: '25px',
+        cornerRadius: '25px',
+        contents: [{ type: 'text', text: '分享', weight: 'bold', align: 'center', color: '#FFFFFF', size: 'xs' }],
+        action: shareActionUrl ? { type: 'uri', uri: shareActionUrl } : undefined
+      }]
+    },
+    hero: {
+      type: 'image',
+      url: imgUrl,
+      size: 'full',
+      aspectRatio,
+      aspectMode: 'cover',
+      action: badgeUrl ? { type: 'uri', uri: badgeUrl } : undefined
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '15px',
+      contents: [
+        { type: 'text', text: String(config.title || card['姓名'] || ' ').trim() || ' ', weight: 'bold', size: 'xl', align: 'center', wrap: true },
+        { type: 'text', text: String(config.desc || card['服務項目'] || ' ').trim() || ' ', size: 'sm', margin: 'md', color: config.descColor || '#666666', wrap: true, align: config.descAlign || 'center' }
+      ]
+    },
+    footer: buttons.length ? { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '10px', contents: buttons } : undefined
+  };
+}
+
 function bindECardFieldAutoSync() {
   if (window.__ecardAutoSyncBound) return;
   window.__ecardAutoSyncBound = true;
@@ -115,22 +196,6 @@ function bindECardFieldAutoSync() {
       window.syncECardButtonsFromFields({ render: true });
     }
   });
-}
-
-function assertUsableFlexMessage(flexMsg, cfg) {
-  if (!flexMsg || flexMsg.error) {
-    throw new Error((flexMsg && flexMsg.error) || '後端沒有產生名片訊息');
-  }
-  if (flexMsg.type !== 'bubble' || !flexMsg.hero || !flexMsg.body) {
-    console.warn('[shareECardToLine] invalid flex payload:', flexMsg);
-    throw new Error('名片訊息格式異常');
-  }
-  const footerButtons = Array.isArray(flexMsg.footer?.contents) ? flexMsg.footer.contents : [];
-  if (!footerButtons.length && Array.isArray(cfg?.buttons) && cfg.buttons.length) {
-    console.warn('[shareECardToLine] flex footer missing, cfg:', cfg);
-    throw new Error('名片按鈕沒有寫入發送訊息');
-  }
-  return true;
 }
 
 /**
@@ -369,23 +434,15 @@ window.shareECardToLine = async function(btnId) {
       } catch(e) {}
     }
 
-    const flexMsg = await window.fetchAPI('buildFlexMessage', {
-      card: window.currentCard,
-      config: cfg,
-      referrerId: window.currentUserProfile?.userId,
-      networkId: window.currentNetworkId,
-      liffId: window.POINT_LIFF_ID || window.LIFF_ID
-    }, true);
+    const flexMsg = buildLocalECardFlexMessage(window.currentCard, cfg, fallbackUrl);
 
-    if (flexMsg && !flexMsg.error) {
-      assertUsableFlexMessage(flexMsg, cfg);
+    if (flexMsg) {
       routeECardFlexHeaderShareToPicker(flexMsg, fallbackUrl);
       const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
       if (shared === false && fallbackUrl) {
         await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
       }
     } else if (fallbackUrl) {
-      if (flexMsg && flexMsg.error) console.warn('[shareECardToLine] buildFlexMessage failed:', flexMsg.error);
       await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
     }
   } catch(e) {

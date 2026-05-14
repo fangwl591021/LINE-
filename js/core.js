@@ -282,7 +282,7 @@ const Core = (function() {
                     window.showToast(reasonText, true);
                     return false;
                 }
-                window.showToast('✅ 已開啟 LINE 分享');
+                window.showToast('✅ 已成功發送！');
                 return true;
             }
             if (!liff.isApiAvailable('shareTargetPicker')) {
@@ -295,7 +295,7 @@ const Core = (function() {
                 contents: flexMsg
             };
             await liff.shareTargetPicker([message]);
-            window.showToast('✅ 已開啟 LINE 分享');
+            window.showToast('✅ 已成功發送！');
             return true;
         } catch (err) {
             window.showToast('發送失敗：' + (err.message || '未知錯誤'), true);
