@@ -607,6 +607,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
+    if (urlParams.get('admin') === '1' || urlParams.get('adminPage') === '1') {
+      window.location.replace('admin.html?from_liff=1&t=' + Date.now());
+      return;
+    }
     const shareCardId = urlParams.get('shareCardId');
     const shouldAutoShareCard = shareCardId && (
       urlParams.get('share') === '1' ||

@@ -1336,6 +1336,15 @@
     let adminNetworkId = 'admin';
     let currentAdminEcardImgs = { landscape: '', portrait: '', square: '' };
     let currentAdminEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
+
+    function getAdminLiffEntryUrl() {
+      const params = new URLSearchParams({
+        admin: '1',
+        adminPage: '1',
+        t: String(Date.now())
+      });
+      return 'https://liff.line.me/' + encodeURIComponent(LIFF_ID) + '?' + params.toString();
+    }
     
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
@@ -3607,7 +3616,11 @@
       try {
         await liff.init({ liffId: LIFF_ID });
         if (!liff.isLoggedIn()) {
-          liff.login({ redirectUri: window.location.href });
+          if (!liff.isInClient()) {
+            window.location.replace(getAdminLiffEntryUrl());
+            return;
+          }
+          liff.login();
           return;
         }
 

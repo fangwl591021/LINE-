@@ -384,7 +384,7 @@ const HomeModule = (function() {
                 const fee = window.escapeHTML(r['繳費狀態'] || r.paymentStatus || '');
                 const recordIndex = records.length - 1 - idx;
                 return `
-                    <div class="p-4 flex items-center justify-between gap-3 active:bg-slate-50 transition-colors cursor-pointer" onclick="window.showActivityCheckinQr(${recordIndex})">
+                    <div class="p-4 flex items-center justify-between gap-3 active:bg-slate-50 transition-colors cursor-pointer" onclick="window.openMyActivityRecordDetail(${recordIndex})">
                         <div class="min-w-0">
                             <div class="font-black text-slate-800 text-[16px] truncate">${title}</div>
                             <div class="text-[13px] text-slate-500 mt-1">${time}</div>
@@ -403,6 +403,71 @@ const HomeModule = (function() {
             list.innerHTML = '<div class="text-center py-10 text-red-400 text-sm font-bold">活動紀錄暫時無法讀取，請稍後再試</div>';
             return [];
         }
+    };
+
+    function getMyActivityField_(record, keys, fallback = '') {
+        for (const key of keys) {
+            const value = record && record[key];
+            if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+        }
+        return fallback;
+    }
+
+    window.openMyActivityRecordDetail = function(index) {
+        const record = (window.myActivitiesData || [])[index];
+        if (!record) return window.showToast('找不到這筆報名資料，請重新整理', true);
+
+        const content = document.getElementById('my-act-detail-content');
+        if (!content) return;
+
+        const status = getRegistrationStatus_(record);
+        const title = getMyActivityField_(record, ['活動名稱', 'activityName', 'title'], '活動報名');
+        const startTime = getMyActivityField_(record, ['開始時間', 'startTime', 'createdAt', '報名時間']);
+        const registerTime = getMyActivityField_(record, ['報名時間', 'createdAt', 'created_at', 'updatedAt']);
+        const payment = getMyActivityField_(record, ['繳費狀態', '付款狀態', 'paymentStatus'], '免費');
+        const name = getMyActivityField_(record, ['姓名', 'name', 'displayName'], window.currentUser?.name || window.currentUserProfile?.displayName || '');
+        const phone = getMyActivityField_(record, ['電話', '手機', 'phone', 'mobile'], window.currentUser?.phone || '');
+        const identity = getMyActivityField_(record, ['身份', '身分', 'identity'], '');
+        const activityId = getMyActivityField_(record, ['活動ID', 'activityId', 'actId']);
+        const rowId = getRegistrationId_(record);
+        const detailRows = [
+            ['報名人', name],
+            ['手機', phone],
+            ['身份', identity],
+            ['活動時間', typeof window.formatDisplayTime === 'function' ? window.formatDisplayTime(startTime) : startTime],
+            ['報名時間', typeof window.formatDisplayTime === 'function' ? window.formatDisplayTime(registerTime) : registerTime],
+            ['繳費狀態', payment],
+            ['核銷編號', rowId],
+            ['活動 ID', activityId]
+        ].filter(row => row[1]);
+
+        content.innerHTML = `
+            <div class="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
+                <div class="p-5 border-b border-slate-100">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h3 class="text-[20px] font-black text-slate-800 leading-snug">${window.escapeHTML(title)}</h3>
+                            <p class="text-[13px] text-slate-500 mt-1">報名詳細內容</p>
+                        </div>
+                        <span class="shrink-0 inline-flex px-3 py-1.5 rounded-full text-[13px] font-black ${status.className}">${status.label}</span>
+                    </div>
+                </div>
+                <div class="p-5 space-y-3">
+                    ${detailRows.map(([label, value]) => `
+                        <div class="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3">
+                            <div class="text-[12px] font-bold text-slate-400">${window.escapeHTML(label)}</div>
+                            <div class="text-[15px] font-bold text-slate-800 mt-1 break-words">${window.escapeHTML(value)}</div>
+                        </div>
+                    `).join('')}
+                    <div class="grid grid-cols-1 gap-2 pt-1">
+                        <button type="button" onclick="window.showActivityCheckinQr(${index})" class="py-3.5 rounded-2xl bg-slate-800 text-white text-[15px] font-black active:scale-95 flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-[18px]">qr_code_2</span> 出示核銷 QR
+                        </button>
+                        ${(!status.checked && !status.cancelled) ? `<button type="button" onclick="window.cancelMyActivityRegistration(${index}, this)" class="py-3.5 rounded-2xl bg-red-50 text-red-600 border border-red-100 text-[15px] font-black active:scale-95">取消報名</button>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        window.goPage('my-act-detail', true);
     };
 
     window.showActivityCheckinQr = function(index) {
