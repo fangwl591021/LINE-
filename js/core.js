@@ -254,13 +254,20 @@ const Core = (function() {
                 window.showToast('目前不在 LINE LIFF 環境，改用連結分享', true);
                 return false;
             }
+            if (typeof window.initActmasterLiff === 'function') {
+                try {
+                    await window.initActmasterLiff(window.LIFF_ID || window.Config?.LIFF_ID, { withLoginOnExternalBrowser: true });
+                } catch (initErr) {
+                    console.warn('[triggerFlexSharing] LIFF init skipped:', initErr);
+                }
+            }
             if (!liff.isLoggedIn()) {
                 if (typeof window.ensureActmasterLiffLogin === 'function') {
                     window.ensureActmasterLiffLogin({ redirectUri: window.location.href });
                 } else {
                     liff.login({ redirectUri: window.location.href });
                 }
-                return false;
+                return null;
             }
             if (typeof window.actmasterShareTargetPicker === 'function') {
                 const result = await window.actmasterShareTargetPicker([{
