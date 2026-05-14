@@ -322,6 +322,23 @@ const HomeModule = (function() {
         }
     }
 
+    function getInitialActivityNetwork_() {
+        try {
+            const params = typeof readActmasterInitialParams === 'function'
+                ? readActmasterInitialParams()
+                : new URLSearchParams(window.location.search || '');
+            return String(params.get('net') || params.get('networkId') || '').trim();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function getActivityListNetwork_() {
+        const activityId = getInitialActivityId_();
+        const linkNetwork = getInitialActivityNetwork_();
+        return activityId && linkNetwork ? linkNetwork : getCurrentEffectiveNetwork_();
+    }
+
     window.openActivityFromUrlParam = function(force = false) {
         const activityId = getInitialActivityId_();
         if (!activityId) return false;
@@ -341,7 +358,7 @@ const HomeModule = (function() {
         try {
             window.allActivities = await fetchActivitiesByFallback_(
                 ['getPublicActivities', 'getAllActivities', 'getActivities'],
-                { networkId: getCurrentEffectiveNetwork_(), role: window.userRole || 'user' }
+                { networkId: getActivityListNetwork_(), role: window.userRole || 'user' }
             );
             window.renderHomeActivities();
             window.openActivityFromUrlParam();
@@ -460,6 +477,9 @@ const HomeModule = (function() {
                         </div>
                     `).join('')}
                     <div class="grid grid-cols-1 gap-2 pt-1">
+                        <button type="button" onclick="window.openActivityDetailFromRecord(${index}, this)" class="py-3.5 rounded-2xl bg-blue-600 text-white text-[15px] font-black active:scale-95 flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-[18px]">event_note</span> 查看活動內容
+                        </button>
                         <button type="button" onclick="window.showActivityCheckinQr(${index})" class="py-3.5 rounded-2xl bg-slate-800 text-white text-[15px] font-black active:scale-95 flex items-center justify-center gap-2">
                             <span class="material-symbols-outlined text-[18px]">qr_code_2</span> 出示核銷 QR
                         </button>
@@ -468,6 +488,88 @@ const HomeModule = (function() {
                 </div>
             </div>`;
         window.goPage('my-act-detail', true);
+    };
+
+    function buildActivityFromRegistration_(record = {}) {
+        return {
+            rowId: getMyActivityField_(record, ['活動ID', 'activityId', 'actId']),
+            activityId: getMyActivityField_(record, ['活動ID', 'activityId', 'actId']),
+            activityName: getMyActivityField_(record, ['活動名稱', 'activityName', 'title'], '活動報名'),
+            name: getMyActivityField_(record, ['活動名稱', 'activityName', 'title'], '活動報名'),
+            activityType: getMyActivityField_(record, ['活動類型', 'activityType', 'type'], '活動'),
+            price: Number(getMyActivityField_(record, ['金額', 'amount', 'price'], '0')) || 0,
+            startTime: getMyActivityField_(record, ['開始時間', 'startTime']),
+            endTime: getMyActivityField_(record, ['結束時間', 'endTime']),
+            description: getMyActivityField_(record, ['活動說明', 'description'], '這是報名時保存的活動資訊。'),
+            imageUrl: getMyActivityField_(record, ['宣傳圖', 'imageUrl']),
+            status: getMyActivityField_(record, ['狀態', 'status'], '已報名')
+        };
+    }
+
+    function renderRegisteredActivityDetail_(activity, recordIndex) {
+        const content = document.getElementById('my-act-detail-content');
+        if (!content) return;
+        const activityId = getPublicActivityId_(activity);
+        const rawTitle = activity.activityName || activity.name || activity.title || activity['活動名稱'] || '活動報名';
+        const type = activity.activityType || activity.type || activity['活動類型'] || '活動';
+        const startTime = window.formatDisplayTime(activity.startTime || activity.start_time || activity['開始時間'] || '');
+        const endTime = window.formatDisplayTime(activity.endTime || activity.end_time || activity['結束時間'] || '');
+        const price = Number(activity.price || activity.amount || activity['金額'] || 0) || 0;
+        const fee = price > 0 ? 'NT$ ' + price.toLocaleString() : '免費';
+        const img = activity.imageUrl || activity.image_url || activity['宣傳圖'] || '';
+        const desc = activity.description || activity['活動說明'] || '尚無說明';
+
+        content.innerHTML = `
+            <div class="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
+                ${img ? `<img src="${window.escapeHTML(img)}" class="w-full aspect-video object-cover">` : ''}
+                <div class="p-5 space-y-4">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="bg-orange-50 text-orange-600 text-[12px] px-2.5 py-1 rounded-full font-bold">${window.escapeHTML(type)}</span>
+                        <span class="bg-slate-100 text-slate-600 text-[12px] px-2.5 py-1 rounded-full font-bold">${window.escapeHTML(fee)}</span>
+                    </div>
+                    <h3 class="text-[22px] font-black text-slate-800 leading-snug">${window.escapeHTML(rawTitle)}</h3>
+                    <div class="space-y-1 text-[13px] text-slate-500">
+                        ${startTime ? `<div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[17px]">schedule</span> ${window.escapeHTML(startTime)}</div>` : ''}
+                        ${endTime ? `<div class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[17px]">event_available</span> ${window.escapeHTML(endTime)}</div>` : ''}
+                        ${activityId ? `<div class="font-mono text-[12px] text-slate-400 break-all">${window.escapeHTML(activityId)}</div>` : ''}
+                    </div>
+                    <p class="text-[14px] text-slate-600 whitespace-pre-wrap">${window.escapeHTML(desc)}</p>
+                    <div class="grid grid-cols-1 gap-2 pt-1">
+                        <button type="button" onclick="window.showActivityCheckinQr(${recordIndex})" class="py-3.5 rounded-2xl bg-slate-800 text-white text-[15px] font-black active:scale-95 flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-[18px]">qr_code_2</span> 出示核銷 QR
+                        </button>
+                        <button type="button" onclick="window.openMyActivityRecordDetail(${recordIndex})" class="py-3.5 rounded-2xl bg-slate-50 text-slate-700 border border-slate-100 text-[15px] font-black active:scale-95">返回報名資料</button>
+                    </div>
+                </div>
+            </div>`;
+        window.goPage('my-act-detail', true);
+    }
+
+    window.openActivityDetailFromRecord = async function(index, btn) {
+        const record = (window.myActivitiesData || [])[index];
+        if (!record) return window.showToast('找不到活動紀錄，請重新整理後再試', true);
+        const activityId = getRegistrationActivityId_(record);
+        const oldHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 載入中';
+        }
+        try {
+            let activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId));
+            if (!activity && activityId) {
+                const res = await window.fetchAPI('getActivityById', { activityId }, true);
+                activity = (res && (res.activityId || res['活動ID'])) ? res : (res && res.data ? res.data : null);
+            }
+            renderRegisteredActivityDetail_(activity || buildActivityFromRegistration_(record), index);
+        } catch (e) {
+            console.warn('openActivityDetailFromRecord failed:', e);
+            renderRegisteredActivityDetail_(buildActivityFromRegistration_(record), index);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = oldHtml;
+            }
+        }
     };
 
     window.showActivityCheckinQr = function(index) {

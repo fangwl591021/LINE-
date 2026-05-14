@@ -211,6 +211,7 @@ const SecurityModule = {
       'mlmCreateOrder',
       'createTenantBonusOrder',
       'nfcCheckin',
+      'getActivityById',
       'cancelActivityRegistration',
       'cancelRegistration',
       'unregisterActivity',
@@ -2833,6 +2834,34 @@ const D1ActivityModule = {
     return { success: true, data: rows.map(row => this.activityRow(row)).filter(Boolean) };
   },
 
+  async getActivityById(payload, env, actor = null) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureActivityNetworkScope(env);
+    const activityId = this.pick(payload, ['activityId', '活動ID']);
+    if (!activityId) return { success: false, error: 'Missing activityId' };
+    const row = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    if (!row) return { success: false, error: '找不到活動資料' };
+
+    const role = actor
+      ? SecurityModule.normalizeRole(actor.role)
+      : SecurityModule.normalizeRole(payload.authenticatedRole || '');
+    const actorId = this.text(actor?.userId || payload.authenticatedUserId || payload.userId);
+    const actorNetwork = this.text(actor?.networkId || payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
+    const activityNetwork = this.text(row.network_id, 'admin');
+    const sameNetwork = !activityNetwork || activityNetwork === 'admin' || activityNetwork === actorNetwork;
+
+    let hasRegistration = false;
+    if (actorId) {
+      const reg = await D1ReadModule.first(env, "SELECT row_id FROM registrants WHERE activity_id = ? AND line_id = ? AND status <> 'cancelled' LIMIT 1", [activityId, actorId]).catch(() => null);
+      hasRegistration = !!reg;
+    }
+
+    if (role !== 'admin' && !sameNetwork && !hasRegistration) {
+      return { success: false, error: 'Access Denied: Activity outside your scope' };
+    }
+    return { success: true, data: this.activityRow(row) };
+  },
+
   getActivityNetwork(activity) {
     const explicitNetwork = this.text(activity && (
       activity.networkId ||
@@ -4722,6 +4751,15 @@ async function dispatchAction(action, payload, request, env) {
       }
       const fallbackResult = await DBModule.forward(action, payload, env);
       return D1ActivityModule.filterResultByActor(fallbackResult, payload || {}, listActor);
+    }
+    case 'getActivityById': {
+      try {
+        const d1Result = await D1ActivityModule.getActivityById(payload || {}, env, actor);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 getActivityById fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
     }
     case 'bulkAddRegistrants': {
       try {
