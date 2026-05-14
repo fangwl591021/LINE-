@@ -326,39 +326,23 @@ const Core = (function() {
             if (typeof window.actmasterShareTargetPicker === 'function') {
                 const result = await window.actmasterShareTargetPicker([message]);
                 if (!result.ok) {
-                    if (result.reason === 'token_refresh') return null;
                     const reasonText = result.reason === 'share_unavailable'
                         ? '您的環境不支援分享功能'
-                        : (result.reason === 'cancelled' ? '尚未完成發送' : '請先登入 LINE LIFF');
+                        : '請先登入 LINE LIFF';
                     window.showToast(reasonText, true);
                     return false;
                 }
-                window.showToast('✅ 名片已送出');
+                window.showToast('✅ 已開啟 LINE 分享');
                 return true;
             }
             if (!liff.isApiAvailable('shareTargetPicker')) {
                 window.showToast('您的環境不支援分享功能', true);
                 return false;
             }
-            const result = await liff.shareTargetPicker([message]);
-            if (!result) {
-                window.showToast('尚未完成發送', true);
-                return false;
-            }
-            window.showToast('✅ 名片已送出');
+            await liff.shareTargetPicker([message]);
+            window.showToast('✅ 已開啟 LINE 分享');
             return true;
         } catch (err) {
-            const msg = String(err?.message || err || '').toLowerCase();
-            if (msg.includes('sharetargetpicker is not allowed') || msg.includes('not allowed in this liff app') || msg.includes('forbidden') || msg.includes('403')) {
-                try {
-                    window.alert('系統分享權限已更新，將重新登入以取得最新權限。');
-                    if (liff.logout && liff.isLoggedIn && liff.isLoggedIn()) liff.logout();
-                    window.location.reload();
-                    return null;
-                } catch (resetErr) {
-                    console.warn('[triggerFlexSharing] token refresh failed:', resetErr);
-                }
-            }
             window.showToast('發送失敗：' + (err.message || '未知錯誤'), true);
             return false;
         }

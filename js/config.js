@@ -134,43 +134,11 @@ window.ensureActmasterLiffLogin = function(options = {}) {
   return false;
 };
 
-function isActmasterSharePermissionError(error) {
-  const text = String(error?.message || error?.description || error || '').toLowerCase();
-  return text.includes('sharetargetpicker is not allowed') ||
-    text.includes('share target picker is not allowed') ||
-    text.includes('not allowed in this liff app') ||
-    text.includes('forbidden') ||
-    text.includes('403');
-}
-
-function refreshActmasterLiffTokenForShare() {
-  try {
-    window.alert('系統分享權限已更新，將重新登入以取得最新權限。');
-  } catch (e) {}
-  try {
-    if (window.liff && typeof window.liff.logout === 'function' && window.liff.isLoggedIn && window.liff.isLoggedIn()) {
-      window.liff.logout();
-    }
-  } catch (e) {}
-  window.location.reload();
-}
-
 window.actmasterShareTargetPicker = async function(messages) {
   if (!window.liff || typeof window.liff.isLoggedIn !== 'function' || !window.liff.isLoggedIn()) return { ok: false, reason: 'not_logged_in' };
   if (typeof window.liff.isApiAvailable !== 'function' || !window.liff.isApiAvailable('shareTargetPicker')) return { ok: false, reason: 'share_unavailable' };
-  try {
-    const result = await window.liff.shareTargetPicker(messages);
-    if (!result) return { ok: false, reason: 'cancelled' };
-    if (result.status && result.status !== 'success') return { ok: false, reason: result.status };
-    return { ok: true, result };
-  } catch (error) {
-    console.error('[actmasterShareTargetPicker] LIFF SDK Share Error:', error);
-    if (isActmasterSharePermissionError(error)) {
-      refreshActmasterLiffTokenForShare();
-      return { ok: false, reason: 'token_refresh' };
-    }
-    throw error;
-  }
+  await window.liff.shareTargetPicker(messages);
+  return { ok: true };
 };
 
 window.closeActmasterLiffOrHome = function(delayMs = 1800) {
