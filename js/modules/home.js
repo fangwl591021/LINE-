@@ -136,13 +136,16 @@ const HomeModule = (function() {
     }
 
     function getPublicActivityNetwork_(activity) {
-        return String(
+        const explicitNetwork = String(
             activity.networkId ||
             activity.network_id ||
             activity.net ||
             activity['歸屬網'] ||
             ''
         ).trim();
+        if (explicitNetwork) return explicitNetwork;
+        const creatorId = String(activity.creatorId || activity.creator_id || activity.userId || '').trim();
+        return creatorId && creatorId !== 'admin' ? creatorId : 'admin';
     }
 
     function getCurrentEffectiveNetwork_() {
@@ -162,7 +165,7 @@ const HomeModule = (function() {
         if (role === 'admin') return true;
         const currentNetwork = getCurrentEffectiveNetwork_();
         const activityNetwork = getPublicActivityNetwork_(activity);
-        if (!activityNetwork) return currentNetwork === 'admin';
+        if (!activityNetwork || activityNetwork === 'admin') return true;
         return activityNetwork === currentNetwork;
     }
 

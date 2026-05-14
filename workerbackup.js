@@ -2791,6 +2791,7 @@ const D1ActivityModule = {
       : await D1ReadModule.all(env, `
           SELECT * FROM activities
           WHERE COALESCE(NULLIF(network_id, ''), 'admin') = ?
+             OR COALESCE(NULLIF(network_id, ''), 'admin') = 'admin'
           ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
           LIMIT 500
         `, [networkId]);
@@ -2798,12 +2799,15 @@ const D1ActivityModule = {
   },
 
   getActivityNetwork(activity) {
-    return this.text(activity && (
+    const explicitNetwork = this.text(activity && (
       activity.networkId ||
       activity.network_id ||
       activity.net ||
       activity['歸屬網']
     ));
+    if (explicitNetwork) return explicitNetwork;
+    const creatorId = this.text(activity && (activity.creatorId || activity.creator_id || activity.userId));
+    return creatorId && creatorId !== 'admin' ? creatorId : 'admin';
   },
 
   filterResultByActor(result, payload = {}, actor = null) {
@@ -2814,7 +2818,7 @@ const D1ActivityModule = {
     const networkId = this.text(actor?.networkId || payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
     const canSee = (activity) => {
       const activityNetwork = this.getActivityNetwork(activity);
-      if (!activityNetwork) return networkId === 'admin';
+      if (!activityNetwork || activityNetwork === 'admin') return true;
       return activityNetwork === networkId;
     };
     if (Array.isArray(result)) return result.filter(canSee);
