@@ -1361,6 +1361,13 @@
       if (phone && account.phones.includes(phone)) return true;
       return !!name && account.names.some(allowed => name.includes(allowed));
     }
+
+    function getSafeUserRole(user = {}) {
+      const role = String(user.role || 'user').trim().toLowerCase();
+      if (role === 'admin' && !isHardAdminAccount(getUserId(user), user)) return 'user';
+      if (role === 'admin' || role === 'store' || role === 'tenant') return role;
+      return 'user';
+    }
     
     function showToast(msg, isError = false) {
       const container = document.getElementById('toast-container');
@@ -1481,7 +1488,7 @@
     function getTenantCountForBonus() {
       const users = Array.isArray(allUsersData) ? allUsersData : [];
       const tenants = users.filter(u => {
-        const role = String(u.role || '').toLowerCase();
+        const role = getSafeUserRole(u);
         return role === 'store' || role === 'tenant';
       });
       return tenants.length;
@@ -1526,7 +1533,7 @@
             if (role === 'admin') return 1;
             return 2;
           };
-          return priority(a.role) - priority(b.role);
+          return priority(getSafeUserRole(a)) - priority(getSafeUserRole(b));
         });
     }
 
@@ -2404,7 +2411,7 @@
       const order = getLatestBonusOrder(user);
       const statusMeta = getCrmStatusMeta(getCrmStatus(user));
       const intentMeta = getIntentMeta(user.intentLevel || user.crmIntent);
-      const role = getRoleLabel(user.role);
+      const role = getRoleLabel(getSafeUserRole(user));
       const directCount = getDirectDownlineCount(user);
       const placementCount = getPlacementChildCount(user);
       const dealerProfile = readDealerProfile(user);
@@ -2643,7 +2650,7 @@
       const query = String(filters.search || '').trim().toLowerCase();
       return (Array.isArray(users) ? users : []).filter(u => {
         const status = String(getCrmStatus(u) || '').toLowerCase();
-        const role = String(u.role || 'user').toLowerCase();
+        const role = getSafeUserRole(u);
         if (filters.status && filters.status !== 'all' && status !== filters.status) return false;
         if (filters.role && filters.role !== 'all' && role !== filters.role) return false;
         if (filters.fee === 'paid' && !hasAnnualFeeActive(u)) return false;
@@ -2712,7 +2719,7 @@
       userPage = Math.min(Math.max(1, userPage), totalPages);
       const pageList = filteredList.slice((userPage - 1) * ADMIN_PAGE_SIZE, userPage * ADMIN_PAGE_SIZE);
       tbody.innerHTML = pageList.map(u => {
-        const role = u.role || 'user';
+        const role = getSafeUserRole(u);
         const isBoundCard = u.source === 'bound_card' || u.profileStatus === 'bound_card';
         const id = getUserId(u);
         const status = getCrmStatusMeta(getCrmStatus(u));

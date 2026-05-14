@@ -1960,9 +1960,9 @@ const D1WriteModule = {
     const role = this.role(this.pick(payload, ['newRole', 'targetRole', 'permission', 'role']));
     if (!targetUserId) return { success: false, error: 'Missing targetUserId' };
     if (role === 'admin') return { success: false, error: 'Admin role cannot be assigned from role editor' };
-    if (SecurityModule.hardAdminIds.has(targetUserId)) return { success: false, error: 'Hard admin role cannot be modified' };
     const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [targetUserId, targetUserId]);
     if (!existing) return { success: false, error: '找不到指定用戶' };
+    if (SecurityModule.isHardAdmin(targetUserId, existing)) return { success: false, error: 'Hard admin role cannot be modified' };
     await env.ACTMASTER_DB.prepare('UPDATE users SET role = ? WHERE line_id = ? OR row_id = ?').bind(role, targetUserId, targetUserId).run();
     await this.clearUserCache(env, targetUserId);
     return { success: true, data: { userId: targetUserId, role, source: 'd1_write' } };
@@ -1974,9 +1974,9 @@ const D1WriteModule = {
     const role = this.role(this.pick(payload, ['newRole', 'targetRole', 'permission', 'role']));
     if (!targetUserId) return { success: false, error: 'Missing targetUserId' };
     if (role === 'admin') return { success: false, error: 'Admin role cannot be assigned from role editor' };
-    if (SecurityModule.hardAdminIds.has(targetUserId)) return { success: false, error: 'Hard admin role cannot be modified' };
 
     let existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ? LIMIT 1', [targetUserId, targetUserId, targetUserId, targetUserId]).catch(() => null);
+    if (existing && SecurityModule.isHardAdmin(targetUserId, existing)) return { success: false, error: 'Hard admin role cannot be modified' };
     if (!existing) {
       const card = await D1ReadModule.first(env, `
         SELECT * FROM card_contacts

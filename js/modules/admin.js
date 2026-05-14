@@ -530,8 +530,15 @@ window.renderStoreManagement = function() {
     return;
   }
 
+  const getSafeStoreRole = (u) => {
+    const role = String((u && u.role) || 'user').trim().toLowerCase();
+    if (role === 'admin') return 'user';
+    return role === 'store' ? 'store' : 'user';
+  };
+
   container.innerHTML = allSystemUsers.map(u => {
     const isMe = u.userId === currentUserProfile?.userId;
+    const role = getSafeStoreRole(u);
     return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col gap-3 shadow-sm">' +
       '<div class="flex justify-between items-center">' +
         '<div>' +
@@ -541,9 +548,9 @@ window.renderStoreManagement = function() {
           '</div>' +
           '<div class="text-[12px] text-slate-500 font-mono mt-0.5">' + window.escapeJS(u.phone || '無設定電話') + '</div>' +
         '</div>' +
-        '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value)" ' + (isMe ? 'disabled' : '') + ' class="bg-white border border-slate-200 rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(u.role || 'user') + '">' +
-          '<option value="user" ' + (u.role === 'user' ? 'selected' : '') + '>一般 User</option>' +
-          '<option value="store" ' + (u.role === 'store' ? 'selected' : '') + '>商家 Store</option>' +
+        '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value)" ' + (isMe ? 'disabled' : '') + ' class="bg-white border border-slate-200 rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(role) + '">' +
+          '<option value="user" ' + (role === 'user' ? 'selected' : '') + '>一般 User</option>' +
+          '<option value="store" ' + (role === 'store' ? 'selected' : '') + '>商家 Store</option>' +
         '</select>' +
       '</div>' +
       '<div class="text-[11px] text-slate-500 flex items-center gap-1.5 bg-white border border-slate-100 px-2 py-1.5 rounded-lg w-fit">' +
@@ -558,7 +565,7 @@ window.renderStoreManagement = function() {
 window.changeUserRole = async function(userId, newRole) {
   // 找到下拉選單元素並暫時 disable,給視覺反饋
   const selectEl = event && event.target;
-  const oldRole = (allSystemUsers.find(u => u.userId === userId) || {}).role || 'user';
+  const oldRole = (allSystemUsers.find(u => u.userId === userId) || {}).role === 'store' ? 'store' : 'user';
   const allowedRoles = new Set(['user', 'store']);
   if (!allowedRoles.has(String(newRole || ''))) {
     if (selectEl) selectEl.value = oldRole === 'store' ? 'store' : 'user';
@@ -599,7 +606,7 @@ window.changeUserRole = async function(userId, newRole) {
 window.changeUserRole = async function(userId, newRole, evt) {
   const selectEl = (evt && evt.target) || (typeof event !== 'undefined' && event.target) || document.activeElement;
   const user = allSystemUsers.find(u => u.userId === userId);
-  const oldRole = (user || {}).role || 'user';
+  const oldRole = (user || {}).role === 'store' ? 'store' : 'user';
   const allowedRoles = new Set(['user', 'store']);
   if (!allowedRoles.has(String(newRole || ''))) {
     if (selectEl) selectEl.value = oldRole === 'store' ? 'store' : 'user';
