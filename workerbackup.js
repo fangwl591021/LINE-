@@ -59,6 +59,20 @@ const NewebPayCrypto = {
 
 // ==================== 模組 0: 資安防護 (Security Module) ====================
 const SecurityModule = {
+  hardAdminAccounts: [
+    {
+      label: '方萬隆',
+      ids: ['Uf729764dbb5b652a5a90a467320bea29', 'U050397a077bef628b317b0bbedeb2187'],
+      phones: ['0927136847'],
+      names: ['方萬隆', 'Tonyfang']
+    },
+    {
+      label: '楊滄棋',
+      ids: ['U58eb5c1a747450140ce1335af709ae55'],
+      phones: ['0986919171'],
+      names: ['楊滄棋']
+    }
+  ],
   hardAdminIds: new Set([
     'Uf729764dbb5b652a5a90a467320bea29',
     'U050397a077bef628b317b0bbedeb2187',
@@ -74,6 +88,27 @@ const SecurityModule = {
     if (role === 'admin' || role === '總管') return 'admin';
     if (role === 'store' || role === 'tenant' || role === '店長' || role === '租戶') return 'store';
     return 'user';
+  },
+
+  normalizePhone(value) {
+    return this.text(value).replace(/\D/g, '');
+  },
+
+  isHardAdmin(userId, user = {}) {
+    const uid = this.text(userId || user.line_id || user.row_id);
+    const account = this.hardAdminAccounts.find(item => item.ids.includes(uid));
+    if (!account) return false;
+    const name = this.text(user.name || user.displayName || user.user_name);
+    const phone = this.normalizePhone(user.phone || user.mobile);
+    if (!name && !phone) return false;
+    if (phone && account.phones.includes(phone)) return true;
+    return !!name && account.names.some(allowed => name.includes(allowed));
+  },
+
+  sanitizeRole(userId, role, user = {}) {
+    if (this.isHardAdmin(userId, user)) return 'admin';
+    const normalized = this.normalizeRole(role);
+    return normalized === 'admin' ? 'user' : normalized;
   },
 
   effectiveNetworkId(userId, role, user = {}) {
@@ -116,11 +151,11 @@ const SecurityModule = {
 
     let role = 'user';
     let networkId = 'admin';
-    if (this.hardAdminIds.has(userId)) role = 'admin';
+    if (this.isHardAdmin(userId)) role = 'admin';
     if (env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined') {
-      const user = await D1ReadModule.first(env, 'SELECT role, network_id, referrer_id FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
+      const user = await D1ReadModule.first(env, 'SELECT role, network_id, referrer_id, name, phone FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
       if (user) {
-        role = this.hardAdminIds.has(userId) ? 'admin' : this.normalizeRole(user.role);
+        role = this.sanitizeRole(userId, user.role, user);
         networkId = this.effectiveNetworkId(userId, role, user);
       }
     }
@@ -1132,7 +1167,7 @@ const D1BackfillModule = {
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(line_id) DO UPDATE SET
         name=excluded.name,industry=excluded.industry,phone=excluded.phone,birthday=excluded.birthday,socials=excluded.socials,
-        role=CASE WHEN users.role IN ('admin','store') AND excluded.role = 'user' THEN users.role ELSE excluded.role END,
+        role=CASE WHEN users.role = 'store' AND excluded.role = 'user' THEN users.role ELSE excluded.role END,
         store_id=excluded.store_id,referrer_id=excluded.referrer_id,network_id=excluded.network_id,
         tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
     `).bind(user.user_id,user.line_id,user.name,user.industry,user.phone,user.birthday,user.socials_json,user.role,user.store_id,user.referrer_id,user.network_id,user.telegram_token,user.telegram_chat_id).run();
@@ -1326,7 +1361,7 @@ const D1ReadModule = {
     if (!row) return null;
     const userId = this.text(row.line_id || row.row_id);
     if (!userId) return null;
-    const role = SecurityModule.hardAdminIds.has(userId) ? 'admin' : this.role(row.role);
+    const role = SecurityModule.sanitizeRole(userId, row.role, row);
     const networkId = SecurityModule.effectiveNetworkId(userId, role, row);
     const socials = this.jsonObject(row.socials);
     const dealerProfile = socials.dealerProfile && typeof socials.dealerProfile === 'object' ? socials.dealerProfile : {};
@@ -1514,7 +1549,7 @@ const D1ReadModule = {
     const cachedPhone = this.text(payload.phone || payload.cachedPhone);
     const oldName = this.text(oldUser.name);
     const oldPhone = this.text(oldUser.phone);
-    const isHardAdmin = SecurityModule.hardAdminIds.has(oldUserId);
+    const isHardAdmin = SecurityModule.isHardAdmin(oldUserId, oldUser);
     const nameOk = cachedName && oldName && cachedName === oldName;
     const phoneOk = cachedPhone && oldPhone && cachedPhone === oldPhone;
     if (!isHardAdmin && !nameOk && !phoneOk) {
@@ -1887,16 +1922,17 @@ const D1WriteModule = {
         user.network_id = existing.network_id || user.network_id;
       }
       if (user.referrer_id && user.referrer_id === user.line_id) user.referrer_id = existing.referrer_id || '';
-      if ((existing.role === 'admin' || existing.role === 'store') && user.role === 'user') user.role = existing.role;
+      if (existing.role === 'store' && user.role === 'user') user.role = existing.role;
       if (!hasRoleInput) user.role = existing.role || user.role;
     }
+    user.role = SecurityModule.sanitizeRole(user.line_id, user.role, user);
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(line_id) DO UPDATE SET
         name=excluded.name,industry=excluded.industry,gender=excluded.gender,phone=excluded.phone,birthday=excluded.birthday,
         region=excluded.region,address=excluded.address,socials=excluded.socials,
-        role=CASE WHEN users.role IN ('admin','store') AND excluded.role = 'user' THEN users.role ELSE excluded.role END,
+        role=CASE WHEN users.role = 'store' AND excluded.role = 'user' THEN users.role ELSE excluded.role END,
         store_id=excluded.store_id,
         referrer_id=excluded.referrer_id,network_id=excluded.network_id,tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
     `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id).run();
@@ -2180,7 +2216,10 @@ const D1WriteModule = {
       region: this.firstText(newUser && newUser.region, oldUser && oldUser.region),
       address: this.firstText(newUser && newUser.address, oldUser && oldUser.address, newCard && newCard.address, oldCard && oldCard.address),
       socials: this.firstText(newUser && newUser.socials, oldUser && oldUser.socials),
-      role: this.bestRole(newUser && newUser.role, oldUser && oldUser.role, SecurityModule.hardAdminIds.has(oldLineId) || SecurityModule.hardAdminIds.has(newLineId) ? 'admin' : ''),
+      role: SecurityModule.sanitizeRole(newLineId, this.bestRole(newUser && newUser.role, oldUser && oldUser.role), {
+        name: this.firstText(newUser && newUser.name, oldUser && oldUser.name, newCard && newCard.name, oldCard && oldCard.name),
+        phone: this.firstText(newUser && newUser.phone, oldUser && oldUser.phone, newCard && (newCard.mobile || newCard.office_phone), oldCard && (oldCard.mobile || oldCard.office_phone))
+      }),
       store_id: this.firstText(newUser && newUser.store_id, oldUser && oldUser.store_id),
       referrer_id: this.firstText(newUser && newUser.referrer_id, oldUser && oldUser.referrer_id),
       network_id: this.firstText(newUser && newUser.network_id, oldUser && oldUser.network_id, newCard && newCard.network_id, oldCard && oldCard.network_id, 'admin'),
@@ -2200,11 +2239,7 @@ const D1WriteModule = {
         region=CASE WHEN users.region <> '' THEN users.region ELSE excluded.region END,
         address=CASE WHEN users.address <> '' THEN users.address ELSE excluded.address END,
         socials=CASE WHEN users.socials <> '' THEN users.socials ELSE excluded.socials END,
-        role=CASE
-          WHEN users.role = 'admin' OR excluded.role = 'admin' THEN 'admin'
-          WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store'
-          ELSE 'user'
-        END,
+        role=CASE WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store' ELSE excluded.role END,
         store_id=CASE WHEN users.store_id <> '' THEN users.store_id ELSE excluded.store_id END,
         referrer_id=CASE WHEN users.referrer_id <> '' THEN users.referrer_id ELSE excluded.referrer_id END,
         network_id=CASE WHEN users.network_id <> '' THEN users.network_id ELSE excluded.network_id END,
@@ -3087,6 +3122,7 @@ const AuthModule = {
         // 🚨 修正：變更 Cache Key 前綴，瞬間作廢所有舊記憶
         const cached = await env.ACTMASTER_KV.get(`U_PROFILE_${userId}`, 'json');
         if (cached) {
+          cached.role = SecurityModule.sanitizeRole(userId, cached.role, cached);
           return { success: true, data: { isRegistered: true, info: cached } };
         }
       } catch (e) { console.error("KV Read Error", e); }

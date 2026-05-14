@@ -189,7 +189,7 @@ const Core = (function() {
     window.applyUserPermissions = function() {
         if (typeof window.isHardAdminUser === 'function') {
             const currentId = window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '';
-            if (window.isHardAdminUser(currentId)) {
+            if (window.isHardAdminUser(currentId, window.currentUser || {})) {
                 window.userRole = 'admin';
                 if (window.currentUser) {
                     window.currentUser.role = 'admin';

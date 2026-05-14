@@ -1309,8 +1309,13 @@
     let adminProfile = null;
     const HARD_ADMIN_IDS = new Set([
       'Uf729764dbb5b652a5a90a467320bea29',
+      'U050397a077bef628b317b0bbedeb2187',
       'U58eb5c1a747450140ce1335af709ae55'
     ]);
+    const HARD_ADMIN_ACCOUNTS = [
+      { ids: ['Uf729764dbb5b652a5a90a467320bea29', 'U050397a077bef628b317b0bbedeb2187'], names: ['方萬隆', 'Tonyfang'], phones: ['0927136847'] },
+      { ids: ['U58eb5c1a747450140ce1335af709ae55'], names: ['楊滄棋'], phones: ['0986919171'] }
+    ];
     let allUsersData = [];
     let allCardsData = [];
     let duplicateBindingData = [];
@@ -1344,6 +1349,17 @@
         t: String(Date.now())
       });
       return 'https://liff.line.me/' + encodeURIComponent(LIFF_ID) + '?' + params.toString();
+    }
+
+    function isHardAdminAccount(userId, profile = {}) {
+      const uid = String(userId || '').trim();
+      const name = String(profile.name || profile.displayName || profile.userName || '').trim();
+      const phone = String(profile.phone || profile.mobile || '').replace(/\D/g, '');
+      const account = HARD_ADMIN_ACCOUNTS.find(item => item.ids.includes(uid));
+      if (!account) return false;
+      if (!name && !phone) return false;
+      if (phone && account.phones.includes(phone)) return true;
+      return !!name && account.names.some(allowed => name.includes(allowed));
     }
     
     function showToast(msg, isError = false) {
@@ -3631,10 +3647,12 @@
         loadingText.innerText = "驗證管理權限中...";
         const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
 
-        if (check && HARD_ADMIN_IDS.has(adminProfile.userId)) {
+        if (check && isHardAdminAccount(adminProfile.userId, check.info || adminProfile)) {
           check.info = check.info || {};
           check.info.role = 'admin';
           check.info.networkId = check.info.networkId || 'admin';
+        } else if (check && check.info && check.info.role === 'admin') {
+          check.info.role = 'user';
         }
         if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
           adminRole = check.info.role || 'store';

@@ -4,11 +4,21 @@ const DEFAULT_LIFF_ID = "1660923784-vViMTZ1y";
 const NFC_LIFF_ID = "1660923784-cOH9Hvsv";
 const POINT_LIFF_ID = "1660923784-vViMTZ1y";
 const POINT_OA_URL = "https://lin.ee/sDW7u4T";
-const HARD_ADMIN_IDS = [
-  "Uf729764dbb5b652a5a90a467320bea29",
-  "U050397a077bef628b317b0bbedeb2187",
-  "U58eb5c1a747450140ce1335af709ae55"
+const HARD_ADMIN_ACCOUNTS = [
+  {
+    label: "方萬隆",
+    ids: ["Uf729764dbb5b652a5a90a467320bea29", "U050397a077bef628b317b0bbedeb2187"],
+    phones: ["0927136847"],
+    names: ["方萬隆", "Tonyfang"]
+  },
+  {
+    label: "楊滄棋",
+    ids: ["U58eb5c1a747450140ce1335af709ae55"],
+    phones: ["0986919171"],
+    names: ["楊滄棋"]
+  }
 ];
+const HARD_ADMIN_IDS = HARD_ADMIN_ACCOUNTS.flatMap(account => account.ids);
 
 function readActmasterInitialParams() {
   const params = new URLSearchParams(window.location.search || '');
@@ -66,9 +76,17 @@ window.DEFAULT_LIFF_ID = DEFAULT_LIFF_ID;
 window.NFC_LIFF_ID = window.NFC_LIFF_ID || NFC_LIFF_ID;
 window.POINT_LIFF_ID = window.POINT_LIFF_ID || POINT_LIFF_ID;
 window.POINT_OA_URL = window.POINT_OA_URL || POINT_OA_URL;
+window.HARD_ADMIN_ACCOUNTS = window.HARD_ADMIN_ACCOUNTS || HARD_ADMIN_ACCOUNTS;
 window.HARD_ADMIN_IDS = window.HARD_ADMIN_IDS || HARD_ADMIN_IDS;
-window.isHardAdminUser = function(userId) {
-  return (window.HARD_ADMIN_IDS || []).includes(String(userId || '').trim());
+window.isHardAdminUser = function(userId, profile = {}) {
+  const uid = String(userId || '').trim();
+  const name = String(profile.name || profile.displayName || profile.userName || '').trim();
+  const phone = String(profile.phone || profile.mobile || '').replace(/\D/g, '');
+  const account = (window.HARD_ADMIN_ACCOUNTS || []).find(item => (item.ids || []).includes(uid));
+  if (!account) return false;
+  if (!name && !phone) return false;
+  if (phone && (account.phones || []).includes(phone)) return true;
+  return !!name && (account.names || []).some(allowed => name.includes(allowed));
 };
 window.WORKER_URL = WORKER_URL;
 window.Config = {
@@ -78,6 +96,7 @@ window.Config = {
   POINT_LIFF_ID: window.POINT_LIFF_ID,
   POINT_OA_URL: window.POINT_OA_URL,
   HARD_ADMIN_IDS: window.HARD_ADMIN_IDS,
+  HARD_ADMIN_ACCOUNTS: window.HARD_ADMIN_ACCOUNTS,
   WORKER_URL,
   API_URL: WORKER_URL.replace(/\/$/, '')
 };

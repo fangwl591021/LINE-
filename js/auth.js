@@ -511,7 +511,7 @@ window.applyRegisteredUserSession = function(info) {
   if (!info) return;
 
   window.currentUser = { ...info };
-  if (typeof window.isHardAdminUser === 'function' && window.isHardAdminUser(window.currentUserProfile?.userId || window.currentUser.userId)) {
+  if (typeof window.isHardAdminUser === 'function' && window.isHardAdminUser(window.currentUserProfile?.userId || window.currentUser.userId, window.currentUser)) {
     window.currentUser.role = 'admin';
     window.currentUser.networkId = window.currentUser.networkId || 'admin';
   }
