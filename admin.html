@@ -1301,7 +1301,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
   <script>
     const LIFF_ID = "1660923784-vViMTZ1y";
     const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/"; 
@@ -3637,7 +3637,11 @@
       const errorActions = document.getElementById('error-actions');
 
       try {
-        await liff.init({ liffId: LIFF_ID });
+        if (typeof window.initActmasterLiff === 'function') {
+          await window.initActmasterLiff(LIFF_ID);
+        } else {
+          await liff.init({ liffId: LIFF_ID });
+        }
         if (!liff.isLoggedIn()) {
           if (!liff.isInClient()) {
             window.location.replace(getAdminLiffEntryUrl());

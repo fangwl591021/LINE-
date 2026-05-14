@@ -581,10 +581,18 @@ window.refreshPointBalanceBadge = async function() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    await liff.init({ liffId: LIFF_ID });
+    if (typeof window.initActmasterLiff === 'function') {
+      await window.initActmasterLiff(LIFF_ID);
+    } else {
+      await liff.init({ liffId: LIFF_ID });
+    }
 
     if (!liff.isLoggedIn()) {
-      liff.login({ redirectUri: window.location.href });
+      if (typeof window.ensureActmasterLiffLogin === 'function') {
+        window.ensureActmasterLiffLogin({ redirectUri: window.location.href });
+      } else {
+        liff.login({ redirectUri: window.location.href });
+      }
       return;
     }
 

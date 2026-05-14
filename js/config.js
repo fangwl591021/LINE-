@@ -101,6 +101,63 @@ window.Config = {
   API_URL: WORKER_URL.replace(/\/$/, '')
 };
 
+window.__actmasterLiffInit = window.__actmasterLiffInit || { liffId: '', promise: null };
+
+window.initActmasterLiff = async function(liffId, options = {}) {
+  const id = String(liffId || window.LIFF_ID || '').trim();
+  if (!id) throw new Error('Missing LIFF ID');
+  if (!window.liff) throw new Error('LINE LIFF SDK 尚未載入');
+
+  if (window.__actmasterLiffInit.promise && window.__actmasterLiffInit.liffId === id) {
+    return window.__actmasterLiffInit.promise;
+  }
+
+  window.__actmasterLiffInit.liffId = id;
+  window.__actmasterLiffInit.promise = window.liff.init({
+    liffId: id,
+    withLoginOnExternalBrowser: options.withLoginOnExternalBrowser === true
+  });
+  try {
+    await window.__actmasterLiffInit.promise;
+    return true;
+  } catch (err) {
+    window.__actmasterLiffInit = { liffId: '', promise: null };
+    throw err;
+  }
+};
+
+window.ensureActmasterLiffLogin = function(options = {}) {
+  if (!window.liff || typeof window.liff.isLoggedIn !== 'function') return false;
+  if (window.liff.isLoggedIn()) return true;
+  const redirectUri = options.redirectUri || window.location.href;
+  if (typeof window.liff.login === 'function') window.liff.login({ redirectUri });
+  return false;
+};
+
+window.actmasterShareTargetPicker = async function(messages) {
+  if (!window.liff || typeof window.liff.isLoggedIn !== 'function' || !window.liff.isLoggedIn()) return { ok: false, reason: 'not_logged_in' };
+  if (typeof window.liff.isApiAvailable !== 'function' || !window.liff.isApiAvailable('shareTargetPicker')) return { ok: false, reason: 'share_unavailable' };
+  await window.liff.shareTargetPicker(messages);
+  return { ok: true };
+};
+
+window.closeActmasterLiffOrHome = function(delayMs = 1800) {
+  setTimeout(() => {
+    try {
+      if (
+        window.liff &&
+        typeof window.liff.isInClient === 'function' &&
+        window.liff.isInClient() &&
+        typeof window.liff.closeWindow === 'function'
+      ) {
+        window.liff.closeWindow();
+        return;
+      }
+    } catch (e) {}
+    window.location.replace(window.location.pathname);
+  }, delayMs);
+};
+
 window.buildPointLiffUrl = function(params) {
   const targetParams = new URLSearchParams();
   Object.keys(params || {}).forEach(key => {
@@ -198,21 +255,8 @@ window.getActmasterUrlParams = function() {
   }
 
   function finishNfcCheckinFlow() {
-    setTimeout(() => {
-      try {
-        if (
-          window.liff &&
-          typeof window.liff.isInClient === 'function' &&
-          window.liff.isInClient() &&
-          typeof window.liff.closeWindow === 'function'
-        ) {
-          window.liff.closeWindow();
-          return;
-        }
-      } catch (e) {}
-
-      window.location.replace(window.location.pathname);
-    }, 1800);
+    if (typeof window.closeActmasterLiffOrHome === 'function') return window.closeActmasterLiffOrHome(1800);
+    setTimeout(() => window.location.replace(window.location.pathname), 1800);
   }
 
   async function runNfcCheckin() {

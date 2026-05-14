@@ -255,8 +255,25 @@ const Core = (function() {
                 return false;
             }
             if (!liff.isLoggedIn()) {
-                liff.login({ redirectUri: window.location.href });
+                if (typeof window.ensureActmasterLiffLogin === 'function') {
+                    window.ensureActmasterLiffLogin({ redirectUri: window.location.href });
+                } else {
+                    liff.login({ redirectUri: window.location.href });
+                }
                 return false;
+            }
+            if (typeof window.actmasterShareTargetPicker === 'function') {
+                const result = await window.actmasterShareTargetPicker([{
+                    type: "flex",
+                    altText: altText || "您收到一則訊息",
+                    contents: flexMsg
+                }]);
+                if (!result.ok) {
+                    window.showToast(result.reason === 'share_unavailable' ? '您的環境不支援分享功能' : '請先登入 LINE LIFF', true);
+                    return false;
+                }
+                window.showToast('✅ 已成功發送！');
+                return true;
             }
             if (!liff.isApiAvailable('shareTargetPicker')) {
                 window.showToast('您的環境不支援分享功能', true);
