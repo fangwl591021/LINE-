@@ -625,6 +625,15 @@
     const rowId = window.currentCard.rowId || window.currentCard["rowId"];
 
     try {
+      if (typeof window.syncECardButtonsFromFields === "function") {
+        window.syncECardButtonsFromFields({ render: false });
+      }
+      if (typeof window.buildECardConfigFromFields === "function") {
+        const cfg = window.buildECardConfigFromFields();
+        payloadData["自訂名片設定"] = JSON.stringify(cfg);
+        if (cfg.imgUrl) payloadData["名片圖檔"] = cfg.imgUrl;
+      }
+
       const res = await window.fetchAPI("updateCard", { rowId, data: payloadData }, true);
       assertApiSuccess(res, "儲存失敗");
 

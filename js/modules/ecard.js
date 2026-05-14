@@ -2,6 +2,120 @@
 window.currentEcardButtons = [];
 window.currentEcardImgs = { landscape: '', portrait: '', square: '' };
 window.currentEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
+window.__ecardAutoSyncBound = window.__ecardAutoSyncBound || false;
+
+const ECardAutoDefaults = {
+  lineUrl: 'https://lin.ee/y7h8BUF',
+  introUrl: 'https://lihi2.me/yXhCf'
+};
+
+function readECardField(name, fallbackCard) {
+  const input = document.getElementById('edit-' + name);
+  const live = input ? String(input.value || '').trim() : '';
+  if (live) return live;
+  return String((fallbackCard || window.currentCard || {})[name] || '').trim();
+}
+
+function normalizeTelValue(value) {
+  const clean = String(value || '').replace(/[^0-9+]/g, '');
+  return clean ? 'tel:' + clean : 'tel:XXXXXXXXXX';
+}
+
+function normalizeUrlValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const match = raw.match(/https?:\/\/[^\s,，;；]+/i);
+  if (match) return match[0];
+  if (/^line\.me|^lin\.ee/i.test(raw)) return 'https://' + raw;
+  return '';
+}
+
+function getECardButtonKind(button, index) {
+  const label = String(button?.l || '').toLowerCase();
+  const url = String(button?.u || '').toLowerCase();
+  if (label.includes('line') || label.includes('好友') || url.includes('lin.ee') || url.includes('line.me')) return 'line';
+  if (label.includes('電話') || label.includes('手機') || url.startsWith('tel:')) return 'phone';
+  if (label.includes('簡介') || label.includes('網站') || label.includes('官網') || url.includes('lihi2.me')) return 'intro';
+  if (index === 0) return 'line';
+  if (index === 1) return 'phone';
+  if (index === 2) return 'intro';
+  return 'custom';
+}
+
+function buildAutoECardButtons(card, existingButtons) {
+  const existing = Array.isArray(existingButtons) ? existingButtons : [];
+  const phone = readECardField('手機號碼', card) || readECardField('公司電話', card);
+  const social = readECardField('社群帳號', card);
+  const companyUrl = normalizeUrlValue(readECardField('公司網址', card));
+  const lineUrl = normalizeUrlValue(social) || ECardAutoDefaults.lineUrl;
+  const introUrl = companyUrl || ECardAutoDefaults.introUrl;
+
+  const auto = {
+    line: { l: '加LINE好友', u: lineUrl, c: '#06C755' },
+    phone: { l: '行動電話', u: normalizeTelValue(phone), c: '#3b82f6' },
+    intro: { l: companyUrl ? '公司網站' : '數位包租公簡介', u: introUrl, c: '#1e293b' }
+  };
+
+  const used = new Set();
+  const merged = ['line', 'phone', 'intro'].map(kind => {
+    const foundIndex = existing.findIndex((button, index) => !used.has(index) && getECardButtonKind(button, index) === kind);
+    const found = foundIndex >= 0 ? existing[foundIndex] : null;
+    if (foundIndex >= 0) used.add(foundIndex);
+    return {
+      l: found?.l || auto[kind].l,
+      u: auto[kind].u || found?.u || '',
+      c: found?.c || auto[kind].c
+    };
+  });
+
+  existing.forEach((button, index) => {
+    if (!used.has(index) && getECardButtonKind(button, index) === 'custom') {
+      merged.push(button);
+    }
+  });
+
+  return merged;
+}
+
+window.syncECardButtonsFromFields = function(options = {}) {
+  if (!window.currentCard && !options.card) return window.currentEcardButtons || [];
+  window.currentEcardButtons = buildAutoECardButtons(options.card || window.currentCard, window.currentEcardButtons);
+  if (options.render !== false) {
+    window.renderV1Buttons();
+    window.updateECardPreview();
+  }
+  return window.currentEcardButtons;
+};
+
+window.buildECardConfigFromFields = function() {
+  const layoutVal = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
+  window.syncECardButtonsFromFields({ render: false });
+  return {
+    layoutStyle: layoutVal,
+    imgUrl: window.currentEcardImgs.landscape,
+    imgUrlPortrait: window.currentEcardImgs.portrait,
+    imgUrlSquare: window.currentEcardImgs.square,
+    imgRatioLandscape: '20:13',
+    imgRatioPortrait: window.currentEcardRatios.portrait.replace('/', ':'),
+    imgRatioSquare: '1:1',
+    desc: document.getElementById('edit-服務項目')?.value || '',
+    descAlign: window.currentDescAlign || 'center',
+    descColor: document.getElementById('edit-desc-color')?.value || '#666666',
+    buttons: window.currentEcardButtons
+  };
+};
+
+function bindECardFieldAutoSync() {
+  if (window.__ecardAutoSyncBound) return;
+  window.__ecardAutoSyncBound = true;
+  document.addEventListener('input', function(evt) {
+    const id = evt.target && evt.target.id;
+    if (!['edit-手機號碼', 'edit-公司電話', 'edit-公司網址', 'edit-社群帳號', 'edit-服務項目'].includes(id)) return;
+    if (typeof window.syncECardButtonsFromFields === 'function') {
+      window.syncECardButtonsFromFields({ render: true });
+    }
+  });
+}
 
 /**
  * 載入名片設定到 UI (請確保在 cards.js 的 openCardDetail 中呼叫此函數)
@@ -9,6 +123,7 @@ window.currentEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1'
  */
 window.initECardSettings = function(card) {
   if (!card) return;
+  bindECardFieldAutoSync();
 
   // 1. 安全解析 JSON
   let cfg = {};
@@ -46,7 +161,7 @@ window.initECardSettings = function(card) {
   }
 
   // 4. 按鈕列表
-  window.currentEcardButtons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+  window.currentEcardButtons = buildAutoECardButtons(card, Array.isArray(cfg.buttons) ? cfg.buttons : []);
   window.renderV1Buttons();
 
   // 5. 強制刷新預覽畫面
@@ -169,21 +284,7 @@ window.saveECardConfig = async function() {
     btn.disabled = true;
   }
 
-  const layoutVal = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
-  
-  const cfg = {
-    layoutStyle: layoutVal,
-    imgUrl: window.currentEcardImgs.landscape,
-    imgUrlPortrait: window.currentEcardImgs.portrait,
-    imgUrlSquare: window.currentEcardImgs.square,
-    imgRatioLandscape: '20:13',
-    imgRatioPortrait: window.currentEcardRatios.portrait.replace('/', ':'),
-    imgRatioSquare: '1:1',
-    desc: document.getElementById('edit-服務項目')?.value || '',
-    descAlign: window.currentDescAlign || 'center',
-    descColor: document.getElementById('edit-desc-color')?.value || '#666666',
-    buttons: window.currentEcardButtons
-  };
+  const cfg = window.buildECardConfigFromFields();
 
   const payloadData = {
     '名片圖檔': cfg.imgUrl,
@@ -239,26 +340,16 @@ window.shareECardToLine = async function(btnId) {
   try {
     const rowId = window.currentCard.rowId || window.currentCard["rowId"] || window.currentCard.id || "";
     const fallbackUrl = buildECardShareUrl(rowId);
-    const layoutVal = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
-    const cfg = {
-      layoutStyle: layoutVal,
-      imgUrl: window.currentEcardImgs.landscape || window.currentCard['名片圖檔'] || '',
-      imgUrlPortrait: window.currentEcardImgs.portrait,
-      imgUrlSquare: window.currentEcardImgs.square,
-      imgRatioLandscape: '20:13',
-      imgRatioPortrait: window.currentEcardRatios.portrait.replace('/', ':'),
-      imgRatioSquare: '1:1',
-      desc: document.getElementById('edit-服務項目')?.value || window.currentCard['服務項目'] || '',
-      descAlign: window.currentDescAlign || 'center',
-      descColor: document.getElementById('edit-desc-color')?.value || '#666666',
-      buttons: window.currentEcardButtons
-    };
+    const cfg = window.buildECardConfigFromFields();
+    if (!cfg.imgUrl) cfg.imgUrl = window.currentCard['名片圖檔'] || '';
+    if (!cfg.desc) cfg.desc = window.currentCard['服務項目'] || '';
 
     // 若在「聯絡資料」tab 點擊（ecard UI 可能未初始化），改用已存的設定
     if (!document.getElementById('v1-img-url')?.value) {
       try {
         const saved = JSON.parse(window.currentCard['自訂名片設定'] || '{}');
         Object.assign(cfg, saved);
+        cfg.buttons = buildAutoECardButtons(window.currentCard, saved.buttons || cfg.buttons || []);
       } catch(e) {}
     }
 
