@@ -128,11 +128,30 @@ const HomeModule = (function() {
     // === 2. 活動渲染邏輯 ===
 
     function getPublicActivityId_(activity) {
-        return String(activity['活動ID'] || activity.rowId || '').trim();
+        return String(activity.activityId || activity.activity_id || activity.rowId || activity.id || activity['活動ID'] || '').trim();
     }
 
     function getPublicActivityStatus_(activity) {
-        return String(activity['狀態'] || '上架').trim();
+        return String(activity.status || activity['狀態'] || '上架').trim();
+    }
+
+    function getPublicActivityNetwork_(activity) {
+        return String(
+            activity.networkId ||
+            activity.network_id ||
+            activity.net ||
+            activity['歸屬網'] ||
+            ''
+        ).trim();
+    }
+
+    function canSeePublicActivity_(activity) {
+        const role = String(window.userRole || '').toLowerCase();
+        if (role === 'admin') return true;
+        const currentNetwork = String(window.currentNetworkId || 'admin').trim();
+        const activityNetwork = getPublicActivityNetwork_(activity);
+        if (!activityNetwork) return currentNetwork === 'admin';
+        return activityNetwork === currentNetwork;
     }
 
     window.homeActivityFilter = '全部';
@@ -169,18 +188,18 @@ const HomeModule = (function() {
         const list = document.getElementById('user-activities-list');
         if (!list) return;
 
-        const activities = Array.isArray(window.allActivities) ? window.allActivities : [];
+        const activities = (Array.isArray(window.allActivities) ? window.allActivities : []).filter(canSeePublicActivity_);
         const allActiveActs = activities
             .filter(a => getPublicActivityStatus_(a) === '上架')
             .slice()
             .reverse();
         
-        const types = Array.from(new Set(allActiveActs.map(a => String(a['活動類型'] || '活動').trim()).filter(Boolean)));
+        const types = Array.from(new Set(allActiveActs.map(a => String(a.activityType || a.type || a['活動類型'] || '活動').trim()).filter(Boolean)));
         renderHomeActivityFilters_(types);
 
         const activeActs = window.homeActivityFilter === '全部'
             ? allActiveActs
-            : allActiveActs.filter(a => String(a['活動類型'] || '活動').trim() === window.homeActivityFilter);
+            : allActiveActs.filter(a => String(a.activityType || a.type || a['活動類型'] || '活動').trim() === window.homeActivityFilter);
 
         list.className = 'grid grid-cols-2 gap-3';
 
@@ -192,11 +211,13 @@ const HomeModule = (function() {
 
         list.innerHTML = activeActs.map(a => {
             const actId = window.escapeJS(getPublicActivityId_(a));
-            const title = window.escapeHTML(a['活動名稱'] || '未命名活動');
-            const type = window.escapeHTML(a['活動類型'] || '活動');
-            const time = window.escapeHTML(window.formatDisplayTime(a['開始時間']));
-            const desc = window.escapeHTML(a['活動說明'] || '');
-            const img = window.escapeHTML(a['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80');
+            const rawTitle = a.activityName || a.name || a.title || a['活動名稱'] || '未命名活動';
+            const shareTitle = window.escapeJS(rawTitle);
+            const title = window.escapeHTML(rawTitle);
+            const type = window.escapeHTML(a.activityType || a.type || a['活動類型'] || '活動');
+            const time = window.escapeHTML(window.formatDisplayTime(a.startTime || a.start_time || a['開始時間']));
+            const desc = window.escapeHTML(a.description || a['活動說明'] || '');
+            const img = window.escapeHTML(a.imageUrl || a.image_url || a['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80');
 
             return `
                 <div class="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 flex flex-col min-h-[250px]">
@@ -210,8 +231,11 @@ const HomeModule = (function() {
                         </div>
                         <h4 class="font-black text-slate-800 text-[14px] leading-snug line-clamp-2 mb-1">${title}</h4>
                         <p class="text-slate-500 text-[12px] line-clamp-2 leading-relaxed mb-3">${desc}</p>
-                        <div class="grid grid-cols-2 gap-2 mt-auto">
+                        <div class="grid grid-cols-3 gap-2 mt-auto">
                             <button type="button" onclick="event.stopPropagation(); window.openActivityDetail('${actId}')" class="py-2 bg-slate-100 text-slate-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform">詳細</button>
+                            <button type="button" onclick="event.stopPropagation(); window.openActivityShareModal('${actId}', '${shareTitle}')" class="py-2 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex items-center justify-center gap-1">
+                                <span class="material-symbols-outlined text-[15px]">ios_share</span> 分享
+                            </button>
                             <button type="button" onclick="event.stopPropagation(); window.joinPublicActivity('${actId}', this)" class="py-2 bg-[#06C755] text-white rounded-xl text-[12px] font-bold active:scale-95 transition-transform">報名</button>
                         </div>
                     </div>
@@ -287,7 +311,7 @@ const HomeModule = (function() {
         const activityId = getInitialActivityId_();
         if (!activityId) return false;
         if (window.__openedActivityParam === activityId && !force) return true;
-        const found = (window.allActivities || []).some(a => getPublicActivityId_(a) === String(activityId));
+        const found = (window.allActivities || []).some(a => getPublicActivityId_(a) === String(activityId) && canSeePublicActivity_(a));
         if (!found) return false;
         window.__openedActivityParam = activityId;
         setTimeout(() => window.openActivityDetail(activityId), 120);
@@ -302,7 +326,7 @@ const HomeModule = (function() {
         try {
             window.allActivities = await fetchActivitiesByFallback_(
                 ['getPublicActivities', 'getAllActivities', 'getActivities'],
-                {}
+                { networkId: window.currentNetworkId || 'admin', role: window.userRole || 'user' }
             );
             window.renderHomeActivities();
             window.openActivityFromUrlParam();
@@ -458,19 +482,20 @@ const HomeModule = (function() {
     // === 3. 活動互動邏輯 ===
 
     window.openActivityDetail = function(activityId) {
-        const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId));
+        const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId) && canSeePublicActivity_(a));
         if (!activity) return window.showToast('找不到活動資料', true);
 
         const content = document.getElementById('my-act-detail-content');
         if (!content) return;
 
-        const title = window.escapeHTML(activity['活動名稱'] || '未命名活動');
-        const type = window.escapeHTML(activity['活動類型'] || '活動');
-        const startTime = window.escapeHTML(window.formatDisplayTime(activity['開始時間']));
-        const price = parseInt(activity['金額']) || 0;
+        const rawTitle = activity.activityName || activity.name || activity.title || activity['活動名稱'] || '未命名活動';
+        const title = window.escapeHTML(rawTitle);
+        const type = window.escapeHTML(activity.activityType || activity.type || activity['活動類型'] || '活動');
+        const startTime = window.escapeHTML(window.formatDisplayTime(activity.startTime || activity.start_time || activity['開始時間']));
+        const price = parseInt(activity.price || activity['金額']) || 0;
         const fee = price > 0 ? 'NT$ ' + price.toLocaleString() : '免費';
-        const img = window.escapeHTML(activity['宣傳圖'] || '');
-        const desc = window.escapeHTML(activity['活動說明'] || '尚無說明');
+        const img = window.escapeHTML(activity.imageUrl || activity.image_url || activity['宣傳圖'] || '');
+        const desc = window.escapeHTML(activity.description || activity['活動說明'] || '尚無說明');
 
         content.innerHTML = `
             <div class="bg-white rounded-3xl overflow-hidden">
@@ -487,7 +512,7 @@ const HomeModule = (function() {
                     <p class="text-[14px] text-slate-600 whitespace-pre-wrap">${desc}</p>
                     <div class="grid grid-cols-2 gap-2">
                         <button onclick="window.joinPublicActivity('${window.escapeJS(activityId)}', this)" class="py-4 bg-[#06C755] text-white rounded-2xl font-black text-[16px]">我要報名</button>
-                        <button onclick="window.openActivityShareModal('${window.escapeJS(activityId)}', '${window.escapeJS(activity['活動名稱'] || activity['瘣餃??迂'] || '活動報名')}')" class="py-4 bg-blue-600 text-white rounded-2xl font-black text-[16px] flex justify-center items-center gap-1">
+                        <button onclick="window.openActivityShareModal('${window.escapeJS(activityId)}', '${window.escapeJS(rawTitle)}')" class="py-4 bg-blue-600 text-white rounded-2xl font-black text-[16px] flex justify-center items-center gap-1">
                             <span class="material-symbols-outlined text-[18px]">ios_share</span> 分享
                         </button>
                     </div>
@@ -497,7 +522,7 @@ const HomeModule = (function() {
     };
 
     window.joinPublicActivity = async function(activityId, btn) {
-        const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId));
+        const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId) && canSeePublicActivity_(a));
         if (!activity) return window.showToast('活動已下架', true);
 
         const oriHtml = btn.innerHTML;
@@ -507,7 +532,7 @@ const HomeModule = (function() {
         try {
             const res = await window.fetchAPI('joinActivity', {
                 activityId: getPublicActivityId_(activity),
-                activityName: activity['活動名稱'] || '',
+                activityName: activity.activityName || activity.name || activity.title || activity['活動名稱'] || '',
                 userName: window.currentUser?.name || window.currentUserProfile?.displayName || '',
                 userPhone: window.currentUser?.phone || '',
                 defaultIdentity: activity['預設身份'] || '會員'

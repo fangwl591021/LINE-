@@ -2650,6 +2650,8 @@ const D1ActivityModule = {
       description: this.text(row.description),
       imageUrl: this.text(row.image_url),
       status: this.text(row.status, '上架'),
+      networkId: this.text(row.network_id, 'admin'),
+      network_id: this.text(row.network_id, 'admin'),
       nfcCheckinStart: this.text(row.nfc_checkin_start),
       nfcCheckinEnd: this.text(row.nfc_checkin_end),
       nfcCheckinSameDayOnly: row.nfc_same_day_only !== 0,
@@ -2664,6 +2666,7 @@ const D1ActivityModule = {
       '活動說明': this.text(row.description),
       '宣傳圖': this.text(row.image_url),
       '狀態': this.text(row.status, '上架'),
+      '歸屬網': this.text(row.network_id, 'admin'),
       'NFC簽到開始': this.text(row.nfc_checkin_start),
       'NFC簽到結束': this.text(row.nfc_checkin_end),
       'NFC限當日': row.nfc_same_day_only !== 0
@@ -2727,6 +2730,7 @@ const D1ActivityModule = {
       description: this.pick(data, ['description', '活動說明']),
       image_url: this.pick(data, ['imageUrl', '宣傳圖']),
       creator_id: this.pick(data, ['userId', 'creatorId'], this.pick(payload, ['userId'], 'admin')),
+      network_id: this.pick(payload, ['authenticatedNetworkId'], this.pick(data, ['networkId', 'network_id', '歸屬網'], this.pick(payload, ['networkId'], 'admin'))),
       status: this.pick(data, ['status', '狀態'], '上架'),
       nfc_checkin_start: this.pick(data, ['nfcCheckinStart', 'NFC簽到開始']),
       nfc_checkin_end: this.pick(data, ['nfcCheckinEnd', 'NFC簽到結束']),
@@ -2735,24 +2739,87 @@ const D1ActivityModule = {
     };
   },
 
-  async listActivities(payload, env) {
+  async ensureActivityNetworkScope(env) {
+    if (!this.hasD1(env) || this._networkScopeReady) return;
+    await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN network_id TEXT NOT NULL DEFAULT 'admin'").run().catch(() => null);
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE activities
+      SET network_id = COALESCE(
+        (
+          SELECT NULLIF(users.network_id, '')
+          FROM users
+          WHERE users.line_id = activities.creator_id
+             OR users.row_id = activities.creator_id
+          LIMIT 1
+        ),
+        'admin'
+      )
+      WHERE network_id = '' OR network_id = 'admin'
+    `).run().catch(() => null);
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_activities_network_status ON activities(network_id, status, start_time)').run().catch(() => null);
+    this._networkScopeReady = true;
+  },
+
+  async listActivities(payload, env, actor = null) {
     if (!this.hasD1(env)) return null;
-    const rows = await D1ReadModule.all(env, 'SELECT * FROM activities ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC LIMIT 500');
+    await this.ensureActivityNetworkScope(env);
+    const role = actor
+      ? SecurityModule.normalizeRole(actor.role)
+      : SecurityModule.normalizeRole(payload.authenticatedRole || '');
+    const networkId = this.text(actor?.networkId || payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
+    const isAdmin = role === 'admin';
+    const rows = isAdmin
+      ? await D1ReadModule.all(env, 'SELECT * FROM activities ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC LIMIT 500')
+      : await D1ReadModule.all(env, `
+          SELECT * FROM activities
+          WHERE COALESCE(NULLIF(network_id, ''), 'admin') = ?
+          ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
+          LIMIT 500
+        `, [networkId]);
     return { success: true, data: rows.map(row => this.activityRow(row)).filter(Boolean) };
+  },
+
+  getActivityNetwork(activity) {
+    return this.text(activity && (
+      activity.networkId ||
+      activity.network_id ||
+      activity.net ||
+      activity['歸屬網']
+    ));
+  },
+
+  filterResultByActor(result, payload = {}, actor = null) {
+    const role = actor
+      ? SecurityModule.normalizeRole(actor.role)
+      : SecurityModule.normalizeRole(payload.authenticatedRole || '');
+    if (role === 'admin') return result;
+    const networkId = this.text(actor?.networkId || payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
+    const canSee = (activity) => {
+      const activityNetwork = this.getActivityNetwork(activity);
+      if (!activityNetwork) return networkId === 'admin';
+      return activityNetwork === networkId;
+    };
+    if (Array.isArray(result)) return result.filter(canSee);
+    if (!result || typeof result !== 'object') return result;
+    if (Array.isArray(result.data)) return { ...result, data: result.data.filter(canSee) };
+    if (Array.isArray(result.activities)) return { ...result, activities: result.activities.filter(canSee) };
+    if (Array.isArray(result.items)) return { ...result, items: result.items.filter(canSee) };
+    return result;
   },
 
   async upsertActivity(payload, env) {
     if (!this.hasD1(env)) return null;
+    await this.ensureActivityNetworkScope(env);
     const activity = this.normalizeActivity(payload);
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,creator_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(activity_id) DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
-        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,status=excluded.status,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,network_id=excluded.network_id,status=excluded.status,
         is_series=excluded.is_series,nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
         nfc_same_day_only=excluded.nfc_same_day_only
-    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.creator_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
     return activity;
   },
 
@@ -4585,13 +4652,18 @@ async function dispatchAction(action, payload, request, env) {
     case 'getPublicActivities':
     case 'getAllActivities':
     case 'getActivities': {
+      let listActor = actor;
       try {
-        const d1Result = await D1ActivityModule.listActivities(payload || {}, env);
+        if (!listActor && payload && payload.lineAccessToken) {
+          listActor = await SecurityModule.getActor(payload, request, env).catch(() => null);
+        }
+        const d1Result = await D1ActivityModule.listActivities(payload || {}, env, listActor);
         if (d1Result) return d1Result;
       } catch (e) {
         console.error("D1 listActivities fallback", e);
       }
-      return await DBModule.forward(action, payload, env);
+      const fallbackResult = await DBModule.forward(action, payload, env);
+      return D1ActivityModule.filterResultByActor(fallbackResult, payload || {}, listActor);
     }
     case 'bulkAddRegistrants': {
       try {
