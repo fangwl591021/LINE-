@@ -57,6 +57,108 @@ function resolveReferralForRegistration(urlRef, urlNet) {
   };
 }
 
+function removeAutoShareParamsFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('share');
+    url.searchParams.delete('autoShare');
+    url.searchParams.delete('action');
+    window.history.replaceState({}, document.title, url.toString());
+  } catch (e) {}
+}
+
+function buildCardShareConfig(card) {
+  let cfg = {};
+  try { cfg = JSON.parse(card?.['自訂名片設定'] || '{}') || {}; } catch (e) {}
+  return {
+    ...cfg,
+    layoutStyle: cfg.layoutStyle || cfg.layout || 'landscape',
+    imgUrl: cfg.imgUrl || card?.['名片圖檔'] || '',
+    imgUrlPortrait: cfg.imgUrlPortrait || '',
+    imgUrlSquare: cfg.imgUrlSquare || '',
+    imgRatioLandscape: cfg.imgRatioLandscape || '20:13',
+    imgRatioPortrait: cfg.imgRatioPortrait || '2:3',
+    imgRatioSquare: cfg.imgRatioSquare || '1:1',
+    desc: cfg.desc || card?.['服務項目'] || '',
+    descAlign: cfg.descAlign || 'center',
+    descColor: cfg.descColor || '#666666',
+    buttons: Array.isArray(cfg.buttons) ? cfg.buttons : []
+  };
+}
+
+function buildPlainCardViewUrl(card, referrerId, networkId) {
+  const cardId = card?.rowId || card?.['rowId'] || card?.id || '';
+  if (!cardId) return '';
+  if (window.buildPointLiffUrl) {
+    return window.buildPointLiffUrl({
+      shareCardId: cardId,
+      ref: referrerId || '',
+      net: networkId || 'admin'
+    });
+  }
+  let url = 'https://liff.line.me/' + encodeURIComponent(window.POINT_LIFF_ID || window.LIFF_ID || '') +
+    '?shareCardId=' + encodeURIComponent(cardId);
+  if (referrerId) url += '&ref=' + encodeURIComponent(referrerId);
+  if (networkId) url += '&net=' + encodeURIComponent(networkId);
+  return url;
+}
+
+async function sharePlainCardViewUrl(card, referrerId, networkId) {
+  const url = buildPlainCardViewUrl(card, referrerId, networkId);
+  if (!url) return false;
+  const text = '這是數位名片' + (card?.['姓名'] ? '：' + card['姓名'] : '') + '\n' + url;
+  try {
+    if (typeof liff !== 'undefined' && liff && liff.isLoggedIn && liff.isLoggedIn() && liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')) {
+      await liff.shareTargetPicker([{ type: 'text', text }]);
+      window.showToast?.('✅ 已用連結分享名片');
+      return true;
+    }
+  } catch (e) {
+    console.warn('[sharePlainCardViewUrl] shareTargetPicker failed:', e);
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+      window.showToast?.('✅ 名片連結已複製');
+      return true;
+    }
+  } catch (e) {}
+  window.prompt('請複製名片連結', url);
+  return true;
+}
+
+window.shareCardFromLink = async function(card, options = {}) {
+  if (!card || window.__autoSharingCardFromLink) return false;
+  window.__autoSharingCardFromLink = true;
+  const referrerId = options.referrerId || window.currentUserProfile?.userId || '';
+  const networkId = options.networkId || window.currentNetworkId || 'admin';
+
+  try {
+    const flexMsg = await window.fetchAPI('buildFlexMessage', {
+      card,
+      config: buildCardShareConfig(card),
+      referrerId,
+      networkId,
+      liffId: window.POINT_LIFF_ID || window.DEFAULT_LIFF_ID || window.LIFF_ID
+    }, true);
+
+    if (flexMsg && !flexMsg.error) {
+      const shared = await window.triggerFlexSharing(flexMsg, card['姓名'] || '數位名片');
+      if (shared === false) await sharePlainCardViewUrl(card, referrerId, networkId);
+    } else {
+      await sharePlainCardViewUrl(card, referrerId, networkId);
+    }
+    return true;
+  } catch (e) {
+    console.warn('[shareCardFromLink] fallback to URL:', e);
+    await sharePlainCardViewUrl(card, referrerId, networkId);
+    return true;
+  } finally {
+    removeAutoShareParamsFromUrl();
+    window.__autoSharingCardFromLink = false;
+  }
+};
+
 window.submitRegistration = async function() {
   const name = document.getElementById('reg-name').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
@@ -500,6 +602,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const urlParams = new URLSearchParams(window.location.search);
     const shareCardId = urlParams.get('shareCardId');
+    const shouldAutoShareCard = shareCardId && (
+      urlParams.get('share') === '1' ||
+      urlParams.get('autoShare') === '1' ||
+      urlParams.get('action') === 'share'
+    );
     const claimCardId = urlParams.get('claim');
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
@@ -591,6 +698,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (cData && Array.isArray(cData)) {
             const sc = cData.find(c => String(c.rowId) === String(shareCardId));
             if (sc) {
+              if (shouldAutoShareCard) {
+                await window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId });
+                window.goPage('home');
+                return;
+              }
               window.roCardData = sc;
               let cfg = {};
               try { cfg = JSON.parse(sc['自訂名片設定'] || '{}'); } catch(e){}
@@ -632,7 +744,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (shareCardId) {
         const sc = window.allCards.find(c => String(c.rowId) === String(shareCardId));
         if (sc) {
-          window.openCardDetail(sc);
+          if (shouldAutoShareCard) {
+            window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId })
+              .then(() => window.goPage('home'));
+          } else {
+            window.openCardDetail(sc);
+          }
         } else {
           window.showToast('找不到該名片', true);
           window.goPage('home');
