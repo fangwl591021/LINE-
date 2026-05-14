@@ -85,12 +85,12 @@ window.buildActivityShareUrl = function(activityId, activity) {
     ? 'https://liff.line.me/' + encodeURIComponent(liffId)
     : window.location.origin + window.location.pathname;
   const params = new URLSearchParams();
-  params.set('activityId', id);
+  params.set('a', id);
   const ref = activityShareText(window.currentUserProfile && window.currentUserProfile.userId);
   const net = getActivityNetworkValue(activity);
-  if (ref) params.set('ref', ref);
-  if (net) params.set('net', net);
-  params.set('via', 'activity');
+  if (ref) params.set('r', ref);
+  if (net) params.set('n', net);
+  params.set('v', 'a');
   return baseUrl + '?' + params.toString();
 };
 

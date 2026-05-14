@@ -169,7 +169,9 @@ window.submitRegistration = async function() {
   btn.disabled = true;
 
   try {
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = typeof window.readActmasterInitialParams === 'function'
+      ? window.readActmasterInitialParams()
+      : new URLSearchParams(window.location.search);
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
     const referral = resolveReferralForRegistration(refId, netId);
@@ -217,7 +219,9 @@ window.saveProfileRegistration = async function(event) {
   }
 
   try {
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = typeof window.readActmasterInitialParams === 'function'
+      ? window.readActmasterInitialParams()
+      : new URLSearchParams(window.location.search);
     const referral = resolveReferralForRegistration(urlParams.get('ref') || '', urlParams.get('net') || window.currentNetworkId || 'admin');
     const payload = {
       userId,
@@ -600,7 +604,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       loadingScreen.classList.add('hidden');
     }
 
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = typeof window.readActmasterInitialParams === 'function'
+      ? window.readActmasterInitialParams()
+      : new URLSearchParams(window.location.search);
     const shareCardId = urlParams.get('shareCardId');
     const shouldAutoShareCard = shareCardId && (
       urlParams.get('share') === '1' ||

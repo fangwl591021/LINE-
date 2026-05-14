@@ -187,6 +187,16 @@ const Core = (function() {
     // === 4. 權限與流程 ===
 
     window.applyUserPermissions = function() {
+        if (typeof window.isHardAdminUser === 'function') {
+            const currentId = window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '';
+            if (window.isHardAdminUser(currentId)) {
+                window.userRole = 'admin';
+                if (window.currentUser) {
+                    window.currentUser.role = 'admin';
+                    window.currentUser.networkId = window.currentUser.networkId || 'admin';
+                }
+            }
+        }
         window.hasAdminRights = (window.userRole === 'admin' || window.userRole === 'store');
         
         const selectors = {

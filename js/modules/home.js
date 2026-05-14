@@ -536,6 +536,40 @@ const HomeModule = (function() {
         window.goPage('my-act-detail', true);
     };
 
+    async function ensurePointOAFriendForActivity_() {
+        try {
+            const params = typeof window.readActmasterInitialParams === 'function'
+                ? window.readActmasterInitialParams()
+                : new URLSearchParams(window.location.search || '');
+            if (params.get('point_friend') === '1') return true;
+
+            if (typeof liff !== 'undefined' && liff.isLoggedIn() && typeof liff.getFriendship === 'function') {
+                const friendship = await liff.getFriendship().catch(() => null);
+                if (friendship && friendship.friendFlag) return true;
+                if (typeof liff.requestFriendship === 'function') {
+                    await liff.requestFriendship().catch(() => null);
+                    const latest = await liff.getFriendship().catch(() => null);
+                    if (latest && latest.friendFlag) return true;
+                }
+            }
+
+            const oaUrl = window.POINT_OA_URL || 'https://lin.ee/sDW7u4T';
+            if (typeof liff !== 'undefined' && typeof liff.openWindow === 'function') {
+                liff.openWindow({ url: oaUrl, external: true });
+            }
+            window.showToast('已開啟點數通官方帳號，加入後可回來查看活動紀錄');
+        } catch (e) {
+            console.warn('[activity] point friendship check skipped:', e);
+        }
+        return false;
+    }
+
+    async function goActivityRecordAfterJoin_(activityId) {
+        await ensurePointOAFriendForActivity_();
+        if (typeof window.loadMyActivities === 'function') await window.loadMyActivities();
+        window.goPage('my-activities');
+    }
+
     window.joinPublicActivity = async function(activityId, btn) {
         const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId) && canSeePublicActivity_(a));
         if (!activity) return window.showToast('活動已下架', true);
@@ -554,7 +588,8 @@ const HomeModule = (function() {
             }, true);
 
             if (res && !res.error) {
-                window.showToast(res.existed ? '您已報名過此活動' : '報名成功');
+                window.showToast(res.existed ? '您已報名過此活動，正在前往活動紀錄' : '報名成功，正在前往活動紀錄');
+                await goActivityRecordAfterJoin_(getPublicActivityId_(activity));
             } else {
                 throw new Error(res?.error || '報名失敗');
             }

@@ -29,6 +29,19 @@ function readActmasterInitialParams() {
     }
   }
 
+  const aliases = {
+    a: 'activityId',
+    r: 'ref',
+    n: 'net',
+    v: 'via',
+    c: 'claim',
+    s: 'shareCardId'
+  };
+  Object.keys(aliases).forEach(shortKey => {
+    const fullKey = aliases[shortKey];
+    if (!params.has(fullKey) && params.has(shortKey)) params.set(fullKey, params.get(shortKey));
+  });
+
   return params;
 }
 
