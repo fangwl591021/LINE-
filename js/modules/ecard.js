@@ -117,23 +117,50 @@ function cleanECardFlexUri(uri) {
   return '';
 }
 
+function toAbsoluteECardUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return '';
+  if (/^https:\/\//i.test(value)) return value;
+  if (/^\/\//.test(value)) return 'https:' + value;
+  if (/^(line\.me|lin\.ee|lihi\d?\.me)/i.test(value)) return 'https://' + value;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
+  try {
+    const path = window.location.pathname || '/LINE-/';
+    const basePath = path.endsWith('/') ? path : path.replace(/\/[^/]*$/, '/');
+    return new URL(value, window.location.origin + basePath).toString();
+  } catch (e) {
+    return value;
+  }
+}
+
+function cleanECardFlexImageUrl(url) {
+  const value = toAbsoluteECardUrl(url);
+  return /^https:\/\//i.test(value) ? value : '';
+}
+
+function cleanECardFlexHttpsUri(uri) {
+  const value = toAbsoluteECardUrl(uri);
+  return /^https:\/\//i.test(value) ? value : '';
+}
+
 function buildLocalECardFlexMessage(card, config, shareUrl) {
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
-  const imgUrl = (
+  const rawImgUrl = (
     layoutStyle === 'portrait' ? (config.imgUrlPortrait || config.imgUrl || card['名片圖檔']) :
     layoutStyle === 'square' ? (config.imgUrlSquare || config.imgUrl || card['名片圖檔']) :
     (config.imgUrl || config.imgUrlLandscape || card['名片圖檔'])
-  ) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+  );
+  const imgUrl = cleanECardFlexImageUrl(rawImgUrl) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   const aspectRatio = layoutStyle === 'portrait'
     ? (config.imgRatioPortrait || '2:3')
     : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
-  const badgeUrl = shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || '');
+  const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
   const shareActionUrl = appendECardShareMode(badgeUrl);
 
-  const buttons = (Array.isArray(config.buttons) ? config.buttons : [])
+  let buttons = (Array.isArray(config.buttons) ? config.buttons : [])
     .map(btn => ({
       label: String(btn?.l || '').trim(),
-      uri: cleanECardFlexUri(btn?.u),
+      uri: cleanECardFlexHttpsUri(btn?.u),
       color: btn?.c || '#06C755'
     }))
     .filter(btn => btn.label && btn.uri)
@@ -144,8 +171,18 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       height: 'sm',
       action: { type: 'uri', label: btn.label.substring(0, 40), uri: btn.uri }
     }));
+  if (badgeUrl) {
+    buttons.unshift({
+      type: 'button',
+      style: 'primary',
+      color: '#1D4ED8',
+      height: 'sm',
+      action: { type: 'uri', label: '\u67e5\u770b\u540d\u7247', uri: badgeUrl }
+    });
+  }
+  buttons = buttons.slice(0, 4);
 
-  return {
+  return JSON.parse(JSON.stringify({
     type: 'bubble',
     size: layoutStyle === 'portrait' ? 'giga' : 'mega',
     header: {
@@ -183,7 +220,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       ]
     },
     footer: buttons.length ? { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '10px', contents: buttons } : undefined
-  };
+  }));
 }
 
 function bindECardFieldAutoSync() {
@@ -434,15 +471,24 @@ window.shareECardToLine = async function(btnId) {
       } catch(e) {}
     }
 
-    if (fallbackUrl) {
-      await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
-    } else {
-      const flexMsg = buildLocalECardFlexMessage(window.currentCard, cfg, fallbackUrl);
-      if (flexMsg) {
-        routeECardFlexHeaderShareToPicker(flexMsg, fallbackUrl);
-        const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
-        if (shared === false) window.showToast('⚠️ 傳送失敗：找不到名片連結', true);
+    const flexMsg = buildLocalECardFlexMessage(window.currentCard, cfg, fallbackUrl);
+    if (flexMsg) {
+      routeECardFlexHeaderShareToPicker(flexMsg, fallbackUrl);
+      window.__lastECardShareMessages = [{
+        type: 'flex',
+        altText: '\u60a8\u6536\u5230\u4e00\u5f35\u6578\u4f4d\u540d\u7247',
+        contents: flexMsg
+      }];
+      window.getLastECardShareJson = function() {
+        return JSON.stringify(window.__lastECardShareMessages, null, 2);
+      };
+      console.log('[shareECardToLine] shareTargetPicker messages:', window.__lastECardShareMessages);
+      const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
+      if (shared === false && fallbackUrl) {
+        await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
       }
+    } else if (fallbackUrl) {
+      await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
     }
   } catch(e) {
     try {
