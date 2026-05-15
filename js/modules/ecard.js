@@ -568,6 +568,9 @@ window.shareECardToLine = async function(btnId) {
       window.getLastECardShareJson = function() {
         return JSON.stringify(window.__lastECardShareMessages, null, 2);
       };
+      window.getLastECardSimulatorJson = function() {
+        return JSON.stringify(flexMsg, null, 2);
+      };
       console.log('[shareECardToLine] shareTargetPicker messages:', window.__lastECardShareMessages);
       const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
       if (shared === false && fallbackUrl) {
