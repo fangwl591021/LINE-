@@ -14,6 +14,14 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+#btn-share-line-ecard {
+  order: 1;
+}
+
+#btn-ecard-save {
+  order: 2;
+}
+
 @media (max-width: 420px) {
   #header-site-name {
     font-size: 18px;

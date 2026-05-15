@@ -43,6 +43,19 @@
     return document.querySelector(selector);
   }
 
+  function placeMyECardSectionAfterSocials() {
+    var socials = document.getElementById('details-user-socials');
+    var myCard = document.getElementById('details-my-ecard');
+    if (!socials || !myCard || socials.nextElementSibling === myCard) return;
+    socials.insertAdjacentElement('afterend', myCard);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', placeMyECardSectionAfterSocials);
+  } else {
+    placeMyECardSectionAfterSocials();
+  }
+
   function $all(selector) {
     return Array.prototype.slice.call(document.querySelectorAll(selector));
   }
