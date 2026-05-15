@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OCR 名片掃描實驗室</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #12223a;
+      --muted: #64748b;
+      --line: #dbe4f0;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --soft: #eef4fb;
+      --brand: #2563eb;
+      --ok: #06c755;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, "Noto Sans TC", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(26px, 4vw, 38px);
+      letter-spacing: 0;
+      line-height: 1.15;
+    }
+
+    .sub {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .back {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 14px;
+      padding: 11px 16px;
+      text-decoration: none;
+      font-weight: 800;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      white-space: nowrap;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+    }
+
+    .panel-head {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-body { padding: 20px; }
+
+    .dropzone {
+      border: 2px dashed #b8c8dd;
+      background: var(--soft);
+      border-radius: 18px;
+      min-height: 180px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 24px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .dropzone:hover {
+      border-color: var(--brand);
+      background: #eaf2ff;
+    }
+
+    .dropzone .material-symbols-outlined {
+      font-size: 42px;
+      color: var(--brand);
+      margin-bottom: 10px;
+    }
+
+    .dropzone strong {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 6px;
+    }
+
+    .dropzone span {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .controls {
+      display: grid;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      color: #415371;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    input[type="range"], select {
+      width: 100%;
+    }
+
+    select {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 12px;
+      padding: 12px;
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 15px;
+      padding: 14px 18px;
+      font-weight: 900;
+      font-size: 15px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+
+    .btn:active { transform: scale(0.98); }
+    .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+    .btn-primary { background: var(--brand); color: #fff; }
+    .btn-green { background: var(--ok); color: #fff; }
+    .btn-soft { background: #e8eef7; color: var(--ink); }
+
+    .button-row {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .preview-card {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      min-height: 260px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preview-title {
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 900;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .preview-title small {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .image-stage {
+      flex: 1;
+      min-height: 280px;
+      display: grid;
+      place-items: center;
+      background: #eaf0f7;
+      padding: 12px;
+    }
+
+    .image-stage img {
+      max-width: 100%;
+      max-height: 520px;
+      object-fit: contain;
+      display: block;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+    }
+
+    .result-box {
+      margin-top: 18px;
+      background: #0f172a;
+      color: #dbeafe;
+      border-radius: 16px;
+      padding: 16px;
+      overflow: auto;
+      max-height: 360px;
+      font-size: 13px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
+
+    .note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    #toast-container {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 860px) {
+      .page { width: min(100% - 24px, 720px); padding-top: 18px; }
+      .topbar { align-items: flex-start; }
+      .grid, .preview-grid { grid-template-columns: 1fr; }
+      .back { padding: 10px 12px; }
+      .image-stage { min-height: 220px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="toast-container"></div>
+  <main class="page">
+    <div class="topbar">
+      <div>
+        <h1>OCR 名片掃描實驗室</h1>
+        <p class="sub">旁路測試，不會新增名片、不會儲存資料。確認效果穩定後，才接回正式流程。</p>
+      </div>
+      <a class="back" href="./">
+        <span class="material-symbols-outlined">arrow_back</span>
+        回首頁
+      </a>
+    </div>
+
+    <section class="grid">
+      <aside class="panel">
+        <div class="panel-head">
+          <span class="material-symbols-outlined">document_scanner</span>
+          掃描設定
+        </div>
+        <div class="panel-body">
+          <label class="dropzone" for="ocr-lab-file">
+            <span class="material-symbols-outlined">add_photo_alternate</span>
+            <strong>選擇名片照片</strong>
+            <span>建議用拍照原圖測試，包含歪斜、陰影、反光都可以。</span>
+          </label>
+          <input id="ocr-lab-file" class="hidden" type="file" accept="image/*">
+
+          <div class="controls">
+            <label>
+              修正模式
+              <select id="ocr-lab-mode">
+                <option value="balanced">自然清晰</option>
+                <option value="text">文字優先</option>
+              </select>
+            </label>
+
+            <label>
+              對比強度 <span id="ocr-lab-contrast-value">115%</span>
+              <input id="ocr-lab-contrast" type="range" min="100" max="145" value="115">
+            </label>
+
+            <label>
+              最大邊長
+              <select id="ocr-lab-max-side">
+                <option value="1400">1400 px</option>
+                <option value="1800" selected>1800 px</option>
+                <option value="2200">2200 px</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button id="ocr-lab-run" class="btn btn-primary" type="button" disabled>
+              <span class="material-symbols-outlined">auto_fix_high</span>
+              重新產生修正版
+            </button>
+            <button id="ocr-lab-recognize" class="btn btn-green" type="button" disabled>
+              <span class="material-symbols-outlined">psychology</span>
+              用修正版測 OCR
+            </button>
+            <button id="ocr-lab-login" class="btn btn-soft" type="button">
+              <span class="material-symbols-outlined">login</span>
+              LIFF 登入
+            </button>
+          </div>
+
+          <p class="note">這頁只送圖片到 OCR 測試，不會呼叫 saveCard。正式名片上傳目前不受影響。</p>
+        </div>
+      </aside>
+
+      <section>
+        <div class="preview-grid">
+          <div class="preview-card">
+            <div class="preview-title">
+              原圖
+              <small id="ocr-lab-original-info">尚未選圖</small>
+            </div>
+            <div class="image-stage">
+              <img id="ocr-lab-original" alt="原圖預覽" class="hidden">
+            </div>
+          </div>
+
+          <div class="preview-card">
+            <div class="preview-title">
+              OCR 修正版
+              <small id="ocr-lab-enhanced-info">等待產生</small>
+            </div>
+            <div class="image-stage">
+              <img id="ocr-lab-enhanced" alt="修正版預覽" class="hidden">
+            </div>
+          </div>
+        </div>
+
+        <pre id="ocr-lab-result" class="result-box">OCR 結果會顯示在這裡。</pre>
+      </section>
+    </section>
+  </main>
+
+  <script src="js/config.js?v=9.4"></script>
+  <script src="js/core.js?v=7.17"></script>
+  <script src="js/modules/ocr-lab.js?v=0.1"></script>
+</body>
+</html>
