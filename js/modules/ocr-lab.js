@@ -213,7 +213,8 @@
       website: readFirst(card, ['公司網址', '網址', 'website', 'url']),
       address: readFirst(card, ['公司地址', '地址', 'address']),
       lineId: readFirst(card, ['LINE ID', 'lineId', 'line_id']),
-      service: readFirst(card, ['服務項目', '服務說明', '服務項目說明', 'desc', 'description']) || readFirst(settings, ['desc', 'description'])
+      service: readFirst(card, ['服務項目', '服務說明', '服務項目說明', 'desc', 'description']) || readFirst(settings, ['desc', 'description']),
+      rawText: readFirst(card, ['原始文字', '辨識文字', 'rawText', 'ocrText', 'text'])
     };
   }
 
@@ -277,11 +278,9 @@
       .slice(0, 5);
   }
 
-  function renderRedrawnCard() {
-    if (!state.ocrCard) return;
+  function setupRedrawCanvas() {
     var canvas = $('ocr-lab-redraw-canvas');
-    if (!canvas) return;
-
+    if (!canvas) return null;
     var width = 1050;
     var height = 600;
     var ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -293,6 +292,112 @@
     var ctx = canvas.getContext('2d');
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, width, height);
+    return { canvas: canvas, ctx: ctx, width: width, height: height };
+  }
+
+  function getFaithfulRows(card) {
+    return [
+      ['手機', card.mobile],
+      ['電話', card.phone],
+      ['Email', card.email],
+      ['地址', card.address],
+      ['統編', card.taxId],
+      ['LINE', card.lineId],
+      ['網站', card.website]
+    ].filter(function(row) { return row[1]; });
+  }
+
+  function renderFaithfulRedrawnCard() {
+    var surface = setupRedrawCanvas();
+    if (!surface) return;
+    var canvas = surface.canvas;
+    var ctx = surface.ctx;
+    var width = surface.width;
+    var height = surface.height;
+    var card = state.ocrCard;
+    var ink = '#121a2b';
+    var muted = '#526174';
+    var accent = '#0f2f5f';
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = '#d8dee8';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(18, 18, width - 36, height - 36);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(48, 48, 300, 180);
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.strokeRect(48, 48, 300, 180);
+
+    if (card.company) {
+      ctx.font = '900 42px "Noto Sans TC", sans-serif';
+      ctx.fillStyle = accent;
+      drawWrappedText(ctx, card.company, 72, 108, 245, 48, 2);
+    }
+
+    var serviceLines = String(card.service || '')
+      .split(/\n|、|\/|，|,/)
+      .map(function(item) { return item.trim(); })
+      .filter(Boolean)
+      .slice(0, 3);
+    ctx.font = '700 23px "Noto Sans TC", sans-serif';
+    ctx.fillStyle = muted;
+    serviceLines.forEach(function(line, index) {
+      drawWrappedText(ctx, line, 72, 252 + index * 34, 360, 30, 1);
+    });
+
+    if (card.name) {
+      ctx.font = '900 52px "Noto Sans TC", sans-serif';
+      ctx.fillStyle = ink;
+      drawWrappedText(ctx, card.name, 430, 112, 420, 58, 1);
+    }
+    ctx.font = '600 25px Inter, "Noto Sans TC", sans-serif';
+    ctx.fillStyle = muted;
+    var role = [card.title, card.department].filter(Boolean).join(' / ');
+    if (card.englishName) ctx.fillText(card.englishName, 434, 158);
+    if (role) drawWrappedText(ctx, role, 434, card.englishName ? 196 : 166, 420, 32, 2);
+
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(424, 240);
+    ctx.lineTo(950, 240);
+    ctx.stroke();
+
+    var rows = getFaithfulRows(card);
+    var rowY = 294;
+    rows.slice(0, 6).forEach(function(row) {
+      ctx.font = '800 22px "Noto Sans TC", sans-serif';
+      ctx.fillStyle = accent;
+      ctx.fillText(row[0], 430, rowY);
+      ctx.font = '600 24px Inter, "Noto Sans TC", sans-serif';
+      ctx.fillStyle = ink;
+      rowY = drawWrappedText(ctx, row[1], 510, rowY, 430, 31, row[0] === '地址' ? 2 : 1) + 14;
+    });
+
+    if (card.company) {
+      ctx.fillStyle = accent;
+      ctx.fillRect(0, height - 72, width, 72);
+      ctx.font = '900 30px "Noto Sans TC", sans-serif';
+      ctx.fillStyle = '#ffffff';
+      drawWrappedText(ctx, card.company, 70, height - 26, 760, 34, 1);
+    }
+
+    state.redrawDataUrl = canvas.toDataURL('image/png');
+    var info = $('ocr-lab-redraw-info');
+    if (info) info.textContent = width + ' x ' + height + ' / 忠於原版';
+    var download = $('ocr-lab-download-redraw');
+    if (download) download.disabled = false;
+  }
+
+  function renderFreeRedrawnCard() {
+    var surface = setupRedrawCanvas();
+    if (!surface) return;
+    var canvas = surface.canvas;
+    var ctx = surface.ctx;
+    var width = surface.width;
+    var height = surface.height;
 
     var card = state.ocrCard;
     var accent = '#0f766e';
@@ -372,9 +477,19 @@
 
     state.redrawDataUrl = canvas.toDataURL('image/png');
     var info = $('ocr-lab-redraw-info');
-    if (info) info.textContent = width + ' x ' + height + ' / ' + bytesToText(estimateDataUrlBytes(state.redrawDataUrl));
+    if (info) info.textContent = width + ' x ' + height + ' / 自由生成';
     var download = $('ocr-lab-download-redraw');
     if (download) download.disabled = false;
+  }
+
+  function renderRedrawnCard() {
+    if (!state.ocrCard) return;
+    var mode = $('ocr-lab-redraw-mode') ? $('ocr-lab-redraw-mode').value : 'faithful';
+    if (mode === 'free') {
+      renderFreeRedrawnCard();
+      return;
+    }
+    renderFaithfulRedrawnCard();
   }
 
   async function renderEnhanced() {
@@ -475,6 +590,9 @@
     });
     $('ocr-lab-contrast').addEventListener('change', function() { if (state.sourceImage) renderEnhanced(); });
     $('ocr-lab-recognize').addEventListener('click', recognizeEnhanced);
+    $('ocr-lab-redraw-mode').addEventListener('change', function() {
+      if (state.ocrCard) renderRedrawnCard();
+    });
     $('ocr-lab-redraw-button').addEventListener('click', function() {
       if (!state.ocrCard) {
         window.showToast && window.showToast('請先完成 OCR 解析', true);
