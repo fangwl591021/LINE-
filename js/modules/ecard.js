@@ -143,7 +143,7 @@ function cleanECardFlexHttpsUri(uri) {
   return /^https:\/\//i.test(value) ? value : '';
 }
 
-function buildLocalECardFlexMessage(card, config, shareUrl) {
+function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
   const rawImgUrl = (
     layoutStyle === 'portrait' ? (config.imgUrlPortrait || config.imgUrl || card['名片圖檔']) :
@@ -156,7 +156,6 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
     : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
   const shareActionUrl = appendECardShareMode(badgeUrl);
-
   let buttons = (Array.isArray(config.buttons) ? config.buttons : [])
     .map(btn => ({
       label: String(btn?.l || '').trim(),
@@ -221,6 +220,93 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
     },
     footer: buttons.length ? { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '10px', contents: buttons } : undefined
   }));
+}
+
+function buildLocalECardFlexMessage(card, config, shareUrl) {
+  const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
+  const rawImgUrl = layoutStyle === 'portrait'
+    ? (config.imgUrlPortrait || config.imgUrl || card['名片圖檔'])
+    : (layoutStyle === 'square'
+      ? (config.imgUrlSquare || config.imgUrl || card['名片圖檔'])
+      : (config.imgUrl || config.imgUrlLandscape || card['名片圖檔']));
+  const imgUrl = cleanECardFlexImageUrl(rawImgUrl) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+  const aspectRatio = layoutStyle === 'portrait'
+    ? (config.imgRatioPortrait || '2:3')
+    : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
+  const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
+  const bodyText = String(config.desc || card['描述'] || card['服務項目'] || ' ').trim() || ' ';
+  let buttons = (Array.isArray(config.buttons) ? config.buttons : [])
+    .map(btn => ({
+      label: String(btn?.l || '').trim(),
+      uri: cleanECardFlexUri(btn?.u),
+      color: /^#[0-9a-f]{6}$/i.test(String(btn?.c || '')) ? btn.c : '#06C755'
+    }))
+    .filter(btn => btn.label && btn.uri)
+    .map(btn => ({
+      type: 'button',
+      style: 'primary',
+      color: btn.color,
+      height: 'sm',
+      action: { type: 'uri', label: btn.label.substring(0, 40), uri: btn.uri }
+    }));
+
+  if (badgeUrl) {
+    buttons.unshift({
+      type: 'button',
+      style: 'primary',
+      color: '#1D4ED8',
+      height: 'sm',
+      action: { type: 'uri', label: '查看名片', uri: badgeUrl }
+    });
+  }
+  buttons = buttons.slice(0, 4);
+
+  const bubble = {
+    type: 'bubble',
+    size: layoutStyle === 'portrait' ? 'giga' : 'mega',
+    hero: {
+      type: 'image',
+      url: imgUrl,
+      size: 'full',
+      aspectRatio,
+      aspectMode: 'cover'
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '15px',
+      contents: [
+        {
+          type: 'text',
+          text: String(config.title || card['姓名'] || '數位名片').trim() || '數位名片',
+          weight: 'bold',
+          size: 'xl',
+          align: 'center',
+          wrap: true
+        },
+        {
+          type: 'text',
+          text: bodyText,
+          size: 'sm',
+          margin: 'md',
+          color: /^#[0-9a-f]{6}$/i.test(String(config.descColor || '')) ? config.descColor : '#666666',
+          wrap: true,
+          align: ['start', 'end', 'center'].includes(config.descAlign) ? config.descAlign : 'center'
+        }
+      ]
+    }
+  };
+  if (badgeUrl) bubble.hero.action = { type: 'uri', uri: badgeUrl };
+  if (buttons.length) {
+    bubble.footer = {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '10px',
+      contents: buttons
+    };
+  }
+  return bubble;
 }
 
 function bindECardFieldAutoSync() {
