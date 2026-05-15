@@ -170,15 +170,6 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
       height: 'sm',
       action: { type: 'uri', label: btn.label.substring(0, 40), uri: btn.uri }
     }));
-  if (badgeUrl) {
-    buttons.unshift({
-      type: 'button',
-      style: 'primary',
-      color: '#1D4ED8',
-      height: 'sm',
-      action: { type: 'uri', label: '\u67e5\u770b\u540d\u7247', uri: badgeUrl }
-    });
-  }
   buttons = buttons.slice(0, 4);
 
   return JSON.parse(JSON.stringify({
@@ -250,20 +241,30 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       action: { type: 'uri', label: btn.label.substring(0, 40), uri: btn.uri }
     }));
 
-  if (badgeUrl) {
-    buttons.unshift({
-      type: 'button',
-      style: 'primary',
-      color: '#1D4ED8',
-      height: 'sm',
-      action: { type: 'uri', label: '查看名片', uri: badgeUrl }
-    });
-  }
   buttons = buttons.slice(0, 4);
 
   const bubble = {
     type: 'bubble',
     size: layoutStyle === 'portrait' ? 'giga' : 'mega',
+    header: badgeUrl ? {
+      type: 'box',
+      layout: 'horizontal',
+      justifyContent: 'flex-end',
+      paddingAll: '8px',
+      contents: [
+        {
+          type: 'button',
+          style: 'primary',
+          color: '#EF4444',
+          height: 'sm',
+          action: {
+            type: 'uri',
+            label: '分享名片',
+            uri: appendECardShareMode(badgeUrl)
+          }
+        }
+      ]
+    } : undefined,
     hero: {
       type: 'image',
       url: imgUrl,
