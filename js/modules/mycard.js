@@ -336,8 +336,8 @@
     }).join('');
 
     var imageClass = layout === 'portrait'
-      ? 'w-full max-h-[520px] object-contain bg-slate-50 rounded-2xl'
-      : 'w-full object-cover bg-slate-50 rounded-2xl';
+      ? 'w-full max-h-[520px] object-contain block'
+      : 'w-full object-cover block';
     var imageStyle = layout === 'portrait'
       ? ''
       : 'aspect-ratio:' + ratio + ';';
