@@ -275,7 +275,11 @@
     if (!flexMsg || !actionUrl) return flexMsg;
     try {
       if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
-        flexMsg.header.contents[0].action = { type: 'uri', uri: actionUrl };
+        var headerItem = flexMsg.header.contents[0];
+        var action = headerItem.action || {};
+        headerItem.action = headerItem.type === 'button'
+          ? { type: 'uri', label: action.label || '分享名片', uri: actionUrl }
+          : { type: 'uri', uri: actionUrl };
       }
     } catch (e) {
       console.warn('[routeFlexHeaderShareToPicker] failed:', e);

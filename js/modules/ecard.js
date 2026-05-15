@@ -634,7 +634,11 @@ function routeECardFlexHeaderShareToPicker(flexMsg, shareUrl) {
   if (!flexMsg || !actionUrl) return flexMsg;
   try {
     if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
-      flexMsg.header.contents[0].action = { type: "uri", uri: actionUrl };
+      const headerItem = flexMsg.header.contents[0];
+      const action = headerItem.action || {};
+      headerItem.action = headerItem.type === "button"
+        ? { type: "uri", label: action.label || "分享名片", uri: actionUrl }
+        : { type: "uri", uri: actionUrl };
     }
   } catch (e) {
     console.warn("[routeECardFlexHeaderShareToPicker] failed:", e);
