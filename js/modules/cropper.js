@@ -354,110 +354,6 @@ function hideCardOcrProgress(doneMessage) {
   }, doneMessage ? 500 : 0);
 }
 
-function compressCanvasForOcr(canvas) {
-  if (!canvas) return '';
-  let quality = 0.82;
-  let base64Image = canvas.toDataURL('image/jpeg', quality);
-
-  while (base64Image.length > 660000 && quality > 0.35) {
-    quality -= 0.12;
-    base64Image = canvas.toDataURL('image/jpeg', quality);
-  }
-
-  return base64Image;
-}
-
-function enhanceCanvasForOcr(sourceCanvas) {
-  if (!sourceCanvas) return null;
-
-  const maxSide = 1400;
-  const scale = Math.min(1, maxSide / Math.max(sourceCanvas.width, sourceCanvas.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(sourceCanvas.width * scale));
-  canvas.height = Math.max(1, Math.round(sourceCanvas.height * scale));
-
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.filter = 'brightness(1.04) contrast(1.14) saturate(0.92)';
-  ctx.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
-  ctx.filter = 'none';
-
-  try {
-    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = image.data;
-    const histogram = new Uint32Array(256);
-
-    for (let i = 0; i < data.length; i += 4) {
-      const luma = Math.max(0, Math.min(255, Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2])));
-      histogram[luma]++;
-    }
-
-    const total = data.length / 4;
-    const lowTarget = total * 0.02;
-    const highTarget = total * 0.985;
-    let acc = 0;
-    let low = 0;
-    let high = 255;
-
-    for (let i = 0; i < 256; i++) {
-      acc += histogram[i];
-      if (acc >= lowTarget) {
-        low = i;
-        break;
-      }
-    }
-
-    acc = 0;
-    for (let i = 0; i < 256; i++) {
-      acc += histogram[i];
-      if (acc >= highTarget) {
-        high = i;
-        break;
-      }
-    }
-
-    const range = Math.max(40, high - low);
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-      const leveled = Math.max(0, Math.min(255, ((luma - low) / range) * 255));
-      const mix = 0.72;
-      data[i] = Math.max(0, Math.min(255, r * (1 - mix) + leveled * mix));
-      data[i + 1] = Math.max(0, Math.min(255, g * (1 - mix) + leveled * mix));
-      data[i + 2] = Math.max(0, Math.min(255, b * (1 - mix) + leveled * mix));
-    }
-
-    ctx.putImageData(image, 0, 0);
-  } catch (err) {
-    console.warn('[enhanceCanvasForOcr] pixel enhancement skipped:', err);
-  }
-
-  return canvas;
-}
-
-function getCropperOcrCanvas() {
-  if (!cropperInstance) return null;
-  return cropperInstance.getCroppedCanvas({
-    maxWidth: 1400,
-    maxHeight: 1400,
-    fillColor: '#ffffff',
-    imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high'
-  });
-}
-
-async function prepareCardImageForOcr(fallbackBase64) {
-  const croppedCanvas = getCropperOcrCanvas();
-  if (!croppedCanvas) return fallbackBase64 || '';
-
-  await new Promise(resolve => requestAnimationFrame(resolve));
-  const enhancedCanvas = enhanceCanvasForOcr(croppedCanvas) || croppedCanvas;
-  return compressCanvasForOcr(enhancedCanvas);
-}
-
 window.openCropper = function(input) {
   const file = input.files[0];
   if (!file) return;
@@ -507,9 +403,22 @@ window.confirmCrop = async function() {
   btn.disabled = true;
 
   let base64Image = window.lastCardUploadImage || '';
-  showCardOcrProgress('正在修正名片影像');
-  setCardOcrProgressStage(12, '正在拉正亮度、對比與文字清晰度...');
-  base64Image = await prepareCardImageForOcr(base64Image);
+
+  if (cropperInstance) {
+    let size = 1000;
+    let quality = 0.8;
+    base64Image = cropperInstance.getCroppedCanvas({
+      maxWidth: size,
+      maxHeight: size,
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high'
+    }).toDataURL('image/jpeg', quality);
+
+    while (base64Image.length > 660000 && quality > 0.3) {
+      quality -= 0.15;
+      base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+    }
+  }
 
   if (!base64Image) {
     btn.innerHTML = '確認裁切';
@@ -522,7 +431,7 @@ window.confirmCrop = async function() {
   window.showToast('AI 正在辨識客戶名片...');
 
   try {
-    setCardOcrProgressStage(24, '正在上傳修正版圖片並送入 OCR...');
+    setCardOcrProgressStage(18, '正在上傳照片並送入 OCR...');
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
     console.log('[confirmCrop] OCR result:', ocrRes);
@@ -613,9 +522,22 @@ window.confirmMyCardCrop = async function() {
   btn.disabled = true;
 
   let base64Image = window.lastMyCardUploadImage || '';
-  showCardOcrProgress('正在修正名片影像');
-  setCardOcrProgressStage(12, '正在拉正亮度、對比與文字清晰度...');
-  base64Image = await prepareCardImageForOcr(base64Image);
+
+  if (cropperInstance) {
+    let size = 1000;
+    let quality = 0.8;
+    base64Image = cropperInstance.getCroppedCanvas({
+      maxWidth: size,
+      maxHeight: size,
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high'
+    }).toDataURL('image/jpeg', quality);
+
+    while (base64Image.length > 660000 && quality > 0.3) {
+      quality -= 0.15;
+      base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+    }
+  }
 
   if (!base64Image) {
     btn.innerHTML = '確認裁切';
@@ -624,10 +546,11 @@ window.confirmMyCardCrop = async function() {
   }
 
   window.cancelCrop();
+  showCardOcrProgress('專屬名片建立中');
   window.showToast('AI 正在辨識專屬名片...');
 
   try {
-    setCardOcrProgressStage(24, '正在上傳修正版圖片並送入 OCR...');
+    setCardOcrProgressStage(18, '正在上傳照片並送入 OCR...');
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
     console.log('[confirmMyCardCrop] OCR result:', ocrRes);
