@@ -79,14 +79,26 @@ window.POINT_OA_URL = window.POINT_OA_URL || POINT_OA_URL;
 window.HARD_ADMIN_ACCOUNTS = window.HARD_ADMIN_ACCOUNTS || HARD_ADMIN_ACCOUNTS;
 window.HARD_ADMIN_IDS = window.HARD_ADMIN_IDS || HARD_ADMIN_IDS;
 window.isHardAdminUser = function(userId, profile = {}) {
-  const uid = String(userId || '').trim();
+  const ids = [
+    userId,
+    profile.userId,
+    profile.lineId,
+    profile.legacyLineId,
+    profile.pointLineId,
+    profile.legacy_line_id,
+    profile.point_line_id,
+    profile.identityLink && profile.identityLink.oldLineId,
+    profile.identityLink && profile.identityLink.newLineId
+  ].map(value => String(value || '').trim()).filter(Boolean);
   const name = String(profile.name || profile.displayName || profile.userName || '').trim();
   const phone = String(profile.phone || profile.mobile || '').replace(/\D/g, '');
-  const account = (window.HARD_ADMIN_ACCOUNTS || []).find(item => (item.ids || []).includes(uid));
-  if (!account) return false;
-  if (!name && !phone) return false;
-  if (phone && (account.phones || []).includes(phone)) return true;
-  return !!name && (account.names || []).some(allowed => name.includes(allowed));
+  return (window.HARD_ADMIN_ACCOUNTS || []).some(account => {
+    const idMatch = ids.some(id => (account.ids || []).includes(id));
+    const phoneMatch = !!phone && (account.phones || []).includes(phone);
+    const nameMatch = !!name && (account.names || []).some(allowed => name.includes(allowed));
+    if (idMatch) return phoneMatch || nameMatch;
+    return phoneMatch && nameMatch;
+  });
 };
 window.WORKER_URL = WORKER_URL;
 window.Config = {

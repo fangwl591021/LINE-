@@ -95,14 +95,26 @@ const SecurityModule = {
   },
 
   isHardAdmin(userId, user = {}) {
-    const uid = this.text(userId || user.line_id || user.row_id);
-    const account = this.hardAdminAccounts.find(item => item.ids.includes(uid));
-    if (!account) return false;
+    const ids = [
+      userId,
+      user.line_id,
+      user.row_id,
+      user.legacy_line_id,
+      user.point_line_id,
+      user.legacyLineId,
+      user.pointLineId,
+      user.identityLink && user.identityLink.oldLineId,
+      user.identityLink && user.identityLink.newLineId
+    ].map(value => this.text(value)).filter(Boolean);
     const name = this.text(user.name || user.displayName || user.user_name);
     const phone = this.normalizePhone(user.phone || user.mobile);
-    if (!name && !phone) return false;
-    if (phone && account.phones.includes(phone)) return true;
-    return !!name && account.names.some(allowed => name.includes(allowed));
+    return this.hardAdminAccounts.some(account => {
+      const idMatch = ids.some(id => account.ids.includes(id));
+      const phoneMatch = !!phone && account.phones.includes(phone);
+      const nameMatch = !!name && account.names.some(allowed => name.includes(allowed));
+      if (idMatch) return phoneMatch || nameMatch;
+      return phoneMatch && nameMatch;
+    });
   },
 
   sanitizeRole(userId, role, user = {}) {
@@ -1168,7 +1180,11 @@ const D1BackfillModule = {
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(line_id) DO UPDATE SET
         name=excluded.name,industry=excluded.industry,phone=excluded.phone,birthday=excluded.birthday,socials=excluded.socials,
-        role=CASE WHEN users.role = 'store' AND excluded.role = 'user' THEN users.role ELSE excluded.role END,
+        role=CASE
+          WHEN users.role = 'admin' OR excluded.role = 'admin' THEN 'admin'
+          WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store'
+          ELSE excluded.role
+        END,
         store_id=excluded.store_id,referrer_id=excluded.referrer_id,network_id=excluded.network_id,
         tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
     `).bind(user.user_id,user.line_id,user.name,user.industry,user.phone,user.birthday,user.socials_json,user.role,user.store_id,user.referrer_id,user.network_id,user.telegram_token,user.telegram_chat_id).run();
@@ -1476,10 +1492,89 @@ const D1ReadModule = {
     };
   },
 
-  async upsertBoundUserFromCard(env, card) {
+  cardMatchesHardAdmin(card, account) {
+    if (!card || !account) return false;
+    const name = this.text(card.name);
+    const phone = SecurityModule.normalizePhone(card.mobile || card.office_phone);
+    const phoneMatch = !!phone && account.phones.includes(phone);
+    const nameMatch = !!name && account.names.some(allowed => name.includes(allowed));
+    return phoneMatch && nameMatch;
+  },
+
+  hardAdminAccountFromIdentity(userId, link) {
+    const ids = [
+      userId,
+      link && link.old_line_id,
+      link && link.new_line_id
+    ].map(value => this.text(value)).filter(Boolean);
+    return SecurityModule.hardAdminAccounts.find(account => ids.some(id => account.ids.includes(id))) || null;
+  },
+
+  async findBestBoundCard(env, userId, identity = {}) {
+    const id = this.text(userId);
+    const link = identity && identity.link;
+    const ids = [];
+    const addId = value => {
+      const next = this.text(value);
+      if (next && !ids.includes(next)) ids.push(next);
+    };
+    addId(id);
+    addId(link && link.new_line_id);
+    addId(link && link.old_line_id);
+    if (!ids.length) return null;
+
+    const placeholders = ids.map(() => '?').join(',');
+    const cards = await this.all(env, `
+      SELECT * FROM card_contacts
+      WHERE line_id IN (${placeholders}) OR creator_id IN (${placeholders})
+      ORDER BY row_id DESC
+      LIMIT 50
+    `, [...ids, ...ids]).catch(() => []);
+
+    const account = this.hardAdminAccountFromIdentity(id, link);
+    if (account) {
+      const ownCard = cards.find(card => this.cardMatchesHardAdmin(card, account));
+      if (ownCard) return ownCard;
+    }
+    return cards.find(card => this.text(card.line_id) === id) || cards[0] || null;
+  },
+
+  async upsertBoundUserFromCard(env, card, options = {}) {
     const user = this.userFromCard(card);
     if (!user) return null;
+    if (options.userId) {
+      user.user_id = this.text(options.userId);
+      user.line_id = this.text(options.userId);
+    }
+    if (options.role) user.role = this.text(options.role, user.role);
+    if (options.networkId) user.network_id = this.text(options.networkId, user.network_id);
     await D1BackfillModule.upsertUser(env, user);
+    if (options.legacyLineId || options.pointLineId || options.identitySource || options.role) {
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE users
+        SET role = CASE
+              WHEN ? = 'admin' OR role = 'admin' THEN 'admin'
+              WHEN ? = 'store' OR role = 'store' THEN 'store'
+              ELSE role
+            END,
+            legacy_line_id = CASE WHEN ? <> '' THEN ? ELSE legacy_line_id END,
+            point_line_id = CASE WHEN ? <> '' THEN ? ELSE point_line_id END,
+            identity_source = CASE WHEN ? <> '' THEN ? ELSE identity_source END,
+            migrated_at = CASE WHEN ? <> '' THEN CURRENT_TIMESTAMP ELSE migrated_at END
+        WHERE line_id = ? OR row_id = ?
+      `).bind(
+        this.text(options.role),
+        this.text(options.role),
+        this.text(options.legacyLineId), this.text(options.legacyLineId),
+        this.text(options.pointLineId), this.text(options.pointLineId),
+        this.text(options.identitySource), this.text(options.identitySource),
+        this.text(options.identitySource),
+        user.line_id,
+        user.user_id
+      ).run().catch(e => console.error('bound user identity update skipped', e));
+    }
+    const saved = await this.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [user.line_id, user.user_id]).catch(() => null);
+    if (saved) return this.userRow(saved, options.source || 'bound_card');
     return this.userRow({
       row_id: user.user_id,
       line_id: user.line_id,
@@ -1489,7 +1584,7 @@ const D1ReadModule = {
       birthday: user.birthday,
       role: user.role,
       network_id: user.network_id
-    }, 'bound_card');
+    }, options.source || 'bound_card');
   },
 
   async checkUser(payload, env) {
@@ -1517,9 +1612,19 @@ const D1ReadModule = {
       return { success: true, data: { isRegistered: true, info: profile, source: identity.link ? 'identity_link' : 'd1_user' } };
     }
 
-    const card = await this.first(env, 'SELECT * FROM card_contacts WHERE line_id = ? LIMIT 1', [userId]);
+    const card = await this.findBestBoundCard(env, userId, identity);
     if (card) {
-      const profile = await this.upsertBoundUserFromCard(env, card);
+      const account = this.hardAdminAccountFromIdentity(userId, identity.link);
+      const isLinkedHardAdmin = !!(account && this.cardMatchesHardAdmin(card, account));
+      const profile = await this.upsertBoundUserFromCard(env, card, {
+        userId,
+        role: isLinkedHardAdmin ? 'admin' : 'user',
+        networkId: isLinkedHardAdmin ? 'admin' : this.text(card.network_id, 'admin'),
+        legacyLineId: identity.link && identity.link.old_line_id,
+        pointLineId: identity.link && identity.link.new_line_id,
+        identitySource: identity.link ? 'identity_bound_card' : '',
+        source: isLinkedHardAdmin ? 'hard_admin_bound_card' : 'bound_card'
+      });
       if (profile && env.ACTMASTER_KV) {
         await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(profile), { expirationTtl: 600 });
       }
@@ -1933,7 +2038,11 @@ const D1WriteModule = {
       ON CONFLICT(line_id) DO UPDATE SET
         name=excluded.name,industry=excluded.industry,gender=excluded.gender,phone=excluded.phone,birthday=excluded.birthday,
         region=excluded.region,address=excluded.address,socials=excluded.socials,
-        role=CASE WHEN users.role = 'store' AND excluded.role = 'user' THEN users.role ELSE excluded.role END,
+        role=CASE
+          WHEN users.role = 'admin' OR excluded.role = 'admin' THEN 'admin'
+          WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store'
+          ELSE excluded.role
+        END,
         store_id=excluded.store_id,
         referrer_id=excluded.referrer_id,network_id=excluded.network_id,tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
     `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id).run();
@@ -2219,7 +2328,9 @@ const D1WriteModule = {
       socials: this.firstText(newUser && newUser.socials, oldUser && oldUser.socials),
       role: SecurityModule.sanitizeRole(newLineId, this.bestRole(newUser && newUser.role, oldUser && oldUser.role), {
         name: this.firstText(newUser && newUser.name, oldUser && oldUser.name, newCard && newCard.name, oldCard && oldCard.name),
-        phone: this.firstText(newUser && newUser.phone, oldUser && oldUser.phone, newCard && (newCard.mobile || newCard.office_phone), oldCard && (oldCard.mobile || oldCard.office_phone))
+        phone: this.firstText(newUser && newUser.phone, oldUser && oldUser.phone, newCard && (newCard.mobile || newCard.office_phone), oldCard && (oldCard.mobile || oldCard.office_phone)),
+        legacy_line_id: oldLineId,
+        point_line_id: newLineId
       }),
       store_id: this.firstText(newUser && newUser.store_id, oldUser && oldUser.store_id),
       referrer_id: this.firstText(newUser && newUser.referrer_id, oldUser && oldUser.referrer_id),
@@ -2240,7 +2351,11 @@ const D1WriteModule = {
         region=CASE WHEN users.region <> '' THEN users.region ELSE excluded.region END,
         address=CASE WHEN users.address <> '' THEN users.address ELSE excluded.address END,
         socials=CASE WHEN users.socials <> '' THEN users.socials ELSE excluded.socials END,
-        role=CASE WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store' ELSE excluded.role END,
+        role=CASE
+          WHEN users.role = 'admin' OR excluded.role = 'admin' THEN 'admin'
+          WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store'
+          ELSE excluded.role
+        END,
         store_id=CASE WHEN users.store_id <> '' THEN users.store_id ELSE excluded.store_id END,
         referrer_id=CASE WHEN users.referrer_id <> '' THEN users.referrer_id ELSE excluded.referrer_id END,
         network_id=CASE WHEN users.network_id <> '' THEN users.network_id ELSE excluded.network_id END,
