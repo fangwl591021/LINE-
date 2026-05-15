@@ -177,19 +177,14 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
     size: layoutStyle === 'portrait' ? 'giga' : 'mega',
     header: {
       type: 'box',
-      layout: 'horizontal',
-      justifyContent: 'flex-end',
+      layout: 'vertical',
       paddingAll: '8px',
       contents: [{
-        type: 'box',
-        layout: 'vertical',
-        justifyContent: 'center',
-        backgroundColor: '#FF0000',
-        width: '65px',
-        height: '25px',
-        cornerRadius: '25px',
-        contents: [{ type: 'text', text: '分享', weight: 'bold', align: 'center', color: '#FFFFFF', size: 'xs' }],
-        action: shareActionUrl ? { type: 'uri', uri: shareActionUrl } : undefined
+        type: 'button',
+        style: 'primary',
+        color: '#EF4444',
+        height: 'sm',
+        action: shareActionUrl ? { type: 'uri', label: '分享名片', uri: shareActionUrl } : undefined
       }]
     },
     hero: {
@@ -248,8 +243,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
     size: layoutStyle === 'portrait' ? 'giga' : 'mega',
     header: badgeUrl ? {
       type: 'box',
-      layout: 'horizontal',
-      justifyContent: 'flex-end',
+      layout: 'vertical',
       paddingAll: '8px',
       contents: [
         {
