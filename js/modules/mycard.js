@@ -609,15 +609,23 @@
       if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
       currentCardData.rowId = currentCardData.rowId || rowId;
       var shareUrl = buildMyCardShareUrl(rowId);
-      var flexMsg = await window.fetchAPI('buildFlexMessage', {
-        card: currentCardData,
-        config: buildCurrentShareConfig(),
-        referrerId: moduleAuth.getUserId(),
-        networkId: window.currentNetworkId,
-        liffId: moduleConfig.POINT_LIFF_ID || window.POINT_LIFF_ID || moduleConfig.LIFF_ID
-      }, true);
+      var shareConfig = buildCurrentShareConfig();
+      var flexMsg = typeof window.buildLocalECardFlexMessage === 'function'
+        ? window.buildLocalECardFlexMessage(currentCardData, shareConfig, shareUrl)
+        : await window.fetchAPI('buildFlexMessage', {
+          card: currentCardData,
+          config: shareConfig,
+          referrerId: moduleAuth.getUserId(),
+          networkId: window.currentNetworkId,
+          liffId: moduleConfig.POINT_LIFF_ID || window.POINT_LIFF_ID || moduleConfig.LIFF_ID
+        }, true);
       if (flexMsg && !flexMsg.error) {
         routeFlexHeaderShareToPicker(flexMsg, shareUrl);
+        window.__lastMyCardShareMessages = [{
+          type: 'flex',
+          altText: '\u60a8\u6536\u5230\u4e00\u5f35\u6578\u4f4d\u540d\u7247',
+          contents: flexMsg
+        }];
         var shared = await window.triggerFlexSharing(flexMsg, currentCardData['姓名'] || '數位名片');
         if (shared === false) await sharePlainCardLink(shareUrl, currentCardData['姓名'] || '');
       } else {

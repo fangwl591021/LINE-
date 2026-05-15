@@ -310,6 +310,8 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   return bubble;
 }
 
+window.buildLocalECardFlexMessage = buildLocalECardFlexMessage;
+
 function bindECardFieldAutoSync() {
   if (window.__ecardAutoSyncBound) return;
   window.__ecardAutoSyncBound = true;
