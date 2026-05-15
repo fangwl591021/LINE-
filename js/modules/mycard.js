@@ -119,12 +119,31 @@
     });
   }
 
-  function load() {
+  async function resolveCurrentUserCard(force) {
+    if (window.currentUserCard && !force) return window.currentUserCard;
+
+    if (typeof window.loadCardData === 'function') {
+      try {
+        await window.loadCardData({ render: false, force: !!force, initPanels: false });
+      } catch (e) {
+        console.warn('[mycard] loadCardData failed:', e);
+      }
+    }
+
+    if (typeof window.syncUserCardMatch === 'function') {
+      window.syncUserCardMatch();
+    }
+
+    return window.currentUserCard || null;
+  }
+
+  async function load() {
     moduleCore.showLoading(true);
-    currentCardData = window.currentUserCard || null;
 
     var emptyState = $('#my-ecard-empty-state');
     var editState = $('#my-ecard-edit-state');
+
+    currentCardData = await resolveCurrentUserCard(!window.currentUserCard);
 
     if (!currentCardData) {
       show(emptyState, true);
@@ -177,6 +196,23 @@
     }
   }
 
+  async function openMyCardDetail(evt) {
+    if (evt && evt.preventDefault) evt.preventDefault();
+    moduleCore.showLoading(true);
+    try {
+      currentCardData = await resolveCurrentUserCard(true);
+      if (!currentCardData) {
+        if (window.showToast) window.showToast('找不到您的名片資料，請先重新整理或建立名片。', true);
+        return;
+      }
+      if (typeof window.openCardDetail === 'function') {
+        window.openCardDetail(currentCardData);
+      }
+    } finally {
+      moduleCore.showLoading(false);
+    }
+  }
+
   function getCardRowId(card) {
     return card && (
       card.rowId ||
@@ -195,7 +231,7 @@
     if (rowId) return rowId;
 
     if (typeof window.loadCardData === 'function') {
-      await window.loadCardData({ render: false });
+      await window.loadCardData({ render: false, initPanels: false });
       if (typeof window.syncUserCardMatch === 'function') window.syncUserCardMatch();
       currentCardData = window.currentUserCard || currentCardData;
       rowId = getCardRowId(currentCardData);
@@ -347,6 +383,7 @@
   }
 
   async function saveMyECardConfig() {
+    currentCardData = await resolveCurrentUserCard(!currentCardData) || currentCardData;
     if (!currentCardData) return;
     var btn = $('#btn-save-my-ecard');
     var originalHtml = btn ? btn.innerHTML : '';
@@ -558,11 +595,7 @@
 
   async function shareMyCard(btn) {
     if (!currentCardData) {
-      if (typeof window.loadCardData === 'function') {
-        await window.loadCardData({ render: false });
-        if (typeof window.syncUserCardMatch === 'function') window.syncUserCardMatch();
-      }
-      currentCardData = window.currentUserCard || null;
+      currentCardData = await resolveCurrentUserCard(true);
       if (!currentCardData) {
         if (window.showToast) window.showToast('尚未建立專屬名片', true);
         return;
@@ -635,6 +668,7 @@
   var api = {
     init: init,
     load: load,
+    openMyCardDetail: openMyCardDetail,
     shareMyCard: shareMyCard,
     showMyQRCode: showMyQRCode,
     updateButton: updateButton,
@@ -643,11 +677,13 @@
 
   window.MyCardModule = api;
   window.initMyECard = function() { api.init(); api.load(); };
+  window.openMyCardDetail = openMyCardDetail;
   window.changeMyLayout = handleLayoutChange;
   window.focusMyECardSection = focusMyECardSection;
   window.addMyV1Button = addV1Button;
   window.updateMyV1Button = updateButton;
   window.removeMyV1Button = removeButton;
+  window.updateMyECardPreview = updatePreview;
   window.saveMyECardConfig = saveMyECardConfig;
   window.generateCardFromProfile = generateCardFromProfile;
   window.applyMyCardTemplate = applyMyCardTemplate;
