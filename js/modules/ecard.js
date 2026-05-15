@@ -113,7 +113,7 @@ function cleanECardFlexUri(uri) {
     const phone = value.replace(/^tel:/i, '').replace(/[^0-9+]/g, '');
     return phone ? 'tel:' + phone : '';
   }
-  if (/^(line\.me|lin\.ee)/i.test(value)) return 'https://' + value;
+  if (/^(line\.me|lin\.ee|lihi\d?\.me)/i.test(value)) return 'https://' + value;
   return '';
 }
 
@@ -160,7 +160,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   let buttons = (Array.isArray(config.buttons) ? config.buttons : [])
     .map(btn => ({
       label: String(btn?.l || '').trim(),
-      uri: cleanECardFlexHttpsUri(btn?.u),
+      uri: cleanECardFlexUri(btn?.u),
       color: btn?.c || '#06C755'
     }))
     .filter(btn => btn.label && btn.uri)
