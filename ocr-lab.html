@@ -188,7 +188,7 @@
 
     .preview-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 16px;
     }
 
@@ -235,6 +235,18 @@
       display: block;
       border-radius: 8px;
       box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+    }
+
+    .image-stage canvas {
+      width: 100%;
+      max-width: 100%;
+      display: block;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+    }
+
+    .redraw-stage {
+      background: #f1f5f9;
     }
 
     .result-box {
@@ -341,6 +353,14 @@
               <span class="material-symbols-outlined">psychology</span>
               用修正版測 OCR
             </button>
+            <button id="ocr-lab-redraw-button" class="btn btn-primary" type="button" disabled>
+              <span class="material-symbols-outlined">draw</span>
+              用 OCR 結果重畫名片
+            </button>
+            <button id="ocr-lab-download-redraw" class="btn btn-soft" type="button" disabled>
+              <span class="material-symbols-outlined">download</span>
+              下載重畫版
+            </button>
             <button id="ocr-lab-login" class="btn btn-soft" type="button">
               <span class="material-symbols-outlined">login</span>
               LIFF 登入
@@ -372,6 +392,16 @@
               <img id="ocr-lab-enhanced" alt="修正版預覽" class="hidden">
             </div>
           </div>
+
+          <div class="preview-card">
+            <div class="preview-title">
+              重畫名片
+              <small id="ocr-lab-redraw-info">等待 OCR</small>
+            </div>
+            <div class="image-stage redraw-stage">
+              <canvas id="ocr-lab-redraw-canvas" class="hidden"></canvas>
+            </div>
+          </div>
         </div>
 
         <pre id="ocr-lab-result" class="result-box">OCR 結果會顯示在這裡。</pre>
@@ -381,6 +411,6 @@
 
   <script src="js/config.js?v=9.4"></script>
   <script src="js/core.js?v=7.17"></script>
-  <script src="js/modules/ocr-lab.js?v=0.1"></script>
+  <script src="js/modules/ocr-lab.js?v=0.2"></script>
 </body>
 </html>
