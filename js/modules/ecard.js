@@ -461,7 +461,7 @@ window.updateECardPreview = function() {
   ).join('');
 
   area.innerHTML = `
-    <div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px]">
+    <div class="flex flex-col w-full">
       <div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
       <div class="p-6 text-center">
         <div class="font-black text-[22px] text-slate-800 mb-2">${escapeHTML(name)}</div>
