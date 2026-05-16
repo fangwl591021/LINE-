@@ -188,6 +188,17 @@ window.submitRegistration = async function() {
     };
 
     const res = await window.fetchAPI('registerUser', payload, true);
+    const d1Info = res?.info || res?.user || res?.data?.info || (res?.isRegistered ? payload : null);
+    if (res && (res.rowId || res.userId || res.isRegistered || d1Info)) {
+      const nextInfo = { ...payload, ...(d1Info || {}) };
+      window.applyRegisteredUserSession(nextInfo);
+      try {
+        localStorage.setItem('ACTMASTER_USER_' + payload.userId, JSON.stringify({ info: nextInfo, savedAt: Date.now() }));
+      } catch (e) {}
+      window.showToast('會員資料已建立');
+      setTimeout(() => window.location.reload(), 800);
+      return;
+    }
     if (res && res.rowId) {
       window.showToast('✅ 註冊成功！');
       setTimeout(() => window.location.reload(), 1000);

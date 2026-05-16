@@ -143,6 +143,51 @@ function cleanECardFlexHttpsUri(uri) {
   return /^https:\/\//i.test(value) ? value : '';
 }
 
+function buildECardHeroWithShareBadge(imgUrl, aspectRatio, badgeUrl) {
+  const image = {
+    type: 'image',
+    url: imgUrl,
+    size: 'full',
+    aspectRatio,
+    aspectMode: 'cover'
+  };
+  if (badgeUrl) image.action = { type: 'uri', uri: badgeUrl };
+
+  const contents = [image];
+  const shareActionUrl = appendECardShareMode(badgeUrl);
+  if (shareActionUrl) {
+    contents.push({
+      type: 'box',
+      layout: 'vertical',
+      position: 'absolute',
+      offsetTop: '12px',
+      offsetEnd: '12px',
+      backgroundColor: '#EF4444',
+      cornerRadius: '20px',
+      paddingTop: '6px',
+      paddingBottom: '6px',
+      paddingStart: '14px',
+      paddingEnd: '14px',
+      contents: [{
+        type: 'text',
+        text: '分享',
+        color: '#FFFFFF',
+        size: 'xs',
+        weight: 'bold',
+        align: 'center'
+      }],
+      action: { type: 'uri', uri: shareActionUrl }
+    });
+  }
+
+  return {
+    type: 'box',
+    layout: 'vertical',
+    paddingAll: '0px',
+    contents
+  };
+}
+
 function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
   const rawImgUrl = (
@@ -291,7 +336,8 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       ]
     }
   };
-  if (badgeUrl) bubble.hero.action = { type: 'uri', uri: badgeUrl };
+  delete bubble.header;
+  bubble.hero = buildECardHeroWithShareBadge(imgUrl, aspectRatio, badgeUrl);
   if (buttons.length) {
     bubble.footer = {
       type: 'box',
