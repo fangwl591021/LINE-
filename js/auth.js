@@ -527,8 +527,21 @@ window.applyRegisteredUserSession = function(info) {
     window.currentUser.networkId = window.currentUser.networkId || 'admin';
   }
   window.userRole = window.currentUser.role || 'user';
-  window.currentNetworkId = window.currentUser.networkId || 'admin';
-  window.currentStoreId = window.currentUser.storeid || '';
+  const normalizedRole = String(window.userRole || '').toLowerCase();
+  const sessionUserId = String(
+    window.currentUser.userId ||
+    window.currentUser.lineId ||
+    window.currentUserProfile?.userId ||
+    ''
+  ).trim();
+  if (normalizedRole === 'admin') {
+    window.currentNetworkId = 'admin';
+  } else if (normalizedRole === 'store' || normalizedRole === 'tenant') {
+    window.currentNetworkId = sessionUserId || window.currentUser.networkId || 'admin';
+  } else {
+    window.currentNetworkId = window.currentUser.networkId || window.currentUser.referrerId || window.currentUser.referrer_id || 'admin';
+  }
+  window.currentStoreId = window.currentUser.storeid || (normalizedRole === 'store' ? window.currentNetworkId : '');
 
   const bottomNav = document.getElementById('bottom-nav');
   if (bottomNav) bottomNav.classList.remove('hidden');

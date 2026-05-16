@@ -2935,14 +2935,22 @@ const D1ActivityModule = {
     const role = actor
       ? SecurityModule.normalizeRole(actor.role)
       : SecurityModule.normalizeRole(payload.authenticatedRole || '');
-    const networkId = this.text(actor?.networkId || payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
+    const requestedNetworkId = this.text(payload.networkId || payload.net || '');
+    const actorNetworkId = this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
+    const networkId = requestedNetworkId || actorNetworkId;
     const isAdmin = role === 'admin';
-    const rows = isAdmin
+    const rows = isAdmin && !requestedNetworkId
       ? await D1ReadModule.all(env, 'SELECT * FROM activities ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC LIMIT 500')
+      : networkId === 'admin'
+        ? await D1ReadModule.all(env, `
+            SELECT * FROM activities
+            WHERE COALESCE(NULLIF(network_id, ''), 'admin') = 'admin'
+            ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
+            LIMIT 500
+          `)
       : await D1ReadModule.all(env, `
           SELECT * FROM activities
           WHERE COALESCE(NULLIF(network_id, ''), 'admin') = ?
-             OR COALESCE(NULLIF(network_id, ''), 'admin') = 'admin'
           ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
           LIMIT 500
         `, [networkId]);
@@ -2961,9 +2969,12 @@ const D1ActivityModule = {
       ? SecurityModule.normalizeRole(actor.role)
       : SecurityModule.normalizeRole(payload.authenticatedRole || '');
     const actorId = this.text(actor?.userId || payload.authenticatedUserId || payload.userId);
-    const actorNetwork = this.text(actor?.networkId || payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
+    const requestedNetwork = this.text(payload.networkId || payload.net || '');
+    const actorNetwork = requestedNetwork || this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
     const activityNetwork = this.text(row.network_id, 'admin');
-    const sameNetwork = !activityNetwork || activityNetwork === 'admin' || activityNetwork === actorNetwork;
+    const sameNetwork = (!activityNetwork || activityNetwork === 'admin')
+      ? actorNetwork === 'admin'
+      : activityNetwork === actorNetwork;
 
     let hasRegistration = false;
     if (actorId) {
@@ -2994,10 +3005,11 @@ const D1ActivityModule = {
       ? SecurityModule.normalizeRole(actor.role)
       : SecurityModule.normalizeRole(payload.authenticatedRole || '');
     if (role === 'admin') return result;
-    const networkId = this.text(actor?.networkId || payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
+    const requestedNetworkId = this.text(payload.networkId || payload.net || '');
+    const networkId = requestedNetworkId || this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
     const canSee = (activity) => {
       const activityNetwork = this.getActivityNetwork(activity);
-      if (!activityNetwork || activityNetwork === 'admin') return true;
+      if (!activityNetwork || activityNetwork === 'admin') return networkId === 'admin';
       return activityNetwork === networkId;
     };
     if (Array.isArray(result)) return result.filter(canSee);

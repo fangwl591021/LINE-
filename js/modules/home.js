@@ -153,7 +153,9 @@ const HomeModule = (function() {
         const userId = String(window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '').trim();
         const networkId = String(window.currentNetworkId || window.currentUser?.networkId || 'admin').trim();
         const referrerId = String(window.currentUser?.referrerId || window.currentUser?.referrer_id || '').trim();
+        const linkNetwork = getInitialActivityNetwork_();
         if (role === 'admin') return 'admin';
+        if (linkNetwork && linkNetwork !== 'admin') return linkNetwork;
         if (role === 'store' || role === 'tenant') return userId || networkId || 'admin';
         if (networkId && networkId !== 'admin') return networkId;
         if (referrerId) return referrerId;
@@ -165,7 +167,7 @@ const HomeModule = (function() {
         if (role === 'admin') return true;
         const currentNetwork = getCurrentEffectiveNetwork_();
         const activityNetwork = getPublicActivityNetwork_(activity);
-        if (!activityNetwork || activityNetwork === 'admin') return true;
+        if (!activityNetwork || activityNetwork === 'admin') return currentNetwork === 'admin';
         return activityNetwork === currentNetwork;
     }
 
@@ -334,9 +336,8 @@ const HomeModule = (function() {
     }
 
     function getActivityListNetwork_() {
-        const activityId = getInitialActivityId_();
         const linkNetwork = getInitialActivityNetwork_();
-        return activityId && linkNetwork ? linkNetwork : getCurrentEffectiveNetwork_();
+        return linkNetwork || getCurrentEffectiveNetwork_();
     }
 
     window.openActivityFromUrlParam = function(force = false) {
