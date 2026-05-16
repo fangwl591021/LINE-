@@ -21,17 +21,49 @@ function createSafeCropper(imgElement, ratio) {
   return new Cropper(imgElement, {
     aspectRatio: freeRatio ? NaN : ratio,
     viewMode: 1,
-    dragMode: 'crop',
-    autoCropArea: 0.95,
+    dragMode: 'move',
+    autoCropArea: 0.92,
     cropBoxMovable: true,
     cropBoxResizable: true,
     toggleDragModeOnDblclick: true,
+    zoomable: true,
+    zoomOnTouch: true,
+    zoomOnWheel: true,
+    wheelZoomRatio: 0.08,
+    movable: true,
+    scalable: true,
+    responsive: true,
+    restore: false,
     guides: true,
     center: true,
     highlight: false,
     background: false
   });
 }
+
+function getCropperByScope(scope) {
+  return scope === 'active' ? activeCropperInstance : cropperInstance;
+}
+
+window.zoomCropper = function(delta, scope) {
+  const instance = getCropperByScope(scope);
+  if (!instance) return;
+  try {
+    instance.zoom(Number(delta) || 0);
+  } catch (e) {
+    console.warn('[zoomCropper] failed:', e);
+  }
+};
+
+window.resetCropperView = function(scope) {
+  const instance = getCropperByScope(scope);
+  if (!instance) return;
+  try {
+    instance.reset();
+  } catch (e) {
+    console.warn('[resetCropperView] failed:', e);
+  }
+};
 
 window.cancelCrop = function() {
   const modal = document.getElementById('cropper-modal');
