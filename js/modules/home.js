@@ -376,9 +376,209 @@ const HomeModule = (function() {
         }
     };
 
+    function ensurePersonalAgendaPanel_() {
+        const page = document.getElementById('page-my-activities');
+        if (!page || document.getElementById('personal-agenda-panel')) return;
+        const title = page.querySelector('h2');
+        if (title) title.textContent = '跟進行事曆';
+        const recordsBox = document.getElementById('my-activities-list')?.parentElement;
+        if (!recordsBox) return;
+
+        const panel = document.createElement('div');
+        panel.id = 'personal-agenda-panel';
+        panel.className = 'space-y-4 mb-4';
+        panel.innerHTML = `
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-start justify-between gap-3">
+                    <div>
+                        <h3 class="text-[18px] font-black text-slate-800 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[#06C755] icon-filled">event_note</span>
+                            我的跟進提醒
+                        </h3>
+                        <p class="text-[12px] text-slate-500 mt-1 font-medium">私人可見，可一鍵加入 Google 行事曆。</p>
+                    </div>
+                    <button type="button" onclick="window.toggleAgendaForm()" class="shrink-0 px-3 py-2 rounded-xl bg-blue-600 text-white text-[13px] font-black active:scale-95">新增</button>
+                </div>
+                <div id="personal-agenda-form" class="hidden p-5 border-b border-slate-100 bg-slate-50/60 space-y-3">
+                    <input id="agenda-title" class="custom-input !py-3" placeholder="例：回訪王小姐、提醒收款、準備活動">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input id="agenda-start" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local">
+                        <select id="agenda-type" class="custom-input !py-3 !px-3 text-[13px]">
+                            <option value="followup">客戶跟進</option>
+                            <option value="visit">拜訪</option>
+                            <option value="payment">收款</option>
+                            <option value="event">活動提醒</option>
+                            <option value="todo">待辦</option>
+                        </select>
+                    </div>
+                    <input id="agenda-related" class="custom-input !py-3" placeholder="對象 / 客戶 / 名片名稱">
+                    <textarea id="agenda-notes" class="textarea-block !h-20" placeholder="備註"></textarea>
+                    <div class="grid grid-cols-2 gap-3">
+                        <select id="agenda-remind" class="custom-input !py-3 !px-3 text-[13px]">
+                            <option value="10">10 分鐘前提醒</option>
+                            <option value="30" selected>30 分鐘前提醒</option>
+                            <option value="1440">1 天前提醒</option>
+                        </select>
+                        <button type="button" onclick="window.savePersonalAgendaTask(this)" class="bg-[#06C755] text-white rounded-2xl font-black active:scale-95">儲存</button>
+                    </div>
+                </div>
+                <div id="personal-agenda-list" class="divide-y divide-slate-100">
+                    <div class="py-8 text-center text-slate-400 text-sm font-bold">載入跟進提醒中...</div>
+                </div>
+            </div>
+            <div class="px-1 pt-1">
+                <h3 class="text-[16px] font-black text-slate-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-orange-500 icon-filled">confirmation_number</span>
+                    活動報名紀錄
+                </h3>
+            </div>
+        `;
+        recordsBox.insertAdjacentElement('beforebegin', panel);
+    }
+
+    window.toggleAgendaForm = function(force) {
+        const form = document.getElementById('personal-agenda-form');
+        if (!form) return;
+        const shouldOpen = force === undefined ? form.classList.contains('hidden') : !!force;
+        form.classList.toggle('hidden', !shouldOpen);
+        if (shouldOpen) {
+            const start = document.getElementById('agenda-start');
+            if (start && !start.value) {
+                const d = new Date(Date.now() + 60 * 60 * 1000);
+                d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+                start.value = toDatetimeLocal_(d);
+            }
+        }
+    };
+
+    function toDatetimeLocal_(date) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function formatAgendaTime_(value) {
+        if (!value) return '未設定時間';
+        if (typeof window.formatDisplayTime === 'function') return window.formatDisplayTime(value);
+        return String(value).replace('T', ' ').slice(0, 16);
+    }
+
+    function buildGoogleCalendarUrl_(task) {
+        const start = task.startTime ? new Date(task.startTime) : new Date();
+        const end = task.endTime ? new Date(task.endTime) : new Date(start.getTime() + 30 * 60 * 1000);
+        const fmt = d => {
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+        };
+        const params = new URLSearchParams({
+            action: 'TEMPLATE',
+            text: task.title || '跟進提醒',
+            dates: `${fmt(start)}/${fmt(end)}`,
+            details: [task.relatedName, task.notes].filter(Boolean).join('\n'),
+            ctz: 'Asia/Taipei'
+        });
+        return 'https://calendar.google.com/calendar/render?' + params.toString();
+    }
+
+    window.loadPersonalAgenda = async function() {
+        ensurePersonalAgendaPanel_();
+        const list = document.getElementById('personal-agenda-list');
+        if (!list) return [];
+        list.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">載入跟進提醒中...</div>';
+        try {
+            const tasks = await window.fetchAPI('listPersonalTasks', {}, true);
+            const rows = Array.isArray(tasks) ? tasks : [];
+            window.personalAgendaTasks = rows;
+            if (!rows.length) {
+                list.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">尚未建立跟進提醒</div>';
+                return rows;
+            }
+            list.innerHTML = rows.slice(0, 10).map((task, index) => {
+                const done = String(task.status || '') === 'done';
+                return `
+                    <div class="p-4 flex items-start justify-between gap-3 ${done ? 'opacity-60' : ''}">
+                        <div class="min-w-0">
+                            <div class="text-[15px] font-black text-slate-800 leading-snug">${window.escapeHTML(task.title || '跟進提醒')}</div>
+                            <div class="text-[13px] text-slate-500 mt-1">${window.escapeHTML(formatAgendaTime_(task.startTime))}</div>
+                            ${task.relatedName ? `<div class="text-[12px] text-blue-600 font-bold mt-1">${window.escapeHTML(task.relatedName)}</div>` : ''}
+                            ${task.notes ? `<div class="text-[12px] text-slate-400 mt-1 line-clamp-2">${window.escapeHTML(task.notes)}</div>` : ''}
+                        </div>
+                        <div class="shrink-0 flex flex-col gap-2">
+                            <button type="button" onclick="window.addAgendaTaskToGoogle(${index})" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[12px] font-black active:scale-95">Google</button>
+                            ${done ? '' : `<button type="button" onclick="window.completePersonalAgendaTask(${index})" class="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-[12px] font-black active:scale-95">完成</button>`}
+                            <button type="button" onclick="window.deletePersonalAgendaTask(${index})" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 text-[12px] font-black active:scale-95">刪除</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            return rows;
+        } catch (e) {
+            list.innerHTML = '<div class="py-8 text-center text-red-400 text-sm font-bold">跟進提醒載入失敗</div>';
+            return [];
+        }
+    };
+
+    window.savePersonalAgendaTask = async function(btn) {
+        const title = String(document.getElementById('agenda-title')?.value || '').trim();
+        if (!title) return window.showToast('請輸入提醒標題', true);
+        const payload = {
+            title,
+            startTime: String(document.getElementById('agenda-start')?.value || '').trim(),
+            taskType: document.getElementById('agenda-type')?.value || 'followup',
+            relatedName: document.getElementById('agenda-related')?.value || '',
+            notes: document.getElementById('agenda-notes')?.value || '',
+            remindMinutes: document.getElementById('agenda-remind')?.value || 30
+        };
+        const oldHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '儲存中...';
+        }
+        try {
+            const res = await window.fetchAPI('savePersonalTask', payload, true);
+            if (res && res.error) throw new Error(res.error);
+            ['agenda-title', 'agenda-related', 'agenda-notes'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            window.toggleAgendaForm(false);
+            window.showToast('已建立跟進提醒');
+            await window.loadPersonalAgenda();
+        } catch (e) {
+            window.showToast(e.message || '儲存失敗', true);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = oldHtml;
+            }
+        }
+    };
+
+    window.addAgendaTaskToGoogle = function(index) {
+        const task = (window.personalAgendaTasks || [])[index];
+        if (task) window.open(buildGoogleCalendarUrl_(task), '_blank');
+    };
+
+    window.completePersonalAgendaTask = async function(index) {
+        const task = (window.personalAgendaTasks || [])[index];
+        if (!task) return;
+        const res = await window.fetchAPI('completePersonalTask', { taskId: task.taskId }, true);
+        if (res && res.error) return window.showToast(res.error, true);
+        await window.loadPersonalAgenda();
+    };
+
+    window.deletePersonalAgendaTask = async function(index) {
+        const task = (window.personalAgendaTasks || [])[index];
+        if (!task || !window.confirm('刪除這筆跟進提醒？')) return;
+        const res = await window.fetchAPI('deletePersonalTask', { taskId: task.taskId }, true);
+        if (res && res.error) return window.showToast(res.error, true);
+        await window.loadPersonalAgenda();
+    };
+
     window.loadMyActivities = async function() {
         const list = document.getElementById('my-activities-list');
         if (!list) return [];
+        ensurePersonalAgendaPanel_();
+        window.loadPersonalAgenda();
         list.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm font-bold">活動紀錄載入中...</div>';
 
         const payload = {

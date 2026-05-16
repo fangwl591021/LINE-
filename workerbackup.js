@@ -220,6 +220,10 @@ const SecurityModule = {
       'deleteCard',
       'unlinkCard',
       'queryUserPoints',
+      'listPersonalTasks',
+      'savePersonalTask',
+      'completePersonalTask',
+      'deletePersonalTask',
       'mlmCreateOrder',
       'createTenantBonusOrder',
       'nfcCheckin',
@@ -3194,6 +3198,135 @@ const D1ActivityModule = {
   }
 };
 
+const D1PersonalTaskModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  number(value, fallback = 0) {
+    const next = Number(value);
+    return Number.isFinite(next) ? next : fallback;
+  },
+
+  async ensure(env) {
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS personal_tasks (
+        task_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        task_type TEXT NOT NULL DEFAULT 'followup',
+        related_name TEXT NOT NULL DEFAULT '',
+        related_card_id TEXT NOT NULL DEFAULT '',
+        start_time TEXT NOT NULL DEFAULT '',
+        end_time TEXT NOT NULL DEFAULT '',
+        remind_minutes INTEGER NOT NULL DEFAULT 30,
+        notes TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        google_event_url TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completed_at TEXT NOT NULL DEFAULT ''
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_personal_tasks_user_time ON personal_tasks(user_id, start_time)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_personal_tasks_user_status ON personal_tasks(user_id, status)').run();
+  },
+
+  taskRow(row) {
+    if (!row) return null;
+    return {
+      taskId: this.text(row.task_id),
+      userId: this.text(row.user_id),
+      title: this.text(row.title),
+      taskType: this.text(row.task_type, 'followup'),
+      relatedName: this.text(row.related_name),
+      relatedCardId: this.text(row.related_card_id),
+      startTime: this.text(row.start_time),
+      endTime: this.text(row.end_time),
+      remindMinutes: this.number(row.remind_minutes, 30),
+      notes: this.text(row.notes),
+      status: this.text(row.status, 'pending'),
+      googleEventUrl: this.text(row.google_event_url),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at),
+      completedAt: this.text(row.completed_at)
+    };
+  },
+
+  ownUserId(payload) {
+    return this.text(payload.authenticatedUserId || payload.userId);
+  },
+
+  async list(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const rows = await D1ReadModule.all(env, `
+      SELECT * FROM personal_tasks
+      WHERE user_id = ? AND status <> 'deleted'
+      ORDER BY CASE WHEN status = 'pending' THEN 0 ELSE 1 END,
+               COALESCE(NULLIF(start_time, ''), created_at) ASC,
+               updated_at DESC
+      LIMIT 200
+    `, [userId]);
+    return { success: true, data: rows.map(row => this.taskRow(row)).filter(Boolean) };
+  },
+
+  async save(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const taskId = this.text(payload.taskId || payload.task_id) || `TASK_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const title = this.text(payload.title);
+    if (!title) return { success: false, error: '請輸入標題' };
+    const taskType = this.text(payload.taskType || payload.task_type, 'followup');
+    const relatedName = this.text(payload.relatedName || payload.related_name);
+    const relatedCardId = this.text(payload.relatedCardId || payload.related_card_id);
+    const startTime = this.text(payload.startTime || payload.start_time);
+    const endTime = this.text(payload.endTime || payload.end_time);
+    const remindMinutes = this.number(payload.remindMinutes || payload.remind_minutes, 30);
+    const notes = this.text(payload.notes);
+    const googleEventUrl = this.text(payload.googleEventUrl || payload.google_event_url);
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO personal_tasks (
+        task_id,user_id,title,task_type,related_name,related_card_id,start_time,end_time,
+        remind_minutes,notes,status,google_event_url,created_at,updated_at,completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '')
+      ON CONFLICT(task_id) DO UPDATE SET
+        title=excluded.title,
+        task_type=excluded.task_type,
+        related_name=excluded.related_name,
+        related_card_id=excluded.related_card_id,
+        start_time=excluded.start_time,
+        end_time=excluded.end_time,
+        remind_minutes=excluded.remind_minutes,
+        notes=excluded.notes,
+        google_event_url=excluded.google_event_url,
+        updated_at=CURRENT_TIMESTAMP
+      WHERE personal_tasks.user_id = excluded.user_id
+    `).bind(taskId, userId, title, taskType, relatedName, relatedCardId, startTime, endTime, remindMinutes, notes, googleEventUrl).run();
+
+    const row = await D1ReadModule.first(env, 'SELECT * FROM personal_tasks WHERE task_id = ? AND user_id = ? LIMIT 1', [taskId, userId]);
+    return { success: true, data: this.taskRow(row) };
+  },
+
+  async setStatus(payload, env, status) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    const taskId = this.text(payload.taskId || payload.task_id);
+    if (!userId || !taskId) return { success: false, error: 'Missing taskId' };
+    const completedAt = status === 'done' ? new Date().toISOString() : '';
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE personal_tasks
+      SET status = ?, completed_at = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE task_id = ? AND user_id = ?
+    `).bind(status, completedAt, taskId, userId).run();
+    return { success: true, data: { taskId, status } };
+  }
+};
+
 const AuthModule = {
   getCardLineId(card) {
     return String((card && (card['LINE ID'] || card.lineId || card.userId)) || '').trim();
@@ -4984,6 +5117,14 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await DBModule.forward(action, payload, env);
     }
+    case 'listPersonalTasks':
+      return await D1PersonalTaskModule.list(payload || {}, env);
+    case 'savePersonalTask':
+      return await D1PersonalTaskModule.save(payload || {}, env);
+    case 'completePersonalTask':
+      return await D1PersonalTaskModule.setStatus(payload || {}, env, 'done');
+    case 'deletePersonalTask':
+      return await D1PersonalTaskModule.setStatus(payload || {}, env, 'deleted');
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
