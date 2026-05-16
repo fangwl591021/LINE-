@@ -329,7 +329,11 @@ const HomeModule = (function() {
             const params = typeof readActmasterInitialParams === 'function'
                 ? readActmasterInitialParams()
                 : new URLSearchParams(window.location.search || '');
-            return String(params.get('net') || params.get('networkId') || '').trim();
+            const networkId = String(params.get('net') || params.get('networkId') || '').trim();
+            const referrerId = String(params.get('ref') || params.get('referrerId') || '').trim();
+            if (networkId && networkId !== 'admin') return networkId;
+            if (referrerId && referrerId !== 'admin') return referrerId;
+            return networkId;
         } catch (e) {
             return '';
         }
