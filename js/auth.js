@@ -677,8 +677,25 @@ window.loadPointsWallet = async function(force = false) {
   }
 };
 
+window.reorderSettingsSections = function() {
+  const page = document.getElementById('page-admin-settings');
+  if (!page) return;
+
+  const inviteButton = page.querySelector('button[onclick="window.showInviteLink()"]');
+  const myCard = document.getElementById('details-my-ecard');
+  const tenantPlan = document.getElementById('tenant-upgrade-card');
+  const performance = document.getElementById('details-dealer-performance');
+
+  if (inviteButton && myCard && myCard.previousElementSibling !== inviteButton) {
+    inviteButton.insertAdjacentElement('afterend', myCard);
+  }
+  if (tenantPlan && tenantPlan.parentElement === page) page.appendChild(tenantPlan);
+  if (performance && performance.parentElement === page) page.appendChild(performance);
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    window.reorderSettingsSections();
     if (typeof window.initActmasterLiff === 'function') {
       await window.initActmasterLiff(LIFF_ID);
     } else {
