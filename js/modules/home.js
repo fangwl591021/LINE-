@@ -383,6 +383,9 @@ const HomeModule = (function() {
         if (title) title.textContent = '跟進行事曆';
         const recordsBox = document.getElementById('my-activities-list')?.parentElement;
         if (!recordsBox) return;
+        recordsBox.id = recordsBox.id || 'activity-records-panel';
+        recordsBox.dataset.collapsiblePanel = 'activity-records';
+        recordsBox.classList.add('hidden');
 
         const panel = document.createElement('div');
         panel.id = 'personal-agenda-panel';
@@ -390,55 +393,77 @@ const HomeModule = (function() {
         panel.innerHTML = `
             <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                 <div class="p-5 border-b border-slate-100 flex items-start justify-between gap-3">
-                    <div>
+                    <button type="button" onclick="window.toggleMyActivitySection('personal-agenda-content')" class="min-w-0 text-left active:opacity-75">
                         <h3 class="text-[18px] font-black text-slate-800 flex items-center gap-2">
                             <span class="material-symbols-outlined text-[#06C755] icon-filled">event_note</span>
                             我的跟進提醒
                         </h3>
                         <p class="text-[12px] text-slate-500 mt-1 font-medium">私人可見，可一鍵加入 Google 行事曆。</p>
-                    </div>
-                    <button type="button" onclick="window.toggleAgendaForm()" class="shrink-0 px-3 py-2 rounded-xl bg-blue-600 text-white text-[13px] font-black active:scale-95">新增</button>
-                </div>
-                <div id="personal-agenda-form" class="hidden p-5 border-b border-slate-100 bg-slate-50/60 space-y-3">
-                    <input id="agenda-title" class="custom-input !py-3" placeholder="例：回訪王小姐、提醒收款、準備活動">
-                    <div class="grid grid-cols-2 gap-3">
-                        <input id="agenda-start" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local">
-                        <select id="agenda-type" class="custom-input !py-3 !px-3 text-[13px]">
-                            <option value="followup">客戶跟進</option>
-                            <option value="visit">拜訪</option>
-                            <option value="payment">收款</option>
-                            <option value="event">活動提醒</option>
-                            <option value="todo">待辦</option>
-                        </select>
-                    </div>
-                    <input id="agenda-related" class="custom-input !py-3" placeholder="對象 / 客戶 / 名片名稱">
-                    <textarea id="agenda-notes" class="textarea-block !h-20" placeholder="備註"></textarea>
-                    <div class="grid grid-cols-2 gap-3">
-                        <select id="agenda-remind" class="custom-input !py-3 !px-3 text-[13px]">
-                            <option value="10">10 分鐘前提醒</option>
-                            <option value="30" selected>30 分鐘前提醒</option>
-                            <option value="1440">1 天前提醒</option>
-                        </select>
-                        <button type="button" onclick="window.savePersonalAgendaTask(this)" class="bg-[#06C755] text-white rounded-2xl font-black active:scale-95">儲存</button>
+                    </button>
+                    <div class="shrink-0 flex items-center gap-2">
+                        <button type="button" onclick="window.toggleAgendaForm()" class="px-3 py-2 rounded-xl bg-blue-600 text-white text-[13px] font-black active:scale-95">新增</button>
+                        <button type="button" onclick="window.toggleMyActivitySection('personal-agenda-content')" class="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center active:scale-95">
+                            <span id="personal-agenda-content-icon" class="material-symbols-outlined text-slate-400 transition-transform">expand_less</span>
+                        </button>
                     </div>
                 </div>
-                <div id="personal-agenda-list" class="divide-y divide-slate-100">
-                    <div class="py-8 text-center text-slate-400 text-sm font-bold">載入跟進提醒中...</div>
+                <div id="personal-agenda-content">
+                    <div id="personal-agenda-form" class="hidden p-5 border-b border-slate-100 bg-slate-50/60 space-y-3">
+                        <input id="agenda-title" class="custom-input !py-3" placeholder="例：回訪王小姐、提醒收款、準備活動">
+                        <div class="grid grid-cols-2 gap-3">
+                            <input id="agenda-start" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local">
+                            <select id="agenda-type" class="custom-input !py-3 !px-3 text-[13px]">
+                                <option value="followup">客戶跟進</option>
+                                <option value="visit">拜訪</option>
+                                <option value="payment">收款</option>
+                                <option value="event">活動提醒</option>
+                                <option value="todo">待辦</option>
+                            </select>
+                        </div>
+                        <input id="agenda-related" class="custom-input !py-3" placeholder="對象 / 客戶 / 名片名稱">
+                        <textarea id="agenda-notes" class="textarea-block !h-20" placeholder="備註"></textarea>
+                        <div class="grid grid-cols-2 gap-3">
+                            <select id="agenda-remind" class="custom-input !py-3 !px-3 text-[13px]">
+                                <option value="10">10 分鐘前提醒</option>
+                                <option value="30" selected>30 分鐘前提醒</option>
+                                <option value="1440">1 天前提醒</option>
+                            </select>
+                            <button type="button" onclick="window.savePersonalAgendaTask(this)" class="bg-[#06C755] text-white rounded-2xl font-black active:scale-95">儲存</button>
+                        </div>
+                    </div>
+                    <div id="personal-agenda-list" class="divide-y divide-slate-100">
+                        <div class="py-8 text-center text-slate-400 text-sm font-bold">載入跟進提醒中...</div>
+                    </div>
                 </div>
             </div>
-            <div class="px-1 pt-1">
-                <h3 class="text-[16px] font-black text-slate-800 flex items-center gap-2">
-                    <span class="material-symbols-outlined text-orange-500 icon-filled">confirmation_number</span>
-                    活動報名紀錄
-                </h3>
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <button type="button" onclick="window.toggleMyActivitySection('activity-records-panel')" class="w-full p-5 flex items-center justify-between gap-3 text-left active:bg-slate-50">
+                    <h3 class="text-[18px] font-black text-slate-800 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-orange-500 icon-filled">confirmation_number</span>
+                        活動報名紀錄
+                    </h3>
+                    <span id="activity-records-panel-icon" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
+                </button>
             </div>
         `;
         recordsBox.insertAdjacentElement('beforebegin', panel);
     }
 
+    window.toggleMyActivitySection = function(sectionId, force) {
+        const section = document.getElementById(sectionId);
+        if (!section) return;
+        const shouldOpen = force === undefined ? section.classList.contains('hidden') : !!force;
+        section.classList.toggle('hidden', !shouldOpen);
+        const icon = document.getElementById(`${sectionId}-icon`);
+        if (icon) {
+            icon.textContent = shouldOpen ? 'expand_less' : 'expand_more';
+        }
+    };
+
     window.toggleAgendaForm = function(force) {
         const form = document.getElementById('personal-agenda-form');
         if (!form) return;
+        window.toggleMyActivitySection('personal-agenda-content', true);
         const shouldOpen = force === undefined ? form.classList.contains('hidden') : !!force;
         form.classList.toggle('hidden', !shouldOpen);
         if (shouldOpen) {
