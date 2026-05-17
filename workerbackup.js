@@ -68,7 +68,7 @@ const SecurityModule = {
     },
     {
       label: '楊滄棋',
-      ids: ['U58eb5c1a747450140ce1335af709ae55'],
+      ids: ['U58eb5c1a747450140ce1335af709ae55', 'Ue9a59cf9b2969ec78b6bfdc2a4cfca08'],
       phones: ['0986919171'],
       names: ['楊滄棋']
     }
@@ -76,7 +76,8 @@ const SecurityModule = {
   hardAdminIds: new Set([
     'Uf729764dbb5b652a5a90a467320bea29',
     'U050397a077bef628b317b0bbedeb2187',
-    'U58eb5c1a747450140ce1335af709ae55'
+    'U58eb5c1a747450140ce1335af709ae55',
+    'Ue9a59cf9b2969ec78b6bfdc2a4cfca08'
   ]),
 
   text(value) {

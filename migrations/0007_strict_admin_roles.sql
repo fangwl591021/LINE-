@@ -11,7 +11,7 @@ WHERE role = 'admin'
     )
     OR
     (
-      line_id = 'U58eb5c1a747450140ce1335af709ae55'
+      line_id IN ('U58eb5c1a747450140ce1335af709ae55', 'Ue9a59cf9b2969ec78b6bfdc2a4cfca08')
       AND (name LIKE '%楊滄棋%' OR phone = '0986919171')
     )
   );

@@ -13,7 +13,7 @@ const HARD_ADMIN_ACCOUNTS = [
   },
   {
     label: "楊滄棋",
-    ids: ["U58eb5c1a747450140ce1335af709ae55"],
+    ids: ["U58eb5c1a747450140ce1335af709ae55", "Ue9a59cf9b2969ec78b6bfdc2a4cfca08"],
     phones: ["0986919171"],
     names: ["楊滄棋"]
   }
