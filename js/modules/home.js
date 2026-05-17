@@ -528,7 +528,7 @@ const HomeModule = (function() {
                             ${task.notes ? `<div class="text-[12px] text-slate-400 mt-1 line-clamp-2">${window.escapeHTML(task.notes)}</div>` : ''}
                         </div>
                         <div class="shrink-0 flex flex-col gap-2">
-                            <button type="button" onclick="window.addAgendaTaskToGoogle(${index})" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[12px] font-black active:scale-95">Google</button>
+                            <button type="button" onclick="window.addAgendaTaskToGoogle(${index})" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[12px] font-black active:scale-95">加入日曆</button>
                             ${done ? '' : `<button type="button" onclick="window.completePersonalAgendaTask(${index})" class="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-[12px] font-black active:scale-95">完成</button>`}
                             <button type="button" onclick="window.deletePersonalAgendaTask(${index})" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 text-[12px] font-black active:scale-95">刪除</button>
                         </div>
@@ -566,7 +566,7 @@ const HomeModule = (function() {
                 if (el) el.value = '';
             });
             window.toggleAgendaForm(false);
-            window.showToast('已建立跟進提醒');
+            window.showToast('已建立跟進提醒，可點「加入日曆」加入 Google');
             await window.loadPersonalAgenda();
         } catch (e) {
             window.showToast(e.message || '儲存失敗', true);
