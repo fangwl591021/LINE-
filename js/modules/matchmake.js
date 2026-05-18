@@ -179,7 +179,10 @@ window.startMatchmaking = async function() {
       if (c.rowId === window.currentUserCard?.rowId) return false;
       let isPriv = false;
       try { isPriv = JSON.parse(c['自訂名片設定']||'{}').isPrivate; } catch(e){}
-      return !isPriv;
+      const visibility = String(c.visibility || c['公開狀態'] || '').toLowerCase();
+      const sourceType = String(c.sourceType || c['名片來源'] || '').toLowerCase();
+      const poolEligible = c.poolEligible === true || c.poolEligible === 1 || c.poolEligible === '1';
+      return !isPriv && visibility === 'public' && sourceType === 'self_profile' && poolEligible;
     });
 
     if (pool.length === 0) {
@@ -194,7 +197,11 @@ window.startMatchmaking = async function() {
         Name: c['姓名'],
         Company: c['公司名稱'],
         Title: c['職稱'],
-        Tags: (c['個性']||'') + (c['興趣']||'') + (c['事業']||'')
+        Tags: (c['個性']||'') + (c['興趣']||'') + (c['事業']||''),
+        visibility: c.visibility || c['公開狀態'] || '',
+        sourceType: c.sourceType || c['名片來源'] || '',
+        poolEligible: c.poolEligible === true || c.poolEligible === 1 || c.poolEligible === '1',
+        isPrivate: c.isPrivate === true
       }))
     }, true);
 

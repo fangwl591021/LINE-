@@ -221,6 +221,8 @@ const SecurityModule = {
       'registerUser',
       'updateUserProfile',
       'linkUserIdentity',
+      'getCardContacts',
+      'getCrmContacts',
       'saveCard',
       'updateCard',
       'claimCardAndRegister',
@@ -242,6 +244,7 @@ const SecurityModule = {
       'saveWebPushSubscription',
       'deleteWebPushSubscription',
       'dailyPointCheckin',
+      'matchmakeContacts',
       'mlmCreateOrder',
       'createTenantBonusOrder',
       'nfcCheckin',
@@ -1467,12 +1470,19 @@ const AIModule = {
   async matchmaking(payload, env) {
     try {
       const { currentUser, query, contacts } = payload;
-      const contactsList = contacts.map((c, i) => `${i+1}. ${c.Name||'未知'} (${c.Company||'無'}) \n標籤: ${c.Tags||'無'}`).join('\n');
+      const safeContacts = (Array.isArray(contacts) ? contacts : []).filter(c => {
+        const visibility = String(c.visibility || '').toLowerCase();
+        const sourceType = String(c.sourceType || '').toLowerCase();
+        const isPrivate = c.isPrivate === true || visibility === 'private';
+        return !isPrivate && c.poolEligible === true && sourceType === 'self_profile';
+      });
+      if (!safeContacts.length) return { success: false, error: '目前沒有可配對的公開名片' };
+      const contactsList = safeContacts.map((c, i) => `${i+1}. ${c.Name||'未知'} (${c.Company||'無'}) \n標籤: ${c.Tags||'無'}`).join('\n');
       const prompt = `尋求者：${currentUser.name}，需求：${query}\n候選人：\n${contactsList}\n請選前3位，返回純 JSON 陣列: [{"index":0,"score":95,"reason":"結合標籤與需求，給出20字內的推薦理由"}]`;
       
       const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] });
       const jsonMatch = result.choices[0].message.content.match(/\[[\s\S]*\]/);
-      const matches = jsonMatch ? JSON.parse(jsonMatch[0]).map(item => ({ rowId: contacts[item.index]?.rowId, score: item.score, reason: item.reason })) : [];
+      const matches = jsonMatch ? JSON.parse(jsonMatch[0]).map(item => ({ rowId: safeContacts[item.index]?.rowId, score: item.score, reason: item.reason })).filter(item => item.rowId) : [];
       return { success: true, data: matches };
     } catch (e) { return { success: false, error: e.message }; }
   },
@@ -1915,6 +1925,8 @@ const D1BackfillModule = {
 
 // ==================== 模組 6: 邊緣快取驗證 (Edge Auth KV Module) ====================
 const D1ReadModule = {
+  cardAccessSchemaReady: false,
+
   hasD1(env) {
     return !!(env && env.ACTMASTER_DB);
   },
@@ -1938,6 +1950,30 @@ const D1ReadModule = {
     } catch (e) {
       return {};
     }
+  },
+
+  async ensureCardAccessColumns(env) {
+    if (!this.hasD1(env) || this.cardAccessSchemaReady) return;
+    const alters = [
+      "ALTER TABLE card_contacts ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN profile_user_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN source_type TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN visibility TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN pool_eligible INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE card_contacts ADD COLUMN ai_review_status TEXT NOT NULL DEFAULT ''"
+    ];
+    for (const sql of alters) {
+      try {
+        await env.ACTMASTER_DB.prepare(sql).run();
+      } catch (e) {
+        const msg = String(e && e.message || e).toLowerCase();
+        if (!msg.includes('duplicate column')) throw e;
+      }
+    }
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_owner ON card_contacts(owner_user_id)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_profile ON card_contacts(profile_user_id)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_pool ON card_contacts(pool_eligible, visibility)').run();
+    this.cardAccessSchemaReady = true;
   },
 
   async first(env, sql, binds = []) {
@@ -1965,6 +2001,21 @@ const D1ReadModule = {
     } catch (e) {
       return null;
     }
+  },
+
+  async identityIdsForUser(env, userId) {
+    const ids = [];
+    const add = value => {
+      const id = this.text(value);
+      if (id && !ids.includes(id)) ids.push(id);
+    };
+    add(userId);
+    const link = await this.getIdentityLink(env, userId).catch(() => null);
+    if (link) {
+      add(link.new_line_id);
+      add(link.old_line_id);
+    }
+    return ids;
   },
 
   async findUserByIdentity(env, userId) {
@@ -2037,15 +2088,60 @@ const D1ReadModule = {
     };
   },
 
+  inferCardAccess(row, options = {}) {
+    const cfg = this.jsonObject(row && (row.custom_config || row.customConfig || row['自訂名片設定']));
+    const creatorId = this.text(row && (row.creator_id || row.creatorId || row['建檔者ID']));
+    const lineId = this.text(row && (row.line_id || row.lineId || row['LINE ID']));
+    const actorId = this.text(options.actorId);
+    const ownerUserId = this.text(row && (row.owner_user_id || row.ownerUserId), creatorId || actorId || lineId);
+    const profileUserId = this.text(row && (row.profile_user_id || row.profileUserId), lineId);
+    const explicitSource = this.text(row && (row.source_type || row.sourceType || cfg.sourceType));
+    const explicitVisibility = this.text(row && (row.visibility || cfg.visibility)).toLowerCase();
+    const safetyStatus = this.text(row && (row.ai_review_status || row.aiReviewStatus), cfg.safetyReview ? (cfg.safetyReview.pass ? 'passed' : 'failed') : '');
+    const isSelfProfile = explicitSource === 'self_profile'
+      || (!!lineId && !!creatorId && lineId === creatorId)
+      || (!!lineId && !!ownerUserId && lineId === ownerUserId && (cfg.templateVersion || cfg.cardType || cfg.buttons));
+    const sourceType = explicitSource || (isSelfProfile ? 'self_profile' : 'private_import');
+    const cfgPrivate = cfg.isPrivate === true || cfg.private === true;
+    const visibility = explicitVisibility || ((isSelfProfile && !cfgPrivate) ? 'public' : 'private');
+    const hasStoredAccess = !!(explicitSource || explicitVisibility || this.text(row && row.ai_review_status));
+    const storedPool = hasStoredAccess && row && row.pool_eligible !== undefined && row.pool_eligible !== null && String(row.pool_eligible).trim() !== ''
+      ? Number(row.pool_eligible) === 1
+      : null;
+    const aiPassed = safetyStatus ? safetyStatus === 'passed' : true;
+    const poolEligible = storedPool !== null
+      ? storedPool
+      : !!(isSelfProfile && visibility === 'public' && !cfg.templateDraft && aiPassed);
+    return {
+      ownerUserId,
+      profileUserId,
+      sourceType,
+      visibility,
+      poolEligible,
+      aiReviewStatus: safetyStatus || (aiPassed ? 'passed' : 'pending'),
+      isPrivate: visibility !== 'public',
+      isSelfProfile
+    };
+  },
+
   cardRow(row) {
     if (!row) return null;
     const config = this.text(row.custom_config);
+    const access = this.inferCardAccess(row);
     return {
       rowId: this.text(row.row_id),
       id: this.text(row.row_id),
       lineId: this.text(row.line_id),
       userId: this.text(row.line_id),
       creatorId: this.text(row.creator_id),
+      ownerUserId: access.ownerUserId,
+      profileUserId: access.profileUserId,
+      sourceType: access.sourceType,
+      visibility: access.visibility,
+      poolEligible: access.poolEligible,
+      aiReviewStatus: access.aiReviewStatus,
+      isPrivate: access.isPrivate,
+      isSelfProfile: access.isSelfProfile,
       networkId: this.text(row.network_id, 'admin'),
       name: this.text(row.name, '未命名'),
       englishName: this.text(row.english_name),
@@ -2088,6 +2184,9 @@ const D1ReadModule = {
       '服務項目': this.text(row.services),
       '建檔人/備註': this.text(row.notes),
       '建檔者ID': this.text(row.creator_id),
+      '擁有人ID': access.ownerUserId,
+      '名片來源': access.sourceType,
+      '公開狀態': access.visibility,
       '名片圖檔': this.text(row.image_url),
       '自訂名片設定': config,
       '電子名片設定': config,
@@ -2399,9 +2498,81 @@ const D1ReadModule = {
 
   async getCardContacts(payload, env) {
     if (!this.hasD1(env)) return null;
+    await this.ensureCardAccessColumns(env);
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
-    const rows = await this.all(env, `SELECT * FROM card_contacts ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`);
+    const role = this.role(payload.authenticatedRole || payload.role);
+    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    let rows = [];
+    if (role === 'admin') {
+      rows = await this.all(env, `SELECT * FROM card_contacts ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`);
+    } else if (actorId) {
+      const ids = await this.identityIdsForUser(env, actorId);
+      const placeholders = ids.map(() => '?').join(',');
+      rows = await this.all(env, `
+        SELECT * FROM card_contacts
+        WHERE line_id IN (${placeholders}) OR creator_id IN (${placeholders})
+           OR owner_user_id IN (${placeholders}) OR profile_user_id IN (${placeholders})
+        ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+        LIMIT ${limit}
+      `, [...ids, ...ids, ...ids, ...ids]);
+    }
     return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
+  },
+
+  crmContactRow(row) {
+    if (!row) return null;
+    const card = this.cardRow(row);
+    const phone = this.text(card.mobile || card.officePhone);
+    return {
+      rowId: card.rowId,
+      cardRowId: card.rowId,
+      userId: card.lineId,
+      ownerUserId: card.ownerUserId,
+      profileUserId: card.profileUserId,
+      name: card.name,
+      phone,
+      email: card.email,
+      company: card.companyName,
+      title: card.title,
+      tags: card.tags,
+      sourceType: card.sourceType,
+      visibility: card.visibility,
+      poolEligible: card.poolEligible,
+      ownerNetwork: card.networkId,
+      ownerName: this.text(row.owner_name),
+      ownerStoreId: this.text(row.owner_store_id),
+      activityCount: 0,
+      activities: [],
+      lastActivityTime: this.text(row.updated_at || row.created_at)
+    };
+  },
+
+  async getCrmContacts(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureCardAccessColumns(env);
+    const role = this.role(payload.authenticatedRole || payload.role);
+    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
+    const baseSelect = `
+      SELECT c.*, u.name AS owner_name, u.store_id AS owner_store_id
+      FROM card_contacts c
+      LEFT JOIN users u ON u.line_id = COALESCE(NULLIF(c.owner_user_id,''), NULLIF(c.creator_id,''), NULLIF(c.line_id,''))
+    `;
+    let rows = [];
+    if (role === 'admin') {
+      rows = await this.all(env, `${baseSelect} ORDER BY COALESCE(c.updated_at, c.created_at) DESC, c.row_id DESC LIMIT ${limit}`);
+    } else if (actorId) {
+      const ids = await this.identityIdsForUser(env, actorId);
+      const placeholders = ids.map(() => '?').join(',');
+      rows = await this.all(env, `
+        ${baseSelect}
+        WHERE c.owner_user_id IN (${placeholders}) OR c.creator_id IN (${placeholders})
+           OR c.line_id IN (${placeholders}) OR c.profile_user_id IN (${placeholders})
+        ORDER BY COALESCE(c.updated_at, c.created_at) DESC, c.row_id DESC
+        LIMIT ${limit}
+      `, [...ids, ...ids, ...ids, ...ids]);
+    }
+    return { success: true, data: rows.map(row => this.crmContactRow(row)).filter(Boolean) };
   },
 
   async previewIdentityMigration(payload, env) {
@@ -2631,7 +2802,13 @@ const D1WriteModule = {
       image_url: this.pick(data, ['imageUrl', 'image_url', '名片圖檔']),
       custom_config: config,
       network_id: this.pick(data, ['networkId', 'network_id', '歸屬網'], 'admin'),
-      tags: this.pick(data, ['tags', '標籤'])
+      tags: this.pick(data, ['tags', '標籤']),
+      owner_user_id: this.pick(data, ['ownerUserId', 'owner_user_id', '擁有人ID']),
+      profile_user_id: this.pick(data, ['profileUserId', 'profile_user_id']),
+      source_type: this.pick(data, ['sourceType', 'source_type', '名片來源']),
+      visibility: this.pick(data, ['visibility', '公開狀態']),
+      pool_eligible: this.pick(data, ['poolEligible', 'pool_eligible']),
+      ai_review_status: this.pick(data, ['aiReviewStatus', 'ai_review_status'])
     };
   },
 
@@ -3058,6 +3235,7 @@ const D1WriteModule = {
 
   async upsertCard(payload, env) {
     if (!this.hasD1(env)) return null;
+    await D1ReadModule.ensureCardAccessColumns(env);
     const card = this.normalizeCard(payload);
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
     const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
@@ -3075,9 +3253,16 @@ const D1WriteModule = {
         if (card[key] === '' || card[key] === undefined || card[key] === null) card[key] = existing[key] || '';
       });
     }
+    const access = D1ReadModule.inferCardAccess(card, { actorId: awardUserId });
+    card.owner_user_id = access.ownerUserId;
+    card.profile_user_id = access.profileUserId;
+    card.source_type = access.sourceType;
+    card.visibility = access.visibility;
+    card.pool_eligible = access.poolEligible ? 1 : 0;
+    card.ai_review_status = access.aiReviewStatus;
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,owner_user_id,profile_user_id,source_type,visibility,pool_eligible,ai_review_status,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
       ON CONFLICT(row_id) DO UPDATE SET
         line_id=excluded.line_id,name=excluded.name,english_name=excluded.english_name,company_name=excluded.company_name,title=excluded.title,
         department=excluded.department,tax_id=excluded.tax_id,mobile=excluded.mobile,office_phone=excluded.office_phone,
@@ -3085,8 +3270,9 @@ const D1WriteModule = {
         address=excluded.address,birthday=excluded.birthday,personality=excluded.personality,hobbies=excluded.hobbies,
         wealth=excluded.wealth,health=excluded.health,career=excluded.career,services=excluded.services,notes=excluded.notes,
         creator_id=excluded.creator_id,image_url=excluded.image_url,custom_config=excluded.custom_config,network_id=excluded.network_id,
-        tags=excluded.tags,updated_at=CURRENT_TIMESTAMP
-    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags).run();
+        tags=excluded.tags,owner_user_id=excluded.owner_user_id,profile_user_id=excluded.profile_user_id,source_type=excluded.source_type,
+        visibility=excluded.visibility,pool_eligible=excluded.pool_eligible,ai_review_status=excluded.ai_review_status,updated_at=CURRENT_TIMESTAMP
+    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags,card.owner_user_id,card.profile_user_id,card.source_type,card.visibility,card.pool_eligible,card.ai_review_status).run();
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
     const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward && !isOwnCard);
     const awardedPoints = pointAward && pointAward.awarded ? pointAward.points : 0;
@@ -4871,6 +5057,7 @@ const ClaimModule = {
   async getCardForClaim(payload, env) {
     const rowId = this.pick(payload, ['claimRowId', 'rowId', 'cardId', 'claim']);
     if (!rowId) return { success: false, error: 'Missing claimRowId' };
+    await D1ReadModule.ensureCardAccessColumns(env);
     const card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
     if (!card) return { success: false, error: 'Card not found' };
     return { success: true, data: D1ReadModule.cardRow(card) };
@@ -4881,14 +5068,21 @@ const ClaimModule = {
     const userId = this.pick(payload, ['authenticatedUserId', 'userId', 'lineId']);
     if (!rowId || !userId) return { success: false, error: 'Missing claimRowId or userId' };
 
+    await D1ReadModule.ensureCardAccessColumns(env);
     const card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
     if (!card) return { success: false, error: 'Card not found' };
     const existingOwner = this.text(card.line_id);
     if (existingOwner && existingOwner !== userId) return { success: false, error: 'Card already claimed by another user' };
 
     const networkId = this.pick(payload, ['networkId', 'network_id'], this.text(card.network_id, 'admin'));
-    await env.ACTMASTER_DB.prepare('UPDATE card_contacts SET line_id = ?, network_id = ?, updated_at = CURRENT_TIMESTAMP WHERE row_id = ?')
-      .bind(userId, networkId, rowId).run();
+    const ownerUserId = this.text(card.owner_user_id, this.text(card.creator_id) || userId);
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE card_contacts
+      SET line_id = ?, profile_user_id = ?, owner_user_id = ?, network_id = ?,
+          source_type = CASE WHEN TRIM(COALESCE(source_type,'')) = '' THEN 'private_import' ELSE source_type END,
+          visibility = 'private', pool_eligible = 0, updated_at = CURRENT_TIMESTAMP
+      WHERE row_id = ?
+    `).bind(userId, userId, ownerUserId, networkId, rowId).run();
 
     const profile = {
       userId,
@@ -6283,6 +6477,15 @@ async function dispatchAction(action, payload, request, env) {
         if (d1Result && d1Result.success && Array.isArray(d1Result.data)) return d1Result;
       } catch (e) {
         console.error("D1 getCardContacts fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'getCrmContacts': {
+      try {
+        const d1Result = await D1ReadModule.getCrmContacts(payload || {}, env);
+        if (d1Result && d1Result.success && Array.isArray(d1Result.data)) return d1Result;
+      } catch (e) {
+        console.error("D1 getCrmContacts fallback", e);
       }
       return await DBModule.forward(action, payload, env);
     }
