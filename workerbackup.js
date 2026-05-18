@@ -3696,7 +3696,15 @@ const D1InboxModule = {
     const messageId = this.text(payload.messageId || payload.message_id) || `MSG_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const networkId = this.text(payload.networkId || payload.authenticatedNetworkId || receiver.user.network_id || 'admin', 'admin');
     const expiresAt = this.text(payload.expiresAt || payload.expires_at);
-    const payloadJson = JSON.stringify(payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
+    const pointUserId = await PointModule.resolvePointUserId(env, senderUserId);
+    const wallet = await PointModule.queryUserPoints({ pointUserId, point_type: 'gift_money' }, env);
+    if (!wallet || !wallet.success) return { success: false, error: (wallet && wallet.error) || '無法確認點數餘額' };
+    const balance = Number(wallet.data && wallet.data.balance || 0) || 0;
+    if (balance < 10) return { success: false, error: '點數不足，傳送訊息需要 10 點' };
+
+    const pointPayload = { ...(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}) };
+    pointPayload.pointCharge = { pointType: 'gift_money', points: -10, status: 'pending' };
+    const payloadJson = JSON.stringify(pointPayload);
 
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO inbox_items (
@@ -3717,6 +3725,29 @@ const D1InboxModule = {
       JSON.stringify(context.snapshot || {}),
       expiresAt
     ).run();
+
+    const debit = await PointModule.insertUserPoint({
+      userId: pointUserId,
+      points: -10,
+      pointType: 'gift_money',
+      eventName: '收件匣傳訊扣點',
+      eventContent: `傳送${this.text(messageType, 'message')}給 ${this.text(receiver.user.name, receiverUserId)}`,
+      shop_remark: `messageId=${messageId};receiver=${receiverUserId}`
+    }, env);
+
+    if (!debit || !debit.success) {
+      await env.ACTMASTER_DB.prepare('DELETE FROM inbox_items WHERE message_id = ?').bind(messageId).run().catch(() => null);
+      return { success: false, error: (debit && debit.error) || '扣點失敗，訊息未送出' };
+    }
+
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE inbox_items
+      SET payload_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE message_id = ?
+    `).bind(JSON.stringify({
+      ...pointPayload,
+      pointCharge: { pointType: 'gift_money', points: -10, status: 'sent', response: debit.data || null }
+    }), messageId).run();
 
     const row = await D1ReadModule.first(env, 'SELECT * FROM inbox_items WHERE message_id = ? LIMIT 1', [messageId]);
     return { success: true, data: this.itemRow(row, context) };

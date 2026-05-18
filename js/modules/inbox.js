@@ -219,7 +219,9 @@
     }
     try {
       await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, messageType, title, body }, true);
-      window.showToast?.("訊息已送出");
+      window.showToast?.("訊息已送出，已扣 10 點");
+      window.pointWalletData = null;
+      window.refreshPointBalanceBadge?.();
       ["inbox-message-title", "inbox-message-body", "inbox-recipient-id", "inbox-recipient-query"].forEach(id => {
         const el = $(id);
         if (el) el.value = "";
@@ -254,6 +256,7 @@
   function renderDetail(item) {
     const panel = $("inbox-detail-panel");
     if (!panel) return;
+    window.currentInboxItem = item;
     $("inbox-detail-type").textContent = typeLabel(item);
     $("inbox-detail-title").textContent = item.title || "未命名訊息";
     $("inbox-detail-meta").textContent = `${senderName(item)} · ${formatTime(item.createdAt)}`;
@@ -282,6 +285,12 @@
   window.openInboxSenderCard = async function (rowId) {
     if (!rowId) return;
     try {
+      const currentCard = window.currentInboxItem?.senderCard;
+      if (currentCard && String(currentCard.rowId || currentCard.id || "") === String(rowId) && typeof window.openCardDetail === "function") {
+        if (typeof window.goPage === "function") window.goPage("card");
+        setTimeout(() => window.openCardDetail(currentCard), 80);
+        return;
+      }
       if (typeof window.loadCardData === "function") {
         await window.loadCardData({ render: true });
       }
