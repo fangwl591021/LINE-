@@ -715,7 +715,7 @@
     <div id="page-home" class="hidden space-y-6 animate-in fade-in pb-10">
 
       <section id="home-profile-card" class="mx-0 -mt-1 bg-transparent shadow-none overflow-visible">
-        <div class="px-0 py-0 flex items-center justify-center gap-3">
+        <div class="px-1 py-0 flex items-center justify-between gap-3">
           <button type="button" onclick="document.getElementById('home-profile-avatar-file')?.click()" class="relative shrink-0 w-[48px] h-[48px] rounded-full bg-white border-[3px] border-white shadow-md overflow-hidden active:scale-95 transition-transform">
             <img id="home-profile-avatar" src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" class="w-full h-full object-cover" alt="Profile">
             <span class="absolute right-0 bottom-0 w-5 h-5 rounded-full bg-pink-500 text-white border-2 border-white flex items-center justify-center shadow-sm">
@@ -725,7 +725,7 @@
           <input id="home-profile-avatar-file" type="file" accept="image/*" class="hidden" onchange="window.uploadHomeProfileAvatar(this)">
           <input id="home-profile-avatar-url" type="hidden">
 
-          <div class="min-w-0 w-[150px]">
+          <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 min-w-0">
               <h2 id="home-profile-name" class="truncate text-[17px] font-black text-slate-900 tracking-tight">會員</h2>
               <span id="home-profile-role" class="shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-600 px-2 py-0.5 text-[10px] font-black">
@@ -734,7 +734,7 @@
               </span>
             </div>
             <p class="mt-1 text-[10px] font-bold text-slate-500">可用點數</p>
-            <div class="mt-0.5 flex items-center gap-2">
+            <div class="mt-0.5 flex items-center gap-2 flex-wrap">
               <button type="button" onclick="window.openPointsWallet()" class="text-left active:scale-[0.99] transition-transform">
                 <span id="home-profile-points" class="text-[20px] leading-none font-black text-pink-500 tracking-tight">0</span>
                 <span class="ml-1 text-[10px] font-black text-slate-600">點</span>
