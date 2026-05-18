@@ -669,6 +669,84 @@ const PointModule = {
     return { success: true, data };
   },
 
+  async enrichPointRowsWithCashierLogs(env, lineUserId, rows) {
+    if (!env.ACTMASTER_DB || !lineUserId || !Array.isArray(rows) || !rows.length) return rows;
+    await this.ensureCashierLedgerTable(env);
+
+    const logs = await D1ReadModule.all(env, `
+      SELECT *
+      FROM store_point_cashier_logs
+      WHERE customer_point_user_id = ? OR customer_user_id = ?
+      ORDER BY created_at DESC
+      LIMIT 100
+    `, [lineUserId, lineUserId]).catch(() => []);
+    if (!logs.length) return rows;
+
+    const actorNames = {};
+    for (const log of logs) {
+      const actorId = D1ReadModule.text(log.actor_user_id);
+      if (!actorId || actorNames[actorId]) continue;
+      const actor = await D1ReadModule.findUserByIdentity(env, actorId).catch(() => null);
+      const user = actor && actor.user ? D1ReadModule.userRow(actor.user) : null;
+      actorNames[actorId] = D1ReadModule.text(user && user.name)
+        || D1ReadModule.text(user && user.storeId)
+        || D1ReadModule.text(user && user.phone)
+        || actorId;
+    }
+
+    const usedLogIds = new Set();
+    const rowAmount = row => Number(row.get_point ?? row.point ?? row.amount ?? row.points ?? 0) || 0;
+    const rowTime = row => Date.parse(String(row.created_at || row.createdAt || row.time || row.date || '').replace(' ', 'T'));
+    const logTime = log => Date.parse(String(log.created_at || '').replace(' ', 'T'));
+    const hasSource = row => Boolean(
+      D1ReadModule.text(row.event_content || row.eventContent || row.child_shop_name || row.childShopName || row.shop_remark || row.shopRemark)
+    );
+    const makeDetail = (log, sourceName) => {
+      const amount = Number(log.amount || 0) || 0;
+      const points = Math.abs(Number(log.points || 0) || 0);
+      const payable = Number(log.payable_amount || 0) || 0;
+      if (D1ReadModule.text(log.mode) === 'reward') {
+        return `來源：${sourceName}；消費 NT$${amount.toLocaleString('zh-TW')}，1:1 贈送 ${points.toLocaleString('zh-TW')} 點`;
+      }
+      return `來源：${sourceName}；消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${points.toLocaleString('zh-TW')} 點，應收 NT$${payable.toLocaleString('zh-TW')}`;
+    };
+
+    return rows.map(row => {
+      if (hasSource(row)) return row;
+      const amount = rowAmount(row);
+      const title = D1ReadModule.text(row.event_name || row.eventName || row.title || row.name);
+      const timeMs = rowTime(row);
+      const matched = logs.find(log => {
+        const logId = D1ReadModule.text(log.log_id);
+        if (!logId || usedLogIds.has(logId)) return false;
+        const points = Number(log.points || 0) || 0;
+        if (points !== amount) return false;
+        const mode = D1ReadModule.text(log.mode);
+        if (title && !title.includes('店家') && !title.includes(mode === 'reward' ? '贈點' : '折抵')) return false;
+        const lTime = logTime(log);
+        if (!Number.isNaN(timeMs) && !Number.isNaN(lTime)) {
+          return Math.abs(timeMs - lTime) <= 6 * 60 * 60 * 1000;
+        }
+        return true;
+      });
+      if (!matched) return row;
+
+      const logId = D1ReadModule.text(matched.log_id);
+      usedLogIds.add(logId);
+      const sourceName = actorNames[D1ReadModule.text(matched.actor_user_id)] || '店家';
+      const eventContent = makeDetail(matched, sourceName);
+      return {
+        ...row,
+        event_content: eventContent,
+        eventContent,
+        child_shop_name: sourceName,
+        childShopName: sourceName,
+        shop_remark: `source=${sourceName}; store_cashier_log=${logId}`,
+        storeCashierLogId: logId
+      };
+    });
+  },
+
   async queryUserPoints(payload, env) {
     const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
@@ -732,6 +810,11 @@ const PointModule = {
     const allTypeResult = await collectPages(baseBody);
     const balanceByType = allTypeResult.error ? typedResult.balanceByType : allTypeResult.balanceByType;
     const balance = typedResult.latestBalance;
+    const enrichedList = await this.enrichPointRowsWithCashierLogs(
+      env,
+      lineUserId,
+      typedResult.list.slice(0, baseBody.per_page)
+    );
 
     return {
       success: true,
@@ -747,7 +830,7 @@ const PointModule = {
         requestedPointType: typedBody.point_type,
         total: typedResult.total,
         pagination: typedResult.pagination,
-        list: typedResult.list.slice(0, baseBody.per_page)
+        list: enrichedList
       }
     };
   }
