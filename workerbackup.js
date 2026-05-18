@@ -970,7 +970,7 @@ const PointModule = {
       LIMIT 20
     `, [`%${phone}%`, `%${tail}%`, `%${phone}%`, `%${tail}%`]).catch(() => []);
 
-    const matches = [];
+    const candidates = [];
     const pushMatch = (kind, row, rawPhone) => {
       const normalized = SecurityModule.normalizePhone(rawPhone);
       if (!normalized || (normalized !== phone && !normalized.endsWith(tail) && !phone.endsWith(normalized.slice(-9)))) return;
@@ -978,15 +978,30 @@ const PointModule = {
         ? D1ReadModule.text(row.line_id)
         : D1ReadModule.text(row.line_id || row.row_id);
       if (!id) return;
-      if (!matches.some(item => item.id === id)) matches.push({ kind, id, row });
+      candidates.push({ kind, id, row });
     };
     userRows.forEach(row => pushMatch('user', row, row.phone));
     cardRows.forEach(row => pushMatch('card', row, row.mobile || row.office_phone));
 
-    if (matches.length > 1) {
+    const canonicalMatches = [];
+    for (const item of candidates) {
+      const identity = await D1ReadModule.findUserByIdentity(env, item.id).catch(() => null);
+      const canonicalId = D1ReadModule.text(identity && identity.canonicalId, item.id);
+      const user = identity && identity.user ? identity.user : null;
+      const preferredRow = user || item.row;
+      if (!canonicalMatches.some(match => match.id === canonicalId)) {
+        canonicalMatches.push({
+          kind: user ? 'user' : item.kind,
+          id: canonicalId,
+          row: preferredRow
+        });
+      }
+    }
+
+    if (canonicalMatches.length > 1) {
       return { match: null, error: '此手機號碼對應多位用戶，請改掃 QR 或貼上 UID' };
     }
-    return { match: matches[0] || null, error: '' };
+    return { match: canonicalMatches[0] || null, error: '' };
   },
 
   async resolveStorePointCustomer(env, rawCustomerId) {
