@@ -711,7 +711,7 @@ window.extractPointCustomerId = function(value) {
 
   try {
     const url = new URL(raw, window.location.origin);
-    const keys = ['pt_uid', 'wallet_uid', 'pointUserId', 'LINE_user_id', 'lineUserId', 'userId', 'uid'];
+    const keys = ['pt_uid', 'wallet_uid', 'pointUserId', 'LINE_user_id', 'lineUserId', 'userId', 'uid', 'ref'];
     for (const key of keys) {
       const found = String(url.searchParams.get(key) || '').trim();
       if (found) return found;
@@ -720,6 +720,49 @@ window.extractPointCustomerId = function(value) {
 
   const match = raw.match(/\bU[0-9a-fA-F]{20,64}\b/);
   return match ? match[0] : raw;
+};
+
+window.loadQrDecoder = function() {
+  if (window.jsQR) return Promise.resolve(window.jsQR);
+  if (window.__jsQrLoading) return window.__jsQrLoading;
+  window.__jsQrLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+    script.async = true;
+    script.onload = () => resolve(window.jsQR);
+    script.onerror = () => reject(new Error('QR 解碼器載入失敗'));
+    document.head.appendChild(script);
+  });
+  return window.__jsQrLoading;
+};
+
+window.decodeStorePointQrFile = async function(file) {
+  if (!file) return '';
+
+  if ('BarcodeDetector' in window) {
+    try {
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      const image = await createImageBitmap(file);
+      const codes = await detector.detect(image);
+      const raw = codes?.[0]?.rawValue || '';
+      if (raw) return raw;
+    } catch (e) {
+      console.warn('[storePointQr] BarcodeDetector failed, fallback to jsQR:', e);
+    }
+  }
+
+  const jsQR = await window.loadQrDecoder();
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  const maxSize = 1400;
+  const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+  return code?.data || '';
 };
 
 window.updateStorePointPreview = function() {
@@ -751,15 +794,11 @@ window.scanStorePointQr = async function(input) {
   const file = input?.files?.[0];
   if (!file) return;
   try {
-    if (!('BarcodeDetector' in window)) throw new Error('此瀏覽器不支援 QR 解析');
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-    const image = await createImageBitmap(file);
-    const codes = await detector.detect(image);
-    const raw = codes?.[0]?.rawValue || '';
+    const raw = await window.decodeStorePointQrFile(file);
     if (!raw) throw new Error('沒有讀到 QR 內容');
     const target = document.getElementById('store-point-customer');
     if (target) target.value = window.extractPointCustomerId(raw);
-    window.showToast?.('已讀取客戶帳號', false);
+    window.showToast?.('已讀取客戶帳號：' + window.extractPointCustomerId(raw).slice(0, 10) + '...', false);
   } catch (e) {
     window.showToast?.((e.message || 'QR 讀取失敗') + '，可改用貼上客戶 UID。', true);
   } finally {
