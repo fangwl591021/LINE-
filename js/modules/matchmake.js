@@ -21,6 +21,17 @@ function hideMatchStatus_() {
   if (status) status.classList.add('hidden');
 }
 
+function isMatchmakeToolsVisibleContext_() {
+  if (!(window.hasAdminRights || window.userRole === 'admin')) return false;
+  if (window.currentPage === 'matchmake') return true;
+
+  const homeSlot = document.getElementById('home-matchmake-slot');
+  const adminTools = document.getElementById('admin-tools-container');
+  if (!homeSlot || !adminTools) return false;
+
+  return window.currentPage === 'home' && homeSlot.contains(adminTools);
+}
+
 window.initMatchmakePage = async function() {
   const lock = document.getElementById('privacy-lock-container');
   const ui = document.getElementById('matchmaker-ui');
@@ -30,7 +41,7 @@ window.initMatchmakePage = async function() {
   if (lock) lock.classList.add('hidden');
   if (ui) ui.classList.add('hidden');
   if (results) results.classList.add('hidden');
-  if (adminTools) adminTools.classList.toggle('hidden', !(window.hasAdminRights && window.currentPage === 'matchmake'));
+  if (adminTools) adminTools.classList.toggle('hidden', !isMatchmakeToolsVisibleContext_());
 
   if (typeof window.checkDatabaseStatus === 'function') window.checkDatabaseStatus();
 
@@ -301,14 +312,14 @@ window.syncOldTags = async function(forceAll = false) {
         const updateData = {
           '個性': newTags.Personality || '待分析',
           '興趣': newTags.Hobbies || '待分析',
-          '財運': newTags.Wealth || '待分析',
+          '財富': newTags.Wealth || '待分析',
           '健康': newTags.Health || '待分析',
           '事業': newTags.Career || '待分析'
         };
         await window.fetchAPI('updateCard', { rowId: c.rowId, data: updateData }, true);
         c['個性'] = updateData['個性'];
         c['興趣'] = updateData['興趣'];
-        c['財運'] = updateData['財運'];
+        c['財富'] = updateData['財富'];
         c['健康'] = updateData['健康'];
         c['事業'] = updateData['事業'];
         successCount++;
