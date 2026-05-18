@@ -142,6 +142,34 @@ const HomeModule = (function() {
         }
     };
 
+    window.shareHomeProfileCard = async function(btn) {
+        const originalHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[13px]">refresh</span>';
+        }
+        try {
+            if (typeof window.initMyECard === 'function') window.initMyECard();
+            const settingsShareBtn = document.getElementById('btn-share-my-card');
+            if (settingsShareBtn) {
+                settingsShareBtn.click();
+                return;
+            }
+            if (typeof window.shareMyCard === 'function') {
+                await window.shareMyCard(btn);
+                return;
+            }
+            throw new Error('找不到專屬名片分享入口');
+        } catch (e) {
+            if (window.showToast) window.showToast('分享名片失敗：' + (e.message || '請稍後再試'), true);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+    };
+
     window.uploadHomeProfileAvatar = function(inputEl) {
         if (!inputEl || !inputEl.files || !inputEl.files[0]) return;
         if (typeof window.uploadCustomImageToR2 === 'function') {
