@@ -611,7 +611,7 @@
         </section>
 
         <section id="store-point-cashier" class="hidden bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-          <div class="p-5 border-b border-slate-100 bg-slate-50/70">
+          <div onclick="window.toggleStorePointCashier()" class="p-5 border-b border-slate-100 bg-slate-50/70 cursor-pointer active:bg-slate-100 transition-colors">
             <div class="flex items-center justify-between gap-3">
               <div>
                 <h3 class="text-[17px] font-black text-slate-900 flex items-center gap-2">
@@ -620,7 +620,7 @@
                 </h3>
                 <p class="text-[13px] text-slate-500 font-bold mt-1">掃客戶帳戶後，可折抵扣點或消費贈點。</p>
               </div>
-              <button type="button" onclick="window.toggleStorePointCashier()" class="w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center active:scale-95 transition-transform">
+              <button type="button" tabindex="-1" class="pointer-events-none w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center transition-transform">
                 <span id="store-point-cashier-icon" class="material-symbols-outlined text-slate-500">expand_more</span>
               </button>
             </div>
@@ -641,11 +641,11 @@
               <label class="text-[13px] font-black text-slate-600">客戶帳號 / QR 內容</label>
               <div class="grid grid-cols-[1fr_auto] gap-2">
                 <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px]" placeholder="掃 QR 後自動填入，也可貼上 UID">
-                <button type="button" onclick="document.getElementById('store-point-qr-input').click()" class="px-4 rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center gap-1">
+                <label for="store-point-qr-input" class="px-4 rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center gap-1 cursor-pointer">
                   <span class="material-symbols-outlined text-[18px]">qr_code_scanner</span>
                   掃碼
-                </button>
-                <input id="store-point-qr-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="window.scanStorePointQr(this)">
+                </label>
+                <input id="store-point-qr-input" type="file" accept="image/*" capture="environment" class="sr-only" onchange="window.scanStorePointQr(this)">
               </div>
             </div>
 
@@ -920,7 +920,7 @@
       <div id="matchmaker-ui" class="bg-white rounded-3xl shadow-sm p-6 mb-6 border border-slate-100 hidden">
         <div class="flex justify-between items-center mb-6 pb-5 border-b border-slate-50">
           <div class="flex flex-col">
-            <span class="text-[15px] font-black text-slate-800 flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px] text-[#06C755] icon-filled">public</span> 參與配對池</span>
+            <span class="text-[15px] font-black text-slate-800">參與配對池</span>
             <span class="text-[11px] text-slate-400 font-bold mt-0.5 tracking-wide">名片已公開,允許他人搜尋</span>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
@@ -929,7 +929,7 @@
           </label>
         </div>
 
-        <h2 class="text-xl font-black mb-2 text-slate-800 flex items-center gap-1.5"><span class="material-symbols-outlined text-primary icon-filled">search_spark</span> 尋找完美合作夥伴</h2>
+        <h2 class="text-xl font-black mb-2 text-slate-800">尋找完美合作夥伴</h2>
         <p class="text-sm text-slate-500 mb-5 font-medium">輸入您的業務需求,AI 將結合您的性格與 CRM 資料庫的命理標籤,尋找最互補的人選。</p>
 
         <textarea id="match-query" class="custom-input h-32 resize-none mb-5" placeholder="例如:我想找有電商通路資源的夥伴,且做事穩重細心..."></textarea>
