@@ -214,7 +214,8 @@ const SecurityModule = {
       'saveStoreSettings',
       'extractLineVoomMedia',
       'storeAdjustCustomerPoints',
-      'getStorePointCustomer'
+      'getStorePointCustomer',
+      'listStorePointCashierLogs'
     ]);
     const ownTokenRequired = new Set([
       'registerUser',
@@ -1051,6 +1052,75 @@ const PointModule = {
         eventName,
         eventContent,
         insertResult: result.data || result
+      }
+    };
+  },
+
+  async listStorePointCashierLogs(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    await this.ensureCashierLedgerTable(env);
+
+    const actorId = String(payload.authenticatedUserId || payload.userId || '').trim();
+    const role = SecurityModule.normalizeRole(payload.authenticatedRole || payload.role || '');
+    const limit = Math.min(50, Math.max(1, Math.floor(Number(payload.limit || 10))));
+    if (!actorId) return { success: false, error: 'Missing operator user id' };
+
+    const binds = role === 'admin' ? [limit] : [actorId, limit];
+    const where = role === 'admin' ? '' : 'WHERE actor_user_id = ?';
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM store_point_cashier_logs
+      ${where}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, binds);
+
+    const list = [];
+    for (const row of rows) {
+      const customerId = D1ReadModule.text(row.customer_point_user_id || row.customer_user_id);
+      const identity = customerId ? await D1ReadModule.findUserByIdentity(env, customerId).catch(() => null) : null;
+      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
+      let card = null;
+      if (customerId) {
+        card = await D1ReadModule.first(env, `
+          SELECT * FROM card_contacts
+          WHERE line_id = ? OR creator_id = ?
+          ORDER BY COALESCE(updated_at, created_at) DESC
+          LIMIT 1
+        `, [customerId, customerId]).catch(() => null);
+      }
+      const mappedCard = D1ReadModule.cardRow(card);
+      const customerName = D1ReadModule.text(user && user.name)
+        || D1ReadModule.text(mappedCard && mappedCard.name)
+        || D1ReadModule.text(row.customer_point_user_id, '客戶');
+      const customerPhone = D1ReadModule.text(user && user.phone)
+        || D1ReadModule.text(mappedCard && mappedCard.mobile);
+
+      list.push({
+        logId: D1ReadModule.text(row.log_id),
+        actorUserId: D1ReadModule.text(row.actor_user_id),
+        customerUserId: D1ReadModule.text(row.customer_user_id),
+        customerPointUserId: customerId,
+        customerName,
+        customerPhone,
+        customerAvatarUrl: D1ReadModule.text(mappedCard && mappedCard.imageUrl),
+        mode: D1ReadModule.text(row.mode),
+        amount: Number(row.amount || 0) || 0,
+        points: Number(row.points || 0) || 0,
+        payableAmount: Number(row.payable_amount || 0) || 0,
+        balanceBefore: Number(row.balance_before || 0) || 0,
+        balanceAfterEstimate: Number(row.balance_after_estimate || 0) || 0,
+        pointType: D1ReadModule.text(row.point_type, 'gift_money'),
+        createdAt: D1ReadModule.text(row.created_at)
+      });
+    }
+
+    return {
+      success: true,
+      data: {
+        role,
+        scope: role === 'admin' ? 'all' : 'own_store',
+        list
       }
     };
   }
@@ -6233,6 +6303,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
     case 'getStorePointCustomer':  return await PointModule.getStorePointCustomer(payload || {}, env);
     case 'storeAdjustCustomerPoints': return await PointModule.storeAdjustCustomerPoints(payload || {}, env);
+    case 'listStorePointCashierLogs': return await PointModule.listStorePointCashierLogs(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
     case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);

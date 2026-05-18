@@ -657,15 +657,28 @@ window.loadPointsWallet = async function(force = false) {
   const getAmount = (row) => Number(row.get_point ?? row.point ?? row.amount ?? row.points ?? 0) || 0;
   const getTitle = (row) => String(row.event_name || row.eventName || row.title || row.name || '點數異動').trim();
   const getTime = (row) => row.created_at || row.createdAt || row.time || row.date || '';
+  const getSourceDetail = (row) => {
+    const content = String(row.event_content || row.eventContent || row.content || '').trim();
+    const shopName = String(row.child_shop_name || row.childShopName || row.shop_name || row.shopName || '').trim();
+    const remark = String(row.shop_remark || row.shopRemark || '').trim();
+    const sourceFromRemark = (remark.match(/(?:^|[;\s])source=([^;]+)/) || [])[1] || '';
+    const source = shopName || sourceFromRemark.trim();
+    if (content && content.includes('來源：')) return content;
+    if (source && content) return `來源：${source}｜${content}`;
+    if (source) return `來源：${source}`;
+    return content;
+  };
 
   listEl.innerHTML = rows.map(row => {
     const amount = getAmount(row);
     const positive = amount >= 0;
     const amountText = (positive ? '+' : '') + Number(amount).toLocaleString('zh-TW');
+    const detail = getSourceDetail(row);
     return `
       <div class="flex items-center justify-between gap-4 px-5 py-5 border-b border-slate-100 last:border-b-0">
         <div class="min-w-0">
           <div class="text-[16px] font-black text-slate-900 leading-snug">${window.escapeHTML(getTitle(row))}</div>
+          ${detail ? `<div class="text-[12px] text-slate-500 font-bold mt-1 leading-snug">${window.escapeHTML(detail)}</div>` : ''}
           <div class="text-[13px] text-slate-400 font-medium mt-2">${window.escapeHTML(formatTime(getTime(row)))}</div>
         </div>
         <div class="shrink-0 text-[22px] font-black ${positive ? 'text-[#06C755]' : 'text-slate-400'}">${window.escapeHTML(amountText)}</div>
@@ -688,7 +701,9 @@ window.canUseStorePointCashier = function() {
 window.updateStorePointCashierVisibility = function() {
   const panel = document.getElementById('store-point-cashier');
   if (!panel) return;
-  panel.classList.toggle('hidden', !window.canUseStorePointCashier());
+  const canUse = window.canUseStorePointCashier();
+  panel.classList.toggle('hidden', !canUse);
+  if (canUse) window.loadStorePointCashierLogs?.();
   window.updateStorePointPreview?.();
 };
 
@@ -699,7 +714,62 @@ window.toggleStorePointCashier = function() {
   const willOpen = body.classList.contains('hidden');
   body.classList.toggle('hidden', !willOpen);
   if (icon) icon.textContent = willOpen ? 'expand_less' : 'expand_more';
+  if (willOpen) window.loadStorePointCashierLogs?.();
 };
+
+window.loadStorePointCashierLogs = async function(force = false) {
+  const listEl = document.getElementById('store-point-cashier-log-list');
+  if (!listEl || !window.canUseStorePointCashier() || typeof window.fetchAPI !== 'function') return;
+  if (!force && window.storePointCashierLogsCache && Date.now() - (window.storePointCashierLogsCache.loadedAt || 0) < 30000) {
+    renderStorePointCashierLogs(window.storePointCashierLogsCache.list || []);
+    return;
+  }
+
+  listEl.innerHTML = '<div class="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3 text-[13px] text-slate-400 font-bold text-center">載入收銀紀錄中...</div>';
+  try {
+    const res = await window.fetchAPI('listStorePointCashierLogs', { limit: 10 }, true);
+    if (!res || res.error) throw new Error(res?.error || '收銀紀錄讀取失敗');
+    const data = res.data || res;
+    const rows = Array.isArray(data.list) ? data.list : [];
+    window.storePointCashierLogsCache = { list: rows, loadedAt: Date.now() };
+    renderStorePointCashierLogs(rows);
+  } catch (e) {
+    listEl.innerHTML = `<div class="rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-[13px] text-red-500 font-bold text-center">${window.escapeHTML(e.message || '收銀紀錄讀取失敗')}</div>`;
+  }
+};
+
+function renderStorePointCashierLogs(rows) {
+  const listEl = document.getElementById('store-point-cashier-log-list');
+  if (!listEl) return;
+  if (!Array.isArray(rows) || !rows.length) {
+    listEl.innerHTML = '<div class="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3 text-[13px] text-slate-400 font-bold text-center">目前沒有店家收銀紀錄</div>';
+    return;
+  }
+  const formatTime = (value) => {
+    if (typeof window.formatDisplayTime === 'function') return window.formatDisplayTime(value);
+    return String(value || '').replace('T', ' ').slice(0, 16);
+  };
+  listEl.innerHTML = rows.map(row => {
+    const mode = row.mode === 'reward' ? '消費贈點' : '消費折抵';
+    const positive = row.mode === 'reward';
+    const pointText = (positive ? '+' : '-') + Number(Math.abs(row.points || row.changedPoints || 0)).toLocaleString('zh-TW') + ' 點';
+    const customer = row.customerName || row.customerPhone || row.customerPointUserId || '客戶';
+    const amount = Number(row.amount || 0).toLocaleString('zh-TW');
+    const payable = Number(row.payableAmount || row.payable_amount || 0).toLocaleString('zh-TW');
+    return `
+      <div class="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-[14px] font-black text-slate-900 truncate">${window.escapeHTML(customer)}</div>
+            <div class="text-[12px] font-bold text-slate-500 mt-1">${window.escapeHTML(mode)}｜消費 NT$${window.escapeHTML(amount)}${positive ? '' : `｜應收 NT$${window.escapeHTML(payable)}`}</div>
+            <div class="text-[11px] font-bold text-slate-400 mt-1">${window.escapeHTML(formatTime(row.createdAt || row.created_at))}</div>
+          </div>
+          <div class="shrink-0 text-[15px] font-black ${positive ? 'text-[#06C755]' : 'text-blue-600'}">${window.escapeHTML(pointText)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
 
 window.getStorePointMode = function() {
   return document.querySelector('input[name="store-point-mode"]:checked')?.value || 'redeem';
@@ -999,6 +1069,8 @@ window.submitStorePointCashier = async function(btn) {
     window.showToast?.(message, false);
     window.pointWalletData = null;
     await window.refreshPointBalanceBadge?.();
+    window.storePointCashierLogsCache = null;
+    await window.loadStorePointCashierLogs?.(true);
     window.resetStorePointCashier?.();
   } catch (e) {
     const msg = e.message || e || '點數處理失敗';
