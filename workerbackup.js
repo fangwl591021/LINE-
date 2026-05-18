@@ -2733,6 +2733,12 @@ const D1WriteModule = {
   buildSocials(data = {}) {
     const raw = this.pick(data, ['socials', 'socials_json', '社群帳號']);
     if (!raw && !(data.dealerProfile && typeof data.dealerProfile === 'object')) return '';
+    if (raw) {
+      try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (Array.isArray(parsed)) return JSON.stringify(parsed.filter(Boolean));
+      } catch (e) {}
+    }
     const socials = this.jsonObject(raw || '{}');
     if (data.dealerProfile && typeof data.dealerProfile === 'object') {
       socials.dealerProfile = data.dealerProfile;

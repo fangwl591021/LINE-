@@ -712,6 +712,8 @@ window.confirmCustomImageCrop = async function() {
       } else if (targetInputId === 'input-store-banner') {
         const preview = document.getElementById('setting-preview-banner');
         if (preview) preview.src = res.url;
+      } else if (targetInputId === 'home-profile-avatar-url') {
+        if (typeof window.setHomeProfileAvatar === 'function') window.setHomeProfileAvatar(res.url);
       }
     } else {
       throw new Error(res.error || '上傳失敗');

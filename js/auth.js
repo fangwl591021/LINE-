@@ -4,6 +4,7 @@ if (typeof window.addUserSocial !== 'function') {
   window.addUserSocial = function(type = 'LINE', url = '') {
     window.userSocials = Array.isArray(window.userSocials) ? window.userSocials : [];
     window.userSocials.push({ t: type, u: url });
+    if (String(type || '').toUpperCase() === 'PROFILE_AVATAR') return;
     const list = document.getElementById('user-socials-list');
     if (!list) return;
     const idx = window.userSocials.length - 1;
@@ -564,7 +565,9 @@ window.applyRegisteredUserSession = function(info) {
   if (window.currentUser.socials) {
     try {
       const arr = JSON.parse(window.currentUser.socials);
-      arr.forEach(s => window.addUserSocial(s.t, s.u));
+      if (Array.isArray(arr)) arr.forEach(s => {
+        if (s && String(s.t || '').toUpperCase() !== 'PROFILE_AVATAR') window.addUserSocial(s.t, s.u);
+      });
     } catch(e){}
   } else {
     window.addUserSocial('LINE', '');
@@ -574,6 +577,7 @@ window.applyRegisteredUserSession = function(info) {
   const tgChatId = document.getElementById('setting-tg-chatid');
   if (tgToken && window.currentUser.tgToken) tgToken.value = window.currentUser.tgToken;
   if (tgChatId && window.currentUser.tgChatId) tgChatId.value = window.currentUser.tgChatId;
+  if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
 };
 
 window.refreshPointBalanceBadge = async function() {
@@ -590,6 +594,7 @@ window.refreshPointBalanceBadge = async function() {
     const balance = Number(data.balance || 0);
     badge.textContent = balance.toLocaleString('zh-TW') + ' 點';
     badge.classList.remove('hidden');
+    if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
   } catch (e) {
     badge.classList.add('hidden');
     console.warn('[points] query skipped:', e.message || e);
@@ -1166,6 +1171,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       avatarImg.src = window.currentUserProfile.pictureUrl;
       avatarImg.classList.remove('hidden');
     }
+    if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
     setTimeout(() => window.refreshPointBalanceBadge?.(), 300);
 
     // 先把首頁框架顯示出來，後續身分與資料用背景載入補上。

@@ -67,6 +67,126 @@ const HomeModule = (function() {
         return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
     };
 
+    const HOME_PROFILE_DEFAULT_AVATAR = 'https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg';
+
+    function parseUserSocials_() {
+        try {
+            const raw = window.currentUser?.socials || '';
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed.filter(Boolean);
+            if (parsed && typeof parsed === 'object') return Object.keys(parsed).map(k => ({ t: k, u: parsed[k] }));
+        } catch (e) {}
+        return [];
+    }
+
+    function getHomeAvatarUrl_() {
+        const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+        const custom = parseUserSocials_().find(s => String(s.t || '').toUpperCase() === 'PROFILE_AVATAR');
+        if (custom && custom.u) return custom.u;
+        try {
+            const cached = localStorage.getItem('ACTMASTER_HOME_AVATAR_' + userId);
+            if (cached) return cached;
+        } catch (e) {}
+        return window.currentUserProfile?.pictureUrl || HOME_PROFILE_DEFAULT_AVATAR;
+    }
+
+    window.buildHomeInviteUrl = function() {
+        const myUserId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+        const myStoreId = window.currentUser?.storeid || '';
+        const tracking = (myStoreId ? myStoreId + '_' : '') + String(myUserId || '').substring(0, 10);
+        if (window.buildPointLiffUrl) {
+            return window.buildPointLiffUrl({
+                ref: myUserId,
+                net: window.currentNetworkId || 'admin',
+                via: tracking
+            });
+        }
+        return 'https://liff.line.me/' + encodeURIComponent(window.LIFF_ID || '') +
+            '?ref=' + encodeURIComponent(myUserId) +
+            '&net=' + encodeURIComponent(window.currentNetworkId || 'admin') +
+            '&via=' + encodeURIComponent(tracking);
+    };
+
+    window.refreshHomeProfileCard = function() {
+        const card = document.getElementById('home-profile-card');
+        if (!card) return;
+
+        const name = window.currentUser?.name || window.currentUserProfile?.displayName || '會員';
+        const role = String(window.userRole || window.currentUser?.role || 'user').toLowerCase();
+        const roleLabel = role === 'admin' ? '盟主' : (role === 'store' || role === 'tenant' ? '店長' : '用戶');
+        const roleIcon = role === 'admin' ? 'workspace_premium' : (role === 'store' || role === 'tenant' ? 'storefront' : 'person');
+        const balanceText = document.getElementById('point-balance-badge')?.textContent || '';
+        const balance = Number(String(balanceText).replace(/[^\d.-]/g, '')) || Number(window.pointWalletData?.balance || window.currentUser?.points || 0) || 0;
+
+        const nameEl = document.getElementById('home-profile-name');
+        const roleEl = document.getElementById('home-profile-role');
+        const pointsEl = document.getElementById('home-profile-points');
+        const avatarEl = document.getElementById('home-profile-avatar');
+        const hiddenAvatar = document.getElementById('home-profile-avatar-url');
+        const qrEl = document.getElementById('home-profile-qr');
+
+        if (nameEl) nameEl.textContent = name;
+        if (roleEl) {
+            roleEl.innerHTML = '<span class="material-symbols-outlined text-[14px] icon-filled">' + roleIcon + '</span>' + roleLabel;
+        }
+        if (pointsEl) pointsEl.textContent = balance.toLocaleString('zh-TW');
+        const avatarUrl = getHomeAvatarUrl_();
+        if (avatarEl && avatarEl.getAttribute('src') !== avatarUrl) avatarEl.src = avatarUrl;
+        if (hiddenAvatar) hiddenAvatar.value = avatarUrl;
+
+        const inviteUrl = window.buildHomeInviteUrl();
+        if (qrEl && inviteUrl) {
+            const qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(inviteUrl) + '&size=220&margin=1';
+            if (qrEl.getAttribute('src') !== qrUrl) qrEl.src = qrUrl;
+        }
+    };
+
+    window.uploadHomeProfileAvatar = function(inputEl) {
+        if (!inputEl || !inputEl.files || !inputEl.files[0]) return;
+        if (typeof window.uploadCustomImageToR2 === 'function') {
+            window.uploadCustomImageToR2(inputEl, 'home-profile-avatar-url', 1);
+        }
+    };
+
+    window.setHomeProfileAvatar = async function(url) {
+        const cleanUrl = String(url || '').trim();
+        if (!cleanUrl) return;
+        const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+        try {
+            if (userId) localStorage.setItem('ACTMASTER_HOME_AVATAR_' + userId, cleanUrl);
+        } catch (e) {}
+
+        const avatarEl = document.getElementById('home-profile-avatar');
+        if (avatarEl) avatarEl.src = cleanUrl;
+
+        const socials = parseUserSocials_().filter(s => String(s.t || '').toUpperCase() !== 'PROFILE_AVATAR');
+        socials.push({ t: 'PROFILE_AVATAR', u: cleanUrl, hidden: true });
+        if (window.currentUser) window.currentUser.socials = JSON.stringify(socials);
+
+        if (userId && typeof window.fetchAPI === 'function' && window.currentUser) {
+            try {
+                await window.fetchAPI('updateUserProfile', {
+                    userId,
+                    name: window.currentUser.name || window.currentUserProfile?.displayName || '',
+                    phone: window.currentUser.phone || '',
+                    industry: window.currentUser.industry || '',
+                    birthday: window.currentUser.birthday || '',
+                    socials: JSON.stringify(socials),
+                    referrerId: window.currentUser.referrerId || '',
+                    networkId: window.currentUser.networkId || window.currentNetworkId || 'admin'
+                }, true);
+                try {
+                    localStorage.setItem('ACTMASTER_USER_' + userId, JSON.stringify({ info: window.currentUser, savedAt: Date.now() }));
+                } catch (e) {}
+            } catch (e) {
+                window.showToast?.('圖片已更新，會員資料同步稍後再試', true);
+            }
+        }
+
+        window.refreshHomeProfileCard();
+    };
+
     window.applyStoreSettingsToHome = function(settings) {
         const d = window.normalizeStoreSettings(settings);
         if (!d) return;
@@ -455,6 +575,7 @@ const HomeModule = (function() {
     };
 
     window.loadUserActivities = async function() {
+        if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
         if (typeof window.initHomeMatchmakeEmbed === 'function') window.initHomeMatchmakeEmbed();
         if (typeof window.initMatchmakePage === 'function') window.initMatchmakePage();
         if (typeof window.loadHomeAnnouncements === 'function') window.loadHomeAnnouncements();
