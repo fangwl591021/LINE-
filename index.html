@@ -725,7 +725,7 @@
           <input id="home-profile-avatar-file" type="file" accept="image/*" class="hidden" onchange="window.uploadHomeProfileAvatar(this)">
           <input id="home-profile-avatar-url" type="hidden">
 
-          <div class="min-w-0 w-[124px]">
+          <div class="min-w-0 w-[150px]">
             <div class="flex items-center gap-2 min-w-0">
               <h2 id="home-profile-name" class="truncate text-[17px] font-black text-slate-900 tracking-tight">會員</h2>
               <span id="home-profile-role" class="shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-600 px-2 py-0.5 text-[10px] font-black">
@@ -734,10 +734,16 @@
               </span>
             </div>
             <p class="mt-1 text-[10px] font-bold text-slate-500">可用點數</p>
-            <button type="button" onclick="window.openPointsWallet()" class="mt-0.5 text-left active:scale-[0.99] transition-transform">
-              <span id="home-profile-points" class="text-[20px] leading-none font-black text-pink-500 tracking-tight">0</span>
-              <span class="ml-1 text-[10px] font-black text-slate-600">點</span>
-            </button>
+            <div class="mt-0.5 flex items-center gap-2">
+              <button type="button" onclick="window.openPointsWallet()" class="text-left active:scale-[0.99] transition-transform">
+                <span id="home-profile-points" class="text-[20px] leading-none font-black text-pink-500 tracking-tight">0</span>
+                <span class="ml-1 text-[10px] font-black text-slate-600">點</span>
+              </button>
+              <button type="button" onclick="window.openPointsWallet()" class="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-amber-50 text-amber-700 px-2 py-1 text-[10px] font-black active:scale-95 transition-transform">
+                <span class="material-symbols-outlined text-[12px] icon-filled">account_balance_wallet</span>
+                點數專區
+              </button>
+            </div>
           </div>
 
           <div class="shrink-0 w-[78px] rounded-xl bg-white p-1.5 text-center">
