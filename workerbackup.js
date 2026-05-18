@@ -966,11 +966,20 @@ const PointModule = {
     let payableAmount = amount;
     let eventName = '';
     let eventContent = '';
+    const actorIdentity = env.ACTMASTER_DB
+      ? await D1ReadModule.findUserByIdentity(env, actorId).catch(() => null)
+      : null;
+    const actorProfile = actorIdentity && actorIdentity.user ? D1ReadModule.userRow(actorIdentity.user) : null;
+    const sourceName = D1ReadModule.text(actorProfile && actorProfile.name)
+      || D1ReadModule.text(actorProfile && actorProfile.storeId)
+      || D1ReadModule.text(actorProfile && actorProfile.phone)
+      || actorId;
+    const sourceLabel = sourceName.length > 28 ? sourceName.slice(0, 28) + '...' : sourceName;
 
     if (isReward) {
       points = amount;
-      eventName = '消費贈點';
-      eventContent = `消費 NT$${amount.toLocaleString('zh-TW')}，1:1 贈送 ${points.toLocaleString('zh-TW')} 點`;
+      eventName = '店家消費贈點';
+      eventContent = `來源：${sourceLabel}；消費 NT$${amount.toLocaleString('zh-TW')}，1:1 贈送 ${points.toLocaleString('zh-TW')} 點`;
     } else {
       const requestedDeduction = Math.floor(amount * 0.1);
       const deductPoints = Math.min(requestedDeduction, balanceBefore);
@@ -983,8 +992,8 @@ const PointModule = {
       }
       points = -deductPoints;
       payableAmount = Math.max(0, amount - deductPoints);
-      eventName = '消費折抵';
-      eventContent = `消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${deductPoints.toLocaleString('zh-TW')} 點，應收 NT$${payableAmount.toLocaleString('zh-TW')}`;
+      eventName = '店家消費折抵';
+      eventContent = `來源：${sourceLabel}；消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${deductPoints.toLocaleString('zh-TW')} 點，應收 NT$${payableAmount.toLocaleString('zh-TW')}`;
     }
 
     const result = await this.insertUserPoint({
@@ -994,7 +1003,8 @@ const PointModule = {
       eventName,
       eventContent,
       shop_user_lineid: actorId,
-      shop_remark: `store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
+      child_shop_name: sourceLabel,
+      shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
     }, env);
 
     if (!result || !result.success) {

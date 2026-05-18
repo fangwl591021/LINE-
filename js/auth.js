@@ -925,6 +925,23 @@ window.lookupStorePointCustomer = async function() {
   }
 };
 
+window.resetStorePointCashier = function() {
+  const body = document.getElementById('store-point-cashier-body');
+  const icon = document.getElementById('store-point-cashier-icon');
+  const customerInput = document.getElementById('store-point-customer');
+  const amountInput = document.getElementById('store-point-amount');
+  const preview = document.getElementById('store-point-preview');
+  if (body) body.classList.add('hidden');
+  if (icon) icon.textContent = 'expand_more';
+  if (customerInput) customerInput.value = '';
+  if (amountInput) amountInput.value = '';
+  window.renderStorePointCustomer(null);
+  if (preview) {
+    preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
+    preview.textContent = '請先輸入消費金額。';
+  }
+};
+
 window.scanStorePointQr = async function(input) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -981,8 +998,8 @@ window.submitStorePointCashier = async function(btn) {
     }
     window.showToast?.(message, false);
     window.pointWalletData = null;
-    await window.lookupStorePointCustomer?.();
     await window.refreshPointBalanceBadge?.();
+    window.resetStorePointCashier?.();
   } catch (e) {
     const msg = e.message || e || '點數處理失敗';
     if (preview) {
