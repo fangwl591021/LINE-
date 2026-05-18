@@ -639,3 +639,138 @@ window.changeUserRole = async function(userId, newRole, evt) {
     if (selectEl) selectEl.disabled = false;
   }
 };
+
+window.clearAnnouncementForm = function() {
+  const ids = ['announcement-id', 'announcement-title', 'announcement-body', 'announcement-image-url', 'announcement-action-label', 'announcement-action-url'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const status = document.getElementById('announcement-status');
+  if (status) status.value = 'active';
+};
+
+function readAnnouncementForm_() {
+  const val = id => String(document.getElementById(id)?.value || '').trim();
+  return {
+    announcementId: val('announcement-id'),
+    title: val('announcement-title'),
+    body: val('announcement-body'),
+    imageUrl: val('announcement-image-url'),
+    actionLabel: val('announcement-action-label'),
+    actionUrl: val('announcement-action-url'),
+    status: val('announcement-status') || 'active'
+  };
+}
+
+function renderAnnouncementStatus_(status) {
+  if (status === 'active') return '<span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[12px] font-black">顯示中</span>';
+  return '<span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-[12px] font-black">隱藏</span>';
+}
+
+window.loadAdminAnnouncements = async function() {
+  const list = document.getElementById('admin-announcements-list');
+  if (!list) return;
+  list.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">載入公告中...</div>';
+  try {
+    const res = await window.fetchAPI('listAdminAnnouncements', { limit: 100 }, true);
+    const rows = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+    if (!rows.length) {
+      list.innerHTML = '<div class="bg-white rounded-3xl border border-slate-100 p-8 text-center text-slate-400 text-sm font-bold">目前沒有公告</div>';
+      return;
+    }
+    list.innerHTML = rows.map(item => {
+      const id = window.escapeJS(item.announcementId || '');
+      const title = window.escapeHTML(item.title || '未命名公告');
+      const body = window.escapeHTML(item.body || '').replace(/\n/g, '<br>');
+      const image = window.escapeHTML(item.imageUrl || '');
+      const time = window.escapeHTML(window.formatDisplayTime(item.updatedAt || item.createdAt || ''));
+      return `
+        <article class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          ${image ? `<img src="${image}" class="w-full h-auto block" loading="lazy" alt="">` : ''}
+          <div class="p-5">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h3 class="text-[17px] font-black text-slate-800 leading-snug">${title}</h3>
+                ${time ? `<div class="text-[12px] text-slate-400 font-bold mt-1">${time}</div>` : ''}
+              </div>
+              ${renderAnnouncementStatus_(item.status)}
+            </div>
+            ${body ? `<div class="text-[14px] text-slate-600 leading-relaxed mt-3">${body}</div>` : ''}
+            <div class="grid grid-cols-2 gap-3 mt-4">
+              <button onclick="window.editAnnouncement('${id}')" class="py-3 rounded-2xl bg-blue-50 text-blue-600 font-black active:scale-95 transition-transform">修改</button>
+              <button onclick="window.deleteAnnouncement('${id}', this)" class="py-3 rounded-2xl bg-red-50 text-red-500 font-black active:scale-95 transition-transform">刪除</button>
+            </div>
+          </div>
+        </article>`;
+    }).join('');
+    window._adminAnnouncements = rows;
+  } catch (e) {
+    list.innerHTML = '<div class="bg-white rounded-3xl border border-red-100 p-8 text-center text-red-500 text-sm font-bold">公告載入失敗：' + window.escapeHTML(e.message || '請稍後再試') + '</div>';
+  }
+};
+
+window.editAnnouncement = function(announcementId) {
+  const item = (window._adminAnnouncements || []).find(row => String(row.announcementId) === String(announcementId));
+  if (!item) return window.showToast('找不到公告資料', true);
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value || '';
+  };
+  set('announcement-id', item.announcementId);
+  set('announcement-title', item.title);
+  set('announcement-body', item.body);
+  set('announcement-image-url', item.imageUrl);
+  set('announcement-action-label', item.actionLabel);
+  set('announcement-action-url', item.actionUrl);
+  set('announcement-status', item.status || 'active');
+  document.getElementById('page-admin-announcements')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.saveAnnouncement = async function(btn) {
+  const payload = readAnnouncementForm_();
+  if (!payload.title && !payload.body) return window.showToast('請輸入公告標題或內容', true);
+  const original = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span>';
+  }
+  try {
+    const res = await window.fetchAPI('saveAnnouncement', payload, true);
+    if (res && res.error) throw new Error(res.error);
+    window.showToast('公告已儲存');
+    window.clearAnnouncementForm();
+    await window.loadAdminAnnouncements();
+    if (typeof window.loadHomeAnnouncements === 'function') window.loadHomeAnnouncements();
+  } catch (e) {
+    window.showToast('儲存公告失敗：' + (e.message || '請稍後再試'), true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  }
+};
+
+window.deleteAnnouncement = async function(announcementId, btn) {
+  if (!announcementId) return;
+  if (!confirm('確定刪除此公告？')) return;
+  const original = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span>';
+  }
+  try {
+    const res = await window.fetchAPI('deleteAnnouncement', { announcementId }, true);
+    if (res && res.error) throw new Error(res.error);
+    window.showToast('公告已刪除');
+    await window.loadAdminAnnouncements();
+    if (typeof window.loadHomeAnnouncements === 'function') window.loadHomeAnnouncements();
+  } catch (e) {
+    window.showToast('刪除公告失敗：' + (e.message || '請稍後再試'), true);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  }
+};

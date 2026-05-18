@@ -30,7 +30,7 @@ window.initMatchmakePage = async function() {
   if (lock) lock.classList.add('hidden');
   if (ui) ui.classList.add('hidden');
   if (results) results.classList.add('hidden');
-  if (adminTools) adminTools.classList.toggle('hidden', !window.hasAdminRights);
+  if (adminTools) adminTools.classList.toggle('hidden', !(window.hasAdminRights && window.currentPage === 'matchmake'));
 
   if (typeof window.checkDatabaseStatus === 'function') window.checkDatabaseStatus();
 

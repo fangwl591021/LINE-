@@ -199,7 +199,10 @@ const SecurityModule = {
       'confirmIdentityMerge',
       'listDuplicateCardBindings',
       'resolveDuplicateCardBinding',
-      'deployRichMenu'
+      'deployRichMenu',
+      'listAdminAnnouncements',
+      'saveAnnouncement',
+      'deleteAnnouncement'
     ]);
     const managerOnly = new Set([
       'bulkAddRegistrants',
@@ -3417,6 +3420,114 @@ const D1PersonalTaskModule = {
   }
 };
 
+const D1AnnouncementModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  number(value, fallback = 20) {
+    const next = Number(value);
+    return Number.isFinite(next) ? next : fallback;
+  },
+
+  async ensure(env) {
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        announcement_id TEXT PRIMARY KEY,
+        title TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        image_url TEXT NOT NULL DEFAULT '',
+        action_label TEXT NOT NULL DEFAULT '',
+        action_url TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'active',
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_announcements_status_updated ON announcements(status, updated_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_announcements_updated ON announcements(updated_at)').run();
+  },
+
+  row(row) {
+    if (!row) return null;
+    return {
+      announcementId: this.text(row.announcement_id),
+      title: this.text(row.title),
+      body: this.text(row.body),
+      imageUrl: this.text(row.image_url),
+      actionLabel: this.text(row.action_label),
+      actionUrl: this.text(row.action_url),
+      status: this.text(row.status, 'active'),
+      createdBy: this.text(row.created_by),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at)
+    };
+  },
+
+  async list(payload, env, admin = false) {
+    await this.ensure(env);
+    const limit = Math.min(Math.max(this.number(payload.limit, admin ? 100 : 10), 1), 100);
+    const rows = admin
+      ? await D1ReadModule.all(env, `
+          SELECT * FROM announcements
+          WHERE status <> 'deleted'
+          ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC, created_at DESC
+          LIMIT ?
+        `, [limit])
+      : await D1ReadModule.all(env, `
+          SELECT * FROM announcements
+          WHERE status = 'active'
+          ORDER BY COALESCE(NULLIF(updated_at, ''), created_at) DESC, created_at DESC
+          LIMIT ?
+        `, [limit]);
+    return { success: true, data: rows.map(row => this.row(row)).filter(Boolean) };
+  },
+
+  async save(payload, env) {
+    await this.ensure(env);
+    const announcementId = this.text(payload.announcementId || payload.announcement_id) || `ANN_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const title = this.text(payload.title);
+    const body = this.text(payload.body);
+    if (!title && !body) return { success: false, error: 'Missing announcement content' };
+    const imageUrl = this.text(payload.imageUrl || payload.image_url);
+    const actionLabel = this.text(payload.actionLabel || payload.action_label);
+    const actionUrl = this.text(payload.actionUrl || payload.action_url);
+    const status = ['active', 'hidden'].includes(this.text(payload.status)) ? this.text(payload.status) : 'active';
+    const createdBy = this.text(payload.authenticatedUserId || payload.userId || payload.operatorId || payload.createdBy);
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO announcements (
+        announcement_id,title,body,image_url,action_label,action_url,status,created_by,created_at,updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(announcement_id) DO UPDATE SET
+        title=excluded.title,
+        body=excluded.body,
+        image_url=excluded.image_url,
+        action_label=excluded.action_label,
+        action_url=excluded.action_url,
+        status=excluded.status,
+        updated_at=CURRENT_TIMESTAMP
+    `).bind(announcementId, title, body, imageUrl, actionLabel, actionUrl, status, createdBy).run();
+
+    const row = await D1ReadModule.first(env, 'SELECT * FROM announcements WHERE announcement_id = ? LIMIT 1', [announcementId]);
+    return { success: true, data: this.row(row) };
+  },
+
+  async remove(payload, env) {
+    await this.ensure(env);
+    const announcementId = this.text(payload.announcementId || payload.announcement_id);
+    if (!announcementId) return { success: false, error: 'Missing announcementId' };
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE announcements
+      SET status = 'deleted', updated_at = CURRENT_TIMESTAMP
+      WHERE announcement_id = ?
+    `).bind(announcementId).run();
+    return { success: true, data: { announcementId, status: 'deleted' } };
+  }
+};
+
 const D1InboxModule = {
   text(value, fallback = '') {
     const next = String(value ?? '').trim();
@@ -5856,6 +5967,14 @@ async function dispatchAction(action, payload, request, env) {
       return await D1PersonalTaskModule.setStatus(payload || {}, env, 'done');
     case 'deletePersonalTask':
       return await D1PersonalTaskModule.setStatus(payload || {}, env, 'deleted');
+    case 'listAnnouncements':
+      return await D1AnnouncementModule.list(payload || {}, env, false);
+    case 'listAdminAnnouncements':
+      return await D1AnnouncementModule.list(payload || {}, env, true);
+    case 'saveAnnouncement':
+      return await D1AnnouncementModule.save(payload || {}, env);
+    case 'deleteAnnouncement':
+      return await D1AnnouncementModule.remove(payload || {}, env);
     case 'getInboxCount':
       return await D1InboxModule.count(payload || {}, env);
     case 'listInboxItems':

@@ -125,6 +125,105 @@ const HomeModule = (function() {
         window.refreshStoreSettingsInBackground();
     };
 
+    window.initHomeMatchmakeEmbed = function() {
+        const slot = document.getElementById('home-matchmake-slot');
+        const page = document.getElementById('page-matchmake');
+        if (!slot || !page || slot.dataset.ready === '1') return;
+
+        Array.from(page.children).forEach(child => slot.appendChild(child));
+        slot.dataset.ready = '1';
+        page.innerHTML =
+            '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 text-center mx-1">' +
+                '<div class="w-14 h-14 rounded-full bg-emerald-50 text-[#06C755] flex items-center justify-center mx-auto mb-3">' +
+                    '<span class="material-symbols-outlined text-[30px] icon-filled">psychology</span>' +
+                '</div>' +
+                '<h2 class="text-lg font-black text-slate-800">AI 配對已移到首頁</h2>' +
+                '<p class="text-[13px] text-slate-500 mt-2">回首頁即可直接使用，不必再切換頁籤。</p>' +
+                '<button onclick="window.goPage(&quot;home&quot;)" class="mt-4 px-5 py-3 rounded-2xl bg-[#06C755] text-white font-black active:scale-95 transition-transform">回首頁</button>' +
+            '</div>';
+    };
+
+    window.scrollToHomeAnnouncements = function() {
+        const section = document.getElementById('home-announcements-section');
+        if (window.currentPage !== 'home' && typeof window.goPage === 'function') {
+            window.goPage('home');
+            setTimeout(() => window.scrollToHomeAnnouncements(), 160);
+            return;
+        }
+        if (section && section.scrollIntoView) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (typeof window.goPage === 'function') {
+            window.goPage('home');
+        }
+    };
+
+    window.scrollToHomeMatchmake = function() {
+        const section = document.getElementById('home-matchmake-slot');
+        if (window.currentPage !== 'home' && typeof window.goPage === 'function') {
+            window.goPage('home');
+            setTimeout(() => window.scrollToHomeMatchmake(), 160);
+            return;
+        }
+        if (section && section.scrollIntoView) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
+
+    window.renderHomeAnnouncements = function(items) {
+        const list = document.getElementById('home-announcements-list');
+        if (!list) return;
+        const rows = Array.isArray(items) ? items : [];
+        if (!rows.length) {
+            list.innerHTML = '<div class="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 text-center text-slate-400 text-sm font-bold">目前沒有公告</div>';
+            return;
+        }
+        list.innerHTML = rows.map(item => {
+            const title = window.escapeHTML(item.title || '未命名公告');
+            const body = window.escapeHTML(item.body || '').replace(/\n/g, '<br>');
+            const image = window.escapeHTML(item.imageUrl || '');
+            const actionLabel = window.escapeHTML(item.actionLabel || '');
+            const actionUrl = window.escapeHTML(item.actionUrl || '');
+            const time = window.escapeHTML(window.formatDisplayTime(item.updatedAt || item.createdAt || ''));
+            return `
+                <article class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                    ${image ? `<img src="${image}" class="w-full h-auto block" loading="lazy" alt="">` : ''}
+                    <div class="p-5">
+                        <div class="flex items-start justify-between gap-3 mb-2">
+                            <h4 class="text-[17px] font-black text-slate-800 leading-snug">${title}</h4>
+                            ${time ? `<span class="text-[11px] text-slate-400 font-bold whitespace-nowrap">${time}</span>` : ''}
+                        </div>
+                        ${body ? `<div class="text-[14px] text-slate-600 leading-relaxed">${body}</div>` : ''}
+                        ${actionLabel && actionUrl ? `<button onclick="window.openAnnouncementLink('${window.escapeJS(actionUrl)}')" class="mt-4 w-full py-3 rounded-2xl bg-blue-600 text-white font-black active:scale-95 transition-transform">${actionLabel}</button>` : ''}
+                    </div>
+                </article>
+            `;
+        }).join('');
+    };
+
+    window.openAnnouncementLink = function(url) {
+        const href = String(url || '').trim();
+        if (!href) return;
+        if (typeof liff !== 'undefined' && typeof liff.openWindow === 'function') {
+            liff.openWindow({ url: href, external: true });
+        } else {
+            window.open(href, '_blank', 'noopener');
+        }
+    };
+
+    window.loadHomeAnnouncements = async function() {
+        const list = document.getElementById('home-announcements-list');
+        if (list) list.innerHTML = '<div class="py-6 text-center text-slate-400 text-sm font-bold">載入公告中...</div>';
+        try {
+            const res = await window.fetchAPI('listAnnouncements', { limit: 10 }, true);
+            const rows = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+            window.renderHomeAnnouncements(rows);
+            return rows;
+        } catch (e) {
+            if (list) list.innerHTML = '<div class="bg-white rounded-3xl border border-red-100 p-6 text-center text-red-500 text-sm font-bold">公告載入失敗，請稍後再試</div>';
+            return [];
+        }
+    };
+
     // === 2. 活動渲染邏輯 ===
 
     function getPublicActivityId_(activity) {
@@ -356,6 +455,10 @@ const HomeModule = (function() {
     };
 
     window.loadUserActivities = async function() {
+        if (typeof window.initHomeMatchmakeEmbed === 'function') window.initHomeMatchmakeEmbed();
+        if (typeof window.initMatchmakePage === 'function') window.initMatchmakePage();
+        if (typeof window.loadHomeAnnouncements === 'function') window.loadHomeAnnouncements();
+
         if (typeof window.syncStoreSettingsToHome === 'function') {
             window.syncStoreSettingsToHome();
         }
