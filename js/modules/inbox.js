@@ -148,6 +148,97 @@
     if (panel) panel.classList.add("hidden");
   };
 
+  window.toggleInboxComposer = function (force) {
+    const box = $("inbox-composer");
+    const icon = $("inbox-composer-icon");
+    if (!box) return;
+    const open = typeof force === "boolean" ? force : box.classList.contains("hidden");
+    box.classList.toggle("hidden", !open);
+    if (icon) icon.style.transform = open ? "rotate(180deg)" : "";
+  };
+
+  window.searchInboxRecipients = async function () {
+    const query = $("inbox-recipient-query")?.value?.trim() || "";
+    const box = $("inbox-recipient-results");
+    const hidden = $("inbox-recipient-id");
+    if (hidden) hidden.value = "";
+    if (!box) return;
+    if (query.length < 2) {
+      box.innerHTML = '<div class="text-[13px] text-slate-400 font-bold px-1">請至少輸入 2 個字。</div>';
+      return;
+    }
+
+    box.innerHTML = '<div class="text-[13px] text-slate-400 font-bold px-1">搜尋中...</div>';
+    try {
+      const rows = await window.fetchAPI("searchInboxRecipients", { keyword: query }, true);
+      const list = Array.isArray(rows) ? rows : [];
+      if (!list.length) {
+        box.innerHTML = '<div class="text-[13px] text-red-400 font-bold px-1">找不到符合的收件人</div>';
+        return;
+      }
+      box.innerHTML = list.map(user => `
+        <button type="button" onclick="window.selectInboxRecipient('${escapeHTML(user.userId)}','${escapeHTML(user.name)}')" class="w-full p-3 rounded-2xl bg-slate-50 border border-slate-100 text-left active:scale-[0.99] transition-all">
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-[15px] font-black text-slate-900 truncate">${escapeHTML(user.name || "未命名")}</p>
+              <p class="text-[12px] text-slate-500 font-bold mt-1 truncate">${escapeHTML([user.phone, user.industry].filter(Boolean).join(" / ") || user.userId)}</p>
+            </div>
+            <span class="shrink-0 rounded-full bg-blue-50 text-blue-600 px-2 py-1 text-[11px] font-black">${escapeHTML(user.roleLabel || "用戶")}</span>
+          </div>
+        </button>
+      `).join("");
+    } catch (e) {
+      box.innerHTML = `<div class="text-[13px] text-red-400 font-bold px-1">搜尋失敗：${escapeHTML(e.message || e)}</div>`;
+    }
+  };
+
+  window.selectInboxRecipient = function (userId, name) {
+    const hidden = $("inbox-recipient-id");
+    const query = $("inbox-recipient-query");
+    const box = $("inbox-recipient-results");
+    if (hidden) hidden.value = userId || "";
+    if (query) query.value = name || userId || "";
+    if (box) box.innerHTML = `<div class="rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 px-3 py-2 text-[13px] font-black">已選擇：${escapeHTML(name || userId)}</div>`;
+  };
+
+  window.sendInboxMessage = async function (btn) {
+    const receiverUserId = $("inbox-recipient-id")?.value?.trim() || "";
+    const receiverQuery = $("inbox-recipient-query")?.value?.trim() || "";
+    const messageType = $("inbox-message-type")?.value || "message";
+    const title = $("inbox-message-title")?.value?.trim() || "";
+    const body = $("inbox-message-body")?.value?.trim() || "";
+    if (!receiverUserId && !receiverQuery) return window.showToast?.("請先選擇收件人", true);
+    if (!title) return window.showToast?.("請輸入標題", true);
+    if (!body) return window.showToast?.("請輸入內容", true);
+
+    const oldText = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "傳送中...";
+      btn.classList.add("opacity-70");
+    }
+    try {
+      await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, messageType, title, body }, true);
+      window.showToast?.("訊息已送出");
+      ["inbox-message-title", "inbox-message-body", "inbox-recipient-id", "inbox-recipient-query"].forEach(id => {
+        const el = $(id);
+        if (el) el.value = "";
+      });
+      const results = $("inbox-recipient-results");
+      if (results) results.innerHTML = "";
+      window.toggleInboxComposer(false);
+      await window.loadInbox();
+    } catch (e) {
+      window.showToast?.("傳送失敗：" + (e.message || e), true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = oldText || "送出訊息";
+        btn.classList.remove("opacity-70");
+      }
+    }
+  };
+
   window.openInboxItem = async function (messageId) {
     if (!messageId || !canUseInbox()) return;
     try {

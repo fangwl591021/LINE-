@@ -229,7 +229,9 @@ const SecurityModule = {
       'listInboxItems',
       'getInboxItem',
       'markInboxRead',
+      'searchInboxRecipients',
       'sendInboxMessage',
+      'dailyPointCheckin',
       'mlmCreateOrder',
       'createTenantBonusOrder',
       'nfcCheckin',
@@ -738,6 +740,84 @@ const PointModule = {
         list: typedResult.list.slice(0, baseBody.per_page)
       }
     };
+  }
+,
+
+  async resolvePointUserId(env, userId) {
+    const id = String(userId || '').trim();
+    if (!id || !env || !env.ACTMASTER_DB) return id;
+    const identity = await D1ReadModule.findUserByIdentity(env, id).catch(() => null);
+    const row = identity && identity.user;
+    return D1ReadModule.text(row && row.point_line_id)
+      || D1ReadModule.text(identity && identity.canonicalId)
+      || D1ReadModule.text(row && row.line_id)
+      || id;
+  },
+
+  async ensureAwardTable(env) {
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS point_awards (
+        award_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT '',
+        card_id TEXT NOT NULL DEFAULT '',
+        award_type TEXT NOT NULL DEFAULT 'card_scan_create',
+        points REAL NOT NULL DEFAULT 0,
+        point_type TEXT NOT NULL DEFAULT 'gift_money',
+        status TEXT NOT NULL DEFAULT 'pending',
+        response_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_point_awards_unique_card_scan
+      ON point_awards(user_id, card_id, award_type)
+      WHERE user_id <> '' AND card_id <> ''
+    `).run();
+  },
+
+  taipeiDate() {
+    return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  },
+
+  async dailyCheckin(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    await this.ensureAwardTable(env);
+    const rawUserId = String(payload.authenticatedUserId || payload.userId || '').trim();
+    const pointUserId = await this.resolvePointUserId(env, rawUserId);
+    if (!pointUserId) return { success: false, error: 'Missing userId' };
+
+    const today = this.taipeiDate();
+    const awardId = `AWD_DAILY_${pointUserId}_${today}`;
+    await env.ACTMASTER_DB.prepare(`
+      INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
+      VALUES (?, ?, ?, 'daily_checkin', 10, 'gift_money', 'pending', '{}', CURRENT_TIMESTAMP)
+    `).bind(awardId, pointUserId, today).run();
+
+    const existing = await D1ReadModule.first(env, 'SELECT * FROM point_awards WHERE award_id = ? LIMIT 1', [awardId]);
+    if (existing && existing.status === 'sent') {
+      return { success: true, data: { awarded: false, alreadyChecked: true, points: 0, date: today, message: '今天已領取過點數家族簽到獎勵' } };
+    }
+
+    const result = await this.insertUserPoint({
+      userId: pointUserId,
+      points: 10,
+      pointType: 'gift_money',
+      eventName: '點數家族每日簽到',
+      eventContent: `點數家族 ${today} 每日簽到贈點`,
+      shop_remark: `daily_checkin=${today}`
+    }, env);
+
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE point_awards
+      SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE award_id = ?
+    `).bind(result && result.success ? 'sent' : 'failed', JSON.stringify(result || {}), awardId).run();
+
+    if (!result || !result.success) {
+      return { success: false, error: result && result.error ? result.error : '每日簽到贈點失敗', data: { date: today } };
+    }
+    return { success: true, data: { awarded: true, alreadyChecked: false, points: 10, date: today, message: '點數家族簽到成功，已獲得 10 點' } };
   }
 };
 
@@ -3531,16 +3611,82 @@ const D1InboxModule = {
     return { success: true, data: { messageId, status: 'read' } };
   },
 
+  async searchRecipients(payload, env) {
+    await this.ensure(env);
+    const actorId = this.ownUserId(payload);
+    const actorRole = this.text(payload.authenticatedRole || payload.role, 'user').toLowerCase();
+    const actorNetwork = this.text(payload.authenticatedNetworkId || payload.networkId, 'admin');
+    const keyword = this.text(payload.keyword || payload.query || payload.q);
+    if (!actorId) return { success: false, error: 'Missing userId' };
+    if (keyword.length < 2) return { success: true, data: [] };
+
+    const like = `%${keyword}%`;
+    const binds = [actorId, like, like, like, like];
+    let scopeSql = '';
+    if (actorRole === 'admin') {
+      scopeSql = '';
+    } else if (actorRole === 'store') {
+      scopeSql = 'AND (line_id = ? OR row_id = ? OR network_id = ? OR referrer_id = ?)';
+      binds.push(actorId, actorId, actorId, actorId);
+    } else {
+      scopeSql = 'AND (network_id = ? OR referrer_id = ?)';
+      binds.push(actorNetwork, actorNetwork);
+    }
+
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM users
+      WHERE line_id <> ?
+        AND (name LIKE ? OR phone LIKE ? OR line_id LIKE ? OR store_id LIKE ?)
+        ${scopeSql}
+      ORDER BY CASE WHEN name LIKE ? THEN 0 ELSE 1 END, row_id DESC
+      LIMIT 20
+    `, [...binds, like]).catch(() => []);
+
+    return {
+      success: true,
+      data: rows.map(row => D1ReadModule.userRow(row)).filter(Boolean).map(user => ({
+        userId: user.userId,
+        name: user.name,
+        phone: user.phone,
+        industry: user.industry,
+        role: user.role,
+        roleLabel: user.roleLabel,
+        networkId: user.networkId
+      }))
+    };
+  },
+
+  canReachRecipient(payload, receiverRow) {
+    const actorId = this.ownUserId(payload);
+    const actorRole = this.text(payload.authenticatedRole || payload.role, 'user').toLowerCase();
+    const actorNetwork = this.text(payload.authenticatedNetworkId || payload.networkId, 'admin');
+    const receiverId = this.text(receiverRow && (receiverRow.line_id || receiverRow.row_id));
+    const receiverNetwork = this.text(receiverRow && receiverRow.network_id, 'admin');
+    const receiverReferrer = this.text(receiverRow && receiverRow.referrer_id);
+    if (!actorId || !receiverId || actorId === receiverId) return false;
+    if (actorRole === 'admin') return true;
+    if (actorRole === 'store') {
+      return receiverNetwork === actorId || receiverReferrer === actorId || receiverId === actorId;
+    }
+    return receiverNetwork === actorNetwork || receiverReferrer === actorNetwork;
+  },
+
   async send(payload, env) {
     await this.ensure(env);
     const senderUserId = this.ownUserId(payload);
-    const receiverUserId = this.text(payload.receiverUserId || payload.receiver_user_id || payload.toUserId);
+    let receiverUserId = this.text(payload.receiverUserId || payload.receiver_user_id || payload.toUserId);
+    if (!receiverUserId && this.text(payload.receiverQuery || payload.keyword)) {
+      const found = await this.searchRecipients({ ...payload, keyword: payload.receiverQuery || payload.keyword }, env);
+      receiverUserId = this.text(found && found.data && found.data[0] && found.data[0].userId);
+    }
     if (!senderUserId) return { success: false, error: 'Missing sender' };
     if (!receiverUserId) return { success: false, error: '請指定收件人' };
     if (receiverUserId === senderUserId) return { success: false, error: '不能寄給自己' };
 
     const receiver = await D1ReadModule.findUserByIdentity(env, receiverUserId).catch(() => null);
     if (!receiver || !receiver.user) return { success: false, error: '找不到收件人' };
+    if (!this.canReachRecipient(payload, receiver.user)) return { success: false, error: '收件人不在可傳送範圍內' };
 
     const title = this.text(payload.title, '新訊息');
     const body = this.text(payload.body || payload.content);
@@ -5383,6 +5529,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1InboxModule.get(payload || {}, env);
     case 'markInboxRead':
       return await D1InboxModule.markRead(payload || {}, env);
+    case 'searchInboxRecipients':
+      return await D1InboxModule.searchRecipients(payload || {}, env);
     case 'sendInboxMessage':
       return await D1InboxModule.send(payload || {}, env);
     
@@ -5392,6 +5540,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
+    case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
     case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);

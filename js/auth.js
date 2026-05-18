@@ -678,6 +678,39 @@ window.loadPointsWallet = async function(force = false) {
   }
 };
 
+window.claimDailyPointCheckin = async function(btn) {
+  if (!window.currentUserProfile?.userId || typeof window.fetchAPI !== 'function') {
+    return window.showToast?.('請先登入後再簽到', true);
+  }
+  const statusEl = document.getElementById('daily-checkin-status');
+  const oldText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '處理中';
+    btn.classList.add('opacity-70');
+  }
+  try {
+    const res = await window.fetchAPI('dailyPointCheckin', { userId: window.currentUserProfile.userId }, true);
+    const data = res && (res.data || res);
+    const message = data?.message || (data?.alreadyChecked ? '今天已領取過點數家族簽到獎勵' : '點數家族簽到成功，已獲得 10 點');
+    if (statusEl) statusEl.textContent = message;
+    window.showToast?.(message, false);
+    window.pointWalletData = null;
+    await window.loadPointsWallet(true);
+    await window.refreshPointBalanceBadge?.();
+  } catch (e) {
+    const msg = e.message || e || '每日簽到失敗';
+    if (statusEl) statusEl.textContent = String(msg);
+    window.showToast?.('每日簽到失敗：' + msg, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = oldText || '簽到';
+      btn.classList.remove('opacity-70');
+    }
+  }
+};
+
 window.reorderSettingsSections = function() {
   const page = document.getElementById('page-admin-settings');
   if (!page) return;
