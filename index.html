@@ -610,6 +610,60 @@
           </div>
         </section>
 
+        <section id="store-point-cashier" class="hidden bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          <div class="p-5 border-b border-slate-100 bg-slate-50/70">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-[17px] font-black text-slate-900 flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[#06C755] icon-filled">point_of_sale</span>
+                  店家點數收銀
+                </h3>
+                <p class="text-[13px] text-slate-500 font-bold mt-1">掃客戶帳戶後，可折抵扣點或消費贈點。</p>
+              </div>
+              <button type="button" onclick="window.toggleStorePointCashier()" class="w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center active:scale-95 transition-transform">
+                <span id="store-point-cashier-icon" class="material-symbols-outlined text-slate-500">expand_more</span>
+              </button>
+            </div>
+          </div>
+          <div id="store-point-cashier-body" class="hidden p-5 space-y-4">
+            <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl">
+              <label class="cursor-pointer">
+                <input type="radio" name="store-point-mode" value="redeem" class="peer sr-only" checked onchange="window.updateStorePointPreview()">
+                <div class="py-3 text-center rounded-xl text-[14px] font-black text-slate-500 peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm transition-all">折抵扣點</div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="store-point-mode" value="reward" class="peer sr-only" onchange="window.updateStorePointPreview()">
+                <div class="py-3 text-center rounded-xl text-[14px] font-black text-slate-500 peer-checked:bg-white peer-checked:text-[#06C755] peer-checked:shadow-sm transition-all">消費贈點</div>
+              </label>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-[13px] font-black text-slate-600">客戶帳號 / QR 內容</label>
+              <div class="grid grid-cols-[1fr_auto] gap-2">
+                <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px]" placeholder="掃 QR 後自動填入，也可貼上 UID">
+                <button type="button" onclick="document.getElementById('store-point-qr-input').click()" class="px-4 rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[18px]">qr_code_scanner</span>
+                  掃碼
+                </button>
+                <input id="store-point-qr-input" type="file" accept="image/*" capture="environment" class="hidden" onchange="window.scanStorePointQr(this)">
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <label class="text-[13px] font-black text-slate-600">消費金額</label>
+              <input id="store-point-amount" type="number" min="0" step="1" inputmode="numeric" class="custom-input !py-3 text-[20px] font-black" placeholder="例如 1000" oninput="window.updateStorePointPreview()">
+            </div>
+
+            <div id="store-point-preview" class="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed">
+              請先輸入消費金額。
+            </div>
+
+            <button id="btn-store-point-submit" type="button" onclick="window.submitStorePointCashier(this)" class="w-full py-4 rounded-2xl bg-[#06C755] text-white text-[16px] font-black shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">
+              確認送出
+            </button>
+          </div>
+        </section>
+
         <section>
           <div class="flex items-center justify-between mb-4 px-1">
             <div class="flex items-center gap-2">

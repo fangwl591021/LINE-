@@ -631,6 +631,8 @@ window.loadPointsWallet = async function(force = false) {
   const listEl = document.getElementById('points-wallet-list');
   if (!balanceEl || !listEl) return;
 
+  window.updateStorePointCashierVisibility?.();
+
   if (force) window.pointWalletData = null;
   listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">載入點數紀錄中...</div>';
 
@@ -675,6 +677,150 @@ window.loadPointsWallet = async function(force = false) {
   if (badge) {
     badge.textContent = Number(data.balance || 0).toLocaleString('zh-TW') + ' 點';
     badge.classList.remove('hidden');
+  }
+};
+
+window.canUseStorePointCashier = function() {
+  const role = String(window.userRole || window.currentUser?.role || '').toLowerCase();
+  return role === 'admin' || role === 'store';
+};
+
+window.updateStorePointCashierVisibility = function() {
+  const panel = document.getElementById('store-point-cashier');
+  if (!panel) return;
+  panel.classList.toggle('hidden', !window.canUseStorePointCashier());
+  window.updateStorePointPreview?.();
+};
+
+window.toggleStorePointCashier = function() {
+  const body = document.getElementById('store-point-cashier-body');
+  const icon = document.getElementById('store-point-cashier-icon');
+  if (!body) return;
+  const willOpen = body.classList.contains('hidden');
+  body.classList.toggle('hidden', !willOpen);
+  if (icon) icon.textContent = willOpen ? 'expand_less' : 'expand_more';
+};
+
+window.getStorePointMode = function() {
+  return document.querySelector('input[name="store-point-mode"]:checked')?.value || 'redeem';
+};
+
+window.extractPointCustomerId = function(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  try {
+    const url = new URL(raw, window.location.origin);
+    const keys = ['pt_uid', 'wallet_uid', 'pointUserId', 'LINE_user_id', 'lineUserId', 'userId', 'uid'];
+    for (const key of keys) {
+      const found = String(url.searchParams.get(key) || '').trim();
+      if (found) return found;
+    }
+  } catch (e) {}
+
+  const match = raw.match(/\bU[0-9a-fA-F]{20,64}\b/);
+  return match ? match[0] : raw;
+};
+
+window.updateStorePointPreview = function() {
+  const preview = document.getElementById('store-point-preview');
+  const amountInput = document.getElementById('store-point-amount');
+  if (!preview || !amountInput) return;
+
+  const amount = Math.floor(Number(amountInput.value || 0));
+  const mode = window.getStorePointMode();
+  if (!amount || amount <= 0) {
+    preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
+    preview.textContent = '請先輸入消費金額。';
+    return;
+  }
+
+  if (mode === 'reward') {
+    preview.className = 'rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
+    preview.innerHTML = `消費金額 NT$${amount.toLocaleString('zh-TW')}，將贈送客戶 <b class="text-[#06C755]">${amount.toLocaleString('zh-TW')} 點</b>。`;
+    return;
+  }
+
+  const maxDeduct = Math.floor(amount * 0.1);
+  const payable = amount - maxDeduct;
+  preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
+  preview.innerHTML = `最多可折抵 <b class="text-blue-600">${maxDeduct.toLocaleString('zh-TW')} 點</b>，若客戶點數足夠，應收 NT$${payable.toLocaleString('zh-TW')}。`;
+};
+
+window.scanStorePointQr = async function(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    if (!('BarcodeDetector' in window)) throw new Error('此瀏覽器不支援 QR 解析');
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const image = await createImageBitmap(file);
+    const codes = await detector.detect(image);
+    const raw = codes?.[0]?.rawValue || '';
+    if (!raw) throw new Error('沒有讀到 QR 內容');
+    const target = document.getElementById('store-point-customer');
+    if (target) target.value = window.extractPointCustomerId(raw);
+    window.showToast?.('已讀取客戶帳號', false);
+  } catch (e) {
+    window.showToast?.((e.message || 'QR 讀取失敗') + '，可改用貼上客戶 UID。', true);
+  } finally {
+    if (input) input.value = '';
+  }
+};
+
+window.submitStorePointCashier = async function(btn) {
+  if (!window.canUseStorePointCashier()) {
+    return window.showToast?.('只有店長或總管可以使用店家點數收銀', true);
+  }
+  const customerInput = document.getElementById('store-point-customer');
+  const amountInput = document.getElementById('store-point-amount');
+  const preview = document.getElementById('store-point-preview');
+  const customerUserId = window.extractPointCustomerId(customerInput?.value || '');
+  const amount = Math.floor(Number(amountInput?.value || 0));
+  const mode = window.getStorePointMode();
+
+  if (!customerUserId) return window.showToast?.('請先掃描或輸入客戶帳號', true);
+  if (!amount || amount <= 0) return window.showToast?.('請輸入正確消費金額', true);
+
+  const oldText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '處理中...';
+    btn.classList.add('opacity-70');
+  }
+
+  try {
+    const res = await window.fetchAPI('storeAdjustCustomerPoints', {
+      customerUserId,
+      amount,
+      mode
+    }, true);
+    if (!res || res.error) throw new Error(res?.error || '點數處理失敗');
+    const data = res.data || res;
+    const changed = Number(data.changedPoints || Math.abs(data.points || 0)).toLocaleString('zh-TW');
+    const payable = Number(data.payableAmount || 0).toLocaleString('zh-TW');
+    const message = data.mode === 'reward'
+      ? `已完成消費贈點：${changed} 點`
+      : `已完成折抵：${changed} 點，應收 NT$${payable}`;
+    if (preview) {
+      preview.className = 'rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
+      preview.textContent = message;
+    }
+    window.showToast?.(message, false);
+    window.pointWalletData = null;
+    await window.refreshPointBalanceBadge?.();
+  } catch (e) {
+    const msg = e.message || e || '點數處理失敗';
+    if (preview) {
+      preview.className = 'rounded-2xl bg-red-50 border border-red-100 p-4 text-[14px] text-red-600 font-bold leading-relaxed';
+      preview.textContent = msg;
+    }
+    window.showToast?.('點數處理失敗：' + msg, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = oldText || '確認送出';
+      btn.classList.remove('opacity-70');
+    }
   }
 };
 

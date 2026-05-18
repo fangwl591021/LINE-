@@ -212,7 +212,8 @@ const SecurityModule = {
       'confirmPayment',
       'toggleCheckin',
       'saveStoreSettings',
-      'extractLineVoomMedia'
+      'extractLineVoomMedia',
+      'storeAdjustCustomerPoints'
     ]);
     const ownTokenRequired = new Set([
       'registerUser',
@@ -825,6 +826,95 @@ const PointModule = {
       return { success: false, error: result && result.error ? result.error : '每日簽到贈點失敗', data: { date: today } };
     }
     return { success: true, data: { awarded: true, alreadyChecked: false, points: 10, date: today, message: '點數家族簽到成功，已獲得 10 點' } };
+  },
+
+  async storeAdjustCustomerPoints(payload, env) {
+    const actorId = String(payload.authenticatedUserId || payload.userId || '').trim();
+    const rawCustomerId = String(
+      payload.customerUserId ||
+      payload.targetUserId ||
+      payload.pointUserId ||
+      payload.LINE_user_id ||
+      payload.uid ||
+      ''
+    ).trim();
+    const customerPointUserId = await this.resolvePointUserId(env, rawCustomerId);
+    const amount = Math.floor(Number(payload.amount || payload.spendAmount || payload.total || 0));
+    const mode = String(payload.mode || payload.operation || 'redeem').trim().toLowerCase();
+
+    if (!actorId) return { success: false, error: 'Missing operator user id' };
+    if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
+    if (!amount || amount <= 0) return { success: false, error: '消費金額必須大於 0' };
+
+    const wallet = await this.queryUserPoints({
+      pointUserId: customerPointUserId,
+      point_type: 'gift_money',
+      page: 1,
+      per_page: 100
+    }, env);
+    if (!wallet || !wallet.success) {
+      return { success: false, error: wallet && wallet.error ? wallet.error : '無法取得客戶點數' };
+    }
+
+    const balanceBefore = Math.max(0, Math.floor(Number(wallet.data?.balance || 0)));
+    const isReward = mode === 'reward' || mode === 'earn' || mode === 'add';
+    let points = 0;
+    let payableAmount = amount;
+    let eventName = '';
+    let eventContent = '';
+
+    if (isReward) {
+      points = amount;
+      eventName = '消費贈點';
+      eventContent = `消費 NT$${amount.toLocaleString('zh-TW')}，1:1 贈送 ${points.toLocaleString('zh-TW')} 點`;
+    } else {
+      const requestedDeduction = Math.floor(amount * 0.1);
+      const deductPoints = Math.min(requestedDeduction, balanceBefore);
+      if (!deductPoints || deductPoints <= 0) {
+        return {
+          success: false,
+          error: '客戶可用點數不足，無法折抵',
+          data: { amount, balanceBefore, requestedDeduction, payableAmount: amount }
+        };
+      }
+      points = -deductPoints;
+      payableAmount = Math.max(0, amount - deductPoints);
+      eventName = '消費折抵';
+      eventContent = `消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${deductPoints.toLocaleString('zh-TW')} 點，應收 NT$${payableAmount.toLocaleString('zh-TW')}`;
+    }
+
+    const result = await this.insertUserPoint({
+      userId: customerPointUserId,
+      points,
+      pointType: 'gift_money',
+      eventName,
+      eventContent,
+      shop_user_lineid: actorId,
+      shop_remark: `store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
+    }, env);
+
+    if (!result || !result.success) {
+      return { success: false, error: result && result.error ? result.error : '點數流水寫入失敗', data: result };
+    }
+
+    const changedPoints = Math.abs(points);
+    return {
+      success: true,
+      data: {
+        mode: isReward ? 'reward' : 'redeem',
+        customerPointUserId,
+        amount,
+        points,
+        changedPoints,
+        payableAmount,
+        requestedDeduction: isReward ? 0 : Math.floor(amount * 0.1),
+        balanceBefore,
+        balanceAfterEstimate: balanceBefore + points,
+        eventName,
+        eventContent,
+        insertResult: result.data || result
+      }
+    };
   }
 };
 
@@ -6003,6 +6093,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
+    case 'storeAdjustCustomerPoints': return await PointModule.storeAdjustCustomerPoints(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
     case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);
