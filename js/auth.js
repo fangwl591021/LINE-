@@ -772,6 +772,7 @@ window.fillStorePointCustomerFromQr = function(raw) {
     target.value = customerId;
     target.dispatchEvent(new Event('input', { bubbles: true }));
   }
+  window.lookupStorePointCustomer?.();
   return customerId;
 };
 
@@ -863,9 +864,65 @@ window.updateStorePointPreview = function() {
   }
 
   const maxDeduct = Math.floor(amount * 0.1);
-  const payable = amount - maxDeduct;
+  const customerBalance = Number(window.storePointCustomer?.balance || 0);
+  const actualDeduct = customerBalance > 0 ? Math.min(maxDeduct, Math.floor(customerBalance)) : maxDeduct;
+  const payable = amount - actualDeduct;
   preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
-  preview.innerHTML = `最多可折抵 <b class="text-blue-600">${maxDeduct.toLocaleString('zh-TW')} 點</b>，若客戶點數足夠，應收 NT$${payable.toLocaleString('zh-TW')}。`;
+  preview.innerHTML = `最多可折抵 <b class="text-blue-600">${maxDeduct.toLocaleString('zh-TW')} 點</b>${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}，預估應收 NT$${payable.toLocaleString('zh-TW')}。`;
+};
+
+window.renderStorePointCustomer = function(customer) {
+  const card = document.getElementById('store-point-customer-card');
+  const avatar = document.getElementById('store-point-customer-avatar');
+  const name = document.getElementById('store-point-customer-name');
+  const meta = document.getElementById('store-point-customer-meta');
+  const balance = document.getElementById('store-point-customer-balance');
+  if (!card) return;
+  if (!customer) {
+    window.storePointCustomer = null;
+    card.classList.add('hidden');
+    return;
+  }
+  window.storePointCustomer = customer;
+  if (avatar) {
+    avatar.src = customer.avatarUrl || customer.card?.imageUrl || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(customer.name || 'U') + '&background=E2E8F0&color=334155';
+  }
+  if (name) name.textContent = customer.name || '未命名用戶';
+  if (meta) {
+    const metaParts = [customer.phone, customer.industry].filter(Boolean);
+    meta.textContent = metaParts.length ? metaParts.join(' / ') : (customer.customerPointUserId || '-');
+  }
+  if (balance) balance.textContent = Number(customer.balance || 0).toLocaleString('zh-TW') + ' 點';
+  card.classList.remove('hidden');
+  window.updateStorePointPreview?.();
+};
+
+window.lookupStorePointCustomer = async function() {
+  if (!window.canUseStorePointCashier()) return null;
+  const input = document.getElementById('store-point-customer');
+  const customerUserId = window.extractPointCustomerId(input?.value || '');
+  if (!customerUserId) {
+    window.renderStorePointCustomer(null);
+    return null;
+  }
+  if (input && input.value !== customerUserId) input.value = customerUserId;
+  try {
+    const res = await window.fetchAPI('getStorePointCustomer', { customerUserId }, true);
+    if (!res || res.error) throw new Error(res?.error || '查無客戶資料');
+    const data = res.data || res;
+    window.renderStorePointCustomer(data);
+    return data;
+  } catch (e) {
+    window.renderStorePointCustomer({
+      name: '查無用戶資料',
+      phone: '',
+      industry: customerUserId,
+      customerPointUserId: customerUserId,
+      balance: 0
+    });
+    window.showToast?.('客戶資料查詢失敗：' + (e.message || e), true);
+    return null;
+  }
 };
 
 window.scanStorePointQr = async function(input) {
@@ -924,6 +981,7 @@ window.submitStorePointCashier = async function(btn) {
     }
     window.showToast?.(message, false);
     window.pointWalletData = null;
+    await window.lookupStorePointCustomer?.();
     await window.refreshPointBalanceBadge?.();
   } catch (e) {
     const msg = e.message || e || '點數處理失敗';

@@ -213,7 +213,8 @@ const SecurityModule = {
       'toggleCheckin',
       'saveStoreSettings',
       'extractLineVoomMedia',
-      'storeAdjustCustomerPoints'
+      'storeAdjustCustomerPoints',
+      'getStorePointCustomer'
     ]);
     const ownTokenRequired = new Set([
       'registerUser',
@@ -828,6 +829,109 @@ const PointModule = {
     return { success: true, data: { awarded: true, alreadyChecked: false, points: 10, date: today, message: '點數家族簽到成功，已獲得 10 點' } };
   },
 
+  async getStorePointCustomer(payload, env) {
+    const rawCustomerId = String(
+      payload.customerUserId ||
+      payload.targetUserId ||
+      payload.pointUserId ||
+      payload.LINE_user_id ||
+      payload.uid ||
+      ''
+    ).trim();
+    const customerPointUserId = await this.resolvePointUserId(env, rawCustomerId);
+    if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
+
+    let identity = null;
+    let user = null;
+    let card = null;
+    if (env.ACTMASTER_DB) {
+      identity = await D1ReadModule.findUserByIdentity(env, rawCustomerId).catch(() => null);
+      user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
+      card = await D1ReadModule.first(env, `
+        SELECT * FROM card_contacts
+        WHERE line_id = ? OR creator_id = ?
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT 1
+      `, [customerPointUserId, customerPointUserId]).catch(() => null);
+      if (!card && rawCustomerId !== customerPointUserId) {
+        card = await D1ReadModule.first(env, `
+          SELECT * FROM card_contacts
+          WHERE line_id = ? OR creator_id = ?
+          ORDER BY COALESCE(updated_at, created_at) DESC
+          LIMIT 1
+        `, [rawCustomerId, rawCustomerId]).catch(() => null);
+      }
+    }
+
+    const mappedCard = D1ReadModule.cardRow(card);
+    const wallet = await this.queryUserPoints({
+      pointUserId: customerPointUserId,
+      point_type: 'gift_money',
+      page: 1,
+      per_page: 20
+    }, env);
+    if (!wallet || !wallet.success) {
+      return { success: false, error: wallet && wallet.error ? wallet.error : '無法取得客戶點數' };
+    }
+
+    const displayName = D1ReadModule.text(user && user.name)
+      || D1ReadModule.text(mappedCard && mappedCard.name)
+      || D1ReadModule.text(mappedCard && mappedCard['姓名'])
+      || '未命名用戶';
+    const phone = D1ReadModule.text(user && user.phone)
+      || D1ReadModule.text(mappedCard && (mappedCard.mobile || mappedCard['手機號碼']));
+    const industry = D1ReadModule.text(user && user.industry)
+      || D1ReadModule.text(mappedCard && (mappedCard.title || mappedCard.companyName || mappedCard['職稱'] || mappedCard['公司名稱']));
+
+    return {
+      success: true,
+      data: {
+        customerUserId: rawCustomerId,
+        customerPointUserId,
+        canonicalUserId: D1ReadModule.text(identity && identity.canonicalId, customerPointUserId),
+        name: displayName,
+        phone,
+        industry,
+        role: D1ReadModule.text(user && user.role, 'user'),
+        avatarUrl: D1ReadModule.text(mappedCard && mappedCard.imageUrl),
+        balance: Number(wallet.data?.balance || 0) || 0,
+        pointType: 'gift_money',
+        user,
+        card: mappedCard
+      }
+    };
+  },
+
+  async ensureCashierLedgerTable(env) {
+    if (!env.ACTMASTER_DB) return false;
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS store_point_cashier_logs (
+        log_id TEXT PRIMARY KEY,
+        actor_user_id TEXT NOT NULL DEFAULT '',
+        customer_user_id TEXT NOT NULL DEFAULT '',
+        customer_point_user_id TEXT NOT NULL DEFAULT '',
+        mode TEXT NOT NULL DEFAULT '',
+        amount REAL NOT NULL DEFAULT 0,
+        points REAL NOT NULL DEFAULT 0,
+        payable_amount REAL NOT NULL DEFAULT 0,
+        balance_before REAL NOT NULL DEFAULT 0,
+        balance_after_estimate REAL NOT NULL DEFAULT 0,
+        point_type TEXT NOT NULL DEFAULT 'gift_money',
+        point_response_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_store_point_cashier_actor_time
+      ON store_point_cashier_logs(actor_user_id, created_at)
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_store_point_cashier_customer_time
+      ON store_point_cashier_logs(customer_point_user_id, created_at)
+    `).run();
+    return true;
+  },
+
   async storeAdjustCustomerPoints(payload, env) {
     const actorId = String(payload.authenticatedUserId || payload.userId || '').trim();
     const rawCustomerId = String(
@@ -898,9 +1002,33 @@ const PointModule = {
     }
 
     const changedPoints = Math.abs(points);
+    const ledgerId = `SPC_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    if (await this.ensureCashierLedgerTable(env)) {
+      await env.ACTMASTER_DB.prepare(`
+        INSERT INTO store_point_cashier_logs (
+          log_id, actor_user_id, customer_user_id, customer_point_user_id,
+          mode, amount, points, payable_amount, balance_before, balance_after_estimate,
+          point_type, point_response_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'gift_money', ?)
+      `).bind(
+        ledgerId,
+        actorId,
+        rawCustomerId,
+        customerPointUserId,
+        isReward ? 'reward' : 'redeem',
+        amount,
+        points,
+        payableAmount,
+        balanceBefore,
+        balanceBefore + points,
+        JSON.stringify(result.data || result)
+      ).run();
+    }
+
     return {
       success: true,
       data: {
+        ledgerId,
         mode: isReward ? 'reward' : 'redeem',
         customerPointUserId,
         amount,
@@ -6093,6 +6221,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
+    case 'getStorePointCustomer':  return await PointModule.getStorePointCustomer(payload || {}, env);
     case 'storeAdjustCustomerPoints': return await PointModule.storeAdjustCustomerPoints(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
