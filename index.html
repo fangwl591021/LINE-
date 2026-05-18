@@ -65,6 +65,10 @@
     </div>
 
     <div class="flex items-center gap-2 shrink-0">
+      <button id="inbox-nav-button" type="button" onclick="window.goPage('inbox')" class="relative hidden w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
+        <span class="material-symbols-outlined text-[18px]">mail</span>
+        <span id="inbox-unread-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-[18px] text-center shadow-sm">0</span>
+      </button>
       <button id="point-balance-badge" type="button" onclick="window.openPointsWallet()" class="hidden bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2.5 py-1 text-[11px] font-black whitespace-nowrap active:scale-95 transition-transform">0 點</button>
       <img id="avatar" src="" class="w-8 h-8 rounded-full border border-slate-200 hidden object-cover shadow-sm">
       <button id="top-nav-switch" onclick="window.toggleAdminMode()" class="hidden w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
@@ -872,6 +876,40 @@
       </div>
     </div>
 
+    <!-- ==================== 收件匣 ==================== -->
+    <div id="page-inbox" class="hidden animate-in slide-in-from-right-8 mx-1 pb-10">
+      <div class="flex items-center justify-between gap-3 mb-4 mt-2 px-1">
+        <div class="flex items-center gap-3 min-w-0">
+          <button onclick="window.goPage('home')" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
+            <span class="material-symbols-outlined text-[20px]">arrow_back</span>
+          </button>
+          <h2 class="text-xl font-black text-slate-800 tracking-tight">收件匣</h2>
+        </div>
+        <button type="button" onclick="window.loadInbox()" class="px-3 py-2 rounded-2xl bg-slate-100 text-slate-600 text-[13px] font-bold active:scale-95 transition-all">重新整理</button>
+      </div>
+
+      <div id="inbox-detail-panel" class="hidden bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden mb-4">
+        <div class="p-5 border-b border-slate-100 flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div id="inbox-detail-type" class="text-[12px] text-blue-600 font-black mb-1">訊息</div>
+            <h3 id="inbox-detail-title" class="text-lg font-black text-slate-900 leading-snug"></h3>
+            <p id="inbox-detail-meta" class="text-[12px] text-slate-400 font-bold mt-1"></p>
+          </div>
+          <button type="button" onclick="window.closeInboxDetail()" class="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center active:scale-90 transition-all">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div class="p-5 space-y-4">
+          <p id="inbox-detail-body" class="text-[15px] text-slate-700 leading-relaxed whitespace-pre-wrap"></p>
+          <div id="inbox-sender-card" class="hidden rounded-2xl bg-slate-50 border border-slate-100 p-4"></div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div id="inbox-list" class="divide-y divide-slate-100"></div>
+      </div>
+    </div>
+
     <!-- ==================== 我的活動明細 ==================== -->
     <div id="page-my-act-detail" class="hidden animate-in slide-in-from-right-8 mx-1 pb-10">
       <div class="flex items-center gap-3 mb-4 mt-2 px-1">
@@ -1383,6 +1421,7 @@
 <script src="js/modules/activities.js?v=7.6"></script>
 <script src="js/modules/admin.js?v=8.5"></script>
 <script src="js/modules/home.js?v=7.19"></script>
+<script src="js/modules/inbox.js?v=1.0"></script>
 <script src="js/modules/settings.js?v=7.2"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.2"></script>

@@ -225,6 +225,11 @@ const SecurityModule = {
       'savePersonalTask',
       'completePersonalTask',
       'deletePersonalTask',
+      'getInboxCount',
+      'listInboxItems',
+      'getInboxItem',
+      'markInboxRead',
+      'sendInboxMessage',
       'mlmCreateOrder',
       'createTenantBonusOrder',
       'nfcCheckin',
@@ -3328,6 +3333,250 @@ const D1PersonalTaskModule = {
   }
 };
 
+const D1InboxModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  json(value, fallback = {}) {
+    if (!value) return fallback;
+    if (typeof value === 'object') return value;
+    try {
+      const parsed = JSON.parse(String(value));
+      return parsed && typeof parsed === 'object' ? parsed : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  },
+
+  ownUserId(payload) {
+    return this.text(payload.authenticatedUserId || payload.userId || payload.lineId);
+  },
+
+  async ensure(env) {
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS inbox_items (
+        message_id TEXT PRIMARY KEY,
+        receiver_user_id TEXT NOT NULL,
+        sender_user_id TEXT NOT NULL DEFAULT '',
+        sender_card_id TEXT NOT NULL DEFAULT '',
+        network_id TEXT NOT NULL DEFAULT 'admin',
+        message_type TEXT NOT NULL DEFAULT 'message',
+        title TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        sender_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'unread',
+        read_at TEXT NOT NULL DEFAULT '',
+        archived_at TEXT NOT NULL DEFAULT '',
+        expires_at TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_inbox_receiver_status ON inbox_items(receiver_user_id, status, created_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_inbox_receiver_created ON inbox_items(receiver_user_id, created_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_inbox_sender_created ON inbox_items(sender_user_id, created_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_inbox_network_created ON inbox_items(network_id, created_at)').run();
+  },
+
+  async senderContext(env, senderUserId, senderCardId = '') {
+    const senderId = this.text(senderUserId);
+    const cardId = this.text(senderCardId);
+    let card = null;
+    let user = null;
+
+    if (cardId) {
+      card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [cardId]).catch(() => null);
+    }
+    if (!card && senderId) {
+      card = await D1ReadModule.first(env, `
+        SELECT * FROM card_contacts
+        WHERE line_id = ? OR creator_id = ?
+        ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+        LIMIT 1
+      `, [senderId, senderId]).catch(() => null);
+    }
+    if (senderId) {
+      user = await D1ReadModule.first(env, `
+        SELECT * FROM users
+        WHERE line_id = ? OR row_id = ? OR legacy_line_id = ? OR point_line_id = ?
+        LIMIT 1
+      `, [senderId, senderId, senderId, senderId]).catch(() => null);
+    }
+
+    const mappedCard = D1ReadModule.cardRow(card);
+    const mappedUser = D1ReadModule.userRow(user);
+    return {
+      senderCard: mappedCard,
+      senderUser: mappedUser,
+      snapshot: {
+        name: this.text(mappedUser && mappedUser.name, this.text(mappedCard && mappedCard.name, '未知寄件者')),
+        phone: this.text(mappedUser && mappedUser.phone, this.text(mappedCard && mappedCard.mobile)),
+        companyName: this.text(mappedCard && mappedCard.companyName),
+        title: this.text(mappedUser && mappedUser.industry, this.text(mappedCard && mappedCard.title)),
+        cardId: this.text(mappedCard && mappedCard.rowId, cardId),
+        lineId: senderId
+      }
+    };
+  },
+
+  itemRow(row, context = {}) {
+    if (!row) return null;
+    return {
+      messageId: this.text(row.message_id),
+      receiverUserId: this.text(row.receiver_user_id),
+      senderUserId: this.text(row.sender_user_id),
+      senderCardId: this.text(row.sender_card_id),
+      networkId: this.text(row.network_id, 'admin'),
+      messageType: this.text(row.message_type, 'message'),
+      title: this.text(row.title),
+      body: this.text(row.body),
+      payload: this.json(row.payload_json),
+      senderSnapshot: this.json(row.sender_snapshot_json, context.snapshot || {}),
+      status: this.text(row.status, 'unread'),
+      readAt: this.text(row.read_at),
+      archivedAt: this.text(row.archived_at),
+      expiresAt: this.text(row.expires_at),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at),
+      senderCard: context.senderCard || null,
+      senderUser: context.senderUser || null
+    };
+  },
+
+  isVisibleSql() {
+    return "(expires_at = '' OR expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)";
+  },
+
+  async count(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const row = await D1ReadModule.first(env, `
+      SELECT COUNT(*) AS unread
+      FROM inbox_items
+      WHERE receiver_user_id = ?
+        AND status = 'unread'
+        AND ${this.isVisibleSql()}
+    `, [userId]);
+    return { success: true, data: { unread: Number(row && row.unread) || 0 } };
+  },
+
+  async list(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const status = this.text(payload.status);
+    const type = this.text(payload.messageType || payload.type);
+    const binds = [userId];
+    let where = `receiver_user_id = ? AND archived_at = '' AND ${this.isVisibleSql()}`;
+    if (status === 'unread' || status === 'read') {
+      where += ' AND status = ?';
+      binds.push(status);
+    }
+    if (type) {
+      where += ' AND message_type = ?';
+      binds.push(type);
+    }
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM inbox_items
+      WHERE ${where}
+      ORDER BY CASE WHEN status = 'unread' THEN 0 ELSE 1 END,
+               created_at DESC,
+               message_id DESC
+      LIMIT 100
+    `, binds);
+    return { success: true, data: rows.map(row => this.itemRow(row)).filter(Boolean) };
+  },
+
+  async get(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    const messageId = this.text(payload.messageId || payload.message_id);
+    if (!userId || !messageId) return { success: false, error: 'Missing messageId' };
+    const row = await D1ReadModule.first(env, `
+      SELECT *
+      FROM inbox_items
+      WHERE message_id = ? AND receiver_user_id = ? AND archived_at = '' AND ${this.isVisibleSql()}
+      LIMIT 1
+    `, [messageId, userId]);
+    if (!row) return { success: false, error: '找不到這封訊息' };
+
+    if (this.text(row.status, 'unread') === 'unread') {
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE inbox_items
+        SET status = 'read', read_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE message_id = ? AND receiver_user_id = ?
+      `).bind(messageId, userId).run();
+      row.status = 'read';
+    }
+
+    const context = await this.senderContext(env, row.sender_user_id, row.sender_card_id);
+    return { success: true, data: this.itemRow(row, context) };
+  },
+
+  async markRead(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    const messageId = this.text(payload.messageId || payload.message_id);
+    if (!userId || !messageId) return { success: false, error: 'Missing messageId' };
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE inbox_items
+      SET status = 'read', read_at = COALESCE(NULLIF(read_at, ''), CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+      WHERE message_id = ? AND receiver_user_id = ?
+    `).bind(messageId, userId).run();
+    return { success: true, data: { messageId, status: 'read' } };
+  },
+
+  async send(payload, env) {
+    await this.ensure(env);
+    const senderUserId = this.ownUserId(payload);
+    const receiverUserId = this.text(payload.receiverUserId || payload.receiver_user_id || payload.toUserId);
+    if (!senderUserId) return { success: false, error: 'Missing sender' };
+    if (!receiverUserId) return { success: false, error: '請指定收件人' };
+    if (receiverUserId === senderUserId) return { success: false, error: '不能寄給自己' };
+
+    const receiver = await D1ReadModule.findUserByIdentity(env, receiverUserId).catch(() => null);
+    if (!receiver || !receiver.user) return { success: false, error: '找不到收件人' };
+
+    const title = this.text(payload.title, '新訊息');
+    const body = this.text(payload.body || payload.content);
+    const messageType = this.text(payload.messageType || payload.type, 'message');
+    const senderCardId = this.text(payload.senderCardId || payload.sender_card_id);
+    const context = await this.senderContext(env, senderUserId, senderCardId);
+    const messageId = this.text(payload.messageId || payload.message_id) || `MSG_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const networkId = this.text(payload.networkId || payload.authenticatedNetworkId || receiver.user.network_id || 'admin', 'admin');
+    const expiresAt = this.text(payload.expiresAt || payload.expires_at);
+    const payloadJson = JSON.stringify(payload.payload && typeof payload.payload === 'object' ? payload.payload : {});
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO inbox_items (
+        message_id, receiver_user_id, sender_user_id, sender_card_id, network_id,
+        message_type, title, body, payload_json, sender_snapshot_json, status,
+        read_at, archived_at, expires_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unread', '', '', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).bind(
+      messageId,
+      D1ReadModule.text(receiver.canonicalId || receiver.user.line_id || receiver.user.row_id, receiverUserId),
+      senderUserId,
+      this.text(context.snapshot && context.snapshot.cardId, senderCardId),
+      networkId,
+      messageType,
+      title,
+      body,
+      payloadJson,
+      JSON.stringify(context.snapshot || {}),
+      expiresAt
+    ).run();
+
+    const row = await D1ReadModule.first(env, 'SELECT * FROM inbox_items WHERE message_id = ? LIMIT 1', [messageId]);
+    return { success: true, data: this.itemRow(row, context) };
+  }
+};
+
 const AuthModule = {
   getCardLineId(card) {
     return String((card && (card['LINE ID'] || card.lineId || card.userId)) || '').trim();
@@ -5126,6 +5375,16 @@ async function dispatchAction(action, payload, request, env) {
       return await D1PersonalTaskModule.setStatus(payload || {}, env, 'done');
     case 'deletePersonalTask':
       return await D1PersonalTaskModule.setStatus(payload || {}, env, 'deleted');
+    case 'getInboxCount':
+      return await D1InboxModule.count(payload || {}, env);
+    case 'listInboxItems':
+      return await D1InboxModule.list(payload || {}, env);
+    case 'getInboxItem':
+      return await D1InboxModule.get(payload || {}, env);
+    case 'markInboxRead':
+      return await D1InboxModule.markRead(payload || {}, env);
+    case 'sendInboxMessage':
+      return await D1InboxModule.send(payload || {}, env);
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);

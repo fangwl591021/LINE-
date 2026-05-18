@@ -546,6 +546,7 @@ window.applyRegisteredUserSession = function(info) {
   const bottomNav = document.getElementById('bottom-nav');
   if (bottomNav) bottomNav.classList.remove('hidden');
   window.applyUserPermissions();
+  if (typeof window.refreshInboxBadge === 'function') window.refreshInboxBadge();
 
   const profileName = document.getElementById('profile-name');
   const profilePhone = document.getElementById('profile-phone');

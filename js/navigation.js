@@ -16,6 +16,7 @@ window.goPage = function(page, isInitLoad = false) {
     else if (page === 'matchmake' && typeof window.initMatchmakePage === 'function') window.initMatchmakePage();
     else if (page === 'admin-stats') window.loadAdminStats();
     else if (page === 'my-activities') window.loadMyActivities();
+    else if (page === 'inbox' && typeof window.loadInbox === 'function') window.loadInbox();
     else if (page === 'admin-crm') window.loadCrm();
     else if (page === 'tenant-upgrade' && typeof window.initTenantUpgradePage === 'function') window.initTenantUpgradePage();
     else if (page === 'points-wallet' && typeof window.loadPointsWallet === 'function') window.loadPointsWallet();
