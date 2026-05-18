@@ -4,6 +4,7 @@ window.goPage = function(page, isInitLoad = false) {
   if (page === 'profile') page = 'admin-settings';
   window.previousPage = window.currentPage || '';
   window.currentPage = page;
+  document.body.classList.toggle('home-page', page === 'home');
 
   document.querySelectorAll('[id^="page"]').forEach(el => el.classList.add('hidden'));
   const targetPage = document.getElementById('page-' + page);
