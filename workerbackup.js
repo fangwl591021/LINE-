@@ -711,18 +711,15 @@ const PointModule = {
       return `來源：${sourceName}；消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${points.toLocaleString('zh-TW')} 點，應收 NT$${payable.toLocaleString('zh-TW')}`;
     };
 
-    return rows.map(row => {
+    const enrichedRows = rows.map(row => {
       if (hasSource(row)) return row;
       const amount = rowAmount(row);
-      const title = D1ReadModule.text(row.event_name || row.eventName || row.title || row.name);
       const timeMs = rowTime(row);
       const matched = logs.find(log => {
         const logId = D1ReadModule.text(log.log_id);
         if (!logId || usedLogIds.has(logId)) return false;
         const points = Number(log.points || 0) || 0;
         if (points !== amount) return false;
-        const mode = D1ReadModule.text(log.mode);
-        if (title && !title.includes('店家') && !title.includes(mode === 'reward' ? '贈點' : '折抵')) return false;
         const lTime = logTime(log);
         if (!Number.isNaN(timeMs) && !Number.isNaN(lTime)) {
           // D1 stores CURRENT_TIMESTAMP in UTC while the point service may return Taiwan-local time.
@@ -737,8 +734,14 @@ const PointModule = {
       usedLogIds.add(logId);
       const sourceName = actorNames[D1ReadModule.text(matched.actor_user_id)] || '店家';
       const eventContent = makeDetail(matched, sourceName);
+      const originalTitle = D1ReadModule.text(row.event_name || row.eventName || row.title || row.name);
+      const sourceTitle = originalTitle.includes(sourceName)
+        ? originalTitle
+        : `${sourceName}｜${originalTitle || (D1ReadModule.text(matched.mode) === 'reward' ? '消費贈點' : '消費折抵')}`;
       return {
         ...row,
+        event_name: sourceTitle,
+        eventName: sourceTitle,
         event_content: eventContent,
         eventContent,
         child_shop_name: sourceName,
@@ -746,6 +749,40 @@ const PointModule = {
         shop_remark: `source=${sourceName}; store_cashier_log=${logId}`,
         storeCashierLogId: logId
       };
+    });
+
+    const sourceRowForLog = (log) => {
+      const logId = D1ReadModule.text(log.log_id);
+      const sourceName = actorNames[D1ReadModule.text(log.actor_user_id)] || '店家';
+      const eventContent = makeDetail(log, sourceName);
+      const mode = D1ReadModule.text(log.mode);
+      return {
+        id: logId,
+        localLedger: true,
+        event_name: `${sourceName}｜${mode === 'reward' ? '消費贈點' : '消費折抵'}`,
+        eventName: `${sourceName}｜${mode === 'reward' ? '消費贈點' : '消費折抵'}`,
+        event_content: eventContent,
+        eventContent,
+        child_shop_name: sourceName,
+        childShopName: sourceName,
+        shop_remark: `source=${sourceName}; store_cashier_log=${logId}`,
+        get_point: Number(log.points || 0) || 0,
+        point: Number(log.points || 0) || 0,
+        created_at: D1ReadModule.text(log.created_at),
+        createdAt: D1ReadModule.text(log.created_at),
+        storeCashierLogId: logId
+      };
+    };
+    const combined = enrichedRows.concat(
+      logs
+        .filter(log => !usedLogIds.has(D1ReadModule.text(log.log_id)))
+        .slice(0, 20)
+        .map(sourceRowForLog)
+    );
+    return combined.sort((a, b) => {
+      const at = Date.parse(String(a.created_at || a.createdAt || '').replace(' ', 'T')) || 0;
+      const bt = Date.parse(String(b.created_at || b.createdAt || '').replace(' ', 'T')) || 0;
+      return bt - at;
     });
   },
 
