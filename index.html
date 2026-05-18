@@ -641,11 +641,11 @@
               <label class="text-[13px] font-black text-slate-600">客戶帳號 / QR 內容</label>
               <div class="grid grid-cols-[1fr_auto] gap-2">
                 <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px]" placeholder="掃 QR 後自動填入，也可貼上 UID">
-                <label for="store-point-qr-input" class="px-4 rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center gap-1 cursor-pointer">
+                <label class="relative px-4 rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center gap-1 cursor-pointer overflow-hidden">
                   <span class="material-symbols-outlined text-[18px]">qr_code_scanner</span>
                   掃碼
+                  <input id="store-point-qr-input" type="file" accept="image/*" capture="environment" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="window.scanStorePointQr(this)">
                 </label>
-                <input id="store-point-qr-input" type="file" accept="image/*" capture="environment" class="sr-only" onchange="window.scanStorePointQr(this)">
               </div>
             </div>
 
