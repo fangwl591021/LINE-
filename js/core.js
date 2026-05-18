@@ -198,6 +198,11 @@ const Core = (function() {
             }
         }
         window.hasAdminRights = (window.userRole === 'admin' || window.userRole === 'store');
+        const roleLabel = document.querySelector('#header-role-label');
+        if (roleLabel) {
+            const roleText = window.userRole === 'admin' ? '總管' : (window.userRole === 'store' ? '店長' : '用戶');
+            roleLabel.textContent = '目前：' + roleText;
+        }
         
         const selectors = {
             '#header-admin-badge': window.hasAdminRights,

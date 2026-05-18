@@ -58,26 +58,28 @@
 
 <div id="app" class="w-full max-w-md bg-background h-screen relative flex flex-col shadow-2xl overflow-hidden">
 
-  <nav class="fixed top-0 w-full max-w-md z-40 bg-white/90 backdrop-blur-xl px-5 py-4 flex justify-between items-center gap-2 left-1/2 -translate-x-1/2 border-b border-slate-100 min-h-[68px]">
-    <div class="flex items-center gap-1.5 min-w-0 flex-1">
+  <nav class="fixed top-0 w-full max-w-md z-40 bg-white/90 backdrop-blur-xl px-5 py-3 flex flex-col gap-2 left-1/2 -translate-x-1/2 border-b border-slate-100 min-h-[96px]">
+    <div class="w-full min-w-0">
       <span id="header-site-name" class="block min-w-0 truncate whitespace-nowrap text-[20px] font-black text-slate-800 tracking-tight leading-tight">LINE商機引擎</span>
-      <span id="header-admin-badge" class="hidden shrink-0 bg-[#1e293b] text-white text-[10px] px-2 py-0.5 rounded-full tracking-wider font-bold shadow-sm">ADMIN</span>
     </div>
 
-    <div class="flex items-center gap-2 shrink-0">
-      <button id="inbox-nav-button" type="button" onclick="window.goPage('inbox')" class="relative hidden w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
-        <span class="material-symbols-outlined text-[18px]">mail</span>
-        <span id="inbox-unread-badge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-[18px] text-center shadow-sm">0</span>
-      </button>
+    <div class="w-full flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span id="header-admin-badge" class="hidden shrink-0 bg-[#1e293b] text-white text-[10px] px-2 py-0.5 rounded-full tracking-wider font-bold shadow-sm">ADMIN</span>
+        <span id="header-role-label" class="shrink-0 bg-slate-100 text-slate-600 text-[11px] px-2 py-1 rounded-full font-black">目前：用戶</span>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
       <button id="point-balance-badge" type="button" onclick="window.openPointsWallet()" class="hidden bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2.5 py-1 text-[11px] font-black whitespace-nowrap active:scale-95 transition-transform">0 點</button>
       <img id="avatar" src="" class="w-8 h-8 rounded-full border border-slate-200 hidden object-cover shadow-sm">
       <button id="top-nav-switch" onclick="window.toggleAdminMode()" class="hidden w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
         <span class="material-symbols-outlined text-[18px]">swap_horiz</span>
       </button>
+      </div>
     </div>
   </nav>
 
-  <main id="main" class="flex-1 overflow-y-auto pb-32 pt-20 px-4 space-y-6">
+  <main id="main" class="flex-1 overflow-y-auto pb-32 pt-28 px-4 space-y-6">
 
     <!-- ==================== 一般註冊頁面 ==================== -->
     <div id="page-register" class="hidden h-full flex-col items-center justify-center animate-in fade-in pb-10">
@@ -639,9 +641,10 @@
             <span class="home-quick-icon material-symbols-outlined">event_note</span>
             <span class="home-quick-label">&#36319;&#36914;</span>
           </button>
-          <button onclick="window.location.href='https://lin.ee/NxFMl6L'" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">person_add</span>
-            <span class="home-quick-label">&#21152;&#22909;&#21451;</span>
+          <button id="inbox-nav-button" onclick="window.goPage('inbox')" class="home-quick-circle group relative">
+            <span class="home-quick-icon material-symbols-outlined">mail</span>
+            <span class="home-quick-label">收件匣</span>
+            <span id="inbox-unread-badge" class="hidden absolute top-0 right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-5 text-center shadow-sm">0</span>
           </button>
         </div>
       </div>
@@ -1410,7 +1413,7 @@
 </div>
 
 <!-- ocr-lab route: ocr-lab.html -->
-<script src="js/core.js?v=7.17"></script>
+<script src="js/core.js?v=7.18"></script>
 <script src="js/navigation.js?v=7.5"></script>
 <script src="js/modules/cropper.js?v=7.6"></script>
 <script src="js/modules/cards.js?v=7.4"></script>
