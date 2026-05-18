@@ -25,6 +25,7 @@
 
   var currentCardData = null;
   var myEcardButtons = [];
+  var myEcardStateLoaded = false;
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
@@ -167,6 +168,7 @@
       square: cfg.imgRatioSquare || '1:1'
     };
     myEcardButtons = Array.isArray(cfg.buttons) ? cfg.buttons.slice() : [];
+    myEcardStateLoaded = true;
 
     var layout = cfg.layoutStyle || 'landscape';
     var radio = $('input[name="my-ecard-layout"][value="' + layout + '"]');
@@ -439,6 +441,9 @@
 
   function buildCurrentShareConfig() {
     var cfg = parseCardConfig(currentCardData);
+    if (!myEcardStateLoaded && Array.isArray(cfg.buttons)) {
+      myEcardButtons = cfg.buttons.slice();
+    }
     var liveLayout = document.querySelector('input[name="my-ecard-layout"]:checked');
     syncCurrentImageInput();
     if (liveLayout) {
@@ -524,6 +529,7 @@
       cardPayload.rowId = saveRes.rowId || saveRes.id || saveRes.RowID || '';
       window.currentUserCard = cardPayload;
       currentCardData = cardPayload;
+      myEcardStateLoaded = true;
       if (Array.isArray(window.allCards)) window.allCards.unshift(cardPayload);
       if (window.showToast) window.showToast('✅ 已使用 LINE 資料建立專屬名片');
       if (typeof window.loadAllData === 'function') await window.loadAllData({ render: false });
@@ -584,6 +590,7 @@
       window.currentUserCard = currentCardData;
       myEcardImgs.landscape = cfg.imgUrl;
       myEcardButtons = cfg.buttons.slice();
+      myEcardStateLoaded = true;
       renderButtons();
       updatePreview();
       if (window.showToast) window.showToast('✅ 已套用介紹模板');
@@ -688,7 +695,7 @@
   };
 
   window.MyCardModule = api;
-  window.initMyECard = function() { api.init(); api.load(); };
+  window.initMyECard = function() { api.init(); return api.load(); };
   window.openMyCardDetail = openMyCardDetail;
   window.changeMyLayout = handleLayoutChange;
   window.focusMyECardSection = focusMyECardSection;

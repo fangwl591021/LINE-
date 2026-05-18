@@ -149,12 +149,7 @@ const HomeModule = (function() {
             btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[13px]">refresh</span>';
         }
         try {
-            if (typeof window.initMyECard === 'function') window.initMyECard();
-            const settingsShareBtn = document.getElementById('btn-share-my-card');
-            if (settingsShareBtn) {
-                settingsShareBtn.click();
-                return;
-            }
+            if (typeof window.initMyECard === 'function') await window.initMyECard();
             if (typeof window.shareMyCard === 'function') {
                 await window.shareMyCard(btn);
                 return;
