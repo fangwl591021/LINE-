@@ -765,6 +765,84 @@ window.decodeStorePointQrFile = async function(file) {
   return code?.data || '';
 };
 
+window.fillStorePointCustomerFromQr = function(raw) {
+  const customerId = window.extractPointCustomerId(raw);
+  const target = document.getElementById('store-point-customer');
+  if (target) {
+    target.value = customerId;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  return customerId;
+};
+
+window.closeStorePointScanner = function() {
+  window.__storePointScannerActive = false;
+  if (window.__storePointScannerStream) {
+    window.__storePointScannerStream.getTracks().forEach(track => track.stop());
+    window.__storePointScannerStream = null;
+  }
+  const video = document.getElementById('store-point-scanner-video');
+  if (video) video.srcObject = null;
+  document.getElementById('store-point-scanner-modal')?.classList.add('hidden');
+};
+
+window.openStorePointScanner = async function() {
+  const modal = document.getElementById('store-point-scanner-modal');
+  const video = document.getElementById('store-point-scanner-video');
+  const status = document.getElementById('store-point-scanner-status');
+  const canvas = document.getElementById('store-point-scanner-canvas');
+  if (!modal || !video || !canvas) return window.showToast?.('掃描器尚未載入', true);
+
+  modal.classList.remove('hidden');
+  if (status) status.textContent = '正在開啟相機...';
+
+  try {
+    const jsQR = await window.loadQrDecoder();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 1280 }
+      },
+      audio: false
+    });
+    window.__storePointScannerStream = stream;
+    window.__storePointScannerActive = true;
+    video.srcObject = stream;
+    await video.play();
+    if (status) status.textContent = '請將客戶 QR 放入框內。';
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const scanFrame = () => {
+      if (!window.__storePointScannerActive) return;
+      if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth && video.videoHeight) {
+        const size = Math.min(video.videoWidth, video.videoHeight);
+        const sx = Math.max(0, Math.floor((video.videoWidth - size) / 2));
+        const sy = Math.max(0, Math.floor((video.videoHeight - size) / 2));
+        canvas.width = size;
+        canvas.height = size;
+        ctx.drawImage(video, sx, sy, size, size, 0, 0, size, size);
+        const imageData = ctx.getImageData(0, 0, size, size);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+        if (code?.data) {
+          const customerId = window.fillStorePointCustomerFromQr(code.data);
+          window.closeStorePointScanner();
+          window.showToast?.('已讀取客戶帳號：' + customerId.slice(0, 10) + '...', false);
+          return;
+        }
+      }
+      requestAnimationFrame(scanFrame);
+    };
+    requestAnimationFrame(scanFrame);
+  } catch (e) {
+    const msg = e?.name === 'NotAllowedError'
+      ? '相機權限被拒絕，請允許相機或改用相簿辨識。'
+      : (e.message || '無法開啟掃描器，請改用相簿辨識或貼上 UID。');
+    if (status) status.textContent = msg;
+    window.showToast?.(msg, true);
+  }
+};
+
 window.updateStorePointPreview = function() {
   const preview = document.getElementById('store-point-preview');
   const amountInput = document.getElementById('store-point-amount');
@@ -796,9 +874,9 @@ window.scanStorePointQr = async function(input) {
   try {
     const raw = await window.decodeStorePointQrFile(file);
     if (!raw) throw new Error('沒有讀到 QR 內容');
-    const target = document.getElementById('store-point-customer');
-    if (target) target.value = window.extractPointCustomerId(raw);
-    window.showToast?.('已讀取客戶帳號：' + window.extractPointCustomerId(raw).slice(0, 10) + '...', false);
+    const customerId = window.fillStorePointCustomerFromQr(raw);
+    window.closeStorePointScanner?.();
+    window.showToast?.('已讀取客戶帳號：' + customerId.slice(0, 10) + '...', false);
   } catch (e) {
     window.showToast?.((e.message || 'QR 讀取失敗') + '，可改用貼上客戶 UID。', true);
   } finally {

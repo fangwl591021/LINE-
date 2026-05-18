@@ -641,11 +641,10 @@
               <label class="text-[13px] font-black text-slate-600">客戶帳號 / QR 內容</label>
               <div class="grid grid-cols-[1fr_auto] gap-2">
                 <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px]" placeholder="掃 QR 後自動填入，也可貼上 UID">
-                <label class="relative px-4 rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center gap-1 cursor-pointer overflow-hidden">
+                <button type="button" onclick="window.openStorePointScanner()" class="px-4 rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center gap-1 cursor-pointer">
                   <span class="material-symbols-outlined text-[18px]">qr_code_scanner</span>
                   掃碼
-                  <input id="store-point-qr-input" type="file" accept="image/*" capture="environment" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="window.scanStorePointQr(this)">
-                </label>
+                </button>
               </div>
             </div>
 
@@ -1474,6 +1473,33 @@
   </div>
 </div>
 
+<div id="store-point-scanner-modal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col justify-center items-center z-[2100] p-4">
+  <div class="bg-white rounded-3xl overflow-hidden w-full max-w-[360px] shadow-2xl animate-in zoom-in-95">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <h3 class="font-black text-slate-900 text-[18px] flex items-center gap-2">
+        <span class="material-symbols-outlined text-[#06C755]">qr_code_scanner</span>
+        掃描客戶 QR
+      </h3>
+      <button type="button" onclick="window.closeStorePointScanner()" class="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 active:scale-95">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="p-4 space-y-4">
+      <div class="relative bg-slate-950 rounded-2xl overflow-hidden aspect-square flex items-center justify-center">
+        <video id="store-point-scanner-video" class="w-full h-full object-cover" autoplay muted playsinline></video>
+        <canvas id="store-point-scanner-canvas" class="hidden"></canvas>
+        <div class="absolute inset-10 border-2 border-[#06C755] rounded-3xl pointer-events-none shadow-[0_0_0_999px_rgba(0,0,0,0.22)]"></div>
+      </div>
+      <p id="store-point-scanner-status" class="text-center text-[13px] text-slate-500 font-bold leading-relaxed">請將客戶 QR 放入框內。</p>
+      <label class="relative w-full py-3 rounded-2xl bg-slate-100 text-slate-700 font-black active:scale-95 transition-transform flex items-center justify-center gap-2 cursor-pointer overflow-hidden">
+        <span class="material-symbols-outlined text-[18px]">photo_library</span>
+        相簿辨識備援
+        <input id="store-point-qr-input" type="file" accept="image/*" capture="environment" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="window.scanStorePointQr(this)">
+      </label>
+    </div>
+  </div>
+</div>
+
 <div id="activity-share-modal" class="hidden fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-center items-center z-[2000] p-4">
   <div class="bg-white rounded-3xl p-6 flex flex-col items-center w-full max-w-[340px] shadow-2xl animate-in zoom-in-95">
     <div class="w-full flex justify-between items-center mb-4">
@@ -1604,7 +1630,7 @@
 <script src="js/modules/settings.js?v=7.2"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.2"></script>
-<script src="js/auth.js?v=10.0"></script>
+<script src="js/auth.js?v=10.1"></script>
 
 </body>
 </html>
