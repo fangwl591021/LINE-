@@ -232,6 +232,9 @@ const SecurityModule = {
       'markInboxRead',
       'searchInboxRecipients',
       'sendInboxMessage',
+      'getWebPushConfig',
+      'saveWebPushSubscription',
+      'deleteWebPushSubscription',
       'dailyPointCheckin',
       'mlmCreateOrder',
       'createTenantBonusOrder',
@@ -3836,8 +3839,222 @@ const D1InboxModule = {
       pointCharge: { pointType: 'gift_money', points: -10, status: 'sent', response: debit.data || null }
     }), messageId).run();
 
+    await WebPushModule.notifyUser(receiverUserId, {
+      title: '你有一封新訊息',
+      body: `${this.text(context.snapshot && context.snapshot.name, '會員')} 傳送了 ${this.text(messageType, 'message')}`,
+      url: '/LINE-/?open=inbox'
+    }, env).catch(() => null);
+
     const row = await D1ReadModule.first(env, 'SELECT * FROM inbox_items WHERE message_id = ? LIMIT 1', [messageId]);
     return { success: true, data: this.itemRow(row, context) };
+  }
+};
+
+const WebPushModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  base64Url(input) {
+    let bytes;
+    if (typeof input === 'string') bytes = new TextEncoder().encode(input);
+    else bytes = new Uint8Array(input);
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  },
+
+  base64UrlToBytes(value) {
+    const text = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    const padded = text + '='.repeat((4 - text.length % 4) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  },
+
+  async ensure(env) {
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        endpoint TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        p256dh TEXT NOT NULL DEFAULT '',
+        auth TEXT NOT NULL DEFAULT '',
+        user_agent TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id, status, updated_at)').run();
+  },
+
+  async config(payload, env) {
+    const publicKey = this.text(env.VAPID_PUBLIC_KEY);
+    return {
+      success: true,
+      data: {
+        enabled: !!publicKey,
+        publicKey,
+        reason: publicKey ? '' : '尚未設定 VAPID_PUBLIC_KEY'
+      }
+    };
+  },
+
+  async save(payload, env, request) {
+    await this.ensure(env);
+    const userId = this.text(payload.authenticatedUserId || payload.userId);
+    const subscription = payload.subscription && typeof payload.subscription === 'object' ? payload.subscription : payload;
+    const endpoint = this.text(subscription.endpoint);
+    const keys = subscription.keys && typeof subscription.keys === 'object' ? subscription.keys : {};
+    if (!userId || !endpoint) return { success: false, error: 'Missing push subscription' };
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth, user_agent, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(endpoint) DO UPDATE SET
+        user_id = excluded.user_id,
+        p256dh = excluded.p256dh,
+        auth = excluded.auth,
+        user_agent = excluded.user_agent,
+        status = 'active',
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(
+      endpoint,
+      userId,
+      this.text(keys.p256dh),
+      this.text(keys.auth),
+      this.text(payload.userAgent || (request && request.headers.get('user-agent')))
+    ).run();
+    return { success: true, data: { endpoint, status: 'active' } };
+  },
+
+  async remove(payload, env) {
+    await this.ensure(env);
+    const userId = this.text(payload.authenticatedUserId || payload.userId);
+    const endpoint = this.text(payload.endpoint || (payload.subscription && payload.subscription.endpoint));
+    if (!userId || !endpoint) return { success: false, error: 'Missing push subscription' };
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE push_subscriptions
+      SET status = 'deleted', updated_at = CURRENT_TIMESTAMP
+      WHERE endpoint = ? AND user_id = ?
+    `).bind(endpoint, userId).run();
+    return { success: true, data: { endpoint, status: 'deleted' } };
+  },
+
+  publicKeyParts(publicKey) {
+    const bytes = this.base64UrlToBytes(publicKey);
+    if (bytes.length !== 65 || bytes[0] !== 4) throw new Error('Invalid VAPID public key');
+    return {
+      x: this.base64Url(bytes.slice(1, 33)),
+      y: this.base64Url(bytes.slice(33, 65))
+    };
+  },
+
+  async privateKey(env) {
+    const publicKey = this.text(env.VAPID_PUBLIC_KEY);
+    const rawPrivate = this.text(env.VAPID_PRIVATE_KEY);
+    const privateJwkText = this.text(env.VAPID_PRIVATE_JWK);
+    if (privateJwkText) {
+      return JSON.parse(privateJwkText);
+    }
+    if (!publicKey || !rawPrivate) throw new Error('Missing VAPID keys');
+    const parts = this.publicKeyParts(publicKey);
+    return { kty: 'EC', crv: 'P-256', x: parts.x, y: parts.y, d: rawPrivate, ext: true };
+  },
+
+  ecdsaSignatureToJose(signature) {
+    const bytes = new Uint8Array(signature);
+    if (bytes.length === 64) return this.base64Url(bytes);
+    let offset = 0;
+    if (bytes[offset++] !== 0x30) throw new Error('Invalid ECDSA signature');
+    let seqLen = bytes[offset++];
+    if (seqLen & 0x80) offset += (seqLen & 0x7f);
+    if (bytes[offset++] !== 0x02) throw new Error('Invalid ECDSA signature');
+    const rLen = bytes[offset++];
+    let r = bytes.slice(offset, offset + rLen);
+    offset += rLen;
+    if (bytes[offset++] !== 0x02) throw new Error('Invalid ECDSA signature');
+    const sLen = bytes[offset++];
+    let s = bytes.slice(offset, offset + sLen);
+    const normalize = part => {
+      let start = 0;
+      while (start < part.length - 1 && part[start] === 0) start++;
+      part = part.slice(start);
+      if (part.length > 32) part = part.slice(part.length - 32);
+      const out = new Uint8Array(32);
+      out.set(part, 32 - part.length);
+      return out;
+    };
+    const out = new Uint8Array(64);
+    out.set(normalize(r), 0);
+    out.set(normalize(s), 32);
+    return this.base64Url(out);
+  },
+
+  async vapidJwt(endpoint, env) {
+    const aud = new URL(endpoint).origin;
+    const exp = Math.floor(Date.now() / 1000) + 12 * 60 * 60;
+    const sub = this.text(env.VAPID_SUBJECT, 'mailto:Fangwl591021@gmail.com');
+    const header = this.base64Url(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
+    const body = this.base64Url(JSON.stringify({ aud, exp, sub }));
+    const signingInput = `${header}.${body}`;
+    const key = await crypto.subtle.importKey(
+      'jwk',
+      await this.privateKey(env),
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign']
+    );
+    const signature = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      key,
+      new TextEncoder().encode(signingInput)
+    );
+    return `${signingInput}.${this.ecdsaSignatureToJose(signature)}`;
+  },
+
+  async send(subscription, env) {
+    const publicKey = this.text(env.VAPID_PUBLIC_KEY);
+    const endpoint = this.text(subscription && subscription.endpoint);
+    if (!publicKey || !endpoint) return { ok: false, skipped: true };
+    const jwt = await this.vapidJwt(endpoint, env);
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        TTL: '120',
+        Urgency: 'normal',
+        Authorization: `vapid t=${jwt}, k=${publicKey}`
+      }
+    });
+    return { ok: res.ok, status: res.status, text: res.ok ? '' : await res.text().catch(() => '') };
+  },
+
+  async notifyUser(userId, message, env) {
+    await this.ensure(env);
+    if (!this.text(env.VAPID_PUBLIC_KEY) || (!this.text(env.VAPID_PRIVATE_KEY) && !this.text(env.VAPID_PRIVATE_JWK))) {
+      return { success: false, skipped: true, error: 'Missing VAPID keys' };
+    }
+    const ids = await D1InboxModule.identityIds(env, userId);
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM push_subscriptions
+      WHERE user_id IN (${D1InboxModule.placeholders(ids)}) AND status = 'active'
+      ORDER BY updated_at DESC
+      LIMIT 10
+    `, ids).catch(() => []);
+    let sent = 0;
+    for (const row of rows) {
+      const result = await this.send(row, env).catch(err => ({ ok: false, status: 0, text: String(err && err.message || err) }));
+      if (result.ok) {
+        sent++;
+      } else if (result.status === 404 || result.status === 410) {
+        await env.ACTMASTER_DB.prepare(`
+          UPDATE push_subscriptions SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE endpoint = ?
+        `).bind(row.endpoint).run().catch(() => null);
+      }
+    }
+    return { success: true, data: { sent, total: rows.length } };
   }
 };
 
@@ -5653,6 +5870,12 @@ async function dispatchAction(action, payload, request, env) {
       return await D1InboxModule.searchRecipients(payload || {}, env);
     case 'sendInboxMessage':
       return await D1InboxModule.send(payload || {}, env);
+    case 'getWebPushConfig':
+      return await WebPushModule.config(payload || {}, env);
+    case 'saveWebPushSubscription':
+      return await WebPushModule.save(payload || {}, env, request);
+    case 'deleteWebPushSubscription':
+      return await WebPushModule.remove(payload || {}, env);
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);

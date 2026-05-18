@@ -97,6 +97,133 @@
     document.title = unread > 0 ? `(${unread}) ${base}` : base;
   }
 
+  function base64UrlToUint8Array(value) {
+    const text = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    const padded = text + "=".repeat((4 - text.length % 4) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function setPushStatus(text, enabled = false) {
+    const status = $("inbox-push-status");
+    const btn = $("btn-enable-inbox-push");
+    if (status) {
+      status.textContent = text;
+      status.className = `text-[12px] font-bold mt-1 truncate ${enabled ? "text-emerald-600" : "text-slate-500"}`;
+    }
+    if (btn) {
+      btn.textContent = enabled ? "已開啟" : "開啟";
+      btn.classList.toggle("bg-emerald-600", enabled);
+      btn.classList.toggle("bg-slate-900", !enabled);
+    }
+  }
+
+  function playInboxSound() {
+    if (localStorage.getItem("inboxSoundEnabled") !== "1") return;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = window.inboxAudioContext || new AudioContext();
+      window.inboxAudioContext = ctx;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+      console.warn("[inbox] sound skipped:", e.message || e);
+    }
+  }
+
+  async function registerInboxServiceWorker() {
+    if (!("serviceWorker" in navigator)) throw new Error("此瀏覽器不支援背景通知");
+    return await navigator.serviceWorker.register("./sw.js");
+  }
+
+  async function refreshPushStatus() {
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushStatus("此瀏覽器不支援背景通知，可使用站內提示音", false);
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setPushStatus("通知被瀏覽器封鎖，請到網站設定重新允許", false);
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      setPushStatus("尚未開啟，點擊後會詢問通知權限", false);
+      return;
+    }
+    try {
+      const reg = await registerInboxServiceWorker();
+      const sub = await reg.pushManager.getSubscription();
+      setPushStatus(sub ? "已開啟手機通知與站內提示音" : "通知權限已允許，尚未完成訂閱", !!sub);
+    } catch (e) {
+      setPushStatus("通知初始化失敗：" + (e.message || e), false);
+    }
+  }
+
+  window.enableInboxNotifications = async function (btn) {
+    if (!canUseInbox()) return window.showToast?.("請先登入後再開啟通知", true);
+    const oldText = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "設定中...";
+      btn.classList.add("opacity-70");
+    }
+    try {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        localStorage.setItem("inboxSoundEnabled", "1");
+        playInboxSound();
+        setPushStatus("此瀏覽器不支援背景通知，已開啟站內提示音", false);
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      localStorage.setItem("inboxSoundEnabled", "1");
+      playInboxSound();
+      if (permission !== "granted") {
+        setPushStatus("尚未允許通知，已開啟站內提示音", false);
+        return;
+      }
+      const cfg = await window.fetchAPI("getWebPushConfig", {}, true);
+      if (!cfg?.enabled || !cfg?.publicKey) {
+        setPushStatus(cfg?.reason || "後台尚未設定 Web Push 金鑰", false);
+        window.showToast?.("通知金鑰尚未設定；站內提示音已開啟", true);
+        return;
+      }
+      const reg = await registerInboxServiceWorker();
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: base64UrlToUint8Array(cfg.publicKey)
+        });
+      }
+      await window.fetchAPI("saveWebPushSubscription", {
+        subscription: sub.toJSON(),
+        userAgent: navigator.userAgent
+      }, true);
+      setPushStatus("已開啟手機通知與站內提示音", true);
+      window.showToast?.("通知已開啟");
+    } catch (e) {
+      setPushStatus("通知設定失敗：" + (e.message || e), false);
+      window.showToast?.("通知設定失敗：" + (e.message || e), true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove("opacity-70");
+        if (oldText && btn.textContent === "設定中...") btn.textContent = oldText;
+      }
+    }
+  };
+
   window.refreshInboxBadge = async function (options = {}) {
     const button = $("inbox-nav-button");
     const badge = $("inbox-unread-badge");
@@ -129,6 +256,7 @@
 
       if (options.notify && hasInitialized && unread > previous) {
         const diff = unread - previous;
+        playInboxSound();
         window.showToast?.(`你有 ${diff} 封新訊息`);
         if (window.currentPage === "inbox" && window.inboxMode !== "sent") {
           window.loadInbox({ silent: true });
@@ -491,7 +619,21 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => window.refreshInboxBadge(), 1800);
+    setTimeout(refreshPushStatus, 2200);
     startInboxPolling();
+    const params = new URLSearchParams(location.search);
+    if (params.get("open") === "inbox") {
+      let tries = 0;
+      const timer = setInterval(() => {
+        tries++;
+        if (typeof window.goPage === "function" && canUseInbox()) {
+          clearInterval(timer);
+          window.goPage("inbox");
+        } else if (tries > 20) {
+          clearInterval(timer);
+        }
+      }, 500);
+    }
   });
 
   window.addEventListener("focus", () => {
@@ -500,5 +642,11 @@
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && canUseInbox()) window.refreshInboxBadge({ notify: true });
+  });
+
+  navigator.serviceWorker?.addEventListener?.("message", event => {
+    if (event.data?.type === "OPEN_INBOX" && typeof window.goPage === "function") {
+      window.goPage("inbox");
+    }
   });
 })();
