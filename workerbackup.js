@@ -915,6 +915,80 @@ const PointModule = {
     return { success: true, data: { awarded: true, alreadyChecked: false, points: 10, date: today, message: '點數家族簽到成功，已獲得 10 點' } };
   },
 
+  async findCustomerByPhone(env, phoneRaw) {
+    if (!env.ACTMASTER_DB) return { match: null, error: '' };
+    const phone = SecurityModule.normalizePhone(phoneRaw);
+    if (phone.length < 7) return { match: null, error: '' };
+    const tail = phone.slice(-9);
+    const userRows = await D1ReadModule.all(env, `
+      SELECT * FROM users
+      WHERE phone LIKE ? OR phone LIKE ?
+      ORDER BY row_id DESC
+      LIMIT 20
+    `, [`%${phone}%`, `%${tail}%`]).catch(() => []);
+    const cardRows = await D1ReadModule.all(env, `
+      SELECT * FROM card_contacts
+      WHERE mobile LIKE ? OR mobile LIKE ? OR office_phone LIKE ? OR office_phone LIKE ?
+      ORDER BY COALESCE(updated_at, created_at) DESC
+      LIMIT 20
+    `, [`%${phone}%`, `%${tail}%`, `%${phone}%`, `%${tail}%`]).catch(() => []);
+
+    const matches = [];
+    const pushMatch = (kind, row, rawPhone) => {
+      const normalized = SecurityModule.normalizePhone(rawPhone);
+      if (!normalized || (normalized !== phone && !normalized.endsWith(tail) && !phone.endsWith(normalized.slice(-9)))) return;
+      const id = kind === 'card'
+        ? D1ReadModule.text(row.line_id)
+        : D1ReadModule.text(row.line_id || row.row_id);
+      if (!id) return;
+      if (!matches.some(item => item.id === id)) matches.push({ kind, id, row });
+    };
+    userRows.forEach(row => pushMatch('user', row, row.phone));
+    cardRows.forEach(row => pushMatch('card', row, row.mobile || row.office_phone));
+
+    if (matches.length > 1) {
+      return { match: null, error: '此手機號碼對應多位用戶，請改掃 QR 或貼上 UID' };
+    }
+    return { match: matches[0] || null, error: '' };
+  },
+
+  async resolveStorePointCustomer(env, rawCustomerId) {
+    const raw = D1ReadModule.text(rawCustomerId);
+    if (!raw) return { customerPointUserId: '', rawCustomerId: raw, identity: null, user: null, card: null };
+
+    let matchedId = raw;
+    let matchedUser = null;
+    let matchedCard = null;
+    const looksLikePhone = !/^U[0-9a-fA-F]{20,64}$/.test(raw) && SecurityModule.normalizePhone(raw).length >= 7;
+    if (looksLikePhone) {
+      const phoneMatch = await this.findCustomerByPhone(env, raw);
+      if (phoneMatch.error) return { error: phoneMatch.error };
+      if (phoneMatch.match) {
+        matchedId = phoneMatch.match.id;
+        if (phoneMatch.match.kind === 'user') matchedUser = D1ReadModule.userRow(phoneMatch.match.row);
+        if (phoneMatch.match.kind === 'card') matchedCard = D1ReadModule.cardRow(phoneMatch.match.row);
+      }
+    }
+
+    const customerPointUserId = await this.resolvePointUserId(env, matchedId);
+    const identity = env.ACTMASTER_DB
+      ? await D1ReadModule.findUserByIdentity(env, matchedId).catch(() => null)
+      : null;
+    const user = matchedUser || (identity && identity.user ? D1ReadModule.userRow(identity.user) : null);
+    let card = matchedCard;
+    if (env.ACTMASTER_DB && customerPointUserId && !card) {
+      const row = await D1ReadModule.first(env, `
+        SELECT * FROM card_contacts
+        WHERE line_id = ? OR creator_id = ?
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT 1
+      `, [customerPointUserId, customerPointUserId]).catch(() => null);
+      card = D1ReadModule.cardRow(row);
+    }
+
+    return { customerPointUserId, rawCustomerId: raw, matchedId, identity, user, card };
+  },
+
   async getStorePointCustomer(payload, env) {
     const rawCustomerId = String(
       payload.customerUserId ||
@@ -924,32 +998,46 @@ const PointModule = {
       payload.uid ||
       ''
     ).trim();
-    const customerPointUserId = await this.resolvePointUserId(env, rawCustomerId);
+    const resolved = await this.resolveStorePointCustomer(env, rawCustomerId);
+    if (resolved.error) return { success: false, error: resolved.error };
+    const customerPointUserId = resolved.customerPointUserId;
     if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
 
-    let identity = null;
-    let user = null;
-    let card = null;
-    if (env.ACTMASTER_DB) {
-      identity = await D1ReadModule.findUserByIdentity(env, rawCustomerId).catch(() => null);
-      user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
-      card = await D1ReadModule.first(env, `
-        SELECT * FROM card_contacts
-        WHERE line_id = ? OR creator_id = ?
-        ORDER BY COALESCE(updated_at, created_at) DESC
-        LIMIT 1
-      `, [customerPointUserId, customerPointUserId]).catch(() => null);
-      if (!card && rawCustomerId !== customerPointUserId) {
-        card = await D1ReadModule.first(env, `
+    let identity = resolved.identity;
+    let user = resolved.user;
+    let mappedCard = resolved.card;
+    if (env.ACTMASTER_DB && !mappedCard && rawCustomerId !== customerPointUserId) {
+      const card = await D1ReadModule.first(env, `
           SELECT * FROM card_contacts
           WHERE line_id = ? OR creator_id = ?
           ORDER BY COALESCE(updated_at, created_at) DESC
           LIMIT 1
         `, [rawCustomerId, rawCustomerId]).catch(() => null);
+      mappedCard = D1ReadModule.cardRow(card);
+    }
+    if (env.ACTMASTER_DB && !identity) {
+      identity = await D1ReadModule.findUserByIdentity(env, customerPointUserId).catch(() => null);
+      user = identity && identity.user ? D1ReadModule.userRow(identity.user) : user;
+    }
+    if (env.ACTMASTER_DB && !mappedCard) {
+      const card = await D1ReadModule.first(env, `
+        SELECT * FROM card_contacts
+        WHERE line_id = ? OR creator_id = ?
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT 1
+      `, [customerPointUserId, customerPointUserId]).catch(() => null);
+      mappedCard = D1ReadModule.cardRow(card);
+      if (!card && rawCustomerId !== customerPointUserId) {
+        const fallbackCard = await D1ReadModule.first(env, `
+          SELECT * FROM card_contacts
+          WHERE line_id = ? OR creator_id = ?
+          ORDER BY COALESCE(updated_at, created_at) DESC
+          LIMIT 1
+        `, [rawCustomerId, rawCustomerId]).catch(() => null);
+        mappedCard = D1ReadModule.cardRow(fallbackCard);
       }
     }
 
-    const mappedCard = D1ReadModule.cardRow(card);
     const wallet = await this.queryUserPoints({
       pointUserId: customerPointUserId,
       point_type: 'gift_money',
@@ -975,6 +1063,7 @@ const PointModule = {
         customerUserId: rawCustomerId,
         customerPointUserId,
         canonicalUserId: D1ReadModule.text(identity && identity.canonicalId, customerPointUserId),
+        matchedBy: rawCustomerId === customerPointUserId ? 'uid' : 'phone_or_identity',
         name: displayName,
         phone,
         industry,
@@ -1028,7 +1117,9 @@ const PointModule = {
       payload.uid ||
       ''
     ).trim();
-    const customerPointUserId = await this.resolvePointUserId(env, rawCustomerId);
+    const resolvedCustomer = await this.resolveStorePointCustomer(env, rawCustomerId);
+    if (resolvedCustomer.error) return { success: false, error: resolvedCustomer.error };
+    const customerPointUserId = resolvedCustomer.customerPointUserId;
     const amount = Math.floor(Number(payload.amount || payload.spendAmount || payload.total || 0));
     const mode = String(payload.mode || payload.operation || 'redeem').trim().toLowerCase();
 

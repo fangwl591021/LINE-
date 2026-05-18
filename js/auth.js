@@ -980,6 +980,9 @@ window.lookupStorePointCustomer = async function() {
     const res = await window.fetchAPI('getStorePointCustomer', { customerUserId }, true);
     if (!res || res.error) throw new Error(res?.error || '查無客戶資料');
     const data = res.data || res;
+    if (input && data.customerPointUserId && input.value !== data.customerPointUserId) {
+      input.value = data.customerPointUserId;
+    }
     window.renderStorePointCustomer(data);
     return data;
   } catch (e) {
@@ -1035,7 +1038,8 @@ window.submitStorePointCashier = async function(btn) {
   const customerInput = document.getElementById('store-point-customer');
   const amountInput = document.getElementById('store-point-amount');
   const preview = document.getElementById('store-point-preview');
-  const customerUserId = window.extractPointCustomerId(customerInput?.value || '');
+  const customerUserId = window.storePointCustomer?.customerPointUserId
+    || window.extractPointCustomerId(customerInput?.value || '');
   const amount = Math.floor(Number(amountInput?.value || 0));
   const mode = window.getStorePointMode();
 
