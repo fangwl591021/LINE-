@@ -725,7 +725,9 @@ const PointModule = {
         if (title && !title.includes('店家') && !title.includes(mode === 'reward' ? '贈點' : '折抵')) return false;
         const lTime = logTime(log);
         if (!Number.isNaN(timeMs) && !Number.isNaN(lTime)) {
-          return Math.abs(timeMs - lTime) <= 6 * 60 * 60 * 1000;
+          // D1 stores CURRENT_TIMESTAMP in UTC while the point service may return Taiwan-local time.
+          // Keep this wide enough for timezone differences and delayed external ledger writes.
+          return Math.abs(timeMs - lTime) <= 36 * 60 * 60 * 1000;
         }
         return true;
       });
