@@ -2,7 +2,7 @@
   const $ = id => document.getElementById(id);
 
   const TYPE_LABELS = {
-    message: "訊息",
+    message: "一般訊息",
     coupon: "優惠券",
     course: "課程邀約",
     interview: "1 對 1 訪談",
@@ -35,12 +35,16 @@
   }
 
   function typeLabel(item) {
-    return TYPE_LABELS[item?.messageType] || "訊息";
+    return TYPE_LABELS[item?.messageType] || "一般訊息";
   }
 
   function senderName(item) {
     const snap = item?.senderSnapshot || {};
-    return snap.name || item?.senderUser?.name || item?.senderCard?.name || "未知寄件者";
+    return snap.name || item?.senderUser?.name || item?.senderCard?.name || "未知寄件人";
+  }
+
+  function receiverName(item) {
+    return item?.receiverUser?.name || item?.receiverCard?.name || item?.receiverUserId || "未知收件人";
   }
 
   function senderSubtitle(item) {
@@ -49,6 +53,15 @@
       snap.companyName || item?.senderCard?.companyName || "",
       snap.title || item?.senderUser?.industry || item?.senderCard?.title || "",
       snap.phone || item?.senderUser?.phone || item?.senderCard?.mobile || ""
+    ].filter(Boolean);
+    return parts.join(" / ");
+  }
+
+  function receiverSubtitle(item) {
+    const parts = [
+      item?.receiverUser?.phone || item?.receiverCard?.mobile || "",
+      item?.receiverUser?.industry || item?.receiverCard?.title || "",
+      item?.receiverUser?.networkId || item?.receiverCard?.networkId || ""
     ].filter(Boolean);
     return parts.join(" / ");
   }
@@ -66,11 +79,25 @@
 
   function getCardImage(card) {
     if (!card) return "";
-    const cfg = parseConfig(card.customConfig || card["自訂名片設定"] || card["電子名片設定"]);
+    const cfg = parseConfig(card.customConfig || card["自訂名片設定"] || card["電子名片設定"] || card["自訂版面"] || card["名片設定"]);
     return cfg.imgUrlPortrait || cfg.imgUrl || cfg.imgUrlLandscape || cfg.imgUrlSquare || card.imageUrl || card["名片圖檔"] || "";
   }
 
-  window.refreshInboxBadge = async function () {
+  function setTabs(mode) {
+    const received = $("inbox-tab-received");
+    const sent = $("inbox-tab-sent");
+    const active = "bg-white text-slate-900 shadow-sm";
+    const idle = "text-slate-500";
+    if (received) received.className = `py-3 rounded-xl text-[15px] font-black active:scale-95 transition-all ${mode === "received" ? active : idle}`;
+    if (sent) sent.className = `py-3 rounded-xl text-[15px] font-black active:scale-95 transition-all ${mode === "sent" ? active : idle}`;
+  }
+
+  function updateTitleUnread(unread) {
+    const base = document.title.replace(/^\(\d+\)\s*/, "");
+    document.title = unread > 0 ? `(${unread}) ${base}` : base;
+  }
+
+  window.refreshInboxBadge = async function (options = {}) {
     const button = $("inbox-nav-button");
     const badge = $("inbox-unread-badge");
     if (!button || !badge) return;
@@ -78,6 +105,8 @@
     if (!canUseInbox()) {
       button.classList.add("hidden");
       badge.classList.add("hidden");
+      window.inboxUnreadCount = 0;
+      updateTitleUnread(0);
       return;
     }
 
@@ -85,45 +114,65 @@
     try {
       const data = await window.fetchAPI("getInboxCount", {}, true);
       const unread = Number(data?.unread || 0);
+      const previous = Number(window.inboxUnreadCount || 0);
+      const hasInitialized = window.inboxBadgeInitialized === true;
+      window.inboxUnreadCount = unread;
+      window.inboxBadgeInitialized = true;
+
       if (unread > 0) {
         badge.textContent = unread > 99 ? "99+" : String(unread);
         badge.classList.remove("hidden");
       } else {
         badge.classList.add("hidden");
       }
+      updateTitleUnread(unread);
+
+      if (options.notify && hasInitialized && unread > previous) {
+        const diff = unread - previous;
+        window.showToast?.(`你有 ${diff} 封新訊息`);
+        if (window.currentPage === "inbox" && window.inboxMode !== "sent") {
+          window.loadInbox({ silent: true });
+        }
+      }
     } catch (e) {
       console.warn("[inbox] badge skipped:", e.message || e);
     }
   };
 
-  function renderEmpty() {
+  function renderEmpty(mode = "received") {
     const list = $("inbox-list");
     if (!list) return;
+    const sent = mode === "sent";
     list.innerHTML = `
       <div class="p-8 text-center">
         <div class="w-14 h-14 mx-auto mb-3 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-          <span class="material-symbols-outlined">mail</span>
+          <span class="material-symbols-outlined">${sent ? "outbox" : "mail"}</span>
         </div>
-        <p class="text-[16px] font-black text-slate-700">目前沒有信件</p>
-        <p class="text-[13px] text-slate-400 font-bold mt-1">訊息、優惠券、課程邀約與訪談邀請會集中在這裡。</p>
+        <p class="text-[16px] font-black text-slate-700">${sent ? "尚無寄件紀錄" : "目前沒有訊息"}</p>
+        <p class="text-[13px] text-slate-400 font-bold mt-1">${sent ? "你寄出的訊息會保留在這裡，方便追蹤。" : "收到會員訊息、優惠券、課程邀約或回覆時會顯示在這裡。"}</p>
       </div>
     `;
   }
 
-  function renderList(items) {
+  function renderList(items, mode = "received") {
     const list = $("inbox-list");
     if (!list) return;
     if (!Array.isArray(items) || items.length === 0) {
-      renderEmpty();
+      renderEmpty(mode);
       return;
     }
 
+    const sent = mode === "sent";
     list.innerHTML = items.map(item => {
-      const unread = item.status !== "read";
+      const unread = !sent && item.status !== "read";
+      const primaryName = sent ? receiverName(item) : senderName(item);
+      const meta = sent ? `寄給：${primaryName}` : `來自：${primaryName}`;
+      const icon = sent ? "outbox" : (unread ? "mark_email_unread" : "drafts");
+      const statusText = sent ? (item.status === "read" ? "已讀" : "未讀") : "未讀";
       return `
         <button type="button" onclick="window.openInboxItem('${escapeHTML(item.messageId)}')" class="w-full text-left p-4 flex gap-3 active:bg-slate-50 transition-colors">
           <div class="w-10 h-10 rounded-2xl ${unread ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-400"} flex items-center justify-center shrink-0">
-            <span class="material-symbols-outlined text-[22px]">${unread ? "mark_email_unread" : "drafts"}</span>
+            <span class="material-symbols-outlined text-[22px]">${icon}</span>
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
@@ -131,9 +180,9 @@
                 <p class="text-[12px] font-black ${unread ? "text-blue-600" : "text-slate-400"}">${escapeHTML(typeLabel(item))}</p>
                 <h3 class="text-[16px] font-black text-slate-900 leading-snug truncate">${escapeHTML(item.title || "未命名訊息")}</h3>
               </div>
-              ${unread ? '<span class="shrink-0 mt-1 rounded-full bg-red-50 text-red-600 px-2 py-1 text-[11px] font-black">未讀</span>' : ""}
+              ${unread || sent ? `<span class="shrink-0 mt-1 rounded-full ${unread ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500"} px-2 py-1 text-[11px] font-black">${escapeHTML(statusText)}</span>` : ""}
             </div>
-            <p class="text-[13px] text-slate-500 font-bold mt-1 truncate">${escapeHTML(senderName(item))}</p>
+            <p class="text-[13px] text-slate-500 font-bold mt-1 truncate">${escapeHTML(meta)}</p>
             <p class="text-[12px] text-slate-400 font-bold mt-1">${escapeHTML(formatTime(item.createdAt))}</p>
           </div>
         </button>
@@ -141,22 +190,32 @@
     }).join("");
   }
 
-  window.loadInbox = async function () {
+  window.switchInboxBox = function (mode) {
+    window.inboxMode = mode === "sent" ? "sent" : "received";
+    window.closeInboxDetail();
+    setTabs(window.inboxMode);
+    window.loadInbox();
+  };
+
+  window.loadInbox = async function (options = {}) {
     const list = $("inbox-list");
     if (!list) return;
+    const mode = window.inboxMode === "sent" ? "sent" : "received";
+    setTabs(mode);
     if (!canUseInbox()) {
-      renderEmpty();
+      renderEmpty(mode);
       return;
     }
 
-    list.innerHTML = '<div class="p-8 text-center text-slate-400 font-bold">讀取收件匣中...</div>';
+    if (!options.silent) list.innerHTML = '<div class="p-8 text-center text-slate-400 font-bold">載入訊息中...</div>';
     try {
-      const items = await window.fetchAPI("listInboxItems", {}, true);
+      const action = mode === "sent" ? "listSentInboxItems" : "listInboxItems";
+      const items = await window.fetchAPI(action, {}, true);
       window.inboxItems = Array.isArray(items) ? items : [];
-      renderList(window.inboxItems);
+      renderList(window.inboxItems, mode);
       await window.refreshInboxBadge();
     } catch (e) {
-      list.innerHTML = `<div class="p-8 text-center text-red-500 font-bold">收件匣讀取失敗：${escapeHTML(e.message || e)}</div>`;
+      list.innerHTML = `<div class="p-8 text-center text-red-500 font-bold">訊息載入失敗：${escapeHTML(e.message || e)}</div>`;
     }
   };
 
@@ -181,7 +240,7 @@
     if (hidden) hidden.value = "";
     if (!box) return;
     if (query.length < 2) {
-      box.innerHTML = '<div class="text-[13px] text-slate-400 font-bold px-1">請至少輸入 2 個字。</div>';
+      box.innerHTML = '<div class="text-[13px] text-slate-400 font-bold px-1">請至少輸入 2 個字搜尋</div>';
       return;
     }
 
@@ -231,7 +290,7 @@
     const oldText = btn ? btn.textContent : "";
     if (btn) {
       btn.disabled = true;
-      btn.textContent = "傳送中...";
+      btn.textContent = "送出中...";
       btn.classList.add("opacity-70");
     }
     try {
@@ -246,9 +305,9 @@
       const results = $("inbox-recipient-results");
       if (results) results.innerHTML = "";
       window.toggleInboxComposer(false);
-      await window.loadInbox();
+      window.switchInboxBox("sent");
     } catch (e) {
-      window.showToast?.("傳送失敗：" + (e.message || e), true);
+      window.showToast?.("送出失敗：" + (e.message || e), true);
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -264,50 +323,69 @@
       const item = await window.fetchAPI("getInboxItem", { messageId }, true);
       renderDetail(item);
       await window.refreshInboxBadge();
-      await window.loadInbox();
+      await window.loadInbox({ silent: true });
     } catch (e) {
-      window.showToast?.("收件匣讀取失敗：" + (e.message || e), true);
+      window.showToast?.("訊息開啟失敗：" + (e.message || e), true);
     }
   };
 
   function renderDetail(item) {
     const panel = $("inbox-detail-panel");
     if (!panel) return;
+    const sentView = item.viewerRole === "sender" || window.inboxMode === "sent";
     window.currentInboxItem = item;
     $("inbox-detail-type").textContent = typeLabel(item);
     $("inbox-detail-title").textContent = item.title || "未命名訊息";
-    $("inbox-detail-meta").textContent = `${senderName(item)} · ${formatTime(item.createdAt)}`;
+    $("inbox-detail-meta").textContent = `${sentView ? "寄給：" + receiverName(item) : "來自：" + senderName(item)} · ${formatTime(item.createdAt)}`;
     $("inbox-detail-body").textContent = item.body || "沒有內文";
 
     const cardBox = $("inbox-sender-card");
+    if (!cardBox) return;
+    cardBox.classList.remove("hidden");
+    if (sentView) {
+      cardBox.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400">
+            <span class="material-symbols-outlined">person</span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[15px] font-black text-slate-900 truncate">${escapeHTML(receiverName(item))}</p>
+            <p class="text-[13px] text-slate-500 font-bold mt-1 leading-relaxed">${escapeHTML(receiverSubtitle(item) || "收件人資料尚未完整")}</p>
+            <p class="text-[12px] text-slate-400 font-bold mt-3">讀取狀態：${item.status === "read" ? "對方已讀" : "對方尚未讀取"}</p>
+          </div>
+        </div>
+      `;
+    } else {
+      renderSenderCard(cardBox, item);
+    }
+    panel.classList.remove("hidden");
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderSenderCard(cardBox, item) {
     const card = item.senderCard;
     const subtitle = senderSubtitle(item);
     const cardImage = getCardImage(card);
-    if (cardBox) {
-      cardBox.classList.remove("hidden");
-      cardBox.innerHTML = `
-        <div class="space-y-4">
-          ${cardImage ? `
-            <button type="button" onclick="window.openInboxSenderCard('${escapeHTML(card?.rowId || card?.id || "")}')" class="block w-full overflow-hidden rounded-2xl border border-slate-200 bg-white active:scale-[0.99] transition-transform">
-              <img src="${escapeHTML(cardImage)}" class="w-full h-auto max-h-[320px] object-contain bg-white" alt="寄件者名片預覽">
-            </button>
-          ` : ""}
-          <div class="flex items-start gap-3">
+    cardBox.innerHTML = `
+      <div class="space-y-4">
+        ${cardImage ? `
+          <button type="button" onclick="window.openInboxSenderCard('${escapeHTML(card?.rowId || card?.id || "")}')" class="block w-full overflow-hidden rounded-2xl border border-slate-200 bg-white active:scale-[0.99] transition-transform">
+            <img src="${escapeHTML(cardImage)}" class="w-full h-auto max-h-[320px] object-contain bg-white" alt="對方名片預覽">
+          </button>
+        ` : ""}
+        <div class="flex items-start gap-3">
           ${cardImage ? `<img src="${escapeHTML(cardImage)}" class="w-14 h-14 rounded-2xl object-cover border border-slate-200 bg-white">` : '<div class="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400"><span class="material-symbols-outlined">badge</span></div>'}
           <div class="min-w-0 flex-1">
             <p class="text-[15px] font-black text-slate-900 truncate">${escapeHTML(senderName(item))}</p>
-            <p class="text-[13px] text-slate-500 font-bold mt-1 leading-relaxed">${escapeHTML(subtitle || "可反查寄件者資料")}</p>
+            <p class="text-[13px] text-slate-500 font-bold mt-1 leading-relaxed">${escapeHTML(subtitle || "對方資料尚未完整")}</p>
             <div class="mt-3 flex flex-wrap gap-2">
               <button type="button" onclick="window.replyInboxMessage()" class="px-4 py-2 rounded-2xl bg-[#06C755] text-white text-[13px] font-black active:scale-95 transition-all">回覆</button>
               ${card?.rowId ? `<button type="button" onclick="window.openInboxSenderCard('${escapeHTML(card.rowId)}')" class="px-4 py-2 rounded-2xl bg-slate-900 text-white text-[13px] font-black active:scale-95 transition-all">${cardImage ? "預覽名片" : "查看名片"}</button>` : ""}
             </div>
           </div>
-          </div>
         </div>
-      `;
-    }
-    panel.classList.remove("hidden");
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      </div>
+    `;
   }
 
   window.openInboxSenderCard = async function (rowId) {
@@ -340,7 +418,7 @@
         }
       }, 120);
     } catch (e) {
-      window.showToast?.("無法開啟寄件者名片", true);
+      window.showToast?.("打開名片失敗", true);
     }
   };
 
@@ -379,7 +457,7 @@
 
   window.openInboxSenderCardDetail = function () {
     const card = window.currentInboxItem?.senderCard;
-    if (!card || typeof window.openCardDetail !== "function") return window.showToast?.("無法開啟名片資料", true);
+    if (!card || typeof window.openCardDetail !== "function") return window.showToast?.("找不到名片資料", true);
     if (typeof window.goPage === "function") window.goPage("card");
     setTimeout(() => window.openCardDetail(card), 80);
   };
@@ -388,7 +466,7 @@
     const item = window.currentInboxItem;
     if (!item) return;
     const senderId = item.senderUserId || item.senderSnapshot?.lineId || item.senderCard?.lineId || item.senderCard?.userId || "";
-    if (!senderId) return window.showToast?.("找不到寄件者，無法回覆", true);
+    if (!senderId) return window.showToast?.("找不到對方帳號，無法回覆", true);
     const name = senderName(item);
     const hidden = $("inbox-recipient-id");
     const query = $("inbox-recipient-query");
@@ -404,11 +482,23 @@
     $("inbox-composer")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  function startInboxPolling() {
+    if (window.inboxPollTimer) return;
+    window.inboxPollTimer = setInterval(() => {
+      if (canUseInbox()) window.refreshInboxBadge({ notify: true });
+    }, 60000);
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
-    setTimeout(window.refreshInboxBadge, 1800);
+    setTimeout(() => window.refreshInboxBadge(), 1800);
+    startInboxPolling();
   });
 
   window.addEventListener("focus", () => {
-    if (canUseInbox()) window.refreshInboxBadge();
+    if (canUseInbox()) window.refreshInboxBadge({ notify: true });
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && canUseInbox()) window.refreshInboxBadge({ notify: true });
   });
 })();

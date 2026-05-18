@@ -227,6 +227,7 @@ const SecurityModule = {
       'deletePersonalTask',
       'getInboxCount',
       'listInboxItems',
+      'listSentInboxItems',
       'getInboxItem',
       'markInboxRead',
       'searchInboxRecipients',
@@ -3434,6 +3435,31 @@ const D1InboxModule = {
     return this.text(payload.authenticatedUserId || payload.userId || payload.lineId);
   },
 
+  async identityIds(env, userId) {
+    const id = this.text(userId);
+    const ids = [];
+    const add = value => {
+      const next = this.text(value);
+      if (next && !ids.includes(next)) ids.push(next);
+    };
+    add(id);
+    const identity = await D1ReadModule.findUserByIdentity(env, id).catch(() => null);
+    add(identity && identity.canonicalId);
+    const user = identity && identity.user ? identity.user : null;
+    add(user && user.line_id);
+    add(user && user.row_id);
+    add(user && user.legacy_line_id);
+    add(user && user.point_line_id);
+    const link = identity && identity.link ? identity.link : null;
+    add(link && link.new_line_id);
+    add(link && link.old_line_id);
+    return ids.length ? ids : [id];
+  },
+
+  placeholders(values) {
+    return (Array.isArray(values) ? values : []).map(() => '?').join(', ');
+  },
+
   async ensure(env) {
     await env.ACTMASTER_DB.prepare(`
       CREATE TABLE IF NOT EXISTS inbox_items (
@@ -3502,6 +3528,27 @@ const D1InboxModule = {
     };
   },
 
+  async receiverContext(env, receiverUserId) {
+    const receiverId = this.text(receiverUserId);
+    let user = null;
+    let card = null;
+    if (receiverId) {
+      const identity = await D1ReadModule.findUserByIdentity(env, receiverId).catch(() => null);
+      user = identity && identity.user ? identity.user : null;
+      const canonicalId = this.text(identity && identity.canonicalId, receiverId);
+      card = await D1ReadModule.first(env, `
+        SELECT * FROM card_contacts
+        WHERE line_id = ? OR creator_id = ?
+        ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+        LIMIT 1
+      `, [canonicalId, canonicalId]).catch(() => null);
+    }
+    return {
+      receiverUser: D1ReadModule.userRow(user),
+      receiverCard: D1ReadModule.cardRow(card)
+    };
+  },
+
   itemRow(row, context = {}) {
     if (!row) return null;
     return {
@@ -3522,7 +3569,10 @@ const D1InboxModule = {
       createdAt: this.text(row.created_at),
       updatedAt: this.text(row.updated_at),
       senderCard: context.senderCard || null,
-      senderUser: context.senderUser || null
+      senderUser: context.senderUser || null,
+      receiverCard: context.receiverCard || null,
+      receiverUser: context.receiverUser || null,
+      viewerRole: context.viewerRole || ''
     };
   },
 
@@ -3534,13 +3584,14 @@ const D1InboxModule = {
     await this.ensure(env);
     const userId = this.ownUserId(payload);
     if (!userId) return { success: false, error: 'Missing userId' };
+    const ids = await this.identityIds(env, userId);
     const row = await D1ReadModule.first(env, `
       SELECT COUNT(*) AS unread
       FROM inbox_items
-      WHERE receiver_user_id = ?
+      WHERE receiver_user_id IN (${this.placeholders(ids)})
         AND status = 'unread'
         AND ${this.isVisibleSql()}
-    `, [userId]);
+    `, ids);
     return { success: true, data: { unread: Number(row && row.unread) || 0 } };
   },
 
@@ -3548,10 +3599,11 @@ const D1InboxModule = {
     await this.ensure(env);
     const userId = this.ownUserId(payload);
     if (!userId) return { success: false, error: 'Missing userId' };
+    const ids = await this.identityIds(env, userId);
     const status = this.text(payload.status);
     const type = this.text(payload.messageType || payload.type);
-    const binds = [userId];
-    let where = `receiver_user_id = ? AND archived_at = '' AND ${this.isVisibleSql()}`;
+    const binds = [...ids];
+    let where = `receiver_user_id IN (${this.placeholders(ids)}) AND archived_at = '' AND ${this.isVisibleSql()}`;
     if (status === 'unread' || status === 'read') {
       where += ' AND status = ?';
       binds.push(status);
@@ -3572,30 +3624,64 @@ const D1InboxModule = {
     return { success: true, data: rows.map(row => this.itemRow(row)).filter(Boolean) };
   },
 
+  async listSent(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const ids = await this.identityIds(env, userId);
+    const type = this.text(payload.messageType || payload.type);
+    const binds = [...ids];
+    let where = `sender_user_id IN (${this.placeholders(ids)}) AND archived_at = '' AND ${this.isVisibleSql()}`;
+    if (type) {
+      where += ' AND message_type = ?';
+      binds.push(type);
+    }
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM inbox_items
+      WHERE ${where}
+      ORDER BY created_at DESC, message_id DESC
+      LIMIT 100
+    `, binds);
+    const enriched = [];
+    for (const row of rows) {
+      const receiver = await this.receiverContext(env, row.receiver_user_id).catch(() => ({}));
+      const sender = await this.senderContext(env, row.sender_user_id, row.sender_card_id).catch(() => ({}));
+      enriched.push(this.itemRow(row, { ...sender, ...receiver, viewerRole: 'sender' }));
+    }
+    return { success: true, data: enriched.filter(Boolean) };
+  },
+
   async get(payload, env) {
     await this.ensure(env);
     const userId = this.ownUserId(payload);
     const messageId = this.text(payload.messageId || payload.message_id);
     if (!userId || !messageId) return { success: false, error: 'Missing messageId' };
+    const ids = await this.identityIds(env, userId);
     const row = await D1ReadModule.first(env, `
       SELECT *
       FROM inbox_items
-      WHERE message_id = ? AND receiver_user_id = ? AND archived_at = '' AND ${this.isVisibleSql()}
+      WHERE message_id = ?
+        AND (receiver_user_id IN (${this.placeholders(ids)}) OR sender_user_id IN (${this.placeholders(ids)}))
+        AND archived_at = ''
+        AND ${this.isVisibleSql()}
       LIMIT 1
-    `, [messageId, userId]);
+    `, [messageId, ...ids, ...ids]);
     if (!row) return { success: false, error: '找不到這封訊息' };
 
-    if (this.text(row.status, 'unread') === 'unread') {
+    const viewerIsReceiver = ids.includes(this.text(row.receiver_user_id));
+    if (viewerIsReceiver && this.text(row.status, 'unread') === 'unread') {
       await env.ACTMASTER_DB.prepare(`
         UPDATE inbox_items
         SET status = 'read', read_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE message_id = ? AND receiver_user_id = ?
-      `).bind(messageId, userId).run();
+      `).bind(messageId, this.text(row.receiver_user_id)).run();
       row.status = 'read';
     }
 
     const context = await this.senderContext(env, row.sender_user_id, row.sender_card_id);
-    return { success: true, data: this.itemRow(row, context) };
+    const receiver = await this.receiverContext(env, row.receiver_user_id).catch(() => ({}));
+    return { success: true, data: this.itemRow(row, { ...context, ...receiver, viewerRole: viewerIsReceiver ? 'receiver' : 'sender' }) };
   },
 
   async markRead(payload, env) {
@@ -3603,11 +3689,12 @@ const D1InboxModule = {
     const userId = this.ownUserId(payload);
     const messageId = this.text(payload.messageId || payload.message_id);
     if (!userId || !messageId) return { success: false, error: 'Missing messageId' };
+    const ids = await this.identityIds(env, userId);
     await env.ACTMASTER_DB.prepare(`
       UPDATE inbox_items
       SET status = 'read', read_at = COALESCE(NULLIF(read_at, ''), CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
-      WHERE message_id = ? AND receiver_user_id = ?
-    `).bind(messageId, userId).run();
+      WHERE message_id = ? AND receiver_user_id IN (${this.placeholders(ids)})
+    `).bind(messageId, ...ids).run();
     return { success: true, data: { messageId, status: 'read' } };
   },
 
@@ -5556,6 +5643,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1InboxModule.count(payload || {}, env);
     case 'listInboxItems':
       return await D1InboxModule.list(payload || {}, env);
+    case 'listSentInboxItems':
+      return await D1InboxModule.listSent(payload || {}, env);
     case 'getInboxItem':
       return await D1InboxModule.get(payload || {}, env);
     case 'markInboxRead':
