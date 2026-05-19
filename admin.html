@@ -1153,15 +1153,15 @@
                 <label class="block text-sm font-bold text-slate-500 mb-2">名片版型</label>
                 <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl h-[46px]">
                   <label class="flex-1 text-center cursor-pointer m-0 h-full">
-                    <input type="radio" name="edit-v-layout" value="landscape" class="peer sr-only" onchange="updateAdminCardPreview()">
+                    <input type="radio" name="edit-v-layout" value="landscape" class="peer sr-only" onchange="changeAdminCardLayout()">
                     <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all h-full flex items-center justify-center">標準(Mega)</div>
                   </label>
                   <label class="flex-1 text-center cursor-pointer m-0 h-full">
-                    <input type="radio" name="edit-v-layout" value="portrait" class="peer sr-only" onchange="updateAdminCardPreview()">
+                    <input type="radio" name="edit-v-layout" value="portrait" class="peer sr-only" onchange="changeAdminCardLayout()">
                     <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all h-full flex items-center justify-center">滿版(Giga)</div>
                   </label>
                   <label class="flex-1 text-center cursor-pointer m-0 h-full">
-                    <input type="radio" name="edit-v-layout" value="square" class="peer sr-only" onchange="updateAdminCardPreview()">
+                    <input type="radio" name="edit-v-layout" value="square" class="peer sr-only" onchange="changeAdminCardLayout()">
                     <div class="rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[13px] transition-all h-full flex items-center justify-center">正方(1:1)</div>
                   </label>
                 </div>
@@ -1183,7 +1183,7 @@
             <div>
               <label class="block text-sm font-bold text-slate-500 mb-1.5">封面圖片網址</label>
               <div class="flex gap-2">
-                <input type="text" id="edit-v-img" oninput="window.currentAdminCropRatio=null; updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
+                <input type="text" id="edit-v-img" oninput="window.currentAdminCropRatio=null; syncAdminEcardImageInput(); updateAdminCardPreview()" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono" placeholder="https://...">
                 <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center gap-1 transition-colors whitespace-nowrap shadow-sm">
                   <span class="material-symbols-outlined text-[18px]">upload</span> 上傳圖片
                   <input type="file" class="hidden" accept="image/*" onchange="openAdminCropper(this)">
@@ -3551,10 +3551,28 @@
       updateAdminCardPreview();
     }
 
+    function getAdminCardLayout() {
+      return document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
+    }
+
+    function syncAdminEcardImageInput() {
+      const layoutStyle = getAdminCardLayout();
+      const imgInput = document.getElementById('edit-v-img');
+      if (imgInput) currentAdminEcardImgs[layoutStyle] = imgInput.value.trim();
+    }
+
+    function changeAdminCardLayout() {
+      const layoutStyle = getAdminCardLayout();
+      const imgInput = document.getElementById('edit-v-img');
+      if (imgInput) imgInput.value = currentAdminEcardImgs[layoutStyle] || '';
+      updateAdminCardPreview();
+    }
+
     function updateAdminCardPreview() {
+      syncAdminEcardImageInput();
       const area = document.getElementById('admin-card-preview-area');
       const name = document.getElementById('edit-c-name').value || '姓名';
-      const layoutStyle = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
+      const layoutStyle = getAdminCardLayout();
       const imgUrl = currentAdminEcardImgs[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
       
       const desc = (document.getElementById('edit-v-desc').value || '').replace(/\n/g, '<br>');
@@ -3583,7 +3601,8 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
 
-      const layoutVal = document.querySelector('input[name="edit-v-layout"]:checked')?.value || 'landscape';
+      syncAdminEcardImageInput();
+      const layoutVal = getAdminCardLayout();
       const cfg = {
         layoutStyle: layoutVal,
         imgUrl: currentAdminEcardImgs.landscape,
