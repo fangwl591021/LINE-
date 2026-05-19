@@ -63,7 +63,7 @@ function buildAutoECardButtons(card, existingButtons) {
     if (foundIndex >= 0) used.add(foundIndex);
     return {
       l: found?.l || auto[kind].l,
-      u: auto[kind].u || found?.u || '',
+      u: resolveECardButtonUrl(kind, found?.u, auto[kind].u),
       c: found?.c || auto[kind].c
     };
   });
@@ -75,6 +75,16 @@ function buildAutoECardButtons(card, existingButtons) {
   });
 
   return merged;
+}
+
+function resolveECardButtonUrl(kind, existingUrl, autoUrl) {
+  const existing = String(existingUrl || '').trim();
+  const auto = String(autoUrl || '').trim();
+  if (!existing) return auto;
+  if (kind === 'phone' && /^tel:/i.test(existing)) return auto || existing;
+  if (kind === 'line' && existing === ECardAutoDefaults.lineUrl) return auto || existing;
+  if (kind === 'intro' && existing === ECardAutoDefaults.introUrl) return auto || existing;
+  return existing;
 }
 
 window.syncECardButtonsFromFields = function(options = {}) {
@@ -430,7 +440,7 @@ window.renderV1Buttons = function() {
         <input type="color" value="${b.c || '#06C755'}" class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200 bg-white" onchange="window.currentEcardButtons[${i}].c=this.value; window.updateECardPreview()">
         <div class="flex-1 flex flex-col gap-1.5">
           <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="window.currentEcardButtons[${i}].l=this.value; window.updateECardPreview()">
-          <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://..." class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="window.currentEcardButtons[${i}].u=this.value">
+          <input type="text" value="${escapeHTML(b.u || '')}" placeholder="網址、tel:電話 或 line 連結" class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="window.currentEcardButtons[${i}].u=this.value; window.updateECardPreview()">
         </div>
         <button onclick="window.currentEcardButtons.splice(${i},1); window.renderV1Buttons(); window.updateECardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
       </div>
@@ -532,6 +542,15 @@ window.saveECardConfig = async function() {
   }
 
   const cfg = window.buildECardConfigFromFields();
+  const rowId = window.currentCard.rowId || window.currentCard["rowId"] || window.currentCard.id || "";
+  if (!rowId) {
+    window.showToast('⚠️ 儲存失敗：找不到名片編號，請重新整理後再試', true);
+    if (btn) {
+      btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> 儲存';
+      btn.disabled = false;
+    }
+    return;
+  }
 
   const payloadData = {
     '名片圖檔': cfg.imgUrl,
@@ -540,21 +559,29 @@ window.saveECardConfig = async function() {
   };
 
   try {
-    const res = await window.fetchAPI('updateCard', { rowId: window.currentCard.rowId, data: payloadData }, false);
-    if (res) {
-      window.showToast('✅ 數位名片設定已成功儲存');
-      
-      window.currentCard['自訂名片設定'] = payloadData['自訂名片設定'];
-      window.currentCard['名片圖檔'] = payloadData['名片圖檔'];
-      window.currentCard['服務項目'] = payloadData['服務項目'];
-      
-      if (typeof window.allCards !== 'undefined') {
-        const match = window.allCards.find(c => String(c.rowId) === String(window.currentCard.rowId));
-        if (match) {
-           match['自訂名片設定'] = payloadData['自訂名片設定'];
-           match['名片圖檔'] = payloadData['名片圖檔'];
-           match['服務項目'] = payloadData['服務項目'];
-        }
+    const res = await window.fetchAPI('updateCard', { rowId, data: payloadData }, true);
+    if (!res || res.error || res.success === false) {
+      throw new Error((res && res.error) || '後端沒有確認儲存成功');
+    }
+
+    window.showToast('✅ 數位名片設定已成功儲存');
+
+    window.currentCard['自訂名片設定'] = payloadData['自訂名片設定'];
+    window.currentCard.customConfig = payloadData['自訂名片設定'];
+    window.currentCard['名片圖檔'] = payloadData['名片圖檔'];
+    window.currentCard.imageUrl = payloadData['名片圖檔'];
+    window.currentCard['服務項目'] = payloadData['服務項目'];
+    window.currentCard.services = payloadData['服務項目'];
+
+    if (Array.isArray(window.allCards)) {
+      const match = window.allCards.find(c => String(c.rowId || c["rowId"] || c.id || '') === String(rowId));
+      if (match) {
+        match['自訂名片設定'] = payloadData['自訂名片設定'];
+        match.customConfig = payloadData['自訂名片設定'];
+        match['名片圖檔'] = payloadData['名片圖檔'];
+        match.imageUrl = payloadData['名片圖檔'];
+        match['服務項目'] = payloadData['服務項目'];
+        match.services = payloadData['服務項目'];
       }
     }
   } catch(e) {
