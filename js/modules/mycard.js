@@ -379,7 +379,10 @@
 
     preview.innerHTML =
       '<div class="flex flex-col w-full">' +
-      '<div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio:' + ratio + ';background-image:url(&quot;' + escapeHTML(imgUrl) + '&quot;);"></div>' +
+      '<div class="relative w-full">' +
+        '<div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio:' + ratio + ';background-image:url(&quot;' + escapeHTML(imgUrl) + '&quot;);"></div>' +
+        '<div class="absolute top-3 right-3 bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+      '</div>' +
       '<div class="p-6 text-center">' +
         '<div class="font-black text-[22px] text-slate-800 mb-2">' + escapeHTML(name) + '</div>' +
         '<div class="text-[14px] leading-relaxed" style="color:' + escapeHTML(color) + ';text-align:' + escapeHTML(align) + ';">' + escapeHTML(desc).replace(/\n/g, '<br>') + '</div>' +

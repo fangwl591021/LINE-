@@ -198,6 +198,35 @@ function buildECardHeroWithShareBadge(imgUrl, aspectRatio, badgeUrl) {
   };
 }
 
+function buildECardShareHeader(badgeUrl) {
+  const shareActionUrl = appendECardShareMode(badgeUrl);
+  if (!shareActionUrl) return undefined;
+  return {
+    type: 'box',
+    layout: 'horizontal',
+    justifyContent: 'flex-end',
+    paddingAll: '8px',
+    contents: [{
+      type: 'box',
+      layout: 'vertical',
+      justifyContent: 'center',
+      backgroundColor: '#EF4444',
+      width: '65px',
+      height: '25px',
+      cornerRadius: '25px',
+      contents: [{
+        type: 'text',
+        text: '分享',
+        weight: 'bold',
+        align: 'center',
+        color: '#FFFFFF',
+        size: 'xs'
+      }],
+      action: { type: 'uri', uri: shareActionUrl }
+    }]
+  };
+}
+
 function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
   const rawImgUrl = (
@@ -296,30 +325,14 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   const bubble = {
     type: 'bubble',
     size: layoutStyle === 'portrait' ? 'giga' : 'mega',
-    header: badgeUrl ? {
-      type: 'box',
-      layout: 'vertical',
-      paddingAll: '8px',
-      contents: [
-        {
-          type: 'button',
-          style: 'primary',
-          color: '#EF4444',
-          height: 'sm',
-          action: {
-            type: 'uri',
-            label: '分享名片',
-            uri: appendECardShareMode(badgeUrl)
-          }
-        }
-      ]
-    } : undefined,
+    header: buildECardShareHeader(badgeUrl),
     hero: {
       type: 'image',
       url: imgUrl,
       size: 'full',
       aspectRatio,
-      aspectMode: 'cover'
+      aspectMode: 'cover',
+      action: badgeUrl ? { type: 'uri', uri: badgeUrl } : undefined
     },
     body: {
       type: 'box',
@@ -346,8 +359,6 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       ]
     }
   };
-  delete bubble.header;
-  bubble.hero = buildECardHeroWithShareBadge(imgUrl, aspectRatio, badgeUrl);
   if (buttons.length) {
     bubble.footer = {
       type: 'box',
@@ -515,7 +526,10 @@ window.updateECardPreview = function() {
 
   area.innerHTML = `
     <div class="flex flex-col w-full">
-      <div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
+      <div class="relative w-full">
+        <div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
+        <div class="absolute top-3 right-3 bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>
+      </div>
       <div class="p-6 text-center">
         <div class="font-black text-[22px] text-slate-800 mb-2">${escapeHTML(name)}</div>
         <div class="text-[14px] leading-relaxed" style="color: ${color}; text-align: ${align};">${desc}</div>
