@@ -9,8 +9,18 @@
   font-variation-settings: 'FILL' 1;
 }
 
+:root {
+  --system-background-image: none;
+}
+
 body {
-  background-color: #f8fafc;
+  margin: 0;
+  min-height: 100vh;
+  background-image: var(--system-background-image);
+  background-repeat: repeat-y;
+  background-size: 100% auto;
+  background-position: top center;
+  background-color: #ffe8ef;
   -webkit-tap-highlight-color: transparent;
 }
 
