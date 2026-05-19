@@ -3899,23 +3899,40 @@ const D1ActivityModule = {
     const requestedNetworkId = this.text(payload.networkId || payload.net || '');
     const actorNetworkId = this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
     const networkId = requestedNetworkId || actorNetworkId;
+    const actorId = this.text(actor?.userId || payload.authenticatedUserId || payload.userId);
     const isAdmin = role === 'admin';
     const adminWantsAll = isAdmin && (!requestedNetworkId || requestedNetworkId === 'all' || requestedNetworkId === 'admin');
     const rows = adminWantsAll
       ? await D1ReadModule.all(env, 'SELECT * FROM activities ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC LIMIT 500')
       : networkId === 'admin'
-        ? await D1ReadModule.all(env, `
+        ? actorId
+          ? await D1ReadModule.all(env, `
+              SELECT * FROM activities
+              WHERE COALESCE(NULLIF(network_id, ''), 'admin') = 'admin'
+                 OR creator_id = ?
+              ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
+              LIMIT 500
+            `, [actorId])
+          : await D1ReadModule.all(env, `
             SELECT * FROM activities
             WHERE COALESCE(NULLIF(network_id, ''), 'admin') = 'admin'
             ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
             LIMIT 500
           `)
-      : await D1ReadModule.all(env, `
-          SELECT * FROM activities
-          WHERE COALESCE(NULLIF(network_id, ''), 'admin') = ?
-          ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
-          LIMIT 500
-        `, [networkId]);
+      : actorId
+        ? await D1ReadModule.all(env, `
+            SELECT * FROM activities
+            WHERE COALESCE(NULLIF(network_id, ''), 'admin') = ?
+               OR creator_id = ?
+            ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
+            LIMIT 500
+          `, [networkId, actorId])
+        : await D1ReadModule.all(env, `
+            SELECT * FROM activities
+            WHERE COALESCE(NULLIF(network_id, ''), 'admin') = ?
+            ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC
+            LIMIT 500
+          `, [networkId]);
     return { success: true, data: rows.map(row => this.activityRow(row)).filter(Boolean) };
   },
 

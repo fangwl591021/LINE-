@@ -588,6 +588,9 @@ const HomeModule = (function() {
     function canSeePublicActivity_(activity) {
         const role = String(window.userRole || '').toLowerCase();
         if (role === 'admin') return true;
+        const userId = String(window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '').trim();
+        const creatorId = String(activity.creatorId || activity.creator_id || activity.userId || '').trim();
+        if (userId && creatorId && userId === creatorId) return true;
         const currentNetwork = getCurrentEffectiveNetwork_();
         const activityNetwork = getPublicActivityNetwork_(activity);
         if (!activityNetwork || activityNetwork === 'admin') return currentNetwork === 'admin';

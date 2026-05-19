@@ -1271,7 +1271,14 @@
           </div>
           <div>
             <label class="block text-sm font-bold text-slate-500 mb-1.5">宣傳圖網址</label>
-            <input id="edit-a-image" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+            <div class="flex gap-2">
+              <input id="edit-a-image" type="text" oninput="updateActivityImagePreview()" class="flex-1 min-w-0 bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+              <button type="button" onclick="document.getElementById('edit-a-image-file').click()" class="shrink-0 px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-bold">換圖</button>
+              <input id="edit-a-image-file" type="file" accept="image/*" class="hidden" onchange="uploadActivityImageFromMonitor(this)">
+            </div>
+            <div id="edit-a-image-preview-wrap" class="hidden mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <img id="edit-a-image-preview" src="" class="w-full h-40 object-cover">
+            </div>
           </div>
           <div class="md:col-span-2">
             <label class="block text-sm font-bold text-slate-500 mb-1.5">活動說明</label>
@@ -3352,10 +3359,50 @@
       document.getElementById("edit-a-nfc-end").value = toNfcDateTimeLocal_(act["NFC簽到結束"] || act.nfcCheckinEnd || "", act["開始時間"]);
       document.getElementById("edit-a-desc").value = safeStringForPrompt_(act["活動說明"]);
       document.getElementById("edit-a-image").value = safeStringForPrompt_(act["宣傳圖"]);
+      updateActivityImagePreview();
 
       const modal = document.getElementById("modal-activity-edit");
       modal.classList.remove("hidden");
       modal.classList.add("flex");
+    }
+
+    function updateActivityImagePreview() {
+      const input = document.getElementById("edit-a-image");
+      const wrap = document.getElementById("edit-a-image-preview-wrap");
+      const img = document.getElementById("edit-a-image-preview");
+      const url = (input?.value || "").trim();
+      if (!wrap || !img) return;
+      if (/^https?:\/\//i.test(url) || /^data:image\//i.test(url)) {
+        img.src = url;
+        wrap.classList.remove("hidden");
+      } else {
+        img.removeAttribute("src");
+        wrap.classList.add("hidden");
+      }
+    }
+
+    async function uploadActivityImageFromMonitor(inputEl) {
+      const file = inputEl?.files?.[0];
+      if (!file) return;
+      try {
+        showToast("活動圖片上傳中...");
+        const base64Image = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error("讀取圖片失敗"));
+          reader.readAsDataURL(file);
+        });
+        const res = await fetchAPI("uploadImageToR2", { base64Image });
+        const url = res?.url || res?.data?.url || "";
+        if (!url) throw new Error("後端沒有回傳圖片網址");
+        document.getElementById("edit-a-image").value = url;
+        updateActivityImagePreview();
+        showToast("活動圖片已更新，請記得按儲存變更");
+      } catch (e) {
+        showToast(e.message || "活動圖片上傳失敗", true);
+      } finally {
+        if (inputEl) inputEl.value = "";
+      }
     }
 
     function closeActivityEditModal() {
