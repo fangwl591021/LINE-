@@ -317,6 +317,138 @@ const HomeModule = (function() {
         return !status || ['新名片', '已初次聯繫', '已發送資料', '待跟進'].includes(status);
     }
 
+    function openSettingsSection_(sectionId) {
+        if (typeof window.goPage === 'function') window.goPage('admin-settings');
+        setTimeout(function() {
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.open = true;
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 180);
+    }
+
+    window.openMemberProfileSettings = function() {
+        openSettingsSection_('details-profile-registration');
+    };
+
+    window.openMyCardSettings = function() {
+        openSettingsSection_('details-my-ecard');
+    };
+
+    window.scrollToHomeSalesAssistant = function() {
+        const section = document.getElementById('home-sales-assistant-section');
+        if (section && section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    function buildOnboardingSuggestions_(contacts) {
+        const rows = Array.isArray(contacts) ? contacts : [];
+        const current = window.currentUser || {};
+        const hasMemberProfile = !!(current.name && current.phone && current.industry);
+        const hasMyCard = !!window.currentUserCard || rows.some(function(item) {
+            return String(item.sourceType || '') === 'self_profile' || String(item.crmStatus || '') === '個人名片';
+        });
+        const scannedCards = rows.filter(function(item) {
+            return String(item.sourceType || '') !== 'self_profile' && String(item.crmStatus || '') !== '個人名片';
+        });
+        const followups = scannedCards.filter(crmNeedsFollowup_);
+        const suggestions = [];
+
+        if (!hasMemberProfile) {
+            suggestions.push({
+                icon: 'person_add',
+                title: '先完成會員資料',
+                body: '補上姓名、電話與主要業種，後續名片、邀約與點數紀錄才會對得準。',
+                action: '去補資料',
+                onclick: 'window.openMemberProfileSettings()',
+                tone: 'blue'
+            });
+        }
+
+        if (!hasMyCard) {
+            suggestions.push({
+                icon: 'badge',
+                title: '建立自己的數位名片',
+                body: '先把自己的專屬名片建好，之後才能一鍵分享、被搜尋，也方便別人回查你的資料。',
+                action: '建立名片',
+                onclick: 'window.openMyCardSettings()',
+                tone: 'emerald'
+            });
+        }
+
+        if (scannedCards.length < 5) {
+            suggestions.push({
+                icon: 'document_scanner',
+                title: '把手上的紙本名片建檔',
+                body: '先掃 5 張最有機會成交或合作的名片，系統會自動變成 CRM 跟進名單。',
+                action: '去名片庫',
+                onclick: "window.goPage('card')",
+                tone: 'amber'
+            });
+        }
+
+        if (followups.length) {
+            suggestions.push({
+                icon: 'follow_the_signs',
+                title: '今天先跟進 ' + Math.min(followups.length, 3) + ' 位名片客戶',
+                body: '從剛掃進來、尚未聯繫的人開始，先傳合作說明或安排一次簡短訪談。',
+                action: '看跟進',
+                onclick: 'window.scrollToHomeSalesAssistant()',
+                tone: 'pink'
+            });
+        }
+
+        if (hasMyCard && scannedCards.length >= 5 && !followups.length) {
+            suggestions.push({
+                icon: 'send',
+                title: '開始主動發送名片',
+                body: '你的基本資料已經準備好，可以把名片分享給新認識的人，讓關係回流到系統。',
+                action: '發名片',
+                onclick: 'window.shareMyCard(this)',
+                tone: 'emerald'
+            });
+        }
+
+        return suggestions.slice(0, 3);
+    }
+
+    function renderHomeOnboardingAI_(contacts) {
+        const list = document.getElementById('home-onboarding-ai-list');
+        if (!list) return;
+        const suggestions = buildOnboardingSuggestions_(contacts);
+        if (!suggestions.length) {
+            list.innerHTML = '<div class="bg-white rounded-3xl border border-emerald-100 shadow-sm p-5 text-[13px] text-emerald-700 font-bold leading-relaxed">目前基礎設定已完成。下一步可以固定每天整理新增名片、追蹤回覆，讓名片庫變成真正的業務管線。</div>';
+            return;
+        }
+        const toneMap = {
+            blue: 'bg-blue-50 text-blue-600 border-blue-100',
+            emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+            amber: 'bg-amber-50 text-amber-600 border-amber-100',
+            pink: 'bg-pink-50 text-pink-600 border-pink-100'
+        };
+        list.innerHTML = suggestions.map(function(item, index) {
+            const tone = toneMap[item.tone] || toneMap.blue;
+            return `
+                <button type="button" onclick="${item.onclick}" class="w-full bg-white rounded-3xl border border-amber-100 shadow-sm p-4 text-left active:scale-[0.99] transition-transform">
+                    <div class="flex items-start gap-3">
+                        <span class="material-symbols-outlined icon-filled w-10 h-10 rounded-2xl ${tone} border flex items-center justify-center shrink-0">${item.icon}</span>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center justify-between gap-3">
+                                <h4 class="font-black text-slate-900 text-[15px] leading-snug">${window.escapeHTML(item.title)}</h4>
+                                <span class="text-[11px] font-black text-slate-400 whitespace-nowrap">建議 ${index + 1}</span>
+                            </div>
+                            <p class="mt-1.5 text-[13px] text-slate-500 font-bold leading-relaxed">${window.escapeHTML(item.body)}</p>
+                            <div class="mt-3 inline-flex items-center gap-1 text-[12px] font-black text-blue-600">
+                                ${window.escapeHTML(item.action)}
+                                <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                            </div>
+                        </div>
+                    </div>
+                </button>
+            `;
+        }).join('');
+    }
+
     window.loadHomeSalesAssistant = async function() {
         const list = document.getElementById('home-sales-assistant-list');
         if (!list || typeof window.fetchAPI !== 'function') return;
@@ -324,6 +456,7 @@ const HomeModule = (function() {
         try {
             const res = await window.fetchAPI('getCrmContacts', { limit: 80 }, true);
             const contacts = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+            renderHomeOnboardingAI_(contacts);
             const rows = contacts
                 .filter(crmNeedsFollowup_)
                 .filter(item => String(item.sourceType || '') !== 'self_profile')
@@ -355,6 +488,7 @@ const HomeModule = (function() {
                 `;
             }).join('');
         } catch (e) {
+            renderHomeOnboardingAI_([]);
             list.innerHTML = '<div class="bg-white rounded-3xl border border-red-100 shadow-sm p-5 text-[13px] text-red-400 font-bold text-center">今日建議讀取失敗：' + window.escapeHTML(e.message || e) + '</div>';
         }
     };
