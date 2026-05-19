@@ -240,6 +240,7 @@ const SecurityModule = {
       'markInboxRead',
       'searchInboxRecipients',
       'sendInboxMessage',
+      'redeemInboxCoupon',
       'getWebPushConfig',
       'saveWebPushSubscription',
       'deleteWebPushSubscription',
@@ -4306,6 +4307,10 @@ const D1InboxModule = {
         payload_json TEXT NOT NULL DEFAULT '{}',
         sender_snapshot_json TEXT NOT NULL DEFAULT '{}',
         status TEXT NOT NULL DEFAULT 'unread',
+        coupon_status TEXT NOT NULL DEFAULT 'issued',
+        coupon_redeemed_at TEXT NOT NULL DEFAULT '',
+        coupon_redeemed_by TEXT NOT NULL DEFAULT '',
+        coupon_redeem_note TEXT NOT NULL DEFAULT '',
         read_at TEXT NOT NULL DEFAULT '',
         archived_at TEXT NOT NULL DEFAULT '',
         expires_at TEXT NOT NULL DEFAULT '',
@@ -4317,6 +4322,10 @@ const D1InboxModule = {
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_inbox_receiver_created ON inbox_items(receiver_user_id, created_at)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_inbox_sender_created ON inbox_items(sender_user_id, created_at)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_inbox_network_created ON inbox_items(network_id, created_at)').run();
+    await env.ACTMASTER_DB.prepare("ALTER TABLE inbox_items ADD COLUMN coupon_status TEXT NOT NULL DEFAULT 'issued'").run().catch(() => null);
+    await env.ACTMASTER_DB.prepare("ALTER TABLE inbox_items ADD COLUMN coupon_redeemed_at TEXT NOT NULL DEFAULT ''").run().catch(() => null);
+    await env.ACTMASTER_DB.prepare("ALTER TABLE inbox_items ADD COLUMN coupon_redeemed_by TEXT NOT NULL DEFAULT ''").run().catch(() => null);
+    await env.ACTMASTER_DB.prepare("ALTER TABLE inbox_items ADD COLUMN coupon_redeem_note TEXT NOT NULL DEFAULT ''").run().catch(() => null);
   },
 
   async senderContext(env, senderUserId, senderCardId = '') {
@@ -4395,6 +4404,10 @@ const D1InboxModule = {
       payload: this.json(row.payload_json),
       senderSnapshot: this.json(row.sender_snapshot_json, context.snapshot || {}),
       status: this.text(row.status, 'unread'),
+      couponStatus: this.text(row.coupon_status, 'issued'),
+      couponRedeemedAt: this.text(row.coupon_redeemed_at),
+      couponRedeemedBy: this.text(row.coupon_redeemed_by),
+      couponRedeemNote: this.text(row.coupon_redeem_note),
       readAt: this.text(row.read_at),
       archivedAt: this.text(row.archived_at),
       expiresAt: this.text(row.expires_at),
@@ -4530,6 +4543,54 @@ const D1InboxModule = {
     return { success: true, data: { messageId, status: 'read' } };
   },
 
+  async redeemCoupon(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    const messageId = this.text(payload.messageId || payload.message_id);
+    if (!userId || !messageId) return { success: false, error: 'Missing messageId' };
+    const ids = await this.identityIds(env, userId);
+    const row = await D1ReadModule.first(env, `
+      SELECT *
+      FROM inbox_items
+      WHERE message_id = ?
+        AND receiver_user_id IN (${this.placeholders(ids)})
+        AND message_type = 'coupon'
+        AND archived_at = ''
+        AND ${this.isVisibleSql()}
+      LIMIT 1
+    `, [messageId, ...ids]);
+    if (!row) return { success: false, error: '找不到可核銷的優惠券' };
+    if (this.text(row.coupon_redeemed_at) || this.text(row.coupon_status) === 'redeemed') {
+      return { success: false, error: '這張優惠券已核銷，不能重複使用' };
+    }
+
+    const note = this.text(payload.note || payload.redeemNote);
+    const result = await env.ACTMASTER_DB.prepare(`
+      UPDATE inbox_items
+      SET coupon_status = 'redeemed',
+          coupon_redeemed_at = CURRENT_TIMESTAMP,
+          coupon_redeemed_by = ?,
+          coupon_redeem_note = ?,
+          status = 'read',
+          read_at = COALESCE(NULLIF(read_at, ''), CURRENT_TIMESTAMP),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE message_id = ?
+        AND receiver_user_id IN (${this.placeholders(ids)})
+        AND message_type = 'coupon'
+        AND (coupon_redeemed_at = '' OR coupon_redeemed_at IS NULL)
+        AND coupon_status <> 'redeemed'
+    `).bind(userId, note, messageId, ...ids).run();
+
+    if (!result || !result.success || Number(result.meta && result.meta.changes || 0) < 1) {
+      return { success: false, error: '這張優惠券已核銷，不能重複使用' };
+    }
+
+    const updated = await D1ReadModule.first(env, 'SELECT * FROM inbox_items WHERE message_id = ? LIMIT 1', [messageId]);
+    const context = await this.senderContext(env, updated.sender_user_id, updated.sender_card_id);
+    const receiver = await this.receiverContext(env, updated.receiver_user_id).catch(() => ({}));
+    return { success: true, data: this.itemRow(updated, { ...context, ...receiver, viewerRole: 'receiver' }) };
+  },
+
   async searchRecipients(payload, env) {
     await this.ensure(env);
     const actorId = this.ownUserId(payload);
@@ -4623,6 +4684,9 @@ const D1InboxModule = {
 
     const pointPayload = { ...(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}) };
     pointPayload.pointCharge = { pointType: 'gift_money', points: -10, status: 'pending' };
+    if (messageType === 'coupon') {
+      pointPayload.coupon = { status: 'issued', issuedAt: new Date().toISOString(), singleUse: true };
+    }
     const payloadJson = JSON.stringify(pointPayload);
 
     await env.ACTMASTER_DB.prepare(`
@@ -6724,6 +6788,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1InboxModule.searchRecipients(payload || {}, env);
     case 'sendInboxMessage':
       return await D1InboxModule.send(payload || {}, env);
+    case 'redeemInboxCoupon':
+      return await D1InboxModule.redeemCoupon(payload || {}, env);
     case 'getWebPushConfig':
       return await WebPushModule.config(payload || {}, env);
     case 'saveWebPushSubscription':

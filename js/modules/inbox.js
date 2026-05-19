@@ -38,6 +38,24 @@
     return TYPE_LABELS[item?.messageType] || "一般訊息";
   }
 
+  function couponMeta(item) {
+    const payload = item?.payload || {};
+    const coupon = payload.coupon && typeof payload.coupon === "object" ? payload.coupon : {};
+    const redeemedAt = item?.couponRedeemedAt || coupon.redeemedAt || "";
+    const redeemedBy = item?.couponRedeemedBy || coupon.redeemedBy || "";
+    const status = redeemedAt ? "redeemed" : (item?.couponStatus || coupon.status || "issued");
+    return {
+      status,
+      redeemedAt,
+      redeemedBy,
+      note: item?.couponRedeemNote || coupon.note || ""
+    };
+  }
+
+  function isCouponRedeemed(item) {
+    return couponMeta(item).status === "redeemed";
+  }
+
   function senderName(item) {
     const snap = item?.senderSnapshot || {};
     return snap.name || item?.senderUser?.name || item?.senderCard?.name || "未知寄件人";
@@ -466,6 +484,7 @@
     $("inbox-detail-title").textContent = item.title || "未命名訊息";
     $("inbox-detail-meta").textContent = `${sentView ? "寄給：" + receiverName(item) : "來自：" + senderName(item)} · ${formatTime(item.createdAt)}`;
     $("inbox-detail-body").textContent = item.body || "沒有內文";
+    renderCouponPanel(item, sentView);
 
     const cardBox = $("inbox-sender-card");
     if (!cardBox) return;
@@ -489,6 +508,71 @@
     panel.classList.remove("hidden");
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  function renderCouponPanel(item, sentView) {
+    const panel = $("inbox-coupon-panel");
+    if (!panel) return;
+    if (item?.messageType !== "coupon") {
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+      return;
+    }
+
+    const meta = couponMeta(item);
+    const redeemed = meta.status === "redeemed";
+    const redeemedText = meta.redeemedAt ? formatTime(meta.redeemedAt) : "";
+    panel.classList.remove("hidden");
+    panel.innerHTML = `
+      <div class="rounded-3xl border ${redeemed ? "border-slate-200 bg-slate-50" : "border-rose-100 bg-rose-50"} p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-[12px] font-black ${redeemed ? "text-slate-500" : "text-rose-600"}">優惠券狀態</p>
+            <h4 class="mt-1 text-[18px] font-black ${redeemed ? "text-slate-600" : "text-slate-900"}">${redeemed ? "已核銷" : "可使用"}</h4>
+            <p class="mt-1 text-[13px] font-bold text-slate-500 leading-relaxed">
+              ${redeemed ? `核銷時間：${escapeHTML(redeemedText || "已完成")}` : "請到店出示此畫面，由現場人員確認後核銷。"}
+            </p>
+          </div>
+          <span class="material-symbols-outlined text-[32px] ${redeemed ? "text-slate-300" : "text-rose-500"}">${redeemed ? "verified" : "redeem"}</span>
+        </div>
+        ${!sentView && !redeemed ? `
+          <button id="btn-redeem-inbox-coupon" type="button" onclick="window.redeemInboxCoupon(this)" class="mt-4 w-full py-3.5 rounded-2xl bg-rose-500 text-white text-[15px] font-black shadow-lg shadow-rose-500/20 active:scale-95 transition-all">
+            現場核銷優惠券
+          </button>
+          <p class="mt-2 text-center text-[12px] font-bold text-rose-500">核銷後不能復原，也不能再次使用。</p>
+        ` : ""}
+        ${sentView && !redeemed ? `<p class="mt-3 rounded-2xl bg-white px-3 py-2 text-[13px] font-bold text-slate-500">對方尚未核銷。</p>` : ""}
+      </div>
+    `;
+  }
+
+  window.redeemInboxCoupon = async function (btn) {
+    const item = window.currentInboxItem;
+    if (!item?.messageId || item.messageType !== "coupon") return;
+    if (isCouponRedeemed(item)) return window.showToast?.("這張優惠券已核銷", true);
+    if (!confirm("確認現場核銷這張優惠券？核銷後只能使用一次，不能復原。")) return;
+
+    const oldText = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "核銷中...";
+      btn.classList.add("opacity-70");
+    }
+    try {
+      const updated = await window.fetchAPI("redeemInboxCoupon", { messageId: item.messageId }, true);
+      window.currentInboxItem = updated || { ...item, couponStatus: "redeemed", couponRedeemedAt: new Date().toISOString() };
+      renderDetail(window.currentInboxItem);
+      await window.loadInbox({ silent: true });
+      window.showToast?.("優惠券已核銷");
+    } catch (e) {
+      window.showToast?.("核銷失敗：" + (e.message || e), true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = oldText || "現場核銷優惠券";
+        btn.classList.remove("opacity-70");
+      }
+    }
+  };
 
   function renderSenderCard(cardBox, item) {
     const card = item.senderCard;
