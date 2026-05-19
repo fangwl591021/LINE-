@@ -3900,7 +3900,8 @@ const D1ActivityModule = {
     const actorNetworkId = this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
     const networkId = requestedNetworkId || actorNetworkId;
     const isAdmin = role === 'admin';
-    const rows = isAdmin && !requestedNetworkId
+    const adminWantsAll = isAdmin && (!requestedNetworkId || requestedNetworkId === 'all' || requestedNetworkId === 'admin');
+    const rows = adminWantsAll
       ? await D1ReadModule.all(env, 'SELECT * FROM activities ORDER BY COALESCE(start_time, created_at) DESC, created_at DESC LIMIT 500')
       : networkId === 'admin'
         ? await D1ReadModule.all(env, `
