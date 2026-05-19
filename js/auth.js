@@ -934,7 +934,7 @@ window.updateStorePointPreview = function() {
 
   if (mode === 'reward') {
     preview.className = 'rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
-    preview.innerHTML = `消費金額 NT$${amount.toLocaleString('zh-TW')}，將贈送客戶 <b class="text-[#06C755]">${amount.toLocaleString('zh-TW')} 點</b>。`;
+    preview.innerHTML = `消費金額 NT$${amount.toLocaleString('zh-TW')}，將贈送客戶 <b class="text-[#06C755]">${amount.toLocaleString('zh-TW')} 點</b>；店家操作扣 10 點。`;
     return;
   }
 
@@ -943,7 +943,7 @@ window.updateStorePointPreview = function() {
   const actualDeduct = customerBalance > 0 ? Math.min(maxDeduct, Math.floor(customerBalance)) : maxDeduct;
   const payable = amount - actualDeduct;
   preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
-  preview.innerHTML = `最多可折抵 <b class="text-blue-600">${maxDeduct.toLocaleString('zh-TW')} 點</b>${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}，預估應收 NT$${payable.toLocaleString('zh-TW')}。`;
+  preview.innerHTML = `最多可折抵 <b class="text-blue-600">${maxDeduct.toLocaleString('zh-TW')} 點</b>${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}，預估應收 NT$${payable.toLocaleString('zh-TW')}；店家操作扣 10 點。`;
 };
 
 window.renderStorePointCustomer = function(customer) {
@@ -1069,8 +1069,8 @@ window.submitStorePointCashier = async function(btn) {
     const changed = Number(data.changedPoints || Math.abs(data.points || 0)).toLocaleString('zh-TW');
     const payable = Number(data.payableAmount || 0).toLocaleString('zh-TW');
     const message = data.mode === 'reward'
-      ? `已完成消費贈點：${changed} 點`
-      : `已完成折抵：${changed} 點，應收 NT$${payable}`;
+      ? `已完成消費贈點：${changed} 點，店家已扣 10 點`
+      : `已完成折抵：${changed} 點，應收 NT$${payable}，店家已扣 10 點`;
     if (preview) {
       preview.className = 'rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
       preview.textContent = message;

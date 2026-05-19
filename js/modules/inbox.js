@@ -377,6 +377,7 @@
     const open = typeof force === "boolean" ? force : box.classList.contains("hidden");
     box.classList.toggle("hidden", !open);
     if (icon) icon.style.transform = open ? "rotate(180deg)" : "";
+    if (open) window.updateInboxPointCostHint?.();
   };
 
   window.searchInboxRecipients = async function () {
@@ -423,12 +424,28 @@
     if (box) box.innerHTML = `<div class="rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 px-3 py-2 text-[13px] font-black">已選擇：${escapeHTML(name || userId)}</div>`;
   };
 
+  function inboxMessageCost(messageType) {
+    return messageType === "coupon" ? 50 : 10;
+  }
+
+  window.updateInboxPointCostHint = function () {
+    const type = $("inbox-message-type")?.value || "message";
+    const cost = inboxMessageCost(type);
+    const hint = $("inbox-point-cost-hint");
+    if (hint) hint.textContent = type === "coupon"
+      ? `優惠券寄出會扣除 ${cost} 點，且只能核銷一次。`
+      : `本次送出會扣除 ${cost} 點。`;
+    const btn = $("btn-send-inbox-message");
+    if (btn) btn.textContent = type === "coupon" ? `送出優惠券（扣 ${cost} 點）` : `送出訊息（扣 ${cost} 點）`;
+  };
+
   window.sendInboxMessage = async function (btn) {
     const receiverUserId = $("inbox-recipient-id")?.value?.trim() || "";
     const receiverQuery = $("inbox-recipient-query")?.value?.trim() || "";
     const messageType = $("inbox-message-type")?.value || "message";
     const title = $("inbox-message-title")?.value?.trim() || "";
     const body = $("inbox-message-body")?.value?.trim() || "";
+    const cost = inboxMessageCost(messageType);
     if (!receiverUserId && !receiverQuery) return window.showToast?.("請先選擇收件人", true);
     if (!title) return window.showToast?.("請輸入標題", true);
     if (!body) return window.showToast?.("請輸入內容", true);
@@ -441,7 +458,7 @@
     }
     try {
       await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, messageType, title, body }, true);
-      window.showToast?.("訊息已送出，已扣 10 點");
+      window.showToast?.(`${messageType === "coupon" ? "優惠券" : "訊息"}已送出，已扣 ${cost} 點`);
       window.pointWalletData = null;
       window.refreshPointBalanceBadge?.();
       ["inbox-message-title", "inbox-message-body", "inbox-recipient-id", "inbox-recipient-query"].forEach(id => {
@@ -450,6 +467,7 @@
       });
       const results = $("inbox-recipient-results");
       if (results) results.innerHTML = "";
+      window.updateInboxPointCostHint?.();
       window.toggleInboxComposer(false);
       window.switchInboxBox("sent");
     } catch (e) {
@@ -457,7 +475,7 @@
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = oldText || "送出訊息";
+        btn.textContent = oldText || `送出訊息（扣 ${cost} 點）`;
         btn.classList.remove("opacity-70");
       }
     }

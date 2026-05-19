@@ -627,7 +627,7 @@
                   <span class="material-symbols-outlined text-[#06C755] icon-filled">point_of_sale</span>
                   店家點數收銀
                 </h3>
-                <p class="text-[13px] text-slate-500 font-bold mt-1">掃客戶帳戶後，可折抵扣點或消費贈點。</p>
+                <p class="text-[13px] text-slate-500 font-bold mt-1">掃客戶帳戶後，可折抵扣點或消費贈點；每次操作扣店家 10 點。</p>
               </div>
               <button type="button" tabindex="-1" class="pointer-events-none w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center transition-transform">
                 <span id="store-point-cashier-icon" class="material-symbols-outlined text-slate-500">expand_more</span>
@@ -678,6 +678,9 @@
 
             <div id="store-point-preview" class="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed">
               請先輸入消費金額。
+            </div>
+            <div class="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-[13px] text-amber-800 font-black leading-relaxed">
+              店家每送出一次折抵扣點或消費贈點，會扣除 10 點操作點數。
             </div>
 
             <button id="btn-store-point-submit" type="button" onclick="window.submitStorePointCashier(this)" class="w-full py-4 rounded-2xl bg-[#06C755] text-white text-[16px] font-black shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">
@@ -1071,7 +1074,7 @@
             <span class="material-symbols-outlined text-amber-600">edit_square</span>
             <div>
               <h3 class="text-[17px] font-black text-slate-900">傳送訊息</h3>
-              <p class="text-[13px] text-amber-800 font-bold mt-1">傳送訊息、優惠券、課程邀約或訪談邀請；每次扣 10 點。</p>
+              <p class="text-[13px] text-amber-800 font-bold mt-1">一般訊息、課程邀約、訪談邀請每次扣 10 點；優惠券每次扣 50 點。</p>
             </div>
           </div>
           <span id="inbox-composer-icon" class="material-symbols-outlined text-amber-600 transition-transform">expand_more</span>
@@ -1088,13 +1091,14 @@
           </div>
           <div>
             <label class="block text-[13px] text-slate-500 font-black mb-2">類型</label>
-            <select id="inbox-message-type" class="custom-input !py-3 !px-4 text-[15px]">
+            <select id="inbox-message-type" class="custom-input !py-3 !px-4 text-[15px]" onchange="window.updateInboxPointCostHint?.()">
               <option value="message">一般訊息</option>
               <option value="coupon">優惠券</option>
               <option value="course">課程邀約</option>
               <option value="interview">1 對 1 訪談</option>
               <option value="activity">活動邀約</option>
             </select>
+            <p id="inbox-point-cost-hint" class="mt-2 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-[13px] text-amber-800 font-black">本次送出會扣除 10 點。</p>
           </div>
           <div>
             <label class="block text-[13px] text-slate-500 font-black mb-2">標題</label>
@@ -1705,11 +1709,11 @@
 <script src="js/modules/activities.js?v=7.6"></script>
 <script src="js/modules/admin.js?v=8.5"></script>
 <script src="js/modules/home.js?v=7.23"></script>
-<script src="js/modules/inbox.js?v=1.5"></script>
+<script src="js/modules/inbox.js?v=1.6"></script>
 <script src="js/modules/settings.js?v=7.2"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.2"></script>
-<script src="js/auth.js?v=10.7"></script>
+<script src="js/auth.js?v=10.8"></script>
 
 </body>
 </html>
