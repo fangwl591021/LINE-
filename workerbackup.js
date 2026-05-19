@@ -2003,7 +2003,12 @@ const D1ReadModule = {
       "ALTER TABLE card_contacts ADD COLUMN source_type TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE card_contacts ADD COLUMN visibility TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE card_contacts ADD COLUMN pool_eligible INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE card_contacts ADD COLUMN ai_review_status TEXT NOT NULL DEFAULT ''"
+      "ALTER TABLE card_contacts ADD COLUMN ai_review_status TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN crm_status TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN crm_type TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN crm_next_action TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN crm_next_followup_at TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN crm_ai_suggestion TEXT NOT NULL DEFAULT ''"
     ];
     for (const sql of alters) {
       try {
@@ -2016,6 +2021,7 @@ const D1ReadModule = {
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_owner ON card_contacts(owner_user_id)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_profile ON card_contacts(profile_user_id)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_pool ON card_contacts(pool_eligible, visibility)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_crm_status ON card_contacts(owner_user_id, crm_status, updated_at)').run();
     this.cardAccessSchemaReady = true;
   },
 
@@ -2167,6 +2173,43 @@ const D1ReadModule = {
     };
   },
 
+  inferCrmType(row) {
+    const text = [
+      row && row.title,
+      row && row.company_name,
+      row && row.department,
+      row && row.services,
+      row && row.notes,
+      row && row.tags
+    ].map(v => this.text(v).toLowerCase()).join(' ');
+    if (!text.trim()) return '待判斷';
+    if (/保險|房仲|不動產|地產|租|建設|投資|理財|貸款|金融/.test(text)) return '潛在客戶';
+    if (/董事|總經理|負責人|創辦|店長|經理|協會|理事|主任|總監/.test(text)) return '合作夥伴';
+    if (/通路|行銷|媒體|廣告|社群|電商|直播|業務|銷售/.test(text)) return '通路資源';
+    if (/教育|講師|顧問|課程|教練|培訓/.test(text)) return '課程合作';
+    if (/供應|製造|印刷|設計|工程|系統|開發|科技/.test(text)) return '供應商';
+    return '待判斷';
+  },
+
+  inferCrmNextAction(row, crmType) {
+    const phone = this.text(row && (row.mobile || row.office_phone));
+    if (!phone) return '補齊聯絡方式';
+    if (crmType === '通路資源') return '傳送合作說明';
+    if (crmType === '課程合作') return '邀請課程或訪談';
+    if (crmType === '合作夥伴') return '安排 1 對 1 訪談';
+    if (crmType === '供應商') return '詢問合作條件';
+    return '初次聯繫';
+  },
+
+  inferCrmSuggestion(row, crmType, nextAction) {
+    const name = this.text(row && row.name, '此客戶');
+    const company = this.text(row && row.company_name);
+    const title = this.text(row && row.title);
+    const identity = [company, title].filter(Boolean).join(' / ');
+    if (crmType === '待判斷') return `${name}${identity ? '（' + identity + '）' : ''}已建立，建議先補上備註與客戶類型，再安排下一步。`;
+    return `${name}${identity ? '（' + identity + '）' : ''}被歸類為${crmType}，建議下一步：${nextAction}。`;
+  },
+
   cardRow(row) {
     if (!row) return null;
     const config = this.text(row.custom_config);
@@ -2183,6 +2226,11 @@ const D1ReadModule = {
       visibility: access.visibility,
       poolEligible: access.poolEligible,
       aiReviewStatus: access.aiReviewStatus,
+      crmStatus: this.text(row.crm_status, access.isSelfProfile ? '個人名片' : '新名片'),
+      crmType: this.text(row.crm_type, this.inferCrmType(row)),
+      crmNextAction: this.text(row.crm_next_action, this.inferCrmNextAction(row, this.inferCrmType(row))),
+      crmNextFollowupAt: this.text(row.crm_next_followup_at),
+      crmAiSuggestion: this.text(row.crm_ai_suggestion, this.inferCrmSuggestion(row, this.inferCrmType(row), this.inferCrmNextAction(row, this.inferCrmType(row)))),
       isPrivate: access.isPrivate,
       isSelfProfile: access.isSelfProfile,
       networkId: this.text(row.network_id, 'admin'),
@@ -2230,6 +2278,11 @@ const D1ReadModule = {
       '擁有人ID': access.ownerUserId,
       '名片來源': access.sourceType,
       '公開狀態': access.visibility,
+      '客戶狀態': this.text(row.crm_status, access.isSelfProfile ? '個人名片' : '新名片'),
+      '客戶類型': this.text(row.crm_type, this.inferCrmType(row)),
+      '建議下一步': this.text(row.crm_next_action, this.inferCrmNextAction(row, this.inferCrmType(row))),
+      '下次跟進時間': this.text(row.crm_next_followup_at),
+      'AI建議': this.text(row.crm_ai_suggestion, this.inferCrmSuggestion(row, this.inferCrmType(row), this.inferCrmNextAction(row, this.inferCrmType(row)))),
       '名片圖檔': this.text(row.image_url),
       '自訂名片設定': config,
       '電子名片設定': config,
@@ -2581,6 +2634,11 @@ const D1ReadModule = {
       sourceType: card.sourceType,
       visibility: card.visibility,
       poolEligible: card.poolEligible,
+      crmStatus: card.crmStatus,
+      crmType: card.crmType,
+      crmNextAction: card.crmNextAction,
+      crmNextFollowupAt: card.crmNextFollowupAt,
+      crmAiSuggestion: card.crmAiSuggestion,
       ownerNetwork: card.networkId,
       ownerName: this.text(row.owner_name),
       ownerStoreId: this.text(row.owner_store_id),
@@ -2616,6 +2674,38 @@ const D1ReadModule = {
       `, [...ids, ...ids, ...ids, ...ids]);
     }
     return { success: true, data: rows.map(row => this.crmContactRow(row)).filter(Boolean) };
+  },
+
+  async updateCrmContact(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureCardAccessColumns(env);
+    const rowId = this.text(payload.rowId || payload.cardRowId);
+    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const role = this.role(payload.authenticatedRole || payload.role);
+    if (!rowId) return { success: false, error: 'Missing card row id' };
+    const row = await this.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    if (!row) return { success: false, error: '找不到名片資料' };
+    if (role !== 'admin') {
+      const ids = actorId ? await this.identityIdsForUser(env, actorId) : [];
+      const ownerId = this.text(row.owner_user_id || row.creator_id || row.line_id);
+      if (!ids.includes(ownerId) && !ids.includes(this.text(row.creator_id)) && !ids.includes(this.text(row.profile_user_id))) {
+        return { success: false, error: '無權限更新此客戶資料' };
+      }
+    }
+    const allowedStatuses = new Set(['新名片', '已初次聯繫', '已發送資料', '已邀約', '已報名活動', '已到場', '已成交', '已流失', '暫緩追蹤', '個人名片']);
+    const status = this.text(payload.crmStatus || payload.status || row.crm_status, row.crm_status || '新名片');
+    const crmType = this.text(payload.crmType || payload.type || row.crm_type, row.crm_type || this.inferCrmType(row));
+    const nextAction = this.text(payload.crmNextAction || payload.nextAction || row.crm_next_action, row.crm_next_action || this.inferCrmNextAction(row, crmType));
+    const nextFollowupAt = this.text(payload.crmNextFollowupAt || payload.nextFollowupAt || row.crm_next_followup_at);
+    const suggestion = this.text(payload.crmAiSuggestion || payload.aiSuggestion || row.crm_ai_suggestion, row.crm_ai_suggestion || this.inferCrmSuggestion(row, crmType, nextAction));
+    if (!allowedStatuses.has(status)) return { success: false, error: '不支援的客戶狀態' };
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE card_contacts
+      SET crm_status = ?, crm_type = ?, crm_next_action = ?, crm_next_followup_at = ?, crm_ai_suggestion = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE row_id = ?
+    `).bind(status, crmType, nextAction, nextFollowupAt, suggestion, rowId).run();
+    const updated = await this.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    return { success: true, data: this.crmContactRow(updated) };
   },
 
   async previewIdentityMigration(payload, env) {
@@ -2857,7 +2947,12 @@ const D1WriteModule = {
       source_type: this.pick(data, ['sourceType', 'source_type', '名片來源']),
       visibility: this.pick(data, ['visibility', '公開狀態']),
       pool_eligible: this.pick(data, ['poolEligible', 'pool_eligible']),
-      ai_review_status: this.pick(data, ['aiReviewStatus', 'ai_review_status'])
+      ai_review_status: this.pick(data, ['aiReviewStatus', 'ai_review_status']),
+      crm_status: this.pick(data, ['crmStatus', 'crm_status', '客戶狀態']),
+      crm_type: this.pick(data, ['crmType', 'crm_type', '客戶類型']),
+      crm_next_action: this.pick(data, ['crmNextAction', 'crm_next_action', '建議下一步']),
+      crm_next_followup_at: this.pick(data, ['crmNextFollowupAt', 'crm_next_followup_at', '下次跟進時間']),
+      crm_ai_suggestion: this.pick(data, ['crmAiSuggestion', 'crm_ai_suggestion', 'AI建議'])
     };
   },
 
@@ -3297,7 +3392,8 @@ const D1WriteModule = {
       [
         'line_id','name','english_name','company_name','title','department','tax_id','mobile','office_phone',
         'extension','fax','email','website','socials','address','birthday','personality','hobbies','wealth',
-        'health','career','services','notes','creator_id','image_url','custom_config','network_id','tags'
+        'health','career','services','notes','creator_id','image_url','custom_config','network_id','tags',
+        'crm_status','crm_type','crm_next_action','crm_next_followup_at','crm_ai_suggestion'
       ].forEach(key => {
         if (card[key] === '' || card[key] === undefined || card[key] === null) card[key] = existing[key] || '';
       });
@@ -3309,9 +3405,13 @@ const D1WriteModule = {
     card.visibility = access.visibility;
     card.pool_eligible = access.poolEligible ? 1 : 0;
     card.ai_review_status = access.aiReviewStatus;
+    card.crm_status = card.crm_status || (access.isSelfProfile ? '個人名片' : '新名片');
+    card.crm_type = card.crm_type || D1ReadModule.inferCrmType(card);
+    card.crm_next_action = card.crm_next_action || D1ReadModule.inferCrmNextAction(card, card.crm_type);
+    card.crm_ai_suggestion = card.crm_ai_suggestion || D1ReadModule.inferCrmSuggestion(card, card.crm_type, card.crm_next_action);
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,owner_user_id,profile_user_id,source_type,visibility,pool_eligible,ai_review_status,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,owner_user_id,profile_user_id,source_type,visibility,pool_eligible,ai_review_status,crm_status,crm_type,crm_next_action,crm_next_followup_at,crm_ai_suggestion,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
       ON CONFLICT(row_id) DO UPDATE SET
         line_id=excluded.line_id,name=excluded.name,english_name=excluded.english_name,company_name=excluded.company_name,title=excluded.title,
         department=excluded.department,tax_id=excluded.tax_id,mobile=excluded.mobile,office_phone=excluded.office_phone,
@@ -3320,8 +3420,11 @@ const D1WriteModule = {
         wealth=excluded.wealth,health=excluded.health,career=excluded.career,services=excluded.services,notes=excluded.notes,
         creator_id=excluded.creator_id,image_url=excluded.image_url,custom_config=excluded.custom_config,network_id=excluded.network_id,
         tags=excluded.tags,owner_user_id=excluded.owner_user_id,profile_user_id=excluded.profile_user_id,source_type=excluded.source_type,
-        visibility=excluded.visibility,pool_eligible=excluded.pool_eligible,ai_review_status=excluded.ai_review_status,updated_at=CURRENT_TIMESTAMP
-    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags,card.owner_user_id,card.profile_user_id,card.source_type,card.visibility,card.pool_eligible,card.ai_review_status).run();
+        visibility=excluded.visibility,pool_eligible=excluded.pool_eligible,ai_review_status=excluded.ai_review_status,
+        crm_status=excluded.crm_status,crm_type=excluded.crm_type,crm_next_action=excluded.crm_next_action,
+        crm_next_followup_at=excluded.crm_next_followup_at,crm_ai_suggestion=excluded.crm_ai_suggestion,
+        updated_at=CURRENT_TIMESTAMP
+    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags,card.owner_user_id,card.profile_user_id,card.source_type,card.visibility,card.pool_eligible,card.ai_review_status,card.crm_status,card.crm_type,card.crm_next_action,card.crm_next_followup_at,card.crm_ai_suggestion).run();
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
     const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward && !isOwnCard);
     const awardedPoints = pointAward && pointAward.awarded ? pointAward.points : 0;
@@ -6831,6 +6934,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1AnnouncementModule.save(payload || {}, env);
     case 'deleteAnnouncement':
       return await D1AnnouncementModule.remove(payload || {}, env);
+    case 'updateCrmContact':
+      return await D1ReadModule.updateCrmContact(payload || {}, env);
     case 'getInboxCount':
       return await D1InboxModule.count(payload || {}, env);
     case 'listInboxItems':

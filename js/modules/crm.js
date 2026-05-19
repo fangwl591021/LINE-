@@ -7,6 +7,7 @@ window.crmCurrentPersonPhone = null;
 
 // 預設標籤(快選)
 window.CRM_DEFAULT_TAGS = ['VIP', '待跟進', '拒接'];
+window.CRM_STATUS_OPTIONS = ['新名片', '已初次聯繫', '已發送資料', '已邀約', '已報名活動', '已到場', '已成交', '已流失', '暫緩追蹤'];
 
 // ============ 載入 CRM 主頁 ============
 window.loadCrm = async function() {
@@ -105,6 +106,9 @@ window.renderCrmList = function() {
     const tagsHtml = tagList.map(t =>
       '<span class="bg-blue-50 text-blue-600 text-[10px] px-1.5 py-0.5 rounded font-bold">' + window.escapeJS(t.trim()) + '</span>'
     ).join('');
+    const crmStatus = p.crmStatus || '新名片';
+    const crmType = p.crmType || '待判斷';
+    const nextAction = p.crmNextAction || '初次聯繫';
 
     // admin 顯示歸屬商家
     const storeBadge = (userRole === 'admin' && p.ownerName)
@@ -122,10 +126,13 @@ window.renderCrmList = function() {
           '<p class="text-[12px] text-slate-500 font-mono">' + window.escapeJS(p.phone) + '</p>' +
           (p.company ? '<p class="text-[12px] text-slate-500 truncate">' + window.escapeJS(p.company) + (p.title ? ' · ' + window.escapeJS(p.title) : '') + '</p>' : '') +
           '<div class="flex items-center gap-1.5 mt-1.5 flex-wrap">' +
+            '<span class="bg-pink-50 text-pink-600 text-[10px] px-1.5 py-0.5 rounded font-bold">' + window.escapeJS(crmStatus) + '</span>' +
+            '<span class="bg-amber-50 text-amber-700 text-[10px] px-1.5 py-0.5 rounded font-bold">' + window.escapeJS(crmType) + '</span>' +
             tagsHtml +
             (p.activityCount > 0 ? '<span class="bg-orange-50 text-orange-600 text-[10px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[10px]">event</span>' + p.activityCount + ' 場</span>' : '') +
             (lastTime ? '<span class="text-[10px] text-slate-400">最近 ' + lastTime + '</span>' : '') +
           '</div>' +
+          '<p class="mt-1.5 text-[12px] text-slate-400 font-bold truncate">下一步：' + window.escapeJS(nextAction) + '</p>' +
         '</div>' +
         '<span class="material-symbols-outlined text-slate-300">chevron_right</span>' +
       '</div>' +
@@ -156,6 +163,9 @@ window.openCrmPerson = function(phone) {
   if (!container) return;
 
   const tagList = String(person.tags || '').split(',').map(t => t.trim()).filter(t => t);
+  const statusOptionsHtml = window.CRM_STATUS_OPTIONS.map(status =>
+    '<option value="' + window.escapeJS(status) + '"' + (status === (person.crmStatus || '新名片') ? ' selected' : '') + '>' + window.escapeJS(status) + '</option>'
+  ).join('');
 
   // 標籤按鈕區
   const allTags = [...new Set([...window.CRM_DEFAULT_TAGS, ...tagList])];
@@ -194,6 +204,27 @@ window.openCrmPerson = function(phone) {
           '<p class="text-[13px] text-slate-500 font-mono">' + window.escapeJS(person.phone) + '</p>' +
           (person.company ? '<p class="text-[13px] text-slate-500 mt-0.5">' + window.escapeJS(person.company) + '</p>' : '') +
           (userRole === 'admin' && person.ownerName ? '<div class="mt-2 inline-flex items-center gap-1 text-[11px] text-purple-600 bg-purple-50 px-2 py-0.5 rounded font-bold"><span class="material-symbols-outlined text-[14px]">storefront</span>歸屬:' + window.escapeJS(person.ownerName) + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+
+      '<div class="grid grid-cols-1 gap-3 mb-4">' +
+        '<div class="rounded-2xl bg-pink-50 border border-pink-100 p-4">' +
+          '<p class="text-[12px] font-black text-pink-600 mb-2">AI 業務建議</p>' +
+          '<p class="text-[14px] text-slate-700 font-bold leading-relaxed">' + window.escapeJS(person.crmAiSuggestion || '建議先補上備註與客戶類型，再安排下一步。') + '</p>' +
+        '</div>' +
+        '<div class="grid grid-cols-2 gap-2">' +
+          '<div class="rounded-2xl bg-amber-50 border border-amber-100 p-3">' +
+            '<p class="text-[11px] font-black text-amber-700">客戶類型</p>' +
+            '<p class="mt-1 text-[14px] font-black text-slate-800">' + window.escapeJS(person.crmType || '待判斷') + '</p>' +
+          '</div>' +
+          '<div class="rounded-2xl bg-blue-50 border border-blue-100 p-3">' +
+            '<p class="text-[11px] font-black text-blue-600">下一步</p>' +
+            '<p class="mt-1 text-[14px] font-black text-slate-800">' + window.escapeJS(person.crmNextAction || '初次聯繫') + '</p>' +
+          '</div>' +
+        '</div>' +
+        '<div class="rounded-2xl bg-slate-50 border border-slate-100 p-3">' +
+          '<label class="block text-[11px] font-black text-slate-500 mb-2">客戶狀態</label>' +
+          '<select onchange="window.updateCrmStatus(this.value)" class="w-full bg-white rounded-xl border border-slate-100 px-3 py-2.5 text-[14px] font-black text-slate-700 outline-none">' + statusOptionsHtml + '</select>' +
         '</div>' +
       '</div>' +
 
@@ -254,6 +285,24 @@ window.toggleCrmTag = async function(tag) {
     }
   } catch (e) {
     window.showToast('⚠️ ' + e.message, true);
+  }
+};
+
+window.updateCrmStatus = async function(status) {
+  const person = window.crmContactsCache.find(p => p.phone === window.crmCurrentPersonPhone);
+  if (!person) return window.showToast('找不到聯絡人', true);
+  try {
+    const res = await window.fetchAPI('updateCrmContact', {
+      rowId: person.rowId || person.cardRowId,
+      crmStatus: status
+    }, true);
+    if (!res || res.error) throw new Error(res?.error || '更新失敗');
+    const updated = res.data || res;
+    Object.assign(person, updated);
+    window.renderCrmList();
+    window.showToast('客戶狀態已更新');
+  } catch (e) {
+    window.showToast('狀態更新失敗：' + (e.message || e), true);
   }
 };
 

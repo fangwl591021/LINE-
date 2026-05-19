@@ -312,6 +312,53 @@ const HomeModule = (function() {
         }
     };
 
+    function crmNeedsFollowup_(item) {
+        const status = String(item.crmStatus || '').trim();
+        return !status || ['新名片', '已初次聯繫', '已發送資料', '待跟進'].includes(status);
+    }
+
+    window.loadHomeSalesAssistant = async function() {
+        const list = document.getElementById('home-sales-assistant-list');
+        if (!list || typeof window.fetchAPI !== 'function') return;
+        list.innerHTML = '<div class="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 text-[13px] text-slate-400 font-bold text-center">正在整理今日建議...</div>';
+        try {
+            const res = await window.fetchAPI('getCrmContacts', { limit: 80 }, true);
+            const contacts = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+            const rows = contacts
+                .filter(crmNeedsFollowup_)
+                .filter(item => String(item.sourceType || '') !== 'self_profile')
+                .slice(0, 3);
+            if (!rows.length) {
+                list.innerHTML = '<div class="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 text-[13px] text-slate-400 font-bold text-center">今天沒有待跟進名片。新增名片後，系統會在這裡提醒下一步。</div>';
+                return;
+            }
+            list.innerHTML = rows.map(item => {
+                const name = window.escapeHTML(item.name || '未命名');
+                const type = window.escapeHTML(item.crmType || '待判斷');
+                const action = window.escapeHTML(item.crmNextAction || '初次聯繫');
+                const suggestion = window.escapeHTML(item.crmAiSuggestion || '');
+                const rowId = window.escapeJS(item.rowId || item.cardRowId || '');
+                return `
+                    <button type="button" onclick="window.openCardDetailById ? window.openCardDetailById('${rowId}') : window.goPage('card')" class="w-full bg-white rounded-3xl border border-slate-100 shadow-sm p-4 text-left active:scale-[0.99] transition-transform">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-black text-slate-900 text-[16px]">${name}</span>
+                                    <span class="px-2 py-1 rounded-full bg-pink-50 text-pink-600 text-[11px] font-black">${type}</span>
+                                </div>
+                                <p class="mt-1 text-[13px] font-bold text-slate-600">建議：${action}</p>
+                                ${suggestion ? `<p class="mt-2 text-[12px] text-slate-400 font-bold leading-relaxed line-clamp-2">${suggestion}</p>` : ''}
+                            </div>
+                            <span class="material-symbols-outlined text-slate-300 shrink-0">chevron_right</span>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+        } catch (e) {
+            list.innerHTML = '<div class="bg-white rounded-3xl border border-red-100 shadow-sm p-5 text-[13px] text-red-400 font-bold text-center">今日建議讀取失敗：' + window.escapeHTML(e.message || e) + '</div>';
+        }
+    };
+
     window.renderHomeAnnouncements = function(items) {
         const list = document.getElementById('home-announcements-list');
         if (!list) return;
@@ -602,6 +649,7 @@ const HomeModule = (function() {
         if (typeof window.initHomeMatchmakeEmbed === 'function') window.initHomeMatchmakeEmbed();
         if (typeof window.initMatchmakePage === 'function') window.initMatchmakePage();
         if (typeof window.loadHomeAnnouncements === 'function') window.loadHomeAnnouncements();
+        if (typeof window.loadHomeSalesAssistant === 'function') window.loadHomeSalesAssistant();
 
         if (typeof window.syncStoreSettingsToHome === 'function') {
             window.syncStoreSettingsToHome();
