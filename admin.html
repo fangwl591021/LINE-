@@ -3624,10 +3624,13 @@
     function renderAdminCardButtons() {
       const container = document.getElementById('admin-edit-buttons-list');
       container.innerHTML = currentEditButtons.map((b, i) => `
-        <div class="flex gap-2 items-center bg-white p-2 border rounded-xl shadow-sm">
-          <input type="color" value="${b.c}" class="w-8 h-8 rounded shrink-0 border-none cursor-pointer" onchange="currentEditButtons[${i}].c=this.value; updateAdminCardPreview()">
-          <input type="text" value="${escapeHTML(b.l)}" placeholder="標題" class="flex-1 text-sm font-bold border-none outline-none focus:ring-0" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
-          <button onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 hover:text-red-600 p-1 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+        <div class="flex gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100 shadow-sm">
+          <input type="color" value="${escapeHTML(b.c || '#06C755')}" class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200 bg-white" onchange="currentEditButtons[${i}].c=this.value; updateAdminCardPreview()">
+          <div class="flex-1 flex flex-col gap-1.5 min-w-0">
+            <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕名稱" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
+            <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://... 或 tel:09..." class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="currentEditButtons[${i}].u=this.value; updateAdminCardPreview()">
+          </div>
+          <button type="button" onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>`).join('');
     }
 
