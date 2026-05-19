@@ -405,7 +405,7 @@
               <p class="text-[15px] font-black text-slate-900 truncate">${escapeHTML(user.name || "未命名")}</p>
               <p class="text-[12px] text-slate-500 font-bold mt-1 truncate">${escapeHTML([user.phone, user.industry].filter(Boolean).join(" / ") || user.userId)}</p>
             </div>
-            <span class="shrink-0 rounded-full bg-blue-50 text-blue-600 px-2 py-1 text-[11px] font-black">${escapeHTML(user.roleLabel || "用戶")}</span>
+            <span class="shrink-0 rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 text-[11px] font-black">可收信</span>
           </div>
         </button>
       `).join("");

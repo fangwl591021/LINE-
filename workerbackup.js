@@ -4618,6 +4618,7 @@ const D1InboxModule = {
       FROM users
       WHERE line_id <> ?
         AND (name LIKE ? OR phone LIKE ? OR line_id LIKE ? OR store_id LIKE ?)
+        AND ${this.activeRecipientSql()}
         ${scopeSql}
       ORDER BY CASE WHEN name LIKE ? THEN 0 ELSE 1 END, row_id DESC
       LIMIT 20
@@ -4632,9 +4633,21 @@ const D1InboxModule = {
         industry: user.industry,
         role: user.role,
         roleLabel: user.roleLabel,
-        networkId: user.networkId
+        networkId: user.networkId,
+        canReceiveInbox: true
       }))
     };
+  },
+
+  activeRecipientSql() {
+    return "TRIM(COALESCE(line_id,'')) <> '' AND TRIM(COALESCE(name,'')) NOT IN ('', '未命名', '待補資料') AND TRIM(COALESCE(phone,'')) <> ''";
+  },
+
+  isActiveRecipient(row) {
+    const userId = this.text(row && (row.line_id || row.row_id));
+    const name = this.text(row && row.name);
+    const phone = this.text(row && row.phone);
+    return !!userId && !!phone && !!name && !['未命名', '待補資料'].includes(name);
   },
 
   canReachRecipient(payload, receiverRow) {
@@ -4666,6 +4679,7 @@ const D1InboxModule = {
 
     const receiver = await D1ReadModule.findUserByIdentity(env, receiverUserId).catch(() => null);
     if (!receiver || !receiver.user) return { success: false, error: '找不到收件人' };
+    if (!this.isActiveRecipient(receiver.user)) return { success: false, error: '對方尚未完成會員註冊，無法接收站內訊息' };
     if (!this.canReachRecipient(payload, receiver.user)) return { success: false, error: '收件人不在可傳送範圍內' };
 
     const title = this.text(payload.title, '新訊息');
