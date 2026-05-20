@@ -30,13 +30,14 @@
   var myEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
   var templateCoverUrl = 'assets/rental-template-cover.png';
+  var templateAddressUrl = 'https://www.google.com/maps';
 
   function getTemplateButtons(phone) {
     var cleanPhone = String(phone || '').replace(/[^0-9+]/g, '');
     return [
       { l: '加LINE好友', u: 'https://lin.ee/y7h8BUF', c: '#06C755' },
       { l: '行動電話', u: cleanPhone ? 'tel:' + cleanPhone : 'tel:XXXXXXXXXX', c: '#3b82f6' },
-      { l: '數位包租公簡介', u: 'https://lihi2.me/yXhCf', c: '#1e293b' }
+      { l: '店家地址', u: templateAddressUrl, c: '#1e293b' }
     ];
   }
 

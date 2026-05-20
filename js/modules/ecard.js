@@ -6,7 +6,8 @@ window.__ecardAutoSyncBound = window.__ecardAutoSyncBound || false;
 
 const ECardAutoDefaults = {
   lineUrl: 'https://lin.ee/y7h8BUF',
-  introUrl: 'https://lihi2.me/yXhCf'
+  addressUrl: 'https://www.google.com/maps',
+  legacyIntroUrl: 'https://lihi2.me/yXhCf'
 };
 
 function readECardField(name, fallbackCard) {
@@ -30,15 +31,23 @@ function normalizeUrlValue(value) {
   return '';
 }
 
+function buildGoogleMapsUrl(address) {
+  const cleanAddress = String(address || '').trim();
+  return cleanAddress
+    ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(cleanAddress)
+    : ECardAutoDefaults.addressUrl;
+}
+
 function getECardButtonKind(button, index) {
   const label = String(button?.l || '').toLowerCase();
   const url = String(button?.u || '').toLowerCase();
   if (label.includes('line') || label.includes('好友') || url.includes('lin.ee') || url.includes('line.me')) return 'line';
   if (label.includes('電話') || label.includes('手機') || url.startsWith('tel:')) return 'phone';
-  if (label.includes('簡介') || label.includes('網站') || label.includes('官網') || url.includes('lihi2.me')) return 'intro';
+  if (label.includes('地址') || label.includes('地圖') || url.includes('google.com/maps')) return 'address';
+  if (label.includes('包租公') || label.includes('簡介') || url.includes('lihi2.me')) return 'address';
   if (index === 0) return 'line';
   if (index === 1) return 'phone';
-  if (index === 2) return 'intro';
+  if (index === 2) return 'address';
   return 'custom';
 }
 
@@ -46,24 +55,24 @@ function buildAutoECardButtons(card, existingButtons) {
   const existing = Array.isArray(existingButtons) ? existingButtons : [];
   const phone = readECardField('手機號碼', card) || readECardField('公司電話', card);
   const social = readECardField('社群帳號', card);
-  const companyUrl = normalizeUrlValue(readECardField('公司網址', card));
+  const address = readECardField('公司地址', card);
   const lineUrl = normalizeUrlValue(social) || ECardAutoDefaults.lineUrl;
-  const introUrl = companyUrl || ECardAutoDefaults.introUrl;
+  const addressUrl = buildGoogleMapsUrl(address);
 
   const auto = {
     line: { l: '加LINE好友', u: lineUrl, c: '#06C755' },
     phone: { l: '行動電話', u: normalizeTelValue(phone), c: '#3b82f6' },
-    intro: { l: companyUrl ? '公司網站' : '數位包租公簡介', u: introUrl, c: '#1e293b' }
+    address: { l: '店家地址', u: addressUrl, c: '#1e293b' }
   };
 
   const used = new Set();
-  const merged = ['line', 'phone', 'intro'].map(kind => {
+  const merged = ['line', 'phone', 'address'].map(kind => {
     const foundIndex = existing.findIndex((button, index) => !used.has(index) && getECardButtonKind(button, index) === kind);
     const found = foundIndex >= 0 ? existing[foundIndex] : null;
     if (foundIndex >= 0) used.add(foundIndex);
     return {
-      l: found?.l || auto[kind].l,
-      u: resolveECardButtonUrl(kind, found?.u, auto[kind].u),
+      l: resolveECardButtonLabel(kind, found, auto[kind].l),
+      u: resolveECardButtonUrl(kind, found, auto[kind].u),
       c: found?.c || auto[kind].c
     };
   });
@@ -77,13 +86,37 @@ function buildAutoECardButtons(card, existingButtons) {
   return merged;
 }
 
-function resolveECardButtonUrl(kind, existingUrl, autoUrl) {
-  const existing = String(existingUrl || '').trim();
+function resolveECardButtonLabel(kind, found, autoLabel) {
+  const label = String(found?.l || '').trim();
+  const url = String(found?.u || '').trim();
+  if (!label) return autoLabel;
+  if (kind === 'address' && (
+    label.includes('包租公') ||
+    label.includes('簡介') ||
+    label.includes('網站') ||
+    label.includes('官網') ||
+    url === ECardAutoDefaults.legacyIntroUrl ||
+    url.includes('lihi2.me/yXhCf')
+  )) return autoLabel;
+  return label;
+}
+
+function resolveECardButtonUrl(kind, found, autoUrl) {
+  const existing = String(found?.u || '').trim();
+  const label = String(found?.l || '').trim();
   const auto = String(autoUrl || '').trim();
   if (!existing) return auto;
   if (kind === 'phone' && /^tel:/i.test(existing)) return auto || existing;
   if (kind === 'line' && existing === ECardAutoDefaults.lineUrl) return auto || existing;
-  if (kind === 'intro' && existing === ECardAutoDefaults.introUrl) return auto || existing;
+  if (kind === 'address' && (
+    label.includes('包租公') ||
+    label.includes('簡介') ||
+    label.includes('網站') ||
+    label.includes('官網') ||
+    existing === ECardAutoDefaults.addressUrl ||
+    existing === ECardAutoDefaults.legacyIntroUrl ||
+    existing.includes('lihi2.me/yXhCf')
+  )) return auto || existing;
   return existing;
 }
 
