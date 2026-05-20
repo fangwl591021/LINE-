@@ -1477,7 +1477,8 @@ const AIModule = {
 
   async callGeminiVision(env, base64Image, prompt, temperature = 0.2) {
     if (!env.GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
-    const model = env.GEMINI_MODEL || 'gemini-1.5-flash';
+    const model = env.GEMINI_VISION_MODEL || env.GEMINI_MODEL;
+    if (!model) throw new Error('Missing GEMINI_VISION_MODEL');
     const image = this.dataUriParts(base64Image);
     if (!image.data) throw new Error('Missing image data');
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`, {
@@ -1519,9 +1520,10 @@ const AIModule = {
       const prompt = '請解析這張名片並提取資訊。支援多國語言（如英文、日文等），若無中文請直接保留原文。輸出JSON格式：{"姓名":"","英文名":"","職稱":"","公司名稱":"","手機號碼":"","公司電話":"","電子郵件":"","公司網址":"","公司地址":"","統一編號":"","分機":"","傳真":"","部門":"","社群帳號":"","服務項目":""}\n所有欄位必須是字串，保留開頭的 0。若名片上沒有清楚服務項目，請依公司名稱、職稱、地址、網站合理推估，替「服務項目」生成 3 到 5 行簡短商務介紹；每行 12 到 18 字，避免誇大，不要寫「未知」。';
 
       let text = '';
+      let openaiError = null;
       try {
         const result = await this.callOpenAI(env, {
-          model: 'gpt-4o',
+          model: env.OPENAI_VISION_MODEL || env.OPENAI_MODEL || 'gpt-4o',
           messages: [{
             role: 'user',
             content: [
@@ -1531,9 +1533,23 @@ const AIModule = {
           }]
         });
         text = result.choices?.[0]?.message?.content || '';
-      } catch (openaiError) {
-        console.warn('[AI fallback] recognize OpenAI failed, trying Gemini:', openaiError.message);
-        text = await this.callGeminiVision(env, payload.base64Image, prompt, 0.2);
+      } catch (err) {
+        openaiError = err;
+        console.warn('[AI OCR] GPT vision failed:', err.message);
+      }
+
+      if (!text && String(env.OCR_FALLBACK_PROVIDER || '').toLowerCase() === 'gemini') {
+        try {
+          console.warn('[AI fallback] recognize GPT failed, trying Gemini:', openaiError && openaiError.message);
+          text = await this.callGeminiVision(env, payload.base64Image, prompt, 0.2);
+        } catch (geminiError) {
+          console.warn('[AI fallback] Gemini OCR failed:', geminiError.message);
+          throw new Error('GPT OCR 失敗: ' + ((openaiError && openaiError.message) || '無法取得辨識結果'));
+        }
+      }
+
+      if (!text) {
+        throw new Error('GPT OCR 失敗: ' + ((openaiError && openaiError.message) || '無法取得辨識結果'));
       }
       
       let cardData = this.parseJsonObject(text);
