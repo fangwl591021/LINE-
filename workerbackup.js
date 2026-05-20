@@ -7053,7 +7053,7 @@ async function dispatchAction(action, payload, request, env) {
   }
   const actor = authz.actor;
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
-  const legacyAuthSkipActions = new Set(['mlmListOrders', 'getTenantBonusOrders', 'prepareTenantCardPayment']);
+  const legacyAuthSkipActions = new Set(['checkUser', 'mlmListOrders', 'getTenantBonusOrders', 'prepareTenantCardPayment']);
   if (payload.userId && !actor && !legacyAuthSkipActions.has(action)) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
     if (token) {
