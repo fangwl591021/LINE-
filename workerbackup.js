@@ -889,7 +889,9 @@ const PointModule = {
     const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
 
-    const lineUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || payload.authenticatedUserId || payload.userId || '').trim();
+    const requestedUserId = String(payload.authenticatedUserId || payload.loginUserId || payload.userId || '').trim();
+    const resolvedUserId = await this.resolvePointUserId(env, requestedUserId);
+    const lineUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || resolvedUserId || requestedUserId || '').trim();
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
     const baseBody = {
@@ -2639,7 +2641,7 @@ const D1ReadModule = {
 
   async checkUser(payload, env) {
     if (!this.hasD1(env)) return null;
-    const userId = this.text(payload.userId || payload.lineId);
+    const userId = this.text(payload.userId || payload.lineId || payload.loginUserId || payload.lineDecodedUserId);
     if (!userId) return { success: false, error: 'Missing userId' };
 
     const identity = await this.findUserByIdentity(env, userId);
