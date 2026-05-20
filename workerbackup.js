@@ -1405,7 +1405,15 @@ const PointModule = {
 };
 
 const AIModule = {
-  getOpenAIKeys(env) {
+  normalizeClientOpenAIKey(key) {
+    const value = String(key || '').trim();
+    if (!value || !/^sk-[A-Za-z0-9_\-]+/.test(value)) return '';
+    return value;
+  },
+
+  getOpenAIKeys(env, clientKey = '') {
+    const localKey = this.normalizeClientOpenAIKey(clientKey);
+    if (localKey) return [localKey];
     return [
       env.OPENAI_API_KEY,
       env.OPENAI_API_KEY_2,
@@ -1414,8 +1422,8 @@ const AIModule = {
     ].filter((key, index, list) => key && list.indexOf(key) === index);
   },
 
-  async callOpenAI(env, body) {
-    const keys = this.getOpenAIKeys(env);
+  async callOpenAI(env, body, clientKey = '') {
+    const keys = this.getOpenAIKeys(env, clientKey);
     if (!keys.length) throw new Error("Missing OPENAI_API_KEY");
 
     let lastError = '';
@@ -1567,7 +1575,7 @@ const AIModule = {
               { type: 'text', text: prompt }
             ]
           }]
-        });
+        }, payload.clientOpenAIKey);
         text = result.choices?.[0]?.message?.content || '';
       } catch (err) {
         openaiError = err;
@@ -1632,7 +1640,7 @@ const AIModule = {
       
       let items = [];
       try {
-        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
+        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: prompt }], temperature: 0.2 }, payload.clientOpenAIKey);
         items = this.parseJsonArray(result.choices?.[0]?.message?.content || '[]');
       } catch (aiError) {
         console.warn('[AI matchmaking] GPT failed, using local fallback:', aiError.message);
@@ -1673,10 +1681,11 @@ const AIModule = {
 
       let text = '';
       try {
-        const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content }], temperature: 0 });
+        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content }], temperature: 0 }, payload.clientOpenAIKey);
         text = result.choices?.[0]?.message?.content || '{}';
       } catch (openaiError) {
-        console.warn('[AI fallback] reviewCardSafety OpenAI failed, trying Gemini:', openaiError.message);
+        if (String(env.AI_FALLBACK_PROVIDER || '').toLowerCase() !== 'gemini') throw openaiError;
+        console.warn('[AI fallback] reviewCardSafety GPT failed, trying Gemini:', openaiError.message);
         text = await this.callGemini(env, prompt, 0);
       }
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -1703,10 +1712,11 @@ const AIModule = {
 
       let text = '';
       try {
-        const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], temperature: 0.7 });
+        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: prompt }], temperature: 0.7 }, payload.clientOpenAIKey);
         text = result.choices?.[0]?.message?.content || '{}';
       } catch (openaiError) {
-        console.warn('[AI fallback] generateCardCopy OpenAI failed, trying Gemini:', openaiError.message);
+        if (String(env.AI_FALLBACK_PROVIDER || '').toLowerCase() !== 'gemini') throw openaiError;
+        console.warn('[AI fallback] generateCardCopy GPT failed, trying Gemini:', openaiError.message);
         text = await this.callGemini(env, prompt, 0.7);
       }
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -1738,7 +1748,7 @@ const AIModule = {
 【強制要求】：請輸出純 JSON 格式。五大維度（Personality, Hobbies, Wealth, Health, Career）的值，每個都「必須」是一段 20 到 40 字的完整情境描述，請直接給出具體特徵與商務應對建議（例如：此人為視覺數據型，決策保守，建議提供圖表數據...），絕對不要只給單詞。
 JSON格式：{"Personality":"","Hobbies":"","Wealth":"","Health":"","Career":""}`;
 
-      const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] });
+      const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: prompt }] }, payload.clientOpenAIKey);
       const jsonMatch = result.choices[0].message.content.match(/\{[\s\S]*\}/);
       return { success: true, data: jsonMatch ? JSON.parse(jsonMatch[0]) : {} };
     } catch (e) { return { success: false, error: e.message }; }

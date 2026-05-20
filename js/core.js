@@ -119,6 +119,18 @@ const Core = (function() {
             }
             safePayload.userId = safePayload.userId !== undefined ? safePayload.userId : window.currentUserProfile?.userId;
 
+            const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy'];
+            if (aiActions.includes(action)) {
+                try {
+                    const localOpenAIKey = String(localStorage.getItem('line_engine_local_openai_api_key') || '').trim();
+                    if (/^sk-[A-Za-z0-9_\-]+/.test(localOpenAIKey)) {
+                        safePayload.clientOpenAIKey = localOpenAIKey;
+                    }
+                } catch (e) {
+                    console.warn('Local GPT API key read failed:', e);
+                }
+            }
+
             // 嘗試取得 LIFF Token
             try {
                 if (typeof liff !== 'undefined' && liff.isLoggedIn()) {

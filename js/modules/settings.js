@@ -1,5 +1,46 @@
 /* ==================== 系統參數與設定模組 ==================== */
 
+const LOCAL_OPENAI_KEY_STORAGE = 'line_engine_local_openai_api_key';
+
+window.loadLocalGptKeySettings = function() {
+  const input = document.getElementById('local-gpt-api-key');
+  const status = document.getElementById('local-gpt-api-key-status');
+  let key = '';
+  try { key = localStorage.getItem(LOCAL_OPENAI_KEY_STORAGE) || ''; } catch (e) {}
+  if (input) input.value = key;
+  if (status) {
+    status.textContent = key
+      ? '已在本機保存 GPT API Key。AI 功能會優先使用這把 key，不會寫入資料庫。'
+      : '尚未設定。本機 key 只存在這台裝置，AI 請求時才會送到 Worker 使用。';
+    status.className = 'text-[12px] leading-relaxed ' + (key ? 'text-emerald-700' : 'text-slate-500');
+  }
+};
+
+window.saveLocalGptApiKey = function(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('local-gpt-api-key');
+  const key = input ? String(input.value || '').trim() : '';
+  if (!/^sk-[A-Za-z0-9_\-]+/.test(key)) {
+    return window.showToast('請輸入正確的 OpenAI API Key，通常以 sk- 開頭。', true);
+  }
+  try {
+    localStorage.setItem(LOCAL_OPENAI_KEY_STORAGE, key);
+    window.showToast('本機 GPT API Key 已保存');
+    window.loadLocalGptKeySettings();
+  } catch (err) {
+    window.showToast('本機保存失敗：' + (err.message || err), true);
+  }
+};
+
+window.clearLocalGptApiKey = function(e) {
+  if (e) e.preventDefault();
+  try { localStorage.removeItem(LOCAL_OPENAI_KEY_STORAGE); } catch (err) {}
+  const input = document.getElementById('local-gpt-api-key');
+  if (input) input.value = '';
+  window.loadLocalGptKeySettings();
+  window.showToast('已清除本機 GPT API Key');
+};
+
 /**
  * 儲存後台 Banner 與 系統名稱設定
  */
