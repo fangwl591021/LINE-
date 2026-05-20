@@ -139,21 +139,26 @@ const SecurityModule = {
   async getLineUserIdFromToken(token, env) {
     if (!token) return '';
     const cacheKey = `AUTH_${token.substring(0, 30)}`;
-    if (env.ACTMASTER_KV) {
-      const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
-      if (cachedUserId) return cachedUserId;
-    }
+    try {
+      if (env.ACTMASTER_KV) {
+        const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
+        if (cachedUserId) return cachedUserId;
+      }
 
-    const res = await fetch('https://api.line.me/v2/profile', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.status !== 200) return '';
-    const data = await res.json();
-    const userId = this.text(data.userId);
-    if (userId && env.ACTMASTER_KV) {
-      await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
+      const res = await fetch('https://api.line.me/v2/profile', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.status !== 200) return '';
+      const data = await res.json();
+      const userId = this.text(data.userId);
+      if (userId && env.ACTMASTER_KV) {
+        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
+      }
+      return userId;
+    } catch (e) {
+      console.error('LINE token profile lookup failed', e && e.message ? e.message : e);
+      return '';
     }
-    return userId;
   },
 
   async getActor(payload, request, env) {
@@ -2673,6 +2678,7 @@ const D1ReadModule = {
 
     await env.ACTMASTER_DB.prepare('UPDATE card_contacts SET line_id = ?, updated_at = CURRENT_TIMESTAMP WHERE line_id = ?').bind(newUserId, oldUserId).run();
     await env.ACTMASTER_DB.prepare('UPDATE registrants SET line_id = ? WHERE line_id = ?').bind(newUserId, oldUserId).run().catch(() => null);
+
     if (env.ACTMASTER_KV) {
       await env.ACTMASTER_KV.delete(`U_PROFILE_${oldUserId}`).catch(() => null);
       await env.ACTMASTER_KV.delete(`U_PROFILE_${newUserId}`).catch(() => null);
@@ -5537,6 +5543,31 @@ const AuthModule = {
       } catch (e) { console.error("KV Read Error", e); }
     }
 
+    if (env.ACTMASTER_DB) {
+      try {
+        const user = await D1ReadModule.first(env, `
+          SELECT * FROM users
+          WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
+          LIMIT 1
+        `, [userId, userId, userId, userId]);
+        if (user) {
+          const profile = D1ReadModule.userRow(user);
+          if (profile) {
+            profile.requestedUserId = userId;
+            profile.canonicalUserId = profile.pointLineId || profile.lineId || profile.userId;
+            if (env.ACTMASTER_KV) {
+              try {
+                await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(profile), { expirationTtl: 600 });
+              } catch (e) { console.error("KV Write Error", e); }
+            }
+            return { success: true, data: { isRegistered: true, info: profile, source: 'd1_direct_user' } };
+          }
+        }
+      } catch (e) {
+        console.error("D1 direct checkUser failed", e && e.message ? e.message : e);
+      }
+    }
+
     const result = await DBModule.forward('checkUser', payload, env);
 
     if (result && result.success && result.data && result.data.isRegistered && env.ACTMASTER_KV) {
@@ -7375,4 +7406,3 @@ export default {
     }
   }
 };
-
