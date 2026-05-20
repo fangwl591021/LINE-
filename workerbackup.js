@@ -313,6 +313,15 @@ const SecurityModule = {
         return { allowed: true, actor: null };
       }
     }
+    if (!actor && action === 'getCardContacts' && env.ACTMASTER_DB) {
+      const requestedUserId = this.text(payload.userId);
+      const identity = requestedUserId
+        ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
+        : null;
+      if (identity && identity.user) {
+        return { allowed: true, actor: null };
+      }
+    }
     if (!actor) return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' };
 
     payload.authenticatedUserId = actor.userId;
@@ -2780,7 +2789,7 @@ const D1ReadModule = {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
-    const role = this.role(payload.authenticatedRole || payload.role);
+    const role = this.role(payload.authenticatedRole || 'user');
     const actorId = this.text(payload.authenticatedUserId || payload.userId);
     let rows = [];
     if (role === 'admin') {
@@ -7065,6 +7074,7 @@ async function dispatchAction(action, payload, request, env) {
   const legacyAuthSkipActions = new Set([
     'checkUser',
     'queryUserPoints',
+    'getCardContacts',
     'getPublicActivities',
     'getActivityById',
     'getStoreSettings',
