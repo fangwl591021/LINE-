@@ -156,10 +156,57 @@ const SecurityModule = {
     return userId;
   },
 
+  getLineLoginClientId(payload = {}, env = {}) {
+    const explicit = this.text(payload.lineLoginClientId || payload.clientId || payload.liffClientId || env.LINE_LOGIN_CLIENT_ID || env.LINE_CHANNEL_ID);
+    if (explicit) return explicit;
+    const liffId = this.text(payload.liffId || payload.liffID || payload.activeLiffId);
+    if (liffId && liffId.includes('-')) return liffId.split('-')[0];
+    return '1660923784';
+  },
+
+  async getLineUserIdFromIdToken(idToken, env, clientId) {
+    if (!idToken) return '';
+    const cacheKey = `IDTOKEN_${idToken.substring(0, 30)}`;
+    if (env.ACTMASTER_KV) {
+      const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
+      if (cachedUserId) return cachedUserId;
+    }
+
+    try {
+      const res = await fetch('https://api.line.me/oauth2/v2.1/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          id_token: idToken,
+          client_id: this.text(clientId || '1660923784')
+        }).toString()
+      });
+      if (res.status !== 200) return '';
+      const data = await res.json();
+      const userId = this.text(data.sub);
+      if (userId && env.ACTMASTER_KV) {
+        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
+      }
+      return userId;
+    } catch (e) {
+      return '';
+    }
+  },
+
+  async getLineUserIdFromAuth(payload, request, env) {
+    payload = payload || {};
+    const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
+    const idToken = payload.lineIdToken || request.headers.get('X-LINE-ID-TOKEN') || '';
+    const clientId = this.getLineLoginClientId(payload, env);
+    return await this.getLineUserIdFromToken(token, env)
+      || await this.getLineUserIdFromIdToken(idToken, env, clientId);
+  },
+
   async getActor(payload, request, env) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) return null;
-    const userId = await this.getLineUserIdFromToken(token, env);
+    const idToken = payload.lineIdToken || request.headers.get('X-LINE-ID-TOKEN') || '';
+    if (!token && !idToken) return null;
+    const userId = await this.getLineUserIdFromAuth(payload, request, env);
     if (!userId) return null;
 
     let role = 'user';
@@ -310,30 +357,39 @@ const SecurityModule = {
     return { allowed: true, actor };
   },
   // 驗證 LIFF Token，確保 userId 未被偽造
-  async verifyLineAuth(userId, token, env) {
-    if (!token || !userId) return false;
+  async verifyLineAuth(userId, token, env, idToken = '', clientId = '') {
+    if ((!token && !idToken) || !userId) return false;
     if (!env.ACTMASTER_KV) return true; // 若未綁定 KV 則暫時放行(避免癱瘓系統)
 
-    const cacheKey = `AUTH_${token.substring(0, 30)}`; // 避免 Key 過長
-    const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
-    if (cachedUserId === userId) return true;
+    if (token) {
+      const cacheKey = `AUTH_${token.substring(0, 30)}`; // 避免 Key 過長
+      const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
+      if (cachedUserId === userId) return true;
 
-    try {
-      const res = await fetch('https://api.line.me/v2/profile', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.status !== 200) return false;
-      const data = await res.json();
-      
-      if (data.userId === userId) {
-        // 驗證成功，快取 1 小時，大幅降低 LINE API 呼叫延遲
-        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
-        return true;
-      }
-      return false;
-    } catch(e) {
-      return false;
+      try {
+        const res = await fetch('https://api.line.me/v2/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 200) {
+          const data = await res.json();
+          if (data.userId === userId) {
+            // 驗證成功，快取 1 小時，大幅降低 LINE API 呼叫延遲
+            await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
+            return true;
+          }
+        }
+      } catch(e) {}
     }
+
+    if (idToken) {
+      try {
+        const idTokenUserId = await this.getLineUserIdFromIdToken(idToken, env, clientId || '1660923784');
+        if (idTokenUserId === userId) return true;
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
   },
 
   // 防刷機制 (Rate Limiting)
@@ -7011,9 +7067,16 @@ async function dispatchAction(action, payload, request, env) {
   const legacyAuthSkipActions = new Set(['mlmListOrders', 'getTenantBonusOrders', 'prepareTenantCardPayment']);
   if (payload.userId && !actor && !legacyAuthSkipActions.has(action)) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (token) {
+    const idToken = payload.lineIdToken || request.headers.get('X-LINE-ID-TOKEN') || '';
+    if (token || idToken) {
       // 若前端有傳 Token，則嚴格驗證是否被偽造
-      const isValid = await SecurityModule.verifyLineAuth(payload.userId, token, env);
+      const isValid = await SecurityModule.verifyLineAuth(
+        payload.userId,
+        token,
+        env,
+        idToken,
+        SecurityModule.getLineLoginClientId(payload, env)
+      );
       if (!isValid) {
         return { success: false, error: "Access Denied: Invalid or Expired LINE Token" };
       }

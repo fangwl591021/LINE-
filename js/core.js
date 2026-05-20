@@ -105,38 +105,7 @@ const Core = (function() {
         if (!isLineTokenAuthError(message)) return false;
         if (window.__lineTokenRefreshInProgress) return true;
         window.__lineTokenRefreshInProgress = true;
-
-        try {
-            const lastAt = Number(sessionStorage.getItem('ACTMASTER_LAST_LINE_RELOGIN_AT') || 0);
-            const now = Date.now();
-            sessionStorage.setItem('ACTMASTER_LAST_LINE_RELOGIN_AT', String(now));
-            if (lastAt && now - lastAt < 5000) {
-                window.showToast('LINE 授權仍未更新，請按重新載入再試一次', true);
-                return true;
-            }
-        } catch (e) {}
-
-        window.showToast('LINE 授權已過期，正在重新登入...', true);
-        setTimeout(() => {
-            try {
-                if (typeof liff !== 'undefined' && liff && typeof liff.isLoggedIn === 'function' && liff.isLoggedIn() && typeof liff.logout === 'function') {
-                    liff.logout();
-                }
-            } catch (e) {}
-
-            const redirectUri = getCleanLiffRedirectUrl();
-            try {
-                if (typeof window.ensureActmasterLiffLogin === 'function') {
-                    window.ensureActmasterLiffLogin({ redirectUri });
-                    return;
-                }
-                if (typeof liff !== 'undefined' && liff && typeof liff.login === 'function') {
-                    liff.login({ redirectUri });
-                    return;
-                }
-            } catch (e) {}
-            window.location.replace(redirectUri);
-        }, 500);
+        window.showToast('LINE 授權驗證失敗，請按重新載入或關閉後重進', true);
         return true;
     };
 
@@ -189,7 +158,16 @@ const Core = (function() {
             // 嘗試取得 LIFF Token
             try {
                 if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
+                    safePayload.liffId = safePayload.liffId || window.LIFF_ID || window.Config?.LIFF_ID || '';
                     safePayload.lineAccessToken = liff.getAccessToken();
+                    if (typeof liff.getIDToken === 'function') {
+                        const idToken = liff.getIDToken();
+                        if (idToken) safePayload.lineIdToken = idToken;
+                    }
+                    if (typeof liff.getDecodedIDToken === 'function') {
+                        const decoded = liff.getDecodedIDToken();
+                        if (decoded && decoded.sub) safePayload.lineDecodedUserId = decoded.sub;
+                    }
                 }
             } catch (e) {
                 console.warn("LIFF token fetch failed:", e);
@@ -227,7 +205,7 @@ const Core = (function() {
             }
             if (isLineTokenAuthError(message)) {
                 window.handleLineTokenAuthError(message);
-                message = 'LINE 授權已過期，正在重新登入...';
+                message = 'LINE 授權驗證失敗，請重新載入';
             }
             if (!silent) window.showToast(message, true);
             return { success: false, error: message };
