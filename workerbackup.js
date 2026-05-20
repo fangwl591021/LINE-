@@ -1468,25 +1468,75 @@ const AIModule = {
     return text;
   },
 
+  dataUriParts(base64Image) {
+    const raw = String(base64Image || '');
+    const match = raw.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) return { mimeType: match[1] || 'image/jpeg', data: match[2] || '' };
+    return { mimeType: 'image/jpeg', data: raw };
+  },
+
+  async callGeminiVision(env, base64Image, prompt, temperature = 0.2) {
+    if (!env.GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
+    const model = env.GEMINI_MODEL || 'gemini-1.5-flash';
+    const image = this.dataUriParts(base64Image);
+    if (!image.data) throw new Error('Missing image data');
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          role: 'user',
+          parts: [
+            { text: prompt },
+            { inline_data: { mime_type: image.mimeType, data: image.data } }
+          ]
+        }],
+        generationConfig: { temperature }
+      })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.error) {
+      throw new Error(result.error?.message || ('Gemini HTTP ' + response.status));
+    }
+    const text = (result.candidates?.[0]?.content?.parts || [])
+      .map(part => part.text || '')
+      .join('');
+    if (!text) throw new Error('Gemini did not return text');
+    return text;
+  },
+
+  parseJsonObject(text) {
+    const raw = String(text || '').replace(/```json/gi, '```');
+    const fence = raw.match(/```\s*([\s\S]*?)```/);
+    const source = fence && fence[1] ? fence[1] : raw;
+    const jsonMatch = source.match(/\{[\s\S]*\}/);
+    return jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+  },
+
   async recognize(payload, env) {
     try {
       const uploadedImgUrl = await StorageModule.upload(payload.base64Image, env);
+      const prompt = '請解析這張名片並提取資訊。支援多國語言（如英文、日文等），若無中文請直接保留原文。輸出JSON格式：{"姓名":"","英文名":"","職稱":"","公司名稱":"","手機號碼":"","公司電話":"","電子郵件":"","公司網址":"","公司地址":"","統一編號":"","分機":"","傳真":"","部門":"","社群帳號":"","服務項目":""}\n所有欄位必須是字串，保留開頭的 0。若名片上沒有清楚服務項目，請依公司名稱、職稱、地址、網站合理推估，替「服務項目」生成 3 到 5 行簡短商務介紹；每行 12 到 18 字，避免誇大，不要寫「未知」。';
 
-      const result = await this.callOpenAI(env, {
+      let text = '';
+      try {
+        const result = await this.callOpenAI(env, {
           model: 'gpt-4o',
           messages: [{
             role: 'user',
             content: [
               { type: 'image_url', image_url: { url: payload.base64Image, detail: 'high' } },
-              { type: 'text', text: '請解析這張名片並提取資訊。支援多國語言（如英文、日文等），若無中文請直接保留原文。輸出JSON格式：{"姓名":"","英文名":"","職稱":"","公司名稱":"","手機號碼":"","公司電話":"","電子郵件":"","公司網址":"","公司地址":"","統一編號":"","分機":"","傳真":"","部門":"","社群帳號":"","服務項目":""}\n所有欄位必須是字串，保留開頭的 0。若名片上沒有清楚服務項目，請依公司名稱、職稱、地址、網站合理推估，替「服務項目」生成 3 到 5 行簡短商務介紹；每行 12 到 18 字，避免誇大，不要寫「未知」。' }
+              { type: 'text', text: prompt }
             ]
           }]
         });
+        text = result.choices?.[0]?.message?.content || '';
+      } catch (openaiError) {
+        console.warn('[AI fallback] recognize OpenAI failed, trying Gemini:', openaiError.message);
+        text = await this.callGeminiVision(env, payload.base64Image, prompt, 0.2);
+      }
       
-      const text = result.choices[0].message.content;
-      let cardData = {};
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) cardData = JSON.parse(jsonMatch[0]);
+      let cardData = this.parseJsonObject(text);
       
       cardData['名片圖檔'] = uploadedImgUrl;
       
