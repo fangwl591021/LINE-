@@ -161,6 +161,37 @@ const SecurityModule = {
     }
   },
 
+  maskId(id) {
+    const text = this.text(id);
+    if (!text) return '';
+    if (text.length <= 12) return text;
+    return `${text.slice(0, 10)}...${text.slice(-6)}`;
+  },
+
+  async authMismatchDiagnostic(payloadUserId, tokenUserId, env) {
+    const payloadId = this.text(payloadUserId);
+    const tokenId = this.text(tokenUserId);
+    const payloadIdentity = env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined' && payloadId
+      ? await D1ReadModule.findUserByIdentity(env, payloadId).catch(() => null)
+      : null;
+    const tokenIdentity = env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined' && tokenId
+      ? await D1ReadModule.findUserByIdentity(env, tokenId).catch(() => null)
+      : null;
+    return {
+      payloadUserId: this.maskId(payloadId),
+      tokenUserId: this.maskId(tokenId),
+      payloadRegistered: !!(payloadIdentity && payloadIdentity.user),
+      tokenRegistered: !!(tokenIdentity && tokenIdentity.user),
+      payloadCanonical: this.maskId(payloadIdentity && payloadIdentity.canonicalId),
+      tokenCanonical: this.maskId(tokenIdentity && tokenIdentity.canonicalId),
+      sameCanonical: !!(
+        payloadIdentity && tokenIdentity &&
+        this.text(payloadIdentity.canonicalId) &&
+        this.text(payloadIdentity.canonicalId) === this.text(tokenIdentity.canonicalId)
+      )
+    };
+  },
+
   async getActor(payload, request, env) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
     if (!token) return null;
@@ -7029,6 +7060,15 @@ async function dispatchAction(action, payload, request, env) {
       // 若前端有傳 Token，則嚴格驗證是否被偽造
       const isValid = await SecurityModule.verifyLineAuth(payload.userId, token, env);
       if (!isValid) {
+        if (action === 'checkUser') {
+          const tokenUserId = await SecurityModule.getLineUserIdFromToken(token, env);
+          const diag = await SecurityModule.authMismatchDiagnostic(payload.userId, tokenUserId, env);
+          return {
+            success: false,
+            error: `Access Denied: Invalid or Expired LINE Token [payload=${diag.payloadUserId || '-'} token=${diag.tokenUserId || '-'} payloadRegistered=${diag.payloadRegistered ? 'Y' : 'N'} tokenRegistered=${diag.tokenRegistered ? 'Y' : 'N'} sameCanonical=${diag.sameCanonical ? 'Y' : 'N'}]`,
+            data: { authDiagnostic: diag }
+          };
+        }
         return { success: false, error: "Access Denied: Invalid or Expired LINE Token" };
       }
     } else {
