@@ -1173,7 +1173,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const enhancedPayload = payload ? { ...payload } : {};
         if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
           try {
-            enhancedPayload.lineAccessToken = liff.getAccessToken();
+            enhancedPayload.lineAccessToken = liff.getAccessToken() || '';
+            if (typeof liff.getIDToken === 'function') {
+              enhancedPayload.lineIdToken = liff.getIDToken() || '';
+            }
+            enhancedPayload.liffId = window.LIFF_ID || window.Config?.LIFF_ID || '';
             // 確保有 userId，避免某些舊 Payload 遺漏導致後端配對錯誤
             if (!enhancedPayload.userId && window.currentUserProfile?.userId) {
               enhancedPayload.userId = window.currentUserProfile.userId;

@@ -161,6 +161,58 @@ const SecurityModule = {
     }
   },
 
+  resolveLineLoginClientId(payload = {}, env = {}) {
+    const explicit = this.text(
+      env.LINE_LOGIN_CHANNEL_ID ||
+      env.LINE_CHANNEL_ID ||
+      env.LIFF_CHANNEL_ID ||
+      payload.lineLoginClientId ||
+      payload.liffChannelId
+    );
+    if (explicit) return explicit;
+    const liffId = this.text(payload.liffId || payload.LIFF_ID || payload.lineLiffId);
+    return liffId && liffId.includes('-') ? liffId.split('-')[0] : '';
+  },
+
+  async getLineUserIdFromIdToken(idToken, payload, env) {
+    if (!idToken) return '';
+    const clientId = this.resolveLineLoginClientId(payload, env);
+    if (!clientId) return '';
+    const cacheKey = `IDTOKEN_${idToken.substring(0, 30)}`;
+    try {
+      if (env.ACTMASTER_KV) {
+        const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
+        if (cachedUserId) return cachedUserId;
+      }
+
+      const form = new URLSearchParams();
+      form.set('id_token', idToken);
+      form.set('client_id', clientId);
+      const res = await fetch('https://api.line.me/oauth2/v2.1/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString()
+      });
+      if (res.status !== 200) return '';
+      const data = await res.json();
+      const userId = this.text(data.sub);
+      if (userId && env.ACTMASTER_KV) {
+        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
+      }
+      return userId;
+    } catch (e) {
+      console.error('LINE ID token verify failed', e && e.message ? e.message : e);
+      return '';
+    }
+  },
+
+  async getLineUserIdFromAuth(payload, request, env) {
+    const accessToken = this.text(payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', ''));
+    const idToken = this.text(payload.lineIdToken || payload.idToken);
+    return (await this.getLineUserIdFromToken(accessToken, env)) ||
+      (await this.getLineUserIdFromIdToken(idToken, payload, env));
+  },
+
   maskId(id) {
     const text = this.text(id);
     if (!text) return '';
@@ -194,8 +246,9 @@ const SecurityModule = {
 
   async getActor(payload, request, env) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) return null;
-    const userId = await this.getLineUserIdFromToken(token, env);
+    const idToken = payload.lineIdToken || payload.idToken;
+    if (!token && !idToken) return null;
+    const userId = await this.getLineUserIdFromAuth(payload, request, env);
     if (!userId) return null;
 
     let role = 'user';
@@ -7200,9 +7253,14 @@ async function dispatchAction(action, payload, request, env) {
   ]);
   if (payload.userId && !actor && !legacyAuthSkipActions.has(action)) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (token) {
+    const idToken = payload.lineIdToken || payload.idToken;
+    if (token || idToken) {
+      let isValid = token ? await SecurityModule.verifyLineAuth(payload.userId, token, env) : false;
+      if (!isValid && idToken) {
+        const idTokenUserId = await SecurityModule.getLineUserIdFromIdToken(idToken, payload, env);
+        isValid = !!idTokenUserId && idTokenUserId === payload.userId;
+      }
       // 若前端有傳 Token，則嚴格驗證是否被偽造
-      const isValid = await SecurityModule.verifyLineAuth(payload.userId, token, env);
       if (!isValid) {
         if (action === 'checkUser') {
           const tokenUserId = await SecurityModule.getLineUserIdFromToken(token, env);

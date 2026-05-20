@@ -1403,7 +1403,13 @@
       const timeoutMs = Number(options.timeoutMs || 20000);
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        if (!options.omitAuthToken && liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
+        let lineAccessToken = '';
+        if (!options.omitAuthToken && liff.isLoggedIn()) {
+          lineAccessToken = liff.getAccessToken() || '';
+          payload.lineAccessToken = lineAccessToken;
+          if (typeof liff.getIDToken === 'function') payload.lineIdToken = liff.getIDToken() || '';
+          payload.liffId = window.LIFF_ID || LIFF_ID || '';
+        }
         const authUserId = adminProfile?.userId || '';
         if (!options.omitDefaultUserId && !payload.userId) payload.userId = authUserId;
         payload.authUserId = payload.authUserId || authUserId;
@@ -1413,7 +1419,9 @@
         payload.networkId = payload.networkId || adminNetworkId || 'admin';
         const res = await fetch(WORKER_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: lineAccessToken
+            ? { 'Content-Type': 'application/json', Authorization: 'Bearer ' + lineAccessToken }
+            : { 'Content-Type': 'application/json' },
           signal: controller.signal,
           body: JSON.stringify({ action, payload })
         });
@@ -3892,4 +3900,3 @@
   </script>
 </body>
 </html>
-

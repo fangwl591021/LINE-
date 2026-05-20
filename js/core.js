@@ -175,9 +175,15 @@ const Core = (function() {
             }
 
             // 嘗試取得 LIFF Token
+            let lineAccessToken = '';
             try {
                 if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
-                    safePayload.lineAccessToken = liff.getAccessToken();
+                    lineAccessToken = liff.getAccessToken() || '';
+                    safePayload.lineAccessToken = lineAccessToken;
+                    if (typeof liff.getIDToken === 'function') {
+                        safePayload.lineIdToken = liff.getIDToken() || '';
+                    }
+                    safePayload.liffId = window.LIFF_ID || Config.LIFF_ID || '';
                 }
             } catch (e) {
                 console.warn("LIFF token fetch failed:", e);
@@ -186,9 +192,11 @@ const Core = (function() {
             const controller = new AbortController();
             const timeoutMs = action === 'checkUser' ? 10000 : 18000;
             const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            const headers = { 'Content-Type': 'application/json' };
+            if (lineAccessToken) headers.Authorization = 'Bearer ' + lineAccessToken;
             const res = await fetch(Config.WORKER_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ action, payload: safePayload }),
                 signal: controller.signal
             });
