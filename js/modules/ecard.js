@@ -17,6 +17,40 @@ function readECardField(name, fallbackCard) {
   return String((fallbackCard || window.currentCard || {})[name] || '').trim();
 }
 
+function readECardCardValue(card, keys) {
+  const source = card || window.currentCard || {};
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return '';
+}
+
+function parseStoredECardConfig(card) {
+  const source = card || {};
+  const candidates = [
+    source.customConfig,
+    source.custom_config,
+    source.ecardConfig,
+    source['自訂名片設定'],
+    source['電子名片設定'],
+    source['自訂版面'],
+    source['名片設定'],
+    source['?芾???閮剖?']
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    if (typeof raw === 'object') return raw;
+    try {
+      const parsed = JSON.parse(String(raw));
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (e) {}
+  }
+  return {};
+}
+
 function normalizeTelValue(value) {
   const clean = String(value || '').replace(/[^0-9+]/g, '');
   return clean ? 'tel:' + clean : 'tel:XXXXXXXXXX';
@@ -53,9 +87,12 @@ function getECardButtonKind(button, index) {
 
 function buildAutoECardButtons(card, existingButtons) {
   const existing = Array.isArray(existingButtons) ? existingButtons : [];
-  const phone = readECardField('手機號碼', card) || readECardField('公司電話', card);
-  const social = readECardField('社群帳號', card);
-  const address = readECardField('公司地址', card);
+  const phone = readECardField('\u624b\u6a5f\u865f\u78bc', card) || readECardField('\u516c\u53f8\u96fb\u8a71', card) ||
+    readECardCardValue(card, ['mobile', 'phone', 'officePhone', 'office_phone', '\u624b\u6a5f\u865f\u78bc', '\u516c\u53f8\u96fb\u8a71']);
+  const social = readECardField('\u793e\u7fa4\u5e33\u865f', card) ||
+    readECardCardValue(card, ['socials', 'social', 'lineUrl', 'line_url', '\u793e\u7fa4\u5e33\u865f']);
+  const address = readECardField('\u516c\u53f8\u5730\u5740', card) ||
+    readECardCardValue(card, ['address', 'companyAddress', 'company_address', '\u516c\u53f8\u5730\u5740']);
   const lineUrl = normalizeUrlValue(social) || ECardAutoDefaults.lineUrl;
   const addressUrl = buildGoogleMapsUrl(address);
 
@@ -326,23 +363,28 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
 }
 
 function buildLocalECardFlexMessage(card, config, shareUrl) {
+  const savedConfig = parseStoredECardConfig(card);
+  config = Object.assign({}, savedConfig, config || {});
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
+  const cardImageUrl = readECardCardValue(card, ['imageUrl', 'image_url', 'cardImage', 'card_image', '\u540d\u7247\u5716\u6a94']);
   const rawImgUrl = layoutStyle === 'portrait'
-    ? (config.imgUrlPortrait || config.imgUrl || card['名片圖檔'])
+    ? (config.imgUrlPortrait || config.imgUrl || cardImageUrl)
     : (layoutStyle === 'square'
-      ? (config.imgUrlSquare || config.imgUrl || card['名片圖檔'])
-      : (config.imgUrl || config.imgUrlLandscape || card['名片圖檔']));
+      ? (config.imgUrlSquare || config.imgUrl || cardImageUrl)
+      : (config.imgUrl || config.imgUrlLandscape || cardImageUrl));
   const imgUrl = cleanECardFlexImageUrl(rawImgUrl) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   const aspectRatio = layoutStyle === 'portrait'
     ? (config.imgRatioPortrait || '2:3')
     : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
-  const bodyText = String(config.desc || card['描述'] || card['服務項目'] || ' ').trim() || ' ';
-  let buttons = (Array.isArray(config.buttons) ? config.buttons : [])
+  const titleText = String(config.title || readECardCardValue(card, ['name', 'title', '\u59d3\u540d']) || '\u6578\u4f4d\u540d\u7247').trim() || '\u6578\u4f4d\u540d\u7247';
+  const bodyText = String(config.desc || readECardCardValue(card, ['services', 'description', 'desc', '\u670d\u52d9\u9805\u76ee']) || ' ').trim() || ' ';
+  const buttonSource = Array.isArray(config.buttons) && config.buttons.length ? config.buttons : buildAutoECardButtons(card, []);
+  let buttons = buttonSource
     .map(btn => ({
-      label: String(btn?.l || '').trim(),
-      uri: cleanECardFlexUri(btn?.u),
-      color: /^#[0-9a-f]{6}$/i.test(String(btn?.c || '')) ? btn.c : '#06C755'
+      label: String(btn?.l || btn?.label || '').trim(),
+      uri: cleanECardFlexUri(btn?.u || btn?.url || btn?.uri),
+      color: /^#[0-9a-f]{6}$/i.test(String(btn?.c || btn?.color || '')) ? (btn.c || btn.color) : '#06C755'
     }))
     .filter(btn => btn.label && btn.uri)
     .map(btn => ({
@@ -374,7 +416,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       contents: [
         {
           type: 'text',
-          text: String(config.title || card['姓名'] || '數位名片').trim() || '數位名片',
+          text: titleText,
           weight: 'bold',
           size: 'xl',
           align: 'center',

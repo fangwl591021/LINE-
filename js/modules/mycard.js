@@ -85,11 +85,26 @@
   }
 
   function parseCardConfig(card) {
-    try {
-      return JSON.parse((card && card['自訂名片設定']) || '{}') || {};
-    } catch (e) {
-      return {};
+    var source = card || {};
+    var candidates = [
+      source.customConfig,
+      source.custom_config,
+      source.ecardConfig,
+      source['\u81ea\u8a02\u540d\u7247\u8a2d\u5b9a'],
+      source['\u96fb\u5b50\u540d\u7247\u8a2d\u5b9a'],
+      source['\u81ea\u8a02\u7248\u9762'],
+      source['\u540d\u7247\u8a2d\u5b9a']
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+      var raw = candidates[i];
+      if (!raw) continue;
+      if (typeof raw === 'object') return raw;
+      try {
+        var parsed = JSON.parse(String(raw));
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch (e) {}
     }
+    return {};
   }
 
   function init() {
