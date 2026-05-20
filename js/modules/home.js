@@ -114,7 +114,7 @@ const HomeModule = (function() {
 
         const name = window.currentUser?.name || window.currentUserProfile?.displayName || '會員';
         const role = String(window.userRole || window.currentUser?.role || 'user').toLowerCase();
-        const roleLabel = role === 'admin' ? '盟主' : (role === 'store' || role === 'tenant' ? '店長' : '用戶');
+        const roleLabel = role === 'admin' ? '總管' : (role === 'store' || role === 'tenant' ? '店長' : '用戶');
         const roleIcon = role === 'admin' ? 'workspace_premium' : (role === 'store' || role === 'tenant' ? 'storefront' : 'person');
         const balanceText = document.getElementById('point-balance-badge')?.textContent || '';
         const balance = Number(String(balanceText).replace(/[^\d.-]/g, '')) || Number(window.pointWalletData?.balance || window.currentUser?.points || 0) || 0;

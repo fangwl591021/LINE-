@@ -304,6 +304,15 @@ const SecurityModule = {
     }
 
     const actor = await this.getActor(payload, request, env);
+    if (!actor && action === 'queryUserPoints' && env.ACTMASTER_DB) {
+      const requestedUserId = this.text(payload.userId || payload.pointUserId || payload.LINE_user_id);
+      const identity = requestedUserId
+        ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
+        : null;
+      if (identity && identity.user) {
+        return { allowed: true, actor: null };
+      }
+    }
     if (!actor) return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' };
 
     payload.authenticatedUserId = actor.userId;
@@ -7053,7 +7062,7 @@ async function dispatchAction(action, payload, request, env) {
   }
   const actor = authz.actor;
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
-  const legacyAuthSkipActions = new Set(['checkUser', 'mlmListOrders', 'getTenantBonusOrders', 'prepareTenantCardPayment']);
+  const legacyAuthSkipActions = new Set(['checkUser', 'queryUserPoints', 'mlmListOrders', 'getTenantBonusOrders', 'prepareTenantCardPayment']);
   if (payload.userId && !actor && !legacyAuthSkipActions.has(action)) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
     if (token) {
