@@ -359,14 +359,14 @@ window.autoClaimCardFromLink = async function(claimCardId, refId, netId) {
   const cardForClaim = await window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true);
   if (!cardForClaim || cardForClaim.error) throw new Error((cardForClaim && cardForClaim.error) || '找不到名片');
 
-  const referral = resolveReferralForRegistration(refId || '', netId || cardForClaim.networkId || cardForClaim['甇詨惇蝬?'] || 'admin');
+  const referral = resolveReferralForRegistration(refId || '', netId || cardForClaim.networkId || cardForClaim['歸屬網'] || 'admin');
   const payload = {
     claimRowId: claimCardId,
     userId: window.currentUserProfile.userId,
-    name: cardForClaim.name || cardForClaim['憪?'] || window.currentUserProfile.displayName || '',
-    phone: cardForClaim.mobile || cardForClaim.phone || cardForClaim['???Ⅳ'] || cardForClaim.officePhone || cardForClaim['?砍?餉店'] || '',
-    companyName: cardForClaim.companyName || cardForClaim['?砍?迂'] || '',
-    title: cardForClaim.title || cardForClaim['?瑞迂'] || '',
+    name: cardForClaim.name || cardForClaim['姓名'] || window.currentUserProfile.displayName || '',
+    phone: cardForClaim.mobile || cardForClaim.phone || cardForClaim['手機號碼'] || cardForClaim.officePhone || cardForClaim['公司電話'] || '',
+    companyName: cardForClaim.companyName || cardForClaim['公司名稱'] || '',
+    title: cardForClaim.title || cardForClaim['職稱'] || '',
     referrerId: referral.referrerId,
     networkId: referral.networkId
   };
@@ -1165,6 +1165,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     window.currentUserProfile = await liff.getProfile();
+
+    // 🟢 【關鍵修復】在此處攔截 window.fetchAPI，自動為所有 API 請求注入 lineAccessToken 以通過 workerbackup.js 嚴格驗證
+    if (typeof window.fetchAPI === 'function' && !window.__fetchApiEnhanced) {
+      const originalFetch = window.fetchAPI;
+      window.fetchAPI = async function(action, payload, showLoading) {
+        const enhancedPayload = payload ? { ...payload } : {};
+        if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+          try {
+            enhancedPayload.lineAccessToken = liff.getAccessToken();
+            // 確保有 userId，避免某些舊 Payload 遺漏導致後端配對錯誤
+            if (!enhancedPayload.userId && window.currentUserProfile?.userId) {
+              enhancedPayload.userId = window.currentUserProfile.userId;
+            }
+          } catch(e) {}
+        }
+        return originalFetch.call(this, action, enhancedPayload, showLoading);
+      };
+      window.__fetchApiEnhanced = true;
+    }
 
     const avatarImg = document.getElementById('avatar');
     if (avatarImg && window.currentUserProfile.pictureUrl) {
