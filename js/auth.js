@@ -1149,6 +1149,33 @@ window.reorderSettingsSections = function() {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     window.reorderSettingsSections();
+    if (typeof window.isActmasterLocalPreview === 'function' && window.isActmasterLocalPreview()) {
+      window.currentUserProfile = {
+        userId: 'LOCAL_PREVIEW_USER',
+        displayName: '本機預覽',
+        pictureUrl: ''
+      };
+      window.currentUser = {
+        userId: 'LOCAL_PREVIEW_USER',
+        name: '本機預覽',
+        role: 'admin',
+        networkId: 'admin'
+      };
+      window.userRole = 'admin';
+      window.currentViewMode = 'user';
+      window.hasAdminRights = true;
+
+      if (typeof window.applyUserPermissions === 'function') window.applyUserPermissions();
+      if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
+      const loadingScreen = document.getElementById('loading-screen');
+      if (loadingScreen) loadingScreen.classList.add('hidden');
+      window.goPage('home', true);
+      setTimeout(() => {
+        if (typeof window.loadHomeData === 'function') window.loadHomeData();
+      }, 60);
+      window.showToast?.('本機預覽模式：已略過 LINE 登入');
+      return;
+    }
     if (typeof window.initActmasterLiff === 'function') {
       await window.initActmasterLiff(LIFF_ID);
     } else {

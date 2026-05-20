@@ -115,6 +115,10 @@ window.Config = {
 
 window.__actmasterLiffInit = window.__actmasterLiffInit || { liffId: '', promise: null };
 
+window.isActmasterLocalPreview = function() {
+  return ['127.0.0.1', 'localhost', '::1'].includes(window.location.hostname);
+};
+
 window.initActmasterLiff = async function(liffId, options = {}) {
   const id = String(liffId || window.LIFF_ID || '').trim();
   if (!id) throw new Error('Missing LIFF ID');
