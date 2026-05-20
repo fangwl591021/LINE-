@@ -167,6 +167,40 @@ function getCreatedActivityId(res, payload) {
   );
 }
 
+function buildCreatedActivityForShare(res, payload, activityId) {
+  const data = (res && typeof res.data === 'object' && !Array.isArray(res.data)) ? res.data : {};
+  const activity = (data && typeof data.activity === 'object' && !Array.isArray(data.activity)) ? data.activity : data;
+  const id = activityShareText(activityId || getActivityIdValue(activity) || getActivityIdValue(payload));
+  return {
+    ...(activity || {}),
+    activityId: id,
+    rowId: id || activityShareText(activity && (activity.rowId || activity.id)),
+    '活動ID': id,
+    activityName: payload.activityName,
+    '活動名稱': payload.activityName,
+    activityType: payload.activityType,
+    '活動類型': payload.activityType,
+    feeType: payload.feeType,
+    '收費方式': payload.feeType,
+    price: payload.price,
+    '金額': payload.price,
+    startTime: payload.startTime,
+    '開始時間': payload.startTime,
+    endTime: payload.endTime,
+    '結束時間': payload.endTime,
+    description: payload.description,
+    '活動說明': payload.description,
+    imageUrl: payload.imageUrl,
+    '宣傳圖': payload.imageUrl,
+    imageLayout: payload.imageLayout,
+    image_layout: payload.imageLayout,
+    '宣傳圖版型': payload.imageLayout,
+    networkId: getActivityNetworkValue(payload),
+    '歸屬網': getActivityNetworkValue(payload),
+    userId: payload.userId
+  };
+}
+
 window.buildActivityShareUrl = function(activityId, activity) {
   const id = String(activityId || '').trim();
   if (!id) return '';
@@ -185,7 +219,7 @@ window.buildActivityShareUrl = function(activityId, activity) {
 };
 
 window.openActivityShareModal = function(activityId, title, options = {}) {
-  const activity = findActivityForShare(activityId) || {};
+  const activity = options.activity || findActivityForShare(activityId) || {};
   const id = String(activityId || getActivityIdValue(activity)).trim();
   if (!id) return window.showToast('找不到活動 ID，請重新整理後再試', true);
 
@@ -707,11 +741,12 @@ window.submitActivityForm = async function(mode) {
 
       // 清快取讓核銷頁能看到新活動
       const createdActivityId = getCreatedActivityId(res, p);
+      const createdActivityForShare = buildCreatedActivityForShare(res, p, createdActivityId);
       window.showToast('活動建立成功，可以分享給朋友報名');
       window._adminActsCache = { data: null, time: 0 };
       setTimeout(() => {
         if (createdActivityId && typeof window.openActivityShareModal === 'function') {
-          window.openActivityShareModal(createdActivityId, p.activityName, { returnToAdmin: true });
+          window.openActivityShareModal(createdActivityId, p.activityName, { returnToAdmin: true, activity: createdActivityForShare });
         } else {
           window.goPage('admin-activities');
         }

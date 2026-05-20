@@ -92,6 +92,15 @@
     }
   }
 
+  function normalizeMyCardButtons(card, existingButtons) {
+    if (typeof window.normalizeECardButtonsForCard === 'function') {
+      return window.normalizeECardButtonsForCard(card, existingButtons);
+    }
+    return Array.isArray(existingButtons) && existingButtons.length
+      ? existingButtons.slice()
+      : getTemplateButtons(card && card['手機號碼']);
+  }
+
   function init() {
     bindOnce(document, 'change', 'input[name="my-ecard-layout"]', handleLayoutChange);
     bindOnce(document, 'click', '#btn-add-v1-button', addV1Button);
@@ -168,7 +177,7 @@
       portrait: cfg.imgRatioPortrait || '2:3',
       square: cfg.imgRatioSquare || '1:1'
     };
-    myEcardButtons = Array.isArray(cfg.buttons) ? cfg.buttons.slice() : [];
+    myEcardButtons = normalizeMyCardButtons(currentCardData, Array.isArray(cfg.buttons) ? cfg.buttons : []);
     myEcardStateLoaded = true;
 
     var layout = cfg.layoutStyle || 'landscape';
@@ -445,11 +454,11 @@
 
   function buildCurrentShareConfig() {
     var cfg = parseCardConfig(currentCardData);
-    if (!myEcardStateLoaded && Array.isArray(cfg.buttons)) {
-      myEcardButtons = cfg.buttons.slice();
+    if (!myEcardStateLoaded) {
+      myEcardButtons = normalizeMyCardButtons(currentCardData, Array.isArray(cfg.buttons) ? cfg.buttons : []);
     }
-    var liveLayout = document.querySelector('input[name="my-ecard-layout"]:checked');
-    syncCurrentImageInput();
+    var liveLayout = myEcardStateLoaded ? document.querySelector('input[name="my-ecard-layout"]:checked') : null;
+    if (liveLayout) syncCurrentImageInput();
     if (liveLayout) {
       cfg.layoutStyle = liveLayout.value || cfg.layoutStyle || 'landscape';
       cfg.imgUrl = myEcardImgs.landscape || cfg.imgUrl || '';
@@ -458,7 +467,12 @@
       cfg.imgRatioLandscape = '20:13';
       cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
-      cfg.buttons = myEcardButtons.slice();
+      cfg.buttons = normalizeMyCardButtons(currentCardData, myEcardButtons).slice();
+    } else {
+      cfg.buttons = normalizeMyCardButtons(currentCardData, Array.isArray(cfg.buttons) ? cfg.buttons : []).slice();
+    }
+    if (!Array.isArray(cfg.buttons) || !cfg.buttons.length) {
+      cfg.buttons = normalizeMyCardButtons(currentCardData, cfg.buttons).slice();
     }
     return cfg;
   }
