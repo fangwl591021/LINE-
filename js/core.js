@@ -85,6 +85,61 @@ const Core = (function() {
         }
     }
 
+    function isLineTokenAuthError(message) {
+        return /Invalid or Expired LINE Token|Missing LINE Token|line_id_token_expired|Missing or invalid LINE Token/i.test(String(message || ''));
+    }
+
+    function getCleanLiffRedirectUrl() {
+        try {
+            const url = new URL(window.location.href);
+            ['code', 'state', 'liffClientId', 'liffRedirectUri', 'liffIsEscapedFromApp', 'friendship_status_changed'].forEach(key => {
+                url.searchParams.delete(key);
+            });
+            return url.toString();
+        } catch (e) {
+            return window.location.href;
+        }
+    }
+
+    window.handleLineTokenAuthError = function(message) {
+        if (!isLineTokenAuthError(message)) return false;
+        if (window.__lineTokenRefreshInProgress) return true;
+        window.__lineTokenRefreshInProgress = true;
+
+        try {
+            const lastAt = Number(sessionStorage.getItem('ACTMASTER_LAST_LINE_RELOGIN_AT') || 0);
+            const now = Date.now();
+            sessionStorage.setItem('ACTMASTER_LAST_LINE_RELOGIN_AT', String(now));
+            if (lastAt && now - lastAt < 5000) {
+                window.showToast('LINE 授權仍未更新，請按重新載入再試一次', true);
+                return true;
+            }
+        } catch (e) {}
+
+        window.showToast('LINE 授權已過期，正在重新登入...', true);
+        setTimeout(() => {
+            try {
+                if (typeof liff !== 'undefined' && liff && typeof liff.isLoggedIn === 'function' && liff.isLoggedIn() && typeof liff.logout === 'function') {
+                    liff.logout();
+                }
+            } catch (e) {}
+
+            const redirectUri = getCleanLiffRedirectUrl();
+            try {
+                if (typeof window.ensureActmasterLiffLogin === 'function') {
+                    window.ensureActmasterLiffLogin({ redirectUri });
+                    return;
+                }
+                if (typeof liff !== 'undefined' && liff && typeof liff.login === 'function') {
+                    liff.login({ redirectUri });
+                    return;
+                }
+            } catch (e) {}
+            window.location.replace(redirectUri);
+        }, 500);
+        return true;
+    };
+
     // 時間格式化
     window.formatDisplayTime = function(val) {
         if (!val) return '';
@@ -156,7 +211,11 @@ const Core = (function() {
             }
 
             const data = await res.json();
-            if (!data.success) throw new Error(data.error || 'API 請求失敗');
+            if (!data.success) {
+                const errorMessage = data.error || 'API 請求失敗';
+                window.handleLineTokenAuthError(errorMessage);
+                throw new Error(errorMessage);
+            }
             return data.data || data;
         } catch (err) {
             let message = err && err.message ? err.message : '連線失敗';
@@ -165,6 +224,10 @@ const Core = (function() {
             }
             if (message === 'Failed to fetch' || message.includes('NetworkError')) {
                 message = '無法連線到伺服器，請確認網路狀態後重試';
+            }
+            if (isLineTokenAuthError(message)) {
+                window.handleLineTokenAuthError(message);
+                message = 'LINE 授權已過期，正在重新登入...';
             }
             if (!silent) window.showToast(message, true);
             return { success: false, error: message };
