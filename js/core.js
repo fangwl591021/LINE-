@@ -104,6 +104,49 @@ const Core = (function() {
     // === 3. API 與 資料處理 ===
 
     // 統一 API 呼叫 (整合您提供的 fetchAPI 邏輯)
+    window.isActmasterAuthTokenError = function(message) {
+        const text = String(message || '').toLowerCase();
+        return text.includes('invalid or expired line token') ||
+            text.includes('missing or invalid line token') ||
+            text.includes('missing line token for sensitive action');
+    };
+
+    window.handleActmasterAuthTokenError = function(message) {
+        if (!window.isActmasterAuthTokenError || !window.isActmasterAuthTokenError(message)) return false;
+        if (!window.liff || typeof window.liff.logout !== 'function') return false;
+        try {
+            if (sessionStorage.getItem('ACTMASTER_LIFF_REAUTH_RUNNING') === '1') return true;
+            sessionStorage.setItem('ACTMASTER_LIFF_REAUTH_RUNNING', '1');
+        } catch (e) {}
+
+        if (window.showToast) window.showToast('LINE 授權已失效，正在重新登入...', true);
+
+        try {
+            if (typeof window.liff.isLoggedIn !== 'function' || window.liff.isLoggedIn()) {
+                window.liff.logout();
+            }
+        } catch (e) {}
+
+        setTimeout(function() {
+            try {
+                const url = new URL(window.location.href);
+                [
+                    'code',
+                    'state',
+                    'liff.state',
+                    'liffClientId',
+                    'liffRedirectUri',
+                    'liffIsEscapedFromApp',
+                    'friendship_status_changed'
+                ].forEach(key => url.searchParams.delete(key));
+                window.location.replace(url.toString());
+            } catch (e) {
+                window.location.reload();
+            }
+        }, 350);
+        return true;
+    };
+
     window.fetchAPI = async function(action, payload = {}, silent = false) {
         try {
             if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -156,10 +199,19 @@ const Core = (function() {
             }
 
             const data = await res.json();
-            if (!data.success) throw new Error(data.error || 'API 請求失敗');
+            if (!data.success) {
+                const errorMessage = data.error || 'API request failed';
+                if (window.handleActmasterAuthTokenError && window.handleActmasterAuthTokenError(errorMessage)) {
+                    return { success: false, error: errorMessage, authRelogin: true };
+                }
+                throw new Error(errorMessage);
+            }
             return data.data || data;
         } catch (err) {
             let message = err && err.message ? err.message : '連線失敗';
+            if (window.handleActmasterAuthTokenError && window.handleActmasterAuthTokenError(message)) {
+                return { success: false, error: message, authRelogin: true };
+            }
             if (err && err.name === 'AbortError') {
                 message = '系統連線逾時，請重新進入或稍後再試';
             }
