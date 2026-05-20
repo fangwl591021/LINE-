@@ -743,10 +743,7 @@ window.openActiveCropper = function(input, targetMode) {
     img.onload = () => {
       if (activeCropperInstance) activeCropperInstance.destroy();
       setTimeout(() => {
-        const ratio = typeof window.getActivityImageCropRatio === 'function'
-          ? window.getActivityImageCropRatio(targetMode)
-          : NaN;
-        activeCropperInstance = createSafeCropper(img, ratio);
+        activeCropperInstance = createSafeCropper(img, NaN);
         img.style.opacity = '1';
       }, 150);
     };

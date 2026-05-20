@@ -3,96 +3,6 @@
 // 當前編輯中的活動 ID(null 代表新建,有值代表編輯)
 window.currentEditingActId = null;
 
-const ACTIVITY_IMAGE_LAYOUTS = {
-  landscape: { label: '標準(16:9)', ratio: '16:9', cssRatio: '16 / 9', cropRatio: 16 / 9 },
-  portrait: { label: '滿版(2:3)', ratio: '2:3', cssRatio: '2 / 3', cropRatio: 2 / 3 },
-  square: { label: '正方(1:1)', ratio: '1:1', cssRatio: '1 / 1', cropRatio: 1 }
-};
-
-function normalizeActivityImageLayout(value) {
-  const raw = String(value || '').trim().toLowerCase();
-  if (raw === 'portrait' || raw === 'giga' || raw === 'vertical' || raw === '2:3') return 'portrait';
-  if (raw === 'square' || raw === '1:1') return 'square';
-  return 'landscape';
-}
-
-function getActivityImageLayout(mode) {
-  const input = document.getElementById('activity-image-layout-' + mode);
-  return normalizeActivityImageLayout(input ? input.value : 'landscape');
-}
-
-function getActivityImageLayoutFromRecord(activity) {
-  return normalizeActivityImageLayout(activity && (
-    activity.imageLayout ||
-    activity.image_layout ||
-    activity['宣傳圖版型'] ||
-    activity['圖片版型']
-  ));
-}
-
-function getActivityImageLayoutMeta(layout) {
-  return ACTIVITY_IMAGE_LAYOUTS[normalizeActivityImageLayout(layout)] || ACTIVITY_IMAGE_LAYOUTS.landscape;
-}
-
-window.getActivityImageCropRatio = function(mode) {
-  return getActivityImageLayoutMeta(getActivityImageLayout(mode)).cropRatio;
-};
-
-window.getActivityImageAspectRatio = function(activity) {
-  return getActivityImageLayoutMeta(getActivityImageLayoutFromRecord(activity)).ratio;
-};
-
-function updateActivityImageLayoutButtons(mode) {
-  const layout = getActivityImageLayout(mode);
-  document.querySelectorAll('[data-activity-image-layout-for="' + mode + '"]').forEach(btn => {
-    const active = btn.getAttribute('data-layout') === layout;
-    btn.className = 'flex-1 py-2 rounded-xl text-[12px] font-black transition-all active:scale-95 ' +
-      (active ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500');
-  });
-}
-
-function updateActivityImagePreviewRatio(mode) {
-  const preview = document.getElementById('image-preview-' + mode);
-  const box = preview && preview.parentElement;
-  if (!box) return;
-  box.style.aspectRatio = getActivityImageLayoutMeta(getActivityImageLayout(mode)).cssRatio;
-  box.style.height = 'auto';
-  box.style.minHeight = mode === 'quick' ? '144px' : '160px';
-}
-
-window.setActivityImageLayout = function(mode, layout) {
-  const input = document.getElementById('activity-image-layout-' + mode);
-  if (input) input.value = normalizeActivityImageLayout(layout);
-  updateActivityImageLayoutButtons(mode);
-  updateActivityImagePreviewRatio(mode);
-};
-
-function ensureActivityImageLayoutControls() {
-  ['quick', 'full', 'series'].forEach(mode => {
-    const urlInput = document.getElementById('in-image-url-' + mode);
-    if (!urlInput || document.getElementById('activity-image-layout-wrap-' + mode)) return;
-    const field = urlInput.closest('.flex.flex-col') || urlInput.parentElement;
-    if (!field) return;
-    const buttons = Object.entries(ACTIVITY_IMAGE_LAYOUTS).map(([key, meta]) =>
-      '<button type="button" data-activity-image-layout-for="' + mode + '" data-layout="' + key + '" onclick="window.setActivityImageLayout(\'' + mode + '\', \'' + key + '\')">' + meta.label + '</button>'
-    ).join('');
-    field.insertAdjacentHTML('beforeend',
-      '<div id="activity-image-layout-wrap-' + mode + '" class="mt-3">' +
-        '<input type="hidden" id="activity-image-layout-' + mode + '" value="landscape">' +
-        '<p class="text-[12px] font-bold text-slate-500 mb-1.5 pl-1">圖片版型</p>' +
-        '<div class="flex gap-1 rounded-2xl bg-slate-100 p-1">' + buttons + '</div>' +
-      '</div>'
-    );
-    window.setActivityImageLayout(mode, 'landscape');
-  });
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', ensureActivityImageLayoutControls);
-} else {
-  ensureActivityImageLayoutControls();
-}
-
 function normalizeDateTimeLocal(value) {
   if (!value) return '';
   return String(value).replace(' ', 'T').substring(0, 16);
@@ -167,40 +77,6 @@ function getCreatedActivityId(res, payload) {
   );
 }
 
-function buildCreatedActivityForShare(res, payload, activityId) {
-  const data = (res && typeof res.data === 'object' && !Array.isArray(res.data)) ? res.data : {};
-  const activity = (data && typeof data.activity === 'object' && !Array.isArray(data.activity)) ? data.activity : data;
-  const id = activityShareText(activityId || getActivityIdValue(activity) || getActivityIdValue(payload));
-  return {
-    ...(activity || {}),
-    activityId: id,
-    rowId: id || activityShareText(activity && (activity.rowId || activity.id)),
-    '活動ID': id,
-    activityName: payload.activityName,
-    '活動名稱': payload.activityName,
-    activityType: payload.activityType,
-    '活動類型': payload.activityType,
-    feeType: payload.feeType,
-    '收費方式': payload.feeType,
-    price: payload.price,
-    '金額': payload.price,
-    startTime: payload.startTime,
-    '開始時間': payload.startTime,
-    endTime: payload.endTime,
-    '結束時間': payload.endTime,
-    description: payload.description,
-    '活動說明': payload.description,
-    imageUrl: payload.imageUrl,
-    '宣傳圖': payload.imageUrl,
-    imageLayout: payload.imageLayout,
-    image_layout: payload.imageLayout,
-    '宣傳圖版型': payload.imageLayout,
-    networkId: getActivityNetworkValue(payload),
-    '歸屬網': getActivityNetworkValue(payload),
-    userId: payload.userId
-  };
-}
-
 window.buildActivityShareUrl = function(activityId, activity) {
   const id = String(activityId || '').trim();
   if (!id) return '';
@@ -219,7 +95,7 @@ window.buildActivityShareUrl = function(activityId, activity) {
 };
 
 window.openActivityShareModal = function(activityId, title, options = {}) {
-  const activity = options.activity || findActivityForShare(activityId) || {};
+  const activity = findActivityForShare(activityId) || {};
   const id = String(activityId || getActivityIdValue(activity)).trim();
   if (!id) return window.showToast('找不到活動 ID，請重新整理後再試', true);
 
@@ -283,7 +159,6 @@ function buildActivityFlexMessage(share) {
   const title = clipActivityFlexText(share.title || getActivityTitleValue(activity, '活動報名'), 60);
   const url = share.url || '';
   const imageUrl = activityFlexField(activity, ['imageUrl', 'image_url', '宣傳圖']);
-  const imageAspectRatio = window.getActivityImageAspectRatio(activity);
   const rawTime = activityFlexField(activity, ['startTime', 'start_time', '開始時間']);
   const startTime = clipActivityFlexText(
     typeof window.formatDisplayTime === 'function' ? window.formatDisplayTime(rawTime) : rawTime,
@@ -325,7 +200,7 @@ function buildActivityFlexMessage(share) {
       type: 'image',
       url: imageUrl,
       size: 'full',
-      aspectRatio: imageAspectRatio,
+      aspectRatio: '16:9',
       aspectMode: 'cover',
       action: { type: 'uri', uri: url }
     };
@@ -418,7 +293,6 @@ window.openEditActivity = async function(actId) {
       }
       if (placeholder) placeholder.classList.add('hidden');
     }
-    window.setActivityImageLayout('full', getActivityImageLayoutFromRecord(act));
 
     // 改變按鈕文字為「儲存變更」
     const submitBtn = document.getElementById('btn-submit-full');
@@ -467,7 +341,6 @@ window.cancelEditActivity = function() {
   document.getElementById('in-image-url-full').value = '';
   document.getElementById('image-preview-full').classList.add('hidden');
   document.getElementById('preview-placeholder-full').classList.remove('hidden');
-  window.setActivityImageLayout('full', 'landscape');
 
   // 還原按鈕
   const submitBtn = document.getElementById('btn-submit-full');
@@ -631,7 +504,6 @@ window.submitActivityForm = async function(mode) {
     endTime: formatDT(document.getElementById(pfx + '-end') ? document.getElementById(pfx + '-end').value : ''),
     description: document.getElementById(pfx + '-desc') ? document.getElementById(pfx + '-desc').value.trim() : '',
     imageUrl: finalImageUrl,
-    imageLayout: getActivityImageLayout(mode),
     nfcCheckinStart: nfcWindow.start,
     nfcCheckinEnd: nfcWindow.end,
     nfcCheckinSameDayOnly: true,
@@ -707,7 +579,6 @@ window.submitActivityForm = async function(mode) {
           '收費方式': p.feeType,
           '活動說明': p.description,
           '宣傳圖': p.imageUrl,
-          '宣傳圖版型': p.imageLayout,
           'NFC簽到開始': p.nfcCheckinStart,
           'NFC簽到結束': p.nfcCheckinEnd,
           'NFC限當日': p.nfcCheckinSameDayOnly
@@ -741,12 +612,11 @@ window.submitActivityForm = async function(mode) {
 
       // 清快取讓核銷頁能看到新活動
       const createdActivityId = getCreatedActivityId(res, p);
-      const createdActivityForShare = buildCreatedActivityForShare(res, p, createdActivityId);
       window.showToast('活動建立成功，可以分享給朋友報名');
       window._adminActsCache = { data: null, time: 0 };
       setTimeout(() => {
         if (createdActivityId && typeof window.openActivityShareModal === 'function') {
-          window.openActivityShareModal(createdActivityId, p.activityName, { returnToAdmin: true, activity: createdActivityForShare });
+          window.openActivityShareModal(createdActivityId, p.activityName, { returnToAdmin: true });
         } else {
           window.goPage('admin-activities');
         }

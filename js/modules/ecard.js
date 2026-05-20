@@ -51,15 +51,11 @@ function getECardButtonKind(button, index) {
   return 'custom';
 }
 
-function buildAutoECardButtons(card, existingButtons, options = {}) {
+function buildAutoECardButtons(card, existingButtons) {
   const existing = Array.isArray(existingButtons) ? existingButtons : [];
-  const preferDom = options.preferDom !== false;
-  const readField = preferDom
-    ? readECardField
-    : function(name, fallbackCard) { return String((fallbackCard || {})[name] || '').trim(); };
-  const phone = readField('手機號碼', card) || readField('公司電話', card);
-  const social = readField('社群帳號', card);
-  const address = readField('公司地址', card);
+  const phone = readECardField('手機號碼', card) || readECardField('公司電話', card);
+  const social = readECardField('社群帳號', card);
+  const address = readECardField('公司地址', card);
   const lineUrl = normalizeUrlValue(social) || ECardAutoDefaults.lineUrl;
   const addressUrl = buildGoogleMapsUrl(address);
 
@@ -89,10 +85,6 @@ function buildAutoECardButtons(card, existingButtons, options = {}) {
 
   return merged;
 }
-
-window.normalizeECardButtonsForCard = function(card, existingButtons) {
-  return buildAutoECardButtons(card, existingButtons, { preferDom: false });
-};
 
 function resolveECardButtonLabel(kind, found, autoLabel) {
   const label = String(found?.l || '').trim();
