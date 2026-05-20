@@ -339,6 +339,7 @@ window.loadPersonalAssistantCore = async function() {
   }
   try {
     const res = await window.fetchAPI('getPersonalAssistantCore', {}, true);
+    if (res && res.success === false) throw new Error(res.error || '讀取失敗');
     const data = res && res.data ? res.data : res;
     renderPersonalAssistantCoreStatus(data);
   } catch (e) {
@@ -367,6 +368,7 @@ window.savePersonalAssistantCore = async function(event) {
 
   try {
     const res = await window.fetchAPI('savePersonalAssistantCore', { core }, true);
+    if (res && res.success === false) throw new Error(res.error || '儲存失敗');
     const data = res && res.data ? res.data : res;
     window.personalAssistantCoreDraft = null;
     renderPersonalAssistantCoreStatus(data);
