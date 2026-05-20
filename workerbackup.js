@@ -247,6 +247,8 @@ const SecurityModule = {
       'saveWebPushSubscription',
       'deleteWebPushSubscription',
       'dailyPointCheckin',
+      'getPersonalAssistantCore',
+      'savePersonalAssistantCore',
       'matchmakeContacts',
       'mlmCreateOrder',
       'createTenantBonusOrder',
@@ -4375,6 +4377,115 @@ const D1PersonalTaskModule = {
   }
 };
 
+const D1PersonalAssistantCoreModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  ownUserId(payload) {
+    return this.text(payload.authenticatedUserId || payload.userId);
+  },
+
+  async ensure(env) {
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS personal_ai_cores (
+        user_id TEXT PRIMARY KEY,
+        schema_version TEXT NOT NULL DEFAULT '',
+        core_json TEXT NOT NULL DEFAULT '{}',
+        summary_json TEXT NOT NULL DEFAULT '{}',
+        summary_text TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_personal_ai_cores_updated ON personal_ai_cores(updated_at)').run();
+  },
+
+  parseCore(payload) {
+    let core = payload && (payload.core || payload.coreJson || payload.data);
+    if (typeof core === 'string') core = JSON.parse(core);
+    if (!core || typeof core !== 'object' || Array.isArray(core)) throw new Error('JSON 格式不正確');
+    if (core.schemaVersion !== 'personal_ai_assistant_core_v1') throw new Error('schemaVersion 不正確');
+    return core;
+  },
+
+  summarize(core) {
+    core = core || {};
+    const owner = core.ownerProfile || {};
+    const biz = core.businessIdentity || {};
+    const crm = core.crmRules || {};
+    const daily = core.dailyAssistantRules || {};
+    const offers = Array.isArray(core.productsAndOffers) ? core.productsAndOffers : [];
+    const tags = Array.isArray(crm.defaultTags) ? crm.defaultTags.filter(Boolean).slice(0, 12) : [];
+    return {
+      displayName: this.text(owner.displayName, '未命名'),
+      companyName: this.text(owner.companyName),
+      title: this.text(owner.title),
+      positioning: this.text(biz.oneLinePositioning),
+      serviceSummary: this.text(biz.serviceSummary),
+      productCount: offers.length,
+      tagCount: tags.length,
+      tags,
+      suggestionCount: Array.isArray(daily.cardScanSuggestions) ? daily.cardScanSuggestions.length : 0,
+      isComplete: !!(core.uploadReview && core.uploadReview.isComplete)
+    };
+  },
+
+  row(row) {
+    if (!row) return { exists: false, core: null, summary: null, summaryText: '', updatedAt: '' };
+    let core = null;
+    let summary = null;
+    try { core = JSON.parse(row.core_json || '{}'); } catch (e) { core = {}; }
+    try { summary = JSON.parse(row.summary_json || '{}'); } catch (e) { summary = this.summarize(core); }
+    return {
+      exists: true,
+      userId: this.text(row.user_id),
+      schemaVersion: this.text(row.schema_version),
+      core,
+      summary,
+      summaryText: this.text(row.summary_text),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at)
+    };
+  },
+
+  async get(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const row = await D1ReadModule.first(env, 'SELECT * FROM personal_ai_cores WHERE user_id = ? LIMIT 1', [userId]);
+    return { success: true, data: this.row(row) };
+  },
+
+  async save(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const core = this.parseCore(payload || {});
+    const coreJson = JSON.stringify(core);
+    if (coreJson.length > 120000) return { success: false, error: '資料包過大，請只保留標準 JSON 結果' };
+    const summary = this.summarize(core);
+    const summaryJson = JSON.stringify(summary);
+    const summaryText = this.text(payload.summaryText || payload.summary_text).slice(0, 10000);
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO personal_ai_cores (
+        user_id,schema_version,core_json,summary_json,summary_text,created_at,updated_at
+      ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(user_id) DO UPDATE SET
+        schema_version=excluded.schema_version,
+        core_json=excluded.core_json,
+        summary_json=excluded.summary_json,
+        summary_text=excluded.summary_text,
+        updated_at=CURRENT_TIMESTAMP
+    `).bind(userId, core.schemaVersion, coreJson, summaryJson, summaryText).run();
+
+    const row = await D1ReadModule.first(env, 'SELECT * FROM personal_ai_cores WHERE user_id = ? LIMIT 1', [userId]);
+    return { success: true, data: this.row(row) };
+  }
+};
+
 const D1AnnouncementModule = {
   text(value, fallback = '') {
     const next = String(value ?? '').trim();
@@ -7067,6 +7178,10 @@ async function dispatchAction(action, payload, request, env) {
       return await WebPushModule.save(payload || {}, env, request);
     case 'deleteWebPushSubscription':
       return await WebPushModule.remove(payload || {}, env);
+    case 'getPersonalAssistantCore':
+      return await D1PersonalAssistantCoreModule.get(payload || {}, env);
+    case 'savePersonalAssistantCore':
+      return await D1PersonalAssistantCoreModule.save(payload || {}, env);
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);

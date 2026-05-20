@@ -234,6 +234,37 @@
         </div>
       </details>
 
+      <details id="details-ai-assistant-core" class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group" ontoggle="if(this.open && typeof window.loadPersonalAssistantCore === 'function') window.loadPersonalAssistantCore()">
+        <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
+          <div class="flex items-center gap-2"><span class="material-symbols-outlined text-pink-500 icon-filled">psychology</span> 個人 AI 助理核心</div>
+          <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+        </summary>
+        <div class="p-5 pt-0 border-t border-slate-50 space-y-4">
+          <div class="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-[13px] text-amber-900 leading-relaxed">
+            先下載訪談規格，拿去自己的 GPT 問答產生標準 JSON，再回來上傳。系統只保存結果，不在這裡消耗大量 AI 額度。
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <a href="docs/personal-ai-assistant-interview-spec.md" target="_blank" rel="noopener" class="bg-slate-900 text-white py-3 rounded-xl font-bold text-center active:scale-95 transition-transform flex justify-center items-center gap-2">
+              <span class="material-symbols-outlined text-[18px]">download</span> 訪談規格
+            </a>
+            <label for="assistant-core-file" class="bg-blue-600 text-white py-3 rounded-xl font-bold text-center active:scale-95 transition-transform flex justify-center items-center gap-2 cursor-pointer">
+              <span class="material-symbols-outlined text-[18px]">upload_file</span> 上傳 JSON
+            </label>
+            <input id="assistant-core-file" type="file" accept=".json,.txt,.md,application/json,text/plain,text/markdown" class="hidden" onchange="window.handlePersonalAssistantCoreFile(this)">
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 font-bold ml-1">或貼上標準 JSON 結果</label>
+            <textarea id="assistant-core-json-text" class="textarea-block mt-1 !h-36 !text-[13px] font-mono" placeholder='貼上 schemaVersion 為 personal_ai_assistant_core_v1 的 JSON'></textarea>
+          </div>
+          <div id="assistant-core-status" class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-[13px] text-slate-500 leading-relaxed">
+            尚未載入 AI 助理核心資料。
+          </div>
+          <button id="btn-save-assistant-core" onclick="window.savePersonalAssistantCore(event)" class="w-full bg-[#06C755] text-white py-3.5 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
+            <span class="material-symbols-outlined text-[18px]">save</span> 儲存 AI 核心資料
+          </button>
+        </div>
+      </details>
+
       <details id="details-user-socials" class="bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2"><span class="material-symbols-outlined text-[#06C755] icon-filled">share</span> 個人社群連結</div>
@@ -1730,7 +1761,7 @@
 <script src="js/modules/admin.js?v=8.6"></script>
 <script src="js/modules/home.js?v=7.26"></script>
 <script src="js/modules/inbox.js?v=1.6"></script>
-<script src="js/modules/settings.js?v=7.2"></script>
+<script src="js/modules/settings.js?v=7.3"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.3"></script>
 <script src="js/auth.js?v=10.8"></script>

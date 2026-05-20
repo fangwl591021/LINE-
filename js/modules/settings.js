@@ -214,3 +214,169 @@ function renderDealerOrgTree(tree) {
 
   box.innerHTML = renderNode(tree, 0);
 };
+
+/* ==================== 個人 AI 助理核心 ==================== */
+
+window.personalAssistantCoreDraft = null;
+
+function assistantCoreText(value, fallback = '') {
+  const next = String(value ?? '').trim();
+  return next || fallback;
+}
+
+function assistantCoreJsonSource(rawText) {
+  let source = String(rawText || '').trim();
+  const fenceMatch = source.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch && fenceMatch[1]) source = fenceMatch[1].trim();
+  const firstBrace = source.indexOf('{');
+  const lastBrace = source.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) source = source.slice(firstBrace, lastBrace + 1);
+  return source;
+}
+
+function parsePersonalAssistantCoreText(rawText) {
+  const jsonText = assistantCoreJsonSource(rawText);
+  if (!jsonText) throw new Error('請上傳或貼上標準 JSON 結果');
+  const core = JSON.parse(jsonText);
+  if (!core || typeof core !== 'object' || Array.isArray(core)) throw new Error('JSON 格式不正確');
+  if (core.schemaVersion !== 'personal_ai_assistant_core_v1') {
+    throw new Error('schemaVersion 必須是 personal_ai_assistant_core_v1');
+  }
+  return core;
+}
+
+function summarizePersonalAssistantCore(core) {
+  core = core || {};
+  const owner = core.ownerProfile || {};
+  const biz = core.businessIdentity || {};
+  const crm = core.crmRules || {};
+  const daily = core.dailyAssistantRules || {};
+  const offers = Array.isArray(core.productsAndOffers) ? core.productsAndOffers : [];
+  const tags = Array.isArray(crm.defaultTags) ? crm.defaultTags.filter(Boolean) : [];
+  return {
+    displayName: assistantCoreText(owner.displayName, '未命名'),
+    companyName: assistantCoreText(owner.companyName),
+    title: assistantCoreText(owner.title),
+    positioning: assistantCoreText(biz.oneLinePositioning),
+    serviceSummary: assistantCoreText(biz.serviceSummary),
+    productCount: offers.length,
+    tagCount: tags.length,
+    tags: tags.slice(0, 8),
+    suggestionCount: Array.isArray(daily.cardScanSuggestions) ? daily.cardScanSuggestions.length : 0,
+    isComplete: !!(core.uploadReview && core.uploadReview.isComplete)
+  };
+}
+
+function renderPersonalAssistantCoreStatus(data, options = {}) {
+  const box = document.getElementById('assistant-core-status');
+  if (!box) return;
+  if (!data || !data.exists && !data.core) {
+    box.innerHTML = '尚未建立 AI 助理核心。請先下載訪談規格，完成外部 AI 訪談後再上傳 JSON。';
+    return;
+  }
+
+  const core = data.core || data;
+  const summary = data.summary || summarizePersonalAssistantCore(core);
+  const updatedAt = data.updatedAt || '';
+  const badgeClass = options.isDraft
+    ? 'bg-amber-100 text-amber-700 border-amber-200'
+    : 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  const badgeText = options.isDraft ? '待儲存' : '已儲存';
+  const tags = Array.isArray(summary.tags) && summary.tags.length
+    ? summary.tags.map(tag => '<span class="px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-600">' + window.escapeHTML(tag) + '</span>').join('')
+    : '<span class="text-slate-400">尚未提供標籤</span>';
+
+  box.innerHTML =
+    '<div class="flex items-start justify-between gap-3">' +
+      '<div class="min-w-0">' +
+        '<div class="font-black text-slate-900 text-[15px] truncate">' + window.escapeHTML(summary.displayName || '未命名') + '</div>' +
+        '<div class="text-slate-500 mt-1 truncate">' + window.escapeHTML([summary.companyName, summary.title].filter(Boolean).join(' / ') || '尚未提供公司與角色') + '</div>' +
+      '</div>' +
+      '<span class="shrink-0 px-2.5 py-1 rounded-full border text-[12px] font-black ' + badgeClass + '">' + badgeText + '</span>' +
+    '</div>' +
+    '<div class="mt-3 rounded-xl bg-white border border-slate-100 p-3">' +
+      '<div class="text-[12px] text-slate-400 font-bold">定位</div>' +
+      '<div class="mt-1 text-slate-700 leading-relaxed">' + window.escapeHTML(summary.positioning || summary.serviceSummary || '尚未提供定位內容') + '</div>' +
+    '</div>' +
+    '<div class="mt-3 flex flex-wrap gap-2 text-[12px]">' + tags + '</div>' +
+    '<div class="mt-3 grid grid-cols-3 gap-2 text-center text-[12px]">' +
+      '<div class="rounded-xl bg-white border border-slate-100 p-2"><b class="block text-slate-900 text-[15px]">' + Number(summary.productCount || 0) + '</b>產品</div>' +
+      '<div class="rounded-xl bg-white border border-slate-100 p-2"><b class="block text-slate-900 text-[15px]">' + Number(summary.tagCount || 0) + '</b>標籤</div>' +
+      '<div class="rounded-xl bg-white border border-slate-100 p-2"><b class="block text-slate-900 text-[15px]">' + Number(summary.suggestionCount || 0) + '</b>建議</div>' +
+    '</div>' +
+    (updatedAt ? '<div class="mt-3 text-[12px] text-slate-400">最後更新：' + window.escapeHTML(window.formatDisplayTime ? window.formatDisplayTime(updatedAt) : updatedAt) + '</div>' : '');
+}
+
+window.handlePersonalAssistantCoreFile = async function(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  if (file.size > 300 * 1024) {
+    input.value = '';
+    return window.showToast('檔案太大，請只上傳標準 JSON 結果', true);
+  }
+
+  try {
+    const raw = await file.text();
+    const core = parsePersonalAssistantCoreText(raw);
+    window.personalAssistantCoreDraft = core;
+    const textArea = document.getElementById('assistant-core-json-text');
+    if (textArea) textArea.value = JSON.stringify(core, null, 2);
+    renderPersonalAssistantCoreStatus({ core, summary: summarizePersonalAssistantCore(core) }, { isDraft: true });
+    window.showToast('AI 核心 JSON 已讀取，確認後請按儲存');
+  } catch (e) {
+    window.personalAssistantCoreDraft = null;
+    window.showToast(e.message || 'JSON 讀取失敗', true);
+  } finally {
+    input.value = '';
+  }
+};
+
+window.loadPersonalAssistantCore = async function() {
+  const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+  if (!userId) {
+    renderPersonalAssistantCoreStatus(null);
+    return;
+  }
+  try {
+    const res = await window.fetchAPI('getPersonalAssistantCore', {}, true);
+    const data = res && res.data ? res.data : res;
+    renderPersonalAssistantCoreStatus(data);
+  } catch (e) {
+    const box = document.getElementById('assistant-core-status');
+    if (box) box.innerHTML = '<span class="text-red-500">AI 核心資料讀取失敗：' + window.escapeHTML(e.message || e) + '</span>';
+  }
+};
+
+window.savePersonalAssistantCore = async function(event) {
+  const btn = event?.currentTarget || document.getElementById('btn-save-assistant-core');
+  const raw = document.getElementById('assistant-core-json-text')?.value || '';
+  let core = window.personalAssistantCoreDraft;
+
+  try {
+    if (raw.trim()) core = parsePersonalAssistantCoreText(raw);
+    if (!core) throw new Error('請先上傳或貼上標準 JSON 結果');
+  } catch (e) {
+    return window.showToast(e.message || 'JSON 格式不正確', true);
+  }
+
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
+  }
+
+  try {
+    const res = await window.fetchAPI('savePersonalAssistantCore', { core }, true);
+    const data = res && res.data ? res.data : res;
+    window.personalAssistantCoreDraft = null;
+    renderPersonalAssistantCoreStatus(data);
+    window.showToast('AI 助理核心已儲存');
+  } catch (e) {
+    window.showToast(e.message || 'AI 核心資料儲存失敗', true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml || '<span class="material-symbols-outlined text-[18px]">save</span> 儲存 AI 核心資料';
+    }
+  }
+};
