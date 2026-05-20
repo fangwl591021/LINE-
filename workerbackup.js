@@ -1948,6 +1948,7 @@ const D1BackfillModule = {
 
   normalizeActivity(row, index) {
     const activityId = this.str(row.activityId || row['活動ID'] || row.rowId || row.id) || `ACT_${Date.now()}_${index}`;
+    const imageLayout = D1ActivityModule.normalizeImageLayout(row.imageLayout || row.image_layout || row['宣傳圖版型'] || row['圖片版型']);
     return {
       activity_id: activityId,
       owner_user_id: this.str(row.userId || row.ownerUserId || row['建立者ID']),
@@ -1961,6 +1962,7 @@ const D1BackfillModule = {
       end_time: this.str(row.endTime || row['結束時間']),
       description: this.str(row.description || row['活動說明']),
       image_url: this.str(row.imageUrl || row['宣傳圖']),
+      image_layout: imageLayout,
       status: this.str(row.status || row['狀態'] || 'published'),
       is_batch: this.boolInt(row.isBatch || row['是否系列']),
       parent_activity_id: this.str(row.parentActivityId || row['父活動ID']),
@@ -2018,14 +2020,15 @@ const D1BackfillModule = {
   },
 
   async upsertActivity(env, activity) {
+    await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN image_layout TEXT NOT NULL DEFAULT 'landscape'").run().catch(() => null);
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,creator_id,status,is_series)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_layout,creator_id,status,is_series)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(activity_id) DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
-        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,creator_id=excluded.creator_id,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_layout=excluded.image_layout,creator_id=excluded.creator_id,
         status=excluded.status,is_series=excluded.is_series
-    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.owner_user_id,activity.status,activity.is_batch).run();
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_layout,activity.owner_user_id,activity.status,activity.is_batch).run();
   },
 
   async upsertRegistration(env, reg) {
@@ -3914,8 +3917,16 @@ const D1ActivityModule = {
     return value === true || String(value ?? '').toLowerCase() === 'true' || String(value ?? '') === '1';
   },
 
+  normalizeImageLayout(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'portrait' || raw === 'giga' || raw === 'vertical' || raw === '2:3') return 'portrait';
+    if (raw === 'square' || raw === '1:1') return 'square';
+    return 'landscape';
+  },
+
   activityRow(row) {
     if (!row) return null;
+    const imageLayout = this.normalizeImageLayout(row.image_layout);
     return {
       rowId: this.text(row.activity_id),
       activityId: this.text(row.activity_id),
@@ -3929,6 +3940,8 @@ const D1ActivityModule = {
       endTime: this.text(row.end_time),
       description: this.text(row.description),
       imageUrl: this.text(row.image_url),
+      imageLayout,
+      image_layout: imageLayout,
       status: this.text(row.status, '上架'),
       networkId: this.text(row.network_id, 'admin'),
       network_id: this.text(row.network_id, 'admin'),
@@ -3945,6 +3958,7 @@ const D1ActivityModule = {
       '結束時間': this.text(row.end_time),
       '活動說明': this.text(row.description),
       '宣傳圖': this.text(row.image_url),
+      '宣傳圖版型': imageLayout,
       '狀態': this.text(row.status, '上架'),
       '歸屬網': this.text(row.network_id, 'admin'),
       'NFC簽到開始': this.text(row.nfc_checkin_start),
@@ -4009,6 +4023,7 @@ const D1ActivityModule = {
       end_time: this.pick(data, ['endTime', '結束時間']),
       description: this.pick(data, ['description', '活動說明']),
       image_url: this.pick(data, ['imageUrl', '宣傳圖']),
+      image_layout: this.normalizeImageLayout(this.pick(data, ['imageLayout', 'image_layout', '宣傳圖版型', '圖片版型'], this.pick(payload, ['imageLayout', 'image_layout'], 'landscape'))),
       creator_id: this.pick(data, ['userId', 'creatorId'], this.pick(payload, ['userId'], 'admin')),
       network_id: this.pick(payload, ['authenticatedNetworkId'], this.pick(data, ['networkId', 'network_id', '歸屬網'], this.pick(payload, ['networkId'], 'admin'))),
       status: this.pick(data, ['status', '狀態'], '上架'),
@@ -4022,6 +4037,7 @@ const D1ActivityModule = {
   async ensureActivityNetworkScope(env) {
     if (!this.hasD1(env) || this._networkScopeReady) return;
     await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN network_id TEXT NOT NULL DEFAULT 'admin'").run().catch(() => null);
+    await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN image_layout TEXT NOT NULL DEFAULT 'landscape'").run().catch(() => null);
     await env.ACTMASTER_DB.prepare(`
       UPDATE activities
       SET network_id = COALESCE(
@@ -4159,14 +4175,14 @@ const D1ActivityModule = {
     await this.ensureActivityNetworkScope(env);
     const activity = this.normalizeActivity(payload);
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_layout,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(activity_id) DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
-        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,network_id=excluded.network_id,status=excluded.status,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_layout=excluded.image_layout,network_id=excluded.network_id,status=excluded.status,
         is_series=excluded.is_series,nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
         nfc_same_day_only=excluded.nfc_same_day_only
-    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_layout,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
     return activity;
   },
 
@@ -4354,10 +4370,10 @@ const D1ActivityModule = {
     const copiedName = `${this.text(source.name, '未命名活動')}（複製）`;
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO activities (
-        activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,
+        activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_layout,
         creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).bind(
       newActivityId,
       copiedName,
@@ -4368,6 +4384,7 @@ const D1ActivityModule = {
       this.text(source.end_time),
       this.text(source.description),
       this.text(source.image_url),
+      this.normalizeImageLayout(source.image_layout),
       this.text(source.creator_id, this.text(payload.authenticatedUserId || payload.userId, 'admin')),
       this.text(source.network_id, this.text(payload.authenticatedNetworkId || payload.networkId, 'admin')),
       '下架',
