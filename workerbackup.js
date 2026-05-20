@@ -1514,6 +1514,42 @@ const AIModule = {
     return jsonMatch ? JSON.parse(jsonMatch[0]) : {};
   },
 
+  parseJsonArray(text) {
+    const raw = String(text || '').replace(/```json/gi, '```');
+    const fence = raw.match(/```\s*([\s\S]*?)```/);
+    const source = fence && fence[1] ? fence[1] : raw;
+    const jsonMatch = source.match(/\[[\s\S]*\]/);
+    return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+  },
+
+  openAITextModel(env) {
+    return env.OPENAI_TEXT_MODEL || env.OPENAI_MODEL || 'gpt-4o';
+  },
+
+  localMatchmakingFallback(query, contacts) {
+    const tokens = String(query || '')
+      .toLowerCase()
+      .split(/[\s,，。;；、/\\|]+/)
+      .map(token => token.trim())
+      .filter(token => token.length >= 2);
+
+    return contacts
+      .map(contact => {
+        const text = [contact.Name, contact.Company, contact.Title, contact.Tags].filter(Boolean).join(' ').toLowerCase();
+        const hitCount = tokens.reduce((count, token) => count + (text.includes(token) ? 1 : 0), 0);
+        const score = Math.max(55, Math.min(88, 60 + hitCount * 8));
+        return {
+          rowId: contact.rowId,
+          score,
+          reason: hitCount
+            ? 'AI 暫時無法完成深度配對，先依需求關鍵字與名片標籤排序。'
+            : 'AI 暫時無法完成深度配對，先提供公開配對池中的可交流名片。'
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  },
+
   async recognize(payload, env) {
     try {
       const uploadedImgUrl = await StorageModule.upload(payload.base64Image, env);
@@ -1586,17 +1622,39 @@ const AIModule = {
       const safeContacts = (Array.isArray(contacts) ? contacts : []).filter(c => {
         const visibility = String(c.visibility || '').toLowerCase();
         const sourceType = String(c.sourceType || '').toLowerCase();
+        const poolEligible = c.poolEligible === true || c.poolEligible === 1 || c.poolEligible === '1' || c.poolEligible === 'true';
         const isPrivate = c.isPrivate === true || visibility === 'private';
-        return !isPrivate && c.poolEligible === true && sourceType === 'self_profile';
+        return !isPrivate && visibility === 'public' && poolEligible && sourceType === 'self_profile';
       });
       if (!safeContacts.length) return { success: false, error: '目前沒有可配對的公開名片' };
       const contactsList = safeContacts.map((c, i) => `${i+1}. ${c.Name||'未知'} (${c.Company||'無'}) \n標籤: ${c.Tags||'無'}`).join('\n');
       const prompt = `尋求者：${currentUser.name}，需求：${query}\n候選人：\n${contactsList}\n請選前3位，返回純 JSON 陣列: [{"index":0,"score":95,"reason":"結合標籤與需求，給出20字內的推薦理由"}]`;
       
-      const result = await this.callOpenAI(env, { model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] });
-      const jsonMatch = result.choices[0].message.content.match(/\[[\s\S]*\]/);
-      const matches = jsonMatch ? JSON.parse(jsonMatch[0]).map(item => ({ rowId: safeContacts[item.index]?.rowId, score: item.score, reason: item.reason })).filter(item => item.rowId) : [];
-      return { success: true, data: matches };
+      let items = [];
+      try {
+        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: prompt }], temperature: 0.2 });
+        items = this.parseJsonArray(result.choices?.[0]?.message?.content || '[]');
+      } catch (aiError) {
+        console.warn('[AI matchmaking] GPT failed, using local fallback:', aiError.message);
+        return { success: true, data: this.localMatchmakingFallback(query, safeContacts), fallback: true };
+      }
+
+      const used = new Set();
+      const matches = items.map(item => {
+        let index = Number(item.index);
+        if (!Number.isFinite(index)) index = Number(item.no || item.number || item.id);
+        if (!Number.isFinite(index)) return null;
+        const zeroBased = index > 0 ? index - 1 : index;
+        const contact = safeContacts[zeroBased] || safeContacts[index];
+        if (!contact || used.has(contact.rowId)) return null;
+        used.add(contact.rowId);
+        return {
+          rowId: contact.rowId,
+          score: Math.max(0, Math.min(100, Number(item.score || 0) || 0)),
+          reason: String(item.reason || '符合您的配對需求').slice(0, 80)
+        };
+      }).filter(Boolean);
+      return { success: true, data: matches.length ? matches : this.localMatchmakingFallback(query, safeContacts), fallback: matches.length === 0 };
     } catch (e) { return { success: false, error: e.message }; }
   },
 
