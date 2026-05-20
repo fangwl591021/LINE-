@@ -103,6 +103,9 @@ const Core = (function() {
 
     window.handleLineTokenAuthError = function(message) {
         if (!isLineTokenAuthError(message)) return false;
+        if (window.__lineTokenRefreshInProgress) return true;
+        window.__lineTokenRefreshInProgress = true;
+        window.showToast('LINE 授權驗證失敗，請按重新載入或關閉後重進', true);
         return true;
     };
 
@@ -163,10 +166,7 @@ const Core = (function() {
                     }
                     if (typeof liff.getDecodedIDToken === 'function') {
                         const decoded = liff.getDecodedIDToken();
-                        if (decoded && decoded.sub) {
-                            safePayload.lineDecodedUserId = decoded.sub;
-                            safePayload.loginUserId = safePayload.loginUserId || decoded.sub;
-                        }
+                        if (decoded && decoded.sub) safePayload.lineDecodedUserId = decoded.sub;
                     }
                 }
             } catch (e) {

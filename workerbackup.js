@@ -226,41 +226,6 @@ const SecurityModule = {
     return role === 'admin' || role === 'store';
   },
 
-  async lineUserMatches(env, expectedUserId, actualUserId) {
-    const expected = this.text(expectedUserId);
-    const actual = this.text(actualUserId);
-    if (!expected || !actual) return false;
-    if (expected === actual) return true;
-    if (!env.ACTMASTER_DB || typeof D1ReadModule === 'undefined') return false;
-
-    const collect = (identity) => {
-      const ids = new Set();
-      const add = value => {
-        const id = this.text(value);
-        if (id) ids.add(id);
-      };
-      add(identity && identity.canonicalId);
-      const user = identity && identity.user ? identity.user : null;
-      add(user && user.line_id);
-      add(user && user.row_id);
-      add(user && user.legacy_line_id);
-      add(user && user.point_line_id);
-      const link = identity && identity.link ? identity.link : null;
-      add(link && link.old_line_id);
-      add(link && link.new_line_id);
-      return ids;
-    };
-
-    try {
-      const expectedIdentity = await D1ReadModule.findUserByIdentity(env, expected);
-      if (collect(expectedIdentity).has(actual)) return true;
-      const actualIdentity = await D1ReadModule.findUserByIdentity(env, actual);
-      return collect(actualIdentity).has(expected);
-    } catch (e) {
-      return false;
-    }
-  },
-
   async authorizeAction(action, payload, request, env) {
     const adminOnly = new Set([
       'updateUserRole',
@@ -399,7 +364,7 @@ const SecurityModule = {
     if (token) {
       const cacheKey = `AUTH_${token.substring(0, 30)}`; // 避免 Key 過長
       const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
-      if (await this.lineUserMatches(env, userId, cachedUserId)) return true;
+      if (cachedUserId === userId) return true;
 
       try {
         const res = await fetch('https://api.line.me/v2/profile', {
@@ -407,7 +372,7 @@ const SecurityModule = {
         });
         if (res.status === 200) {
           const data = await res.json();
-          if (await this.lineUserMatches(env, userId, data.userId)) {
+          if (data.userId === userId) {
             // 驗證成功，快取 1 小時，大幅降低 LINE API 呼叫延遲
             await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
             return true;
@@ -419,7 +384,7 @@ const SecurityModule = {
     if (idToken) {
       try {
         const idTokenUserId = await this.getLineUserIdFromIdToken(idToken, env, clientId || '1660923784');
-        if (await this.lineUserMatches(env, userId, idTokenUserId)) return true;
+        if (idTokenUserId === userId) return true;
       } catch (e) {
         return false;
       }
