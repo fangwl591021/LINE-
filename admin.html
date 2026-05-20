@@ -3298,38 +3298,101 @@
       return [];
     }
 
+    function getMonitorActivityMeta(a) {
+      const id = String(a['活動ID'] || a.activityId || a.rowId || '');
+      const title = String(a['活動名稱'] || a.activityName || a.name || '未命名活動');
+      const status = String(a['狀態'] || a.status || '上架') === '下架' ? '下架' : '上架';
+      return {
+        id,
+        encodedId: encodeURIComponent(id),
+        title,
+        titleHtml: escapeHTML(title),
+        status,
+        image: String(a['宣傳圖'] || a.imageUrl || '').trim(),
+        creator: escapeHTML(a['建立者ID'] || a.userId || 'admin'),
+        start: escapeHTML(a['開始時間'] || a.startTime || ''),
+        fee: Number(a['金額'] || a.price || 0) > 0 ? 'NT$ ' + escapeHTML(a['金額'] || a.price || 0) : '<span class="text-green-600 font-bold">免費</span>',
+        registrants: Number(a['報名人數'] || a.registrantCount || 0) || 0
+      };
+    }
+
+    function renderActivitySectionRows(title, rows, isArchived) {
+      if (!rows.length) {
+        return `<tr><td colspan="8" class="px-6 py-5 text-sm text-slate-400">${title}目前沒有資料</td></tr>`;
+      }
+      const sectionClass = isArchived ? 'bg-slate-50 text-slate-500' : 'bg-blue-50 text-blue-700';
+      return `
+        <tr class="${sectionClass}">
+          <td colspan="8" class="px-6 py-3 text-sm font-black">${title}<span class="ml-2 text-xs font-bold opacity-70">${rows.length} 筆</span></td>
+        </tr>
+        ${rows.map(a => renderActivityRow(a, isArchived)).join('')}`;
+    }
+
+    function renderActivityRow(a, isArchived) {
+      const meta = getMonitorActivityMeta(a);
+      const statusClass = meta.status === '上架' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500';
+      const thumbnail = meta.image
+        ? `<img src="${escapeHTML(meta.image)}" class="${isArchived ? 'w-10 h-10' : 'w-12 h-12'} rounded-lg object-cover bg-slate-100 border border-slate-200" loading="lazy">`
+        : `<div class="${isArchived ? 'w-10 h-10' : 'w-12 h-12'} rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-300"><span class="material-symbols-outlined text-[18px]">image</span></div>`;
+      const rowClass = isArchived ? 'bg-slate-50/40' : '';
+      const titleClass = isArchived ? 'text-sm font-bold text-slate-600' : 'font-bold text-slate-700';
+      const statusButton = meta.status === '上架'
+        ? `<button type="button" onclick="setActivityStatusFromMonitor('${meta.encodedId}', '下架', this)" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 text-xs font-bold transition-colors"><span class="material-symbols-outlined text-[16px]">visibility_off</span> 下架</button>`
+        : `<button type="button" onclick="setActivityStatusFromMonitor('${meta.encodedId}', '上架', this)" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition-colors"><span class="material-symbols-outlined text-[16px]">publish</span> 上架</button>`;
+      return `
+        <tr class="${rowClass}">
+          <td class="${titleClass}">
+            <div class="flex items-center gap-3 min-w-[220px]">
+              ${thumbnail}
+              <div class="min-w-0">
+                <div class="truncate">${meta.titleHtml}</div>
+                ${isArchived ? `<div class="text-[11px] text-slate-400 mt-0.5">下架縮圖</div>` : ''}
+              </div>
+            </div>
+          </td>
+          <td>
+            <button type="button" onclick="copyActivityId('${escapeHTML(meta.id)}')" class="font-mono text-[12px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors">
+              ${escapeHTML(meta.id)}
+            </button>
+          </td>
+          <td class="text-sm text-slate-500">${meta.creator}</td>
+          <td class="text-[12px] text-slate-500 font-mono">${meta.start}</td>
+          <td class="text-sm">${meta.fee}</td>
+          <td class="text-sm"><span class="font-bold text-blue-600">${meta.registrants}</span> 人報名</td>
+          <td>
+            <span class="px-2 py-1 rounded-full text-[10px] font-bold ${statusClass}">
+              ${meta.status}
+            </span>
+          </td>
+          <td class="text-right">
+            <div class="inline-flex items-center gap-2">
+              <button type="button" onclick="editActivityFromMonitor('${meta.encodedId}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-[16px]">edit</span> 編輯
+              </button>
+              <button type="button" onclick="duplicateActivityFromMonitor('${meta.encodedId}', this)" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-bold transition-colors">
+                <span class="material-symbols-outlined text-[16px]">content_copy</span> 複製
+              </button>
+              ${statusButton}
+            </div>
+          </td>
+        </tr>`;
+    }
+
     function renderActivities() {
       const tbody = document.getElementById('acts-table-body');
       const filter = document.getElementById('act-tenant-filter').value;
-      const filtered = filter === 'all' ? allActivitiesData : allActivitiesData.filter(a => a['建立者ID'] === filter);
+      const ownerOf = a => String(a['建立者ID'] || a.userId || a.creatorId || a.creator_id || a['歸屬網'] || a.networkId || '');
+      const filtered = filter === 'all' ? allActivitiesData : allActivitiesData.filter(a => ownerOf(a) === filter);
       if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">沒有符合條件的活動</td></tr>';
         return;
       }
-      
-      tbody.innerHTML = filtered.map(a => `
-        <tr>
-          <td class="font-bold text-slate-700">${escapeHTML(a['活動名稱'])}</td>
-          <td>
-            <button type="button" onclick="copyActivityId('${escapeHTML(a['活動ID'] || a.rowId || '')}')" class="font-mono text-[12px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors">
-              ${escapeHTML(a['活動ID'] || a.rowId || '')}
-            </button>
-          </td>
-          <td class="text-sm text-slate-500">${escapeHTML(a['建立者ID'] || 'admin')}</td>
-          <td class="text-[12px] text-slate-500 font-mono">${escapeHTML(a['開始時間'])}</td>
-          <td class="text-sm">${a['金額'] > 0 ? 'NT$ ' + a['金額'] : '<span class="text-green-600 font-bold">免費</span>'}</td>
-          <td class="text-sm"><span class="font-bold text-blue-600">${a['報名人數'] || 0}</span> 人報名</td>
-          <td>
-            <span class="px-2 py-1 rounded-full text-[10px] font-bold ${a['狀態'] === '上架' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}">
-              ${a['狀態'] || '下架'}
-            </span>
-          </td>
-          <td class="text-right">
-            <button type="button" onclick="editActivityFromMonitor('${encodeURIComponent(a['活動ID'] || a.rowId || '')}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 text-xs font-bold transition-colors">
-              <span class="material-symbols-outlined text-[16px]">edit</span> 編輯
-            </button>
-          </td>
-        </tr>`).join('');
+
+      const active = filtered.filter(a => getMonitorActivityMeta(a).status === '上架');
+      const archived = filtered.filter(a => getMonitorActivityMeta(a).status === '下架');
+      tbody.innerHTML =
+        renderActivitySectionRows('上架區', active, false) +
+        renderActivitySectionRows('下架區', archived, true);
     }
 
     async function copyActivityId(activityId) {
@@ -3339,6 +3402,60 @@
         showToast('活動 ID 已複製');
       } catch(e) {
         window.prompt('請複製活動 ID', activityId);
+      }
+    }
+
+    async function setActivityStatusFromMonitor(encodedActivityId, status, btn) {
+      const activityId = decodeURIComponent(encodedActivityId || "");
+      if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
+      const confirmText = status === "上架"
+        ? "確定要重新上架此活動？"
+        : "確定要下架此活動？報名資料會保留，可再重新上架。";
+      if (!window.confirm(confirmText)) return;
+      const originalHtml = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span>';
+      }
+      try {
+        const action = status === "下架" ? "removeAct" : "setActivityStatus";
+        const res = await fetchAPI(action, { activityId, status });
+        if (res) {
+          showToast(status === "上架" ? "活動已重新上架" : "活動已下架");
+          await loadActivities();
+        }
+      } catch (e) {
+        showToast(e.message || "活動狀態更新失敗", true);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
+      }
+    }
+
+    async function duplicateActivityFromMonitor(encodedActivityId, btn) {
+      const activityId = decodeURIComponent(encodedActivityId || "");
+      if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
+      if (!window.confirm("要複製此活動為一筆下架草稿嗎？")) return;
+      const originalHtml = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span>';
+      }
+      try {
+        const res = await fetchAPI("duplicateActivity", { activityId });
+        if (res) {
+          showToast("已複製為下架草稿");
+          await loadActivities();
+        }
+      } catch (e) {
+        showToast(e.message || "活動複製失敗", true);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
       }
     }
 

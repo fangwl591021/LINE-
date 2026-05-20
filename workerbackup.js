@@ -208,6 +208,8 @@ const SecurityModule = {
       'bulkAddRegistrants',
       'updateActivity',
       'removeAct',
+      'setActivityStatus',
+      'duplicateActivity',
       'getActivityRegistrants',
       'confirmPayment',
       'toggleCheckin',
@@ -4168,8 +4170,62 @@ const D1ActivityModule = {
   async removeActivity(payload, env) {
     const activityId = this.pick(payload, ['activityId', '活動ID']);
     if (!activityId) return { success: false, error: 'Missing activityId' };
-    await env.ACTMASTER_DB.prepare("UPDATE activities SET status = '下架', ever_unpublished = 1 WHERE activity_id = ?").bind(activityId).run();
-    return { success: true, data: { activityId, status: '下架' } };
+    return await this.setActivityStatus({ activityId, status: '下架' }, env);
+  },
+
+  async setActivityStatus(payload, env) {
+    const activityId = this.pick(payload, ['activityId', '活動ID']);
+    const status = this.pick(payload, ['status', '狀態'], '上架') === '下架' ? '下架' : '上架';
+    if (!activityId) return { success: false, error: 'Missing activityId' };
+
+    const existing = await D1ReadModule.first(env, 'SELECT activity_id FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    if (!existing) return { success: false, error: '找不到活動資料' };
+
+    if (status === '下架') {
+      await env.ACTMASTER_DB.prepare("UPDATE activities SET status = '下架', ever_unpublished = 1 WHERE activity_id = ?").bind(activityId).run();
+    } else {
+      await env.ACTMASTER_DB.prepare("UPDATE activities SET status = '上架' WHERE activity_id = ?").bind(activityId).run();
+    }
+    return { success: true, data: { activityId, status } };
+  },
+
+  async duplicateActivity(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureActivityNetworkScope(env);
+    const activityId = this.pick(payload, ['activityId', '活動ID']);
+    if (!activityId) return { success: false, error: 'Missing activityId' };
+    const source = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    if (!source) return { success: false, error: '找不到活動資料' };
+
+    const newActivityId = this.pick(payload, ['newActivityId']) || `ACT_${Date.now()}`;
+    const copiedName = `${this.text(source.name, '未命名活動')}（複製）`;
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO activities (
+        activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,
+        creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only
+      )
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).bind(
+      newActivityId,
+      copiedName,
+      this.text(source.type, '活動'),
+      this.text(source.fee_type, '免費'),
+      Number(source.price || 0) || 0,
+      this.text(source.start_time),
+      this.text(source.end_time),
+      this.text(source.description),
+      this.text(source.image_url),
+      this.text(source.creator_id, this.text(payload.authenticatedUserId || payload.userId, 'admin')),
+      this.text(source.network_id, this.text(payload.authenticatedNetworkId || payload.networkId, 'admin')),
+      '下架',
+      Number(source.is_series || 0) || 0,
+      this.text(source.nfc_checkin_start),
+      this.text(source.nfc_checkin_end),
+      source.nfc_same_day_only === 0 ? 0 : 1
+    ).run();
+
+    const copied = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [newActivityId]);
+    return { success: true, data: { activityId: newActivityId, sourceActivityId: activityId, activity: this.activityRow(copied) } };
   }
 };
 
@@ -6933,6 +6989,24 @@ async function dispatchAction(action, payload, request, env) {
         if (d1Result) return d1Result;
       } catch (e) {
         console.error("D1 removeAct fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'setActivityStatus': {
+      try {
+        const d1Result = await D1ActivityModule.setActivityStatus(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 setActivityStatus fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'duplicateActivity': {
+      try {
+        const d1Result = await D1ActivityModule.duplicateActivity(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 duplicateActivity fallback", e);
       }
       return await DBModule.forward(action, payload, env);
     }

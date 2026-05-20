@@ -92,6 +92,78 @@ window.loadAdminActivities = async function(forceRefresh = false) {
   }
 };
 
+function getAdminActivityMeta(act) {
+  const rawTitle = act && (act['活動名稱'] || act.activityName || act.name) || '未命名活動';
+  const rawId = act && (act['活動ID'] || act.activityId || act.rowId) || '';
+  const rawStatus = act && (act['狀態'] || act.status) || '上架';
+  const price = parseInt(act && (act['金額'] || act.price) || 0, 10) || 0;
+  return {
+    title: window.escapeJS(rawTitle),
+    titleHtml: window.escapeHTML ? window.escapeHTML(rawTitle) : window.escapeJS(rawTitle),
+    actId: window.escapeJS(rawId),
+    time: window.formatDisplayTime(act && (act['開始時間'] || act.startTime)),
+    status: rawStatus === '下架' ? '下架' : '上架',
+    fee: price > 0 ? 'NT$ ' + price : '免費',
+    img: window.escapeHTML
+      ? window.escapeHTML((act && (act['宣傳圖'] || act.imageUrl)) || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80')
+      : ((act && (act['宣傳圖'] || act.imageUrl)) || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80')
+  };
+}
+
+function renderActiveAdminActivity(act) {
+  const meta = getAdminActivityMeta(act);
+  return '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">' +
+    '<div class="w-full aspect-[16/9] bg-slate-100 relative">' +
+      '<img src="' + meta.img + '" class="w-full h-full object-cover" loading="lazy">' +
+      '<div class="absolute top-3 left-3 bg-emerald-700 text-white text-[11px] px-2 py-1 rounded-full font-bold">上架</div>' +
+      '<div class="absolute top-3 right-3 bg-black/60 text-white text-[11px] px-2 py-1 rounded-full font-bold">' + meta.fee + '</div>' +
+    '</div>' +
+    '<div class="p-4">' +
+      '<h4 class="text-[15px] font-black text-slate-800 leading-snug mb-1">' + meta.titleHtml + '</h4>' +
+      '<div class="text-[12px] text-slate-500 mb-3 flex items-center gap-1">' +
+        '<span class="material-symbols-outlined text-[14px]">schedule</span>' + meta.time +
+      '</div>' +
+      '<button onclick="window.openActivityShareModal(\'' + meta.actId + '\', \'' + meta.title + '\')" class="w-full mb-2 py-3 bg-blue-600 text-white rounded-xl text-[13px] font-black active:scale-95 transition-transform flex justify-center items-center gap-1.5">' +
+        '<span class="material-symbols-outlined text-[17px]">ios_share</span> 分享活動' +
+      '</button>' +
+      '<div class="grid grid-cols-5 gap-1.5">' +
+        '<button onclick="window.openCheckinPage(\'' + meta.actId + '\', \'' + meta.title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[11px] font-bold active:scale-95 transition-transform flex flex-col justify-center items-center gap-0.5">' +
+          '<span class="material-symbols-outlined text-[15px]">fact_check</span> 核銷' +
+        '</button>' +
+        '<button onclick="window.copyNfcCheckinUrl(\'' + meta.actId + '\')" class="py-2.5 bg-emerald-700 text-white rounded-xl text-[11px] font-bold active:scale-95 transition-transform flex flex-col justify-center items-center gap-0.5">' +
+          '<span class="material-symbols-outlined text-[15px]">nfc</span> NFC' +
+        '</button>' +
+        '<button onclick="window.openEditActivity(\'' + meta.actId + '\')" class="py-2.5 bg-amber-50 text-amber-600 rounded-xl text-[11px] font-bold active:scale-95 transition-transform flex flex-col justify-center items-center gap-0.5">' +
+          '<span class="material-symbols-outlined text-[15px]">edit</span> 編輯' +
+        '</button>' +
+        '<button onclick="window.duplicateActivity(\'' + meta.actId + '\', this)" class="py-2.5 bg-slate-100 text-slate-700 rounded-xl text-[11px] font-bold active:scale-95 transition-transform flex flex-col justify-center items-center gap-0.5">' +
+          '<span class="material-symbols-outlined text-[15px]">content_copy</span> 複製' +
+        '</button>' +
+        '<button onclick="window.unpublishActivity(\'' + meta.actId + '\', this)" class="py-2.5 bg-red-50 text-red-500 rounded-xl text-[11px] font-bold active:scale-95 transition-transform flex flex-col justify-center items-center gap-0.5">' +
+          '<span class="material-symbols-outlined text-[15px]">visibility_off</span> 下架' +
+        '</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderInactiveAdminActivity(act) {
+  const meta = getAdminActivityMeta(act);
+  return '<div class="bg-white rounded-2xl border border-slate-100 p-2.5 flex items-center gap-3 shadow-sm">' +
+    '<img src="' + meta.img + '" class="w-14 h-14 rounded-xl object-cover bg-slate-100 shrink-0" loading="lazy">' +
+    '<div class="min-w-0 flex-1">' +
+      '<div class="text-[13px] font-black text-slate-800 truncate">' + meta.titleHtml + '</div>' +
+      '<div class="text-[11px] text-slate-500 mt-0.5">' + meta.time + ' · ' + meta.fee + '</div>' +
+      '<div class="mt-1 inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">下架</div>' +
+    '</div>' +
+    '<div class="flex items-center gap-1.5 shrink-0">' +
+      '<button onclick="window.republishActivity(\'' + meta.actId + '\', this)" class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 active:scale-95 transition-transform" title="重新上架"><span class="material-symbols-outlined text-[18px]">publish</span></button>' +
+      '<button onclick="window.duplicateActivity(\'' + meta.actId + '\', this)" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 active:scale-95 transition-transform" title="複製活動"><span class="material-symbols-outlined text-[18px]">content_copy</span></button>' +
+      '<button onclick="window.openEditActivity(\'' + meta.actId + '\')" class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 active:scale-95 transition-transform" title="編輯活動"><span class="material-symbols-outlined text-[18px]">edit</span></button>' +
+    '</div>' +
+  '</div>';
+}
+
 // 將「渲染邏輯」獨立出來,讓快取與 API 都能重用
 window._renderAdminActivities = function(res) {
   const container = document.getElementById('admin-activities-list');
@@ -99,46 +171,27 @@ window._renderAdminActivities = function(res) {
 
   if (res && Array.isArray(res) && res.length > 0) {
     const acts = [...res].reverse();
-    container.innerHTML = acts.map(act => {
-      const title = window.escapeJS(act['活動名稱'] || '未命名活動');
-      const time = window.formatDisplayTime(act['開始時間']);
-      const status = act['狀態'] || '上架';
-      const fee = parseInt(act['金額']) > 0 ? 'NT$ ' + act['金額'] : '免費';
-      const img = act['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
-      const actId = window.escapeJS(act['活動ID'] || act.rowId || '');
-      const statusColor = status === '上架' ? 'bg-emerald-700 text-white' : 'bg-slate-700 text-white';
+    const activeActs = acts.filter(act => getAdminActivityMeta(act).status === '上架');
+    const inactiveActs = acts.filter(act => getAdminActivityMeta(act).status === '下架');
+    const activeHtml = activeActs.length
+      ? activeActs.map(renderActiveAdminActivity).join('')
+      : '<div class="bg-white p-6 rounded-3xl text-center shadow-sm border border-slate-100 text-sm text-slate-400 font-bold">目前沒有上架活動</div>';
+    const inactiveHtml = inactiveActs.length
+      ? '<details class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">' +
+          '<summary class="cursor-pointer px-4 py-3 flex items-center justify-between text-[14px] font-black text-slate-700 list-none">' +
+            '<span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px] text-slate-400">inventory_2</span>下架區</span>' +
+            '<span class="bg-slate-100 text-slate-500 text-[11px] px-2 py-1 rounded-full">' + inactiveActs.length + ' 筆</span>' +
+          '</summary>' +
+          '<div class="px-3 pb-3 space-y-2">' + inactiveActs.map(renderInactiveAdminActivity).join('') + '</div>' +
+        '</details>'
+      : '';
 
-      return '<div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">' +
-        '<div class="w-full aspect-[16/9] bg-slate-100 relative">' +
-          '<img src="' + img + '" class="w-full h-full object-cover" loading="lazy">' +
-          '<div class="absolute top-3 left-3 ' + statusColor + ' text-[11px] px-2 py-1 rounded-full font-bold">' + status + '</div>' +
-          '<div class="absolute top-3 right-3 bg-black/60 text-white text-[11px] px-2 py-1 rounded-full font-bold">' + fee + '</div>' +
-        '</div>' +
-        '<div class="p-4">' +
-          '<h4 class="text-[15px] font-black text-slate-800 leading-snug mb-1">' + title + '</h4>' +
-          '<div class="text-[12px] text-slate-500 mb-3 flex items-center gap-1">' +
-            '<span class="material-symbols-outlined text-[14px]">schedule</span>' + time +
-          '</div>' +
-          '<button onclick="window.openActivityShareModal(\'' + actId + '\', \'' + title + '\')" class="w-full mb-2 py-3 bg-blue-600 text-white rounded-xl text-[13px] font-black active:scale-95 transition-transform flex justify-center items-center gap-1.5">' +
-            '<span class="material-symbols-outlined text-[17px]">ios_share</span> 分享活動' +
-          '</button>' +
-          '<div class="grid grid-cols-4 gap-2">' +
-            '<button onclick="window.openCheckinPage(\'' + actId + '\', \'' + title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
-              '<span class="material-symbols-outlined text-[15px]">fact_check</span> 核銷' +
-            '</button>' +
-            '<button onclick="window.copyNfcCheckinUrl(\'' + actId + '\')" class="py-2.5 bg-emerald-700 text-white rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
-              '<span class="material-symbols-outlined text-[15px]">nfc</span> NFC' +
-            '</button>' +
-            '<button onclick="window.openEditActivity(\'' + actId + '\')" class="py-2.5 bg-amber-50 text-amber-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
-              '<span class="material-symbols-outlined text-[15px]">edit</span> 編輯' +
-            '</button>' +
-            '<button onclick="window.unpublishActivity(\'' + actId + '\', this)" class="py-2.5 bg-red-50 text-red-500 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">' +
-              '<span class="material-symbols-outlined text-[15px]">delete</span> 下架' +
-            '</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    }).join('');
+    container.innerHTML =
+      '<div class="mb-3 flex items-center justify-between px-1">' +
+        '<h3 class="text-[15px] font-black text-slate-800">上架活動</h3>' +
+        '<span class="text-[12px] text-slate-400 font-bold">' + activeActs.length + ' 筆</span>' +
+      '</div>' +
+      '<div class="space-y-4">' + activeHtml + inactiveHtml + '</div>';
   } else {
     container.innerHTML = '<div class="bg-white p-8 rounded-3xl text-center shadow-sm border border-slate-100"><span class="material-symbols-outlined text-4xl text-slate-300 mb-2">event_busy</span><p class="text-sm text-slate-400 font-bold mt-2">目前沒有活動</p></div>';
   }
@@ -250,21 +303,54 @@ window.confirmPayment = async function(rowId, btnEl) {
 
 // 下架活動
 window.unpublishActivity = async function(actId, btnEl) {
-  if (!confirm('確定要下架此活動嗎？相關的所有報名資料也將一併移除。')) return;
+  if (!confirm('確定要下架此活動嗎？報名資料會保留，之後可重新上架。')) return;
+  return window.setActivityStatus(actId, '下架', btnEl);
+};
+
+// 重新上架活動
+window.republishActivity = async function(actId, btnEl) {
+  if (!confirm('確定要重新上架此活動嗎？')) return;
+  return window.setActivityStatus(actId, '上架', btnEl);
+};
+
+window.setActivityStatus = async function(actId, status, btnEl) {
   const oriHtml = btnEl.innerHTML;
   btnEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span>';
   btnEl.disabled = true;
 
   try {
-    const res = await window.fetchAPI('removeAct', { activityId: actId }, true);
+    const action = status === '下架' ? 'removeAct' : 'setActivityStatus';
+    const res = await window.fetchAPI(action, { activityId: actId, status: status }, true);
     if (res && !res.error) {
-      window.showToast('✅ 活動已成功下架！');
+      window.showToast(status === '下架' ? '✅ 活動已下架' : '✅ 活動已重新上架');
       // 清快取讓下次進核銷頁時重新從 API 拉
       window._adminActsCache = { data: null, time: 0 };
       window.loadAdminActivities(true);
-      window.loadUserActivities();
+      if (typeof window.loadUserActivities === 'function') window.loadUserActivities();
     } else {
-      throw new Error(res.error || '下架失敗');
+      throw new Error(res.error || '更新失敗');
+    }
+  } catch(e) {
+    window.showToast('⚠️ ' + e.message, true);
+    btnEl.innerHTML = oriHtml;
+    btnEl.disabled = false;
+  }
+};
+
+window.duplicateActivity = async function(actId, btnEl) {
+  if (!confirm('要複製此活動為一筆下架草稿嗎？')) return;
+  const oriHtml = btnEl.innerHTML;
+  btnEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span>';
+  btnEl.disabled = true;
+
+  try {
+    const res = await window.fetchAPI('duplicateActivity', { activityId: actId }, true);
+    if (res && !res.error) {
+      window.showToast('✅ 已複製為下架草稿');
+      window._adminActsCache = { data: null, time: 0 };
+      window.loadAdminActivities(true);
+    } else {
+      throw new Error(res.error || '複製失敗');
     }
   } catch(e) {
     window.showToast('⚠️ ' + e.message, true);
