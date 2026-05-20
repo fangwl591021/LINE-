@@ -111,6 +111,23 @@
       : "";
   }
 
+  function isCurrentAdmin() {
+    const role = safeText(
+      window.userRole ||
+      (window.currentUser && window.currentUser.role) ||
+      (window.currentUserProfile && window.currentUserProfile.role)
+    ).toLowerCase();
+    if (role === "admin" || role === "總管") return true;
+
+    if (typeof window.isHardAdminUser === "function") {
+      const userId = getCurrentUserId() ||
+        safeText(window.currentUser && (window.currentUser.userId || window.currentUser.lineId));
+      return window.isHardAdminUser(userId, window.currentUser || window.currentUserProfile || {});
+    }
+
+    return false;
+  }
+
   function getCreatorId(card) {
     return safeText(card && (card["建檔者ID"] || card.creatorId || card["creatorId"])).trim();
   }
@@ -145,6 +162,8 @@
     const cardLineId = getCardLineId(card);
     const creatorId = getCreatorId(card);
     const userId = getCurrentUserId();
+
+    if (isCurrentAdmin() && !cardLineId) return true;
 
     // Once the invitee claims a card, the scanner keeps read access only.
     if (cardLineId) return cardLineId === userId;

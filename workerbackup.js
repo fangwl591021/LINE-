@@ -3385,6 +3385,23 @@ const D1WriteModule = {
     const card = this.normalizeCard(payload);
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
     const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
+    if (existing) {
+      const actorId = this.text(payload.authenticatedUserId || payload.userId);
+      const role = this.role(payload.authenticatedRole || payload.role);
+      const networkId = this.text(payload.authenticatedNetworkId || payload.networkId);
+      const existingLineId = this.text(existing.line_id);
+      const existingCreatorId = this.text(existing.creator_id);
+      const existingOwnerId = this.text(existing.owner_user_id);
+      const existingNetworkId = this.text(existing.network_id);
+      const isBoundToActor = !!(actorId && existingLineId && existingLineId === actorId);
+      const isUnboundAdmin = role === 'admin' && !existingLineId;
+      const isUnboundOwner = !!(actorId && !existingLineId && (existingCreatorId === actorId || existingOwnerId === actorId));
+      const isUnboundStoreManager = !!(role === 'store' && !existingLineId && networkId && existingNetworkId && networkId === existingNetworkId);
+
+      if (!isBoundToActor && !isUnboundAdmin && !isUnboundOwner && !isUnboundStoreManager) {
+        return { success: false, error: 'Access Denied: cannot update this card' };
+      }
+    }
     const rawAwardUserId = this.text(payload.authenticatedUserId || card.creator_id || payload.creatorId || payload.userId);
     const awardUserId = await this.resolvePointAwardUserId(env, rawAwardUserId);
     const cardLineId = await this.resolvePointAwardUserId(env, card.line_id);
