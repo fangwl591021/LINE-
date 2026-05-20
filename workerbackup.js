@@ -3984,6 +3984,8 @@ const D1ActivityModule = {
       endTime: this.text(row.end_time),
       description: this.text(row.description),
       imageUrl: this.text(row.image_url),
+      imageRatio: this.text(row.image_ratio, '16:9'),
+      image_ratio: this.text(row.image_ratio, '16:9'),
       status: this.text(row.status, '上架'),
       networkId: this.text(row.network_id, 'admin'),
       network_id: this.text(row.network_id, 'admin'),
@@ -4064,6 +4066,7 @@ const D1ActivityModule = {
       end_time: this.pick(data, ['endTime', '結束時間']),
       description: this.pick(data, ['description', '活動說明']),
       image_url: this.pick(data, ['imageUrl', '宣傳圖']),
+      image_ratio: this.pick(data, ['imageRatio', 'image_ratio', 'posterRatio', 'poster_ratio', 'posterLayout', 'imageLayout'], '16:9'),
       creator_id: this.pick(data, ['userId', 'creatorId'], this.pick(payload, ['userId'], 'admin')),
       network_id: this.pick(payload, ['authenticatedNetworkId'], this.pick(data, ['networkId', 'network_id', '歸屬網'], this.pick(payload, ['networkId'], 'admin'))),
       status: this.pick(data, ['status', '狀態'], '上架'),
@@ -4077,6 +4080,8 @@ const D1ActivityModule = {
   async ensureActivityNetworkScope(env) {
     if (!this.hasD1(env) || this._networkScopeReady) return;
     await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN network_id TEXT NOT NULL DEFAULT 'admin'").run().catch(() => null);
+    await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN image_ratio TEXT NOT NULL DEFAULT '16:9'").run().catch(() => null);
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_activities_status_start ON activities(status, start_time)').run().catch(() => null);
     await env.ACTMASTER_DB.prepare(`
       UPDATE activities
       SET network_id = COALESCE(
@@ -4214,14 +4219,14 @@ const D1ActivityModule = {
     await this.ensureActivityNetworkScope(env);
     const activity = this.normalizeActivity(payload);
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_ratio,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(activity_id) DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
-        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,network_id=excluded.network_id,status=excluded.status,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_ratio=excluded.image_ratio,network_id=excluded.network_id,status=excluded.status,
         is_series=excluded.is_series,nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
         nfc_same_day_only=excluded.nfc_same_day_only
-    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_ratio,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
     return activity;
   },
 
@@ -4409,10 +4414,10 @@ const D1ActivityModule = {
     const copiedName = `${this.text(source.name, '未命名活動')}（複製）`;
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO activities (
-        activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,
+        activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_ratio,
         creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).bind(
       newActivityId,
       copiedName,
@@ -4423,6 +4428,7 @@ const D1ActivityModule = {
       this.text(source.end_time),
       this.text(source.description),
       this.text(source.image_url),
+      this.text(source.image_ratio, '16:9'),
       this.text(source.creator_id, this.text(payload.authenticatedUserId || payload.userId, 'admin')),
       this.text(source.network_id, this.text(payload.authenticatedNetworkId || payload.networkId, 'admin')),
       '下架',
@@ -4434,6 +4440,115 @@ const D1ActivityModule = {
 
     const copied = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [newActivityId]);
     return { success: true, data: { activityId: newActivityId, sourceActivityId: activityId, activity: this.activityRow(copied) } };
+  },
+
+  reminderWindowTaipei() {
+    const now = new Date();
+    const taipeiNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
+    const next = new Date(taipeiNow);
+    next.setDate(next.getDate() + 1);
+    const y = next.getFullYear();
+    const m = String(next.getMonth() + 1).padStart(2, '0');
+    const d = String(next.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  },
+
+  nextDateString(dateText) {
+    const raw = this.text(dateText);
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return raw;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    date.setDate(date.getDate() + 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  },
+
+  async sendActivityReminders(payload, env) {
+    if (!this.hasD1(env)) return null;
+    const targetDate = this.pick(payload, ['date', 'targetDate'], this.reminderWindowTaipei());
+    const nextDate = this.nextDateString(targetDate);
+    const rows = await D1ReadModule.all(env, `
+      SELECT
+        r.row_id AS registration_id,
+        r.line_id AS receiver_user_id,
+        r.name AS registrant_name,
+        a.activity_id,
+        a.name AS activity_name,
+        a.start_time,
+        a.end_time,
+        a.description,
+        a.image_url,
+        a.network_id,
+        a.creator_id
+      FROM registrants r
+      JOIN activities a ON a.activity_id = r.activity_id
+      WHERE r.status <> 'cancelled'
+        AND TRIM(COALESCE(r.line_id, '')) <> ''
+        AND a.status <> '銝'
+        AND a.start_time >= ?
+        AND a.start_time < ?
+      ORDER BY a.start_time ASC, r.created_at ASC
+      LIMIT 1000
+    `, [targetDate, nextDate]);
+    let sent = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      const receiverId = this.text(row.receiver_user_id);
+      const activityId = this.text(row.activity_id);
+      if (!receiverId || !activityId) {
+        skipped++;
+        continue;
+      }
+      const payloadJson = JSON.stringify({
+        activityId,
+        registrationId: this.text(row.registration_id),
+        reminderDate: targetDate,
+        kind: 'activity_day_before'
+      });
+      const exists = await D1ReadModule.first(env, `
+        SELECT message_id
+        FROM inbox_items
+        WHERE receiver_user_id = ?
+          AND message_type = 'activity_reminder'
+          AND payload_json LIKE ?
+        LIMIT 1
+      `, [receiverId, `%"activityId":"${activityId}"%`]).catch(() => null);
+      if (exists) {
+        skipped++;
+        continue;
+      }
+      const messageId = `ACTREM_${activityId}_${receiverId}_${targetDate}`.replace(/[^A-Za-z0-9_:-]/g, '_');
+      const senderId = this.text(row.creator_id, 'system');
+      const context = await D1InboxModule.senderContext(env, senderId).catch(() => ({ snapshot: { name: '系統提醒', lineId: senderId } }));
+      const bodyLines = [
+        `你報名的活動將於明日開始：${this.text(row.activity_name)}`,
+        row.start_time ? `時間：${this.text(row.start_time)}` : '',
+        this.text(row.description)
+      ].filter(Boolean);
+      await env.ACTMASTER_DB.prepare(`
+        INSERT OR IGNORE INTO inbox_items (
+          message_id, receiver_user_id, sender_user_id, sender_card_id, network_id,
+          message_type, title, body, payload_json, sender_snapshot_json, status,
+          read_at, archived_at, expires_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'activity_reminder', ?, ?, ?, ?, 'unread', '', '', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).bind(
+        messageId,
+        receiverId,
+        senderId,
+        this.text(context.snapshot && context.snapshot.cardId),
+        this.text(row.network_id, 'admin'),
+        `明日活動提醒：${this.text(row.activity_name)}`,
+        bodyLines.join('\n'),
+        payloadJson,
+        JSON.stringify(context.snapshot || { name: '系統提醒', lineId: senderId })
+      ).run();
+      sent++;
+      await WebPushModule.notifyUser(receiverId, {
+        title: '明日活動提醒',
+        body: this.text(row.activity_name),
+        url: '/LINE-/?open=inbox'
+      }, env).catch(() => null);
+    }
+    return { success: true, data: { targetDate, checked: rows.length, sent, skipped } };
   }
 };
 
@@ -7457,6 +7572,14 @@ async function dispatchAction(action, payload, request, env) {
 
 // ==================== 主入口 (Worker Entry) ====================
 export default {
+  async scheduled(controller, env, ctx) {
+    const run = D1ActivityModule.sendActivityReminders({ source: 'cron' }, env).catch(err => {
+      console.error('activity reminder cron failed', err);
+    });
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(run);
+    else await run;
+  },
+
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });

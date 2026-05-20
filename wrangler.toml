@@ -2,6 +2,9 @@ name = "line-engine"
 main = "workerbackup.js"
 compatibility_date = "2026-04-23"
 
+[triggers]
+crons = ["0 1 * * *"]
+
 [[kv_namespaces]]
 binding = "ACTMASTER_KV"
 id = "6785c24db6eb4080b48ce091c81d631c"

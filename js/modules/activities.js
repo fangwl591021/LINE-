@@ -154,11 +154,23 @@ function activityFlexField(activity, keys, fallback = '') {
   return fallback;
 }
 
+function normalizeActivityAspectRatio(value) {
+  const raw = activityShareText(value);
+  if (!raw) return '16:9';
+  if (/^\d+(\.\d+)?:\d+(\.\d+)?$/.test(raw)) return raw;
+  const lower = raw.toLowerCase();
+  if (lower === 'giga' || lower === 'portrait' || lower === 'full') return '2:3';
+  if (lower === 'square' || lower === '1:1') return '1:1';
+  if (lower === 'mega' || lower === 'landscape' || lower === 'wide') return '16:9';
+  return '16:9';
+}
+
 function buildActivityFlexMessage(share) {
   const activity = share.activity || {};
   const title = clipActivityFlexText(share.title || getActivityTitleValue(activity, '活動報名'), 60);
   const url = share.url || '';
   const imageUrl = activityFlexField(activity, ['imageUrl', 'image_url', '宣傳圖']);
+  const imageRatio = normalizeActivityAspectRatio(activityFlexField(activity, ['imageRatio', 'image_ratio', 'posterRatio', 'poster_ratio', 'posterLayout', 'imageLayout']));
   const rawTime = activityFlexField(activity, ['startTime', 'start_time', '開始時間']);
   const startTime = clipActivityFlexText(
     typeof window.formatDisplayTime === 'function' ? window.formatDisplayTime(rawTime) : rawTime,
@@ -200,7 +212,7 @@ function buildActivityFlexMessage(share) {
       type: 'image',
       url: imageUrl,
       size: 'full',
-      aspectRatio: '16:9',
+      aspectRatio: imageRatio,
       aspectMode: 'cover',
       action: { type: 'uri', uri: url }
     };
@@ -504,6 +516,7 @@ window.submitActivityForm = async function(mode) {
     endTime: formatDT(document.getElementById(pfx + '-end') ? document.getElementById(pfx + '-end').value : ''),
     description: document.getElementById(pfx + '-desc') ? document.getElementById(pfx + '-desc').value.trim() : '',
     imageUrl: finalImageUrl,
+    imageRatio: document.getElementById('in-image-ratio-' + pfx) ? document.getElementById('in-image-ratio-' + pfx).value : '',
     nfcCheckinStart: nfcWindow.start,
     nfcCheckinEnd: nfcWindow.end,
     nfcCheckinSameDayOnly: true,
@@ -579,6 +592,7 @@ window.submitActivityForm = async function(mode) {
           '收費方式': p.feeType,
           '活動說明': p.description,
           '宣傳圖': p.imageUrl,
+          imageRatio: p.imageRatio,
           'NFC簽到開始': p.nfcCheckinStart,
           'NFC簽到結束': p.nfcCheckinEnd,
           'NFC限當日': p.nfcCheckinSameDayOnly

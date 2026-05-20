@@ -777,11 +777,13 @@ window.confirmActiveCrop = function() {
 
   let size = 800;
   let quality = 0.8;
-  let base64 = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+  let canvas = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size });
+  let base64 = canvas.toDataURL('image/jpeg', quality);
 
   while (base64.length > 660000 && quality > 0.3) {
     quality -= 0.15;
-    base64 = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+    canvas = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size });
+    base64 = canvas.toDataURL('image/jpeg', quality);
   }
 
   if (base64.length > 800000) {
@@ -795,12 +797,22 @@ window.confirmActiveCrop = function() {
   const previewImg = document.getElementById('image-preview-' + modeId);
   const placeholder = document.getElementById('preview-placeholder-' + modeId);
   const urlInput = document.getElementById('in-image-url-' + modeId);
+  let ratioInput = document.getElementById('in-image-ratio-' + modeId);
+  if (!ratioInput && urlInput && urlInput.parentElement) {
+    ratioInput = document.createElement('input');
+    ratioInput.type = 'hidden';
+    ratioInput.id = 'in-image-ratio-' + modeId;
+    urlInput.parentElement.appendChild(ratioInput);
+  }
 
   if (previewImg && placeholder && urlInput) {
     previewImg.src = base64;
     previewImg.classList.remove('hidden');
     placeholder.classList.add('hidden');
     urlInput.value = base64;
+    if (ratioInput && canvas && canvas.width && canvas.height) {
+      ratioInput.value = canvas.width + ':' + canvas.height;
+    }
   } else {
     alert('系統找不到對應的預覽區塊 (' + modeId + ')，請重新整理');
   }
