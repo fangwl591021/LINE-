@@ -213,13 +213,27 @@ const SecurityModule = {
 
   async getActorFromD1Identity(payload, env) {
     if (!env.ACTMASTER_DB || typeof D1ReadModule === 'undefined') return null;
+    const data = payload && typeof payload.data === 'object' ? payload.data : {};
     const requestedUserId = this.text(
       payload.authenticatedUserId ||
+      payload.authUserId ||
+      payload.operatorId ||
+      payload.targetUserId ||
       payload.userId ||
       payload.lineId ||
       payload.LINE_user_id ||
       payload.ownerUserId ||
-      payload.creatorId
+      payload.creatorId ||
+      data.authenticatedUserId ||
+      data.authUserId ||
+      data.operatorId ||
+      data.userId ||
+      data.lineId ||
+      data.LINE_user_id ||
+      data['LINE ID'] ||
+      data.ownerUserId ||
+      data.creatorId ||
+      data['建檔者ID']
     );
     if (!requestedUserId) return null;
     const identity = await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null);
