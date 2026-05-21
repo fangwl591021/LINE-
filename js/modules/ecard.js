@@ -200,6 +200,9 @@ function cleanECardFlexUri(uri) {
 function toAbsoluteECardUrl(url) {
   const value = String(url || '').trim();
   if (!value) return '';
+  if (/^https:\/\/photoman\.fangwl591021\.workers\.dev\//i.test(value)) {
+    return value.replace(/^https:\/\/photoman\.fangwl591021\.workers\.dev/i, 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev');
+  }
   if (/^https:\/\//i.test(value)) return value;
   if (/^\/\//.test(value)) return 'https:' + value;
   if (/^(line\.me|lin\.ee|lihi\d?\.me)/i.test(value)) return 'https://' + value;
@@ -477,9 +480,9 @@ window.initECardSettings = function(card) {
   }
 
   window.currentEcardImgs = {
-    landscape: cfg.imgUrl || card['名片圖檔'] || '',
-    portrait: cfg.imgUrlPortrait || '',
-    square: cfg.imgUrlSquare || ''
+    landscape: cleanECardFlexImageUrl(cfg.imgUrl || card['名片圖檔'] || ''),
+    portrait: cleanECardFlexImageUrl(cfg.imgUrlPortrait || ''),
+    square: cleanECardFlexImageUrl(cfg.imgUrlSquare || '')
   };
   
   window.currentEcardRatios = {
@@ -561,10 +564,11 @@ window.changeOtherLayout = function() {
 
 window.setOtherUploadImage = function(url, ratio) {
     const layoutStyle = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
-    window.currentEcardImgs[layoutStyle] = url;
+    const cleanUrl = cleanECardFlexImageUrl(url);
+    window.currentEcardImgs[layoutStyle] = cleanUrl || url;
     if (ratio) window.currentEcardRatios[layoutStyle] = ratio.replace(':', '/');
     const imgInput = document.getElementById('v1-img-url');
-    if (imgInput) imgInput.value = url;
+    if (imgInput) imgInput.value = window.currentEcardImgs[layoutStyle];
     window.updateECardPreview();
 };
 
@@ -577,7 +581,7 @@ window.updateECardPreview = function() {
 
   const layoutStyle = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
   const name = document.getElementById('edit-姓名')?.value || '姓名';
-  const imgUrl = window.currentEcardImgs[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+  const imgUrl = cleanECardFlexImageUrl(window.currentEcardImgs[layoutStyle]) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   
   const descRaw = document.getElementById('edit-服務項目')?.value || '';
   const desc = descRaw.replace(/\n/g, '<br>');
