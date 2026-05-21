@@ -545,7 +545,7 @@ const StorageModule = {
           const ext = mimeType.split('/')[1] || 'jpeg';
           const fileName = `card_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
           await env.IMG_BUCKET.put(fileName, buffer, { httpMetadata: { contentType: mimeType } });
-          const baseUrl = env.R2_WORKER_URL ? env.R2_WORKER_URL.replace(/\/$/, '') : 'https://photoman.fangwl591021.workers.dev';
+          const baseUrl = (env.R2_PUBLIC_URL || env.R2_WORKER_URL || 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev').replace(/\/$/, '');
           return `${baseUrl}/${fileName}`;
         }
       } 
