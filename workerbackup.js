@@ -139,116 +139,27 @@ const SecurityModule = {
   async getLineUserIdFromToken(token, env) {
     if (!token) return '';
     const cacheKey = `AUTH_${token.substring(0, 30)}`;
-    try {
-      if (env.ACTMASTER_KV) {
-        const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
-        if (cachedUserId) return cachedUserId;
-      }
-
-      const res = await fetch('https://api.line.me/v2/profile', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.status !== 200) return '';
-      const data = await res.json();
-      const userId = this.text(data.userId);
-      if (userId && env.ACTMASTER_KV) {
-        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
-      }
-      return userId;
-    } catch (e) {
-      console.error('LINE token profile lookup failed', e && e.message ? e.message : e);
-      return '';
+    if (env.ACTMASTER_KV) {
+      const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
+      if (cachedUserId) return cachedUserId;
     }
-  },
 
-  resolveLineLoginClientId(payload = {}, env = {}) {
-    const explicit = this.text(
-      env.LINE_LOGIN_CHANNEL_ID ||
-      env.LINE_CHANNEL_ID ||
-      env.LIFF_CHANNEL_ID ||
-      payload.lineLoginClientId ||
-      payload.liffChannelId
-    );
-    if (explicit) return explicit;
-    const liffId = this.text(payload.liffId || payload.LIFF_ID || payload.lineLiffId);
-    return liffId && liffId.includes('-') ? liffId.split('-')[0] : '';
-  },
-
-  async getLineUserIdFromIdToken(idToken, payload, env) {
-    if (!idToken) return '';
-    const clientId = this.resolveLineLoginClientId(payload, env);
-    if (!clientId) return '';
-    const cacheKey = `IDTOKEN_${idToken.substring(0, 30)}`;
-    try {
-      if (env.ACTMASTER_KV) {
-        const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
-        if (cachedUserId) return cachedUserId;
-      }
-
-      const form = new URLSearchParams();
-      form.set('id_token', idToken);
-      form.set('client_id', clientId);
-      const res = await fetch('https://api.line.me/oauth2/v2.1/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: form.toString()
-      });
-      if (res.status !== 200) return '';
-      const data = await res.json();
-      const userId = this.text(data.sub);
-      if (userId && env.ACTMASTER_KV) {
-        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
-      }
-      return userId;
-    } catch (e) {
-      console.error('LINE ID token verify failed', e && e.message ? e.message : e);
-      return '';
+    const res = await fetch('https://api.line.me/v2/profile', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.status !== 200) return '';
+    const data = await res.json();
+    const userId = this.text(data.userId);
+    if (userId && env.ACTMASTER_KV) {
+      await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
     }
-  },
-
-  async getLineUserIdFromAuth(payload, request, env) {
-    const accessToken = this.text(payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', ''));
-    const idToken = this.text(payload.lineIdToken || payload.idToken);
-    return (await this.getLineUserIdFromToken(accessToken, env)) ||
-      (await this.getLineUserIdFromIdToken(idToken, payload, env));
-  },
-
-  maskId(id) {
-    const text = this.text(id);
-    if (!text) return '';
-    if (text.length <= 12) return text;
-    return `${text.slice(0, 10)}...${text.slice(-6)}`;
-  },
-
-  async authMismatchDiagnostic(payloadUserId, tokenUserId, env) {
-    const payloadId = this.text(payloadUserId);
-    const tokenId = this.text(tokenUserId);
-    const payloadIdentity = env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined' && payloadId
-      ? await D1ReadModule.findUserByIdentity(env, payloadId).catch(() => null)
-      : null;
-    const tokenIdentity = env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined' && tokenId
-      ? await D1ReadModule.findUserByIdentity(env, tokenId).catch(() => null)
-      : null;
-    return {
-      payloadUserId: this.maskId(payloadId),
-      tokenUserId: this.maskId(tokenId),
-      payloadRegistered: !!(payloadIdentity && payloadIdentity.user),
-      tokenRegistered: !!(tokenIdentity && tokenIdentity.user),
-      payloadCanonical: this.maskId(payloadIdentity && payloadIdentity.canonicalId),
-      tokenCanonical: this.maskId(tokenIdentity && tokenIdentity.canonicalId),
-      sameCanonical: !!(
-        payloadIdentity && tokenIdentity &&
-        this.text(payloadIdentity.canonicalId) &&
-        this.text(payloadIdentity.canonicalId) === this.text(tokenIdentity.canonicalId)
-      )
-    };
+    return userId;
   },
 
   async getActor(payload, request, env) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    const idToken = payload.lineIdToken || payload.idToken;
-    if (!token && !idToken) return null;
-    const userId = await this.getLineUserIdFromAuth(payload, request, env);
+    if (!token) return null;
+    const userId = await this.getLineUserIdFromToken(token, env);
     if (!userId) return null;
 
     let role = 'user';
@@ -357,24 +268,6 @@ const SecurityModule = {
     }
 
     const actor = await this.getActor(payload, request, env);
-    if (!actor && action === 'queryUserPoints' && env.ACTMASTER_DB) {
-      const requestedUserId = this.text(payload.userId || payload.pointUserId || payload.LINE_user_id);
-      const identity = requestedUserId
-        ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
-        : null;
-      if (identity && identity.user) {
-        return { allowed: true, actor: null };
-      }
-    }
-    if (!actor && action === 'getCardContacts' && env.ACTMASTER_DB) {
-      const requestedUserId = this.text(payload.userId);
-      const identity = requestedUserId
-        ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
-        : null;
-      if (identity && identity.user) {
-        return { allowed: true, actor: null };
-      }
-    }
     if (!actor) return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' };
 
     payload.authenticatedUserId = actor.userId;
@@ -2055,6 +1948,7 @@ const D1BackfillModule = {
 
   normalizeActivity(row, index) {
     const activityId = this.str(row.activityId || row['活動ID'] || row.rowId || row.id) || `ACT_${Date.now()}_${index}`;
+    const imageLayout = D1ActivityModule.normalizeImageLayout(row.imageLayout || row.image_layout || row['宣傳圖版型'] || row['圖片版型']);
     return {
       activity_id: activityId,
       owner_user_id: this.str(row.userId || row.ownerUserId || row['建立者ID']),
@@ -2068,6 +1962,7 @@ const D1BackfillModule = {
       end_time: this.str(row.endTime || row['結束時間']),
       description: this.str(row.description || row['活動說明']),
       image_url: this.str(row.imageUrl || row['宣傳圖']),
+      image_layout: imageLayout,
       status: this.str(row.status || row['狀態'] || 'published'),
       is_batch: this.boolInt(row.isBatch || row['是否系列']),
       parent_activity_id: this.str(row.parentActivityId || row['父活動ID']),
@@ -2125,14 +2020,15 @@ const D1BackfillModule = {
   },
 
   async upsertActivity(env, activity) {
+    await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN image_layout TEXT NOT NULL DEFAULT 'landscape'").run().catch(() => null);
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,creator_id,status,is_series)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_layout,creator_id,status,is_series)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(activity_id) DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
-        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,creator_id=excluded.creator_id,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_layout=excluded.image_layout,creator_id=excluded.creator_id,
         status=excluded.status,is_series=excluded.is_series
-    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.owner_user_id,activity.status,activity.is_batch).run();
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_layout,activity.owner_user_id,activity.status,activity.is_batch).run();
   },
 
   async upsertRegistration(env, reg) {
@@ -2780,7 +2676,6 @@ const D1ReadModule = {
 
     await env.ACTMASTER_DB.prepare('UPDATE card_contacts SET line_id = ?, updated_at = CURRENT_TIMESTAMP WHERE line_id = ?').bind(newUserId, oldUserId).run();
     await env.ACTMASTER_DB.prepare('UPDATE registrants SET line_id = ? WHERE line_id = ?').bind(newUserId, oldUserId).run().catch(() => null);
-
     if (env.ACTMASTER_KV) {
       await env.ACTMASTER_KV.delete(`U_PROFILE_${oldUserId}`).catch(() => null);
       await env.ACTMASTER_KV.delete(`U_PROFILE_${newUserId}`).catch(() => null);
@@ -2842,7 +2737,7 @@ const D1ReadModule = {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
-    const role = this.role(payload.authenticatedRole || 'user');
+    const role = this.role(payload.authenticatedRole || payload.role);
     const actorId = this.text(payload.authenticatedUserId || payload.userId);
     let rows = [];
     if (role === 'admin') {
@@ -4022,8 +3917,16 @@ const D1ActivityModule = {
     return value === true || String(value ?? '').toLowerCase() === 'true' || String(value ?? '') === '1';
   },
 
+  normalizeImageLayout(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'portrait' || raw === 'giga' || raw === 'vertical' || raw === '2:3') return 'portrait';
+    if (raw === 'square' || raw === '1:1') return 'square';
+    return 'landscape';
+  },
+
   activityRow(row) {
     if (!row) return null;
+    const imageLayout = this.normalizeImageLayout(row.image_layout);
     return {
       rowId: this.text(row.activity_id),
       activityId: this.text(row.activity_id),
@@ -4037,8 +3940,8 @@ const D1ActivityModule = {
       endTime: this.text(row.end_time),
       description: this.text(row.description),
       imageUrl: this.text(row.image_url),
-      imageRatio: this.text(row.image_ratio, '16:9'),
-      image_ratio: this.text(row.image_ratio, '16:9'),
+      imageLayout,
+      image_layout: imageLayout,
       status: this.text(row.status, '上架'),
       networkId: this.text(row.network_id, 'admin'),
       network_id: this.text(row.network_id, 'admin'),
@@ -4055,6 +3958,7 @@ const D1ActivityModule = {
       '結束時間': this.text(row.end_time),
       '活動說明': this.text(row.description),
       '宣傳圖': this.text(row.image_url),
+      '宣傳圖版型': imageLayout,
       '狀態': this.text(row.status, '上架'),
       '歸屬網': this.text(row.network_id, 'admin'),
       'NFC簽到開始': this.text(row.nfc_checkin_start),
@@ -4119,7 +4023,7 @@ const D1ActivityModule = {
       end_time: this.pick(data, ['endTime', '結束時間']),
       description: this.pick(data, ['description', '活動說明']),
       image_url: this.pick(data, ['imageUrl', '宣傳圖']),
-      image_ratio: this.pick(data, ['imageRatio', 'image_ratio', 'posterRatio', 'poster_ratio', 'posterLayout', 'imageLayout'], '16:9'),
+      image_layout: this.normalizeImageLayout(this.pick(data, ['imageLayout', 'image_layout', '宣傳圖版型', '圖片版型'], this.pick(payload, ['imageLayout', 'image_layout'], 'landscape'))),
       creator_id: this.pick(data, ['userId', 'creatorId'], this.pick(payload, ['userId'], 'admin')),
       network_id: this.pick(payload, ['authenticatedNetworkId'], this.pick(data, ['networkId', 'network_id', '歸屬網'], this.pick(payload, ['networkId'], 'admin'))),
       status: this.pick(data, ['status', '狀態'], '上架'),
@@ -4133,8 +4037,7 @@ const D1ActivityModule = {
   async ensureActivityNetworkScope(env) {
     if (!this.hasD1(env) || this._networkScopeReady) return;
     await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN network_id TEXT NOT NULL DEFAULT 'admin'").run().catch(() => null);
-    await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN image_ratio TEXT NOT NULL DEFAULT '16:9'").run().catch(() => null);
-    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_activities_status_start ON activities(status, start_time)').run().catch(() => null);
+    await env.ACTMASTER_DB.prepare("ALTER TABLE activities ADD COLUMN image_layout TEXT NOT NULL DEFAULT 'landscape'").run().catch(() => null);
     await env.ACTMASTER_DB.prepare(`
       UPDATE activities
       SET network_id = COALESCE(
@@ -4272,14 +4175,14 @@ const D1ActivityModule = {
     await this.ensureActivityNetworkScope(env);
     const activity = this.normalizeActivity(payload);
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_ratio,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_layout,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(activity_id) DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
-        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_ratio=excluded.image_ratio,network_id=excluded.network_id,status=excluded.status,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_layout=excluded.image_layout,network_id=excluded.network_id,status=excluded.status,
         is_series=excluded.is_series,nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
         nfc_same_day_only=excluded.nfc_same_day_only
-    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_ratio,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_layout,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
     return activity;
   },
 
@@ -4467,7 +4370,7 @@ const D1ActivityModule = {
     const copiedName = `${this.text(source.name, '未命名活動')}（複製）`;
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO activities (
-        activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_ratio,
+        activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_layout,
         creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only
       )
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -4481,7 +4384,7 @@ const D1ActivityModule = {
       this.text(source.end_time),
       this.text(source.description),
       this.text(source.image_url),
-      this.text(source.image_ratio, '16:9'),
+      this.normalizeImageLayout(source.image_layout),
       this.text(source.creator_id, this.text(payload.authenticatedUserId || payload.userId, 'admin')),
       this.text(source.network_id, this.text(payload.authenticatedNetworkId || payload.networkId, 'admin')),
       '下架',
@@ -4493,115 +4396,6 @@ const D1ActivityModule = {
 
     const copied = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [newActivityId]);
     return { success: true, data: { activityId: newActivityId, sourceActivityId: activityId, activity: this.activityRow(copied) } };
-  },
-
-  reminderWindowTaipei() {
-    const now = new Date();
-    const taipeiNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
-    const next = new Date(taipeiNow);
-    next.setDate(next.getDate() + 1);
-    const y = next.getFullYear();
-    const m = String(next.getMonth() + 1).padStart(2, '0');
-    const d = String(next.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  },
-
-  nextDateString(dateText) {
-    const raw = this.text(dateText);
-    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return raw;
-    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-    date.setDate(date.getDate() + 1);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  },
-
-  async sendActivityReminders(payload, env) {
-    if (!this.hasD1(env)) return null;
-    const targetDate = this.pick(payload, ['date', 'targetDate'], this.reminderWindowTaipei());
-    const nextDate = this.nextDateString(targetDate);
-    const rows = await D1ReadModule.all(env, `
-      SELECT
-        r.row_id AS registration_id,
-        r.line_id AS receiver_user_id,
-        r.name AS registrant_name,
-        a.activity_id,
-        a.name AS activity_name,
-        a.start_time,
-        a.end_time,
-        a.description,
-        a.image_url,
-        a.network_id,
-        a.creator_id
-      FROM registrants r
-      JOIN activities a ON a.activity_id = r.activity_id
-      WHERE r.status <> 'cancelled'
-        AND TRIM(COALESCE(r.line_id, '')) <> ''
-        AND a.status <> '銝'
-        AND a.start_time >= ?
-        AND a.start_time < ?
-      ORDER BY a.start_time ASC, r.created_at ASC
-      LIMIT 1000
-    `, [targetDate, nextDate]);
-    let sent = 0;
-    let skipped = 0;
-    for (const row of rows) {
-      const receiverId = this.text(row.receiver_user_id);
-      const activityId = this.text(row.activity_id);
-      if (!receiverId || !activityId) {
-        skipped++;
-        continue;
-      }
-      const payloadJson = JSON.stringify({
-        activityId,
-        registrationId: this.text(row.registration_id),
-        reminderDate: targetDate,
-        kind: 'activity_day_before'
-      });
-      const exists = await D1ReadModule.first(env, `
-        SELECT message_id
-        FROM inbox_items
-        WHERE receiver_user_id = ?
-          AND message_type = 'activity_reminder'
-          AND payload_json LIKE ?
-        LIMIT 1
-      `, [receiverId, `%"activityId":"${activityId}"%`]).catch(() => null);
-      if (exists) {
-        skipped++;
-        continue;
-      }
-      const messageId = `ACTREM_${activityId}_${receiverId}_${targetDate}`.replace(/[^A-Za-z0-9_:-]/g, '_');
-      const senderId = this.text(row.creator_id, 'system');
-      const context = await D1InboxModule.senderContext(env, senderId).catch(() => ({ snapshot: { name: '系統提醒', lineId: senderId } }));
-      const bodyLines = [
-        `你報名的活動將於明日開始：${this.text(row.activity_name)}`,
-        row.start_time ? `時間：${this.text(row.start_time)}` : '',
-        this.text(row.description)
-      ].filter(Boolean);
-      await env.ACTMASTER_DB.prepare(`
-        INSERT OR IGNORE INTO inbox_items (
-          message_id, receiver_user_id, sender_user_id, sender_card_id, network_id,
-          message_type, title, body, payload_json, sender_snapshot_json, status,
-          read_at, archived_at, expires_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'activity_reminder', ?, ?, ?, ?, 'unread', '', '', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `).bind(
-        messageId,
-        receiverId,
-        senderId,
-        this.text(context.snapshot && context.snapshot.cardId),
-        this.text(row.network_id, 'admin'),
-        `明日活動提醒：${this.text(row.activity_name)}`,
-        bodyLines.join('\n'),
-        payloadJson,
-        JSON.stringify(context.snapshot || { name: '系統提醒', lineId: senderId })
-      ).run();
-      sent++;
-      await WebPushModule.notifyUser(receiverId, {
-        title: '明日活動提醒',
-        body: this.text(row.activity_name),
-        url: '/LINE-/?open=inbox'
-      }, env).catch(() => null);
-    }
-    return { success: true, data: { targetDate, checked: rows.length, sent, skipped } };
   }
 };
 
@@ -5758,31 +5552,6 @@ const AuthModule = {
           return { success: true, data: { isRegistered: true, info: cached } };
         }
       } catch (e) { console.error("KV Read Error", e); }
-    }
-
-    if (env.ACTMASTER_DB) {
-      try {
-        const user = await D1ReadModule.first(env, `
-          SELECT * FROM users
-          WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
-          LIMIT 1
-        `, [userId, userId, userId, userId]);
-        if (user) {
-          const profile = D1ReadModule.userRow(user);
-          if (profile) {
-            profile.requestedUserId = userId;
-            profile.canonicalUserId = profile.pointLineId || profile.lineId || profile.userId;
-            if (env.ACTMASTER_KV) {
-              try {
-                await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(profile), { expirationTtl: 600 });
-              } catch (e) { console.error("KV Write Error", e); }
-            }
-            return { success: true, data: { isRegistered: true, info: profile, source: 'd1_direct_user' } };
-          }
-        }
-      } catch (e) {
-        console.error("D1 direct checkUser failed", e && e.message ? e.message : e);
-      }
     }
 
     const result = await DBModule.forward('checkUser', payload, env);
@@ -7239,38 +7008,13 @@ async function dispatchAction(action, payload, request, env) {
   }
   const actor = authz.actor;
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
-  const legacyAuthSkipActions = new Set([
-    'checkUser',
-    'queryUserPoints',
-    'getCardContacts',
-    'getPublicActivities',
-    'getActivityById',
-    'getStoreSettings',
-    'listAnnouncements',
-    'mlmListOrders',
-    'getTenantBonusOrders',
-    'prepareTenantCardPayment'
-  ]);
+  const legacyAuthSkipActions = new Set(['mlmListOrders', 'getTenantBonusOrders', 'prepareTenantCardPayment']);
   if (payload.userId && !actor && !legacyAuthSkipActions.has(action)) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    const idToken = payload.lineIdToken || payload.idToken;
-    if (token || idToken) {
-      let isValid = token ? await SecurityModule.verifyLineAuth(payload.userId, token, env) : false;
-      if (!isValid && idToken) {
-        const idTokenUserId = await SecurityModule.getLineUserIdFromIdToken(idToken, payload, env);
-        isValid = !!idTokenUserId && idTokenUserId === payload.userId;
-      }
+    if (token) {
       // 若前端有傳 Token，則嚴格驗證是否被偽造
+      const isValid = await SecurityModule.verifyLineAuth(payload.userId, token, env);
       if (!isValid) {
-        if (action === 'checkUser') {
-          const tokenUserId = await SecurityModule.getLineUserIdFromToken(token, env);
-          const diag = await SecurityModule.authMismatchDiagnostic(payload.userId, tokenUserId, env);
-          return {
-            success: false,
-            error: `Access Denied: Invalid or Expired LINE Token [payload=${diag.payloadUserId || '-'} token=${diag.tokenUserId || '-'} payloadRegistered=${diag.payloadRegistered ? 'Y' : 'N'} tokenRegistered=${diag.tokenRegistered ? 'Y' : 'N'} sameCanonical=${diag.sameCanonical ? 'Y' : 'N'}]`,
-            data: { authDiagnostic: diag }
-          };
-        }
         return { success: false, error: "Access Denied: Invalid or Expired LINE Token" };
       }
     } else {
@@ -7630,14 +7374,6 @@ async function dispatchAction(action, payload, request, env) {
 
 // ==================== 主入口 (Worker Entry) ====================
 export default {
-  async scheduled(controller, env, ctx) {
-    const run = D1ActivityModule.sendActivityReminders({ source: 'cron' }, env).catch(err => {
-      console.error('activity reminder cron failed', err);
-    });
-    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(run);
-    else await run;
-  },
-
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });
@@ -7656,3 +7392,4 @@ export default {
     }
   }
 };
+

@@ -160,9 +160,7 @@
       try {
         const res = await fetch(WORKER_URL, {
           method: 'POST',
-          headers: token
-            ? { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }
-            : { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, payload }),
           signal: controller.signal
         });

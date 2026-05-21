@@ -359,14 +359,14 @@ window.autoClaimCardFromLink = async function(claimCardId, refId, netId) {
   const cardForClaim = await window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true);
   if (!cardForClaim || cardForClaim.error) throw new Error((cardForClaim && cardForClaim.error) || '找不到名片');
 
-  const referral = resolveReferralForRegistration(refId || '', netId || cardForClaim.networkId || cardForClaim['歸屬網'] || 'admin');
+  const referral = resolveReferralForRegistration(refId || '', netId || cardForClaim.networkId || cardForClaim['甇詨惇蝬?'] || 'admin');
   const payload = {
     claimRowId: claimCardId,
     userId: window.currentUserProfile.userId,
-    name: cardForClaim.name || cardForClaim['姓名'] || window.currentUserProfile.displayName || '',
-    phone: cardForClaim.mobile || cardForClaim.phone || cardForClaim['手機號碼'] || cardForClaim.officePhone || cardForClaim['公司電話'] || '',
-    companyName: cardForClaim.companyName || cardForClaim['公司名稱'] || '',
-    title: cardForClaim.title || cardForClaim['職稱'] || '',
+    name: cardForClaim.name || cardForClaim['憪?'] || window.currentUserProfile.displayName || '',
+    phone: cardForClaim.mobile || cardForClaim.phone || cardForClaim['???Ⅳ'] || cardForClaim.officePhone || cardForClaim['?砍?餉店'] || '',
+    companyName: cardForClaim.companyName || cardForClaim['?砍?迂'] || '',
+    title: cardForClaim.title || cardForClaim['?瑞迂'] || '',
     referrerId: referral.referrerId,
     networkId: referral.networkId
   };
@@ -1149,33 +1149,6 @@ window.reorderSettingsSections = function() {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     window.reorderSettingsSections();
-    if (typeof window.isActmasterLocalPreview === 'function' && window.isActmasterLocalPreview()) {
-      window.currentUserProfile = {
-        userId: 'LOCAL_PREVIEW_USER',
-        displayName: '本機預覽',
-        pictureUrl: ''
-      };
-      window.currentUser = {
-        userId: 'LOCAL_PREVIEW_USER',
-        name: '本機預覽',
-        role: 'admin',
-        networkId: 'admin'
-      };
-      window.userRole = 'admin';
-      window.currentViewMode = 'user';
-      window.hasAdminRights = true;
-
-      if (typeof window.applyUserPermissions === 'function') window.applyUserPermissions();
-      if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-      const loadingScreen = document.getElementById('loading-screen');
-      if (loadingScreen) loadingScreen.classList.add('hidden');
-      window.goPage('home', true);
-      setTimeout(() => {
-        if (typeof window.loadHomeData === 'function') window.loadHomeData();
-      }, 60);
-      window.showToast?.('本機預覽模式：已略過 LINE 登入');
-      return;
-    }
     if (typeof window.initActmasterLiff === 'function') {
       await window.initActmasterLiff(LIFF_ID);
     } else {
@@ -1192,29 +1165,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     window.currentUserProfile = await liff.getProfile();
-
-    // 🟢 【關鍵修復】在此處攔截 window.fetchAPI，自動為所有 API 請求注入 lineAccessToken 以通過 workerbackup.js 嚴格驗證
-    if (typeof window.fetchAPI === 'function' && !window.__fetchApiEnhanced) {
-      const originalFetch = window.fetchAPI;
-      window.fetchAPI = async function(action, payload, showLoading) {
-        const enhancedPayload = payload ? { ...payload } : {};
-        if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
-          try {
-            enhancedPayload.lineAccessToken = liff.getAccessToken() || '';
-            if (typeof liff.getIDToken === 'function') {
-              enhancedPayload.lineIdToken = liff.getIDToken() || '';
-            }
-            enhancedPayload.liffId = window.LIFF_ID || window.Config?.LIFF_ID || '';
-            // 確保有 userId，避免某些舊 Payload 遺漏導致後端配對錯誤
-            if (!enhancedPayload.userId && window.currentUserProfile?.userId) {
-              enhancedPayload.userId = window.currentUserProfile.userId;
-            }
-          } catch(e) {}
-        }
-        return originalFetch.call(this, action, enhancedPayload, showLoading);
-      };
-      window.__fetchApiEnhanced = true;
-    }
 
     const avatarImg = document.getElementById('avatar');
     if (avatarImg && window.currentUserProfile.pictureUrl) {

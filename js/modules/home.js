@@ -114,7 +114,7 @@ const HomeModule = (function() {
 
         const name = window.currentUser?.name || window.currentUserProfile?.displayName || '會員';
         const role = String(window.userRole || window.currentUser?.role || 'user').toLowerCase();
-        const roleLabel = role === 'admin' ? '總管' : (role === 'store' || role === 'tenant' ? '店長' : '用戶');
+        const roleLabel = role === 'admin' ? '盟主' : (role === 'store' || role === 'tenant' ? '店長' : '用戶');
         const roleIcon = role === 'admin' ? 'workspace_premium' : (role === 'store' || role === 'tenant' ? 'storefront' : 'person');
         const balanceText = document.getElementById('point-balance-badge')?.textContent || '';
         const balance = Number(String(balanceText).replace(/[^\d.-]/g, '')) || Number(window.pointWalletData?.balance || window.currentUser?.points || 0) || 0;
@@ -661,10 +661,13 @@ const HomeModule = (function() {
             const time = window.escapeHTML(window.formatDisplayTime(a.startTime || a.start_time || a['開始時間']));
             const desc = window.escapeHTML(a.description || a['活動說明'] || '');
             const img = window.escapeHTML(a.imageUrl || a.image_url || a['宣傳圖'] || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80');
+            const imageRatio = window.escapeHTML(String(
+                typeof window.getActivityImageAspectRatio === 'function' ? window.getActivityImageAspectRatio(a) : '16:9'
+            ).replace(':', ' / '));
 
             return `
                 <div class="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 flex flex-col min-h-[250px]">
-                    <div class="w-full aspect-[4/3] bg-slate-100 overflow-hidden relative">
+                    <div class="w-full bg-slate-100 overflow-hidden relative" style="aspect-ratio:${imageRatio}">
                         <img src="${img}" class="w-full h-full object-cover" loading="lazy">
                         <span class="absolute top-2 left-2 bg-[#ff5a1f] text-white text-[11px] px-2.5 py-1 rounded-lg font-black shadow-sm">${type}</span>
                     </div>
@@ -1164,6 +1167,7 @@ const HomeModule = (function() {
             endTime: getMyActivityField_(record, ['結束時間', 'endTime']),
             description: getMyActivityField_(record, ['活動說明', 'description'], '這是報名時保存的活動資訊。'),
             imageUrl: getMyActivityField_(record, ['宣傳圖', 'imageUrl']),
+            imageLayout: getMyActivityField_(record, ['宣傳圖版型', 'imageLayout', 'image_layout', '圖片版型'], 'landscape'),
             status: getMyActivityField_(record, ['狀態', 'status'], '已報名')
         };
     }
@@ -1180,10 +1184,13 @@ const HomeModule = (function() {
         const fee = price > 0 ? 'NT$ ' + price.toLocaleString() : '免費';
         const img = activity.imageUrl || activity.image_url || activity['宣傳圖'] || '';
         const desc = activity.description || activity['活動說明'] || '尚無說明';
+        const imageRatio = window.escapeHTML(String(
+            typeof window.getActivityImageAspectRatio === 'function' ? window.getActivityImageAspectRatio(activity) : '16:9'
+        ).replace(':', ' / '));
 
         content.innerHTML = `
             <div class="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
-                ${img ? `<img src="${window.escapeHTML(img)}" class="w-full aspect-video object-cover">` : ''}
+                ${img ? `<img src="${window.escapeHTML(img)}" class="w-full object-cover" style="aspect-ratio:${imageRatio}">` : ''}
                 <div class="p-5 space-y-4">
                     <div class="flex items-center justify-between gap-2">
                         <span class="bg-orange-50 text-orange-600 text-[12px] px-2.5 py-1 rounded-full font-bold">${window.escapeHTML(type)}</span>
@@ -1340,10 +1347,13 @@ const HomeModule = (function() {
         const fee = price > 0 ? 'NT$ ' + price.toLocaleString() : '免費';
         const img = window.escapeHTML(activity.imageUrl || activity.image_url || activity['宣傳圖'] || '');
         const desc = window.escapeHTML(activity.description || activity['活動說明'] || '尚無說明');
+        const imageRatio = window.escapeHTML(String(
+            typeof window.getActivityImageAspectRatio === 'function' ? window.getActivityImageAspectRatio(activity) : '16:9'
+        ).replace(':', ' / '));
 
         content.innerHTML = `
             <div class="bg-white rounded-3xl overflow-hidden">
-                ${img ? `<img src="${img}" class="w-full aspect-video object-cover">` : ''}
+                ${img ? `<img src="${img}" class="w-full object-cover" style="aspect-ratio:${imageRatio}">` : ''}
                 <div class="p-5 space-y-4">
                     <div class="flex items-center justify-between">
                         <span class="bg-orange-50 text-orange-600 text-[12px] px-2.5 py-1 rounded-full font-bold">${type}</span>

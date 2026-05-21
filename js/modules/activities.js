@@ -3,6 +3,96 @@
 // 當前編輯中的活動 ID(null 代表新建,有值代表編輯)
 window.currentEditingActId = null;
 
+const ACTIVITY_IMAGE_LAYOUTS = {
+  landscape: { label: '標準(16:9)', ratio: '16:9', cssRatio: '16 / 9', cropRatio: 16 / 9 },
+  portrait: { label: '滿版(2:3)', ratio: '2:3', cssRatio: '2 / 3', cropRatio: 2 / 3 },
+  square: { label: '正方(1:1)', ratio: '1:1', cssRatio: '1 / 1', cropRatio: 1 }
+};
+
+function normalizeActivityImageLayout(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'portrait' || raw === 'giga' || raw === 'vertical' || raw === '2:3') return 'portrait';
+  if (raw === 'square' || raw === '1:1') return 'square';
+  return 'landscape';
+}
+
+function getActivityImageLayout(mode) {
+  const input = document.getElementById('activity-image-layout-' + mode);
+  return normalizeActivityImageLayout(input ? input.value : 'landscape');
+}
+
+function getActivityImageLayoutFromRecord(activity) {
+  return normalizeActivityImageLayout(activity && (
+    activity.imageLayout ||
+    activity.image_layout ||
+    activity['宣傳圖版型'] ||
+    activity['圖片版型']
+  ));
+}
+
+function getActivityImageLayoutMeta(layout) {
+  return ACTIVITY_IMAGE_LAYOUTS[normalizeActivityImageLayout(layout)] || ACTIVITY_IMAGE_LAYOUTS.landscape;
+}
+
+window.getActivityImageCropRatio = function(mode) {
+  return getActivityImageLayoutMeta(getActivityImageLayout(mode)).cropRatio;
+};
+
+window.getActivityImageAspectRatio = function(activity) {
+  return getActivityImageLayoutMeta(getActivityImageLayoutFromRecord(activity)).ratio;
+};
+
+function updateActivityImageLayoutButtons(mode) {
+  const layout = getActivityImageLayout(mode);
+  document.querySelectorAll('[data-activity-image-layout-for="' + mode + '"]').forEach(btn => {
+    const active = btn.getAttribute('data-layout') === layout;
+    btn.className = 'flex-1 py-2 rounded-xl text-[12px] font-black transition-all active:scale-95 ' +
+      (active ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500');
+  });
+}
+
+function updateActivityImagePreviewRatio(mode) {
+  const preview = document.getElementById('image-preview-' + mode);
+  const box = preview && preview.parentElement;
+  if (!box) return;
+  box.style.aspectRatio = getActivityImageLayoutMeta(getActivityImageLayout(mode)).cssRatio;
+  box.style.height = 'auto';
+  box.style.minHeight = mode === 'quick' ? '144px' : '160px';
+}
+
+window.setActivityImageLayout = function(mode, layout) {
+  const input = document.getElementById('activity-image-layout-' + mode);
+  if (input) input.value = normalizeActivityImageLayout(layout);
+  updateActivityImageLayoutButtons(mode);
+  updateActivityImagePreviewRatio(mode);
+};
+
+function ensureActivityImageLayoutControls() {
+  ['quick', 'full', 'series'].forEach(mode => {
+    const urlInput = document.getElementById('in-image-url-' + mode);
+    if (!urlInput || document.getElementById('activity-image-layout-wrap-' + mode)) return;
+    const field = urlInput.closest('.flex.flex-col') || urlInput.parentElement;
+    if (!field) return;
+    const buttons = Object.entries(ACTIVITY_IMAGE_LAYOUTS).map(([key, meta]) =>
+      '<button type="button" data-activity-image-layout-for="' + mode + '" data-layout="' + key + '" onclick="window.setActivityImageLayout(\'' + mode + '\', \'' + key + '\')">' + meta.label + '</button>'
+    ).join('');
+    field.insertAdjacentHTML('beforeend',
+      '<div id="activity-image-layout-wrap-' + mode + '" class="mt-3">' +
+        '<input type="hidden" id="activity-image-layout-' + mode + '" value="landscape">' +
+        '<p class="text-[12px] font-bold text-slate-500 mb-1.5 pl-1">圖片版型</p>' +
+        '<div class="flex gap-1 rounded-2xl bg-slate-100 p-1">' + buttons + '</div>' +
+      '</div>'
+    );
+    window.setActivityImageLayout(mode, 'landscape');
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', ensureActivityImageLayoutControls);
+} else {
+  ensureActivityImageLayoutControls();
+}
+
 function normalizeDateTimeLocal(value) {
   if (!value) return '';
   return String(value).replace(' ', 'T').substring(0, 16);
@@ -154,23 +244,12 @@ function activityFlexField(activity, keys, fallback = '') {
   return fallback;
 }
 
-function normalizeActivityAspectRatio(value) {
-  const raw = activityShareText(value);
-  if (!raw) return '16:9';
-  if (/^\d+(\.\d+)?:\d+(\.\d+)?$/.test(raw)) return raw;
-  const lower = raw.toLowerCase();
-  if (lower === 'giga' || lower === 'portrait' || lower === 'full') return '2:3';
-  if (lower === 'square' || lower === '1:1') return '1:1';
-  if (lower === 'mega' || lower === 'landscape' || lower === 'wide') return '16:9';
-  return '16:9';
-}
-
 function buildActivityFlexMessage(share) {
   const activity = share.activity || {};
   const title = clipActivityFlexText(share.title || getActivityTitleValue(activity, '活動報名'), 60);
   const url = share.url || '';
   const imageUrl = activityFlexField(activity, ['imageUrl', 'image_url', '宣傳圖']);
-  const imageRatio = normalizeActivityAspectRatio(activityFlexField(activity, ['imageRatio', 'image_ratio', 'posterRatio', 'poster_ratio', 'posterLayout', 'imageLayout']));
+  const imageAspectRatio = window.getActivityImageAspectRatio(activity);
   const rawTime = activityFlexField(activity, ['startTime', 'start_time', '開始時間']);
   const startTime = clipActivityFlexText(
     typeof window.formatDisplayTime === 'function' ? window.formatDisplayTime(rawTime) : rawTime,
@@ -212,7 +291,7 @@ function buildActivityFlexMessage(share) {
       type: 'image',
       url: imageUrl,
       size: 'full',
-      aspectRatio: imageRatio,
+      aspectRatio: imageAspectRatio,
       aspectMode: 'cover',
       action: { type: 'uri', uri: url }
     };
@@ -305,6 +384,7 @@ window.openEditActivity = async function(actId) {
       }
       if (placeholder) placeholder.classList.add('hidden');
     }
+    window.setActivityImageLayout('full', getActivityImageLayoutFromRecord(act));
 
     // 改變按鈕文字為「儲存變更」
     const submitBtn = document.getElementById('btn-submit-full');
@@ -353,6 +433,7 @@ window.cancelEditActivity = function() {
   document.getElementById('in-image-url-full').value = '';
   document.getElementById('image-preview-full').classList.add('hidden');
   document.getElementById('preview-placeholder-full').classList.remove('hidden');
+  window.setActivityImageLayout('full', 'landscape');
 
   // 還原按鈕
   const submitBtn = document.getElementById('btn-submit-full');
@@ -516,7 +597,7 @@ window.submitActivityForm = async function(mode) {
     endTime: formatDT(document.getElementById(pfx + '-end') ? document.getElementById(pfx + '-end').value : ''),
     description: document.getElementById(pfx + '-desc') ? document.getElementById(pfx + '-desc').value.trim() : '',
     imageUrl: finalImageUrl,
-    imageRatio: document.getElementById('in-image-ratio-' + pfx) ? document.getElementById('in-image-ratio-' + pfx).value : '',
+    imageLayout: getActivityImageLayout(mode),
     nfcCheckinStart: nfcWindow.start,
     nfcCheckinEnd: nfcWindow.end,
     nfcCheckinSameDayOnly: true,
@@ -592,7 +673,7 @@ window.submitActivityForm = async function(mode) {
           '收費方式': p.feeType,
           '活動說明': p.description,
           '宣傳圖': p.imageUrl,
-          imageRatio: p.imageRatio,
+          '宣傳圖版型': p.imageLayout,
           'NFC簽到開始': p.nfcCheckinStart,
           'NFC簽到結束': p.nfcCheckinEnd,
           'NFC限當日': p.nfcCheckinSameDayOnly
