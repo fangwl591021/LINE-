@@ -1410,7 +1410,19 @@
       return /Missing or invalid LINE Token|Invalid or Expired LINE Token|Missing LINE Token/i.test(String(message || ''));
     }
 
+    let adminReauthInProgress = false;
+    let adminAuthErrorToastAt = 0;
+
+    function showAdminAuthErrorToast(message) {
+      const now = Date.now();
+      if (now - adminAuthErrorToastAt < 5000) return;
+      adminAuthErrorToastAt = now;
+      showToast(message || 'LINE authorization expired. Please login again.', true);
+    }
+
     function resetAdminLiffLogin(message) {
+      if (adminReauthInProgress) return;
+      adminReauthInProgress = true;
       showToast(message || 'LINE 授權已過期，正在重新登入', true);
       try {
         if (window.liff && typeof liff.isLoggedIn === 'function' && liff.isLoggedIn()) {
@@ -1450,7 +1462,11 @@
       } catch (err) {
         const message = err && err.name === 'AbortError' ? '連線逾時，請重新整理後再試' : err.message;
         if (isAdminAuthTokenError(message)) {
-          resetAdminLiffLogin('LINE 授權已過期，請重新登入後再儲存');
+          if (options.forceReauthOnTokenError && !options.silent) {
+            resetAdminLiffLogin('LINE 授權已過期，請重新登入後再儲存');
+          } else if (!options.silent) {
+            showAdminAuthErrorToast('LINE 授權已過期，請重新登入後再操作');
+          }
         } else if (!options.silent) {
           showToast(message, true);
         }
@@ -3795,7 +3811,7 @@
         '自訂名片設定': JSON.stringify(cfg)
       };
 
-      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData });
+      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData }, { forceReauthOnTokenError: true });
       btn.disabled = false;
       btn.innerHTML = originalText;
       if (res) {
