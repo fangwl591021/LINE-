@@ -1280,14 +1280,6 @@
               <img id="edit-a-image-preview" src="" class="w-full h-40 object-cover">
             </div>
           </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">宣傳圖版型</label>
-            <select id="edit-a-image-ratio" onchange="updateActivityImagePreview()" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
-              <option value="16:9">橫式 16:9</option>
-              <option value="2:3">滿版 2:3</option>
-              <option value="1:1">正方 1:1</option>
-            </select>
-          </div>
           <div class="md:col-span-2">
             <label class="block text-sm font-bold text-slate-500 mb-1.5">活動說明</label>
             <textarea id="edit-a-desc" rows="4" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 resize-none"></textarea>
@@ -1406,51 +1398,16 @@
       setTimeout(() => { toast.remove(); }, 3000);
     }
 
-    function isAdminAuthTokenError(message) {
-      return /Missing or invalid LINE Token|Invalid or Expired LINE Token|Missing LINE Token/i.test(String(message || ''));
-    }
-
-    let adminReauthInProgress = false;
-    let adminAuthErrorToastAt = 0;
-
-    function showAdminAuthErrorToast(message) {
-      const now = Date.now();
-      if (now - adminAuthErrorToastAt < 5000) return;
-      adminAuthErrorToastAt = now;
-      showToast(message || 'LINE authorization expired. Please login again.', true);
-    }
-
-    function resetAdminLiffLogin(message) {
-      if (adminReauthInProgress) return;
-      adminReauthInProgress = true;
-      showToast(message || 'LINE 授權已過期，正在重新登入', true);
-      try {
-        if (window.liff && typeof liff.isLoggedIn === 'function' && liff.isLoggedIn()) {
-          liff.logout();
-        }
-      } catch (e) {}
-      setTimeout(() => {
-        window.location.replace(getAdminLiffEntryUrl());
-      }, 450);
-    }
-
     async function fetchAPI(action, payload = {}, options = {}) {
       const controller = new AbortController();
       const timeoutMs = Number(options.timeoutMs || 20000);
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        if (!options.omitAuthToken && window.liff && liff.isLoggedIn()) {
-          payload.lineAccessToken = liff.getAccessToken();
-          if (typeof liff.getIDToken === 'function') {
-            payload.lineIdToken = liff.getIDToken();
-            payload.lineClientId = LIFF_ID.split('-')[0];
-          }
-        }
+        if (!options.omitAuthToken && liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
         const authUserId = adminProfile?.userId || '';
         if (!options.omitDefaultUserId && !payload.userId) payload.userId = authUserId;
         payload.authUserId = payload.authUserId || authUserId;
         payload.operatorId = payload.operatorId || authUserId;
-        payload.authenticatedUserId = payload.authenticatedUserId || authUserId;
         payload.role = payload.role || adminRole || 'store';
         payload.operatorRole = payload.operatorRole || adminRole || 'store';
         payload.networkId = payload.networkId || adminNetworkId || 'admin';
@@ -1465,15 +1422,7 @@
         return data.data || data;
       } catch (err) {
         const message = err && err.name === 'AbortError' ? '連線逾時，請重新整理後再試' : err.message;
-        if (isAdminAuthTokenError(message)) {
-          if (options.forceReauthOnTokenError && !options.silent) {
-            resetAdminLiffLogin('LINE 授權已過期，請重新登入後再儲存');
-          } else if (!options.silent) {
-            showAdminAuthErrorToast('LINE 授權已過期，請重新登入後再操作');
-          }
-        } else if (!options.silent) {
-          showToast(message, true);
-        }
+        if (!options.silent) showToast(message, true);
         return null;
       } finally {
         clearTimeout(timer);
@@ -3333,7 +3282,6 @@
         if (loaded.length) break;
       }
       allActivitiesData = loaded;
-      window._adminActsCache = { data: loaded, time: Date.now() };
       document.getElementById('stat-acts').innerText = loaded.length;
       if (loaded.length) {
         renderActivities();
@@ -3360,7 +3308,7 @@
         title,
         titleHtml: escapeHTML(title),
         status,
-        image: String(a['宣傳圖'] || a.imageUrl || a.image_url || '').trim(),
+        image: String(a['宣傳圖'] || a.imageUrl || '').trim(),
         creator: escapeHTML(a['建立者ID'] || a.userId || 'admin'),
         start: escapeHTML(a['開始時間'] || a.startTime || ''),
         fee: Number(a['金額'] || a.price || 0) > 0 ? 'NT$ ' + escapeHTML(a['金額'] || a.price || 0) : '<span class="text-green-600 font-bold">免費</span>',
@@ -3528,7 +3476,6 @@
       document.getElementById("edit-a-nfc-end").value = toNfcDateTimeLocal_(act["NFC簽到結束"] || act.nfcCheckinEnd || "", act["開始時間"]);
       document.getElementById("edit-a-desc").value = safeStringForPrompt_(act["活動說明"]);
       document.getElementById("edit-a-image").value = safeStringForPrompt_(act["宣傳圖"]);
-      document.getElementById("edit-a-image-ratio").value = normalizeActivityImageRatioForAdmin_(act.imageRatio || act.image_ratio || act["圖片版型"] || act["宣傳圖版型"]);
       updateActivityImagePreview();
 
       const modal = document.getElementById("modal-activity-edit");
@@ -3538,13 +3485,10 @@
 
     function updateActivityImagePreview() {
       const input = document.getElementById("edit-a-image");
-      const ratioEl = document.getElementById("edit-a-image-ratio");
       const wrap = document.getElementById("edit-a-image-preview-wrap");
       const img = document.getElementById("edit-a-image-preview");
       const url = (input?.value || "").trim();
       if (!wrap || !img) return;
-      const ratio = normalizeActivityImageRatioForAdmin_(ratioEl?.value);
-      img.className = "w-full object-cover " + (ratio === "2:3" ? "h-72" : ratio === "1:1" ? "aspect-square h-auto" : "aspect-video h-auto");
       if (/^https?:\/\//i.test(url) || /^data:image\//i.test(url)) {
         img.src = url;
         wrap.classList.remove("hidden");
@@ -3598,7 +3542,6 @@
       const nextNfcEnd = document.getElementById("edit-a-nfc-end").value;
       const nextDesc = document.getElementById("edit-a-desc").value;
       const nextImage = document.getElementById("edit-a-image").value.trim();
-      const nextImageRatio = normalizeActivityImageRatioForAdmin_(document.getElementById("edit-a-image-ratio").value);
 
       if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
       if (!nextName) return showToast("請輸入活動名稱", true);
@@ -3628,8 +3571,7 @@
             "NFC簽到結束": nextNfcEnd,
             "NFC限當日": true,
             "活動說明": nextDesc,
-            "宣傳圖": nextImage,
-            imageRatio: nextImageRatio
+            "宣傳圖": nextImage
           }
         });
 
@@ -3648,13 +3590,6 @@
 
     function safeStringForPrompt_(value) {
       return value === null || value === undefined ? "" : String(value);
-    }
-
-    function normalizeActivityImageRatioForAdmin_(value) {
-      const raw = safeStringForPrompt_(value).trim().toLowerCase();
-      if (raw === "2:3" || raw === "portrait" || raw === "giga" || raw === "full") return "2:3";
-      if (raw === "1:1" || raw === "square") return "1:1";
-      return "16:9";
     }
 
     function toDateTimeLocal_(value) {
@@ -3815,7 +3750,7 @@
         '自訂名片設定': JSON.stringify(cfg)
       };
 
-      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData }, { forceReauthOnTokenError: false });
+      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData });
       btn.disabled = false;
       btn.innerHTML = originalText;
       if (res) {

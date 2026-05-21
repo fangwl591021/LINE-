@@ -113,8 +113,38 @@ const Core = (function() {
 
     window.handleActmasterAuthTokenError = function(message) {
         if (!window.isActmasterAuthTokenError || !window.isActmasterAuthTokenError(message)) return false;
-        try { sessionStorage.removeItem('ACTMASTER_LIFF_REAUTH_RUNNING'); } catch (e) {}
-        return false;
+        if (!window.liff || typeof window.liff.logout !== 'function') return false;
+        try {
+            if (sessionStorage.getItem('ACTMASTER_LIFF_REAUTH_RUNNING') === '1') return true;
+            sessionStorage.setItem('ACTMASTER_LIFF_REAUTH_RUNNING', '1');
+        } catch (e) {}
+
+        if (window.showToast) window.showToast('LINE 授權已失效，正在重新登入...', true);
+
+        try {
+            if (typeof window.liff.isLoggedIn !== 'function' || window.liff.isLoggedIn()) {
+                window.liff.logout();
+            }
+        } catch (e) {}
+
+        setTimeout(function() {
+            try {
+                const url = new URL(window.location.href);
+                [
+                    'code',
+                    'state',
+                    'liff.state',
+                    'liffClientId',
+                    'liffRedirectUri',
+                    'liffIsEscapedFromApp',
+                    'friendship_status_changed'
+                ].forEach(key => url.searchParams.delete(key));
+                window.location.replace(url.toString());
+            } catch (e) {
+                window.location.reload();
+            }
+        }, 350);
+        return true;
     };
 
     window.fetchAPI = async function(action, payload = {}, silent = false) {
@@ -148,14 +178,6 @@ const Core = (function() {
             try {
                 if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
                     safePayload.lineAccessToken = liff.getAccessToken();
-                    if (typeof liff.getIDToken === 'function') {
-                        const idToken = liff.getIDToken();
-                        if (idToken) {
-                            safePayload.lineIdToken = idToken;
-                            const liffId = String(window.LIFF_ID || window.Config?.LIFF_ID || Config.LIFF_ID || '');
-                            safePayload.lineClientId = liffId.split('-')[0];
-                        }
-                    }
                 }
             } catch (e) {
                 console.warn("LIFF token fetch failed:", e);

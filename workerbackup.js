@@ -161,163 +161,6 @@ const SecurityModule = {
     }
   },
 
-  base64UrlToBytes(input) {
-    const normalized = String(input || '').replace(/-/g, '+').replace(/_/g, '/');
-    const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-  },
-
-  parseJwtPart(input) {
-    const bytes = this.base64UrlToBytes(input);
-    return JSON.parse(new TextDecoder().decode(bytes));
-  },
-
-  trimLeadingZeroes(bytes) {
-    let start = 0;
-    while (start < bytes.length - 1 && bytes[start] === 0) start += 1;
-    return bytes.slice(start);
-  },
-
-  derInteger(bytes) {
-    let value = this.trimLeadingZeroes(bytes);
-    if (value[0] & 0x80) {
-      const next = new Uint8Array(value.length + 1);
-      next[0] = 0;
-      next.set(value, 1);
-      value = next;
-    }
-    const out = new Uint8Array(value.length + 2);
-    out[0] = 0x02;
-    out[1] = value.length;
-    out.set(value, 2);
-    return out;
-  },
-
-  ecdsaJoseToDer(signature) {
-    const bytes = signature instanceof Uint8Array ? signature : new Uint8Array(signature || []);
-    if (bytes.length !== 64) return bytes;
-    const r = this.derInteger(bytes.slice(0, 32));
-    const s = this.derInteger(bytes.slice(32));
-    const out = new Uint8Array(2 + r.length + s.length);
-    out[0] = 0x30;
-    out[1] = r.length + s.length;
-    out.set(r, 2);
-    out.set(s, 2 + r.length);
-    return out;
-  },
-
-  cleanLineJwk(jwk, alg) {
-    if (!jwk) return null;
-    if (alg === 'ES256') {
-      return {
-        kty: 'EC',
-        crv: jwk.crv || 'P-256',
-        x: jwk.x || jwk.xvalue,
-        y: jwk.y || jwk.yvalue,
-        ext: true
-      };
-    }
-    return {
-      kty: 'RSA',
-      n: jwk.n,
-      e: jwk.e,
-      ext: true
-    };
-  },
-
-  async getLineJwks(env) {
-    const cacheKey = 'LINE_LOGIN_JWKS_V2';
-    try {
-      if (env.ACTMASTER_KV) {
-        const cached = await env.ACTMASTER_KV.get(cacheKey, 'json');
-        if (cached && Array.isArray(cached.keys)) return cached;
-      }
-    } catch (e) {}
-
-    const res = await fetch('https://api.line.me/oauth2/v2.1/certs', {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (res.status !== 200) throw new Error(`LINE JWKS fetch failed: ${res.status}`);
-    const jwks = await res.json();
-    if (env.ACTMASTER_KV && jwks && Array.isArray(jwks.keys)) {
-      await env.ACTMASTER_KV.put(cacheKey, JSON.stringify(jwks), { expirationTtl: 21600 });
-    }
-    return jwks;
-  },
-
-  async getLineUserIdFromSignedIdToken(idToken, channelId, env) {
-    const token = this.text(idToken);
-    const clientId = this.text(channelId);
-    if (!token || !clientId || token.split('.').length !== 3) return '';
-
-    try {
-      const [rawHeader, rawPayload, rawSignature] = token.split('.');
-      const header = this.parseJwtPart(rawHeader);
-      const payload = this.parseJwtPart(rawPayload);
-      if (!['RS256', 'ES256'].includes(header.alg) || !header.kid) return '';
-      if (payload.iss !== 'https://access.line.me') return '';
-      const audiences = Array.isArray(payload.aud) ? payload.aud.map(String) : [String(payload.aud || '')];
-      if (!audiences.includes(clientId)) return '';
-      if (!payload.sub) return '';
-      if (Number(payload.exp || 0) <= Math.floor(Date.now() / 1000)) return '';
-
-      const jwks = await this.getLineJwks(env);
-      const jwk = (jwks.keys || []).find(key => key.kid === header.kid);
-      if (!jwk) return '';
-
-      const cleanJwk = this.cleanLineJwk(jwk, header.alg);
-      const algorithm = header.alg === 'ES256'
-        ? { import: { name: 'ECDSA', namedCurve: 'P-256' }, verify: { name: 'ECDSA', hash: 'SHA-256' } }
-        : { import: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, verify: 'RSASSA-PKCS1-v1_5' };
-      const cryptoKey = await crypto.subtle.importKey('jwk', cleanJwk, algorithm.import, false, ['verify']);
-      const signingInput = new TextEncoder().encode(`${rawHeader}.${rawPayload}`);
-      const signature = this.base64UrlToBytes(rawSignature);
-      let verified = await crypto.subtle.verify(algorithm.verify, cryptoKey, signature, signingInput);
-      if (!verified && header.alg === 'ES256') {
-        verified = await crypto.subtle.verify(algorithm.verify, cryptoKey, this.ecdsaJoseToDer(signature), signingInput);
-      }
-      return verified ? this.text(payload.sub) : '';
-    } catch (e) {
-      console.error('LINE signed id token verify failed', e && e.message ? e.message : e);
-      return '';
-    }
-  },
-
-  async getLineUserIdFromIdToken(idToken, clientId, env) {
-    const token = this.text(idToken);
-    const channelId = this.text(clientId || env.LINE_LOGIN_CHANNEL_ID || env.LINE_CHANNEL_ID || '1660923784');
-    if (!token || !channelId) return '';
-    const cacheKey = `IDTOKEN_${token.substring(0, 30)}`;
-    try {
-      if (env.ACTMASTER_KV) {
-        const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
-        if (cachedUserId) return cachedUserId;
-      }
-
-      const body = new URLSearchParams();
-      body.set('id_token', token);
-      body.set('client_id', channelId);
-      const res = await fetch('https://api.line.me/oauth2/v2.1/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
-      });
-      if (res.status !== 200) return await this.getLineUserIdFromSignedIdToken(token, channelId, env);
-      const data = await res.json();
-      const userId = this.text(data.sub);
-      if (userId && env.ACTMASTER_KV) {
-        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
-      }
-      return userId;
-    } catch (e) {
-      console.error('LINE id token verify failed', e && e.message ? e.message : e);
-      return await this.getLineUserIdFromSignedIdToken(token, channelId, env);
-    }
-  },
-
   maskId(id) {
     const text = this.text(id);
     if (!text) return '';
@@ -351,12 +194,8 @@ const SecurityModule = {
 
   async getActor(payload, request, env) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    const idToken = payload.lineIdToken || '';
-    if (!token && !idToken) return null;
-    let userId = token ? await this.getLineUserIdFromToken(token, env) : '';
-    if (!userId && idToken) {
-      userId = await this.getLineUserIdFromIdToken(idToken, payload.lineClientId, env);
-    }
+    if (!token) return null;
+    const userId = await this.getLineUserIdFromToken(token, env);
     if (!userId) return null;
 
     let role = 'user';
@@ -370,27 +209,6 @@ const SecurityModule = {
       }
     }
     return { userId, role, networkId, token };
-  },
-
-  async describeActorFailure(payload, request, env) {
-    const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    const idToken = payload.lineIdToken || '';
-    const clientId = this.text(payload.lineClientId || env.LINE_LOGIN_CHANNEL_ID || env.LINE_CHANNEL_ID || '1660923784');
-    const hints = [
-      `access=${token ? 'Y' : 'N'}`,
-      `id=${idToken ? 'Y' : 'N'}`,
-      `client=${clientId || '-'}`
-    ];
-    if (!token && !idToken) return hints.join(' ');
-    if (token) {
-      const tokenUserId = await this.getLineUserIdFromToken(token, env);
-      hints.push(`accessOk=${tokenUserId ? 'Y' : 'N'}`);
-    }
-    if (idToken) {
-      const idUserId = await this.getLineUserIdFromIdToken(idToken, clientId, env);
-      hints.push(`idOk=${idUserId ? 'Y' : 'N'}`);
-    }
-    return hints.join(' ');
   },
 
   canManage(role) {
@@ -496,25 +314,12 @@ const SecurityModule = {
       }
     }
     if (!actor && action === 'getCardContacts' && env.ACTMASTER_DB) {
-      const requestedUserId = this.text(payload.userId || payload.authUserId || payload.operatorId || payload.authenticatedUserId);
+      const requestedUserId = this.text(payload.userId);
       const identity = requestedUserId
         ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
         : null;
-      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
-      if (user) {
-        payload.userId = payload.userId || user.userId;
-        payload.authenticatedUserId = user.userId;
-        payload.authenticatedRole = user.role;
-        payload.authenticatedNetworkId = user.networkId;
-        return {
-          allowed: true,
-          actor: {
-            userId: user.userId,
-            role: user.role,
-            networkId: user.networkId,
-            token: ''
-          }
-        };
+      if (identity && identity.user) {
+        return { allowed: true, actor: null };
       }
     }
     if (!actor && action === 'listStorePointCashierLogs' && env.ACTMASTER_DB) {
@@ -538,10 +343,7 @@ const SecurityModule = {
         };
       }
     }
-    if (!actor) {
-      const detail = await this.describeActorFailure(payload, request, env).catch(() => '');
-      return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' + (detail ? ` [${detail}]` : '') };
-    }
+    if (!actor) return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' };
 
     payload.authenticatedUserId = actor.userId;
     payload.authenticatedRole = actor.role;
@@ -3899,12 +3701,12 @@ const D1WriteModule = {
       const existingCreatorId = this.text(existing.creator_id);
       const existingOwnerId = this.text(existing.owner_user_id);
       const existingNetworkId = this.text(existing.network_id);
-      const isAdmin = role === 'admin';
       const isBoundToActor = !!(actorId && existingLineId && existingLineId === actorId);
+      const isUnboundAdmin = role === 'admin' && !existingLineId;
       const isUnboundOwner = !!(actorId && !existingLineId && (existingCreatorId === actorId || existingOwnerId === actorId));
       const isUnboundStoreManager = !!(role === 'store' && !existingLineId && networkId && existingNetworkId && networkId === existingNetworkId);
 
-      if (!isAdmin && !isBoundToActor && !isUnboundOwner && !isUnboundStoreManager) {
+      if (!isBoundToActor && !isUnboundAdmin && !isUnboundOwner && !isUnboundStoreManager) {
         return { success: false, error: 'Access Denied: cannot update this card' };
       }
     }
@@ -4798,7 +4600,7 @@ const D1ActivityModule = {
       JOIN activities a ON a.activity_id = r.activity_id
       WHERE r.status <> 'cancelled'
         AND TRIM(COALESCE(r.line_id, '')) <> ''
-        AND a.status <> '下架'
+        AND a.status <> '銝'
         AND a.start_time >= ?
         AND a.start_time < ?
       ORDER BY a.start_time ASC, r.created_at ASC
@@ -7763,12 +7565,9 @@ async function dispatchAction(action, payload, request, env) {
     case 'updateCard': {
       try {
         const d1Result = await D1WriteModule.upsertCard(payload || {}, env);
-        if (d1Result) return d1Result;
+        if (d1Result && d1Result.success !== false) return d1Result;
       } catch (e) {
         console.error("D1 upsertCard fallback", e);
-        if (env.ACTMASTER_DB) {
-          return { success: false, error: 'D1 card save failed: ' + (e && e.message ? e.message : String(e)) };
-        }
       }
       return await DBModule.forward(action, payload, env);
     }
