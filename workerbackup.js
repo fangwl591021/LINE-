@@ -204,7 +204,7 @@ const SecurityModule = {
       const [rawHeader, rawPayload, rawSignature] = token.split('.');
       const header = this.parseJwtPart(rawHeader);
       const payload = this.parseJwtPart(rawPayload);
-      if (header.alg !== 'RS256' || !header.kid) return '';
+      if (!['RS256', 'ES256'].includes(header.alg) || !header.kid) return '';
       if (payload.iss !== 'https://access.line.me') return '';
       const audiences = Array.isArray(payload.aud) ? payload.aud.map(String) : [String(payload.aud || '')];
       if (!audiences.includes(clientId)) return '';
@@ -215,16 +215,13 @@ const SecurityModule = {
       const jwk = (jwks.keys || []).find(key => key.kid === header.kid);
       if (!jwk) return '';
 
-      const cryptoKey = await crypto.subtle.importKey(
-        'jwk',
-        jwk,
-        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-        false,
-        ['verify']
-      );
+      const algorithm = header.alg === 'ES256'
+        ? { import: { name: 'ECDSA', namedCurve: 'P-256' }, verify: { name: 'ECDSA', hash: 'SHA-256' } }
+        : { import: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, verify: 'RSASSA-PKCS1-v1_5' };
+      const cryptoKey = await crypto.subtle.importKey('jwk', jwk, algorithm.import, false, ['verify']);
       const signingInput = new TextEncoder().encode(`${rawHeader}.${rawPayload}`);
       const signature = this.base64UrlToBytes(rawSignature);
-      const verified = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, signature, signingInput);
+      const verified = await crypto.subtle.verify(algorithm.verify, cryptoKey, signature, signingInput);
       return verified ? this.text(payload.sub) : '';
     } catch (e) {
       console.error('LINE signed id token verify failed', e && e.message ? e.message : e);
