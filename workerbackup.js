@@ -7445,6 +7445,7 @@ async function dispatchAction(action, payload, request, env) {
     'getActivityById',
     'getStoreSettings',
     'listAnnouncements',
+    'uploadImageToR2',
     'mlmListOrders',
     'getTenantBonusOrders',
     'prepareTenantCardPayment'
