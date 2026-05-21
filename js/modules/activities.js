@@ -95,7 +95,8 @@ window.buildActivityShareUrl = function(activityId, activity) {
 };
 
 window.openActivityShareModal = function(activityId, title, options = {}) {
-  const activity = findActivityForShare(activityId) || {};
+  const optionActivity = options && options.activity ? options.activity : null;
+  const activity = optionActivity || findActivityForShare(activityId) || {};
   const id = String(activityId || getActivityIdValue(activity)).trim();
   if (!id) return window.showToast('找不到活動 ID，請重新整理後再試', true);
 
@@ -650,7 +651,7 @@ window.submitActivityForm = async function(mode) {
       window._adminActsCache = { data: null, time: 0 };
       setTimeout(() => {
         if (createdActivityId && typeof window.openActivityShareModal === 'function') {
-          window.openActivityShareModal(createdActivityId, p.activityName, { returnToAdmin: true });
+          window.openActivityShareModal(createdActivityId, p.activityName, { returnToAdmin: true, activity: { ...p, activityId: createdActivityId } });
         } else {
           window.goPage('admin-activities');
         }

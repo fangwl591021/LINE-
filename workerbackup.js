@@ -4613,7 +4613,7 @@ const D1ActivityModule = {
       JOIN activities a ON a.activity_id = r.activity_id
       WHERE r.status <> 'cancelled'
         AND TRIM(COALESCE(r.line_id, '')) <> ''
-        AND a.status <> '銝'
+        AND a.status <> '下架'
         AND a.start_time >= ?
         AND a.start_time < ?
       ORDER BY a.start_time ASC, r.created_at ASC
