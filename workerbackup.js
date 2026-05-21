@@ -161,6 +161,77 @@ const SecurityModule = {
     }
   },
 
+  base64UrlToBytes(input) {
+    const normalized = String(input || '').replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  },
+
+  parseJwtPart(input) {
+    const bytes = this.base64UrlToBytes(input);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  },
+
+  async getLineJwks(env) {
+    const cacheKey = 'LINE_LOGIN_JWKS_V1';
+    try {
+      if (env.ACTMASTER_KV) {
+        const cached = await env.ACTMASTER_KV.get(cacheKey, 'json');
+        if (cached && Array.isArray(cached.keys)) return cached;
+      }
+    } catch (e) {}
+
+    const res = await fetch('https://api.line.me/oauth2/v2.1/certs', {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.status !== 200) throw new Error(`LINE JWKS fetch failed: ${res.status}`);
+    const jwks = await res.json();
+    if (env.ACTMASTER_KV && jwks && Array.isArray(jwks.keys)) {
+      await env.ACTMASTER_KV.put(cacheKey, JSON.stringify(jwks), { expirationTtl: 21600 });
+    }
+    return jwks;
+  },
+
+  async getLineUserIdFromSignedIdToken(idToken, channelId, env) {
+    const token = this.text(idToken);
+    const clientId = this.text(channelId);
+    if (!token || !clientId || token.split('.').length !== 3) return '';
+
+    try {
+      const [rawHeader, rawPayload, rawSignature] = token.split('.');
+      const header = this.parseJwtPart(rawHeader);
+      const payload = this.parseJwtPart(rawPayload);
+      if (header.alg !== 'RS256' || !header.kid) return '';
+      if (payload.iss !== 'https://access.line.me') return '';
+      const audiences = Array.isArray(payload.aud) ? payload.aud.map(String) : [String(payload.aud || '')];
+      if (!audiences.includes(clientId)) return '';
+      if (!payload.sub) return '';
+      if (Number(payload.exp || 0) <= Math.floor(Date.now() / 1000)) return '';
+
+      const jwks = await this.getLineJwks(env);
+      const jwk = (jwks.keys || []).find(key => key.kid === header.kid);
+      if (!jwk) return '';
+
+      const cryptoKey = await crypto.subtle.importKey(
+        'jwk',
+        jwk,
+        { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+        false,
+        ['verify']
+      );
+      const signingInput = new TextEncoder().encode(`${rawHeader}.${rawPayload}`);
+      const signature = this.base64UrlToBytes(rawSignature);
+      const verified = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, signature, signingInput);
+      return verified ? this.text(payload.sub) : '';
+    } catch (e) {
+      console.error('LINE signed id token verify failed', e && e.message ? e.message : e);
+      return '';
+    }
+  },
+
   async getLineUserIdFromIdToken(idToken, clientId, env) {
     const token = this.text(idToken);
     const channelId = this.text(clientId || env.LINE_LOGIN_CHANNEL_ID || env.LINE_CHANNEL_ID || '1660923784');
@@ -180,7 +251,7 @@ const SecurityModule = {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body
       });
-      if (res.status !== 200) return '';
+      if (res.status !== 200) return await this.getLineUserIdFromSignedIdToken(token, channelId, env);
       const data = await res.json();
       const userId = this.text(data.sub);
       if (userId && env.ACTMASTER_KV) {
@@ -189,7 +260,7 @@ const SecurityModule = {
       return userId;
     } catch (e) {
       console.error('LINE id token verify failed', e && e.message ? e.message : e);
-      return '';
+      return await this.getLineUserIdFromSignedIdToken(token, channelId, env);
     }
   },
 
