@@ -1190,6 +1190,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
           try {
             enhancedPayload.lineAccessToken = liff.getAccessToken();
+            if (typeof liff.getIDToken === 'function') {
+              const idToken = liff.getIDToken();
+              if (idToken) {
+                enhancedPayload.lineIdToken = idToken;
+                const liffId = String(window.LIFF_ID || window.Config?.LIFF_ID || '');
+                enhancedPayload.lineClientId = liffId.split('-')[0];
+              }
+            }
             // 確保有 userId，避免某些舊 Payload 遺漏導致後端配對錯誤
             if (!enhancedPayload.userId && window.currentUserProfile?.userId) {
               enhancedPayload.userId = window.currentUserProfile.userId;

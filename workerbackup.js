@@ -7614,9 +7614,12 @@ async function dispatchAction(action, payload, request, env) {
     case 'updateCard': {
       try {
         const d1Result = await D1WriteModule.upsertCard(payload || {}, env);
-        if (d1Result && d1Result.success !== false) return d1Result;
+        if (d1Result) return d1Result;
       } catch (e) {
         console.error("D1 upsertCard fallback", e);
+        if (env.ACTMASTER_DB) {
+          return { success: false, error: 'D1 card save failed: ' + (e && e.message ? e.message : String(e)) };
+        }
       }
       return await DBModule.forward(action, payload, env);
     }
