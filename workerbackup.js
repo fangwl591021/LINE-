@@ -161,6 +161,38 @@ const SecurityModule = {
     }
   },
 
+  async getLineUserIdFromIdToken(idToken, clientId, env) {
+    const token = this.text(idToken);
+    const channelId = this.text(clientId || env.LINE_LOGIN_CHANNEL_ID || env.LINE_CHANNEL_ID || '1660923784');
+    if (!token || !channelId) return '';
+    const cacheKey = `IDTOKEN_${token.substring(0, 30)}`;
+    try {
+      if (env.ACTMASTER_KV) {
+        const cachedUserId = await env.ACTMASTER_KV.get(cacheKey);
+        if (cachedUserId) return cachedUserId;
+      }
+
+      const body = new URLSearchParams();
+      body.set('id_token', token);
+      body.set('client_id', channelId);
+      const res = await fetch('https://api.line.me/oauth2/v2.1/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+      if (res.status !== 200) return '';
+      const data = await res.json();
+      const userId = this.text(data.sub);
+      if (userId && env.ACTMASTER_KV) {
+        await env.ACTMASTER_KV.put(cacheKey, userId, { expirationTtl: 3600 });
+      }
+      return userId;
+    } catch (e) {
+      console.error('LINE id token verify failed', e && e.message ? e.message : e);
+      return '';
+    }
+  },
+
   maskId(id) {
     const text = this.text(id);
     if (!text) return '';
@@ -194,8 +226,12 @@ const SecurityModule = {
 
   async getActor(payload, request, env) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
-    if (!token) return null;
-    const userId = await this.getLineUserIdFromToken(token, env);
+    const idToken = payload.lineIdToken || '';
+    if (!token && !idToken) return null;
+    let userId = token ? await this.getLineUserIdFromToken(token, env) : '';
+    if (!userId && idToken) {
+      userId = await this.getLineUserIdFromIdToken(idToken, payload.lineClientId, env);
+    }
     if (!userId) return null;
 
     let role = 'user';

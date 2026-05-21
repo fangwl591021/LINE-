@@ -1441,6 +1441,10 @@
       try {
         if (!options.omitAuthToken && window.liff && liff.isLoggedIn()) {
           payload.lineAccessToken = liff.getAccessToken();
+          if (typeof liff.getIDToken === 'function') {
+            payload.lineIdToken = liff.getIDToken();
+            payload.lineClientId = LIFF_ID.split('-')[0];
+          }
         }
         const authUserId = adminProfile?.userId || '';
         if (!options.omitDefaultUserId && !payload.userId) payload.userId = authUserId;
