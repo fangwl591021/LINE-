@@ -1406,16 +1406,35 @@
       setTimeout(() => { toast.remove(); }, 3000);
     }
 
+    function isAdminAuthTokenError(message) {
+      return /Missing or invalid LINE Token|Invalid or Expired LINE Token|Missing LINE Token/i.test(String(message || ''));
+    }
+
+    function resetAdminLiffLogin(message) {
+      showToast(message || 'LINE 授權已過期，正在重新登入', true);
+      try {
+        if (window.liff && typeof liff.isLoggedIn === 'function' && liff.isLoggedIn()) {
+          liff.logout();
+        }
+      } catch (e) {}
+      setTimeout(() => {
+        window.location.replace(getAdminLiffEntryUrl());
+      }, 450);
+    }
+
     async function fetchAPI(action, payload = {}, options = {}) {
       const controller = new AbortController();
       const timeoutMs = Number(options.timeoutMs || 20000);
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        if (!options.omitAuthToken && liff.isLoggedIn()) { payload.lineAccessToken = liff.getAccessToken(); }
+        if (!options.omitAuthToken && window.liff && liff.isLoggedIn()) {
+          payload.lineAccessToken = liff.getAccessToken();
+        }
         const authUserId = adminProfile?.userId || '';
         if (!options.omitDefaultUserId && !payload.userId) payload.userId = authUserId;
         payload.authUserId = payload.authUserId || authUserId;
         payload.operatorId = payload.operatorId || authUserId;
+        payload.authenticatedUserId = payload.authenticatedUserId || authUserId;
         payload.role = payload.role || adminRole || 'store';
         payload.operatorRole = payload.operatorRole || adminRole || 'store';
         payload.networkId = payload.networkId || adminNetworkId || 'admin';
@@ -1430,7 +1449,11 @@
         return data.data || data;
       } catch (err) {
         const message = err && err.name === 'AbortError' ? '連線逾時，請重新整理後再試' : err.message;
-        if (!options.silent) showToast(message, true);
+        if (isAdminAuthTokenError(message)) {
+          resetAdminLiffLogin('LINE 授權已過期，請重新登入後再儲存');
+        } else if (!options.silent) {
+          showToast(message, true);
+        }
         return null;
       } finally {
         clearTimeout(timer);
