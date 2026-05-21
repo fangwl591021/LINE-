@@ -177,8 +177,17 @@ function toAbsoluteECardUrl(url) {
 }
 
 function cleanECardFlexImageUrl(url) {
-  const value = toAbsoluteECardUrl(url);
+  const value = normalizeECardImageUrl(toAbsoluteECardUrl(url));
   return /^https:\/\//i.test(value) ? value : '';
+}
+
+function normalizeECardImageUrl(url) {
+  const value = String(url || '').trim();
+  if (!value) return '';
+  const match = value.match(/^https:\/\/photoman\.fangwl591021\.workers\.dev\/(card_[^/?#]+)([?#].*)?$/i);
+  if (!match) return value;
+  const workerUrl = String((window.Config && window.Config.WORKER_URL) || window.WORKER_URL || 'https://line-engine.fangwl591021.workers.dev').replace(/\/$/, '');
+  return workerUrl + '/img/' + match[1];
 }
 
 function cleanECardFlexHttpsUri(uri) {
@@ -435,9 +444,9 @@ window.initECardSettings = function(card) {
   }
 
   window.currentEcardImgs = {
-    landscape: cfg.imgUrl || card['名片圖檔'] || '',
-    portrait: cfg.imgUrlPortrait || '',
-    square: cfg.imgUrlSquare || ''
+    landscape: normalizeECardImageUrl(cfg.imgUrl || card['名片圖檔'] || ''),
+    portrait: normalizeECardImageUrl(cfg.imgUrlPortrait || ''),
+    square: normalizeECardImageUrl(cfg.imgUrlSquare || '')
   };
   
   window.currentEcardRatios = {
@@ -456,7 +465,7 @@ window.initECardSettings = function(card) {
   if (imgInput) {
     imgInput.value = window.currentEcardImgs[layoutVal];
     imgInput.oninput = function() {
-       window.currentEcardImgs[layoutVal] = this.value;
+       window.currentEcardImgs[layoutVal] = normalizeECardImageUrl(this.value);
        window.updateECardPreview();
     };
   }
@@ -510,7 +519,7 @@ window.changeOtherLayout = function() {
   if (imgInput) {
     imgInput.value = window.currentEcardImgs[layoutStyle] || '';
     imgInput.oninput = function() {
-       window.currentEcardImgs[layoutStyle] = this.value;
+       window.currentEcardImgs[layoutStyle] = normalizeECardImageUrl(this.value);
        window.updateECardPreview();
     };
   }
@@ -519,10 +528,10 @@ window.changeOtherLayout = function() {
 
 window.setOtherUploadImage = function(url, ratio) {
     const layoutStyle = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
-    window.currentEcardImgs[layoutStyle] = url;
+    window.currentEcardImgs[layoutStyle] = normalizeECardImageUrl(url);
     if (ratio) window.currentEcardRatios[layoutStyle] = ratio.replace(':', '/');
     const imgInput = document.getElementById('v1-img-url');
-    if (imgInput) imgInput.value = url;
+    if (imgInput) imgInput.value = window.currentEcardImgs[layoutStyle];
     window.updateECardPreview();
 };
 
@@ -535,7 +544,7 @@ window.updateECardPreview = function() {
 
   const layoutStyle = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
   const name = document.getElementById('edit-姓名')?.value || '姓名';
-  const imgUrl = window.currentEcardImgs[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+  const imgUrl = normalizeECardImageUrl(window.currentEcardImgs[layoutStyle]) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   
   const descRaw = document.getElementById('edit-服務項目')?.value || '';
   const desc = descRaw.replace(/\n/g, '<br>');

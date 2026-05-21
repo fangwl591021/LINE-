@@ -81,7 +81,17 @@
     var imgInput = $('#my-v1-img-url');
     if (!imgInput) return;
     var layout = getLayout();
-    myEcardImgs[layout] = imgInput.value || '';
+    myEcardImgs[layout] = normalizeMyCardImageUrl(imgInput.value || '');
+    if (imgInput.value !== myEcardImgs[layout]) imgInput.value = myEcardImgs[layout];
+  }
+
+  function normalizeMyCardImageUrl(url) {
+    var value = String(url || '').trim();
+    if (!value) return '';
+    var match = value.match(/^https:\/\/photoman\.fangwl591021\.workers\.dev\/(card_[^/?#]+)([?#].*)?$/i);
+    if (!match) return value;
+    var workerUrl = String((moduleConfig && moduleConfig.WORKER_URL) || window.WORKER_URL || 'https://line-engine.fangwl591021.workers.dev').replace(/\/$/, '');
+    return workerUrl + '/img/' + match[1];
   }
 
   function parseCardConfig(card) {
@@ -159,9 +169,9 @@
 
     var cfg = parseCardConfig(currentCardData);
     myEcardImgs = {
-      landscape: cfg.imgUrl || currentCardData['名片圖檔'] || '',
-      portrait: cfg.imgUrlPortrait || '',
-      square: cfg.imgUrlSquare || ''
+      landscape: normalizeMyCardImageUrl(cfg.imgUrl || currentCardData['名片圖檔'] || ''),
+      portrait: normalizeMyCardImageUrl(cfg.imgUrlPortrait || ''),
+      square: normalizeMyCardImageUrl(cfg.imgUrlSquare || '')
     };
     myEcardRatios = {
       landscape: cfg.imgRatioLandscape || '20:13',
@@ -368,7 +378,7 @@
     var layout = getLayout();
     var profile = moduleAuth.getUserProfile() || {};
     var name = (currentCardData && currentCardData['姓名']) || profile.displayName || '姓名';
-    var imgUrl = myEcardImgs[layout] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
+    var imgUrl = normalizeMyCardImageUrl(myEcardImgs[layout]) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
     var desc = currentCardData ? (currentCardData['服務項目'] || currentCardData['職稱'] || currentCardData['公司名稱'] || '') : '';
     var cfg = parseCardConfig(currentCardData);
     var color = cfg.descColor || '#666666';
