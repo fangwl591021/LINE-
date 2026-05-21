@@ -247,6 +247,27 @@ const SecurityModule = {
     return { userId, role, networkId, token };
   },
 
+  async describeActorFailure(payload, request, env) {
+    const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
+    const idToken = payload.lineIdToken || '';
+    const clientId = this.text(payload.lineClientId || env.LINE_LOGIN_CHANNEL_ID || env.LINE_CHANNEL_ID || '1660923784');
+    const hints = [
+      `access=${token ? 'Y' : 'N'}`,
+      `id=${idToken ? 'Y' : 'N'}`,
+      `client=${clientId || '-'}`
+    ];
+    if (!token && !idToken) return hints.join(' ');
+    if (token) {
+      const tokenUserId = await this.getLineUserIdFromToken(token, env);
+      hints.push(`accessOk=${tokenUserId ? 'Y' : 'N'}`);
+    }
+    if (idToken) {
+      const idUserId = await this.getLineUserIdFromIdToken(idToken, clientId, env);
+      hints.push(`idOk=${idUserId ? 'Y' : 'N'}`);
+    }
+    return hints.join(' ');
+  },
+
   canManage(role) {
     return role === 'admin' || role === 'store';
   },
@@ -392,7 +413,10 @@ const SecurityModule = {
         };
       }
     }
-    if (!actor) return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' };
+    if (!actor) {
+      const detail = await this.describeActorFailure(payload, request, env).catch(() => '');
+      return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' + (detail ? ` [${detail}]` : '') };
+    }
 
     payload.authenticatedUserId = actor.userId;
     payload.authenticatedRole = actor.role;
