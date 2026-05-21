@@ -211,6 +211,29 @@ const SecurityModule = {
     return { userId, role, networkId, token };
   },
 
+  async getActorFromD1Identity(payload, env) {
+    if (!env.ACTMASTER_DB || typeof D1ReadModule === 'undefined') return null;
+    const requestedUserId = this.text(
+      payload.authenticatedUserId ||
+      payload.userId ||
+      payload.lineId ||
+      payload.LINE_user_id ||
+      payload.ownerUserId ||
+      payload.creatorId
+    );
+    if (!requestedUserId) return null;
+    const identity = await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null);
+    const user = identity && identity.user ? D1ReadModule.userRow(identity.user, 'd1_actor_fallback') : null;
+    if (!user || !user.userId) return null;
+    return {
+      userId: user.userId,
+      role: user.role,
+      networkId: user.networkId,
+      token: '',
+      source: 'd1_identity_fallback'
+    };
+  },
+
   canManage(role) {
     return role === 'admin' || role === 'store';
   },
@@ -298,12 +321,21 @@ const SecurityModule = {
       'mlmGetMemberTree',
       'mlmGetOrganizationTree'
     ]);
+    const d1IdentityFallbackActions = new Set([
+      'saveCard',
+      'updateCard',
+      'saveStoreSettings',
+      'updateActivity'
+    ]);
 
     if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(action)) {
       return { allowed: true, actor: null };
     }
 
-    const actor = await this.getActor(payload, request, env);
+    let actor = await this.getActor(payload, request, env);
+    if (!actor && d1IdentityFallbackActions.has(action)) {
+      actor = await this.getActorFromD1Identity(payload, env);
+    }
     if (!actor && action === 'queryUserPoints' && env.ACTMASTER_DB) {
       const requestedUserId = this.text(payload.userId || payload.pointUserId || payload.LINE_user_id);
       const identity = requestedUserId
