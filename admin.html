@@ -3815,7 +3815,7 @@
         '自訂名片設定': JSON.stringify(cfg)
       };
 
-      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData }, { forceReauthOnTokenError: true });
+      const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData }, { forceReauthOnTokenError: false });
       btn.disabled = false;
       btn.innerHTML = originalText;
       if (res) {
