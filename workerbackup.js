@@ -424,8 +424,8 @@ const StorageModule = {
           const ext = mimeType.split('/')[1] || 'jpeg';
           const fileName = `card_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
           await env.IMG_BUCKET.put(fileName, buffer, { httpMetadata: { contentType: mimeType } });
-          const baseUrl = env.R2_WORKER_URL ? env.R2_WORKER_URL.replace(/\/$/, '') : 'https://photoman.fangwl591021.workers.dev';
-          return `${baseUrl}/${fileName}`;
+          const baseUrl = env.R2_WORKER_URL ? env.R2_WORKER_URL.replace(/\/$/, '') : 'https://line-engine.fangwl591021.workers.dev';
+          return `${baseUrl}/img/${fileName}`;
         }
       } 
       
@@ -7380,6 +7380,18 @@ export default {
     }
     try {
       const url = new URL(request.url);
+      if (request.method === 'GET' && url.pathname.startsWith('/img/')) {
+        if (!env.IMG_BUCKET) return new Response('Image bucket not configured', { status: 500 });
+        const key = decodeURIComponent(url.pathname.replace(/^\/img\//, ''));
+        if (!key || key.includes('..')) return new Response('Bad image key', { status: 400 });
+        const object = await env.IMG_BUCKET.get(key);
+        if (!object) return new Response('Image not found', { status: 404 });
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set('Access-Control-Allow-Origin', '*');
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+        return new Response(object.body, { headers });
+      }
       if (url.pathname === '/newebpay/notify') {
         return await PaymentModule.handleNewebpayNotify(request, env, ctx || { waitUntil: promise => promise });
       }

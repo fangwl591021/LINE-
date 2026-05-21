@@ -179,7 +179,16 @@
 
   function getCardImageUrl(card) {
     const cfg = parseCardConfig(card);
-    return safeText(cfg.imgUrl || cfg.imgUrlLandscape || cfg.imgUrlSquare || cfg.imgUrlPortrait || card["名片圖檔"] || "").trim();
+    return normalizeCardImageUrl(safeText(cfg.imgUrl || cfg.imgUrlLandscape || cfg.imgUrlSquare || cfg.imgUrlPortrait || card["名片圖檔"] || "").trim());
+  }
+
+  function normalizeCardImageUrl(url) {
+    const raw = safeText(url).trim();
+    if (!raw) return "";
+    const match = raw.match(/^https:\/\/photoman\.fangwl591021\.workers\.dev\/(card_[^/?#]+)([?#].*)?$/i);
+    if (!match) return raw;
+    const workerUrl = safeText(window.Config && window.Config.WORKER_URL).replace(/\/$/, "") || "https://line-engine.fangwl591021.workers.dev";
+    return workerUrl + "/img/" + match[1];
   }
 
   function renderTags(value, small = true) {
