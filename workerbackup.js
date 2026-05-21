@@ -314,12 +314,25 @@ const SecurityModule = {
       }
     }
     if (!actor && action === 'getCardContacts' && env.ACTMASTER_DB) {
-      const requestedUserId = this.text(payload.userId);
+      const requestedUserId = this.text(payload.userId || payload.authUserId || payload.operatorId || payload.authenticatedUserId);
       const identity = requestedUserId
         ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
         : null;
-      if (identity && identity.user) {
-        return { allowed: true, actor: null };
+      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
+      if (user) {
+        payload.userId = payload.userId || user.userId;
+        payload.authenticatedUserId = user.userId;
+        payload.authenticatedRole = user.role;
+        payload.authenticatedNetworkId = user.networkId;
+        return {
+          allowed: true,
+          actor: {
+            userId: user.userId,
+            role: user.role,
+            networkId: user.networkId,
+            token: ''
+          }
+        };
       }
     }
     if (!actor && action === 'listStorePointCashierLogs' && env.ACTMASTER_DB) {
