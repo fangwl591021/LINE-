@@ -178,6 +178,14 @@ const Core = (function() {
             try {
                 if (typeof liff !== 'undefined' && liff.isLoggedIn()) {
                     safePayload.lineAccessToken = liff.getAccessToken();
+                    if (typeof liff.getIDToken === 'function') {
+                        const idToken = liff.getIDToken();
+                        if (idToken) {
+                            safePayload.lineIdToken = idToken;
+                            const liffId = String(window.LIFF_ID || window.Config?.LIFF_ID || Config.LIFF_ID || '');
+                            safePayload.lineClientId = liffId.split('-')[0];
+                        }
+                    }
                 }
             } catch (e) {
                 console.warn("LIFF token fetch failed:", e);

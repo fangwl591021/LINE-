@@ -3750,12 +3750,12 @@ const D1WriteModule = {
       const existingCreatorId = this.text(existing.creator_id);
       const existingOwnerId = this.text(existing.owner_user_id);
       const existingNetworkId = this.text(existing.network_id);
+      const isAdmin = role === 'admin';
       const isBoundToActor = !!(actorId && existingLineId && existingLineId === actorId);
-      const isUnboundAdmin = role === 'admin' && !existingLineId;
       const isUnboundOwner = !!(actorId && !existingLineId && (existingCreatorId === actorId || existingOwnerId === actorId));
       const isUnboundStoreManager = !!(role === 'store' && !existingLineId && networkId && existingNetworkId && networkId === existingNetworkId);
 
-      if (!isBoundToActor && !isUnboundAdmin && !isUnboundOwner && !isUnboundStoreManager) {
+      if (!isAdmin && !isBoundToActor && !isUnboundOwner && !isUnboundStoreManager) {
         return { success: false, error: 'Access Denied: cannot update this card' };
       }
     }
