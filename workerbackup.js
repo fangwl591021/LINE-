@@ -175,8 +175,61 @@ const SecurityModule = {
     return JSON.parse(new TextDecoder().decode(bytes));
   },
 
+  trimLeadingZeroes(bytes) {
+    let start = 0;
+    while (start < bytes.length - 1 && bytes[start] === 0) start += 1;
+    return bytes.slice(start);
+  },
+
+  derInteger(bytes) {
+    let value = this.trimLeadingZeroes(bytes);
+    if (value[0] & 0x80) {
+      const next = new Uint8Array(value.length + 1);
+      next[0] = 0;
+      next.set(value, 1);
+      value = next;
+    }
+    const out = new Uint8Array(value.length + 2);
+    out[0] = 0x02;
+    out[1] = value.length;
+    out.set(value, 2);
+    return out;
+  },
+
+  ecdsaJoseToDer(signature) {
+    const bytes = signature instanceof Uint8Array ? signature : new Uint8Array(signature || []);
+    if (bytes.length !== 64) return bytes;
+    const r = this.derInteger(bytes.slice(0, 32));
+    const s = this.derInteger(bytes.slice(32));
+    const out = new Uint8Array(2 + r.length + s.length);
+    out[0] = 0x30;
+    out[1] = r.length + s.length;
+    out.set(r, 2);
+    out.set(s, 2 + r.length);
+    return out;
+  },
+
+  cleanLineJwk(jwk, alg) {
+    if (!jwk) return null;
+    if (alg === 'ES256') {
+      return {
+        kty: 'EC',
+        crv: jwk.crv || 'P-256',
+        x: jwk.x || jwk.xvalue,
+        y: jwk.y || jwk.yvalue,
+        ext: true
+      };
+    }
+    return {
+      kty: 'RSA',
+      n: jwk.n,
+      e: jwk.e,
+      ext: true
+    };
+  },
+
   async getLineJwks(env) {
-    const cacheKey = 'LINE_LOGIN_JWKS_V1';
+    const cacheKey = 'LINE_LOGIN_JWKS_V2';
     try {
       if (env.ACTMASTER_KV) {
         const cached = await env.ACTMASTER_KV.get(cacheKey, 'json');
@@ -215,13 +268,17 @@ const SecurityModule = {
       const jwk = (jwks.keys || []).find(key => key.kid === header.kid);
       if (!jwk) return '';
 
+      const cleanJwk = this.cleanLineJwk(jwk, header.alg);
       const algorithm = header.alg === 'ES256'
         ? { import: { name: 'ECDSA', namedCurve: 'P-256' }, verify: { name: 'ECDSA', hash: 'SHA-256' } }
         : { import: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, verify: 'RSASSA-PKCS1-v1_5' };
-      const cryptoKey = await crypto.subtle.importKey('jwk', jwk, algorithm.import, false, ['verify']);
+      const cryptoKey = await crypto.subtle.importKey('jwk', cleanJwk, algorithm.import, false, ['verify']);
       const signingInput = new TextEncoder().encode(`${rawHeader}.${rawPayload}`);
       const signature = this.base64UrlToBytes(rawSignature);
-      const verified = await crypto.subtle.verify(algorithm.verify, cryptoKey, signature, signingInput);
+      let verified = await crypto.subtle.verify(algorithm.verify, cryptoKey, signature, signingInput);
+      if (!verified && header.alg === 'ES256') {
+        verified = await crypto.subtle.verify(algorithm.verify, cryptoKey, this.ecdsaJoseToDer(signature), signingInput);
+      }
       return verified ? this.text(payload.sub) : '';
     } catch (e) {
       console.error('LINE signed id token verify failed', e && e.message ? e.message : e);
