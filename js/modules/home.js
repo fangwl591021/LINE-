@@ -1360,6 +1360,9 @@ const HomeModule = (function() {
                             <span class="material-symbols-outlined text-[18px]">ios_share</span> 分享
                         </button>
                     </div>
+                    <button onclick="window.copyActivityId('${window.escapeJS(activityId)}')" class="w-full py-3 bg-slate-100 text-slate-700 rounded-2xl font-black text-[14px] flex justify-center items-center gap-1">
+                        <span class="material-symbols-outlined text-[18px]">tag</span> 複製課程編號
+                    </button>
                 </div>
             </div>`;
         window.goPage('my-act-detail', true);

@@ -139,6 +139,26 @@ window.copyActivityShareLink = async function() {
   }
 };
 
+window.copyActivityId = async function(activityId) {
+  const id = String(activityId || '').trim();
+  if (!id) return window.showToast('沒有可複製的課程編號', true);
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(id);
+    } else {
+      const input = document.createElement('input');
+      input.value = id;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+    }
+    window.showToast('課程編號已複製');
+  } catch (e) {
+    window.prompt('請複製課程編號', id);
+  }
+};
+
 function clipActivityFlexText(value, max = 120) {
   const text = activityShareText(value);
   if (!text) return '';

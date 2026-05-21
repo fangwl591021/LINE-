@@ -380,8 +380,32 @@
     if (open) window.updateInboxPointCostHint?.();
   };
 
+  window.setInboxRecipientMode = function (mode) {
+    const next = mode === "course" ? "course" : "user";
+    const modeEl = $("inbox-recipient-mode");
+    const query = $("inbox-recipient-query");
+    const hidden = $("inbox-recipient-id");
+    const box = $("inbox-recipient-results");
+    if (modeEl) modeEl.value = next;
+    if (hidden) hidden.value = "";
+    if (box) box.innerHTML = "";
+    if (query) {
+      query.value = "";
+      query.placeholder = next === "course" ? "貼上課程編號，例如 ACT_..." : "輸入姓名、電話或 LINE ID";
+    }
+    const userBtn = $("inbox-recipient-mode-user");
+    const courseBtn = $("inbox-recipient-mode-course");
+    if (userBtn) userBtn.className = next === "user"
+      ? "py-2 rounded-2xl bg-slate-900 text-white text-[13px] font-black active:scale-95"
+      : "py-2 rounded-2xl bg-slate-50 text-slate-600 border border-slate-200 text-[13px] font-black active:scale-95";
+    if (courseBtn) courseBtn.className = next === "course"
+      ? "py-2 rounded-2xl bg-slate-900 text-white text-[13px] font-black active:scale-95"
+      : "py-2 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200 text-[13px] font-black active:scale-95";
+  };
+
   window.searchInboxRecipients = async function () {
     const query = $("inbox-recipient-query")?.value?.trim() || "";
+    const mode = $("inbox-recipient-mode")?.value || "user";
     const box = $("inbox-recipient-results");
     const hidden = $("inbox-recipient-id");
     if (hidden) hidden.value = "";
@@ -393,7 +417,7 @@
 
     box.innerHTML = '<div class="text-[13px] text-slate-400 font-bold px-1">搜尋中...</div>';
     try {
-      const rows = await window.fetchAPI("searchInboxRecipients", { keyword: query }, true);
+      const rows = await window.fetchAPI("searchInboxRecipients", { keyword: query, recipientMode: mode }, true);
       const list = Array.isArray(rows) ? rows : [];
       if (!list.length) {
         box.innerHTML = '<div class="text-[13px] text-red-400 font-bold px-1">找不到符合的收件人</div>';
@@ -404,9 +428,9 @@
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
               <p class="text-[15px] font-black text-slate-900 truncate">${escapeHTML(user.name || "未命名")}</p>
-              <p class="text-[12px] text-slate-500 font-bold mt-1 truncate">${escapeHTML([user.phone, user.industry].filter(Boolean).join(" / ") || user.userId)}</p>
+              <p class="text-[12px] text-slate-500 font-bold mt-1 truncate">${escapeHTML(user.subtitle || [user.phone, user.industry].filter(Boolean).join(" / ") || user.userId)}</p>
             </div>
-            <span class="shrink-0 rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 text-[11px] font-black">可收信</span>
+            <span class="shrink-0 rounded-full ${user.type === "course" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"} px-2 py-1 text-[11px] font-black">${escapeHTML(user.badge || "可收信")}</span>
           </div>
         </button>
       `).join("");
@@ -442,6 +466,7 @@
   window.sendInboxMessage = async function (btn) {
     const receiverUserId = $("inbox-recipient-id")?.value?.trim() || "";
     const receiverQuery = $("inbox-recipient-query")?.value?.trim() || "";
+    const recipientMode = $("inbox-recipient-mode")?.value || "user";
     const messageType = $("inbox-message-type")?.value || "message";
     const title = $("inbox-message-title")?.value?.trim() || "";
     const body = $("inbox-message-body")?.value?.trim() || "";
@@ -457,8 +482,10 @@
       btn.classList.add("opacity-70");
     }
     try {
-      await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, messageType, title, body }, true);
-      window.showToast?.(`${messageType === "coupon" ? "優惠券" : "訊息"}已送出，已扣 ${cost} 點`);
+      const res = await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, recipientMode, messageType, title, body }, true);
+      const sentCount = Number((res && res.data && res.data.sentCount) || 1);
+      const totalCost = Number((res && res.data && res.data.totalCost) || cost);
+      window.showToast?.(`${messageType === "coupon" ? "優惠券" : "訊息"}已送出 ${sentCount} 位，扣除 ${totalCost} 點`);
       window.pointWalletData = null;
       window.refreshPointBalanceBadge?.();
       ["inbox-message-title", "inbox-message-body", "inbox-recipient-id", "inbox-recipient-query"].forEach(id => {

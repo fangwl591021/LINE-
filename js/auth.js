@@ -732,7 +732,10 @@ window.loadStorePointCashierLogs = async function(force = false) {
 
   listEl.innerHTML = '<div class="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3 text-[13px] text-slate-400 font-bold text-center">載入收銀紀錄中...</div>';
   try {
-    const res = await window.fetchAPI('listStorePointCashierLogs', { limit: 10 }, true);
+    const res = await window.fetchAPI('listStorePointCashierLogs', {
+      userId: window.currentUserProfile?.userId || '',
+      limit: 10
+    }, true);
     if (!res || res.error) throw new Error(res?.error || '收銀紀錄讀取失敗');
     const data = res.data || res;
     const rows = Array.isArray(data.list) ? data.list : [];
@@ -1103,6 +1106,7 @@ window.claimDailyPointCheckin = async function(btn) {
   }
   const statusEl = document.getElementById('daily-checkin-status');
   const oldText = btn ? btn.textContent : '';
+  let keepDisabled = false;
   if (btn) {
     btn.disabled = true;
     btn.textContent = '處理中';
@@ -1110,11 +1114,23 @@ window.claimDailyPointCheckin = async function(btn) {
   }
   try {
     const res = await window.fetchAPI('dailyPointCheckin', { userId: window.currentUserProfile.userId }, true);
+    if (!res || res.success === false || res.error) {
+      throw new Error(res?.error || '每日簽到失敗');
+    }
     const data = res && (res.data || res);
     const message = data?.message || (data?.alreadyChecked ? '今天已領取過點數家族簽到獎勵' : '點數家族簽到成功，已獲得 10 點');
+    keepDisabled = Boolean(data?.awarded || data?.alreadyChecked);
     if (statusEl) statusEl.textContent = message;
     window.showToast?.(message, false);
     window.pointWalletData = null;
+    if (data?.balance !== undefined) {
+      window.pointWalletData = {
+        balance: Number(data.balance || 0),
+        list: [],
+        loadedAt: Date.now()
+      };
+    }
+    if (data?.awarded) await new Promise(resolve => setTimeout(resolve, 1000));
     await window.loadPointsWallet(true);
     await window.refreshPointBalanceBadge?.();
   } catch (e) {
@@ -1123,8 +1139,8 @@ window.claimDailyPointCheckin = async function(btn) {
     window.showToast?.('每日簽到失敗：' + msg, true);
   } finally {
     if (btn) {
-      btn.disabled = false;
-      btn.textContent = oldText || '簽到';
+      btn.disabled = keepDisabled;
+      btn.textContent = keepDisabled ? '已簽到' : (oldText || '簽到');
       btn.classList.remove('opacity-70');
     }
   }

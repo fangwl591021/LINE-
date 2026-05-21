@@ -322,6 +322,27 @@ const SecurityModule = {
         return { allowed: true, actor: null };
       }
     }
+    if (!actor && action === 'listStorePointCashierLogs' && env.ACTMASTER_DB) {
+      const requestedUserId = this.text(payload.userId || payload.authenticatedUserId);
+      const identity = requestedUserId
+        ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
+        : null;
+      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
+      if (user && this.canManage(user.role)) {
+        payload.authenticatedUserId = user.userId;
+        payload.authenticatedRole = user.role;
+        payload.authenticatedNetworkId = user.networkId;
+        return {
+          allowed: true,
+          actor: {
+            userId: user.userId,
+            role: user.role,
+            networkId: user.networkId,
+            token: ''
+          }
+        };
+      }
+    }
     if (!actor) return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' };
 
     payload.authenticatedUserId = actor.userId;
@@ -963,6 +984,20 @@ const PointModule = {
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `).run();
+    const awardColumns = [
+      "ALTER TABLE point_awards ADD COLUMN user_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE point_awards ADD COLUMN card_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE point_awards ADD COLUMN award_type TEXT NOT NULL DEFAULT 'card_scan_create'",
+      "ALTER TABLE point_awards ADD COLUMN points REAL NOT NULL DEFAULT 0",
+      "ALTER TABLE point_awards ADD COLUMN point_type TEXT NOT NULL DEFAULT 'gift_money'",
+      "ALTER TABLE point_awards ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
+      "ALTER TABLE point_awards ADD COLUMN response_json TEXT NOT NULL DEFAULT '{}'",
+      "ALTER TABLE point_awards ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+      "ALTER TABLE point_awards ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    ];
+    for (const sql of awardColumns) {
+      await env.ACTMASTER_DB.prepare(sql).run().catch(() => null);
+    }
     await env.ACTMASTER_DB.prepare(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_point_awards_unique_card_scan
       ON point_awards(user_id, card_id, award_type)
@@ -977,21 +1012,66 @@ const PointModule = {
   async dailyCheckin(payload, env) {
     if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
     await this.ensureAwardTable(env);
+
     const rawUserId = String(payload.authenticatedUserId || payload.userId || '').trim();
-    const pointUserId = await this.resolvePointUserId(env, rawUserId);
+    const pointUserId = String(payload.pointUserId || payload.pt_uid || rawUserId || '').trim();
     if (!pointUserId) return { success: false, error: 'Missing userId' };
 
     const today = this.taipeiDate();
     const awardId = `AWD_DAILY_${pointUserId}_${today}`;
+    const beforeWallet = await this.queryUserPoints({
+      pointUserId,
+      point_type: 'gift_money',
+      page: 1,
+      per_page: 100
+    }, env);
+    if (!beforeWallet || !beforeWallet.success) {
+      return {
+        success: false,
+        error: beforeWallet && beforeWallet.error ? beforeWallet.error : '無法讀取母站點數',
+        data: { pointUserId, date: today, stage: 'before_query', beforeWallet }
+      };
+    }
+
+    const balanceBefore = Number(beforeWallet.data?.balance || 0) || 0;
+    const dailyAwardExists = (wallet) => {
+      const list = Array.isArray(wallet?.data?.list) ? wallet.data.list : [];
+      return list.some(row => {
+        const amount = Number(row.get_point ?? row.point ?? row.points ?? 0) || 0;
+        const text = [
+          row.event_name,
+          row.eventName,
+          row.event_content,
+          row.eventContent,
+          row.shop_remark,
+          row.shopRemark
+        ].map(v => String(v || '')).join(' ');
+        return amount >= 10 && (
+          text.includes(`daily_checkin=${today}`) ||
+          (text.includes(today) && (text.includes('每日簽到') || text.includes('點數家族')))
+        );
+      });
+    };
+
+    if (dailyAwardExists(beforeWallet)) {
+      return {
+        success: true,
+        data: {
+          awarded: false,
+          alreadyChecked: true,
+          points: 0,
+          date: today,
+          balance: balanceBefore,
+          pointUserId,
+          message: '今天已領取過點數家族簽到獎勵'
+        }
+      };
+    }
+
     await env.ACTMASTER_DB.prepare(`
       INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
       VALUES (?, ?, ?, 'daily_checkin', 10, 'gift_money', 'pending', '{}', CURRENT_TIMESTAMP)
     `).bind(awardId, pointUserId, today).run();
-
-    const existing = await D1ReadModule.first(env, 'SELECT * FROM point_awards WHERE award_id = ? LIMIT 1', [awardId]);
-    if (existing && existing.status === 'sent') {
-      return { success: true, data: { awarded: false, alreadyChecked: true, points: 0, date: today, message: '今天已領取過點數家族簽到獎勵' } };
-    }
 
     const result = await this.insertUserPoint({
       userId: pointUserId,
@@ -1002,16 +1082,53 @@ const PointModule = {
       shop_remark: `daily_checkin=${today}`
     }, env);
 
+    let afterWallet = null;
+    let balanceAfter = balanceBefore;
+    if (result && result.success) {
+      await new Promise(resolve => setTimeout(resolve, 1600));
+      afterWallet = await this.queryUserPoints({
+        pointUserId,
+        point_type: 'gift_money',
+        page: 1,
+        per_page: 100
+      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+      if (afterWallet && afterWallet.success) {
+        balanceAfter = Number(afterWallet.data?.balance || 0) || 0;
+      }
+    }
+
+    const verified = !!(result && result.success && (balanceAfter >= balanceBefore + 10 || dailyAwardExists(afterWallet)));
     await env.ACTMASTER_DB.prepare(`
       UPDATE point_awards
       SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
       WHERE award_id = ?
-    `).bind(result && result.success ? 'sent' : 'failed', JSON.stringify(result || {}), awardId).run();
+    `).bind(
+      verified ? 'sent' : 'failed',
+      JSON.stringify({ result, before: balanceBefore, after: balanceAfter, afterWallet }),
+      awardId
+    ).run();
 
-    if (!result || !result.success) {
-      return { success: false, error: result && result.error ? result.error : '每日簽到贈點失敗', data: { date: today } };
+    if (!verified) {
+      return {
+        success: false,
+        error: result && result.error ? result.error : '母站尚未確認點數入帳，請重新整理後再試',
+        data: { date: today, pointUserId, balanceBefore, balanceAfter, pointInsertResult: result, afterWallet }
+      };
     }
-    return { success: true, data: { awarded: true, alreadyChecked: false, points: 10, date: today, message: '點數家族簽到成功，已獲得 10 點' } };
+
+    return {
+      success: true,
+      data: {
+        awarded: true,
+        alreadyChecked: false,
+        points: 10,
+        date: today,
+        balanceBefore,
+        balance: balanceAfter,
+        pointUserId,
+        message: '點數家族簽到成功，已獲得 10 點'
+      }
+    };
   },
 
   async findCustomerByPhone(env, phoneRaw) {
@@ -5242,6 +5359,60 @@ const D1InboxModule = {
     return { success: true, data: this.itemRow(updated, { ...context, ...receiver, viewerRole: 'receiver' }) };
   },
 
+  async courseRecipientSummary(payload, env) {
+    const actorId = this.ownUserId(payload);
+    const actorRole = this.text(payload.authenticatedRole || payload.role, 'user').toLowerCase();
+    const actorNetwork = this.text(payload.authenticatedNetworkId || payload.networkId, 'admin');
+    const courseId = this.text(payload.courseId || payload.activityId || payload.keyword || payload.receiverQuery);
+    if (!courseId) return { activity: null, recipients: [] };
+
+    const activity = await D1ReadModule.first(env, `
+      SELECT *
+      FROM activities
+      WHERE activity_id = ?
+      LIMIT 1
+    `, [courseId]).catch(() => null);
+    if (!activity) return { activity: null, recipients: [] };
+
+    const ownerId = this.text(activity.owner_id || activity.network_id || activity.creator_id || activity.created_by || activity.store_id);
+    if (actorRole !== 'admin' && ownerId && ownerId !== actorId && ownerId !== actorNetwork) {
+      return { activity, recipients: [] };
+    }
+
+    const rows = await D1ReadModule.all(env, `
+      SELECT r.*, u.line_id AS user_line_id, u.row_id AS user_row_id, u.name AS user_name,
+             u.phone AS user_phone, u.industry AS user_industry, u.role AS user_role,
+             u.network_id AS user_network_id
+      FROM registrants r
+      LEFT JOIN users u ON u.line_id = r.line_id OR u.row_id = r.line_id OR u.phone = r.phone
+      WHERE r.activity_id = ?
+        AND COALESCE(r.status, '') <> 'cancelled'
+      ORDER BY r.created_at DESC
+      LIMIT 500
+    `, [courseId]).catch(() => []);
+
+    const seen = new Set();
+    const recipients = [];
+    for (const row of rows) {
+      const userRow = {
+        line_id: this.text(row.user_line_id || row.line_id),
+        row_id: this.text(row.user_row_id),
+        name: this.text(row.user_name || row.name),
+        phone: this.text(row.user_phone || row.phone),
+        industry: this.text(row.user_industry),
+        role: this.text(row.user_role, 'user'),
+        network_id: this.text(row.user_network_id || activity.network_id || activity.owner_id || 'admin')
+      };
+      if (!this.isActiveRecipient(userRow)) continue;
+      if (!this.canReachRecipient(payload, userRow)) continue;
+      const uid = this.text(userRow.line_id || userRow.row_id);
+      if (!uid || seen.has(uid)) continue;
+      seen.add(uid);
+      recipients.push(userRow);
+    }
+    return { activity, recipients };
+  },
+
   async searchRecipients(payload, env) {
     await this.ensure(env);
     const actorId = this.ownUserId(payload);
@@ -5250,6 +5421,22 @@ const D1InboxModule = {
     const keyword = this.text(payload.keyword || payload.query || payload.q);
     if (!actorId) return { success: false, error: 'Missing userId' };
     if (keyword.length < 2) return { success: true, data: [] };
+
+    if (this.text(payload.recipientMode || payload.mode) === 'course') {
+      const summary = await this.courseRecipientSummary({ ...payload, courseId: keyword }, env);
+      if (!summary.activity) return { success: true, data: [] };
+      const title = this.text(summary.activity.name || summary.activity.activity_name || summary.activity.title, keyword);
+      return {
+        success: true,
+        data: [{
+          type: 'course',
+          userId: `course:${keyword}`,
+          name: title,
+          subtitle: `課程編號 ${keyword} / 可群發 ${summary.recipients.length} 位學員`,
+          badge: `${summary.recipients.length} 位`
+        }]
+      };
+    }
 
     const like = `%${keyword}%`;
     const binds = [actorId, like, like, like, like];
@@ -5316,6 +5503,67 @@ const D1InboxModule = {
     return receiverNetwork === actorNetwork || receiverReferrer === actorNetwork;
   },
 
+  async sendCourseGroup(payload, env) {
+    const senderUserId = this.ownUserId(payload);
+    const rawCourseId = this.text(payload.receiverUserId || payload.receiverQuery || payload.courseId || payload.activityId).replace(/^course:/, '');
+    const messageType = this.text(payload.messageType || payload.type, 'message');
+    const title = this.text(payload.title);
+    const body = this.text(payload.body || payload.content);
+    const messageCost = messageType === 'coupon' ? 50 : 10;
+    if (!senderUserId) return { success: false, error: 'Missing sender' };
+    if (!rawCourseId) return { success: false, error: '請貼上課程編號' };
+    if (!title) return { success: false, error: '請輸入標題' };
+    if (!body) return { success: false, error: '請輸入內容' };
+
+    const summary = await this.courseRecipientSummary({ ...payload, courseId: rawCourseId }, env);
+    if (!summary.activity) return { success: false, error: '找不到課程編號' };
+    const recipients = Array.isArray(summary.recipients) ? summary.recipients : [];
+    if (!recipients.length) return { success: false, error: '這個課程目前沒有可收信的已註冊學員' };
+
+    const totalCost = recipients.length * messageCost;
+    const pointUserId = await PointModule.resolvePointUserId(env, senderUserId);
+    const wallet = await PointModule.queryUserPoints({ pointUserId, point_type: 'gift_money' }, env);
+    if (!wallet || !wallet.success) return { success: false, error: (wallet && wallet.error) || '無法讀取點數餘額' };
+    const balance = Number(wallet.data && wallet.data.balance || 0) || 0;
+    if (balance < totalCost) return { success: false, error: `點數不足，群發 ${recipients.length} 位需要 ${totalCost} 點` };
+
+    const sent = [];
+    const failed = [];
+    for (const row of recipients) {
+      const receiverId = this.text(row.line_id || row.row_id);
+      const result = await this.send({
+        ...payload,
+        receiverUserId: receiverId,
+        receiverQuery: '',
+        recipientMode: 'user',
+        _skipCourseGroup: true,
+        payload: {
+          ...(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}),
+          courseId: rawCourseId,
+          courseTitle: this.text(summary.activity.name || summary.activity.activity_name || summary.activity.title, rawCourseId)
+        }
+      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+      if (result && result.success) {
+        sent.push({ userId: receiverId, name: this.text(row.name, receiverId), messageId: result.data && result.data.messageId });
+      } else {
+        failed.push({ userId: receiverId, name: this.text(row.name, receiverId), error: result && result.error || 'send_failed' });
+      }
+    }
+
+    if (!sent.length) return { success: false, error: failed[0] && failed[0].error || '群發失敗', data: { failed } };
+    return {
+      success: true,
+      data: {
+        courseId: rawCourseId,
+        sentCount: sent.length,
+        failedCount: failed.length,
+        totalCost: sent.length * messageCost,
+        sent,
+        failed
+      }
+    };
+  },
+
   async send(payload, env) {
     await this.ensure(env);
     const senderUserId = this.ownUserId(payload);
@@ -5325,6 +5573,9 @@ const D1InboxModule = {
       receiverUserId = this.text(found && found.data && found.data[0] && found.data[0].userId);
     }
     if (!senderUserId) return { success: false, error: 'Missing sender' };
+    if (!payload._skipCourseGroup && (this.text(payload.recipientMode || payload.mode) === 'course' || receiverUserId.startsWith('course:'))) {
+      return await this.sendCourseGroup({ ...payload, receiverUserId }, env);
+    }
     if (!receiverUserId) return { success: false, error: '請指定收件人' };
     if (receiverUserId === senderUserId) return { success: false, error: '不能寄給自己' };
 

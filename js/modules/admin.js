@@ -126,7 +126,10 @@ function renderActiveAdminActivity(act) {
       '<button onclick="window.openActivityShareModal(\'' + meta.actId + '\', \'' + meta.title + '\')" class="w-full mb-2 py-3 bg-blue-600 text-white rounded-xl text-[13px] font-black active:scale-95 transition-transform flex justify-center items-center gap-1.5">' +
         '<span class="material-symbols-outlined text-[17px]">ios_share</span> 分享活動' +
       '</button>' +
-      '<div class="grid grid-cols-5 gap-1.5">' +
+      '<div class="grid grid-cols-6 gap-1.5">' +
+        '<button onclick="window.copyActivityId(\'' + meta.actId + '\')" class="py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-[11px] font-bold active:scale-95 transition-transform flex flex-col justify-center items-center gap-0.5">' +
+          '<span class="material-symbols-outlined text-[15px]">tag</span> 編號' +
+        '</button>' +
         '<button onclick="window.openCheckinPage(\'' + meta.actId + '\', \'' + meta.title + '\')" class="py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[11px] font-bold active:scale-95 transition-transform flex flex-col justify-center items-center gap-0.5">' +
           '<span class="material-symbols-outlined text-[15px]">fact_check</span> 核銷' +
         '</button>' +
@@ -158,6 +161,7 @@ function renderInactiveAdminActivity(act) {
     '</div>' +
     '<div class="flex items-center gap-1.5 shrink-0">' +
       '<button onclick="window.republishActivity(\'' + meta.actId + '\', this)" class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 active:scale-95 transition-transform" title="重新上架"><span class="material-symbols-outlined text-[18px]">publish</span></button>' +
+      '<button onclick="window.copyActivityId(\'' + meta.actId + '\')" class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 active:scale-95 transition-transform" title="複製課程編號"><span class="material-symbols-outlined text-[18px]">tag</span></button>' +
       '<button onclick="window.duplicateActivity(\'' + meta.actId + '\', this)" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 active:scale-95 transition-transform" title="複製活動"><span class="material-symbols-outlined text-[18px]">content_copy</span></button>' +
       '<button onclick="window.openEditActivity(\'' + meta.actId + '\')" class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 active:scale-95 transition-transform" title="編輯活動"><span class="material-symbols-outlined text-[18px]">edit</span></button>' +
     '</div>' +
