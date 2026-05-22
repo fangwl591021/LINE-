@@ -219,6 +219,8 @@ const SecurityModule = {
       payload.authUserId ||
       payload.operatorId ||
       payload.targetUserId ||
+      payload.pointUserId ||
+      payload.pt_uid ||
       payload.userId ||
       payload.lineId ||
       payload.LINE_user_id ||
@@ -227,6 +229,8 @@ const SecurityModule = {
       data.authenticatedUserId ||
       data.authUserId ||
       data.operatorId ||
+      data.pointUserId ||
+      data.pt_uid ||
       data.userId ||
       data.lineId ||
       data.LINE_user_id ||

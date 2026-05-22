@@ -1113,7 +1113,20 @@ window.claimDailyPointCheckin = async function(btn) {
     btn.classList.add('opacity-70');
   }
   try {
-    const res = await window.fetchAPI('dailyPointCheckin', { userId: window.currentUserProfile.userId }, true);
+    const userId = window.currentUserProfile.userId;
+    let pointUserId = '';
+    try {
+      const samePointLiff = String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '');
+      const params = typeof window.readActmasterInitialParams === 'function'
+        ? window.readActmasterInitialParams()
+        : new URLSearchParams(window.location.search || '');
+      pointUserId = samePointLiff
+        ? userId
+        : (localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || params.get('pt_uid') || userId);
+    } catch (e) {
+      pointUserId = userId;
+    }
+    const res = await window.fetchAPI('dailyPointCheckin', { userId, pointUserId, pt_uid: pointUserId }, true);
     if (!res || res.success === false || res.error) {
       throw new Error(res?.error || '每日簽到失敗');
     }
