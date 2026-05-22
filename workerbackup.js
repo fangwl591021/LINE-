@@ -339,7 +339,9 @@ const SecurityModule = {
       'saveCard',
       'updateCard',
       'saveStoreSettings',
-      'updateActivity'
+      'updateActivity',
+      'dailyPointCheckin',
+      'extractLineVoomMedia'
     ]);
 
     if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(action)) {
