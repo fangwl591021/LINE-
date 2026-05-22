@@ -143,7 +143,11 @@ function resolveECardButtonUrl(kind, found, autoUrl) {
   const label = String(found?.l || '').trim();
   const auto = String(autoUrl || '').trim();
   if (!existing) return auto;
-  if (kind === 'phone' && /^tel:/i.test(existing)) return auto || existing;
+  if (kind === 'phone' && /^tel:/i.test(existing)) {
+    const existingPhone = existing.replace(/^tel:/i, '').replace(/[^0-9+]/g, '');
+    if (!existingPhone || /x/i.test(existing)) return auto || existing;
+    return existing;
+  }
   if (kind === 'line' && existing === ECardAutoDefaults.lineUrl) return auto || existing;
   if (kind === 'address' && (
     label.includes('包租公') ||

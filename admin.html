@@ -1129,13 +1129,17 @@
             </div>
             <div class="grid grid-cols-2 gap-5">
               <div>
-                <label class="block text-sm font-bold text-slate-500 mb-1.5">聯絡電話</label>
+                <label class="block text-sm font-bold text-slate-500 mb-1.5">手機號碼</label>
                 <input type="text" id="edit-c-phone" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono">
               </div>
               <div>
-                <label class="block text-sm font-bold text-slate-500 mb-1.5 flex justify-between">歸屬網</label>
-                <input type="text" id="edit-c-network" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="填寫 admin 或 店代碼">
+                <label class="block text-sm font-bold text-slate-500 mb-1.5">公司電話 / 市話</label>
+                <input type="text" id="edit-c-office-phone" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors font-mono">
               </div>
+            </div>
+            <div>
+              <label class="block text-sm font-bold text-slate-500 mb-1.5 flex justify-between">歸屬網</label>
+              <input type="text" id="edit-c-network" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-colors" placeholder="填寫 admin 或 店代碼">
             </div>
             <div>
               <label class="block text-sm font-bold text-slate-500 mb-1.5">自訂標籤 (多個請用空格分開)</label>
@@ -3180,7 +3184,10 @@
             <div class="table-main-text">${escapeHTML(c['公司名稱'] || '-')}</div>
             <div class="table-sub-text">${escapeHTML(c['職稱'] || '')}</div>
           </td>
-          <td class="font-mono"><div class="table-main-text">${escapeHTML(c['手機號碼'] || '-')}</div></td>
+          <td class="font-mono">
+            <div class="table-main-text">${escapeHTML(c['手機號碼'] || c['公司電話'] || '-')}</div>
+            ${c['公司電話'] && c['手機號碼'] ? `<div class="table-sub-text">市話 ${escapeHTML(c['公司電話'])}</div>` : ''}
+          </td>
           <td><span class="status-pill status-slate">${escapeHTML(c['歸屬網'] || 'admin')}</span></td>
           <td>${bindBadge}</td>
           <td><div class="table-sub-text">${escapeHTML(c['標籤'] || c['備註'] || '-')}</div></td>
@@ -3628,7 +3635,8 @@
       document.getElementById('edit-c-name').value = card['姓名'] || '';
       document.getElementById('edit-c-company').value = card['公司名稱'] || '';
       document.getElementById('edit-c-title').value = card['職稱'] || '';
-      document.getElementById('edit-c-phone').value = card['手機號碼'] || card['公司電話'] || '';
+      document.getElementById('edit-c-phone').value = card['手機號碼'] || '';
+      document.getElementById('edit-c-office-phone').value = card['公司電話'] || '';
       document.getElementById('edit-c-network').value = card['歸屬網'] || '';
       document.getElementById('edit-c-tags').value = card['標籤'] || '';
       document.getElementById('edit-c-notes').value = card['建檔人/備註'] || '';
@@ -3742,6 +3750,7 @@
         '公司名稱': document.getElementById('edit-c-company').value,
         '職稱': document.getElementById('edit-c-title').value,
         '手機號碼': document.getElementById('edit-c-phone').value,
+        '公司電話': document.getElementById('edit-c-office-phone').value,
         '歸屬網': document.getElementById('edit-c-network').value,
         '標籤': document.getElementById('edit-c-tags').value,
         '建檔人/備註': document.getElementById('edit-c-notes').value,
