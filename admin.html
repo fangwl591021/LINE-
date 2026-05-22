@@ -3778,6 +3778,10 @@
             <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕名稱" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="currentEditButtons[${i}].l=this.value; updateAdminCardPreview()">
             <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://... 或 tel:09..." class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="currentEditButtons[${i}].u=this.value; updateAdminCardPreview()">
           </div>
+          <div class="flex flex-col gap-1 shrink-0">
+            <button type="button" onclick="moveAdminCardButton(${i}, -1)" ${i === 0 ? 'disabled' : ''} class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span></button>
+            <button type="button" onclick="moveAdminCardButton(${i}, 1)" ${i === currentEditButtons.length - 1 ? 'disabled' : ''} class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span></button>
+          </div>
           <button type="button" onclick="currentEditButtons.splice(${i},1); renderAdminCardButtons(); updateAdminCardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>`).join('');
     }
@@ -3785,6 +3789,15 @@
     function addAdminCardButton() {
       currentEditButtons.push({ l: '新按鈕', u: '', c: '#06C755' });
       renderAdminCardButtons();
+    }
+
+    function moveAdminCardButton(index, direction) {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= currentEditButtons.length) return;
+      const moved = currentEditButtons.splice(index, 1)[0];
+      currentEditButtons.splice(nextIndex, 0, moved);
+      renderAdminCardButtons();
+      updateAdminCardPreview();
     }
 
     function switchModalTab(type) {

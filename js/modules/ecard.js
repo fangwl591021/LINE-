@@ -102,6 +102,19 @@ function buildAutoECardButtons(card, existingButtons) {
     address: { l: '店家地址', u: addressUrl, c: '#1e293b' }
   };
 
+  if (existing.length) {
+    return existing.map((button, index) => {
+      const kind = getECardButtonKind(button, index);
+      const autoButton = auto[kind];
+      if (!autoButton) return button;
+      return {
+        l: resolveECardButtonLabel(kind, button, autoButton.l),
+        u: resolveECardButtonUrl(kind, button, autoButton.u),
+        c: button?.c || autoButton.c
+      };
+    });
+  }
+
   const used = new Set();
   const merged = ['line', 'phone', 'address'].map(kind => {
     const foundIndex = existing.findIndex((button, index) => !used.has(index) && getECardButtonKind(button, index) === kind);
@@ -535,10 +548,24 @@ window.renderV1Buttons = function() {
           <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="window.currentEcardButtons[${i}].l=this.value; window.updateECardPreview()">
           <input type="text" value="${escapeHTML(b.u || '')}" placeholder="網址、tel:電話 或 line 連結" class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="window.currentEcardButtons[${i}].u=this.value; window.updateECardPreview()">
         </div>
+        <div class="flex flex-col gap-1 shrink-0">
+          <button type="button" onclick="window.moveV1Button(${i}, -1)" ${i === 0 ? 'disabled' : ''} class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span></button>
+          <button type="button" onclick="window.moveV1Button(${i}, 1)" ${i === window.currentEcardButtons.length - 1 ? 'disabled' : ''} class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span></button>
+        </div>
         <button onclick="window.currentEcardButtons.splice(${i},1); window.renderV1Buttons(); window.updateECardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
       </div>
     `).join('');
   }
+};
+
+window.moveV1Button = function(index, direction) {
+  const nextIndex = index + direction;
+  if (!Array.isArray(window.currentEcardButtons)) return;
+  if (nextIndex < 0 || nextIndex >= window.currentEcardButtons.length) return;
+  const moved = window.currentEcardButtons.splice(index, 1)[0];
+  window.currentEcardButtons.splice(nextIndex, 0, moved);
+  window.renderV1Buttons();
+  window.updateECardPreview();
 };
 
 /**

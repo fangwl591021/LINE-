@@ -350,6 +350,10 @@
           '<input type="text" value="' + escapeHTML(button.l || '') + '" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
           '<input type="text" value="' + escapeHTML(button.u || '') + '" placeholder="https://..." class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
         '</div>' +
+        '<div class="flex flex-col gap-1 shrink-0">' +
+          '<button type="button" onclick="window.moveMyV1Button(' + index + ', -1)" ' + (index === 0 ? 'disabled' : '') + ' class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span></button>' +
+          '<button type="button" onclick="window.moveMyV1Button(' + index + ', 1)" ' + (index === myEcardButtons.length - 1 ? 'disabled' : '') + ' class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span></button>' +
+        '</div>' +
         '<button type="button" onclick="window.removeMyV1Button(' + index + ')" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors">' +
           '<span class="material-symbols-outlined text-[18px]">delete</span>' +
         '</button>' +
@@ -371,6 +375,15 @@
 
   function removeButton(index) {
     myEcardButtons.splice(index, 1);
+    renderButtons();
+    updatePreview();
+  }
+
+  function moveButton(index, direction) {
+    var nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= myEcardButtons.length) return;
+    var moved = myEcardButtons.splice(index, 1)[0];
+    myEcardButtons.splice(nextIndex, 0, moved);
     renderButtons();
     updatePreview();
   }
@@ -710,7 +723,8 @@
     shareMyCard: shareMyCard,
     showMyQRCode: showMyQRCode,
     updateButton: updateButton,
-    removeButton: removeButton
+    removeButton: removeButton,
+    moveButton: moveButton
   };
 
   window.MyCardModule = api;
@@ -721,6 +735,7 @@
   window.addMyV1Button = addV1Button;
   window.updateMyV1Button = updateButton;
   window.removeMyV1Button = removeButton;
+  window.moveMyV1Button = moveButton;
   window.updateMyECardPreview = updatePreview;
   window.saveMyECardConfig = saveMyECardConfig;
   window.generateCardFromProfile = generateCardFromProfile;
