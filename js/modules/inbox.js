@@ -433,6 +433,36 @@
       btn.className = key === next ? activeClass : modes[key].idle;
       if (key === "broadcast") btn.classList.toggle("hidden", !canBroadcast);
     });
+    window.refreshInboxRecipientAudienceHint?.(next);
+  };
+
+  window.refreshInboxRecipientAudienceHint = async function (mode) {
+    const hint = $("inbox-recipient-audience-hint");
+    if (!hint) return;
+    if (mode === "user") {
+      hint.classList.add("hidden");
+      hint.innerHTML = "";
+      return;
+    }
+    if (mode === "course") {
+      hint.className = "mb-2 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[13px] font-bold text-amber-700";
+      hint.innerHTML = "貼上課程編號後搜尋，系統會顯示這堂課可推播的已報名學員人數。";
+      hint.classList.remove("hidden");
+      return;
+    }
+    const label = mode === "broadcast" ? "跨區合格可推播人數" : "我的已用戶合格可推播人數";
+    hint.className = "mb-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-[13px] font-bold text-blue-700";
+    hint.textContent = `${label}：統計中...`;
+    hint.classList.remove("hidden");
+    try {
+      const rows = await window.fetchAPI("searchInboxRecipients", { keyword: "全部", recipientMode: mode }, true);
+      const row = Array.isArray(rows) ? rows[0] : null;
+      const countText = row?.badge || "0 位";
+      hint.textContent = `${label}：${countText}`;
+    } catch (e) {
+      hint.className = "mb-2 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2 text-[13px] font-bold text-rose-600";
+      hint.textContent = `${label}：無法取得`;
+    }
   };
 
   window.searchInboxRecipients = async function () {
@@ -451,6 +481,13 @@
     try {
       const rows = await window.fetchAPI("searchInboxRecipients", { keyword: query, recipientMode: mode }, true);
       const list = Array.isArray(rows) ? rows : [];
+      const hint = $("inbox-recipient-audience-hint");
+      if (hint && ["course", "owned", "broadcast"].includes(mode) && list[0]?.badge) {
+        const label = mode === "course" ? "本課程合格可推播人數" : (mode === "broadcast" ? "跨區合格可推播人數" : "我的已用戶合格可推播人數");
+        hint.className = "mb-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-[13px] font-bold text-blue-700";
+        hint.textContent = `${label}：${list[0].badge}`;
+        hint.classList.remove("hidden");
+      }
       if (!list.length) {
         box.innerHTML = '<div class="text-[13px] text-red-400 font-bold px-1">找不到符合的收件人</div>';
         return;
