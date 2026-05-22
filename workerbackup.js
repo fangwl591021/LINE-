@@ -3370,6 +3370,70 @@ const D1WriteModule = {
     };
   },
 
+  async ensureReferralPlaceholderCard(env, user = {}) {
+    if (!this.hasD1(env)) return null;
+    const lineId = this.text(user.line_id);
+    const referrerId = this.text(user.referrer_id);
+    if (!lineId || !referrerId || lineId === referrerId) return null;
+    await D1ReadModule.ensureCardAccessColumns(env);
+
+    const rowId = `REF_${lineId}`;
+    const ownCard = await D1ReadModule.first(env, `
+      SELECT row_id FROM card_contacts
+      WHERE (line_id = ? OR profile_user_id = ? OR creator_id = ?)
+        AND source_type = 'self_profile'
+      LIMIT 1
+    `, [lineId, lineId, lineId]).catch(() => null);
+    if (ownCard) return { skipped: true, reason: 'has_self_profile', rowId: ownCard.row_id };
+
+    const existing = await D1ReadModule.first(env, `
+      SELECT row_id FROM card_contacts
+      WHERE row_id = ? OR (profile_user_id = ? AND source_type = 'referral_placeholder')
+      LIMIT 1
+    `, [rowId, lineId]).catch(() => null);
+
+    const name = this.text(user.name, '\u5c1a\u672a\u5efa\u7acb\u540d\u7247');
+    const phone = this.text(user.phone);
+    const title = this.text(user.industry);
+    const networkId = this.text(user.network_id, 'admin');
+    const crmStatus = '\u5df2\u8a3b\u518a\u672a\u5efa\u540d\u7247';
+    const crmType = '\u9080\u7d04\u8a3b\u518a';
+    const note = '\u63a8\u85a6\u9023\u7d50\u6388\u6b0a\u5f8c\u81ea\u52d5\u5efa\u7acb\uff1b\u5f85\u672c\u4eba\u5efa\u7acb\u6b63\u5f0f\u540d\u7247\u3002';
+
+    if (existing) {
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE card_contacts
+        SET owner_user_id = CASE WHEN TRIM(COALESCE(owner_user_id,'')) = '' THEN ? ELSE owner_user_id END,
+            creator_id = CASE WHEN TRIM(COALESCE(creator_id,'')) = '' THEN ? ELSE creator_id END,
+            line_id = CASE WHEN TRIM(COALESCE(line_id,'')) = '' THEN ? ELSE line_id END,
+            profile_user_id = ?,
+            name = CASE WHEN TRIM(COALESCE(name,'')) = '' OR name = ? THEN ? ELSE name END,
+            mobile = CASE WHEN TRIM(COALESCE(mobile,'')) = '' THEN ? ELSE mobile END,
+            title = CASE WHEN TRIM(COALESCE(title,'')) = '' THEN ? ELSE title END,
+            network_id = CASE WHEN TRIM(COALESCE(network_id,'')) = '' THEN ? ELSE network_id END,
+            source_type = 'referral_placeholder',
+            visibility = 'private',
+            pool_eligible = 0,
+            ai_review_status = CASE WHEN TRIM(COALESCE(ai_review_status,'')) = '' THEN 'pending' ELSE ai_review_status END,
+            crm_status = ?,
+            crm_type = CASE WHEN TRIM(COALESCE(crm_type,'')) = '' THEN ? ELSE crm_type END,
+            notes = CASE WHEN TRIM(COALESCE(notes,'')) = '' THEN ? ELSE notes END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE row_id = ?
+      `).bind(referrerId, referrerId, lineId, lineId, '\u5c1a\u672a\u5efa\u7acb\u540d\u7247', name, phone, title, networkId, crmStatus, crmType, note, existing.row_id).run();
+      return { rowId: existing.row_id, updated: true };
+    }
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO card_contacts (
+        row_id,line_id,name,title,mobile,creator_id,notes,network_id,
+        owner_user_id,profile_user_id,source_type,visibility,pool_eligible,
+        ai_review_status,crm_status,crm_type,updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+    `).bind(rowId, lineId, name, title, phone, referrerId, note, networkId, referrerId, lineId, 'referral_placeholder', 'private', 0, 'pending', crmStatus, crmType).run();
+    return { rowId, created: true };
+  },
+
   async upsertUser(payload, env) {
     if (!this.hasD1(env)) return null;
     const user = this.normalizeUser(payload);
@@ -3405,6 +3469,10 @@ const D1WriteModule = {
         referrer_id=excluded.referrer_id,network_id=excluded.network_id,tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
     `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id).run();
     await this.clearUserCache(env, user.line_id);
+    const referralPlaceholder = await this.ensureReferralPlaceholderCard(env, user).catch(e => {
+      console.error('D1 referral placeholder failed', e && e.message ? e.message : e);
+      return null;
+    });
     const info = D1ReadModule.userRow({
       row_id: user.row_id,
       line_id: user.line_id,
@@ -3419,7 +3487,7 @@ const D1WriteModule = {
       tg_token: user.tg_token,
       tg_chat_id: user.tg_chat_id
     });
-    return { success: true, data: { isRegistered: true, info, source: 'd1_write' } };
+    return { success: true, data: { isRegistered: true, info, source: 'd1_write', referralPlaceholder } };
   },
 
   async updateUserRoleLegacy(payload, env) {
@@ -6433,6 +6501,19 @@ const TrackingModule = {
     }
     if (referrerId && referrerId === visitorId) {
       return { success: true, data: { skipped: true, reason: 'self_referral' } };
+    }
+
+    if (env.ACTMASTER_DB && referrerId && visitorId) {
+      await D1WriteModule.upsertUser({
+        userId: visitorId,
+        name: payload.displayName || payload.name || '',
+        referrerId,
+        networkId,
+        source: 'share_visit',
+        profileStatus: 'line_authorized'
+      }, env).catch(e => {
+        console.error('D1 share visit placeholder failed', e && e.message ? e.message : e);
+      });
     }
 
     const key = `FIRST_SHARE_TOUCH_${visitorId}`;
