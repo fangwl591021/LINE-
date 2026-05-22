@@ -381,7 +381,31 @@
   };
 
   window.setInboxRecipientMode = function (mode) {
-    const next = mode === "course" ? "course" : "user";
+    const canBroadcast = window.hasAdminRights === true || String(window.currentRole || "").toLowerCase() === "admin";
+    if (mode === "broadcast" && !canBroadcast) mode = "user";
+    const modes = {
+      user: {
+        button: "inbox-recipient-mode-user",
+        placeholder: "輸入姓名、電話或 LINE ID",
+        idle: "py-2 rounded-2xl bg-slate-50 text-slate-600 border border-slate-200 text-[13px] font-black active:scale-95"
+      },
+      course: {
+        button: "inbox-recipient-mode-course",
+        placeholder: "輸入課程編號，例如 ACT_...",
+        idle: "py-2 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200 text-[13px] font-black active:scale-95"
+      },
+      owned: {
+        button: "inbox-recipient-mode-owned",
+        placeholder: "搜尋自己的已使用客戶，或輸入全部",
+        idle: "py-2 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[13px] font-black active:scale-95"
+      },
+      broadcast: {
+        button: "inbox-recipient-mode-broadcast",
+        placeholder: "輸入關鍵字篩選跨區用戶，或輸入全部",
+        idle: "py-2 rounded-2xl bg-blue-50 text-blue-700 border border-blue-200 text-[13px] font-black active:scale-95"
+      }
+    };
+    const next = modes[mode] ? mode : "user";
     const modeEl = $("inbox-recipient-mode");
     const query = $("inbox-recipient-query");
     const hidden = $("inbox-recipient-id");
@@ -393,6 +417,7 @@
       query.value = "";
       query.placeholder = next === "course" ? "貼上課程編號，例如 ACT_..." : "輸入姓名、電話或 LINE ID";
     }
+    if (query) query.placeholder = modes[next].placeholder;
     const userBtn = $("inbox-recipient-mode-user");
     const courseBtn = $("inbox-recipient-mode-course");
     if (userBtn) userBtn.className = next === "user"
@@ -401,6 +426,13 @@
     if (courseBtn) courseBtn.className = next === "course"
       ? "py-2 rounded-2xl bg-slate-900 text-white text-[13px] font-black active:scale-95"
       : "py-2 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200 text-[13px] font-black active:scale-95";
+    const activeClass = "py-2 rounded-2xl bg-slate-900 text-white text-[13px] font-black active:scale-95";
+    Object.keys(modes).forEach(key => {
+      const btn = $(modes[key].button);
+      if (!btn) return;
+      btn.className = key === next ? activeClass : modes[key].idle;
+      if (key === "broadcast") btn.classList.toggle("hidden", !canBroadcast);
+    });
   };
 
   window.searchInboxRecipients = async function () {
@@ -747,6 +779,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    window.setInboxRecipientMode?.("user");
     setTimeout(() => window.refreshInboxBadge(), 1800);
     setTimeout(refreshPushStatus, 2200);
     startInboxPolling();

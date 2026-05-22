@@ -5517,6 +5517,160 @@ const D1InboxModule = {
     return { activity, recipients };
   },
 
+  recipientFromUserRow(row) {
+    return {
+      line_id: this.text(row && (row.user_line_id || row.line_id || row.row_id)),
+      row_id: this.text(row && (row.user_row_id || row.row_id)),
+      name: this.text(row && (row.user_name || row.name)),
+      phone: this.text(row && (row.user_phone || row.phone)),
+      industry: this.text(row && (row.user_industry || row.industry)),
+      role: this.text(row && (row.user_role || row.role), 'user'),
+      network_id: this.text(row && (row.user_network_id || row.network_id), 'admin'),
+      referrer_id: this.text(row && (row.user_referrer_id || row.referrer_id))
+    };
+  },
+
+  async ownedActiveRecipientSummary(payload, env) {
+    const actorId = this.ownUserId(payload);
+    const keyword = this.text(payload.keyword || payload.query || payload.receiverQuery);
+    if (!actorId) return { recipients: [] };
+    const ids = await this.identityIds(env, actorId);
+    const placeholders = this.placeholders(ids);
+    const allMode = ['all', 'ALL', '全部', '*'].includes(keyword);
+    const binds = [...ids, ...ids];
+    let filterSql = '';
+    if (!allMode) {
+      const like = `%${keyword}%`;
+      filterSql = 'AND (c.name LIKE ? OR c.mobile LIKE ? OR c.office_phone LIKE ? OR c.company_name LIKE ? OR c.line_id LIKE ?)';
+      binds.push(like, like, like, like, like);
+    }
+    const rows = await D1ReadModule.all(env, `
+      SELECT c.*, u.line_id AS user_line_id, u.row_id AS user_row_id, u.name AS user_name,
+             u.phone AS user_phone, u.industry AS user_industry, u.role AS user_role,
+             u.network_id AS user_network_id, u.referrer_id AS user_referrer_id
+      FROM card_contacts c
+      INNER JOIN users u
+        ON u.line_id = c.line_id OR u.row_id = c.line_id OR u.point_line_id = c.line_id OR u.legacy_line_id = c.line_id
+      WHERE (c.owner_user_id IN (${placeholders}) OR c.creator_id IN (${placeholders}))
+        AND TRIM(COALESCE(c.line_id, '')) <> ''
+        ${filterSql}
+      ORDER BY COALESCE(c.updated_at, c.created_at) DESC, c.row_id DESC
+      LIMIT 500
+    `, binds).catch(() => []);
+    const seen = new Set();
+    const recipients = [];
+    for (const row of rows) {
+      const userRow = this.recipientFromUserRow(row);
+      if (!this.isActiveRecipient(userRow)) continue;
+      const uid = this.text(userRow.line_id || userRow.row_id);
+      if (!uid || uid === actorId || seen.has(uid)) continue;
+      seen.add(uid);
+      recipients.push(userRow);
+    }
+    return { recipients };
+  },
+
+  async broadcastRecipientSummary(payload, env) {
+    const actorId = this.ownUserId(payload);
+    const actorRole = this.text(payload.authenticatedRole || payload.role, 'user').toLowerCase();
+    const keyword = this.text(payload.keyword || payload.query || payload.receiverQuery);
+    if (actorRole !== 'admin') return { recipients: [], forbidden: true };
+    const allMode = ['all', 'ALL', '全部', '*'].includes(keyword);
+    const binds = [actorId];
+    let filterSql = '';
+    if (!allMode) {
+      const like = `%${keyword}%`;
+      filterSql = 'AND (name LIKE ? OR phone LIKE ? OR line_id LIKE ? OR store_id LIKE ? OR industry LIKE ?)';
+      binds.push(like, like, like, like, like);
+    }
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM users
+      WHERE line_id <> ?
+        AND ${this.activeRecipientSql()}
+        ${filterSql}
+      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+      LIMIT 500
+    `, binds).catch(() => []);
+    const seen = new Set();
+    const recipients = [];
+    for (const row of rows) {
+      const userRow = this.recipientFromUserRow(row);
+      if (!this.isActiveRecipient(userRow)) continue;
+      const uid = this.text(userRow.line_id || userRow.row_id);
+      if (!uid || uid === actorId || seen.has(uid)) continue;
+      seen.add(uid);
+      recipients.push(userRow);
+    }
+    return { recipients };
+  },
+
+  async sendRecipientGroup(payload, env, groupType) {
+    const senderUserId = this.ownUserId(payload);
+    const rawQuery = this.text(payload.receiverUserId || payload.receiverQuery || payload.keyword).replace(/^(owned|broadcast):/, '');
+    const messageType = this.text(payload.messageType || payload.type, 'message');
+    const title = this.text(payload.title);
+    const body = this.text(payload.body || payload.content);
+    const messageCost = messageType === 'coupon' ? 50 : 10;
+    if (!senderUserId) return { success: false, error: 'Missing sender' };
+    if (!rawQuery) return { success: false, error: 'Missing recipient query' };
+    if (!title) return { success: false, error: 'Missing title' };
+    if (!body) return { success: false, error: 'Missing body' };
+
+    const summary = groupType === 'broadcast'
+      ? await this.broadcastRecipientSummary({ ...payload, keyword: rawQuery }, env)
+      : await this.ownedActiveRecipientSummary({ ...payload, keyword: rawQuery }, env);
+    if (summary.forbidden) return { success: false, error: 'Access Denied: Admin only action' };
+    const recipients = Array.isArray(summary.recipients) ? summary.recipients : [];
+    if (!recipients.length) return { success: false, error: 'No eligible recipients' };
+
+    const totalCost = recipients.length * messageCost;
+    const pointUserId = await PointModule.resolvePointUserId(env, senderUserId);
+    const wallet = await PointModule.queryUserPoints({ pointUserId, point_type: 'gift_money' }, env);
+    if (!wallet || !wallet.success) return { success: false, error: (wallet && wallet.error) || 'Point balance unavailable' };
+    const balance = Number(wallet.data && wallet.data.balance || 0) || 0;
+    if (balance < totalCost) return { success: false, error: `Point balance is not enough. Need ${totalCost}.` };
+
+    const sent = [];
+    const failed = [];
+    for (const row of recipients) {
+      const receiverId = this.text(row.line_id || row.row_id);
+      const result = await this.send({
+        ...payload,
+        receiverUserId: receiverId,
+        receiverQuery: '',
+        recipientMode: 'user',
+        authenticatedRole: groupType === 'owned' ? 'admin' : payload.authenticatedRole,
+        role: groupType === 'owned' ? 'admin' : payload.role,
+        _skipCourseGroup: true,
+        payload: {
+          ...(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}),
+          groupType,
+          groupQuery: rawQuery
+        }
+      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+      if (result && result.success) {
+        sent.push({ userId: receiverId, name: this.text(row.name, receiverId), messageId: result.data && result.data.messageId });
+      } else {
+        failed.push({ userId: receiverId, name: this.text(row.name, receiverId), error: result && result.error || 'send_failed' });
+      }
+    }
+
+    if (!sent.length) return { success: false, error: failed[0] && failed[0].error || 'send_failed', data: { failed } };
+    return {
+      success: true,
+      data: {
+        groupType,
+        groupQuery: rawQuery,
+        sentCount: sent.length,
+        failedCount: failed.length,
+        totalCost: sent.length * messageCost,
+        sent,
+        failed
+      }
+    };
+  },
+
   async searchRecipients(payload, env) {
     await this.ensure(env);
     const actorId = this.ownUserId(payload);
@@ -5539,6 +5693,35 @@ const D1InboxModule = {
           subtitle: `課程編號 ${keyword} / 可群發 ${summary.recipients.length} 位學員`,
           badge: `${summary.recipients.length} 位`
         }]
+      };
+    }
+
+    if (this.text(payload.recipientMode || payload.mode) === 'owned') {
+      const summary = await this.ownedActiveRecipientSummary({ ...payload, keyword }, env);
+      return {
+        success: true,
+        data: summary.recipients.length ? [{
+          type: 'owned',
+          userId: `owned:${keyword}`,
+          name: '我的已使用客戶',
+          subtitle: `符合 ${summary.recipients.length} 位，可群發給自己掃進來且已使用系統的客戶`,
+          badge: `${summary.recipients.length} 位`
+        }] : []
+      };
+    }
+
+    if (this.text(payload.recipientMode || payload.mode) === 'broadcast') {
+      const summary = await this.broadcastRecipientSummary({ ...payload, keyword }, env);
+      if (summary.forbidden) return { success: false, error: 'Access Denied: Admin only action' };
+      return {
+        success: true,
+        data: summary.recipients.length ? [{
+          type: 'broadcast',
+          userId: `broadcast:${keyword}`,
+          name: '跨區訊息',
+          subtitle: `符合 ${summary.recipients.length} 位，僅 admin 可群發`,
+          badge: `${summary.recipients.length} 位`
+        }] : []
       };
     }
 
@@ -5679,6 +5862,12 @@ const D1InboxModule = {
     if (!senderUserId) return { success: false, error: 'Missing sender' };
     if (!payload._skipCourseGroup && (this.text(payload.recipientMode || payload.mode) === 'course' || receiverUserId.startsWith('course:'))) {
       return await this.sendCourseGroup({ ...payload, receiverUserId }, env);
+    }
+    if (!payload._skipCourseGroup && (this.text(payload.recipientMode || payload.mode) === 'owned' || receiverUserId.startsWith('owned:'))) {
+      return await this.sendRecipientGroup({ ...payload, receiverUserId }, env, 'owned');
+    }
+    if (!payload._skipCourseGroup && (this.text(payload.recipientMode || payload.mode) === 'broadcast' || receiverUserId.startsWith('broadcast:'))) {
+      return await this.sendRecipientGroup({ ...payload, receiverUserId }, env, 'broadcast');
     }
     if (!receiverUserId) return { success: false, error: '請指定收件人' };
     if (receiverUserId === senderUserId) return { success: false, error: '不能寄給自己' };
