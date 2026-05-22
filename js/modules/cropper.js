@@ -794,14 +794,15 @@ window.confirmActiveCrop = function() {
   window.cancelActiveCrop();
 
   const modeId = currentActiveCropTarget;
+  const ratioModeId = ({ quick: 'q', full: 'f', series: 's' })[modeId] || modeId;
   const previewImg = document.getElementById('image-preview-' + modeId);
   const placeholder = document.getElementById('preview-placeholder-' + modeId);
   const urlInput = document.getElementById('in-image-url-' + modeId);
-  let ratioInput = document.getElementById('in-image-ratio-' + modeId);
+  let ratioInput = document.getElementById('in-image-ratio-' + ratioModeId);
   if (!ratioInput && urlInput && urlInput.parentElement) {
     ratioInput = document.createElement('input');
     ratioInput.type = 'hidden';
-    ratioInput.id = 'in-image-ratio-' + modeId;
+    ratioInput.id = 'in-image-ratio-' + ratioModeId;
     urlInput.parentElement.appendChild(ratioInput);
   }
 

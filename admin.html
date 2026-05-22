@@ -1284,6 +1284,14 @@
               <img id="edit-a-image-preview" src="" class="w-full h-40 object-cover">
             </div>
           </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-500 mb-1.5">宣傳圖版型</label>
+            <select id="edit-a-image-ratio" onchange="updateActivityImagePreview()" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+              <option value="16:9">橫式 16:9</option>
+              <option value="2:3">滿版 2:3</option>
+              <option value="1:1">正方 1:1</option>
+            </select>
+          </div>
           <div class="md:col-span-2">
             <label class="block text-sm font-bold text-slate-500 mb-1.5">活動說明</label>
             <textarea id="edit-a-desc" rows="4" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 resize-none"></textarea>
@@ -3483,6 +3491,7 @@
       document.getElementById("edit-a-nfc-end").value = toNfcDateTimeLocal_(act["NFC簽到結束"] || act.nfcCheckinEnd || "", act["開始時間"]);
       document.getElementById("edit-a-desc").value = safeStringForPrompt_(act["活動說明"]);
       document.getElementById("edit-a-image").value = safeStringForPrompt_(act["宣傳圖"]);
+      document.getElementById("edit-a-image-ratio").value = normalizeActivityImageRatioForAdmin_(act.imageRatio || act.image_ratio || act["圖片版型"] || act["宣傳圖版型"]);
       updateActivityImagePreview();
 
       const modal = document.getElementById("modal-activity-edit");
@@ -3492,10 +3501,13 @@
 
     function updateActivityImagePreview() {
       const input = document.getElementById("edit-a-image");
+      const ratioEl = document.getElementById("edit-a-image-ratio");
       const wrap = document.getElementById("edit-a-image-preview-wrap");
       const img = document.getElementById("edit-a-image-preview");
       const url = (input?.value || "").trim();
       if (!wrap || !img) return;
+      const ratio = normalizeActivityImageRatioForAdmin_(ratioEl?.value);
+      img.className = "w-full object-cover " + (ratio === "2:3" ? "h-72" : ratio === "1:1" ? "aspect-square h-auto" : "aspect-video h-auto");
       if (/^https?:\/\//i.test(url) || /^data:image\//i.test(url)) {
         img.src = url;
         wrap.classList.remove("hidden");
@@ -3549,6 +3561,7 @@
       const nextNfcEnd = document.getElementById("edit-a-nfc-end").value;
       const nextDesc = document.getElementById("edit-a-desc").value;
       const nextImage = document.getElementById("edit-a-image").value.trim();
+      const nextImageRatio = normalizeActivityImageRatioForAdmin_(document.getElementById("edit-a-image-ratio").value);
 
       if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
       if (!nextName) return showToast("請輸入活動名稱", true);
@@ -3578,7 +3591,8 @@
             "NFC簽到結束": nextNfcEnd,
             "NFC限當日": true,
             "活動說明": nextDesc,
-            "宣傳圖": nextImage
+            "宣傳圖": nextImage,
+            imageRatio: nextImageRatio
           }
         });
 
@@ -3597,6 +3611,13 @@
 
     function safeStringForPrompt_(value) {
       return value === null || value === undefined ? "" : String(value);
+    }
+
+    function normalizeActivityImageRatioForAdmin_(value) {
+      const raw = safeStringForPrompt_(value).trim().toLowerCase();
+      if (raw === "2:3" || raw === "portrait" || raw === "giga" || raw === "full") return "2:3";
+      if (raw === "1:1" || raw === "square") return "1:1";
+      return "16:9";
     }
 
     function toDateTimeLocal_(value) {
