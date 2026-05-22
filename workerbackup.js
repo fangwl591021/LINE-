@@ -4273,7 +4273,7 @@ const D1ActivityModule = {
     await this.ensureActivityNetworkScope(env);
     const role = actor
       ? SecurityModule.normalizeRole(actor.role)
-      : SecurityModule.normalizeRole(payload.authenticatedRole || '');
+      : SecurityModule.normalizeRole(payload.authenticatedRole || payload.role || payload.operatorRole || payload.actorRole || '');
     const requestedNetworkId = this.text(payload.networkId || payload.net || '');
     const actorNetworkId = this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
     const networkId = requestedNetworkId || actorNetworkId;
@@ -4324,7 +4324,7 @@ const D1ActivityModule = {
 
     const role = actor
       ? SecurityModule.normalizeRole(actor.role)
-      : SecurityModule.normalizeRole(payload.authenticatedRole || '');
+      : SecurityModule.normalizeRole(payload.authenticatedRole || payload.role || payload.operatorRole || payload.actorRole || '');
     const actorId = this.text(actor?.userId || payload.authenticatedUserId || payload.userId);
     const requestedNetwork = this.text(payload.networkId || payload.net || '');
     const actorNetwork = requestedNetwork || this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
@@ -4360,7 +4360,7 @@ const D1ActivityModule = {
   filterResultByActor(result, payload = {}, actor = null) {
     const role = actor
       ? SecurityModule.normalizeRole(actor.role)
-      : SecurityModule.normalizeRole(payload.authenticatedRole || '');
+      : SecurityModule.normalizeRole(payload.authenticatedRole || payload.role || payload.operatorRole || payload.actorRole || '');
     if (role === 'admin') return result;
     const requestedNetworkId = this.text(payload.networkId || payload.net || '');
     const networkId = requestedNetworkId || this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
