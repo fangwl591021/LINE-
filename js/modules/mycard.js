@@ -84,6 +84,37 @@
     myEcardImgs[layout] = imgInput.value || '';
   }
 
+  function getVideoUrlInput() {
+    var input = $('#my-v1-video-url');
+    return input ? String(input.value || '').trim() : '';
+  }
+
+  function isVideoModeEnabled() {
+    var toggle = $('#my-v1-video-enabled');
+    return !!(toggle && toggle.checked);
+  }
+
+  function applyVideoConfigToFields(cfg) {
+    var videoInput = $('#my-v1-video-url');
+    var videoToggle = $('#my-v1-video-enabled');
+    var videoUrl = cfg && cfg.videoUrl ? String(cfg.videoUrl) : '';
+    if (videoInput) videoInput.value = videoUrl;
+    if (videoToggle) videoToggle.checked = !!(cfg && cfg.cardType === 'video' && videoUrl);
+  }
+
+  function syncVideoConfig(cfg) {
+    cfg = cfg || {};
+    var videoUrl = getVideoUrlInput();
+    if (isVideoModeEnabled() && videoUrl) {
+      cfg.cardType = 'video';
+      cfg.videoUrl = videoUrl;
+    } else {
+      if (cfg.cardType === 'video') cfg.cardType = 'v1';
+      delete cfg.videoUrl;
+    }
+    return cfg;
+  }
+
   function parseCardConfig(card) {
     var source = card || {};
     var candidates = [
@@ -192,6 +223,7 @@
 
     var imgInput = $('#my-v1-img-url');
     if (imgInput) imgInput.value = myEcardImgs[getLayout()] || '';
+    applyVideoConfigToFields(cfg);
 
     renderButtons();
     updatePreview();
@@ -212,6 +244,33 @@
         details.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 120);
     }
+  }
+
+  function applyMyVideoCardMedia(videoUrl, thumbnailUrl) {
+    var cleanVideoUrl = String(videoUrl || '').trim();
+    var cleanThumbnailUrl = String(thumbnailUrl || '').trim();
+    if (!cleanVideoUrl) {
+      if (window.showToast) window.showToast('沒有可套用的影片網址', true);
+      return false;
+    }
+
+    focusMyECardSection();
+
+    var videoInput = $('#my-v1-video-url');
+    var videoToggle = $('#my-v1-video-enabled');
+    var imgInput = $('#my-v1-img-url');
+    var layout = getLayout();
+
+    if (videoInput) videoInput.value = cleanVideoUrl;
+    if (videoToggle) videoToggle.checked = true;
+    if (cleanThumbnailUrl) {
+      myEcardImgs[layout] = cleanThumbnailUrl;
+      if (imgInput) imgInput.value = cleanThumbnailUrl;
+    }
+
+    updatePreview();
+    if (window.showToast) window.showToast('已套用到影音名片區，請按儲存');
+    return true;
   }
 
   async function openMyCardDetail(evt) {
@@ -402,6 +461,11 @@
     var color = cfg.descColor || '#666666';
     var align = cfg.descAlign || 'center';
     var ratio = layout === 'portrait' ? (myEcardRatios.portrait || '2:3').replace(':', '/') : (layout === 'square' ? '1/1' : '20/13');
+    var videoUrl = getVideoUrlInput() || cfg.videoUrl || '';
+    var videoEnabled = isVideoModeEnabled() && !!videoUrl;
+    var mediaHtml = videoEnabled
+      ? '<video class="w-full bg-slate-100 object-cover" style="aspect-ratio:' + ratio + ';" src="' + escapeHTML(videoUrl) + '" poster="' + escapeHTML(imgUrl) + '" controls playsinline muted></video>'
+      : '<div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio:' + ratio + ';background-image:url(&quot;' + escapeHTML(imgUrl) + '&quot;);"></div>';
     var buttonHtml = myEcardButtons.map(function(button) {
       return '<div class="block py-3 rounded-xl text-white text-center text-[14px] font-black mb-2.5 shadow-sm" style="background:' + escapeHTML(button.c || '#06C755') + '">' + escapeHTML(button.l || '按鈕') + '</div>';
     }).join('');
@@ -409,7 +473,7 @@
     preview.innerHTML =
       '<div class="flex flex-col w-full">' +
       '<div class="relative w-full">' +
-        '<div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio:' + ratio + ';background-image:url(&quot;' + escapeHTML(imgUrl) + '&quot;);"></div>' +
+        mediaHtml +
         '<div class="absolute top-3 right-3 bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
       '</div>' +
       '<div class="p-6 text-center">' +
@@ -441,6 +505,7 @@
     cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
     cfg.imgRatioSquare = '1:1';
     cfg.buttons = myEcardButtons;
+    syncVideoConfig(cfg);
 
     try {
       var rowId = await ensureCurrentCardRowId();
@@ -487,6 +552,7 @@
       cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
       cfg.buttons = myEcardButtons.slice();
+      syncVideoConfig(cfg);
     }
     return cfg;
   }
@@ -738,6 +804,7 @@
   window.moveMyV1Button = moveButton;
   window.updateMyECardPreview = updatePreview;
   window.saveMyECardConfig = saveMyECardConfig;
+  window.applyMyVideoCardMedia = applyMyVideoCardMedia;
   window.generateCardFromProfile = generateCardFromProfile;
   window.applyMyCardTemplate = applyMyCardTemplate;
   window.showMyQRCode = showMyQRCode;

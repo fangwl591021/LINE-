@@ -484,6 +484,17 @@ window.applyVoomMediaToStoreBanner = function() {
   if (window.showToast) window.showToast('已套用到 Banner 與影片欄位，請記得儲存');
 };
 
+window.applyVoomMediaToMyVideoCard = function() {
+  const result = window.voomCaptureLastResult || {};
+  const videoUrl = voomSettingsText(result.videoUrl);
+  const thumbnailUrl = voomSettingsText(result.thumbnailUrl || result.imageUrl);
+  if (!videoUrl) return window.showToast && window.showToast('沒有可套用的影片網址', true);
+  if (typeof window.applyMyVideoCardMedia !== 'function') {
+    return window.showToast && window.showToast('影音名片區尚未載入，請先打開我的專屬名片', true);
+  }
+  window.applyMyVideoCardMedia(videoUrl, thumbnailUrl);
+};
+
 window.extractVoomMediaForSettings = async function(event) {
   const btn = event && event.currentTarget;
   const input = document.getElementById('input-voom-url');
@@ -526,7 +537,10 @@ window.extractVoomMediaForSettings = async function(event) {
           voomSettingsResultRow('影片網址', videoUrl, 'videoUrl') +
           voomSettingsResultRow('縮圖網址', thumbnailUrl, 'thumbnailUrl') +
           (!thumbnailUrl && imageUrl ? voomSettingsResultRow('圖片網址', imageUrl, 'imageUrl') : '') +
-          '<button type="button" onclick="window.applyVoomMediaToStoreBanner()" class="w-full rounded-xl bg-blue-600 text-white py-3 font-black active:scale-95 transition-transform">套用到 Banner 與影片欄位</button>' +
+          '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">' +
+            '<button type="button" onclick="window.applyVoomMediaToMyVideoCard()" class="w-full rounded-xl bg-blue-600 text-white py-3 font-black active:scale-95 transition-transform">套用到影音名片區</button>' +
+            '<button type="button" onclick="window.applyVoomMediaToStoreBanner()" class="w-full rounded-xl bg-slate-900 text-white py-3 font-black active:scale-95 transition-transform">套用到 Banner 與影片欄位</button>' +
+          '</div>' +
         '</div>';
     }
   } catch (e) {
