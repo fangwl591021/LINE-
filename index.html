@@ -445,6 +445,24 @@
         </div>
       </details>
 
+      <details id="details-voom-capture" class="hidden bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group">
+        <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-red-500 icon-filled">movie</span>
+            <span class="flex items-center gap-2">LINE VOOM 影片擷取器 <span class="bg-red-100 text-red-600 text-[10px] px-1.5 py-0.5 rounded-md font-bold tracking-tighter">PRO</span></span>
+          </div>
+          <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+        </summary>
+        <div class="p-5 pt-0 border-t border-slate-50 space-y-4">
+          <p class="text-[12px] text-slate-500 font-bold">貼上 LINE VOOM 網址，系統會使用既有 LINE OA 工具解析影片網址與縮圖網址。</p>
+          <div class="flex gap-2">
+            <input type="text" id="input-voom-url" placeholder="https://linevoom.line.me/..." class="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 text-[13px] font-mono text-slate-600 focus:ring-2 focus:ring-red-500/20 outline-none transition-all">
+            <button type="button" onclick="window.extractVoomMediaForSettings(event)" class="bg-slate-900 text-white px-5 rounded-xl font-black text-[13px] active:scale-95 transition-transform shrink-0">解析</button>
+          </div>
+          <div id="voom-capture-result" class="hidden rounded-2xl border border-slate-100 bg-slate-50 p-4 text-[13px] text-slate-600"></div>
+        </div>
+      </details>
+
       <details id="details-store-banner" class="hidden bg-white rounded-3xl shadow-sm border border-slate-100 mb-4 group" ontoggle="if(this.open) window.loadStoreBannerSettings()">
         <summary class="font-bold text-slate-800 p-5 flex items-center justify-between cursor-pointer list-none outline-none">
           <div class="flex items-center gap-2">
@@ -1800,7 +1818,7 @@
 </div>
 
 <!-- ocr-lab route: ocr-lab.html -->
-<script src="js/core.js?v=7.20"></script>
+<script src="js/core.js?v=7.21"></script>
 <script src="js/navigation.js?v=7.6"></script>
 <script src="js/modules/cropper.js?v=7.9"></script>
 <script src="js/modules/cards.js?v=7.5"></script>
@@ -1812,7 +1830,7 @@
 <script src="js/modules/admin.js?v=8.7"></script>
 <script src="js/modules/home.js?v=7.28"></script>
 <script src="js/modules/inbox.js?v=1.8"></script>
-<script src="js/modules/settings.js?v=7.4"></script>
+<script src="js/modules/settings.js?v=7.5"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.3"></script>
 <script src="js/auth.js?v=10.14"></script>

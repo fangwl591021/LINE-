@@ -423,3 +423,119 @@ window.savePersonalAssistantCore = async function(event) {
     }
   }
 };
+
+/* ==================== LINE VOOM media extractor ==================== */
+
+function voomSettingsText(value) {
+  return String(value || '').trim();
+}
+
+function voomSettingsEscape(value) {
+  return window.escapeHTML ? window.escapeHTML(value) : String(value || '').replace(/[&<>"']/g, function(ch) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+  });
+}
+
+function voomSettingsResultRow(label, value, copyName) {
+  if (!value) return '';
+  return '<div class="rounded-xl bg-white border border-slate-100 p-3">' +
+    '<div class="text-[11px] font-black text-slate-400 mb-1">' + voomSettingsEscape(label) + '</div>' +
+    '<div class="flex items-center gap-2">' +
+      '<input readonly value="' + voomSettingsEscape(value) + '" class="flex-1 min-w-0 bg-slate-50 rounded-lg px-3 py-2 text-[12px] font-mono text-slate-600 outline-none">' +
+      '<button type="button" onclick="window.copyVoomMediaValue(\'' + copyName + '\')" class="shrink-0 rounded-lg bg-slate-900 text-white px-3 py-2 text-[12px] font-black">複製</button>' +
+    '</div>' +
+  '</div>';
+}
+
+window.voomCaptureLastResult = null;
+
+window.copyVoomMediaValue = async function(key) {
+  const result = window.voomCaptureLastResult || {};
+  const value = voomSettingsText(result[key]);
+  if (!value) return window.showToast && window.showToast('沒有可複製的內容', true);
+  try {
+    await navigator.clipboard.writeText(value);
+    if (window.showToast) window.showToast('已複製');
+  } catch (e) {
+    const input = document.createElement('input');
+    input.value = value;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    input.remove();
+    if (window.showToast) window.showToast('已複製');
+  }
+};
+
+window.applyVoomMediaToStoreBanner = function() {
+  const result = window.voomCaptureLastResult || {};
+  const videoUrl = voomSettingsText(result.videoUrl);
+  const thumbnailUrl = voomSettingsText(result.thumbnailUrl || result.imageUrl);
+  const videoInput = document.getElementById('input-store-youtube');
+  const bannerInput = document.getElementById('input-store-banner');
+  const preview = document.getElementById('setting-preview-banner');
+  const showVideo = document.getElementById('toggle-show-youtube');
+  const showBanner = document.getElementById('toggle-show-banner');
+  if (videoInput && videoUrl) videoInput.value = videoUrl;
+  if (bannerInput && thumbnailUrl) bannerInput.value = thumbnailUrl;
+  if (preview && thumbnailUrl) preview.src = thumbnailUrl;
+  if (showVideo && videoUrl) showVideo.checked = true;
+  if (showBanner && thumbnailUrl) showBanner.checked = true;
+  if (window.showToast) window.showToast('已套用到 Banner 與影片欄位，請記得儲存');
+};
+
+window.extractVoomMediaForSettings = async function(event) {
+  const btn = event && event.currentTarget;
+  const input = document.getElementById('input-voom-url');
+  const box = document.getElementById('voom-capture-result');
+  const url = voomSettingsText(input && input.value);
+  if (!url) return window.showToast && window.showToast('請先貼上 LINE VOOM 網址', true);
+  if (!/^https:\/\/(linevoom\.line\.me|line\.me)\//i.test(url)) {
+    return window.showToast && window.showToast('請貼上 LINE VOOM 或 LINE 文章網址', true);
+  }
+
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[16px] align-middle">refresh</span>';
+  }
+  if (box) {
+    box.classList.remove('hidden');
+    box.innerHTML = '<div class="text-slate-500 font-bold">解析中...</div>';
+  }
+
+  try {
+    const res = await window.fetchAPI('extractLineVoomMedia', { url: url }, true);
+    if (res && res.success === false) throw new Error(res.error || '解析失敗');
+    const data = res && res.data ? res.data : res;
+    const video = data && data.video ? data.video : null;
+    const images = Array.isArray(data && data.images) ? data.images : [];
+    const videoUrl = voomSettingsText(video && (video.videoUrl || video.url));
+    const thumbnailUrl = voomSettingsText((video && video.thumbnailUrl) || (images[0] && images[0].url));
+    const imageUrl = voomSettingsText(images[0] && images[0].url);
+    if (!videoUrl && !thumbnailUrl && !imageUrl) throw new Error('沒有解析到影片或縮圖網址');
+
+    window.voomCaptureLastResult = { videoUrl, thumbnailUrl, imageUrl };
+    if (box) {
+      box.innerHTML =
+        '<div class="space-y-3">' +
+          '<div class="flex items-center justify-between gap-3">' +
+            '<div class="font-black text-slate-800">解析完成</div>' +
+            '<span class="rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-[11px] font-black">' + voomSettingsEscape(data.type || 'MEDIA') + '</span>' +
+          '</div>' +
+          voomSettingsResultRow('影片網址', videoUrl, 'videoUrl') +
+          voomSettingsResultRow('縮圖網址', thumbnailUrl, 'thumbnailUrl') +
+          (!thumbnailUrl && imageUrl ? voomSettingsResultRow('圖片網址', imageUrl, 'imageUrl') : '') +
+          '<button type="button" onclick="window.applyVoomMediaToStoreBanner()" class="w-full rounded-xl bg-blue-600 text-white py-3 font-black active:scale-95 transition-transform">套用到 Banner 與影片欄位</button>' +
+        '</div>';
+    }
+  } catch (e) {
+    if (box) box.innerHTML = '<div class="text-red-500 font-bold">解析失敗：' + voomSettingsEscape(e.message || e) + '</div>';
+    if (window.showToast) window.showToast('VOOM 解析失敗：' + (e.message || e), true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml || '解析';
+    }
+  }
+};
