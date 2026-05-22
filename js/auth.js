@@ -128,6 +128,34 @@ async function sharePlainCardViewUrl(card, referrerId, networkId) {
   return true;
 }
 
+function appendCardAutoShareMode(url) {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set('share', '1');
+    return parsed.toString();
+  } catch (e) {
+    return url + (url.includes('?') ? '&' : '?') + 'share=1';
+  }
+}
+
+function routeSharedCardBadgeToPicker(flexMsg, shareUrl) {
+  const actionUrl = appendCardAutoShareMode(shareUrl);
+  if (!flexMsg || !actionUrl) return flexMsg;
+  try {
+    if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
+      const first = flexMsg.header.contents[0];
+      const oldAction = first.action || {};
+      first.action = first.type === 'button'
+        ? { type: 'uri', label: oldAction.label || '分享名片', uri: actionUrl }
+        : { type: 'uri', uri: actionUrl };
+    }
+  } catch (e) {
+    console.warn('[routeSharedCardBadgeToPicker] failed:', e);
+  }
+  return flexMsg;
+}
+
 window.shareCardFromLink = async function(card, options = {}) {
   if (!card || window.__autoSharingCardFromLink) return false;
   window.__autoSharingCardFromLink = true;
@@ -144,6 +172,7 @@ window.shareCardFromLink = async function(card, options = {}) {
     }, true);
 
     if (flexMsg && !flexMsg.error) {
+      routeSharedCardBadgeToPicker(flexMsg, buildPlainCardViewUrl(card, referrerId, networkId));
       const shared = await window.triggerFlexSharing(flexMsg, card['姓名'] || '數位名片');
       if (shared === false) await sharePlainCardViewUrl(card, referrerId, networkId);
     } else {
@@ -1335,7 +1364,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (sc) {
               if (shouldAutoShareCard) {
                 await window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId });
-                window.goPage('home');
                 return;
               }
               window.roCardData = sc;
@@ -1381,7 +1409,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sc) {
           if (shouldAutoShareCard) {
             window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId })
-              .then(() => window.goPage('home'));
+              .catch(e => window.showToast?.(e.message || '分享失敗，請稍後再試', true));
           } else {
             window.openCardDetail(sc);
           }
