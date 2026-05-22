@@ -2051,6 +2051,64 @@ const DBModule = {
   }
 };
 
+const D1StoreSettingsModule = {
+  key(networkId) {
+    return 'store_settings:' + String(networkId || 'admin').trim();
+  },
+
+  normalize(payload = {}) {
+    const networkId = String(payload.networkId || 'admin').trim() || 'admin';
+    return {
+      networkId,
+      siteName: String(payload.siteName || '').trim(),
+      bannerUrl: String(payload.bannerUrl || '').trim(),
+      showBanner: payload.showBanner === undefined ? true : !!payload.showBanner,
+      youtubeUrl: String(payload.youtubeUrl || '').trim(),
+      showYoutube: payload.showYoutube === undefined ? true : !!payload.showYoutube,
+      updatedAt: new Date().toISOString()
+    };
+  },
+
+  async ensure(env) {
+    if (!env.ACTMASTER_DB) throw new Error('D1 database unavailable');
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS app_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+  },
+
+  async get(payload = {}, env) {
+    await this.ensure(env);
+    const networkId = String(payload.networkId || 'admin').trim() || 'admin';
+    const row = await env.ACTMASTER_DB.prepare(
+      'SELECT value FROM app_meta WHERE key = ?'
+    ).bind(this.key(networkId)).first();
+    if (!row || !row.value) return null;
+    try {
+      const data = JSON.parse(row.value);
+      return { success: true, data: { ...data, networkId } };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async save(payload = {}, env) {
+    await this.ensure(env);
+    const data = this.normalize(payload);
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO app_meta(key, value, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(this.key(data.networkId), JSON.stringify(data)).run();
+    return { success: true, data };
+  }
+};
+
 const D1BackfillModule = {
   listFromResult(result, keys = []) {
     if (Array.isArray(result)) return result;
@@ -7645,6 +7703,25 @@ async function dispatchAction(action, payload, request, env) {
         console.error("D1 adminSyncBoundCardUser fallback", e);
       }
       return await AuthModule.adminSyncBoundCardUser(payload, env);
+    }
+    case 'getStoreSettings': {
+      try {
+        const d1Result = await D1StoreSettingsModule.get(payload || {}, env);
+        if (d1Result && d1Result.success !== false) return d1Result;
+      } catch (e) {
+        console.error("D1 getStoreSettings fallback", e);
+      }
+      return await DBModule.forward(action, payload, env);
+    }
+    case 'saveStoreSettings': {
+      try {
+        const d1Result = await D1StoreSettingsModule.save(payload || {}, env);
+        if (d1Result && d1Result.success !== false) return d1Result;
+      } catch (e) {
+        console.error("D1 saveStoreSettings failed", e);
+        return { success: false, error: e.message || 'Store settings save failed' };
+      }
+      return { success: false, error: 'Store settings save failed' };
     }
     case 'getPublicActivities':
     case 'getAllActivities':
