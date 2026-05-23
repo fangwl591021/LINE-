@@ -167,6 +167,8 @@ window.shareCardFromLink = async function(card, options = {}) {
     const shareConfig = buildCardShareConfig(card);
     let flexMsg = null;
 
+    // Share contract: card link auto-share must use the same local Flex builder as the personal card area.
+    // Do not silently fall back to text URL sharing here; users expect the LINE contact picker with a real card.
     if (typeof window.buildLocalECardFlexMessage === 'function') {
       flexMsg = window.buildLocalECardFlexMessage(card, shareConfig, shareUrl);
     } else {
