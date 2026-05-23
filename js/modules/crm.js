@@ -8,6 +8,71 @@ window.crmCurrentPersonPhone = null;
 // 預設標籤(快選)
 window.CRM_DEFAULT_TAGS = ['VIP', '待跟進', '拒接'];
 window.CRM_STATUS_OPTIONS = ['新名片', '已初次聯繫', '已發送資料', '已邀約', '已報名活動', '已到場', '已成交', '已流失', '暫緩追蹤'];
+const CRM_FATE_TAG_FIELDS = [
+  { label: '個性', key: 'personality', zh: '個性', icon: 'psychology', tone: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+  { label: '興趣', key: 'hobbies', zh: '興趣', icon: 'interests', tone: 'bg-sky-50 text-sky-700 border-sky-100' },
+  { label: '財富', key: 'wealth', zh: '財富', icon: 'payments', tone: 'bg-amber-50 text-amber-800 border-amber-100' },
+  { label: '健康', key: 'health', zh: '健康', icon: 'health_and_safety', tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+  { label: '事業', key: 'career', zh: '事業', icon: 'work', tone: 'bg-rose-50 text-rose-700 border-rose-100' }
+];
+
+function crmText(value) {
+  return value === null || value === undefined ? '' : String(value).trim();
+}
+
+function crmFateValue(person, field) {
+  return crmText(person && (person[field.key] || person[field.zh]));
+}
+
+function crmHasFateTags(person) {
+  return CRM_FATE_TAG_FIELDS.some(field => {
+    const value = crmFateValue(person, field);
+    return value && value !== '待分析' && value !== 'undefined';
+  });
+}
+
+function crmFateSummaryHtml(person) {
+  const available = CRM_FATE_TAG_FIELDS
+    .map(field => {
+      const value = crmFateValue(person, field);
+      return { field, value };
+    })
+    .filter(item => item.value && item.value !== '待分析' && item.value !== 'undefined')
+    .slice(0, 3);
+  if (!available.length) {
+    return '<span class="inline-flex items-center rounded-full bg-slate-100 text-slate-500 px-2 py-1 text-[12px] font-bold">五大標籤待補</span>';
+  }
+  return available.map(item =>
+    '<span class="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[12px] font-bold max-w-full ' + item.field.tone + '">' +
+      '<span class="material-symbols-outlined text-[14px]">' + item.field.icon + '</span>' +
+      '<span class="truncate">' + window.escapeJS(item.field.label + '：' + item.value) + '</span>' +
+    '</span>'
+  ).join('');
+}
+
+function crmFateDetailHtml(person) {
+  const cards = CRM_FATE_TAG_FIELDS.map(field => {
+    const value = crmFateValue(person, field);
+    const display = value && value !== 'undefined' ? value : '待補標籤，請先補漏或重新運算。';
+    const muted = !value || value === 'undefined' || value === '待分析';
+    return '<div class="rounded-2xl border p-3 ' + field.tone + '">' +
+      '<div class="flex items-center gap-2 mb-2">' +
+        '<span class="material-symbols-outlined text-[18px]">' + field.icon + '</span>' +
+        '<p class="text-[13px] font-black">' + window.escapeJS(field.label) + '</p>' +
+      '</div>' +
+      '<p class="text-[13px] leading-relaxed font-bold ' + (muted ? 'text-slate-400' : '') + '">' + window.escapeJS(display) + '</p>' +
+    '</div>';
+  }).join('');
+  return '<div class="rounded-2xl bg-slate-50 border border-slate-100 p-4">' +
+    '<div class="flex items-center justify-between mb-3">' +
+      '<p class="text-[15px] font-black text-slate-800 flex items-center gap-1"><span class="material-symbols-outlined text-[18px] text-pink-500">auto_awesome</span> 五大標籤</p>' +
+      '<span class="text-[12px] font-bold ' + (crmHasFateTags(person) ? 'text-emerald-600 bg-emerald-50' : 'text-amber-700 bg-amber-50') + ' rounded-full px-2 py-1">' +
+        (crmHasFateTags(person) ? '已有資料' : '待補漏') +
+      '</span>' +
+    '</div>' +
+    '<div class="grid grid-cols-1 md:grid-cols-2 gap-2">' + cards + '</div>' +
+  '</div>';
+}
 
 // ============ 載入 CRM 主頁 ============
 window.loadCrm = async function() {
@@ -75,7 +140,8 @@ window.renderCrmList = function() {
       String(p.phone || '').toLowerCase().includes(q) ||
       String(p.email || '').toLowerCase().includes(q) ||
       String(p.company || '').toLowerCase().includes(q) ||
-      String(p.tags || '').toLowerCase().includes(q)
+      String(p.tags || '').toLowerCase().includes(q) ||
+      CRM_FATE_TAG_FIELDS.some(field => crmFateValue(p, field).toLowerCase().includes(q))
     );
   }
 
@@ -132,6 +198,7 @@ window.renderCrmList = function() {
             (p.activityCount > 0 ? '<span class="bg-orange-50 text-orange-600 text-[10px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[10px]">event</span>' + p.activityCount + ' 場</span>' : '') +
             (lastTime ? '<span class="text-[10px] text-slate-400">最近 ' + lastTime + '</span>' : '') +
           '</div>' +
+          '<div class="flex items-center gap-1.5 mt-2 flex-wrap">' + crmFateSummaryHtml(p) + '</div>' +
           '<p class="mt-1.5 text-[12px] text-slate-400 font-bold truncate">下一步：' + window.escapeJS(nextAction) + '</p>' +
         '</div>' +
         '<span class="material-symbols-outlined text-slate-300">chevron_right</span>' +
@@ -212,6 +279,7 @@ window.openCrmPerson = function(phone) {
           '<p class="text-[12px] font-black text-pink-600 mb-2">AI 業務建議</p>' +
           '<p class="text-[14px] text-slate-700 font-bold leading-relaxed">' + window.escapeJS(person.crmAiSuggestion || '建議先補上備註與客戶類型，再安排下一步。') + '</p>' +
         '</div>' +
+        crmFateDetailHtml(person) +
         '<div class="grid grid-cols-2 gap-2">' +
           '<div class="rounded-2xl bg-amber-50 border border-amber-100 p-3">' +
             '<p class="text-[11px] font-black text-amber-700">客戶類型</p>' +

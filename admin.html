@@ -988,6 +988,14 @@
           </section>
         </div>
 
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <span class="material-symbols-outlined text-pink-500 text-[20px]">auto_awesome</span>
+            <h4 class="font-black text-slate-800">五大標籤</h4>
+          </div>
+          <div id="crm-fate-grid" class="p-5 grid grid-cols-1 md:grid-cols-5 gap-3 text-sm"></div>
+        </section>
+
         <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
@@ -2407,6 +2415,60 @@
       return (Array.isArray(allCardsData) ? allCardsData : []).filter(c => normalizeLineId(c['LINE ID'] || c.lineId || c.userId) === id);
     }
 
+    const ADMIN_FATE_TAG_FIELDS = [
+      { label: '個性', key: 'personality', zh: '個性', icon: 'psychology', tone: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+      { label: '興趣', key: 'hobbies', zh: '興趣', icon: 'interests', tone: 'bg-sky-50 text-sky-700 border-sky-100' },
+      { label: '財富', key: 'wealth', zh: '財富', icon: 'payments', tone: 'bg-amber-50 text-amber-800 border-amber-100' },
+      { label: '健康', key: 'health', zh: '健康', icon: 'health_and_safety', tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+      { label: '事業', key: 'career', zh: '事業', icon: 'work', tone: 'bg-rose-50 text-rose-700 border-rose-100' }
+    ];
+
+    function isFilledFateTag(value) {
+      const text = String(value || '').trim();
+      return text && text !== 'undefined' && text !== '待分析' && text !== '-';
+    }
+
+    function getAdminFateCard(user = {}) {
+      return getUserCards(user).find(card =>
+        ADMIN_FATE_TAG_FIELDS.some(field => isFilledFateTag(card[field.key] || card[field.zh]))
+      ) || {};
+    }
+
+    function getAdminFateValue(user = {}, field, card = null) {
+      const sourceCard = card || getAdminFateCard(user);
+      return String(user[field.key] || user[field.zh] || sourceCard[field.key] || sourceCard[field.zh] || '').trim();
+    }
+
+    function renderAdminFatePills(user = {}) {
+      const card = getAdminFateCard(user);
+      const values = ADMIN_FATE_TAG_FIELDS
+        .map(field => ({ field, value: getAdminFateValue(user, field, card) }))
+        .filter(item => isFilledFateTag(item.value));
+      if (!values.length) {
+        return '<span class="inline-flex items-center rounded-full bg-slate-100 text-slate-500 px-2.5 py-1 text-[12px] font-bold">五大標籤待補</span>';
+      }
+      return values.slice(0, 5).map(({ field, value }) =>
+        `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-black ${field.tone}">
+          <span class="material-symbols-outlined text-[14px]">${field.icon}</span>${field.label}：${escapeHTML(value)}
+        </span>`
+      ).join('');
+    }
+
+    function renderAdminFateGrid(user = {}) {
+      const card = getAdminFateCard(user);
+      return ADMIN_FATE_TAG_FIELDS.map(field => {
+        const value = getAdminFateValue(user, field, card);
+        const filled = isFilledFateTag(value);
+        return `<div class="rounded-xl border p-3 ${filled ? field.tone : 'bg-slate-50 text-slate-500 border-slate-100'}">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-[18px]">${field.icon}</span>
+            <p class="text-[13px] font-black">${field.label}</p>
+          </div>
+          <p class="text-[13px] leading-relaxed font-bold break-words">${escapeHTML(filled ? value : '待補漏或重新運算')}</p>
+        </div>`;
+      }).join('');
+    }
+
     function crmInfoItem(label, value) {
       return `<div class="bg-slate-50 rounded-lg border border-slate-100 p-3">
         <div class="text-[11px] text-slate-400 font-bold">${label}</div>
@@ -2497,6 +2559,8 @@
         <div class="text-[12px] text-slate-400 font-bold">${label}</div>
         <div class="crm-pill mt-2 ${cls}">${value}</div>
       </div>`).join('');
+
+      document.getElementById('crm-fate-grid').innerHTML = renderAdminFateGrid(user);
 
       document.getElementById('crm-org-grid').innerHTML = [
         crmInfoItem('會員編號', id),
@@ -2773,6 +2837,7 @@
               <span class="crm-pill ${intent[1]}">意向 ${intent[0]}</span>
               ${isBoundCard ? '<span class="crm-pill crm-pill-green">已綁名片</span>' : ''}
             </div>
+            <div class="mt-2 flex flex-wrap gap-1.5">${renderAdminFatePills(u)}</div>
             <div class="crm-code">${escapeHTML(id ? id.substring(0, 12) + '...' : '-')}</div>
           </td>
           <td>
