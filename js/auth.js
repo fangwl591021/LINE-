@@ -163,26 +163,37 @@ window.shareCardFromLink = async function(card, options = {}) {
   const networkId = options.networkId || window.currentNetworkId || 'admin';
 
   try {
-    const flexMsg = await window.fetchAPI('buildFlexMessage', {
-      card,
-      config: buildCardShareConfig(card),
-      referrerId,
-      networkId,
-      liffId: window.POINT_LIFF_ID || window.DEFAULT_LIFF_ID || window.LIFF_ID
-    }, true);
+    const shareUrl = buildPlainCardViewUrl(card, referrerId, networkId);
+    const shareConfig = buildCardShareConfig(card);
+    let flexMsg = null;
 
-    if (flexMsg && !flexMsg.error) {
-      routeSharedCardBadgeToPicker(flexMsg, buildPlainCardViewUrl(card, referrerId, networkId));
-      const shared = await window.triggerFlexSharing(flexMsg, card['姓名'] || '數位名片');
-      if (shared === false) await sharePlainCardViewUrl(card, referrerId, networkId);
+    if (typeof window.buildLocalECardFlexMessage === 'function') {
+      flexMsg = window.buildLocalECardFlexMessage(card, shareConfig, shareUrl);
     } else {
-      await sharePlainCardViewUrl(card, referrerId, networkId);
+      flexMsg = await window.fetchAPI('buildFlexMessage', {
+        card,
+        config: shareConfig,
+        referrerId,
+        networkId,
+        liffId: window.POINT_LIFF_ID || window.DEFAULT_LIFF_ID || window.LIFF_ID
+      }, true);
+    }
+
+    if (!flexMsg || flexMsg.error) {
+      throw new Error(flexMsg?.error || '無法產生 LINE 名片訊息');
+    }
+
+    routeSharedCardBadgeToPicker(flexMsg, shareUrl);
+    const shared = await window.triggerFlexSharing(flexMsg, card['姓名'] || '數位名片');
+    if (shared === false) {
+      window.showToast?.('此環境無法開啟 LINE 通訊錄，請在 LINE 內重新開啟', true);
+      return false;
     }
     return true;
   } catch (e) {
-    console.warn('[shareCardFromLink] fallback to URL:', e);
-    await sharePlainCardViewUrl(card, referrerId, networkId);
-    return true;
+    console.warn('[shareCardFromLink] flex share failed:', e);
+    window.showToast?.(e.message || '名片分享失敗，請稍後再試', true);
+    return false;
   } finally {
     removeAutoShareParamsFromUrl();
     window.__autoSharingCardFromLink = false;
