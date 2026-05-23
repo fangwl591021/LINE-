@@ -2532,6 +2532,11 @@ const D1ReadModule = {
       phone: this.text(row.phone),
       industry: this.text(row.industry || row.title || row.company_name),
       birthday: this.text(row.birthday),
+      personality: this.text(row.personality),
+      hobbies: this.text(row.hobbies),
+      wealth: this.text(row.wealth),
+      health: this.text(row.health),
+      career: this.text(row.career),
       role,
       roleLabel: role === 'admin' ? '總管' : (role === 'store' ? '店長' : '一般'),
       storeid: this.text(row.store_id),
@@ -2676,6 +2681,11 @@ const D1ReadModule = {
       createdAt: this.text(row.created_at),
       updatedAt: this.text(row.updated_at),
       'LINE ID': this.text(row.line_id),
+      ['\u500b\u6027']: this.text(row.personality),
+      ['\u8208\u8da3']: this.text(row.hobbies),
+      ['\u8ca1\u5bcc']: this.text(row.wealth),
+      ['\u5065\u5eb7']: this.text(row.health),
+      ['\u4e8b\u696d']: this.text(row.career),
       '姓名': this.text(row.name, '未命名'),
       '英文名': this.text(row.english_name),
       '公司名稱': this.text(row.company_name),
@@ -3051,6 +3061,16 @@ const D1ReadModule = {
       company: card.companyName,
       title: card.title,
       tags: card.tags,
+      personality: card.personality,
+      hobbies: card.hobbies,
+      wealth: card.wealth,
+      health: card.health,
+      career: card.career,
+      ['\u500b\u6027']: card.personality,
+      ['\u8208\u8da3']: card.hobbies,
+      ['\u8ca1\u5bcc']: card.wealth,
+      ['\u5065\u5eb7']: card.health,
+      ['\u4e8b\u696d']: card.career,
       sourceType: card.sourceType,
       visibility: card.visibility,
       poolEligible: card.poolEligible,
@@ -3315,6 +3335,7 @@ const D1WriteModule = {
       industry: this.pick(data, ['industry', 'title', '職稱', '主要業種', '公司名稱']),
       gender: this.pick(data, ['gender', '性別']),
       phone: this.pick(data, ['phone', 'mobile', '手機', '手機號碼']),
+      picture_url: this.pick(data, ['pictureUrl', 'picture_url', 'avatarUrl', 'avatar_url', 'photoUrl', 'photo_url']),
       birthday: this.pick(data, ['birthday', 'birthdate', '出生年月日']),
       region: this.pick(data, ['region', '地區']),
       address: this.pick(data, ['address', '地址', '公司地址']),
@@ -3401,6 +3422,7 @@ const D1WriteModule = {
     const name = this.text(user.name, '\u5c1a\u672a\u5efa\u7acb\u540d\u7247');
     const phone = this.text(user.phone);
     const title = this.text(user.industry);
+    const imageUrl = this.text(user.picture_url || user.pictureUrl || user.avatarUrl || user.avatar_url);
     const networkId = this.text(user.network_id, 'admin');
     const crmStatus = '\u5df2\u8a3b\u518a\u672a\u5efa\u540d\u7247';
     const crmType = '\u9080\u7d04\u8a3b\u518a';
@@ -3416,6 +3438,7 @@ const D1WriteModule = {
             name = CASE WHEN TRIM(COALESCE(name,'')) = '' OR name = ? THEN ? ELSE name END,
             mobile = CASE WHEN TRIM(COALESCE(mobile,'')) = '' THEN ? ELSE mobile END,
             title = CASE WHEN TRIM(COALESCE(title,'')) = '' THEN ? ELSE title END,
+            image_url = CASE WHEN TRIM(COALESCE(image_url,'')) = '' THEN ? ELSE image_url END,
             network_id = CASE WHEN TRIM(COALESCE(network_id,'')) = '' THEN ? ELSE network_id END,
             source_type = 'referral_placeholder',
             visibility = 'private',
@@ -3426,17 +3449,17 @@ const D1WriteModule = {
             notes = CASE WHEN TRIM(COALESCE(notes,'')) = '' THEN ? ELSE notes END,
             updated_at = CURRENT_TIMESTAMP
         WHERE row_id = ?
-      `).bind(referrerId, referrerId, lineId, lineId, '\u5c1a\u672a\u5efa\u7acb\u540d\u7247', name, phone, title, networkId, crmStatus, crmType, note, existing.row_id).run();
+      `).bind(referrerId, referrerId, lineId, lineId, '\u5c1a\u672a\u5efa\u7acb\u540d\u7247', name, phone, title, imageUrl, networkId, crmStatus, crmType, note, existing.row_id).run();
       return { rowId: existing.row_id, updated: true };
     }
 
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO card_contacts (
-        row_id,line_id,name,title,mobile,creator_id,notes,network_id,
+        row_id,line_id,name,title,mobile,creator_id,notes,network_id,image_url,
         owner_user_id,profile_user_id,source_type,visibility,pool_eligible,
         ai_review_status,crm_status,crm_type,updated_at
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-    `).bind(rowId, lineId, name, title, phone, referrerId, note, networkId, referrerId, lineId, 'referral_placeholder', 'private', 0, 'pending', crmStatus, crmType).run();
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+    `).bind(rowId, lineId, name, title, phone, referrerId, note, networkId, imageUrl, referrerId, lineId, 'referral_placeholder', 'private', 0, 'pending', crmStatus, crmType).run();
     return { rowId, created: true };
   },
 
@@ -3869,8 +3892,12 @@ const D1WriteModule = {
     if (!this.hasD1(env)) return null;
     await D1ReadModule.ensureCardAccessColumns(env);
     const card = this.normalizeCard(payload);
+    const sourceData = payload.data || payload.card || payload;
+    const hasExplicitNetworkInput = ['networkId', 'network_id', '歸屬網'].some((key) => Object.prototype.hasOwnProperty.call(sourceData || {}, key));
+    const explicitNetworkId = hasExplicitNetworkInput ? this.text(this.pick(sourceData, ['networkId', 'network_id', '歸屬網']), 'admin') : '';
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
     const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
+    let preserveExistingCardIdentity = false;
     if (existing) {
       const actorId = this.text(payload.authenticatedUserId || payload.userId);
       const role = this.role(payload.authenticatedRole || payload.role);
@@ -3880,13 +3907,14 @@ const D1WriteModule = {
       const existingOwnerId = this.text(existing.owner_user_id);
       const existingNetworkId = this.text(existing.network_id);
       const isBoundToActor = !!(actorId && existingLineId && existingLineId === actorId);
-      const isUnboundAdmin = role === 'admin' && !existingLineId;
+      const isAdminSupportEdit = role === 'admin';
       const isUnboundOwner = !!(actorId && !existingLineId && (existingCreatorId === actorId || existingOwnerId === actorId));
       const isUnboundStoreManager = !!(role === 'store' && !existingLineId && networkId && existingNetworkId && networkId === existingNetworkId);
 
-      if (!isBoundToActor && !isUnboundAdmin && !isUnboundOwner && !isUnboundStoreManager) {
+      if (!isBoundToActor && !isAdminSupportEdit && !isUnboundOwner && !isUnboundStoreManager) {
         return { success: false, error: 'Access Denied: cannot update this card' };
       }
+      preserveExistingCardIdentity = isAdminSupportEdit && !isBoundToActor;
     }
     const rawAwardUserId = this.text(payload.authenticatedUserId || card.creator_id || payload.creatorId || payload.userId);
     const awardUserId = await this.resolvePointAwardUserId(env, rawAwardUserId);
@@ -3903,7 +3931,27 @@ const D1WriteModule = {
         if (card[key] === '' || card[key] === undefined || card[key] === null) card[key] = existing[key] || '';
       });
     }
-    const access = D1ReadModule.inferCardAccess(card, { actorId: awardUserId });
+    if (existing && preserveExistingCardIdentity) {
+      card.line_id = this.text(existing.line_id);
+      card.creator_id = this.text(existing.creator_id);
+      card.owner_user_id = this.text(existing.owner_user_id);
+      card.profile_user_id = this.text(existing.profile_user_id);
+      card.source_type = this.text(existing.source_type);
+      card.visibility = this.text(existing.visibility);
+      card.pool_eligible = existing.pool_eligible;
+      card.ai_review_status = this.text(existing.ai_review_status);
+      card.network_id = hasExplicitNetworkInput ? explicitNetworkId : this.text(existing.network_id, card.network_id);
+    }
+    const inferredAccess = D1ReadModule.inferCardAccess(card, { actorId: awardUserId });
+    const access = preserveExistingCardIdentity ? {
+      ...inferredAccess,
+      ownerUserId: this.text(card.owner_user_id, inferredAccess.ownerUserId),
+      profileUserId: this.text(card.profile_user_id, inferredAccess.profileUserId),
+      sourceType: this.text(card.source_type, inferredAccess.sourceType),
+      visibility: this.text(card.visibility, inferredAccess.visibility),
+      poolEligible: Number(card.pool_eligible) === 1,
+      aiReviewStatus: this.text(card.ai_review_status, inferredAccess.aiReviewStatus)
+    } : inferredAccess;
     card.owner_user_id = access.ownerUserId;
     card.profile_user_id = access.profileUserId;
     card.source_type = access.sourceType;
@@ -6513,6 +6561,7 @@ const TrackingModule = {
       await D1WriteModule.upsertUser({
         userId: visitorId,
         name: payload.displayName || payload.name || '',
+        pictureUrl: payload.pictureUrl || payload.picture_url || '',
         referrerId,
         networkId,
         source: 'share_visit',
@@ -7946,7 +7995,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'updateCard': {
       try {
         const d1Result = await D1WriteModule.upsertCard(payload || {}, env);
-        if (d1Result && d1Result.success !== false) return d1Result;
+        if (d1Result) return d1Result;
       } catch (e) {
         console.error("D1 upsertCard fallback", e);
       }
