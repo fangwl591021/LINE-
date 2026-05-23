@@ -148,11 +148,65 @@ const HomeModule = (function() {
         btn.classList.remove('hidden');
     }
 
+    function getWeekRangeLabel_() {
+        const now = new Date();
+        const day = now.getDay() || 7;
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - day + 1);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+        return `${fmt(monday)} - ${fmt(sunday)}`;
+    }
+
+    function buildWeeklyZodiacForecast_(zodiac) {
+        const bank = {
+            '\u7261\u7f8a\u5ea7': ['主動開局', '適合把猶豫中的客戶約出來談一次，先給明確方案，不要只停在寒暄。', '本週先做一件能立刻推進的事，例如送出邀約、補一通電話或整理一份成交清單。'],
+            '\u91d1\u725b\u5ea7': ['穩定累積', '適合整理現有名片與舊客戶，把可信任的服務流程講清楚，成交會來自穩定感。', '本週先挑三位高信任客戶做回訪，確認近況與下一次需求。'],
+            '\u96d9\u5b50\u5ea7': ['訊息流動', '適合多發起對話與交換資訊，把你的專業變成好理解、好轉傳的短內容。', '本週可以用收件匣或名片分享，主動送出一段合作說明。'],
+            '\u5de8\u87f9\u5ea7': ['關係修復', '適合關心沉睡客戶，先從近況與需求聊起，不急著推銷。', '本週先安排一次溫和回訪，讓對方感覺被記得。'],
+            '\u7345\u5b50\u5ea7': ['亮點展示', '適合公開展示成果、案例與活動，讓客戶看見你的專業舞台。', '本週挑一張最有代表性的名片或案例，整理成可分享內容。'],
+            '\u8655\u5973\u5ea7': ['流程校準', '適合補齊資料、修正名片內容、清理錯誤歸屬，讓後續跟進更準。', '本週先把名片酷中的重點客戶補上標籤與下一步。'],
+            '\u5929\u79e4\u5ea7': ['合作平衡', '適合談合作條件、互換資源，不要單向付出。', '本週可從供應商或合作夥伴名單中挑一位約談。'],
+            '\u5929\u880d\u5ea7': ['深度突破', '適合處理關鍵客戶的真問題，談深一點，比廣撒更有效。', '本週找一位最有價值的客戶，問清楚真正卡住的地方。'],
+            '\u5c04\u624b\u5ea7': ['拓展視野', '適合參加活動、跨圈交流、把資源帶到新的場域。', '本週選一場活動報名或分享，讓新關係開始流動。'],
+            '\u6469\u7faf\u5ea7': ['目標落地', '適合把名單分級、排優先順序，從最接近成交的人開始。', '本週列出三位最可能成交的對象，逐一設定跟進日期。'],
+            '\u6c34\u74f6\u5ea7': ['創新連結', '適合用新工具、新訊息、新活動打開對話，讓對方感覺有新鮮價值。', '本週可嘗試用數位名片或站內訊息發起一次新互動。'],
+            '\u96d9\u9b5a\u5ea7': ['感受共鳴', '適合用故事、案例與體驗建立信任，先打動人，再談方案。', '本週整理一段你服務客戶的真實故事，作為邀約開場。']
+        };
+        const item = bank[zodiac.name] || ['穩定推進', '適合整理資料並主動跟進，讓機會不要停在名片裡。', '本週先選三位客戶設定下一步行動。'];
+        return {
+            title: item[0],
+            summary: item[1],
+            action: item[2],
+            week: getWeekRangeLabel_()
+        };
+    }
+
+    window.closeWeeklyZodiacModal = function() {
+        document.getElementById('weekly-zodiac-modal')?.classList.add('hidden');
+    };
+
     window.openWeeklyZodiac = function() {
-        const zodiac = getHomeZodiac_(parseHomeBirthday_());
+        const birthday = parseHomeBirthday_();
+        const zodiac = getHomeZodiac_(birthday);
         if (!zodiac) return;
-        const url = 'https://www.google.com/search?q=' + encodeURIComponent(zodiac.name + ' \u672c\u5468\u904b\u52e2');
-        window.open(url, '_blank', 'noopener');
+        const forecast = buildWeeklyZodiacForecast_(zodiac);
+        const modal = document.getElementById('weekly-zodiac-modal');
+        if (!modal) return;
+        const iconEl = document.getElementById('weekly-zodiac-icon');
+        const titleEl = document.getElementById('weekly-zodiac-title');
+        const weekEl = document.getElementById('weekly-zodiac-week');
+        const themeEl = document.getElementById('weekly-zodiac-theme');
+        const summaryEl = document.getElementById('weekly-zodiac-summary');
+        const actionEl = document.getElementById('weekly-zodiac-action');
+        if (iconEl) iconEl.textContent = zodiac.symbol;
+        if (titleEl) titleEl.textContent = `${zodiac.name}本周運勢`;
+        if (weekEl) weekEl.textContent = forecast.week;
+        if (themeEl) themeEl.textContent = forecast.title;
+        if (summaryEl) summaryEl.textContent = forecast.summary;
+        if (actionEl) actionEl.textContent = forecast.action;
+        modal.classList.remove('hidden');
     };
 
     window.buildHomeInviteUrl = function() {
