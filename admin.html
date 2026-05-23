@@ -993,7 +993,7 @@
             <span class="material-symbols-outlined text-pink-500 text-[20px]">auto_awesome</span>
             <h4 class="font-black text-slate-800">五大標籤</h4>
           </div>
-          <div id="crm-fate-grid" class="p-5 grid grid-cols-1 md:grid-cols-5 gap-3 text-sm"></div>
+          <div id="crm-fate-grid" class="p-4 flex gap-3 overflow-x-auto text-sm"></div>
         </section>
 
         <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
@@ -2439,32 +2439,17 @@
       return String(user[field.key] || user[field.zh] || sourceCard[field.key] || sourceCard[field.zh] || '').trim();
     }
 
-    function renderAdminFatePills(user = {}) {
-      const card = getAdminFateCard(user);
-      const values = ADMIN_FATE_TAG_FIELDS
-        .map(field => ({ field, value: getAdminFateValue(user, field, card) }))
-        .filter(item => isFilledFateTag(item.value));
-      if (!values.length) {
-        return '<span class="inline-flex items-center rounded-full bg-slate-100 text-slate-500 px-2.5 py-1 text-[12px] font-bold">五大標籤待補</span>';
-      }
-      return values.slice(0, 5).map(({ field, value }) =>
-        `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-black ${field.tone}">
-          <span class="material-symbols-outlined text-[14px]">${field.icon}</span>${field.label}：${escapeHTML(value)}
-        </span>`
-      ).join('');
-    }
-
     function renderAdminFateGrid(user = {}) {
       const card = getAdminFateCard(user);
       return ADMIN_FATE_TAG_FIELDS.map(field => {
         const value = getAdminFateValue(user, field, card);
         const filled = isFilledFateTag(value);
-        return `<div class="rounded-xl border p-3 ${filled ? field.tone : 'bg-slate-50 text-slate-500 border-slate-100'}">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="material-symbols-outlined text-[18px]">${field.icon}</span>
-            <p class="text-[13px] font-black">${field.label}</p>
+        return `<div class="min-w-[190px] flex-1 rounded-xl border px-3 py-2.5 ${filled ? field.tone : 'bg-slate-50 text-slate-500 border-slate-100'}">
+          <div class="flex items-center gap-1.5 mb-1">
+            <span class="material-symbols-outlined text-[16px]">${field.icon}</span>
+            <p class="text-[12px] font-black">${field.label}</p>
           </div>
-          <p class="text-[13px] leading-relaxed font-bold break-words">${escapeHTML(filled ? value : '待補漏或重新運算')}</p>
+          <p class="text-[12px] leading-relaxed font-bold break-words">${escapeHTML(filled ? value : '待補漏或重新運算')}</p>
         </div>`;
       }).join('');
     }
@@ -2837,7 +2822,6 @@
               <span class="crm-pill ${intent[1]}">意向 ${intent[0]}</span>
               ${isBoundCard ? '<span class="crm-pill crm-pill-green">已綁名片</span>' : ''}
             </div>
-            <div class="mt-2 flex flex-wrap gap-1.5">${renderAdminFatePills(u)}</div>
             <div class="crm-code">${escapeHTML(id ? id.substring(0, 12) + '...' : '-')}</div>
           </td>
           <td>

@@ -55,22 +55,22 @@ function crmFateDetailHtml(person) {
     const value = crmFateValue(person, field);
     const display = value && value !== 'undefined' ? value : '待補標籤，請先補漏或重新運算。';
     const muted = !value || value === 'undefined' || value === '待分析';
-    return '<div class="rounded-2xl border p-3 ' + field.tone + '">' +
-      '<div class="flex items-center gap-2 mb-2">' +
-        '<span class="material-symbols-outlined text-[18px]">' + field.icon + '</span>' +
-        '<p class="text-[13px] font-black">' + window.escapeJS(field.label) + '</p>' +
+    return '<div class="min-w-[180px] flex-1 rounded-xl border px-3 py-2.5 ' + field.tone + '">' +
+      '<div class="flex items-center gap-1.5 mb-1">' +
+        '<span class="material-symbols-outlined text-[16px]">' + field.icon + '</span>' +
+        '<p class="text-[12px] font-black">' + window.escapeJS(field.label) + '</p>' +
       '</div>' +
-      '<p class="text-[13px] leading-relaxed font-bold ' + (muted ? 'text-slate-400' : '') + '">' + window.escapeJS(display) + '</p>' +
+      '<p class="text-[12px] leading-relaxed font-bold line-clamp-3 ' + (muted ? 'text-slate-400' : '') + '">' + window.escapeJS(display) + '</p>' +
     '</div>';
   }).join('');
-  return '<div class="rounded-2xl bg-slate-50 border border-slate-100 p-4">' +
-    '<div class="flex items-center justify-between mb-3">' +
+  return '<div class="rounded-2xl bg-slate-50 border border-slate-100 p-3">' +
+    '<div class="flex items-center justify-between mb-2">' +
       '<p class="text-[15px] font-black text-slate-800 flex items-center gap-1"><span class="material-symbols-outlined text-[18px] text-pink-500">auto_awesome</span> 五大標籤</p>' +
       '<span class="text-[12px] font-bold ' + (crmHasFateTags(person) ? 'text-emerald-600 bg-emerald-50' : 'text-amber-700 bg-amber-50') + ' rounded-full px-2 py-1">' +
         (crmHasFateTags(person) ? '已有資料' : '待補漏') +
       '</span>' +
     '</div>' +
-    '<div class="grid grid-cols-1 md:grid-cols-2 gap-2">' + cards + '</div>' +
+    '<div class="flex gap-2 overflow-x-auto pb-1">' + cards + '</div>' +
   '</div>';
 }
 
@@ -198,7 +198,6 @@ window.renderCrmList = function() {
             (p.activityCount > 0 ? '<span class="bg-orange-50 text-orange-600 text-[10px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1"><span class="material-symbols-outlined text-[10px]">event</span>' + p.activityCount + ' 場</span>' : '') +
             (lastTime ? '<span class="text-[10px] text-slate-400">最近 ' + lastTime + '</span>' : '') +
           '</div>' +
-          '<div class="flex items-center gap-1.5 mt-2 flex-wrap">' + crmFateSummaryHtml(p) + '</div>' +
           '<p class="mt-1.5 text-[12px] text-slate-400 font-bold truncate">下一步：' + window.escapeJS(nextAction) + '</p>' +
         '</div>' +
         '<span class="material-symbols-outlined text-slate-300">chevron_right</span>' +
