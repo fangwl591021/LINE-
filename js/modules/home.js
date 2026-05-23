@@ -91,6 +91,70 @@ const HomeModule = (function() {
         return window.currentUserProfile?.pictureUrl || HOME_PROFILE_DEFAULT_AVATAR;
     }
 
+    function parseHomeBirthday_() {
+        const raw = String(
+            window.currentUser?.birthday ||
+            window.currentUser?.birthdate ||
+            window.currentUser?.birthDate ||
+            window.currentUser?.Birthday ||
+            window.currentUser?.['\u751f\u65e5'] ||
+            window.currentUser?.['\u51fa\u751f\u5e74\u6708\u65e5'] ||
+            document.getElementById('profile-birthday')?.value ||
+            ''
+        ).trim();
+        if (!raw) return null;
+        const match = raw.match(/(?:\d{4}\D+)?(\d{1,2})\D+(\d{1,2})/);
+        if (!match) return null;
+        const month = Number(match[1]);
+        const day = Number(match[2]);
+        if (!month || !day) return null;
+        return { month, day, raw };
+    }
+
+    function getHomeZodiac_(birthday) {
+        if (!birthday) return null;
+        const md = birthday.month * 100 + birthday.day;
+        const ranges = [
+            { max: 119, name: '\u6469\u7faf\u5ea7', symbol: '\u2651' },
+            { max: 218, name: '\u6c34\u74f6\u5ea7', symbol: '\u2652' },
+            { max: 320, name: '\u96d9\u9b5a\u5ea7', symbol: '\u2653' },
+            { max: 419, name: '\u7261\u7f8a\u5ea7', symbol: '\u2648' },
+            { max: 520, name: '\u91d1\u725b\u5ea7', symbol: '\u2649' },
+            { max: 621, name: '\u96d9\u5b50\u5ea7', symbol: '\u264a' },
+            { max: 722, name: '\u5de8\u87f9\u5ea7', symbol: '\u264b' },
+            { max: 822, name: '\u7345\u5b50\u5ea7', symbol: '\u264c' },
+            { max: 922, name: '\u8655\u5973\u5ea7', symbol: '\u264d' },
+            { max: 1023, name: '\u5929\u79e4\u5ea7', symbol: '\u264e' },
+            { max: 1122, name: '\u5929\u880d\u5ea7', symbol: '\u264f' },
+            { max: 1221, name: '\u5c04\u624b\u5ea7', symbol: '\u2650' },
+            { max: 1231, name: '\u6469\u7faf\u5ea7', symbol: '\u2651' }
+        ];
+        return ranges.find(item => md <= item.max) || ranges[0];
+    }
+
+    function refreshHomeZodiacButton_() {
+        const btn = document.getElementById('home-zodiac-weekly-btn');
+        if (!btn) return;
+        const zodiac = getHomeZodiac_(parseHomeBirthday_());
+        if (!zodiac) {
+            btn.classList.add('hidden');
+            return;
+        }
+        const iconEl = document.getElementById('home-zodiac-weekly-icon');
+        const labelEl = document.getElementById('home-zodiac-weekly-label');
+        if (iconEl) iconEl.textContent = zodiac.symbol;
+        if (labelEl) labelEl.textContent = zodiac.name.replace('\u5ea7', '');
+        btn.title = zodiac.name + ' \u672c\u5468\u904b\u52e2';
+        btn.classList.remove('hidden');
+    }
+
+    window.openWeeklyZodiac = function() {
+        const zodiac = getHomeZodiac_(parseHomeBirthday_());
+        if (!zodiac) return;
+        const url = 'https://www.google.com/search?q=' + encodeURIComponent(zodiac.name + ' \u672c\u5468\u904b\u52e2');
+        window.open(url, '_blank', 'noopener');
+    };
+
     window.buildHomeInviteUrl = function() {
         const myUserId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
         const myStoreId = window.currentUser?.storeid || '';
@@ -140,6 +204,7 @@ const HomeModule = (function() {
             const qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(inviteUrl) + '&size=220&margin=1';
             if (qrEl.getAttribute('src') !== qrUrl) qrEl.src = qrUrl;
         }
+        refreshHomeZodiacButton_();
     };
 
     window.shareHomeProfileCard = async function(btn) {
@@ -381,7 +446,7 @@ const HomeModule = (function() {
                 icon: 'document_scanner',
                 title: '把手上的紙本名片建檔',
                 body: '先掃 5 張最有機會成交或合作的名片，系統會自動變成 CRM 跟進名單。',
-                action: '去名片庫',
+                action: '去名片酷',
                 onclick: "window.goPage('card')",
                 tone: 'amber'
             });
@@ -417,7 +482,7 @@ const HomeModule = (function() {
         if (!list) return;
         const suggestions = buildOnboardingSuggestions_(contacts);
         if (!suggestions.length) {
-            list.innerHTML = '<div class="bg-white rounded-3xl border border-emerald-100 shadow-sm p-5 text-[13px] text-emerald-700 font-bold leading-relaxed">目前基礎設定已完成。下一步可以固定每天整理新增名片、追蹤回覆，讓名片庫變成真正的業務管線。</div>';
+            list.innerHTML = '<div class="bg-white rounded-3xl border border-emerald-100 shadow-sm p-5 text-[13px] text-emerald-700 font-bold leading-relaxed">目前基礎設定已完成。下一步可以固定每天整理新增名片、追蹤回覆，讓名片酷變成真正的業務管線。</div>';
             return;
         }
         const toneMap = {
