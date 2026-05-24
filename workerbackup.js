@@ -2989,8 +2989,18 @@ const D1ReadModule = {
       const network = this.text(profile.networkId, 'admin').toLowerCase();
       return name ? `name:${network}:${name}` : '';
     };
+    const hasUsefulProfile = (profile) => {
+      const role = this.text(profile.role, 'user').toLowerCase();
+      if (['admin', 'store', 'tenant'].includes(role)) return true;
+      const placeholders = new Set(['-', '—', '未填寫', '未命名', '待補資料', '無電話', '尚無 Email', '尚無公司資料', '已綁定名片']);
+      return [profile.name, profile.phone, profile.email, profile.companyName, profile.title, profile.industry, profile.birthday, profile.city, profile.area, profile.address]
+        .some(value => {
+          const text = this.text(value);
+          return text && !placeholders.has(text);
+        });
+    };
     const addProfile = (profile) => {
-      if (!profile || seen.has(profile.userId)) return;
+      if (!profile || seen.has(profile.userId) || !hasUsefulProfile(profile)) return;
       const key = identityKey(profile);
       if (key && seenIdentity.has(key)) return;
       seen.add(profile.userId);
@@ -6289,14 +6299,16 @@ const AuthModule = {
   },
 
   buildProfileFromBoundCard(card, userId) {
+    const rawName = String(card['姓名'] || card['英文名'] || '').trim();
     const company = String(card['公司名稱'] || '').trim();
     const title = String(card['職稱'] || '').trim();
     const phone = String(card['手機號碼'] || card['公司電話'] || '').trim();
+    if (!(rawName || phone || company || title)) return null;
     return {
       userId,
-      name: String(card['姓名'] || card['英文名'] || '待補資料').trim(),
+      name: rawName || '待補資料',
       phone,
-      industry: title || company || '已綁定名片',
+      industry: title || company || '',
       birthday: '',
       role: 'user',
       networkId: String(card['歸屬網'] || 'admin').trim(),
@@ -6315,6 +6327,7 @@ const AuthModule = {
     if (!card) return null;
 
     const profile = this.buildProfileFromBoundCard(card, userId);
+    if (!profile) return null;
     const result = await DBModule.forward('registerUser', profile, env);
     if (!result || !result.success) return null;
     if (env.ACTMASTER_KV) {
@@ -6344,8 +6357,10 @@ const AuthModule = {
     cards.forEach(card => {
       const userId = this.getCardLineId(card);
       if (!userId || seen.has(userId)) return;
+      const profile = this.buildProfileFromBoundCard(card, userId);
+      if (!profile) return;
       seen.add(userId);
-      merged.push(this.buildProfileFromBoundCard(card, userId));
+      merged.push(profile);
     });
 
     return { success: true, data: merged };
@@ -8377,3 +8392,4 @@ export default {
     }
   }
 };
+

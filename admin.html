@@ -2311,6 +2311,22 @@
       return u.userId || u.memberId || u.lineId || '';
     }
 
+    function isPlaceholderCrmValue(value) {
+      const text = String(value || '').trim();
+      return !text || ['-', '—', '未填寫', '未命名', '待補資料', '無電話', '尚無 Email', '尚無公司資料'].includes(text);
+    }
+
+    function hasDistributorProfileData(user = {}) {
+      if (!user) return false;
+      const role = String(getSafeUserRole(user) || '').toLowerCase();
+      if (['admin', 'store', 'tenant'].includes(role)) return true;
+      return [
+        user.name, user.phone, user.email, user.companyName, user.title, user.industry,
+        user.birthday, user.city, user.area, user.address, user.taxId,
+        user.legalCompanyName, user.dealerProfile && user.dealerProfile.legalCompanyName
+      ].some(value => !isPlaceholderCrmValue(value));
+    }
+
     function getRoleLabel(role) {
       role = String(role || 'user').toLowerCase();
       if (role === 'admin') return '總管';
@@ -2730,6 +2746,7 @@
       const filters = adminCrmFilters || {};
       const query = String(filters.search || '').trim().toLowerCase();
       return (Array.isArray(users) ? users : []).filter(u => {
+        if (!hasDistributorProfileData(u)) return false;
         const status = String(getCrmStatus(u) || '').toLowerCase();
         const role = getSafeUserRole(u);
         if (filters.status && filters.status !== 'all' && status !== filters.status) return false;
@@ -2787,7 +2804,7 @@
 
     function renderUsersTable(users) {
       const tbody = document.getElementById('users-table-body');
-      const list = Array.isArray(users) ? users : [];
+      const list = (Array.isArray(users) ? users : []).filter(hasDistributorProfileData);
       document.getElementById('stat-users').innerText = list.length;
       const filteredList = getAdminCrmFilteredUsers(list);
       updateCrmSummaryCards(list, filteredList);
@@ -2885,17 +2902,17 @@
 
     function buildUserPayloadFromBoundCard(card) {
       const userId = normalizeLineId(card['LINE ID'] || card.lineId);
-      const name = String(card['姓名'] || card['英文名'] || '').trim() || '待補資料';
+      const rawName = String(card['姓名'] || card['英文名'] || '').trim();
       const phone = String(card['手機號碼'] || card['公司電話'] || '').trim();
       const company = String(card['公司名稱'] || '').trim();
       const title = String(card['職稱'] || '').trim();
 
-      if (!userId) return null;
+      if (!userId || !(rawName || phone || company || title)) return null;
       return {
         userId,
-        name,
+        name: rawName || '待補資料',
         phone,
-        industry: title || company || '待補資料',
+        industry: title || company || '',
         birthday: '',
         role: 'user',
         networkId: card['歸屬網'] || 'admin',
@@ -3984,4 +4001,5 @@
   </script>
 </body>
 </html>
+
 
