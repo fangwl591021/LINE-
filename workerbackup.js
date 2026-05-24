@@ -7058,6 +7058,74 @@ const D1FinanceModule = {
     return { success: true, data: rows.map(row => this.bonusRow(row)), transactions: rows.map(row => this.bonusRow(row)), page, pageSize };
   },
 
+  async getReferralStats(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await D1ReadModule.ensureCardAccessColumns(env).catch(() => null);
+    const actorRole = this.text(payload.authenticatedRole || payload.role || '').toLowerCase();
+    const actorId = this.text(payload.authenticatedUserId || '');
+    let memberId = this.text(payload.memberId || payload.userId);
+    if (actorId && actorRole !== 'admin' && memberId && memberId !== actorId) {
+      return { success: false, error: 'Access Denied: Cannot query another user referral stats' };
+    }
+    if (actorId && actorRole !== 'admin' && !memberId) memberId = actorId;
+    if (!memberId) return { success: false, error: 'Missing memberId' };
+
+    const ids = Array.from(new Set([
+      memberId,
+      ...await D1ReadModule.identityIdsForUser(env, memberId).catch(() => [])
+    ].map(id => this.text(id)).filter(Boolean)));
+    const placeholders = ids.map(() => '?').join(',');
+
+    const scanRows = await D1ReadModule.all(env, `
+      SELECT DISTINCT line_id AS person_id
+      FROM users
+      WHERE referrer_id IN (${placeholders})
+        AND TRIM(COALESCE(line_id, '')) <> ''
+        AND line_id NOT IN (${placeholders})
+      UNION
+      SELECT DISTINCT COALESCE(NULLIF(profile_user_id, ''), NULLIF(line_id, ''), row_id) AS person_id
+      FROM card_contacts
+      WHERE owner_user_id IN (${placeholders})
+        AND source_type = 'referral_placeholder'
+    `, [...ids, ...ids, ...ids]).catch(() => []);
+
+    const boundRows = await D1ReadModule.all(env, `
+      SELECT DISTINCT u.line_id AS person_id
+      FROM users u
+      WHERE u.referrer_id IN (${placeholders})
+        AND TRIM(COALESCE(u.line_id, '')) <> ''
+        AND EXISTS (
+          SELECT 1
+          FROM card_contacts c
+          WHERE (c.profile_user_id = u.line_id OR c.line_id = u.line_id OR c.creator_id = u.line_id)
+            AND COALESCE(c.source_type, '') <> 'referral_placeholder'
+            AND (
+              c.source_type = 'self_profile'
+              OR c.pool_eligible = 1
+              OR c.visibility = 'public'
+              OR TRIM(COALESCE(c.line_id, '')) <> ''
+            )
+        )
+    `, [...ids]).catch(() => []);
+
+    const ownIds = new Set(ids);
+    const cleanIds = rows => new Set((rows || [])
+      .map(row => this.text(row.person_id))
+      .filter(id => id && !ownIds.has(id)));
+    const scanIds = cleanIds(scanRows);
+    const boundIds = cleanIds(boundRows);
+
+    return {
+      success: true,
+      data: {
+        scanCount: scanIds.size,
+        scannedCount: scanIds.size,
+        boundCount: boundIds.size,
+        bindingCount: boundIds.size
+      }
+    };
+  },
+
   ym(value = '') {
     const source = String(value || '').trim();
     const match = source.match(/^(\d{4})-(\d{2})/);
@@ -7788,6 +7856,16 @@ const MLMModule = {
     }, env);
   },
 
+  async getReferralStats(payload, env) {
+    const d1Result = await D1FinanceModule.getReferralStats(payload, env);
+    if (d1Result) return d1Result;
+    return await DBModule.forward('mlmGetReferralStats', {
+      memberId: payload.memberId || payload.userId || '',
+      userId: payload.userId || '',
+      networkId: payload.networkId || ''
+    }, env);
+  },
+
   async createSettlementBatch(payload, env) {
     const d1Result = await D1FinanceModule.createSettlementBatch(payload, env);
     if (d1Result) return d1Result;
@@ -8253,6 +8331,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'mlmRefundOrder':         return await MLMModule.refundOrder(payload, env);
     case 'mlmListOrders':          return await MLMModule.listOrders(payload, env);
     case 'mlmListBonusTransactions': return await MLMModule.listBonusTransactions(payload, env);
+    case 'mlmGetReferralStats':    return await MLMModule.getReferralStats(payload, env);
     case 'mlmListSettlementBatches': return await MLMModule.listSettlementBatches(payload, env);
     case 'mlmPreviewMonthlySettlement': return await MLMModule.previewMonthlySettlement(payload, env);
     case 'mlmCreateSettlementBatch': return await MLMModule.createSettlementBatch(payload, env);

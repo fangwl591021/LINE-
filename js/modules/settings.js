@@ -136,7 +136,7 @@ window.loadDealerPerformance = async function(force) {
   if (orgBox) orgBox.innerHTML = '<div class="text-slate-400">讀取組織圖...</div>';
 
   try {
-    const [bonusRes, treeRes] = await Promise.all([
+    const [bonusRes, treeRes, referralStatsRes] = await Promise.all([
       window.fetchAPI('mlmListBonusTransactions', {
         memberId: userId,
         beneficiaryId: userId,
@@ -148,14 +148,21 @@ window.loadDealerPerformance = async function(force) {
         memberId: userId,
         treeType: 'placement',
         depth: 3
-      }, true)
+      }, true),
+      window.fetchAPI('mlmGetReferralStats', {
+        memberId: userId
+      }, true).catch(error => {
+        console.warn('[dealer performance] referral stats skipped', error);
+        return { data: {} };
+      })
     ]);
 
     const bonuses = Array.isArray(bonusRes)
       ? bonusRes
       : (Array.isArray(bonusRes?.transactions) ? bonusRes.transactions : (Array.isArray(bonusRes?.data) ? bonusRes.data : []));
     const tree = treeRes?.tree || treeRes?.data?.root || treeRes?.data || null;
-    renderDealerBonusSummary(bonuses, tree);
+    const referralStats = referralStatsRes?.data || referralStatsRes || {};
+    renderDealerBonusSummary(bonuses, tree, referralStats);
     renderDealerBonusList(bonuses);
     renderDealerOrgTree(tree);
   } catch (e) {
@@ -189,7 +196,7 @@ function flattenDealerTree(node, list) {
   return list;
 }
 
-function renderDealerBonusSummary(bonuses, tree) {
+function renderDealerBonusSummary(bonuses, tree, referralStats = {}) {
   const total = bonuses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const pending = bonuses
     .filter(item => ['frozen', 'payable'].includes(String(item.status || '').toLowerCase()))
@@ -207,6 +214,8 @@ function renderDealerBonusSummary(bonuses, tree) {
   setText('dealer-bonus-pending', dealerCurrency(pending));
   setText('dealer-bonus-paid', dealerCurrency(paid));
   setText('dealer-org-count', String(orgCount));
+  setText('dealer-scan-count', String(Number(referralStats.scanCount || referralStats.scannedCount || 0)));
+  setText('dealer-bound-count', String(Number(referralStats.boundCount || referralStats.bindingCount || 0)));
 }
 
 function renderDealerBonusList(bonuses) {
