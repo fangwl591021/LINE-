@@ -72,34 +72,6 @@ const Core = (function() {
         }, 3000);
     };
 
-    window.showShareOpeningOverlay = function() {
-        let overlay = document.getElementById('share-opening-overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'share-opening-overlay';
-            overlay.className = 'fixed inset-0 z-[3000] bg-white/95 backdrop-blur-md flex flex-col items-center justify-center text-slate-800 transition-opacity duration-200';
-            overlay.innerHTML = `
-                <div class="w-16 h-16 rounded-full bg-emerald-50 text-[#06C755] flex items-center justify-center shadow-sm mb-5">
-                    <span class="material-symbols-outlined animate-pulse text-[34px]">group_add</span>
-                </div>
-                <div class="text-xl font-black mb-2">\u6b63\u5728\u958b\u555f LINE \u901a\u8a0a\u9304</div>
-                <div class="text-sm font-bold text-slate-500">\u8acb\u7a0d\u5019\uff0c\u4e0d\u8981\u91cd\u8907\u9ede\u64ca\u5206\u4eab</div>
-            `;
-            document.body.appendChild(overlay);
-        }
-        overlay.classList.remove('hidden');
-        overlay.style.opacity = '1';
-    };
-
-    window.hideShareOpeningOverlay = function() {
-        const overlay = document.getElementById('share-opening-overlay');
-        if (!overlay) return;
-        overlay.style.opacity = '0';
-        setTimeout(function() {
-            overlay.classList.add('hidden');
-        }, 180);
-    };
-
     // 載入動畫
     function showLoading(show) {
         const loader = document.getElementById('global-loader');
@@ -368,13 +340,11 @@ const Core = (function() {
                 return null;
             }
             if (typeof window.actmasterShareTargetPicker === 'function') {
-                if (window.showShareOpeningOverlay) window.showShareOpeningOverlay();
                 const result = await window.actmasterShareTargetPicker([{
                     type: "flex",
                     altText: altText || "您收到一則訊息",
                     contents: flexMsg
                 }]);
-                if (window.hideShareOpeningOverlay) window.hideShareOpeningOverlay();
                 if (!result.ok) {
                     const reasonText = result.reason === 'share_unavailable'
                         ? '您的環境不支援分享功能'
@@ -394,9 +364,7 @@ const Core = (function() {
                 altText: altText || "您收到一則訊息",
                 contents: flexMsg
             };
-            if (window.showShareOpeningOverlay) window.showShareOpeningOverlay();
             const result = await liff.shareTargetPicker([message]);
-            if (window.hideShareOpeningOverlay) window.hideShareOpeningOverlay();
             if (!result) {
                 window.showToast('尚未完成分享，請重新點選分享並選擇好友', true);
                 return false;
