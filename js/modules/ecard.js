@@ -767,24 +767,12 @@ window.shareECardToLine = async function(btnId) {
       };
       console.log('[shareECardToLine] shareTargetPicker messages:', window.__lastECardShareMessages);
       const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
-      if (shared === false && fallbackUrl) {
-        await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
-      }
+      if (shared === false) return;
     } else if (fallbackUrl) {
-      await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
+      window.showToast('無法產生 LINE 名片訊息，請稍後再試', true);
     }
   } catch(e) {
-    try {
-      const rowId = window.currentCard.rowId || window.currentCard["rowId"] || window.currentCard.id || "";
-      const fallbackUrl = buildECardShareUrl(rowId);
-      if (fallbackUrl) {
-        await shareECardPlainLink(fallbackUrl, window.currentCard["姓名"] || "");
-      } else {
-        window.showToast('⚠️ 傳送失敗: ' + e.message, true);
-      }
-    } catch (fallbackErr) {
-      window.showToast('⚠️ 傳送失敗: ' + (fallbackErr.message || e.message), true);
-    }
+    window.showToast('⚠️ 傳送失敗: ' + (e.message || '請稍後再試'), true);
   } finally {
     if (btn) {
       btn.innerHTML = oriHtml;

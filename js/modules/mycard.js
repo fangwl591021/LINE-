@@ -736,18 +736,13 @@
           contents: flexMsg
         }];
         var shared = await window.triggerFlexSharing(flexMsg, currentCardData['姓名'] || '數位名片');
-        if (shared === false) await sharePlainCardLink(shareUrl, currentCardData['姓名'] || '');
+        if (shared === false) return;
       } else {
         throw new Error((flexMsg && flexMsg.error) || '建立分享訊息失敗');
       }
     } catch (e) {
-      console.warn('[shareMyCard] Flex share failed, fallback to URL:', e);
-      var fallbackRowId = getCardRowId(currentCardData) || await ensureCurrentCardRowId();
-      if (fallbackRowId) {
-        await sharePlainCardLink(buildMyCardShareUrl(fallbackRowId), currentCardData['姓名'] || '');
-      } else if (window.showToast) {
-        window.showToast('發送失敗: ' + e.message, true);
-      }
+      console.warn('[shareMyCard] Flex share failed:', e);
+      if (window.showToast) window.showToast('發送失敗: ' + e.message, true);
     } finally {
       if (btn) {
         btn.innerHTML = originalHtml;
