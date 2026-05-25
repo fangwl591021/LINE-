@@ -1264,13 +1264,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
     setTimeout(() => window.refreshPointBalanceBadge?.(), 300);
 
-    // 先把首頁框架顯示出來，後續身分與資料用背景載入補上。
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-      window.goPage('home', true);
-      loadingScreen.classList.add('hidden');
-    }
-
     const urlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
@@ -1284,6 +1277,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       urlParams.get('autoShare') === '1' ||
       urlParams.get('action') === 'share'
     );
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      if (!shouldAutoShareCard) window.goPage('home', true);
+      loadingScreen.classList.add('hidden');
+    }
     const claimCardId = urlParams.get('claim');
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';

@@ -338,7 +338,8 @@ const HomeModule = (function() {
 
         const headerName = document.getElementById('header-site-name');
         if (headerName && d.siteName !== undefined) {
-            headerName.innerText = d.siteName || 'LINE商機引擎';
+            const siteName = String(d.siteName || '').trim();
+            headerName.innerText = (!siteName || siteName === 'LINE商機引擎') ? 'AI工坊' : siteName;
         }
 
         const bannerImg = document.getElementById('home-main-banner');
