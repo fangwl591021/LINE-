@@ -680,8 +680,8 @@
               <span class="material-symbols-outlined text-[20px]">forum</span>
               LINE OA 聊天室監控
             </div>
-            <h3 class="text-2xl font-black text-slate-900">站內訊息與聊天室總覽</h3>
-            <p class="text-sm text-slate-500 font-semibold mt-2">監控收件匣訊息、未讀狀態、優惠券核銷與最近互動。</p>
+            <h3 class="text-2xl font-black text-slate-900">LINE OA 真人聊天室後台</h3>
+            <p class="text-sm text-slate-500 font-semibold mt-2">只監看 LINE 官方帳號 webhook 訊息、對話列表與最近互動，不自動代回覆。</p>
           </div>
           <button onclick="loadLineOAMonitor()" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center gap-2 active:scale-95 transition-transform">
             <span class="material-symbols-outlined text-[18px]">refresh</span>
@@ -1634,6 +1634,86 @@
         return;
       }
       renderLineOAMonitor(data);
+    }
+
+    function renderLineOAChatMonitor(data) {
+      const box = document.getElementById('lineoa-monitor-content');
+      if (!box) return;
+      const summary = data && data.summary ? data.summary : {};
+      const threads = Array.isArray(data && data.threads) ? data.threads : [];
+      const messages = Array.isArray(data && data.messages) ? data.messages : [];
+      const activeThreadId = data && data.selectedThreadId ? data.selectedThreadId : (threads[0] && threads[0].thread_id) || '';
+      const threadHtml = threads.length ? threads.map(thread => {
+        const active = thread.thread_id === activeThreadId;
+        const name = escapeHTML(thread.display_name || thread.user_id || 'LINE 用戶');
+        const preview = escapeHTML(thread.last_message_text || '尚無訊息內容');
+        const unread = Number(thread.unread_count || 0);
+        return `
+          <button type="button" onclick="loadLineOAMonitor('${escapeHTML(thread.thread_id || '')}')" class="w-full text-left p-4 border-b border-slate-100 ${active ? 'bg-blue-50' : 'bg-white hover:bg-slate-50'}">
+            <div class="flex items-start gap-3">
+              ${thread.picture_url ? `<img src="${escapeHTML(thread.picture_url)}" class="w-11 h-11 rounded-full object-cover border border-slate-200">` : '<div class="w-11 h-11 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black">OA</div>'}
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="font-black text-slate-900 truncate">${name}</div>
+                  <div class="text-[11px] font-bold text-slate-400 shrink-0">${formatDisplayTime(thread.last_event_at || thread.updated_at)}</div>
+                </div>
+                <div class="text-xs font-bold text-slate-400 truncate mt-0.5">${escapeHTML(thread.user_id || '')}</div>
+                <div class="text-sm text-slate-600 truncate mt-2">${preview}</div>
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-black">${monitorNumber(thread.message_count)} 則</span>
+                  ${unread ? `<span class="px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[11px] font-black">${monitorNumber(unread)} 未讀</span>` : '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-black">已讀</span>'}
+                </div>
+              </div>
+            </div>
+          </button>`;
+      }).join('') : '<div class="p-8 text-center text-slate-400 font-bold">尚未收到 LINE OA webhook 訊息</div>';
+      const messageHtml = messages.length ? messages.map(msg => `
+        <div class="mb-4 flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
+          <div class="max-w-[78%] rounded-2xl ${msg.direction === 'outbound' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-800'} px-4 py-3 shadow-sm">
+            <div class="text-sm font-bold whitespace-pre-wrap break-words">${escapeHTML(msg.text_content || '[' + (msg.message_type || msg.event_type || 'event') + ']')}</div>
+            <div class="text-[11px] mt-2 ${msg.direction === 'outbound' ? 'text-blue-100' : 'text-slate-400'}">${escapeHTML(msg.message_type || msg.event_type || '')} · ${formatDisplayTime(msg.created_at)}</div>
+          </div>
+        </div>
+      `).join('') : '<div class="h-full flex items-center justify-center text-slate-400 font-bold">選擇左側對話後顯示 LINE 訊息</div>';
+
+      box.innerHTML = `
+        <div class="grid grid-cols-1 xl:grid-cols-4 gap-5">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><div class="text-xs font-black text-slate-400 mb-2">LINE 對話</div><div class="text-3xl font-black text-slate-900">${monitorNumber(summary.threads)}</div></div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><div class="text-xs font-black text-slate-400 mb-2">總訊息</div><div class="text-3xl font-black text-slate-900">${monitorNumber(summary.messages)}</div></div>
+          <div class="bg-white rounded-xl border border-red-100 shadow-sm p-5"><div class="text-xs font-black text-red-500 mb-2">未讀</div><div class="text-3xl font-black text-red-600">${monitorNumber(summary.unread)}</div></div>
+          <div class="bg-white rounded-xl border border-blue-100 shadow-sm p-5"><div class="text-xs font-black text-blue-600 mb-2">24 小時活躍</div><div class="text-3xl font-black text-blue-700">${monitorNumber(summary.active24h)}</div></div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-5 min-h-[620px]">
+          <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h4 class="font-black text-slate-900">LINE OA 對話列表</h4>
+              <span class="text-xs font-bold text-slate-400">${monitorNumber(threads.length)} 筆</span>
+            </div>
+            <div class="max-h-[560px] overflow-y-auto">${threadHtml}</div>
+          </section>
+          <section class="bg-slate-100 rounded-2xl border border-slate-200 shadow-inner overflow-hidden flex flex-col">
+            <div class="px-5 py-4 bg-white border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h4 class="font-black text-slate-900">訊息時間線</h4>
+                <p class="text-xs font-bold text-slate-400 mt-1">${escapeHTML(activeThreadId || '尚未選擇對話')}</p>
+              </div>
+              <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-black">只監看，不自動回覆</span>
+            </div>
+            <div class="flex-1 overflow-y-auto p-5">${messageHtml}</div>
+          </section>
+        </div>`;
+    }
+
+    async function loadLineOAMonitor(threadId = '') {
+      const box = document.getElementById('lineoa-monitor-content');
+      if (!box) return;
+      box.innerHTML = '<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center text-slate-400 font-bold"><span class="material-symbols-outlined animate-spin text-3xl block mb-2">refresh</span>載入 LINE OA 聊天室後台...</div>';
+      const data = await fetchAPI('getLineOAChatMonitor', { threadId }, { timeoutMs: 20000 });
+      if (!data) {
+        box.innerHTML = '<div class="bg-white rounded-2xl border border-red-100 shadow-sm p-10 text-center text-red-500 font-bold">LINE OA 聊天室資料載入失敗，請確認 Worker 已部署且 webhook 已設定。</div>';
+        return;
+      }
+      renderLineOAChatMonitor(data);
     }
 
     function normalizeApiList(res, keys = []) {

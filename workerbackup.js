@@ -277,6 +277,7 @@ const SecurityModule = {
       'listDuplicateCardBindings',
       'resolveDuplicateCardBinding',
       'deployRichMenu',
+      'getLineOAChatMonitor',
       'listAdminAnnouncements',
       'saveAnnouncement',
       'deleteAnnouncement'
@@ -715,6 +716,217 @@ const LineOAModule = {
     if (media.video && ogImage && !media.video.thumbnailUrl) media.video.thumbnailUrl = ogImage;
     const type = media.video && media.images.length ? 'MIXED' : media.video ? 'VIDEO' : media.images.length ? 'IMAGE' : 'UNKNOWN';
     return { success: true, data: { success: true, sourceUrl: target, type, video: media.video, images: media.images.slice(0, 20), urls: urls.slice(0, 100) } };
+  }
+};
+
+const LineOAChatModule = {
+  encoder: new TextEncoder(),
+
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  async ensure(env) {
+    if (!env.ACTMASTER_DB) throw new Error('Missing ACTMASTER_DB binding');
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS line_oa_threads (
+        thread_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT '',
+        source_type TEXT NOT NULL DEFAULT 'user',
+        display_name TEXT NOT NULL DEFAULT '',
+        picture_url TEXT NOT NULL DEFAULT '',
+        last_message_text TEXT NOT NULL DEFAULT '',
+        last_message_type TEXT NOT NULL DEFAULT '',
+        last_event_type TEXT NOT NULL DEFAULT '',
+        message_count INTEGER NOT NULL DEFAULT 0,
+        unread_count INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'open',
+        tags TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        last_event_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS line_oa_messages (
+        message_id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL DEFAULT '',
+        user_id TEXT NOT NULL DEFAULT '',
+        direction TEXT NOT NULL DEFAULT 'inbound',
+        message_type TEXT NOT NULL DEFAULT '',
+        text_content TEXT NOT NULL DEFAULT '',
+        event_type TEXT NOT NULL DEFAULT '',
+        reply_token TEXT NOT NULL DEFAULT '',
+        raw_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_threads_updated ON line_oa_threads(updated_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_threads_user ON line_oa_threads(user_id)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_messages_thread ON line_oa_messages(thread_id, created_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_messages_user ON line_oa_messages(user_id, created_at)').run();
+  },
+
+  async verifySignature(rawBody, signature, env) {
+    const secret = this.text(env.LINE_CHANNEL_SECRET);
+    if (!secret) return false;
+    if (!signature) return false;
+    const key = await crypto.subtle.importKey('raw', this.encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const signed = await crypto.subtle.sign('HMAC', key, this.encoder.encode(rawBody));
+    const expected = btoa(String.fromCharCode(...new Uint8Array(signed)));
+    return expected === signature;
+  },
+
+  eventUserId(event) {
+    return this.text(event?.source?.userId || event?.source?.groupId || event?.source?.roomId);
+  },
+
+  eventTimestamp(event) {
+    const ts = Number(event?.timestamp || 0);
+    return ts ? new Date(ts).toISOString() : new Date().toISOString();
+  },
+
+  messageId(event) {
+    return this.text(event?.message?.id) || `LINE_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  },
+
+  messageText(event) {
+    const message = event?.message || {};
+    if (message.type === 'text') return this.text(message.text);
+    if (event?.type === 'follow') return '加入好友 / 開始關注官方帳號';
+    if (event?.type === 'unfollow') return '封鎖或離開官方帳號';
+    if (event?.type === 'postback') return this.text(event?.postback?.data, '點擊 postback');
+    return message.type ? `[${message.type}]` : `[${this.text(event?.type, 'event')}]`;
+  },
+
+  async fetchProfile(env, userId) {
+    const id = this.text(userId);
+    if (!id || !id.startsWith('U') || !env.LINE_CHANNEL_ACCESS_TOKEN) return {};
+    try {
+      const res = await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` }
+      });
+      if (!res.ok) return {};
+      const data = await res.json();
+      return {
+        displayName: this.text(data.displayName),
+        pictureUrl: this.text(data.pictureUrl)
+      };
+    } catch (e) {
+      return {};
+    }
+  },
+
+  async saveEvent(env, event) {
+    const userId = this.eventUserId(event);
+    if (!userId) return null;
+    const threadId = `line:${userId}`;
+    const createdAt = this.eventTimestamp(event);
+    const messageType = this.text(event?.message?.type || event?.type);
+    const eventType = this.text(event?.type);
+    const text = this.messageText(event);
+    const messageId = this.messageId(event);
+    const existingMessage = await D1ReadModule.first(env, 'SELECT message_id FROM line_oa_messages WHERE message_id = ? LIMIT 1', [messageId]).catch(() => null);
+    if (existingMessage) return { threadId, userId, duplicate: true };
+    const profile = await this.fetchProfile(env, userId);
+    const displayName = profile.displayName || userId;
+    const pictureUrl = profile.pictureUrl || '';
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO line_oa_threads (
+        thread_id,user_id,source_type,display_name,picture_url,last_message_text,last_message_type,last_event_type,
+        message_count,unread_count,status,last_event_at,created_at,updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'open', ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(thread_id) DO UPDATE SET
+        display_name=CASE WHEN excluded.display_name <> '' THEN excluded.display_name ELSE line_oa_threads.display_name END,
+        picture_url=CASE WHEN excluded.picture_url <> '' THEN excluded.picture_url ELSE line_oa_threads.picture_url END,
+        last_message_text=excluded.last_message_text,
+        last_message_type=excluded.last_message_type,
+        last_event_type=excluded.last_event_type,
+        message_count=line_oa_threads.message_count + 1,
+        unread_count=line_oa_threads.unread_count + 1,
+        status=CASE WHEN excluded.last_event_type = 'unfollow' THEN 'closed' ELSE line_oa_threads.status END,
+        last_event_at=excluded.last_event_at,
+        updated_at=CURRENT_TIMESTAMP
+    `).bind(threadId, userId, this.text(event?.source?.type, 'user'), displayName, pictureUrl, text, messageType, eventType, createdAt, createdAt).run();
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT OR IGNORE INTO line_oa_messages (
+        message_id,thread_id,user_id,direction,message_type,text_content,event_type,reply_token,raw_json,created_at
+      ) VALUES (?, ?, ?, 'inbound', ?, ?, ?, ?, ?, ?)
+    `).bind(
+      messageId,
+      threadId,
+      userId,
+      messageType,
+      text,
+      eventType,
+      this.text(event?.replyToken),
+      JSON.stringify(event || {}),
+      createdAt
+    ).run();
+    return { threadId, userId };
+  },
+
+  async handleWebhook(request, env, ctx) {
+    const rawBody = await request.text();
+    const signature = request.headers.get('x-line-signature') || '';
+    const ok = await this.verifySignature(rawBody, signature, env);
+    if (!ok) return new Response('Invalid LINE signature', { status: 401 });
+    await this.ensure(env);
+    const body = JSON.parse(rawBody || '{}');
+    const events = Array.isArray(body.events) ? body.events : [];
+    const job = Promise.all(events.map(event => this.saveEvent(env, event).catch(e => console.error('LINE OA event save failed', e))));
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(job);
+    else await job;
+    return new Response('OK', { status: 200 });
+  },
+
+  async monitor(payload, env) {
+    await this.ensure(env);
+    const limit = Math.min(Math.max(Number(payload.limit || 30) || 30, 1), 100);
+    const threadId = this.text(payload.threadId);
+    const summary = await D1ReadModule.first(env, `
+      SELECT
+        COUNT(*) AS threads,
+        COALESCE(SUM(message_count), 0) AS messages,
+        COALESCE(SUM(unread_count), 0) AS unread,
+        SUM(CASE WHEN last_event_at >= datetime('now', '-1 day') THEN 1 ELSE 0 END) AS active24h
+      FROM line_oa_threads
+    `, []);
+    const threads = await D1ReadModule.all(env, `
+      SELECT thread_id,user_id,source_type,display_name,picture_url,last_message_text,last_message_type,last_event_type,
+             message_count,unread_count,status,tags,note,last_event_at,updated_at
+      FROM line_oa_threads
+      ORDER BY COALESCE(NULLIF(last_event_at, ''), updated_at) DESC
+      LIMIT ?
+    `, [limit]);
+    const selectedThreadId = threadId || (threads[0] && threads[0].thread_id) || '';
+    const messages = selectedThreadId
+      ? await D1ReadModule.all(env, `
+          SELECT message_id,thread_id,user_id,direction,message_type,text_content,event_type,created_at
+          FROM line_oa_messages
+          WHERE thread_id = ?
+          ORDER BY created_at DESC
+          LIMIT 80
+        `, [selectedThreadId])
+      : [];
+    return {
+      success: true,
+      data: {
+        summary: {
+          threads: Number(summary?.threads || 0),
+          messages: Number(summary?.messages || 0),
+          unread: Number(summary?.unread || 0),
+          active24h: Number(summary?.active24h || 0)
+        },
+        threads,
+        selectedThreadId,
+        messages: messages.reverse()
+      }
+    };
   }
 };
 // ==================== Point Service Module ====================
@@ -8391,6 +8603,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1InboxModule.count(payload || {}, env);
     case 'getInboxMonitor':
       return await D1InboxModule.monitor(payload || {}, env);
+    case 'getLineOAChatMonitor':
+      return await LineOAChatModule.monitor(payload || {}, env);
     case 'listInboxItems':
       return await D1InboxModule.list(payload || {}, env);
     case 'listSentInboxItems':
@@ -8471,6 +8685,9 @@ export default {
     }
     try {
       const url = new URL(request.url);
+      if (url.pathname === '/webhook/line') {
+        return await LineOAChatModule.handleWebhook(request, env, ctx || { waitUntil: promise => promise });
+      }
       if (url.pathname === '/newebpay/notify') {
         return await PaymentModule.handleNewebpayNotify(request, env, ctx || { waitUntil: promise => promise });
       }
