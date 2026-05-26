@@ -538,6 +538,64 @@ const Utils = {
 };
 
 // ==================== 模組 2: 圖片處理 (Storage Module) ====================
+const TestUiModule = {
+  branch: 'codex-matchmake-pool-split',
+  workerUrl: 'https://line-engine-matchmake-test.fangwl591021.workers.dev/',
+  rawBase: 'https://raw.githubusercontent.com/fangwl591021/LINE-/codex-matchmake-pool-split/',
+
+  mime(pathname) {
+    if (pathname.endsWith('.html')) return 'text/html; charset=utf-8';
+    if (pathname.endsWith('.js')) return 'application/javascript; charset=utf-8';
+    if (pathname.endsWith('.css')) return 'text/css; charset=utf-8';
+    if (pathname.endsWith('.json') || pathname.endsWith('.webmanifest')) return 'application/manifest+json; charset=utf-8';
+    if (pathname.endsWith('.png')) return 'image/png';
+    if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) return 'image/jpeg';
+    if (pathname.endsWith('.svg')) return 'image/svg+xml';
+    return 'text/plain; charset=utf-8';
+  },
+
+  assetPath(pathname) {
+    if (pathname === '/test-ui' || pathname === '/test-ui/' || pathname === '/index.html') return 'index.html';
+    const clean = pathname.replace(/^\/+/, '');
+    if (/^(css|js|assets|docs|tools|migrations)\//.test(clean)) return clean;
+    if (/^(manifest\.webmanifest|sw\.js|lineoa\.html|admin\.html|point-bridge\.html|ocr-lab\.html)$/.test(clean)) return clean;
+    return '';
+  },
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const asset = this.assetPath(url.pathname);
+    if (!asset) return null;
+
+    const upstream = await fetch(this.rawBase + asset, {
+      headers: { 'User-Agent': 'line-engine-matchmake-test-ui' }
+    });
+    if (!upstream.ok) return new Response('Test UI asset not found', { status: 404 });
+
+    let body;
+    if (asset === 'js/config.js') {
+      body = await upstream.text();
+      body = body.replace(
+        /const WORKER_URL = "https:\/\/line-engine\.fangwl591021\.workers\.dev\/";/,
+        `const WORKER_URL = "undefined";`
+      );
+    } else if (asset === 'index.html') {
+      body = await upstream.text();
+      body = body.replace(/<title>.*?<\/title>/, '<title>LINE Engine Matchmake Test</title>');
+    } else {
+      body = upstream.body;
+    }
+
+    return new Response(body, {
+      headers: {
+        'Content-Type': this.mime(asset),
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-store'
+      }
+    });
+  }
+};
+
 const StorageModule = {
   async upload(base64Image, env) {
     try {
@@ -8486,6 +8544,10 @@ export default {
     }
     try {
       const url = new URL(request.url);
+      if (request.method === 'GET') {
+        const testUiResponse = await TestUiModule.fetch(request);
+        if (testUiResponse) return testUiResponse;
+      }
       if (url.pathname === '/newebpay/notify') {
         return await PaymentModule.handleNewebpayNotify(request, env, ctx || { waitUntil: promise => promise });
       }

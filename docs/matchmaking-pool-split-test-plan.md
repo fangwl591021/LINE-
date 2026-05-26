@@ -35,7 +35,8 @@ npx.cmd wrangler deploy --dry-run --outdir .wrangler-dry-run
 
 ## Manual Test Flow
 
-1. Open the test branch UI.
+1. Open the test branch UI:
+   `https://line-engine-matchmake-test.fangwl591021.workers.dev/test-ui`
 2. Go to AI matchmaking.
 3. Select `我的名片池`.
 4. Enter a matchmaking request and confirm results are limited to the user's own scanned/managed cards.
