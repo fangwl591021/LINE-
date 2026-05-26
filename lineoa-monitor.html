@@ -258,6 +258,16 @@
     let replyToolMode = '';
 
     const el = id => document.getElementById(id);
+    function captureTokenFromHash() {
+      const hash = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+      const nextToken = hash.get('lineoa_token') || hash.get('access_token') || '';
+      if (nextToken) {
+        localStorage.setItem('lineoa_access_token', nextToken);
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+      return nextToken;
+    }
+    captureTokenFromHash();
     const token = () => localStorage.getItem('lineoa_access_token') || '';
     const safe = value => String(value ?? '');
     const esc = value => safe(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));

@@ -1532,14 +1532,17 @@
     }
 
     function openLineOAMonitorTool() {
+      let accessToken = '';
       try {
         if (window.liff && typeof liff.isLoggedIn === 'function' && liff.isLoggedIn()) {
-          localStorage.setItem('lineoa_access_token', liff.getAccessToken());
+          accessToken = liff.getAccessToken();
+          localStorage.setItem('lineoa_access_token', accessToken);
         }
       } catch (err) {
         console.warn('Unable to pass LINE OA monitor token:', err);
       }
-      window.open('https://line-engine.fangwl591021.workers.dev/monitor', '_blank', 'noopener');
+      const hash = accessToken ? `#lineoa_token=${encodeURIComponent(accessToken)}` : '';
+      window.open(`https://line-engine.fangwl591021.workers.dev/monitor${hash}`, '_blank', 'noopener');
     }
 
     function formatCurrency(value) {
