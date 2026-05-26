@@ -1545,7 +1545,7 @@
         console.warn('Unable to pass LINE OA monitor token:', err);
       }
       const hash = accessToken ? `#lineoa_token=${encodeURIComponent(accessToken)}` : '';
-      window.location.href = `https://line-engine.fangwl591021.workers.dev/monitor${hash}`;
+      window.open(`https://line-engine.fangwl591021.workers.dev/monitor${hash}`, '_blank', 'noopener');
     }
 
     function formatCurrency(value) {

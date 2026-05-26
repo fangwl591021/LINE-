@@ -30,6 +30,7 @@
             <h1 class="text-xl font-bold">LINE 聊天室監控</h1>
             <p class="text-sm text-slate-500 mt-1">只監看、標記與分析，不自動代回覆。</p>
           </div>
+          <button id="back-admin" type="button" class="collapse-hide shrink-0 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">返回</button>
           <button id="toggle-left" type="button" class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">收合</button>
         </div>
         <div class="collapse-hide mt-4 grid grid-cols-2 gap-3">
@@ -670,6 +671,9 @@
     el('toggle-left').addEventListener('click', () => {
       el('left-panel').classList.toggle('left-collapsed');
       el('toggle-left').textContent = el('left-panel').classList.contains('left-collapsed') ? '展開' : '收合';
+    });
+    el('back-admin').addEventListener('click', () => {
+      window.location.href = 'https://fangwl591021.github.io/LINE-/admin.html';
     });
     el('tools-toggle').addEventListener('click', () => {
       el('tools-panel').hidden = !el('tools-panel').hidden;
