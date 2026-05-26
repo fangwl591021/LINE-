@@ -1544,9 +1544,16 @@
       } catch (err) {
         console.warn('Unable to pass LINE OA monitor token:', err);
       }
+      const monitorUid = String(
+        window.currentUserProfile?.userId ||
+        window.currentUser?.userId ||
+        localStorage.getItem('actmaster_last_user_id') ||
+        ''
+      ).trim();
+      const query = monitorUid ? `?pt_uid=${encodeURIComponent(monitorUid)}` : '';
       const hash = accessToken ? `#lineoa_token=${encodeURIComponent(accessToken)}` : '';
-      const monitorUrl = accessToken
-        ? `https://line-engine.fangwl591021.workers.dev/monitor${hash}`
+      const monitorUrl = accessToken || monitorUid
+        ? `https://line-engine.fangwl591021.workers.dev/monitor${query}${hash}`
         : `https://liff.line.me/${encodeURIComponent(LIFF_ID)}?open=monitor`;
       window.open(monitorUrl, '_blank', 'noopener');
     }

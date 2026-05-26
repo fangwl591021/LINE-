@@ -349,7 +349,10 @@ const SecurityModule = {
       'saveStoreSettings',
       'updateActivity',
       'dailyPointCheckin',
-      'extractLineVoomMedia'
+      'extractLineVoomMedia',
+      'getLineOAChatMonitor',
+      'sendLineOAChatReply',
+      'updateLineOAChatThread'
     ]);
 
     if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(action)) {

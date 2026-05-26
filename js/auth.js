@@ -1341,8 +1341,20 @@ document.addEventListener('DOMContentLoaded', async () => {
           accessToken = liff.getAccessToken();
         }
       } catch (e) {}
+      const monitorUid = String(
+        urlParams.get('pt_uid') ||
+        urlParams.get('uid') ||
+        urlParams.get('userId') ||
+        urlParams.get('LINE_user_id') ||
+        urlParams.get('lineUserId') ||
+        urlParams.get('pointUserId') ||
+        urlParams.get('wallet_uid') ||
+        window.currentUserProfile?.userId ||
+        ''
+      ).trim();
+      const query = monitorUid ? '?pt_uid=' + encodeURIComponent(monitorUid) : '';
       const hash = accessToken ? '#lineoa_token=' + encodeURIComponent(accessToken) : '';
-      window.location.replace('https://line-engine.fangwl591021.workers.dev/monitor' + hash);
+      window.location.replace('https://line-engine.fangwl591021.workers.dev/monitor' + query + hash);
       return;
     }
     if (urlParams.get('admin') === '1' || urlParams.get('adminPage') === '1') {

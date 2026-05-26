@@ -271,6 +271,16 @@
     }
     captureTokenFromHash();
     const token = () => localStorage.getItem('lineoa_access_token') || '';
+    function readMonitorUid() {
+      const params = new URLSearchParams(location.search || '');
+      const keys = ['pt_uid', 'uid', 'userId', 'LINE_user_id', 'lineUserId', 'pointUserId', 'wallet_uid'];
+      for (const key of keys) {
+        const value = String(params.get(key) || '').trim();
+        if (value) return value;
+      }
+      return '';
+    }
+    const monitorUid = readMonitorUid();
     const safe = value => String(value ?? '');
     const esc = value => safe(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
@@ -285,6 +295,10 @@
     async function api(action, payload = {}) {
       const body = { action, payload: { ...payload } };
       if (token()) body.payload.lineAccessToken = token();
+      if (monitorUid) {
+        body.payload.pt_uid = monitorUid;
+        body.payload.userId = body.payload.userId || monitorUid;
+      }
       const res = await fetch(WORKER_URL, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.success === false) throw new Error(data?.error || `HTTP ${res.status}`);
