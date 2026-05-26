@@ -1545,7 +1545,10 @@
         console.warn('Unable to pass LINE OA monitor token:', err);
       }
       const hash = accessToken ? `#lineoa_token=${encodeURIComponent(accessToken)}` : '';
-      window.open(`https://line-engine.fangwl591021.workers.dev/monitor${hash}`, '_blank', 'noopener');
+      const monitorUrl = accessToken
+        ? `https://line-engine.fangwl591021.workers.dev/monitor${hash}`
+        : `https://liff.line.me/${encodeURIComponent(LIFF_ID)}?open=monitor`;
+      window.open(monitorUrl, '_blank', 'noopener');
     }
 
     function formatCurrency(value) {

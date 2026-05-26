@@ -1329,6 +1329,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
+    const wantsLineOAMonitor = (
+      urlParams.get('open') === 'monitor' ||
+      urlParams.get('monitor') === '1' ||
+      urlParams.get('lineoaMonitor') === '1'
+    );
+    if (wantsLineOAMonitor) {
+      let accessToken = '';
+      try {
+        if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+          accessToken = liff.getAccessToken();
+        }
+      } catch (e) {}
+      const hash = accessToken ? '#lineoa_token=' + encodeURIComponent(accessToken) : '';
+      window.location.replace('https://line-engine.fangwl591021.workers.dev/monitor' + hash);
+      return;
+    }
     if (urlParams.get('admin') === '1' || urlParams.get('adminPage') === '1') {
       window.location.replace('admin.html?from_liff=1&t=' + Date.now());
       return;
