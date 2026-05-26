@@ -735,7 +735,7 @@
     el('open-crm').addEventListener('click', () => location.href = './admin.html');
 
     async function initMonitor() {
-      if (!token() && window.liff && typeof liff.init === 'function') {
+      if (!token() && !monitorUid && window.liff && typeof liff.init === 'function') {
         try {
           await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
           if (!liff.isLoggedIn()) {
