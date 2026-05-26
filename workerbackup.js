@@ -1176,6 +1176,30 @@ const LineOAChatModule = {
         messages: messages.reverse()
       }
     };
+  },
+
+  async monitorPage() {
+    const source = 'https://raw.githubusercontent.com/fangwl591021/LINE-/main/lineoa-monitor.html';
+    try {
+      const res = await fetch(source, {
+        headers: { 'User-Agent': 'line-engine-monitor-page/1.0' },
+        cf: { cacheTtl: 60, cacheEverything: true }
+      });
+      if (!res.ok) throw new Error(`source ${res.status}`);
+      const html = await res.text();
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    } catch (e) {
+      return new Response(`<!doctype html><meta charset="utf-8"><title>LINE OA Monitor</title><body style="font-family:system-ui;padding:32px"><h1>LINE OA 聊天室監控</h1><p>監控頁暫時無法載入，請稍後重新整理。</p><pre>${String(e?.message || e)}</pre></body>`, {
+        status: 502,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      });
+    }
   }
 };
 // ==================== Point Service Module ====================
@@ -8940,6 +8964,9 @@ export default {
       const url = new URL(request.url);
       if (request.method === 'GET' && url.pathname === '/hub-test') {
         return await LineOAChatModule.hubTest(env);
+      }
+      if (request.method === 'GET' && (url.pathname === '/monitor' || url.pathname === '/lineoa-monitor.html')) {
+        return await LineOAChatModule.monitorPage();
       }
       if (url.pathname === '/webhook/line' || url.pathname === '/line-webhook') {
         return await LineOAChatModule.handleWebhook(request, env, ctx || { waitUntil: promise => promise });
