@@ -290,6 +290,7 @@ const SecurityModule = {
       'getActivityRegistrants',
       'confirmPayment',
       'toggleCheckin',
+      'getInboxMonitor',
       'saveStoreSettings',
       'extractLineVoomMedia',
       'storeAdjustCustomerPoints',
@@ -5451,6 +5452,87 @@ const D1InboxModule = {
     return { success: true, data: { unread: Number(row && row.unread) || 0 } };
   },
 
+  async monitor(payload, env) {
+    await this.ensure(env);
+    const role = this.text(payload.authenticatedRole || payload.role, 'user').toLowerCase();
+    const networkId = this.text(payload.authenticatedNetworkId || payload.networkId, 'admin');
+    const isAdmin = role === 'admin';
+    const binds = [];
+    const scopeSql = isAdmin ? '1 = 1' : 'network_id = ?';
+    if (!isAdmin) binds.push(networkId);
+
+    const summary = await D1ReadModule.first(env, `
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END) AS unread,
+        SUM(CASE WHEN created_at >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS last24h,
+        SUM(CASE WHEN message_type = 'coupon' THEN 1 ELSE 0 END) AS coupons,
+        SUM(CASE WHEN message_type = 'coupon' AND coupon_status = 'redeemed' THEN 1 ELSE 0 END) AS redeemedCoupons
+      FROM inbox_items
+      WHERE archived_at = ''
+        AND ${this.isVisibleSql()}
+        AND ${scopeSql}
+    `, binds);
+
+    const recentRows = await D1ReadModule.all(env, `
+      SELECT i.*,
+             su.name AS sender_name,
+             ru.name AS receiver_name
+      FROM inbox_items i
+      LEFT JOIN users su ON su.line_id = i.sender_user_id OR su.row_id = i.sender_user_id OR su.point_line_id = i.sender_user_id OR su.legacy_line_id = i.sender_user_id
+      LEFT JOIN users ru ON ru.line_id = i.receiver_user_id OR ru.row_id = i.receiver_user_id OR ru.point_line_id = i.receiver_user_id OR ru.legacy_line_id = i.receiver_user_id
+      WHERE i.archived_at = ''
+        AND ${this.isVisibleSql().replace(/expires_at/g, 'i.expires_at')}
+        AND ${isAdmin ? '1 = 1' : 'i.network_id = ?'}
+      ORDER BY i.created_at DESC, i.message_id DESC
+      LIMIT 8
+    `, binds);
+
+    const threadRows = await D1ReadModule.all(env, `
+      SELECT
+        CASE WHEN sender_user_id < receiver_user_id THEN sender_user_id || '|' || receiver_user_id ELSE receiver_user_id || '|' || sender_user_id END AS thread_key,
+        MAX(created_at) AS lastAt,
+        COUNT(*) AS total,
+        SUM(CASE WHEN status = 'unread' THEN 1 ELSE 0 END) AS unread,
+        MAX(sender_user_id) AS sender_user_id,
+        MAX(receiver_user_id) AS receiver_user_id
+      FROM inbox_items
+      WHERE archived_at = ''
+        AND ${this.isVisibleSql()}
+        AND ${scopeSql}
+      GROUP BY thread_key
+      ORDER BY lastAt DESC
+      LIMIT 6
+    `, binds);
+
+    return {
+      success: true,
+      data: {
+        scope: isAdmin ? 'all' : networkId,
+        summary: {
+          total: Number(summary && summary.total) || 0,
+          unread: Number(summary && summary.unread) || 0,
+          last24h: Number(summary && summary.last24h) || 0,
+          coupons: Number(summary && summary.coupons) || 0,
+          redeemedCoupons: Number(summary && summary.redeemedCoupons) || 0
+        },
+        recent: recentRows.map(row => ({
+          ...this.itemRow(row),
+          senderName: this.text(row.sender_name, this.text(this.json(row.sender_snapshot_json).name, row.sender_user_id)),
+          receiverName: this.text(row.receiver_name, row.receiver_user_id)
+        })),
+        threads: threadRows.map(row => ({
+          threadKey: this.text(row.thread_key),
+          senderUserId: this.text(row.sender_user_id),
+          receiverUserId: this.text(row.receiver_user_id),
+          total: Number(row.total) || 0,
+          unread: Number(row.unread) || 0,
+          lastAt: this.text(row.lastAt)
+        }))
+      }
+    };
+  },
+
   async list(payload, env) {
     await this.ensure(env);
     const userId = this.ownUserId(payload);
@@ -8307,6 +8389,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1ReadModule.updateCrmContact(payload || {}, env);
     case 'getInboxCount':
       return await D1InboxModule.count(payload || {}, env);
+    case 'getInboxMonitor':
+      return await D1InboxModule.monitor(payload || {}, env);
     case 'listInboxItems':
       return await D1InboxModule.list(payload || {}, env);
     case 'listSentInboxItems':

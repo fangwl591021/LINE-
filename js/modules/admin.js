@@ -364,13 +364,109 @@ window.duplicateActivity = async function(actId, btnEl) {
 };
 
 // 載入營運統計
+function adminStatsNumber(value) {
+  return Number(value || 0).toLocaleString('zh-TW');
+}
+
+function adminStatsTime(value) {
+  if (!value) return '-';
+  if (typeof window.formatDisplayTime === 'function') return window.formatDisplayTime(value);
+  const date = new Date(String(value).replace(' ', 'T'));
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-TW', { hour12: false });
+}
+
+function adminInboxTypeLabel(type) {
+  if (type === 'coupon') return '優惠券';
+  if (type === 'activity_reminder') return '活動提醒';
+  return '一般訊息';
+}
+
+function renderAdminInboxMonitor(monitor) {
+  if (!monitor || monitor.success === false) {
+    const msg = monitor && monitor.error ? monitor.error : '尚未取得聊天室資料';
+    return '<div class="bg-white rounded-3xl p-5 border border-red-100 shadow-sm mb-6 text-red-500 text-[13px] font-bold">聊天室監控載入失敗：' + window.escapeHTML(msg) + '</div>';
+  }
+  const summary = monitor.summary || {};
+  const recent = Array.isArray(monitor.recent) ? monitor.recent : [];
+  const threads = Array.isArray(monitor.threads) ? monitor.threads : [];
+  const couponRate = Number(summary.coupons || 0) > 0
+    ? Math.round(Number(summary.redeemedCoupons || 0) * 100 / Number(summary.coupons || 0)) + '%'
+    : '-';
+  const recentHtml = recent.length ? recent.map(item => {
+    const sender = window.escapeHTML(item.senderName || item.senderUserId || '-');
+    const receiver = window.escapeHTML(item.receiverName || item.receiverUserId || '-');
+    const title = window.escapeHTML(item.title || '未命名訊息');
+    const statusClass = item.status === 'unread' ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500';
+    const statusText = item.status === 'unread' ? '未讀' : '已讀';
+    return '<div class="px-4 py-3 flex items-start justify-between gap-3 border-t border-slate-100 first:border-t-0">' +
+      '<div class="min-w-0">' +
+        '<div class="flex items-center gap-2 mb-1">' +
+          '<span class="text-[11px] font-black text-blue-600">' + adminInboxTypeLabel(item.messageType) + '</span>' +
+          '<span class="text-[11px] font-bold text-slate-400">' + adminStatsTime(item.createdAt) + '</span>' +
+        '</div>' +
+        '<div class="text-[14px] font-black text-slate-900 truncate">' + title + '</div>' +
+        '<div class="text-[12px] font-bold text-slate-500 mt-1 truncate">' + sender + ' → ' + receiver + '</div>' +
+      '</div>' +
+      '<span class="shrink-0 px-2 py-1 rounded-full text-[10px] font-black ' + statusClass + '">' + statusText + '</span>' +
+    '</div>';
+  }).join('') : '<div class="px-4 py-8 text-center text-slate-400 text-[13px] font-bold">尚無聊天室訊息</div>';
+  const threadHtml = threads.length ? threads.map(thread =>
+    '<div class="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2">' +
+      '<div class="min-w-0">' +
+        '<div class="text-[12px] font-black text-slate-700 truncate">' + window.escapeHTML(thread.senderUserId || '-') + '</div>' +
+        '<div class="text-[11px] font-bold text-slate-400 truncate">' + window.escapeHTML(thread.receiverUserId || '-') + '</div>' +
+      '</div>' +
+      '<div class="text-right shrink-0">' +
+        '<div class="text-[13px] font-black text-slate-900">' + adminStatsNumber(thread.total) + ' 則</div>' +
+        '<div class="text-[11px] font-bold ' + (Number(thread.unread || 0) > 0 ? 'text-red-500' : 'text-slate-400') + '">' + adminStatsNumber(thread.unread) + ' 未讀</div>' +
+      '</div>' +
+    '</div>'
+  ).join('') : '<div class="text-center text-slate-400 text-[13px] font-bold py-5">尚無活躍對話</div>';
+
+  return '<div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mb-6">' +
+    '<div class="p-5 border-b border-slate-100 flex items-center justify-between gap-3">' +
+      '<div>' +
+        '<div class="flex items-center gap-2 text-slate-900">' +
+          '<span class="material-symbols-outlined text-[22px] text-blue-600">forum</span>' +
+          '<h3 class="text-[18px] font-black">聊天室監控</h3>' +
+        '</div>' +
+        '<p class="text-[12px] text-slate-500 font-bold mt-1">站內收件匣訊息與優惠券狀態</p>' +
+      '</div>' +
+      '<button type="button" onclick="window.loadAdminStats()" class="w-9 h-9 rounded-full bg-slate-100 text-slate-600 active:scale-95 transition-transform flex items-center justify-center">' +
+        '<span class="material-symbols-outlined text-[18px]">refresh</span>' +
+      '</button>' +
+    '</div>' +
+    '<div class="grid grid-cols-2 gap-3 p-4">' +
+      '<div class="rounded-2xl bg-slate-50 p-3"><div class="text-[11px] font-black text-slate-500">總訊息</div><div class="text-[24px] font-black text-slate-900">' + adminStatsNumber(summary.total) + '</div></div>' +
+      '<div class="rounded-2xl bg-red-50 p-3"><div class="text-[11px] font-black text-red-500">未讀</div><div class="text-[24px] font-black text-red-600">' + adminStatsNumber(summary.unread) + '</div></div>' +
+      '<div class="rounded-2xl bg-blue-50 p-3"><div class="text-[11px] font-black text-blue-600">24 小時新增</div><div class="text-[24px] font-black text-blue-700">' + adminStatsNumber(summary.last24h) + '</div></div>' +
+      '<div class="rounded-2xl bg-emerald-50 p-3"><div class="text-[11px] font-black text-emerald-700">優惠券核銷率</div><div class="text-[24px] font-black text-emerald-700">' + couponRate + '</div></div>' +
+    '</div>' +
+    '<div class="px-4 pb-4">' +
+      '<div class="mb-2 text-[13px] font-black text-slate-700">活躍對話</div>' +
+      '<div class="space-y-2">' + threadHtml + '</div>' +
+    '</div>' +
+    '<div class="border-t border-slate-100">' +
+      '<div class="px-4 py-3 text-[13px] font-black text-slate-700 bg-slate-50">最近訊息</div>' +
+      recentHtml +
+    '</div>' +
+  '</div>';
+}
+
 window.loadAdminStats = async function() {
   const content = document.getElementById('admin-stats-content');
   if (!content) return;
   content.innerHTML = '<div class="text-center py-10"><span class="material-symbols-outlined animate-spin text-3xl text-slate-300">refresh</span><p class="text-sm text-slate-400 font-bold mt-2">載入數據中...</p></div>';
 
   try {
-    const res = await window.fetchAPI('getAdminStats', {}, true);
+    const [statsResult, monitorResult] = await Promise.allSettled([
+      window.fetchAPI('getAdminStats', {}, true),
+      window.fetchAPI('getInboxMonitor', {}, true)
+    ]);
+    const res = statsResult.status === 'fulfilled' ? statsResult.value : null;
+    const inboxMonitor = monitorResult.status === 'fulfilled'
+      ? monitorResult.value
+      : { success: false, error: monitorResult.reason?.message || monitorResult.reason || '聊天室監控載入失敗' };
     if (res) {
       let tableRows = '';
       if (res.details && res.details.length > 0) {
@@ -387,6 +483,7 @@ window.loadAdminStats = async function() {
       }
 
       content.innerHTML =
+        renderAdminInboxMonitor(inboxMonitor) +
         '<div class="grid grid-cols-2 gap-4 mb-4">' +
           '<div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm">' +
             '<div class="flex items-center gap-1.5 text-[#06C755] mb-2">' +
