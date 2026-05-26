@@ -14,9 +14,18 @@ function fail(message) {
 if (!index.includes('match-pool-own') || !index.includes('match-pool-public')) {
   fail('matchmaking UI must expose own and public pool modes');
 }
+if (!index.includes('match-public-toggle-wrap')) {
+  fail('public visibility toggle must be wrapped so own pool can hide it');
+}
 
 if (!matchmake.includes('window.matchmakePoolScope') || !matchmake.includes('window.setMatchmakePoolScope')) {
   fail('front-end must track and switch matchmaking pool scope');
+}
+if (!matchmake.includes("toggleWrap.classList.toggle('hidden', scope !== 'public')")) {
+  fail('own pool must hide the public visibility toggle');
+}
+if (!matchmake.includes('個人配對池') || !matchmake.includes('參與公開交流池')) {
+  fail('matchmaking UI labels must change with pool scope');
 }
 
 const startMatch = matchmake.match(/window\.startMatchmaking\s*=\s*async function[\s\S]*?\n\};/);

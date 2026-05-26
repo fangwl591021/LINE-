@@ -1133,17 +1133,17 @@
       <div id="matchmaker-ui" class="bg-white rounded-3xl shadow-sm p-6 mb-6 border border-slate-100 hidden">
         <div class="flex justify-between items-center mb-6 pb-5 border-b border-slate-50">
           <div class="flex flex-col">
-            <span class="text-[15px] font-black text-slate-800">參與配對池</span>
-            <span class="text-[11px] text-slate-400 font-bold mt-0.5 tracking-wide">名片已公開,允許他人搜尋</span>
+            <span id="match-pool-card-title" class="text-[15px] font-black text-slate-800">參與配對池</span>
+            <span id="match-pool-card-subtitle" class="text-[11px] text-slate-400 font-bold mt-0.5 tracking-wide">名片已公開,允許他人搜尋</span>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer">
+          <label id="match-public-toggle-wrap" class="relative inline-flex items-center cursor-pointer">
             <input type="checkbox" id="fate-privacy-toggle" class="sr-only peer" checked onchange="window.toggleFatePrivacy()">
             <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#06C755]"></div>
           </label>
         </div>
 
-        <h2 class="text-xl font-black mb-2 text-slate-800">尋找完美合作夥伴</h2>
-        <p class="text-sm text-slate-500 mb-5 font-medium">輸入您的業務需求,AI 將結合您的性格與 CRM 資料庫的命理標籤,尋找最互補的人選。</p>
+        <h2 id="match-query-title" class="text-xl font-black mb-2 text-slate-800">尋找完美合作夥伴</h2>
+        <p id="match-query-desc" class="text-sm text-slate-500 mb-5 font-medium">輸入您的業務需求,AI 將結合您的性格與 CRM 資料庫的命理標籤,尋找最互補的人選。</p>
 
         <textarea id="match-query" class="custom-input h-32 resize-none mb-5" placeholder="例如:我想找有電商通路資源的夥伴,且做事穩重細心..."></textarea>
 

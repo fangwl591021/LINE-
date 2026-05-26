@@ -28,6 +28,11 @@ function renderMatchmakePoolMode_() {
   const ownBtn = document.getElementById('match-pool-own');
   const publicBtn = document.getElementById('match-pool-public');
   const help = document.getElementById('match-pool-mode-help');
+  const title = document.getElementById('match-pool-card-title');
+  const subtitle = document.getElementById('match-pool-card-subtitle');
+  const toggleWrap = document.getElementById('match-public-toggle-wrap');
+  const queryTitle = document.getElementById('match-query-title');
+  const queryDesc = document.getElementById('match-query-desc');
   const activeClass = ['bg-slate-900', 'text-white'];
   const inactiveClass = ['bg-slate-50', 'text-slate-600'];
 
@@ -47,6 +52,15 @@ function renderMatchmakePoolMode_() {
     help.textContent = scope === 'public'
       ? '只使用已同意公開、通過 AI 健檢的本人名片，可跨店交流。'
       : '只使用你自己掃描或建立的名片，不進入跨店配對。';
+  }
+  if (title) title.textContent = scope === 'public' ? '參與公開交流池' : '個人配對池';
+  if (subtitle) subtitle.textContent = scope === 'public' ? '名片已公開，允許跨店搜尋' : '只使用我的名片資料，不公開';
+  if (toggleWrap) toggleWrap.classList.toggle('hidden', scope !== 'public');
+  if (queryTitle) queryTitle.textContent = scope === 'public' ? '尋找跨店合作夥伴' : '整理我的人脈配對';
+  if (queryDesc) {
+    queryDesc.textContent = scope === 'public'
+      ? '輸入您的業務需求，AI 將從已公開的跨店交流池尋找互補人選。'
+      : '輸入您的業務需求，AI 只會使用您自己掃描或建立的名片資料進行配對。';
   }
 }
 
