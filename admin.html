@@ -690,17 +690,17 @@
               <span class="material-symbols-outlined text-[20px]">forum</span>
               LINE OA 聊天室監控
             </div>
-            <h3 class="text-2xl font-black text-slate-900">LINE OA 真人聊天室後台</h3>
-            <p class="text-sm text-slate-500 font-semibold mt-2">只監看 LINE 官方帳號 webhook 訊息、對話列表與最近互動，不自動代回覆。</p>
+            <h3 class="text-2xl font-black text-slate-900">請開啟完整聊天室工作台</h3>
+            <p class="text-sm text-slate-500 font-semibold mt-2">此舊分頁已停用；新版監控在 Worker /monitor，版面與 TravelKeeper 範例一致。</p>
           </div>
-          <button onclick="loadLineOAMonitor()" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center gap-2 active:scale-95 transition-transform">
-            <span class="material-symbols-outlined text-[18px]">refresh</span>
-            重新整理
+          <button onclick="openLineOAMonitorTool()" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center gap-2 active:scale-95 transition-transform">
+            <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+            開啟完整工作台
           </button>
         </div>
 
         <div id="lineoa-monitor-content" class="space-y-6">
-          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center text-slate-400 font-bold">尚未載入聊天室監控資料</div>
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center text-slate-500 font-bold">請從左側選單重新點選「LINE OA 聊天室監控」，系統會開啟新版三欄工作台。</div>
         </div>
       </div>
 
@@ -1486,6 +1486,10 @@
     }
 
     function switchTab(tabId) {
+      if (tabId === 'lineoa-monitor') {
+        openLineOAMonitorTool();
+        tabId = 'users';
+      }
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       const target = document.getElementById('tab-' + tabId);
@@ -1509,7 +1513,6 @@
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'finance') loadFinanceStats();
       if (tabId === 'bonus') initBonusSystem();
-      if (tabId === 'lineoa-monitor') loadLineOAMonitor();
     }
 
     try {
