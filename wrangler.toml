@@ -17,3 +17,10 @@ database_id = "8a0107f9-000d-4810-b6bf-5d599b699195"
 [[r2_buckets]]
 binding = "IMG_BUCKET"
 bucket_name = "linengine"
+
+[vars]
+# Set real secrets in Cloudflare Dashboard or with `wrangler secret put`.
+# GAS_URL = "https://script.google.com/macros/s/.../exec"
+# LINE_CHANNEL_SECRET = ""
+# LINE_CHANNEL_ACCESS_TOKEN = ""
+# FORWARD_WEBHOOK_URL = ""

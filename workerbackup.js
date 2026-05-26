@@ -819,6 +819,71 @@ const LineOAChatModule = {
     }
   },
 
+  async forwardToGas(rawBody, env) {
+    const gasUrl = this.text(env.GAS_URL || env.GAS_WEBAPP_URL);
+    if (!gasUrl) return { success: false, skipped: true, error: 'Missing GAS_URL' };
+    const body = JSON.parse(rawBody || '{}');
+    const res = await fetch(gasUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'LINE_WEBHOOK', payload: body })
+    });
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (e) {
+      data = { rawText: text };
+    }
+    if (!res.ok) return { success: false, status: res.status, data, error: text || `GAS HTTP ${res.status}` };
+    return { success: true, status: res.status, data };
+  },
+
+  normalizeReplyPayload(gasResult) {
+    const data = gasResult && gasResult.data ? gasResult.data : gasResult;
+    const payload = data?.replyPayload || data?.data?.replyPayload || data?.payload?.replyPayload;
+    if (!payload || !payload.replyToken || !Array.isArray(payload.messages) || !payload.messages.length) return null;
+    return {
+      replyToken: this.text(payload.replyToken),
+      messages: payload.messages.slice(0, 5)
+    };
+  },
+
+  async replyLine(replyPayload, env) {
+    if (!replyPayload) return { success: true, skipped: true };
+    if (!env.LINE_CHANNEL_ACCESS_TOKEN) return { success: false, error: 'Missing LINE_CHANNEL_ACCESS_TOKEN' };
+    const res = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(replyPayload)
+    });
+    const text = await res.text();
+    if (!res.ok) return { success: false, status: res.status, error: text || `LINE Reply API HTTP ${res.status}` };
+    return { success: true, status: res.status };
+  },
+
+  async forwardToSecondSystem(rawBody, signature, env) {
+    const forwardUrl = this.text(env.FORWARD_WEBHOOK_URL);
+    if (!forwardUrl) return { success: true, skipped: true };
+    try {
+      const res = await fetch(forwardUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-line-signature': signature || ''
+        },
+        body: rawBody
+      });
+      return { success: res.ok, status: res.status };
+    } catch (e) {
+      console.error('FORWARD_WEBHOOK_URL failed', e);
+      return { success: false, error: e.message || String(e) };
+    }
+  },
+
   async saveEvent(env, event) {
     const userId = this.eventUserId(event);
     if (!userId) return null;
@@ -878,10 +943,88 @@ const LineOAChatModule = {
     await this.ensure(env);
     const body = JSON.parse(rawBody || '{}');
     const events = Array.isArray(body.events) ? body.events : [];
-    const job = Promise.all(events.map(event => this.saveEvent(env, event).catch(e => console.error('LINE OA event save failed', e))));
-    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(job);
-    else await job;
+    const saveJob = Promise.all(events.map(event => this.saveEvent(env, event).catch(e => console.error('LINE OA event save failed', e))));
+    const forwardJob = this.forwardToSecondSystem(rawBody, signature, env);
+    if (ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(saveJob);
+      ctx.waitUntil(forwardJob);
+    } else {
+      await saveJob;
+      await forwardJob;
+    }
+    const gasResult = await this.forwardToGas(rawBody, env);
+    if (gasResult.success) {
+      const replyPayload = this.normalizeReplyPayload(gasResult.data);
+      const replyResult = await this.replyLine(replyPayload, env);
+      if (!replyResult.success) console.error('LINE Reply API failed', replyResult);
+    } else if (!gasResult.skipped) {
+      console.error('GAS LINE_WEBHOOK failed', gasResult);
+    }
     return new Response('OK', { status: 200 });
+  },
+
+  async hubTest(env) {
+    const gasUrl = this.text(env.GAS_URL || env.GAS_WEBAPP_URL);
+    const forwardUrl = this.text(env.FORWARD_WEBHOOK_URL);
+    const checks = {
+      gas: { configured: !!gasUrl, ok: false, status: 0 },
+      forward: { configured: !!forwardUrl, ok: false, status: 0 },
+      line: { configured: !!env.LINE_CHANNEL_ACCESS_TOKEN, ok: false, status: 0, botName: '' }
+    };
+    if (gasUrl) {
+      try {
+        const res = await fetch(gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'PING', payload: { source: 'hub-test' } })
+        });
+        checks.gas.status = res.status;
+        checks.gas.ok = res.ok || res.status < 500;
+      } catch (e) {
+        checks.gas.error = e.message || String(e);
+      }
+    }
+    if (forwardUrl) {
+      try {
+        const res = await fetch(forwardUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-line-signature': 'hub-test' },
+          body: JSON.stringify({ events: [], source: 'hub-test' })
+        });
+        checks.forward.status = res.status;
+        checks.forward.ok = res.status < 500;
+      } catch (e) {
+        checks.forward.error = e.message || String(e);
+      }
+    }
+    if (env.LINE_CHANNEL_ACCESS_TOKEN) {
+      try {
+        const res = await fetch('https://api.line.me/v2/bot/info', {
+          headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` }
+        });
+        checks.line.status = res.status;
+        checks.line.ok = res.ok;
+        if (res.ok) {
+          const data = await res.json();
+          checks.line.botName = this.text(data.displayName || data.basicId);
+        }
+      } catch (e) {
+        checks.line.error = e.message || String(e);
+      }
+    }
+    const row = (label, item) => {
+      const mark = item.ok ? 'OK' : (item.configured ? 'CHECK' : 'MISSING');
+      const color = item.ok ? '#047857' : (item.configured ? '#b45309' : '#b91c1c');
+      return `<tr><td>${label}</td><td style="color:${color};font-weight:800">${mark}</td><td>${item.status || '-'}</td><td>${item.botName || item.error || ''}</td></tr>`;
+    };
+    return new Response(`<!doctype html><meta charset="utf-8"><title>LINE Hub Test</title>
+      <body style="font-family:system-ui;padding:32px;background:#f8fafc;color:#0f172a">
+      <h1>雙 Webhook 診斷</h1>
+      <p>Webhook URL: <code>https://line-engine.fangwl591021.workers.dev/line-webhook</code></p>
+      <table cellpadding="10" cellspacing="0" style="background:white;border-collapse:collapse;border:1px solid #e2e8f0">
+      <tr><th align="left">節點</th><th align="left">狀態</th><th align="left">HTTP</th><th align="left">備註</th></tr>
+      ${row('GAS_URL', checks.gas)}${row('FORWARD_WEBHOOK_URL', checks.forward)}${row('LINE_CHANNEL_ACCESS_TOKEN', checks.line)}
+      </table></body>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   },
 
   async monitor(payload, env) {
@@ -8685,7 +8828,10 @@ export default {
     }
     try {
       const url = new URL(request.url);
-      if (url.pathname === '/webhook/line') {
+      if (request.method === 'GET' && url.pathname === '/hub-test') {
+        return await LineOAChatModule.hubTest(env);
+      }
+      if (url.pathname === '/webhook/line' || url.pathname === '/line-webhook') {
         return await LineOAChatModule.handleWebhook(request, env, ctx || { waitUntil: promise => promise });
       }
       if (url.pathname === '/newebpay/notify') {
