@@ -925,7 +925,13 @@ const PointModule = {
     const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
 
-    const lineUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || payload.authenticatedUserId || payload.userId || '').trim();
+    const explicitPointUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || '').trim();
+    const fallbackUserId = String(payload.authenticatedUserId || payload.userId || '').trim();
+    let lineUserId = explicitPointUserId;
+    if (!lineUserId || lineUserId === fallbackUserId) {
+      const resolvedPointUserId = await this.resolvePointUserId(env, lineUserId || fallbackUserId).catch(() => '');
+      lineUserId = resolvedPointUserId || lineUserId || fallbackUserId;
+    }
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
     const baseBody = {
@@ -999,6 +1005,7 @@ const PointModule = {
         allTypeBalance: allTypeResult.error ? null : allTypeResult.latestBalance,
         balanceByType,
         queriedLineUserId: lineUserId,
+        requestedLineUserId: explicitPointUserId || fallbackUserId,
         sampledRows: typedResult.list.length,
         pointType: typedResult.body.point_type || 'gift_money',
         requestedPointType: typedBody.point_type,

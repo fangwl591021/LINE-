@@ -10,6 +10,7 @@
 4. `queryUserPoints` 仍然只查 `gift_money`。
 5. 點數 UID 橋接不可因為 LIFF ID 相同就被清除。
 6. 查詢點數時必須優先使用 `ACTMASTER_POINT_UID_{userId}` 或網址中的 `pt_uid` / `wallet_uid` / `pointUserId` / `LINE_user_id`，最後才退回 `userId`。
+7. Worker 的 `queryUserPoints` 若只收到目前 LIFF `userId`，必須再經過 D1 `point_line_id` / canonical identity 橋接後才查 wetw-point。
 
 ## 部署前檢查
 

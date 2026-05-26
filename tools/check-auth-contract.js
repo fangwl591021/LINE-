@@ -41,6 +41,10 @@ const checks = [
   {
     name: 'point uid bridge accepts URL point identifiers',
     pass: /readPointUidFromParams[\s\S]*pt_uid[\s\S]*wallet_uid[\s\S]*pointUserId[\s\S]*LINE_user_id/.test(auth)
+  },
+  {
+    name: 'queryUserPoints resolves D1 point identity bridge',
+    pass: /queryUserPoints[\s\S]*explicitPointUserId[\s\S]*fallbackUserId[\s\S]*resolvePointUserId/.test(worker)
   }
 ];
 
