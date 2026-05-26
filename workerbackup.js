@@ -278,6 +278,7 @@ const SecurityModule = {
       'resolveDuplicateCardBinding',
       'deployRichMenu',
       'getLineOAChatMonitor',
+      'sendLineOAChatReply',
       'listAdminAnnouncements',
       'saveAnnouncement',
       'deleteAnnouncement'
@@ -863,6 +864,55 @@ const LineOAChatModule = {
     const text = await res.text();
     if (!res.ok) return { success: false, status: res.status, error: text || `LINE Reply API HTTP ${res.status}` };
     return { success: true, status: res.status };
+  },
+
+  async pushLineMessage(userId, text, env) {
+    const target = this.text(userId);
+    const body = this.text(text);
+    if (!target) return { success: false, error: 'Missing LINE userId' };
+    if (!body) return { success: false, error: 'Missing reply text' };
+    if (!env.LINE_CHANNEL_ACCESS_TOKEN) return { success: false, error: 'Missing LINE_CHANNEL_ACCESS_TOKEN' };
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ to: target, messages: [{ type: 'text', text: body.slice(0, 5000) }] })
+    });
+    const responseText = await res.text();
+    if (!res.ok) return { success: false, status: res.status, error: responseText || `LINE Push API HTTP ${res.status}` };
+    return { success: true, status: res.status };
+  },
+
+  async sendReply(payload, env) {
+    await this.ensure(env);
+    const threadId = this.text(payload.threadId);
+    const text = this.text(payload.text || payload.body || payload.message);
+    if (!threadId) return { success: false, error: 'Missing threadId' };
+    if (!text) return { success: false, error: 'Missing reply text' };
+    const thread = await D1ReadModule.first(env, 'SELECT * FROM line_oa_threads WHERE thread_id = ? LIMIT 1', [threadId]);
+    if (!thread) return { success: false, error: 'Thread not found' };
+    const userId = this.text(thread.user_id);
+    const pushResult = await this.pushLineMessage(userId, text, env);
+    if (!pushResult.success) return pushResult;
+    const now = new Date().toISOString();
+    const messageId = `OUT_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO line_oa_messages (
+        message_id,thread_id,user_id,direction,message_type,text_content,event_type,reply_token,raw_json,created_at
+      ) VALUES (?, ?, ?, 'outbound', 'text', ?, 'admin_reply', '', ?, ?)
+    `).bind(messageId, threadId, userId, text, JSON.stringify({
+      operatorId: this.text(payload.authenticatedUserId || payload.userId),
+      source: 'admin_console'
+    }), now).run();
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE line_oa_threads
+      SET last_message_text = ?, last_message_type = 'text', last_event_type = 'admin_reply',
+          message_count = message_count + 1, unread_count = 0, updated_at = CURRENT_TIMESTAMP, last_event_at = ?
+      WHERE thread_id = ?
+    `).bind(text, now, threadId).run();
+    return { success: true, data: { messageId, threadId, userId } };
   },
 
   async forwardToSecondSystem(rawBody, signature, env) {
@@ -8750,6 +8800,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1InboxModule.monitor(payload || {}, env);
     case 'getLineOAChatMonitor':
       return await LineOAChatModule.monitor(payload || {}, env);
+    case 'sendLineOAChatReply':
+      return await LineOAChatModule.sendReply(payload || {}, env);
     case 'listInboxItems':
       return await D1InboxModule.list(payload || {}, env);
     case 'listSentInboxItems':

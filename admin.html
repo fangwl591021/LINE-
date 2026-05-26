@@ -25,6 +25,13 @@
     .nav-item.active { background-color: #eff6ff; color: #2563eb; } 
     .nav-item:not(.active) { color: #64748b; } 
     .nav-item:not(.active):hover { background-color: #f8fafc; color: #475569; } 
+    #admin-sidebar { transition: width .2s ease; }
+    #admin-sidebar.sidebar-collapsed { width: 84px; }
+    #admin-sidebar.sidebar-collapsed .sidebar-copy,
+    #admin-sidebar.sidebar-collapsed .sidebar-section,
+    #admin-sidebar.sidebar-collapsed .nav-label { display: none; }
+    #admin-sidebar.sidebar-collapsed .nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
+    #admin-sidebar.sidebar-collapsed .material-symbols-outlined { margin-right: 0 !important; }
     
     .data-table { width: 100%; border-collapse: collapse; text-align: left; }
     .data-table th { background-color: #f8fafc; padding: 14px 16px; font-size: 13px; color: #344054; font-weight: 700; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
@@ -394,8 +401,8 @@
   <div id="toast-container" class="fixed top-6 left-1/2 -translate-x-1/2 z-[10000] flex flex-col gap-2 pointer-events-none w-max"></div>
 
   <!-- 左側邊欄 (Sidebar) -->
-  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative shrink-0">
-    <div class="h-24 flex items-center px-6 border-b border-slate-100 shrink-0">
+  <aside id="admin-sidebar" class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative shrink-0">
+    <div class="h-24 flex items-center px-6 border-b border-slate-100 shrink-0 gap-3">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/30 shrink-0">
           <span class="material-symbols-outlined text-[24px]">shield_person</span>
@@ -1502,6 +1509,14 @@
       if (tabId === 'lineoa-monitor') loadLineOAMonitor();
     }
 
+    try {
+      if (localStorage.getItem('admin_sidebar_collapsed') === '1') {
+        document.getElementById('admin-sidebar')?.classList.add('sidebar-collapsed');
+        const icon = document.getElementById('sidebar-toggle-icon');
+        if (icon) icon.textContent = 'left_panel_open';
+      }
+    } catch (e) {}
+
     function openLineOATool() {
       try {
         if (window.liff && typeof liff.isLoggedIn === 'function' && liff.isLoggedIn()) {
@@ -1598,7 +1613,7 @@
           </div>
         </div>
 
-        <div>
+        <div class="sidebar-copy min-w-0">
           <h4 class="text-sm font-black text-slate-700 mb-3">活躍對話</h4>
           <div class="grid grid-cols-2 gap-4">${threadHtml}</div>
         </div>
@@ -1662,8 +1677,11 @@
                 <div class="flex items-center gap-2 mt-2">
                   <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-black">${monitorNumber(thread.message_count)} 則</span>
                   ${unread ? `<span class="px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[11px] font-black">${monitorNumber(unread)} 未讀</span>` : '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-black">已讀</span>'}
-                </div>
-              </div>
+      </div>
+      <button type="button" onclick="toggleAdminSidebar()" class="ml-auto w-9 h-9 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center active:scale-95" title="收合選單">
+        <span id="sidebar-toggle-icon" class="material-symbols-outlined text-[20px]">left_panel_close</span>
+      </button>
+    </div>
             </div>
           </button>`;
       }).join('') : '<div class="p-8 text-center text-slate-400 font-bold">尚未收到 LINE OA webhook 訊息</div>';
@@ -1697,9 +1715,29 @@
                 <h4 class="font-black text-slate-900">訊息時間線</h4>
                 <p class="text-xs font-bold text-slate-400 mt-1">${escapeHTML(activeThreadId || '尚未選擇對話')}</p>
               </div>
-              <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-black">只監看，不自動回覆</span>
+              <div class="flex items-center gap-2">
+                <a href="https://hotel.fangwl591021.workers.dev/kb" target="_blank" rel="noopener" class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black">雲端知識庫</a>
+                <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-black">可人工回覆</span>
+              </div>
             </div>
             <div class="flex-1 overflow-y-auto p-5">${messageHtml}</div>
+            <div class="bg-white border-t border-slate-200 p-4 space-y-3">
+              <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_220px] gap-3">
+                <textarea id="lineoa-reply-text" rows="3" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 focus:bg-white resize-none" placeholder="輸入要送給 LINE 用戶的回覆..."></textarea>
+                <div class="grid gap-2">
+                  <button type="button" onclick="sendLineOAChatReply('${escapeHTML(activeThreadId)}')" class="rounded-2xl bg-blue-600 text-white px-5 py-3 text-sm font-black active:scale-95">送出 LINE 回覆</button>
+                  <button type="button" onclick="openLineOAKnowledgeBase()" class="rounded-2xl border border-slate-200 bg-white text-slate-700 px-5 py-3 text-sm font-black active:scale-95">開啟雲端知識庫</button>
+                </div>
+              </div>
+              <details class="rounded-2xl bg-slate-50 border border-slate-200 p-3">
+                <summary class="cursor-pointer text-sm font-black text-slate-700">腳本素材整理</summary>
+                <textarea id="lineoa-kb-script" rows="5" class="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:border-emerald-500 resize-none" placeholder="把常用回覆、SOP、FAQ 腳本貼在這裡，整理後可貼到雲端知識庫。"></textarea>
+                <div class="mt-2 flex gap-2">
+                  <button type="button" onclick="copyLineOAKbScript()" class="rounded-xl bg-slate-900 text-white px-4 py-2 text-xs font-black">複製腳本</button>
+                  <a href="https://hotel.fangwl591021.workers.dev/kb" target="_blank" rel="noopener" class="rounded-xl bg-emerald-50 text-emerald-700 px-4 py-2 text-xs font-black">上傳到雲端知識庫</a>
+                </div>
+              </details>
+            </div>
           </section>
         </div>`;
     }
@@ -1714,6 +1752,43 @@
         return;
       }
       renderLineOAChatMonitor(data);
+    }
+
+    function toggleAdminSidebar() {
+      const sidebar = document.getElementById('admin-sidebar');
+      const icon = document.getElementById('sidebar-toggle-icon');
+      if (!sidebar) return;
+      sidebar.classList.toggle('sidebar-collapsed');
+      const collapsed = sidebar.classList.contains('sidebar-collapsed');
+      if (icon) icon.textContent = collapsed ? 'left_panel_open' : 'left_panel_close';
+      try { localStorage.setItem('admin_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+    }
+
+    function openLineOAKnowledgeBase() {
+      window.open('https://hotel.fangwl591021.workers.dev/kb', '_blank', 'noopener');
+    }
+
+    async function copyLineOAKbScript() {
+      const text = document.getElementById('lineoa-kb-script')?.value || '';
+      if (!text.trim()) return showToast('請先輸入腳本內容', true);
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('腳本已複製，可貼到雲端知識庫');
+      } catch (e) {
+        showToast('複製失敗，請手動選取內容', true);
+      }
+    }
+
+    async function sendLineOAChatReply(threadId) {
+      const textarea = document.getElementById('lineoa-reply-text');
+      const text = textarea?.value?.trim() || '';
+      if (!threadId) return showToast('請先選擇對話', true);
+      if (!text) return showToast('請輸入回覆內容', true);
+      const res = await fetchAPI('sendLineOAChatReply', { threadId, text }, { timeoutMs: 20000 });
+      if (!res) return showToast('LINE 回覆送出失敗', true);
+      if (textarea) textarea.value = '';
+      showToast('LINE 回覆已送出');
+      await loadLineOAMonitor(threadId);
     }
 
     function normalizeApiList(res, keys = []) {
