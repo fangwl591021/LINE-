@@ -279,6 +279,7 @@ const SecurityModule = {
       'deployRichMenu',
       'getLineOAChatMonitor',
       'getLineOAChatCrm',
+      'uploadLineOAAsset',
       'sendLineOAChatReply',
       'updateLineOAChatThread',
       'listAdminAnnouncements',
@@ -353,6 +354,7 @@ const SecurityModule = {
       'extractLineVoomMedia',
       'getLineOAChatMonitor',
       'getLineOAChatCrm',
+      'uploadLineOAAsset',
       'sendLineOAChatReply',
       'updateLineOAChatThread'
     ]);
@@ -777,9 +779,23 @@ const LineOAChatModule = {
     const optionalThreadColumns = [
       `ALTER TABLE line_oa_threads ADD COLUMN opportunity_stage TEXT NOT NULL DEFAULT 'new'`,
       `ALTER TABLE line_oa_threads ADD COLUMN opportunity_value INTEGER NOT NULL DEFAULT 0`,
-      `ALTER TABLE line_oa_threads ADD COLUMN opportunity_note TEXT NOT NULL DEFAULT ''`
+      `ALTER TABLE line_oa_threads ADD COLUMN opportunity_note TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE line_oa_threads ADD COLUMN ai_paused INTEGER NOT NULL DEFAULT 0`
     ];
     for (const sql of optionalThreadColumns) {
+      try {
+        await env.ACTMASTER_DB.prepare(sql).run();
+      } catch (e) {
+        if (!String(e?.message || e).toLowerCase().includes('duplicate column')) throw e;
+      }
+    }
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_threads_ai_paused ON line_oa_threads(ai_paused, updated_at)').run();
+    const optionalMessageColumns = [
+      `ALTER TABLE line_oa_messages ADD COLUMN media_url TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE line_oa_messages ADD COLUMN media_content_type TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE line_oa_messages ADD COLUMN media_size INTEGER NOT NULL DEFAULT 0`
+    ];
+    for (const sql of optionalMessageColumns) {
       try {
         await env.ACTMASTER_DB.prepare(sql).run();
       } catch (e) {
@@ -885,10 +901,53 @@ const LineOAChatModule = {
   },
 
   async pushLineMessage(userId, text, env) {
+    return await this.pushLineMessages(userId, [{ type: 'text', text }], env);
+  },
+
+  normalizeOutboundMessage(item = {}) {
+    const type = this.text(item.type);
+    if (type === 'text') {
+      const text = this.text(item.text);
+      if (!text) return null;
+      if (text.length > 5000) throw new Error('TEXT_TOO_LONG');
+      return { type: 'text', text };
+    }
+    if (type === 'image') {
+      const originalContentUrl = this.text(item.originalContentUrl || item.url);
+      const previewImageUrl = this.text(item.previewImageUrl || item.previewUrl || originalContentUrl);
+      if (!/^https:\/\//i.test(originalContentUrl) || !/^https:\/\//i.test(previewImageUrl)) return null;
+      return { type: 'image', originalContentUrl, previewImageUrl };
+    }
+    if (type === 'flex') {
+      const contents = item.contents;
+      const altText = this.text(item.altText || '客服訊息').slice(0, 400) || '客服訊息';
+      if (!contents || typeof contents !== 'object') return null;
+      return { type: 'flex', altText, contents };
+    }
+    return null;
+  },
+
+  normalizeOutboundMessages(messages = []) {
+    const items = (Array.isArray(messages) ? messages : [])
+      .filter(item => item && typeof item === 'object')
+      .slice(0, 5)
+      .map(item => this.normalizeOutboundMessage(item))
+      .filter(Boolean);
+    if (!items.length) throw new Error('MISSING_MESSAGES');
+    return items;
+  },
+
+  summarizeOutboundMessage(message = {}) {
+    if (message.type === 'text') return this.text(message.text);
+    if (message.type === 'image') return '客服傳送圖片';
+    if (message.type === 'flex') return this.text(message.altText, '客服傳送多頁訊息');
+    return '客服傳送訊息';
+  },
+
+  async pushLineMessages(userId, messages = [], env) {
     const target = this.text(userId);
-    const body = this.text(text);
     if (!target) return { success: false, error: 'Missing LINE userId' };
-    if (!body) return { success: false, error: 'Missing reply text' };
+    const safeMessages = this.normalizeOutboundMessages(messages);
     if (!env.LINE_CHANNEL_ACCESS_TOKEN) return { success: false, error: 'Missing LINE_CHANNEL_ACCESS_TOKEN' };
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
@@ -896,41 +955,99 @@ const LineOAChatModule = {
         Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ to: target, messages: [{ type: 'text', text: body.slice(0, 5000) }] })
+      body: JSON.stringify({ to: target, messages: safeMessages })
     });
     const responseText = await res.text();
     if (!res.ok) return { success: false, status: res.status, error: responseText || `LINE Push API HTTP ${res.status}` };
-    return { success: true, status: res.status };
+    return { success: true, status: res.status, count: safeMessages.length };
+  },
+
+  decodeBase64DataUrl(value = '') {
+    const input = this.text(value);
+    if (!input) return null;
+    const match = input.match(/^data:([^;,]+);base64,(.+)$/i);
+    const contentType = match ? match[1] : 'application/octet-stream';
+    const base64 = (match ? match[2] : input).replace(/\s+/g, '');
+    if (!base64) return null;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return { contentType, bytes };
+  },
+
+  safeAssetName(value = '') {
+    return this.text(value, 'line-oa-asset')
+      .replace(/[\\/:*?"<>|#%{}^~[\]`]+/g, '_')
+      .replace(/\s+/g, '_')
+      .slice(0, 120) || 'line-oa-asset';
+  },
+
+  async uploadAsset(payload, env) {
+    if (!env.IMG_BUCKET) return { success: false, error: 'IMG_BUCKET_MISSING' };
+    const decoded = this.decodeBase64DataUrl(payload.base64 || payload.dataUrl || payload.file);
+    if (!decoded?.bytes?.length) return { success: false, error: 'MISSING_FILE' };
+    const contentType = this.text(payload.contentType || decoded.contentType, decoded.contentType || 'application/octet-stream');
+    const filename = this.safeAssetName(payload.filename || `line-oa-${Date.now()}`);
+    const key = `line-oa/outbound/${Date.now()}_${filename}`;
+    await env.IMG_BUCKET.put(key, decoded.bytes, { httpMetadata: { contentType } });
+    const baseUrl = (env.R2_PUBLIC_URL || env.R2_WORKER_URL || 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev').replace(/\/$/, '');
+    return {
+      success: true,
+      data: {
+        url: `${baseUrl}/${key}`,
+        key,
+        filename,
+        contentType,
+        size: decoded.bytes.length
+      }
+    };
   },
 
   async sendReply(payload, env) {
     await this.ensure(env);
     const threadId = this.text(payload.threadId);
     const text = this.text(payload.text || payload.body || payload.message);
+    const rawMessages = Array.isArray(payload.messages) ? payload.messages : [];
+    const messages = rawMessages.length ? this.normalizeOutboundMessages(rawMessages) : (text ? [{ type: 'text', text }] : []);
     if (!threadId) return { success: false, error: 'Missing threadId' };
-    if (!text) return { success: false, error: 'Missing reply text' };
+    if (!messages.length) return { success: false, error: 'Missing reply messages' };
     const thread = await D1ReadModule.first(env, 'SELECT * FROM line_oa_threads WHERE thread_id = ? LIMIT 1', [threadId]);
     if (!thread) return { success: false, error: 'Thread not found' };
     const userId = this.text(thread.user_id);
-    const pushResult = await this.pushLineMessage(userId, text, env);
+    const pushResult = await this.pushLineMessages(userId, messages, env);
     if (!pushResult.success) return pushResult;
     const now = new Date().toISOString();
-    const messageId = `OUT_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    await env.ACTMASTER_DB.prepare(`
-      INSERT INTO line_oa_messages (
-        message_id,thread_id,user_id,direction,message_type,text_content,event_type,reply_token,raw_json,created_at
-      ) VALUES (?, ?, ?, 'outbound', 'text', ?, 'admin_reply', '', ?, ?)
-    `).bind(messageId, threadId, userId, text, JSON.stringify({
-      operatorId: this.text(payload.authenticatedUserId || payload.userId),
-      source: 'admin_console'
-    }), now).run();
+    let messageId = '';
+    for (const message of messages) {
+      messageId = `OUT_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await env.ACTMASTER_DB.prepare(`
+        INSERT INTO line_oa_messages (
+          message_id,thread_id,user_id,direction,message_type,text_content,event_type,reply_token,raw_json,media_url,media_content_type,media_size,created_at
+        ) VALUES (?, ?, ?, 'outbound', ?, ?, 'admin_reply', '', ?, ?, ?, 0, ?)
+      `).bind(
+        messageId,
+        threadId,
+        userId,
+        message.type || 'text',
+        this.summarizeOutboundMessage(message),
+        JSON.stringify({
+          operatorId: this.text(payload.authenticatedUserId || payload.userId),
+          source: 'admin_console',
+          message
+        }),
+        message.type === 'image' ? message.originalContentUrl : '',
+        message.type === 'image' ? 'image' : '',
+        now
+      ).run();
+    }
+    const summaryText = messages.map(message => this.summarizeOutboundMessage(message)).filter(Boolean).join('\n').slice(0, 1000);
     await env.ACTMASTER_DB.prepare(`
       UPDATE line_oa_threads
       SET last_message_text = ?, last_message_type = 'text', last_event_type = 'admin_reply',
           message_count = message_count + 1, unread_count = 0, updated_at = CURRENT_TIMESTAMP, last_event_at = ?
       WHERE thread_id = ?
-    `).bind(text, now, threadId).run();
-    return { success: true, data: { messageId, threadId, userId } };
+    `).bind(summaryText, now, threadId).run();
+    return { success: true, data: { messageId, threadId, userId, messageCount: messages.length } };
   },
 
   async updateThread(payload, env) {
@@ -947,6 +1064,9 @@ const LineOAChatModule = {
     const opportunityStage = allowedOpportunity.has(this.text(payload.opportunityStage)) ? this.text(payload.opportunityStage) : '';
     const opportunityValue = Math.max(0, Math.round(Number(payload.opportunityValue || 0) || 0));
     const opportunityNote = this.text(payload.opportunityNote).slice(0, 5000);
+    const aiPaused = payload.aiPaused === undefined && payload.ai_paused === undefined
+      ? null
+      : ((payload.aiPaused ?? payload.ai_paused) === true || String(payload.aiPaused ?? payload.ai_paused) === '1' ? 1 : 0);
 
     const current = await D1ReadModule.first(env, 'SELECT * FROM line_oa_threads WHERE thread_id = ? LIMIT 1', [threadId]);
     if (!current) return { success: false, error: 'Thread not found' };
@@ -958,6 +1078,7 @@ const LineOAChatModule = {
           opportunity_stage = COALESCE(NULLIF(?, ''), opportunity_stage),
           opportunity_value = ?,
           opportunity_note = ?,
+          ai_paused = COALESCE(?, ai_paused),
           unread_count = CASE WHEN ? = 'closed' THEN 0 ELSE unread_count END,
           updated_at = CURRENT_TIMESTAMP
       WHERE thread_id = ?
@@ -968,6 +1089,7 @@ const LineOAChatModule = {
       opportunityStage,
       opportunityValue,
       opportunityNote,
+      aiPaused,
       status,
       threadId
     ).run();
@@ -1062,7 +1184,9 @@ const LineOAChatModule = {
       await saveJob;
       await forwardJob;
     }
-    const gasResult = await this.forwardToGas(rawBody, env);
+    const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);
+    if (!gasRawBody) return new Response('OK', { status: 200 });
+    const gasResult = await this.forwardToGas(gasRawBody, env);
     if (gasResult.success) {
       const replyPayload = this.normalizeReplyPayload(gasResult.data);
       const replyResult = await this.replyLine(replyPayload, env);
@@ -1071,6 +1195,28 @@ const LineOAChatModule = {
       console.error('GAS LINE_WEBHOOK failed', gasResult);
     }
     return new Response('OK', { status: 200 });
+  },
+
+  async isAiPaused(env, threadId) {
+    if (!env.ACTMASTER_DB || !threadId) return false;
+    await this.ensure(env);
+    const row = await D1ReadModule.first(env, 'SELECT ai_paused FROM line_oa_threads WHERE thread_id = ? LIMIT 1', [threadId]).catch(() => null);
+    return Number(row?.ai_paused || 0) === 1;
+  },
+
+  async filterAutoReplyPayload(rawBody, events, env) {
+    if (!Array.isArray(events) || !events.length || !env.ACTMASTER_DB) return rawBody;
+    const activeEvents = [];
+    for (const event of events) {
+      const userId = this.eventUserId(event);
+      const threadId = userId ? `line:${userId}` : '';
+      const paused = await this.isAiPaused(env, threadId);
+      if (!paused) activeEvents.push(event);
+    }
+    if (!activeEvents.length) return '';
+    if (activeEvents.length === events.length) return rawBody;
+    const body = JSON.parse(rawBody || '{}');
+    return JSON.stringify({ ...body, events: activeEvents });
   },
 
   async hubTest(env) {
@@ -1152,7 +1298,7 @@ const LineOAChatModule = {
     `, []);
     const threads = await D1ReadModule.all(env, `
       SELECT thread_id,user_id,source_type,display_name,picture_url,last_message_text,last_message_type,last_event_type,
-             message_count,unread_count,status,tags,note,opportunity_stage,opportunity_value,opportunity_note,last_event_at,updated_at
+             message_count,unread_count,status,tags,note,opportunity_stage,opportunity_value,opportunity_note,ai_paused,last_event_at,updated_at
       FROM line_oa_threads
       ORDER BY COALESCE(NULLIF(last_event_at, ''), updated_at) DESC
       LIMIT ?
@@ -1246,6 +1392,7 @@ const LineOAChatModule = {
       opportunityStage: row.opportunity_stage || 'new',
       opportunityValue: Number(row.opportunity_value || 0),
       opportunityNote: row.opportunity_note || '',
+      aiPaused: Number(row.ai_paused || 0) === 1,
       visitorRecords: records
     };
   },
@@ -1255,7 +1402,7 @@ const LineOAChatModule = {
     const limit = Math.min(Math.max(Number(payload.limit || 300) || 300, 1), 500);
     const rows = await D1ReadModule.all(env, `
       SELECT thread_id,user_id,source_type,display_name,picture_url,last_message_text,last_message_type,last_event_type,
-             message_count,unread_count,status,tags,note,opportunity_stage,opportunity_value,opportunity_note,last_event_at,updated_at
+             message_count,unread_count,status,tags,note,opportunity_stage,opportunity_value,opportunity_note,ai_paused,last_event_at,updated_at
       FROM line_oa_threads
       ORDER BY COALESCE(NULLIF(last_event_at, ''), updated_at) DESC
       LIMIT ?
@@ -8996,6 +9143,8 @@ async function dispatchAction(action, payload, request, env) {
       return await LineOAChatModule.monitor(payload || {}, env);
     case 'getLineOAChatCrm':
       return await LineOAChatModule.crm(payload || {}, env);
+    case 'uploadLineOAAsset':
+      return await LineOAChatModule.uploadAsset(payload || {}, env);
     case 'sendLineOAChatReply':
       return await LineOAChatModule.sendReply(payload || {}, env);
     case 'updateLineOAChatThread':
@@ -9097,6 +9246,13 @@ export default {
         const authz = await SecurityModule.authorizeAction('getLineOAChatCrm', payload, request, env);
         if (!authz.allowed) return Utils.jsonResponse({ success: false, error: authz.error || 'Access Denied' }, 403);
         return Utils.jsonResponse(await LineOAChatModule.crm(payload, env));
+      }
+      if (request.method === 'POST' && url.pathname === '/api/line-oa/upload-asset') {
+        const payload = await request.json();
+        payload.pt_uid = payload.pt_uid || payload.uid || payload.userId || '';
+        const authz = await SecurityModule.authorizeAction('uploadLineOAAsset', payload, request, env);
+        if (!authz.allowed) return Utils.jsonResponse({ success: false, error: authz.error || 'Access Denied' }, 403);
+        return Utils.jsonResponse(await LineOAChatModule.uploadAsset(payload, env));
       }
       if (url.pathname === '/webhook/line' || url.pathname === '/line-webhook') {
         return await LineOAChatModule.handleWebhook(request, env, ctx || { waitUntil: promise => promise });

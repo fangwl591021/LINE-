@@ -99,17 +99,43 @@
           </div>
           <div class="flex flex-wrap gap-2 items-center">
             <button id="open-records" class="px-4 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 text-sm font-semibold">重要紀錄</button>
+            <button id="manual-handoff" class="px-4 py-2 rounded-xl border border-rose-300 bg-rose-50 text-rose-700 text-sm font-semibold">人工回應</button>
             <button id="mark-open" class="status-btn px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold" data-status="open">待回覆</button>
             <button id="mark-pending" class="status-btn px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold" data-status="pending">處理中</button>
             <button id="mark-closed" class="status-btn px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold" data-status="closed">已處理</button>
           </div>
         </div>
-        <div class="px-6 py-3 bg-slate-600 text-white text-sm font-semibold">
+        <div id="ai-mode-banner" class="px-6 py-3 bg-slate-600 text-white text-sm font-semibold">
           這裡做監看、標記、建議回覆與人工送出；不自動接管真人客服流程。
         </div>
         <div id="chat-messages" class="flex-1 overflow-y-auto bg-slate-300/80 grid-bg px-6 py-6 space-y-4"></div>
         <div class="border-t border-slate-200 bg-white px-4 py-3">
           <div id="reply-suggestions" class="flex flex-wrap gap-3 mb-4"></div>
+          <div id="reply-content-panel" hidden class="mb-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex flex-wrap gap-2 mb-4">
+              <button type="button" class="reply-mode rounded-full bg-slate-900 text-white px-4 py-2 text-sm font-semibold" data-mode="text">文字</button>
+              <button type="button" class="reply-mode rounded-full bg-white text-slate-700 border border-slate-200 px-4 py-2 text-sm font-semibold" data-mode="image">圖片</button>
+              <button type="button" class="reply-mode rounded-full bg-white text-slate-700 border border-slate-200 px-4 py-2 text-sm font-semibold" data-mode="file">文件 / 檔案</button>
+              <button type="button" class="reply-mode rounded-full bg-white text-slate-700 border border-slate-200 px-4 py-2 text-sm font-semibold" data-mode="flex">多頁訊息</button>
+            </div>
+            <div id="reply-mode-image" hidden class="space-y-3">
+              <input id="reply-image-file" type="file" accept="image/*" class="block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+              <input id="reply-image-url" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-500" placeholder="或貼上已公開的圖片 HTTPS URL">
+            </div>
+            <div id="reply-mode-file" hidden class="space-y-3">
+              <input id="reply-file-input" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.txt,.zip" class="block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+              <input id="reply-file-title" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-500" placeholder="文件標題，例如：活動說明 / 報名表 / PDF">
+              <input id="reply-file-note" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-500" placeholder="補充說明，例如：請下載後確認內容">
+            </div>
+            <div id="reply-mode-flex" hidden class="space-y-3">
+              <textarea id="reply-flex-json" rows="8" class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 font-mono text-xs leading-5 outline-none focus:border-emerald-500" placeholder='貼上 Flex contents JSON，例如 {"type":"carousel","contents":[...]} 或完整 {"type":"flex","altText":"...","contents":...}'></textarea>
+              <div class="flex gap-2">
+                <input id="reply-flex-alt" class="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-500" placeholder="替代文字，例如：多頁客服訊息">
+                <button id="reply-flex-sample" type="button" class="rounded-2xl bg-slate-900 text-white px-4 py-3 text-sm font-semibold">範例</button>
+              </div>
+            </div>
+            <p id="reply-content-hint" class="mt-3 text-xs text-slate-500">文字模式：直接輸入內容後送出。</p>
+          </div>
           <div class="flex items-end gap-3">
             <button id="reply-emoji" type="button" title="插入表情" class="w-10 h-10 rounded-full border border-slate-300 bg-white text-lg text-slate-500 hover:bg-slate-50">☺</button>
             <button id="reply-attach" type="button" title="附件提醒" class="w-10 h-10 rounded-full border border-slate-300 bg-white text-lg text-slate-500 hover:bg-slate-50">📎</button>
@@ -258,6 +284,7 @@
     let messages = [];
     let activeThreadId = new URLSearchParams(location.search).get('thread') || '';
     let replyToolMode = '';
+    let replyContentMode = 'text';
 
     const el = id => document.getElementById(id);
     function captureTokenFromHash() {
@@ -305,6 +332,152 @@
       return data.data || data;
     }
 
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(reader.error || new Error('檔案讀取失敗'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadReplyAsset(file) {
+      if (!file) throw new Error('請先選擇檔案');
+      const base64 = await fileToDataUrl(file);
+      const result = await api('uploadLineOAAsset', {
+        filename: file.name,
+        contentType: file.type || 'application/octet-stream',
+        base64
+      });
+      const asset = result.data || result;
+      if (!asset.url) throw new Error('檔案上傳失敗');
+      return asset;
+    }
+
+    function setReplyContentMode(mode = 'text') {
+      replyContentMode = ['text', 'image', 'file', 'flex'].includes(mode) ? mode : 'text';
+      document.querySelectorAll('.reply-mode').forEach(button => {
+        const active = button.dataset.mode === replyContentMode;
+        button.className = active
+          ? 'reply-mode rounded-full bg-slate-900 text-white px-4 py-2 text-sm font-semibold'
+          : 'reply-mode rounded-full bg-white text-slate-700 border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-white';
+      });
+      ['image', 'file', 'flex'].forEach(name => {
+        const section = el(`reply-mode-${name}`);
+        if (section) section.hidden = replyContentMode !== name;
+      });
+      const hints = {
+        text: '文字模式：直接輸入內容後送出。',
+        image: '圖片模式：可上傳圖片或貼上公開 HTTPS 圖片 URL。',
+        file: '文件模式：會上傳檔案並以 Flex 訊息提供下載連結。',
+        flex: '多頁訊息：貼上 Flex bubble/carousel JSON 後送出。'
+      };
+      el('reply-content-hint').textContent = hints[replyContentMode] || hints.text;
+    }
+
+    function buildFileFlex(asset) {
+      const title = safe(el('reply-file-title').value || asset.filename || '客服文件').slice(0, 80);
+      const note = safe(el('reply-file-note').value || '請點選下方按鈕開啟文件。').slice(0, 160);
+      return {
+        type: 'flex',
+        altText: title,
+        contents: {
+          type: 'bubble',
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'md',
+            contents: [
+              { type: 'text', text: title, weight: 'bold', size: 'lg', wrap: true },
+              { type: 'text', text: note, size: 'sm', color: '#64748b', wrap: true },
+              { type: 'text', text: asset.filename || '', size: 'xs', color: '#94a3b8', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'vertical',
+            contents: [{ type: 'button', style: 'primary', action: { type: 'uri', label: '開啟文件', uri: asset.url } }]
+          }
+        }
+      };
+    }
+
+    function parseFlexMessage() {
+      const raw = el('reply-flex-json').value.trim();
+      if (!raw) throw new Error('請先貼上 Flex JSON');
+      const parsed = JSON.parse(raw);
+      if (parsed.type === 'flex' && parsed.contents) {
+        return {
+          type: 'flex',
+          altText: safe(parsed.altText || el('reply-flex-alt').value || '客服訊息').slice(0, 400),
+          contents: parsed.contents
+        };
+      }
+      if (parsed.type === 'bubble' || parsed.type === 'carousel') {
+        return {
+          type: 'flex',
+          altText: safe(el('reply-flex-alt').value || '客服訊息').slice(0, 400),
+          contents: parsed
+        };
+      }
+      throw new Error('Flex JSON 必須是 bubble、carousel 或完整 flex message');
+    }
+
+    async function buildReplyMessages(text) {
+      const outbound = [];
+      if (text) outbound.push({ type: 'text', text });
+      if (replyContentMode === 'image') {
+        let url = el('reply-image-url').value.trim();
+        if (!url && el('reply-image-file').files?.[0]) {
+          const asset = await uploadReplyAsset(el('reply-image-file').files[0]);
+          url = asset.url;
+        }
+        if (!url) throw new Error('請先選擇圖片或貼上圖片 URL');
+        outbound.push({ type: 'image', originalContentUrl: url, previewImageUrl: url });
+      } else if (replyContentMode === 'file') {
+        const asset = await uploadReplyAsset(el('reply-file-input').files?.[0]);
+        outbound.push(buildFileFlex(asset));
+      } else if (replyContentMode === 'flex') {
+        outbound.push(parseFlexMessage());
+      }
+      if (!outbound.length) throw new Error('請先輸入或選擇要送出的內容');
+      if (outbound.length > 5) throw new Error('LINE 單次最多 5 則訊息');
+      return outbound;
+    }
+
+    function insertFlexSample() {
+      el('reply-flex-alt').value = el('reply-flex-alt').value || '客服多頁訊息';
+      el('reply-flex-json').value = JSON.stringify({
+        type: 'carousel',
+        contents: [
+          {
+            type: 'bubble',
+            body: {
+              type: 'box',
+              layout: 'vertical',
+              spacing: 'md',
+              contents: [
+                { type: 'text', text: '方案 A', weight: 'bold', size: 'lg' },
+                { type: 'text', text: '這裡放第一個方案或說明。', size: 'sm', wrap: true }
+              ]
+            }
+          },
+          {
+            type: 'bubble',
+            body: {
+              type: 'box',
+              layout: 'vertical',
+              spacing: 'md',
+              contents: [
+                { type: 'text', text: '方案 B', weight: 'bold', size: 'lg' },
+                { type: 'text', text: '這裡放第二個方案或說明。', size: 'sm', wrap: true }
+              ]
+            }
+          }
+        ]
+      }, null, 2);
+    }
+
     function fmt(value) {
       if (!value) return '';
       const d = new Date(String(value).includes('T') ? value : String(value).replace(' ', 'T'));
@@ -331,6 +504,7 @@
         opportunityStage: row.opportunity_stage || 'new',
         opportunityValue: Number(row.opportunity_value || 0),
         opportunityNote: row.opportunity_note || '',
+        aiPaused: row.aiPaused === true || Number(row.ai_paused || 0) === 1,
         lastMessageAt: row.last_event_at || row.updated_at || ''
       };
     }
@@ -437,6 +611,7 @@
                 <span class="px-3 py-1 rounded-full text-xs font-semibold ${statusClass(item.status)}">${statusLabel(item.status)}</span>
                 <span class="px-3 py-1 rounded-full text-xs font-semibold ${opportunityClass(item.opportunityStage)}">${opportunityLabel(item.opportunityStage)}</span>
                 <span class="px-3 py-1 rounded-full text-xs font-semibold ${riskClass(item.risk)}">${riskLabel(item.risk)}</span>
+                ${item.aiPaused ? '<span class="px-3 py-1 rounded-full text-xs font-semibold bg-rose-600 text-white">人工接手</span>' : ''}
                 ${item.unread > 0 ? `<span class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-900 text-white">${item.unread} 則</span>` : ''}
               </div>
             </div>
@@ -514,6 +689,24 @@
       });
     }
 
+    function syncAiPauseControls(thread) {
+      const button = el('manual-handoff');
+      const banner = el('ai-mode-banner');
+      if (!button || !banner) return;
+      const paused = !!thread?.aiPaused;
+      button.disabled = !thread;
+      button.textContent = paused ? '恢復 AI 回覆' : '人工回應';
+      button.className = paused
+        ? 'px-4 py-2 rounded-xl border border-emerald-300 bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600'
+        : 'px-4 py-2 rounded-xl border border-rose-300 bg-rose-50 text-rose-700 text-sm font-semibold hover:bg-rose-100';
+      banner.className = paused
+        ? 'px-6 py-3 bg-rose-600 text-white text-sm font-semibold'
+        : 'px-6 py-3 bg-slate-600 text-white text-sm font-semibold';
+      banner.textContent = paused
+        ? '人工接手中：此聊天室會暫停 AI 自動回覆，只保留人工送出。'
+        : '這裡做監看、標記、建議回覆與人工送出；不自動接管真人客服流程。';
+    }
+
     function renderActiveThread(thread) {
       if (!thread) {
         el('chat-view').hidden = true;
@@ -529,6 +722,7 @@
         renderRecords(null);
         renderTags(null);
         syncStatusButtons('');
+        syncAiPauseControls(null);
         return;
       }
       el('chat-view').hidden = false;
@@ -553,6 +747,7 @@
       renderRecords(thread);
       renderOpportunity(thread);
       syncStatusButtons(thread.status || 'open');
+      syncAiPauseControls(thread);
       const merged = messages.map(m => m.text).join('\n') + '\n' + thread.summary;
       const hits = [...new Set(RISK_KEYWORDS.filter(k => merged.includes(k)))];
       el('risk-count').textContent = String(hits.length);
@@ -582,7 +777,8 @@
         note: patch.note ?? el('internal-note').value,
         opportunityStage: patch.opportunityStage ?? el('opportunity-stage').value,
         opportunityValue: patch.opportunityValue ?? Number(el('opportunity-value').value || 0),
-        opportunityNote: patch.opportunityNote ?? el('opportunity-note').value
+        opportunityNote: patch.opportunityNote ?? el('opportunity-note').value,
+        aiPaused: patch.aiPaused ?? thread.aiPaused
       });
       threads = (data.threads || []).map(normalizeThread);
       messages = (data.messages || []).map(normalizeMessage);
@@ -596,13 +792,19 @@
       const thread = getActiveThread();
       const text = el('draft-reply').value.trim();
       if (!thread) return showToast('請先選擇聊天室', 'error');
-      if (!text) return showToast('請先輸入要回覆的內容', 'error');
       const button = el('send-reply');
       button.disabled = true;
       button.classList.add('opacity-60');
       try {
-        await api('sendLineOAChatReply', { threadId: thread.id, text });
+        const outboundMessages = await buildReplyMessages(text);
+        await api('sendLineOAChatReply', { threadId: thread.id, messages: outboundMessages });
         el('draft-reply').value = '';
+        el('reply-image-file').value = '';
+        el('reply-image-url').value = '';
+        el('reply-file-input').value = '';
+        el('reply-file-title').value = '';
+        el('reply-file-note').value = '';
+        el('reply-flex-json').value = '';
         await loadMonitor(thread.id);
         showToast('已送出 LINE 回覆');
       } finally {
@@ -657,6 +859,7 @@
         opportunityStage: 'new',
         opportunityValue: 0,
         opportunityNote: '',
+        aiPaused: false,
         lastMessageAt: new Date().toISOString()
       };
       threads = [imported, ...threads];
@@ -695,8 +898,15 @@
       el('tools-toggle-label').textContent = el('tools-panel').hidden ? '展開' : '收合';
     });
     el('reply-emoji').addEventListener('click', () => renderReplyQuickTools(replyToolMode === 'emoji' ? '' : 'emoji'));
-    el('reply-attach').addEventListener('click', () => showToast('圖片、PDF、檔案請回 LINE OA 後台傳。', 'error'));
+    el('reply-attach').addEventListener('click', () => {
+      el('reply-content-panel').hidden = !el('reply-content-panel').hidden;
+      if (!el('reply-content-panel').hidden) setReplyContentMode(replyContentMode);
+    });
     el('reply-quick').addEventListener('click', () => renderReplyQuickTools(replyToolMode === 'quick' ? '' : 'quick'));
+    document.querySelectorAll('.reply-mode').forEach(button => {
+      button.addEventListener('click', () => setReplyContentMode(button.dataset.mode || 'text'));
+    });
+    el('reply-flex-sample').addEventListener('click', insertFlexSample);
     el('send-reply').addEventListener('click', () => sendReply().catch(err => showToast(err.message, 'error')));
     el('copy-reply').addEventListener('click', async () => {
       await navigator.clipboard.writeText(el('draft-reply').value || '').catch(() => {});
@@ -712,6 +922,14 @@
     el('save-opportunity').addEventListener('click', () => updateThreadMeta().catch(err => showToast(err.message, 'error')));
     document.querySelectorAll('.status-btn').forEach(button => {
       button.addEventListener('click', () => updateThreadMeta({ status: button.dataset.status }).catch(err => showToast(err.message, 'error')));
+    });
+    el('manual-handoff').addEventListener('click', () => {
+      const thread = getActiveThread();
+      if (!thread) return showToast('請先選擇聊天室', 'error');
+      updateThreadMeta({
+        aiPaused: !thread.aiPaused,
+        status: thread.aiPaused ? (thread.status || 'open') : 'pending'
+      }).catch(err => showToast(err.message, 'error'));
     });
     el('add-tag').addEventListener('click', () => {
       const thread = getActiveThread();
