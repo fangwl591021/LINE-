@@ -243,6 +243,7 @@
 
   <script>
     const WORKER_URL = 'https://line-engine.fangwl591021.workers.dev/';
+    const LIFF_ID = '1660923784-vViMTZ1y';
     const RISK_KEYWORDS = ['退費', '生氣', '投訴', '詐騙', '不能用', '沒同步', '未入帳', '客服', '緊急'];
     const QUICK_REPLY_TEXTS = [
       '您好，收到您的訊息了，我先幫您確認點數與會員紀錄，稍後回覆您。',
@@ -719,7 +720,23 @@
     el('open-broadcast').addEventListener('click', () => showToast('分時推播工作台入口已保留。'));
     el('open-crm').addEventListener('click', () => location.href = './admin.html');
 
-    loadMonitor().catch(err => {
+    async function initMonitor() {
+      if (!token() && window.liff && typeof liff.init === 'function') {
+        try {
+          await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
+          if (!liff.isLoggedIn()) {
+            liff.login({ redirectUri: location.href });
+            return;
+          }
+          localStorage.setItem('lineoa_access_token', liff.getAccessToken());
+        } catch (err) {
+          console.warn('LIFF login on monitor failed:', err);
+        }
+      }
+      await loadMonitor();
+    }
+
+    initMonitor().catch(err => {
       el('thread-list').innerHTML = `<div class="rounded-3xl border border-dashed border-rose-300 bg-rose-50 p-8 text-center text-rose-500 font-bold">${esc(err.message || '載入失敗，請先從後台登入')}</div>`;
     });
   </script>
