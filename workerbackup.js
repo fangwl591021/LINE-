@@ -279,6 +279,7 @@ const SecurityModule = {
       'deployRichMenu',
       'getLineOAChatMonitor',
       'sendLineOAChatReply',
+      'updateLineOAChatThread',
       'listAdminAnnouncements',
       'saveAnnouncement',
       'deleteAnnouncement'
@@ -768,6 +769,18 @@ const LineOAChatModule = {
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_threads_user ON line_oa_threads(user_id)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_messages_thread ON line_oa_messages(thread_id, created_at)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_messages_user ON line_oa_messages(user_id, created_at)').run();
+    const optionalThreadColumns = [
+      `ALTER TABLE line_oa_threads ADD COLUMN opportunity_stage TEXT NOT NULL DEFAULT 'new'`,
+      `ALTER TABLE line_oa_threads ADD COLUMN opportunity_value INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE line_oa_threads ADD COLUMN opportunity_note TEXT NOT NULL DEFAULT ''`
+    ];
+    for (const sql of optionalThreadColumns) {
+      try {
+        await env.ACTMASTER_DB.prepare(sql).run();
+      } catch (e) {
+        if (!String(e?.message || e).toLowerCase().includes('duplicate column')) throw e;
+      }
+    }
   },
 
   async verifySignature(rawBody, signature, env) {
@@ -913,6 +926,47 @@ const LineOAChatModule = {
       WHERE thread_id = ?
     `).bind(text, now, threadId).run();
     return { success: true, data: { messageId, threadId, userId } };
+  },
+
+  async updateThread(payload, env) {
+    await this.ensure(env);
+    const threadId = this.text(payload.threadId || payload.id);
+    if (!threadId) return { success: false, error: 'Missing threadId' };
+    const allowedStatus = new Set(['open', 'pending', 'closed']);
+    const status = allowedStatus.has(this.text(payload.status)) ? this.text(payload.status) : '';
+    const tags = Array.isArray(payload.tags)
+      ? payload.tags.map(v => this.text(v)).filter(Boolean).slice(0, 20).join(',')
+      : this.text(payload.tags);
+    const note = this.text(payload.note).slice(0, 5000);
+    const allowedOpportunity = new Set(['new', 'qualified', 'quoted', 'payment', 'won', 'lost']);
+    const opportunityStage = allowedOpportunity.has(this.text(payload.opportunityStage)) ? this.text(payload.opportunityStage) : '';
+    const opportunityValue = Math.max(0, Math.round(Number(payload.opportunityValue || 0) || 0));
+    const opportunityNote = this.text(payload.opportunityNote).slice(0, 5000);
+
+    const current = await D1ReadModule.first(env, 'SELECT * FROM line_oa_threads WHERE thread_id = ? LIMIT 1', [threadId]);
+    if (!current) return { success: false, error: 'Thread not found' };
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE line_oa_threads
+      SET status = COALESCE(NULLIF(?, ''), status),
+          tags = ?,
+          note = ?,
+          opportunity_stage = COALESCE(NULLIF(?, ''), opportunity_stage),
+          opportunity_value = ?,
+          opportunity_note = ?,
+          unread_count = CASE WHEN ? = 'closed' THEN 0 ELSE unread_count END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE thread_id = ?
+    `).bind(
+      status,
+      tags,
+      note,
+      opportunityStage,
+      opportunityValue,
+      opportunityNote,
+      status,
+      threadId
+    ).run();
+    return await this.monitor({ threadId, limit: Number(payload.limit || 30) || 30 }, env);
   },
 
   async forwardToSecondSystem(rawBody, signature, env) {
@@ -1093,7 +1147,7 @@ const LineOAChatModule = {
     `, []);
     const threads = await D1ReadModule.all(env, `
       SELECT thread_id,user_id,source_type,display_name,picture_url,last_message_text,last_message_type,last_event_type,
-             message_count,unread_count,status,tags,note,last_event_at,updated_at
+             message_count,unread_count,status,tags,note,opportunity_stage,opportunity_value,opportunity_note,last_event_at,updated_at
       FROM line_oa_threads
       ORDER BY COALESCE(NULLIF(last_event_at, ''), updated_at) DESC
       LIMIT ?
@@ -8802,6 +8856,8 @@ async function dispatchAction(action, payload, request, env) {
       return await LineOAChatModule.monitor(payload || {}, env);
     case 'sendLineOAChatReply':
       return await LineOAChatModule.sendReply(payload || {}, env);
+    case 'updateLineOAChatThread':
+      return await LineOAChatModule.updateThread(payload || {}, env);
     case 'listInboxItems':
       return await D1InboxModule.list(payload || {}, env);
     case 'listSentInboxItems':

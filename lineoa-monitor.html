@@ -6,112 +6,269 @@
   <title>點數通 LINE OA 聊天室監控</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
   <style>
-    body { font-family: system-ui, "Noto Sans TC", sans-serif; background:#eef3f8; }
+    body { font-family: "Noto Sans TC", system-ui, sans-serif; background:#eef3f8; font-size:15px; }
     [hidden] { display:none !important; }
-    .sidebar-collapsed { width: 84px !important; }
-    .sidebar-collapsed .collapse-hide { display:none !important; }
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(255,255,255,.12) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.12) 1px, transparent 1px);
+      background-size:40px 40px;
+    }
+    .left-collapsed { width:84px !important; }
+    .left-collapsed .collapse-hide { display:none !important; }
   </style>
 </head>
 <body class="h-screen overflow-hidden text-slate-900">
   <div class="h-screen flex overflow-hidden">
-    <aside id="left-sidebar" class="w-[360px] shrink-0 bg-white border-r border-slate-200 flex flex-col transition-all">
-      <header class="p-5 border-b border-slate-200">
-        <div class="flex items-start justify-between gap-3">
-          <div class="collapse-hide">
-            <h1 class="text-2xl font-black">LINE OA 聊天室監控</h1>
-            <p class="text-sm text-slate-500 mt-1">只監看、標記與人工回覆，不自動代回覆。</p>
+    <aside id="left-panel" class="w-[390px] shrink-0 border-r border-slate-200 bg-white flex flex-col transition-all">
+      <div class="px-5 py-4 border-b border-slate-200">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-full bg-emerald-500 text-white grid place-items-center font-bold text-lg shrink-0">OA</div>
+          <div class="min-w-0 flex-1 collapse-hide">
+            <h1 class="text-xl font-bold">LINE 聊天室監控</h1>
+            <p class="text-sm text-slate-500 mt-1">只監看、標記與分析，不自動代回覆。</p>
           </div>
-          <button id="toggle-sidebar" type="button" class="w-11 h-11 rounded-2xl bg-slate-100 text-slate-600 grid place-items-center shrink-0">
-            <span class="material-symbols-outlined">left_panel_close</span>
-          </button>
+          <button id="toggle-left" type="button" class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">收合</button>
         </div>
-        <div class="collapse-hide mt-4 grid grid-cols-2 gap-2">
-          <a href="./admin.html" class="rounded-2xl bg-slate-900 text-white px-4 py-3 text-sm font-black text-center">回後台</a>
-          <a href="./lineoa.html" class="rounded-2xl bg-blue-600 text-white px-4 py-3 text-sm font-black text-center">圖文選單</a>
-          <a href="https://hotel.fangwl591021.workers.dev/kb" target="_blank" rel="noopener" class="rounded-2xl bg-sky-600 text-white px-4 py-3 text-sm font-black text-center">雲端知識庫</a>
-          <button id="refresh" type="button" class="rounded-2xl bg-emerald-500 text-white px-4 py-3 text-sm font-black">同步</button>
-        </div>
-      </header>
-      <div class="collapse-hide p-4 border-b border-slate-200 space-y-3">
-        <input id="search" class="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500" placeholder="搜尋姓名、ID、訊息">
-        <div class="flex gap-2">
-          <button class="filter rounded-full bg-slate-900 text-white px-4 py-2 text-sm font-bold" data-filter="all">全部</button>
-          <button class="filter rounded-full bg-slate-100 text-slate-700 px-4 py-2 text-sm font-bold" data-filter="unread">未讀</button>
-          <button class="filter rounded-full bg-slate-100 text-slate-700 px-4 py-2 text-sm font-bold" data-filter="active">24 小時</button>
+        <div class="collapse-hide mt-4 grid grid-cols-2 gap-3">
+          <button id="open-broadcast" type="button" class="rounded-2xl bg-slate-900 text-white px-4 py-3 text-sm font-semibold hover:bg-slate-800">分時推播工作台</button>
+          <button id="open-crm" type="button" class="rounded-2xl bg-emerald-500 text-white px-4 py-3 text-sm font-semibold hover:bg-emerald-600">客戶 CRM</button>
+          <a href="./lineoa.html" class="col-span-2 rounded-2xl bg-blue-600 text-center text-white px-4 py-3 text-sm font-semibold hover:bg-blue-700">圖文選單管理</a>
         </div>
       </div>
-      <div id="thread-list" class="collapse-hide flex-1 overflow-y-auto p-3 space-y-3"></div>
+
+      <div class="collapse-hide px-4 py-4 border-b border-slate-200 space-y-4">
+        <div>
+          <label class="block text-sm font-semibold mb-2">聊天室搜尋</label>
+          <input id="thread-search" class="w-full rounded-full border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500" placeholder="搜尋聊天、用戶名稱、用戶 ID、標籤">
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button class="thread-filter rounded-full px-4 py-2 bg-slate-900 text-white text-sm font-semibold" data-filter="all">全部</button>
+          <button class="thread-filter rounded-full px-4 py-2 bg-slate-100 text-slate-700 text-sm font-semibold" data-filter="open">待回覆</button>
+          <button class="thread-filter rounded-full px-4 py-2 bg-slate-100 text-slate-700 text-sm font-semibold" data-filter="pending">處理中</button>
+          <button class="thread-filter rounded-full px-4 py-2 bg-slate-100 text-slate-700 text-sm font-semibold" data-filter="closed">已處理</button>
+          <button class="thread-filter rounded-full px-4 py-2 bg-slate-100 text-slate-700 text-sm font-semibold" data-filter="risk">高風險</button>
+        </div>
+      </div>
+
+      <div id="thread-list" class="collapse-hide flex-1 overflow-y-auto p-3 pb-24 space-y-3"></div>
+
+      <div class="collapse-hide border-t border-slate-200 bg-white">
+        <button id="tools-toggle" type="button" class="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition">
+          <div class="text-left">
+            <p class="font-semibold text-sm text-slate-900">工具與手動匯入</p>
+            <p class="text-xs text-slate-500 mt-1">平常收在底部，需要時再展開</p>
+          </div>
+          <span id="tools-toggle-label" class="text-slate-400 text-sm font-semibold">展開</span>
+        </button>
+        <div id="tools-panel" hidden class="px-4 pb-4 space-y-4 border-t border-slate-100 bg-slate-50/80">
+          <div>
+            <label class="block text-sm font-semibold mb-2">監看 Worker API</label>
+            <input class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm bg-white text-slate-600" value="https://line-engine.fangwl591021.workers.dev" readonly>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2">匯入名稱</label>
+            <input id="import-title" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500 bg-white" placeholder="例如：2026-05-26 LINE OA 對話匯入">
+          </div>
+          <input id="import-file" type="file" accept=".txt,.json,.csv,.log,.md" class="block w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm bg-white">
+          <div class="grid grid-cols-2 gap-2">
+            <button id="import-read" class="rounded-2xl bg-slate-100 text-slate-700 font-semibold py-3 hover:bg-slate-200">讀取檔案</button>
+            <button id="import-save" class="rounded-2xl bg-emerald-500 text-white font-semibold py-3 hover:bg-emerald-600">匯入聊天室</button>
+          </div>
+          <textarea id="import-text" rows="5" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500 bg-white" placeholder="貼上 LINE 官方帳號聊天室內容。"></textarea>
+        </div>
+      </div>
     </aside>
 
-    <main class="flex-1 min-w-0 bg-white flex flex-col">
-      <div id="empty" class="flex-1 grid place-items-center text-slate-400 font-black text-xl">尚未選擇聊天室</div>
-      <section id="chat" hidden class="flex-1 min-h-0 flex flex-col">
-        <header class="px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
-          <div class="flex items-start gap-4 min-w-0">
-            <div id="chat-avatar" class="w-14 h-14 rounded-full bg-slate-100 text-slate-700 grid place-items-center font-black text-xl shrink-0 overflow-hidden">OA</div>
-            <div class="min-w-0">
-              <h2 id="chat-name" class="text-3xl font-black truncate"></h2>
-              <p id="chat-meta" class="text-sm text-slate-500 mt-1"></p>
-              <div id="chat-badges" class="flex flex-wrap gap-2 mt-2"></div>
+    <main class="min-w-0 flex-1 flex flex-col bg-white border-r border-slate-200">
+      <div id="chat-empty" class="flex-1 grid place-items-center text-slate-400 font-semibold text-base px-8 text-center">
+        尚未選擇聊天室，或目前沒有任何真實對話可顯示。
+      </div>
+      <div id="chat-view" hidden class="flex-1 flex flex-col min-h-0">
+        <div class="px-5 py-3 border-b border-slate-200 flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <div class="flex items-center gap-3">
+              <div id="chat-avatar" class="w-10 h-10 rounded-full bg-slate-100 text-slate-700 grid place-items-center font-bold text-base shrink-0 overflow-hidden"></div>
+              <h2 id="chat-name" class="text-2xl font-bold truncate"></h2>
+              <span id="chat-risk-pill" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">低風險</span>
+            </div>
+            <p id="chat-meta" class="text-sm text-slate-500 mt-2"></p>
+          </div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <button id="open-records" class="px-4 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 text-sm font-semibold">重要紀錄</button>
+            <button id="mark-open" class="status-btn px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold" data-status="open">待回覆</button>
+            <button id="mark-pending" class="status-btn px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold" data-status="pending">處理中</button>
+            <button id="mark-closed" class="status-btn px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold" data-status="closed">已處理</button>
+          </div>
+        </div>
+        <div class="px-6 py-3 bg-slate-600 text-white text-sm font-semibold">
+          這裡做監看、標記、建議回覆與人工送出；不自動接管真人客服流程。
+        </div>
+        <div id="chat-messages" class="flex-1 overflow-y-auto bg-slate-300/80 grid-bg px-6 py-6 space-y-4"></div>
+        <div class="border-t border-slate-200 bg-white px-4 py-3">
+          <div id="reply-suggestions" class="flex flex-wrap gap-3 mb-4"></div>
+          <div class="flex items-end gap-3">
+            <button id="reply-emoji" type="button" title="插入表情" class="w-10 h-10 rounded-full border border-slate-300 bg-white text-lg text-slate-500 hover:bg-slate-50">☺</button>
+            <button id="reply-attach" type="button" title="附件提醒" class="w-10 h-10 rounded-full border border-slate-300 bg-white text-lg text-slate-500 hover:bg-slate-50">📎</button>
+            <button id="reply-quick" type="button" title="快速片語" class="w-10 h-10 rounded-full border border-slate-300 bg-white text-xl text-slate-500 hover:bg-slate-50">＋</button>
+            <textarea id="draft-reply" rows="5" class="flex-1 min-h-[160px] rounded-3xl border border-slate-200 px-4 py-3 text-sm leading-6 outline-none focus:border-emerald-500" placeholder="AI 建議回覆會放在這裡，方便人工確認後送出 LINE OA。"></textarea>
+            <div class="flex flex-col gap-2">
+              <button id="send-reply" class="rounded-2xl bg-emerald-500 text-white font-semibold px-5 py-3 hover:bg-emerald-600">送出</button>
+              <button id="copy-reply" class="rounded-2xl bg-slate-100 text-slate-700 font-semibold px-5 py-3 hover:bg-slate-200">複製</button>
             </div>
           </div>
-          <span class="rounded-full bg-emerald-50 text-emerald-700 px-4 py-2 text-sm font-black">人工工作台</span>
-        </header>
-        <div class="bg-slate-700 text-white text-sm font-semibold px-6 py-3">此頁可人工回覆 LINE 用戶；建議先從右側知識庫整理腳本。</div>
-        <div id="messages" class="flex-1 overflow-y-auto bg-slate-100 px-6 py-6 space-y-4"></div>
-        <footer class="border-t border-slate-200 p-4 bg-white">
-          <div id="suggestions" class="flex flex-wrap gap-3 mb-3"></div>
-          <div class="grid grid-cols-[minmax(0,1fr)_150px] gap-3">
-            <textarea id="reply-text" rows="3" class="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500 resize-none" placeholder="輸入要送給 LINE 用戶的回覆"></textarea>
-            <button id="send-reply" type="button" class="rounded-2xl bg-emerald-500 text-white px-5 py-3 font-black">送出回覆</button>
-          </div>
-        </footer>
-      </section>
+        </div>
+      </div>
     </main>
 
-    <aside class="w-[360px] shrink-0 bg-white border-l border-slate-200 overflow-y-auto p-5 space-y-4">
-      <section class="rounded-2xl border border-slate-200 p-4">
-        <h2 class="text-xl font-black mb-3">監控摘要</h2>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="rounded-2xl bg-slate-50 p-3"><p class="text-xs text-slate-400 font-bold">對話</p><b id="sum-threads" class="text-2xl">0</b></div>
-          <div class="rounded-2xl bg-sky-50 p-3"><p class="text-xs text-sky-500 font-bold">訊息</p><b id="sum-messages" class="text-2xl text-sky-700">0</b></div>
-          <div class="rounded-2xl bg-rose-50 p-3"><p class="text-xs text-rose-500 font-bold">未讀</p><b id="sum-unread" class="text-2xl text-rose-700">0</b></div>
-          <div class="rounded-2xl bg-emerald-50 p-3"><p class="text-xs text-emerald-500 font-bold">24 小時</p><b id="sum-active" class="text-2xl text-emerald-700">0</b></div>
+    <aside class="w-[380px] shrink-0 bg-white flex flex-col min-h-0">
+      <div class="px-5 py-4 border-b border-slate-200 shrink-0">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-bold">AI 助理</h2>
+            <p class="text-sm text-slate-500 mt-1">僅提供管理員參考</p>
+          </div>
+          <span id="status-chip" class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">監看中</span>
         </div>
-      </section>
-      <section class="rounded-2xl border border-slate-200 p-4">
-        <div class="flex items-center justify-between gap-3 mb-3">
-          <h2 class="text-xl font-black">雲端知識庫</h2>
-          <a href="https://hotel.fangwl591021.workers.dev/kb" target="_blank" rel="noopener" class="rounded-xl bg-sky-50 text-sky-700 px-3 py-2 text-xs font-bold">開啟</a>
-        </div>
-        <textarea id="kb-script" rows="9" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500 resize-none" placeholder="整理常用回覆、SOP、FAQ 後複製到雲端知識庫。"></textarea>
-        <div class="mt-3 flex gap-2">
-          <button id="copy-script" type="button" class="flex-1 rounded-xl bg-slate-900 text-white px-3 py-2 text-sm font-bold">複製腳本</button>
-          <a href="https://hotel.fangwl591021.workers.dev/kb" target="_blank" rel="noopener" class="flex-1 rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-sm font-bold text-center">上傳</a>
-        </div>
-      </section>
-      <section class="rounded-2xl border border-slate-200 p-4">
-        <h2 class="text-xl font-black mb-3">建議回覆</h2>
-        <div id="reply-panel" class="space-y-3 text-sm leading-7 text-slate-700"></div>
-      </section>
+      </div>
+      <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        <section class="rounded-3xl border border-slate-200 bg-white p-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <p class="text-lg font-bold">最新建議回覆</p>
+            <span id="suggestion-count" class="text-slate-500 font-semibold">0</span>
+          </div>
+          <div id="suggestion-list" class="space-y-3"></div>
+        </section>
+
+        <section class="rounded-3xl border border-blue-200 bg-blue-50/60 p-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <p class="text-lg font-bold">商機追蹤</p>
+            <span id="opportunity-stage-pill" class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">新客</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="block">
+              <span class="block text-xs font-semibold text-slate-500 mb-1">商機階段</span>
+              <select id="opportunity-stage" class="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500">
+                <option value="new">新客</option>
+                <option value="qualified">需求確認</option>
+                <option value="quoted">已報價</option>
+                <option value="payment">待付款</option>
+                <option value="won">已成交</option>
+                <option value="lost">暫緩 / 流失</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="block text-xs font-semibold text-slate-500 mb-1">預估金額</span>
+              <input id="opportunity-value" type="number" min="0" step="100" class="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500" placeholder="例如 30000">
+            </label>
+          </div>
+          <textarea id="opportunity-note" rows="3" class="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 outline-none focus:border-blue-500" placeholder="記錄客戶需求、預算、問題或下一步。"></textarea>
+          <button id="save-opportunity" type="button" class="mt-3 w-full rounded-2xl bg-blue-600 text-white font-semibold py-3 hover:bg-blue-700">儲存商機</button>
+        </section>
+
+        <section class="rounded-3xl border border-emerald-200 bg-emerald-50/60 p-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <p class="text-lg font-bold">客戶檔案 / 重要紀錄</p>
+            <span id="record-count" class="text-emerald-700 font-semibold">0</span>
+          </div>
+          <div id="record-list" class="space-y-3"></div>
+          <button id="add-record" type="button" class="mt-3 w-full rounded-2xl bg-emerald-500 text-white font-semibold py-3 hover:bg-emerald-600">新增客戶紀錄</button>
+        </section>
+
+        <section class="rounded-3xl border border-sky-200 bg-sky-50/60 p-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <p class="text-lg font-bold">雲端知識庫</p>
+            <a href="https://hotel.fangwl591021.workers.dev/kb" target="_blank" rel="noopener" class="rounded-xl bg-sky-600 text-white px-3 py-2 text-xs font-semibold">開啟</a>
+          </div>
+          <textarea id="kb-script" rows="5" class="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 outline-none focus:border-sky-500" placeholder="整理常用回覆、SOP 或 FAQ，再複製到雲端知識庫。"></textarea>
+          <div class="mt-3 grid grid-cols-2 gap-2">
+            <button id="copy-kb-script" type="button" class="rounded-xl bg-slate-900 text-white px-3 py-2 text-sm font-semibold">複製腳本</button>
+            <a href="https://hotel.fangwl591021.workers.dev/kb" target="_blank" rel="noopener" class="rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-sm font-semibold text-center">上傳</a>
+          </div>
+        </section>
+
+        <section class="rounded-3xl border border-slate-200 bg-white p-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <p class="text-lg font-bold">對話標籤</p>
+            <span id="thread-status-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">待回覆</span>
+          </div>
+          <div id="thread-tags" class="flex flex-wrap gap-2 mb-3"></div>
+          <div class="flex gap-2">
+            <input id="custom-tag" class="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500" placeholder="新增自訂標籤">
+            <button id="add-tag" class="rounded-2xl bg-emerald-500 text-white font-semibold px-4 py-3 hover:bg-emerald-600">新增</button>
+          </div>
+        </section>
+
+        <section class="rounded-3xl border border-slate-200 bg-white p-4">
+          <p class="text-lg font-bold mb-3">備註</p>
+          <textarea id="internal-note" rows="5" class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-500" placeholder="內部備註，不會發送給用戶。"></textarea>
+          <button id="save-thread-meta" class="mt-3 w-full rounded-2xl bg-slate-900 text-white font-semibold py-3 hover:bg-slate-800">儲存備註與標籤</button>
+        </section>
+
+        <section class="rounded-3xl border border-slate-200 bg-white p-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <p class="text-lg font-bold">重要訊息通報</p>
+            <span id="risk-count" class="text-slate-500 font-semibold">0</span>
+          </div>
+          <div id="risk-summary" class="text-sm text-slate-600 leading-7">目前未偵測到高風險關鍵字。</div>
+        </section>
+      </div>
     </aside>
   </div>
-  <div id="toast" hidden class="fixed top-4 left-1/2 -translate-x-1/2 rounded-2xl bg-slate-900 text-white px-5 py-3 font-bold shadow-xl"></div>
+
+  <div id="record-modal" hidden class="fixed inset-0 z-50 bg-slate-900/45 px-4 py-6 overflow-y-auto">
+    <div class="mx-auto w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200">
+      <div class="px-6 py-5 border-b border-slate-200 flex items-start justify-between gap-4">
+        <div>
+          <p class="text-sm text-emerald-700 font-semibold">客戶資料庫</p>
+          <h3 class="text-xl font-bold mt-1">客戶重要紀錄</h3>
+          <p id="record-customer" class="text-sm text-slate-500 mt-1"></p>
+        </div>
+        <button id="record-close" type="button" class="w-11 h-11 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">x</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <textarea id="record-content" rows="8" class="w-full rounded-2xl border border-slate-200 px-4 py-3 leading-7 outline-none focus:border-emerald-500" placeholder="例如：客戶詢問加入好友贈點、點數未同步、分享名片流程等。"></textarea>
+      </div>
+      <div class="px-6 py-5 border-t border-slate-200 flex justify-end gap-3">
+        <button id="record-cancel" type="button" class="px-5 py-3 rounded-2xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">取消</button>
+        <button id="record-save" type="button" class="px-6 py-3 rounded-2xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600">儲存紀錄</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" hidden class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-white font-semibold shadow-2xl"></div>
 
   <script>
     const WORKER_URL = 'https://line-engine.fangwl591021.workers.dev/';
+    const RISK_KEYWORDS = ['退費', '生氣', '投訴', '詐騙', '不能用', '沒同步', '未入帳', '客服', '緊急'];
+    const QUICK_REPLY_TEXTS = [
+      '您好，收到您的訊息了，我先幫您確認點數與會員紀錄，稍後回覆您。',
+      '請問您方便提供目前使用的 LINE 名稱、手機或遇到問題的畫面嗎？我先幫您查核。',
+      '如果是加入好友贈點或簽到贈點不同步，我會先確認來源帳號與點數事件紀錄。',
+      '我先幫您把這筆狀況記錄下來，確認後再回覆您處理方式。'
+    ];
+    const QUICK_EMOJIS = ['😊', '🙏', '👍', '✨'];
+
+    let currentFilter = 'all';
     let threads = [];
     let messages = [];
-    let activeThreadId = '';
-    let filter = 'all';
+    let activeThreadId = new URLSearchParams(location.search).get('thread') || '';
+    let replyToolMode = '';
 
     const el = id => document.getElementById(id);
-    function esc(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-    function toast(text) { const node = el('toast'); node.textContent = text; node.hidden = false; setTimeout(() => node.hidden = true, 1800); }
-    function fmt(value) { const d = new Date(value || 0); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }); }
-    function token() { return localStorage.getItem('lineoa_access_token') || ''; }
+    const token = () => localStorage.getItem('lineoa_access_token') || '';
+    const safe = value => String(value ?? '');
+    const esc = value => safe(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+    function showToast(message, type = 'success') {
+      const node = el('toast');
+      node.hidden = false;
+      node.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-white font-semibold shadow-2xl ' + (type === 'error' ? 'bg-red-500' : 'bg-emerald-500');
+      node.textContent = message;
+      setTimeout(() => { node.hidden = true; }, 2400);
+    }
 
     async function api(action, payload = {}) {
       const body = { action, payload: { ...payload } };
@@ -122,113 +279,435 @@
       return data.data || data;
     }
 
-    function currentThread() { return threads.find(t => t.thread_id === activeThreadId) || null; }
-    function filteredThreads() {
-      const q = el('search').value.trim();
-      return threads.filter(t => {
-        if (filter === 'unread' && !Number(t.unread_count || 0)) return false;
-        if (filter === 'active') {
-          const at = Date.parse(t.last_event_at || t.updated_at || 0);
-          if (!at || Date.now() - at > 86400000) return false;
+    function fmt(value) {
+      if (!value) return '';
+      const d = new Date(String(value).includes('T') ? value : String(value).replace(' ', 'T'));
+      if (Number.isNaN(d.getTime())) return value;
+      return d.toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    }
+
+    function normalizeThread(row = {}) {
+      const text = safe(row.last_message_text);
+      const tags = safe(row.tags).split(',').map(v => v.trim()).filter(Boolean);
+      const risk = RISK_KEYWORDS.some(k => text.includes(k) || tags.includes(k)) ? 'high' : 'low';
+      return {
+        id: row.thread_id || row.id || '',
+        name: row.display_name || '未命名聊天室',
+        userId: row.user_id || '',
+        pictureUrl: row.picture_url || '',
+        summary: text,
+        unread: Number(row.unread_count || 0),
+        status: row.status || 'open',
+        tags,
+        note: row.note || '',
+        risk,
+        messageCount: Number(row.message_count || 0),
+        opportunityStage: row.opportunity_stage || 'new',
+        opportunityValue: Number(row.opportunity_value || 0),
+        opportunityNote: row.opportunity_note || '',
+        lastMessageAt: row.last_event_at || row.updated_at || ''
+      };
+    }
+
+    function normalizeMessage(row = {}) {
+      return {
+        id: row.message_id || row.id || '',
+        type: row.message_type || row.event_type || 'text',
+        senderRole: row.direction === 'outbound' ? 'guide' : 'user',
+        senderName: row.direction === 'outbound' ? '客服' : '用戶',
+        text: row.text_content || `[${row.message_type || row.event_type || 'event'}]`,
+        createdAt: row.created_at || ''
+      };
+    }
+
+    function statusLabel(status) {
+      if (status === 'pending') return '處理中';
+      if (status === 'closed') return '已處理';
+      return '待回覆';
+    }
+
+    function statusClass(status) {
+      if (status === 'pending') return 'bg-blue-100 text-blue-700';
+      if (status === 'closed') return 'bg-slate-200 text-slate-700';
+      return 'bg-amber-100 text-amber-700';
+    }
+
+    function opportunityLabel(stage) {
+      return ({ qualified:'需求確認', quoted:'已報價', payment:'待付款', won:'已成交', lost:'暫緩 / 流失' })[stage] || '新客';
+    }
+
+    function opportunityClass(stage) {
+      if (stage === 'payment') return 'bg-amber-100 text-amber-700';
+      if (stage === 'won') return 'bg-emerald-100 text-emerald-700';
+      if (stage === 'lost') return 'bg-slate-200 text-slate-700';
+      if (stage === 'quoted') return 'bg-violet-100 text-violet-700';
+      if (stage === 'qualified') return 'bg-blue-100 text-blue-700';
+      return 'bg-slate-100 text-slate-600';
+    }
+
+    function riskLabel(risk) { return risk === 'high' ? '高風險' : '低風險'; }
+    function riskClass(risk) { return risk === 'high' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'; }
+    function getActiveThread() { return threads.find(item => item.id === activeThreadId) || null; }
+
+    function renderAvatar(node, item = {}, active = false) {
+      node.innerHTML = '';
+      if (item.pictureUrl) {
+        node.innerHTML = `<img src="${esc(item.pictureUrl)}" alt="" class="w-full h-full object-cover">`;
+        return;
+      }
+      node.textContent = safe(item.name || 'OA').slice(0, 1);
+      node.className = node.className.replace(/bg-\S+|text-\S+/g, '').trim() + (active ? ' bg-emerald-200 text-emerald-800' : ' bg-slate-100 text-slate-700');
+    }
+
+    function readableMessageText(message = {}) {
+      const type = safe(message.type).toLowerCase();
+      const text = safe(message.text).trim();
+      if (type === 'follow') return '加入好友 / 開始關注官方帳號';
+      if (type === 'unfollow') return '封鎖或取消關注官方帳號';
+      if (type === 'image') return '客戶傳送圖片';
+      if (type === 'sticker') return '客戶傳送貼圖';
+      if (type === 'postback') return text || '客戶點選選單';
+      return text || '收到一則 LINE 事件';
+    }
+
+    function getFilteredThreads() {
+      const q = safe(el('thread-search').value).trim();
+      return threads.filter(item => {
+        if (currentFilter !== 'all') {
+          if (currentFilter === 'risk' && item.risk !== 'high') return false;
+          if (currentFilter !== 'risk' && item.status !== currentFilter) return false;
         }
         if (!q) return true;
-        return [t.display_name, t.user_id, t.last_message_text].join(' ').includes(q);
+        return [item.name, item.userId, item.summary, item.tags.join(' '), opportunityLabel(item.opportunityStage)].join(' ').includes(q);
       });
     }
 
-    function renderThreads() {
-      const list = filteredThreads();
-      el('thread-list').innerHTML = list.length ? list.map(t => `
-        <button type="button" data-id="${esc(t.thread_id)}" class="thread w-full text-left rounded-2xl border p-4 ${t.thread_id === activeThreadId ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-white hover:bg-slate-50'}">
-          <div class="flex gap-3">
-            ${t.picture_url ? `<img src="${esc(t.picture_url)}" class="w-12 h-12 rounded-full object-cover">` : '<div class="w-12 h-12 rounded-full bg-slate-100 text-slate-700 grid place-items-center font-black">OA</div>'}
+    function renderThreadList() {
+      const rows = getFilteredThreads();
+      const box = el('thread-list');
+      box.innerHTML = '';
+      if (!rows.length) {
+        box.innerHTML = '<div class="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-400 font-bold">目前還沒有真實聊天室資料。</div>';
+        return;
+      }
+      rows.forEach(item => {
+        const active = activeThreadId === item.id;
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = `w-full text-left rounded-3xl border px-4 py-3 transition ${active ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`;
+        card.innerHTML = `
+          <div class="flex items-start gap-3">
+            <div class="avatar w-12 h-12 rounded-full grid place-items-center font-bold text-lg shrink-0 overflow-hidden"></div>
             <div class="min-w-0 flex-1">
-              <div class="flex justify-between gap-3"><b class="truncate text-lg">${esc(t.display_name || 'LINE 用戶')}</b><span class="text-xs text-slate-400">${fmt(t.last_event_at || t.updated_at)}</span></div>
-              <p class="text-xs text-slate-400 truncate">${esc(t.user_id || '')}</p>
-              <p class="text-sm text-slate-600 mt-2 line-clamp-2">${esc(t.last_message_text || '')}</p>
-              <div class="mt-3 flex gap-2">
-                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">${Number(t.message_count || 0)} 則</span>
-                ${Number(t.unread_count || 0) ? `<span class="rounded-full bg-rose-100 text-rose-700 px-3 py-1 text-xs font-bold">${Number(t.unread_count || 0)} 未讀</span>` : '<span class="rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 text-xs font-bold">已讀</span>'}
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <p class="font-bold text-base truncate">${esc(item.name)}</p>
+                  <p class="text-xs text-slate-400 truncate mt-0.5">${esc(item.userId)}</p>
+                </div>
+                <p class="text-xs text-slate-400 shrink-0">${fmt(item.lastMessageAt)}</p>
+              </div>
+              <p class="text-sm text-slate-600 mt-1.5 line-clamp-3">${esc(readableMessageText({ text:item.summary, type:item.lastMessageType }))}</p>
+              <div class="flex flex-wrap gap-2 mt-2.5">
+                <span class="px-3 py-1 rounded-full text-xs font-semibold ${statusClass(item.status)}">${statusLabel(item.status)}</span>
+                <span class="px-3 py-1 rounded-full text-xs font-semibold ${opportunityClass(item.opportunityStage)}">${opportunityLabel(item.opportunityStage)}</span>
+                <span class="px-3 py-1 rounded-full text-xs font-semibold ${riskClass(item.risk)}">${riskLabel(item.risk)}</span>
+                ${item.unread > 0 ? `<span class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-900 text-white">${item.unread} 則</span>` : ''}
               </div>
             </div>
-          </div>
-        </button>`).join('') : '<div class="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-slate-400 font-bold">目前沒有聊天室資料。</div>';
-      document.querySelectorAll('.thread').forEach(btn => btn.addEventListener('click', () => loadMonitor(btn.dataset.id).catch(err => toast(err.message))));
+          </div>`;
+        renderAvatar(card.querySelector('.avatar'), item, active);
+        card.addEventListener('click', () => loadMonitor(item.id).catch(err => showToast(err.message, 'error')));
+        box.appendChild(card);
+      });
     }
 
     function buildSuggestions(thread) {
-      const text = [thread?.last_message_text, ...messages.map(m => m.text_content)].join(' ');
-      const items = [];
-      if (/點數|贈點|兌換|簽到/.test(text)) items.push('您好，點數相關問題我先幫您確認帳戶與活動紀錄，稍後回覆您目前可使用的點數與處理方式。');
-      if (/名片|分享|掃描|AI/.test(text)) items.push('您好，名片與 AI 配對功能我可以協助確認，請問您目前是卡在掃描、分享，還是配對結果的部分？');
-      if (!items.length) items.push('您好，感謝您來訊。請問您想了解哪一項服務或遇到什麼問題呢？');
-      return items.slice(0, 3);
+      const text = [thread?.summary, ...messages.map(m => m.text)].join('\n');
+      const suggestions = [];
+      if (/點數|贈點|簽到|兌換|入帳|同步/.test(text)) suggestions.push('您好，我先幫您確認點數事件與會員綁定紀錄。若是加入好友贈點或簽到贈點不同步，我會查來源帳號、事件時間與目前點數餘額。');
+      if (/名片|分享|掃描|AI|配對/.test(text)) suggestions.push('您好，名片與 AI 配對功能我可以協助確認。請問目前是卡在掃描、分享、公開交流池，還是配對結果的部分？');
+      if (/好友|加入|官方帳號|關注/.test(text)) suggestions.push('您好，加入好友狀態我會先幫您確認。若系統有贈點活動，會核對 LINE user ID 與點數帳戶是否已橋接完成。');
+      if (!suggestions.length) suggestions.push('您好，感謝您來訊。請問您想了解哪個功能或目前遇到什麼狀況呢？我可以先幫您確認。');
+      return suggestions.slice(0, 3);
     }
 
-    function renderChat() {
-      const thread = currentThread();
-      if (!thread) { el('chat').hidden = true; el('empty').hidden = false; return; }
-      el('chat').hidden = false; el('empty').hidden = true;
-      el('chat-avatar').innerHTML = thread.picture_url ? `<img src="${esc(thread.picture_url)}" class="w-full h-full object-cover">` : 'OA';
-      el('chat-name').textContent = thread.display_name || 'LINE 用戶';
-      el('chat-meta').textContent = `${Number(thread.message_count || 0)} 則訊息 · ${thread.user_id || ''}`;
-      el('chat-badges').innerHTML = `<span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">${esc(thread.status || 'open')}</span>`;
-      el('messages').innerHTML = messages.length ? messages.map(msg => `
-        <div class="flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
-          <div class="max-w-[72%] rounded-2xl ${msg.direction === 'outbound' ? 'bg-emerald-500 text-white' : 'bg-white border border-slate-200'} px-5 py-4 shadow-sm">
-            <p class="leading-7 whitespace-pre-wrap">${esc(msg.text_content || '[' + (msg.message_type || msg.event_type || 'event') + ']')}</p>
-            <p class="text-xs ${msg.direction === 'outbound' ? 'text-emerald-50' : 'text-slate-400'} mt-2">${fmt(msg.created_at)}</p>
-          </div>
-        </div>`).join('') : '<div class="text-slate-400 font-bold">尚無訊息</div>';
+    function renderSuggestions(thread) {
       const suggestions = buildSuggestions(thread);
-      el('suggestions').innerHTML = suggestions.map(s => `<button class="suggestion rounded-full bg-emerald-50 text-emerald-700 px-4 py-2 text-sm font-bold" data-text="${encodeURIComponent(s)}">帶入建議</button>`).join('');
-      el('reply-panel').innerHTML = suggestions.map((s, i) => `<div class="rounded-2xl bg-emerald-50 border border-emerald-100 p-3"><b>建議 ${i + 1}</b><p>${esc(s)}</p></div>`).join('');
-      document.querySelectorAll('.suggestion').forEach(btn => btn.addEventListener('click', () => { el('reply-text').value = decodeURIComponent(btn.dataset.text || ''); }));
-      renderThreads();
+      el('suggestion-count').textContent = suggestions.length;
+      el('suggestion-list').innerHTML = suggestions.map((text, idx) => `
+        <div class="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4">
+          <div class="flex items-center justify-between gap-3 mb-2">
+            <p class="font-bold">建議回覆 ${idx + 1}</p>
+            <button class="copy-suggestion text-sm font-semibold text-emerald-700" data-text="${encodeURIComponent(text)}">複製</button>
+          </div>
+          <p class="text-sm leading-7 text-slate-700">${esc(text)}</p>
+        </div>`).join('');
+      document.querySelectorAll('.copy-suggestion').forEach(button => {
+        button.addEventListener('click', async () => {
+          const text = decodeURIComponent(button.dataset.text || '');
+          el('draft-reply').value = text;
+          await navigator.clipboard.writeText(text).catch(() => {});
+          showToast('已帶入建議回覆');
+        });
+      });
+      el('draft-reply').value = suggestions[0] || '';
+    }
+
+    function renderTags(thread) {
+      const tags = thread?.tags || [];
+      el('thread-tags').innerHTML = tags.length
+        ? tags.map(tag => `<span class="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm font-semibold">${esc(tag)}</span>`).join('')
+        : '<span class="text-sm text-slate-400">尚未建立標籤</span>';
+      el('thread-status-badge').className = `px-3 py-1 rounded-full text-xs font-semibold ${statusClass(thread?.status || 'open')}`;
+      el('thread-status-badge').textContent = statusLabel(thread?.status || 'open');
+    }
+
+    function renderRecords(thread) {
+      const records = safe(thread?.note).split('\n').filter(line => line.trim().startsWith('[重要]'));
+      el('record-count').textContent = String(records.length);
+      el('record-list').innerHTML = records.length
+        ? records.slice(0, 3).map(line => `<div class="rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm leading-6 text-slate-700">${esc(line.replace('[重要]', '').trim())}</div>`).join('')
+        : '<div class="rounded-2xl border border-dashed border-emerald-200 bg-white/70 px-4 py-4 text-sm text-slate-500">尚未建立重要需求，可把點數、名片或會員問題記在這裡。</div>';
+    }
+
+    function renderOpportunity(thread) {
+      const stage = thread?.opportunityStage || 'new';
+      el('opportunity-stage').value = stage;
+      el('opportunity-value').value = Number(thread?.opportunityValue || 0) || '';
+      el('opportunity-note').value = thread?.opportunityNote || '';
+      el('opportunity-stage-pill').className = `px-3 py-1 rounded-full text-xs font-semibold ${opportunityClass(stage)}`;
+      el('opportunity-stage-pill').textContent = opportunityLabel(stage);
+    }
+
+    function syncStatusButtons(status) {
+      document.querySelectorAll('.status-btn').forEach(button => {
+        const active = button.dataset.status === status;
+        button.className = active
+          ? 'status-btn px-4 py-2 rounded-xl border border-slate-900 bg-slate-900 text-white text-sm font-semibold'
+          : 'status-btn px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50';
+      });
+    }
+
+    function renderActiveThread(thread) {
+      if (!thread) {
+        el('chat-view').hidden = true;
+        el('chat-empty').hidden = false;
+        el('suggestion-list').innerHTML = '';
+        el('reply-suggestions').innerHTML = '';
+        el('suggestion-count').textContent = '0';
+        el('risk-summary').textContent = '尚未選擇聊天室。';
+        el('risk-count').textContent = '0';
+        el('internal-note').value = '';
+        el('draft-reply').value = '';
+        renderOpportunity(null);
+        renderRecords(null);
+        renderTags(null);
+        syncStatusButtons('');
+        return;
+      }
+      el('chat-view').hidden = false;
+      el('chat-empty').hidden = true;
+      renderAvatar(el('chat-avatar'), thread, false);
+      el('chat-name').textContent = thread.name;
+      el('chat-meta').textContent = `共 ${messages.length} 則訊息・用戶 ID ${thread.userId || ''}`;
+      el('chat-risk-pill').className = `px-3 py-1 rounded-full text-xs font-semibold ${riskClass(thread.risk)}`;
+      el('chat-risk-pill').textContent = riskLabel(thread.risk);
+      el('chat-messages').innerHTML = messages.map(msg => {
+        const right = msg.senderRole !== 'user';
+        return `<div class="flex ${right ? 'justify-end' : 'justify-start'}">
+          <div class="max-w-[72%] bg-white text-slate-900 border ${right ? 'border-emerald-200' : 'border-slate-200'} rounded-[22px] px-4 py-3 shadow-sm">
+            <p class="font-semibold text-xs text-slate-400 mb-2">${esc(msg.senderName)}</p>
+            <p class="text-sm font-medium leading-6 whitespace-pre-wrap">${esc(readableMessageText(msg))}</p>
+            <p class="text-xs text-slate-500 mt-3">${fmt(msg.createdAt)}</p>
+          </div>
+        </div>`;
+      }).join('') || '<div class="text-slate-400 font-bold">尚無訊息</div>';
+      renderSuggestions(thread);
+      renderTags(thread);
+      renderRecords(thread);
+      renderOpportunity(thread);
+      syncStatusButtons(thread.status || 'open');
+      const merged = messages.map(m => m.text).join('\n') + '\n' + thread.summary;
+      const hits = [...new Set(RISK_KEYWORDS.filter(k => merged.includes(k)))];
+      el('risk-count').textContent = String(hits.length);
+      el('risk-summary').textContent = hits.length
+        ? `偵測到關鍵字：${hits.join('、')}，建議優先查看並補上內部備註。`
+        : '目前未偵測到高風險關鍵字。';
+      el('internal-note').value = thread.note || '';
+      el('chat-messages').scrollTop = el('chat-messages').scrollHeight;
     }
 
     async function loadMonitor(threadId = activeThreadId) {
-      const data = await api('getLineOAChatMonitor', { threadId });
-      threads = data.threads || [];
-      messages = data.messages || [];
-      activeThreadId = data.selectedThreadId || threadId || threads[0]?.thread_id || '';
-      el('sum-threads').textContent = data.summary?.threads || 0;
-      el('sum-messages').textContent = data.summary?.messages || 0;
-      el('sum-unread').textContent = data.summary?.unread || 0;
-      el('sum-active').textContent = data.summary?.active24h || 0;
-      renderThreads();
-      renderChat();
+      const data = await api('getLineOAChatMonitor', { threadId, limit: 100 });
+      threads = (data.threads || []).map(normalizeThread);
+      messages = (data.messages || []).map(normalizeMessage);
+      activeThreadId = data.selectedThreadId || threadId || threads[0]?.id || '';
+      renderThreadList();
+      renderActiveThread(getActiveThread());
+    }
+
+    async function updateThreadMeta(patch = {}) {
+      const thread = getActiveThread();
+      if (!thread) return showToast('請先選擇聊天室', 'error');
+      const data = await api('updateLineOAChatThread', {
+        threadId: thread.id,
+        status: patch.status ?? thread.status,
+        tags: patch.tags ?? thread.tags,
+        note: patch.note ?? el('internal-note').value,
+        opportunityStage: patch.opportunityStage ?? el('opportunity-stage').value,
+        opportunityValue: patch.opportunityValue ?? Number(el('opportunity-value').value || 0),
+        opportunityNote: patch.opportunityNote ?? el('opportunity-note').value
+      });
+      threads = (data.threads || []).map(normalizeThread);
+      messages = (data.messages || []).map(normalizeMessage);
+      activeThreadId = data.selectedThreadId || thread.id;
+      renderThreadList();
+      renderActiveThread(getActiveThread());
+      showToast('聊天室狀態已更新');
     }
 
     async function sendReply() {
-      const text = el('reply-text').value.trim();
-      if (!activeThreadId) return toast('請先選擇聊天室');
-      if (!text) return toast('請輸入回覆內容');
-      await api('sendLineOAChatReply', { threadId: activeThreadId, text });
-      el('reply-text').value = '';
-      toast('已送出 LINE 回覆');
-      await loadMonitor(activeThreadId);
+      const thread = getActiveThread();
+      const text = el('draft-reply').value.trim();
+      if (!thread) return showToast('請先選擇聊天室', 'error');
+      if (!text) return showToast('請先輸入要回覆的內容', 'error');
+      const button = el('send-reply');
+      button.disabled = true;
+      button.classList.add('opacity-60');
+      try {
+        await api('sendLineOAChatReply', { threadId: thread.id, text });
+        el('draft-reply').value = '';
+        await loadMonitor(thread.id);
+        showToast('已送出 LINE 回覆');
+      } finally {
+        button.disabled = false;
+        button.classList.remove('opacity-60');
+      }
     }
 
-    el('toggle-sidebar').addEventListener('click', () => {
-      el('left-sidebar').classList.toggle('sidebar-collapsed');
+    function renderReplyQuickTools(mode = '') {
+      replyToolMode = mode;
+      el('reply-suggestions').innerHTML = '';
+      if (!mode) return;
+      const items = mode === 'emoji' ? QUICK_EMOJIS : QUICK_REPLY_TEXTS;
+      items.forEach(item => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = mode === 'emoji'
+          ? 'rounded-full border border-slate-200 bg-white px-3 py-2 text-lg hover:bg-slate-50'
+          : 'rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 hover:bg-emerald-100';
+        button.textContent = item;
+        button.addEventListener('click', () => {
+          el('draft-reply').value = item;
+          showToast(mode === 'emoji' ? '已插入表情' : '已帶入快速片語');
+        });
+        el('reply-suggestions').appendChild(button);
+      });
+    }
+
+    async function readImportFile() {
+      const file = el('import-file').files && el('import-file').files[0];
+      if (!file) return showToast('請先選擇檔案', 'error');
+      el('import-text').value = await file.text();
+      if (!el('import-title').value.trim()) el('import-title').value = file.name.replace(/\.[^.]+$/, '');
+      showToast('檔案已讀取');
+    }
+
+    function saveImportedThread() {
+      const text = el('import-text').value.trim();
+      if (!text) return showToast('請先貼上或讀入聊天內容', 'error');
+      const title = el('import-title').value.trim() || `手動匯入 ${new Date().toLocaleString('zh-TW')}`;
+      const imported = {
+        id: `manual:${Date.now()}`,
+        name: title,
+        userId: 'manual-import',
+        summary: text.split('\n').find(Boolean) || '',
+        unread: 0,
+        risk: RISK_KEYWORDS.some(k => text.includes(k)) ? 'high' : 'low',
+        status: 'pending',
+        tags: ['手動匯入'],
+        note: '',
+        messageCount: text.split('\n').filter(Boolean).length,
+        opportunityStage: 'new',
+        opportunityValue: 0,
+        opportunityNote: '',
+        lastMessageAt: new Date().toISOString()
+      };
+      threads = [imported, ...threads];
+      messages = text.split('\n').filter(Boolean).map((line, index) => ({
+        id: `manual-msg-${Date.now()}-${index}`,
+        type: 'text',
+        senderRole: 'user',
+        senderName: '匯入客服',
+        text: line,
+        createdAt: new Date(Date.now() + index * 60000).toISOString()
+      }));
+      activeThreadId = imported.id;
+      renderThreadList();
+      renderActiveThread(imported);
+      showToast('已匯入聊天室並設為目前對話');
+    }
+
+    document.querySelectorAll('.thread-filter').forEach(button => {
+      button.addEventListener('click', () => {
+        currentFilter = button.dataset.filter || 'all';
+        document.querySelectorAll('.thread-filter').forEach(btn => btn.className = 'thread-filter rounded-full px-4 py-2 bg-slate-100 text-slate-700 text-sm font-semibold');
+        button.className = 'thread-filter rounded-full px-4 py-2 bg-slate-900 text-white text-sm font-semibold';
+        renderThreadList();
+      });
     });
-    el('refresh').addEventListener('click', () => loadMonitor().catch(err => toast(err.message)));
-    el('send-reply').addEventListener('click', () => sendReply().catch(err => toast(err.message)));
-    el('search').addEventListener('input', renderThreads);
-    el('copy-script').addEventListener('click', async () => {
-      const text = el('kb-script').value.trim();
-      if (!text) return toast('請先輸入腳本內容');
-      await navigator.clipboard.writeText(text);
-      toast('腳本已複製');
+    el('thread-search').addEventListener('input', renderThreadList);
+    el('toggle-left').addEventListener('click', () => {
+      el('left-panel').classList.toggle('left-collapsed');
+      el('toggle-left').textContent = el('left-panel').classList.contains('left-collapsed') ? '展開' : '收合';
     });
-    document.querySelectorAll('.filter').forEach(btn => btn.addEventListener('click', () => {
-      filter = btn.dataset.filter || 'all';
-      document.querySelectorAll('.filter').forEach(item => item.className = 'filter rounded-full bg-slate-100 text-slate-700 px-4 py-2 text-sm font-bold');
-      btn.className = 'filter rounded-full bg-slate-900 text-white px-4 py-2 text-sm font-bold';
-      renderThreads();
-    }));
-    loadMonitor().catch(err => toast(err.message || '載入失敗，請先從後台登入'));
+    el('tools-toggle').addEventListener('click', () => {
+      el('tools-panel').hidden = !el('tools-panel').hidden;
+      el('tools-toggle-label').textContent = el('tools-panel').hidden ? '展開' : '收合';
+    });
+    el('reply-emoji').addEventListener('click', () => renderReplyQuickTools(replyToolMode === 'emoji' ? '' : 'emoji'));
+    el('reply-attach').addEventListener('click', () => showToast('圖片、PDF、檔案請回 LINE OA 後台傳。', 'error'));
+    el('reply-quick').addEventListener('click', () => renderReplyQuickTools(replyToolMode === 'quick' ? '' : 'quick'));
+    el('send-reply').addEventListener('click', () => sendReply().catch(err => showToast(err.message, 'error')));
+    el('copy-reply').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(el('draft-reply').value || '').catch(() => {});
+      showToast('已複製客服草稿');
+    });
+    el('import-read').addEventListener('click', () => readImportFile().catch(err => showToast(err.message, 'error')));
+    el('import-save').addEventListener('click', saveImportedThread);
+    el('copy-kb-script').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(el('kb-script').value || '').catch(() => {});
+      showToast('腳本已複製');
+    });
+    el('save-thread-meta').addEventListener('click', () => updateThreadMeta().catch(err => showToast(err.message, 'error')));
+    el('save-opportunity').addEventListener('click', () => updateThreadMeta().catch(err => showToast(err.message, 'error')));
+    document.querySelectorAll('.status-btn').forEach(button => {
+      button.addEventListener('click', () => updateThreadMeta({ status: button.dataset.status }).catch(err => showToast(err.message, 'error')));
+    });
+    el('add-tag').addEventListener('click', () => {
+      const thread = getActiveThread();
+      const tag = el('custom-tag').value.trim();
+      if (!thread || !tag) return;
+      el('custom-tag').value = '';
+      updateThreadMeta({ tags: [...new Set([...(thread.tags || []), tag])] }).catch(err => showToast(err.message, 'error'));
+    });
+    el('open-records').addEventListener('click', () => el('record-modal').hidden = false);
+    el('add-record').addEventListener('click', () => el('record-modal').hidden = false);
+    el('record-close').addEventListener('click', () => el('record-modal').hidden = true);
+    el('record-cancel').addEventListener('click', () => el('record-modal').hidden = true);
+    el('record-save').addEventListener('click', () => {
+      const content = el('record-content').value.trim();
+      if (!content) return showToast('請先填寫重要紀錄', 'error');
+      el('record-modal').hidden = true;
+      el('record-content').value = '';
+      updateThreadMeta({ note: `${el('internal-note').value || ''}\n[重要] ${content}`.trim() }).catch(err => showToast(err.message, 'error'));
+    });
+    el('open-broadcast').addEventListener('click', () => showToast('分時推播工作台入口已保留。'));
+    el('open-crm').addEventListener('click', () => location.href = './admin.html');
+
+    loadMonitor().catch(err => {
+      el('thread-list').innerHTML = `<div class="rounded-3xl border border-dashed border-rose-300 bg-rose-50 p-8 text-center text-rose-500 font-bold">${esc(err.message || '載入失敗，請先從後台登入')}</div>`;
+    });
   </script>
 </body>
 </html>
