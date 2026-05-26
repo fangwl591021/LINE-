@@ -163,6 +163,52 @@
       <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3">
         <section class="rounded-3xl border border-slate-200 bg-white p-4">
           <div class="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <p class="text-lg font-bold">AI 監控總覽</p>
+              <p id="audience-generated-at" class="text-xs text-slate-400 mt-1">尚未同步</p>
+            </div>
+            <button id="refresh-audience" type="button" class="rounded-xl bg-slate-900 text-white px-3 py-2 text-xs font-semibold">更新</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="rounded-2xl bg-slate-50 p-3">
+              <p class="text-xs font-semibold text-slate-500">30 天活躍</p>
+              <b id="audience-active30" class="mt-1 block text-2xl">0</b>
+            </div>
+            <div class="rounded-2xl bg-rose-50 p-3">
+              <p class="text-xs font-semibold text-rose-500">高風險</p>
+              <b id="audience-high-risk" class="mt-1 block text-2xl text-rose-700">0</b>
+            </div>
+            <div class="rounded-2xl bg-sky-50 p-3">
+              <p class="text-xs font-semibold text-sky-600">7 天訊息</p>
+              <b id="audience-messages7" class="mt-1 block text-2xl text-sky-700">0</b>
+            </div>
+            <div class="rounded-2xl bg-emerald-50 p-3">
+              <p class="text-xs font-semibold text-emerald-600">未讀</p>
+              <b id="audience-unread" class="mt-1 block text-2xl text-emerald-700">0</b>
+            </div>
+          </div>
+          <div class="mt-4">
+            <p class="mb-2 text-sm font-bold text-slate-600">需求熱度</p>
+            <div id="audience-interests" class="space-y-2"></div>
+          </div>
+          <div class="mt-4">
+            <p class="mb-2 text-sm font-bold text-slate-600">風險 / 待處理名單</p>
+            <div id="audience-risk-list" class="space-y-2"></div>
+          </div>
+          <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-sm font-bold text-amber-900">已領點未折抵</p>
+                <p class="text-xs leading-5 text-amber-700">同步 hostel 最新 audience 概念，列出已取得點數但尚未產生扣點紀錄的名單。</p>
+              </div>
+              <b id="audience-claimed-count" class="text-2xl text-amber-700">0</b>
+            </div>
+            <div id="audience-claimed-list" class="mt-3 space-y-2"></div>
+          </div>
+        </section>
+
+        <section class="rounded-3xl border border-slate-200 bg-white p-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
             <p class="text-lg font-bold">最新建議回覆</p>
             <span id="suggestion-count" class="text-slate-500 font-semibold">0</span>
           </div>
@@ -282,6 +328,7 @@
     let currentFilter = 'all';
     let threads = [];
     let messages = [];
+    let audience = null;
     let activeThreadId = new URLSearchParams(location.search).get('thread') || '';
     let replyToolMode = '';
     let replyContentMode = 'text';
@@ -488,7 +535,7 @@
     function normalizeThread(row = {}) {
       const text = safe(row.last_message_text);
       const tags = safe(row.tags).split(',').map(v => v.trim()).filter(Boolean);
-      const risk = RISK_KEYWORDS.some(k => text.includes(k) || tags.includes(k)) ? 'high' : 'low';
+      const risk = row.risk || (RISK_KEYWORDS.some(k => text.includes(k) || tags.includes(k)) ? 'high' : 'low');
       return {
         id: row.thread_id || row.id || '',
         name: row.display_name || '未命名聊天室',
@@ -545,8 +592,16 @@
       return 'bg-slate-100 text-slate-600';
     }
 
-    function riskLabel(risk) { return risk === 'high' ? '高風險' : '低風險'; }
-    function riskClass(risk) { return risk === 'high' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'; }
+    function riskLabel(risk) {
+      if (risk === 'high') return '高風險';
+      if (risk === 'medium') return '中風險';
+      return '低風險';
+    }
+    function riskClass(risk) {
+      if (risk === 'high') return 'bg-rose-100 text-rose-700';
+      if (risk === 'medium') return 'bg-amber-100 text-amber-700';
+      return 'bg-emerald-100 text-emerald-700';
+    }
     function getActiveThread() { return threads.find(item => item.id === activeThreadId) || null; }
 
     function renderAvatar(node, item = {}, active = false) {
@@ -620,6 +675,71 @@
         card.addEventListener('click', () => loadMonitor(item.id).catch(err => showToast(err.message, 'error')));
         box.appendChild(card);
       });
+    }
+
+    function renderAudience() {
+      const data = audience || {};
+      const overview = data.overview || {};
+      el('audience-generated-at').textContent = data.generatedAt ? `更新 ${fmt(data.generatedAt)}` : '尚未同步';
+      el('audience-active30').textContent = Number(overview.activeThreads30d || 0);
+      el('audience-high-risk').textContent = Number(overview.highRiskThreads || 0);
+      el('audience-messages7').textContent = Number(overview.messages7d || 0);
+      el('audience-unread').textContent = Number(overview.unreadMessages || 0);
+
+      const interests = (data.interests || []).filter(item => Number(item.count || 0) > 0).slice(0, 6);
+      const maxInterest = Math.max(1, ...interests.map(item => Number(item.count || 0)));
+      el('audience-interests').innerHTML = interests.length
+        ? interests.map(item => {
+          const pct = Math.max(8, Math.round(Number(item.count || 0) / maxInterest * 100));
+          return `<div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <b class="text-slate-700">${esc(item.label)}</b>
+              <span class="text-slate-400">${Number(item.count || 0)}</span>
+            </div>
+            <div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-emerald-500" style="width:${pct}%"></div></div>
+          </div>`;
+        }).join('')
+        : '<div class="rounded-2xl border border-dashed border-slate-200 px-3 py-3 text-sm text-slate-400">累積更多對話後會顯示熱度。</div>';
+
+      const riskRows = data.riskThreads || [];
+      el('audience-risk-list').innerHTML = riskRows.length
+        ? riskRows.slice(0, 5).map(row => `
+          <button type="button" data-thread="${esc(row.threadId || row.id)}" class="audience-thread w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-left hover:bg-white">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <b class="block truncate text-sm">${esc(row.name || row.userId || '未命名客戶')}</b>
+                <span class="block truncate text-xs text-slate-400">${esc(row.summary || row.userId || '')}</span>
+              </div>
+              <span class="shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${riskClass(row.risk)}">${riskLabel(row.risk)}</span>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-xs text-slate-400">
+              <span>${fmt(row.lastMessageAt)}</span>
+              <span>${Number(row.unread || 0) ? `${Number(row.unread || 0)} 未讀` : (row.aiPaused ? '人工接手' : '')}</span>
+            </div>
+          </button>`).join('')
+        : '<div class="rounded-2xl border border-dashed border-slate-200 px-3 py-3 text-sm text-slate-400">目前沒有高風險或待處理名單。</div>';
+      document.querySelectorAll('.audience-thread').forEach(button => {
+        button.addEventListener('click', () => loadMonitor(button.dataset.thread).catch(err => showToast(err.message, 'error')));
+      });
+
+      const claimed = data.pointAudience?.claimedNotDeducted || [];
+      el('audience-claimed-count').textContent = Number(overview.claimedNotDeducted || claimed.length || 0);
+      el('audience-claimed-list').innerHTML = claimed.length
+        ? claimed.slice(0, 4).map(row => `
+          <div class="rounded-2xl bg-white/80 px-3 py-2 text-sm">
+            <div class="flex items-start justify-between gap-2">
+              <b class="truncate">${esc(row.name || row.pointUserId || '未命名會員')}</b>
+              <span class="shrink-0 text-xs font-bold text-amber-700">${Number(row.awardPoints || 0)} 點</span>
+            </div>
+            <p class="mt-1 truncate font-mono text-[11px] text-slate-400">${esc(row.pointUserId || row.userId || '')}</p>
+          </div>`).join('')
+        : '<div class="rounded-2xl bg-white/70 px-3 py-3 text-sm text-amber-700">目前沒有符合條件的名單。</div>';
+    }
+
+    async function loadAudience() {
+      const data = await api('getLineOAChatAudience', { limit: 500 });
+      audience = data.data || data;
+      renderAudience();
     }
 
     function buildSuggestions(thread) {
@@ -886,6 +1006,13 @@
       });
     });
     el('thread-search').addEventListener('input', renderThreadList);
+    el('refresh-audience').addEventListener('click', () => {
+      el('refresh-audience').disabled = true;
+      loadAudience()
+        .then(() => showToast('AI 監控已更新'))
+        .catch(err => showToast(err.message, 'error'))
+        .finally(() => { el('refresh-audience').disabled = false; });
+    });
     el('toggle-left').addEventListener('click', () => {
       el('left-panel').classList.toggle('left-collapsed');
       el('toggle-left').textContent = el('left-panel').classList.contains('left-collapsed') ? '展開' : '收合';
@@ -949,7 +1076,10 @@
       el('record-content').value = '';
       updateThreadMeta({ note: `${el('internal-note').value || ''}\n[重要] ${content}`.trim() }).catch(err => showToast(err.message, 'error'));
     });
-    el('open-broadcast').addEventListener('click', () => showToast('分時推播工作台入口已保留。'));
+    el('open-broadcast').addEventListener('click', () => {
+      showToast('先用右側 AI 監控總覽確認受眾，再建立推播流程。');
+      document.getElementById('audience-generated-at')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
     el('open-crm').addEventListener('click', () => {
       const query = monitorUid ? `?pt_uid=${encodeURIComponent(monitorUid)}` : '';
       location.href = `https://line-engine.fangwl591021.workers.dev/crm${query}`;
@@ -968,7 +1098,10 @@
           console.warn('LIFF login on monitor failed:', err);
         }
       }
-      await loadMonitor();
+      await Promise.all([loadMonitor(), loadAudience().catch(err => {
+        console.warn('audience load failed:', err);
+        renderAudience();
+      })]);
     }
 
     initMonitor().catch(err => {

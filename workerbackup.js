@@ -278,6 +278,7 @@ const SecurityModule = {
       'resolveDuplicateCardBinding',
       'deployRichMenu',
       'getLineOAChatMonitor',
+      'getLineOAChatAudience',
       'getLineOAChatCrm',
       'uploadLineOAAsset',
       'sendLineOAChatReply',
@@ -353,6 +354,7 @@ const SecurityModule = {
       'dailyPointCheckin',
       'extractLineVoomMedia',
       'getLineOAChatMonitor',
+      'getLineOAChatAudience',
       'getLineOAChatCrm',
       'uploadLineOAAsset',
       'sendLineOAChatReply',
@@ -1303,6 +1305,7 @@ const LineOAChatModule = {
       ORDER BY COALESCE(NULLIF(last_event_at, ''), updated_at) DESC
       LIMIT ?
     `, [limit]);
+    const enrichedThreads = threads.map(row => ({ ...row, risk: this.riskLevel(row) }));
     const selectedThreadId = threadId || (threads[0] && threads[0].thread_id) || '';
     const messages = selectedThreadId
       ? await D1ReadModule.all(env, `
@@ -1322,7 +1325,7 @@ const LineOAChatModule = {
           unread: Number(summary?.unread || 0),
           active24h: Number(summary?.active24h || 0)
         },
-        threads,
+        threads: enrichedThreads,
         selectedThreadId,
         messages: messages.reverse()
       }
@@ -1331,6 +1334,146 @@ const LineOAChatModule = {
 
   splitList(value) {
     return this.text(value).split(',').map(item => this.text(item)).filter(Boolean);
+  },
+
+  audienceInterestBuckets() {
+    return [
+      { key: 'points', label: '點數/贈點', keywords: ['點數', '贈點', '簽到', '入帳', '折抵', '扣點'] },
+      { key: 'card', label: '名片/掃描', keywords: ['名片', '掃描', 'QR', 'QRCode', '個人專屬連結'] },
+      { key: 'share', label: '分享/導流', keywords: ['分享', '轉發', '連結', '好友', '邀請'] },
+      { key: 'match', label: 'AI 配對', keywords: ['AI', '配對', '媒合', '公開交流池', '名片池'] },
+      { key: 'crm', label: 'CRM/商機', keywords: ['CRM', '客戶', '商機', '報價', '合作', '付款'] },
+      { key: 'lineoa', label: 'LINE OA 設定', keywords: ['LINE', 'OA', '圖文選單', 'webhook', 'LIFF'] },
+      { key: 'support', label: '客服/異常', keywords: ['客服', '沒同步', '失敗', '錯誤', '無法', 'Bad Request', 'Unauthorized'] }
+    ];
+  },
+
+  async pointAudience(env) {
+    const empty = { claimedNotDeducted: [], summary: { claimedNotDeducted: 0 } };
+    if (!env.ACTMASTER_DB) return empty;
+    try {
+      const rows = await D1ReadModule.all(env, `
+        SELECT
+          pa.user_id AS user_id,
+          COALESCE(NULLIF(u.name, ''), NULLIF(u.line_id, ''), pa.user_id) AS display_name,
+          COALESCE(NULLIF(u.point_line_id, ''), pa.user_id) AS point_user_id,
+          COUNT(*) AS award_count,
+          COALESCE(SUM(pa.points), 0) AS award_points,
+          MAX(pa.created_at) AS last_award_at
+        FROM point_awards pa
+        LEFT JOIN users u
+          ON u.line_id = pa.user_id
+          OR u.row_id = pa.user_id
+          OR u.point_line_id = pa.user_id
+          OR u.legacy_line_id = pa.user_id
+        WHERE CAST(pa.points AS REAL) > 0
+          AND COALESCE(pa.status, '') IN ('success', 'awarded', 'completed', 'pending')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM store_point_cashier_logs logs
+            WHERE (logs.customer_point_user_id = pa.user_id OR logs.customer_user_id = pa.user_id)
+              AND CAST(logs.points AS REAL) < 0
+          )
+        GROUP BY pa.user_id, display_name, point_user_id
+        ORDER BY last_award_at DESC
+        LIMIT 30
+      `, []);
+      const claimedNotDeducted = rows.map(row => ({
+        userId: this.text(row.user_id),
+        name: this.text(row.display_name, row.user_id || '未命名會員'),
+        pointUserId: this.text(row.point_user_id || row.user_id),
+        awardCount: Number(row.award_count || 0),
+        awardPoints: Number(row.award_points || 0),
+        lastAwardAt: row.last_award_at || ''
+      }));
+      return {
+        claimedNotDeducted,
+        summary: { claimedNotDeducted: claimedNotDeducted.length }
+      };
+    } catch (e) {
+      return { ...empty, error: this.text(e?.message || e) };
+    }
+  },
+
+  async audience(payload, env) {
+    await this.ensure(env);
+    const limit = Math.min(Math.max(Number(payload.limit || 500) || 500, 1), 1000);
+    const rows = await D1ReadModule.all(env, `
+      SELECT thread_id,user_id,source_type,display_name,picture_url,last_message_text,last_message_type,last_event_type,
+             message_count,unread_count,status,tags,note,opportunity_stage,opportunity_value,opportunity_note,ai_paused,last_event_at,updated_at
+      FROM line_oa_threads
+      ORDER BY COALESCE(NULLIF(last_event_at, ''), updated_at) DESC
+      LIMIT ?
+    `, [limit]);
+    const messages7d = await D1ReadModule.first(env, `
+      SELECT COUNT(*) AS count
+      FROM line_oa_messages
+      WHERE created_at >= datetime('now', '-7 days')
+    `, []).catch(() => ({ count: 0 }));
+    const buckets = this.audienceInterestBuckets().map(bucket => ({ ...bucket, count: 0 }));
+    const tagCounts = {};
+    const statusCounts = {};
+    const riskCounts = {};
+    const riskThreads = [];
+    for (const row of rows) {
+      const risk = this.riskLevel(row);
+      riskCounts[risk] = (riskCounts[risk] || 0) + 1;
+      statusCounts[row.status || 'open'] = (statusCounts[row.status || 'open'] || 0) + 1;
+      const tags = this.splitList(row.tags);
+      tags.forEach(tag => { tagCounts[tag] = (tagCounts[tag] || 0) + 1; });
+      const blob = [row.display_name, row.last_message_text, row.tags, row.note, row.opportunity_note].map(v => this.text(v)).join('\n');
+      buckets.forEach(bucket => {
+        if (bucket.keywords.some(keyword => blob.includes(keyword))) bucket.count += 1;
+      });
+      if (risk === 'high' || risk === 'medium' || Number(row.unread_count || 0) > 0 || Number(row.ai_paused || 0) === 1) {
+        riskThreads.push({
+          id: row.thread_id || '',
+          threadId: row.thread_id || '',
+          userId: row.user_id || '',
+          name: row.display_name || row.user_id || '未命名客戶',
+          pictureUrl: row.picture_url || '',
+          risk,
+          status: row.status || 'open',
+          unread: Number(row.unread_count || 0),
+          aiPaused: Number(row.ai_paused || 0) === 1,
+          summary: row.last_message_text || '',
+          tags,
+          lastMessageAt: row.last_event_at || row.updated_at || ''
+        });
+      }
+    }
+    const pointAudience = await this.pointAudience(env);
+    return {
+      success: true,
+      data: {
+        generatedAt: new Date().toISOString(),
+        overview: {
+          totalThreads: rows.length,
+          activeThreads24h: rows.filter(row => Date.parse(row.last_event_at || row.updated_at || '') >= Date.now() - 24 * 60 * 60 * 1000).length,
+          activeThreads7d: rows.filter(row => Date.parse(row.last_event_at || row.updated_at || '') >= Date.now() - 7 * 24 * 60 * 60 * 1000).length,
+          activeThreads30d: rows.filter(row => Date.parse(row.last_event_at || row.updated_at || '') >= Date.now() - 30 * 24 * 60 * 60 * 1000).length,
+          messages7d: Number(messages7d?.count || 0),
+          unreadMessages: rows.reduce((sum, row) => sum + Number(row.unread_count || 0), 0),
+          highRiskThreads: riskCounts.high || 0,
+          mediumRiskThreads: riskCounts.medium || 0,
+          aiPausedThreads: rows.filter(row => Number(row.ai_paused || 0) === 1).length,
+          claimedNotDeducted: pointAudience.summary.claimedNotDeducted || 0
+        },
+        statusCounts,
+        riskCounts,
+        interests: buckets
+          .map(({ key, label, count }) => ({ key, label, count }))
+          .sort((a, b) => b.count - a.count),
+        tags: Object.entries(tagCounts)
+          .map(([label, count]) => ({ label, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 20),
+        riskThreads: riskThreads
+          .sort((a, b) => Number(b.unread || 0) - Number(a.unread || 0) || String(b.lastMessageAt || '').localeCompare(String(a.lastMessageAt || '')))
+          .slice(0, 30),
+        pointAudience
+      }
+    };
   },
 
   riskLevel(row) {
@@ -9141,6 +9284,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1InboxModule.monitor(payload || {}, env);
     case 'getLineOAChatMonitor':
       return await LineOAChatModule.monitor(payload || {}, env);
+    case 'getLineOAChatAudience':
+      return await LineOAChatModule.audience(payload || {}, env);
     case 'getLineOAChatCrm':
       return await LineOAChatModule.crm(payload || {}, env);
     case 'uploadLineOAAsset':
@@ -9246,6 +9391,15 @@ export default {
         const authz = await SecurityModule.authorizeAction('getLineOAChatCrm', payload, request, env);
         if (!authz.allowed) return Utils.jsonResponse({ success: false, error: authz.error || 'Access Denied' }, 403);
         return Utils.jsonResponse(await LineOAChatModule.crm(payload, env));
+      }
+      if (request.method === 'GET' && url.pathname === '/api/line-oa/audience') {
+        const payload = {
+          pt_uid: url.searchParams.get('pt_uid') || url.searchParams.get('uid') || url.searchParams.get('userId') || '',
+          limit: url.searchParams.get('limit') || '500'
+        };
+        const authz = await SecurityModule.authorizeAction('getLineOAChatAudience', payload, request, env);
+        if (!authz.allowed) return Utils.jsonResponse({ success: false, error: authz.error || 'Access Denied' }, 403);
+        return Utils.jsonResponse(await LineOAChatModule.audience(payload, env));
       }
       if (request.method === 'POST' && url.pathname === '/api/line-oa/upload-asset') {
         const payload = await request.json();
