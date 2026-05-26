@@ -202,6 +202,35 @@ window.shareCardFromLink = async function(card, options = {}) {
   }
 };
 
+async function handleAutoShareCardEntry(shareCardId, refId, netId) {
+  if (!shareCardId) return false;
+  const loadingText = document.getElementById('loading-text');
+  if (loadingText) loadingText.innerText = '正在開啟 LINE 分享...';
+
+  try {
+    const cData = await window.fetchAPI('getCardContacts', { networkId: 'admin', role: 'admin', userId: '' }, true);
+    const cards = Array.isArray(cData) ? cData : (Array.isArray(cData?.data) ? cData.data : []);
+    const sc = cards.find(c => String(c.rowId) === String(shareCardId));
+    if (!sc) throw new Error('找不到要分享的名片');
+
+    const shared = await window.shareCardFromLink(sc, {
+      referrerId: window.currentUserProfile?.userId || refId || '',
+      networkId: netId || 'admin'
+    });
+    if (shared && typeof window.closeActmasterLiffOrHome === 'function') {
+      window.closeActmasterLiffOrHome(600);
+    }
+    return true;
+  } catch (e) {
+    console.warn('[handleAutoShareCardEntry] failed:', e);
+    window.showToast?.(e.message || '分享名片失敗，請稍後再試', true);
+    return false;
+  } finally {
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) loadingScreen.classList.add('hidden');
+  }
+}
+
 window.submitRegistration = async function() {
   const name = document.getElementById('reg-name').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
@@ -1277,14 +1306,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       urlParams.get('autoShare') === '1' ||
       urlParams.get('action') === 'share'
     );
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-      if (!shouldAutoShareCard) window.goPage('home', true);
-      loadingScreen.classList.add('hidden');
-    }
     const claimCardId = urlParams.get('claim');
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
+
+    if (shouldAutoShareCard) {
+      await handleAutoShareCardEntry(shareCardId, refId, netId);
+      return;
+    }
+
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+      window.goPage('home', true);
+      loadingScreen.classList.add('hidden');
+    }
     const pointUid = urlParams.get('pt_uid') || '';
     if (pointUid) {
       try {

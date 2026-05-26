@@ -31,4 +31,24 @@ if (!body.includes('triggerFlexSharing')) {
   fail('shareCardFromLink must still open LINE shareTargetPicker through triggerFlexSharing');
 }
 
+if (!auth.includes('async function handleAutoShareCardEntry')) {
+  fail('auto share entry handler must exist');
+}
+
+const domReady = auth.match(/document\.addEventListener\('DOMContentLoaded', async \(\) => \{[\s\S]*?\n\}\);/);
+if (!domReady) fail('DOMContentLoaded auth flow not found');
+
+const domReadyBody = domReady[0];
+const autoShareIndex = domReadyBody.indexOf('handleAutoShareCardEntry(shareCardId, refId, netId)');
+const checkUserIndex = domReadyBody.indexOf("window.fetchAPI('checkUser'");
+if (autoShareIndex === -1) {
+  fail('shareCardId auto-share must call handleAutoShareCardEntry');
+}
+if (checkUserIndex === -1) {
+  fail('checkUser call not found');
+}
+if (autoShareIndex > checkUserIndex) {
+  fail('shareCardId auto-share must run before checkUser');
+}
+
 console.log('Share contract passed.');
