@@ -402,16 +402,19 @@
 
   <!-- 左側邊欄 (Sidebar) -->
   <aside id="admin-sidebar" class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-10 relative shrink-0">
-    <div class="h-24 flex items-center px-6 border-b border-slate-100 shrink-0 gap-3">
-      <div class="flex items-center gap-3">
+    <div class="h-24 flex items-center px-4 border-b border-slate-100 shrink-0 gap-3">
+      <div class="flex items-center gap-3 min-w-0">
         <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/30 shrink-0">
           <span class="material-symbols-outlined text-[24px]">shield_person</span>
         </div>
-        <div>
+        <div class="sidebar-copy min-w-0">
           <h1 class="font-black text-slate-800 text-lg leading-tight tracking-wide">商機引擎後台</h1>
           <p class="text-[10px] font-bold text-slate-400 tracking-wider">ADMIN DASHBOARD</p>
         </div>
       </div>
+      <button type="button" onclick="toggleAdminSidebar()" class="ml-auto w-9 h-9 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center active:scale-95 shrink-0" title="收合選單">
+        <span id="sidebar-toggle-icon" class="material-symbols-outlined text-[20px]">left_panel_close</span>
+      </button>
     </div>
 
     <nav class="flex-1 py-6 px-4 flex flex-col gap-6 overflow-y-auto no-scrollbar">
@@ -444,7 +447,7 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">payments</span>
             獎金制度
           </a>
-          <a href="#" onclick="switchTab('lineoa-monitor')" id="nav-lineoa-monitor" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+          <a href="./lineoa-monitor.html" onclick="openLineOAMonitorTool(); return false;" id="nav-lineoa-monitor" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">forum</span>
             LINE OA 聊天室監控
           </a>
@@ -1528,6 +1531,17 @@
       window.open('./lineoa.html', '_blank', 'noopener');
     }
 
+    function openLineOAMonitorTool() {
+      try {
+        if (window.liff && typeof liff.isLoggedIn === 'function' && liff.isLoggedIn()) {
+          localStorage.setItem('lineoa_access_token', liff.getAccessToken());
+        }
+      } catch (err) {
+        console.warn('Unable to pass LINE OA monitor token:', err);
+      }
+      window.open('./lineoa-monitor.html', '_blank', 'noopener');
+    }
+
     function formatCurrency(value) {
       return 'NT$ ' + Math.round(Number(value || 0)).toLocaleString();
     }
@@ -1677,11 +1691,7 @@
                 <div class="flex items-center gap-2 mt-2">
                   <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[11px] font-black">${monitorNumber(thread.message_count)} 則</span>
                   ${unread ? `<span class="px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[11px] font-black">${monitorNumber(unread)} 未讀</span>` : '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-black">已讀</span>'}
-      </div>
-      <button type="button" onclick="toggleAdminSidebar()" class="ml-auto w-9 h-9 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center active:scale-95" title="收合選單">
-        <span id="sidebar-toggle-icon" class="material-symbols-outlined text-[20px]">left_panel_close</span>
-      </button>
-    </div>
+                </div>
             </div>
           </button>`;
       }).join('') : '<div class="p-8 text-center text-slate-400 font-bold">尚未收到 LINE OA webhook 訊息</div>';
