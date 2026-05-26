@@ -678,11 +678,11 @@ window.fetchPointWalletData_ = async function(force = false) {
   if (!force && window.pointWalletData && Date.now() - (window.pointWalletData.loadedAt || 0) < 60000) {
     return window.pointWalletData;
   }
-  const samePointLiff = String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '');
-  const pointUserId = samePointLiff ? '' : (localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || '');
+  const pointUserId = window.resolvePointUserIdForCurrentProfile?.(userId) || userId;
   const res = await window.fetchAPI('queryUserPoints', {
     userId,
     pointUserId,
+    pt_uid: pointUserId,
     page: 1,
     per_page: 100,
     point_type: 'gift_money'
@@ -693,6 +693,8 @@ window.fetchPointWalletData_ = async function(force = false) {
     ...data,
     balance: Number(data.balance || data.latestBalance || data.typedBalance || 0) || 0,
     list: Array.isArray(data.list) ? data.list : [],
+    queriedLineUserId: data.queriedLineUserId || pointUserId,
+    balanceByType: data.balanceByType || null,
     loadedAt: Date.now()
   };
   return window.pointWalletData;
@@ -852,6 +854,40 @@ function renderStorePointCashierLogs(rows) {
 
 window.getStorePointMode = function() {
   return document.querySelector('input[name="store-point-mode"]:checked')?.value || 'redeem';
+};
+
+window.readPointUidFromParams = function(params) {
+  const source = params || (typeof window.readActmasterInitialParams === 'function'
+    ? window.readActmasterInitialParams()
+    : new URLSearchParams(window.location.search || ''));
+  const keys = ['pt_uid', 'wallet_uid', 'pointUserId', 'LINE_user_id', 'lineUserId', 'uid'];
+  for (const key of keys) {
+    const found = String(source.get(key) || '').trim();
+    if (found) return found;
+  }
+  return '';
+};
+
+window.storePointUidBridge = function(userId, pointUid) {
+  const localUserId = String(userId || '').trim();
+  const uid = String(pointUid || '').trim();
+  if (!localUserId || !uid) return '';
+  try {
+    localStorage.setItem('ACTMASTER_POINT_UID_' + localUserId, uid);
+  } catch (e) {}
+  return uid;
+};
+
+window.resolvePointUserIdForCurrentProfile = function(userId, params) {
+  const localUserId = String(userId || window.currentUserProfile?.userId || '').trim();
+  if (!localUserId) return '';
+  let cached = '';
+  try {
+    cached = String(localStorage.getItem('ACTMASTER_POINT_UID_' + localUserId) || '').trim();
+  } catch (e) {}
+  const fromParams = window.readPointUidFromParams?.(params) || '';
+  if (fromParams) return window.storePointUidBridge(localUserId, fromParams);
+  return cached || localUserId;
 };
 
 window.extractPointCustomerId = function(value) {
@@ -1187,13 +1223,10 @@ window.claimDailyPointCheckin = async function(btn) {
     const userId = window.currentUserProfile.userId;
     let pointUserId = '';
     try {
-      const samePointLiff = String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '');
       const params = typeof window.readActmasterInitialParams === 'function'
         ? window.readActmasterInitialParams()
         : new URLSearchParams(window.location.search || '');
-      pointUserId = samePointLiff
-        ? userId
-        : (localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || params.get('pt_uid') || userId);
+      pointUserId = window.resolvePointUserIdForCurrentProfile?.(userId, params) || userId;
     } catch (e) {
       pointUserId = userId;
     }
@@ -1320,14 +1353,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.goPage('home', true);
       loadingScreen.classList.add('hidden');
     }
-    const pointUid = urlParams.get('pt_uid') || '';
+    const pointUid = window.readPointUidFromParams?.(urlParams) || '';
     if (pointUid) {
       try {
-        if (String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '')) {
-          localStorage.removeItem('ACTMASTER_POINT_UID_' + window.currentUserProfile.userId);
-        } else {
-          localStorage.setItem('ACTMASTER_POINT_UID_' + window.currentUserProfile.userId, pointUid);
-        }
+        window.storePointUidBridge?.(window.currentUserProfile.userId, pointUid);
       } catch (e) {}
       setTimeout(() => window.refreshPointBalanceBadge?.(), 200);
     }

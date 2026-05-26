@@ -8,8 +8,8 @@
 2. D1 fallback 必須接受 `pointUserId` 與 `pt_uid`。
 3. 前端每日簽到必須同時送出 `userId`、`pointUserId`、`pt_uid`。
 4. `queryUserPoints` 仍然只查 `gift_money`。
-5. 若 LIFF ID 與點數通 LIFF ID 相同，點數身分以目前 LIFF `userId` 為準。
-6. 若 LIFF ID 與點數通 LIFF ID 不同，優先使用 `ACTMASTER_POINT_UID_{userId}`，再退回網址 `pt_uid`，最後才退回 `userId`。
+5. 點數 UID 橋接不可因為 LIFF ID 相同就被清除。
+6. 查詢點數時必須優先使用 `ACTMASTER_POINT_UID_{userId}` 或網址中的 `pt_uid` / `wallet_uid` / `pointUserId` / `LINE_user_id`，最後才退回 `userId`。
 
 ## 部署前檢查
 

@@ -29,6 +29,18 @@ const checks = [
   {
     name: 'daily checkin reads ACTMASTER_POINT_UID cache',
     pass: /ACTMASTER_POINT_UID_/.test(auth)
+  },
+  {
+    name: 'point wallet query sends bridged point uid',
+    pass: /queryUserPoints[\s\S]*pointUserId[\s\S]*pt_uid:\s*pointUserId[\s\S]*point_type:\s*['"]gift_money['"]/.test(auth)
+  },
+  {
+    name: 'same LIFF no longer clears point uid bridge',
+    pass: !/removeItem\(['"]ACTMASTER_POINT_UID_/.test(auth)
+  },
+  {
+    name: 'point uid bridge accepts URL point identifiers',
+    pass: /readPointUidFromParams[\s\S]*pt_uid[\s\S]*wallet_uid[\s\S]*pointUserId[\s\S]*LINE_user_id/.test(auth)
   }
 ];
 

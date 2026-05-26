@@ -203,11 +203,11 @@ async function queryCurrentPointBalance() {
   const userId = window.currentUserProfile?.userId || '';
   if (!userId || typeof window.fetchAPI !== 'function') return null;
 
-  const samePointLiff = String(window.LIFF_ID || '') === String(window.POINT_LIFF_ID || '');
-  const pointUserId = samePointLiff ? '' : (localStorage.getItem('ACTMASTER_POINT_UID_' + userId) || '');
+  const pointUserId = window.resolvePointUserIdForCurrentProfile?.(userId) || userId;
   const res = await window.fetchAPI('queryUserPoints', {
     userId,
     pointUserId,
+    pt_uid: pointUserId,
     page: 1,
     per_page: 100
   }, true);
