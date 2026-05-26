@@ -1545,7 +1545,7 @@
         console.warn('Unable to pass LINE OA monitor token:', err);
       }
       const hash = accessToken ? `#lineoa_token=${encodeURIComponent(accessToken)}` : '';
-      window.open(`https://line-engine.fangwl591021.workers.dev/monitor${hash}`, '_blank', 'noopener');
+      window.location.href = `https://line-engine.fangwl591021.workers.dev/monitor${hash}`;
     }
 
     function formatCurrency(value) {
@@ -4289,6 +4289,10 @@
           adminNetworkId = check.info.networkId || check.info.storeId || 'admin';
           document.getElementById('loading-screen').classList.add('fade-out');
           setTimeout(() => document.getElementById('loading-screen').remove(), 500);
+          if (String(location.hash || '').includes('lineoa-monitor') || new URLSearchParams(location.search || '').get('tab') === 'lineoa-monitor') {
+            openLineOAMonitorTool();
+            return;
+          }
           switchTab('users');
         } else {
           loadingIcon.innerText = "lock_person";
