@@ -1561,7 +1561,7 @@ const LineOAChatModule = {
   },
 
   async monitorPage() {
-    const source = 'https://raw.githubusercontent.com/fangwl591021/LINE-/0cac0ab/lineoa-monitor.html';
+    const source = 'https://raw.githubusercontent.com/fangwl591021/LINE-/691416b/lineoa-monitor.html';
     try {
       const res = await fetch(source, {
         headers: { 'User-Agent': 'line-engine-monitor-page/1.0' },
