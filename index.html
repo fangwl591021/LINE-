@@ -1107,6 +1107,20 @@
         </div>
       </div>
 
+      <div id="match-pool-mode-container" class="bg-white rounded-3xl shadow-sm p-3 mb-5 border border-slate-100">
+        <div class="grid grid-cols-2 gap-2">
+          <button id="match-pool-own" type="button" onclick="window.setMatchmakePoolScope('own')" class="py-3 rounded-2xl font-black text-[13px] bg-slate-900 text-white flex items-center justify-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px]">folder_managed</span> 我的名片池
+          </button>
+          <button id="match-pool-public" type="button" onclick="window.setMatchmakePoolScope('public')" class="py-3 rounded-2xl font-black text-[13px] bg-slate-50 text-slate-600 flex items-center justify-center gap-1.5">
+            <span class="material-symbols-outlined text-[18px]">hub</span> 公開交流池
+          </button>
+        </div>
+        <div id="match-pool-mode-help" class="px-2 pt-3 text-[12px] text-slate-500 font-bold leading-relaxed">
+          只使用你自己掃描或建立的名片，不進入跨店配對。
+        </div>
+      </div>
+
       <div id="privacy-lock-container" class="hidden bg-white rounded-3xl shadow-sm p-8 mb-6 text-center border border-slate-100 animate-in zoom-in-95">
         <div class="w-16 h-16 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
           <span class="material-symbols-outlined text-[32px] icon-filled">lock</span>
@@ -1883,7 +1897,7 @@
 <script src="js/modules/cards.js?v=7.5"></script>
 <script src="js/modules/ecard.js?v=7.27"></script>
 <script src="js/modules/mycard.js?v=8.29"></script>
-<script src="js/modules/matchmake.js?v=7.6"></script>
+<script src="js/modules/matchmake.js?v=7.7"></script>
 <script src="js/modules/cardmaster.js?v=1.3"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.7"></script>

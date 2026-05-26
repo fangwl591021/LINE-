@@ -1774,11 +1774,103 @@ const AIModule = {
           score,
           reason: hitCount
             ? 'AI 暫時無法完成深度配對，先依需求關鍵字與名片標籤排序。'
-            : 'AI 暫時無法完成深度配對，先提供公開配對池中的可交流名片。'
+            : 'AI 暫時無法完成深度配對，先提供配對池中的可交流名片。',
+          card: contact.card || undefined
         };
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
+  },
+
+  matchContactFromCard(card) {
+    const tags = [
+      card.tags,
+      card['個性'],
+      card['興趣'],
+      card['財富'],
+      card['健康'],
+      card['事業'],
+      card.services,
+      card['服務項目'],
+      card.notes
+    ].filter(Boolean).join(' ');
+    return {
+      rowId: card.rowId,
+      Name: card.name || card['姓名'] || '',
+      Company: card.companyName || card['公司名稱'] || '',
+      Title: card.title || card['職稱'] || '',
+      Tags: tags,
+      visibility: card.visibility || card['公開狀態'] || '',
+      sourceType: card.sourceType || card['名片來源'] || '',
+      poolEligible: card.poolEligible,
+      isPrivate: card.isPrivate === true,
+      card
+    };
+  },
+
+  async loadMatchmakingPool(payload, env) {
+    const scope = payload.poolScope === 'public' ? 'public' : 'own';
+    const legacyContacts = Array.isArray(payload.contacts) ? payload.contacts : [];
+    if (!env.ACTMASTER_DB || typeof D1ReadModule === 'undefined') {
+      return { scope, contacts: legacyContacts };
+    }
+
+    await D1ReadModule.ensureCardAccessColumns(env);
+    const actorId = D1ReadModule.text(
+      payload.authenticatedUserId ||
+      payload.userId ||
+      payload.currentUser?.userId ||
+      payload.currentUser?.lineId ||
+      payload.currentUser?.line_id
+    );
+    const excludeRowId = D1ReadModule.text(payload.currentCardRowId || payload.excludeRowId);
+    const limit = Math.min(Math.max(Number(payload.limit || 80) || 80, 1), 120);
+    let rows = [];
+
+    if (scope === 'own') {
+      if (!actorId) throw new Error('Missing user identity for own matchmaking pool');
+      const ids = await D1ReadModule.identityIdsForUser(env, actorId);
+      if (!ids.length) ids.push(actorId);
+      const placeholders = ids.map(() => '?').join(',');
+      const params = [...ids, ...ids, ...ids, ...ids];
+      let sql = `
+        SELECT * FROM card_contacts
+        WHERE (
+          owner_user_id IN (${placeholders}) OR creator_id IN (${placeholders})
+          OR line_id IN (${placeholders}) OR profile_user_id IN (${placeholders})
+        )
+        AND LOWER(COALESCE(source_type,'')) <> 'referral_placeholder'
+      `;
+      if (excludeRowId) {
+        sql += ' AND row_id <> ?';
+        params.push(excludeRowId);
+      }
+      sql += ` ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`;
+      rows = await D1ReadModule.all(env, sql, params);
+    } else {
+      const params = [];
+      let sql = `
+        SELECT * FROM card_contacts
+        WHERE LOWER(COALESCE(visibility,'')) = 'public'
+          AND LOWER(COALESCE(source_type,'')) = 'self_profile'
+          AND CAST(COALESCE(pool_eligible, 0) AS INTEGER) = 1
+          AND LOWER(COALESCE(ai_review_status, 'passed')) = 'passed'
+      `;
+      if (excludeRowId) {
+        sql += ' AND row_id <> ?';
+        params.push(excludeRowId);
+      }
+      sql += ` ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`;
+      rows = await D1ReadModule.all(env, sql, params);
+    }
+
+    return {
+      scope,
+      contacts: rows
+        .map(row => D1ReadModule.cardRow(row))
+        .filter(Boolean)
+        .map(card => this.matchContactFromCard(card))
+    };
   },
 
   async recognize(payload, env) {
@@ -1849,25 +1941,31 @@ const AIModule = {
 
   async matchmaking(payload, env) {
     try {
-      const { currentUser, query, contacts } = payload;
-      const safeContacts = (Array.isArray(contacts) ? contacts : []).filter(c => {
+      const { currentUser, query } = payload || {};
+      const pool = await this.loadMatchmakingPool(payload || {}, env);
+      const safeContacts = pool.contacts.filter(c => {
         const visibility = String(c.visibility || '').toLowerCase();
         const sourceType = String(c.sourceType || '').toLowerCase();
         const poolEligible = c.poolEligible === true || c.poolEligible === 1 || c.poolEligible === '1' || c.poolEligible === 'true';
         const isPrivate = c.isPrivate === true || visibility === 'private';
+        if (pool.scope === 'own') return sourceType !== 'referral_placeholder';
         return !isPrivate && visibility === 'public' && poolEligible && sourceType === 'self_profile';
       });
-      if (!safeContacts.length) return { success: false, error: '目前沒有可配對的公開名片' };
-      const contactsList = safeContacts.map((c, i) => `${i+1}. ${c.Name||'未知'} (${c.Company||'無'}) \n標籤: ${c.Tags||'無'}`).join('\n');
-      const prompt = `尋求者：${currentUser.name}，需求：${query}\n候選人：\n${contactsList}\n請選前3位，返回純 JSON 陣列: [{"index":0,"score":95,"reason":"結合標籤與需求，給出20字內的推薦理由"}]`;
-      
+
+      if (!safeContacts.length) {
+        return { success: false, error: pool.scope === 'own' ? '自己的名片池目前沒有可配對名片' : '目前沒有可配對的公開名片' };
+      }
+
+      const contactsList = safeContacts.map((c, i) => `${i + 1}. ${c.Name || '未命名'} (${c.Company || '無'})\n標籤: ${c.Tags || '無'}`).join('\n');
+      const prompt = `使用者:${currentUser?.name || '使用者'}，配對池:${pool.scope === 'own' ? '自己的名片池' : '公開交流池'}，需求:${query}\n候選名單:\n${contactsList}\n請回傳最匹配的前5名 JSON 陣列: [{"index":0,"score":95,"reason":"原因，20字內"}]`;
+
       let items = [];
       try {
         const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: prompt }], temperature: 0.2 }, payload.clientOpenAIKey);
         items = this.parseJsonArray(result.choices?.[0]?.message?.content || '[]');
       } catch (aiError) {
         console.warn('[AI matchmaking] GPT failed, using local fallback:', aiError.message);
-        return { success: true, data: this.localMatchmakingFallback(query, safeContacts), fallback: true };
+        return { success: true, data: this.localMatchmakingFallback(query, safeContacts), fallback: true, poolScope: pool.scope };
       }
 
       const used = new Set();
@@ -1882,11 +1980,19 @@ const AIModule = {
         return {
           rowId: contact.rowId,
           score: Math.max(0, Math.min(100, Number(item.score || 0) || 0)),
-          reason: String(item.reason || '符合您的配對需求').slice(0, 80)
+          reason: String(item.reason || '符合您的配對需求').slice(0, 80),
+          card: contact.card || undefined
         };
       }).filter(Boolean);
-      return { success: true, data: matches.length ? matches : this.localMatchmakingFallback(query, safeContacts), fallback: matches.length === 0 };
-    } catch (e) { return { success: false, error: e.message }; }
+      return {
+        success: true,
+        data: matches.length ? matches : this.localMatchmakingFallback(query, safeContacts),
+        fallback: matches.length === 0,
+        poolScope: pool.scope
+      };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   },
 
   async reviewCardSafety(payload, env) {
