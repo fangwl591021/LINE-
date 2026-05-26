@@ -437,6 +437,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">payments</span>
             獎金制度
           </a>
+          <a href="#" onclick="switchTab('lineoa-monitor')" id="nav-lineoa-monitor" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">forum</span>
+            LINE OA 聊天室監控
+          </a>
           <a href="./lineoa.html" onclick="openLineOATool(); return false;" id="nav-lineoa" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">dashboard_customize</span>
             LINE OA 選單
@@ -665,6 +669,28 @@
         </div>
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex items-center justify-center h-64">
           <p class="text-slate-400 text-sm">此處未來可擴充財務對帳圖表與匯出功能</p>
+        </div>
+      </div>
+
+      <!-- Tab: LINE OA Chat Monitor -->
+      <div id="tab-lineoa-monitor" class="tab-content hidden space-y-6">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 text-blue-700 font-black text-sm mb-2">
+              <span class="material-symbols-outlined text-[20px]">forum</span>
+              LINE OA 聊天室監控
+            </div>
+            <h3 class="text-2xl font-black text-slate-900">站內訊息與聊天室總覽</h3>
+            <p class="text-sm text-slate-500 font-semibold mt-2">監控收件匣訊息、未讀狀態、優惠券核銷與最近互動。</p>
+          </div>
+          <button onclick="loadLineOAMonitor()" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center gap-2 active:scale-95 transition-transform">
+            <span class="material-symbols-outlined text-[18px]">refresh</span>
+            重新整理
+          </button>
+        </div>
+
+        <div id="lineoa-monitor-content" class="space-y-6">
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center text-slate-400 font-bold">尚未載入聊天室監控資料</div>
         </div>
       </div>
 
@@ -1473,6 +1499,7 @@
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'finance') loadFinanceStats();
       if (tabId === 'bonus') initBonusSystem();
+      if (tabId === 'lineoa-monitor') loadLineOAMonitor();
     }
 
     function openLineOATool() {
@@ -1497,6 +1524,116 @@
       if (Number.isNaN(d.getTime())) return raw.replace('T', ' ').replace('.000Z', '').slice(0, 16);
       const pad = n => String(n).padStart(2, '0');
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function monitorNumber(value) {
+      return Number(value || 0).toLocaleString('zh-TW');
+    }
+
+    function monitorTypeLabel(type) {
+      if (type === 'coupon') return '優惠券';
+      if (type === 'activity_reminder') return '活動提醒';
+      return '一般訊息';
+    }
+
+    function monitorStatusBadge(status) {
+      return status === 'unread'
+        ? '<span class="px-2.5 py-1 rounded-full bg-red-50 text-red-600 text-xs font-black">未讀</span>'
+        : '<span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-xs font-black">已讀</span>';
+    }
+
+    function renderLineOAMonitor(data) {
+      const box = document.getElementById('lineoa-monitor-content');
+      if (!box) return;
+      const summary = data && data.summary ? data.summary : {};
+      const recent = Array.isArray(data && data.recent) ? data.recent : [];
+      const threads = Array.isArray(data && data.threads) ? data.threads : [];
+      const couponRate = Number(summary.coupons || 0) > 0
+        ? Math.round(Number(summary.redeemedCoupons || 0) * 100 / Number(summary.coupons || 0)) + '%'
+        : '-';
+      const recentHtml = recent.length ? recent.map(item => {
+        const sender = escapeHTML(item.senderName || item.senderUserId || '-');
+        const receiver = escapeHTML(item.receiverName || item.receiverUserId || '-');
+        const title = escapeHTML(item.title || '未命名訊息');
+        return `
+          <tr class="border-b border-slate-100 last:border-0">
+            <td class="py-4 px-5">
+              <div class="text-sm font-black text-slate-900">${title}</div>
+              <div class="text-xs font-bold text-slate-400 mt-1">${monitorTypeLabel(item.messageType)} · ${formatDisplayTime(item.createdAt)}</div>
+            </td>
+            <td class="py-4 px-5 text-sm font-bold text-slate-600">${sender}</td>
+            <td class="py-4 px-5 text-sm font-bold text-slate-600">${receiver}</td>
+            <td class="py-4 px-5 text-right">${monitorStatusBadge(item.status)}</td>
+          </tr>`;
+      }).join('') : '<tr><td colspan="4" class="py-10 text-center text-slate-400 font-bold">尚無聊天室訊息</td></tr>';
+      const threadHtml = threads.length ? threads.map(thread => `
+        <div class="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <div class="text-sm font-black text-slate-800 truncate">${escapeHTML(thread.senderUserId || '-')}</div>
+            <div class="text-xs font-bold text-slate-400 truncate mt-1">${escapeHTML(thread.receiverUserId || '-')}</div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-lg font-black text-slate-900">${monitorNumber(thread.total)} 則</div>
+            <div class="text-xs font-bold ${Number(thread.unread || 0) > 0 ? 'text-red-500' : 'text-slate-400'}">${monitorNumber(thread.unread)} 未讀</div>
+          </div>
+        </div>`).join('') : '<div class="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400 font-bold">尚無活躍對話</div>';
+
+      box.innerHTML = `
+        <div class="grid grid-cols-4 gap-5">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+            <div class="text-xs font-black text-slate-400 mb-2">總訊息</div>
+            <div class="text-3xl font-black text-slate-900">${monitorNumber(summary.total)}</div>
+          </div>
+          <div class="bg-white rounded-xl border border-red-100 shadow-sm p-5">
+            <div class="text-xs font-black text-red-500 mb-2">未讀</div>
+            <div class="text-3xl font-black text-red-600">${monitorNumber(summary.unread)}</div>
+          </div>
+          <div class="bg-white rounded-xl border border-blue-100 shadow-sm p-5">
+            <div class="text-xs font-black text-blue-600 mb-2">24 小時新增</div>
+            <div class="text-3xl font-black text-blue-700">${monitorNumber(summary.last24h)}</div>
+          </div>
+          <div class="bg-white rounded-xl border border-emerald-100 shadow-sm p-5">
+            <div class="text-xs font-black text-emerald-700 mb-2">優惠券核銷率</div>
+            <div class="text-3xl font-black text-emerald-700">${couponRate}</div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="text-sm font-black text-slate-700 mb-3">活躍對話</h4>
+          <div class="grid grid-cols-2 gap-4">${threadHtml}</div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h4 class="font-black text-slate-800">最近訊息</h4>
+            <span class="text-xs font-bold text-slate-400">LINE OA / 站內收件匣</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-[760px]">
+              <thead class="bg-slate-50 text-xs text-slate-500 font-black">
+                <tr>
+                  <th class="py-3 px-5">訊息</th>
+                  <th class="py-3 px-5">發送者</th>
+                  <th class="py-3 px-5">接收者</th>
+                  <th class="py-3 px-5 text-right">狀態</th>
+                </tr>
+              </thead>
+              <tbody>${recentHtml}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    async function loadLineOAMonitor() {
+      const box = document.getElementById('lineoa-monitor-content');
+      if (!box) return;
+      box.innerHTML = '<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center text-slate-400 font-bold"><span class="material-symbols-outlined animate-spin text-3xl block mb-2">refresh</span>載入聊天室監控中...</div>';
+      const data = await fetchAPI('getInboxMonitor', {}, { timeoutMs: 20000 });
+      if (!data) {
+        box.innerHTML = '<div class="bg-white rounded-2xl border border-red-100 shadow-sm p-10 text-center text-red-500 font-bold">聊天室監控載入失敗，請稍後再試</div>';
+        return;
+      }
+      renderLineOAMonitor(data);
     }
 
     function normalizeApiList(res, keys = []) {
