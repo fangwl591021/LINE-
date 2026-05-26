@@ -1249,6 +1249,17 @@ window.reorderSettingsSections = function() {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     window.reorderSettingsSections();
+    const initialParams = typeof window.readActmasterInitialParams === 'function'
+      ? window.readActmasterInitialParams()
+      : new URLSearchParams(window.location.search);
+    if (
+      window.location.hostname === 'line-engine-matchmake-test.fangwl591021.workers.dev' &&
+      !initialParams.get('liffId')
+    ) {
+      document.getElementById('loading-text').innerText = '測試入口需要專用 LIFF ID';
+      window.showToast?.('請先建立 Endpoint 指向 /test-ui 的測試 LIFF，並用 ?liffId=測試ID 開啟。', true);
+      return;
+    }
     if (typeof window.initActmasterLiff === 'function') {
       await window.initActmasterLiff(LIFF_ID);
     } else {
@@ -1293,9 +1304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
     setTimeout(() => window.refreshPointBalanceBadge?.(), 300);
 
-    const urlParams = typeof window.readActmasterInitialParams === 'function'
-      ? window.readActmasterInitialParams()
-      : new URLSearchParams(window.location.search);
+    const urlParams = initialParams;
     if (urlParams.get('admin') === '1' || urlParams.get('adminPage') === '1') {
       window.location.replace('admin.html?from_liff=1&t=' + Date.now());
       return;
