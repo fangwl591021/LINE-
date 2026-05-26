@@ -278,6 +278,7 @@ const SecurityModule = {
       'resolveDuplicateCardBinding',
       'deployRichMenu',
       'getLineOAChatMonitor',
+      'getLineOAChatCrm',
       'sendLineOAChatReply',
       'updateLineOAChatThread',
       'listAdminAnnouncements',
@@ -351,6 +352,7 @@ const SecurityModule = {
       'dailyPointCheckin',
       'extractLineVoomMedia',
       'getLineOAChatMonitor',
+      'getLineOAChatCrm',
       'sendLineOAChatReply',
       'updateLineOAChatThread'
     ]);
@@ -1181,6 +1183,93 @@ const LineOAChatModule = {
     };
   },
 
+  splitList(value) {
+    return this.text(value).split(',').map(item => this.text(item)).filter(Boolean);
+  },
+
+  riskLevel(row) {
+    const blob = [row.last_message_text, row.tags, row.note, row.opportunity_note].map(v => this.text(v)).join('\n');
+    if (/(退費|生氣|投訴|詐騙|不能用|沒同步|未入帳|客服|緊急|失敗|錯誤|無法)/.test(blob)) return 'high';
+    if (/(點數|贈點|簽到|名片|加入好友|合作|報價|付款|需求)/.test(blob)) return 'medium';
+    return 'low';
+  },
+
+  visitorRecordsFromThread(row) {
+    const records = [];
+    const note = this.text(row.note);
+    note.split(/\r?\n/).map(line => this.text(line)).filter(Boolean).forEach((line, index) => {
+      const important = line.startsWith('[重要]');
+      const content = important ? this.text(line.replace(/^\[重要\]\s*/, '')) : line;
+      if (!content) return;
+      records.push({
+        id: `${row.thread_id || row.user_id || 'thread'}:note:${index}`,
+        category: important ? '重要紀錄' : '備註',
+        content,
+        status: important ? 'follow_up' : 'open',
+        priority: important ? 'high' : 'normal',
+        createdAt: row.updated_at || row.last_event_at || ''
+      });
+    });
+    const opportunityNote = this.text(row.opportunity_note);
+    if (opportunityNote) {
+      records.unshift({
+        id: `${row.thread_id || row.user_id || 'thread'}:opportunity`,
+        category: '商機',
+        content: opportunityNote,
+        status: ['won', 'lost'].includes(this.text(row.opportunity_stage)) ? 'done' : 'follow_up',
+        priority: Number(row.opportunity_value || 0) > 0 ? 'high' : 'normal',
+        createdAt: row.updated_at || row.last_event_at || ''
+      });
+    }
+    return records;
+  },
+
+  crmThreadRow(row) {
+    const records = this.visitorRecordsFromThread(row);
+    const tags = this.splitList(row.tags);
+    const risk = this.riskLevel(row);
+    return {
+      id: row.thread_id || '',
+      threadId: row.thread_id || '',
+      userId: row.user_id || '',
+      name: row.display_name || row.user_id || '未命名客戶',
+      pictureUrl: row.picture_url || '',
+      status: row.status || 'open',
+      risk,
+      summary: row.last_message_text || '',
+      lastMessageType: row.last_message_type || '',
+      tags,
+      note: row.note || '',
+      unread: Number(row.unread_count || 0),
+      messageCount: Number(row.message_count || 0),
+      lastMessageAt: row.last_event_at || row.updated_at || '',
+      opportunityStage: row.opportunity_stage || 'new',
+      opportunityValue: Number(row.opportunity_value || 0),
+      opportunityNote: row.opportunity_note || '',
+      visitorRecords: records
+    };
+  },
+
+  async crm(payload, env) {
+    await this.ensure(env);
+    const limit = Math.min(Math.max(Number(payload.limit || 300) || 300, 1), 500);
+    const rows = await D1ReadModule.all(env, `
+      SELECT thread_id,user_id,source_type,display_name,picture_url,last_message_text,last_message_type,last_event_type,
+             message_count,unread_count,status,tags,note,opportunity_stage,opportunity_value,opportunity_note,last_event_at,updated_at
+      FROM line_oa_threads
+      ORDER BY COALESCE(NULLIF(last_event_at, ''), updated_at) DESC
+      LIMIT ?
+    `, [limit]);
+    const data = rows.map(row => this.crmThreadRow(row));
+    const summary = {
+      customers: data.length,
+      records: data.reduce((sum, item) => sum + item.visitorRecords.length, 0),
+      unread: data.reduce((sum, item) => sum + Number(item.unread || 0), 0),
+      highRisk: data.filter(item => item.risk === 'high' || item.visitorRecords.some(record => record.priority === 'high')).length
+    };
+    return { success: true, data, summary };
+  },
+
   async monitorPage() {
     const source = 'https://raw.githubusercontent.com/fangwl591021/LINE-/e05fd2b/lineoa-monitor.html';
     try {
@@ -1199,6 +1288,30 @@ const LineOAChatModule = {
       });
     } catch (e) {
       return new Response(`<!doctype html><meta charset="utf-8"><title>LINE OA Monitor</title><body style="font-family:system-ui;padding:32px"><h1>LINE OA 聊天室監控</h1><p>監控頁暫時無法載入，請稍後重新整理。</p><pre>${String(e?.message || e)}</pre></body>`, {
+        status: 502,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      });
+    }
+  },
+
+  async crmPage() {
+    const source = 'https://raw.githubusercontent.com/fangwl591021/LINE-/main/lineoa-crm.html';
+    try {
+      const res = await fetch(source, {
+        headers: { 'User-Agent': 'line-engine-crm-page/1.0' },
+        cf: { cacheTtl: 60, cacheEverything: true }
+      });
+      if (!res.ok) throw new Error(`source ${res.status}`);
+      const html = await res.text();
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    } catch (e) {
+      return new Response(`<!doctype html><meta charset="utf-8"><title>LINE OA CRM</title><body style="font-family:system-ui;padding:32px"><h1>LINE OA CRM 載入失敗</h1><pre>${String(e?.message || e)}</pre></body>`, {
         status: 502,
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
       });
@@ -8881,6 +8994,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1InboxModule.monitor(payload || {}, env);
     case 'getLineOAChatMonitor':
       return await LineOAChatModule.monitor(payload || {}, env);
+    case 'getLineOAChatCrm':
+      return await LineOAChatModule.crm(payload || {}, env);
     case 'sendLineOAChatReply':
       return await LineOAChatModule.sendReply(payload || {}, env);
     case 'updateLineOAChatThread':
@@ -8970,6 +9085,18 @@ export default {
       }
       if (request.method === 'GET' && (url.pathname === '/monitor' || url.pathname === '/lineoa-monitor.html')) {
         return await LineOAChatModule.monitorPage();
+      }
+      if (request.method === 'GET' && (url.pathname === '/crm' || url.pathname === '/lineoa-crm.html')) {
+        return await LineOAChatModule.crmPage();
+      }
+      if (request.method === 'GET' && url.pathname === '/api/line-oa/crm') {
+        const payload = {
+          pt_uid: url.searchParams.get('pt_uid') || url.searchParams.get('uid') || url.searchParams.get('userId') || '',
+          limit: url.searchParams.get('limit') || '300'
+        };
+        const authz = await SecurityModule.authorizeAction('getLineOAChatCrm', payload, request, env);
+        if (!authz.allowed) return Utils.jsonResponse({ success: false, error: authz.error || 'Access Denied' }, 403);
+        return Utils.jsonResponse(await LineOAChatModule.crm(payload, env));
       }
       if (url.pathname === '/webhook/line' || url.pathname === '/line-webhook') {
         return await LineOAChatModule.handleWebhook(request, env, ctx || { waitUntil: promise => promise });

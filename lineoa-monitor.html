@@ -732,7 +732,10 @@
       updateThreadMeta({ note: `${el('internal-note').value || ''}\n[重要] ${content}`.trim() }).catch(err => showToast(err.message, 'error'));
     });
     el('open-broadcast').addEventListener('click', () => showToast('分時推播工作台入口已保留。'));
-    el('open-crm').addEventListener('click', () => location.href = './admin.html');
+    el('open-crm').addEventListener('click', () => {
+      const query = monitorUid ? `?pt_uid=${encodeURIComponent(monitorUid)}` : '';
+      location.href = `https://line-engine.fangwl591021.workers.dev/crm${query}`;
+    });
 
     async function initMonitor() {
       if (!token() && !monitorUid && window.liff && typeof liff.init === 'function') {

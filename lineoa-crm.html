@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>點數通 LINE OA 客戶 CRM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family:"Noto Sans TC", system-ui, sans-serif; background:#f3f6fb; }
+    [hidden] { display:none !important; }
+    .thin-scroll::-webkit-scrollbar { width:8px; height:8px; }
+    .thin-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:999px; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-900">
+  <div class="mx-auto max-w-[1500px] px-5 py-6">
+    <header class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <p class="text-xs font-black tracking-[0.22em] text-blue-600">LINE OA CUSTOMER CRM</p>
+        <h1 class="mt-2 text-3xl font-black">客戶 CRM</h1>
+        <p class="mt-2 text-slate-500">彙整 LINE OA 聊天室、重要紀錄、商機階段與風險訊號，提供真人客服追蹤使用。</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a id="monitor-link" href="https://line-engine.fangwl591021.workers.dev/monitor" class="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800">返回聊天室監控</a>
+        <button id="reload-crm" type="button" class="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700">重新載入 CRM</button>
+        <button id="download-csv" type="button" class="rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-700 border border-slate-200 hover:bg-slate-50">匯出 CSV</button>
+      </div>
+    </header>
+
+    <section class="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-6">
+        <label class="block lg:col-span-2">
+          <span class="mb-2 block text-sm font-bold text-slate-700">搜尋</span>
+          <input id="search-input" class="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500" placeholder="姓名、LINE ID、訊息、標籤、紀錄">
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-bold text-slate-700">客服狀態</span>
+          <select id="status-filter" class="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500">
+            <option value="all">全部</option>
+            <option value="open">待回覆</option>
+            <option value="pending">處理中</option>
+            <option value="closed">已處理</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-bold text-slate-700">風險</span>
+          <select id="risk-filter" class="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500">
+            <option value="all">全部</option>
+            <option value="high">高風險</option>
+            <option value="medium">中風險</option>
+            <option value="low">低風險</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-bold text-slate-700">紀錄類型</span>
+          <select id="category-filter" class="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500">
+            <option value="all">全部</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm font-bold text-slate-700">紀錄狀態</span>
+          <select id="record-status-filter" class="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500">
+            <option value="all">全部</option>
+            <option value="open">待處理</option>
+            <option value="follow_up">追蹤中</option>
+            <option value="done">已完成</option>
+          </select>
+        </label>
+      </div>
+      <p id="load-state" class="mt-4 text-sm font-bold text-slate-500">準備載入 CRM。</p>
+    </section>
+
+    <section class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div class="rounded-3xl bg-slate-900 p-5 text-white">
+        <p class="text-sm text-slate-300">客戶檔案</p>
+        <p id="stat-customers" class="mt-3 text-4xl font-black">0</p>
+      </div>
+      <div class="rounded-3xl bg-blue-600 p-5 text-white">
+        <p class="text-sm text-blue-100">重要紀錄</p>
+        <p id="stat-records" class="mt-3 text-4xl font-black">0</p>
+      </div>
+      <div class="rounded-3xl bg-emerald-600 p-5 text-white">
+        <p class="text-sm text-emerald-100">未讀訊息</p>
+        <p id="stat-unread" class="mt-3 text-4xl font-black">0</p>
+      </div>
+      <div class="rounded-3xl bg-rose-500 p-5 text-white">
+        <p class="text-sm text-rose-100">高風險 / 待追蹤</p>
+        <p id="stat-alerts" class="mt-3 text-4xl font-black">0</p>
+      </div>
+    </section>
+
+    <section class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
+      <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-xl font-black">客服狀態</h2>
+          <span id="status-total" class="text-sm font-bold text-slate-400">0</span>
+        </div>
+        <div id="status-bars" class="space-y-3"></div>
+      </div>
+      <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-xl font-black">紀錄分類</h2>
+          <span id="category-total" class="text-sm font-bold text-slate-400">0</span>
+        </div>
+        <div id="category-bars" class="space-y-3"></div>
+      </div>
+      <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-xl font-black">風險分布</h2>
+          <span id="risk-total" class="text-sm font-bold text-slate-400">0</span>
+        </div>
+        <div id="risk-bars" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <section class="mt-5 rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div class="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 class="text-xl font-black">客戶列表</h2>
+          <p class="mt-1 text-sm text-slate-500">點擊「開啟聊天室」回到對應 LINE OA 對話。</p>
+        </div>
+        <p id="table-count" class="text-sm font-bold text-slate-400">0 筆</p>
+      </div>
+      <div class="overflow-auto thin-scroll">
+        <table class="min-w-[1120px] w-full text-left text-sm">
+          <thead class="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-400">
+            <tr>
+              <th class="px-5 py-4">客戶</th>
+              <th class="px-5 py-4">狀態</th>
+              <th class="px-5 py-4">風險</th>
+              <th class="px-5 py-4">最新紀錄</th>
+              <th class="px-5 py-4">商機</th>
+              <th class="px-5 py-4">最近互動</th>
+              <th class="px-5 py-4">操作</th>
+            </tr>
+          </thead>
+          <tbody id="customer-table" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" hidden class="px-5 py-12 text-center text-slate-400 font-bold">目前沒有符合條件的客戶資料。</div>
+    </section>
+  </div>
+
+  <div id="toast" hidden class="fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-2xl px-5 py-3 font-bold text-white shadow-2xl"></div>
+
+  <script>
+    const WORKER_URL = 'https://line-engine.fangwl591021.workers.dev/';
+    const LIFF_ID = '1660923784-vViMTZ1y';
+    const statusLabels = { open:'待回覆', pending:'處理中', closed:'已處理' };
+    const riskLabels = { high:'高風險', medium:'中風險', low:'低風險' };
+    const recordStatusLabels = { open:'待處理', follow_up:'追蹤中', done:'已完成' };
+    const opportunityLabels = { new:'新客', qualified:'需求確認', quoted:'已報價', payment:'待付款', won:'已成交', lost:'暫緩 / 流失' };
+
+    let customers = [];
+    let filteredCustomers = [];
+    let loading = false;
+
+    const els = {
+      loadState: document.getElementById('load-state'),
+      search: document.getElementById('search-input'),
+      status: document.getElementById('status-filter'),
+      risk: document.getElementById('risk-filter'),
+      category: document.getElementById('category-filter'),
+      recordStatus: document.getElementById('record-status-filter'),
+      table: document.getElementById('customer-table'),
+      tableCount: document.getElementById('table-count'),
+      emptyState: document.getElementById('empty-state'),
+      stats: {
+        customers: document.getElementById('stat-customers'),
+        records: document.getElementById('stat-records'),
+        unread: document.getElementById('stat-unread'),
+        alerts: document.getElementById('stat-alerts')
+      },
+      bars: {
+        status: document.getElementById('status-bars'),
+        category: document.getElementById('category-bars'),
+        risk: document.getElementById('risk-bars'),
+        statusTotal: document.getElementById('status-total'),
+        categoryTotal: document.getElementById('category-total'),
+        riskTotal: document.getElementById('risk-total')
+      }
+    };
+
+    function query() {
+      return new URLSearchParams(location.search || '');
+    }
+
+    function captureTokenFromHash() {
+      const hash = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+      const token = hash.get('lineoa_token') || hash.get('access_token') || '';
+      if (token) {
+        localStorage.setItem('lineoa_access_token', token);
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+      return token;
+    }
+
+    function token() {
+      return localStorage.getItem('lineoa_access_token') || '';
+    }
+
+    function monitorUid() {
+      const params = query();
+      const keys = ['pt_uid', 'uid', 'userId', 'LINE_user_id', 'lineUserId', 'pointUserId', 'wallet_uid'];
+      for (const key of keys) {
+        const value = String(params.get(key) || '').trim();
+        if (value) return value;
+      }
+      return '';
+    }
+
+    function withUid(path, extra = {}) {
+      const uid = monitorUid();
+      const params = new URLSearchParams(extra);
+      if (uid) params.set('pt_uid', uid);
+      const suffix = params.toString() ? '?' + params.toString() : '';
+      return `https://line-engine.fangwl591021.workers.dev${path}${suffix}`;
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.hidden = false;
+      toast.className = 'fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-2xl px-5 py-3 font-bold text-white shadow-2xl ' + (type === 'error' ? 'bg-red-500' : 'bg-emerald-500');
+      toast.textContent = message;
+      setTimeout(() => { toast.hidden = true; }, 2400);
+    }
+
+    async function api(action, payload = {}) {
+      const body = { action, payload: { ...payload } };
+      const uid = monitorUid();
+      if (uid) {
+        body.payload.pt_uid = uid;
+        body.payload.userId = body.payload.userId || uid;
+      }
+      if (token()) body.payload.lineAccessToken = token();
+      const res = await fetch(WORKER_URL, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.success === false) throw new Error(data?.error || `HTTP ${res.status}`);
+      return data.data || data;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+    }
+
+    function csvCell(value) {
+      const text = String(value ?? '').replace(/\r?\n/g, ' ');
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    function formatTime(value) {
+      if (!value) return '-';
+      const date = new Date(String(value).includes('T') ? value : String(value).replace(' ', 'T'));
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    }
+
+    function countBy(items, getter) {
+      return items.reduce((acc, item) => {
+        const key = getter(item) || '未分類';
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+    }
+
+    function summarizeCustomer(row) {
+      const records = Array.isArray(row.visitorRecords) ? row.visitorRecords : [];
+      const categories = [...new Set(records.map(record => record.category || '紀錄'))];
+      const latestRecord = records[0] || null;
+      const alertRecords = records.filter(record => record.priority === 'high' || record.status === 'follow_up');
+      const searchBlob = [
+        row.name, row.userId, row.summary, row.note, row.opportunityNote, ...(row.tags || []),
+        ...records.flatMap(record => [record.category, record.content, record.status, record.priority])
+      ].join(' ').toLowerCase();
+      return { ...row, records, categories, latestRecord, alertRecords, searchBlob };
+    }
+
+    async function loadCrm() {
+      if (loading) return;
+      loading = true;
+      document.getElementById('reload-crm').disabled = true;
+      els.loadState.textContent = '載入 CRM 摘要...';
+      try {
+        const data = await api('getLineOAChatCrm', { limit: 500 });
+        customers = (Array.isArray(data) ? data : data.data || []).map(summarizeCustomer);
+        fillCategoryFilter();
+        applyFilters();
+        els.loadState.textContent = `已載入 ${customers.length} 筆客戶檔。`;
+      } finally {
+        loading = false;
+        document.getElementById('reload-crm').disabled = false;
+      }
+    }
+
+    function fillCategoryFilter() {
+      const current = els.category.value;
+      const categories = [...new Set(customers.flatMap(customer => customer.categories))].filter(Boolean).sort();
+      els.category.innerHTML = '<option value="all">全部</option>' + categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+      if (categories.includes(current)) els.category.value = current;
+    }
+
+    function applyFilters() {
+      const q = els.search.value.trim().toLowerCase();
+      const status = els.status.value;
+      const risk = els.risk.value;
+      const category = els.category.value;
+      const recordStatus = els.recordStatus.value;
+      filteredCustomers = customers.filter(customer => {
+        if (q && !customer.searchBlob.includes(q)) return false;
+        if (status !== 'all' && customer.status !== status) return false;
+        if (risk !== 'all' && customer.risk !== risk) return false;
+        if (category !== 'all' && !customer.records.some(record => record.category === category)) return false;
+        if (recordStatus !== 'all' && !customer.records.some(record => record.status === recordStatus)) return false;
+        return true;
+      });
+      renderStats();
+      renderCharts();
+      renderTable();
+    }
+
+    function renderStats() {
+      els.stats.customers.textContent = filteredCustomers.length;
+      els.stats.records.textContent = filteredCustomers.reduce((sum, item) => sum + item.records.length, 0);
+      els.stats.unread.textContent = filteredCustomers.reduce((sum, item) => sum + Number(item.unread || 0), 0);
+      els.stats.alerts.textContent = filteredCustomers.filter(item => item.risk === 'high' || item.alertRecords.length).length;
+    }
+
+    function renderBarList(container, counts, labels = {}) {
+      const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      const total = entries.reduce((sum, [, value]) => sum + value, 0);
+      if (!entries.length) {
+        container.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-400">尚無資料</div>';
+        return total;
+      }
+      container.innerHTML = entries.map(([key, value]) => {
+        const percent = total ? Math.round((value / total) * 100) : 0;
+        return `<div>
+          <div class="mb-1 flex items-center justify-between text-sm">
+            <span class="font-bold text-slate-700">${escapeHtml(labels[key] || key)}</span>
+            <span class="text-slate-400">${value} 筆</span>
+          </div>
+          <div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-blue-600" style="width:${percent}%"></div></div>
+        </div>`;
+      }).join('');
+      return total;
+    }
+
+    function renderCharts() {
+      els.bars.statusTotal.textContent = renderBarList(els.bars.status, countBy(filteredCustomers, item => item.status), statusLabels);
+      els.bars.riskTotal.textContent = renderBarList(els.bars.risk, countBy(filteredCustomers, item => item.risk), riskLabels);
+      const categories = {};
+      filteredCustomers.forEach(customer => {
+        if (!customer.categories.length) categories['未建立紀錄'] = (categories['未建立紀錄'] || 0) + 1;
+        customer.categories.forEach(category => { categories[category] = (categories[category] || 0) + 1; });
+      });
+      els.bars.categoryTotal.textContent = renderBarList(els.bars.category, categories);
+    }
+
+    function pillClass(type, value) {
+      if (type === 'status') {
+        if (value === 'open') return 'bg-amber-100 text-amber-700';
+        if (value === 'pending') return 'bg-blue-100 text-blue-700';
+        return 'bg-slate-100 text-slate-600';
+      }
+      if (value === 'high') return 'bg-rose-100 text-rose-700';
+      if (value === 'medium') return 'bg-amber-100 text-amber-700';
+      return 'bg-emerald-100 text-emerald-700';
+    }
+
+    function renderTable() {
+      els.tableCount.textContent = `${filteredCustomers.length} 筆`;
+      els.emptyState.hidden = filteredCustomers.length > 0;
+      els.table.innerHTML = filteredCustomers.map(customer => {
+        const image = customer.pictureUrl
+          ? `<img src="${escapeHtml(customer.pictureUrl)}" alt="${escapeHtml(customer.name)}" class="h-11 w-11 rounded-full object-cover">`
+          : `<div class="h-11 w-11 rounded-full bg-slate-100 grid place-items-center font-black text-slate-600">${escapeHtml(String(customer.name || '客').slice(0, 1))}</div>`;
+        const recordText = customer.latestRecord
+          ? `${customer.latestRecord.category}：${customer.latestRecord.content}`
+          : customer.summary || '尚未建立客戶紀錄';
+        const opportunity = [
+          opportunityLabels[customer.opportunityStage] || customer.opportunityStage || '新客',
+          customer.opportunityValue ? `NT$ ${Math.round(customer.opportunityValue).toLocaleString()}` : '',
+          customer.opportunityNote || ''
+        ].filter(Boolean).join(' / ') || '-';
+        return `<tr class="hover:bg-slate-50">
+          <td class="px-5 py-4 align-top">
+            <div class="flex items-start gap-3">
+              ${image}
+              <div class="min-w-0">
+                <p class="font-black text-slate-900">${escapeHtml(customer.name || '未命名客戶')}</p>
+                <p class="mt-1 max-w-[230px] truncate font-mono text-xs text-slate-400">${escapeHtml(customer.userId || '-')}</p>
+                <p class="mt-1 text-xs font-bold text-slate-400">${Number(customer.messageCount || 0)} 則訊息 / ${Number(customer.unread || 0)} 未讀</p>
+              </div>
+            </div>
+          </td>
+          <td class="px-5 py-4 align-top"><span class="rounded-full px-3 py-1 text-xs font-bold ${pillClass('status', customer.status)}">${statusLabels[customer.status] || customer.status}</span></td>
+          <td class="px-5 py-4 align-top"><span class="rounded-full px-3 py-1 text-xs font-bold ${pillClass('risk', customer.risk)}">${riskLabels[customer.risk] || customer.risk}</span></td>
+          <td class="max-w-[340px] px-5 py-4 align-top text-slate-600">${escapeHtml(recordText)}</td>
+          <td class="max-w-[300px] px-5 py-4 align-top text-slate-600">${escapeHtml(opportunity)}</td>
+          <td class="px-5 py-4 align-top text-slate-500">${formatTime(customer.lastMessageAt)}</td>
+          <td class="px-5 py-4 align-top">
+            <a class="rounded-2xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800" href="${withUid('/monitor', { thread: customer.threadId || customer.id })}">開啟聊天室</a>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function downloadCsv() {
+      const header = ['客戶', 'User ID', '狀態', '風險', '訊息數', '未讀', '最新紀錄', '商機', '最近互動'];
+      const rows = filteredCustomers.map(customer => [
+        customer.name,
+        customer.userId,
+        statusLabels[customer.status] || customer.status,
+        riskLabels[customer.risk] || customer.risk,
+        customer.messageCount,
+        customer.unread,
+        customer.latestRecord ? `${customer.latestRecord.category}:${customer.latestRecord.content}` : customer.summary,
+        [opportunityLabels[customer.opportunityStage] || customer.opportunityStage, customer.opportunityValue, customer.opportunityNote].filter(Boolean).join(' / '),
+        customer.lastMessageAt
+      ]);
+      const csv = '\ufeff' + [header, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
+      const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `line-oa-customer-crm-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function init() {
+      captureTokenFromHash();
+      document.getElementById('monitor-link').href = withUid('/monitor');
+      if (!monitorUid() && !token() && window.liff && typeof liff.init === 'function') {
+        await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
+        if (!liff.isLoggedIn()) {
+          liff.login({ redirectUri: location.href });
+          return;
+        }
+        localStorage.setItem('lineoa_access_token', liff.getAccessToken());
+      }
+      await loadCrm();
+    }
+
+    ['input', 'change'].forEach(eventName => {
+      els.search.addEventListener(eventName, applyFilters);
+      els.status.addEventListener(eventName, applyFilters);
+      els.risk.addEventListener(eventName, applyFilters);
+      els.category.addEventListener(eventName, applyFilters);
+      els.recordStatus.addEventListener(eventName, applyFilters);
+    });
+    document.getElementById('reload-crm').addEventListener('click', () => loadCrm().catch(err => showToast(err.message, 'error')));
+    document.getElementById('download-csv').addEventListener('click', downloadCsv);
+
+    init().catch(err => {
+      els.loadState.textContent = err.message || 'CRM 載入失敗';
+      showToast(err.message || 'CRM 載入失敗', 'error');
+    });
+  </script>
+</body>
+</html>
