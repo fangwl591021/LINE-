@@ -938,11 +938,12 @@ const LineOAChatModule = {
   async handleWebhook(request, env, ctx) {
     const rawBody = await request.text();
     const signature = request.headers.get('x-line-signature') || '';
-    const ok = await this.verifySignature(rawBody, signature, env);
-    if (!ok) return new Response('Invalid LINE signature', { status: 401 });
-    await this.ensure(env);
     const body = JSON.parse(rawBody || '{}');
     const events = Array.isArray(body.events) ? body.events : [];
+    const ok = await this.verifySignature(rawBody, signature, env);
+    if (!ok && events.length > 0) return new Response('Invalid LINE signature', { status: 401 });
+    if (!ok && events.length === 0) return new Response('OK', { status: 200 });
+    await this.ensure(env);
     const saveJob = Promise.all(events.map(event => this.saveEvent(env, event).catch(e => console.error('LINE OA event save failed', e))));
     const forwardJob = this.forwardToSecondSystem(rawBody, signature, env);
     if (ctx && typeof ctx.waitUntil === 'function') {
@@ -969,6 +970,7 @@ const LineOAChatModule = {
     const checks = {
       gas: { configured: !!gasUrl, ok: false, status: 0 },
       forward: { configured: !!forwardUrl, ok: false, status: 0 },
+      secret: { configured: !!env.LINE_CHANNEL_SECRET, ok: !!env.LINE_CHANNEL_SECRET, status: 0 },
       line: { configured: !!env.LINE_CHANNEL_ACCESS_TOKEN, ok: false, status: 0, botName: '' }
     };
     if (gasUrl) {
@@ -1023,7 +1025,7 @@ const LineOAChatModule = {
       <p>Webhook URL: <code>https://line-engine.fangwl591021.workers.dev/line-webhook</code></p>
       <table cellpadding="10" cellspacing="0" style="background:white;border-collapse:collapse;border:1px solid #e2e8f0">
       <tr><th align="left">節點</th><th align="left">狀態</th><th align="left">HTTP</th><th align="left">備註</th></tr>
-      ${row('GAS_URL', checks.gas)}${row('FORWARD_WEBHOOK_URL', checks.forward)}${row('LINE_CHANNEL_ACCESS_TOKEN', checks.line)}
+      ${row('GAS_URL（舊 GAS 相容，選填）', checks.gas)}${row('FORWARD_WEBHOOK_URL（選填）', checks.forward)}${row('LINE_CHANNEL_SECRET', checks.secret)}${row('LINE_CHANNEL_ACCESS_TOKEN', checks.line)}
       </table></body>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
   },
 
