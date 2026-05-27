@@ -911,6 +911,14 @@
       <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 mx-1">
         <h3 class="font-black text-lg mb-3 text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">document_scanner</span> 掃描建立名片</h3>
 
+        <div class="mt-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-[13px] leading-relaxed text-blue-800">
+          <div class="font-black">名片酷請用來掃描客戶或合作夥伴。</div>
+          <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>要建立自己的名片，請走「我的專屬名片」，系統才會綁定到本人資料。</span>
+            <button type="button" onclick="window.openMyCardSettings ? window.openMyCardSettings() : window.goPage('admin-settings')" class="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-white font-black active:scale-95 transition-transform">建立我的名片</button>
+          </div>
+        </div>
+
         <div class="flex gap-3 mt-4">
           <button onclick="document.getElementById('cameraInput').click()" class="flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm">
             <span class="material-symbols-outlined text-3xl">photo_camera</span>
@@ -1866,7 +1874,7 @@
 <!-- ocr-lab route: ocr-lab.html -->
 <script src="js/core.js?v=7.23"></script>
 <script src="js/navigation.js?v=7.6"></script>
-<script src="js/modules/cropper.js?v=7.11"></script>
+<script src="js/modules/cropper.js?v=7.12"></script>
 <script src="js/modules/cards.js?v=7.5"></script>
 <script src="js/modules/ecard.js?v=7.34"></script>
 <script src="js/modules/mycard.js?v=8.37"></script>

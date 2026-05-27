@@ -162,6 +162,95 @@ function hasOcrContent(cardData) {
     .some((key) => String(cardData?.[key] || '').trim() !== '');
 }
 
+function normalizeOwnCardText(value) {
+  return String(value || '').trim().replace(/\s+/g, '').toLowerCase();
+}
+
+function normalizeOwnCardPhone(value) {
+  let text = String(value || '').replace(/[^\d+]/g, '');
+  if (text.startsWith('+886')) text = '0' + text.slice(4);
+  else if (text.startsWith('886')) text = '0' + text.slice(3);
+  return text.replace(/[^\d]/g, '');
+}
+
+function collectOwnCardValues(source, depth = 0, values = []) {
+  if (source === undefined || source === null || depth > 2) return values;
+  if (typeof source === 'string' || typeof source === 'number') {
+    const text = String(source).trim();
+    if (text) values.push(text);
+    return values;
+  }
+  if (Array.isArray(source)) {
+    source.forEach((item) => collectOwnCardValues(item, depth + 1, values));
+    return values;
+  }
+  if (typeof source === 'object') {
+    Object.values(source).forEach((item) => collectOwnCardValues(item, depth + 1, values));
+  }
+  return values;
+}
+
+function getCurrentOwnCardIdentity() {
+  const user = window.currentUser || {};
+  const profile = window.currentUserProfile || {};
+  const userId = String(profile.userId || user.userId || user.lineId || '').trim();
+  const names = [
+    user.name,
+    user.displayName,
+    profile.displayName,
+    profile.name
+  ].map(normalizeOwnCardText).filter((value, index, arr) => value.length >= 2 && arr.indexOf(value) === index);
+  const phones = [
+    user.phone,
+    user.mobile,
+    user.tel,
+    user.userPhone,
+    profile.phone,
+    profile.mobile,
+    profile.tel
+  ].map(normalizeOwnCardPhone).filter((value, index, arr) => value.length >= 7 && arr.indexOf(value) === index);
+  return { userId, names, phones };
+}
+
+function phonesLookSame(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.length >= 9 && b.length >= 9 && a.slice(-9) === b.slice(-9);
+}
+
+function looksLikeOwnCardUpload(cardData) {
+  if (window.currentUserCard) return { matched: false, reason: 'already_has_self_card' };
+  const identity = getCurrentOwnCardIdentity();
+  if (!identity.userId) return { matched: false, reason: 'missing_user' };
+  const values = collectOwnCardValues(cardData);
+  const cardPhones = values.map(normalizeOwnCardPhone).filter((value) => value.length >= 7);
+  const phoneMatch = identity.phones.find((phone) => cardPhones.some((candidate) => phonesLookSame(phone, candidate)));
+  if (phoneMatch) return { matched: true, reason: 'phone' };
+
+  // Name-only matching is intentionally conservative; it is used only when the member profile has no phone.
+  if (!identity.phones.length) {
+    const cardTexts = values.map(normalizeOwnCardText).filter(Boolean);
+    const nameMatch = identity.names.find((name) => cardTexts.includes(name));
+    if (nameMatch) return { matched: true, reason: 'name' };
+  }
+  return { matched: false, reason: 'no_match' };
+}
+
+function buildSelfProfileCardPayload(cardData) {
+  const userId = String(window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '').trim();
+  return {
+    ...cardData,
+    userId,
+    lineId: userId,
+    'LINE ID': userId,
+    creatorId: userId,
+    ['\u5efa\u6a94\u8005ID']: userId,
+    sourceType: 'self_profile',
+    ['\u540d\u7247\u4f86\u6e90']: 'self_profile',
+    ['\u5efa\u6a94\u4eba/\u5099\u8a3b']: '\u6211\u7684\u5c08\u5c6c\u540d\u7247\uff08\u7531\u540d\u7247\u9177\u8f49\u5165\uff09'
+  };
+}
+
 function describeCardSaveResult(saveRes, baseMessage) {
   const award = saveRes && saveRes.pointAward ? saveRes.pointAward : null;
   const points = Number((saveRes && saveRes.awardedPoints) || (award && award.awarded ? award.points : 0) || 0);
@@ -473,6 +562,26 @@ window.confirmCrop = async function() {
     if (!hasOcrContent(cardData)) {
       console.warn('[confirmCrop] OCR returned no usable card fields:', ocrRes);
       throw new Error('AI 有回應，但沒有辨識到姓名、公司或聯絡資料，請換一張更清楚的名片照片');
+    }
+
+    const ownCardMatch = looksLikeOwnCardUpload(cardData);
+    if (ownCardMatch.matched && window.confirm('\u9019\u770b\u8d77\u4f86\u662f\u4f60\u7684\u540d\u7247\u3002\u8981\u6539\u5b58\u5230\u300c\u6211\u7684\u5c08\u5c6c\u540d\u7247\u300d\u55ce\uff1f\n\n\u6309\u78ba\u5b9a\uff1a\u5efa\u7acb\u70ba\u6211\u7684\u5c08\u5c6c\u540d\u7247\n\u6309\u53d6\u6d88\uff1a\u4ecd\u5b58\u5165\u540d\u7247\u9177')) {
+      const selfProfilePayload = buildSelfProfileCardPayload(cardData);
+      setCardOcrProgressStage(86, '\u6539\u5b58\u5230\u6211\u7684\u5c08\u5c6c\u540d\u7247...');
+      const saveRes = await window.fetchAPI('saveCard', selfProfilePayload, true);
+      if (saveRes && saveRes.rowId) {
+        const savedCard = putSavedCardOnTop(saveRes, selfProfilePayload);
+        hideCardOcrProgress('\u6211\u7684\u5c08\u5c6c\u540d\u7247\u5df2\u5efa\u7acb');
+        window.showToast('\u5df2\u5efa\u7acb\u6211\u7684\u5c08\u5c6c\u540d\u7247');
+        refreshPointsAfterCardSave();
+        window.currentUserCard = savedCard;
+        if (typeof window.initMyECard === 'function') window.initMyECard();
+        refreshCardsAfterSave(savedCard);
+        if (typeof window.openCardDetail === 'function') window.openCardDetail(savedCard);
+        else if (typeof window.openMyCardSettings === 'function') window.openMyCardSettings();
+        return;
+      }
+      throw new Error('\u5132\u5b58\u5931\u6557');
     }
 
     const cardPayload = {
