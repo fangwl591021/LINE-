@@ -290,6 +290,31 @@
     }
   }
 
+  async function openMyCardEntry(evt) {
+    if (evt && evt.preventDefault) evt.preventDefault();
+    moduleCore.showLoading(true);
+    try {
+      currentCardData = await resolveCurrentUserCard(true);
+      var details = document.getElementById('details-my-ecard');
+      if (currentCardData) {
+        if (details) details.open = false;
+        if (typeof window.openCardDetail === 'function') {
+          window.openCardDetail(currentCardData);
+        }
+        return;
+      }
+      if (details) {
+        details.open = true;
+        setTimeout(function() {
+          details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+      }
+      if (window.showToast) window.showToast('請先建立專屬名片');
+    } finally {
+      moduleCore.showLoading(false);
+    }
+  }
+
   function getCardRowId(card) {
     return card && (
       card.rowId ||
@@ -645,8 +670,8 @@
       if (Array.isArray(window.allCards)) window.allCards.unshift(cardPayload);
       if (window.showToast) window.showToast('✅ 已使用 LINE 資料建立專屬名片');
       if (typeof window.loadAllData === 'function') await window.loadAllData({ render: false });
-      load();
-      focusMyECardSection();
+      await load();
+      await openMyCardDetail();
       if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards || []);
     } catch (e) {
       if (window.showToast) window.showToast('生成名片失敗：' + (e.message || '請稍後再試'), true);
@@ -794,6 +819,7 @@
   var api = {
     init: init,
     load: load,
+    openMyCardEntry: openMyCardEntry,
     openMyCardDetail: openMyCardDetail,
     shareMyCard: shareMyCard,
     showMyQRCode: showMyQRCode,
@@ -804,6 +830,7 @@
 
   window.MyCardModule = api;
   window.initMyECard = function() { api.init(); return api.load(); };
+  window.openMyCardEntry = openMyCardEntry;
   window.openMyCardDetail = openMyCardDetail;
   window.changeMyLayout = handleLayoutChange;
   window.focusMyECardSection = focusMyECardSection;
