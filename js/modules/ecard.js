@@ -542,17 +542,30 @@ window.renderV1Buttons = function() {
     container.innerHTML = '<p class="text-[12px] text-slate-400">尚未設定任何按鈕</p>';
   } else {
     container.innerHTML = window.currentEcardButtons.map((b, i) => `
-      <div class="flex gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-        <input type="color" value="${b.c || '#06C755'}" class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200 bg-white" onchange="window.currentEcardButtons[${i}].c=this.value; window.updateECardPreview()">
-        <div class="flex-1 flex flex-col gap-1.5">
-          <input type="text" value="${escapeHTML(b.l || '')}" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="window.currentEcardButtons[${i}].l=this.value; window.updateECardPreview()">
-          <input type="text" value="${escapeHTML(b.u || '')}" placeholder="網址、tel:電話 或 line 連結" class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5" oninput="window.currentEcardButtons[${i}].u=this.value; window.updateECardPreview()">
+      <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <p class="text-[13px] font-black text-slate-700">按鈕 ${i + 1}</p>
+          <button type="button" onclick="window.currentEcardButtons.splice(${i},1); window.renderV1Buttons(); window.updateECardPreview()" class="w-10 h-10 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl shrink-0 transition-colors flex items-center justify-center" aria-label="刪除按鈕"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
-        <div class="flex flex-col gap-1 shrink-0">
-          <button type="button" onclick="window.moveV1Button(${i}, -1)" ${i === 0 ? 'disabled' : ''} class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span></button>
-          <button type="button" onclick="window.moveV1Button(${i}, 1)" ${i === window.currentEcardButtons.length - 1 ? 'disabled' : ''} class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span></button>
+        <label class="block">
+          <span class="block text-[12px] font-bold text-slate-500 mb-1.5">按鈕顏色</span>
+          <div class="grid grid-cols-[56px_1fr] gap-2">
+            <input type="color" value="${/^#[0-9a-f]{6}$/i.test(b.c || '') ? b.c : '#06C755'}" class="w-14 h-12 p-1 cursor-pointer rounded-xl shrink-0 border border-slate-200 bg-white" onchange="window.currentEcardButtons[${i}].c=this.value; var next=this.parentElement.querySelector('.button-color-text'); if(next) next.value=this.value; window.updateECardPreview()">
+            <input type="text" value="${escapeHTML(b.c || '#06C755')}" placeholder="#06C755" class="button-color-text w-full text-[13px] font-mono bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3" oninput="window.currentEcardButtons[${i}].c=this.value; window.updateECardPreview()">
+          </div>
+        </label>
+        <label class="block">
+          <span class="block text-[12px] font-bold text-slate-500 mb-1.5">按鈕文字</span>
+          <input type="text" value="${escapeHTML(b.l || '')}" placeholder="例如：加入LINE好友" class="w-full text-[14px] font-bold bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3" oninput="window.currentEcardButtons[${i}].l=this.value; window.updateECardPreview()">
+        </label>
+        <label class="block">
+          <span class="block text-[12px] font-bold text-slate-500 mb-1.5">網址 / 電話 / LINE 連結</span>
+          <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://... 或 tel:0927136847" class="w-full text-[13px] font-mono bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3" oninput="window.currentEcardButtons[${i}].u=this.value; window.updateECardPreview()">
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" onclick="window.moveV1Button(${i}, -1)" ${i === 0 ? 'disabled' : ''} class="h-11 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span></button>
+          <button type="button" onclick="window.moveV1Button(${i}, 1)" ${i === window.currentEcardButtons.length - 1 ? 'disabled' : ''} class="h-11 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_down</span></button>
         </div>
-        <button onclick="window.currentEcardButtons.splice(${i},1); window.renderV1Buttons(); window.updateECardPreview()" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
       </div>
     `).join('');
   }

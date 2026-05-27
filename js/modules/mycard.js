@@ -403,19 +403,33 @@
     }
 
     list.innerHTML = myEcardButtons.map(function(button, index) {
-      return '<div class="flex gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100 mb-2">' +
-        '<input type="color" value="' + escapeHTML(button.c || '#06C755') + '" class="w-10 h-10 p-0 cursor-pointer rounded-lg shrink-0 border border-slate-200" onchange="window.updateMyV1Button(' + index + ', \'c\', this.value)">' +
-        '<div class="flex-1 flex flex-col gap-1.5">' +
-          '<input type="text" value="' + escapeHTML(button.l || '') + '" placeholder="按鈕顯示文字" class="w-full text-[13px] font-bold bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
-          '<input type="text" value="' + escapeHTML(button.u || '') + '" placeholder="https://..." class="w-full text-[12px] font-mono bg-white border-none outline-none focus:ring-1 focus:ring-blue-500 rounded px-2.5 py-1.5 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
+      var colorValue = /^#[0-9a-f]{6}$/i.test(button.c || '') ? button.c : '#06C755';
+      return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-3 space-y-3">' +
+        '<div class="flex items-center justify-between gap-3">' +
+          '<p class="text-[13px] font-black text-slate-700">按鈕 ' + (index + 1) + '</p>' +
+          '<button type="button" onclick="window.removeMyV1Button(' + index + ')" class="w-10 h-10 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl shrink-0 transition-colors flex items-center justify-center" aria-label="刪除按鈕">' +
+            '<span class="material-symbols-outlined text-[18px]">delete</span>' +
+          '</button>' +
         '</div>' +
-        '<div class="flex flex-col gap-1 shrink-0">' +
-          '<button type="button" onclick="window.moveMyV1Button(' + index + ', -1)" ' + (index === 0 ? 'disabled' : '') + ' class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span></button>' +
-          '<button type="button" onclick="window.moveMyV1Button(' + index + ', 1)" ' + (index === myEcardButtons.length - 1 ? 'disabled' : '') + ' class="w-10 h-9 rounded-lg border border-slate-200 bg-white text-slate-500 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span></button>' +
+        '<label class="block">' +
+          '<span class="block text-[12px] font-bold text-slate-500 mb-1.5">按鈕顏色</span>' +
+          '<div class="grid grid-cols-[56px_1fr] gap-2">' +
+            '<input type="color" value="' + escapeHTML(colorValue) + '" class="w-14 h-12 p-1 cursor-pointer rounded-xl shrink-0 border border-slate-200 bg-white" onchange="window.updateMyV1Button(' + index + ', \'c\', this.value); var next=this.parentElement.querySelector(\'.button-color-text\'); if(next) next.value=this.value;">' +
+            '<input type="text" value="' + escapeHTML(button.c || colorValue) + '" placeholder="#06C755" class="button-color-text w-full text-[13px] font-mono bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'c\', this.value)">' +
+          '</div>' +
+        '</label>' +
+        '<label class="block">' +
+          '<span class="block text-[12px] font-bold text-slate-500 mb-1.5">按鈕文字</span>' +
+          '<input type="text" value="' + escapeHTML(button.l || '') + '" placeholder="例如：加入LINE好友" class="w-full text-[14px] font-bold bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
+        '</label>' +
+        '<label class="block">' +
+          '<span class="block text-[12px] font-bold text-slate-500 mb-1.5">網址 / 電話 / LINE 連結</span>' +
+          '<input type="text" value="' + escapeHTML(button.u || '') + '" placeholder="https://... 或 tel:0927136847" class="w-full text-[13px] font-mono bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
+        '</label>' +
+        '<div class="grid grid-cols-2 gap-2">' +
+          '<button type="button" onclick="window.moveMyV1Button(' + index + ', -1)" ' + (index === 0 ? 'disabled' : '') + ' class="h-11 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span></button>' +
+          '<button type="button" onclick="window.moveMyV1Button(' + index + ', 1)" ' + (index === myEcardButtons.length - 1 ? 'disabled' : '') + ' class="h-11 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_down</span></button>' +
         '</div>' +
-        '<button type="button" onclick="window.removeMyV1Button(' + index + ')" class="text-red-400 bg-red-50 hover:bg-red-100 p-2.5 rounded-lg shrink-0 transition-colors">' +
-          '<span class="material-symbols-outlined text-[18px]">delete</span>' +
-        '</button>' +
       '</div>';
     }).join('');
   }
