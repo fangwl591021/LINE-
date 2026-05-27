@@ -404,7 +404,7 @@
 
     list.innerHTML = myEcardButtons.map(function(button, index) {
       var colorValue = /^#[0-9a-f]{6}$/i.test(button.c || '') ? button.c : '#06C755';
-      return '<div class="border-b border-slate-200 pb-5 mb-5 last:border-b-0 last:pb-0 last:mb-0 space-y-4">' +
+      return '<div class="border-b border-slate-200 pb-4 mb-4 last:border-b-0 last:pb-0 last:mb-0 space-y-3">' +
         '<div class="flex items-center justify-between gap-3">' +
           '<p class="text-[13px] font-black text-slate-700">按鈕 ' + (index + 1) + '</p>' +
           '<button type="button" onclick="window.removeMyV1Button(' + index + ')" class="w-11 h-11 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl shrink-0 transition-colors flex items-center justify-center" aria-label="刪除按鈕">' +

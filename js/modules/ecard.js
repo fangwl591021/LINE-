@@ -542,7 +542,7 @@ window.renderV1Buttons = function() {
     container.innerHTML = '<p class="text-[12px] text-slate-400">尚未設定任何按鈕</p>';
   } else {
     container.innerHTML = window.currentEcardButtons.map((b, i) => `
-      <div class="border-b border-slate-200 pb-5 mb-5 last:border-b-0 last:pb-0 last:mb-0 space-y-4">
+      <div class="border-b border-slate-200 pb-4 mb-4 last:border-b-0 last:pb-0 last:mb-0 space-y-3">
         <div class="flex items-center justify-between gap-3">
           <p class="text-[13px] font-black text-slate-700">按鈕 ${i + 1}</p>
           <button type="button" onclick="window.currentEcardButtons.splice(${i},1); window.renderV1Buttons(); window.updateECardPreview()" class="w-11 h-11 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl shrink-0 transition-colors flex items-center justify-center" aria-label="刪除按鈕"><span class="material-symbols-outlined text-[18px]">delete</span></button>
