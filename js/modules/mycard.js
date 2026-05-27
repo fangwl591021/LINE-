@@ -404,27 +404,27 @@
 
     list.innerHTML = myEcardButtons.map(function(button, index) {
       var colorValue = /^#[0-9a-f]{6}$/i.test(button.c || '') ? button.c : '#06C755';
-      return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-3 space-y-3">' +
+      return '<div class="border-b border-slate-200 pb-5 mb-5 last:border-b-0 last:pb-0 last:mb-0 space-y-4">' +
         '<div class="flex items-center justify-between gap-3">' +
           '<p class="text-[13px] font-black text-slate-700">按鈕 ' + (index + 1) + '</p>' +
-          '<button type="button" onclick="window.removeMyV1Button(' + index + ')" class="w-10 h-10 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl shrink-0 transition-colors flex items-center justify-center" aria-label="刪除按鈕">' +
+          '<button type="button" onclick="window.removeMyV1Button(' + index + ')" class="w-11 h-11 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl shrink-0 transition-colors flex items-center justify-center" aria-label="刪除按鈕">' +
             '<span class="material-symbols-outlined text-[18px]">delete</span>' +
           '</button>' +
         '</div>' +
         '<label class="block">' +
-          '<span class="block text-[12px] font-bold text-slate-500 mb-1.5">按鈕顏色</span>' +
-          '<div class="grid grid-cols-[56px_1fr] gap-2">' +
-            '<input type="color" value="' + escapeHTML(colorValue) + '" class="w-14 h-12 p-1 cursor-pointer rounded-xl shrink-0 border border-slate-200 bg-white" onchange="window.updateMyV1Button(' + index + ', \'c\', this.value); var next=this.parentElement.querySelector(\'.button-color-text\'); if(next) next.value=this.value;">' +
-            '<input type="text" value="' + escapeHTML(button.c || colorValue) + '" placeholder="#06C755" class="button-color-text w-full text-[13px] font-mono bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'c\', this.value)">' +
+          '<span class="block text-[13px] font-bold text-slate-600 mb-2">按鈕顏色</span>' +
+          '<div class="grid grid-cols-[52px_minmax(0,1fr)] gap-3 items-center">' +
+            '<input type="color" value="' + escapeHTML(colorValue) + '" class="w-[52px] h-[52px] p-1 cursor-pointer rounded-xl shrink-0 border border-slate-200 bg-white" onchange="window.updateMyV1Button(' + index + ', \'c\', this.value); var next=this.parentElement.querySelector(\'.button-color-text\'); if(next) next.value=this.value;">' +
+            '<input type="text" value="' + escapeHTML(button.c || colorValue) + '" placeholder="#06C755" class="button-color-text min-w-0 w-full text-base font-mono bg-white border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'c\', this.value)">' +
           '</div>' +
         '</label>' +
         '<label class="block">' +
-          '<span class="block text-[12px] font-bold text-slate-500 mb-1.5">按鈕文字</span>' +
-          '<input type="text" value="' + escapeHTML(button.l || '') + '" placeholder="例如：加入LINE好友" class="w-full text-[14px] font-bold bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
+          '<span class="block text-[13px] font-bold text-slate-600 mb-2">按鈕文字</span>' +
+          '<input type="text" value="' + escapeHTML(button.l || '') + '" placeholder="例如：加入LINE好友" class="min-w-0 w-full text-base font-bold bg-white border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
         '</label>' +
         '<label class="block">' +
-          '<span class="block text-[12px] font-bold text-slate-500 mb-1.5">網址 / 電話 / LINE 連結</span>' +
-          '<input type="text" value="' + escapeHTML(button.u || '') + '" placeholder="https://... 或 tel:0927136847" class="w-full text-[13px] font-mono bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
+          '<span class="block text-[13px] font-bold text-slate-600 mb-2">網址 / 電話 / LINE 連結</span>' +
+          '<input type="text" value="' + escapeHTML(button.u || '') + '" placeholder="https://... 或 tel:0927136847" class="min-w-0 w-full text-base font-mono bg-white border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3 shadow-sm" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
         '</label>' +
         '<div class="grid grid-cols-2 gap-2">' +
           '<button type="button" onclick="window.moveMyV1Button(' + index + ', -1)" ' + (index === 0 ? 'disabled' : '') + ' class="h-11 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span></button>' +

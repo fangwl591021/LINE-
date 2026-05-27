@@ -542,25 +542,25 @@ window.renderV1Buttons = function() {
     container.innerHTML = '<p class="text-[12px] text-slate-400">尚未設定任何按鈕</p>';
   } else {
     container.innerHTML = window.currentEcardButtons.map((b, i) => `
-      <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+      <div class="border-b border-slate-200 pb-5 mb-5 last:border-b-0 last:pb-0 last:mb-0 space-y-4">
         <div class="flex items-center justify-between gap-3">
           <p class="text-[13px] font-black text-slate-700">按鈕 ${i + 1}</p>
-          <button type="button" onclick="window.currentEcardButtons.splice(${i},1); window.renderV1Buttons(); window.updateECardPreview()" class="w-10 h-10 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl shrink-0 transition-colors flex items-center justify-center" aria-label="刪除按鈕"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+          <button type="button" onclick="window.currentEcardButtons.splice(${i},1); window.renderV1Buttons(); window.updateECardPreview()" class="w-11 h-11 text-red-500 bg-red-50 hover:bg-red-100 rounded-xl shrink-0 transition-colors flex items-center justify-center" aria-label="刪除按鈕"><span class="material-symbols-outlined text-[18px]">delete</span></button>
         </div>
         <label class="block">
-          <span class="block text-[12px] font-bold text-slate-500 mb-1.5">按鈕顏色</span>
-          <div class="grid grid-cols-[56px_1fr] gap-2">
-            <input type="color" value="${/^#[0-9a-f]{6}$/i.test(b.c || '') ? b.c : '#06C755'}" class="w-14 h-12 p-1 cursor-pointer rounded-xl shrink-0 border border-slate-200 bg-white" onchange="window.currentEcardButtons[${i}].c=this.value; var next=this.parentElement.querySelector('.button-color-text'); if(next) next.value=this.value; window.updateECardPreview()">
-            <input type="text" value="${escapeHTML(b.c || '#06C755')}" placeholder="#06C755" class="button-color-text w-full text-[13px] font-mono bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3" oninput="window.currentEcardButtons[${i}].c=this.value; window.updateECardPreview()">
+          <span class="block text-[13px] font-bold text-slate-600 mb-2">按鈕顏色</span>
+          <div class="grid grid-cols-[52px_minmax(0,1fr)] gap-3 items-center">
+            <input type="color" value="${/^#[0-9a-f]{6}$/i.test(b.c || '') ? b.c : '#06C755'}" class="w-[52px] h-[52px] p-1 cursor-pointer rounded-xl shrink-0 border border-slate-200 bg-white" onchange="window.currentEcardButtons[${i}].c=this.value; var next=this.parentElement.querySelector('.button-color-text'); if(next) next.value=this.value; window.updateECardPreview()">
+            <input type="text" value="${escapeHTML(b.c || '#06C755')}" placeholder="#06C755" class="button-color-text min-w-0 w-full text-base font-mono bg-white border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.currentEcardButtons[${i}].c=this.value; window.updateECardPreview()">
           </div>
         </label>
         <label class="block">
-          <span class="block text-[12px] font-bold text-slate-500 mb-1.5">按鈕文字</span>
-          <input type="text" value="${escapeHTML(b.l || '')}" placeholder="例如：加入LINE好友" class="w-full text-[14px] font-bold bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3" oninput="window.currentEcardButtons[${i}].l=this.value; window.updateECardPreview()">
+          <span class="block text-[13px] font-bold text-slate-600 mb-2">按鈕文字</span>
+          <input type="text" value="${escapeHTML(b.l || '')}" placeholder="例如：加入LINE好友" class="min-w-0 w-full text-base font-bold bg-white border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.currentEcardButtons[${i}].l=this.value; window.updateECardPreview()">
         </label>
         <label class="block">
-          <span class="block text-[12px] font-bold text-slate-500 mb-1.5">網址 / 電話 / LINE 連結</span>
-          <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://... 或 tel:0927136847" class="w-full text-[13px] font-mono bg-white border border-slate-200 outline-none focus:ring-1 focus:ring-blue-500 rounded-xl px-3 py-3" oninput="window.currentEcardButtons[${i}].u=this.value; window.updateECardPreview()">
+          <span class="block text-[13px] font-bold text-slate-600 mb-2">網址 / 電話 / LINE 連結</span>
+          <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://... 或 tel:0927136847" class="min-w-0 w-full text-base font-mono bg-white border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.currentEcardButtons[${i}].u=this.value; window.updateECardPreview()">
         </label>
         <div class="grid grid-cols-2 gap-2">
           <button type="button" onclick="window.moveV1Button(${i}, -1)" ${i === 0 ? 'disabled' : ''} class="h-11 rounded-xl border border-slate-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span></button>
