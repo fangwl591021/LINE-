@@ -21,6 +21,55 @@ function hideMatchStatus_() {
   if (status) status.classList.add('hidden');
 }
 
+window.matchmakePoolScope = window.matchmakePoolScope || 'own';
+
+function renderMatchmakePoolMode_() {
+  const scope = window.matchmakePoolScope === 'public' ? 'public' : 'own';
+  const ownBtn = document.getElementById('match-pool-own');
+  const publicBtn = document.getElementById('match-pool-public');
+  const help = document.getElementById('match-pool-mode-help');
+  const title = document.getElementById('match-pool-card-title');
+  const subtitle = document.getElementById('match-pool-card-subtitle');
+  const toggleWrap = document.getElementById('match-public-toggle-wrap');
+  const queryTitle = document.getElementById('match-query-title');
+  const queryDesc = document.getElementById('match-query-desc');
+  const activeClass = ['bg-slate-900', 'text-white'];
+  const inactiveClass = ['bg-slate-50', 'text-slate-600'];
+
+  [ownBtn, publicBtn].forEach(btn => {
+    if (!btn) return;
+    btn.classList.remove(...activeClass, ...inactiveClass);
+    btn.classList.add(...inactiveClass);
+  });
+
+  const activeBtn = scope === 'public' ? publicBtn : ownBtn;
+  if (activeBtn) {
+    activeBtn.classList.remove(...inactiveClass);
+    activeBtn.classList.add(...activeClass);
+  }
+
+  if (help) {
+    help.textContent = scope === 'public'
+      ? '只使用已同意公開、通過 AI 健檢的本人名片，可跨店交流。'
+      : '只使用你自己掃描或建立的名片，不進入跨店配對。';
+  }
+  if (title) title.textContent = scope === 'public' ? '參與公開交流池' : '個人配對池';
+  if (subtitle) subtitle.textContent = scope === 'public' ? '名片已公開，允許跨店搜尋' : '只使用我的名片資料，不公開';
+  if (toggleWrap) toggleWrap.classList.toggle('hidden', scope !== 'public');
+  if (queryTitle) queryTitle.textContent = scope === 'public' ? '尋找跨店合作夥伴' : '整理我的人脈配對';
+  if (queryDesc) {
+    queryDesc.textContent = scope === 'public'
+      ? '輸入您的業務需求，AI 將從已公開的跨店交流池尋找互補人選。'
+      : '輸入您的業務需求，AI 只會使用您自己掃描或建立的名片資料進行配對。';
+  }
+}
+
+window.setMatchmakePoolScope = function(scope) {
+  window.matchmakePoolScope = scope === 'public' ? 'public' : 'own';
+  renderMatchmakePoolMode_();
+  window.initMatchmakePage?.();
+};
+
 function isMatchmakeToolsVisibleContext_() {
   if (!(window.hasAdminRights || window.userRole === 'admin')) return false;
   if (window.currentPage === 'matchmake') return true;
@@ -42,6 +91,7 @@ window.initMatchmakePage = async function() {
   if (ui) ui.classList.add('hidden');
   if (results) results.classList.add('hidden');
   if (adminTools) adminTools.classList.toggle('hidden', !isMatchmakeToolsVisibleContext_());
+  renderMatchmakePoolMode_();
 
   if (typeof window.checkDatabaseStatus === 'function') window.checkDatabaseStatus();
 
@@ -64,7 +114,8 @@ window.initMatchmakePage = async function() {
   }
 
   const isAdmin = window.hasAdminRights || window.userRole === 'admin';
-  if (!window.currentUserCard && !isAdmin) {
+  const scope = window.matchmakePoolScope === 'public' ? 'public' : 'own';
+  if (scope === 'public' && !window.currentUserCard && !isAdmin) {
     if (ui) ui.classList.add('hidden');
     showMatchStatus_(
       '<div class="text-center">' +
@@ -85,7 +136,7 @@ window.initMatchmakePage = async function() {
   const toggleEl = document.getElementById('fate-privacy-toggle');
   if (toggleEl) toggleEl.checked = !isPrivate;
 
-  if (isPrivate && !isAdmin) {
+  if (scope === 'public' && isPrivate && !isAdmin) {
     hideMatchStatus_();
     if (lock) lock.classList.remove('hidden');
     return;
@@ -161,10 +212,8 @@ window.startMatchmaking = async function() {
   if (!query) return window.showToast('請輸入您的配對需求', true);
 
   if (!window.allCards || window.allCards.length === 0) {
-    window.showToast('名片資料仍在載入，請稍後再試', true);
-    if (typeof window.loadCardData === 'function') window.loadCardData({ render: false });
-    else if (typeof window.loadAllData === 'function') window.loadAllData();
-    return;
+    if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false });
+    else if (typeof window.loadAllData === 'function') await window.loadAllData();
   }
 
   const role = window.currentUser?.role || 'user';
@@ -186,34 +235,12 @@ window.startMatchmaking = async function() {
   btn.disabled = true;
 
   try {
-    const pool = window.allCards.filter(c => {
-      if (c.rowId === window.currentUserCard?.rowId) return false;
-      let isPriv = false;
-      try { isPriv = JSON.parse(c['自訂名片設定']||'{}').isPrivate; } catch(e){}
-      const visibility = String(c.visibility || c['公開狀態'] || '').toLowerCase();
-      const sourceType = String(c.sourceType || c['名片來源'] || '').toLowerCase();
-      const poolEligible = c.poolEligible === true || c.poolEligible === 1 || c.poolEligible === '1';
-      return !isPriv && visibility === 'public' && sourceType === 'self_profile' && poolEligible;
-    });
-
-    if (pool.length === 0) {
-      throw new Error('目前沒有可配對的公開名片');
-    }
-
+    const poolScope = window.matchmakePoolScope === 'public' ? 'public' : 'own';
     const res = await window.fetchAPI('matchmakeContacts', {
       currentUser: window.currentUser,
       query: query,
-      contacts: pool.map(c => ({
-        rowId: c.rowId,
-        Name: c['姓名'],
-        Company: c['公司名稱'],
-        Title: c['職稱'],
-        Tags: (c['個性']||'') + (c['興趣']||'') + (c['事業']||''),
-        visibility: c.visibility || c['公開狀態'] || '',
-        sourceType: c.sourceType || c['名片來源'] || '',
-        poolEligible: c.poolEligible === true || c.poolEligible === 1 || c.poolEligible === '1',
-        isPrivate: c.isPrivate === true
-      }))
+      poolScope: poolScope,
+      currentCardRowId: window.currentUserCard?.rowId || ''
     }, true);
 
     const matches = Array.isArray(res) ? res : (res && Array.isArray(res.data) ? res.data : null);
@@ -229,8 +256,11 @@ window.startMatchmaking = async function() {
         resultsList.innerHTML = '<div class="text-center py-6 text-slate-500">目前沒有合適的人選</div>';
       } else {
         resultsList.innerHTML = matches.map(match => {
-          const c = window.allCards.find(card => String(card.rowId) === String(match.rowId));
+          const c = match.card || window.allCards.find(card => String(card.rowId) === String(match.rowId));
           if (!c) return '';
+          if (match.card && !window.allCards.some(card => String(card.rowId) === String(match.rowId))) {
+            window.allCards.push(match.card);
+          }
           return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2">' +
             '<div class="flex justify-between items-center">' +
               '<div class="font-black text-slate-800">' + window.escapeJS(c['姓名'] || '未知') + ' <span class="text-[12px] font-medium text-slate-500 ml-1">' + window.escapeJS(c['公司名稱'] || '') + '</span></div>' +
