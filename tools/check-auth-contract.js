@@ -4,6 +4,8 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
 const auth = fs.readFileSync(path.join(root, 'js', 'auth.js'), 'utf8');
+const core = fs.readFileSync(path.join(root, 'js', 'core.js'), 'utf8');
+const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 const checks = [
   {
@@ -45,6 +47,21 @@ const checks = [
   {
     name: 'queryUserPoints resolves D1 point identity bridge',
     pass: /queryUserPoints[\s\S]*explicitPointUserId[\s\S]*fallbackUserId[\s\S]*resolvePointUserId/.test(worker)
+  },
+  {
+    name: 'fresh cached member session is not downgraded by an inconclusive checkUser',
+    pass: /let cachedUserInfo = null/.test(auth) &&
+      /usedCachedUser && cachedUserInfo[\s\S]*keeping cached session/.test(auth) &&
+      /!checkRes\.isRegistered/.test(auth)
+  },
+  {
+    name: 'token refresh does not show a red login toast',
+    pass: /LINE 授權更新中/.test(core) &&
+      !/LINE 授權已失效，正在重新登入\.\.\.', true/.test(core)
+  },
+  {
+    name: 'auth and core cache bust versions were bumped',
+    pass: /js\/core\.js\?v=7\.23/.test(index) && /js\/auth\.js\?v=10\.23/.test(index)
   }
 ];
 

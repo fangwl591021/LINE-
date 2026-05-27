@@ -1391,13 +1391,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (refId) writeFirstReferral(window.currentUserProfile.userId, refId, netId);
     const authCacheKey = 'ACTMASTER_USER_' + window.currentUserProfile.userId;
     let usedCachedUser = false;
+    let cachedUserInfo = null;
 
     if (!shareCardId && !claimCardId) {
       try {
         const cached = JSON.parse(localStorage.getItem(authCacheKey) || 'null');
         const isFresh = cached && cached.info && cached.savedAt && (Date.now() - cached.savedAt < 6 * 60 * 60 * 1000);
         if (isFresh) {
-          window.applyRegisteredUserSession(cached.info);
+          cachedUserInfo = cached.info;
+          window.applyRegisteredUserSession(cachedUserInfo);
           window.goPage('home');
           setTimeout(() => {
             if (typeof window.loadHomeData === 'function') window.loadHomeData();
@@ -1421,9 +1423,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔒 未註冊用戶邏輯
     if (!checkRes || checkRes.error || !checkRes.isRegistered) {
+      if (usedCachedUser && cachedUserInfo && !shareCardId && !claimCardId) {
+        console.warn('Auth check did not confirm membership; keeping cached session:', checkRes && (checkRes.error || checkRes.source || 'not_registered'));
+        return;
+      }
       if (checkRes && checkRes.error) {
         console.error("Auth check failed:", checkRes.error);
-        if (usedCachedUser) return;
         const recovered = await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
         if (recovered) {
           window.goPage('home');

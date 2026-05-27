@@ -119,7 +119,8 @@ const Core = (function() {
             sessionStorage.setItem('ACTMASTER_LIFF_REAUTH_RUNNING', '1');
         } catch (e) {}
 
-        if (window.showToast) window.showToast('LINE 授權已失效，正在重新登入...', true);
+        const loadingText = document.getElementById('loading-text');
+        if (loadingText) loadingText.textContent = 'LINE 授權更新中...';
 
         try {
             if (typeof window.liff.isLoggedIn !== 'function' || window.liff.isLoggedIn()) {
