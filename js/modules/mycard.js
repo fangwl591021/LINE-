@@ -414,21 +414,21 @@
         '<label class="block">' +
           '<span class="block text-[13px] font-bold text-slate-600 mb-2">按鈕顏色</span>' +
           '<div class="grid grid-cols-[52px_minmax(0,1fr)] gap-3 items-center">' +
-            '<input type="color" value="' + escapeHTML(colorValue) + '" class="w-[52px] h-[52px] p-1 cursor-pointer rounded-xl shrink-0 border border-blue-200 bg-white" onchange="window.updateMyV1Button(' + index + ', \'c\', this.value); var next=this.parentElement.querySelector(\'.button-color-text\'); if(next) next.value=this.value;">' +
-            '<input type="text" value="' + escapeHTML(button.c || colorValue) + '" placeholder="#06C755" class="button-color-text min-w-0 w-full text-base font-mono bg-white border border-blue-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'c\', this.value)">' +
+            '<input type="color" value="' + escapeHTML(colorValue) + '" class="w-[52px] h-[52px] p-1 cursor-pointer rounded-xl shrink-0 border border-blue-300 bg-white" onchange="window.updateMyV1Button(' + index + ', \'c\', this.value); var next=this.parentElement.querySelector(\'.button-color-text\'); if(next) next.value=this.value;">' +
+            '<input type="text" value="' + escapeHTML(button.c || colorValue) + '" placeholder="#06C755" class="button-color-text min-w-0 w-full text-base font-mono bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'c\', this.value)">' +
           '</div>' +
         '</label>' +
         '<label class="block">' +
           '<span class="block text-[13px] font-bold text-slate-600 mb-2">按鈕文字</span>' +
-          '<input type="text" value="' + escapeHTML(button.l || '') + '" placeholder="例如：加入LINE好友" class="min-w-0 w-full text-base font-bold bg-white border border-blue-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
+          '<input type="text" value="' + escapeHTML(button.l || '') + '" placeholder="例如：加入LINE好友" class="min-w-0 w-full text-base font-bold bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
         '</label>' +
         '<label class="block">' +
           '<span class="block text-[13px] font-bold text-slate-600 mb-2">網址 / 電話 / LINE 連結</span>' +
-          '<input type="text" value="' + escapeHTML(button.u || '') + '" placeholder="https://... 或 tel:0927136847" class="min-w-0 w-full text-base font-mono bg-white border border-blue-200 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
+          '<input type="text" value="' + escapeHTML(button.u || '') + '" placeholder="https://... 或 tel:0927136847" class="min-w-0 w-full text-base font-mono bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
         '</label>' +
         '<div class="grid grid-cols-2 gap-2">' +
-          '<button type="button" onclick="window.moveMyV1Button(' + index + ', -1)" ' + (index === 0 ? 'disabled' : '') + ' class="h-11 rounded-xl border border-blue-100 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span></button>' +
-          '<button type="button" onclick="window.moveMyV1Button(' + index + ', 1)" ' + (index === myEcardButtons.length - 1 ? 'disabled' : '') + ' class="h-11 rounded-xl border border-blue-100 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_down</span></button>' +
+          '<button type="button" onclick="window.moveMyV1Button(' + index + ', -1)" ' + (index === 0 ? 'disabled' : '') + ' class="h-11 rounded-xl border border-blue-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span></button>' +
+          '<button type="button" onclick="window.moveMyV1Button(' + index + ', 1)" ' + (index === myEcardButtons.length - 1 ? 'disabled' : '') + ' class="h-11 rounded-xl border border-blue-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_down</span></button>' +
         '</div>' +
       '</div>';
     }).join('');
