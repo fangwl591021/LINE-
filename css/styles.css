@@ -10,12 +10,7 @@
 }
 
 :root {
-  --system-background-image:
-    linear-gradient(135deg, #f05387 0%, #ff89a4 34%, #ffd0b6 68%, #fff0cf 100%);
-  --app-background-image:
-    linear-gradient(155deg, #f25386 0%, #ff7f9e 30%, #ffc0ad 62%, #fff0c9 100%),
-    linear-gradient(22deg, rgba(190, 36, 96, 0.26) 0%, rgba(255, 165, 156, 0) 48%),
-    linear-gradient(315deg, rgba(255, 241, 181, 0.72) 0%, rgba(255, 147, 167, 0) 42%);
+  --system-background-image: none;
 }
 
 body {
@@ -25,14 +20,8 @@ body {
   background-repeat: repeat-y;
   background-size: 100% auto;
   background-position: top center;
-  background-color: #ff8aa6;
+  background-color: #ffe8ef;
   -webkit-tap-highlight-color: transparent;
-}
-
-#app {
-  background-color: #ff8aa6;
-  background-image: var(--app-background-image);
-  background-attachment: local;
 }
 
 #btn-share-line-ecard {
