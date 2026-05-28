@@ -10,8 +10,12 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!html.includes('id="home-profile-edit-button"') || !html.includes('id="home-profile-avatar-edit-badge"')) {
-  fail('profile edit controls must have explicit IDs');
+if (html.includes('id="home-profile-edit-button"')) {
+  fail('top-right profile edit button should be removed');
+}
+
+if (!html.includes('id="home-profile-avatar-edit-badge"')) {
+  fail('avatar edit badge must have explicit ID');
 }
 
 if (!html.includes('onclick="window.handleHomeAvatarClick?.()"')) {
@@ -24,6 +28,10 @@ if (!home.includes('window.isHomeProfileOwner = function()')) {
 
 if (!home.includes('window.updateHomeProfileOwnerControls = function()')) {
   fail('home module must toggle owner-only controls');
+}
+
+if (home.includes("getElementById('home-profile-edit-button')")) {
+  fail('home module should no longer manage a removed top-right edit button');
 }
 
 if (!home.includes('window.handleHomeAvatarClick = function()')) {

@@ -26,7 +26,6 @@ if (!html.includes('id="home-profile-card" class="mx-0 -mt-1 overflow-hidden"'))
 }
 
 [
-  'id="home-profile-edit-button"',
   'id="home-profile-avatar-button"',
   'id="home-profile-avatar-edit-badge"'
 ].forEach(marker => {

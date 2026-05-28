@@ -118,13 +118,8 @@ const HomeModule = (function() {
 
     window.updateHomeProfileOwnerControls = function() {
         const isOwner = window.isHomeProfileOwner();
-        const editBtn = document.getElementById('home-profile-edit-button');
         const avatarBtn = document.getElementById('home-profile-avatar-button');
         const avatarBadge = document.getElementById('home-profile-avatar-edit-badge');
-        if (editBtn) {
-            editBtn.classList.toggle('hidden', !isOwner);
-            editBtn.classList.toggle('flex', isOwner);
-        }
         if (avatarBadge) {
             avatarBadge.classList.toggle('hidden', !isOwner);
             avatarBadge.classList.toggle('flex', isOwner);
