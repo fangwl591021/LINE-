@@ -13,7 +13,7 @@ if (!html.includes('home-profile-hero')) {
   fail('missing dark dotted profile hero');
 }
 
-if (!html.includes('grid grid-cols-[112px_1fr_92px]')) {
+if (!html.includes('grid grid-cols-[108px_1fr_96px]')) {
   fail('profile card must move points and QR into the left and right side columns');
 }
 
@@ -29,7 +29,7 @@ if (!html.includes('id="home-profile-card"')) {
   fail('missing active home profile card');
 }
 
-if (!html.includes('id="home-profile-card" class="mx-0 -mt-1 overflow-hidden"')) {
+if (!html.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1"')) {
   fail('active home profile card should not render an outer frame');
 }
 
@@ -55,11 +55,11 @@ if (!html.includes('id="home-profile-card-legacy" class="hidden"')) {
   if (!html.includes(marker)) fail(`missing required profile marker ${marker}`);
 });
 
-if (!html.includes("onclick=\"window.goPage('admin-settings')\"")) {
-  fail('new profile card must keep an edit entry point');
+if (html.includes('profile-edit-button')) {
+  fail('profile card should not render the old top-right edit button');
 }
 
-if (!html.includes('grid grid-cols-3 gap-3')) {
+if (!html.includes('grid grid-cols-3 gap-2.5')) {
   fail('home quick actions must use separated card grid spacing');
 }
 

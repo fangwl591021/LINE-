@@ -43,22 +43,22 @@ if (!index.includes('home-action-card')) {
 if (!index.includes('overflow-y-auto overflow-x-hidden')) {
   fail('main app surface should prevent horizontal overflow on mobile');
 }
-if (!index.includes('id="home-profile-card" class="mx-0 -mt-1 overflow-hidden"')) {
-  fail('profile panel should keep the restyled layout without an outer frame');
+if (!index.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1"')) {
+  fail('profile panel should keep the v2 layout without an outer frame');
 }
 if (!index.includes('home-profile-hero')) {
   fail('profile panel should render the dark dotted hero header');
 }
-if (!index.includes('grid grid-cols-3 gap-3')) {
+if (!index.includes('grid grid-cols-3 gap-2.5')) {
   fail('quick actions should render as separated action cards');
 }
-if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[22px] leading-none')) {
+if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[23px] leading-none')) {
   fail('home top spacing and point size should stay compact');
 }
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
-if (!index.includes('js/modules/home.js?v=7.38')) {
+if (!index.includes('js/modules/home.js?v=7.39')) {
   fail('home.js cache-bust version must be bumped');
 }
 if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia')) {
