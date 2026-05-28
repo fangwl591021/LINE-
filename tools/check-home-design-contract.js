@@ -33,7 +33,7 @@ function fail(message) {
   if (!index.includes(needle)) fail(`missing home action: ${needle}`);
 });
 
-if (!index.includes('js/auth.js?v=10.25')) {
+if (!index.includes('js/auth.js?v=10.26')) {
   fail('auth.js cache-bust version must be bumped for check-in UI change');
 }
 
@@ -43,19 +43,16 @@ if (!index.includes('home-action-card')) {
 if (!index.includes('overflow-y-auto overflow-x-hidden')) {
   fail('main app surface should prevent horizontal overflow on mobile');
 }
-if (index.includes('id="home-profile-card" class="mx-0 -mt-1 rounded-')) {
-  fail('profile panel should not render an outer card frame');
+if (!index.includes('id="home-profile-card" class="mx-0 -mt-1 overflow-hidden bg-white shadow-sm border border-slate-100"')) {
+  fail('profile panel should use the restyled profile card shell');
 }
-if (!index.includes('id="home-profile-card" class="mx-0 -mt-1 p-2.5 overflow-hidden"')) {
-  fail('profile panel should keep only compact spacing without an outer frame');
+if (!index.includes('home-profile-hero')) {
+  fail('profile panel should render the dark dotted hero header');
 }
-if (!index.includes('grid grid-cols-3 divide-x divide-y divide-slate-100')) {
-  fail('quick actions should render as a 2x3 grid');
+if (!index.includes('grid grid-cols-3 gap-3')) {
+  fail('quick actions should render as separated action cards');
 }
-if (!index.includes('mx-0 home-action-card p-2')) {
-  fail('quick action card should use tighter spacing');
-}
-if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[26px] leading-none')) {
+if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[28px] leading-none')) {
   fail('home top spacing and point size should stay compact');
 }
 if (!index.includes('id="home-feature-section"')) {
