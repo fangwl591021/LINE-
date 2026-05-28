@@ -26,6 +26,105 @@ if (typeof window.addUserSocial !== 'function') {
   };
 }
 
+window.addUserSocial = function(type = 'LINE', url = '') {
+  window.userSocials = Array.isArray(window.userSocials) ? window.userSocials : [];
+  window.userSocials.push({ t: type, u: url });
+  if (String(type || '').toUpperCase() === 'PROFILE_AVATAR') return;
+  const list = document.getElementById('user-socials-list');
+  if (!list) return;
+  const idx = window.userSocials.length - 1;
+  const row = document.createElement('div');
+  row.className = 'user-social-row rounded-2xl bg-slate-50/70 border border-slate-200 p-3 space-y-2';
+  row.dataset.socialIndex = String(idx);
+  row.innerHTML =
+    '<div class="flex items-center gap-2">' +
+      '<select class="user-social-type min-w-0 flex-1 bg-white border border-blue-200 rounded-xl px-3 py-3 text-[14px] font-bold text-slate-700 outline-none focus:border-blue-500">' +
+        ['LINE','FB','IG','YT','WEB'].map(v => '<option value="' + v + '"' + (v === type ? ' selected' : '') + '>' + v + '</option>').join('') +
+      '</select>' +
+      '<button type="button" class="shrink-0 px-3 py-3 rounded-xl bg-red-50 text-red-500 font-bold">刪除</button>' +
+    '</div>' +
+    '<input type="text" class="user-social-url w-full bg-white border border-blue-200 rounded-xl px-3 py-3 text-[14px] text-slate-700 outline-none focus:border-blue-500" value="' + String(url || '').replace(/"/g, '&quot;') + '" placeholder="連結網址">';
+  const select = row.querySelector('select');
+  const input = row.querySelector('input');
+  const remove = row.querySelector('button');
+  select.onchange = () => { if (window.userSocials[idx]) window.userSocials[idx].t = select.value; };
+  input.oninput = () => { if (window.userSocials[idx]) window.userSocials[idx].u = input.value; };
+  remove.onclick = () => { window.userSocials[idx] = null; row.remove(); };
+  list.appendChild(row);
+};
+
+function parseSocialArrayForSettings(raw) {
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw;
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function collectVisibleUserSocials() {
+  const rows = Array.from(document.querySelectorAll('#user-socials-list .user-social-row'));
+  return rows.map(row => ({
+    t: String(row.querySelector('.user-social-type')?.value || '').trim() || 'WEB',
+    u: String(row.querySelector('.user-social-url')?.value || '').trim()
+  })).filter(item => item.u);
+}
+
+window.saveUserSettings = async function(event) {
+  if (event) event.preventDefault();
+  const btn = event?.currentTarget || null;
+  const userId = window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '';
+  if (!userId) return window.showToast?.('找不到登入會員，請重新開啟 LIFF', true);
+
+  const existingSocials = parseSocialArrayForSettings(window.currentUser?.socials || window.userSocials || []);
+  const hiddenSocials = existingSocials.filter(item => String(item && item.t || '').toUpperCase() === 'PROFILE_AVATAR');
+  const socials = [...hiddenSocials, ...collectVisibleUserSocials()];
+  window.userSocials = socials.slice();
+
+  const payload = {
+    userId,
+    name: window.currentUser?.name || window.currentUserProfile?.displayName || '',
+    phone: window.currentUser?.phone || '',
+    industry: window.currentUser?.industry || '',
+    birthday: window.currentUser?.birthday || '',
+    role: window.currentUser?.role || window.userRole || 'user',
+    storeId: window.currentUser?.storeId || window.currentUser?.storeid || '',
+    referrerId: window.currentUser?.referrerId || window.currentUser?.referrer_id || '',
+    networkId: window.currentUser?.networkId || window.currentNetworkId || 'admin',
+    socials: JSON.stringify(socials),
+    tgToken: document.getElementById('setting-tg-token')?.value?.trim() || window.currentUser?.tgToken || '',
+    tgChatId: document.getElementById('setting-tg-chatid')?.value?.trim() || window.currentUser?.tgChatId || ''
+  };
+
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
+  }
+
+  try {
+    const saved = await window.fetchAPI('updateUserProfile', payload, true);
+    if (!saved || saved.error) throw new Error(saved?.error || '儲存失敗');
+    const refreshed = await window.fetchAPI('checkUser', { userId }, true).catch(() => null);
+    const info = refreshed && refreshed.isRegistered && refreshed.info
+      ? refreshed.info
+      : { ...(window.currentUser || {}), ...payload };
+    info.socials = info.socials || payload.socials;
+    window.applyRegisteredUserSession?.(info);
+    try {
+      localStorage.setItem('ACTMASTER_USER_' + userId, JSON.stringify({ info, savedAt: Date.now() }));
+    } catch (e) {}
+    window.showToast?.('設定已儲存');
+  } catch (e) {
+    window.showToast?.((e && e.message) || '設定儲存失敗', true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml || '<span class="material-symbols-outlined text-[18px]">save</span> 儲存';
+    }
+  }
+};
+
 function getReferralStorageKey(userId) {
   return 'ACTMASTER_FIRST_REF_' + String(userId || 'guest');
 }
