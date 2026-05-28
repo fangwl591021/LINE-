@@ -13,6 +13,12 @@ if (!html.includes('home-profile-hero')) {
   fail('missing dark dotted profile hero');
 }
 
+if (!html.includes('id="home-header-site-name"') ||
+    !html.includes('id="home-top-nav-switch"') ||
+    !html.includes('text-white')) {
+  fail('home title and switch must live on the green hero in white');
+}
+
 if (!html.includes('grid grid-cols-[108px_1fr_96px]')) {
   fail('profile card must move points and QR into the left and right side columns');
 }

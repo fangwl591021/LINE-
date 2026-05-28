@@ -273,6 +273,7 @@ const Core = (function() {
             '#header-admin-badge': window.hasAdminRights,
             '#admin-switch-container': window.hasAdminRights,
             '#top-nav-switch': window.hasAdminRights,
+            '#home-top-nav-switch': window.hasAdminRights,
             '#details-dealer-performance': window.hasAdminRights,
             '#details-voom-capture': window.hasAdminRights,
             '#details-store-banner': window.hasAdminRights,
