@@ -1235,10 +1235,14 @@ window.claimDailyPointCheckin = async function(btn) {
       throw new Error(res?.error || '每日簽到失敗');
     }
     const data = res && (res.data || res);
-    const message = data?.message || (data?.alreadyChecked ? '今天已領取過點數家族簽到獎勵' : '點數家族簽到成功，已獲得 10 點');
-    keepDisabled = Boolean(data?.awarded || data?.alreadyChecked);
-    if (statusEl) statusEl.textContent = message;
-    window.showToast?.(message, false);
+    const awardedPoints = Number(data?.points || data?.awardedPoints || data?.changedPoints || 10);
+    const message = data?.alreadyChecked
+      ? '\u4eca\u5929\u5df2\u9818\u53d6\u904e\u8d08\u9ede'
+      : `\u5df2\u8d08\u9001 ${Number.isFinite(awardedPoints) ? awardedPoints : 10} \u9ede`;
+    keepDisabled = false;
+    if (statusEl) statusEl.textContent = data?.alreadyChecked ? '\u4eca\u5929\u5df2\u9818\u53d6\u904e\u8d08\u9ede\u3002' : message;
+    if (typeof window.showPointAwardCelebration === 'function' && data?.awarded) window.showPointAwardCelebration(Number.isFinite(awardedPoints) ? awardedPoints : 10);
+    else window.showToast?.(message, false);
     window.pointWalletData = null;
     if (data?.balance !== undefined) {
       window.pointWalletData = {
@@ -1256,8 +1260,8 @@ window.claimDailyPointCheckin = async function(btn) {
     window.showToast?.('每日簽到失敗：' + msg, true);
   } finally {
     if (btn) {
-      btn.disabled = keepDisabled;
-      btn.textContent = keepDisabled ? '已簽到' : (oldText || '簽到');
+      btn.disabled = false;
+      btn.textContent = oldText || '\u7c3d\u5230\u8d08\u9ede';
       btn.classList.remove('opacity-70');
     }
   }

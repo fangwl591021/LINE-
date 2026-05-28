@@ -33,6 +33,10 @@ function fail(message) {
   if (!index.includes(needle)) fail(`missing home action: ${needle}`);
 });
 
+if (!index.includes('js/auth.js?v=10.24')) {
+  fail('auth.js cache-bust version must be bumped for check-in UI change');
+}
+
 if (!index.includes('home-action-card')) {
   fail('home cards should use the refreshed white card styling');
 }
@@ -44,6 +48,9 @@ if (!index.includes('bg-gradient-to-br from-white via-pink-50/70 to-white')) {
 }
 if (!index.includes('grid grid-cols-3 divide-x divide-y divide-slate-100')) {
   fail('quick actions should render as a 2x3 grid');
+}
+if (!index.includes('mx-0 home-action-card p-2')) {
+  fail('quick action card should use tighter spacing');
 }
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
