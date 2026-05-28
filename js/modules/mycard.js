@@ -141,7 +141,6 @@
   function init() {
     bindOnce(document, 'change', 'input[name="my-ecard-layout"]', handleLayoutChange);
     bindOnce(document, 'click', '#btn-add-v1-button', addV1Button);
-    bindOnce(document, 'click', '#btn-save-my-ecard', saveMyECardConfig);
     bindOnce(document, 'click', '#btn-share-my-card', function(evt) { shareMyCard(evt.currentTarget); });
     bindOnce(document, 'click', '#btn-show-qrcode', showMyQRCode);
     bindOnce(document, 'click', '#edit-card-image-btn', function() {
@@ -537,30 +536,34 @@
     updatePreview();
   }
 
-  async function saveMyECardConfig() {
-    currentCardData = await resolveCurrentUserCard(!currentCardData) || currentCardData;
-    if (!currentCardData) return;
+  async function saveMyECardConfig(evt) {
+    if (evt && evt.preventDefault) evt.preventDefault();
     var btn = $('#btn-save-my-ecard');
+    if (btn && btn.dataset.myEcardSaving === '1') return;
     var originalHtml = btn ? btn.innerHTML : '';
     if (btn) {
-      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
+      btn.dataset.myEcardSaving = '1';
+      btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> \u5132\u5b58\u4e2d...';
       btn.disabled = true;
     }
 
-    syncCurrentImageInput();
-    var layout = getLayout();
-    var cfg = parseCardConfig(currentCardData);
-    cfg.layoutStyle = layout;
-    cfg.imgUrl = myEcardImgs.landscape;
-    cfg.imgUrlPortrait = myEcardImgs.portrait;
-    cfg.imgUrlSquare = myEcardImgs.square;
-    cfg.imgRatioLandscape = '20:13';
-    cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
-    cfg.imgRatioSquare = '1:1';
-    cfg.buttons = myEcardButtons;
-    syncVideoConfig(cfg);
-
     try {
+      currentCardData = await resolveCurrentUserCard(!currentCardData) || currentCardData;
+      if (!currentCardData) throw new Error('\u627e\u4e0d\u5230\u53ef\u5132\u5b58\u7684\u5c08\u5c6c\u540d\u7247');
+
+      syncCurrentImageInput();
+      var layout = getLayout();
+      var cfg = parseCardConfig(currentCardData);
+      cfg.layoutStyle = layout;
+      cfg.imgUrl = myEcardImgs.landscape;
+      cfg.imgUrlPortrait = myEcardImgs.portrait;
+      cfg.imgUrlSquare = myEcardImgs.square;
+      cfg.imgRatioLandscape = '20:13';
+      cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
+      cfg.imgRatioSquare = '1:1';
+      cfg.buttons = myEcardButtons;
+      syncVideoConfig(cfg);
+
       var rowId = await ensureCurrentCardRowId();
       if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
       var res = await window.fetchAPI('updateCard', {
@@ -585,6 +588,7 @@
       if (btn) {
         btn.innerHTML = originalHtml;
         btn.disabled = false;
+        delete btn.dataset.myEcardSaving;
       }
     }
   }

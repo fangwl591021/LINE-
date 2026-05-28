@@ -13,7 +13,7 @@ function fail(message) {
 if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
   fail('my card summary must open the direct entry handler');
 }
-if (!index.includes('js/modules/mycard.js?v=8.37')) {
+if (!index.includes('js/modules/mycard.js?v=8.38')) {
   fail('mycard.js cache-bust version must be bumped');
 }
 if (index.includes('編輯名片詳細文字資料')) {
@@ -27,6 +27,12 @@ if (!/currentCardData[\s\S]*window\.openCardDetail\(currentCardData\)/.test(myca
 }
 if (!/await load\(\);\s*await openMyCardDetail\(\);/.test(mycard)) {
   fail('newly generated personal card must continue directly into detail editor');
+}
+if (/bindOnce\(document,\s*['"]click['"],\s*['"]#btn-save-my-ecard['"]/.test(mycard)) {
+  fail('personal card save button must not be bound twice');
+}
+if (!/dataset\.myEcardSaving/.test(mycard)) {
+  fail('personal card save must guard against duplicate submissions');
 }
 
 console.log('My card entry contract passed.');

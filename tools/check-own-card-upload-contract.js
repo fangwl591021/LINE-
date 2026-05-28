@@ -13,7 +13,7 @@ function fail(message) {
 if (!index.includes('名片酷請用來掃描客戶或合作夥伴')) {
   fail('card scan page must warn that Card Cool is for customers/partners');
 }
-if (!index.includes('window.openMyCardSettings ? window.openMyCardSettings()')) {
+if (!index.includes('window.openMyCardEntry ? window.openMyCardEntry(event)')) {
   fail('card scan page must offer a direct personal-card entry');
 }
 if (!index.includes('js/modules/cropper.js?v=7.12')) {
