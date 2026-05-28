@@ -52,7 +52,7 @@ if (!index.includes('home-profile-hero')) {
 if (!index.includes('grid grid-cols-3 gap-3')) {
   fail('quick actions should render as separated action cards');
 }
-if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[28px] leading-none')) {
+if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[22px] leading-none')) {
   fail('home top spacing and point size should stay compact');
 }
 if (!index.includes('id="home-feature-section"')) {

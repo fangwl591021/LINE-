@@ -13,6 +13,10 @@ if (!html.includes('home-profile-hero')) {
   fail('missing dark dotted profile hero');
 }
 
+if (!html.includes('grid grid-cols-[112px_1fr_92px]')) {
+  fail('profile card must move points and QR into the left and right side columns');
+}
+
 if (!html.includes('id="home-profile-card"')) {
   fail('missing active home profile card');
 }
