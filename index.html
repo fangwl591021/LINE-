@@ -44,9 +44,10 @@
     .nav-active { @apply text-slate-800 font-bold; }
     .nav-active .icon-box { @apply bg-slate-100 text-slate-800; }
     .nav-active .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
-    .home-quick-circle { @apply flex flex-col items-center justify-start gap-1.5 active:scale-95 transition-transform; width: 20%; min-width: 0; }
-    .home-quick-icon { @apply w-14 h-14 rounded-full bg-[#06C755] text-white flex items-center justify-center shadow-md shadow-emerald-200 text-[28px]; font-variation-settings: 'FILL' 1; }
-    .home-quick-label { @apply text-[12px] font-bold text-slate-700 leading-tight text-center whitespace-nowrap; }
+    .home-quick-circle { @apply flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform min-w-0 py-4; }
+    .home-quick-icon { @apply w-14 h-14 rounded-full bg-pink-50 text-pink-500 border border-pink-100 flex items-center justify-center shadow-sm text-[30px]; font-variation-settings: 'FILL' 1; }
+    .home-quick-label { @apply text-[13px] font-bold text-slate-800 leading-tight text-center whitespace-nowrap; }
+    .home-action-card { @apply bg-white rounded-3xl border border-slate-100 shadow-sm; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06); }
     body.home-page #header-admin-badge,
     body.home-page #header-role-label,
     body.home-page #point-balance-badge,
@@ -90,7 +91,7 @@
     </div>
   </nav>
 
-  <main id="main" class="flex-1 overflow-y-auto pb-32 pt-28 px-4 space-y-6">
+  <main id="main" class="flex-1 overflow-y-auto overflow-x-hidden pb-32 pt-28 px-4 space-y-6">
 
     <!-- ==================== 一般註冊頁面 ==================== -->
     <div id="page-register" class="hidden h-full flex-col items-center justify-center animate-in fade-in pb-10">
@@ -784,12 +785,12 @@
     <!-- ==================== 首頁 ==================== -->
     <div id="page-home" class="hidden space-y-6 animate-in fade-in pb-10">
 
-      <section id="home-profile-card" class="mx-0 -mt-1 bg-transparent shadow-none overflow-visible">
-        <div class="px-1 py-0 flex items-center justify-between gap-3">
-          <button type="button" onclick="document.getElementById('home-profile-avatar-file')?.click()" class="relative shrink-0 w-[48px] h-[48px] rounded-full bg-white border-[3px] border-white shadow-md overflow-hidden active:scale-95 transition-transform">
+      <section id="home-profile-card" class="mx-0 -mt-1 rounded-[28px] border border-pink-100 bg-gradient-to-br from-white via-pink-50/70 to-white p-4 shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between gap-4">
+          <button type="button" onclick="document.getElementById('home-profile-avatar-file')?.click()" class="relative shrink-0 w-[74px] h-[74px] rounded-full bg-white border-[4px] border-white shadow-lg overflow-hidden active:scale-95 transition-transform">
             <img id="home-profile-avatar" src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" class="w-full h-full object-cover" alt="Profile">
-            <span class="absolute right-0 bottom-0 w-5 h-5 rounded-full bg-pink-500 text-white border-2 border-white flex items-center justify-center shadow-sm">
-              <span class="material-symbols-outlined text-[12px] icon-filled">photo_camera</span>
+            <span class="absolute right-0 bottom-0 w-7 h-7 rounded-full bg-pink-500 text-white border-2 border-white flex items-center justify-center shadow-sm">
+              <span class="material-symbols-outlined text-[16px] icon-filled">photo_camera</span>
             </span>
           </button>
           <input id="home-profile-avatar-file" type="file" accept="image/*" class="hidden" onchange="window.uploadHomeProfileAvatar(this)">
@@ -797,36 +798,36 @@
 
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 min-w-0">
-              <h2 id="home-profile-name" class="truncate text-[17px] font-black text-slate-900 tracking-tight">會員</h2>
-              <span id="home-profile-role" class="shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-600 px-2 py-0.5 text-[10px] font-black">
-                <span class="material-symbols-outlined text-[12px] icon-filled">workspace_premium</span>
+              <h2 id="home-profile-name" class="truncate text-[24px] font-black text-slate-900 tracking-tight">會員</h2>
+              <span id="home-profile-role" class="shrink-0 inline-flex items-center gap-1 rounded-full bg-pink-100 text-pink-600 px-2.5 py-1 text-[11px] font-black">
+                <span class="material-symbols-outlined text-[13px] icon-filled">workspace_premium</span>
                 用戶
               </span>
             </div>
-            <p class="mt-1 text-[10px] font-bold text-slate-500">可用點數</p>
+            <p class="mt-3 text-[13px] font-bold text-slate-500">可用點數</p>
             <div class="mt-0.5 flex items-center gap-2 flex-wrap">
               <button type="button" onclick="window.openPointsWallet()" class="text-left active:scale-[0.99] transition-transform">
-                <span id="home-profile-points" class="text-[20px] leading-none font-black text-pink-500 tracking-tight">0</span>
-                <span class="ml-1 text-[10px] font-black text-slate-600">點</span>
+                <span id="home-profile-points" class="text-[34px] leading-none font-black text-pink-500 tracking-tight">0</span>
+                <span class="ml-1 text-[14px] font-black text-slate-600">點</span>
               </button>
-              <button type="button" onclick="window.openPointsWallet()" class="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-amber-50 text-amber-700 px-2 py-1 text-[10px] font-black active:scale-95 transition-transform">
+              <button type="button" onclick="window.openPointsWallet()" class="hidden shrink-0 items-center gap-0.5 rounded-full bg-amber-50 text-amber-700 px-2 py-1 text-[10px] font-black active:scale-95 transition-transform">
                 <span class="material-symbols-outlined text-[12px] icon-filled">account_balance_wallet</span>
                 簽到贈點
               </button>
             </div>
           </div>
 
-          <button id="home-zodiac-weekly-btn" type="button" onclick="window.openTodayFortune?.()" class="hidden shrink-0 w-[52px] rounded-xl bg-white px-1.5 py-2 text-center shadow-sm border border-pink-100 active:scale-95 transition-transform">
-            <span id="home-zodiac-weekly-icon" class="block text-[20px] leading-none">♈</span>
-            <span id="home-zodiac-weekly-label" class="block mt-0.5 text-[9px] font-black text-pink-500 leading-none">&#20170;&#26085;</span>
+          <button id="home-zodiac-weekly-btn" type="button" onclick="window.openTodayFortune?.()" class="hidden shrink-0 w-[58px] rounded-2xl bg-white px-1.5 py-2 text-center border-r border-slate-200 active:scale-95 transition-transform">
+            <span id="home-zodiac-weekly-icon" class="block text-[30px] leading-none text-pink-500">♈</span>
+            <span id="home-zodiac-weekly-label" class="block mt-2 text-[14px] font-black text-pink-500 leading-none">&#20170;&#26085;</span>
           </button>
 
-          <div class="shrink-0 w-[78px] rounded-xl bg-white p-1.5 text-center">
-            <p class="text-[9px] font-black text-slate-500 mb-1 leading-tight">專屬 QR</p>
-            <button type="button" onclick="window.showInviteLink?.()" class="block w-[50px] h-[50px] mx-auto rounded-lg bg-white border border-slate-100 overflow-hidden active:scale-95 transition-transform">
+          <div class="shrink-0 w-[96px] rounded-3xl bg-white p-2 text-center shadow-sm">
+            <p class="text-[13px] font-black text-slate-700 mb-2 leading-tight">專屬 QR</p>
+            <button type="button" onclick="window.showInviteLink?.()" class="block w-[72px] h-[72px] mx-auto rounded-lg bg-white overflow-hidden active:scale-95 transition-transform">
               <img id="home-profile-qr" src="" class="w-full h-full object-contain" alt="QR Code">
             </button>
-            <button type="button" onclick="window.shareHomeProfileCard(this)" class="mt-1.5 w-full py-1.5 rounded-lg bg-pink-500 text-white text-[10px] font-black active:scale-95 transition-transform flex items-center justify-center gap-0.5 whitespace-nowrap">
+            <button type="button" onclick="window.shareHomeProfileCard(this)" class="mt-2 w-full py-2 rounded-xl bg-pink-500 text-white text-[13px] font-black active:scale-95 transition-transform flex items-center justify-center gap-1 whitespace-nowrap">
               分享
               <span class="material-symbols-outlined text-[13px]">share</span>
             </button>
@@ -844,8 +845,8 @@
         </div>
       </div>
 
-      <div class="mx-1">
-        <div class="flex items-start justify-between gap-2">
+      <div class="mx-1 home-action-card p-4">
+        <div class="grid grid-cols-3 divide-x divide-y divide-slate-100">
           <button onclick="window.goPage('card')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined">contact_mail</span>
             <span class="home-quick-label">&#21517;&#29255;&#37239;</span>
@@ -867,13 +868,17 @@
             <span class="home-quick-label">收件匣</span>
             <span id="inbox-unread-badge" class="hidden absolute top-0 right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-5 text-center shadow-sm">0</span>
           </button>
+          <button onclick="window.claimDailyPointCheckin(this)" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">redeem</span>
+            <span class="home-quick-label">&#31805;&#21040;&#36104;&#40670;</span>
+          </button>
         </div>
       </div>
 
       <section id="home-onboarding-ai-section" class="mx-1 mt-5">
         <h3 class="font-black text-lg text-slate-800 mb-3 flex items-center gap-2">
-          <span class="material-symbols-outlined text-amber-500 icon-filled">tips_and_updates</span>
-          AI 上手建議
+          <span class="material-symbols-outlined text-pink-500 icon-filled">emoji_objects</span>
+          AI &#19978;&#25163;&#24314;&#35696;
         </h3>
         <div id="home-onboarding-ai-list" class="space-y-3">
           <div class="bg-white rounded-3xl border border-amber-100 shadow-sm p-5 text-[13px] text-slate-400 font-bold text-center">正在判斷下一步...</div>
@@ -883,7 +888,7 @@
       <section id="home-sales-assistant-section" class="mx-1 mt-5">
         <h3 class="font-black text-lg text-slate-800 mb-3 flex items-center gap-2">
           <span class="material-symbols-outlined text-pink-500 icon-filled">support_agent</span>
-          今日業務助理
+          &#20170;&#26085;&#26989;&#21209;&#21161;&#29702;
         </h3>
         <div id="home-sales-assistant-list" class="space-y-3">
           <div class="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 text-[13px] text-slate-400 font-bold text-center">正在整理今日建議...</div>
@@ -891,6 +896,43 @@
       </section>
 
       <div id="home-matchmake-slot" class="mx-1 mt-6"></div>
+
+      <section id="home-feature-section" class="mx-1 mt-6">
+        <h3 class="font-black text-lg text-slate-800 mb-3 flex items-center gap-2">
+          <span class="material-symbols-outlined text-pink-500 icon-filled">stars</span>
+          &#31934;&#36984;&#21151;&#33021;
+        </h3>
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" onclick="window.goPage('admin-crm')" class="home-action-card p-4 text-left active:scale-[0.99] transition-transform flex items-center gap-3">
+            <span class="home-quick-icon material-symbols-outlined !w-12 !h-12 !text-[26px]">groups</span>
+            <span class="min-w-0">
+              <span class="block text-[15px] font-black text-slate-900">&#25105;&#30340;&#23458;&#25142;</span>
+              <span class="block text-[12px] font-bold text-slate-400 mt-0.5">&#23458;&#25142;&#31649;&#29702;&#33287;&#36861;&#36452;</span>
+            </span>
+          </button>
+          <button type="button" onclick="window.goPage('admin-stats')" class="home-action-card p-4 text-left active:scale-[0.99] transition-transform flex items-center gap-3">
+            <span class="home-quick-icon material-symbols-outlined !w-12 !h-12 !text-[26px]">pie_chart</span>
+            <span class="min-w-0">
+              <span class="block text-[15px] font-black text-slate-900">&#25976;&#25818;&#20998;&#26512;</span>
+              <span class="block text-[12px] font-bold text-slate-400 mt-0.5">&#26989;&#21209;&#25976;&#25818;&#32317;&#35261;</span>
+            </span>
+          </button>
+          <button type="button" onclick="window.goPage('my-activities')" class="home-action-card p-4 text-left active:scale-[0.99] transition-transform flex items-center gap-3">
+            <span class="home-quick-icon material-symbols-outlined !w-12 !h-12 !text-[26px]">bookmark_star</span>
+            <span class="min-w-0">
+              <span class="block text-[15px] font-black text-slate-900">&#20219;&#21209;&#31649;&#29702;</span>
+              <span class="block text-[12px] font-bold text-slate-400 mt-0.5">&#24453;&#36774;&#20107;&#38917;&#36861;&#36452;</span>
+            </span>
+          </button>
+          <button type="button" onclick="window.openPointsWallet()" class="home-action-card p-4 text-left active:scale-[0.99] transition-transform flex items-center gap-3">
+            <span class="home-quick-icon material-symbols-outlined !w-12 !h-12 !text-[26px]">redeem</span>
+            <span class="min-w-0">
+              <span class="block text-[15px] font-black text-slate-900">&#40670;&#25976;&#21830;&#22478;</span>
+              <span class="block text-[12px] font-bold text-slate-400 mt-0.5">&#40670;&#25976;&#20812;&#25563;&#22909;&#31150;</span>
+            </span>
+          </button>
+        </div>
+      </section>
 
       <section id="home-announcements-section" class="mx-1 mt-8">
         <h3 class="font-black text-lg text-slate-800 mb-4 flex items-center gap-2">
@@ -1882,7 +1924,7 @@
 <script src="js/modules/cardmaster.js?v=1.3"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.34"></script>
+<script src="js/modules/home.js?v=7.35"></script>
 <script src="js/modules/inbox.js?v=1.8"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>

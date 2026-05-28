@@ -676,16 +676,16 @@ const HomeModule = (function() {
         list.innerHTML = suggestions.map(function(item, index) {
             const tone = toneMap[item.tone] || toneMap.blue;
             return `
-                <button type="button" onclick="${item.onclick}" class="w-full bg-white rounded-3xl border border-amber-100 shadow-sm p-4 text-left active:scale-[0.99] transition-transform">
+                <button type="button" onclick="${item.onclick}" class="w-full bg-white rounded-3xl border border-pink-100 shadow-sm p-4 text-left active:scale-[0.99] transition-transform">
                     <div class="flex items-start gap-3">
-                        <span class="material-symbols-outlined icon-filled w-10 h-10 rounded-2xl ${tone} border flex items-center justify-center shrink-0">${item.icon}</span>
+                        <span class="material-symbols-outlined icon-filled w-16 h-24 rounded-2xl bg-pink-50 text-pink-500 border border-pink-100 flex items-center justify-center shrink-0 text-[34px]">${item.icon}</span>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center justify-between gap-3">
                                 <h4 class="font-black text-slate-900 text-[15px] leading-snug">${window.escapeHTML(item.title)}</h4>
                                 <span class="text-[11px] font-black text-slate-400 whitespace-nowrap">建議 ${index + 1}</span>
                             </div>
                             <p class="mt-1.5 text-[13px] text-slate-500 font-bold leading-relaxed">${window.escapeHTML(item.body)}</p>
-                            <div class="mt-3 inline-flex items-center gap-1 text-[12px] font-black text-blue-600">
+                            <div class="mt-3 inline-flex items-center gap-1 text-[13px] font-black text-pink-500">
                                 ${window.escapeHTML(item.action)}
                                 <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
                             </div>
@@ -719,7 +719,7 @@ const HomeModule = (function() {
                 const suggestion = window.escapeHTML(item.crmAiSuggestion || '');
                 const rowId = window.escapeJS(item.rowId || item.cardRowId || '');
                 return `
-                    <button type="button" onclick="window.openCardDetailById ? window.openCardDetailById('${rowId}') : window.goPage('card')" class="w-full bg-white rounded-3xl border border-slate-100 shadow-sm p-4 text-left active:scale-[0.99] transition-transform">
+                    <button type="button" onclick="window.openCardDetailById ? window.openCardDetailById('${rowId}') : window.goPage('card')" class="w-full bg-white rounded-3xl border border-pink-100 shadow-sm p-4 text-left active:scale-[0.99] transition-transform">
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2 flex-wrap">
