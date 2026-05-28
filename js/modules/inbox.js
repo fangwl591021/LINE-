@@ -101,6 +101,81 @@
     return cfg.imgUrlPortrait || cfg.imgUrl || cfg.imgUrlLandscape || cfg.imgUrlSquare || card.imageUrl || card["名片圖檔"] || "";
   }
 
+  function getCardConfig(card) {
+    if (!card) return {};
+    return parseConfig(card.customConfig || card["自訂名片設定"] || card["電子名片設定"] || card["自訂版面"] || card["名片設定"]);
+  }
+
+  function safeCssColor(value, fallback = "#06C755") {
+    const color = String(value || "").trim();
+    return /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(color) ? color : fallback;
+  }
+
+  function safeCardUrl(value) {
+    const url = String(value || "").trim();
+    return /^(https?:\/\/|line:\/\/|tel:|mailto:)/i.test(url) ? url : "";
+  }
+
+  function cardText(card, keys, fallback = "") {
+    for (const key of keys) {
+      const value = card && card[key];
+      if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+    }
+    return fallback;
+  }
+
+  function getPreviewImage(card, cfg) {
+    const layout = String(cfg.layoutStyle || cfg.layout || "landscape").trim();
+    if (layout === "portrait") return cfg.imgUrlPortrait || cfg.imgUrl || cardText(card, ["imageUrl", "名片圖檔"]);
+    if (layout === "square") return cfg.imgUrlSquare || cfg.imgUrl || cardText(card, ["imageUrl", "名片圖檔"]);
+    return cfg.imgUrl || cfg.imgUrlLandscape || cfg.imgUrlPortrait || cfg.imgUrlSquare || cardText(card, ["imageUrl", "名片圖檔"]);
+  }
+
+  function getPreviewRatio(cfg) {
+    const layout = String(cfg.layoutStyle || cfg.layout || "landscape").trim();
+    if (layout === "portrait") return String(cfg.imgRatioPortrait || "2:3").replace(":", "/");
+    if (layout === "square") return "1/1";
+    return String(cfg.imgRatioLandscape || "20:13").replace(":", "/");
+  }
+
+  function renderInboxECardPreview(card, options = {}) {
+    const cfg = getCardConfig(card);
+    const img = getPreviewImage(card, cfg);
+    const ratio = getPreviewRatio(cfg);
+    const name = cardText(card, ["name", "姓名"], "未命名名片");
+    const company = cardText(card, ["companyName", "公司名稱"]);
+    const title = cardText(card, ["title", "職稱"]);
+    const mobile = cardText(card, ["mobile", "手機號碼", "手機"]);
+    const desc = String(cfg.desc || cardText(card, ["services", "服務項目", "notes", "備註"])).trim();
+    const buttons = Array.isArray(cfg.buttons) ? cfg.buttons.slice(0, 4) : [];
+    const compact = options.compact === true;
+    const imageHtml = img
+      ? '<div class="relative w-full overflow-hidden rounded-2xl bg-slate-100 border border-slate-100">' +
+          '<img src="' + escapeHTML(img) + '" class="block w-full object-cover" style="aspect-ratio:' + escapeHTML(ratio) + ';" alt="business card cover">' +
+        '</div>'
+      : '<div class="w-full rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400" style="aspect-ratio:' + escapeHTML(ratio) + ';"><span class="material-symbols-outlined text-[42px]">badge</span></div>';
+    const buttonHtml = buttons.map(button => {
+      const label = String(button && (button.l || button.label || "") || "").trim();
+      if (!label) return "";
+      const color = safeCssColor(button.c || button.color || "#06C755");
+      const url = safeCardUrl(button.u || button.url || button.uri || "");
+      const attrs = url ? ' href="' + escapeHTML(url) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()"' : "";
+      const tag = url ? "a" : "div";
+      return '<' + tag + attrs + ' class="block w-full rounded-2xl py-3 text-center text-[14px] font-black text-white shadow-sm active:scale-95 transition-transform" style="background:' + escapeHTML(color) + ';">' + escapeHTML(label) + '</' + tag + '>';
+    }).join("");
+    return (
+      '<div class="overflow-hidden rounded-3xl bg-white border border-slate-100 shadow-sm">' +
+        imageHtml +
+        '<div class="' + (compact ? 'p-4' : 'p-5') + ' text-center">' +
+          '<div class="text-[22px] font-black text-slate-900 leading-tight">' + escapeHTML(name) + '</div>' +
+          ([company, title, mobile].filter(Boolean).length ? '<div class="mt-2 text-[13px] font-bold text-slate-500 leading-relaxed">' + escapeHTML([company, title, mobile].filter(Boolean).join(" / ")) + '</div>' : '') +
+          (desc ? '<div class="mt-4 text-[14px] font-bold leading-relaxed text-slate-600 whitespace-pre-wrap text-left">' + escapeHTML(desc) + '</div>' : '') +
+        '</div>' +
+        (buttonHtml ? '<div class="px-5 pb-5 grid gap-2">' + buttonHtml + '</div>' : '') +
+      '</div>'
+    );
+  }
+
   function setTabs(mode) {
     const received = $("inbox-tab-received");
     const sent = $("inbox-tab-sent");
@@ -696,10 +771,10 @@
     const cardImage = getCardImage(card);
     cardBox.innerHTML = `
       <div class="space-y-4">
-        ${cardImage ? `
-          <button type="button" onclick="window.openInboxSenderCard('${escapeHTML(card?.rowId || card?.id || "")}')" class="block w-full overflow-hidden rounded-2xl border border-slate-200 bg-white active:scale-[0.99] transition-transform">
-            <img src="${escapeHTML(cardImage)}" class="w-full h-auto max-h-[320px] object-contain bg-white" alt="對方名片預覽">
-          </button>
+        ${card ? `
+          <div role="button" tabindex="0" onclick="window.openInboxCardPreview(window.currentInboxItem?.senderCard)" class="block w-full text-left active:scale-[0.99] transition-transform cursor-pointer">
+            ${renderInboxECardPreview(card, { compact: true })}
+          </div>
         ` : ""}
         <div class="flex items-start gap-3">
           ${cardImage ? `<img src="${escapeHTML(cardImage)}" class="w-14 h-14 rounded-2xl object-cover border border-slate-200 bg-white">` : '<div class="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400"><span class="material-symbols-outlined">badge</span></div>'}
@@ -721,18 +796,10 @@
     try {
       const currentCard = window.currentInboxItem?.senderCard;
       if (currentCard && String(currentCard.rowId || currentCard.id || "") === String(rowId)) {
-        const img = getCardImage(currentCard);
-        if (img) {
-          window.openInboxCardPreview(currentCard);
-          return;
-        }
-        if (typeof window.openCardDetail === "function") {
-          if (typeof window.goPage === "function") window.goPage("card");
-          setTimeout(() => window.openCardDetail(currentCard), 80);
-          return;
-        }
+        window.openInboxCardPreview(currentCard);
+        return;
       }
-      if (currentCard && getCardImage(currentCard)) {
+      if (currentCard) {
         window.openInboxCardPreview(currentCard);
         return;
       }
@@ -751,17 +818,16 @@
   };
 
   window.openInboxCardPreview = function (card) {
-    const img = getCardImage(card);
-    if (!img) return window.showToast?.("這張名片沒有預覽圖", true);
+    if (!card) return window.showToast?.("找不到名片資料", true);
     let modal = $("inbox-card-preview-modal");
     if (!modal) {
       modal = document.createElement("div");
       modal.id = "inbox-card-preview-modal";
-      modal.className = "hidden fixed inset-0 z-[2200] bg-slate-900/70 backdrop-blur-sm p-4 flex items-center justify-center";
+      modal.className = "hidden fixed inset-0 z-[2200] bg-slate-900/70 backdrop-blur-sm p-4 flex items-center justify-center overflow-y-auto";
       document.body.appendChild(modal);
     }
     modal.innerHTML = `
-      <div class="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95">
+      <div class="w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 my-6">
         <div class="p-4 flex items-center justify-between border-b border-slate-100">
           <div>
             <p class="text-[16px] font-black text-slate-900">${escapeHTML(card.name || card["姓名"] || "名片預覽")}</p>
@@ -771,8 +837,8 @@
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
-        <div class="bg-slate-50 p-3">
-          <img src="${escapeHTML(img)}" class="w-full h-auto max-h-[70vh] object-contain rounded-2xl bg-white border border-slate-100" alt="名片預覽">
+        <div class="bg-slate-50 p-3 max-h-[70vh] overflow-y-auto">
+          ${renderInboxECardPreview(card)}
         </div>
         <div class="p-4 flex gap-3">
           <button type="button" onclick="document.getElementById('inbox-card-preview-modal')?.classList.add('hidden'); window.replyInboxMessage();" class="flex-1 py-3 rounded-2xl bg-[#06C755] text-white text-[15px] font-black active:scale-95">回覆</button>
