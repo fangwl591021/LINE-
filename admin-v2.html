@@ -1018,6 +1018,7 @@
                 </select>
               </label>
               <label class="text-sm font-bold text-slate-500">加入日期<input id="crm-joined-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
+              <label class="text-sm font-bold text-slate-500">推薦人 UID<input id="crm-referrer-id" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono outline-none focus:border-blue-500" placeholder="LINE UID"></label>
               <label class="text-sm font-bold text-slate-500">年費到期日<input id="crm-expire-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
               <label class="md:col-span-2 text-sm font-bold text-slate-500">標籤<input id="crm-tags" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-blue-600 font-bold outline-none focus:border-blue-500" placeholder="#待跟進 #租戶 #講師"></label>
             </div>
@@ -2842,6 +2843,7 @@
       setInputValue('crm-status', getCrmStatus(user));
       setInputValue('crm-intent', user.intentLevel || user.crmIntent || 'cold');
       setInputValue('crm-joined-at', String(user.joinedAt || user.createdAt || '').slice(0, 10));
+      setInputValue('crm-referrer-id', readSponsorId(user));
       setInputValue('crm-expire-at', String(user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '').slice(0, 10));
       setInputValue('crm-tags', user.tags || user.crmTags || '');
       setInputValue('crm-last-contact', String(user.lastContactAt || '').slice(0, 10));
@@ -2957,6 +2959,7 @@
         crmStatus: document.getElementById('crm-status')?.value || 'lead',
         intentLevel: document.getElementById('crm-intent')?.value || 'cold',
         joinedAt: document.getElementById('crm-joined-at')?.value || '',
+        referrerId: document.getElementById('crm-referrer-id')?.value || '',
         annualFeeExpireAt: document.getElementById('crm-expire-at')?.value || '',
         tags: document.getElementById('crm-tags')?.value || '',
         lastContactAt: document.getElementById('crm-last-contact')?.value || '',
