@@ -142,6 +142,30 @@ window.initMatchmakePage = async function() {
     return;
   }
 
+  if (scope === 'public' && !isAdmin) {
+    const readiness = typeof window.validateCardPublicReadiness === 'function'
+      ? window.validateCardPublicReadiness(window.currentUserCard)
+      : { pass: true, missing: [] };
+    const review = config.safetyReview || {};
+    if (!readiness.pass || review.pass !== true) {
+      if (ui) ui.classList.add('hidden');
+      if (toggleEl) toggleEl.checked = false;
+      showMatchStatus_(
+        '<div class="text-center">' +
+          '<span class="material-symbols-outlined text-4xl text-amber-400 mb-3">health_and_safety</span>' +
+          '<h3 class="font-black text-slate-800 mb-2">公開交流池需要先通過 AI 體檢</h3>' +
+          '<p class="text-[13px] text-slate-500 leading-relaxed mb-4">請確認圖片、標題、說明、按鈕都有效，並完成 AI 健檢後才可跨店公開配對。' +
+          (readiness.missing && readiness.missing.length ? '<br><span class="text-red-500 font-black">未通過：' + window.escapeHTML(readiness.missing.join('、')) + '</span>' : '') +
+          '</p>' +
+          '<button type="button" onclick="window.toggleFatePrivacy(true)" class="w-full py-3.5 bg-[#06C755] text-white rounded-xl font-bold text-[15px] active:scale-95 transition-transform shadow-sm flex justify-center items-center gap-2">' +
+            '<span class="material-symbols-outlined text-[18px]">verified</span> 執行 AI 體檢並公開' +
+          '</button>' +
+        '</div>'
+      );
+      return;
+    }
+  }
+
   if (ui) {
     hideMatchStatus_();
     ui.classList.remove('hidden');
@@ -236,6 +260,10 @@ window.startMatchmaking = async function() {
 
   try {
     const poolScope = window.matchmakePoolScope === 'public' ? 'public' : 'own';
+    if (poolScope === 'public' && !(window.hasAdminRights || window.userRole === 'admin') && typeof window.ensureCardCanGoPublic === 'function') {
+      const canUsePublicPool = await window.ensureCardCanGoPublic(window.currentUserCard);
+      if (!canUsePublicPool) return;
+    }
     const res = await window.fetchAPI('matchmakeContacts', {
       currentUser: window.currentUser,
       query: query,

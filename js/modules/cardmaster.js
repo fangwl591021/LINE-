@@ -124,6 +124,44 @@
     return service === TEMPLATE_DESC || !!cfg.templateDraft;
   }
 
+  function isPlaceholderImage(url) {
+    var text = String(url || '').trim().toLowerCase();
+    if (!text) return true;
+    return text.indexOf('assets/rental-template-cover.png') >= 0 ||
+      text.indexOf('images.unsplash.com/photo-1616628188550-808682f3926d') >= 0;
+  }
+
+  function isValidPublicButton(button) {
+    if (!button) return false;
+    var label = String(button.l || button.label || button.text || '').trim();
+    var url = String(button.u || button.url || button.uri || '').trim();
+    if (!label || !url) return false;
+    return /^(https?:\/\/|line:\/\/|tel:|mailto:)/i.test(url);
+  }
+
+  function validateCardPublicReadiness(card) {
+    var cfg = parseConfig(card);
+    var title = String(cfg.title || getField(card, ['姓名', 'Name']) || getField(card, ['職稱', 'Title']) || '').trim();
+    var desc = String(cfg.desc || getField(card, [SERVICE_FIELD, '服務內容', 'Service']) || '').trim();
+    var imageUrl = String(cfg.imgUrl || cfg.imgUrlLandscape || cfg.imgUrlPortrait || cfg.imgUrlSquare || getField(card, [IMAGE_FIELD, 'imageUrl']) || '').trim();
+    var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+    var missing = [];
+
+    if (isPlaceholderImage(imageUrl)) missing.push('圖片');
+    if (title.length < 2) missing.push('標題');
+    if (desc.length < 8 || hasTemplateContent(card)) missing.push('說明');
+    if (!buttons.length || buttons.some(function(button) { return !isValidPublicButton(button); })) missing.push('按鈕');
+
+    return {
+      pass: missing.length === 0,
+      missing: missing,
+      imageUrl: imageUrl,
+      title: title,
+      desc: desc,
+      buttons: buttons
+    };
+  }
+
   function renderQuota() {
     var el = $('cardmaster-quota');
     if (!el) return;
@@ -262,6 +300,14 @@
       return false;
     }
 
+    var readiness = validateCardPublicReadiness(card);
+    if (!readiness.pass) {
+      var missingText = readiness.missing.join('、');
+      if (window.showToast) window.showToast('公開交流池需要先通過 AI 體檢：請補齊有效' + missingText + '。', true);
+      renderNotice('公開交流池需要先完成名片體檢。請確認圖片、標題、說明、按鈕都已設定且有效；目前未通過：' + missingText + '。', true);
+      return false;
+    }
+
     if (hasTemplateContent(card)) {
       if (window.showToast) window.showToast('請先修改模板內容，再公開搜尋。', true);
       return false;
@@ -280,6 +326,8 @@
       return false;
     }
   };
+
+  window.validateCardPublicReadiness = validateCardPublicReadiness;
 
   window.runMyCardSafetyReview = async function(evt) {
     var btn = evt && (evt.currentTarget || evt.target);

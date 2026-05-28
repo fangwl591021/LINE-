@@ -3566,6 +3566,29 @@ const D1ReadModule = {
     };
   },
 
+  isValidPublicCardButton(button) {
+    const label = this.text(button && (button.l || button.label || button.text));
+    const url = this.text(button && (button.u || button.url || button.uri));
+    return !!(label && /^(https?:\/\/|line:\/\/|tel:|mailto:)/i.test(url));
+  },
+
+  isPublicCardReady(row, cfg) {
+    cfg = cfg || {};
+    const imageUrl = this.text(cfg.imgUrl || cfg.imgUrlLandscape || cfg.imgUrlPortrait || cfg.imgUrlSquare || (row && (row.image_url || row.imageUrl || row['名片圖檔'])));
+    const title = this.text(cfg.title || (row && (row.name || row.title || row['姓名'] || row['職稱'])));
+    const desc = this.text(cfg.desc || (row && (row.services || row.description || row['服務項目'] || row['服務內容'])));
+    const buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+    const placeholderImage = !imageUrl ||
+      imageUrl.toLowerCase().includes('assets/rental-template-cover.png') ||
+      imageUrl.toLowerCase().includes('images.unsplash.com/photo-1616628188550-808682f3926d');
+    return !placeholderImage &&
+      title.length >= 2 &&
+      desc.length >= 8 &&
+      cfg.templateDraft !== true &&
+      buttons.length > 0 &&
+      buttons.every(button => this.isValidPublicCardButton(button));
+  },
+
   inferCardAccess(row, options = {}) {
     const cfg = this.jsonObject(row && (row.custom_config || row.customConfig || row['自訂名片設定']));
     const creatorId = this.text(row && (row.creator_id || row.creatorId || row['建檔者ID']));
@@ -3586,17 +3609,18 @@ const D1ReadModule = {
     const storedPool = hasStoredAccess && row && row.pool_eligible !== undefined && row.pool_eligible !== null && String(row.pool_eligible).trim() !== ''
       ? Number(row.pool_eligible) === 1
       : null;
-    const aiPassed = safetyStatus ? safetyStatus === 'passed' : true;
+    const aiPassed = safetyStatus === 'passed';
+    const publicReady = this.isPublicCardReady(row, cfg);
     const poolEligible = storedPool !== null
-      ? storedPool
-      : !!(isSelfProfile && visibility === 'public' && !cfg.templateDraft && aiPassed);
+      ? !!(storedPool && publicReady && aiPassed)
+      : !!(isSelfProfile && visibility === 'public' && publicReady && aiPassed);
     return {
       ownerUserId,
       profileUserId,
       sourceType,
       visibility,
       poolEligible,
-      aiReviewStatus: safetyStatus || (aiPassed ? 'passed' : 'pending'),
+      aiReviewStatus: safetyStatus || 'pending',
       isPrivate: visibility !== 'public',
       isSelfProfile
     };

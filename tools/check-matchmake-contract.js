@@ -21,8 +21,19 @@ if (!index.includes('match-public-toggle-wrap')) {
 if (!matchmake.includes('window.matchmakePoolScope') || !matchmake.includes('window.setMatchmakePoolScope')) {
   fail('front-end must track and switch matchmaking pool scope');
 }
+if (!index.includes('js/modules/matchmake.js?v=7.8')) {
+  fail('matchmake.js cache-bust version must be bumped');
+}
+if (!index.includes('js/modules/cardmaster.js?v=1.4')) {
+  fail('cardmaster.js cache-bust version must be bumped');
+}
 if (!matchmake.includes("toggleWrap.classList.toggle('hidden', scope !== 'public')")) {
   fail('own pool must hide the public visibility toggle');
+}
+if (!matchmake.includes('window.validateCardPublicReadiness') ||
+    !matchmake.includes('review.pass !== true') ||
+    !matchmake.includes('window.ensureCardCanGoPublic(window.currentUserCard)')) {
+  fail('public pool must require readiness and AI review before opening/running');
 }
 if (!matchmake.includes('個人配對池') || !matchmake.includes('參與公開交流池')) {
   fail('matchmaking UI labels must change with pool scope');
@@ -50,6 +61,12 @@ if (!worker.includes("LOWER(COALESCE(visibility,'')) = 'public'") ||
     !worker.includes("LOWER(COALESCE(source_type,'')) = 'self_profile'") ||
     !worker.includes('CAST(COALESCE(pool_eligible, 0) AS INTEGER) = 1')) {
   fail('public pool must require public self_profile pool eligibility');
+}
+if (!worker.includes('isPublicCardReady(row, cfg)') ||
+    !worker.includes('isValidPublicCardButton(button)') ||
+    !worker.includes("const aiPassed = safetyStatus === 'passed'") ||
+    !worker.includes('storedPool && publicReady && aiPassed')) {
+  fail('Worker must enforce public readiness and passed AI review before pool eligibility');
 }
 
 console.log('Matchmake contract passed.');
