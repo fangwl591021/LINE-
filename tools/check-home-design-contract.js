@@ -58,7 +58,7 @@ if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[22p
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
-if (!index.includes('js/modules/home.js?v=7.37')) {
+if (!index.includes('js/modules/home.js?v=7.38')) {
   fail('home.js cache-bust version must be bumped');
 }
 if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia')) {

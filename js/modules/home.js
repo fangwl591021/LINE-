@@ -183,6 +183,7 @@ const HomeModule = (function() {
         const zodiac = getHomeZodiac_(parseHomeBirthday_());
         if (!zodiac) {
             btn.classList.add('hidden');
+            btn.classList.remove('flex');
             return;
         }
         const iconEl = document.getElementById('home-zodiac-weekly-icon');
@@ -191,6 +192,7 @@ const HomeModule = (function() {
         if (labelEl) labelEl.textContent = '\u4eca\u65e5';
         btn.title = zodiac.name + ' \u4eca\u65e5\u904b\u52e2';
         btn.classList.remove('hidden');
+        btn.classList.add('flex');
     }
 
     function getWeekRangeLabel_() {

@@ -112,7 +112,7 @@
 
   function updateTitleUnread(unread) {
     const base = document.title.replace(/^\(\d+\)\s*/, "");
-    document.title = unread > 0 ? `(${unread}) ${base}` : base;
+    document.title = base;
   }
 
   function base64UrlToUint8Array(value) {

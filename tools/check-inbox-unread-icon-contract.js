@@ -22,7 +22,7 @@ if (!html.includes('@keyframes inboxMailPulse')) {
   fail('home page must define the unread mail two-color animation');
 }
 
-if (!html.includes('js/modules/inbox.js?v=1.9')) {
+if (!html.includes('js/modules/inbox.js?v=1.10')) {
   fail('index.html must reference the bumped inbox.js cache version');
 }
 
@@ -32,6 +32,14 @@ if (!inbox.includes('button.classList.add("has-unread-mail")')) {
 
 if (!inbox.includes('button.classList.remove("has-unread-mail")')) {
   fail('refreshInboxBadge must clear unread icon state when unread count is zero');
+}
+
+if (inbox.includes('document.title = unread > 0')) {
+  fail('unread inbox count must not prefix the browser or LIFF title');
+}
+
+if (!inbox.includes('document.title = base;')) {
+  fail('updateTitleUnread must strip any old unread prefix from the title');
 }
 
 console.log('Inbox unread icon contract passed.');

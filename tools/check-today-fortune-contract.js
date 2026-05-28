@@ -16,7 +16,7 @@ if (!index.includes('onclick="window.openTodayFortune?.()"')) {
 if (!index.includes('&#20170;&#26085;')) {
   fail('home fortune button must be labeled Today');
 }
-if (!index.includes('js/modules/home.js?v=7.37')) {
+if (!index.includes('js/modules/home.js?v=7.38')) {
   fail('home.js cache-bust version must be bumped');
 }
 if (!index.includes('weekly-zodiac-theme-label') ||
@@ -36,6 +36,9 @@ if (!/function buildTodayFortune_/.test(home)) {
 }
 if (!/window\.openTodayFortune\s*=\s*function/.test(home)) {
   fail('daily fortune open handler must be exported');
+}
+if (!home.includes("btn.classList.add('flex')") || !home.includes("btn.classList.remove('flex')")) {
+  fail('fortune button must restore flex layout when shown and remove it when hidden');
 }
 if (!home.includes('forecast.meta') || !home.includes('forecast.summary') || !home.includes('forecast.action')) {
   fail('daily fortune modal must render meta, summary, and action text');
