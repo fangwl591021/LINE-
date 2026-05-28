@@ -43,8 +43,11 @@ if (!index.includes('home-action-card')) {
 if (!index.includes('overflow-y-auto overflow-x-hidden')) {
   fail('main app surface should prevent horizontal overflow on mobile');
 }
-if (!index.includes('bg-gradient-to-br from-white via-pink-50/70 to-white')) {
-  fail('profile panel should use the pink-tinted card treatment');
+if (index.includes('id="home-profile-card" class="mx-0 -mt-1 rounded-')) {
+  fail('profile panel should not render an outer card frame');
+}
+if (!index.includes('id="home-profile-card" class="mx-0 -mt-1 p-2.5 overflow-hidden"')) {
+  fail('profile panel should keep only compact spacing without an outer frame');
 }
 if (!index.includes('grid grid-cols-3 divide-x divide-y divide-slate-100')) {
   fail('quick actions should render as a 2x3 grid');
