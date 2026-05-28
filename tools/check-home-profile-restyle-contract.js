@@ -17,6 +17,14 @@ if (!html.includes('grid grid-cols-[112px_1fr_92px]')) {
   fail('profile card must move points and QR into the left and right side columns');
 }
 
+if (html.includes('<span class="ml-0.5 text-[11px] font-black text-slate-600">點</span>')) {
+  fail('profile points card should not render a trailing point unit');
+}
+
+if (!html.includes('items-center justify-center gap-2')) {
+  fail('fortune button should keep the icon and Today label on the same row');
+}
+
 if (!html.includes('id="home-profile-card"')) {
   fail('missing active home profile card');
 }
