@@ -19,7 +19,7 @@ if (!html.includes('id="home-header-site-name"') ||
   fail('home title and switch must live on the green hero in white');
 }
 
-if (!html.includes('grid grid-cols-[108px_1fr_96px]')) {
+if (!html.includes('grid grid-cols-[124px_minmax(0,1fr)_96px]')) {
   fail('profile card must move points and QR into the left and right side columns');
 }
 

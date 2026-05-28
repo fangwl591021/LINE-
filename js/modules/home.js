@@ -657,6 +657,13 @@ const HomeModule = (function() {
         if (section && section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
+    function requireHomeApiSuccess_(result, fallbackMessage) {
+        if (result && result.success === false) {
+            throw new Error(result.error || fallbackMessage || 'API request failed');
+        }
+        return result;
+    }
+
     function buildOnboardingSuggestions_(contacts) {
         const rows = Array.isArray(contacts) ? contacts : [];
         const current = window.currentUser || {};
@@ -770,7 +777,7 @@ const HomeModule = (function() {
         if (!list || typeof window.fetchAPI !== 'function') return;
         list.innerHTML = '<div class="bg-white rounded-[26px] border border-slate-100 shadow-sm p-4 text-[13px] text-slate-400 font-bold text-center">正在整理今日建議...</div>';
         try {
-            const res = await window.fetchAPI('getCrmContacts', { limit: 80 }, true);
+            const res = requireHomeApiSuccess_(await window.fetchAPI('getCrmContacts', { limit: 80 }, true), 'CRM contacts failed');
             const contacts = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
             renderHomeOnboardingAI_(contacts);
             const rows = contacts
@@ -1258,7 +1265,7 @@ const HomeModule = (function() {
         if (!list) return [];
         list.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">載入跟進提醒中...</div>';
         try {
-            const tasks = await window.fetchAPI('listPersonalTasks', {}, true);
+            const tasks = requireHomeApiSuccess_(await window.fetchAPI('listPersonalTasks', {}, true), 'Personal tasks failed');
             const rows = Array.isArray(tasks) ? tasks : [];
             window.personalAgendaTasks = rows;
             if (!rows.length) {
