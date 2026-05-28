@@ -43,8 +43,8 @@ if (!index.includes('home-action-card')) {
 if (!index.includes('overflow-y-auto overflow-x-hidden')) {
   fail('main app surface should prevent horizontal overflow on mobile');
 }
-if (!index.includes('id="home-profile-card" class="mx-0 -mt-1 overflow-hidden bg-white shadow-sm border border-slate-100"')) {
-  fail('profile panel should use the restyled profile card shell');
+if (!index.includes('id="home-profile-card" class="mx-0 -mt-1 overflow-hidden"')) {
+  fail('profile panel should keep the restyled layout without an outer frame');
 }
 if (!index.includes('home-profile-hero')) {
   fail('profile panel should render the dark dotted hero header');
@@ -58,7 +58,7 @@ if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[22p
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
-if (!index.includes('js/modules/home.js?v=7.36')) {
+if (!index.includes('js/modules/home.js?v=7.37')) {
   fail('home.js cache-bust version must be bumped');
 }
 if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia')) {

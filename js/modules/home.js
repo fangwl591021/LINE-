@@ -91,6 +91,55 @@ const HomeModule = (function() {
         return window.currentUserProfile?.pictureUrl || HOME_PROFILE_DEFAULT_AVATAR;
     }
 
+    function normalizeHomeUserId_(value) {
+        return String(value || '').trim();
+    }
+
+    window.isHomeProfileOwner = function() {
+        const viewerIds = [
+            window.currentUserProfile?.userId,
+            window.currentUserProfile?.lineId,
+            window.currentUserProfile?.sub
+        ].map(normalizeHomeUserId_).filter(Boolean);
+        const profileIds = [
+            window.currentUser?.userId,
+            window.currentUser?.lineId,
+            window.currentUser?.line_id,
+            window.currentUser?.rowId,
+            window.currentUser?.row_id,
+            window.currentUser?.pointLineId,
+            window.currentUser?.point_line_id,
+            window.currentUser?.legacyLineId,
+            window.currentUser?.legacy_line_id
+        ].map(normalizeHomeUserId_).filter(Boolean);
+        if (!viewerIds.length || !profileIds.length) return false;
+        return profileIds.some(id => viewerIds.includes(id));
+    };
+
+    window.updateHomeProfileOwnerControls = function() {
+        const isOwner = window.isHomeProfileOwner();
+        const editBtn = document.getElementById('home-profile-edit-button');
+        const avatarBtn = document.getElementById('home-profile-avatar-button');
+        const avatarBadge = document.getElementById('home-profile-avatar-edit-badge');
+        if (editBtn) {
+            editBtn.classList.toggle('hidden', !isOwner);
+            editBtn.classList.toggle('flex', isOwner);
+        }
+        if (avatarBadge) {
+            avatarBadge.classList.toggle('hidden', !isOwner);
+            avatarBadge.classList.toggle('flex', isOwner);
+        }
+        if (avatarBtn) {
+            avatarBtn.classList.toggle('active:scale-95', isOwner);
+            avatarBtn.classList.toggle('cursor-default', !isOwner);
+        }
+    };
+
+    window.handleHomeAvatarClick = function() {
+        if (!window.isHomeProfileOwner()) return;
+        document.getElementById('home-profile-avatar-file')?.click();
+    };
+
     function parseHomeBirthday_() {
         const raw = String(
             window.currentUser?.birthday ||
@@ -385,6 +434,7 @@ const HomeModule = (function() {
             const qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(inviteUrl) + '&size=220&margin=1';
             if (qrEl.getAttribute('src') !== qrUrl) qrEl.src = qrUrl;
         }
+        window.updateHomeProfileOwnerControls?.();
         refreshHomeZodiacButton_();
     };
 
@@ -412,6 +462,11 @@ const HomeModule = (function() {
     };
 
     window.uploadHomeProfileAvatar = function(inputEl) {
+        if (!window.isHomeProfileOwner()) {
+            window.showToast?.('只有本人可以編輯頭像', true);
+            if (inputEl) inputEl.value = '';
+            return;
+        }
         if (!inputEl || !inputEl.files || !inputEl.files[0]) return;
         if (typeof window.uploadCustomImageToR2 === 'function') {
             window.uploadCustomImageToR2(inputEl, 'home-profile-avatar-url', 1);
@@ -419,6 +474,10 @@ const HomeModule = (function() {
     };
 
     window.setHomeProfileAvatar = async function(url) {
+        if (!window.isHomeProfileOwner()) {
+            window.showToast?.('只有本人可以編輯頭像', true);
+            return;
+        }
         const cleanUrl = String(url || '').trim();
         if (!cleanUrl) return;
         const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';

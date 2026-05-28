@@ -21,6 +21,18 @@ if (!html.includes('id="home-profile-card"')) {
   fail('missing active home profile card');
 }
 
+if (!html.includes('id="home-profile-card" class="mx-0 -mt-1 overflow-hidden"')) {
+  fail('active home profile card should not render an outer frame');
+}
+
+[
+  'id="home-profile-edit-button"',
+  'id="home-profile-avatar-button"',
+  'id="home-profile-avatar-edit-badge"'
+].forEach(marker => {
+  if (!html.includes(marker)) fail(`missing owner-only control marker ${marker}`);
+});
+
 if (!html.includes('id="home-profile-card-legacy" class="hidden"')) {
   fail('legacy profile card must be hidden for visual fallback only');
 }

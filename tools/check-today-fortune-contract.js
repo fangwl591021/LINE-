@@ -16,7 +16,7 @@ if (!index.includes('onclick="window.openTodayFortune?.()"')) {
 if (!index.includes('&#20170;&#26085;')) {
   fail('home fortune button must be labeled Today');
 }
-if (!index.includes('js/modules/home.js?v=7.36')) {
+if (!index.includes('js/modules/home.js?v=7.37')) {
   fail('home.js cache-bust version must be bumped');
 }
 if (!index.includes('weekly-zodiac-theme-label') ||
