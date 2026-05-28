@@ -51,9 +51,13 @@ if (!index.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1"')
 if (!index.includes('home-profile-hero')) {
   fail('profile panel should render the dark dotted hero header');
 }
-if (!index.includes('body.home-page nav { display: none !important; }') ||
+if (!index.includes('id="top-nav"') ||
+    !index.includes('body.home-page #top-nav { display: none !important; }') ||
     !index.includes('body.home-page #main { padding-top: 0; }')) {
   fail('home page should move the white nav title into the green hero');
+}
+if (!index.includes('id="bottom-nav"') || index.includes('body.home-page nav { display: none !important; }')) {
+  fail('home page must not hide the bottom navigation');
 }
 if (!index.includes('grid grid-cols-3 gap-2.5')) {
   fail('quick actions should render as separated action cards');
