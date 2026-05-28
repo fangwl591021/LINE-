@@ -103,12 +103,13 @@ const HomeModule = (function() {
             ''
         ).trim();
         if (!raw) return null;
-        const match = raw.match(/(?:\d{4}\D+)?(\d{1,2})\D+(\d{1,2})/);
+        const match = raw.match(/(?:(\d{4})\D+)?(\d{1,2})\D+(\d{1,2})/);
         if (!match) return null;
-        const month = Number(match[1]);
-        const day = Number(match[2]);
+        const year = Number(match[1]) || null;
+        const month = Number(match[2]);
+        const day = Number(match[3]);
         if (!month || !day) return null;
-        return { month, day, raw };
+        return { year, month, day, raw };
     }
 
     function getHomeZodiac_(birthday) {
@@ -143,8 +144,8 @@ const HomeModule = (function() {
         const iconEl = document.getElementById('home-zodiac-weekly-icon');
         const labelEl = document.getElementById('home-zodiac-weekly-label');
         if (iconEl) iconEl.textContent = zodiac.symbol;
-        if (labelEl) labelEl.textContent = zodiac.name.replace('\u5ea7', '');
-        btn.title = zodiac.name + ' \u672c\u5468\u904b\u52e2';
+        if (labelEl) labelEl.textContent = '\u4eca\u65e5';
+        btn.title = zodiac.name + ' \u4eca\u65e5\u904b\u52e2';
         btn.classList.remove('hidden');
     }
 
@@ -157,6 +158,104 @@ const HomeModule = (function() {
         sunday.setDate(monday.getDate() + 6);
         const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
         return `${fmt(monday)} - ${fmt(sunday)}`;
+    }
+
+    function getTodayLabel_() {
+        const now = new Date();
+        return `${now.getMonth() + 1}/${now.getDate()} \u4eca\u65e5`;
+    }
+
+    function getHomeChineseZodiac_(birthday) {
+        if (!birthday || !birthday.year) return null;
+        const animals = [
+            ['\u7334', '\u6a5f\u667a\u8f49\u63db'],
+            ['\u96de', '\u7d30\u7bc0\u638c\u63e1'],
+            ['\u72d7', '\u4fe1\u4efb\u7dad\u8b77'],
+            ['\u8c6c', '\u8cc7\u6e90\u6574\u5408'],
+            ['\u9f20', '\u6a5f\u6703\u55c5\u89ba'],
+            ['\u725b', '\u7a69\u5b9a\u63a8\u9032'],
+            ['\u864e', '\u4e3b\u52d5\u958b\u5c40'],
+            ['\u5154', '\u95dc\u4fc2\u67d4\u5316'],
+            ['\u9f8d', '\u683c\u5c40\u653e\u5927'],
+            ['\u86c7', '\u6df1\u5ea6\u5224\u65b7'],
+            ['\u99ac', '\u884c\u52d5\u7bc0\u594f'],
+            ['\u7f8a', '\u5354\u8abf\u5171\u5275']
+        ];
+        const item = animals[((Number(birthday.year) % 12) + 12) % 12];
+        return { name: item[0], trait: item[1] };
+    }
+
+    function getHomeLifeNumber_(birthday) {
+        if (!birthday || !birthday.year) return null;
+        let digits = `${birthday.year}${String(birthday.month).padStart(2, '0')}${String(birthday.day).padStart(2, '0')}`;
+        let total = digits.split('').reduce((sum, char) => sum + Number(char || 0), 0);
+        while (total > 9) {
+            total = String(total).split('').reduce((sum, char) => sum + Number(char || 0), 0);
+        }
+        const traits = {
+            1: ['\u4e3b\u5c0e\u958b\u5c40', '\u5148\u628a\u8a71\u984c\u5e36\u5230\u660e\u78ba\u76ee\u6a19'],
+            2: ['\u5354\u8abf\u9023\u7d50', '\u7528\u50be\u807d\u8207\u78ba\u8a8d\u964d\u4f4e\u5c0d\u65b9\u9632\u5099'],
+            3: ['\u8868\u9054\u64f4\u6563', '\u628a\u670d\u52d9\u8aaa\u6210\u5bb9\u6613\u8f49\u8ff0\u7684\u77ed\u53e5'],
+            4: ['\u7d50\u69cb\u843d\u5730', '\u628a\u627f\u8afe\u8b8a\u6210\u6e05\u695a\u6642\u9593\u8207\u6b65\u9a5f'],
+            5: ['\u8b8a\u901a\u63a2\u8a62', '\u591a\u554f\u4e00\u500b\u4f7f\u7528\u5834\u666f\u518d\u7d66\u5efa\u8b70'],
+            6: ['\u670d\u52d9\u4fe1\u4efb', '\u5148\u8b93\u5c0d\u65b9\u611f\u5230\u88ab\u7167\u9867'],
+            7: ['\u5206\u6790\u6df1\u6316', '\u5c11\u4e00\u9ede\u63a8\u92b7\uff0c\u591a\u4e00\u9ede\u5224\u65b7\u8207\u8b49\u64da'],
+            8: ['\u6210\u6548\u5c0e\u5411', '\u7528\u6578\u5b57\u8207\u7d50\u679c\u8aaa\u660e\u50f9\u503c'],
+            9: ['\u8996\u91ce\u6574\u5408', '\u628a\u5408\u4f5c\u653e\u5728\u66f4\u5927\u7684\u4e92\u5229\u8108\u7d61\u88e1']
+        };
+        const item = traits[total] || traits[4];
+        return { number: total, theme: item[0], tip: item[1] };
+    }
+
+    function hashHomeFortuneSeed_(text) {
+        let hash = 0;
+        for (let i = 0; i < text.length; i++) {
+            hash = ((hash << 5) - hash) + text.charCodeAt(i);
+            hash |= 0;
+        }
+        return Math.abs(hash);
+    }
+
+    function buildTodayFortune_(birthday, zodiac) {
+        const chinese = getHomeChineseZodiac_(birthday);
+        const life = getHomeLifeNumber_(birthday);
+        const now = new Date();
+        const seed = hashHomeFortuneSeed_([
+            now.getFullYear(),
+            now.getMonth() + 1,
+            now.getDate(),
+            zodiac?.name || '',
+            chinese?.name || '',
+            life?.number || ''
+        ].join('-'));
+        const themes = ['\u7a69\u4e2d\u4e3b\u52d5', '\u5148\u6696\u5f8c\u63a8', '\u6574\u7406\u4eba\u8108', '\u805a\u7126\u6210\u4ea4', '\u5408\u4f5c\u88dc\u4f4d', '\u6e05\u695a\u8868\u9054'];
+        const openings = [
+            '\u4eca\u5929\u9069\u5408\u5148\u628a\u95dc\u4fc2\u9806\u4e00\u904d\uff0c\u518d\u9032\u884c\u660e\u78ba\u9080\u7d04\u3002',
+            '\u4eca\u5929\u4e0d\u5fc5\u6025\u8457\u6210\u4ea4\uff0c\u5148\u628a\u5c0d\u65b9\u9700\u6c42\u8aaa\u6e05\u695a\u6703\u66f4\u6709\u6548\u3002',
+            '\u4eca\u5929\u9069\u5408\u8655\u7406\u6c92\u6709\u56de\u8986\u7684\u7dda\u7d22\uff0c\u7528\u66f4\u5177\u9ad4\u7684\u554f\u984c\u91cd\u65b0\u958b\u5c40\u3002',
+            '\u4eca\u5929\u9069\u5408\u628a\u540d\u7247\u8cc7\u6599\u8f49\u6210\u4e0b\u4e00\u6b65\uff0c\u4e0d\u8981\u53ea\u6536\u85cf\u4e0d\u8ddf\u9032\u3002'
+        ];
+        const theme = themes[seed % themes.length];
+        const opening = openings[Math.floor(seed / 3) % openings.length];
+        const zodiacText = zodiac ? `${zodiac.name}\u5e36\u4f86\u7684\u91cd\u9ede\u662f\u4eba\u969b\u7bc0\u594f` : '\u661f\u5ea7\u8cc7\u6599\u5c1a\u672a\u5b8c\u6574';
+        const animalText = chinese ? `\u751f\u8096${chinese.name}\u504f\u5411\u300c${chinese.trait}\u300d` : '\u751f\u8096\u9700\u8981\u5b8c\u6574\u51fa\u751f\u5e74\u624d\u80fd\u63a8\u7b97';
+        const lifeText = life ? `\u751f\u547d\u9748\u6578 ${life.number}\u7684\u4e3b\u984c\u662f\u300c${life.theme}\u300d` : '\u751f\u547d\u9748\u6578\u9700\u8981\u5b8c\u6574\u751f\u65e5\u624d\u80fd\u63a8\u7b97';
+        const lifeAction = life ? life.tip : '\u5148\u5230\u8a2d\u5b9a\u88dc\u9f4a\u51fa\u751f\u5e74\u6708\u65e5';
+        return {
+            title: theme,
+            meta: [
+                zodiac ? zodiac.name : '',
+                chinese ? `\u751f\u8096${chinese.name}` : '',
+                life ? `\u9748\u6578${life.number}` : ''
+            ].filter(Boolean).join(' \u00b7 ') || '\u8cc7\u6599\u5f85\u88dc',
+            summary: `${opening}${zodiacText}\uff0c${animalText}\uff0c${lifeText}\u3002\u4eca\u5929\u7684\u95dc\u9375\u662f\u628a\u300c\u6709\u8208\u8da3\u300d\u8f49\u6210\u300c\u6709\u4e0b\u4e00\u6b65\u300d\u3002`,
+            action: [
+                `1. \u5f9e\u540d\u7247\u9177\u6216 CRM \u6311\u51fa ${2 + (seed % 3)} \u4f4d\u4eca\u5929\u6700\u503c\u5f97\u806f\u7e6b\u7684\u5c0d\u8c61\u3002`,
+                `2. ${lifeAction}\uff0c\u8b93\u5c0d\u65b9\u4e0d\u9700\u8981\u81ea\u5df1\u731c\u4f60\u7684\u50f9\u503c\u3002`,
+                '3. \u7d66\u51fa\u4e00\u500b\u5f88\u5c0f\u7684\u4e0b\u4e00\u6b65\uff1a\u56de\u8986\u4e00\u500b\u554f\u984c\u3001\u7d04 10 \u5206\u9418\uff0c\u6216\u6536\u4e00\u4efd\u7c21\u77ed\u8cc7\u6599\u3002'
+            ].join('\n'),
+            date: getTodayLabel_()
+        };
     }
 
     function buildWeeklyZodiacForecast_(zodiac) {
@@ -185,6 +284,34 @@ const HomeModule = (function() {
 
     window.closeWeeklyZodiacModal = function() {
         document.getElementById('weekly-zodiac-modal')?.classList.add('hidden');
+    };
+
+    window.openTodayFortune = function() {
+        const birthday = parseHomeBirthday_();
+        const zodiac = getHomeZodiac_(birthday);
+        if (!zodiac) return;
+        const forecast = buildTodayFortune_(birthday, zodiac);
+        const modal = document.getElementById('weekly-zodiac-modal');
+        if (!modal) return;
+        const iconEl = document.getElementById('weekly-zodiac-icon');
+        const titleEl = document.getElementById('weekly-zodiac-title');
+        const weekEl = document.getElementById('weekly-zodiac-week');
+        const themeLabelEl = document.getElementById('weekly-zodiac-theme-label');
+        const summaryLabelEl = document.getElementById('weekly-zodiac-summary-label');
+        const actionLabelEl = document.getElementById('weekly-zodiac-action-label');
+        const themeEl = document.getElementById('weekly-zodiac-theme');
+        const summaryEl = document.getElementById('weekly-zodiac-summary');
+        const actionEl = document.getElementById('weekly-zodiac-action');
+        if (iconEl) iconEl.textContent = zodiac.symbol;
+        if (titleEl) titleEl.textContent = '\u4eca\u65e5\u904b\u52e2';
+        if (weekEl) weekEl.textContent = `${forecast.date} \u00b7 ${forecast.meta}`;
+        if (themeLabelEl) themeLabelEl.textContent = '\u4eca\u65e5\u4e3b\u984c';
+        if (summaryLabelEl) summaryLabelEl.textContent = '\u7d9c\u5408\u89e3\u8b80';
+        if (actionLabelEl) actionLabelEl.textContent = '\u4eca\u65e5\u5efa\u8b70';
+        if (themeEl) themeEl.textContent = forecast.title;
+        if (summaryEl) summaryEl.textContent = forecast.summary;
+        if (actionEl) actionEl.textContent = forecast.action;
+        modal.classList.remove('hidden');
     };
 
     window.openWeeklyZodiac = function() {
