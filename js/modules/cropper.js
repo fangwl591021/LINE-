@@ -564,26 +564,6 @@ window.confirmCrop = async function() {
       throw new Error('AI 有回應，但沒有辨識到姓名、公司或聯絡資料，請換一張更清楚的名片照片');
     }
 
-    const ownCardMatch = looksLikeOwnCardUpload(cardData);
-    if (ownCardMatch.matched && window.confirm('\u9019\u770b\u8d77\u4f86\u662f\u4f60\u7684\u540d\u7247\u3002\u8981\u6539\u5b58\u5230\u300c\u6211\u7684\u5c08\u5c6c\u540d\u7247\u300d\u55ce\uff1f\n\n\u6309\u78ba\u5b9a\uff1a\u5efa\u7acb\u70ba\u6211\u7684\u5c08\u5c6c\u540d\u7247\n\u6309\u53d6\u6d88\uff1a\u4ecd\u5b58\u5165\u540d\u7247\u9177')) {
-      const selfProfilePayload = buildSelfProfileCardPayload(cardData);
-      setCardOcrProgressStage(86, '\u6539\u5b58\u5230\u6211\u7684\u5c08\u5c6c\u540d\u7247...');
-      const saveRes = await window.fetchAPI('saveCard', selfProfilePayload, true);
-      if (saveRes && saveRes.rowId) {
-        const savedCard = putSavedCardOnTop(saveRes, selfProfilePayload);
-        hideCardOcrProgress('\u6211\u7684\u5c08\u5c6c\u540d\u7247\u5df2\u5efa\u7acb');
-        window.showToast('\u5df2\u5efa\u7acb\u6211\u7684\u5c08\u5c6c\u540d\u7247');
-        refreshPointsAfterCardSave();
-        window.currentUserCard = savedCard;
-        if (typeof window.initMyECard === 'function') window.initMyECard();
-        refreshCardsAfterSave(savedCard);
-        if (typeof window.openCardDetail === 'function') window.openCardDetail(savedCard);
-        else if (typeof window.openMyCardSettings === 'function') window.openMyCardSettings();
-        return;
-      }
-      throw new Error('\u5132\u5b58\u5931\u6557');
-    }
-
     const cardPayload = {
       ...cardData,
       userId: '',
