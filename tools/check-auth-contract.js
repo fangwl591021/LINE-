@@ -61,7 +61,7 @@ const checks = [
   },
   {
     name: 'auth and core cache bust versions were bumped',
-    pass: /js\/core\.js\?v=7\.23/.test(index) && /js\/auth\.js\?v=10\.24/.test(index)
+    pass: /js\/core\.js\?v=7\.23/.test(index) && /js\/auth\.js\?v=10\.25/.test(index)
   }
 ];
 

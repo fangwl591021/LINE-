@@ -23,7 +23,13 @@ if (!claim.includes('\\u5df2\\u8d08\\u9001') || !claim.includes('showPointAwardC
 if (!/btn\.disabled\s*=\s*false/.test(claim)) {
   fail('daily check-in button should be restored instead of left disabled');
 }
-if (!index.includes('js/auth.js?v=10.24')) {
+if (!claim.includes('oldHtml') || !claim.includes('btn.innerHTML = oldHtml')) {
+  fail('daily check-in button must restore original innerHTML');
+}
+if (/btn\.textContent\s*=\s*oldText/.test(claim)) {
+  fail('daily check-in button must not restore with textContent only');
+}
+if (!index.includes('js/auth.js?v=10.25')) {
   fail('auth.js cache-bust version must be bumped');
 }
 

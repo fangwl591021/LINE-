@@ -1212,11 +1212,13 @@ window.claimDailyPointCheckin = async function(btn) {
     return window.showToast?.('請先登入後再簽到', true);
   }
   const statusEl = document.getElementById('daily-checkin-status');
-  const oldText = btn ? btn.textContent : '';
+  const oldHtml = btn ? btn.innerHTML : '';
   let keepDisabled = false;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '處理中';
+    const label = btn.querySelector?.('.home-quick-label');
+    if (label) label.textContent = '\u8655\u7406\u4e2d';
+    else btn.textContent = '\u8655\u7406\u4e2d';
     btn.classList.add('opacity-70');
   }
   try {
@@ -1261,7 +1263,8 @@ window.claimDailyPointCheckin = async function(btn) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = oldText || '\u7c3d\u5230\u8d08\u9ede';
+      if (oldHtml) btn.innerHTML = oldHtml;
+      else btn.textContent = '\u7c3d\u5230\u8d08\u9ede';
       btn.classList.remove('opacity-70');
     }
   }

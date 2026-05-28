@@ -33,7 +33,7 @@ function fail(message) {
   if (!index.includes(needle)) fail(`missing home action: ${needle}`);
 });
 
-if (!index.includes('js/auth.js?v=10.24')) {
+if (!index.includes('js/auth.js?v=10.25')) {
   fail('auth.js cache-bust version must be bumped for check-in UI change');
 }
 
