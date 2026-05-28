@@ -6302,6 +6302,50 @@ const D1InboxModule = {
     return (Array.isArray(values) ? values : []).map(() => '?').join(', ');
   },
 
+  uniqueTextList(values) {
+    const list = [];
+    for (const value of Array.isArray(values) ? values : []) {
+      const next = this.text(value);
+      if (next && !list.includes(next)) list.push(next);
+    }
+    return list;
+  },
+
+  recipientIdentityValues(row) {
+    return this.uniqueTextList([
+      row && row.line_id,
+      row && row.row_id,
+      row && row.legacy_line_id,
+      row && row.point_line_id
+    ]);
+  },
+
+  intersects(left, right) {
+    const rightSet = new Set(this.uniqueTextList(right));
+    return this.uniqueTextList(left).some(value => rightSet.has(value));
+  },
+
+  async actorReachContext(payload, env) {
+    const actorId = this.ownUserId(payload);
+    const actorRole = this.text(payload.authenticatedRole || payload.role, 'user').toLowerCase();
+    const actorNetwork = this.text(payload.authenticatedNetworkId || payload.networkId, 'admin');
+    const actorIds = actorId ? await this.identityIds(env, actorId).catch(() => [actorId]) : [];
+    const actorIdentity = actorId ? await D1ReadModule.findUserByIdentity(env, actorId).catch(() => null) : null;
+    const actorUser = actorIdentity && actorIdentity.user ? actorIdentity.user : null;
+    const actorReferrerId = this.text(actorUser && actorUser.referrer_id);
+    const actorReferrerIds = actorReferrerId ? await this.identityIds(env, actorReferrerId).catch(() => [actorReferrerId]) : [];
+    const actorNetworkIds = actorNetwork ? await this.identityIds(env, actorNetwork).catch(() => [actorNetwork]) : [];
+    return {
+      actorId,
+      actorRole,
+      actorNetwork,
+      actorUser,
+      actorIds: this.uniqueTextList(actorIds),
+      actorReferrerIds: this.uniqueTextList(actorReferrerIds),
+      actorNetworkIds: this.uniqueTextList(actorNetworkIds)
+    };
+  },
+
   async ensure(env) {
     await env.ACTMASTER_DB.prepare(`
       CREATE TABLE IF NOT EXISTS inbox_items (
@@ -6726,7 +6770,7 @@ const D1InboxModule = {
         network_id: this.text(row.user_network_id || activity.network_id || activity.owner_id || 'admin')
       };
       if (!this.isActiveRecipient(userRow)) continue;
-      if (!this.canReachRecipient(payload, userRow)) continue;
+      if (!await this.canReachRecipient(payload, userRow, env)) continue;
       const uid = this.text(userRow.line_id || userRow.row_id);
       if (!uid || seen.has(uid)) continue;
       seen.add(uid);
@@ -6946,14 +6990,36 @@ const D1InboxModule = {
     const like = `%${keyword}%`;
     const binds = [actorId, like, like, like, like];
     let scopeSql = '';
+    let excludeIds = [actorId];
     if (actorRole === 'admin') {
       scopeSql = '';
     } else if (actorRole === 'store') {
-      scopeSql = 'AND (line_id = ? OR row_id = ? OR network_id = ? OR referrer_id = ?)';
-      binds.push(actorId, actorId, actorId, actorId);
+      const actorContext = await this.actorReachContext(payload, env);
+      const actorIds = actorContext.actorIds.length ? actorContext.actorIds : [actorId];
+      const actorReferrerIds = actorContext.actorReferrerIds;
+      excludeIds = actorIds;
+      const ownPlaceholders = this.placeholders(actorIds);
+      const conditions = [
+        `network_id IN (${ownPlaceholders})`,
+        `referrer_id IN (${ownPlaceholders})`
+      ];
+      binds.push(...actorIds, ...actorIds);
+      if (actorReferrerIds.length) {
+        const referrerPlaceholders = this.placeholders(actorReferrerIds);
+        conditions.push(`line_id IN (${referrerPlaceholders})`);
+        conditions.push(`row_id IN (${referrerPlaceholders})`);
+        conditions.push(`legacy_line_id IN (${referrerPlaceholders})`);
+        conditions.push(`point_line_id IN (${referrerPlaceholders})`);
+        binds.push(...actorReferrerIds, ...actorReferrerIds, ...actorReferrerIds, ...actorReferrerIds);
+      }
+      scopeSql = `AND (${conditions.join(' OR ')})`;
     } else {
-      scopeSql = 'AND (network_id = ? OR referrer_id = ?)';
-      binds.push(actorNetwork, actorNetwork);
+      const actorContext = await this.actorReachContext(payload, env);
+      const networkIds = actorContext.actorNetworkIds.length ? actorContext.actorNetworkIds : [actorNetwork];
+      excludeIds = actorContext.actorIds.length ? actorContext.actorIds : [actorId];
+      const networkPlaceholders = this.placeholders(networkIds);
+      scopeSql = `AND (network_id IN (${networkPlaceholders}) OR referrer_id IN (${networkPlaceholders}))`;
+      binds.push(...networkIds, ...networkIds);
     }
 
     const rows = await D1ReadModule.all(env, `
@@ -6969,7 +7035,10 @@ const D1InboxModule = {
 
     return {
       success: true,
-      data: rows.map(row => D1ReadModule.userRow(row)).filter(Boolean).map(user => ({
+      data: rows.map(row => D1ReadModule.userRow(row)).filter(Boolean).filter(user => {
+        const ids = this.uniqueTextList([user.userId, user.rowId, user.legacyLineId, user.pointLineId]);
+        return !this.intersects(ids, excludeIds);
+      }).map(user => ({
         userId: user.userId,
         name: user.name,
         phone: user.phone,
@@ -6993,19 +7062,24 @@ const D1InboxModule = {
     return !!userId && !!phone && !!name && !['未命名', '待補資料'].includes(name);
   },
 
-  canReachRecipient(payload, receiverRow) {
-    const actorId = this.ownUserId(payload);
-    const actorRole = this.text(payload.authenticatedRole || payload.role, 'user').toLowerCase();
-    const actorNetwork = this.text(payload.authenticatedNetworkId || payload.networkId, 'admin');
-    const receiverId = this.text(receiverRow && (receiverRow.line_id || receiverRow.row_id));
+  async canReachRecipient(payload, receiverRow, env) {
+    const context = await this.actorReachContext(payload, env);
+    const actorId = context.actorId;
+    const actorRole = context.actorRole;
+    const receiverIds = this.recipientIdentityValues(receiverRow);
+    const receiverId = this.text(receiverIds[0]);
     const receiverNetwork = this.text(receiverRow && receiverRow.network_id, 'admin');
     const receiverReferrer = this.text(receiverRow && receiverRow.referrer_id);
-    if (!actorId || !receiverId || actorId === receiverId) return false;
+    if (!actorId || !receiverId || this.intersects(receiverIds, context.actorIds)) return false;
     if (actorRole === 'admin') return true;
     if (actorRole === 'store') {
-      return receiverNetwork === actorId || receiverReferrer === actorId || receiverId === actorId;
+      return context.actorIds.includes(receiverNetwork)
+        || context.actorIds.includes(receiverReferrer)
+        || this.intersects(receiverIds, context.actorReferrerIds);
     }
-    return receiverNetwork === actorNetwork || receiverReferrer === actorNetwork;
+    return context.actorNetworkIds.includes(receiverNetwork)
+      || context.actorNetworkIds.includes(receiverReferrer)
+      || this.intersects(receiverIds, context.actorReferrerIds);
   },
 
   async sendCourseGroup(payload, env) {
@@ -7093,7 +7167,7 @@ const D1InboxModule = {
     const receiver = await D1ReadModule.findUserByIdentity(env, receiverUserId).catch(() => null);
     if (!receiver || !receiver.user) return { success: false, error: '找不到收件人' };
     if (!this.isActiveRecipient(receiver.user)) return { success: false, error: '對方尚未完成會員註冊，無法接收站內訊息' };
-    if (!this.canReachRecipient(payload, receiver.user)) return { success: false, error: '收件人不在可傳送範圍內' };
+    if (!await this.canReachRecipient(payload, receiver.user, env)) return { success: false, error: '收件人不在可傳送範圍內' };
 
     const title = this.text(payload.title, '新訊息');
     const body = this.text(payload.body || payload.content);
