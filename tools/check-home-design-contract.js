@@ -52,11 +52,17 @@ if (!index.includes('grid grid-cols-3 divide-x divide-y divide-slate-100')) {
 if (!index.includes('mx-0 home-action-card p-2')) {
   fail('quick action card should use tighter spacing');
 }
+if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[26px] leading-none')) {
+  fail('home top spacing and point size should stay compact');
+}
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
-if (!index.includes('js/modules/home.js?v=7.35')) {
+if (!index.includes('js/modules/home.js?v=7.36')) {
   fail('home.js cache-bust version must be bumped');
+}
+if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia')) {
+  fail('optional home media container must stay hidden unless media is enabled');
 }
 if (!home.includes('border border-pink-100') || !home.includes('text-pink-500')) {
   fail('dynamic home suggestion cards should match the refreshed pink design');
