@@ -267,8 +267,10 @@
       if (unread > 0) {
         badge.textContent = unread > 99 ? "99+" : String(unread);
         badge.classList.remove("hidden");
+        button.classList.add("has-unread-mail");
       } else {
         badge.classList.add("hidden");
+        button.classList.remove("has-unread-mail");
       }
       updateTitleUnread(unread);
 

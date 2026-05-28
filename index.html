@@ -47,6 +47,15 @@
     .home-quick-circle { @apply flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-transform min-w-0 py-3; }
     .home-quick-icon { @apply w-12 h-12 rounded-full bg-pink-50 text-pink-500 border border-pink-100 flex items-center justify-center shadow-sm text-[28px]; font-variation-settings: 'FILL' 1; }
     .home-quick-label { @apply text-[13px] font-bold text-slate-800 leading-tight text-center whitespace-nowrap; }
+    .home-quick-circle.has-unread-mail .home-quick-mail-icon {
+      animation: inboxMailPulse 1.15s ease-in-out infinite;
+      border-color: rgba(244, 63, 94, 0.28);
+      box-shadow: 0 8px 18px rgba(244, 63, 94, 0.18);
+    }
+    @keyframes inboxMailPulse {
+      0%, 100% { background: #fdf2f8; color: #ec4899; transform: translateY(0); }
+      50% { background: #fff7ed; color: #f97316; transform: translateY(-1px); }
+    }
     .home-action-card { @apply bg-white rounded-3xl border border-slate-100 shadow-sm; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06); }
     body.home-page #header-admin-badge,
     body.home-page #header-role-label,
@@ -864,7 +873,7 @@
             <span class="home-quick-label">&#36319;&#36914;</span>
           </button>
           <button id="inbox-nav-button" onclick="window.goPage('inbox')" class="home-quick-circle group relative">
-            <span class="home-quick-icon material-symbols-outlined">mail</span>
+            <span class="home-quick-icon home-quick-mail-icon material-symbols-outlined">mail</span>
             <span class="home-quick-label">收件匣</span>
             <span id="inbox-unread-badge" class="hidden absolute top-0 right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-5 text-center shadow-sm">0</span>
           </button>
@@ -1925,7 +1934,7 @@
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
 <script src="js/modules/home.js?v=7.36"></script>
-<script src="js/modules/inbox.js?v=1.8"></script>
+<script src="js/modules/inbox.js?v=1.9"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
