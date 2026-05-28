@@ -34,28 +34,6 @@
     return !!(window.currentUserProfile?.userId && typeof window.fetchAPI === "function");
   }
 
-  function requireApiSuccess(result, fallbackMessage = "Inbox request failed") {
-    if (result && result.success === false) {
-      if (result.authRelogin) return result;
-      throw new Error(result.error || fallbackMessage);
-    }
-    return result;
-  }
-
-  function renderAuthRefreshing() {
-    const list = $("inbox-list");
-    if (!list) return;
-    list.innerHTML = `
-      <div class="p-8 text-center">
-        <div class="w-14 h-14 mx-auto mb-3 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-          <span class="material-symbols-outlined animate-spin">refresh</span>
-        </div>
-        <p class="text-[16px] font-black text-slate-700">LINE 身分驗證更新中</p>
-        <p class="text-[13px] text-slate-400 font-bold mt-1">請稍候，系統會重新整理收件匣。</p>
-      </div>
-    `;
-  }
-
   function typeLabel(item) {
     return TYPE_LABELS[item?.messageType] || "一般訊息";
   }
@@ -354,8 +332,7 @@
 
     button.classList.remove("hidden");
     try {
-      const data = requireApiSuccess(await window.fetchAPI("getInboxCount", {}, true), "Inbox count failed");
-      if (data?.authRelogin) return;
+      const data = await window.fetchAPI("getInboxCount", {}, true);
       const unread = Number(data?.unread || 0);
       const previous = Number(window.inboxUnreadCount || 0);
       const hasInitialized = window.inboxBadgeInitialized === true;
@@ -443,15 +420,6 @@
     window.loadInbox();
   };
 
-  window.openInboxReceived = function () {
-    window.inboxMode = "received";
-    if (typeof window.goPage === "function") {
-      window.goPage("inbox");
-    } else {
-      window.loadInbox();
-    }
-  };
-
   window.loadInbox = async function (options = {}) {
     const list = $("inbox-list");
     if (!list) return;
@@ -465,11 +433,7 @@
     if (!options.silent) list.innerHTML = '<div class="p-8 text-center text-slate-400 font-bold">載入訊息中...</div>';
     try {
       const action = mode === "sent" ? "listSentInboxItems" : "listInboxItems";
-      const items = requireApiSuccess(await window.fetchAPI(action, {}, true), "Inbox list failed");
-      if (items?.authRelogin) {
-        renderAuthRefreshing();
-        return;
-      }
+      const items = await window.fetchAPI(action, {}, true);
       window.inboxItems = Array.isArray(items) ? items : [];
       renderList(window.inboxItems, mode);
       await window.refreshInboxBadge();

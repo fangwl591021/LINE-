@@ -1404,11 +1404,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     window.currentUserProfile = await liff.getProfile();
-    if (typeof window.clearActmasterAuthRefreshState === 'function') {
-      window.clearActmasterAuthRefreshState();
-    } else {
-      try { sessionStorage.removeItem('ACTMASTER_LIFF_REAUTH_RUNNING'); } catch (e) {}
-    }
 
     // 🟢 【關鍵修復】在此處攔截 window.fetchAPI，自動為所有 API 請求注入 lineAccessToken 以通過 workerbackup.js 嚴格驗證
     if (typeof window.fetchAPI === 'function' && !window.__fetchApiEnhanced) {

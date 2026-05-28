@@ -36,7 +36,7 @@ function fail(message) {
   if (!index.includes(needle)) fail(`missing home action: ${needle}`);
 });
 
-if (!index.includes('js/auth.js?v=10.27')) {
+if (!index.includes('js/auth.js?v=10.26')) {
   fail('auth.js cache-bust version must be bumped for check-in UI change');
 }
 
@@ -69,13 +69,13 @@ if (!index.includes('js/navigation.js?v=7.7') ||
 if (!index.includes('grid grid-cols-3 gap-2.5')) {
   fail('quick actions should render as separated action cards');
 }
-if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[18px] leading-none')) {
+if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[23px] leading-none')) {
   fail('home top spacing and point size should stay compact');
 }
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
-if (!index.includes('js/modules/home.js?v=7.43')) {
+if (!index.includes('js/modules/home.js?v=7.40')) {
   fail('home.js cache-bust version must be bumped');
 }
 if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia')) {

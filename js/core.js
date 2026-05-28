@@ -115,9 +115,8 @@ const Core = (function() {
         if (!window.isActmasterAuthTokenError || !window.isActmasterAuthTokenError(message)) return false;
         if (!window.liff || typeof window.liff.logout !== 'function') return false;
         try {
-            const runningAt = Number(sessionStorage.getItem('ACTMASTER_LIFF_REAUTH_RUNNING') || 0);
-            if (runningAt && Date.now() - runningAt < 12000) return true;
-            sessionStorage.setItem('ACTMASTER_LIFF_REAUTH_RUNNING', String(Date.now()));
+            if (sessionStorage.getItem('ACTMASTER_LIFF_REAUTH_RUNNING') === '1') return true;
+            sessionStorage.setItem('ACTMASTER_LIFF_REAUTH_RUNNING', '1');
         } catch (e) {}
 
         const loadingText = document.getElementById('loading-text');
@@ -147,12 +146,6 @@ const Core = (function() {
             }
         }, 350);
         return true;
-    };
-
-    window.clearActmasterAuthRefreshState = function() {
-        try {
-            sessionStorage.removeItem('ACTMASTER_LIFF_REAUTH_RUNNING');
-        } catch (e) {}
     };
 
     window.fetchAPI = async function(action, payload = {}, silent = false) {
