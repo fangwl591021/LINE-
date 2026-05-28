@@ -810,6 +810,74 @@ function buildECardShareUrl(rowId) {
   return url;
 }
 
+function buildECardWebViewUrl(rowId) {
+  if (!rowId) return "";
+  const params = new URLSearchParams();
+  params.set("shareCardId", rowId);
+  const ref = window.currentUserProfile?.userId || "";
+  const net = window.currentNetworkId || "admin";
+  if (ref) params.set("ref", ref);
+  if (net) params.set("net", net);
+  params.set("from", "business-engine");
+
+  let base = window.CARD_WEB_BASE_URL || "";
+  if (!base) {
+    const current = window.location.href || "";
+    base = current.includes("liff.line.me")
+      ? "https://fangwl591021.github.io/LINE-/"
+      : (window.location.origin + (window.location.pathname || "/LINE-/"));
+  }
+  try {
+    const url = new URL(base);
+    url.search = params.toString();
+    url.hash = "";
+    return url.toString();
+  } catch (e) {
+    return "https://fangwl591021.github.io/LINE-/?" + params.toString();
+  }
+}
+
+window.copyECardWebUrl = async function(btnId) {
+  const card = window.currentCard;
+  if (!card) return window.showToast?.("找不到名片資料", true);
+  const rowId = card.rowId || card["rowId"] || card.id || "";
+  const url = buildECardWebViewUrl(rowId);
+  if (!url) return window.showToast?.("找不到名片網址", true);
+
+  const btn = btnId ? document.getElementById(btnId) : null;
+  const originalHtml = btn?.innerHTML || "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span> 已複製';
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const input = document.createElement("textarea");
+      input.value = url;
+      input.setAttribute("readonly", "readonly");
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      input.remove();
+    }
+    window.showToast?.("名片網頁網址已複製");
+  } catch (e) {
+    window.prompt("請複製名片網址", url);
+  } finally {
+    if (btn) {
+      setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+      }, 900);
+    }
+  }
+};
+
 function appendECardShareMode(url) {
   if (!url) return "";
   try {

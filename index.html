@@ -1084,6 +1084,9 @@
             <button id="btn-share-line-info" onclick="window.shareECardToLine('btn-share-line-info')" class="w-full bg-[#06C755] text-white py-3 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">send</span> 傳送名片
             </button>
+            <button id="btn-copy-ecard-url-info" onclick="window.copyECardWebUrl('btn-copy-ecard-url-info')" class="w-full bg-blue-50 text-blue-700 border border-blue-100 py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-transform flex justify-center items-center gap-1">
+              <span class="material-symbols-outlined text-[18px]">content_copy</span> 複製名片網址
+            </button>
             <button id="btn-send-claim" onclick="window.sendClaimInvitation()" class="w-full bg-blue-500 text-white py-3 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">card_membership</span> 發送認領
             </button>
@@ -1180,6 +1183,9 @@
               <span class="material-symbols-outlined">send</span> 傳送至 LINE
             </button>
           </div>
+          <button id="btn-copy-ecard-url" type="button" onclick="window.copyECardWebUrl('btn-copy-ecard-url')" class="mt-3 w-full bg-blue-50 text-blue-700 border border-blue-100 py-3 rounded-2xl font-bold active:scale-95 transition-transform flex justify-center items-center gap-2">
+            <span class="material-symbols-outlined text-[18px]">content_copy</span> 複製名片網址
+          </button>
         </div>
       </div>
     </div>
@@ -1992,7 +1998,7 @@
 <script src="js/navigation.js?v=7.7"></script>
 <script src="js/modules/cropper.js?v=7.12"></script>
 <script src="js/modules/cards.js?v=7.5"></script>
-<script src="js/modules/ecard.js?v=7.34"></script>
+<script src="js/modules/ecard.js?v=7.35"></script>
 <script src="js/modules/mycard.js?v=8.38"></script>
 <script src="js/modules/matchmake.js?v=7.8"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>
