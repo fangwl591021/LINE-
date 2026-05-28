@@ -659,9 +659,23 @@ const HomeModule = (function() {
 
     function requireHomeApiSuccess_(result, fallbackMessage) {
         if (result && result.success === false) {
+            if (result.authRelogin) return result;
             throw new Error(result.error || fallbackMessage || 'API request failed');
         }
         return result;
+    }
+
+    function renderHomeAuthRefreshing_(target, message) {
+        if (!target) return;
+        target.innerHTML = `
+            <div class="py-8 text-center">
+                <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <span class="material-symbols-outlined animate-spin">refresh</span>
+                </div>
+                <p class="text-[15px] font-black text-slate-700">LINE 身分驗證更新中</p>
+                <p class="text-[12px] text-slate-400 font-bold mt-1">${window.escapeHTML(message || '請稍候，系統會重新載入資料。')}</p>
+            </div>
+        `;
     }
 
     function buildOnboardingSuggestions_(contacts) {
@@ -778,6 +792,11 @@ const HomeModule = (function() {
         list.innerHTML = '<div class="bg-white rounded-[26px] border border-slate-100 shadow-sm p-4 text-[13px] text-slate-400 font-bold text-center">正在整理今日建議...</div>';
         try {
             const res = requireHomeApiSuccess_(await window.fetchAPI('getCrmContacts', { limit: 80 }, true), 'CRM contacts failed');
+            if (res && res.authRelogin) {
+                renderHomeOnboardingAI_([]);
+                renderHomeAuthRefreshing_(list, '請稍候，今日業務助理會重新整理。');
+                return;
+            }
             const contacts = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
             renderHomeOnboardingAI_(contacts);
             const rows = contacts
@@ -1266,6 +1285,10 @@ const HomeModule = (function() {
         list.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">載入跟進提醒中...</div>';
         try {
             const tasks = requireHomeApiSuccess_(await window.fetchAPI('listPersonalTasks', {}, true), 'Personal tasks failed');
+            if (tasks && tasks.authRelogin) {
+                renderHomeAuthRefreshing_(list, '請稍候，跟進提醒會重新載入。');
+                return [];
+            }
             const rows = Array.isArray(tasks) ? tasks : [];
             window.personalAgendaTasks = rows;
             if (!rows.length) {
