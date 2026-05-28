@@ -490,6 +490,7 @@
     var preview = $('#my-ecard-preview-area');
     if (!preview) return;
 
+    show(preview, true);
     syncCurrentImageInput();
     var layout = getLayout();
     var profile = moduleAuth.getUserProfile() || {};
@@ -521,6 +522,19 @@
       '</div>' +
       (buttonHtml ? '<div class="px-6">' + buttonHtml + '</div>' : '') +
     '</div>';
+  }
+
+  function setMyUploadImage(url, ratio) {
+    var layout = getLayout();
+    var cleanUrl = String(url || '').trim();
+    if (!cleanUrl) return;
+
+    myEcardImgs[layout] = cleanUrl;
+    if (ratio) myEcardRatios[layout] = String(ratio).replace(':', '/');
+
+    var imgInput = $('#my-v1-img-url');
+    if (imgInput) imgInput.value = cleanUrl;
+    updatePreview();
   }
 
   async function saveMyECardConfig() {
@@ -839,6 +853,7 @@
   window.removeMyV1Button = removeButton;
   window.moveMyV1Button = moveButton;
   window.updateMyECardPreview = updatePreview;
+  window.setMyUploadImage = setMyUploadImage;
   window.saveMyECardConfig = saveMyECardConfig;
   window.applyMyVideoCardMedia = applyMyVideoCardMedia;
   window.generateCardFromProfile = generateCardFromProfile;
