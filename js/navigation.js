@@ -58,6 +58,9 @@ window.goPage = function(page, isInitLoad = false) {
   if (page === 'register' || page === 'admin-stats' || page === 'my-act-detail' || page === 'admin-checkin' || page === 'points-wallet') {
     if (bottomNav) bottomNav.classList.add('hidden');
     if (bottomNavAdmin) bottomNavAdmin.classList.add('hidden');
+  } else if (page === 'home') {
+    if (bottomNav) bottomNav.classList.remove('hidden');
+    if (bottomNavAdmin) bottomNavAdmin.classList.add('hidden');
   } else {
     if (currentViewMode === 'admin') {
       if (bottomNav) bottomNav.classList.add('hidden');

@@ -4,6 +4,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const home = fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8');
+const navigation = fs.readFileSync(path.join(root, 'js', 'navigation.js'), 'utf8');
 
 function fail(message) {
   console.error('Home design contract failed:', message);
@@ -58,6 +59,12 @@ if (!index.includes('id="top-nav"') ||
 }
 if (!index.includes('id="bottom-nav"') || index.includes('body.home-page nav { display: none !important; }')) {
   fail('home page must not hide the bottom navigation');
+}
+if (!index.includes('js/navigation.js?v=7.7') ||
+    !navigation.includes("} else if (page === 'home')") ||
+    !navigation.includes("if (bottomNav) bottomNav.classList.remove('hidden');") ||
+    !navigation.includes("if (bottomNavAdmin) bottomNavAdmin.classList.add('hidden');")) {
+  fail('home page must always show the standard bottom navigation');
 }
 if (!index.includes('grid grid-cols-3 gap-2.5')) {
   fail('quick actions should render as separated action cards');
