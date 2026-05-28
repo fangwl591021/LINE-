@@ -1176,7 +1176,7 @@ const HomeModule = (function() {
                                 <option value="30" selected>30 分鐘前提醒</option>
                                 <option value="1440">1 天前提醒</option>
                             </select>
-                            <button type="button" onclick="window.savePersonalAgendaTask(this)" class="bg-[#06C755] text-white rounded-2xl font-black active:scale-95">儲存</button>
+                            <button type="button" onclick="window.savePersonalAgendaTask(this)" class="bg-blue-600 text-white rounded-2xl font-black shadow-sm shadow-blue-500/20 active:scale-95">儲存</button>
                         </div>
                     </div>
                     <div id="personal-agenda-list" class="divide-y divide-slate-100">

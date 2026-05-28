@@ -32,7 +32,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
 
-  <link rel="stylesheet" href="css/styles.css?v=7.4">
+  <link rel="stylesheet" href="css/styles.css?v=7.5">
   <script src="js/config.js?v=9.5"></script>
 
   <style type="text/tailwindcss">
@@ -282,7 +282,7 @@
             <button type="button" onclick="window.clearLocalGptApiKey(event)" class="bg-slate-100 text-slate-700 py-3 rounded-xl font-bold active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">delete</span> 清除
             </button>
-            <button type="button" onclick="window.saveLocalGptApiKey(event)" class="bg-[#06C755] text-white py-3 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
+            <button type="button" onclick="window.saveLocalGptApiKey(event)" class="bg-blue-600 text-white py-3 rounded-xl font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">save</span> 保存本機 Key
             </button>
           </div>
@@ -314,7 +314,7 @@
           <div id="assistant-core-status" class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-[13px] text-slate-500 leading-relaxed">
             尚未載入 AI 助理核心資料。
           </div>
-          <button id="btn-save-assistant-core" onclick="window.savePersonalAssistantCore(event)" class="w-full bg-[#06C755] text-white py-3.5 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
+          <button id="btn-save-assistant-core" onclick="window.savePersonalAssistantCore(event)" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-transform flex justify-center items-center gap-1">
             <span class="material-symbols-outlined text-[18px]">save</span> 儲存 AI 核心資料
           </button>
         </div>
@@ -330,7 +330,7 @@
             <button onclick="window.addUserSocial()" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">add</span> 新增連結</button>
           </div>
           <div id="user-socials-list" class="space-y-3 mb-4"></div>
-          <button onclick="window.saveUserSettings(event)" class="w-full bg-[#06C755] text-white py-3.5 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
+          <button onclick="window.saveUserSettings(event)" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-transform flex justify-center items-center gap-1">
             <span class="material-symbols-outlined text-[18px]">save</span> 儲存社群連結
           </button>
         </div>
@@ -351,7 +351,7 @@
               <label class="block text-[13px] text-slate-500 mb-1.5 font-bold pl-1">Chat ID</label>
               <input type="text" id="setting-tg-chatid" class="custom-input !py-3.5 !text-[13px]" placeholder="例如: 123456789">
             </div>
-            <button onclick="window.saveUserSettings(event)" class="w-full bg-[#06C755] text-white py-3.5 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
+            <button onclick="window.saveUserSettings(event)" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">save</span> 儲存 TG 參數
             </button>
           </div>
@@ -452,7 +452,7 @@
               </div>
             </div>
 
-            <button id="btn-save-my-ecard" type="button" onclick="window.saveMyECardConfig()" class="w-full bg-[#06C755] text-white py-3.5 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
+            <button id="btn-save-my-ecard" type="button" onclick="window.saveMyECardConfig()" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">save</span> 儲存名片設定
             </button>
           </div>
@@ -535,7 +535,7 @@
             </div>
           </div>
 
-          <button id="btn-save-store-banner" onclick="window.saveStoreBanner(event)" class="w-full py-4 bg-[#06C755] text-white rounded-2xl font-black text-[16px] shadow-lg shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
+          <button id="btn-save-store-banner" onclick="window.saveStoreBanner(event)" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-[16px] shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2">
             <span class="material-symbols-outlined">save</span> 儲存 Banner 與影片
           </button>
         </div>
@@ -772,7 +772,7 @@
               店家每送出一次折抵扣點或消費贈點，會扣除 10 點操作點數。
             </div>
 
-            <button id="btn-store-point-submit" type="button" onclick="window.submitStorePointCashier(this)" class="w-full py-4 rounded-2xl bg-[#06C755] text-white text-[16px] font-black shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">
+            <button id="btn-store-point-submit" type="button" onclick="window.submitStorePointCashier(this)" class="w-full py-4 rounded-2xl bg-blue-600 text-white text-[16px] font-black shadow-lg shadow-blue-500/20 active:scale-95 transition-transform">
               確認送出
             </button>
 
@@ -821,7 +821,7 @@
             <div class="pt-11 space-y-2 text-left">
               <button type="button" onclick="window.openPointsWallet()" class="home-profile-side-card w-full px-3 py-2.5 text-left active:scale-[0.99] transition-transform">
                 <span class="block text-[11px] font-black text-slate-500">可用點數</span>
-                <span id="home-profile-points" class="block mt-1 text-[23px] leading-none font-black text-pink-500 tracking-tight">0</span>
+                <span id="home-profile-points" class="block mt-1 text-[20px] leading-none font-black text-pink-500 tracking-tight">0</span>
               </button>
               <button id="home-zodiac-weekly-btn" type="button" onclick="window.openTodayFortune?.()" class="hidden home-profile-side-card w-full px-3 py-2 active:scale-95 transition-transform items-center justify-center gap-2 whitespace-nowrap">
                 <span id="home-zodiac-weekly-icon" class="shrink-0 w-8 h-8 rounded-xl bg-white shadow-sm flex items-center justify-center text-[20px] leading-none text-pink-500">♎</span>
@@ -881,7 +881,7 @@
             <p class="mt-1.5 text-[12px] font-bold text-slate-500">可用點數</p>
             <div class="mt-0.5 flex items-center gap-2 flex-wrap">
               <button type="button" onclick="window.openPointsWallet()" class="text-left active:scale-[0.99] transition-transform">
-                <span id="home-profile-points" class="text-[26px] leading-none font-black text-pink-500 tracking-tight">0</span>
+                <span id="home-profile-points" class="text-[22px] leading-none font-black text-pink-500 tracking-tight">0</span>
                 <span class="ml-1 text-[12px] font-black text-slate-600">點</span>
               </button>
               <button type="button" onclick="window.openPointsWallet()" class="hidden shrink-0 items-center gap-0.5 rounded-full bg-amber-50 text-amber-700 px-2 py-1 text-[10px] font-black active:scale-95 transition-transform">
@@ -1175,7 +1175,7 @@
           </div>
 
           <div class="flex gap-3 pt-2">
-            <button id="btn-ecard-save" type="button" onclick="window.saveECardConfig()" class="flex-1 bg-slate-200 text-slate-700 py-4 rounded-2xl font-bold active:scale-95 transition-transform flex justify-center items-center gap-1"><span class="material-symbols-outlined text-[18px]">save</span> 儲存</button>
+            <button id="btn-ecard-save" type="button" onclick="window.saveECardConfig()" class="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-transform flex justify-center items-center gap-1"><span class="material-symbols-outlined text-[18px]">save</span> 儲存</button>
             <button id="btn-share-line-ecard" type="button" onclick="window.shareECardToLine('btn-share-line-ecard')" class="flex-[2] bg-[#06C755] text-white py-4 rounded-2xl font-bold flex justify-center items-center gap-2 shadow-lg shadow-green-500/30 active:scale-95 transition-transform">
               <span class="material-symbols-outlined">send</span> 傳送至 LINE
             </button>
@@ -1756,7 +1756,7 @@
           </select>
           <div class="grid grid-cols-2 gap-3 pt-1">
             <button onclick="window.clearAnnouncementForm()" class="py-3.5 rounded-2xl bg-slate-200 text-slate-700 font-black active:scale-95 transition-transform">清空</button>
-            <button id="btn-save-announcement" onclick="window.saveAnnouncement(this)" class="py-3.5 rounded-2xl bg-[#06C755] text-white font-black shadow-sm active:scale-95 transition-transform">儲存公告</button>
+            <button id="btn-save-announcement" onclick="window.saveAnnouncement(this)" class="py-3.5 rounded-2xl bg-blue-600 text-white font-black shadow-sm shadow-blue-500/20 active:scale-95 transition-transform">儲存公告</button>
           </div>
         </div>
       </div>
@@ -1998,7 +1998,7 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.40"></script>
+<script src="js/modules/home.js?v=7.41"></script>
 <script src="js/modules/inbox.js?v=1.11"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
