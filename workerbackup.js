@@ -3032,6 +3032,7 @@ const MessagingModule = {
       ? (config.imgRatioPortrait || '2:3')
       : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
     const bubbleSize = layoutStyle === 'portrait' ? 'giga' : 'mega';
+    const imageAspectMode = layoutStyle === 'landscape' ? 'fit' : 'cover';
     
     let buttons = (config.buttons || []).map(b => ({ l: b.l, u: Utils.cleanURI(b.u), c: b.c }))
       .filter(b => b.l && b.u)
@@ -3040,9 +3041,9 @@ const MessagingModule = {
         action: { type: "uri", label: btn.l.substring(0, 40), uri: btn.u }
       }));
 
-    let hero = { type: "image", url: imgUrl, size: "full", aspectRatio: aspectRatio, aspectMode: "cover", action: { type: "uri", uri: badgeUrl } };
+    let hero = { type: "image", url: imgUrl, size: "full", aspectRatio: aspectRatio, aspectMode: imageAspectMode, action: { type: "uri", uri: badgeUrl } };
     if (config.cardType === 'video' && config.videoUrl) {
-      hero = { type: "video", url: config.videoUrl, previewUrl: imgUrl, aspectRatio: aspectRatio, altContent: { type: "image", size: "full", aspectRatio: aspectRatio, aspectMode: "cover", url: imgUrl, action: { type: "uri", uri: badgeUrl } } };
+      hero = { type: "video", url: config.videoUrl, previewUrl: imgUrl, aspectRatio: aspectRatio, altContent: { type: "image", size: "full", aspectRatio: aspectRatio, aspectMode: imageAspectMode, url: imgUrl, action: { type: "uri", uri: badgeUrl } } };
     }
 
     const titleText = (config.title || card['姓名'] || ' ').trim() || ' ';

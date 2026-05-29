@@ -328,6 +328,7 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
   const aspectRatio = layoutStyle === 'portrait'
     ? (config.imgRatioPortrait || '2:3')
     : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
+  const imageAspectMode = layoutStyle === 'landscape' ? 'fit' : 'cover';
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
   const shareActionUrl = appendECardShareMode(badgeUrl);
   let buttons = (Array.isArray(config.buttons) ? config.buttons : [])
@@ -366,7 +367,7 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
       url: imgUrl,
       size: 'full',
       aspectRatio,
-      aspectMode: 'cover',
+      aspectMode: imageAspectMode,
       action: badgeUrl ? { type: 'uri', uri: badgeUrl } : undefined
     },
     body: {
@@ -396,6 +397,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   const aspectRatio = layoutStyle === 'portrait'
     ? (config.imgRatioPortrait || '2:3')
     : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
+  const imageAspectMode = layoutStyle === 'landscape' ? 'fit' : 'cover';
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
   const titleText = String(config.title || readECardCardValue(card, ['name', 'title', '\u59d3\u540d']) || '\u6578\u4f4d\u540d\u7247').trim() || '\u6578\u4f4d\u540d\u7247';
   const bodyText = String(config.desc || readECardCardValue(card, ['services', 'description', 'desc', '\u670d\u52d9\u9805\u76ee']) || ' ').trim() || ' ';
@@ -426,7 +428,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       url: imgUrl,
       size: 'full',
       aspectRatio,
-      aspectMode: 'cover',
+      aspectMode: imageAspectMode,
       action: badgeUrl ? { type: 'uri', uri: badgeUrl } : undefined
     },
     body: {
