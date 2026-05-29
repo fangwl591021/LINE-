@@ -514,10 +514,21 @@ const SecurityModule = {
       max = (role === 'store' || role === 'tenant') ? 50 : 5;
     }
 
-    let count = parseInt(await env.ACTMASTER_KV.get(key)) || 0;
+    let count = 0;
+    try {
+      count = parseInt(await env.ACTMASTER_KV.get(key)) || 0;
+    } catch (e) {
+      console.warn('[RateLimit] KV get failed, allowing action:', action, e && e.message);
+      return true;
+    }
     if (count >= max) return false;
 
-    await env.ACTMASTER_KV.put(key, (count + 1).toString(), { expirationTtl: 86400 });
+    try {
+      await env.ACTMASTER_KV.put(key, (count + 1).toString(), { expirationTtl: 86400 });
+    } catch (e) {
+      console.warn('[RateLimit] KV put failed, allowing action:', action, e && e.message);
+      return true;
+    }
     return true;
   }
 };
