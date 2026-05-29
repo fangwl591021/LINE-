@@ -939,6 +939,65 @@ const LineOAChatModule = {
     }) || null;
   },
 
+  normalizeCardButton(button) {
+    if (!button || typeof button !== 'object') return null;
+    const label = this.text(button.l || button.label || button.text || button.title);
+    const uri = this.text(button.u || button.url || button.uri || button.href);
+    const color = this.text(button.c || button.color, '#06C755');
+    return label && uri ? { l: label, u: uri, c: color } : null;
+  },
+
+  normalizeCardButtons(buttons) {
+    return (Array.isArray(buttons) ? buttons : [])
+      .map(button => this.normalizeCardButton(button))
+      .filter(Boolean);
+  },
+
+  parseCardSocials(raw) {
+    const text = this.text(raw);
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === 'object') return Object.entries(parsed).map(([type, value]) => {
+        if (value && typeof value === 'object') return { t: type, ...value };
+        return { t: type, u: value };
+      });
+    } catch (e) {}
+    return [{ t: 'LINE', u: text }];
+  },
+
+  socialLineUrl(card) {
+    const socials = this.parseCardSocials(card?.socials);
+    for (const item of socials) {
+      const type = this.text(item.t || item.type || item.platform || item.name).toLowerCase();
+      const url = this.text(item.u || item.url || item.uri || item.value || item.link);
+      if (!url) continue;
+      if (type.includes('line') || /^https?:\/\/(line\.me|lin\.ee)\//i.test(url) || /^line:\/\//i.test(url)) return url;
+    }
+    const website = this.text(card?.website);
+    if (/^https?:\/\/(line\.me|lin\.ee)\//i.test(website) || /^line:\/\//i.test(website)) return website;
+    return '';
+  },
+
+  mapUrlFromAddress(address) {
+    const value = this.text(address);
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(value);
+  },
+
+  autoCardButtons(card) {
+    const buttons = [];
+    const lineUrl = this.socialLineUrl(card);
+    const phone = this.text(card?.mobile || card?.officePhone).replace(/[^0-9+]/g, '');
+    const addressUrl = this.mapUrlFromAddress(card?.address);
+    if (lineUrl) buttons.push({ l: '加LINE好友', u: lineUrl, c: '#06C755' });
+    if (phone) buttons.push({ l: '行動電話', u: 'tel:' + phone, c: '#3B82F6' });
+    if (addressUrl) buttons.push({ l: '店家地址', u: addressUrl, c: '#1E293B' });
+    return buttons;
+  },
+
   buildExistingMyCardFlex(row, userId, env) {
     const card = D1ReadModule.cardRow(row);
     if (!card || !card.rowId) return null;
@@ -955,8 +1014,9 @@ const LineOAChatModule = {
       imgRatioLandscape: config.imgRatioLandscape || '20:13',
       title: config.title || card.name,
       desc: config.desc || card.services || card.title || '',
-      buttons: Array.isArray(config.buttons) ? config.buttons : []
+      buttons: this.normalizeCardButtons(config.buttons)
     };
+    if (!config.buttons.length) config.buttons = this.autoCardButtons(card);
     const flex = MessagingModule.buildFlex({
       card,
       config,
@@ -1099,7 +1159,7 @@ const LineOAChatModule = {
       if (!this.isSimpleMyCardKeyword(event)) continue;
       const replyToken = this.text(event.replyToken);
       const userId = this.eventUserId(event);
-      if (!replyToken || !userId || !userId.startsWith('U')) continue;
+      if (!replyToken || !userId) continue;
       const profile = await this.fetchProfile(env, userId);
       const existingCard = await this.findMySelfCard(env, userId);
       const message = existingCard
