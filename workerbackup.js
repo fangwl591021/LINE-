@@ -901,6 +901,87 @@ const LineOAChatModule = {
     return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
   },
 
+  cardShareUrl(rowId, userId, networkId, env, shareMode = false) {
+    const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
+    const params = new URLSearchParams({ shareCardId: this.text(rowId) });
+    if (userId) params.set('ref', userId);
+    if (networkId) params.set('net', networkId);
+    if (shareMode) params.set('share', '1');
+    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  },
+
+  async findMySelfCard(env, userId) {
+    const id = this.text(userId);
+    if (!id || !env.ACTMASTER_DB) return null;
+    await D1ReadModule.ensureCardAccessColumns(env);
+    const ids = await D1ReadModule.identityIdsForUser(env, id).catch(() => [id]);
+    const safeIds = (Array.isArray(ids) ? ids : [id]).map(v => this.text(v)).filter(Boolean);
+    if (!safeIds.length) return null;
+    const placeholders = safeIds.map(() => '?').join(',');
+    const rows = await D1ReadModule.all(env, `
+      SELECT * FROM card_contacts
+      WHERE (
+        line_id IN (${placeholders})
+        OR profile_user_id IN (${placeholders})
+        OR owner_user_id IN (${placeholders})
+        OR creator_id IN (${placeholders})
+      )
+      ORDER BY
+        CASE WHEN source_type = 'self_profile' THEN 0 ELSE 1 END,
+        CASE WHEN line_id IN (${placeholders}) THEN 0 ELSE 1 END,
+        COALESCE(updated_at, created_at) DESC,
+        row_id DESC
+      LIMIT 20
+    `, [...safeIds, ...safeIds, ...safeIds, ...safeIds, ...safeIds]).catch(() => []);
+    return rows.find(row => {
+      const access = D1ReadModule.inferCardAccess(row);
+      return access.isSelfProfile || this.text(row.line_id) === id || this.text(row.profile_user_id) === id;
+    }) || null;
+  },
+
+  buildExistingMyCardFlex(row, userId, env) {
+    const card = D1ReadModule.cardRow(row);
+    if (!card || !card.rowId) return null;
+    let config = {};
+    try {
+      config = card.customConfig ? JSON.parse(card.customConfig) : {};
+    } catch (e) {
+      config = {};
+    }
+    config = {
+      ...config,
+      layoutStyle: config.layoutStyle || config.layout || 'landscape',
+      imgUrl: config.imgUrl || config.imgUrlLandscape || card.imageUrl,
+      imgRatioLandscape: config.imgRatioLandscape || '20:13',
+      title: config.title || card.name,
+      desc: config.desc || card.services || card.title || '',
+      buttons: Array.isArray(config.buttons) ? config.buttons : []
+    };
+    const flex = MessagingModule.buildFlex({
+      card,
+      config,
+      referrerId: userId,
+      networkId: card.networkId || 'admin',
+      liffId: env.POINT_LIFF_ID || env.LIFF_ID
+    });
+    const editUrl = this.quickMyCardUrl(userId, env);
+    const shareUrl = this.cardShareUrl(card.rowId, userId, card.networkId || 'admin', env, true);
+    if (flex?.header?.contents?.[0]) {
+      flex.header.contents[0].action = { type: 'uri', uri: shareUrl };
+    }
+    return {
+      type: 'flex',
+      altText: `${card.name || '我的名片'} 的電子名片`,
+      quickReply: {
+        items: [{
+          type: 'action',
+          action: { type: 'uri', label: '編輯名片', uri: editUrl }
+        }]
+      },
+      contents: flex
+    };
+  },
+
   buildSimpleMyCardFlex(profile, userId, env) {
     const name = this.text(profile?.displayName, '我的名片');
     const avatarUrl = this.text(profile?.pictureUrl);
@@ -1020,7 +1101,11 @@ const LineOAChatModule = {
       const userId = this.eventUserId(event);
       if (!replyToken || !userId || !userId.startsWith('U')) continue;
       const profile = await this.fetchProfile(env, userId);
-      const message = this.buildSimpleMyCardFlex(profile, userId, env);
+      const existingCard = await this.findMySelfCard(env, userId);
+      const message = existingCard
+        ? this.buildExistingMyCardFlex(existingCard, userId, env)
+        : this.buildSimpleMyCardFlex(profile, userId, env);
+      if (!message) continue;
       const replyResult = await this.replyLine({ replyToken, messages: [message] }, env);
       if (!replyResult.success) console.error('Simple my-card reply failed', replyResult);
       return true;
