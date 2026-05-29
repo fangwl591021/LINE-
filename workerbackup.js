@@ -906,7 +906,7 @@ const LineOAChatModule = {
     const avatarUrl = this.text(profile?.pictureUrl);
     const coverUrl = this.text(
       env.SIMPLE_MY_CARD_COVER_URL,
-      'https://s3.us-west-1.wasabisys.com/aitw/2026/05/d4162025eca59bb845bd9621eb03c086.jpg'
+      'https://s3.us-west-1.wasabisys.com/aitw/2026/05/fe806f078850d66200c36a1daf125597.png'
     );
     const editUrl = this.quickMyCardUrl(userId, env);
     const avatar = avatarUrl ? [{
@@ -921,6 +921,12 @@ const LineOAChatModule = {
     return {
       type: 'flex',
       altText: `${name} 的電子名片`,
+      quickReply: {
+        items: [{
+          type: 'action',
+          action: { type: 'uri', label: '編輯名片', uri: editUrl }
+        }]
+      },
       contents: {
         type: 'bubble',
         size: 'mega',
@@ -988,13 +994,19 @@ const LineOAChatModule = {
             style: 'primary',
             color: '#06C755',
             height: 'sm',
-            action: { type: 'uri', label: '編輯名片', uri: editUrl }
+            action: { type: 'uri', label: '加LINE好友', uri: 'https://lin.ee/OvW0zxb' }
           }, {
             type: 'button',
             style: 'primary',
             color: '#2563EB',
             height: 'sm',
-            action: { type: 'uri', label: '開啟名片', uri: editUrl }
+            action: { type: 'uri', label: '行動電話', uri: 'tel:09xxxxxxxx' }
+          }, {
+            type: 'button',
+            style: 'primary',
+            color: '#1E293B',
+            height: 'sm',
+            action: { type: 'uri', label: '店家地址', uri: 'https://www.google.com/' }
           }]
         }
       }
