@@ -358,7 +358,13 @@ const SecurityModule = {
       'getLineOAChatCrm',
       'uploadLineOAAsset',
       'sendLineOAChatReply',
-      'updateLineOAChatThread'
+      'updateLineOAChatThread',
+      'getCrmContacts',
+      'listPersonalTasks',
+      'getInboxCount',
+      'listInboxItems',
+      'listSentInboxItems',
+      'getInboxItem'
     ]);
 
     if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(action)) {
