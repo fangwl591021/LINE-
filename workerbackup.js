@@ -884,6 +884,138 @@ const LineOAChatModule = {
     }
   },
 
+  isSimpleMyCardKeyword(event) {
+    const message = event?.message || {};
+    if (message.type !== 'text') return false;
+    const text = this.text(message.text).replace(/\s+/g, '');
+    return text === '我的名片';
+  },
+
+  quickMyCardUrl(userId, env) {
+    const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
+    const params = new URLSearchParams({
+      quickly: '1',
+      mode: 'my-card'
+    });
+    if (userId) params.set('lineUserId', userId);
+    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  },
+
+  buildSimpleMyCardFlex(profile, userId, env) {
+    const name = this.text(profile?.displayName, '我的名片');
+    const avatarUrl = this.text(profile?.pictureUrl);
+    const coverUrl = this.text(
+      env.SIMPLE_MY_CARD_COVER_URL,
+      'https://s3.us-west-1.wasabisys.com/aitw/2026/05/d4162025eca59bb845bd9621eb03c086.jpg'
+    );
+    const editUrl = this.quickMyCardUrl(userId, env);
+    const avatar = avatarUrl ? [{
+      type: 'image',
+      url: avatarUrl,
+      size: 'sm',
+      aspectRatio: '1:1',
+      aspectMode: 'cover',
+      flex: 0
+    }] : [];
+
+    return {
+      type: 'flex',
+      altText: `${name} 的電子名片`,
+      contents: {
+        type: 'bubble',
+        size: 'mega',
+        header: {
+          type: 'box',
+          layout: 'horizontal',
+          justifyContent: 'flex-end',
+          paddingAll: '8px',
+          contents: [{
+            type: 'box',
+            layout: 'vertical',
+            justifyContent: 'center',
+            backgroundColor: '#EF4444',
+            width: '65px',
+            height: '25px',
+            cornerRadius: '25px',
+            contents: [{ type: 'text', text: '分享', weight: 'bold', align: 'center', color: '#FFFFFF', size: 'xs' }],
+            action: { type: 'uri', uri: `${editUrl}&share=1` }
+          }]
+        },
+        hero: {
+          type: 'image',
+          url: coverUrl,
+          size: 'full',
+          aspectRatio: '20:13',
+          aspectMode: 'fit',
+          action: { type: 'uri', uri: editUrl }
+        },
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'md',
+          paddingAll: '18px',
+          contents: [{
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'md',
+            alignItems: 'center',
+            contents: [
+              ...avatar,
+              {
+                type: 'box',
+                layout: 'vertical',
+                contents: [
+                  { type: 'text', text: name, weight: 'bold', size: 'xl', color: '#111827', wrap: true },
+                  { type: 'text', text: '快速建立電子名片', size: 'sm', color: '#6B7280', margin: 'xs' }
+                ]
+              }
+            ]
+          }, {
+            type: 'text',
+            text: '這張名片使用 LINE 頭貼與預設封面建立，點下方按鈕即可快速補上電話、連結與介紹。',
+            size: 'sm',
+            color: '#4B5563',
+            wrap: true
+          }]
+        },
+        footer: {
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'sm',
+          paddingAll: '12px',
+          contents: [{
+            type: 'button',
+            style: 'primary',
+            color: '#06C755',
+            height: 'sm',
+            action: { type: 'uri', label: '編輯名片', uri: editUrl }
+          }, {
+            type: 'button',
+            style: 'primary',
+            color: '#2563EB',
+            height: 'sm',
+            action: { type: 'uri', label: '開啟名片', uri: editUrl }
+          }]
+        }
+      }
+    };
+  },
+
+  async replySimpleMyCard(events, env) {
+    for (const event of events) {
+      if (!this.isSimpleMyCardKeyword(event)) continue;
+      const replyToken = this.text(event.replyToken);
+      const userId = this.eventUserId(event);
+      if (!replyToken || !userId || !userId.startsWith('U')) continue;
+      const profile = await this.fetchProfile(env, userId);
+      const message = this.buildSimpleMyCardFlex(profile, userId, env);
+      const replyResult = await this.replyLine({ replyToken, messages: [message] }, env);
+      if (!replyResult.success) console.error('Simple my-card reply failed', replyResult);
+      return true;
+    }
+    return false;
+  },
+
   async forwardToGas(rawBody, env) {
     const gasUrl = this.text(env.GAS_URL || env.GAS_WEBAPP_URL);
     if (!gasUrl) return { success: false, skipped: true, error: 'Missing GAS_URL' };
@@ -1214,6 +1346,8 @@ const LineOAChatModule = {
       await saveJob;
       await forwardJob;
     }
+    const simpleMyCardReplied = await this.replySimpleMyCard(events, env);
+    if (simpleMyCardReplied) return new Response('OK', { status: 200 });
     const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);
     if (!gasRawBody) return new Response('OK', { status: 200 });
     const gasResult = await this.forwardToGas(gasRawBody, env);
