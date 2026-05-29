@@ -304,7 +304,6 @@ const SecurityModule = {
       'listStorePointCashierLogs'
     ]);
     const ownTokenRequired = new Set([
-      'registerUser',
       'updateUserProfile',
       'linkUserIdentity',
       'getCardContacts',
@@ -7603,7 +7602,7 @@ const AuthModule = {
       }
     }
 
-    const result = await DBModule.forward('checkUser', payload, env);
+    const result = { success: true, data: { isRegistered: false, info: null, source: 'd1_no_user' } };
 
     if (result && result.success && result.data && result.data.isRegistered && env.ACTMASTER_KV) {
       try {
@@ -7613,7 +7612,7 @@ const AuthModule = {
     }
 
     if (!result || result.success === false || !result.data || !result.data.isRegistered) {
-      const boundProfile = await this.ensureBoundCardUser(userId, env);
+      const boundProfile = null;
       if (boundProfile) {
         return { success: true, data: { isRegistered: true, info: boundProfile, source: 'bound_card' } };
       }
@@ -9234,7 +9233,15 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await DBModule.forward(action, payload, env);
     }
-    case 'registerUser':
+    case 'registerUser': {
+      try {
+        const d1Result = await D1WriteModule.upsertUser(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 registerUser failed", e);
+      }
+      return { success: false, error: 'D1 registration failed' };
+    }
     case 'updateUserProfile': {
       try {
         const d1Result = await D1WriteModule.upsertUser(payload || {}, env);
