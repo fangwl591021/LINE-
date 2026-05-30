@@ -3867,6 +3867,14 @@ JSON格式：{"Personality":"","Hobbies":"","Wealth":"","Health":"","Career":""}
 
 // ==================== 模組 4: 訊息構建 (Messaging Module) ====================
 const MessagingModule = {
+  flexTextAlign(value) {
+    const align = String(value || '').trim().toLowerCase();
+    if (align === 'left') return 'start';
+    if (align === 'right') return 'end';
+    if (align === 'start' || align === 'end' || align === 'center') return align;
+    return 'center';
+  },
+
   buildFlex(payload) {
     const { card, config, referrerId, networkId, liffId } = payload;
     
@@ -3918,7 +3926,7 @@ const MessagingModule = {
         type: "box", layout: "vertical", paddingAll: "15px",
         contents: [
           { type: "text", text: titleText, weight: "bold", size: "xl", align: "center", wrap: true },
-          { type: "text", text: descText, size: "sm", margin: "md", color: config.descColor || "#666666", wrap: true, align: config.descAlign || "center" }
+          { type: "text", text: descText, size: "sm", margin: "md", color: config.descColor || "#666666", wrap: true, align: this.flexTextAlign(config.descAlign) }
         ]
       },
       footer: buttons.length > 0 ? { type: "box", layout: "vertical", spacing: "sm", paddingAll: "10px", contents: buttons } : undefined

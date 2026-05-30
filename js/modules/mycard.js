@@ -1036,7 +1036,7 @@
     if (descInput) wysiwygState.cfg.desc = String(descInput.value || '').trim();
     var colorInput = document.getElementById('my-wysiwyg-desc-color');
     if (colorInput) wysiwygState.cfg.descColor = safeCssColor(colorInput.value, '#666666');
-    wysiwygState.cfg.descAlign = align || 'center';
+    wysiwygState.cfg.descAlign = align === 'left' ? 'start' : (align === 'right' ? 'end' : (align || 'center'));
     renderWysiwygEditor('desc');
   }
 
