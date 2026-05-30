@@ -1004,6 +1004,24 @@ const LineOAChatModule = {
     return rows.find(row => this.text(row.row_id) === targetRowId) || null;
   },
 
+  isLineOaMyCardCandidate(row) {
+    const rowId = this.text(row && row.row_id);
+    const sourceType = this.text(row && row.source_type);
+    if (sourceType !== 'self_profile') return false;
+    if (!rowId.startsWith('CARD_')) return false;
+    const name = this.text(row && row.name);
+    const company = this.text(row && row.company_name);
+    const title = this.text(row && row.title);
+    const imageUrl = this.text(row && row.image_url);
+    return !!(name && imageUrl && (company || title));
+  },
+
+  filterLineOaMyCardCandidates(rows) {
+    const candidates = (Array.isArray(rows) ? rows : []).filter(row => this.isLineOaMyCardCandidate(row));
+    if (candidates.length) return candidates;
+    return Array.isArray(rows) ? rows : [];
+  },
+
   normalizeCardButton(button) {
     if (!button || typeof button !== 'object') return null;
     const label = this.text(button.l || button.label || button.text || button.title);
@@ -1306,11 +1324,13 @@ const LineOAChatModule = {
       if (!replyToken || !userId) continue;
       let message = null;
       if (selectedRowId) {
-        const selectedCard = await this.findMySelfCardByRowId(env, userId, selectedRowId);
+        const selectedCard = this.filterLineOaMyCardCandidates([
+          await this.findMySelfCardByRowId(env, userId, selectedRowId)
+        ]).filter(Boolean)[0];
         message = selectedCard ? this.buildExistingMyCardFlex(selectedCard, userId, env) : null;
       } else {
         const profile = await this.fetchProfile(env, userId);
-        const existingCards = await this.findMySelfCards(env, userId);
+        const existingCards = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
         message = existingCards.length > 1
           ? this.buildMyCardSelectorFlex(existingCards, userId, env)
           : (existingCards.length === 1

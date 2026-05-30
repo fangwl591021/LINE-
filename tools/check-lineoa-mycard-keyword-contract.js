@@ -17,9 +17,12 @@ ok(worker.includes("return text === '我的名片';"), 'my-card keyword is exact
 ok(worker.includes('async findMySelfCard(env, userId)'), 'self-profile card lookup exists');
 ok(worker.includes('async findMySelfCards(env, userId)'), 'multiple self-profile card lookup exists');
 ok(worker.includes('async findMySelfCardByRowId(env, userId, rowId)'), 'postback-selected self card lookup exists');
+ok(worker.includes('isLineOaMyCardCandidate(row)'), 'LINE OA my-card candidate filter exists');
+ok(worker.includes("if (!rowId.startsWith('CARD_')) return false;"), 'old numeric mother-site row ids are excluded from LINE OA my-card selector');
+ok(worker.includes('filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId))'), 'my-card keyword filters mother-site leftovers before rendering');
 ok(worker.includes("CASE WHEN source_type = 'self_profile' THEN 0 ELSE 1 END"), 'self-profile cards are prioritized');
 ok(worker.includes('async replySimpleMyCard(events, env)'), 'my-card keyword reply handler exists');
-ok(worker.includes('const existingCards = await this.findMySelfCards(env, userId);'), 'reply handler checks existing self cards first');
+ok(worker.includes('await this.findMySelfCards(env, userId)'), 'reply handler checks existing self cards first');
 ok(worker.includes('existingCards.length > 1'), 'multiple self cards render a selector first');
 ok(worker.includes('buildMyCardSelectorFlex(existingCards, userId, env)'), 'multiple self cards use selector flex');
 ok(worker.includes('myCardPostbackRowId(event)'), 'my-card selector uses postback trigger');
