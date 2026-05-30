@@ -72,6 +72,7 @@ Minimum flows covered by contracts:
 
 - route order and webhook separation
 - read-only identity diagnostics
+- read-only identity repair preview
 - auth and point identity bridge
 - share-card flow
 - inbox recipient scope
