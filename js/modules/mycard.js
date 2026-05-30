@@ -245,65 +245,6 @@
     }
   }
 
-  function isQuicklyMyCardRequest() {
-    try {
-      var params = new URLSearchParams(window.location.search || '');
-      return params.get('quickly') === '1' || params.get('mode') === 'my-card';
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function ensureQuicklyPanel() {
-    var details = document.getElementById('details-my-ecard');
-    if (!details) return null;
-    var content = details.querySelector('div.p-5');
-    if (!content) return null;
-    var panel = document.getElementById('my-ecard-quickly-panel');
-    if (panel) return panel;
-    panel = document.createElement('div');
-    panel.id = 'my-ecard-quickly-panel';
-    panel.className = 'rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-[13px] text-blue-800 font-bold leading-relaxed';
-    panel.innerHTML =
-      '<div class="flex items-start gap-2">' +
-        '<span class="material-symbols-outlined text-blue-600 text-[20px] shrink-0">bolt</span>' +
-        '<div class="min-w-0">' +
-          '<div class="text-blue-900 font-black">quickly 快速編輯</div>' +
-          '<div class="mt-1">先補封面圖、介紹文字與按鈕連結；儲存後就沿用原本電子名片分享流程。</div>' +
-        '</div>' +
-      '</div>';
-    content.insertBefore(panel, content.firstChild);
-    return panel;
-  }
-
-  function openQuicklyMyCard() {
-    if (typeof window.goPage === 'function') window.goPage('admin-settings');
-    ensureQuicklyPanel();
-    focusMyECardSection();
-    if (typeof window.initMyECard === 'function') {
-      window.initMyECard().then(function() {
-        ensureQuicklyPanel();
-        focusMyECardSection();
-      }).catch(function(e) {
-        console.warn('[openQuicklyMyCard] init failed:', e);
-      });
-    }
-  }
-
-  function scheduleQuicklyMyCardOpen() {
-    if (!isQuicklyMyCardRequest()) return;
-    var tries = 0;
-    var timer = setInterval(function() {
-      tries += 1;
-      if (typeof window.goPage === 'function' && document.getElementById('details-my-ecard')) {
-        clearInterval(timer);
-        openQuicklyMyCard();
-      } else if (tries > 30) {
-        clearInterval(timer);
-      }
-    }, 300);
-  }
-
   function applyMyVideoCardMedia(videoUrl, thumbnailUrl) {
     var cleanVideoUrl = String(videoUrl || '').trim();
     var cleanThumbnailUrl = String(thumbnailUrl || '').trim();
@@ -898,7 +839,6 @@
     load: load,
     openMyCardEntry: openMyCardEntry,
     openMyCardDetail: openMyCardDetail,
-    openQuicklyMyCard: openQuicklyMyCard,
     shareMyCard: shareMyCard,
     showMyQRCode: showMyQRCode,
     updateButton: updateButton,
@@ -910,7 +850,6 @@
   window.initMyECard = function() { api.init(); return api.load(); };
   window.openMyCardEntry = openMyCardEntry;
   window.openMyCardDetail = openMyCardDetail;
-  window.openQuicklyMyCard = openQuicklyMyCard;
   window.changeMyLayout = handleLayoutChange;
   window.focusMyECardSection = focusMyECardSection;
   window.addMyV1Button = addV1Button;
@@ -925,9 +864,4 @@
   window.applyMyCardTemplate = applyMyCardTemplate;
   window.showMyQRCode = showMyQRCode;
   window.shareMyCard = shareMyCard;
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleQuicklyMyCardOpen);
-  } else {
-    scheduleQuicklyMyCardOpen();
-  }
 })();
