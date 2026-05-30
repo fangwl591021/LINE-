@@ -998,6 +998,25 @@ const LineOAChatModule = {
     return buttons;
   },
 
+  hasAddressButton(buttons) {
+    return this.normalizeCardButtons(buttons).some(button => {
+      const label = this.text(button.l).toLowerCase();
+      const uri = this.text(button.u).toLowerCase();
+      return label.includes('地址') ||
+        label.includes('地圖') ||
+        uri.includes('google.com/maps') ||
+        uri.includes('maps/search');
+    });
+  },
+
+  addMissingAddressButton(buttons, card) {
+    const normalized = this.normalizeCardButtons(buttons);
+    if (normalized.length >= 4 || this.hasAddressButton(normalized)) return normalized;
+    const addressUrl = this.mapUrlFromAddress(card?.address);
+    if (!addressUrl) return normalized;
+    return normalized.concat([{ l: '店家地址', u: addressUrl, c: '#1E293B' }]).slice(0, 4);
+  },
+
   buildExistingMyCardFlex(row, userId, env) {
     const card = D1ReadModule.cardRow(row);
     if (!card || !card.rowId) return null;
@@ -1017,6 +1036,7 @@ const LineOAChatModule = {
       buttons: this.normalizeCardButtons(config.buttons)
     };
     if (!config.buttons.length) config.buttons = this.autoCardButtons(card);
+    else config.buttons = this.addMissingAddressButton(config.buttons, card);
     const flex = MessagingModule.buildFlex({
       card,
       config,
