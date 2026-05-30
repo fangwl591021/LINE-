@@ -11,6 +11,7 @@ const foundationChecks = [
   'tools/check-identity-repair-dry-run-contract.js',
   'tools/check-identity-bridge-contract.js',
   'tools/check-hard-admin-upsert-contract.js',
+  'tools/check-lineoa-mycard-keyword-contract.js',
   'tools/check-referral-keyword-v2-contract.js'
 ];
 
@@ -20,6 +21,7 @@ const fullChecks = [
   'tools/check-identity-diagnostic-contract.js',
   'tools/check-identity-repair-dry-run-contract.js',
   'tools/check-hard-admin-upsert-contract.js',
+  'tools/check-lineoa-mycard-keyword-contract.js',
   'tools/check-referral-keyword-v2-contract.js',
   'tools/check-auth-contract.js',
   'tools/check-share-contract.js',
