@@ -964,12 +964,17 @@ const LineOAChatModule = {
   },
 
   async findMySelfCard(env, userId) {
+    const rows = await this.findMySelfCards(env, userId);
+    return rows[0] || null;
+  },
+
+  async findMySelfCards(env, userId) {
     const id = this.text(userId);
-    if (!id || !env.ACTMASTER_DB) return null;
+    if (!id || !env.ACTMASTER_DB) return [];
     await D1ReadModule.ensureCardAccessColumns(env);
     const ids = await D1ReadModule.identityIdsForUser(env, id).catch(() => [id]);
     const safeIds = (Array.isArray(ids) ? ids : [id]).map(v => this.text(v)).filter(Boolean);
-    if (!safeIds.length) return null;
+    if (!safeIds.length) return [];
     const placeholders = safeIds.map(() => '?').join(',');
     const rows = await D1ReadModule.all(env, `
       SELECT * FROM card_contacts
@@ -986,10 +991,17 @@ const LineOAChatModule = {
         row_id DESC
       LIMIT 20
     `, [...safeIds, ...safeIds, ...safeIds, ...safeIds, ...safeIds]).catch(() => []);
-    return rows.find(row => {
+    return rows.filter(row => {
       const access = D1ReadModule.inferCardAccess(row);
       return access.isSelfProfile || this.text(row.line_id) === id || this.text(row.profile_user_id) === id;
-    }) || null;
+    });
+  },
+
+  async findMySelfCardByRowId(env, userId, rowId) {
+    const targetRowId = this.text(rowId);
+    if (!targetRowId) return null;
+    const rows = await this.findMySelfCards(env, userId);
+    return rows.find(row => this.text(row.row_id) === targetRowId) || null;
   },
 
   normalizeCardButton(button) {
@@ -1115,6 +1127,63 @@ const LineOAChatModule = {
     };
   },
 
+  buildMyCardSelectorFlex(rows, userId, env) {
+    const cards = (Array.isArray(rows) ? rows : []).slice(0, 10).map(row => D1ReadModule.cardRow(row)).filter(card => card && card.rowId);
+    if (!cards.length) return null;
+    const editUrl = this.quickMyCardUrl(userId, env);
+    const buttons = cards.map((card, index) => {
+      const label = this.text(card.name, `名片 ${index + 1}`).slice(0, 20);
+      return {
+        type: 'button',
+        style: 'secondary',
+        height: 'sm',
+        action: {
+          type: 'postback',
+          label,
+          data: new URLSearchParams({
+            action: 'lineoa_mycard_select',
+            rowId: card.rowId
+          }).toString(),
+          displayText: label
+        }
+      };
+    });
+    return {
+      type: 'flex',
+      altText: '選擇我的名片',
+      quickReply: {
+        items: [{
+          type: 'action',
+          action: { type: 'uri', label: '編輯名片', uri: editUrl }
+        }]
+      },
+      contents: {
+        type: 'bubble',
+        size: 'mega',
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'md',
+          paddingAll: '16px',
+          contents: [
+            { type: 'text', text: '選擇要顯示的名片', weight: 'bold', size: 'lg', color: '#111827' },
+            { type: 'text', text: `找到 ${cards.length} 張個人名片`, size: 'sm', color: '#6B7280' },
+            ...buttons
+          ]
+        }
+      }
+    };
+  },
+
+  myCardPostbackRowId(event) {
+    if (event?.type !== 'postback') return '';
+    const data = this.text(event?.postback?.data);
+    if (!data) return '';
+    const params = new URLSearchParams(data);
+    if (params.get('action') !== 'lineoa_mycard_select') return '';
+    return this.text(params.get('rowId'));
+  },
+
   buildSimpleMyCardFlex(profile, userId, env) {
     const name = this.text(profile?.displayName, '我的名片');
     const avatarUrl = this.text(profile?.pictureUrl);
@@ -1229,15 +1298,25 @@ const LineOAChatModule = {
 
   async replySimpleMyCard(events, env) {
     for (const event of events) {
-      if (!this.isSimpleMyCardKeyword(event)) continue;
+      const selectedRowId = this.myCardPostbackRowId(event);
+      const isKeyword = this.isSimpleMyCardKeyword(event);
+      if (!isKeyword && !selectedRowId) continue;
       const replyToken = this.text(event.replyToken);
       const userId = this.eventUserId(event);
       if (!replyToken || !userId) continue;
-      const profile = await this.fetchProfile(env, userId);
-      const existingCard = await this.findMySelfCard(env, userId);
-      const message = existingCard
-        ? this.buildExistingMyCardFlex(existingCard, userId, env)
-        : this.buildSimpleMyCardFlex(profile, userId, env);
+      let message = null;
+      if (selectedRowId) {
+        const selectedCard = await this.findMySelfCardByRowId(env, userId, selectedRowId);
+        message = selectedCard ? this.buildExistingMyCardFlex(selectedCard, userId, env) : null;
+      } else {
+        const profile = await this.fetchProfile(env, userId);
+        const existingCards = await this.findMySelfCards(env, userId);
+        message = existingCards.length > 1
+          ? this.buildMyCardSelectorFlex(existingCards, userId, env)
+          : (existingCards.length === 1
+            ? this.buildExistingMyCardFlex(existingCards[0], userId, env)
+            : this.buildSimpleMyCardFlex(profile, userId, env));
+      }
       if (!message) continue;
       const replyResult = await this.replyLine({ replyToken, messages: [message] }, env);
       if (!replyResult.success) console.error('Simple my-card reply failed', replyResult);
