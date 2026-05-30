@@ -425,7 +425,7 @@
                 <div class="flex gap-2 items-center">
                   <input id="my-v1-img-url" class="custom-input !py-2.5 !px-3 font-mono text-[13px] !bg-white" placeholder="https://" oninput="window.updateMyECardPreview()">
                   <button onclick="document.getElementById('file-my-v1-img').click()" class="shrink-0 bg-slate-800 text-white px-3 py-2.5 rounded-xl text-sm font-bold cursor-pointer active:scale-95 transition-transform shadow-sm">上傳</button>
-                  <input type="file" id="file-my-v1-img" accept="image/*" class="hidden" onchange="window.uploadCustomImageToR2(this, 'my-v1-img-url')">
+                  <input type="file" id="file-my-v1-img" accept="image/*" class="hidden" onchange="window.uploadCustomImageToR2(this, 'my-v1-img-url', window.getMyCardUploadAspectRatio ? window.getMyCardUploadAspectRatio() : null)">
                 </div>
               </div>
 
@@ -1993,7 +1993,7 @@
 <script src="js/modules/cropper.js?v=7.12"></script>
 <script src="js/modules/cards.js?v=7.5"></script>
 <script src="js/modules/ecard.js?v=7.35"></script>
-<script src="js/modules/mycard.js?v=8.41"></script>
+<script src="js/modules/mycard.js?v=8.42"></script>
 <script src="js/modules/matchmake.js?v=7.8"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>

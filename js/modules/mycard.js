@@ -78,6 +78,21 @@
     return /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(raw) ? raw : (fallback || '#06C755');
   }
 
+  function normalizeMyCardButtons(buttons) {
+    if (!Array.isArray(buttons)) return [];
+    return buttons
+      .map(function(button) {
+        if (!button || typeof button !== 'object') return null;
+        return {
+          l: String(button.l || button.label || button.text || button.title || '').trim(),
+          u: String(button.u || button.url || button.uri || button.link || '').trim(),
+          c: safeCssColor(button.c || button.color || button.backgroundColor || button.bgColor, '#06C755')
+        };
+      })
+      .filter(function(button) { return !!(button && (button.l || button.u)); })
+      .slice(0, 4);
+  }
+
   function readCardValue(card, keys) {
     var source = card || {};
     for (var i = 0; i < keys.length; i++) {
@@ -152,6 +167,26 @@
       try {
         var parsed = JSON.parse(String(raw));
         if (parsed && typeof parsed === 'object') return parsed;
+      } catch (e) {}
+    }
+    var keys = Object.keys(source);
+    for (var j = 0; j < keys.length; j++) {
+      var value = source[keys[j]];
+      if (typeof value !== 'string' || value.indexOf('{') < 0) continue;
+      try {
+        var inferred = JSON.parse(value);
+        if (inferred && typeof inferred === 'object' && (
+          Array.isArray(inferred.buttons) ||
+          Array.isArray(inferred.footerBtns) ||
+          inferred.imgUrl ||
+          inferred.imgUrlPortrait ||
+          inferred.layoutStyle ||
+          inferred.cardType ||
+          inferred.title ||
+          inferred.desc
+        )) {
+          return inferred;
+        }
       } catch (e) {}
     }
     return {};
@@ -234,7 +269,7 @@
       portrait: cfg.imgRatioPortrait || '2:3',
       square: cfg.imgRatioSquare || '1:1'
     };
-    myEcardButtons = Array.isArray(cfg.buttons) ? cfg.buttons.slice() : [];
+    myEcardButtons = normalizeMyCardButtons(Array.isArray(cfg.buttons) ? cfg.buttons : cfg.footerBtns);
     myEcardStateLoaded = true;
 
     var layout = cfg.layoutStyle || 'landscape';
@@ -677,7 +712,7 @@
       cfg.imgRatioLandscape = '20:13';
       cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
-      cfg.buttons = myEcardButtons;
+      cfg.buttons = normalizeMyCardButtons(myEcardButtons);
       syncVideoConfig(cfg);
 
       var rowId = await ensureCurrentCardRowId();
@@ -712,7 +747,7 @@
   function buildCurrentShareConfig() {
     var cfg = parseCardConfig(currentCardData);
     if (!myEcardStateLoaded && Array.isArray(cfg.buttons)) {
-      myEcardButtons = cfg.buttons.slice();
+      myEcardButtons = normalizeMyCardButtons(cfg.buttons);
     }
     var liveLayout = document.querySelector('input[name="my-ecard-layout"]:checked');
     syncCurrentImageInput();
@@ -724,7 +759,7 @@
       cfg.imgRatioLandscape = '20:13';
       cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
-      cfg.buttons = myEcardButtons.slice();
+      cfg.buttons = normalizeMyCardButtons(myEcardButtons);
       syncVideoConfig(cfg);
     }
     return cfg;
@@ -756,8 +791,8 @@
     cfg.descAlign = cfg.descAlign || 'center';
     cfg.descColor = cfg.descColor || '#666666';
     cfg.buttons = Array.isArray(myEcardButtons) && myEcardButtons.length
-      ? myEcardButtons.slice()
-      : (Array.isArray(cfg.buttons) ? cfg.buttons.slice() : []);
+      ? normalizeMyCardButtons(myEcardButtons)
+      : normalizeMyCardButtons(Array.isArray(cfg.buttons) ? cfg.buttons : cfg.footerBtns);
     return cfg;
   }
 
@@ -1090,7 +1125,7 @@
           '<label class="block text-[13px] font-black text-slate-600">圖片網址</label>' +
           '<input id="my-wysiwyg-image-input" value="' + escapeAttr(currentWysiwygImage(cfg)) + '" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-mono text-[13px] outline-none focus:ring-2 focus:ring-blue-500">' +
           '<div class="grid grid-cols-2 gap-2">' +
-            '<button type="button" onclick="document.getElementById(\'file-my-v1-img\')?.click()" class="py-3 rounded-xl bg-slate-900 text-white font-black active:scale-95">上傳圖片</button>' +
+            '<button type="button" onclick="window.openMyCardWysiwygImageUpload()" class="py-3 rounded-xl bg-slate-900 text-white font-black active:scale-95">上傳裁切</button>' +
             '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
           '</div>' +
         '</div>';
@@ -1178,7 +1213,7 @@
           u: (document.getElementById('my-wysiwyg-button-url') || {}).value || '',
           c: (document.getElementById('my-wysiwyg-button-color') || {}).value || '#06C755'
         };
-        myEcardButtons = cfg.buttons.slice();
+        myEcardButtons = normalizeMyCardButtons(cfg.buttons);
         renderButtons();
       }
     }
@@ -1197,7 +1232,7 @@
       return;
     }
     cfg.buttons.push({ l: '新增按鈕', u: '', c: '#06C755' });
-    myEcardButtons = cfg.buttons.slice();
+    myEcardButtons = normalizeMyCardButtons(cfg.buttons);
     writeCurrentCardConfig(cfg);
     renderButtons();
     updatePreview();
@@ -1210,7 +1245,7 @@
     var index = wysiwygState.buttonIndex;
     if (!cfg || !Array.isArray(cfg.buttons) || index < 0) return;
     cfg.buttons.splice(index, 1);
-    myEcardButtons = cfg.buttons.slice();
+    myEcardButtons = normalizeMyCardButtons(cfg.buttons);
     writeCurrentCardConfig(cfg);
     renderButtons();
     updatePreview();
@@ -1218,10 +1253,26 @@
     closeMyCardWysiwygEditor();
   }
 
+  function getMyCardUploadAspectRatio() {
+    var layout = getLayout();
+    if (layout === 'portrait') return 2 / 3;
+    if (layout === 'square') return 1;
+    return 20 / 13;
+  }
+
+  function openMyCardWysiwygImageUpload() {
+    var input = document.getElementById('file-my-v1-img');
+    if (!input) {
+      if (window.showToast) window.showToast('找不到圖片上傳元件', true);
+      return;
+    }
+    input.click();
+  }
+
   async function saveMyCardWysiwyg(btn) {
     if (wysiwygState.cfg) {
       writeCurrentCardConfig(wysiwygState.cfg);
-      myEcardButtons = Array.isArray(wysiwygState.cfg.buttons) ? wysiwygState.cfg.buttons.slice() : [];
+      myEcardButtons = normalizeMyCardButtons(wysiwygState.cfg.buttons);
       renderButtons();
       updatePreview();
     }
@@ -1488,6 +1539,8 @@
   window.applyMyCardWysiwygEditor = applyMyCardWysiwygEditor;
   window.addMyCardWysiwygButton = addMyCardWysiwygButton;
   window.removeMyCardWysiwygButton = removeMyCardWysiwygButton;
+  window.openMyCardWysiwygImageUpload = openMyCardWysiwygImageUpload;
+  window.getMyCardUploadAspectRatio = getMyCardUploadAspectRatio;
   window.saveMyCardWysiwyg = saveMyCardWysiwyg;
   window.changeMyLayout = handleLayoutChange;
   window.focusMyECardSection = focusMyECardSection;
