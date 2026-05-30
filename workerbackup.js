@@ -1011,9 +1011,8 @@ const LineOAChatModule = {
     if (!rowId.startsWith('CARD_')) return false;
     const name = this.text(row && row.name);
     const company = this.text(row && row.company_name);
-    const title = this.text(row && row.title);
     const imageUrl = this.text(row && row.image_url);
-    return !!(name && imageUrl && (company || title));
+    return !!(name && company && imageUrl);
   },
 
   filterLineOaMyCardCandidates(rows) {
