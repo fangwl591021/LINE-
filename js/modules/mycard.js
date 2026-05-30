@@ -976,6 +976,248 @@
     if (panel) panel.classList.add('hidden');
   }
 
+  function ensureWysiwygStyleV2() {
+    if (document.getElementById('my-card-wysiwyg-style-v2')) return;
+    var style = document.createElement('style');
+    style.id = 'my-card-wysiwyg-style-v2';
+    style.textContent = [
+      '.my-wysiwyg-target{position:relative;border:2px dashed rgba(0,185,0,.55);border-radius:12px;cursor:pointer;transition:background-color .18s,border-color .18s,box-shadow .18s;}',
+      '.my-wysiwyg-target:hover,.my-wysiwyg-target:active{background-color:rgba(0,185,0,.10);border-color:#00b900;box-shadow:0 0 0 4px rgba(0,185,0,.08);}',
+      '.my-wysiwyg-edit-icon{position:absolute;top:-10px;right:-10px;width:28px;height:28px;border-radius:999px;background:#00b900;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(15,23,42,.22);pointer-events:none;z-index:5;}',
+      '.my-wysiwyg-edit-icon .material-symbols-outlined{font-size:17px;line-height:1;}',
+      '.my-wysiwyg-card-shell{max-width:390px;margin:0 auto 24px;border-radius:18px;overflow:hidden;background:#fff;border:1px solid #dbe3ef;box-shadow:0 18px 40px rgba(15,23,42,.20);}',
+      '.my-wysiwyg-modal-pop{animation:myWysiwygPop .18s ease-out;}',
+      '@keyframes myWysiwygPop{from{transform:scale(.96);opacity:.2}to{transform:scale(1);opacity:1}}'
+    ].join('');
+    document.head.appendChild(style);
+  }
+
+  function ensureWysiwygModal() {
+    var modal = document.getElementById('my-card-wysiwyg-modal');
+    if (modal) {
+      ensureWysiwygStyleV2();
+      return modal;
+    }
+    ensureWysiwygStyleV2();
+    modal = document.createElement('div');
+    modal.id = 'my-card-wysiwyg-modal';
+    modal.className = 'hidden fixed inset-0 z-[2100] bg-[#1A1B1E] text-white';
+    modal.innerHTML =
+      '<div class="h-full flex flex-col">' +
+        '<div class="shrink-0 bg-[#1A1B1E]/95 border-b border-white/10 px-4 py-3 flex items-center justify-between">' +
+          '<div>' +
+            '<div class="text-[12px] font-black text-green-400">WYSIWYG</div>' +
+            '<h3 class="text-lg font-black text-white">所見即所得編輯</h3>' +
+          '</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<button type="button" onclick="window.saveMyCardWysiwyg(this)" class="h-10 px-4 rounded-full bg-[#06C755] text-white text-[14px] font-black active:scale-95">儲存</button>' +
+            '<button type="button" onclick="window.closeMyCardWysiwyg()" class="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center active:scale-95"><span class="material-symbols-outlined">close</span></button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="flex-1 overflow-y-auto px-3 py-5 bg-[#1A1B1E]">' +
+          '<div id="my-card-wysiwyg-preview"></div>' +
+        '</div>' +
+        '<div class="shrink-0 border-t border-white/10 bg-[#1A1B1E] px-4 py-3 text-center text-[12px] font-bold text-slate-300">點圖片、文字或按鈕即可直接修改。</div>' +
+      '</div>' +
+      '<div id="my-card-wysiwyg-editor-modal" class="hidden fixed inset-0 z-[2110] bg-black/75 backdrop-blur-sm px-4 py-6 items-center justify-center">' +
+        '<div class="my-wysiwyg-modal-pop w-full max-w-sm rounded-[24px] bg-white text-slate-900 p-5 shadow-2xl">' +
+          '<div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">' +
+            '<h3 id="my-card-wysiwyg-editor-title" class="text-lg font-black"></h3>' +
+            '<button type="button" onclick="window.closeMyCardWysiwygEditor()" class="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center active:scale-95"><span class="material-symbols-outlined">close</span></button>' +
+          '</div>' +
+          '<div id="my-card-wysiwyg-editor-body"></div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function renderMyCardWysiwyg() {
+    var preview = document.getElementById('my-card-wysiwyg-preview');
+    if (!preview || !wysiwygState.cfg) return;
+    var cfg = wysiwygState.cfg;
+    var layout = cfg.layoutStyle || getLayout();
+    var ratio = layout === 'portrait' ? (cfg.imgRatioPortrait || '2/3') : (layout === 'square' ? '1/1' : '20/13');
+    ratio = String(ratio).replace(':', '/');
+    var imgUrl = currentWysiwygImage(cfg);
+    var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+    var buttonHtml = buttons.map(function(button, index) {
+      return '<button type="button" onclick="window.editMyCardWysiwygButton(' + index + ')" class="my-wysiwyg-target w-full py-3 rounded-xl text-white text-center text-[15px] font-black mb-2.5 shadow-sm active:scale-95" style="background:' + escapeAttr(safeCssColor(button.c, '#06C755')) + '">' +
+        '<span class="my-wysiwyg-edit-icon"><span class="material-symbols-outlined">link</span></span>' +
+        escapeHTML(button.l || '按鈕') +
+      '</button>';
+    }).join('');
+    preview.innerHTML =
+      '<div class="my-wysiwyg-card-shell">' +
+        '<div class="relative bg-slate-100">' +
+          '<button type="button" onclick="window.editMyCardWysiwygField(\'image\')" class="my-wysiwyg-target block w-full text-left active:opacity-90 rounded-none border-0">' +
+            '<span class="my-wysiwyg-edit-icon" style="top:12px;right:12px;"><span class="material-symbols-outlined">image</span></span>' +
+            '<img src="' + escapeAttr(imgUrl || 'https://placehold.co/800x520?text=Cover') + '" class="w-full object-cover bg-slate-100" style="aspect-ratio:' + escapeAttr(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Cover\';">' +
+          '</button>' +
+          '<div class="absolute top-3 right-3 bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm pointer-events-none">分享</div>' +
+        '</div>' +
+        '<div class="px-6 py-5 text-center">' +
+          '<button type="button" onclick="window.editMyCardWysiwygField(\'title\')" class="my-wysiwyg-target block w-full text-[24px] font-black text-slate-900 rounded-xl px-2 py-1">' +
+            '<span class="my-wysiwyg-edit-icon"><span class="material-symbols-outlined">edit</span></span>' +
+            escapeHTML(cfg.title || '姓名') +
+          '</button>' +
+          '<button type="button" onclick="window.editMyCardWysiwygField(\'desc\')" class="my-wysiwyg-target block w-full mt-3 text-[15px] leading-relaxed whitespace-pre-wrap rounded-xl px-3 py-3" style="color:' + escapeAttr(safeCssColor(cfg.descColor, '#666666')) + ';text-align:' + escapeAttr(cfg.descAlign || 'center') + ';">' +
+            '<span class="my-wysiwyg-edit-icon"><span class="material-symbols-outlined">notes</span></span>' +
+            escapeHTML(cfg.desc || '點這裡編輯名片說明').replace(/\n/g, '<br>') +
+          '</button>' +
+        '</div>' +
+        '<div class="px-5 pb-5">' + buttonHtml +
+          '<button type="button" onclick="window.addMyCardWysiwygButton()" class="w-full py-3 rounded-xl border border-dashed border-blue-300 bg-blue-50 text-blue-600 text-[14px] font-black active:scale-95">+ 新增按鈕</button>' +
+        '</div>' +
+      '</div>' +
+      '<p class="text-center text-[12px] text-slate-300 font-bold mt-3">這是編輯畫布。儲存後才會更新名片設定。</p>';
+  }
+
+  function renderWysiwygEditor(type, index) {
+    var modal = document.getElementById('my-card-wysiwyg-editor-modal');
+    var title = document.getElementById('my-card-wysiwyg-editor-title');
+    var panel = document.getElementById('my-card-wysiwyg-editor-body');
+    if (!modal || !panel || !wysiwygState.cfg) return;
+    var cfg = wysiwygState.cfg;
+    wysiwygState.field = type;
+    wysiwygState.buttonIndex = typeof index === 'number' ? index : -1;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (type === 'image') {
+      if (title) title.textContent = '更換封面圖片';
+      panel.innerHTML =
+        '<div class="space-y-3">' +
+          '<label class="block text-[13px] font-black text-slate-600">圖片網址</label>' +
+          '<input id="my-wysiwyg-image-input" value="' + escapeAttr(currentWysiwygImage(cfg)) + '" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-mono text-[13px] outline-none focus:ring-2 focus:ring-blue-500">' +
+          '<div class="grid grid-cols-2 gap-2">' +
+            '<button type="button" onclick="document.getElementById(\'file-my-v1-img\')?.click()" class="py-3 rounded-xl bg-slate-900 text-white font-black active:scale-95">上傳圖片</button>' +
+            '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
+          '</div>' +
+        '</div>';
+    } else if (type === 'title') {
+      if (title) title.textContent = '修改姓名/標題';
+      panel.innerHTML =
+        '<div class="space-y-3">' +
+          '<label class="block text-[13px] font-black text-slate-600">姓名或標題</label>' +
+          '<input id="my-wysiwyg-title-input" value="' + escapeAttr(cfg.title || '') + '" class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[16px] font-black outline-none focus:ring-2 focus:ring-blue-500">' +
+          '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="w-full py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
+        '</div>';
+    } else if (type === 'desc') {
+      if (title) title.textContent = '修改名片說明';
+      panel.innerHTML =
+        '<div class="space-y-3">' +
+          '<label class="block text-[13px] font-black text-slate-600">說明文字</label>' +
+          '<textarea id="my-wysiwyg-desc-input" rows="5" class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-blue-500">' + escapeHTML(cfg.desc || '') + '</textarea>' +
+          '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="w-full py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
+        '</div>';
+    } else if (type === 'button') {
+      var btn = cfg.buttons[index] || { l: '', u: '', c: '#06C755' };
+      if (title) title.textContent = '設定按鈕 ' + (index + 1);
+      panel.innerHTML =
+        '<div class="space-y-3">' +
+          '<div class="flex items-center justify-between gap-3">' +
+            '<label class="text-[13px] font-black text-slate-600">按鈕 ' + (index + 1) + '</label>' +
+            '<button type="button" onclick="window.removeMyCardWysiwygButton()" class="px-3 py-2 rounded-xl bg-red-50 text-red-500 text-[12px] font-black">刪除</button>' +
+          '</div>' +
+          '<input id="my-wysiwyg-button-label" value="' + escapeAttr(btn.l || '') + '" placeholder="按鈕文字" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-black outline-none focus:ring-2 focus:ring-blue-500">' +
+          '<input id="my-wysiwyg-button-url" value="' + escapeAttr(btn.u || '') + '" placeholder="網址 / tel: / line://" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-mono text-[13px] outline-none focus:ring-2 focus:ring-blue-500">' +
+          '<div class="grid grid-cols-[56px_minmax(0,1fr)] gap-3">' +
+            '<input id="my-wysiwyg-button-color" type="color" value="' + escapeAttr(safeCssColor(btn.c, '#06C755')) + '" class="w-14 h-12 rounded-xl border border-blue-300 bg-white p-1">' +
+            '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
+          '</div>' +
+        '</div>';
+    }
+  }
+
+  function closeMyCardWysiwyg() {
+    var modal = document.getElementById('my-card-wysiwyg-modal');
+    if (modal) modal.classList.add('hidden');
+    closeMyCardWysiwygEditor();
+  }
+
+  function closeMyCardWysiwygEditor() {
+    var modal = document.getElementById('my-card-wysiwyg-editor-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+
+  function editMyCardWysiwygField(field) {
+    renderWysiwygEditor(field);
+  }
+
+  function editMyCardWysiwygButton(index) {
+    renderWysiwygEditor('button', index);
+  }
+
+  function applyMyCardWysiwygEditor() {
+    var cfg = wysiwygState.cfg;
+    if (!cfg) return;
+    if (wysiwygState.field === 'image') {
+      var imgInput = document.getElementById('my-wysiwyg-image-input');
+      var url = imgInput ? String(imgInput.value || '').trim() : '';
+      var layout = cfg.layoutStyle || getLayout();
+      if (layout === 'portrait') cfg.imgUrlPortrait = url;
+      else if (layout === 'square') cfg.imgUrlSquare = url;
+      else cfg.imgUrl = url;
+      myEcardImgs[layout] = url;
+      var oldInput = document.getElementById('my-v1-img-url');
+      if (oldInput) oldInput.value = url;
+    } else if (wysiwygState.field === 'title') {
+      var titleInput = document.getElementById('my-wysiwyg-title-input');
+      cfg.title = titleInput ? String(titleInput.value || '').trim() : cfg.title;
+    } else if (wysiwygState.field === 'desc') {
+      var descInput = document.getElementById('my-wysiwyg-desc-input');
+      cfg.desc = descInput ? String(descInput.value || '').trim() : cfg.desc;
+    } else if (wysiwygState.field === 'button') {
+      var buttonIndex = wysiwygState.buttonIndex;
+      if (!Array.isArray(cfg.buttons)) cfg.buttons = [];
+      if (buttonIndex >= 0 && cfg.buttons[buttonIndex]) {
+        cfg.buttons[buttonIndex] = {
+          l: (document.getElementById('my-wysiwyg-button-label') || {}).value || '',
+          u: (document.getElementById('my-wysiwyg-button-url') || {}).value || '',
+          c: (document.getElementById('my-wysiwyg-button-color') || {}).value || '#06C755'
+        };
+        myEcardButtons = cfg.buttons.slice();
+        renderButtons();
+      }
+    }
+    writeCurrentCardConfig(cfg);
+    updatePreview();
+    renderMyCardWysiwyg();
+    closeMyCardWysiwygEditor();
+  }
+
+  function addMyCardWysiwygButton() {
+    var cfg = wysiwygState.cfg;
+    if (!cfg) return;
+    if (!Array.isArray(cfg.buttons)) cfg.buttons = [];
+    if (cfg.buttons.length >= 4) {
+      if (window.showToast) window.showToast('最多 4 個按鈕', true);
+      return;
+    }
+    cfg.buttons.push({ l: '新增按鈕', u: '', c: '#06C755' });
+    myEcardButtons = cfg.buttons.slice();
+    writeCurrentCardConfig(cfg);
+    renderButtons();
+    updatePreview();
+    renderMyCardWysiwyg();
+    renderWysiwygEditor('button', cfg.buttons.length - 1);
+  }
+
+  function removeMyCardWysiwygButton() {
+    var cfg = wysiwygState.cfg;
+    var index = wysiwygState.buttonIndex;
+    if (!cfg || !Array.isArray(cfg.buttons) || index < 0) return;
+    cfg.buttons.splice(index, 1);
+    myEcardButtons = cfg.buttons.slice();
+    writeCurrentCardConfig(cfg);
+    renderButtons();
+    updatePreview();
+    renderMyCardWysiwyg();
+    closeMyCardWysiwygEditor();
+  }
+
   async function saveMyCardWysiwyg(btn) {
     if (wysiwygState.cfg) {
       writeCurrentCardConfig(wysiwygState.cfg);
@@ -1240,6 +1482,7 @@
   window.openQuicklyMyCard = openQuicklyMyCard;
   window.openMyCardWysiwyg = openMyCardWysiwyg;
   window.closeMyCardWysiwyg = closeMyCardWysiwyg;
+  window.closeMyCardWysiwygEditor = closeMyCardWysiwygEditor;
   window.editMyCardWysiwygField = editMyCardWysiwygField;
   window.editMyCardWysiwygButton = editMyCardWysiwygButton;
   window.applyMyCardWysiwygEditor = applyMyCardWysiwygEditor;
