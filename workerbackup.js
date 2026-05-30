@@ -953,6 +953,50 @@ const LineOAChatModule = {
       .filter(Boolean);
   },
 
+  cardButtonKind(button) {
+    const label = this.text(button?.l || button?.label || button?.text).toLowerCase();
+    const uri = this.text(button?.u || button?.url || button?.uri).toLowerCase();
+    if (label.includes('line') || label.includes('好友') || uri.includes('lin.ee') || uri.includes('line.me') || uri.startsWith('line:')) return 'line';
+    if (label.includes('電話') || label.includes('手機') || uri.startsWith('tel:')) return 'phone';
+    if (label.includes('地址') || label.includes('地圖') || uri.includes('google.com/maps')) return 'address';
+    if (label.includes('網站') || label.includes('官網') || uri.startsWith('http')) return 'website';
+    if (label.includes('信') || label.includes('mail') || uri.startsWith('mailto:')) return 'email';
+    return '';
+  },
+
+  isPlaceholderButtonUri(uri) {
+    const value = this.text(uri).toLowerCase();
+    return !value || value === 'http://' || value === 'https://' || value.includes('xxxxxxxx') || value.includes('09xxxxxxxx');
+  },
+
+  mergeCardButtons(storedButtons, autoButtons) {
+    const merged = [];
+    const indexByKind = new Map();
+    const seenUris = new Set();
+    const addOrReplace = (button, preferRealValue = false) => {
+      const normalized = this.normalizeCardButton(button);
+      if (!normalized) return;
+      const kind = this.cardButtonKind(normalized);
+      const uriKey = this.text(normalized.u).toLowerCase();
+      if (uriKey && seenUris.has(uriKey)) return;
+      if (kind && indexByKind.has(kind)) {
+        const index = indexByKind.get(kind);
+        if (preferRealValue && this.isPlaceholderButtonUri(merged[index].u) && !this.isPlaceholderButtonUri(normalized.u)) {
+          if (merged[index].u) seenUris.delete(this.text(merged[index].u).toLowerCase());
+          merged[index] = normalized;
+          if (uriKey) seenUris.add(uriKey);
+        }
+        return;
+      }
+      if (kind) indexByKind.set(kind, merged.length);
+      if (uriKey) seenUris.add(uriKey);
+      merged.push(normalized);
+    };
+    this.normalizeCardButtons(storedButtons).forEach(button => addOrReplace(button, false));
+    this.normalizeCardButtons(autoButtons).forEach(button => addOrReplace(button, true));
+    return merged;
+  },
+
   parseCardSocials(raw) {
     const text = this.text(raw);
     if (!text) return [];
@@ -992,9 +1036,15 @@ const LineOAChatModule = {
     const lineUrl = this.socialLineUrl(card);
     const phone = this.text(card?.mobile || card?.officePhone).replace(/[^0-9+]/g, '');
     const addressUrl = this.mapUrlFromAddress(card?.address);
+    const website = this.text(card?.website);
+    const email = this.text(card?.email);
     if (lineUrl) buttons.push({ l: '加LINE好友', u: lineUrl, c: '#06C755' });
     if (phone) buttons.push({ l: '行動電話', u: 'tel:' + phone, c: '#3B82F6' });
     if (addressUrl) buttons.push({ l: '店家地址', u: addressUrl, c: '#1E293B' });
+    if (website && !/^https?:\/\/(line\.me|lin\.ee)\//i.test(website) && !/^line:\/\//i.test(website)) {
+      buttons.push({ l: '官方網站', u: website, c: '#64748B' });
+    }
+    if (email) buttons.push({ l: '發送郵件', u: 'mailto:' + email, c: '#F59E0B' });
     return buttons;
   },
 
@@ -1014,9 +1064,8 @@ const LineOAChatModule = {
       imgRatioLandscape: config.imgRatioLandscape || '20:13',
       title: config.title || card.name,
       desc: config.desc || card.services || card.title || '',
-      buttons: this.normalizeCardButtons(config.buttons)
+      buttons: this.mergeCardButtons(config.buttons, this.autoCardButtons(card))
     };
-    if (!config.buttons.length) config.buttons = this.autoCardButtons(card);
     const flex = MessagingModule.buildFlex({
       card,
       config,
