@@ -70,6 +70,7 @@ node tools\run-smoke-contracts.js --full
 
 Minimum flows covered by contracts:
 
+- route order and webhook separation
 - auth and point identity bridge
 - share-card flow
 - inbox recipient scope

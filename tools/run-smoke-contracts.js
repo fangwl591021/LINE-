@@ -5,11 +5,13 @@ const root = path.resolve(__dirname, '..');
 const node = process.execPath;
 
 const foundationChecks = [
-  'tools/check-stability-foundation-contract.js'
+  'tools/check-stability-foundation-contract.js',
+  'tools/check-route-contract.js'
 ];
 
 const fullChecks = [
   'tools/check-stability-foundation-contract.js',
+  'tools/check-route-contract.js',
   'tools/check-auth-contract.js',
   'tools/check-share-contract.js',
   'tools/check-inbox-recipient-scope-contract.js',
