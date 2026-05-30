@@ -338,6 +338,29 @@
     moduleCore.showLoading(false);
   }
 
+  function hydrateMyECardStateFromCurrentCard() {
+    if (!currentCardData) return;
+    var cfg = parseCardConfig(currentCardData);
+    myEcardImgs = {
+      landscape: cfg.imgUrl || currentCardData['????'] || '',
+      portrait: cfg.imgUrlPortrait || '',
+      square: cfg.imgUrlSquare || ''
+    };
+    myEcardRatios = {
+      landscape: cfg.imgRatioLandscape || '20:13',
+      portrait: cfg.imgRatioPortrait || '2:3',
+      square: cfg.imgRatioSquare || '1:1'
+    };
+    myEcardButtons = normalizeMyCardButtons(Array.isArray(cfg.buttons) ? cfg.buttons : cfg.footerBtns);
+    myEcardStateLoaded = true;
+    var layout = cfg.layoutStyle || 'landscape';
+    var radio = $('input[name="my-ecard-layout"][value="' + layout + '"]');
+    if (radio) radio.checked = true;
+    var imgInput = $('#my-v1-img-url');
+    if (imgInput) imgInput.value = myEcardImgs[getLayout()] || '';
+    applyVideoConfigToFields(cfg);
+  }
+
   function handleLayoutChange() {
     var imgInput = $('#my-v1-img-url');
     if (imgInput) imgInput.value = myEcardImgs[getLayout()] || '';
@@ -423,14 +446,21 @@
 
   function scheduleQuicklyMyCardOpen() {
     if (!isQuicklyMyCardRequest() && !isWysiwygMyCardRequest()) return;
+    if (isWysiwygMyCardRequest()) {
+      var modal = ensureWysiwygModal();
+      modal.classList.remove('hidden');
+      var preview = document.getElementById('my-card-wysiwyg-preview');
+      if (preview) {
+        preview.innerHTML = '<div class="min-h-[70vh] flex items-center justify-center text-center text-slate-300 font-black">名片編輯器載入中...</div>';
+      }
+    }
     var tries = 0;
     var timer = setInterval(function() {
       tries += 1;
       if (typeof window.goPage === 'function' && document.getElementById('details-my-ecard')) {
         clearInterval(timer);
         if (isWysiwygMyCardRequest()) {
-          openQuicklyMyCard();
-          setTimeout(function() { openMyCardWysiwyg(); }, 900);
+          openMyCardWysiwyg();
         } else {
           openQuicklyMyCard();
         }
@@ -968,20 +998,22 @@
 
   async function openMyCardWysiwyg(evt) {
     if (evt && evt.preventDefault) evt.preventDefault();
-    moduleCore.showLoading(true);
+    var directWysiwyg = isWysiwygMyCardRequest();
+    if (directWysiwyg) ensureWysiwygModal().classList.remove('hidden');
+    else moduleCore.showLoading(true);
     try {
       currentCardData = await resolveCurrentUserCard(!currentCardData);
       if (!currentCardData) {
         if (window.showToast) window.showToast('找不到可編輯的專屬名片，請先建立名片', true);
         return;
       }
-      if (!myEcardStateLoaded) await load();
+      if (!myEcardStateLoaded) hydrateMyECardStateFromCurrentCard();
       wysiwygState.cfg = getWysiwygConfig();
       writeCurrentCardConfig(wysiwygState.cfg);
       ensureWysiwygModal().classList.remove('hidden');
       renderMyCardWysiwyg();
     } finally {
-      moduleCore.showLoading(false);
+      if (!directWysiwyg) moduleCore.showLoading(false);
     }
   }
 
@@ -996,6 +1028,16 @@
 
   function editMyCardWysiwygButton(index) {
     renderWysiwygEditor('button', index);
+  }
+
+  function setMyCardWysiwygAlign(align) {
+    if (!wysiwygState.cfg) return;
+    var descInput = document.getElementById('my-wysiwyg-desc-input');
+    if (descInput) wysiwygState.cfg.desc = String(descInput.value || '').trim();
+    var colorInput = document.getElementById('my-wysiwyg-desc-color');
+    if (colorInput) wysiwygState.cfg.descColor = safeCssColor(colorInput.value, '#666666');
+    wysiwygState.cfg.descAlign = align || 'center';
+    renderWysiwygEditor('desc');
   }
 
   function applyMyCardWysiwygEditor() {
@@ -1017,6 +1059,8 @@
     } else if (wysiwygState.field === 'desc') {
       var descInput = document.getElementById('my-wysiwyg-desc-input');
       cfg.desc = descInput ? String(descInput.value || '').trim() : cfg.desc;
+      var colorInput = document.getElementById('my-wysiwyg-desc-color');
+      if (colorInput) cfg.descColor = safeCssColor(colorInput.value, '#666666');
     } else if (wysiwygState.field === 'button') {
       var index = wysiwygState.buttonIndex;
       if (!Array.isArray(cfg.buttons)) cfg.buttons = [];
@@ -1194,11 +1238,20 @@
         '</div>';
     } else if (type === 'desc') {
       if (title) title.textContent = '修改名片說明';
+      var descAlign = cfg.descAlign || 'center';
       panel.innerHTML =
         '<div class="space-y-3">' +
           '<label class="block text-[13px] font-black text-slate-600">說明文字</label>' +
           '<textarea id="my-wysiwyg-desc-input" rows="5" class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-blue-500">' + escapeHTML(cfg.desc || '') + '</textarea>' +
-          '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="w-full py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
+          '<div class="grid grid-cols-3 gap-2">' +
+            '<button type="button" onclick="window.setMyCardWysiwygAlign(\'left\')" class="my-wysiwyg-align-btn py-2.5 rounded-xl border font-black ' + (descAlign === 'left' || descAlign === 'start' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 bg-white text-slate-600') + '">靠左</button>' +
+            '<button type="button" onclick="window.setMyCardWysiwygAlign(\'center\')" class="my-wysiwyg-align-btn py-2.5 rounded-xl border font-black ' + (descAlign === 'center' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 bg-white text-slate-600') + '">置中</button>' +
+            '<button type="button" onclick="window.setMyCardWysiwygAlign(\'right\')" class="my-wysiwyg-align-btn py-2.5 rounded-xl border font-black ' + (descAlign === 'right' || descAlign === 'end' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 bg-white text-slate-600') + '">靠右</button>' +
+          '</div>' +
+          '<div class="grid grid-cols-[56px_minmax(0,1fr)] gap-3 items-center">' +
+            '<input id="my-wysiwyg-desc-color" type="color" value="' + escapeAttr(safeCssColor(cfg.descColor, '#666666')) + '" class="w-14 h-12 rounded-xl border border-blue-300 bg-white p-1">' +
+            '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
+          '</div>' +
         '</div>';
     } else if (type === 'button') {
       var btn = cfg.buttons[index] || { l: '', u: '', c: '#06C755' };
@@ -1223,6 +1276,9 @@
     var modal = document.getElementById('my-card-wysiwyg-modal');
     if (modal) modal.classList.add('hidden');
     closeMyCardWysiwygEditor();
+    if (isWysiwygMyCardRequest() && typeof liff !== 'undefined' && liff && typeof liff.closeWindow === 'function') {
+      try { liff.closeWindow(); } catch (e) {}
+    }
   }
 
   function closeMyCardWysiwygEditor() {
@@ -1259,6 +1315,8 @@
     } else if (wysiwygState.field === 'desc') {
       var descInput = document.getElementById('my-wysiwyg-desc-input');
       cfg.desc = descInput ? String(descInput.value || '').trim() : cfg.desc;
+      var colorInput = document.getElementById('my-wysiwyg-desc-color');
+      if (colorInput) cfg.descColor = safeCssColor(colorInput.value, '#666666');
     } else if (wysiwygState.field === 'button') {
       var buttonIndex = wysiwygState.buttonIndex;
       if (!Array.isArray(cfg.buttons)) cfg.buttons = [];
@@ -1592,6 +1650,7 @@
   window.closeMyCardWysiwygEditor = closeMyCardWysiwygEditor;
   window.editMyCardWysiwygField = editMyCardWysiwygField;
   window.editMyCardWysiwygButton = editMyCardWysiwygButton;
+  window.setMyCardWysiwygAlign = setMyCardWysiwygAlign;
   window.applyMyCardWysiwygEditor = applyMyCardWysiwygEditor;
   window.addMyCardWysiwygButton = addMyCardWysiwygButton;
   window.removeMyCardWysiwygButton = removeMyCardWysiwygButton;
