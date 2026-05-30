@@ -27,7 +27,7 @@
   var myEcardButtons = [];
   var myEcardStateLoaded = false;
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
-  var myEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
+  var myEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
   var wysiwygState = { cfg: null, field: '', buttonIndex: -1 };
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
   var templateCoverUrl = 'assets/rental-template-cover.png';
@@ -319,7 +319,7 @@
     };
     myEcardRatios = {
       landscape: cfg.imgRatioLandscape || '20:13',
-      portrait: cfg.imgRatioPortrait || '2:3',
+      portrait: cfg.imgRatioPortrait || '400:600',
       square: cfg.imgRatioSquare || '1:1'
     };
     myEcardButtons = normalizeMyCardButtons(Array.isArray(cfg.buttons) ? cfg.buttons : cfg.footerBtns);
@@ -348,7 +348,7 @@
     };
     myEcardRatios = {
       landscape: cfg.imgRatioLandscape || '20:13',
-      portrait: cfg.imgRatioPortrait || '2:3',
+      portrait: cfg.imgRatioPortrait || '400:600',
       square: cfg.imgRatioSquare || '1:1'
     };
     myEcardButtons = normalizeMyCardButtons(Array.isArray(cfg.buttons) ? cfg.buttons : cfg.footerBtns);
@@ -724,7 +724,7 @@
     var desc = cfg.desc || (currentCardData ? (currentCardData['服務項目'] || currentCardData['職稱'] || currentCardData['公司名稱'] || '') : '');
     var color = cfg.descColor || '#666666';
     var align = cfg.descAlign || 'center';
-    var ratio = layout === 'portrait' ? (myEcardRatios.portrait || '2:3').replace(':', '/') : (layout === 'square' ? '1/1' : '20/13');
+    var ratio = layout === 'portrait' ? (myEcardRatios.portrait || '400:600').replace(':', '/') : (layout === 'square' ? '1/1' : '20/13');
     var videoUrl = getVideoUrlInput() || cfg.videoUrl || '';
     var videoEnabled = isVideoModeEnabled() && !!videoUrl;
     var mediaHtml = videoEnabled
@@ -793,7 +793,7 @@
       cfg.imgUrlPortrait = myEcardImgs.portrait;
       cfg.imgUrlSquare = myEcardImgs.square;
       cfg.imgRatioLandscape = '20:13';
-      cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
+      cfg.imgRatioPortrait = (myEcardRatios.portrait || '400:600').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
       cfg.buttons = normalizeMyCardButtons(myEcardButtons);
       syncVideoConfig(cfg);
@@ -840,7 +840,7 @@
       cfg.imgUrlPortrait = myEcardImgs.portrait || cfg.imgUrlPortrait || '';
       cfg.imgUrlSquare = myEcardImgs.square || cfg.imgUrlSquare || '';
       cfg.imgRatioLandscape = '20:13';
-      cfg.imgRatioPortrait = (myEcardRatios.portrait || '2:3').replace('/', ':');
+      cfg.imgRatioPortrait = (myEcardRatios.portrait || '400:600').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
       cfg.buttons = normalizeMyCardButtons(myEcardButtons);
       syncVideoConfig(cfg);
@@ -869,7 +869,7 @@
     cfg.imgUrlPortrait = cfg.imgUrlPortrait || myEcardImgs.portrait || '';
     cfg.imgUrlSquare = cfg.imgUrlSquare || myEcardImgs.square || '';
     cfg.imgRatioLandscape = cfg.imgRatioLandscape || '20:13';
-    cfg.imgRatioPortrait = cfg.imgRatioPortrait || '2:3';
+    cfg.imgRatioPortrait = cfg.imgRatioPortrait || '400:600';
     cfg.imgRatioSquare = cfg.imgRatioSquare || '1:1';
     cfg.descAlign = cfg.descAlign || 'center';
     cfg.descColor = cfg.descColor || '#666666';
@@ -921,7 +921,7 @@
     if (!preview || !wysiwygState.cfg) return;
     var cfg = wysiwygState.cfg;
     var layout = cfg.layoutStyle || getLayout();
-    var ratio = layout === 'portrait' ? (cfg.imgRatioPortrait || '2/3') : (layout === 'square' ? '1/1' : '20/13');
+    var ratio = layout === 'portrait' ? (cfg.imgRatioPortrait || '400/600') : (layout === 'square' ? '1/1' : '20/13');
     ratio = String(ratio).replace(':', '/');
     var imgUrl = currentWysiwygImage(cfg);
     var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
@@ -1171,7 +1171,7 @@
     if (!preview || !wysiwygState.cfg) return;
     var cfg = wysiwygState.cfg;
     var layout = cfg.layoutStyle || getLayout();
-    var ratio = layout === 'portrait' ? (cfg.imgRatioPortrait || '2/3') : (layout === 'square' ? '1/1' : '20/13');
+    var ratio = layout === 'portrait' ? (cfg.imgRatioPortrait || '400/600') : (layout === 'square' ? '1/1' : '20/13');
     ratio = String(ratio).replace(':', '/');
     var imgUrl = currentWysiwygImage(cfg);
     var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
@@ -1368,7 +1368,7 @@
 
   function getMyCardUploadAspectRatio() {
     var layout = getLayout();
-    if (layout === 'portrait') return 2 / 3;
+    if (layout === 'portrait') return 400 / 600;
     if (layout === 'square') return 1;
     return 20 / 13;
   }
@@ -1444,7 +1444,7 @@
         imgUrlPortrait: '',
         imgUrlSquare: '',
         imgRatioLandscape: '20:13',
-        imgRatioPortrait: '2:3',
+        imgRatioPortrait: '400:600',
         imgRatioSquare: '1:1',
         desc: introTemplate,
         descAlign: 'start',

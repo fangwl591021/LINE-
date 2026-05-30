@@ -1272,7 +1272,7 @@ const LineOAChatModule = {
           url: coverUrl,
           size: 'full',
           aspectRatio: '20:13',
-          aspectMode: 'fit',
+          aspectMode: 'cover',
           action: { type: 'uri', uri: editUrl }
         },
         body: {
@@ -2212,7 +2212,7 @@ const ReferralFriendKeywordModule = {
               url: qrUrl,
               size: 'full',
               aspectRatio: '1:1',
-              aspectMode: 'fit',
+              aspectMode: 'cover',
               action: { type: 'uri', uri: inviteUrl }
             },
             {
@@ -3891,10 +3891,10 @@ const MessagingModule = {
       (config.imgUrl || config.imgUrlLandscape || card['名片圖檔'])
     ) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
     const aspectRatio = layoutStyle === 'portrait'
-      ? (config.imgRatioPortrait || '2:3')
+      ? (config.imgRatioPortrait || '400:600')
       : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
     const bubbleSize = layoutStyle === 'portrait' ? 'giga' : 'mega';
-    const imageAspectMode = layoutStyle === 'landscape' ? 'fit' : 'cover';
+    const imageAspectMode = 'cover';
     
     let buttons = (config.buttons || []).map(b => ({ l: b.l, u: Utils.cleanURI(b.u), c: b.c }))
       .filter(b => b.l && b.u)

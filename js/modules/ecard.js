@@ -1,7 +1,7 @@
 // ✅ 宣告全域變數存放當前編輯的按鈕
 window.currentEcardButtons = [];
 window.currentEcardImgs = { landscape: '', portrait: '', square: '' };
-window.currentEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
+window.currentEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
 window.__ecardAutoSyncBound = window.__ecardAutoSyncBound || false;
 
 const ECardAutoDefaults = {
@@ -326,9 +326,9 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
   );
   const imgUrl = cleanECardFlexImageUrl(rawImgUrl) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   const aspectRatio = layoutStyle === 'portrait'
-    ? (config.imgRatioPortrait || '2:3')
+    ? (config.imgRatioPortrait || '400:600')
     : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
-  const imageAspectMode = layoutStyle === 'landscape' ? 'fit' : 'cover';
+  const imageAspectMode = 'cover';
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
   const shareActionUrl = appendECardShareMode(badgeUrl);
   let buttons = (Array.isArray(config.buttons) ? config.buttons : [])
@@ -395,9 +395,9 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       : (config.imgUrl || config.imgUrlLandscape || cardImageUrl));
   const imgUrl = cleanECardFlexImageUrl(rawImgUrl) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   const aspectRatio = layoutStyle === 'portrait'
-    ? (config.imgRatioPortrait || '2:3')
+    ? (config.imgRatioPortrait || '400:600')
     : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
-  const imageAspectMode = layoutStyle === 'landscape' ? 'fit' : 'cover';
+  const imageAspectMode = 'cover';
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
   const titleText = String(config.title || readECardCardValue(card, ['name', 'title', '\u59d3\u540d']) || '\u6578\u4f4d\u540d\u7247').trim() || '\u6578\u4f4d\u540d\u7247';
   const bodyText = String(config.desc || readECardCardValue(card, ['services', 'description', 'desc', '\u670d\u52d9\u9805\u76ee']) || ' ').trim() || ' ';
@@ -506,7 +506,7 @@ window.initECardSettings = function(card) {
   
   window.currentEcardRatios = {
     landscape: cfg.imgRatioLandscape || '20:13',
-    portrait: cfg.imgRatioPortrait || '2:3',
+    portrait: cfg.imgRatioPortrait || '400:600',
     square: cfg.imgRatioSquare || '1:1'
   };
 
@@ -641,7 +641,7 @@ window.updateECardPreview = function() {
   if (window.currentDescAlign === 'end') align = 'right';
 
   let ratio = '20/13';
-  if (layoutStyle === 'portrait') ratio = window.currentEcardRatios.portrait.replace(':', '/') || '2/3';
+  if (layoutStyle === 'portrait') ratio = window.currentEcardRatios.portrait.replace(':', '/') || '400/600';
   if (layoutStyle === 'square') ratio = '1/1';
   if (layoutStyle === 'landscape') ratio = '20/13';
 

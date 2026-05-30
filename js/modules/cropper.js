@@ -53,14 +53,26 @@ function cropperScopeKey(scope) {
 
 function normalizeCropperRatio(ratio) {
   if (ratio === null || ratio === undefined || ratio === 'free') return 'free';
-  const value = Number(ratio);
+  const text = String(ratio).trim();
+  const parts = text.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+  const value = parts ? Number(parts[1]) / Number(parts[2]) : Number(ratio);
   if (!Number.isFinite(value) || value <= 0) return 'free';
   if (Math.abs(value - 1) < 0.01) return '1:1';
-  if (Math.abs(value - (4 / 3)) < 0.01) return '4:3';
   if (Math.abs(value - (20 / 13)) < 0.01) return '20:13';
-  if (Math.abs(value - (2 / 3)) < 0.01) return '2:3';
+  if (Math.abs(value - (400 / 600)) < 0.01 || Math.abs(value - (2 / 3)) < 0.01) return '400:600';
   if (Math.abs(value - (16 / 9)) < 0.01) return '16:9';
   return value;
+}
+
+function cropperAspectRatioValue(ratio) {
+  const normalized = normalizeCropperRatio(ratio);
+  if (normalized === 'free') return NaN;
+  if (normalized === '1:1') return 1;
+  if (normalized === '20:13') return 20 / 13;
+  if (normalized === '400:600') return 400 / 600;
+  if (normalized === '16:9') return 16 / 9;
+  const value = Number(normalized);
+  return Number.isFinite(value) && value > 0 ? value : NaN;
 }
 
 function cropperCanvasOptions(scope, fallbackSize) {
@@ -71,9 +83,8 @@ function cropperCanvasOptions(scope, fallbackSize) {
     imageSmoothingQuality: 'high'
   };
   if (ratio === '1:1') return { ...common, width: 1000, height: 1000 };
-  if (ratio === '4:3') return { ...common, width: 1200, height: 900 };
   if (ratio === '20:13') return { ...common, width: 1200, height: 780 };
-  if (ratio === '2:3') return { ...common, width: 800, height: 1200 };
+  if (ratio === '400:600') return { ...common, width: 400, height: 600 };
   if (ratio === '16:9') return { ...common, width: 1280, height: 720 };
   const size = fallbackSize || 1000;
   return { ...common, maxWidth: size, maxHeight: size };
@@ -135,7 +146,7 @@ window.flipCropper = function(axis, scope) {
 window.setCropperAspectRatio = function(ratio, scope) {
   const instance = getCropperByScope(scope);
   if (!instance) return;
-  const nextRatio = ratio === null || ratio === undefined || ratio === 'free' ? NaN : Number(ratio);
+  const nextRatio = cropperAspectRatioValue(ratio);
   cropperOutputRatioState[cropperScopeKey(scope)] = normalizeCropperRatio(ratio);
   try {
     instance.setAspectRatio(Number.isNaN(nextRatio) ? NaN : nextRatio);
@@ -888,7 +899,11 @@ window.openActiveCropper = function(input, targetMode) {
   const file = input.files[0];
   if (!file) return;
   currentActiveCropTarget = targetMode;
-  cropperOutputRatioState.active = 'free';
+  const ratioModeId = ({ quick: 'q', full: 'f', series: 's' })[targetMode] || targetMode;
+  const ratioSelect = document.getElementById('in-image-ratio-' + ratioModeId);
+  const selectedRatio = ratioSelect ? ratioSelect.value : 'free';
+  const activeRatioValue = cropperAspectRatioValue(selectedRatio);
+  cropperOutputRatioState.active = normalizeCropperRatio(selectedRatio);
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -902,7 +917,7 @@ window.openActiveCropper = function(input, targetMode) {
     img.onload = () => {
       if (activeCropperInstance) activeCropperInstance.destroy();
       setTimeout(() => {
-        activeCropperInstance = createSafeCropper(img, NaN);
+        activeCropperInstance = createSafeCropper(img, activeRatioValue);
         img.style.opacity = '1';
       }, 150);
     };
