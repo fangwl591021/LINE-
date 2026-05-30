@@ -45,6 +45,40 @@ function getCropperByScope(scope) {
   return scope === 'active' ? activeCropperInstance : cropperInstance;
 }
 
+const cropperOutputRatioState = { default: 'free', active: 'free' };
+
+function cropperScopeKey(scope) {
+  return scope === 'active' ? 'active' : 'default';
+}
+
+function normalizeCropperRatio(ratio) {
+  if (ratio === null || ratio === undefined || ratio === 'free') return 'free';
+  const value = Number(ratio);
+  if (!Number.isFinite(value) || value <= 0) return 'free';
+  if (Math.abs(value - 1) < 0.01) return '1:1';
+  if (Math.abs(value - (4 / 3)) < 0.01) return '4:3';
+  if (Math.abs(value - (20 / 13)) < 0.01) return '20:13';
+  if (Math.abs(value - (2 / 3)) < 0.01) return '2:3';
+  if (Math.abs(value - (16 / 9)) < 0.01) return '16:9';
+  return value;
+}
+
+function cropperCanvasOptions(scope, fallbackSize) {
+  const key = cropperScopeKey(scope);
+  const ratio = cropperOutputRatioState[key] || 'free';
+  const common = {
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: 'high'
+  };
+  if (ratio === '1:1') return { ...common, width: 1000, height: 1000 };
+  if (ratio === '4:3') return { ...common, width: 1200, height: 900 };
+  if (ratio === '20:13') return { ...common, width: 1200, height: 780 };
+  if (ratio === '2:3') return { ...common, width: 800, height: 1200 };
+  if (ratio === '16:9') return { ...common, width: 1280, height: 720 };
+  const size = fallbackSize || 1000;
+  return { ...common, maxWidth: size, maxHeight: size };
+}
+
 window.zoomCropper = function(delta, scope) {
   const instance = getCropperByScope(scope);
   if (!instance) return;
@@ -102,6 +136,7 @@ window.setCropperAspectRatio = function(ratio, scope) {
   const instance = getCropperByScope(scope);
   if (!instance) return;
   const nextRatio = ratio === null || ratio === undefined || ratio === 'free' ? NaN : Number(ratio);
+  cropperOutputRatioState[cropperScopeKey(scope)] = normalizeCropperRatio(ratio);
   try {
     instance.setAspectRatio(Number.isNaN(nextRatio) ? NaN : nextRatio);
   } catch (e) {
@@ -120,6 +155,7 @@ window.cancelCrop = function() {
     cropperInstance = null;
   }
   cropperFlipState.default = { x: 1, y: 1 };
+  cropperOutputRatioState.default = 'free';
   const img = document.getElementById('cropper-image');
   if (img) img.src = '';
 };
@@ -523,6 +559,7 @@ function hideCardOcrProgress(doneMessage) {
 window.openCropper = function(input) {
   const file = input.files[0];
   if (!file) return;
+  cropperOutputRatioState.default = 'free';
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -573,16 +610,11 @@ window.confirmCrop = async function() {
   if (cropperInstance) {
     let size = 1000;
     let quality = 0.8;
-    base64Image = cropperInstance.getCroppedCanvas({
-      maxWidth: size,
-      maxHeight: size,
-      imageSmoothingEnabled: true,
-      imageSmoothingQuality: 'high'
-    }).toDataURL('image/jpeg', quality);
+    base64Image = cropperInstance.getCroppedCanvas(cropperCanvasOptions('default', size)).toDataURL('image/jpeg', quality);
 
     while (base64Image.length > 660000 && quality > 0.3) {
       quality -= 0.15;
-      base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+      base64Image = cropperInstance.getCroppedCanvas(cropperCanvasOptions('default', size)).toDataURL('image/jpeg', quality);
     }
   }
 
@@ -692,16 +724,11 @@ window.confirmMyCardCrop = async function() {
   if (cropperInstance) {
     let size = 1000;
     let quality = 0.8;
-    base64Image = cropperInstance.getCroppedCanvas({
-      maxWidth: size,
-      maxHeight: size,
-      imageSmoothingEnabled: true,
-      imageSmoothingQuality: 'high'
-    }).toDataURL('image/jpeg', quality);
+    base64Image = cropperInstance.getCroppedCanvas(cropperCanvasOptions('default', size)).toDataURL('image/jpeg', quality);
 
     while (base64Image.length > 660000 && quality > 0.3) {
       quality -= 0.15;
-      base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+      base64Image = cropperInstance.getCroppedCanvas(cropperCanvasOptions('default', size)).toDataURL('image/jpeg', quality);
     }
   }
 
@@ -765,6 +792,7 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
 
   // 預設不鎖比例，讓 Banner、名片封面、活動圖都能自由拉伸裁切框。
   const uploadRatio = forcedRatio !== null ? forcedRatio : NaN;
+  cropperOutputRatioState.default = normalizeCropperRatio(uploadRatio);
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -804,19 +832,14 @@ window.confirmCustomImageCrop = async function() {
   let size = 800;
   let quality = 0.8;
 
-  const canvas = cropperInstance.getCroppedCanvas({
-    maxWidth: size,
-    maxHeight: size,
-    imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high'
-  });
+  const canvas = cropperInstance.getCroppedCanvas(cropperCanvasOptions('default', size));
 
   const imgRatio = Math.round(canvas.width) + ':' + Math.round(canvas.height);
   let base64Image = canvas.toDataURL('image/jpeg', quality);
 
   while (base64Image.length > 660000 && quality > 0.3) {
     quality -= 0.15;
-    base64Image = cropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size }).toDataURL('image/jpeg', quality);
+    base64Image = cropperInstance.getCroppedCanvas(cropperCanvasOptions('default', size)).toDataURL('image/jpeg', quality);
   }
 
   if (base64Image.length > 800000) {
@@ -865,6 +888,7 @@ window.openActiveCropper = function(input, targetMode) {
   const file = input.files[0];
   if (!file) return;
   currentActiveCropTarget = targetMode;
+  cropperOutputRatioState.active = 'free';
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -895,6 +919,7 @@ window.cancelActiveCrop = function() {
     activeCropperInstance.destroy();
     activeCropperInstance = null;
   }
+  cropperOutputRatioState.active = 'free';
   const modal = document.getElementById('section-image-cropper');
   if (modal) {
     modal.classList.add('hidden');
@@ -912,12 +937,12 @@ window.confirmActiveCrop = function() {
 
   let size = 800;
   let quality = 0.8;
-  let canvas = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size });
+  let canvas = activeCropperInstance.getCroppedCanvas(cropperCanvasOptions('active', size));
   let base64 = canvas.toDataURL('image/jpeg', quality);
 
   while (base64.length > 660000 && quality > 0.3) {
     quality -= 0.15;
-    canvas = activeCropperInstance.getCroppedCanvas({ maxWidth: size, maxHeight: size });
+    canvas = activeCropperInstance.getCroppedCanvas(cropperCanvasOptions('active', size));
     base64 = canvas.toDataURL('image/jpeg', quality);
   }
 
