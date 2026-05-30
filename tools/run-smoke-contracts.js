@@ -9,7 +9,8 @@ const foundationChecks = [
   'tools/check-route-contract.js',
   'tools/check-identity-diagnostic-contract.js',
   'tools/check-identity-repair-dry-run-contract.js',
-  'tools/check-identity-bridge-contract.js'
+  'tools/check-identity-bridge-contract.js',
+  'tools/check-referral-keyword-contract.js'
 ];
 
 const fullChecks = [
@@ -17,6 +18,8 @@ const fullChecks = [
   'tools/check-route-contract.js',
   'tools/check-identity-diagnostic-contract.js',
   'tools/check-identity-repair-dry-run-contract.js',
+  'tools/check-identity-bridge-contract.js',
+  'tools/check-referral-keyword-contract.js',
   'tools/check-auth-contract.js',
   'tools/check-share-contract.js',
   'tools/check-inbox-recipient-scope-contract.js',
