@@ -95,6 +95,21 @@ const SecurityModule = {
     return this.text(value).replace(/\D/g, '');
   },
 
+  hasHardAdminId(userId, user = {}) {
+    const ids = [
+      userId,
+      user.line_id,
+      user.row_id,
+      user.legacy_line_id,
+      user.point_line_id,
+      user.legacyLineId,
+      user.pointLineId,
+      user.identityLink && user.identityLink.oldLineId,
+      user.identityLink && user.identityLink.newLineId
+    ].map(value => this.text(value)).filter(Boolean);
+    return this.hardAdminAccounts.some(account => ids.some(id => account.ids.includes(id)));
+  },
+
   isHardAdmin(userId, user = {}) {
     const ids = [
       userId,
@@ -5189,6 +5204,24 @@ const D1WriteModule = {
       ['name','industry','gender','phone','birthday','region','address','socials','store_id','referrer_id','network_id','tg_token','tg_chat_id'].forEach(key => {
         if (user[key] === '' || user[key] === undefined || user[key] === null || user[key] === '未命名') user[key] = existing[key] || '';
       });
+      const existingHardAdminId = SecurityModule.hasHardAdminId(user.line_id, existing);
+      const incomingHardAdminVerified = SecurityModule.isHardAdmin(user.line_id, {
+        ...existing,
+        row_id: user.row_id || existing.row_id,
+        line_id: user.line_id || existing.line_id,
+        legacy_line_id: user.legacy_line_id || existing.legacy_line_id,
+        point_line_id: user.point_line_id || existing.point_line_id,
+        name: user.name,
+        displayName: user.displayName,
+        user_name: user.user_name,
+        phone: user.phone,
+        mobile: user.mobile
+      });
+      if (existingHardAdminId && !incomingHardAdminVerified) {
+        ['name','industry','gender','phone','birthday','region','address','socials','store_id','tg_token','tg_chat_id'].forEach(key => {
+          user[key] = existing[key] || '';
+        });
+      }
       if (existing.referrer_id && String(existing.referrer_id).trim()) {
         user.referrer_id = existing.referrer_id;
         user.network_id = existing.network_id || user.network_id;
