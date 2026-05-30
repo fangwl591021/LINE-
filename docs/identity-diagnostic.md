@@ -65,3 +65,18 @@ The person is registered or visible in CRM but has not completed their own perso
 Inbox has rows but UI shows empty:
 
 Check alias resolution between `receiver_user_id` and the current LIFF `userId` / `point_line_id`.
+
+## Stable bridge contract
+
+Legacy commercial-engine LIFF users and current point-LIFF users must be read as one identity.
+Runtime reads should expand all known aliases before looking up user-owned data:
+
+- `users.line_id`
+- `users.row_id`
+- `users.legacy_line_id`
+- `users.point_line_id`
+- active rows in `user_identity_links`
+
+For business-card reads, use the shared Worker helper `D1ReadModule.cardByIdentity()`.
+Do not reintroduce single-id card lookups such as only `line_id = ? OR creator_id = ?`
+in inbox, point-customer, or referral-placeholder paths.

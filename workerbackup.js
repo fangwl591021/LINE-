@@ -2536,12 +2536,7 @@ const PointModule = {
     const user = matchedUser || (identity && identity.user ? D1ReadModule.userRow(identity.user) : null);
     let card = matchedCard;
     if (env.ACTMASTER_DB && customerPointUserId && !card) {
-      const row = await D1ReadModule.first(env, `
-        SELECT * FROM card_contacts
-        WHERE line_id = ? OR creator_id = ?
-        ORDER BY COALESCE(updated_at, created_at) DESC
-        LIMIT 1
-      `, [customerPointUserId, customerPointUserId]).catch(() => null);
+      const row = await D1ReadModule.cardByIdentity(env, customerPointUserId);
       card = D1ReadModule.cardRow(row);
     }
 
@@ -2566,12 +2561,7 @@ const PointModule = {
     let user = resolved.user;
     let mappedCard = resolved.card;
     if (env.ACTMASTER_DB && !mappedCard && rawCustomerId !== customerPointUserId) {
-      const card = await D1ReadModule.first(env, `
-          SELECT * FROM card_contacts
-          WHERE line_id = ? OR creator_id = ?
-          ORDER BY COALESCE(updated_at, created_at) DESC
-          LIMIT 1
-        `, [rawCustomerId, rawCustomerId]).catch(() => null);
+      const card = await D1ReadModule.cardByIdentity(env, rawCustomerId);
       mappedCard = D1ReadModule.cardRow(card);
     }
     if (env.ACTMASTER_DB && !identity) {
@@ -2579,20 +2569,10 @@ const PointModule = {
       user = identity && identity.user ? D1ReadModule.userRow(identity.user) : user;
     }
     if (env.ACTMASTER_DB && !mappedCard) {
-      const card = await D1ReadModule.first(env, `
-        SELECT * FROM card_contacts
-        WHERE line_id = ? OR creator_id = ?
-        ORDER BY COALESCE(updated_at, created_at) DESC
-        LIMIT 1
-      `, [customerPointUserId, customerPointUserId]).catch(() => null);
+      const card = await D1ReadModule.cardByIdentity(env, customerPointUserId);
       mappedCard = D1ReadModule.cardRow(card);
       if (!card && rawCustomerId !== customerPointUserId) {
-        const fallbackCard = await D1ReadModule.first(env, `
-          SELECT * FROM card_contacts
-          WHERE line_id = ? OR creator_id = ?
-          ORDER BY COALESCE(updated_at, created_at) DESC
-          LIMIT 1
-        `, [rawCustomerId, rawCustomerId]).catch(() => null);
+        const fallbackCard = await D1ReadModule.cardByIdentity(env, rawCustomerId);
         mappedCard = D1ReadModule.cardRow(fallbackCard);
       }
     }
@@ -4126,7 +4106,70 @@ const D1ReadModule = {
       add(link.new_line_id);
       add(link.old_line_id);
     }
+    for (let pass = 0; pass < 2 && ids.length; pass++) {
+      const placeholders = ids.map(() => '?').join(', ');
+      const rows = await this.all(env, `
+        SELECT line_id,row_id,legacy_line_id,point_line_id
+        FROM users
+        WHERE line_id IN (${placeholders})
+           OR row_id IN (${placeholders})
+           OR legacy_line_id IN (${placeholders})
+           OR point_line_id IN (${placeholders})
+        LIMIT 20
+      `, [...ids, ...ids, ...ids, ...ids]).catch(() => []);
+      const before = ids.length;
+      rows.forEach(row => {
+        add(row && row.line_id);
+        add(row && row.row_id);
+        add(row && row.legacy_line_id);
+        add(row && row.point_line_id);
+      });
+      if (ids.length === before) break;
+    }
     return ids;
+  },
+
+  placeholders(values) {
+    return (Array.isArray(values) ? values : []).map(() => '?').join(', ');
+  },
+
+  async cardByIdentity(env, userId, options = {}) {
+    const ids = await this.identityIdsForUser(env, userId).catch(() => [this.text(userId)].filter(Boolean));
+    const safeIds = ids.filter(Boolean);
+    if (!safeIds.length) return null;
+    const placeholders = this.placeholders(safeIds);
+    const rowId = this.text(options.rowId);
+    const excludeRowId = this.text(options.excludeRowId);
+    const sourceType = this.text(options.sourceType);
+    const binds = [...safeIds, ...safeIds, ...safeIds, ...safeIds];
+    let extra = '';
+    if (sourceType) {
+      extra += ' AND source_type = ?';
+      binds.push(sourceType);
+    }
+    if (rowId) {
+      extra += ' AND row_id = ?';
+      binds.push(rowId);
+    }
+    if (excludeRowId) {
+      extra += ' AND row_id <> ?';
+      binds.push(excludeRowId);
+    }
+    return await this.first(env, `
+      SELECT * FROM card_contacts
+      WHERE (
+        line_id IN (${placeholders})
+        OR creator_id IN (${placeholders})
+        OR owner_user_id IN (${placeholders})
+        OR profile_user_id IN (${placeholders})
+      )
+      ${extra}
+      ORDER BY
+        CASE WHEN source_type = 'self_profile' THEN 0 ELSE 1 END,
+        COALESCE(updated_at, created_at) DESC,
+        row_id DESC
+      LIMIT 1
+    `, binds).catch(() => null);
   },
 
   async findUserByIdentity(env, userId) {
@@ -5082,12 +5125,7 @@ const D1WriteModule = {
     await D1ReadModule.ensureCardAccessColumns(env);
 
     const rowId = `REF_${lineId}`;
-    const ownCard = await D1ReadModule.first(env, `
-      SELECT row_id FROM card_contacts
-      WHERE (line_id = ? OR profile_user_id = ? OR creator_id = ?)
-        AND source_type = 'self_profile'
-      LIMIT 1
-    `, [lineId, lineId, lineId]).catch(() => null);
+    const ownCard = await D1ReadModule.cardByIdentity(env, lineId, { sourceType: 'self_profile' });
     if (ownCard) return { skipped: true, reason: 'has_self_profile', rowId: ownCard.row_id };
 
     const existing = await D1ReadModule.first(env, `
@@ -7053,12 +7091,7 @@ const D1InboxModule = {
       card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [cardId]).catch(() => null);
     }
     if (!card && senderId) {
-      card = await D1ReadModule.first(env, `
-        SELECT * FROM card_contacts
-        WHERE line_id = ? OR creator_id = ?
-        ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
-        LIMIT 1
-      `, [senderId, senderId]).catch(() => null);
+      card = await D1ReadModule.cardByIdentity(env, senderId);
     }
     if (senderId) {
       user = await D1ReadModule.first(env, `
@@ -7092,12 +7125,7 @@ const D1InboxModule = {
       const identity = await D1ReadModule.findUserByIdentity(env, receiverId).catch(() => null);
       user = identity && identity.user ? identity.user : null;
       const canonicalId = this.text(identity && identity.canonicalId, receiverId);
-      card = await D1ReadModule.first(env, `
-        SELECT * FROM card_contacts
-        WHERE line_id = ? OR creator_id = ?
-        ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
-        LIMIT 1
-      `, [canonicalId, canonicalId]).catch(() => null);
+      card = await D1ReadModule.cardByIdentity(env, canonicalId);
     }
     return {
       receiverUser: D1ReadModule.userRow(user),

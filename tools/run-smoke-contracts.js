@@ -8,7 +8,8 @@ const foundationChecks = [
   'tools/check-stability-foundation-contract.js',
   'tools/check-route-contract.js',
   'tools/check-identity-diagnostic-contract.js',
-  'tools/check-identity-repair-dry-run-contract.js'
+  'tools/check-identity-repair-dry-run-contract.js',
+  'tools/check-identity-bridge-contract.js'
 ];
 
 const fullChecks = [
