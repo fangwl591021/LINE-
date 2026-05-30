@@ -579,6 +579,44 @@ const Utils = {
 };
 
 // ==================== 模組 2: 圖片處理 (Storage Module) ====================
+// Central feature flag helpers. Keep feature rollout decisions here so risky
+// changes can be disabled by Worker env vars without reverting code.
+const FeatureFlagModule = {
+  enabled(env, name, defaultValue = false) {
+    const key = String(name || '').trim();
+    if (!key) return Boolean(defaultValue);
+    const value = env && Object.prototype.hasOwnProperty.call(env, key) ? env[key] : undefined;
+    if (value === undefined || value === null || value === '') return Boolean(defaultValue);
+    return ['1', 'true', 'yes', 'on', 'enabled'].includes(String(value).trim().toLowerCase());
+  },
+
+  disabled(env, name, defaultValue = false) {
+    return !this.enabled(env, name, defaultValue);
+  },
+
+  value(env, name, defaultValue = '') {
+    const key = String(name || '').trim();
+    if (!key || !env || !Object.prototype.hasOwnProperty.call(env, key)) return defaultValue;
+    const value = env[key];
+    return value === undefined || value === null || value === '' ? defaultValue : value;
+  },
+
+  snapshot(env) {
+    const names = [
+      'FEATURE_HOME_UI_V2',
+      'FEATURE_MY_CARD_KEYWORD',
+      'FEATURE_PUBLIC_MATCHMAKING_POOL',
+      'FEATURE_THIRD_POINT_WEBHOOK',
+      'FEATURE_RELAXED_NEW_USER_AUTH',
+      'FEATURE_LINEOA_MONITOR_V2'
+    ];
+    return names.reduce((acc, name) => {
+      acc[name] = this.enabled(env, name, false);
+      return acc;
+    }, {});
+  }
+};
+
 const StorageModule = {
   async upload(base64Image, env) {
     try {
