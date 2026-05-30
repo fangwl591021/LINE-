@@ -1956,7 +1956,7 @@
   </div>
 </div>
 
-<div id="cropper-modal" class="hidden fixed inset-0 bg-black/90 z-[2000] flex flex-col w-full max-w-md mx-auto left-0 right-0">
+<div id="cropper-modal" class="hidden fixed inset-0 bg-black/90 z-[2300] flex flex-col w-full max-w-md mx-auto left-0 right-0">
   <div class="flex-1 w-full h-full overflow-hidden flex items-center justify-center p-4">
     <img id="cropper-image" class="max-w-full max-h-full">
   </div>
@@ -1966,12 +1966,24 @@
       <button type="button" onclick="window.resetCropperView()" class="h-11 rounded-xl bg-white/10 text-white font-bold active:scale-95">&#37325;&#32622;</button>
       <button type="button" onclick="window.zoomCropper(0.12)" class="h-11 rounded-xl bg-white/10 text-white font-bold active:scale-95">&#25918;&#22823;</button>
     </div>
+    <div class="grid grid-cols-4 gap-2">
+      <button type="button" onclick="window.rotateCropper(-90)" class="h-10 rounded-xl bg-white/10 text-white text-[13px] font-bold active:scale-95">左旋90</button>
+      <button type="button" onclick="window.rotateCropper(90)" class="h-10 rounded-xl bg-white/10 text-white text-[13px] font-bold active:scale-95">右旋90</button>
+      <button type="button" onclick="window.flipCropper('x')" class="h-10 rounded-xl bg-white/10 text-white text-[13px] font-bold active:scale-95">水平鏡像</button>
+      <button type="button" onclick="window.flipCropper('y')" class="h-10 rounded-xl bg-white/10 text-white text-[13px] font-bold active:scale-95">垂直鏡像</button>
+    </div>
+    <div class="grid grid-cols-4 gap-2">
+      <button type="button" onclick="window.setCropperAspectRatio(1)" class="h-10 rounded-xl bg-white/10 text-white text-[13px] font-bold active:scale-95">1:1</button>
+      <button type="button" onclick="window.setCropperAspectRatio(4/3)" class="h-10 rounded-xl bg-white/10 text-white text-[13px] font-bold active:scale-95">4:3</button>
+      <button type="button" onclick="window.setCropperAspectRatio(20/13)" class="h-10 rounded-xl bg-white/10 text-white text-[13px] font-bold active:scale-95">20:13</button>
+      <button type="button" onclick="window.setCropperAspectRatio('free')" class="h-10 rounded-xl bg-white/10 text-white text-[13px] font-bold active:scale-95">自由</button>
+    </div>
     <div class="flex justify-between items-center gap-3"><button onclick="window.cancelCrop()" class="h-11 px-5 rounded-xl bg-white/10 text-white font-bold active:scale-95">&#21462;&#28040;</button>
     <button id="btn-confirm-crop" onclick="window.confirmCrop()" class="h-11 flex-1 bg-[#06C755] text-white font-bold px-6 rounded-xl active:scale-95 transition-transform">&#30906;&#35469;&#35009;&#20999;</button></div>
   </div>
 </div>
 
-<div id="section-image-cropper" class="hidden fixed inset-0 bg-slate-900 flex flex-col animate-in fade-in duration-200 w-full max-w-md mx-auto z-[2000]">
+<div id="section-image-cropper" class="hidden fixed inset-0 bg-slate-900 flex flex-col animate-in fade-in duration-200 w-full max-w-md mx-auto z-[2300]">
   <div class="flex justify-between items-center p-4 bg-slate-900 text-white shrink-0 z-10 shadow-sm border-b border-slate-800">
     <button onclick="window.cancelActiveCrop()" class="px-3 py-2 font-bold text-slate-400 active:scale-90 transition-transform text-[15px]">取消</button>
     <span class="font-bold text-[16px] tracking-wider text-white flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px]">crop</span> 裁切圖片</span>
@@ -1990,10 +2002,10 @@
 <!-- ocr-lab route: ocr-lab.html -->
 <script src="js/core.js?v=7.24"></script>
 <script src="js/navigation.js?v=7.7"></script>
-<script src="js/modules/cropper.js?v=7.12"></script>
+<script src="js/modules/cropper.js?v=7.13"></script>
 <script src="js/modules/cards.js?v=7.5"></script>
 <script src="js/modules/ecard.js?v=7.35"></script>
-<script src="js/modules/mycard.js?v=8.42"></script>
+<script src="js/modules/mycard.js?v=8.43"></script>
 <script src="js/modules/matchmake.js?v=7.8"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>

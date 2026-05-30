@@ -65,6 +65,50 @@ window.resetCropperView = function(scope) {
   }
 };
 
+const cropperFlipState = { default: { x: 1, y: 1 }, active: { x: 1, y: 1 } };
+
+function cropperStateKey(scope) {
+  return scope === 'active' ? 'active' : 'default';
+}
+
+window.rotateCropper = function(degrees, scope) {
+  const instance = getCropperByScope(scope);
+  if (!instance) return;
+  try {
+    instance.rotate(Number(degrees) || 0);
+  } catch (e) {
+    console.warn('[rotateCropper] failed:', e);
+  }
+};
+
+window.flipCropper = function(axis, scope) {
+  const instance = getCropperByScope(scope);
+  if (!instance) return;
+  const key = cropperStateKey(scope);
+  try {
+    if (axis === 'y') {
+      cropperFlipState[key].y *= -1;
+      instance.scaleY(cropperFlipState[key].y);
+    } else {
+      cropperFlipState[key].x *= -1;
+      instance.scaleX(cropperFlipState[key].x);
+    }
+  } catch (e) {
+    console.warn('[flipCropper] failed:', e);
+  }
+};
+
+window.setCropperAspectRatio = function(ratio, scope) {
+  const instance = getCropperByScope(scope);
+  if (!instance) return;
+  const nextRatio = ratio === null || ratio === undefined || ratio === 'free' ? NaN : Number(ratio);
+  try {
+    instance.setAspectRatio(Number.isNaN(nextRatio) ? NaN : nextRatio);
+  } catch (e) {
+    console.warn('[setCropperAspectRatio] failed:', e);
+  }
+};
+
 window.cancelCrop = function() {
   const modal = document.getElementById('cropper-modal');
   if (modal) {
@@ -75,6 +119,7 @@ window.cancelCrop = function() {
     cropperInstance.destroy();
     cropperInstance = null;
   }
+  cropperFlipState.default = { x: 1, y: 1 };
   const img = document.getElementById('cropper-image');
   if (img) img.src = '';
 };
@@ -738,6 +783,7 @@ window.uploadCustomImageToR2 = function(inputEl, targetInputId, forcedRatio = nu
       }
 
       if (cropperInstance) cropperInstance.destroy();
+      cropperFlipState.default = { x: 1, y: 1 };
       setTimeout(() => {
         cropperInstance = createSafeCropper(img, uploadRatio);
       }, 150);

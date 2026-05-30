@@ -93,6 +93,59 @@
       .slice(0, 4);
   }
 
+  function parseMyCardSocials(raw) {
+    var value = raw;
+    if (!value) return [];
+    if (typeof value === 'string') {
+      try {
+        value = JSON.parse(value);
+      } catch (e) {
+        return [{ t: 'LINE', u: value }];
+      }
+    }
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') {
+      return Object.keys(value).map(function(key) {
+        var item = value[key];
+        if (item && typeof item === 'object') return Object.assign({ t: key }, item);
+        return { t: key, u: item };
+      });
+    }
+    return [];
+  }
+
+  function lineUrlFromMyCard(card) {
+    var socials = parseMyCardSocials(readCardValue(card, ['socials', 'socials_json', '\u793e\u7fa4\u5e33\u865f']));
+    for (var i = 0; i < socials.length; i++) {
+      var item = socials[i] || {};
+      var type = String(item.t || item.type || item.platform || item.name || '').toLowerCase();
+      var url = String(item.u || item.url || item.uri || item.value || item.link || '').trim();
+      if (!url) continue;
+      if (type.indexOf('line') >= 0 || /^https?:\/\/(line\.me|lin\.ee)\//i.test(url) || /^line:\/\//i.test(url)) return url;
+    }
+    var website = String(readCardValue(card, ['website', 'companyUrl', '\u516c\u53f8\u7db2\u5740']) || '').trim();
+    if (/^https?:\/\/(line\.me|lin\.ee)\//i.test(website) || /^line:\/\//i.test(website)) return website;
+    return '';
+  }
+
+  function mapUrlFromMyCardAddress(address) {
+    var value = String(address || '').trim();
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(value);
+  }
+
+  function autoMyCardButtons(card) {
+    var buttons = [];
+    var lineUrl = lineUrlFromMyCard(card);
+    var phone = String(readCardValue(card, ['mobile', 'phone', 'officePhone', 'office_phone', '\u624b\u6a5f\u865f\u78bc', '\u624b\u6a5f']) || '').replace(/[^0-9+]/g, '');
+    var addressUrl = mapUrlFromMyCardAddress(readCardValue(card, ['address', '\u5730\u5740']));
+    if (lineUrl) buttons.push({ l: '\u52a0LINE\u597d\u53cb', u: lineUrl, c: '#06C755' });
+    if (phone) buttons.push({ l: '\u884c\u52d5\u96fb\u8a71', u: 'tel:' + phone, c: '#3B82F6' });
+    if (addressUrl) buttons.push({ l: '\u5e97\u5bb6\u5730\u5740', u: addressUrl, c: '#1E293B' });
+    return buttons.slice(0, 4);
+  }
+
   function readCardValue(card, keys) {
     var source = card || {};
     for (var i = 0; i < keys.length; i++) {
@@ -793,6 +846,8 @@
     cfg.buttons = Array.isArray(myEcardButtons) && myEcardButtons.length
       ? normalizeMyCardButtons(myEcardButtons)
       : normalizeMyCardButtons(Array.isArray(cfg.buttons) ? cfg.buttons : cfg.footerBtns);
+    if (!cfg.buttons.length) cfg.buttons = autoMyCardButtons(currentCardData);
+    myEcardButtons = cfg.buttons.slice();
     return cfg;
   }
 
@@ -1266,6 +1321,7 @@
       if (window.showToast) window.showToast('找不到圖片上傳元件', true);
       return;
     }
+    closeMyCardWysiwygEditor();
     input.click();
   }
 
