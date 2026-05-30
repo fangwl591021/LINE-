@@ -1561,8 +1561,6 @@ const LineOAChatModule = {
       await saveJob;
       await forwardJob;
     }
-    const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);
-    if (referralFriendReplied) return new Response('OK', { status: 200 });
     const simpleMyCardReplied = await this.replySimpleMyCard(events, env);
     if (simpleMyCardReplied) return new Response('OK', { status: 200 });
     const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);
@@ -1985,126 +1983,6 @@ const LineOAChatModule = {
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
       });
     }
-  }
-};
-
-const ReferralFriendKeywordModule = {
-  text(value, fallback = '') {
-    const next = String(value ?? '').trim();
-    return next || fallback;
-  },
-
-  isKeyword(event) {
-    const message = event && event.message ? event.message : {};
-    if (message.type !== 'text') return false;
-    const text = this.text(message.text).replace(/\s+/g, '');
-    return text === '\u63a8\u85a6\u597d\u53cb';
-  },
-
-  async resolveContext(env, userId) {
-    const id = this.text(userId);
-    const identity = id && env.ACTMASTER_DB
-      ? await D1ReadModule.findUserByIdentity(env, id).catch(() => null)
-      : null;
-    const row = identity && identity.user ? identity.user : null;
-    const referrerId = this.text(
-      row && row.point_line_id,
-      this.text(identity && identity.canonicalId, this.text(row && row.line_id, id))
-    );
-    const role = SecurityModule.sanitizeRole(referrerId, row && row.role, row || {});
-    const networkId = this.text(
-      row && row.network_id,
-      SecurityModule.effectiveNetworkId(referrerId, role, row || {})
-    ) || 'admin';
-    const storeId = this.text(row && row.store_id);
-    return {
-      referrerId,
-      networkId,
-      tracking: (storeId ? storeId + '_' : '') + referrerId.substring(0, 10),
-      displayName: this.text(row && row.name, 'LINE \u597d\u53cb')
-    };
-  },
-
-  buildInviteUrl(context, env) {
-    const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
-    const params = new URLSearchParams({
-      ref: context.referrerId,
-      net: context.networkId || 'admin',
-      via: context.tracking,
-      point_friend: '1',
-      point_from: 'lineoa-referral-keyword',
-      from: 'business-engine'
-    });
-    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
-  },
-
-  buildLineShareUrl(inviteUrl, context) {
-    const text = `${context.displayName} \u9080\u8acb\u4f60\u52a0\u5165\u9ede\u6578\u901a\n${inviteUrl}`;
-    return `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
-  },
-
-  buildMessage(inviteUrl, context) {
-    const qrUrl = 'https://quickchart.io/qr?text=' + encodeURIComponent(inviteUrl) + '&size=360&margin=2';
-    return {
-      type: 'flex',
-      altText: '\u63a8\u85a6\u597d\u53cb\u5c08\u5c6c QR',
-      contents: {
-        type: 'bubble',
-        size: 'micro',
-        body: {
-          type: 'box',
-          layout: 'vertical',
-          paddingAll: '10px',
-          spacing: 'sm',
-          contents: [
-            {
-              type: 'text',
-              text: '\u5c08\u5c6c QR',
-              size: 'sm',
-              weight: 'bold',
-              align: 'center',
-              color: '#1F2937'
-            },
-            {
-              type: 'image',
-              url: qrUrl,
-              size: 'full',
-              aspectRatio: '1:1',
-              aspectMode: 'fit',
-              action: { type: 'uri', uri: inviteUrl }
-            },
-            {
-              type: 'button',
-              style: 'primary',
-              height: 'sm',
-              color: '#EC4899',
-              action: {
-                type: 'uri',
-                label: '\u5206\u4eab',
-                uri: this.buildLineShareUrl(inviteUrl, context)
-              }
-            }
-          ]
-        }
-      }
-    };
-  },
-
-  async reply(events, env) {
-    for (const event of Array.isArray(events) ? events : []) {
-      if (!this.isKeyword(event)) continue;
-      const replyToken = this.text(event.replyToken);
-      const userId = LineOAChatModule.eventUserId(event);
-      if (!replyToken || !userId) continue;
-      const context = await this.resolveContext(env, userId);
-      if (!context.referrerId) continue;
-      const inviteUrl = this.buildInviteUrl(context, env);
-      const message = this.buildMessage(inviteUrl, context);
-      const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
-      if (!result.success) console.error('Referral friend keyword reply failed', result);
-      return true;
-    }
-    return false;
   }
 };
 // ==================== Point Service Module ====================
