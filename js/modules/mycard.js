@@ -164,6 +164,19 @@
     return checked ? checked.value : 'landscape';
   }
 
+  function layoutFromImageRatio(ratio, fallback) {
+    var text = String(ratio || '').trim();
+    if (text === '1:1' || text === '1/1') return 'square';
+    if (text === '400:600' || text === '400/600' || text === '2:3' || text === '2/3') return 'portrait';
+    if (text === '20:13' || text === '20/13') return 'landscape';
+    return fallback || getLayout();
+  }
+
+  function selectMyECardLayout(layout) {
+    var target = $('input[name="my-ecard-layout"][value="' + layout + '"]');
+    if (target) target.checked = true;
+  }
+
   function syncCurrentImageInput() {
     var imgInput = $('#my-v1-img-url');
     if (!imgInput) return;
@@ -749,19 +762,24 @@
   }
 
   function setMyUploadImage(url, ratio) {
-    var layout = getLayout();
+    var layout = ratio ? layoutFromImageRatio(ratio, getLayout()) : getLayout();
     var cleanUrl = String(url || '').trim();
     if (!cleanUrl) return;
 
+    selectMyECardLayout(layout);
     myEcardImgs[layout] = cleanUrl;
     if (ratio) myEcardRatios[layout] = String(ratio).replace(':', '/');
 
     var imgInput = $('#my-v1-img-url');
     if (imgInput) imgInput.value = cleanUrl;
     if (wysiwygState.cfg && !document.getElementById('my-card-wysiwyg-modal')?.classList.contains('hidden')) {
+      wysiwygState.cfg.layoutStyle = layout;
       if (layout === 'portrait') wysiwygState.cfg.imgUrlPortrait = cleanUrl;
       else if (layout === 'square') wysiwygState.cfg.imgUrlSquare = cleanUrl;
       else wysiwygState.cfg.imgUrl = cleanUrl;
+      if (layout === 'portrait') wysiwygState.cfg.imgRatioPortrait = String(ratio || '400:600').replace('/', ':');
+      else if (layout === 'square') wysiwygState.cfg.imgRatioSquare = '1:1';
+      else wysiwygState.cfg.imgRatioLandscape = '20:13';
       writeCurrentCardConfig(wysiwygState.cfg);
       renderMyCardWysiwyg();
       var wysiwygImageInput = document.getElementById('my-wysiwyg-image-input');

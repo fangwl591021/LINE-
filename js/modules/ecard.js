@@ -608,9 +608,24 @@ window.changeOtherLayout = function() {
   window.updateECardPreview();
 };
 
+function ecardLayoutFromImageRatio(ratio, fallback) {
+    const text = String(ratio || '').trim();
+    if (text === '1:1' || text === '1/1') return 'square';
+    if (text === '400:600' || text === '400/600' || text === '2:3' || text === '2/3') return 'portrait';
+    if (text === '20:13' || text === '20/13') return 'landscape';
+    return fallback || 'landscape';
+}
+
+function selectOtherECardLayout(layout) {
+    const target = document.querySelector('input[name="ecard-layout"][value="' + layout + '"]');
+    if (target) target.checked = true;
+}
+
 window.setOtherUploadImage = function(url, ratio) {
-    const layoutStyle = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
+    const currentLayout = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
+    const layoutStyle = ratio ? ecardLayoutFromImageRatio(ratio, currentLayout) : currentLayout;
     const cleanUrl = cleanECardFlexImageUrl(url);
+    selectOtherECardLayout(layoutStyle);
     window.currentEcardImgs[layoutStyle] = cleanUrl || url;
     if (ratio) window.currentEcardRatios[layoutStyle] = ratio.replace(':', '/');
     const imgInput = document.getElementById('v1-img-url');
