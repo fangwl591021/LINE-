@@ -947,11 +947,31 @@ const LineOAChatModule = {
   quickMyCardUrl(userId, env) {
     const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
     const params = new URLSearchParams({
-      quickly: '1',
-      mode: 'my-card'
+      mode: 'wysiwyg-card'
     });
     if (userId) params.set('lineUserId', userId);
     return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  },
+
+  showMyCardPostback(rowId = '') {
+    const params = new URLSearchParams({ action: 'lineoa_mycard_show' });
+    if (rowId) params.set('rowId', this.text(rowId));
+    return params.toString();
+  },
+
+  myCardQuickReplyItems(userId, env, rowId = '') {
+    return [{
+      type: 'action',
+      action: { type: 'uri', label: '編輯名片', uri: this.quickMyCardUrl(userId, env) }
+    }, {
+      type: 'action',
+      action: {
+        type: 'postback',
+        label: '顯示名片',
+        data: this.showMyCardPostback(rowId),
+        displayText: '我的名片'
+      }
+    }];
   },
 
   cardShareUrl(rowId, userId, networkId, env, shareMode = false) {
@@ -1135,10 +1155,7 @@ const LineOAChatModule = {
       type: 'flex',
       altText: `${card.name || '我的名片'} 的電子名片`,
       quickReply: {
-        items: [{
-          type: 'action',
-          action: { type: 'uri', label: '編輯名片', uri: editUrl }
-        }]
+        items: this.myCardQuickReplyItems(userId, env, card.rowId)
       },
       contents: flex
     };
@@ -1169,10 +1186,7 @@ const LineOAChatModule = {
       type: 'flex',
       altText: '選擇我的名片',
       quickReply: {
-        items: [{
-          type: 'action',
-          action: { type: 'uri', label: '編輯名片', uri: editUrl }
-        }]
+        items: this.myCardQuickReplyItems(userId, env)
       },
       contents: {
         type: 'bubble',
@@ -1201,6 +1215,15 @@ const LineOAChatModule = {
     return this.text(params.get('rowId'));
   },
 
+  myCardShowPostbackRowId(event) {
+    if (event?.type !== 'postback') return null;
+    const data = this.text(event?.postback?.data);
+    if (!data) return null;
+    const params = new URLSearchParams(data);
+    if (params.get('action') !== 'lineoa_mycard_show') return null;
+    return this.text(params.get('rowId'));
+  },
+
   buildSimpleMyCardFlex(profile, userId, env) {
     const name = this.text(profile?.displayName, '我的名片');
     const avatarUrl = this.text(profile?.pictureUrl);
@@ -1222,10 +1245,7 @@ const LineOAChatModule = {
       type: 'flex',
       altText: `${name} 的電子名片`,
       quickReply: {
-        items: [{
-          type: 'action',
-          action: { type: 'uri', label: '編輯名片', uri: editUrl }
-        }]
+        items: this.myCardQuickReplyItems(userId, env)
       },
       contents: {
         type: 'bubble',
@@ -1316,8 +1336,9 @@ const LineOAChatModule = {
   async replySimpleMyCard(events, env) {
     for (const event of events) {
       const selectedRowId = this.myCardPostbackRowId(event);
+      const showRowId = this.myCardShowPostbackRowId(event);
       const isKeyword = this.isSimpleMyCardKeyword(event);
-      if (!isKeyword && !selectedRowId) continue;
+      if (!isKeyword && !selectedRowId && showRowId === null) continue;
       const replyToken = this.text(event.replyToken);
       const userId = this.eventUserId(event);
       if (!replyToken || !userId) continue;
@@ -1327,6 +1348,17 @@ const LineOAChatModule = {
           await this.findMySelfCardByRowId(env, userId, selectedRowId)
         ]).filter(Boolean)[0];
         message = selectedCard ? this.buildExistingMyCardFlex(selectedCard, userId, env) : null;
+      } else if (showRowId !== null) {
+        const cards = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
+        const selectedCard = showRowId
+          ? cards.find(row => this.text(row.row_id) === showRowId)
+          : cards[0];
+        if (selectedCard) {
+          message = this.buildExistingMyCardFlex(selectedCard, userId, env);
+        } else {
+          const profile = await this.fetchProfile(env, userId);
+          message = this.buildSimpleMyCardFlex(profile, userId, env);
+        }
       } else {
         const profile = await this.fetchProfile(env, userId);
         const existingCards = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
