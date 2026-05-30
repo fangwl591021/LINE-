@@ -2865,6 +2865,266 @@ const PointModule = {
   }
 };
 
+const ThirdPointWebhookModule = {
+  text(value) {
+    return String(value ?? '').trim();
+  },
+
+  pick(source, keys) {
+    if (!source || typeof source !== 'object') return '';
+    for (const key of keys) {
+      const value = source[key];
+      if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+    }
+    return '';
+  },
+
+  async handle(request, env) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type,Authorization,x-webhook-secret,x-point-webhook-secret'
+        }
+      });
+    }
+
+    if (request.method === 'GET') {
+      return Utils.jsonResponse({
+        success: true,
+        service: 'third_point_webhook',
+        lineWebhook: '/line-webhook',
+        pointWebhook: '/point-webhook',
+        compatiblePath: '/webhook/points',
+        auth: 'Authorization: Bearer POINT_WEBHOOK_SECRET',
+        actions: ['bind', 'query', 'grant', 'deduct', 'adjust']
+      });
+    }
+
+    if (request.method !== 'POST') {
+      return Utils.jsonResponse({ success: false, error: 'Method Not Allowed' }, 405);
+    }
+
+    const auth = this.verifySecret(request, env);
+    if (!auth.ok) return Utils.jsonResponse({ success: false, error: auth.error }, auth.status);
+
+    let payload = {};
+    try {
+      payload = await request.json();
+    } catch (err) {
+      return Utils.jsonResponse({ success: false, error: 'Invalid JSON payload' }, 400);
+    }
+
+    const context = await this.normalizePayload(payload, env);
+    let result;
+    try {
+      result = await this.dispatch(context, payload, env);
+    } catch (err) {
+      result = { success: false, error: err && err.message ? err.message : String(err) };
+    }
+
+    await this.logRequest(env, context, payload, result).catch(err => {
+      console.error('third point webhook log failed', err && err.message ? err.message : err);
+    });
+
+    return Utils.jsonResponse(result, result && result.success === false ? 400 : 200);
+  },
+
+  verifySecret(request, env) {
+    const secret = this.text(env.POINT_WEBHOOK_SECRET || env.THIRD_SYSTEM_WEBHOOK_SECRET);
+    if (!secret) return { ok: false, status: 500, error: 'Missing POINT_WEBHOOK_SECRET' };
+    const bearer = this.text(request.headers.get('authorization')).replace(/^Bearer\s+/i, '');
+    const headerSecret = this.text(request.headers.get('x-point-webhook-secret') || request.headers.get('x-webhook-secret'));
+    if (bearer === secret || headerSecret === secret) return { ok: true };
+    return { ok: false, status: 401, error: 'Invalid webhook secret' };
+  },
+
+  async normalizePayload(payload, env) {
+    const member = payload.member && typeof payload.member === 'object' ? payload.member : {};
+    const action = this.text(payload.action || payload.type || payload.event || 'query').toLowerCase();
+    const provider = this.text(payload.provider || payload.sourceSystem || payload.source || member.provider || 'third_system');
+    const externalUserId = this.pick(member, ['externalUserId', 'external_id', 'memberId', 'member_id']) ||
+      this.pick(payload, ['externalUserId', 'external_id', 'memberId', 'member_id']);
+    const lineUserId = this.pick(member, ['lineUserId', 'LINE_user_id', 'lineId', 'userId', 'uid']) ||
+      this.pick(payload, ['lineUserId', 'LINE_user_id', 'lineId', 'userId', 'uid']);
+    const pointUserId = this.pick(member, ['pointUserId', 'point_line_id', 'pt_uid']) ||
+      this.pick(payload, ['pointUserId', 'point_line_id', 'pt_uid']);
+    const phone = this.pick(member, ['phone', 'mobile']) || this.pick(payload, ['phone', 'mobile']);
+    const name = this.pick(member, ['name', 'displayName']) || this.pick(payload, ['name', 'displayName']);
+    const rawUserId = pointUserId || lineUserId || externalUserId;
+
+    let canonicalId = rawUserId;
+    let resolvedPointUserId = pointUserId || lineUserId || '';
+    if (env.ACTMASTER_DB && rawUserId) {
+      const identity = await D1ReadModule.findUserByIdentity(env, rawUserId).catch(() => null);
+      const row = identity && identity.user;
+      canonicalId = this.text(identity && identity.canonicalId) || this.text(row && row.line_id) || rawUserId;
+      resolvedPointUserId = this.text(row && row.point_line_id) || pointUserId || canonicalId || lineUserId;
+    }
+
+    return {
+      action,
+      provider,
+      externalUserId,
+      lineUserId,
+      pointUserId: resolvedPointUserId,
+      canonicalId,
+      phone,
+      name,
+      points: Number(payload.points ?? payload.get_point ?? payload.amount ?? 0) || 0,
+      pointType: this.text(payload.pointType || payload.point_type || 'gift_money'),
+      eventName: this.text(payload.eventName || payload.event_name || provider + ' point webhook'),
+      eventContent: this.text(payload.eventContent || payload.event_content || payload.memo || payload.note || ''),
+      referenceId: this.text(payload.referenceId || payload.reference_id || payload.orderId || payload.order_id || payload.id || ''),
+      shopId: payload.shop_id || payload.shopId || ''
+    };
+  },
+
+  async dispatch(context, payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+
+    if (['ping', 'health'].includes(context.action)) {
+      return { success: true, data: { status: 'ok', provider: context.provider } };
+    }
+
+    if (context.action === 'bind') {
+      return await this.bindMember(context, env);
+    }
+
+    const targetPointUserId = context.pointUserId || context.canonicalId || context.lineUserId;
+    if (!targetPointUserId) return { success: false, error: 'Missing member identity' };
+
+    if (context.action === 'query') {
+      return await PointModule.queryUserPoints({
+        pointUserId: targetPointUserId,
+        point_type: context.pointType,
+        page: payload.page || 1
+      }, env);
+    }
+
+    const debitActions = new Set(['deduct', 'redeem', 'subtract', 'debit']);
+    const creditActions = new Set(['grant', 'add', 'reward', 'credit']);
+    const signedActions = new Set(['adjust', 'transaction']);
+    if (!debitActions.has(context.action) && !creditActions.has(context.action) && !signedActions.has(context.action)) {
+      return { success: false, error: 'Unsupported action: ' + context.action };
+    }
+
+    let points = Number(context.points || 0) || 0;
+    if (!points) return { success: false, error: 'Missing point amount' };
+    if (debitActions.has(context.action)) points = -Math.abs(points);
+    if (creditActions.has(context.action)) points = Math.abs(points);
+
+    const result = await PointModule.insertUserPoint({
+      userId: targetPointUserId,
+      points,
+      pointType: context.pointType,
+      eventName: context.eventName,
+      eventContent: context.eventContent || `${context.provider}:${context.referenceId || context.action}`,
+      shop_id: context.shopId,
+      shop_remark: [context.provider, context.referenceId].filter(Boolean).join(':')
+    }, env);
+
+    return {
+      success: result && result.success !== false,
+      data: {
+        provider: context.provider,
+        action: context.action,
+        lineUserId: context.lineUserId,
+        pointUserId: targetPointUserId,
+        points,
+        pointType: context.pointType,
+        referenceId: context.referenceId,
+        pointResult: result
+      },
+      error: result && result.success === false ? result.error : undefined
+    };
+  },
+
+  async bindMember(context, env) {
+    const lineId = context.lineUserId || context.pointUserId || context.canonicalId;
+    if (!lineId) return { success: false, error: 'Missing LINE user id for bind' };
+    await D1WriteModule.upsertUser({
+      userId: lineId,
+      name: context.name,
+      phone: context.phone,
+      role: 'user'
+    }, env);
+    const pointLineId = context.pointUserId || lineId;
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE users
+      SET point_line_id = COALESCE(NULLIF(?, ''), point_line_id),
+          legacy_line_id = CASE WHEN line_id <> ? THEN COALESCE(NULLIF(legacy_line_id, ''), line_id) ELSE legacy_line_id END,
+          identity_source = COALESCE(NULLIF(identity_source, ''), ?),
+          migrated_at = COALESCE(migrated_at, CURRENT_TIMESTAMP)
+      WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
+    `).bind(pointLineId, pointLineId, context.provider, lineId, lineId, pointLineId, lineId).run().catch(() => null);
+    await D1WriteModule.clearUserCache(env, lineId).catch(() => null);
+    return {
+      success: true,
+      data: {
+        provider: context.provider,
+        lineUserId: lineId,
+        pointUserId: pointLineId,
+        externalUserId: context.externalUserId
+      }
+    };
+  },
+
+  async ensureLogTable(env) {
+    if (!env.ACTMASTER_DB) return false;
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS third_point_webhook_logs (
+        log_id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL DEFAULT '',
+        action TEXT NOT NULL DEFAULT '',
+        external_user_id TEXT NOT NULL DEFAULT '',
+        line_user_id TEXT NOT NULL DEFAULT '',
+        point_user_id TEXT NOT NULL DEFAULT '',
+        points REAL NOT NULL DEFAULT 0,
+        point_type TEXT NOT NULL DEFAULT 'gift_money',
+        reference_id TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT '',
+        request_json TEXT NOT NULL DEFAULT '{}',
+        response_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_third_point_webhook_provider_time
+      ON third_point_webhook_logs(provider, created_at)
+    `).run();
+    return true;
+  },
+
+  async logRequest(env, context, requestPayload, responsePayload) {
+    if (!env.ACTMASTER_DB) return;
+    await this.ensureLogTable(env);
+    const logId = `TPW_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO third_point_webhook_logs (
+        log_id, provider, action, external_user_id, line_user_id, point_user_id,
+        points, point_type, reference_id, status, request_json, response_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      logId,
+      context.provider,
+      context.action,
+      context.externalUserId,
+      context.lineUserId,
+      context.pointUserId,
+      context.points,
+      context.pointType,
+      context.referenceId,
+      responsePayload && responsePayload.success === false ? 'failed' : 'success',
+      JSON.stringify(requestPayload || {}),
+      JSON.stringify(responsePayload || {})
+    ).run();
+  }
+};
+
 const AIModule = {
   normalizeClientOpenAIKey(key) {
     const value = String(key || '').trim();
@@ -9959,6 +10219,9 @@ export default {
         const authz = await SecurityModule.authorizeAction('uploadLineOAAsset', payload, request, env);
         if (!authz.allowed) return Utils.jsonResponse({ success: false, error: authz.error || 'Access Denied' }, 403);
         return Utils.jsonResponse(await LineOAChatModule.uploadAsset(payload, env));
+      }
+      if (url.pathname === '/point-webhook' || url.pathname === '/webhook/points') {
+        return await ThirdPointWebhookModule.handle(request, env);
       }
       if (url.pathname === '/webhook/line' || url.pathname === '/line-webhook') {
         return await LineOAChatModule.handleWebhook(request, env, ctx || { waitUntil: promise => promise });
