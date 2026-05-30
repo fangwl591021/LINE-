@@ -5199,6 +5199,11 @@ const D1WriteModule = {
     if (!user) return { success: false, error: 'Missing userId' };
     const data = payload.data || payload.profile || payload;
     const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [user.line_id, user.line_id]);
+    const hasReferrerInput = ['referrerId', 'referrer_id', '?刻鈭?'].some(key => data && data[key] !== undefined && data[key] !== null);
+    const canOverrideReferrer = SecurityModule.normalizeRole(payload.authenticatedRole || '') === 'admin'
+      && hasReferrerInput
+      && user.referrer_id
+      && user.referrer_id !== user.line_id;
     const hasRoleInput = ['role', '權限級別'].some(key => data && data[key] !== undefined && data[key] !== null && String(data[key]).trim() !== '');
     if (existing) {
       ['name','industry','gender','phone','birthday','region','address','socials','store_id','referrer_id','network_id','tg_token','tg_chat_id'].forEach(key => {
@@ -5222,7 +5227,7 @@ const D1WriteModule = {
           user[key] = existing[key] || '';
         });
       }
-      if (existing.referrer_id && String(existing.referrer_id).trim()) {
+      if (existing.referrer_id && String(existing.referrer_id).trim() && !canOverrideReferrer) {
         user.referrer_id = existing.referrer_id;
         user.network_id = existing.network_id || user.network_id;
       }
