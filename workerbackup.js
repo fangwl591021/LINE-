@@ -1706,7 +1706,7 @@ const LineOAChatModule = {
       await saveJob;
       await forwardJob;
     }
-    const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env);
+    const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);
     if (cardCoolReplied) return new Response('OK', { status: 200 });
     const simpleMyCardReplied = await this.replySimpleMyCard(events, env);
     if (simpleMyCardReplied) return new Response('OK', { status: 200 });
@@ -2254,7 +2254,9 @@ const ReferralFriendKeywordModule = {
 
 const LineOACardCoolKeywordModule = {
   statePrefix: 'lineoa:cardcool:',
+  reviewPrefix: 'lineoa:cardcool:review:',
   ttlSeconds: 900,
+  reviewTtlSeconds: 86400,
 
   text(value, fallback = '') {
     return String(value ?? '').trim() || fallback;
@@ -2262,6 +2264,10 @@ const LineOACardCoolKeywordModule = {
 
   stateKey(userId) {
     return this.statePrefix + this.text(userId);
+  },
+
+  reviewKey(jobId) {
+    return this.reviewPrefix + this.text(jobId);
   },
 
   isKeyword(event) {
@@ -2305,6 +2311,107 @@ const LineOACardCoolKeywordModule = {
   async clearState(env, userId) {
     if (!env.ACTMASTER_KV || !userId) return;
     await env.ACTMASTER_KV.delete(this.stateKey(userId)).catch(() => {});
+  },
+
+  async startLoadingAnimation(userId, env, loadingSeconds = 20) {
+    if (!env.LINE_CHANNEL_ACCESS_TOKEN || !userId) return false;
+    try {
+      const res = await fetch('https://api.line.me/v2/bot/chat/loading/start', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ chatId: userId, loadingSeconds })
+      });
+      return res.ok;
+    } catch (e) {
+      console.error('Card cool loading animation failed', e);
+      return false;
+    }
+  },
+
+  async pushLine(userId, messages, env) {
+    if (!env.LINE_CHANNEL_ACCESS_TOKEN || !userId || !Array.isArray(messages) || !messages.length) {
+      return { success: false, error: 'Missing LINE push payload' };
+    }
+    try {
+      const res = await fetch('https://api.line.me/v2/bot/message/push', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ to: userId, messages })
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? { success: true, data } : { success: false, status: res.status, error: data.message || 'LINE push failed' };
+    } catch (e) {
+      return { success: false, error: e.message || String(e) };
+    }
+  },
+
+  buildReviewUrl(jobId, env) {
+    const liffId = env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y';
+    const params = new URLSearchParams({ mode: 'cardcool-review', jobId: this.text(jobId) });
+    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  },
+
+  buildReviewMessage(jobId, data, env) {
+    const name = this.text(data?.name || data?.companyName || '名片資料');
+    return {
+      type: 'template',
+      altText: '名片解析完成，請核對資料',
+      template: {
+        type: 'buttons',
+        title: '名片解析完成',
+        text: `${name} 的資料已解析完成，請核對後送出建立名片。`,
+        actions: [{ type: 'uri', label: '核對名片資料', uri: this.buildReviewUrl(jobId, env) }]
+      }
+    };
+  },
+
+  async saveReviewDraft(env, draft) {
+    if (!env.ACTMASTER_KV) throw new Error('Missing ACTMASTER_KV');
+    const jobId = draft.jobId || (crypto.randomUUID ? crypto.randomUUID() : `JOB_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+    const payload = { ...draft, jobId, status: draft.status || 'ready', updatedAt: new Date().toISOString() };
+    await env.ACTMASTER_KV.put(this.reviewKey(jobId), JSON.stringify(payload), { expirationTtl: this.reviewTtlSeconds });
+    return payload;
+  },
+
+  async loadReviewDraft(env, jobId) {
+    if (!env.ACTMASTER_KV || !jobId) return null;
+    const raw = await env.ACTMASTER_KV.get(this.reviewKey(jobId)).catch(() => '');
+    if (!raw) return null;
+    try {
+      const draft = JSON.parse(raw);
+      return draft && typeof draft === 'object' ? draft : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async getReviewDraft(payload, env) {
+    const jobId = this.text(payload.jobId);
+    const userId = this.text(payload.userId);
+    const draft = await this.loadReviewDraft(env, jobId);
+    if (!draft) return { success: false, error: '名片核對資料已失效，請重新上傳名片。' };
+    if (this.text(draft.userId) && userId && this.text(draft.userId) !== userId) {
+      return { success: false, error: 'Access Denied: draft owner mismatch' };
+    }
+    return { success: true, data: { jobId, card: draft.card || {}, uploadedUrls: draft.uploadedUrls || [], status: draft.status || 'ready' } };
+  },
+
+  mergeReviewedCard(draftCard, reviewedCard) {
+    const source = reviewedCard && typeof reviewedCard === 'object' ? reviewedCard : {};
+    const merged = { ...(draftCard || {}) };
+    [
+      'name','englishName','companyName','title','department','mobile','officePhone',
+      'email','website','address','services','tags'
+    ].forEach(key => {
+      if (Object.prototype.hasOwnProperty.call(source, key)) merged[key] = this.text(source[key]);
+    });
+    return merged;
   },
 
   buildSidesMessage() {
@@ -2439,7 +2546,56 @@ const LineOACardCoolKeywordModule = {
     return { success: true, card: saved.data };
   },
 
-  async reply(events, env) {
+  async processImagesAndPushReview(userId, imageInputs, env) {
+    try {
+      const images = [];
+      for (const input of Array.isArray(imageInputs) ? imageInputs : []) {
+        if (!input) continue;
+        if (String(input).startsWith('data:')) images.push(input);
+        else images.push(await this.fetchLineImageDataUri(env, input));
+      }
+      if (!images.length) throw new Error('Missing image data');
+      const ocr = await AIModule.recognizeBusinessCardImages({ base64Images: images }, env);
+      if (!ocr.success) throw new Error(ocr.error || '??????');
+      const jobId = crypto.randomUUID ? crypto.randomUUID() : `JOB_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const draft = await this.saveReviewDraft(env, {
+        jobId,
+        userId,
+        card: ocr.data || {},
+        uploadedUrls: ocr.data?.uploadedUrls || [],
+        status: 'ready',
+        createdAt: new Date().toISOString()
+      });
+      const push = await this.pushLine(userId, [this.buildReviewMessage(draft.jobId, draft.card, env)], env);
+      if (!push.success) console.error('Card cool review push failed', push);
+      return { success: true, jobId: draft.jobId };
+    } catch (e) {
+      console.error('Card cool async OCR failed', e);
+      await this.pushLine(userId, [{
+        type: 'text',
+        text: e.message || '???????????????????????????'
+      }], env);
+      return { success: false, error: e.message || String(e) };
+    }
+  },
+
+  async confirmReviewDraft(payload, env) {
+    const jobId = this.text(payload.jobId);
+    const userId = this.text(payload.userId);
+    const draft = await this.loadReviewDraft(env, jobId);
+    if (!draft) return { success: false, error: '??????????????????' };
+    if (!userId || this.text(draft.userId) !== userId) return { success: false, error: 'Access Denied: draft owner mismatch' };
+    const cardData = this.mergeReviewedCard(draft.card || {}, payload.card || {});
+    const savePayload = this.normalizeSavedCardPayload(userId, cardData);
+    const saved = await D1WriteModule.upsertCard(savePayload, env);
+    if (!saved || saved.success === false) return { success: false, error: saved?.error || '??????' };
+    if (env.ACTMASTER_KV) await env.ACTMASTER_KV.delete(this.reviewKey(jobId)).catch(() => {});
+    const push = await this.pushLine(userId, [this.buildSavedCardMessage(saved.data, userId, env)], env);
+    if (!push.success) console.error('Card cool saved card push failed', push);
+    return { success: true, data: { card: saved.data, pushed: push.success } };
+  },
+
+  async reply(events, env, ctx) {
     for (const event of Array.isArray(events) ? events : []) {
       const replyToken = this.text(event.replyToken);
       const userId = LineOAChatModule.eventUserId(event);
@@ -2455,7 +2611,7 @@ const LineOACardCoolKeywordModule = {
       const sides = this.postbackSides(event);
       if (sides) {
         const ok = await this.saveState(env, userId, { sides, images: [], createdAt: new Date().toISOString() });
-        const message = ok ? this.buildUploadPrompt(sides) : { type: 'text', text: '名片酷暫時無法啟動，請稍後再試。' };
+        const message = ok ? this.buildUploadPrompt(sides) : { type: 'text', text: '????????????????' };
         const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
         if (!result.success) console.error('Card cool upload prompt reply failed', result);
         return true;
@@ -2466,30 +2622,34 @@ const LineOACardCoolKeywordModule = {
       if (!state || !state.sides) continue;
 
       try {
-        const image = await this.fetchLineImageDataUri(env, event.message.id);
-        const images = Array.isArray(state.images) ? state.images.concat([image]) : [image];
-        if (Number(state.sides) === 2 && images.length < 2) {
+        const messageId = event.message.id;
+        let images = Array.isArray(state.images) ? state.images.slice() : [];
+        if (Number(state.sides) === 2 && images.length < 1) {
+          const image = await this.fetchLineImageDataUri(env, messageId);
+          images = images.concat([image]);
           await this.saveState(env, userId, { ...state, images, updatedAt: new Date().toISOString() });
           const result = await LineOAChatModule.replyLine({
             replyToken,
-            messages: [{ type: 'text', text: '已收到第 1 面，請再上傳名片第 2 面照片。' }]
+            messages: [{ type: 'text', text: '???? 1 ????????? 2 ????' }]
           }, env);
           if (!result.success) console.error('Card cool second-side prompt failed', result);
           return true;
         }
 
         await this.clearState(env, userId);
-        const saved = await this.processImages(userId, images.slice(0, Number(state.sides) === 2 ? 2 : 1), env);
-        const message = saved.success
-          ? this.buildSavedCardMessage(saved.card, userId, env)
-          : { type: 'text', text: saved.error || '這張圖片不像名片，未建立資料。' };
-        const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
-        if (!result.success) console.error('Card cool OCR reply failed', result);
+        await this.startLoadingAnimation(userId, env, 20);
+        const processingMessage = { type: 'text', text: '??????????????????????????' };
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [processingMessage] }, env);
+        if (!result.success) console.error('Card cool processing reply failed', result);
+        const finalInputs = Number(state.sides) === 2 ? images.concat([messageId]).slice(0, 2) : [messageId];
+        const job = this.processImagesAndPushReview(userId, finalInputs, env);
+        if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(job);
+        else await job;
         return true;
       } catch (e) {
         const result = await LineOAChatModule.replyLine({
           replyToken,
-          messages: [{ type: 'text', text: e.message || '名片酷處理失敗，請重新輸入「名片酷」再試。' }]
+          messages: [{ type: 'text', text: e.message || '?????????????????????' }]
         }, env);
         if (!result.success) console.error('Card cool error reply failed', result);
         return true;
@@ -2497,6 +2657,7 @@ const LineOACardCoolKeywordModule = {
     }
     return false;
   }
+
 };
 
 // ==================== Point Service Module ====================
@@ -3767,6 +3928,23 @@ const AIModule = {
     return text;
   },
 
+  normalizePhoneForTel(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    let phone = raw.replace(/[^\d+]/g, '');
+    if (phone.startsWith('00')) phone = '+' + phone.slice(2);
+    if (!phone.startsWith('+') && /^886\d{8,10}$/.test(phone)) phone = '+' + phone;
+    if (!phone.startsWith('+') && /^86\d{8,13}$/.test(phone)) phone = '+' + phone;
+    return phone;
+  },
+
+  normalizeWebsiteUrl(value) {
+    let url = String(value || '').trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    return url;
+  },
+
   async recognizeBusinessCardImages(payload, env) {
     try {
       const images = (Array.isArray(payload.base64Images) ? payload.base64Images : [payload.base64Image])
@@ -3784,7 +3962,9 @@ const AIModule = {
         '你是名片 OCR 助理。請只接受真實紙本名片、電子名片截圖、商務聯絡卡片。',
         '如果圖片不是名片或缺少姓名與至少一項聯絡資訊，回傳 {"isBusinessCard":false,"reason":"原因"}，不要猜測。',
         '如果是名片，回傳純 JSON，不要 markdown：',
-        '{"isBusinessCard":true,"name":"","englishName":"","companyName":"","title":"","department":"","mobile":"","officePhone":"","email":"","website":"","address":"","services":"","tags":""}',
+        '{"isBusinessCard":true,"language":"","name":"","englishName":"","companyName":"","title":"","department":"","mobile":"","officePhone":"","email":"","website":"","address":"","services":"","tags":""}',
+        '支援中文與英文名片。電話請保留可撥打格式，必須識別 +886、886、00886、+86、86、09 開頭等格式。',
+        'services 請根據名片上的公司、職稱、服務項目、網址與可判斷行業，擴寫成可直接放在電子名片上的 3 到 8 行介紹；不要捏造不存在的證照或經歷。',
         'services 請整理成 3 到 8 行中文重點；沒有資料留空。'
       ].join('\n');
 
@@ -3822,12 +4002,11 @@ const AIModule = {
       }
 
       const buttons = [];
-      const mobile = String(data.mobile || data.officePhone || '').replace(/[^0-9+]/g, '');
+      const mobile = this.normalizePhoneForTel(data.mobile || data.officePhone || '');
       if (mobile) buttons.push({ l: '行動電話', u: 'tel:' + mobile, c: '#3B82F6' });
       if (data.email) buttons.push({ l: '電子郵件', u: 'mailto:' + String(data.email).trim(), c: '#F97316' });
       if (data.website) {
-        let url = String(data.website).trim();
-        if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+        let url = this.normalizeWebsiteUrl(data.website);
         if (url) buttons.push({ l: '官方網站', u: url, c: '#1E293B' });
       }
       if (data.address) {
@@ -10459,6 +10638,8 @@ async function dispatchAction(action, payload, request, env) {
     'getStoreSettings',
     'listAnnouncements',
     'uploadImageToR2',
+    'getCardCoolDraft',
+    'confirmCardCoolDraft',
     'mlmListOrders',
     'getTenantBonusOrders',
     'prepareTenantCardPayment'
@@ -10844,6 +11025,10 @@ async function dispatchAction(action, payload, request, env) {
       return await D1PersonalAssistantCoreModule.get(payload || {}, env);
     case 'savePersonalAssistantCore':
       return await D1PersonalAssistantCoreModule.save(payload || {}, env);
+    case 'getCardCoolDraft':
+      return await LineOACardCoolKeywordModule.getReviewDraft(payload || {}, env);
+    case 'confirmCardCoolDraft':
+      return await LineOACardCoolKeywordModule.confirmReviewDraft(payload || {}, env);
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
