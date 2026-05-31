@@ -472,7 +472,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
         '<section class="max-w-[320px] mx-auto overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-md">' +
           '<div class="relative border-b border-slate-100">' +
             '<a href="' + window.escapeHTML(shareUrl) + '" class="absolute right-2 top-2 z-10 rounded-full bg-red-500 px-3.5 py-1 text-[12px] font-black text-white shadow-sm">分享</a>' +
-            '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-cover bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';max-height:260px;" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">' +
+            '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-cover bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';max-height:260px;object-position:center top;" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">' +
           '</div>' +
           '<div class="px-4 py-4 text-center">' +
             '<h1 class="text-[22px] font-black text-slate-900 leading-tight">' + window.escapeHTML(name) + '</h1>' +
