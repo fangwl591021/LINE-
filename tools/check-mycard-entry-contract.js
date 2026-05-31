@@ -14,10 +14,10 @@ function fail(message) {
 if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
   fail('my card summary must open the direct entry handler');
 }
-if (!index.includes('js/modules/mycard.js?v=8.49')) {
+if (!index.includes('js/modules/mycard.js?v=8.50')) {
   fail('mycard.js cache-bust version must be bumped');
 }
-if (!index.includes('js/auth.js?v=10.29')) {
+if (!index.includes('js/auth.js?v=10.30')) {
   fail('auth.js cache-bust version must be bumped');
 }
 if (index.includes('編輯名片詳細文字資料')) {
@@ -44,10 +44,10 @@ if (!mycard.includes('copyMyCardUrlVariant') || !mycard.includes('網址取用�
 if (!mycard.includes('三按鈕操作') || !mycard.includes('傳送操作') || !mycard.includes('分享操作') || !mycard.includes('WEB版網址')) {
   fail('WYSIWYG editor must include all four URL copy labels');
 }
-if (!mycard.includes('webCardId=') || !mycard.includes('appendShareMode(baseUrl)')) {
-  fail('copy URL variants must separate WEB display from LIFF auto-send');
+if (!mycard.includes('webCardId=') || !mycard.includes('appendSendMode(baseUrl)') || !mycard.includes('appendShareMode(baseUrl)')) {
+  fail('copy URL variants must separate WEB display, current chat send, and LINE picker share');
 }
-if (!auth.includes('renderStandaloneWebCardPage') || !auth.includes("initialUrlParams.get('webCardId')")) {
+if (!auth.includes('renderStandaloneWebCardPage') || !auth.includes("initialUrlParams.get('webCardId')") || !auth.includes('handleAutoSendCardEntry') || !auth.includes('liff.sendMessages')) {
   fail('WEB card URL must render without LIFF login');
 }
 

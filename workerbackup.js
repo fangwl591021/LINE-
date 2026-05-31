@@ -5705,6 +5705,16 @@ const D1ReadModule = {
     return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
   },
 
+  async getPublicCardById(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureCardAccessColumns(env);
+    const rowId = this.text(payload.rowId || payload.cardId || payload.id || payload.webCardId || payload.shareCardId);
+    if (!rowId) return { success: false, error: 'Missing card id' };
+    const row = await this.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    if (!row) return { success: false, error: '找不到這張名片' };
+    return { success: true, data: this.cardRow(row) };
+  },
+
   crmContactRow(row) {
     if (!row) return null;
     const card = this.cardRow(row);
@@ -10850,6 +10860,15 @@ async function dispatchAction(action, payload, request, env) {
         console.error("D1 getCardContacts fallback", e);
       }
       return await DBModule.forward(action, payload, env);
+    }
+    case 'getPublicCardById': {
+      try {
+        const d1Result = await D1ReadModule.getPublicCardById(payload || {}, env);
+        if (d1Result) return d1Result;
+      } catch (e) {
+        console.error("D1 getPublicCardById failed", e);
+      }
+      return { success: false, error: '找不到這張名片' };
     }
     case 'getCrmContacts': {
       try {

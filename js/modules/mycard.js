@@ -611,6 +611,18 @@
     }
   }
 
+  function appendSendMode(url) {
+    if (!url) return '';
+    try {
+      var parsed = new URL(url);
+      parsed.searchParams.delete('share');
+      parsed.searchParams.set('action', 'send');
+      return parsed.toString();
+    } catch (e) {
+      return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'action=send';
+    }
+  }
+
   function setUrlParam(url, key, value) {
     if (!url) return '';
     try {
@@ -638,8 +650,8 @@
     var baseUrl = buildMyCardShareUrl(rowId);
     return {
       buttons: baseUrl,
-      send: appendShareMode(baseUrl),
-      share: setUrlParam(baseUrl, 'action', 'share'),
+      send: appendSendMode(baseUrl),
+      share: appendShareMode(baseUrl),
       web: buildMyCardWebUrl(rowId)
     };
   }

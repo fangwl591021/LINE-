@@ -255,6 +255,52 @@ function routeSharedCardBadgeToPicker(flexMsg, shareUrl) {
   return flexMsg;
 }
 
+async function loadCardByPublicId(cardId) {
+  const rowId = String(cardId || '').trim();
+  if (!rowId) return null;
+  try {
+    const result = await window.fetchAPI('getPublicCardById', { rowId }, true);
+    const card = result && (result.card || result.data || result);
+    if (card && (card.rowId || card.id || card.cardId)) return card;
+  } catch (e) {
+    console.warn('[loadCardByPublicId] public lookup failed:', e);
+  }
+  try {
+    const cData = await window.fetchAPI('getCardContacts', { networkId: 'admin', role: 'admin', userId: '', limit: 500 }, true);
+    const cards = Array.isArray(cData) ? cData : (Array.isArray(cData?.data) ? cData.data : []);
+    return cards.find(c => String(c.rowId || c.id || c.cardId) === rowId) || null;
+  } catch (e) {
+    console.warn('[loadCardByPublicId] fallback lookup failed:', e);
+    return null;
+  }
+}
+
+async function buildFlexForCardLink(card, options = {}) {
+  const referrerId = options.referrerId || window.currentUserProfile?.userId || '';
+  const networkId = options.networkId || window.currentNetworkId || 'admin';
+  const shareUrl = buildPlainCardViewUrl(card, referrerId, networkId);
+  const shareConfig = buildCardShareConfig(card);
+  let flexMsg = null;
+
+  if (typeof window.buildLocalECardFlexMessage === 'function') {
+    flexMsg = window.buildLocalECardFlexMessage(card, shareConfig, shareUrl);
+  } else {
+    flexMsg = await window.fetchAPI('buildFlexMessage', {
+      card,
+      config: shareConfig,
+      referrerId,
+      networkId,
+      liffId: window.POINT_LIFF_ID || window.DEFAULT_LIFF_ID || window.LIFF_ID
+    }, true);
+  }
+
+  if (!flexMsg || flexMsg.error) {
+    throw new Error(flexMsg?.error || '無法產生 LINE 名片訊息');
+  }
+  routeSharedCardBadgeToPicker(flexMsg, shareUrl);
+  return flexMsg;
+}
+
 window.shareCardFromLink = async function(card, options = {}) {
   if (!card || window.__autoSharingCardFromLink) return false;
   window.__autoSharingCardFromLink = true;
@@ -262,29 +308,7 @@ window.shareCardFromLink = async function(card, options = {}) {
   const networkId = options.networkId || window.currentNetworkId || 'admin';
 
   try {
-    const shareUrl = buildPlainCardViewUrl(card, referrerId, networkId);
-    const shareConfig = buildCardShareConfig(card);
-    let flexMsg = null;
-
-    // Share contract: card link auto-share must use the same local Flex builder as the personal card area.
-    // Do not silently fall back to text URL sharing here; users expect the LINE contact picker with a real card.
-    if (typeof window.buildLocalECardFlexMessage === 'function') {
-      flexMsg = window.buildLocalECardFlexMessage(card, shareConfig, shareUrl);
-    } else {
-      flexMsg = await window.fetchAPI('buildFlexMessage', {
-        card,
-        config: shareConfig,
-        referrerId,
-        networkId,
-        liffId: window.POINT_LIFF_ID || window.DEFAULT_LIFF_ID || window.LIFF_ID
-      }, true);
-    }
-
-    if (!flexMsg || flexMsg.error) {
-      throw new Error(flexMsg?.error || '無法產生 LINE 名片訊息');
-    }
-
-    routeSharedCardBadgeToPicker(flexMsg, shareUrl);
+    const flexMsg = await buildFlexForCardLink(card, { referrerId, networkId });
     const shared = await window.triggerFlexSharing(flexMsg, card['姓名'] || '數位名片');
     if (shared === false) {
       window.showToast?.('此環境無法開啟 LINE 通訊錄，請在 LINE 內重新開啟', true);
@@ -301,15 +325,27 @@ window.shareCardFromLink = async function(card, options = {}) {
   }
 };
 
+async function sendCardToCurrentChat(card, options = {}) {
+  const flexMsg = await buildFlexForCardLink(card, options);
+  if (typeof liff === 'undefined' || !liff || typeof liff.sendMessages !== 'function') {
+    throw new Error('此網址必須在 LINE 聊天室內開啟才能傳送');
+  }
+  await liff.sendMessages([{
+    type: 'flex',
+    altText: (card?.['姓名'] || card?.name || '數位名片') + ' 的電子名片',
+    contents: flexMsg
+  }]);
+  window.showToast?.('已傳送到目前聊天室');
+  return true;
+}
+
 async function handleAutoShareCardEntry(shareCardId, refId, netId) {
   if (!shareCardId) return false;
   const loadingText = document.getElementById('loading-text');
   if (loadingText) loadingText.innerText = '正在開啟 LINE 分享...';
 
   try {
-    const cData = await window.fetchAPI('getCardContacts', { networkId: 'admin', role: 'admin', userId: '' }, true);
-    const cards = Array.isArray(cData) ? cData : (Array.isArray(cData?.data) ? cData.data : []);
-    const sc = cards.find(c => String(c.rowId) === String(shareCardId));
+    const sc = await loadCardByPublicId(shareCardId);
     if (!sc) throw new Error('找不到要分享的名片');
 
     const shared = await window.shareCardFromLink(sc, {
@@ -325,6 +361,33 @@ async function handleAutoShareCardEntry(shareCardId, refId, netId) {
     window.showToast?.(e.message || '分享名片失敗，請稍後再試', true);
     return false;
   } finally {
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) loadingScreen.classList.add('hidden');
+  }
+}
+
+async function handleAutoSendCardEntry(shareCardId, refId, netId) {
+  if (!shareCardId) return false;
+  const loadingText = document.getElementById('loading-text');
+  if (loadingText) loadingText.innerText = '正在傳送名片到聊天室...';
+
+  try {
+    const sc = await loadCardByPublicId(shareCardId);
+    if (!sc) throw new Error('找不到要傳送的名片');
+    const sent = await sendCardToCurrentChat(sc, {
+      referrerId: window.currentUserProfile?.userId || refId || '',
+      networkId: netId || 'admin'
+    });
+    if (sent && typeof window.closeActmasterLiffOrHome === 'function') {
+      window.closeActmasterLiffOrHome(600);
+    }
+    return true;
+  } catch (e) {
+    console.warn('[handleAutoSendCardEntry] failed:', e);
+    window.showToast?.(e.message || '傳送名片失敗，請稍後再試', true);
+    return false;
+  } finally {
+    removeAutoShareParamsFromUrl();
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen) loadingScreen.classList.add('hidden');
   }
@@ -354,9 +417,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
   app.innerHTML = '<main class="min-h-screen bg-[#eef2f7] px-3 py-5"><div class="max-w-[420px] mx-auto rounded-3xl bg-white p-6 text-center font-black text-slate-500 shadow-sm">名片載入中...</div></main>';
 
   try {
-    const cData = await window.fetchAPI('getCardContacts', { networkId: 'admin', role: 'admin', userId: '' }, true);
-    const cards = Array.isArray(cData) ? cData : (Array.isArray(cData?.data) ? cData.data : []);
-    const card = cards.find(c => String(c.rowId || c.id || c.cardId) === String(webCardId));
+    const card = await loadCardByPublicId(webCardId);
     if (!card) throw new Error('找不到這張名片');
 
     const cfg = buildCardShareConfig(card);
@@ -1670,6 +1731,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     const shareCardId = urlParams.get('shareCardId');
+    const shouldSendCardToChat = shareCardId && (
+      urlParams.get('send') === '1' ||
+      urlParams.get('action') === 'send'
+    );
     const shouldAutoShareCard = shareCardId && (
       urlParams.get('share') === '1' ||
       urlParams.get('autoShare') === '1' ||
@@ -1678,6 +1743,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const claimCardId = urlParams.get('claim');
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
+
+    if (shouldSendCardToChat) {
+      await handleAutoSendCardEntry(shareCardId, refId, netId);
+      return;
+    }
 
     if (shouldAutoShareCard) {
       await handleAutoShareCardEntry(shareCardId, refId, netId);

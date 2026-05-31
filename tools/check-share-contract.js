@@ -15,8 +15,12 @@ if (!match) fail('shareCardFromLink function not found');
 
 const body = match[0];
 
-if (!body.includes('buildLocalECardFlexMessage')) {
-  fail('shareCardFromLink must use local Flex builder before Worker fallback');
+if (!auth.includes('async function buildFlexForCardLink') || !auth.includes('buildLocalECardFlexMessage')) {
+  fail('shareCardFromLink must use shared local Flex builder before Worker fallback');
+}
+
+if (!body.includes('buildFlexForCardLink')) {
+  fail('shareCardFromLink must route through shared Flex builder');
 }
 
 if (/sharePlainCardViewUrl\s*\(/.test(body)) {
@@ -29,6 +33,10 @@ if (/fallback to URL/.test(body)) {
 
 if (!body.includes('triggerFlexSharing')) {
   fail('shareCardFromLink must still open LINE shareTargetPicker through triggerFlexSharing');
+}
+
+if (!auth.includes('async function handleAutoSendCardEntry') || !auth.includes('liff.sendMessages')) {
+  fail('send URL must send the Flex card to the current LINE chat without opening shareTargetPicker');
 }
 
 if (!auth.includes('async function handleAutoShareCardEntry')) {
