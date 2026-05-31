@@ -17,7 +17,7 @@ if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
 if (!index.includes('js/modules/mycard.js?v=8.50')) {
   fail('mycard.js cache-bust version must be bumped');
 }
-if (!index.includes('js/auth.js?v=10.31')) {
+if (!index.includes('js/auth.js?v=10.32')) {
   fail('auth.js cache-bust version must be bumped');
 }
 if (index.includes('編輯名片詳細文字資料')) {
