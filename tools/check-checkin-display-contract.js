@@ -29,7 +29,7 @@ if (!claim.includes('oldHtml') || !claim.includes('btn.innerHTML = oldHtml')) {
 if (/btn\.textContent\s*=\s*oldText/.test(claim)) {
   fail('daily check-in button must not restore with textContent only');
 }
-if (!index.includes('js/auth.js?v=10.25')) {
+if (!index.includes('js/auth.js?v=10.28')) {
   fail('auth.js cache-bust version must be bumped');
 }
 

@@ -382,6 +382,38 @@
 
   window.openCardDetailById = window.openCardDetailByRowId;
 
+  function isCardCoolPrivateImport(card) {
+    return safeText(card && (card.sourceType || card["名片來源"] || card["??靘?"])).trim() === "private_import";
+  }
+
+  window.openCardCoolReviewForCard = function (rowId) {
+    const id = safeText(rowId).trim();
+    if (!id) {
+      showToast("缺少名片 ID", true);
+      return;
+    }
+    const params = new URLSearchParams(window.location.search || "");
+    params.set("mode", "cardcool-review");
+    params.set("cardId", id);
+    params.delete("jobId");
+    window.location.href = window.location.pathname + "?" + params.toString();
+  };
+
+  window.sendCardCoolCardToChat = async function (rowId) {
+    const id = safeText(rowId).trim();
+    if (!id) {
+      showToast("缺少名片 ID", true);
+      return;
+    }
+    try {
+      const res = await window.fetchAPI("sendCardCoolCardToChat", { cardId: id }, true);
+      assertApiSuccess(res, "發送失敗");
+      showToast("已發送到 LINE 聊天室");
+    } catch (e) {
+      showToast(e.message || "發送失敗", true);
+    }
+  };
+
   window.openCardDetail = function (card) {
     if (!card) return;
 
@@ -468,6 +500,28 @@
         </div>
       `;
     });
+
+    if (canEdit && isCardCoolPrivateImport(card)) {
+      const rowId = safeText(card.rowId || card["rowId"]);
+      const scanner = safeText(card.ownerName || card.scannerName || card.ownerUserId || card.creatorId || getCurrentUserId()).trim();
+      infoHtml = `
+        <div class="rounded-3xl border border-blue-100 bg-blue-50 p-4">
+          <div class="text-[12px] font-black text-blue-700 mb-3">名片酷匯入${scanner ? `｜掃描者：${escapeHTML(scanner)}` : ""}</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button"
+                    onclick="window.openCardCoolReviewForCard('${escapeJS(rowId)}')"
+                    class="rounded-2xl bg-blue-600 py-3 text-[13px] font-black text-white active:scale-[0.98]">
+              編輯名片酷
+            </button>
+            <button type="button"
+                    onclick="window.sendCardCoolCardToChat('${escapeJS(rowId)}')"
+                    class="rounded-2xl bg-slate-900 py-3 text-[13px] font-black text-white active:scale-[0.98]">
+              發送聊天室
+            </button>
+          </div>
+        </div>
+      ` + infoHtml;
+    }
 
     const detailFields = $("detail-fields");
     if (detailFields) {

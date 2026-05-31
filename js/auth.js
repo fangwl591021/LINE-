@@ -1369,7 +1369,7 @@ window.claimDailyPointCheckin = async function(btn) {
   }
 };
 
-window.renderCardCoolReviewPage = async function(jobId) {
+window.renderCardCoolReviewPage = async function(jobId, cardId = '') {
   const app = document.getElementById('app') || document.body;
   const loadingScreen = document.getElementById('loading-screen');
   if (loadingScreen) loadingScreen.classList.add('hidden');
@@ -1396,7 +1396,7 @@ window.renderCardCoolReviewPage = async function(jobId) {
           <div class="px-5 py-4 border-b border-slate-100">
             <div class="text-[12px] font-black text-blue-600 mb-1">名片酷 OCR</div>
             <h1 class="text-[22px] font-black text-slate-900">核對名片資料</h1>
-            <p class="text-[13px] font-bold text-slate-500 mt-1">請確認或修改解析結果，送出後會建立名片並推回聊天室。</p>
+            <p class="text-[13px] font-bold text-slate-500 mt-1">請確認掃描結果，必要時修改後再儲存或發送到聊天室測試。</p>
           </div>
           <div id="cardcool-review-body" class="p-5">${inner}</div>
         </section>
@@ -1404,11 +1404,12 @@ window.renderCardCoolReviewPage = async function(jobId) {
     `;
   };
 
-  renderShell('<div class="py-12 text-center"><span class="material-symbols-outlined animate-spin text-4xl text-blue-600">autorenew</span><div class="mt-3 text-sm font-black text-slate-500">讀取解析結果...</div></div>');
+  renderShell('<div class="py-12 text-center"><span class="material-symbols-outlined animate-spin text-4xl text-blue-600">autorenew</span><div class="mt-3 text-sm font-black text-slate-500">讀取名片資料...</div></div>');
 
   try {
-    const draft = await window.fetchAPI('getCardCoolDraft', { jobId: String(jobId || '') }, true);
+    const draft = await window.fetchAPI('getCardCoolDraft', { jobId: String(jobId || ''), cardId: String(cardId || '') }, true);
     const card = draft.card || {};
+    const scannerName = draft.scanner && (draft.scanner.name || draft.scanner.userId) ? (draft.scanner.name || draft.scanner.userId) : '';
     const inputHtml = fieldDefs.map(([key, label]) => `
       <label class="block mb-4">
         <span class="block text-[12px] font-black text-slate-500 mb-1">${label}</span>
@@ -1416,46 +1417,61 @@ window.renderCardCoolReviewPage = async function(jobId) {
       </label>
     `).join('');
     renderShell(`
+      ${scannerName ? `<div class="mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-[13px] font-black text-blue-700">掃描者：${window.escapeHTML ? window.escapeHTML(scannerName) : scannerName}</div>` : ''}
       ${inputHtml}
       <label class="block mb-5">
         <span class="block text-[12px] font-black text-slate-500 mb-1">名片說明</span>
         <textarea data-cardcool-field="services" rows="8" class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] font-bold leading-7 text-slate-900 outline-none focus:border-blue-500 focus:bg-white">${window.escapeHTML ? window.escapeHTML(card.services || '') : String(card.services || '')}</textarea>
       </label>
-      <button id="btn-cardcool-confirm" class="w-full rounded-2xl bg-blue-600 py-4 text-white text-[16px] font-black shadow-lg shadow-blue-600/20 active:scale-[0.99]">確認送出並建立名片</button>
+      <button id="btn-cardcool-confirm" class="w-full rounded-2xl bg-blue-600 py-4 text-white text-[16px] font-black shadow-lg shadow-blue-600/20 active:scale-[0.99]">儲存並發送到聊天室</button>
+      <button id="btn-cardcool-save-only" class="mt-3 w-full rounded-2xl bg-slate-900 py-4 text-white text-[16px] font-black active:scale-[0.99]">只儲存修改</button>
       <button id="btn-cardcool-close" class="mt-3 w-full rounded-2xl bg-slate-100 py-3 text-slate-600 text-[14px] font-black active:scale-[0.99]">返回聊天室</button>
     `);
 
     const closeBtn = document.getElementById('btn-cardcool-close');
     if (closeBtn) closeBtn.onclick = () => window.closeActmasterLiffOrHome?.(80);
-    const confirmBtn = document.getElementById('btn-cardcool-confirm');
-    if (confirmBtn) {
-      confirmBtn.onclick = async () => {
-        const oldText = confirmBtn.textContent;
+    const saveDraft = async (pushToChat, confirmBtn) => {
+      const oldText = confirmBtn ? confirmBtn.textContent : '';
+      if (confirmBtn) {
         confirmBtn.disabled = true;
-        confirmBtn.textContent = '建立中...';
-        try {
-          const reviewed = {};
-          document.querySelectorAll('[data-cardcool-field]').forEach(el => {
-            reviewed[el.getAttribute('data-cardcool-field')] = el.value || '';
-          });
-          await window.fetchAPI('confirmCardCoolDraft', { jobId: String(jobId || ''), card: reviewed }, true);
-          renderShell(`
-            <div class="py-10 text-center">
-              <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                <span class="material-symbols-outlined text-3xl">check_circle</span>
-              </div>
-              <h2 class="text-xl font-black text-slate-900">名片已建立</h2>
-              <p class="mt-2 text-sm font-bold text-slate-500">完成品已推送到 LINE 聊天室。</p>
+        confirmBtn.textContent = pushToChat ? '儲存並發送中...' : '儲存中...';
+      }
+      try {
+        const reviewed = {};
+        document.querySelectorAll('[data-cardcool-field]').forEach(el => {
+          reviewed[el.getAttribute('data-cardcool-field')] = el.value || '';
+        });
+        await window.fetchAPI('confirmCardCoolDraft', {
+          jobId: String(jobId || ''),
+          cardId: String(cardId || ''),
+          card: reviewed,
+          pushToChat
+        }, true);
+        renderShell(`
+          <div class="py-10 text-center">
+            <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <span class="material-symbols-outlined text-3xl">check_circle</span>
             </div>
-          `);
-          window.closeActmasterLiffOrHome?.(1600);
-        } catch (e) {
+            <h2 class="text-xl font-black text-slate-900">名片已儲存</h2>
+            <p class="mt-2 text-sm font-bold text-slate-500">${pushToChat ? '已推送到 LINE 聊天室。' : '修改已保存，未推送聊天室。'}</p>
+            <button id="btn-cardcool-done-close" class="mt-6 w-full rounded-2xl bg-blue-600 py-4 text-white text-[16px] font-black">返回聊天室</button>
+          </div>
+        `);
+        const doneClose = document.getElementById('btn-cardcool-done-close');
+        if (doneClose) doneClose.onclick = () => window.closeActmasterLiffOrHome?.(80);
+        if (pushToChat) window.closeActmasterLiffOrHome?.(1600);
+      } catch (e) {
+        if (confirmBtn) {
           confirmBtn.disabled = false;
-          confirmBtn.textContent = oldText || '確認送出並建立名片';
-          window.showToast?.(e.message || '名片建立失敗', true);
+          confirmBtn.textContent = oldText || (pushToChat ? '儲存並發送到聊天室' : '只儲存修改');
         }
-      };
-    }
+        window.showToast?.(e.message || '名片儲存失敗', true);
+      }
+    };
+    const confirmBtn = document.getElementById('btn-cardcool-confirm');
+    const saveOnlyBtn = document.getElementById('btn-cardcool-save-only');
+    if (confirmBtn) confirmBtn.onclick = () => saveDraft(true, confirmBtn);
+    if (saveOnlyBtn) saveOnlyBtn.onclick = () => saveDraft(false, saveOnlyBtn);
   } catch (e) {
     renderShell(`<div class="rounded-2xl bg-red-50 border border-red-100 px-4 py-5 text-center text-sm font-black text-red-600">${window.escapeHTML ? window.escapeHTML(e.message || '讀取失敗') : '讀取失敗'}</div>`);
   }
@@ -1528,7 +1544,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
     if (urlParams.get('mode') === 'cardcool-review') {
-      await window.renderCardCoolReviewPage(urlParams.get('jobId') || '');
+      await window.renderCardCoolReviewPage(urlParams.get('jobId') || '', urlParams.get('cardId') || urlParams.get('rowId') || '');
       return;
     }
     const wantsLineOAMonitor = (

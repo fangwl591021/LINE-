@@ -2286,6 +2286,15 @@ const LineOACardCoolKeywordModule = {
     return sides === 2 ? 2 : (sides === 1 ? 1 : 0);
   },
 
+  postbackSendCardId(event) {
+    if (event?.type !== 'postback') return '';
+    const data = this.text(event?.postback?.data);
+    if (!data) return '';
+    const params = new URLSearchParams(data);
+    if (params.get('action') !== 'lineoa_cardcool_send') return '';
+    return this.text(params.get('cardId'));
+  },
+
   isImage(event) {
     return event?.type === 'message' && event?.message?.type === 'image' && !!event?.message?.id;
   },
@@ -2351,9 +2360,11 @@ const LineOACardCoolKeywordModule = {
     }
   },
 
-  buildReviewUrl(jobId, env) {
+  buildReviewUrl(jobId, env, cardId = '') {
     const liffId = env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y';
-    const params = new URLSearchParams({ mode: 'cardcool-review', jobId: this.text(jobId) });
+    const params = new URLSearchParams({ mode: 'cardcool-review' });
+    if (this.text(jobId)) params.set('jobId', this.text(jobId));
+    if (this.text(cardId)) params.set('cardId', this.text(cardId));
     return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
   },
 
@@ -2391,15 +2402,85 @@ const LineOACardCoolKeywordModule = {
     }
   },
 
+  async loadUserLabel(env, userId) {
+    const id = this.text(userId);
+    if (!id || !D1ReadModule.hasD1(env)) return { userId: id, name: '' };
+    const identity = await D1ReadModule.findUserByIdentity(env, id).catch(() => null);
+    const user = identity && identity.user;
+    return {
+      userId: id,
+      name: this.text(user && (user.name || user.display_name || user.line_name))
+    };
+  },
+
+  async loadOwnedCard(env, cardId, userId, role = '') {
+    const rowId = this.text(cardId);
+    const actorId = this.text(userId);
+    const actorRole = this.text(role).toLowerCase();
+    if (!rowId || !D1ReadModule.hasD1(env)) return null;
+    await D1ReadModule.ensureCardAccessColumns(env);
+    const row = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]).catch(() => null);
+    if (!row) return null;
+    if (actorRole !== 'admin') {
+      const ids = actorId ? await D1ReadModule.identityIdsForUser(env, actorId).catch(() => [actorId]) : [];
+      const ownerCandidates = [
+        row.owner_user_id,
+        row.creator_id,
+        row.line_id,
+        row.profile_user_id
+      ].map(v => this.text(v)).filter(Boolean);
+      if (!ids.some(id => ownerCandidates.includes(id))) return null;
+    }
+    return D1ReadModule.cardRow(row);
+  },
+
+  cardToReviewDraft(card) {
+    if (!card) return {};
+    return {
+      name: this.text(card.name),
+      englishName: this.text(card.englishName),
+      companyName: this.text(card.companyName),
+      title: this.text(card.title),
+      department: this.text(card.department),
+      mobile: this.text(card.mobile),
+      officePhone: this.text(card.officePhone),
+      email: this.text(card.email),
+      website: this.text(card.website),
+      address: this.text(card.address),
+      services: this.text(card.services),
+      tags: this.text(card.tags),
+      imageUrl: this.text(card.imageUrl),
+      customConfig: this.text(card.customConfig),
+      notes: this.text(card.notes)
+    };
+  },
+
   async getReviewDraft(payload, env) {
     const jobId = this.text(payload.jobId);
+    const cardId = this.text(payload.cardId || payload.rowId);
     const userId = this.text(payload.userId);
+    const role = this.text(payload.authenticatedRole || payload.role);
+    if (cardId) {
+      const card = await this.loadOwnedCard(env, cardId, userId, role);
+      if (!card) return { success: false, error: 'Access Denied: card owner mismatch' };
+      const scanner = await this.loadUserLabel(env, card.ownerUserId || card.creatorId || userId);
+      return {
+        success: true,
+        data: {
+          cardId,
+          card: this.cardToReviewDraft(card),
+          status: 'ready',
+          source: 'card',
+          scanner
+        }
+      };
+    }
     const draft = await this.loadReviewDraft(env, jobId);
     if (!draft) return { success: false, error: '名片核對資料已失效，請重新上傳名片。' };
     if (this.text(draft.userId) && userId && this.text(draft.userId) !== userId) {
       return { success: false, error: 'Access Denied: draft owner mismatch' };
     }
-    return { success: true, data: { jobId, card: draft.card || {}, uploadedUrls: draft.uploadedUrls || [], status: draft.status || 'ready' } };
+    return { success: true, data: { jobId, card: draft.card || {}, uploadedUrls: draft.uploadedUrls || [], status: draft.status || 'ready', scanner: draft.scanner || null } };
   },
 
   mergeReviewedCard(draftCard, reviewedCard) {
@@ -2407,7 +2488,7 @@ const LineOACardCoolKeywordModule = {
     const merged = { ...(draftCard || {}) };
     [
       'name','englishName','companyName','title','department','mobile','officePhone',
-      'email','website','address','services','tags'
+      'email','website','address','services','tags','imageUrl','customConfig','notes'
     ].forEach(key => {
       if (Object.prototype.hasOwnProperty.call(source, key)) merged[key] = this.text(source[key]);
     });
@@ -2501,7 +2582,7 @@ const LineOACardCoolKeywordModule = {
       address: this.text(ocrData.address),
       services: this.text(ocrData.services || title || companyName),
       tags: this.text(ocrData.tags),
-      notes: 'LINE OA 名片酷 OCR 建立',
+      notes: this.text(ocrData.notes, `LINE OA 名片酷 OCR 建立；掃描者：${this.text(ocrData.scannerName || ocrData.scannerId || userId)}`),
       creatorId: userId,
       ownerUserId: userId,
       profileUserId: '',
@@ -2531,11 +2612,33 @@ const LineOACardCoolKeywordModule = {
       networkId: card.networkId || 'admin',
       liffId: env.POINT_LIFF_ID || env.LIFF_ID
     });
-    return {
+    const message = {
       type: 'flex',
       altText: `${card.name || '名片酷'} 的電子名片`,
       contents: flex
     };
+    const rowId = this.text(card.rowId || card.id);
+    if (rowId) {
+      message.quickReply = {
+        items: [{
+          type: 'action',
+          action: {
+            type: 'uri',
+            label: '編輯名片',
+            uri: this.buildReviewUrl('', env, rowId)
+          }
+        }, {
+          type: 'action',
+          action: {
+            type: 'postback',
+            label: '再發送',
+            data: `action=lineoa_cardcool_send&cardId=${encodeURIComponent(rowId)}`,
+            displayText: '名片酷：發送名片'
+          }
+        }]
+      };
+    }
+    return message;
   },
 
   async processImages(userId, images, env) {
@@ -2558,12 +2661,15 @@ const LineOACardCoolKeywordModule = {
       if (!images.length) throw new Error('Missing image data');
       const ocr = await AIModule.recognizeBusinessCardImages({ base64Images: images }, env);
       if (!ocr.success) throw new Error(ocr.error || '\u540d\u7247\u89e3\u6790\u5931\u6557');
+      const scanner = await this.loadUserLabel(env, userId);
+      const cardData = { ...(ocr.data || {}), scannerId: userId, scannerName: scanner.name || userId };
       const jobId = crypto.randomUUID ? crypto.randomUUID() : `JOB_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const draft = await this.saveReviewDraft(env, {
         jobId,
         userId,
-        card: ocr.data || {},
+        card: cardData,
         uploadedUrls: ocr.data?.uploadedUrls || [],
+        scanner,
         status: 'ready',
         createdAt: new Date().toISOString()
       });
@@ -2582,18 +2688,43 @@ const LineOACardCoolKeywordModule = {
 
   async confirmReviewDraft(payload, env) {
     const jobId = this.text(payload.jobId);
+    const cardId = this.text(payload.cardId || payload.rowId);
     const userId = this.text(payload.userId);
-    const draft = await this.loadReviewDraft(env, jobId);
-    if (!draft) return { success: false, error: '\u540d\u7247\u6838\u5c0d\u8cc7\u6599\u5df2\u5931\u6548\uff0c\u8acb\u91cd\u65b0\u4e0a\u50b3\u540d\u7247\u3002' };
-    if (!userId || this.text(draft.userId) !== userId) return { success: false, error: 'Access Denied: draft owner mismatch' };
+    const role = this.text(payload.authenticatedRole || payload.role);
+    let draft = null;
+    if (cardId) {
+      const existingCard = await this.loadOwnedCard(env, cardId, userId, role);
+      if (!existingCard) return { success: false, error: 'Access Denied: card owner mismatch' };
+      draft = { userId: existingCard.ownerUserId || existingCard.creatorId || userId, card: this.cardToReviewDraft(existingCard), cardId };
+    } else {
+      draft = await this.loadReviewDraft(env, jobId);
+      if (!draft) return { success: false, error: '\u540d\u7247\u6838\u5c0d\u8cc7\u6599\u5df2\u5931\u6548\uff0c\u8acb\u91cd\u65b0\u4e0a\u50b3\u540d\u7247\u3002' };
+      if (!userId || this.text(draft.userId) !== userId) return { success: false, error: 'Access Denied: draft owner mismatch' };
+    }
     const cardData = this.mergeReviewedCard(draft.card || {}, payload.card || {});
+    const scanner = await this.loadUserLabel(env, userId);
+    cardData.scannerId = this.text(cardData.scannerId, userId);
+    cardData.scannerName = this.text(cardData.scannerName, scanner.name || userId);
     const savePayload = this.normalizeSavedCardPayload(userId, cardData);
+    if (cardId) savePayload.rowId = cardId;
     const saved = await D1WriteModule.upsertCard(savePayload, env);
     if (!saved || saved.success === false) return { success: false, error: saved?.error || '\u540d\u7247\u5132\u5b58\u5931\u6557' };
-    if (env.ACTMASTER_KV) await env.ACTMASTER_KV.delete(this.reviewKey(jobId)).catch(() => {});
-    const push = await this.pushLine(userId, [this.buildSavedCardMessage(saved.data, userId, env)], env);
-    if (!push.success) console.error('Card cool saved card push failed', push);
+    if (!cardId && env.ACTMASTER_KV) await env.ACTMASTER_KV.delete(this.reviewKey(jobId)).catch(() => {});
+    const shouldPush = payload.pushToChat !== false;
+    const push = shouldPush ? await this.pushLine(userId, [this.buildSavedCardMessage(saved.data, userId, env)], env) : { success: false };
+    if (shouldPush && !push.success) console.error('Card cool saved card push failed', push);
     return { success: true, data: { card: saved.data, pushed: push.success } };
+  },
+
+  async sendSavedCardToChat(payload, env) {
+    const userId = this.text(payload.userId);
+    const cardId = this.text(payload.cardId || payload.rowId);
+    const role = this.text(payload.authenticatedRole || payload.role);
+    if (!userId || !cardId) return { success: false, error: 'Missing card id' };
+    const card = await this.loadOwnedCard(env, cardId, userId, role);
+    if (!card) return { success: false, error: 'Access Denied: card owner mismatch' };
+    const push = await this.pushLine(userId, [this.buildSavedCardMessage(card, userId, env)], env);
+    return push.success ? { success: true, data: { pushed: true } } : { success: false, error: push.error || 'LINE push failed' };
   },
 
   async reply(events, env, ctx) {
@@ -2615,6 +2746,17 @@ const LineOACardCoolKeywordModule = {
         const message = ok ? this.buildUploadPrompt(sides) : { type: 'text', text: '\u540d\u7247\u9177\u66ab\u6642\u7121\u6cd5\u555f\u52d5\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002' };
         const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
         if (!result.success) console.error('Card cool upload prompt reply failed', result);
+        return true;
+      }
+
+      const sendCardId = this.postbackSendCardId(event);
+      if (sendCardId) {
+        const card = await this.loadOwnedCard(env, sendCardId, userId, '');
+        const message = card
+          ? this.buildSavedCardMessage(card, userId, env)
+          : { type: 'text', text: '找不到可發送的名片，請回名片列表確認。' };
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
+        if (!result.success) console.error('Card cool resend reply failed', result);
         return true;
       }
 
@@ -10641,6 +10783,7 @@ async function dispatchAction(action, payload, request, env) {
     'uploadImageToR2',
     'getCardCoolDraft',
     'confirmCardCoolDraft',
+    'sendCardCoolCardToChat',
     'mlmListOrders',
     'getTenantBonusOrders',
     'prepareTenantCardPayment'
@@ -11030,6 +11173,8 @@ async function dispatchAction(action, payload, request, env) {
       return await LineOACardCoolKeywordModule.getReviewDraft(payload || {}, env);
     case 'confirmCardCoolDraft':
       return await LineOACardCoolKeywordModule.confirmReviewDraft(payload || {}, env);
+    case 'sendCardCoolCardToChat':
+      return await LineOACardCoolKeywordModule.sendSavedCardToChat(payload || {}, env);
     
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
