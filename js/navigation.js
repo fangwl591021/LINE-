@@ -13,7 +13,7 @@ window.goPage = function(page, isInitLoad = false) {
   if (!isInitLoad) {
     if (page === 'admin-activities') window.loadAdminActivities();
     else if (page === 'home') window.loadUserActivities();
-    else if (page === 'card' && typeof window.loadCardData === 'function') window.loadCardData({ render: true });
+    else if (page === 'card' && typeof window.loadCardData === 'function') window.loadCardData({ render: true, harvest: true });
     else if (page === 'matchmake' && typeof window.initMatchmakePage === 'function') window.initMatchmakePage();
     else if (page === 'admin-stats') window.loadAdminStats();
     else if (page === 'my-activities') window.loadMyActivities();

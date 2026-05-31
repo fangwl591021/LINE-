@@ -106,9 +106,12 @@
   }
 
   function getCurrentUserId() {
-    return window.currentUserProfile && window.currentUserProfile.userId
-      ? String(window.currentUserProfile.userId)
-      : "";
+    return safeText(
+      (window.currentUserProfile && window.currentUserProfile.userId) ||
+      (window.currentUser && (window.currentUser.userId || window.currentUser.lineId || window.currentUser.LINE_user_id)) ||
+      window.currentUserId ||
+      ""
+    ).trim();
   }
 
   function isCurrentAdmin() {
@@ -132,8 +135,16 @@
     return safeText(card && (card["建檔者ID"] || card.creatorId || card["creatorId"])).trim();
   }
 
+  function getOwnerId(card) {
+    return safeText(card && (card["擁有人ID"] || card.ownerUserId || card["ownerUserId"])).trim();
+  }
+
   function getCardLineId(card) {
     return safeText(card && (card["LINE ID"] || card.lineId || card["User ID"] || card.userId)).trim();
+  }
+
+  function getCardSourceType(card) {
+    return safeText(card && (card.sourceType || card["名片來源"] || card["sourceType"])).trim().toLowerCase();
   }
 
   function isVisibleCard(card) {
@@ -154,6 +165,19 @@
 
   function getVisibleCards(cards) {
     return (Array.isArray(cards) ? cards : []).filter(isVisibleCard);
+  }
+
+  function isHarvestCard(card) {
+    if (!card) return false;
+    const sourceType = getCardSourceType(card);
+    if (sourceType === "self_profile" || sourceType === "referral_placeholder") return false;
+    const userId = getCurrentUserId();
+    if (!userId) return false;
+    return getCreatorId(card) === userId || getOwnerId(card) === userId;
+  }
+
+  function getHarvestCards(cards) {
+    return getVisibleCards(cards).filter(isHarvestCard);
   }
 
   function canEditCard(card) {
@@ -180,6 +204,37 @@
   function getCardImageUrl(card) {
     const cfg = parseCardConfig(card);
     return safeText(cfg.imgUrl || cfg.imgUrlLandscape || cfg.imgUrlSquare || cfg.imgUrlPortrait || card["名片圖檔"] || "").trim();
+  }
+
+  function getCardSubtitle(card) {
+    const parts = [
+      card && (card["公司名稱"] || card.companyName),
+      card && (card["職稱"] || card.title),
+      card && (card["服務項目"] || card.services)
+    ].map(v => safeText(v).replace(/\s+/g, " ").trim()).filter(Boolean);
+    return parts.join(" / ") || "尚未補充說明";
+  }
+
+  function getCardUpdatedAt(card) {
+    return safeText(card && (card.updatedAt || card.updated_at || card["更新時間"] || card.createdAt || card.created_at || card["建立時間"])).trim();
+  }
+
+  function formatCardListTime(value) {
+    const raw = safeText(value).trim();
+    if (!raw) return "";
+    const date = new Date(raw.replace(" ", "T"));
+    if (Number.isNaN(date.getTime())) return raw.slice(0, 10);
+    const now = new Date();
+    const sameDay = date.toDateString() === now.toDateString();
+    if (sameDay) {
+      const hours = date.getHours();
+      const minutes = String(date.getMinutes()).padStart(2, "0");
+      return (hours < 12 ? "上午 " : "下午 ") + ((hours % 12) || 12) + ":" + minutes;
+    }
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) return "昨天";
+    return (date.getMonth() + 1) + "/" + date.getDate();
   }
 
   function renderTags(value, small = true) {
@@ -258,7 +313,7 @@
   window.renderCardList = function (cards, options = {}) {
     const list = $("card-list");
     if (!list) return;
-    const visibleSource = getVisibleCards(cards);
+    const visibleSource = getHarvestCards(cards);
 
     if (!options.keepPage) {
       window.cardListPage = 1;
@@ -268,8 +323,9 @@
     if (!Array.isArray(visibleSource) || visibleSource.length === 0) {
       list.innerHTML = `
         <div class="bg-white p-8 rounded-3xl text-center text-slate-400 border border-slate-100 shadow-sm">
-          <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">search_off</span>
-          <p class="font-bold text-[13px]">目前沒有找到任何名片</p>
+          <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">contacts_product</span>
+          <p class="font-bold text-[13px]">目前沒有自己的收割名單</p>
+          <p class="text-[12px] mt-1">用名片酷掃描客戶或合作夥伴後，會出現在這裡。</p>
         </div>
       `;
       return;
@@ -281,39 +337,33 @@
 
     const html = visibleCards.map(card => {
       const rowId = safeText(card.rowId || card["rowId"]);
-      const rawService = card["服務項目"] || card["職稱"] || card["公司名稱"] || "";
-      let serviceStr = escapeHTML(rawService).replace(/\n/g, " ");
-      if (serviceStr.length > 25) serviceStr = serviceStr.substring(0, 25) + "...";
-
-      const tagHtml = renderTags(card["標籤"], true);
       const imgUrl = getCardImageUrl(card);
+      const subtitle = getCardSubtitle(card);
+      const timeText = formatCardListTime(getCardUpdatedAt(card));
 
       let imgHtml = "";
       if (imgUrl) {
-        imgHtml = `<img src="${escapeHTML(imgUrl)}" class="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-100 shadow-sm" alt="card image">`;
+        imgHtml = `<img src="${escapeHTML(imgUrl)}" class="w-14 h-14 rounded-full object-cover shrink-0 border border-slate-100 shadow-sm bg-slate-100" alt="card image">`;
       } else {
         imgHtml = `
-          <div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-300 flex items-center justify-center shrink-0 shadow-sm">
+          <div class="w-14 h-14 rounded-full bg-slate-100 text-slate-300 flex items-center justify-center shrink-0 shadow-sm">
             <span class="material-symbols-outlined">person</span>
           </div>
         `;
       }
 
-      const isMine = safeText(card["LINE ID"]).trim() === getCurrentUserId();
-
       return `
-        <div class="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm active:scale-[0.98] transition-all cursor-pointer flex gap-3 items-center"
+        <div class="group bg-white px-3 py-3 active:bg-slate-50 transition-all cursor-pointer flex gap-3 items-center border-b border-slate-100 last:border-b-0"
              onclick="window.openCardDetailByRowId('${escapeJS(rowId)}')">
           ${imgHtml}
           <div class="flex-1 min-w-0">
-            <div class="font-black text-slate-800 text-[16px] leading-tight flex items-center gap-1">
-              ${escapeHTML(getCardTitle(card))}
-              ${isMine ? '<span class="bg-primary-light text-primary text-[9px] px-1.5 py-0.5 rounded font-black tracking-wider">我的</span>' : ""}
-            </div>
-            <div class="text-[12px] text-slate-500 font-medium truncate mt-0.5">${serviceStr}</div>
-            ${tagHtml ? `<div class="mt-1.5 truncate">${tagHtml}</div>` : ""}
+            <div class="font-black text-slate-900 text-[15px] leading-tight truncate">${escapeHTML(getCardTitle(card))}</div>
+            <div class="text-[13px] text-slate-500 font-medium truncate mt-1">${escapeHTML(subtitle)}</div>
           </div>
-          <span class="material-symbols-outlined text-slate-300 text-[20px] shrink-0">chevron_right</span>
+          <div class="shrink-0 self-start pt-0.5 text-right">
+            <div class="text-[12px] text-slate-400 font-medium whitespace-nowrap">${escapeHTML(timeText)}</div>
+            <span class="material-symbols-outlined text-blue-500 bg-blue-50 rounded-full text-[16px] p-0.5 mt-2 shadow-sm">north_east</span>
+          </div>
         </div>
       `;
     }).join("");
@@ -321,7 +371,7 @@
     const hasMore = visibleCards.length < displayCards.length;
     const footerHtml = `
       <div class="text-center py-2">
-        <div class="text-[12px] font-bold text-slate-400 mb-3">顯示 ${visibleCards.length} / ${displayCards.length} 張名片</div>
+        <div class="text-[12px] font-bold text-slate-400 mb-3">顯示 ${visibleCards.length} / ${displayCards.length} 位名單</div>
         ${hasMore ? `
           <button type="button"
                   onclick="window.loadMoreCards()"
@@ -332,7 +382,19 @@
       </div>
     `;
 
-    list.innerHTML = html + footerHtml;
+    list.innerHTML = `
+      <div class="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-sm">
+        <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <div class="font-black text-slate-900 text-[16px]">我的收割名單</div>
+            <div class="text-[12px] text-slate-400 font-bold mt-0.5">只列出自己用名片酷掃進來的資料</div>
+          </div>
+          <span class="text-[12px] font-black text-slate-400">${displayCards.length} 位</span>
+        </div>
+        ${html}
+      </div>
+      ${footerHtml}
+    `;
   };
 
   window.loadMoreCards = function () {
@@ -349,7 +411,7 @@
       return;
     }
 
-    const sourceCards = getVisibleCards(window.allCards);
+    const sourceCards = getHarvestCards(Array.isArray(window.harvestCards) ? window.harvestCards : window.allCards);
     const filtered = sourceCards.filter(card => {
       const str = [
         card["姓名"],

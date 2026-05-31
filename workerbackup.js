@@ -322,6 +322,7 @@ const SecurityModule = {
       'updateUserProfile',
       'linkUserIdentity',
       'getCardContacts',
+      'getCardHarvestContacts',
       'getCrmContacts',
       'saveCard',
       'updateCard',
@@ -398,7 +399,7 @@ const SecurityModule = {
         return { allowed: true, actor: null };
       }
     }
-    if (!actor && action === 'getCardContacts' && env.ACTMASTER_DB) {
+    if (!actor && (action === 'getCardContacts' || action === 'getCardHarvestContacts') && env.ACTMASTER_DB) {
       const requestedUserId = this.text(payload.userId || payload.authenticatedUserId || payload.authUserId || payload.operatorId);
       const identity = requestedUserId
         ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
@@ -5705,6 +5706,29 @@ const D1ReadModule = {
     return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
   },
 
+  async getCardHarvestContacts(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureCardAccessColumns(env);
+    const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
+    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    if (!actorId) return { success: true, data: [] };
+    const ids = await this.identityIdsForUser(env, actorId);
+    if (!ids.length) ids.push(actorId);
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = await this.all(env, `
+      SELECT * FROM card_contacts
+      WHERE (
+        creator_id IN (${placeholders})
+        OR owner_user_id IN (${placeholders})
+      )
+      AND LOWER(COALESCE(source_type,'')) <> 'self_profile'
+      AND LOWER(COALESCE(source_type,'')) <> 'referral_placeholder'
+      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+      LIMIT ${limit}
+    `, [...ids, ...ids]);
+    return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
+  },
+
   async getPublicCardById(payload, env) {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
@@ -10786,6 +10810,7 @@ async function dispatchAction(action, payload, request, env) {
     'checkUser',
     'queryUserPoints',
     'getCardContacts',
+    'getCardHarvestContacts',
     'getPublicActivities',
     'getActivityById',
     'getStoreSettings',
@@ -10860,6 +10885,15 @@ async function dispatchAction(action, payload, request, env) {
         console.error("D1 getCardContacts fallback", e);
       }
       return await DBModule.forward(action, payload, env);
+    }
+    case 'getCardHarvestContacts': {
+      try {
+        const d1Result = await D1ReadModule.getCardHarvestContacts(payload || {}, env);
+        if (d1Result && d1Result.success && Array.isArray(d1Result.data)) return d1Result;
+      } catch (e) {
+        console.error("D1 getCardHarvestContacts failed", e);
+      }
+      return { success: true, data: [] };
     }
     case 'getPublicCardById': {
       try {

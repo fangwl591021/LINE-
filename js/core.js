@@ -288,31 +288,47 @@ const Core = (function() {
 
     // 名片資料載入 (按需載入)
     window.loadCardData = async function(options = {}) {
-        if (window.allCards && window.allCards.length > 0 && !options.force) {
+        const harvestMode = options.harvest === true;
+        const cache = harvestMode ? window.harvestCards : window.allCards;
+        if (Array.isArray(cache) && cache.length > 0 && !options.force) {
             if (options.render !== false && typeof window.renderCardList === 'function') {
-                window.renderCardList(window.allCards);
+                window.renderCardList(cache);
             }
-            return window.allCards;
+            return cache;
         }
 
         try {
-            const cards = await window.fetchAPI('getCardContacts', {}, true);
+            const cards = await window.fetchAPI(harvestMode ? 'getCardHarvestContacts' : 'getCardContacts', {}, true);
+            let normalizedCards = [];
             if (Array.isArray(cards)) {
-                window.allCards = cards;
+                normalizedCards = cards;
             } else if (cards.data && Array.isArray(cards.data)) {
-                window.allCards = cards.data;
+                normalizedCards = cards.data;
+            }
+
+            if (harvestMode) {
+                window.harvestCards = normalizedCards;
+                if (!Array.isArray(window.allCards)) window.allCards = [];
+                const mergedById = new Map(window.allCards.map(card => [String(card && (card.rowId || card["rowId"] || card.id || "")), card]));
+                normalizedCards.forEach(card => {
+                    const rowId = String(card && (card.rowId || card["rowId"] || card.id || ""));
+                    if (rowId) mergedById.set(rowId, card);
+                });
+                window.allCards = Array.from(mergedById.values()).filter(Boolean);
+            } else {
+                window.allCards = normalizedCards;
             }
 
             window.syncUserCardMatch();
 
             if (options.render !== false && typeof window.renderCardList === 'function') {
-                window.renderCardList(window.allCards);
+                window.renderCardList(harvestMode ? window.harvestCards : window.allCards);
             }
             if (options.initPanels !== false) {
                 if (typeof window.initMyECard === 'function') window.initMyECard();
             }
 
-            return window.allCards;
+            return harvestMode ? window.harvestCards : window.allCards;
         } catch (err) {
             console.error('[loadCardData] Error:', err);
             return [];
