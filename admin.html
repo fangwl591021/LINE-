@@ -2990,7 +2990,10 @@
         },
         updatedAt: new Date().toISOString()
       };
-      const res = await fetchAPI('updateUserProfile', payload);
+      const res = await fetchAPI('adminSyncBoundCardUser', {
+        targetUserId: userId,
+        profile: payload
+      });
       if (res) {
         const idx = allUsersData.findIndex(u => normalizeLineId(getUserId(u)) === normalizeLineId(userId));
         if (idx >= 0) allUsersData[idx] = { ...allUsersData[idx], ...payload };

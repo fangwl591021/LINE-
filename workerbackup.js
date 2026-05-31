@@ -10613,7 +10613,14 @@ async function dispatchAction(action, payload, request, env) {
     }
     case 'adminSyncBoundCardUser': {
       try {
-        const profile = { ...(payload.profile || {}), userId: payload.targetUserId || payload.profile?.userId, role: payload.profile?.role || 'user' };
+        const profile = {
+          ...(payload.profile || {}),
+          userId: payload.targetUserId || payload.profile?.userId,
+          role: payload.profile?.role || 'user',
+          authenticatedUserId: payload.authenticatedUserId,
+          authenticatedRole: payload.authenticatedRole,
+          authenticatedNetworkId: payload.authenticatedNetworkId
+        };
         const d1Result = await D1WriteModule.upsertUser(profile, env);
         if (d1Result && d1Result.success !== false) return d1Result;
       } catch (e) {
