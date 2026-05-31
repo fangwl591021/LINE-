@@ -1010,19 +1010,71 @@
   }
 
   function currentWysiwygImage(cfg) {
-    var layout = cfg.layoutStyle || getLayout();
+    var layout = normalizeWysiwygLayout(cfg.layoutStyle || getLayout());
     if (layout === 'portrait') return cfg.imgUrlPortrait || cfg.imgUrl || myEcardImgs.portrait || '';
     if (layout === 'square') return cfg.imgUrlSquare || cfg.imgUrl || myEcardImgs.square || '';
     return cfg.imgUrl || myEcardImgs.landscape || '';
+  }
+
+  function normalizeWysiwygLayout(layout) {
+    if (layout === 'portrait' || layout === 'giga') return 'portrait';
+    if (layout === 'square' || layout === '1:1') return 'square';
+    return 'landscape';
+  }
+
+  function wysiwygLayoutRatio(layout, cfg) {
+    layout = normalizeWysiwygLayout(layout);
+    if (layout === 'portrait') return String((cfg && cfg.imgRatioPortrait) || '400:600').replace(':', '/');
+    if (layout === 'square') return '1/1';
+    return String((cfg && cfg.imgRatioLandscape) || '20:13').replace(':', '/');
+  }
+
+  function renderWysiwygLayoutSelector(cfg, inModal) {
+    var current = normalizeWysiwygLayout((cfg && cfg.layoutStyle) || getLayout());
+    var options = [
+      { value: 'landscape', label: '標準(Mega)' },
+      { value: 'portrait', label: '滿版(Giga)' },
+      { value: 'square', label: '正方(1:1)' }
+    ];
+    var wrapClass = inModal ? 'space-y-2' : 'max-w-[390px] mx-auto mb-3';
+    var labelClass = inModal ? 'text-[13px] font-black text-slate-600' : 'text-[12px] font-black text-slate-300 mb-2';
+    var shellClass = inModal ? 'grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1' : 'grid grid-cols-3 gap-1 rounded-2xl bg-white/10 p-1';
+    var html = '<div class="' + wrapClass + '">' +
+      '<div class="' + labelClass + '">名片版型</div>' +
+      '<div class="' + shellClass + '">';
+    html += options.map(function(option) {
+      var active = option.value === current;
+      var cls = active
+        ? 'bg-white text-blue-600 shadow-sm'
+        : (inModal ? 'text-slate-500' : 'text-slate-300');
+      return '<button type="button" onclick="window.setMyCardWysiwygLayout(\'' + option.value + '\')" class="min-h-[42px] rounded-xl px-2 text-[12px] font-black active:scale-95 ' + cls + '">' + option.label + '</button>';
+    }).join('');
+    return html + '</div></div>';
+  }
+
+  function setMyCardWysiwygLayout(layout) {
+    var cfg = wysiwygState.cfg;
+    if (!cfg) return;
+    layout = normalizeWysiwygLayout(layout);
+    cfg.layoutStyle = layout;
+    if (layout === 'portrait') cfg.imgRatioPortrait = cfg.imgRatioPortrait || '400:600';
+    if (layout === 'square') cfg.imgRatioSquare = cfg.imgRatioSquare || '1:1';
+    if (layout === 'landscape') cfg.imgRatioLandscape = cfg.imgRatioLandscape || '20:13';
+    selectMyECardLayout(layout);
+    var imgInput = $('#my-v1-img-url');
+    if (imgInput) imgInput.value = currentWysiwygImage(cfg);
+    writeCurrentCardConfig(cfg);
+    updatePreview();
+    renderMyCardWysiwyg();
+    if (wysiwygState.field === 'image') renderWysiwygEditor('image', wysiwygState.buttonIndex);
   }
 
   function renderMyCardWysiwyg() {
     var preview = document.getElementById('my-card-wysiwyg-preview');
     if (!preview || !wysiwygState.cfg) return;
     var cfg = wysiwygState.cfg;
-    var layout = cfg.layoutStyle || getLayout();
-    var ratio = layout === 'portrait' ? (cfg.imgRatioPortrait || '400/600') : (layout === 'square' ? '1/1' : '20/13');
-    ratio = String(ratio).replace(':', '/');
+    var layout = normalizeWysiwygLayout(cfg.layoutStyle || getLayout());
+    var ratio = wysiwygLayoutRatio(layout, cfg);
     var imgUrl = currentWysiwygImage(cfg);
     var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
     var buttonHtml = buttons.map(function(button, index) {
@@ -1295,6 +1347,7 @@
       '</button>';
     }).join('');
     preview.innerHTML =
+      renderWysiwygLayoutSelector(cfg, false) +
       '<div class="my-wysiwyg-card-shell">' +
         '<div class="relative bg-slate-100">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'image\')" class="my-wysiwyg-target block w-full text-left active:opacity-90 rounded-none border-0">' +
@@ -1335,6 +1388,7 @@
       if (title) title.textContent = '更換封面圖片';
       panel.innerHTML =
         '<div class="space-y-3">' +
+          renderWysiwygLayoutSelector(cfg, true) +
           '<label class="block text-[13px] font-black text-slate-600">圖片網址</label>' +
           '<input id="my-wysiwyg-image-input" value="' + escapeAttr(currentWysiwygImage(cfg)) + '" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-mono text-[13px] outline-none focus:ring-2 focus:ring-blue-500">' +
           '<div class="grid grid-cols-2 gap-2">' +
@@ -1481,7 +1535,7 @@
   }
 
   function getMyCardUploadAspectRatio() {
-    var layout = getLayout();
+    var layout = normalizeWysiwygLayout((wysiwygState && wysiwygState.cfg && wysiwygState.cfg.layoutStyle) || getLayout());
     if (layout === 'portrait') return 400 / 600;
     if (layout === 'square') return 1;
     return 20 / 13;
@@ -1764,6 +1818,7 @@
   window.closeMyCardWysiwygEditor = closeMyCardWysiwygEditor;
   window.editMyCardWysiwygField = editMyCardWysiwygField;
   window.editMyCardWysiwygButton = editMyCardWysiwygButton;
+  window.setMyCardWysiwygLayout = setMyCardWysiwygLayout;
   window.setMyCardWysiwygAlign = setMyCardWysiwygAlign;
   window.applyMyCardWysiwygEditor = applyMyCardWysiwygEditor;
   window.addMyCardWysiwygButton = addMyCardWysiwygButton;
