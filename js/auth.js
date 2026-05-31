@@ -330,6 +330,23 @@ async function sendCardToCurrentChat(card, options = {}) {
   if (typeof liff === 'undefined' || !liff || typeof liff.sendMessages !== 'function') {
     throw new Error('此網址必須在 LINE 聊天室內開啟才能傳送');
   }
+  if (liff.permission && typeof liff.permission.query === 'function') {
+    let permissionState = '';
+    try {
+      const permission = await liff.permission.query('chat_message.write');
+      permissionState = permission && permission.state;
+      if (permissionState !== 'granted' && typeof liff.permission.requestAll === 'function') {
+        await liff.permission.requestAll();
+        const nextPermission = await liff.permission.query('chat_message.write');
+        permissionState = nextPermission && nextPermission.state;
+      }
+    } catch (permissionError) {
+      console.warn('[sendCardToCurrentChat] chat_message.write permission check failed:', permissionError);
+    }
+    if (permissionState && permissionState !== 'granted') {
+      throw new Error('LIFF 尚未開啟聊天室傳送權限 chat_message.write，請先到 LINE Developers 補上權限');
+    }
+  }
   await liff.sendMessages([{
     type: 'flex',
     altText: (card?.['姓名'] || card?.name || '數位名片') + ' 的電子名片',
@@ -384,7 +401,12 @@ async function handleAutoSendCardEntry(shareCardId, refId, netId) {
     return true;
   } catch (e) {
     console.warn('[handleAutoSendCardEntry] failed:', e);
-    window.showToast?.(e.message || '傳送名片失敗，請稍後再試', true);
+    const message = String(e && (e.message || e) || '');
+    if (message.includes('permission is not in LIFF app scope')) {
+      window.showToast?.('LIFF 缺少 chat_message.write 權限，無法直接傳送到聊天室', true);
+    } else {
+      window.showToast?.(message || '傳送名片失敗，請稍後再試', true);
+    }
     return false;
   } finally {
     removeAutoShareParamsFromUrl();
@@ -414,7 +436,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
   const loadingScreen = document.getElementById('loading-screen');
   if (loadingScreen) loadingScreen.classList.add('hidden');
   document.body.classList.remove('home-page');
-  app.innerHTML = '<main class="min-h-screen bg-[#eef2f7] px-3 py-5"><div class="max-w-[420px] mx-auto rounded-3xl bg-white p-6 text-center font-black text-slate-500 shadow-sm">名片載入中...</div></main>';
+  app.innerHTML = '<main class="min-h-screen bg-[#eef2f7] px-3 py-5"><div class="max-w-[360px] mx-auto rounded-3xl bg-white p-6 text-center font-black text-slate-500 shadow-sm">名片載入中...</div></main>';
 
   try {
     const card = await loadCardByPublicId(webCardId);
@@ -442,27 +464,27 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
       const label = window.escapeHTML(button.l || button.label || '連結');
       const url = cardButtonUrlForWeb(button.u || button.url || '');
       const color = /^#[0-9a-f]{6}$/i.test(button.c || '') ? button.c : '#1e293b';
-      return '<a href="' + window.escapeHTML(url) + '" target="_blank" rel="noopener" class="block w-full rounded-xl px-4 py-3 text-center text-white text-[17px] font-black shadow-sm" style="background:' + color + '">' + label + '</a>';
+      return '<a href="' + window.escapeHTML(url) + '" target="_blank" rel="noopener" class="block w-full rounded-xl px-4 py-2.5 text-center text-white text-[15px] font-black shadow-sm" style="background:' + color + '">' + label + '</a>';
     }).join('');
 
     app.innerHTML =
-      '<main class="min-h-screen bg-[#eef2f7] px-3 py-5">' +
-        '<section class="max-w-[420px] mx-auto overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-xl">' +
+      '<main class="min-h-screen bg-[#eef2f7] px-3 py-4">' +
+        '<section class="max-w-[360px] mx-auto overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-lg">' +
           '<div class="relative border-b border-slate-100">' +
-            '<a href="' + window.escapeHTML(shareUrl) + '" class="absolute right-3 top-3 z-10 rounded-full bg-red-500 px-5 py-2 text-[14px] font-black text-white shadow-sm">分享</a>' +
-            '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-cover bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">' +
+            '<a href="' + window.escapeHTML(shareUrl) + '" class="absolute right-3 top-3 z-10 rounded-full bg-red-500 px-4 py-1.5 text-[13px] font-black text-white shadow-sm">分享</a>' +
+            '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-cover bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';max-height:330px;" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">' +
           '</div>' +
-          '<div class="px-7 py-7 text-center">' +
-            '<h1 class="text-[28px] font-black text-slate-900 leading-tight">' + window.escapeHTML(name) + '</h1>' +
-            '<p class="mt-2 text-[15px] font-bold text-slate-500">' + window.escapeHTML([company, title].filter(Boolean).join(' / ')) + '</p>' +
-            (desc ? '<div class="mt-5 rounded-2xl bg-slate-50 px-5 py-5 text-[17px] font-bold leading-8 whitespace-pre-wrap" style="color:' + window.escapeHTML(cfg.descColor || '#475569') + ';text-align:' + window.escapeHTML(cfg.descAlign || 'center') + ';">' + window.escapeHTML(desc) + '</div>' : '') +
-            (buttonHtml ? '<div class="mt-6 space-y-2.5">' + buttonHtml + '</div>' : '') +
+          '<div class="px-5 py-5 text-center">' +
+            '<h1 class="text-[24px] font-black text-slate-900 leading-tight">' + window.escapeHTML(name) + '</h1>' +
+            '<p class="mt-2 text-[13px] font-bold text-slate-500">' + window.escapeHTML([company, title].filter(Boolean).join(' / ')) + '</p>' +
+            (desc ? '<div class="mt-4 rounded-2xl bg-slate-50 px-4 py-4 text-[14px] font-bold leading-7 whitespace-pre-wrap" style="color:' + window.escapeHTML(cfg.descColor || '#475569') + ';text-align:' + window.escapeHTML(cfg.descAlign || 'center') + ';">' + window.escapeHTML(desc) + '</div>' : '') +
+            (buttonHtml ? '<div class="mt-5 space-y-2">' + buttonHtml + '</div>' : '') +
           '</div>' +
         '</section>' +
       '</main>';
     return true;
   } catch (e) {
-    app.innerHTML = '<main class="min-h-screen bg-[#eef2f7] px-3 py-5"><div class="max-w-[420px] mx-auto rounded-3xl bg-white p-6 text-center font-black text-red-500 shadow-sm">' + window.escapeHTML(e.message || '名片載入失敗') + '</div></main>';
+    app.innerHTML = '<main class="min-h-screen bg-[#eef2f7] px-3 py-5"><div class="max-w-[360px] mx-auto rounded-3xl bg-white p-6 text-center font-black text-red-500 shadow-sm">' + window.escapeHTML(e.message || '名片載入失敗') + '</div></main>';
     return false;
   }
 }
