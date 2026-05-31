@@ -628,7 +628,7 @@
     var cardId = rowId || getCardRowId(currentCardData);
     var referrerId = moduleAuth.getUserId();
     var networkId = window.currentNetworkId || 'admin';
-    var url = window.location.origin + window.location.pathname + '?shareCardId=' + encodeURIComponent(cardId || '');
+    var url = window.location.origin + window.location.pathname + '?webCardId=' + encodeURIComponent(cardId || '');
     if (referrerId) url += '&ref=' + encodeURIComponent(referrerId);
     if (networkId) url += '&net=' + encodeURIComponent(networkId);
     return url;

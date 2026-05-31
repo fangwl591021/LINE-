@@ -330,6 +330,82 @@ async function handleAutoShareCardEntry(shareCardId, refId, netId) {
   }
 }
 
+function cardTextValue(card, keys, fallback = '') {
+  for (const key of keys) {
+    const value = card && card[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+  }
+  return fallback;
+}
+
+function cardButtonUrlForWeb(url) {
+  const value = String(url || '').trim();
+  if (!value) return '#';
+  if (/^tel:/i.test(value) || /^mailto:/i.test(value) || /^https?:\/\//i.test(value) || /^line:\/\//i.test(value)) return value;
+  if (/^09\d{8}$/.test(value.replace(/[\s-]/g, ''))) return 'tel:' + value.replace(/[\s-]/g, '');
+  return value;
+}
+
+async function renderStandaloneWebCardPage(webCardId, refId, netId) {
+  const app = document.getElementById('app') || document.body;
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) loadingScreen.classList.add('hidden');
+  document.body.classList.remove('home-page');
+  app.innerHTML = '<main class="min-h-screen bg-[#eef2f7] px-3 py-5"><div class="max-w-[420px] mx-auto rounded-3xl bg-white p-6 text-center font-black text-slate-500 shadow-sm">名片載入中...</div></main>';
+
+  try {
+    const cData = await window.fetchAPI('getCardContacts', { networkId: 'admin', role: 'admin', userId: '' }, true);
+    const cards = Array.isArray(cData) ? cData : (Array.isArray(cData?.data) ? cData.data : []);
+    const card = cards.find(c => String(c.rowId || c.id || c.cardId) === String(webCardId));
+    if (!card) throw new Error('找不到這張名片');
+
+    const cfg = buildCardShareConfig(card);
+    const layout = cfg.layoutStyle || 'landscape';
+    const ratio = String(
+      layout === 'portrait' ? (cfg.imgRatioPortrait || '400:600') :
+      layout === 'square' ? (cfg.imgRatioSquare || '1:1') :
+      (cfg.imgRatioLandscape || '20:13')
+    ).replace(':', '/');
+    const imgUrl = layout === 'portrait'
+      ? (cfg.imgUrlPortrait || cfg.imgUrl || card['名片圖檔'] || '')
+      : layout === 'square'
+        ? (cfg.imgUrlSquare || cfg.imgUrl || card['名片圖檔'] || '')
+        : (cfg.imgUrl || card['名片圖檔'] || '');
+    const name = cardTextValue(card, ['姓名', 'name', 'displayName'], '數位名片');
+    const company = cardTextValue(card, ['公司名稱', 'companyName', 'company'], '');
+    const title = cardTextValue(card, ['職稱', 'title', 'industry'], '');
+    const desc = String(cfg.desc || cardTextValue(card, ['服務項目', 'services', 'description'], '')).trim();
+    const shareUrl = appendCardAutoShareMode(buildPlainCardViewUrl(card, refId || '', netId || 'admin'));
+    const buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+    const buttonHtml = buttons.map(button => {
+      const label = window.escapeHTML(button.l || button.label || '連結');
+      const url = cardButtonUrlForWeb(button.u || button.url || '');
+      const color = /^#[0-9a-f]{6}$/i.test(button.c || '') ? button.c : '#1e293b';
+      return '<a href="' + window.escapeHTML(url) + '" target="_blank" rel="noopener" class="block w-full rounded-xl px-4 py-3 text-center text-white text-[17px] font-black shadow-sm" style="background:' + color + '">' + label + '</a>';
+    }).join('');
+
+    app.innerHTML =
+      '<main class="min-h-screen bg-[#eef2f7] px-3 py-5">' +
+        '<section class="max-w-[420px] mx-auto overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-xl">' +
+          '<div class="relative border-b border-slate-100">' +
+            '<a href="' + window.escapeHTML(shareUrl) + '" class="absolute right-3 top-3 z-10 rounded-full bg-red-500 px-5 py-2 text-[14px] font-black text-white shadow-sm">分享</a>' +
+            '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-cover bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">' +
+          '</div>' +
+          '<div class="px-7 py-7 text-center">' +
+            '<h1 class="text-[28px] font-black text-slate-900 leading-tight">' + window.escapeHTML(name) + '</h1>' +
+            '<p class="mt-2 text-[15px] font-bold text-slate-500">' + window.escapeHTML([company, title].filter(Boolean).join(' / ')) + '</p>' +
+            (desc ? '<div class="mt-5 rounded-2xl bg-slate-50 px-5 py-5 text-[17px] font-bold leading-8 whitespace-pre-wrap" style="color:' + window.escapeHTML(cfg.descColor || '#475569') + ';text-align:' + window.escapeHTML(cfg.descAlign || 'center') + ';">' + window.escapeHTML(desc) + '</div>' : '') +
+            (buttonHtml ? '<div class="mt-6 space-y-2.5">' + buttonHtml + '</div>' : '') +
+          '</div>' +
+        '</section>' +
+      '</main>';
+    return true;
+  } catch (e) {
+    app.innerHTML = '<main class="min-h-screen bg-[#eef2f7] px-3 py-5"><div class="max-w-[420px] mx-auto rounded-3xl bg-white p-6 text-center font-black text-red-500 shadow-sm">' + window.escapeHTML(e.message || '名片載入失敗') + '</div></main>';
+    return false;
+  }
+}
+
 window.submitRegistration = async function() {
   const name = document.getElementById('reg-name').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
@@ -1496,6 +1572,20 @@ window.reorderSettingsSections = function() {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     window.reorderSettingsSections();
+    const initialUrlParams = typeof window.readActmasterInitialParams === 'function'
+      ? window.readActmasterInitialParams()
+      : new URLSearchParams(window.location.search);
+    const webCardId = initialUrlParams.get('webCardId') || (
+      initialUrlParams.get('web') === '1' ? initialUrlParams.get('shareCardId') : ''
+    );
+    if (webCardId) {
+      await renderStandaloneWebCardPage(
+        webCardId,
+        initialUrlParams.get('ref') || '',
+        initialUrlParams.get('net') || 'admin'
+      );
+      return;
+    }
     if (typeof window.initActmasterLiff === 'function') {
       await window.initActmasterLiff(LIFF_ID);
     } else {

@@ -3,6 +3,7 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const auth = fs.readFileSync(path.join(root, 'js', 'auth.js'), 'utf8');
 const mycard = fs.readFileSync(path.join(root, 'js', 'modules', 'mycard.js'), 'utf8');
 
 function fail(message) {
@@ -13,8 +14,11 @@ function fail(message) {
 if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
   fail('my card summary must open the direct entry handler');
 }
-if (!index.includes('js/modules/mycard.js?v=8.48')) {
+if (!index.includes('js/modules/mycard.js?v=8.49')) {
   fail('mycard.js cache-bust version must be bumped');
+}
+if (!index.includes('js/auth.js?v=10.29')) {
+  fail('auth.js cache-bust version must be bumped');
 }
 if (index.includes('編輯名片詳細文字資料')) {
   fail('duplicate detail-edit button must be removed');
@@ -39,6 +43,12 @@ if (!mycard.includes('copyMyCardUrlVariant') || !mycard.includes('網址取用�
 }
 if (!mycard.includes('三按鈕操作') || !mycard.includes('傳送操作') || !mycard.includes('分享操作') || !mycard.includes('WEB版網址')) {
   fail('WYSIWYG editor must include all four URL copy labels');
+}
+if (!mycard.includes('webCardId=') || !mycard.includes('appendShareMode(baseUrl)')) {
+  fail('copy URL variants must separate WEB display from LIFF auto-send');
+}
+if (!auth.includes('renderStandaloneWebCardPage') || !auth.includes("initialUrlParams.get('webCardId')")) {
+  fail('WEB card URL must render without LIFF login');
 }
 
 console.log('My card entry contract passed.');
