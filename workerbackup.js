@@ -1130,36 +1130,47 @@ const LineOAChatModule = {
     } catch (e) {
       config = {};
     }
-    config = {
+    const baseConfig = {
       ...config,
-      layoutStyle: config.layoutStyle || config.layout || 'landscape',
       imgUrl: config.imgUrl || config.imgUrlLandscape || card.imageUrl,
+      imgUrlLandscape: config.imgUrlLandscape || config.imgUrl || card.imageUrl,
+      imgUrlPortrait: config.imgUrlPortrait || config.imgUrl || config.imgUrlLandscape || card.imageUrl,
+      imgUrlSquare: config.imgUrlSquare || config.imgUrl || config.imgUrlLandscape || card.imageUrl,
       imgRatioLandscape: config.imgRatioLandscape || '20:13',
+      imgRatioPortrait: config.imgRatioPortrait || '400:600',
+      imgRatioSquare: config.imgRatioSquare || '1:1',
       title: config.title || card.name,
       desc: config.desc || card.services || card.title || '',
       buttons: this.normalizeCardButtons(config.buttons)
     };
-    if (!config.buttons.length) config.buttons = this.autoCardButtons(card);
-    else config.buttons = this.addMissingAddressButton(config.buttons, card);
-    const flex = MessagingModule.buildFlex({
-      card,
-      config,
-      referrerId: userId,
-      networkId: card.networkId || 'admin',
-      liffId: env.POINT_LIFF_ID || env.LIFF_ID
-    });
+    if (!baseConfig.buttons.length) baseConfig.buttons = this.autoCardButtons(card);
+    else baseConfig.buttons = this.addMissingAddressButton(baseConfig.buttons, card);
     const editUrl = this.quickMyCardUrl(userId, env);
     const shareUrl = this.cardShareUrl(card.rowId, userId, card.networkId || 'admin', env, true);
-    if (flex?.header?.contents?.[0]) {
-      flex.header.contents[0].action = { type: 'uri', uri: shareUrl };
-    }
+    const layouts = ['landscape', 'portrait', 'square'];
+    const bubbles = layouts.map(layoutStyle => {
+      const flex = MessagingModule.buildFlex({
+        card,
+        config: { ...baseConfig, layoutStyle },
+        referrerId: userId,
+        networkId: card.networkId || 'admin',
+        liffId: env.POINT_LIFF_ID || env.LIFF_ID
+      });
+      if (flex?.header?.contents?.[0]) {
+        flex.header.contents[0].action = { type: 'uri', uri: shareUrl };
+      }
+      return flex;
+    }).filter(Boolean);
+    if (!bubbles.length) return null;
     return {
       type: 'flex',
-      altText: `${card.name || '我的名片'} 的電子名片`,
+      altText: `${card.name || '我的名片'} 的電子名片（三種版型）`,
       quickReply: {
         items: this.myCardQuickReplyItems(userId, env, card.rowId)
       },
-      contents: flex
+      contents: bubbles.length === 1
+        ? bubbles[0]
+        : { type: 'carousel', contents: bubbles }
     };
   },
 
