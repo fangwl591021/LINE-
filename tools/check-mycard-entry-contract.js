@@ -13,7 +13,7 @@ function fail(message) {
 if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
   fail('my card summary must open the direct entry handler');
 }
-if (!index.includes('js/modules/mycard.js?v=8.46')) {
+if (!index.includes('js/modules/mycard.js?v=8.47')) {
   fail('mycard.js cache-bust version must be bumped');
 }
 if (index.includes('編輯名片詳細文字資料')) {

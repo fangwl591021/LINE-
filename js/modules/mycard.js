@@ -166,9 +166,11 @@
 
   function layoutFromImageRatio(ratio, fallback) {
     var text = String(ratio || '').trim();
-    if (text === '1:1' || text === '1/1') return 'square';
-    if (text === '400:600' || text === '400/600' || text === '2:3' || text === '2/3') return 'portrait';
-    if (text === '20:13' || text === '20/13') return 'landscape';
+    var parts = text.match(/^(\d+(?:\.\d+)?)[/:](\d+(?:\.\d+)?)$/);
+    var value = parts ? Number(parts[1]) / Number(parts[2]) : Number(text);
+    if (text === '1:1' || text === '1/1' || (Number.isFinite(value) && Math.abs(value - 1) < 0.01)) return 'square';
+    if (text === '400:600' || text === '400/600' || text === '2:3' || text === '2/3' || (Number.isFinite(value) && Math.abs(value - (400 / 600)) < 0.01)) return 'portrait';
+    if (text === '20:13' || text === '20/13' || (Number.isFinite(value) && Math.abs(value - (20 / 13)) < 0.01)) return 'landscape';
     return fallback || getLayout();
   }
 

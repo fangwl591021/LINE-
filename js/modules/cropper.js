@@ -845,7 +845,10 @@ window.confirmCustomImageCrop = async function() {
 
   const canvas = cropperInstance.getCroppedCanvas(cropperCanvasOptions('default', size));
 
-  const imgRatio = Math.round(canvas.width) + ':' + Math.round(canvas.height);
+  const selectedRatio = normalizeCropperRatio(cropperOutputRatioState.default);
+  const imgRatio = selectedRatio !== 'free'
+    ? selectedRatio
+    : Math.round(canvas.width) + ':' + Math.round(canvas.height);
   let base64Image = canvas.toDataURL('image/jpeg', quality);
 
   while (base64Image.length > 660000 && quality > 0.3) {
