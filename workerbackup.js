@@ -374,6 +374,7 @@ const SecurityModule = {
       'uploadLineOAAsset',
       'sendLineOAChatReply',
       'updateLineOAChatThread',
+      'adminSyncBoundCardUser',
       'getCrmContacts',
       'listPersonalTasks',
       'getInboxCount',
