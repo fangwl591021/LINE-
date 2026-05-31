@@ -1706,6 +1706,8 @@ const LineOAChatModule = {
       await saveJob;
       await forwardJob;
     }
+    const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env);
+    if (cardCoolReplied) return new Response('OK', { status: 200 });
     const simpleMyCardReplied = await this.replySimpleMyCard(events, env);
     if (simpleMyCardReplied) return new Response('OK', { status: 200 });
     const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);
@@ -2245,6 +2247,253 @@ const ReferralFriendKeywordModule = {
       const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
       if (!result.success) console.error('Referral friend keyword reply failed', result);
       return true;
+    }
+    return false;
+  }
+};
+
+const LineOACardCoolKeywordModule = {
+  statePrefix: 'lineoa:cardcool:',
+  ttlSeconds: 900,
+
+  text(value, fallback = '') {
+    return String(value ?? '').trim() || fallback;
+  },
+
+  stateKey(userId) {
+    return this.statePrefix + this.text(userId);
+  },
+
+  isKeyword(event) {
+    const message = event?.message || {};
+    if (message.type !== 'text') return false;
+    return this.text(message.text).replace(/\s+/g, '') === '名片酷';
+  },
+
+  postbackSides(event) {
+    if (event?.type !== 'postback') return 0;
+    const data = this.text(event?.postback?.data);
+    if (!data) return 0;
+    const params = new URLSearchParams(data);
+    if (params.get('action') !== 'lineoa_cardcool_sides') return 0;
+    const sides = Number(params.get('sides') || 0);
+    return sides === 2 ? 2 : (sides === 1 ? 1 : 0);
+  },
+
+  isImage(event) {
+    return event?.type === 'message' && event?.message?.type === 'image' && !!event?.message?.id;
+  },
+
+  async loadState(env, userId) {
+    if (!env.ACTMASTER_KV || !userId) return null;
+    const raw = await env.ACTMASTER_KV.get(this.stateKey(userId)).catch(() => '');
+    if (!raw) return null;
+    try {
+      const state = JSON.parse(raw);
+      return state && typeof state === 'object' ? state : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async saveState(env, userId, state) {
+    if (!env.ACTMASTER_KV || !userId) return false;
+    await env.ACTMASTER_KV.put(this.stateKey(userId), JSON.stringify(state), { expirationTtl: this.ttlSeconds });
+    return true;
+  },
+
+  async clearState(env, userId) {
+    if (!env.ACTMASTER_KV || !userId) return;
+    await env.ACTMASTER_KV.delete(this.stateKey(userId)).catch(() => {});
+  },
+
+  buildSidesMessage() {
+    return {
+      type: 'text',
+      text: '請選擇這張名片有幾面。選完後再上傳名片照片；非名片圖片不會建立資料。',
+      quickReply: {
+        items: [{
+          type: 'action',
+          action: {
+            type: 'postback',
+            label: '一面',
+            data: 'action=lineoa_cardcool_sides&sides=1',
+            displayText: '名片酷：一面'
+          }
+        }, {
+          type: 'action',
+          action: {
+            type: 'postback',
+            label: '二面',
+            data: 'action=lineoa_cardcool_sides&sides=2',
+            displayText: '名片酷：二面'
+          }
+        }]
+      }
+    };
+  },
+
+  buildUploadPrompt(sides) {
+    return {
+      type: 'text',
+      text: sides === 2
+        ? '請先上傳名片第 1 面照片。'
+        : '請上傳名片照片，我會辨識內容並建立到名片酷。',
+      quickReply: {
+        items: [{
+          type: 'action',
+          action: { type: 'camera', label: '拍攝名片' }
+        }, {
+          type: 'action',
+          action: { type: 'cameraRoll', label: '從相簿選擇' }
+        }]
+      }
+    };
+  },
+
+  arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  },
+
+  async fetchLineImageDataUri(env, messageId) {
+    if (!env.LINE_CHANNEL_ACCESS_TOKEN) throw new Error('Missing LINE_CHANNEL_ACCESS_TOKEN');
+    const res = await fetch(`https://api-data.line.me/v2/bot/message/${encodeURIComponent(messageId)}/content`, {
+      headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` }
+    });
+    if (!res.ok) throw new Error('LINE image fetch failed: HTTP ' + res.status);
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const buffer = await res.arrayBuffer();
+    if (buffer.byteLength > 8 * 1024 * 1024) throw new Error('圖片太大，請重新上傳較清楚且較小的名片照片。');
+    return `data:${contentType};base64,${this.arrayBufferToBase64(buffer)}`;
+  },
+
+  normalizeSavedCardPayload(userId, ocrData) {
+    const name = this.text(ocrData.name || ocrData.companyName, '未命名名片');
+    const companyName = this.text(ocrData.companyName);
+    const title = this.text(ocrData.title);
+    return {
+      authenticatedUserId: userId,
+      userId,
+      rowId: `CARD_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      lineId: '',
+      name,
+      englishName: this.text(ocrData.englishName),
+      companyName,
+      title,
+      department: this.text(ocrData.department),
+      mobile: this.text(ocrData.mobile),
+      officePhone: this.text(ocrData.officePhone),
+      email: this.text(ocrData.email),
+      website: this.text(ocrData.website),
+      address: this.text(ocrData.address),
+      services: this.text(ocrData.services || title || companyName),
+      tags: this.text(ocrData.tags),
+      notes: 'LINE OA 名片酷 OCR 建立',
+      creatorId: userId,
+      ownerUserId: userId,
+      sourceType: 'private_import',
+      visibility: 'private',
+      poolEligible: '0',
+      aiReviewStatus: 'passed',
+      imageUrl: this.text(ocrData.imageUrl),
+      customConfig: this.text(ocrData.customConfig)
+    };
+  },
+
+  buildSavedCardMessage(card, userId, env) {
+    let config = {};
+    try {
+      config = card.customConfig ? JSON.parse(card.customConfig) : {};
+    } catch (e) {
+      config = {};
+    }
+    if (!Array.isArray(config.buttons) || !config.buttons.length) {
+      config.buttons = LineOAChatModule.autoCardButtons(card);
+    }
+    const flex = MessagingModule.buildFlex({
+      card,
+      config,
+      referrerId: userId,
+      networkId: card.networkId || 'admin',
+      liffId: env.POINT_LIFF_ID || env.LIFF_ID
+    });
+    return {
+      type: 'flex',
+      altText: `${card.name || '名片酷'} 的電子名片`,
+      contents: flex
+    };
+  },
+
+  async processImages(userId, images, env) {
+    const ocr = await AIModule.recognizeBusinessCardImages({ base64Images: images }, env);
+    if (!ocr.success) return { success: false, error: ocr.error || '非名片圖片，未建立資料。' };
+    const savePayload = this.normalizeSavedCardPayload(userId, ocr.data || {});
+    const saved = await D1WriteModule.upsertCard(savePayload, env);
+    if (!saved || saved.success === false) return { success: false, error: saved?.error || '名片儲存失敗。' };
+    return { success: true, card: saved.data };
+  },
+
+  async reply(events, env) {
+    for (const event of Array.isArray(events) ? events : []) {
+      const replyToken = this.text(event.replyToken);
+      const userId = LineOAChatModule.eventUserId(event);
+      if (!replyToken || !userId) continue;
+
+      if (this.isKeyword(event)) {
+        await this.clearState(env, userId);
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildSidesMessage()] }, env);
+        if (!result.success) console.error('Card cool side selector reply failed', result);
+        return true;
+      }
+
+      const sides = this.postbackSides(event);
+      if (sides) {
+        const ok = await this.saveState(env, userId, { sides, images: [], createdAt: new Date().toISOString() });
+        const message = ok ? this.buildUploadPrompt(sides) : { type: 'text', text: '名片酷暫時無法啟動，請稍後再試。' };
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
+        if (!result.success) console.error('Card cool upload prompt reply failed', result);
+        return true;
+      }
+
+      if (!this.isImage(event)) continue;
+      const state = await this.loadState(env, userId);
+      if (!state || !state.sides) continue;
+
+      try {
+        const image = await this.fetchLineImageDataUri(env, event.message.id);
+        const images = Array.isArray(state.images) ? state.images.concat([image]) : [image];
+        if (Number(state.sides) === 2 && images.length < 2) {
+          await this.saveState(env, userId, { ...state, images, updatedAt: new Date().toISOString() });
+          const result = await LineOAChatModule.replyLine({
+            replyToken,
+            messages: [{ type: 'text', text: '已收到第 1 面，請再上傳名片第 2 面照片。' }]
+          }, env);
+          if (!result.success) console.error('Card cool second-side prompt failed', result);
+          return true;
+        }
+
+        await this.clearState(env, userId);
+        const saved = await this.processImages(userId, images.slice(0, Number(state.sides) === 2 ? 2 : 1), env);
+        const message = saved.success
+          ? this.buildSavedCardMessage(saved.card, userId, env)
+          : { type: 'text', text: saved.error || '這張圖片不像名片，未建立資料。' };
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
+        if (!result.success) console.error('Card cool OCR reply failed', result);
+        return true;
+      } catch (e) {
+        const result = await LineOAChatModule.replyLine({
+          replyToken,
+          messages: [{ type: 'text', text: e.message || '名片酷處理失敗，請重新輸入「名片酷」再試。' }]
+        }, env);
+        if (!result.success) console.error('Card cool error reply failed', result);
+        return true;
+      }
     }
     return false;
   }
@@ -3516,6 +3765,102 @@ const AIModule = {
       .join('');
     if (!text) throw new Error('Gemini did not return text');
     return text;
+  },
+
+  async recognizeBusinessCardImages(payload, env) {
+    try {
+      const images = (Array.isArray(payload.base64Images) ? payload.base64Images : [payload.base64Image])
+        .map(v => String(v || '').trim())
+        .filter(Boolean)
+        .slice(0, 2);
+      if (!images.length) throw new Error('Missing image data');
+
+      const uploadedUrls = [];
+      for (const image of images) {
+        uploadedUrls.push(await StorageModule.upload(image, env));
+      }
+
+      const prompt = [
+        '你是名片 OCR 助理。請只接受真實紙本名片、電子名片截圖、商務聯絡卡片。',
+        '如果圖片不是名片或缺少姓名與至少一項聯絡資訊，回傳 {"isBusinessCard":false,"reason":"原因"}，不要猜測。',
+        '如果是名片，回傳純 JSON，不要 markdown：',
+        '{"isBusinessCard":true,"name":"","englishName":"","companyName":"","title":"","department":"","mobile":"","officePhone":"","email":"","website":"","address":"","services":"","tags":""}',
+        'services 請整理成 3 到 8 行中文重點；沒有資料留空。'
+      ].join('\n');
+
+      const content = images.flatMap(image => ([
+        { type: 'image_url', image_url: { url: image, detail: 'high' } }
+      ]));
+      content.push({ type: 'text', text: prompt });
+
+      let text = '';
+      let openaiError = null;
+      try {
+        const result = await this.callOpenAI(env, {
+          model: env.OPENAI_VISION_MODEL || env.OPENAI_MODEL || 'gpt-4o',
+          messages: [{ role: 'user', content }],
+          temperature: 0
+        }, payload.clientOpenAIKey);
+        text = result.choices?.[0]?.message?.content || '';
+      } catch (err) {
+        openaiError = err;
+        console.warn('[LINE OA card cool] GPT vision failed:', err.message);
+      }
+
+      if (!text && String(env.OCR_FALLBACK_PROVIDER || '').toLowerCase() === 'gemini') {
+        try {
+          text = await this.callGeminiVision(env, images[0], prompt, 0);
+        } catch (geminiError) {
+          throw new Error((openaiError && openaiError.message) || geminiError.message);
+        }
+      }
+      if (!text) throw new Error((openaiError && openaiError.message) || 'OCR failed');
+
+      const data = this.parseJsonObject(text);
+      if (!data || data.isBusinessCard !== true) {
+        return { success: false, code: 'NON_BUSINESS_CARD', error: String(data?.reason || '這張圖片不像名片，未建立資料。') };
+      }
+
+      const buttons = [];
+      const mobile = String(data.mobile || data.officePhone || '').replace(/[^0-9+]/g, '');
+      if (mobile) buttons.push({ l: '行動電話', u: 'tel:' + mobile, c: '#3B82F6' });
+      if (data.email) buttons.push({ l: '電子郵件', u: 'mailto:' + String(data.email).trim(), c: '#F97316' });
+      if (data.website) {
+        let url = String(data.website).trim();
+        if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+        if (url) buttons.push({ l: '官方網站', u: url, c: '#1E293B' });
+      }
+      if (data.address) {
+        buttons.push({ l: '地圖導航', u: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(String(data.address).trim()), c: '#1E293B' });
+      }
+
+      const config = {
+        cardType: 'v1',
+        layoutStyle: 'landscape',
+        imgUrl: uploadedUrls[0],
+        imgUrlLandscape: uploadedUrls[0],
+        imgRatioLandscape: '20:13',
+        title: String(data.name || data.companyName || '名片').trim(),
+        desc: String(data.services || data.title || data.companyName || '').trim(),
+        buttons: buttons.slice(0, 4),
+        isPrivate: true,
+        descAlign: 'center',
+        descColor: '#374151'
+      };
+
+      return {
+        success: true,
+        data: {
+          ...data,
+          imageUrl: uploadedUrls[0],
+          customConfig: JSON.stringify(config),
+          config,
+          uploadedUrls
+        }
+      };
+    } catch (e) {
+      return { success: false, error: '名片 OCR 失敗：' + (e.message || String(e)) };
+    }
   },
 
   parseJsonObject(text) {

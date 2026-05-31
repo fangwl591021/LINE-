@@ -13,7 +13,10 @@ function ok(condition, message) {
 }
 
 const moduleStart = worker.indexOf('const ReferralFriendKeywordModule = {');
-const moduleEnd = worker.indexOf('// ==================== Point Service Module ====================', moduleStart);
+const cardCoolStart = worker.indexOf('const LineOACardCoolKeywordModule = {', moduleStart);
+const moduleEnd = cardCoolStart >= 0
+  ? cardCoolStart
+  : worker.indexOf('// ==================== Point Service Module ====================', moduleStart);
 ok(moduleStart >= 0 && moduleEnd > moduleStart, 'referral friend keyword module exists');
 
 const moduleSource = worker.slice(moduleStart, moduleEnd);
