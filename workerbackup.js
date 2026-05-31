@@ -2504,6 +2504,7 @@ const LineOACardCoolKeywordModule = {
       notes: 'LINE OA 名片酷 OCR 建立',
       creatorId: userId,
       ownerUserId: userId,
+      profileUserId: '',
       sourceType: 'private_import',
       visibility: 'private',
       poolEligible: '0',
@@ -2556,7 +2557,7 @@ const LineOACardCoolKeywordModule = {
       }
       if (!images.length) throw new Error('Missing image data');
       const ocr = await AIModule.recognizeBusinessCardImages({ base64Images: images }, env);
-      if (!ocr.success) throw new Error(ocr.error || '??????');
+      if (!ocr.success) throw new Error(ocr.error || '\u540d\u7247\u89e3\u6790\u5931\u6557');
       const jobId = crypto.randomUUID ? crypto.randomUUID() : `JOB_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const draft = await this.saveReviewDraft(env, {
         jobId,
@@ -2573,7 +2574,7 @@ const LineOACardCoolKeywordModule = {
       console.error('Card cool async OCR failed', e);
       await this.pushLine(userId, [{
         type: 'text',
-        text: e.message || '???????????????????????????'
+        text: e.message || '\u540d\u7247\u89e3\u6790\u5931\u6557\uff0c\u8acb\u78ba\u8a8d\u5716\u7247\u662f\u5b8c\u6574\u3001\u6e05\u695a\u7684\u540d\u7247\u5f8c\u518d\u8a66\u4e00\u6b21\u3002'
       }], env);
       return { success: false, error: e.message || String(e) };
     }
@@ -2583,12 +2584,12 @@ const LineOACardCoolKeywordModule = {
     const jobId = this.text(payload.jobId);
     const userId = this.text(payload.userId);
     const draft = await this.loadReviewDraft(env, jobId);
-    if (!draft) return { success: false, error: '??????????????????' };
+    if (!draft) return { success: false, error: '\u540d\u7247\u6838\u5c0d\u8cc7\u6599\u5df2\u5931\u6548\uff0c\u8acb\u91cd\u65b0\u4e0a\u50b3\u540d\u7247\u3002' };
     if (!userId || this.text(draft.userId) !== userId) return { success: false, error: 'Access Denied: draft owner mismatch' };
     const cardData = this.mergeReviewedCard(draft.card || {}, payload.card || {});
     const savePayload = this.normalizeSavedCardPayload(userId, cardData);
     const saved = await D1WriteModule.upsertCard(savePayload, env);
-    if (!saved || saved.success === false) return { success: false, error: saved?.error || '??????' };
+    if (!saved || saved.success === false) return { success: false, error: saved?.error || '\u540d\u7247\u5132\u5b58\u5931\u6557' };
     if (env.ACTMASTER_KV) await env.ACTMASTER_KV.delete(this.reviewKey(jobId)).catch(() => {});
     const push = await this.pushLine(userId, [this.buildSavedCardMessage(saved.data, userId, env)], env);
     if (!push.success) console.error('Card cool saved card push failed', push);
@@ -2611,7 +2612,7 @@ const LineOACardCoolKeywordModule = {
       const sides = this.postbackSides(event);
       if (sides) {
         const ok = await this.saveState(env, userId, { sides, images: [], createdAt: new Date().toISOString() });
-        const message = ok ? this.buildUploadPrompt(sides) : { type: 'text', text: '????????????????' };
+        const message = ok ? this.buildUploadPrompt(sides) : { type: 'text', text: '\u540d\u7247\u9177\u66ab\u6642\u7121\u6cd5\u555f\u52d5\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002' };
         const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
         if (!result.success) console.error('Card cool upload prompt reply failed', result);
         return true;
@@ -2630,7 +2631,7 @@ const LineOACardCoolKeywordModule = {
           await this.saveState(env, userId, { ...state, images, updatedAt: new Date().toISOString() });
           const result = await LineOAChatModule.replyLine({
             replyToken,
-            messages: [{ type: 'text', text: '???? 1 ????????? 2 ????' }]
+            messages: [{ type: 'text', text: '\u5df2\u6536\u5230\u7b2c 1 \u9762\uff0c\u8acb\u518d\u4e0a\u50b3\u540d\u7247\u7b2c 2 \u9762\u7167\u7247\u3002' }]
           }, env);
           if (!result.success) console.error('Card cool second-side prompt failed', result);
           return true;
@@ -2638,7 +2639,7 @@ const LineOACardCoolKeywordModule = {
 
         await this.clearState(env, userId);
         await this.startLoadingAnimation(userId, env, 20);
-        const processingMessage = { type: 'text', text: '??????????????????????????' };
+        const processingMessage = { type: 'text', text: '\u540d\u7247\u89e3\u6790\u4e2d\uff0c\u5b8c\u6210\u5f8c\u6703\u63a8\u9001\u6838\u5c0d\u756b\u9762\u3002\u8acb\u5148\u4e0d\u8981\u91cd\u8907\u4e0a\u50b3\u3002' };
         const result = await LineOAChatModule.replyLine({ replyToken, messages: [processingMessage] }, env);
         if (!result.success) console.error('Card cool processing reply failed', result);
         const finalInputs = Number(state.sides) === 2 ? images.concat([messageId]).slice(0, 2) : [messageId];
@@ -2649,7 +2650,7 @@ const LineOACardCoolKeywordModule = {
       } catch (e) {
         const result = await LineOAChatModule.replyLine({
           replyToken,
-          messages: [{ type: 'text', text: e.message || '?????????????????????' }]
+          messages: [{ type: 'text', text: e.message || '\u540d\u7247\u9177\u8655\u7406\u5931\u6557\uff0c\u8acb\u91cd\u65b0\u8f38\u5165\u300c\u540d\u7247\u9177\u300d\u518d\u8a66\u3002' }]
         }, env);
         if (!result.success) console.error('Card cool error reply failed', result);
         return true;

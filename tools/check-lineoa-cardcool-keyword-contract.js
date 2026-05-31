@@ -31,7 +31,9 @@ ok(moduleSource.includes("mode: 'cardcool-review'"), 'review LIFF URL is generat
 ok(moduleSource.includes('confirmReviewDraft'), 'review confirmation saves final card');
 ok(moduleSource.includes("sourceType: 'private_import'"), 'saved OCR card stays in private import pool');
 ok(moduleSource.includes("visibility: 'private'"), 'saved OCR card is private by default');
+ok(moduleSource.includes("lineId: ''") && moduleSource.includes("profileUserId: ''"), 'OCR import does not claim the scanned person LINE ownership');
 ok(moduleSource.includes('D1WriteModule.upsertCard'), 'recognized business card is saved through D1 card path');
+ok(!moduleSource.includes('????'), 'card cool replies do not contain garbled fallback text');
 
 const aiStart = worker.indexOf('async recognizeBusinessCardImages(payload, env)');
 const aiEnd = worker.indexOf('\n  parseJsonObject(text)', aiStart);
