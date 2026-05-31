@@ -13,7 +13,7 @@ function fail(message) {
 if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
   fail('my card summary must open the direct entry handler');
 }
-if (!index.includes('js/modules/mycard.js?v=8.47')) {
+if (!index.includes('js/modules/mycard.js?v=8.48')) {
   fail('mycard.js cache-bust version must be bumped');
 }
 if (index.includes('編輯名片詳細文字資料')) {
@@ -33,6 +33,12 @@ if (/bindOnce\(document,\s*['"]click['"],\s*['"]#btn-save-my-ecard['"]/.test(myc
 }
 if (!/dataset\.myEcardSaving/.test(mycard)) {
   fail('personal card save must guard against duplicate submissions');
+}
+if (!mycard.includes('copyMyCardUrlVariant') || !mycard.includes('網址取用資訊')) {
+  fail('WYSIWYG editor must expose copy labels for card URLs');
+}
+if (!mycard.includes('三按鈕操作') || !mycard.includes('傳送操作') || !mycard.includes('分享操作') || !mycard.includes('WEB版網址')) {
+  fail('WYSIWYG editor must include all four URL copy labels');
 }
 
 console.log('My card entry contract passed.');

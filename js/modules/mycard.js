@@ -611,6 +611,74 @@
     }
   }
 
+  function setUrlParam(url, key, value) {
+    if (!url) return '';
+    try {
+      var parsed = new URL(url);
+      if (value === null || value === undefined || value === '') parsed.searchParams.delete(key);
+      else parsed.searchParams.set(key, value);
+      return parsed.toString();
+    } catch (e) {
+      var separator = url.indexOf('?') >= 0 ? '&' : '?';
+      return url + separator + encodeURIComponent(key) + '=' + encodeURIComponent(value || '');
+    }
+  }
+
+  function buildMyCardWebUrl(rowId) {
+    var cardId = rowId || getCardRowId(currentCardData);
+    var referrerId = moduleAuth.getUserId();
+    var networkId = window.currentNetworkId || 'admin';
+    var url = window.location.origin + window.location.pathname + '?shareCardId=' + encodeURIComponent(cardId || '');
+    if (referrerId) url += '&ref=' + encodeURIComponent(referrerId);
+    if (networkId) url += '&net=' + encodeURIComponent(networkId);
+    return url;
+  }
+
+  function buildMyCardCopyUrls(rowId) {
+    var baseUrl = buildMyCardShareUrl(rowId);
+    return {
+      buttons: baseUrl,
+      send: appendShareMode(baseUrl),
+      share: setUrlParam(baseUrl, 'action', 'share'),
+      web: buildMyCardWebUrl(rowId)
+    };
+  }
+
+  function copyTextToClipboard(text, fallbackLabel) {
+    if (!text) {
+      if (window.showToast) window.showToast('沒有可複製的網址', true);
+      return Promise.resolve(false);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function() {
+        if (window.showToast) window.showToast((fallbackLabel || '網址') + '已複製');
+        return true;
+      }).catch(function() {
+        window.prompt('請複製' + (fallbackLabel || '網址'), text);
+        return true;
+      });
+    }
+    window.prompt('請複製' + (fallbackLabel || '網址'), text);
+    return Promise.resolve(true);
+  }
+
+  async function copyMyCardUrlVariant(kind) {
+    try {
+      var rowId = await ensureCurrentCardRowId();
+      if (!rowId) throw new Error('找不到名片編號，請先儲存名片');
+      var urls = buildMyCardCopyUrls(rowId);
+      var labels = {
+        buttons: '三按鈕操作網址',
+        send: '傳送操作網址',
+        share: '分享操作網址',
+        web: 'WEB版網址'
+      };
+      await copyTextToClipboard(urls[kind] || urls.buttons, labels[kind] || '名片網址');
+    } catch (e) {
+      if (window.showToast) window.showToast(e.message || '複製網址失敗', true);
+    }
+  }
+
   function routeFlexHeaderShareToPicker(flexMsg, shareUrl) {
     var actionUrl = appendShareMode(shareUrl);
     if (!flexMsg || !actionUrl) return flexMsg;
@@ -965,6 +1033,19 @@
         '</div>' +
       '</div>' +
       '<p class="text-center text-[12px] text-slate-500 font-bold mt-3">點圖片、文字或按鈕即可編輯。尚未按儲存前不會寫入資料庫。</p>';
+    preview.insertAdjacentHTML('beforeend', renderMyCardCopyUrlPanelHtml());
+  }
+
+  function renderMyCardCopyUrlPanelHtml() {
+    return '<div class="max-w-[390px] mx-auto mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-left">' +
+      '<div class="text-[12px] font-black text-slate-200 mb-2">網址取用資訊</div>' +
+      '<div class="grid grid-cols-2 gap-2">' +
+        '<button type="button" onclick="window.copyMyCardUrlVariant(\'buttons\')" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">三按鈕操作</button>' +
+        '<button type="button" onclick="window.copyMyCardUrlVariant(\'send\')" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">傳送操作</button>' +
+        '<button type="button" onclick="window.copyMyCardUrlVariant(\'share\')" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">分享操作</button>' +
+        '<button type="button" onclick="window.copyMyCardUrlVariant(\'web\')" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">WEB版網址</button>' +
+      '</div>' +
+    '</div>';
   }
 
   function renderWysiwygEditor(type, index) {
@@ -1225,6 +1306,7 @@
         '</div>' +
       '</div>' +
       '<p class="text-center text-[12px] text-slate-300 font-bold mt-3">這是編輯畫布。儲存後才會更新名片設定。</p>';
+    preview.insertAdjacentHTML('beforeend', renderMyCardCopyUrlPanelHtml());
   }
 
   function renderWysiwygEditor(type, index) {
@@ -1674,6 +1756,7 @@
   window.applyMyCardWysiwygEditor = applyMyCardWysiwygEditor;
   window.addMyCardWysiwygButton = addMyCardWysiwygButton;
   window.removeMyCardWysiwygButton = removeMyCardWysiwygButton;
+  window.copyMyCardUrlVariant = copyMyCardUrlVariant;
   window.openMyCardWysiwygImageUpload = openMyCardWysiwygImageUpload;
   window.getMyCardUploadAspectRatio = getMyCardUploadAspectRatio;
   window.saveMyCardWysiwyg = saveMyCardWysiwyg;
