@@ -1718,6 +1718,8 @@ const LineOAChatModule = {
     if (simpleMyCardReplied) return new Response('OK', { status: 200 });
     const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);
     if (referralFriendReplied) return new Response('OK', { status: 200 });
+    const storeSearchReplied = await LineOAStoreSearchKeywordModule.reply(events, env);
+    if (storeSearchReplied) return new Response('OK', { status: 200 });
     const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);
     if (!gasRawBody) return new Response('OK', { status: 200 });
     const gasResult = await this.forwardToGas(gasRawBody, env);
@@ -2252,6 +2254,126 @@ const ReferralFriendKeywordModule = {
       const message = this.buildMessage(inviteUrl, context);
       const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
       if (!result.success) console.error('Referral friend keyword reply failed', result);
+      return true;
+    }
+    return false;
+  }
+};
+
+const LineOAStoreSearchKeywordModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  parseQuery(event) {
+    const message = event && event.message ? event.message : {};
+    if (message.type !== 'text') return '';
+    const raw = this.text(message.text);
+    const compact = raw.replace(/\s+/g, '');
+    const prefixes = ['找服務', '找商品', '搜尋服務', '搜尋商品', '店家搜尋'];
+    for (const prefix of prefixes) {
+      if (compact === prefix) return '';
+      if (compact.startsWith(prefix)) {
+        return raw.replace(new RegExp(`^\\s*${prefix}\\s*[:：]?\\s*`), '').trim();
+      }
+    }
+    return '';
+  },
+
+  button(label, uri, color = '#2563EB') {
+    if (!uri) return null;
+    return {
+      type: 'button',
+      style: 'primary',
+      height: 'sm',
+      color,
+      action: {
+        type: 'uri',
+        label: String(label || '了解更多').slice(0, 20),
+        uri
+      }
+    };
+  },
+
+  buildBubble(item) {
+    const summary = item && item.summary ? item.summary : {};
+    const contacts = summary.contacts || {};
+    const productNames = Array.isArray(summary.productNames) ? summary.productNames : [];
+    const serviceNames = Array.isArray(summary.serviceNames) ? summary.serviceNames : [];
+    const areas = Array.isArray(summary.serviceAreas) ? summary.serviceAreas : [];
+    const lines = [];
+    if (summary.category) lines.push(`類型：${summary.category}`);
+    if (productNames.length) lines.push(`商品：${productNames.slice(0, 4).join('、')}`);
+    if (serviceNames.length) lines.push(`服務：${serviceNames.slice(0, 4).join('、')}`);
+    if (areas.length) lines.push(`地區：${areas.slice(0, 4).join('、')}`);
+    if (contacts.phone) lines.push(`電話：${contacts.phone}`);
+    const actions = [
+      this.button('LINE 聯絡', contacts.lineUrl, '#06C755'),
+      this.button('網站', contacts.website, '#2563EB'),
+      this.button('地圖/地址', contacts.address && /^https?:\/\//i.test(contacts.address) ? contacts.address : '', '#111827')
+    ].filter(Boolean);
+    return {
+      type: 'bubble',
+      size: 'mega',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'md',
+        paddingAll: '18px',
+        contents: [
+          {
+            type: 'text',
+            text: this.text(item.storeName || summary.storeName, '店家'),
+            weight: 'bold',
+            size: 'lg',
+            wrap: true,
+            color: '#0F172A'
+          },
+          {
+            type: 'text',
+            text: lines.length ? lines.join('\n') : '找到符合的店家商品服務資料。',
+            size: 'sm',
+            color: '#475569',
+            wrap: true
+          }
+        ].concat(actions.length ? [{
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'sm',
+          margin: 'md',
+          contents: actions.slice(0, 3)
+        }] : [])
+      }
+    };
+  },
+
+  buildResultMessage(searchResult) {
+    const data = searchResult && searchResult.data ? searchResult.data : {};
+    if (data.outOfScope) return { type: 'text', text: data.message };
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      return { type: 'text', text: `目前找不到「${this.text(data.query)}」相關的店家商品或服務。` };
+    }
+    return {
+      type: 'flex',
+      altText: '店家商品服務搜尋結果',
+      contents: {
+        type: 'carousel',
+        contents: items.slice(0, 10).map(item => this.buildBubble(item))
+      }
+    };
+  },
+
+  async reply(events, env) {
+    for (const event of Array.isArray(events) ? events : []) {
+      const replyToken = this.text(event.replyToken);
+      const query = this.parseQuery(event);
+      if (!replyToken || !query) continue;
+      const searchResult = await D1StoreKnowledgeBaseModule.search({ query, limit: 5 }, env);
+      const message = this.buildResultMessage(searchResult);
+      const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
+      if (!result.success) console.error('Store search keyword reply failed', result);
       return true;
     }
     return false;
@@ -7962,7 +8084,13 @@ const D1StoreKnowledgeBaseModule = {
       serviceCount: services.length,
       faqCount: faqs.length,
       productNames: products.map(item => this.text(item.name)).filter(Boolean).slice(0, 20),
-      serviceNames: services.map(item => this.text(item.name)).filter(Boolean).slice(0, 20)
+      serviceNames: services.map(item => this.text(item.name)).filter(Boolean).slice(0, 20),
+      contacts: {
+        phone: this.text(store.contacts && store.contacts.phone),
+        lineUrl: this.text(store.contacts && store.contacts.lineUrl),
+        website: this.text(store.contacts && store.contacts.website),
+        address: this.text(store.contacts && store.contacts.address)
+      }
     };
   },
 
