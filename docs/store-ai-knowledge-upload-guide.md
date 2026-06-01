@@ -89,3 +89,61 @@ AI 只能回答下列內容：
 - 商品服務搜尋 API。
 - LINE OA 關鍵字或自然語句搜尋入口。
 - 超出範圍防護。
+
+## 測試分支 API
+
+測試分支已新增三個 Worker action。這些 action 走既有 `POST /` dispatch 格式。
+
+### 儲存店家知識庫
+
+`saveStoreKnowledgeBase` 限店長或總管。
+
+```json
+{
+  "action": "saveStoreKnowledgeBase",
+  "payload": {
+    "lineAccessToken": "LIFF_ACCESS_TOKEN",
+    "knowledge": {
+      "schemaVersion": "store_ai_knowledge_base_v1"
+    }
+  }
+}
+```
+
+實際上傳時，`knowledge` 請填完整的 `store-ai-knowledge-upload-template.json` 內容。
+
+### 讀取自己的店家知識庫
+
+`getStoreKnowledgeBase` 限店長或總管。
+
+```json
+{
+  "action": "getStoreKnowledgeBase",
+  "payload": {
+    "lineAccessToken": "LIFF_ACCESS_TOKEN"
+  }
+}
+```
+
+### 搜尋商品服務
+
+`searchStoreKnowledgeBase` 是 LINE OA 搜尋入口的基礎查詢。它只搜尋已公開的店家商品服務資料。
+
+```json
+{
+  "action": "searchStoreKnowledgeBase",
+  "payload": {
+    "query": "LINE OA 設定",
+    "limit": 5
+  }
+}
+```
+
+若問題超出商品服務範圍，會回傳：
+
+```json
+{
+  "outOfScope": true,
+  "message": "這個問題超出本店商品與服務範圍，我只能協助介紹店家的商品、服務、預約與聯絡資訊。"
+}
+```

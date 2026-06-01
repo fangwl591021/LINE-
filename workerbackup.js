@@ -313,6 +313,8 @@ const SecurityModule = {
       'toggleCheckin',
       'getInboxMonitor',
       'saveStoreSettings',
+      'getStoreKnowledgeBase',
+      'saveStoreKnowledgeBase',
       'extractLineVoomMedia',
       'storeAdjustCustomerPoints',
       'getStorePointCustomer',
@@ -365,6 +367,8 @@ const SecurityModule = {
       'saveCard',
       'updateCard',
       'saveStoreSettings',
+      'getStoreKnowledgeBase',
+      'saveStoreKnowledgeBase',
       'updateActivity',
       'dailyPointCheckin',
       'extractLineVoomMedia',
@@ -7846,6 +7850,261 @@ const D1PersonalAssistantCoreModule = {
   }
 };
 
+const D1StoreKnowledgeBaseModule = {
+  schemaVersion: 'store_ai_knowledge_base_v1',
+
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  json(value, fallback = {}) {
+    if (!value) return fallback;
+    if (typeof value === 'object') return value;
+    try {
+      const parsed = JSON.parse(String(value));
+      return parsed && typeof parsed === 'object' ? parsed : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  },
+
+  ownUserId(payload) {
+    return this.text(payload.authenticatedUserId || payload.userId || payload.ownerLineUid || payload.owner_line_uid);
+  },
+
+  async ensure(env) {
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS store_ai_knowledge_profiles (
+        profile_id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL DEFAULT '',
+        network_id TEXT NOT NULL DEFAULT 'admin',
+        store_name TEXT NOT NULL DEFAULT '',
+        schema_version TEXT NOT NULL DEFAULT '',
+        search_visibility INTEGER NOT NULL DEFAULT 0,
+        knowledge_json TEXT NOT NULL DEFAULT '{}',
+        summary_json TEXT NOT NULL DEFAULT '{}',
+        searchable_text TEXT NOT NULL DEFAULT '',
+        item_count INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_store_ai_profiles_owner ON store_ai_knowledge_profiles(owner_user_id, status)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_store_ai_profiles_network ON store_ai_knowledge_profiles(network_id, status, search_visibility)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_store_ai_profiles_updated ON store_ai_knowledge_profiles(updated_at)').run();
+  },
+
+  parseKnowledge(payload) {
+    let knowledge = payload && (payload.knowledge || payload.knowledgeJson || payload.data);
+    if (typeof knowledge === 'string') knowledge = JSON.parse(knowledge);
+    if (!knowledge || typeof knowledge !== 'object' || Array.isArray(knowledge)) throw new Error('JSON 格式不正確');
+    if (knowledge.schemaVersion !== this.schemaVersion) throw new Error('schemaVersion 不正確');
+    return knowledge;
+  },
+
+  normalizeList(value) {
+    return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : [];
+  },
+
+  validateKnowledge(knowledge) {
+    const errors = [];
+    const store = knowledge.store || {};
+    const products = this.normalizeList(knowledge.products);
+    const services = this.normalizeList(knowledge.services);
+    if (!this.text(store.storeName)) errors.push('store.storeName 不可空白');
+    if (!this.text(store.ownerLineUid)) errors.push('store.ownerLineUid 不可空白');
+    if (typeof store.searchVisibility !== 'boolean') errors.push('store.searchVisibility 必須是 true 或 false');
+    if (!products.length && !services.length) errors.push('products 或 services 至少要有一筆');
+    products.forEach((item, index) => {
+      if (!this.text(item.name)) errors.push(`products[${index}].name 不可空白`);
+      if (!this.text(item.summary)) errors.push(`products[${index}].summary 不可空白`);
+      if (!this.text(item.description)) errors.push(`products[${index}].description 不可空白`);
+    });
+    services.forEach((item, index) => {
+      if (!this.text(item.name)) errors.push(`services[${index}].name 不可空白`);
+      if (!this.text(item.summary)) errors.push(`services[${index}].summary 不可空白`);
+      if (!this.text(item.description)) errors.push(`services[${index}].description 不可空白`);
+    });
+    return errors;
+  },
+
+  collectSearchText(knowledge) {
+    const parts = [];
+    const append = value => {
+      if (Array.isArray(value)) value.forEach(append);
+      else if (value && typeof value === 'object') Object.values(value).forEach(append);
+      else {
+        const text = this.text(value);
+        if (text) parts.push(text);
+      }
+    };
+    append(knowledge.store || {});
+    append(knowledge.products || []);
+    append(knowledge.services || []);
+    append(knowledge.faqs || []);
+    return parts.join(' ').slice(0, 60000);
+  },
+
+  summarize(knowledge) {
+    const store = knowledge.store || {};
+    const products = this.normalizeList(knowledge.products);
+    const services = this.normalizeList(knowledge.services);
+    const faqs = Array.isArray(knowledge.faqs) ? knowledge.faqs : [];
+    return {
+      storeName: this.text(store.storeName),
+      category: this.text(store.category),
+      ownerLineUid: this.text(store.ownerLineUid),
+      serviceAreas: Array.isArray(store.serviceAreas) ? store.serviceAreas.filter(Boolean).slice(0, 12) : [],
+      searchVisibility: store.searchVisibility === true,
+      productCount: products.length,
+      serviceCount: services.length,
+      faqCount: faqs.length,
+      productNames: products.map(item => this.text(item.name)).filter(Boolean).slice(0, 20),
+      serviceNames: services.map(item => this.text(item.name)).filter(Boolean).slice(0, 20)
+    };
+  },
+
+  row(row, includeKnowledge = false) {
+    if (!row) return { exists: false };
+    const summary = this.json(row.summary_json, {});
+    const data = {
+      exists: true,
+      profileId: this.text(row.profile_id),
+      ownerUserId: this.text(row.owner_user_id),
+      networkId: this.text(row.network_id),
+      storeName: this.text(row.store_name),
+      schemaVersion: this.text(row.schema_version),
+      searchVisibility: Number(row.search_visibility) === 1,
+      itemCount: Number(row.item_count || 0),
+      status: this.text(row.status, 'active'),
+      summary,
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at)
+    };
+    if (includeKnowledge) data.knowledge = this.json(row.knowledge_json, {});
+    return data;
+  },
+
+  async get(payload, env) {
+    await this.ensure(env);
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const row = await D1ReadModule.first(env, `
+      SELECT * FROM store_ai_knowledge_profiles
+      WHERE owner_user_id = ? AND status <> 'deleted'
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `, [userId]);
+    return { success: true, data: this.row(row, true) };
+  },
+
+  async save(payload, env) {
+    await this.ensure(env);
+    const actorUserId = this.ownUserId(payload);
+    if (!actorUserId) return { success: false, error: 'Missing userId' };
+    const knowledge = this.parseKnowledge(payload || {});
+    const errors = this.validateKnowledge(knowledge);
+    if (errors.length) return { success: false, error: errors.join('；'), validationErrors: errors };
+
+    const store = knowledge.store || {};
+    const ownerLineUid = this.text(store.ownerLineUid, actorUserId);
+    if (ownerLineUid !== actorUserId && this.text(payload.authenticatedRole) !== 'admin') {
+      return { success: false, error: '只能上傳自己的店家知識庫' };
+    }
+    store.ownerLineUid = ownerLineUid;
+    knowledge.store = store;
+
+    const profileId = this.text(payload.profileId || payload.profile_id) || `STOREKB_${ownerLineUid}`;
+    const networkId = this.text(payload.authenticatedNetworkId || store.storeId || store.networkId, ownerLineUid);
+    const summary = this.summarize(knowledge);
+    const products = this.normalizeList(knowledge.products);
+    const services = this.normalizeList(knowledge.services);
+    const itemCount = products.length + services.length;
+    const knowledgeJson = JSON.stringify(knowledge);
+    if (knowledgeJson.length > 150000) return { success: false, error: '資料包過大，請縮減商品服務內容' };
+    const summaryJson = JSON.stringify(summary);
+    const searchableText = this.collectSearchText(knowledge);
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO store_ai_knowledge_profiles (
+        profile_id,owner_user_id,network_id,store_name,schema_version,search_visibility,
+        knowledge_json,summary_json,searchable_text,item_count,status,created_at,updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(profile_id) DO UPDATE SET
+        owner_user_id=excluded.owner_user_id,
+        network_id=excluded.network_id,
+        store_name=excluded.store_name,
+        schema_version=excluded.schema_version,
+        search_visibility=excluded.search_visibility,
+        knowledge_json=excluded.knowledge_json,
+        summary_json=excluded.summary_json,
+        searchable_text=excluded.searchable_text,
+        item_count=excluded.item_count,
+        status='active',
+        updated_at=CURRENT_TIMESTAMP
+    `).bind(
+      profileId,
+      ownerLineUid,
+      networkId,
+      summary.storeName,
+      knowledge.schemaVersion,
+      summary.searchVisibility ? 1 : 0,
+      knowledgeJson,
+      summaryJson,
+      searchableText,
+      itemCount
+    ).run();
+
+    const row = await D1ReadModule.first(env, 'SELECT * FROM store_ai_knowledge_profiles WHERE profile_id = ? LIMIT 1', [profileId]);
+    return { success: true, data: this.row(row, false) };
+  },
+
+  isOutOfScope(query) {
+    const text = this.text(query).toLowerCase();
+    if (!text || text.length < 2) return true;
+    const blocked = ['股票', '投資', '政治', '選舉', '色情', '診斷', '治療', '法律判決', '保證獲利'];
+    return blocked.some(word => text.includes(word.toLowerCase()));
+  },
+
+  async search(payload, env) {
+    await this.ensure(env);
+    const query = this.text(payload.query || payload.q || payload.text);
+    if (this.isOutOfScope(query)) {
+      return {
+        success: true,
+        data: {
+          outOfScope: true,
+          message: '這個問題超出本店商品與服務範圍，我只能協助介紹店家的商品、服務、預約與聯絡資訊。',
+          items: []
+        }
+      };
+    }
+    const limit = Math.max(1, Math.min(Number(payload.limit || 5) || 5, 10));
+    const keyword = `%${query.replace(/[%_]/g, '').slice(0, 80)}%`;
+    const rows = await D1ReadModule.all(env, `
+      SELECT profile_id,owner_user_id,network_id,store_name,schema_version,search_visibility,
+             summary_json,item_count,status,created_at,updated_at
+      FROM store_ai_knowledge_profiles
+      WHERE status = 'active'
+        AND search_visibility = 1
+        AND searchable_text LIKE ?
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `, [keyword, limit]);
+    return {
+      success: true,
+      data: {
+        outOfScope: false,
+        query,
+        count: rows.length,
+        items: rows.map(row => this.row(row, false))
+      }
+    };
+  }
+};
+
 const D1AnnouncementModule = {
   text(value, fallback = '') {
     const next = String(value ?? '').trim();
@@ -11223,6 +11482,12 @@ async function dispatchAction(action, payload, request, env) {
       return await D1PersonalAssistantCoreModule.get(payload || {}, env);
     case 'savePersonalAssistantCore':
       return await D1PersonalAssistantCoreModule.save(payload || {}, env);
+    case 'getStoreKnowledgeBase':
+      return await D1StoreKnowledgeBaseModule.get(payload || {}, env);
+    case 'saveStoreKnowledgeBase':
+      return await D1StoreKnowledgeBaseModule.save(payload || {}, env);
+    case 'searchStoreKnowledgeBase':
+      return await D1StoreKnowledgeBaseModule.search(payload || {}, env);
     case 'getCardCoolDraft':
       return await LineOACardCoolKeywordModule.getReviewDraft(payload || {}, env);
     case 'confirmCardCoolDraft':
