@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "store_ai_knowledge_base_v1",
+  "store": {
+    "storeId": "",
+    "storeName": "範例店家名稱",
+    "ownerLineUid": "",
+    "ownerRoleRequired": "store_manager",
+    "category": "餐飲 / 美容 / 旅遊 / 教育 / 其他",
+    "serviceAreas": ["台北市", "新北市"],
+    "businessHours": "週一至週五 10:00-19:00",
+    "contacts": {
+      "phone": "02-0000-0000",
+      "lineUrl": "https://lin.ee/xxxx",
+      "website": "https://example.com",
+      "address": "店家地址"
+    },
+    "searchVisibility": true
+  },
+  "scopePolicy": {
+    "allowedTopics": [
+      "商品介紹",
+      "服務介紹",
+      "價格與方案",
+      "預約方式",
+      "營業時間",
+      "服務地區",
+      "店家聯絡方式",
+      "商品或服務常見問題"
+    ],
+    "blockedTopics": [
+      "非本店商品或服務",
+      "個人隱私資料",
+      "醫療診斷",
+      "法律結論",
+      "投資保證",
+      "政治與成人內容"
+    ],
+    "outOfScopeReply": "這個問題超出本店商品與服務範圍，我只能協助介紹店家的商品、服務、預約與聯絡資訊。"
+  },
+  "products": [
+    {
+      "id": "product_001",
+      "name": "商品名稱",
+      "aliases": ["別名", "常見搜尋詞"],
+      "category": "商品分類",
+      "summary": "一句話商品介紹",
+      "description": "完整商品說明。請寫清楚用途、特色、適合對象與注意事項。",
+      "priceText": "NT$100 起",
+      "keywords": ["關鍵字1", "關鍵字2"],
+      "suitableFor": ["適合對象1", "適合對象2"],
+      "notSuitableFor": ["不適合情境或限制"],
+      "images": ["https://example.com/product.jpg"],
+      "url": "https://example.com/product",
+      "availability": "現貨 / 預約 / 限量",
+      "callToAction": {
+        "label": "我要了解",
+        "url": "https://lin.ee/xxxx"
+      }
+    }
+  ],
+  "services": [
+    {
+      "id": "service_001",
+      "name": "服務名稱",
+      "aliases": ["服務別名", "客人常用說法"],
+      "category": "服務分類",
+      "summary": "一句話服務介紹",
+      "description": "完整服務說明。請寫清楚服務內容、流程、時間、價格與適合對象。",
+      "durationText": "約 60 分鐘",
+      "priceText": "NT$1,000 起",
+      "keywords": ["關鍵字1", "關鍵字2"],
+      "serviceAreas": ["台北市"],
+      "bookingUrl": "https://example.com/book",
+      "images": ["https://example.com/service.jpg"],
+      "callToAction": {
+        "label": "預約諮詢",
+        "url": "https://lin.ee/xxxx"
+      }
+    }
+  ],
+  "faqs": [
+    {
+      "question": "客人常問問題",
+      "answer": "標準回答。回答必須只限本店商品或服務。",
+      "keywords": ["常見問法", "搜尋詞"],
+      "relatedItemIds": ["product_001", "service_001"]
+    }
+  ],
+  "promotions": [
+    {
+      "title": "活動名稱",
+      "description": "活動內容",
+      "validUntil": "2026-12-31",
+      "relatedItemIds": ["product_001"]
+    }
+  ],
+  "responseRules": {
+    "tone": "專業、簡短、清楚",
+    "mustMention": ["店名", "可預約或聯絡方式"],
+    "prohibitedClaims": ["保證療效", "保證獲利", "未授權折扣"],
+    "maxReplyLength": 500
+  }
+}
