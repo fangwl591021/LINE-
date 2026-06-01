@@ -390,13 +390,19 @@ const HomeModule = (function() {
             return window.buildPointLiffUrl({
                 ref: myUserId,
                 net: window.currentNetworkId || 'admin',
-                via: tracking
+                via: tracking,
+                point_friend: '1',
+                point_from: 'lineoa-referral-keyword-v2',
+                from: 'business-engine'
             });
         }
         return 'https://liff.line.me/' + encodeURIComponent(window.LIFF_ID || '') +
             '?ref=' + encodeURIComponent(myUserId) +
             '&net=' + encodeURIComponent(window.currentNetworkId || 'admin') +
-            '&via=' + encodeURIComponent(tracking);
+            '&via=' + encodeURIComponent(tracking) +
+            '&point_friend=1' +
+            '&point_from=lineoa-referral-keyword-v2' +
+            '&from=business-engine';
     };
 
     window.refreshHomeProfileCard = function() {
@@ -442,14 +448,18 @@ const HomeModule = (function() {
             btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[13px]">refresh</span>';
         }
         try {
-            if (typeof window.initMyECard === 'function') await window.initMyECard();
-            if (typeof window.shareMyCard === 'function') {
-                await window.shareMyCard(btn);
+            const inviteUrl = window.buildHomeInviteUrl ? window.buildHomeInviteUrl() : '';
+            if (!inviteUrl) throw new Error('找不到邀約連結');
+            const displayName = window.currentUser?.name || window.currentUserProfile?.displayName || 'LINE 好友';
+            const text = displayName + ' 邀請你加入點數通\n' + inviteUrl;
+            if (typeof liff !== 'undefined' && liff && liff.isLoggedIn && liff.isLoggedIn() && liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')) {
+                await liff.shareTargetPicker([{ type: 'text', text }]);
+                window.showToast?.('邀約連結已送出');
                 return;
             }
-            throw new Error('找不到專屬名片分享入口');
+            window.location.href = 'https://line.me/R/msg/text/?' + encodeURIComponent(text);
         } catch (e) {
-            if (window.showToast) window.showToast('分享名片失敗：' + (e.message || '請稍後再試'), true);
+            if (window.showToast) window.showToast('分享邀約失敗：' + (e.message || '請稍後再試'), true);
         } finally {
             if (btn) {
                 btn.disabled = false;
