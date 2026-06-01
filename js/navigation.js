@@ -22,16 +22,17 @@ window.goPage = function(page, isInitLoad = false) {
     else if (page === 'admin-crm') window.loadCrm();
     else if (page === 'tenant-upgrade' && typeof window.initTenantUpgradePage === 'function') window.initTenantUpgradePage();
     else if (page === 'points-wallet' && typeof window.loadPointsWallet === 'function') window.loadPointsWallet();
+    else if ((page === 'register' || page === 'claim-register') && typeof window.prepareRegistrationInputs === 'function') window.prepareRegistrationInputs();
     else if (page === 'admin-settings') {
       if (currentUser) {
         const pn = document.getElementById('profile-name');
-        if (pn) pn.value = currentUser.name || '';
+        if (pn && !(pn.dataset.userTouched === '1' && String(pn.value || '').trim())) pn.value = currentUser.name || '';
         const pp = document.getElementById('profile-phone');
-        if (pp) pp.value = String(currentUser.phone || '').replaceAll(String.fromCharCode(8203), '').replaceAll("'", "");
+        if (pp && !(pp.dataset.userTouched === '1' && String(pp.value || '').trim())) pp.value = String(currentUser.phone || '').replaceAll(String.fromCharCode(8203), '').replaceAll("'", "");
         const pi = document.getElementById('profile-industry');
-        if (pi) pi.value = currentUser.industry || '';
+        if (pi && !(pi.dataset.userTouched === '1' && String(pi.value || '').trim())) pi.value = currentUser.industry || '';
         const pb = document.getElementById('profile-birthday');
-        if (pb) pb.value = currentUser.birthday || '';
+        if (pb && !(pb.dataset.userTouched === '1' && String(pb.value || '').trim())) pb.value = currentUser.birthday || '';
       }
       window.userSocials = [];
       try {

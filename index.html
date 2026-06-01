@@ -115,7 +115,7 @@
   <main id="main" class="flex-1 overflow-y-auto overflow-x-hidden pb-32 pt-28 px-4 space-y-6">
 
     <!-- ==================== 一般註冊頁面 ==================== -->
-    <div id="page-register" class="hidden h-full flex-col items-center justify-center animate-in fade-in pb-10">
+    <div id="page-register" class="hidden h-full flex flex-col items-center justify-center animate-in fade-in pb-10">
       <div class="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 w-full space-y-5">
         <div class="w-16 h-16 bg-primary-light text-primary rounded-full flex items-center justify-center mx-auto mb-2">
           <span class="material-symbols-outlined text-3xl icon-filled">person_add</span>
@@ -123,12 +123,12 @@
         <h2 class="text-xl font-black text-center text-slate-800">建立專屬商務檔案</h2>
         <p class="text-xs text-center text-slate-500 mb-6">請先完成設定以啟用 AI 智能配對與名片酷</p>
 
-        <div><label class="text-xs text-slate-500 font-bold ml-1">真實姓名</label><input id="reg-name" class="custom-input mt-1" type="text" placeholder="例:王大明"></div>
-        <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼</label><input id="reg-phone" class="custom-input mt-1 font-mono" type="tel" placeholder="09xxxxxxxx"></div>
-        <div><label class="text-xs text-slate-500 font-bold ml-1">主要業種</label><input id="reg-industry" class="custom-input mt-1" type="text" placeholder="例:保險、房仲、設計"></div>
-        <div><label class="text-xs text-slate-500 font-bold ml-1">出生年月日</label><input id="reg-birthday" class="custom-input mt-1 font-mono text-slate-500" type="date"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">真實姓名</label><input id="reg-name" name="name" class="custom-input mt-1" type="text" autocomplete="name" autocapitalize="off" enterkeyhint="next" placeholder="例:王大明"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼</label><input id="reg-phone" name="tel" class="custom-input mt-1 font-mono" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next" placeholder="09xxxxxxxx"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">主要業種</label><input id="reg-industry" name="organization-title" class="custom-input mt-1" type="text" autocomplete="organization-title" enterkeyhint="next" placeholder="例:保險、房仲、設計"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">出生年月日</label><input id="reg-birthday" name="bday" class="custom-input mt-1 font-mono text-slate-500" type="date" autocomplete="bday"></div>
 
-        <button id="btn-register" onclick="window.submitRegistration()" class="w-full bg-[#06C755] text-white py-4 rounded-2xl font-bold mt-6 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
+        <button id="btn-register" type="button" onclick="window.submitRegistration()" class="w-full bg-[#06C755] text-white py-4 rounded-2xl font-bold mt-6 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
           開始使用 <span class="material-symbols-outlined">arrow_forward</span>
         </button>
       </div>
@@ -148,12 +148,12 @@
         <input type="hidden" id="claim-ref-id">
         <input type="hidden" id="claim-net-id">
 
-        <div><label class="text-xs text-slate-500 font-bold ml-1">您的姓名 <span class="text-red-500">*</span></label><input id="claim-name" class="custom-input mt-1 !bg-blue-50/30 !border !border-blue-100" type="text"></div>
-        <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼 <span class="text-red-500">*</span></label><input id="claim-phone" class="custom-input mt-1 font-mono !bg-blue-50/30 !border !border-blue-100" type="tel"></div>
-        <div><label class="text-xs text-slate-500 font-bold ml-1">公司名稱</label><input id="claim-company" class="custom-input mt-1" type="text"></div>
-        <div><label class="text-xs text-slate-500 font-bold ml-1">職稱</label><input id="claim-title" class="custom-input mt-1" type="text"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">您的姓名 <span class="text-red-500">*</span></label><input id="claim-name" name="claim-name" class="custom-input mt-1 !bg-blue-50/30 !border !border-blue-100" type="text" autocomplete="name" autocapitalize="off" enterkeyhint="next"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼 <span class="text-red-500">*</span></label><input id="claim-phone" name="claim-tel" class="custom-input mt-1 font-mono !bg-blue-50/30 !border !border-blue-100" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">公司名稱</label><input id="claim-company" name="claim-organization" class="custom-input mt-1" type="text" autocomplete="organization" enterkeyhint="next"></div>
+        <div><label class="text-xs text-slate-500 font-bold ml-1">職稱</label><input id="claim-title" name="claim-title" class="custom-input mt-1" type="text" autocomplete="organization-title"></div>
 
-        <button id="btn-claim-register" onclick="window.submitClaimRegistration()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-[16px] mt-6 shadow-lg shadow-blue-500/30 active:scale-95 transition-transform flex justify-center items-center gap-2">
+        <button id="btn-claim-register" type="button" onclick="window.submitClaimRegistration()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-[16px] mt-6 shadow-lg shadow-blue-500/30 active:scale-95 transition-transform flex justify-center items-center gap-2">
           確認認領並啟用名片 <span class="material-symbols-outlined">how_to_reg</span>
         </button>
       </div>
@@ -2001,7 +2001,7 @@
 
 <!-- ocr-lab route: ocr-lab.html -->
 <script src="js/core.js?v=7.25"></script>
-<script src="js/navigation.js?v=7.8"></script>
+<script src="js/navigation.js?v=7.9"></script>
 <script src="js/modules/cropper.js?v=7.16"></script>
 <script src="js/modules/cards.js?v=7.7"></script>
 <script src="js/modules/ecard.js?v=7.38"></script>
@@ -2015,7 +2015,7 @@
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.34"></script>
+<script src="js/auth.js?v=10.35"></script>
 
 </body>
 </html>

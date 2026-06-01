@@ -157,6 +157,45 @@ function resolveReferralForRegistration(urlRef, urlNet) {
   };
 }
 
+function trackManualInputField(id) {
+  const el = document.getElementById(id);
+  if (!el || el.dataset.manualInputTracked === '1') return;
+  el.dataset.manualInputTracked = '1';
+  const markTouched = () => {
+    el.dataset.userTouched = '1';
+  };
+  el.addEventListener('beforeinput', markTouched);
+  el.addEventListener('input', markTouched);
+  el.addEventListener('compositionend', markTouched);
+  el.addEventListener('change', markTouched);
+}
+
+function setInputValueUnlessTouched(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const next = String(value || '').trim();
+  if (!next) return;
+  if (el.dataset.userTouched === '1' && String(el.value || '').trim()) return;
+  el.value = next;
+}
+
+window.prepareRegistrationInputs = function() {
+  [
+    'reg-name',
+    'reg-phone',
+    'reg-industry',
+    'reg-birthday',
+    'claim-name',
+    'claim-phone',
+    'claim-company',
+    'claim-title',
+    'profile-name',
+    'profile-phone',
+    'profile-industry',
+    'profile-birthday'
+  ].forEach(trackManualInputField);
+};
+
 function removeAutoShareParamsFromUrl() {
   try {
     const url = new URL(window.location.href);
@@ -882,10 +921,10 @@ window.applyRegisteredUserSession = function(info) {
   const profilePhone = document.getElementById('profile-phone');
   const profileIndustry = document.getElementById('profile-industry');
   const profileBirthday = document.getElementById('profile-birthday');
-  if (profileName) profileName.value = window.currentUser.name || '';
-  if (profilePhone) profilePhone.value = window.currentUser.phone || '';
-  if (profileIndustry) profileIndustry.value = window.currentUser.industry || '';
-  if (profileBirthday) profileBirthday.value = window.currentUser.birthday || '';
+  if (profileName) setInputValueUnlessTouched('profile-name', window.currentUser.name || '');
+  if (profilePhone) setInputValueUnlessTouched('profile-phone', window.currentUser.phone || '');
+  if (profileIndustry) setInputValueUnlessTouched('profile-industry', window.currentUser.industry || '');
+  if (profileBirthday) setInputValueUnlessTouched('profile-birthday', window.currentUser.birthday || '');
 
   window.userSocials = [];
   const socialsList = document.getElementById('user-socials-list');
@@ -1654,6 +1693,7 @@ window.reorderSettingsSections = function() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    if (typeof window.prepareRegistrationInputs === 'function') window.prepareRegistrationInputs();
     window.reorderSettingsSections();
     const initialUrlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
