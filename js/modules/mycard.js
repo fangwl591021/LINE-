@@ -1495,6 +1495,11 @@
     ratio = String(ratio).replace(':', '/');
     var imgUrl = currentWysiwygImage(cfg);
     var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+    var isVideoHero = cfg.cardType === 'video' && cfg.videoUrl;
+    var fallbackImg = 'https://placehold.co/800x520?text=Cover';
+    var heroMediaHtml = isVideoHero
+      ? '<video class="w-full object-cover bg-slate-100" style="aspect-ratio:' + escapeAttr(ratio) + ';" src="' + escapeAttr(cfg.videoUrl) + '" poster="' + escapeAttr(imgUrl || fallbackImg) + '" controls playsinline muted></video>'
+      : '<img src="' + escapeAttr(imgUrl || fallbackImg) + '" class="w-full object-cover bg-slate-100" style="aspect-ratio:' + escapeAttr(ratio) + ';" onerror="this.src=\'' + fallbackImg + '\';">';
     var buttonHtml = buttons.map(function(button, index) {
       return '<button type="button" onclick="window.editMyCardWysiwygButton(' + index + ')" class="my-wysiwyg-target w-full py-3 rounded-xl text-white text-center text-[15px] font-black mb-2.5 shadow-sm active:scale-95" style="background:' + escapeAttr(safeCssColor(button.c, '#06C755')) + '">' +
         '<span class="my-wysiwyg-edit-icon"><span class="material-symbols-outlined">link</span></span>' +
