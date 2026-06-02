@@ -95,6 +95,42 @@
       .slice(0, 4);
   }
 
+  function normalizeId(value) {
+    return String(value || '').trim();
+  }
+
+  function getCardSourceType(card) {
+    return normalizeId(
+      card && (card.sourceType || card.source_type || card['名片來源'])
+    );
+  }
+
+  function getCurrentOwnerUserId() {
+    return normalizeId(
+      moduleAuth.getUserId() ||
+      getDirectLineUserId() ||
+      (window.currentUserProfile && window.currentUserProfile.userId) ||
+      (window.currentUser && (window.currentUser.userId || window.currentUser.lineId || window.currentUser.line_id))
+    );
+  }
+
+  function isEditableOwnCard(card, version) {
+    if (!card) return false;
+    var userId = getCurrentOwnerUserId();
+    if (!userId) return false;
+    var sourceType = getCardSourceType(card);
+    if (sourceType === 'private_import' || sourceType === 'referral_placeholder') return false;
+    var lineId = normalizeId(card.lineId || card.line_id || card['LINE ID']);
+    var ownerId = normalizeId(card.ownerUserId || card.owner_user_id || card.ownerId || card.creatorId || card.creator_id);
+    var profileId = normalizeId(card.profileUserId || card.profile_user_id || card.profileId);
+    var belongsToUser = lineId === userId || ownerId === userId || profileId === userId;
+    if (!belongsToUser) return false;
+    var targetVersion = normalizeCardVersion(version || getTargetCardVersion());
+    if (targetVersion === 'video') return sourceType === 'video_profile' || isCardVersion(card, 'video');
+    if (sourceType === 'video_profile') return false;
+    return sourceType === 'self_profile' || sourceType === '';
+  }
+
   function parseMyCardSocials(raw) {
     var value = raw;
     if (!value) return [];
@@ -400,7 +436,7 @@
 
   async function resolveCurrentUserCard(force) {
     var targetVersion = getTargetCardVersion();
-    if (window.currentUserCard && !force && isCardVersion(window.currentUserCard, targetVersion)) return window.currentUserCard;
+    if (window.currentUserCard && !force && isEditableOwnCard(window.currentUserCard, targetVersion) && isCardVersion(window.currentUserCard, targetVersion)) return window.currentUserCard;
 
     var videoDraft = null;
     if (isWysiwygMyCardRequest() && getMyVideoDraftId()) {
@@ -428,7 +464,7 @@
     if (requestedRowId) {
       var requestedCard = findLoadedMyCardByRowId(requestedRowId);
       if (requestedCard) {
-        if (!wysiwygState.cfg || isCardVersion(requestedCard, targetVersion)) {
+        if (isEditableOwnCard(requestedCard, targetVersion) && (!wysiwygState.cfg || isCardVersion(requestedCard, targetVersion))) {
           window.currentUserCard = requestedCard;
           return requestedCard;
         }
@@ -438,7 +474,7 @@
           var cardRes = await window.fetchAPI('getPublicCardById', { rowId: requestedRowId }, true);
           var card = cardRes && (cardRes.card || cardRes.data || cardRes);
           if (card && !card.error) {
-            if (!wysiwygState.cfg || isCardVersion(card, targetVersion)) {
+            if (isEditableOwnCard(card, targetVersion) && (!wysiwygState.cfg || isCardVersion(card, targetVersion))) {
               window.currentUserCard = card;
               if (Array.isArray(window.allCards) && !findLoadedMyCardByRowId(requestedRowId)) {
                 window.allCards.unshift(card);
@@ -463,16 +499,16 @@
     }
 
     var versionCard = findLoadedMyCardByVersion(targetVersion);
-    if (versionCard) {
+    if (isEditableOwnCard(versionCard, targetVersion)) {
       window.currentUserCard = versionCard;
       return versionCard;
     }
     versionCard = await resolveMyCardVersion(targetVersion, false);
-    if (versionCard) {
+    if (isEditableOwnCard(versionCard, targetVersion)) {
       window.currentUserCard = versionCard;
       return versionCard;
     }
-    if (targetVersion !== 'video' && window.currentUserCard && cardVersionFromCard(window.currentUserCard) !== 'video') return window.currentUserCard;
+    if (targetVersion !== 'video' && isEditableOwnCard(window.currentUserCard, targetVersion) && cardVersionFromCard(window.currentUserCard) !== 'video') return window.currentUserCard;
     return null;
   }
 
