@@ -166,6 +166,13 @@
     return checked ? checked.value : 'landscape';
   }
 
+  function getActiveMyCardLayout() {
+    if (wysiwygState && wysiwygState.cfg && wysiwygState.cfg.layoutStyle) {
+      return normalizeWysiwygLayout(wysiwygState.cfg.layoutStyle);
+    }
+    return getLayout();
+  }
+
   function layoutFromImageRatio(ratio, fallback) {
     var text = String(ratio || '').trim();
     var parts = text.match(/^(\d+(?:\.\d+)?)[/:](\d+(?:\.\d+)?)$/);
@@ -184,7 +191,7 @@
   function syncCurrentImageInput() {
     var imgInput = $('#my-v1-img-url');
     if (!imgInput) return;
-    var layout = getLayout();
+    var layout = getActiveMyCardLayout();
     myEcardImgs[layout] = imgInput.value || '';
   }
 
@@ -256,7 +263,7 @@
   }
 
   function getTargetCardVersion() {
-    return isMyCardVideoContext() ? 'video' : layoutToCardVersion(getLayout());
+    return isMyCardVideoContext() ? 'video' : layoutToCardVersion(getActiveMyCardLayout());
   }
 
   function cardVersionFromCard(card) {
@@ -421,19 +428,23 @@
     if (requestedRowId) {
       var requestedCard = findLoadedMyCardByRowId(requestedRowId);
       if (requestedCard) {
-        window.currentUserCard = requestedCard;
-        return requestedCard;
+        if (!wysiwygState.cfg || isCardVersion(requestedCard, targetVersion)) {
+          window.currentUserCard = requestedCard;
+          return requestedCard;
+        }
       }
       if (typeof window.fetchAPI === 'function') {
         try {
           var cardRes = await window.fetchAPI('getPublicCardById', { rowId: requestedRowId }, true);
           var card = cardRes && (cardRes.card || cardRes.data || cardRes);
           if (card && !card.error) {
-            window.currentUserCard = card;
-            if (Array.isArray(window.allCards) && !findLoadedMyCardByRowId(requestedRowId)) {
-              window.allCards.unshift(card);
+            if (!wysiwygState.cfg || isCardVersion(card, targetVersion)) {
+              window.currentUserCard = card;
+              if (Array.isArray(window.allCards) && !findLoadedMyCardByRowId(requestedRowId)) {
+                window.allCards.unshift(card);
+              }
+              return card;
             }
-            return card;
           }
         } catch (e) {
           console.warn('[mycard] requested card fallback failed:', e);
@@ -1147,7 +1158,8 @@
       if (!currentCardData) throw new Error('\u627e\u4e0d\u5230\u53ef\u5132\u5b58\u7684\u5c08\u5c6c\u540d\u7247');
 
       syncCurrentImageInput();
-      var layout = getLayout();
+      var layout = getActiveMyCardLayout();
+      selectMyECardLayout(layout);
       var targetVersion = isMyCardVideoContext() ? 'video' : layoutToCardVersion(layout);
       if (!isCardVersion(currentCardData, targetVersion)) {
         var versionCard = await resolveMyCardVersion(targetVersion, true);
@@ -1213,7 +1225,7 @@
     if (!myEcardStateLoaded && Array.isArray(cfg.buttons)) {
       myEcardButtons = normalizeMyCardButtons(cfg.buttons);
     }
-    var liveLayout = document.querySelector('input[name="my-ecard-layout"]:checked');
+    var liveLayout = { value: getActiveMyCardLayout() };
     syncCurrentImageInput();
     if (liveLayout) {
       var liveVersion = isMyCardVideoContext() ? 'video' : layoutToCardVersion(liveLayout.value || cfg.layoutStyle || 'landscape');
