@@ -10718,16 +10718,15 @@ const CardVersionResolverModule = {
   async loadRowsForUser(userId, env) {
     if (!env.ACTMASTER_DB || !userId) return [];
     await D1ReadModule.ensureCardAccessColumns(env);
-    const ids = await D1ReadModule.identityIdsForUser(env, userId).catch(() => [userId]);
-    const safeIds = Array.from(new Set((ids && ids.length ? ids : [userId]).map(id => this.text(id)).filter(Boolean)));
-    if (!safeIds.length) return [];
-    const placeholders = safeIds.map(() => '?').join(',');
     return await D1ReadModule.all(env, `
       SELECT * FROM card_contacts
-      WHERE line_id IN (${placeholders}) OR creator_id IN (${placeholders})
-         OR owner_user_id IN (${placeholders}) OR profile_user_id IN (${placeholders})
+      WHERE (
+        line_id = ? OR profile_user_id = ? OR owner_user_id = ?
+        OR (creator_id = ? AND LOWER(COALESCE(source_type,'')) = 'self_profile')
+      )
+      AND LOWER(COALESCE(source_type,'')) <> 'referral_placeholder'
       ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
-    `, [...safeIds, ...safeIds, ...safeIds, ...safeIds]);
+    `, [userId, userId, userId, userId]);
   },
 
   async createVersionFromBase(baseRow, userId, version, env) {
