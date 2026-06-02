@@ -950,12 +950,13 @@ const LineOAChatModule = {
     return text === '我的名片';
   },
 
-  quickMyCardUrl(userId, env) {
+  quickMyCardUrl(userId, env, rowId = '') {
     const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
     const params = new URLSearchParams({
       mode: 'wysiwyg-card'
     });
     if (userId) params.set('lineUserId', userId);
+    if (rowId) params.set('rowId', rowId);
     return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
   },
 
@@ -968,7 +969,7 @@ const LineOAChatModule = {
   myCardQuickReplyItems(userId, env, rowId = '') {
     return [{
       type: 'action',
-      action: { type: 'uri', label: '編輯名片', uri: this.quickMyCardUrl(userId, env) }
+      action: { type: 'uri', label: '編輯名片', uri: this.quickMyCardUrl(userId, env, rowId) }
     }, {
       type: 'action',
       action: {
@@ -1030,11 +1031,33 @@ const LineOAChatModule = {
     return rows.find(row => this.text(row.row_id) === targetRowId) || null;
   },
 
+  parseLineOaMyCardConfig(row) {
+    const raw = this.text(row && (row.custom_config || row.customConfig || row['自訂名片設定']));
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  isLineOaVideoCard(row) {
+    const rowId = this.text(row && row.row_id);
+    const config = this.parseLineOaMyCardConfig(row);
+    return rowId.startsWith('CARD_VIDEO_')
+      || config.cardType === 'video'
+      || config.cardVariant === 'video_card'
+      || config.videoCard === true
+      || config.videoStorageKind === 'dedicated_video_card';
+  },
+
   isLineOaMyCardCandidate(row) {
     const rowId = this.text(row && row.row_id);
     const sourceType = this.text(row && row.source_type);
     if (sourceType !== 'self_profile') return false;
     if (!rowId.startsWith('CARD_')) return false;
+    if (this.isLineOaVideoCard(row)) return false;
     const name = this.text(row && row.name);
     const company = this.text(row && row.company_name);
     const imageUrl = this.text(row && row.image_url);
@@ -1042,9 +1065,10 @@ const LineOAChatModule = {
   },
 
   filterLineOaMyCardCandidates(rows) {
-    const candidates = (Array.isArray(rows) ? rows : []).filter(row => this.isLineOaMyCardCandidate(row));
+    const list = Array.isArray(rows) ? rows : [];
+    const candidates = list.filter(row => this.isLineOaMyCardCandidate(row));
     if (candidates.length) return candidates;
-    return Array.isArray(rows) ? rows : [];
+    return list.filter(row => !this.isLineOaVideoCard(row));
   },
 
   normalizeCardButton(button) {
@@ -2411,7 +2435,14 @@ const LineOAMyVideoKeywordModule = {
   isKeyword(event) {
     const message = event?.message || {};
     if (message.type !== 'text') return false;
-    return this.text(message.text).replace(/\s+/g, '') === '我的影片';
+    return this.text(message.text).replace(/\s+/g, '') === '影音名片';
+  },
+
+  isRemakeKeyword(event) {
+    const message = event?.message || {};
+    if (message.type !== 'text') return false;
+    const text = this.text(message.text).replace(/\s+/g, '');
+    return text === '重做影音名片' || text === '重新製作影音名片';
   },
 
   isCancel(event) {
@@ -2505,7 +2536,7 @@ const LineOAMyVideoKeywordModule = {
     const jobId = this.text(payload.jobId || payload.videoDraft);
     const userId = this.text(payload.userId || payload.pt_uid || payload.lineUserId);
     const draft = await this.loadDraft(env, jobId);
-    if (!draft) return { success: false, error: '影片名片草稿已失效，請重新輸入「我的影片」。' };
+    if (!draft) return { success: false, error: '影片名片草稿已失效，請重新輸入「影音名片」。' };
     if (this.text(draft.userId) && userId && this.text(draft.userId) !== userId) {
       return { success: false, error: 'Access Denied: video draft owner mismatch' };
     }
@@ -2526,14 +2557,22 @@ const LineOAMyVideoKeywordModule = {
   isDedicatedVideoCard(row) {
     const rowId = this.text(row && row.row_id);
     const config = this.parseCardConfig(row);
+    return rowId.startsWith('CARD_VIDEO_') || config.videoStorageKind === 'dedicated_video_card';
+  },
+
+  isVideoCardLike(row) {
+    const rowId = this.text(row && row.row_id);
+    const config = this.parseCardConfig(row);
     return rowId.startsWith('CARD_VIDEO_')
       || config.cardVariant === 'video_card'
-      || config.videoCard === true;
+      || config.videoCard === true
+      || config.cardType === 'video'
+      || config.videoStorageKind === 'dedicated_video_card';
   },
 
   async findTargetCard(env, userId) {
     const rows = LineOAChatModule.filterLineOaMyCardCandidates(await LineOAChatModule.findMySelfCards(env, userId));
-    return rows.find(row => !this.isDedicatedVideoCard(row)) || rows[0] || null;
+    return rows.find(row => !this.isVideoCardLike(row)) || rows[0] || null;
   },
 
   async findDedicatedVideoCard(env, userId) {
@@ -2548,6 +2587,7 @@ const LineOAMyVideoKeywordModule = {
       cardType: 'video',
       cardVariant: 'video_card',
       videoCard: true,
+      videoStorageKind: 'dedicated_video_card',
       templateVersion: 'my-video-card-v1',
       sourceType: 'self_profile',
       visibility: 'private',
@@ -2597,7 +2637,7 @@ const LineOAMyVideoKeywordModule = {
       socials: this.text(baseCard && baseCard.socials),
       address: this.text(baseCard && baseCard.address),
       services: this.text(baseCard && baseCard.services),
-      notes: this.text(baseCard && baseCard.notes, 'LINE OA 我的影片建立'),
+      notes: this.text(baseCard && baseCard.notes, 'LINE OA 影音名片建立'),
       imageUrl: thumbnailUrl,
       customConfig: JSON.stringify(config),
       tags: this.text(baseCard && baseCard.tags, '#影音名片')
@@ -2609,13 +2649,47 @@ const LineOAMyVideoKeywordModule = {
       authenticatedRole: 'admin'
     }, env);
     if (!saved || saved.success === false) throw new Error(saved?.error || 'video card save failed');
-    return { rowId, baseRowId: this.text(baseRow && baseRow.row_id), created: !existingVideo };
+    return { rowId, baseRowId: this.text(baseRow && baseRow.row_id), card: saved.data || null, created: !existingVideo };
+  },
+
+  buildVideoEditUrl(userId, env, rowId = '') {
+    const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
+    const params = new URLSearchParams({
+      mode: 'wysiwyg-card',
+      videoCard: '1'
+    });
+    if (userId) params.set('lineUserId', userId);
+    if (rowId) params.set('rowId', rowId);
+    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  },
+
+  videoQuickReplyItems(userId, env, rowId = '') {
+    return [{
+      type: 'action',
+      action: { type: 'uri', label: '編輯影音名片', uri: this.buildVideoEditUrl(userId, env, rowId) }
+    }, {
+      type: 'action',
+      action: { type: 'message', label: '顯示影音名片', text: '影音名片' }
+    }, {
+      type: 'action',
+      action: { type: 'message', label: '重新製作', text: '重做影音名片' }
+    }];
+  },
+
+  buildExistingVideoCardFlex(row, userId, env) {
+    const message = LineOAChatModule.buildExistingMyCardFlex(row, userId, env);
+    if (!message) return null;
+    const rowId = this.text(row && row.row_id);
+    message.altText = `${this.text(row && row.name, '影音名片')} 的影音名片`;
+    message.quickReply = { items: this.videoQuickReplyItems(userId, env, rowId) };
+    return message;
   },
 
   buildWysiwygUrl(userId, env, draft) {
     const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
     const params = new URLSearchParams({
       mode: 'wysiwyg-card',
+      videoCard: '1',
       videoDraft: this.text(draft.jobId)
     });
     if (userId) params.set('lineUserId', userId);
@@ -2698,6 +2772,7 @@ const LineOAMyVideoKeywordModule = {
         rowId: this.text(videoCard && videoCard.rowId),
         videoUrl: this.text(state.videoUrl),
         thumbnailUrl,
+        card: videoCard && videoCard.card ? videoCard.card : null,
         createdAt: new Date().toISOString()
       });
       await this.clearState(env, userId);
@@ -2719,7 +2794,7 @@ const LineOAMyVideoKeywordModule = {
       const userId = this.eventUserId(event);
       if (!replyToken || !userId) continue;
 
-      if (this.isKeyword(event)) {
+      if (this.isKeyword(event) || this.isRemakeKeyword(event)) {
         const actor = await this.loadActor(env, userId);
         if (!this.canUse(actor)) {
           const result = await LineOAChatModule.replyLine({
@@ -2729,6 +2804,18 @@ const LineOAMyVideoKeywordModule = {
           if (!result.success) console.error('My video permission reply failed', result);
           return true;
         }
+        if (this.isKeyword(event)) {
+          const existingVideo = await this.findDedicatedVideoCard(env, userId);
+          if (existingVideo) {
+            const message = this.buildExistingVideoCardFlex(existingVideo, userId, env);
+            if (message) {
+              const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
+              if (!result.success) console.error('Existing my video reply failed', result);
+              return true;
+            }
+          }
+        }
+        await this.clearState(env, userId);
         await this.saveState(env, userId, { step: 'await_video_url', createdAt: new Date().toISOString() });
         const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildStartMessage()] }, env);
         if (!result.success) console.error('My video start reply failed', result);

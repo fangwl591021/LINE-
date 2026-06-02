@@ -346,6 +346,16 @@
           console.warn('[mycard] requested card fallback failed:', e);
         }
       }
+      if (videoDraft && videoDraft.card) {
+        var draftCardRowId = getCardRowId(videoDraft.card);
+        if (!draftCardRowId || draftCardRowId === requestedRowId) {
+          window.currentUserCard = videoDraft.card;
+          if (Array.isArray(window.allCards) && !findLoadedMyCardByRowId(requestedRowId)) {
+            window.allCards.unshift(videoDraft.card);
+          }
+          return videoDraft.card;
+        }
+      }
     }
 
     return window.currentUserCard || null;
