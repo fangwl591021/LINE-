@@ -10656,13 +10656,176 @@ const BonusPolicyModule = {
   }
 };
 
+const CardVersionResolverModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  parseConfig(row) {
+    const raw = this.text(row && (row.custom_config || row.customConfig || row['自訂名片設定'] || row['電子名片設定']));
+    if (!raw) return {};
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  normalizeVersion(value) {
+    const next = this.text(value).toLowerCase();
+    if (next === 'video' || next === 'video_card' || next === 'movie') return 'video';
+    if (next === 'poster' || next === 'portrait' || next === 'giga' || next === '400:600') return 'poster';
+    if (next === 'square' || next === '1:1') return 'square';
+    return 'standard';
+  },
+
+  layoutForVersion(version) {
+    if (version === 'poster') return 'portrait';
+    if (version === 'square') return 'square';
+    return 'landscape';
+  },
+
+  versionForRow(row) {
+    const rowId = this.text(row && (row.row_id || row.rowId || row.id)).toUpperCase();
+    const cfg = this.parseConfig(row);
+    if (rowId.startsWith('CARD_VIDEO_') || cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || this.text(cfg.cardType).toLowerCase() === 'video' || this.text(cfg.cardVariant).toLowerCase() === 'video_card') return 'video';
+    if (rowId.startsWith('CARD_POSTER_')) return 'poster';
+    if (rowId.startsWith('CARD_SQUARE_')) return 'square';
+    if (rowId.startsWith('CARD_STD_')) return 'standard';
+    if (cfg.cardVersion || cfg.card_version) return this.normalizeVersion(cfg.cardVersion || cfg.card_version);
+    return this.normalizeVersion(cfg.layoutStyle || cfg.layout || 'standard');
+  },
+
+  isVideoRow(row) {
+    return this.versionForRow(row) === 'video';
+  },
+
+  rowIdPrefix(version) {
+    if (version === 'video') return 'CARD_VIDEO';
+    if (version === 'poster') return 'CARD_POSTER';
+    if (version === 'square') return 'CARD_SQUARE';
+    return 'CARD_STD';
+  },
+
+  imageForVersion(card, cfg, version) {
+    if (version === 'poster') return this.text(cfg.imgUrlPortrait, this.text(card.imageUrl || card.image_url || cfg.imgUrl));
+    if (version === 'square') return this.text(cfg.imgUrlSquare, this.text(card.imageUrl || card.image_url || cfg.imgUrl));
+    return this.text(cfg.imgUrl, this.text(card.imageUrl || card.image_url || cfg.imgUrlPortrait || cfg.imgUrlSquare));
+  },
+
+  async loadRowsForUser(userId, env) {
+    if (!env.ACTMASTER_DB || !userId) return [];
+    await D1ReadModule.ensureCardAccessColumns(env);
+    const ids = await D1ReadModule.identityIdsForUser(env, userId).catch(() => [userId]);
+    const safeIds = Array.from(new Set((ids && ids.length ? ids : [userId]).map(id => this.text(id)).filter(Boolean)));
+    if (!safeIds.length) return [];
+    const placeholders = safeIds.map(() => '?').join(',');
+    return await D1ReadModule.all(env, `
+      SELECT * FROM card_contacts
+      WHERE line_id IN (${placeholders}) OR creator_id IN (${placeholders})
+         OR owner_user_id IN (${placeholders}) OR profile_user_id IN (${placeholders})
+      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+    `, [...safeIds, ...safeIds, ...safeIds, ...safeIds]);
+  },
+
+  async createVersionFromBase(baseRow, userId, version, env) {
+    const base = D1ReadModule.cardRow(baseRow);
+    if (!base || !base.rowId) return null;
+    const cfg = this.parseConfig(baseRow);
+    const nextCfg = { ...cfg };
+    const layout = this.layoutForVersion(version);
+    nextCfg.cardVersion = version;
+    nextCfg.layoutStyle = layout;
+    nextCfg.imgRatioLandscape = nextCfg.imgRatioLandscape || '20:13';
+    nextCfg.imgRatioPortrait = nextCfg.imgRatioPortrait || '400:600';
+    nextCfg.imgRatioSquare = nextCfg.imgRatioSquare || '1:1';
+    if (version !== 'video') {
+      delete nextCfg.cardType;
+      delete nextCfg.cardVariant;
+      delete nextCfg.videoCard;
+      delete nextCfg.videoStorageKind;
+      delete nextCfg.videoUrl;
+      delete nextCfg.videoPosterUrl;
+    }
+    const imageUrl = this.imageForVersion(base, nextCfg, version);
+    const rowId = `${this.rowIdPrefix(version)}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const saved = await D1WriteModule.upsertCard({
+      rowId,
+      authenticatedUserId: userId,
+      userId,
+      authenticatedRole: 'admin',
+      data: {
+        rowId,
+        lineId: userId,
+        creatorId: base.creatorId || userId,
+        ownerUserId: base.ownerUserId || userId,
+        profileUserId: base.profileUserId || userId,
+        sourceType: 'self_profile',
+        visibility: 'private',
+        networkId: base.networkId || 'admin',
+        name: base.name,
+        englishName: base.englishName,
+        companyName: base.companyName,
+        title: base.title,
+        department: base.department,
+        taxId: base.taxId,
+        mobile: base.mobile,
+        officePhone: base.officePhone,
+        extension: base.extension,
+        fax: base.fax,
+        email: base.email,
+        website: base.website,
+        socials: base.socials,
+        address: base.address,
+        birthday: base.birthday,
+        services: base.services,
+        notes: base.notes,
+        imageUrl,
+        customConfig: JSON.stringify(nextCfg),
+        tags: base.tags
+      }
+    }, env);
+    if (!saved || saved.success === false) return null;
+    return saved.data || null;
+  },
+
+  async resolve(payload = {}, env, options = {}) {
+    const userId = this.text(payload.authenticatedUserId || payload.userId || payload.lineUserId || payload.lineId);
+    const version = this.normalizeVersion(payload.cardVersion || payload.version || payload.layout || payload.layoutStyle);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    if (!env.ACTMASTER_DB) return { success: false, error: 'D1 unavailable' };
+    const rows = await this.loadRowsForUser(userId, env);
+    const exact = rows.find(row => this.versionForRow(row) === version);
+    if (exact) {
+      return { success: true, data: { rowId: this.text(exact.row_id), version, versionMatched: true, card: D1ReadModule.cardRow(exact) } };
+    }
+    const staticBase = rows.find(row => !this.isVideoRow(row));
+    const base = version === 'video' ? rows.find(row => this.isVideoRow(row)) : staticBase;
+    if (options.createIfMissing || payload.createIfMissing === true || payload.createIfMissing === 'true') {
+      const created = base ? await this.createVersionFromBase(base, userId, version, env) : null;
+      if (created) return { success: true, data: { rowId: created.rowId, version, versionMatched: true, created: true, card: created } };
+    }
+    if (base) {
+      return { success: true, data: { rowId: this.text(base.row_id), version: this.versionForRow(base), requestedVersion: version, versionMatched: false, card: D1ReadModule.cardRow(base) } };
+    }
+    return { success: false, error: 'Card not found' };
+  }
+};
+
 async function resolveOwnCardRowId(payload, env) {
-  const userId = String((payload && payload.userId) || '').trim();
+  const userId = String((payload && (payload.userId || payload.authenticatedUserId || payload.lineUserId)) || '').trim();
   if (!userId) return '';
   if (env.ACTMASTER_DB) {
     try {
-      const card = await D1ReadModule.first(env, 'SELECT row_id FROM card_contacts WHERE line_id = ? ORDER BY COALESCE(updated_at, created_at) DESC LIMIT 1', [userId]);
-      if (card && card.row_id) return card.row_id;
+      const result = await CardVersionResolverModule.resolve({
+        ...payload,
+        userId,
+        version: payload.cardVersion || payload.version || payload.layout || payload.layoutStyle || 'standard'
+      }, env, { createIfMissing: payload.createIfMissing === true });
+      const rowId = result && result.data && result.data.rowId;
+      if (rowId) return rowId;
     } catch (e) {
       console.error('D1 resolveOwnCardRowId fallback', e);
     }
@@ -10671,7 +10834,7 @@ async function resolveOwnCardRowId(payload, env) {
   const cards = Array.isArray(cardsResult) ? cardsResult : (cardsResult && (cardsResult.data || cardsResult.cards)) || [];
   const card = cards.find(c => {
     const lineId = String(c['LINE ID'] || c.lineId || c.userId || '').trim();
-    return lineId && lineId === userId;
+    return lineId && lineId === userId && !/^CARD_VIDEO_/i.test(String(c.rowId || c['rowId'] || c['Row ID'] || c.id || ''));
   });
   return card && (card.rowId || card['rowId'] || card['Row ID'] || card.id || '');
 }
@@ -11801,6 +11964,7 @@ async function dispatchAction(action, payload, request, env) {
     'getStoreSettings',
     'listAnnouncements',
     'uploadImageToR2',
+    'resolveMyCardVersion',
     'getMyVideoDraft',
     'getCardCoolDraft',
     'confirmCardCoolDraft',
@@ -11854,7 +12018,7 @@ async function dispatchAction(action, payload, request, env) {
   }
 
   if (action === 'updateCard' && (!payload.rowId || String(payload.rowId).trim() === '')) {
-    const rowId = await resolveOwnCardRowId(payload, env);
+    const rowId = await resolveOwnCardRowId({ ...payload, createIfMissing: true }, env);
     if (rowId) payload.rowId = rowId;
   }
 
@@ -11889,6 +12053,16 @@ async function dispatchAction(action, payload, request, env) {
         console.error("D1 getPublicCardById failed", e);
       }
       return { success: false, error: '找不到這張名片' };
+    }
+    case 'resolveMyCardVersion': {
+      try {
+        return await CardVersionResolverModule.resolve(payload || {}, env, {
+          createIfMissing: payload && (payload.createIfMissing === true || payload.createIfMissing === 'true')
+        });
+      } catch (e) {
+        console.error("resolveMyCardVersion failed", e);
+        return { success: false, error: e && e.message ? e.message : 'resolveMyCardVersion failed' };
+      }
     }
     case 'getCrmContacts': {
       try {

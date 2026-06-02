@@ -226,6 +226,98 @@
     return cfg;
   }
 
+  function normalizeCardVersion(value) {
+    var text = String(value || '').trim().toLowerCase();
+    if (text === 'video' || text === 'video_card' || text === 'movie') return 'video';
+    if (text === 'poster' || text === 'portrait' || text === 'giga' || text === '400:600') return 'poster';
+    if (text === 'square' || text === '1:1') return 'square';
+    return 'standard';
+  }
+
+  function layoutToCardVersion(layout) {
+    if (layout === 'portrait') return 'poster';
+    if (layout === 'square') return 'square';
+    return 'standard';
+  }
+
+  function versionToLayout(version) {
+    if (version === 'poster') return 'portrait';
+    if (version === 'square') return 'square';
+    return 'landscape';
+  }
+
+  function isMyCardVideoContext() {
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      if (params.get('videoCard') === '1' || params.get('video') === '1') return true;
+      if (params.get('cardVersion') === 'video' || params.get('version') === 'video') return true;
+    } catch (e) {}
+    return !!getMyVideoDraftId();
+  }
+
+  function getTargetCardVersion() {
+    return isMyCardVideoContext() ? 'video' : layoutToCardVersion(getLayout());
+  }
+
+  function cardVersionFromCard(card) {
+    if (!card) return '';
+    var rowId = String(getCardRowId(card) || '').toUpperCase();
+    var cfg = parseCardConfig(card);
+    if (rowId.indexOf('CARD_VIDEO_') === 0 || cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || String(cfg.cardType || '').toLowerCase() === 'video' || String(cfg.cardVariant || '').toLowerCase() === 'video_card') return 'video';
+    if (rowId.indexOf('CARD_POSTER_') === 0) return 'poster';
+    if (rowId.indexOf('CARD_SQUARE_') === 0) return 'square';
+    if (rowId.indexOf('CARD_STD_') === 0) return 'standard';
+    if (cfg.cardVersion || cfg.card_version) return normalizeCardVersion(cfg.cardVersion || cfg.card_version);
+    return normalizeCardVersion(cfg.layoutStyle || cfg.layout || 'standard');
+  }
+
+  function isCardVersion(card, version) {
+    return cardVersionFromCard(card) === normalizeCardVersion(version);
+  }
+
+  function findLoadedMyCardByVersion(version) {
+    var target = normalizeCardVersion(version);
+    var pools = [];
+    if (window.currentUserCard) pools.push(window.currentUserCard);
+    if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
+    if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
+    for (var i = 0; i < pools.length; i += 1) {
+      if (pools[i] && isCardVersion(pools[i], target)) return pools[i];
+    }
+    if (target !== 'video') {
+      for (var j = 0; j < pools.length; j += 1) {
+        if (pools[j] && cardVersionFromCard(pools[j]) !== 'video') return pools[j];
+      }
+    }
+    return null;
+  }
+
+  function addLoadedMyCard(card) {
+    if (!card) return;
+    var rowId = getCardRowId(card);
+    if (Array.isArray(window.allCards) && rowId && !findLoadedMyCardByRowId(rowId)) window.allCards.unshift(card);
+  }
+
+  async function resolveMyCardVersion(version, createIfMissing) {
+    if (typeof window.fetchAPI !== 'function') return null;
+    var userId = moduleAuth.getUserId() || getDirectLineUserId() || (window.currentUserProfile && window.currentUserProfile.userId) || '';
+    if (!userId) return null;
+    var res = await window.fetchAPI('resolveMyCardVersion', {
+      userId: userId,
+      lineUserId: userId,
+      version: normalizeCardVersion(version),
+      layout: versionToLayout(normalizeCardVersion(version)),
+      createIfMissing: !!createIfMissing
+    }, true);
+    var data = res && (res.data || res);
+    var card = data && data.card;
+    if (card && !card.error) {
+      addLoadedMyCard(card);
+      return card;
+    }
+    return null;
+  }
+
   function parseCardConfig(card) {
     var source = card || {};
     var candidates = [
@@ -300,7 +392,8 @@
   }
 
   async function resolveCurrentUserCard(force) {
-    if (window.currentUserCard && !force) return window.currentUserCard;
+    var targetVersion = getTargetCardVersion();
+    if (window.currentUserCard && !force && isCardVersion(window.currentUserCard, targetVersion)) return window.currentUserCard;
 
     var videoDraft = null;
     if (isWysiwygMyCardRequest() && getMyVideoDraftId()) {
@@ -358,7 +451,18 @@
       }
     }
 
-    return window.currentUserCard || null;
+    var versionCard = findLoadedMyCardByVersion(targetVersion);
+    if (versionCard) {
+      window.currentUserCard = versionCard;
+      return versionCard;
+    }
+    versionCard = await resolveMyCardVersion(targetVersion, false);
+    if (versionCard) {
+      window.currentUserCard = versionCard;
+      return versionCard;
+    }
+    if (targetVersion !== 'video' && window.currentUserCard && cardVersionFromCard(window.currentUserCard) !== 'video') return window.currentUserCard;
+    return null;
   }
 
   async function load() {
@@ -429,7 +533,15 @@
     applyVideoConfigToFields(cfg);
   }
 
-  function handleLayoutChange() {
+  async function handleLayoutChange() {
+    syncCurrentImageInput();
+    var version = layoutToCardVersion(getLayout());
+    var card = findLoadedMyCardByVersion(version) || await resolveMyCardVersion(version, false);
+    if (card && cardVersionFromCard(card) !== 'video') {
+      currentCardData = card;
+      window.currentUserCard = card;
+      hydrateMyECardStateFromCurrentCard();
+    }
     var imgInput = $('#my-v1-img-url');
     if (imgInput) imgInput.value = myEcardImgs[getLayout()] || '';
     updatePreview();
@@ -1036,7 +1148,16 @@
 
       syncCurrentImageInput();
       var layout = getLayout();
+      var targetVersion = isMyCardVideoContext() ? 'video' : layoutToCardVersion(layout);
+      if (!isCardVersion(currentCardData, targetVersion)) {
+        var versionCard = await resolveMyCardVersion(targetVersion, true);
+        if (versionCard) {
+          currentCardData = versionCard;
+          window.currentUserCard = versionCard;
+        }
+      }
       var cfg = parseCardConfig(currentCardData);
+      cfg.cardVersion = targetVersion;
       cfg.layoutStyle = layout;
       cfg.imgUrl = myEcardImgs.landscape;
       cfg.imgUrlPortrait = myEcardImgs.portrait;
@@ -1046,6 +1167,14 @@
       cfg.imgRatioSquare = '1:1';
       cfg.buttons = normalizeMyCardButtons(myEcardButtons);
       syncVideoConfig(cfg);
+      if (targetVersion !== 'video') {
+        if (cfg.cardType === 'video') cfg.cardType = 'v1';
+        delete cfg.cardVariant;
+        delete cfg.videoCard;
+        delete cfg.videoStorageKind;
+        delete cfg.videoUrl;
+        delete cfg.videoPosterUrl;
+      }
 
       var rowId = await ensureCurrentCardRowId();
       if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
@@ -1087,6 +1216,8 @@
     var liveLayout = document.querySelector('input[name="my-ecard-layout"]:checked');
     syncCurrentImageInput();
     if (liveLayout) {
+      var liveVersion = isMyCardVideoContext() ? 'video' : layoutToCardVersion(liveLayout.value || cfg.layoutStyle || 'landscape');
+      cfg.cardVersion = liveVersion;
       cfg.layoutStyle = liveLayout.value || cfg.layoutStyle || 'landscape';
       cfg.imgUrl = myEcardImgs.landscape || cfg.imgUrl || '';
       cfg.imgUrlPortrait = myEcardImgs.portrait || cfg.imgUrlPortrait || '';
@@ -1096,6 +1227,14 @@
       cfg.imgRatioSquare = '1:1';
       cfg.buttons = normalizeMyCardButtons(myEcardButtons);
       syncVideoConfig(cfg);
+      if (liveVersion !== 'video') {
+        if (cfg.cardType === 'video') cfg.cardType = 'v1';
+        delete cfg.cardVariant;
+        delete cfg.videoCard;
+        delete cfg.videoStorageKind;
+        delete cfg.videoUrl;
+        delete cfg.videoPosterUrl;
+      }
     }
     return cfg;
   }
@@ -1204,11 +1343,21 @@
     return html + '</div></div>';
   }
 
-  function setMyCardWysiwygLayout(layout) {
+  async function setMyCardWysiwygLayout(layout) {
     var cfg = wysiwygState.cfg;
     if (!cfg) return;
     layout = normalizeWysiwygLayout(layout);
+    var version = layoutToCardVersion(layout);
+    var card = findLoadedMyCardByVersion(version) || await resolveMyCardVersion(version, false);
+    if (card && cardVersionFromCard(card) !== 'video') {
+      currentCardData = card;
+      window.currentUserCard = card;
+      hydrateMyECardStateFromCurrentCard();
+      cfg = parseCardConfig(card);
+      wysiwygState.cfg = cfg;
+    }
     cfg.layoutStyle = layout;
+    cfg.cardVersion = version;
     if (layout === 'portrait') cfg.imgRatioPortrait = cfg.imgRatioPortrait || '400:600';
     if (layout === 'square') cfg.imgRatioSquare = cfg.imgRatioSquare || '1:1';
     if (layout === 'landscape') cfg.imgRatioLandscape = cfg.imgRatioLandscape || '20:13';
