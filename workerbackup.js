@@ -2512,9 +2512,104 @@ const LineOAMyVideoKeywordModule = {
     return { success: true, data: draft };
   },
 
+  parseCardConfig(row) {
+    const raw = this.text(row && (row.custom_config || row.customConfig || row['自訂名片設定']));
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  isDedicatedVideoCard(row) {
+    const rowId = this.text(row && row.row_id);
+    const config = this.parseCardConfig(row);
+    return rowId.startsWith('CARD_VIDEO_')
+      || config.cardVariant === 'video_card'
+      || config.videoCard === true;
+  },
+
   async findTargetCard(env, userId) {
     const rows = LineOAChatModule.filterLineOaMyCardCandidates(await LineOAChatModule.findMySelfCards(env, userId));
-    return rows[0] || null;
+    return rows.find(row => !this.isDedicatedVideoCard(row)) || rows[0] || null;
+  },
+
+  async findDedicatedVideoCard(env, userId) {
+    const rows = await LineOAChatModule.findMySelfCards(env, userId);
+    return (Array.isArray(rows) ? rows : []).find(row => this.isDedicatedVideoCard(row)) || null;
+  },
+
+  buildVideoCardConfig(baseRow, videoUrl, thumbnailUrl) {
+    const baseConfig = this.parseCardConfig(baseRow);
+    return {
+      ...baseConfig,
+      cardType: 'video',
+      cardVariant: 'video_card',
+      videoCard: true,
+      templateVersion: 'my-video-card-v1',
+      sourceType: 'self_profile',
+      visibility: 'private',
+      isPrivate: true,
+      layoutStyle: baseConfig.layoutStyle || baseConfig.layout || 'landscape',
+      imgUrl: thumbnailUrl,
+      imgUrlLandscape: thumbnailUrl,
+      videoUrl,
+      thumbnailUrl,
+      previewUrl: thumbnailUrl,
+      buttons: Array.isArray(baseConfig.buttons) && baseConfig.buttons.length
+        ? baseConfig.buttons
+        : (baseRow ? LineOAChatModule.autoCardButtons(D1ReadModule.cardRow(baseRow)) : [])
+    };
+  },
+
+  async ensureVideoCard(env, userId, state) {
+    if (!D1ReadModule.hasD1(env)) return null;
+    const id = this.text(userId);
+    const videoUrl = this.text(state && state.videoUrl);
+    const thumbnailUrl = this.text(state && state.thumbnailUrl);
+    const existingVideo = await this.findDedicatedVideoCard(env, id);
+    const baseRow = await this.findTargetCard(env, id);
+    const baseCard = baseRow ? D1ReadModule.cardRow(baseRow) : null;
+    const rowId = this.text(existingVideo && existingVideo.row_id) || `CARD_VIDEO_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const config = this.buildVideoCardConfig(baseRow, videoUrl, thumbnailUrl);
+    const payload = {
+      rowId,
+      lineId: id,
+      creatorId: id,
+      ownerUserId: id,
+      profileUserId: id,
+      sourceType: 'self_profile',
+      visibility: 'private',
+      poolEligible: 0,
+      aiReviewStatus: 'pending',
+      networkId: this.text(baseCard && baseCard.networkId, 'admin'),
+      name: this.text(baseCard && baseCard.name, '影音名片'),
+      englishName: this.text(baseCard && baseCard.englishName),
+      companyName: this.text(baseCard && baseCard.companyName),
+      title: this.text(baseCard && baseCard.title),
+      department: this.text(baseCard && baseCard.department),
+      mobile: this.text(baseCard && baseCard.mobile),
+      officePhone: this.text(baseCard && baseCard.officePhone),
+      email: this.text(baseCard && baseCard.email),
+      website: this.text(baseCard && baseCard.website),
+      socials: this.text(baseCard && baseCard.socials),
+      address: this.text(baseCard && baseCard.address),
+      services: this.text(baseCard && baseCard.services),
+      notes: this.text(baseCard && baseCard.notes, 'LINE OA 我的影片建立'),
+      imageUrl: thumbnailUrl,
+      customConfig: JSON.stringify(config),
+      tags: this.text(baseCard && baseCard.tags, '#影音名片')
+    };
+    const saved = await D1WriteModule.upsertCard({
+      ...payload,
+      authenticatedUserId: id,
+      userId: id,
+      authenticatedRole: 'admin'
+    }, env);
+    if (!saved || saved.success === false) throw new Error(saved?.error || 'video card save failed');
+    return { rowId, baseRowId: this.text(baseRow && baseRow.row_id), created: !existingVideo };
   },
 
   buildWysiwygUrl(userId, env, draft) {
@@ -2594,10 +2689,13 @@ const LineOAMyVideoKeywordModule = {
       const imageDataUri = await LineOACardCoolKeywordModule.fetchLineImageDataUri(env, messageId);
       const thumbnailUrl = await StorageModule.upload(imageDataUri, env);
       if (!thumbnailUrl) throw new Error('thumbnail upload failed');
-      const targetCard = await this.findTargetCard(env, userId);
+      const videoCard = await this.ensureVideoCard(env, userId, {
+        videoUrl: this.text(state.videoUrl),
+        thumbnailUrl
+      });
       const draft = await this.saveDraft(env, {
         userId,
-        rowId: this.text(targetCard && targetCard.row_id),
+        rowId: this.text(videoCard && videoCard.rowId),
         videoUrl: this.text(state.videoUrl),
         thumbnailUrl,
         createdAt: new Date().toISOString()
