@@ -501,6 +501,13 @@
 
   function scheduleQuicklyMyCardOpen() {
     if (!isQuicklyMyCardRequest() && !isWysiwygMyCardRequest()) return;
+    if (isWysiwygMyCardRequest() && typeof window.goPage === 'function') {
+      try {
+        window.goPage('admin-settings');
+      } catch (e) {
+        console.warn('[mycard] direct wysiwyg goPage failed:', e);
+      }
+    }
     if (isWysiwygMyCardRequest()) {
       var modal = ensureWysiwygModal();
       modal.classList.remove('hidden');
@@ -521,6 +528,9 @@
         }
       } else if (tries > 30) {
         clearInterval(timer);
+        if (isWysiwygMyCardRequest()) {
+          openMyCardWysiwyg();
+        }
       }
     }, 300);
   }
@@ -1259,6 +1269,10 @@
     try {
       currentCardData = await resolveCurrentUserCard(!currentCardData);
       if (!currentCardData) {
+        var preview = document.getElementById('my-card-wysiwyg-preview');
+        if (directWysiwyg && preview) {
+          preview.innerHTML = '<div class="min-h-[60vh] flex items-center justify-center p-6 text-center text-red-300 font-black leading-relaxed">找不到可編輯的專屬名片。請先回首頁確認名片存在，再重新點開編輯連結。</div>';
+        }
         if (window.showToast) window.showToast('找不到可編輯的專屬名片，請先建立名片', true);
         return;
       }
@@ -1267,6 +1281,13 @@
       writeCurrentCardConfig(wysiwygState.cfg);
       ensureWysiwygModal().classList.remove('hidden');
       renderMyCardWysiwyg();
+    } catch (e) {
+      console.warn('[mycard] open wysiwyg failed:', e);
+      var errorPreview = document.getElementById('my-card-wysiwyg-preview');
+      if (directWysiwyg && errorPreview) {
+        errorPreview.innerHTML = '<div class="min-h-[60vh] flex items-center justify-center p-6 text-center text-red-300 font-black leading-relaxed">名片編輯器載入失敗，請關閉後重新點開編輯連結。</div>';
+      }
+      if (window.showToast) window.showToast('名片編輯器載入失敗', true);
     } finally {
       if (!directWysiwyg) moduleCore.showLoading(false);
     }
