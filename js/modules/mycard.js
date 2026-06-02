@@ -30,6 +30,7 @@
   var myEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
   var wysiwygState = { cfg: null, field: '', buttonIndex: -1 };
   var myVideoDraftApplied = false;
+  var myVideoDraftCache = null;
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
   var templateCoverUrl = 'assets/rental-template-cover.png';
   var templateAddressUrl = 'https://www.google.com/maps';
@@ -301,6 +302,15 @@
   async function resolveCurrentUserCard(force) {
     if (window.currentUserCard && !force) return window.currentUserCard;
 
+    var videoDraft = null;
+    if (isWysiwygMyCardRequest() && getMyVideoDraftId()) {
+      try {
+        videoDraft = await loadMyVideoDraftForDirectEdit();
+      } catch (e) {
+        console.warn('[mycard] video draft preload failed:', e);
+      }
+    }
+
     if (typeof window.loadCardData === 'function') {
       try {
         await window.loadCardData({ render: false, force: !!force, initPanels: false });
@@ -314,11 +324,27 @@
     }
 
     var requestedRowId = getRequestedMyCardRowId();
+    if (!requestedRowId && videoDraft && videoDraft.rowId) requestedRowId = String(videoDraft.rowId || '').trim();
     if (requestedRowId) {
       var requestedCard = findLoadedMyCardByRowId(requestedRowId);
       if (requestedCard) {
         window.currentUserCard = requestedCard;
         return requestedCard;
+      }
+      if (typeof window.fetchAPI === 'function') {
+        try {
+          var cardRes = await window.fetchAPI('getPublicCardById', { rowId: requestedRowId }, true);
+          var card = cardRes && (cardRes.card || cardRes.data || cardRes);
+          if (card && !card.error) {
+            window.currentUserCard = card;
+            if (Array.isArray(window.allCards) && !findLoadedMyCardByRowId(requestedRowId)) {
+              window.allCards.unshift(card);
+            }
+            return card;
+          }
+        } catch (e) {
+          console.warn('[mycard] requested card fallback failed:', e);
+        }
       }
     }
 
@@ -571,20 +597,37 @@
     }
   }
 
+  function getDirectLineUserId() {
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      return String(params.get('lineUserId') || params.get('pt_uid') || params.get('userId') || '').trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  async function loadMyVideoDraftForDirectEdit() {
+    var jobId = getMyVideoDraftId();
+    if (!jobId || myVideoDraftCache || typeof window.fetchAPI !== 'function') return myVideoDraftCache;
+    var userId = moduleAuth.getUserId() || getDirectLineUserId() || (window.currentUserProfile && window.currentUserProfile.userId) || '';
+    var res = await window.fetchAPI('getMyVideoDraft', {
+      jobId: jobId,
+      userId: userId,
+      lineUserId: userId
+    }, true);
+    var draft = res && (res.data || res);
+    if (!draft || res.error || res.success === false) throw new Error((res && res.error) || '影片草稿讀取失敗');
+    myVideoDraftCache = draft;
+    return draft;
+  }
+
   async function applyMyVideoDraftToWysiwyg(cfg) {
     var jobId = getMyVideoDraftId();
     if (!jobId || myVideoDraftApplied || !cfg) return cfg;
     myVideoDraftApplied = true;
     if (typeof window.fetchAPI !== 'function') return cfg;
     try {
-      var userId = moduleAuth.getUserId() || (window.currentUserProfile && window.currentUserProfile.userId) || '';
-      var res = await window.fetchAPI('getMyVideoDraft', {
-        jobId: jobId,
-        userId: userId,
-        lineUserId: userId
-      }, true);
-      var draft = res && (res.data || res);
-      if (!draft || res.error) throw new Error((res && res.error) || '影片草稿讀取失敗');
+      var draft = await loadMyVideoDraftForDirectEdit();
       var videoUrl = String(draft.videoUrl || '').trim();
       var thumbnailUrl = String(draft.thumbnailUrl || '').trim();
       if (!videoUrl) throw new Error('影片草稿缺少影片網址');
@@ -1285,7 +1328,8 @@
       console.warn('[mycard] open wysiwyg failed:', e);
       var errorPreview = document.getElementById('my-card-wysiwyg-preview');
       if (directWysiwyg && errorPreview) {
-        errorPreview.innerHTML = '<div class="min-h-[60vh] flex items-center justify-center p-6 text-center text-red-300 font-black leading-relaxed">名片編輯器載入失敗，請關閉後重新點開編輯連結。</div>';
+        var reason = escapeHTML(e && e.message ? e.message : '未知錯誤');
+        errorPreview.innerHTML = '<div class="min-h-[60vh] flex items-center justify-center p-6 text-center text-red-300 font-black leading-relaxed">名片編輯器載入失敗<br><span class="text-[13px] text-red-200">' + reason + '</span></div>';
       }
       if (window.showToast) window.showToast('名片編輯器載入失敗', true);
     } finally {
