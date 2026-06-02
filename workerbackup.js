@@ -2531,21 +2531,21 @@ const LineOAMyVideoKeywordModule = {
   buildStartMessage() {
     return {
       type: 'text',
-      text: '影片名片設定開始。\n請先輸入影片網址。\n\n注意：LINE Flex 影片建議使用可直接播放的 HTTPS 影片網址，例如 MP4。'
+      text: '\u5f71\u7247\u540d\u7247\u8a2d\u5b9a\u958b\u59cb\u3002\n\u8acb\u5148\u8f38\u5165\u5f71\u7247\u7db2\u5740\u3002\n\n\u6ce8\u610f\uff1aLINE Flex \u5f71\u7247\u5efa\u8b70\u4f7f\u7528\u53ef\u76f4\u63a5\u64ad\u653e\u7684 HTTPS MP4 \u7db2\u5740\u3002'
     };
   },
 
   buildThumbnailPrompt() {
     return {
       type: 'text',
-      text: '已收到影片網址。\n請上傳縮圖相片，縮圖會放在影片 hero 的 previewUrl。',
+      text: '\u5df2\u6536\u5230\u5f71\u7247\u7db2\u5740\u3002\n\u8acb\u4e0a\u50b3\u7e2e\u5716\u76f8\u7247\uff0c\u7e2e\u5716\u6703\u653e\u5728\u5f71\u7247\u4e0a\u534a\u90e8\u3002',
       quickReply: {
         items: [{
           type: 'action',
-          action: { type: 'camera', label: '拍照' }
+          action: { type: 'camera', label: '\u62cd\u7167' }
         }, {
           type: 'action',
-          action: { type: 'cameraRoll', label: '選照片' }
+          action: { type: 'cameraRoll', label: '\u9078\u7167\u7247' }
         }]
       }
     };
@@ -2554,18 +2554,65 @@ const LineOAMyVideoKeywordModule = {
   buildEditMessage(editUrl) {
     return {
       type: 'template',
-      altText: '影片名片已建立草稿，請編輯下半部內容',
+      altText: '\u5f71\u7247\u540d\u7247\u8349\u7a3f\u5b8c\u6210',
       template: {
         type: 'buttons',
-        title: '影片名片草稿完成',
-        text: '上半部影片與縮圖已套入。請打開編輯頁，確認下半部文字與按鈕後儲存。',
+        title: '\u5f71\u7247\u540d\u7247\u8349\u7a3f\u5b8c\u6210',
+        text: '\u5f71\u7247\u8207\u7e2e\u5716\u5df2\u5957\u5165\uff0c\u8acb\u7de8\u8f2f\u4e0b\u534a\u90e8\u5167\u5bb9\u3002',
         actions: [{
           type: 'uri',
-          label: '編輯影片名片',
+          label: '\u7de8\u8f2f\u5f71\u7247\u540d\u7247',
           uri: editUrl
         }]
       }
     };
+  },
+
+  buildEditFallbackMessage(editUrl) {
+    return {
+      type: 'text',
+      text: '\u5f71\u7247\u540d\u7247\u8349\u7a3f\u5b8c\u6210\uff0c\u8acb\u9ede\u958b\u7de8\u8f2f\uff1a\n' + editUrl
+    };
+  },
+
+  buildThumbnailReceivedMessage() {
+    return {
+      type: 'text',
+      text: '\u5df2\u6536\u5230\u7e2e\u5716\uff0c\u6b63\u5728\u5efa\u7acb\u5f71\u7247\u540d\u7247\u8349\u7a3f\u3002\u5b8c\u6210\u5f8c\u6703\u63a8\u9001\u7de8\u8f2f\u9023\u7d50\u3002'
+    };
+  },
+
+  buildThumbnailErrorMessage() {
+    return {
+      type: 'text',
+      text: '\u7e2e\u5716\u8655\u7406\u5931\u6557\uff0c\u8acb\u91cd\u65b0\u8f38\u5165\u300c\u6211\u7684\u5f71\u7247\u300d\u518d\u8a66\u4e00\u6b21\u3002'
+    };
+  },
+
+  async processThumbnailAndPush(userId, messageId, state, env) {
+    try {
+      const imageDataUri = await LineOACardCoolKeywordModule.fetchLineImageDataUri(env, messageId);
+      const thumbnailUrl = await StorageModule.upload(imageDataUri, env);
+      if (!thumbnailUrl) throw new Error('thumbnail upload failed');
+      const targetCard = await this.findTargetCard(env, userId);
+      const draft = await this.saveDraft(env, {
+        userId,
+        rowId: this.text(targetCard && targetCard.row_id),
+        videoUrl: this.text(state.videoUrl),
+        thumbnailUrl,
+        createdAt: new Date().toISOString()
+      });
+      await this.clearState(env, userId);
+      const editUrl = this.buildWysiwygUrl(userId, env, draft);
+      const result = await LineOACardCoolKeywordModule.pushLine(userId, [this.buildEditMessage(editUrl)], env);
+      if (!result.success) {
+        console.error('My video edit push failed', result);
+        await LineOACardCoolKeywordModule.pushLine(userId, [this.buildEditFallbackMessage(editUrl)], env);
+      }
+    } catch (e) {
+      console.error('My video thumbnail async processing failed', e);
+      await LineOACardCoolKeywordModule.pushLine(userId, [this.buildThumbnailErrorMessage()], env);
+    }
   },
 
   async reply(events, env, ctx) {
@@ -2619,6 +2666,12 @@ const LineOAMyVideoKeywordModule = {
 
       if (state.step === 'await_thumbnail') {
         if (!this.isImage(event)) continue;
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildThumbnailReceivedMessage()] }, env);
+        if (!result.success) console.error('My video thumbnail received reply failed', result);
+        const job = this.processThumbnailAndPush(userId, event.message.id, state, env);
+        if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(job);
+        else await job;
+        return true;
         try {
           const imageDataUri = await LineOACardCoolKeywordModule.fetchLineImageDataUri(env, event.message.id);
           const thumbnailUrl = await StorageModule.upload(imageDataUri, env);
@@ -2634,7 +2687,10 @@ const LineOAMyVideoKeywordModule = {
           await this.clearState(env, userId);
           const editUrl = this.buildWysiwygUrl(userId, env, draft);
           const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildEditMessage(editUrl)] }, env);
-          if (!result.success) console.error('My video edit reply failed', result);
+          if (!result.success) {
+            console.error('My video edit reply failed', result);
+            await LineOACardCoolKeywordModule.pushLine(userId, [this.buildEditFallbackMessage(editUrl)], env);
+          }
           return true;
         } catch (e) {
           console.error('My video thumbnail processing failed', e);
@@ -2642,7 +2698,10 @@ const LineOAMyVideoKeywordModule = {
             replyToken,
             messages: [{ type: 'text', text: '縮圖處理失敗，請重新上傳清楚的圖片。' }]
           }, env);
-          if (!result.success) console.error('My video error reply failed', result);
+          if (!result.success) {
+            console.error('My video error reply failed', result);
+            await LineOACardCoolKeywordModule.pushLine(userId, [{ type: 'text', text: '\u7e2e\u5716\u8655\u7406\u5931\u6557\uff0c\u8acb\u91cd\u65b0\u8f38\u5165\u300c\u6211\u7684\u5f71\u7247\u300d\u518d\u8a66\u4e00\u6b21\u3002' }], env);
+          }
           return true;
         }
       }
