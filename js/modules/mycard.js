@@ -1048,8 +1048,11 @@
         }
       }, true);
       if (res && !res.error) {
+        var rawCfg = JSON.stringify(cfg);
         currentCardData['名片圖檔'] = cfg.imgUrl;
-        currentCardData['自訂名片設定'] = JSON.stringify(cfg);
+        currentCardData['自訂名片設定'] = rawCfg;
+        currentCardData.customConfig = rawCfg;
+        currentCardData.custom_config = rawCfg;
         window.currentUserCard = currentCardData;
         if (window.showToast) window.showToast('✅ 專屬名片設定已儲存');
       } else {

@@ -208,7 +208,26 @@ function removeAutoShareParamsFromUrl() {
 
 function buildCardShareConfig(card) {
   let cfg = {};
-  try { cfg = JSON.parse(card?.['自訂名片設定'] || '{}') || {}; } catch (e) {}
+  const candidates = [
+    card?.customConfig,
+    card?.custom_config,
+    card?.ecardConfig,
+    card?.['自訂名片設定'],
+    card?.['電子名片設定'],
+    card?.['自訂版面'],
+    card?.['名片設定']
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    if (typeof raw === 'object') {
+      cfg = raw || {};
+      break;
+    }
+    try {
+      cfg = JSON.parse(String(raw)) || {};
+      break;
+    } catch (e) {}
+  }
   return {
     ...cfg,
     layoutStyle: cfg.layoutStyle || cfg.layout || 'landscape',
