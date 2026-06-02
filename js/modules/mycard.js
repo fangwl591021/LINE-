@@ -29,6 +29,7 @@
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
   var wysiwygState = { cfg: null, field: '', buttonIndex: -1 };
+  var myVideoDraftApplied = false;
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
   var templateCoverUrl = 'assets/rental-template-cover.png';
   var templateAddressUrl = 'https://www.google.com/maps';
@@ -206,10 +207,17 @@
 
   function syncVideoConfig(cfg) {
     cfg = cfg || {};
+    var videoInput = $('#my-v1-video-url');
+    var videoToggle = $('#my-v1-video-enabled');
+    if (!videoInput && !videoToggle) {
+      return cfg;
+    }
     var videoUrl = getVideoUrlInput();
     if (isVideoModeEnabled() && videoUrl) {
       cfg.cardType = 'video';
       cfg.videoUrl = videoUrl;
+    } else if (!videoToggle && cfg.cardType === 'video' && cfg.videoUrl) {
+      return cfg;
     } else {
       if (cfg.cardType === 'video') cfg.cardType = 'v1';
       delete cfg.videoUrl;
@@ -303,6 +311,15 @@
 
     if (typeof window.syncUserCardMatch === 'function') {
       window.syncUserCardMatch();
+    }
+
+    var requestedRowId = getRequestedMyCardRowId();
+    if (requestedRowId) {
+      var requestedCard = findLoadedMyCardByRowId(requestedRowId);
+      if (requestedCard) {
+        window.currentUserCard = requestedCard;
+        return requestedCard;
+      }
     }
 
     return window.currentUserCard || null;
@@ -410,6 +427,29 @@
     }
   }
 
+  function getRequestedMyCardRowId() {
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      return String(params.get('rowId') || params.get('cardId') || '').trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function findLoadedMyCardByRowId(rowId) {
+    var target = String(rowId || '').trim();
+    if (!target) return null;
+    var pools = [];
+    if (window.currentUserCard) pools.push(window.currentUserCard);
+    if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
+    if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
+    for (var i = 0; i < pools.length; i += 1) {
+      var card = pools[i];
+      if (card && getCardRowId(card) === target) return card;
+    }
+    return null;
+  }
+
   function injectWysiwygButton() {
     var editState = document.getElementById('my-ecard-edit-state');
     if (!editState || document.getElementById('btn-open-my-wysiwyg-card')) return;
@@ -510,6 +550,52 @@
     updatePreview();
     if (window.showToast) window.showToast('已套用到影音名片區，請按儲存');
     return true;
+  }
+
+  function getMyVideoDraftId() {
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      return String(params.get('videoDraft') || params.get('myVideoDraft') || '').trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  async function applyMyVideoDraftToWysiwyg(cfg) {
+    var jobId = getMyVideoDraftId();
+    if (!jobId || myVideoDraftApplied || !cfg) return cfg;
+    myVideoDraftApplied = true;
+    if (typeof window.fetchAPI !== 'function') return cfg;
+    try {
+      var userId = moduleAuth.getUserId() || (window.currentUserProfile && window.currentUserProfile.userId) || '';
+      var res = await window.fetchAPI('getMyVideoDraft', {
+        jobId: jobId,
+        userId: userId,
+        lineUserId: userId
+      }, true);
+      var draft = res && (res.data || res);
+      if (!draft || res.error) throw new Error((res && res.error) || '影片草稿讀取失敗');
+      var videoUrl = String(draft.videoUrl || '').trim();
+      var thumbnailUrl = String(draft.thumbnailUrl || '').trim();
+      if (!videoUrl) throw new Error('影片草稿缺少影片網址');
+      cfg.cardType = 'video';
+      cfg.videoUrl = videoUrl;
+      var layout = cfg.layoutStyle || getLayout();
+      if (thumbnailUrl) {
+        if (layout === 'portrait') cfg.imgUrlPortrait = thumbnailUrl;
+        else if (layout === 'square') cfg.imgUrlSquare = thumbnailUrl;
+        else cfg.imgUrl = thumbnailUrl;
+        myEcardImgs[layout] = thumbnailUrl;
+        var imgInput = $('#my-v1-img-url');
+        if (imgInput) imgInput.value = thumbnailUrl;
+      }
+      applyVideoConfigToFields(cfg);
+      if (window.showToast) window.showToast('已套入影片與縮圖，請編輯下半部內容後儲存。');
+    } catch (e) {
+      console.warn('[mycard] video draft apply failed:', e);
+      if (window.showToast) window.showToast('影片草稿讀取失敗：' + (e.message || '請重新輸入我的影片'), true);
+    }
+    return cfg;
   }
 
   async function openMyCardDetail(evt) {
@@ -1077,6 +1163,10 @@
     var ratio = wysiwygLayoutRatio(layout, cfg);
     var imgUrl = currentWysiwygImage(cfg);
     var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+    var isVideoHero = cfg.cardType === 'video' && cfg.videoUrl;
+    var heroMediaHtml = isVideoHero
+      ? '<video class="w-full object-cover bg-slate-100" style="aspect-ratio:' + escapeAttr(ratio) + ';" src="' + escapeAttr(cfg.videoUrl) + '" poster="' + escapeAttr(imgUrl || 'https://placehold.co/800x520?text=Cover') + '" controls playsinline muted></video>'
+      : '<img src="' + escapeAttr(imgUrl || 'https://placehold.co/800x520?text=Cover') + '" class="w-full object-cover bg-slate-100" style="aspect-ratio:' + escapeAttr(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Cover\';">';
     var buttonHtml = buttons.map(function(button, index) {
       return '<button type="button" onclick="window.editMyCardWysiwygButton(' + index + ')" class="w-full py-3 rounded-xl text-white text-center text-[15px] font-black mb-2.5 shadow-sm active:scale-95" style="background:' + escapeAttr(safeCssColor(button.c, '#06C755')) + '">' + escapeHTML(button.l || '按鈕') + '</button>';
     }).join('');
@@ -1173,7 +1263,7 @@
         return;
       }
       if (!myEcardStateLoaded) hydrateMyECardStateFromCurrentCard();
-      wysiwygState.cfg = getWysiwygConfig();
+      wysiwygState.cfg = await applyMyVideoDraftToWysiwyg(getWysiwygConfig());
       writeCurrentCardConfig(wysiwygState.cfg);
       ensureWysiwygModal().classList.remove('hidden');
       renderMyCardWysiwyg();
@@ -1352,7 +1442,7 @@
         '<div class="relative bg-slate-100">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'image\')" class="my-wysiwyg-target block w-full text-left active:opacity-90 rounded-none border-0">' +
             '<span class="my-wysiwyg-edit-icon" style="top:12px;right:12px;"><span class="material-symbols-outlined">image</span></span>' +
-            '<img src="' + escapeAttr(imgUrl || 'https://placehold.co/800x520?text=Cover') + '" class="w-full object-cover bg-slate-100" style="aspect-ratio:' + escapeAttr(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Cover\';">' +
+            heroMediaHtml +
           '</button>' +
           '<div class="absolute top-3 right-3 bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm pointer-events-none">分享</div>' +
         '</div>' +

@@ -1382,6 +1382,10 @@ const LineOAChatModule = {
     return false;
   },
 
+  async getMyVideoDraft(payload, env) {
+    return await LineOAMyVideoKeywordModule.getDraft(payload || {}, env);
+  },
+
   async forwardToGas(rawBody, env) {
     const gasUrl = this.text(env.GAS_URL || env.GAS_WEBAPP_URL);
     if (!gasUrl) return { success: false, skipped: true, error: 'Missing GAS_URL' };
@@ -1712,6 +1716,8 @@ const LineOAChatModule = {
       await saveJob;
       await forwardJob;
     }
+    const myVideoReplied = await LineOAMyVideoKeywordModule.reply(events, env, ctx);
+    if (myVideoReplied) return new Response('OK', { status: 200 });
     const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);
     if (cardCoolReplied) return new Response('OK', { status: 200 });
     const simpleMyCardReplied = await this.replySimpleMyCard(events, env);
@@ -2380,6 +2386,271 @@ const LineOAStoreSearchKeywordModule = {
   }
 };
 
+const LineOAMyVideoKeywordModule = {
+  statePrefix: 'lineoa:myvideo:',
+  draftPrefix: 'lineoa:myvideo:draft:',
+  ttlSeconds: 1800,
+  draftTtlSeconds: 86400,
+
+  text(value, fallback = '') {
+    return String(value ?? '').trim() || fallback;
+  },
+
+  stateKey(userId) {
+    return this.statePrefix + this.text(userId);
+  },
+
+  draftKey(jobId) {
+    return this.draftPrefix + this.text(jobId);
+  },
+
+  eventUserId(event) {
+    return LineOAChatModule.eventUserId(event);
+  },
+
+  isKeyword(event) {
+    const message = event?.message || {};
+    if (message.type !== 'text') return false;
+    return this.text(message.text).replace(/\s+/g, '') === '我的影片';
+  },
+
+  isCancel(event) {
+    const message = event?.message || {};
+    if (message.type !== 'text') return false;
+    const text = this.text(message.text).replace(/\s+/g, '');
+    return text === '取消' || text === '取消影片' || text === '停止';
+  },
+
+  isText(event) {
+    return event?.type === 'message' && event?.message?.type === 'text';
+  },
+
+  isImage(event) {
+    return event?.type === 'message' && event?.message?.type === 'image' && !!event?.message?.id;
+  },
+
+  normalizeVideoUrl(value) {
+    const raw = this.text(value);
+    if (!raw) return '';
+    const matched = raw.match(/https:\/\/[^\s]+/i);
+    const url = matched ? matched[0] : raw;
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'https:') return '';
+      return parsed.toString();
+    } catch (e) {
+      return '';
+    }
+  },
+
+  async loadState(env, userId) {
+    if (!env.ACTMASTER_KV || !userId) return null;
+    const raw = await env.ACTMASTER_KV.get(this.stateKey(userId)).catch(() => '');
+    if (!raw) return null;
+    try {
+      const state = JSON.parse(raw);
+      return state && typeof state === 'object' ? state : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async saveState(env, userId, state) {
+    if (!env.ACTMASTER_KV || !userId) return false;
+    await env.ACTMASTER_KV.put(this.stateKey(userId), JSON.stringify(state), { expirationTtl: this.ttlSeconds });
+    return true;
+  },
+
+  async clearState(env, userId) {
+    if (!env.ACTMASTER_KV || !userId) return;
+    await env.ACTMASTER_KV.delete(this.stateKey(userId)).catch(() => {});
+  },
+
+  async loadActor(env, userId) {
+    const id = this.text(userId);
+    if (!id) return { role: 'user', user: null };
+    if (SecurityModule.isHardAdmin(id)) return { role: 'admin', user: null };
+    if (!D1ReadModule.hasD1(env)) return { role: 'user', user: null };
+    const identity = await D1ReadModule.findUserByIdentity(env, id).catch(() => null);
+    const user = identity && identity.user;
+    const role = user ? SecurityModule.sanitizeRole(id, user.role, user) : 'user';
+    return { role, user };
+  },
+
+  canUse(actor) {
+    return actor && (actor.role === 'admin' || actor.role === 'store');
+  },
+
+  async saveDraft(env, draft) {
+    if (!env.ACTMASTER_KV) throw new Error('Missing ACTMASTER_KV');
+    const jobId = draft.jobId || (crypto.randomUUID ? crypto.randomUUID() : `VID_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+    const payload = { ...draft, jobId, status: 'ready', updatedAt: new Date().toISOString() };
+    await env.ACTMASTER_KV.put(this.draftKey(jobId), JSON.stringify(payload), { expirationTtl: this.draftTtlSeconds });
+    return payload;
+  },
+
+  async loadDraft(env, jobId) {
+    if (!env.ACTMASTER_KV || !jobId) return null;
+    const raw = await env.ACTMASTER_KV.get(this.draftKey(jobId)).catch(() => '');
+    if (!raw) return null;
+    try {
+      const draft = JSON.parse(raw);
+      return draft && typeof draft === 'object' ? draft : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async getDraft(payload, env) {
+    const jobId = this.text(payload.jobId || payload.videoDraft);
+    const userId = this.text(payload.userId || payload.pt_uid || payload.lineUserId);
+    const draft = await this.loadDraft(env, jobId);
+    if (!draft) return { success: false, error: '影片名片草稿已失效，請重新輸入「我的影片」。' };
+    if (this.text(draft.userId) && userId && this.text(draft.userId) !== userId) {
+      return { success: false, error: 'Access Denied: video draft owner mismatch' };
+    }
+    return { success: true, data: draft };
+  },
+
+  async findTargetCard(env, userId) {
+    const rows = LineOAChatModule.filterLineOaMyCardCandidates(await LineOAChatModule.findMySelfCards(env, userId));
+    return rows[0] || null;
+  },
+
+  buildWysiwygUrl(userId, env, draft) {
+    const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
+    const params = new URLSearchParams({
+      mode: 'wysiwyg-card',
+      videoDraft: this.text(draft.jobId)
+    });
+    if (userId) params.set('lineUserId', userId);
+    if (draft.rowId) params.set('rowId', draft.rowId);
+    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  },
+
+  buildStartMessage() {
+    return {
+      type: 'text',
+      text: '影片名片設定開始。\n請先輸入影片網址。\n\n注意：LINE Flex 影片建議使用可直接播放的 HTTPS 影片網址，例如 MP4。'
+    };
+  },
+
+  buildThumbnailPrompt() {
+    return {
+      type: 'text',
+      text: '已收到影片網址。\n請上傳縮圖相片，縮圖會放在影片 hero 的 previewUrl。',
+      quickReply: {
+        items: [{
+          type: 'action',
+          action: { type: 'camera', label: '拍照' }
+        }, {
+          type: 'action',
+          action: { type: 'cameraRoll', label: '選照片' }
+        }]
+      }
+    };
+  },
+
+  buildEditMessage(editUrl) {
+    return {
+      type: 'template',
+      altText: '影片名片已建立草稿，請編輯下半部內容',
+      template: {
+        type: 'buttons',
+        title: '影片名片草稿完成',
+        text: '上半部影片與縮圖已套入。請打開編輯頁，確認下半部文字與按鈕後儲存。',
+        actions: [{
+          type: 'uri',
+          label: '編輯影片名片',
+          uri: editUrl
+        }]
+      }
+    };
+  },
+
+  async reply(events, env, ctx) {
+    for (const event of Array.isArray(events) ? events : []) {
+      const replyToken = this.text(event.replyToken);
+      const userId = this.eventUserId(event);
+      if (!replyToken || !userId) continue;
+
+      if (this.isKeyword(event)) {
+        const actor = await this.loadActor(env, userId);
+        if (!this.canUse(actor)) {
+          const result = await LineOAChatModule.replyLine({
+            replyToken,
+            messages: [{ type: 'text', text: '影片名片目前僅開放付費租戶、店長與管理員使用。' }]
+          }, env);
+          if (!result.success) console.error('My video permission reply failed', result);
+          return true;
+        }
+        await this.saveState(env, userId, { step: 'await_video_url', createdAt: new Date().toISOString() });
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildStartMessage()] }, env);
+        if (!result.success) console.error('My video start reply failed', result);
+        return true;
+      }
+
+      const state = await this.loadState(env, userId);
+      if (!state || !state.step) continue;
+
+      if (this.isCancel(event)) {
+        await this.clearState(env, userId);
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [{ type: 'text', text: '已取消影片名片設定。' }] }, env);
+        if (!result.success) console.error('My video cancel reply failed', result);
+        return true;
+      }
+
+      if (state.step === 'await_video_url') {
+        if (!this.isText(event)) continue;
+        const videoUrl = this.normalizeVideoUrl(event.message.text);
+        if (!videoUrl) {
+          const result = await LineOAChatModule.replyLine({
+            replyToken,
+            messages: [{ type: 'text', text: '影片網址格式不正確。請輸入 HTTPS 影片網址，例如 https://example.com/video.mp4。' }]
+          }, env);
+          if (!result.success) console.error('My video invalid url reply failed', result);
+          return true;
+        }
+        await this.saveState(env, userId, { ...state, step: 'await_thumbnail', videoUrl, updatedAt: new Date().toISOString() });
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildThumbnailPrompt()] }, env);
+        if (!result.success) console.error('My video thumbnail prompt failed', result);
+        return true;
+      }
+
+      if (state.step === 'await_thumbnail') {
+        if (!this.isImage(event)) continue;
+        try {
+          const imageDataUri = await LineOACardCoolKeywordModule.fetchLineImageDataUri(env, event.message.id);
+          const thumbnailUrl = await StorageModule.upload(imageDataUri, env);
+          if (!thumbnailUrl) throw new Error('縮圖上傳失敗');
+          const targetCard = await this.findTargetCard(env, userId);
+          const draft = await this.saveDraft(env, {
+            userId,
+            rowId: this.text(targetCard && targetCard.row_id),
+            videoUrl: this.text(state.videoUrl),
+            thumbnailUrl,
+            createdAt: new Date().toISOString()
+          });
+          await this.clearState(env, userId);
+          const editUrl = this.buildWysiwygUrl(userId, env, draft);
+          const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildEditMessage(editUrl)] }, env);
+          if (!result.success) console.error('My video edit reply failed', result);
+          return true;
+        } catch (e) {
+          console.error('My video thumbnail processing failed', e);
+          const result = await LineOAChatModule.replyLine({
+            replyToken,
+            messages: [{ type: 'text', text: '縮圖處理失敗，請重新上傳清楚的圖片。' }]
+          }, env);
+          if (!result.success) console.error('My video error reply failed', result);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+};
+
 const LineOACardCoolKeywordModule = {
   statePrefix: 'lineoa:cardcool:',
   reviewPrefix: 'lineoa:cardcool:review:',
@@ -2989,7 +3260,8 @@ const PointModule = {
   async insertUserPoint(payload, env) {
     const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
-    const lineUserId = String(payload.LINE_user_id || payload.lineUserId || payload.userId || '').trim();
+    const rawLineUserId = String(payload.LINE_user_id || payload.lineUserId || payload.userId || '').trim();
+    const lineUserId = await this.resolvePointUserId(env, rawLineUserId).catch(() => rawLineUserId);
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
     const body = {
@@ -3142,22 +3414,33 @@ const PointModule = {
 
     const explicitPointUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || '').trim();
     const fallbackUserId = String(payload.authenticatedUserId || payload.userId || '').trim();
+    const requestedLineUserId = explicitPointUserId || fallbackUserId;
     let lineUserId = explicitPointUserId;
     if (!lineUserId || lineUserId === fallbackUserId) {
       const resolvedPointUserId = await this.resolvePointUserId(env, lineUserId || fallbackUserId).catch(() => '');
       lineUserId = resolvedPointUserId || lineUserId || fallbackUserId;
     }
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
+    const lineUserIds = await this.resolvePointUserIds(env, requestedLineUserId || lineUserId).catch(() => [lineUserId]);
+    const queryLineUserIds = Array.from(new Set([lineUserId, ...lineUserIds, requestedLineUserId].map(id => String(id || '').trim()).filter(Boolean)));
 
-    const baseBody = {
+    const makeBaseBody = (queryLineUserId) => ({
       api_key: apiKey,
-      LINE_user_id: lineUserId,
+      LINE_user_id: queryLineUserId,
       page: Math.max(1, Number(payload.page || 1)),
       per_page: 100
-    };
+    });
+    const baseBody = makeBaseBody(lineUserId);
     if (payload.shop_id || payload.shopId) baseBody.shop_id = Number(payload.shop_id || payload.shopId);
     if (payload.date_start || payload.dateStart) baseBody.date_start = String(payload.date_start || payload.dateStart);
     if (payload.date_end || payload.dateEnd) baseBody.date_end = String(payload.date_end || payload.dateEnd);
+    const withFilters = (body) => {
+      const next = { ...body };
+      if (payload.shop_id || payload.shopId) next.shop_id = Number(payload.shop_id || payload.shopId);
+      if (payload.date_start || payload.dateStart) next.date_start = String(payload.date_start || payload.dateStart);
+      if (payload.date_end || payload.dateEnd) next.date_end = String(payload.date_end || payload.dateEnd);
+      return next;
+    };
 
     const collectPages = async (body) => {
       const firstPage = await this.fetchPointPage(body);
@@ -3198,18 +3481,55 @@ const PointModule = {
     };
 
     const requestedType = String(payload.point_type || payload.pointType || '').trim();
-    const typedBody = { ...baseBody, point_type: requestedType || 'gift_money' };
-    const typedResult = await collectPages(typedBody);
-    if (typedResult.error) return { success: false, error: typedResult.error, code: typedResult.code };
+    const typedResults = [];
+    const allTypeResults = [];
+    for (const queryId of queryLineUserIds) {
+      const body = withFilters(makeBaseBody(queryId));
+      const typedResult = await collectPages({ ...body, point_type: requestedType || 'gift_money' });
+      if (!typedResult.error) typedResults.push(typedResult);
+      const allTypeResult = await collectPages(body);
+      if (!allTypeResult.error) allTypeResults.push(allTypeResult);
+    }
+    if (!typedResults.length) {
+      const firstError = await collectPages({ ...withFilters(makeBaseBody(lineUserId)), point_type: requestedType || 'gift_money' });
+      return { success: false, error: firstError.error || 'Point query failed', code: firstError.code };
+    }
 
-    const allTypeResult = await collectPages(baseBody);
-    const balanceByType = allTypeResult.error ? typedResult.balanceByType : allTypeResult.balanceByType;
-    const balance = typedResult.latestBalance;
-    const enrichedList = await this.enrichPointRowsWithCashierLogs(
-      env,
-      lineUserId,
-      typedResult.list.slice(0, baseBody.per_page)
-    );
+    const mergeBalancesByType = (results) => {
+      const merged = {};
+      for (const result of results) {
+        const source = result.balanceByType || {};
+        for (const [key, value] of Object.entries(source)) {
+          merged[key] = (Number(merged[key] || 0) || 0) + (Number(value || 0) || 0);
+        }
+      }
+      return merged;
+    };
+    const typedList = typedResults.flatMap(result => Array.isArray(result.list) ? result.list : []);
+    const allTypeList = allTypeResults.flatMap(result => Array.isArray(result.list) ? result.list : []);
+    const balanceByType = allTypeResults.length ? mergeBalancesByType(allTypeResults) : mergeBalancesByType(typedResults);
+    const balance = typedResults.reduce((sum, result) => sum + (Number(result.latestBalance || 0) || 0), 0);
+    const allTypeBalance = allTypeResults.length
+      ? allTypeResults.reduce((sum, result) => sum + (Number(result.latestBalance || 0) || 0), 0)
+      : null;
+    const typedBody = typedResults[0].body;
+    const typedResult = {
+      ...typedResults[0],
+      list: typedList,
+      latestBalance: balance,
+      total: typedResults.reduce((sum, result) => sum + (Number(result.total || 0) || 0), 0),
+      pagination: typedResults[0].pagination
+    };
+    let enrichedList = typedList
+      .sort((a, b) => {
+        const at = Date.parse(String(a.created_at || a.createdAt || a.time || a.date || '').replace(' ', 'T')) || 0;
+        const bt = Date.parse(String(b.created_at || b.createdAt || b.time || b.date || '').replace(' ', 'T')) || 0;
+        return bt - at;
+      })
+      .slice(0, baseBody.per_page);
+    for (const queryId of queryLineUserIds) {
+      enrichedList = await this.enrichPointRowsWithCashierLogs(env, queryId, enrichedList);
+    }
 
     return {
       success: true,
@@ -3217,10 +3537,11 @@ const PointModule = {
         balance,
         latestBalance: typedResult.latestBalance,
         typedBalance: typedResult.latestBalance,
-        allTypeBalance: allTypeResult.error ? null : allTypeResult.latestBalance,
+        allTypeBalance,
         balanceByType,
         queriedLineUserId: lineUserId,
-        requestedLineUserId: explicitPointUserId || fallbackUserId,
+        queriedLineUserIds: queryLineUserIds,
+        requestedLineUserId,
         sampledRows: typedResult.list.length,
         pointType: typedResult.body.point_type || 'gift_money',
         requestedPointType: typedBody.point_type,
@@ -3241,6 +3562,37 @@ const PointModule = {
       || D1ReadModule.text(identity && identity.canonicalId)
       || D1ReadModule.text(row && row.line_id)
       || id;
+  },
+
+  async resolvePointUserIds(env, userId) {
+    const id = String(userId || '').trim();
+    const ids = [];
+    const add = value => {
+      const next = String(value || '').trim();
+      if (next && !ids.includes(next)) ids.push(next);
+    };
+    add(id);
+    if (!id || !env || !env.ACTMASTER_DB) return ids;
+    const identity = await D1ReadModule.findUserByIdentity(env, id).catch(() => null);
+    add(identity && identity.canonicalId);
+    const row = identity && identity.user;
+    add(row && row.point_line_id);
+    add(row && row.line_id);
+    add(row && row.legacy_line_id);
+    add(row && row.row_id);
+    const link = identity && identity.link;
+    add(link && link.new_line_id);
+    add(link && link.old_line_id);
+    const activeLinks = await D1ReadModule.all(env, `
+      SELECT old_line_id, new_line_id
+      FROM user_identity_links
+      WHERE status = 'active' AND (old_line_id IN (${ids.map(() => '?').join(',')}) OR new_line_id IN (${ids.map(() => '?').join(',')}))
+    `, ids.concat(ids)).catch(() => []);
+    for (const linkRow of activeLinks) {
+      add(linkRow.old_line_id);
+      add(linkRow.new_line_id);
+    }
+    return ids.length ? ids : [id];
   },
 
   async ensureAwardTable(env) {
@@ -3288,7 +3640,8 @@ const PointModule = {
     await this.ensureAwardTable(env);
 
     const rawUserId = String(payload.authenticatedUserId || payload.userId || '').trim();
-    const pointUserId = String(payload.pointUserId || payload.pt_uid || rawUserId || '').trim();
+    const rawPointUserId = String(payload.pointUserId || payload.pt_uid || rawUserId || '').trim();
+    const pointUserId = await this.resolvePointUserId(env, rawPointUserId).catch(() => rawPointUserId);
     if (!pointUserId) return { success: false, error: 'Missing userId' };
 
     const today = this.taipeiDate();
@@ -11204,6 +11557,7 @@ async function dispatchAction(action, payload, request, env) {
     'getStoreSettings',
     'listAnnouncements',
     'uploadImageToR2',
+    'getMyVideoDraft',
     'getCardCoolDraft',
     'confirmCardCoolDraft',
     'sendCardCoolCardToChat',
@@ -11616,6 +11970,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1StoreKnowledgeBaseModule.save(payload || {}, env);
     case 'searchStoreKnowledgeBase':
       return await D1StoreKnowledgeBaseModule.search(payload || {}, env);
+    case 'getMyVideoDraft':
+      return await LineOAChatModule.getMyVideoDraft(payload || {}, env);
     case 'getCardCoolDraft':
       return await LineOACardCoolKeywordModule.getReviewDraft(payload || {}, env);
     case 'confirmCardCoolDraft':
