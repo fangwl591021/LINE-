@@ -871,10 +871,15 @@
         return;
       }
       if (details) {
-        details.open = true;
-        setTimeout(function() {
-          details.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 80);
+        if (typeof window.goPage === 'function') window.goPage('admin-settings');
+        focusMyECardSection();
+        if (typeof window.initMyECard === 'function') {
+          window.initMyECard().then(function() {
+            focusMyECardSection();
+          }).catch(function(e) {
+            console.warn('[openMyCardEntry] init setup failed:', e);
+          });
+        }
       }
       if (window.showToast) window.showToast('請先建立專屬名片');
     } finally {
