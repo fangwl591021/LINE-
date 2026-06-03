@@ -7327,9 +7327,32 @@ const D1WriteModule = {
     await D1ReadModule.ensureCardAccessColumns(env);
     const card = this.normalizeCard(payload);
     const sourceData = payload.data || payload.card || payload;
+    const explicitRowId = this.pick(sourceData, ['rowId', 'row_id', 'id'], this.pick(payload, ['rowId', 'row_id', 'id']));
     const hasExplicitNetworkInput = ['networkId', 'network_id', '歸屬網'].some((key) => Object.prototype.hasOwnProperty.call(sourceData || {}, key));
     const explicitNetworkId = hasExplicitNetworkInput ? this.text(this.pick(sourceData, ['networkId', 'network_id', '歸屬網']), 'admin') : '';
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
+    if (!explicitRowId) {
+      const provisionalAccess = D1ReadModule.inferCardAccess(card, { actorId: this.text(payload.authenticatedUserId || payload.userId) });
+      const isStaticSelfProfile = provisionalAccess && provisionalAccess.sourceType === 'self_profile'
+        && !String(card.row_id || '').startsWith('CARD_VIDEO_')
+        && String(card.custom_config || '').toLowerCase().indexOf('"videostoragekind"') < 0;
+      const profileId = this.text(card.line_id || provisionalAccess.profileUserId || payload.authenticatedUserId || payload.userId);
+      if (isStaticSelfProfile && profileId) {
+        const existingSelfProfile = await D1ReadModule.first(env, `
+          SELECT row_id FROM card_contacts
+          WHERE (
+            line_id = ? OR profile_user_id = ? OR owner_user_id = ?
+            OR (creator_id = ? AND LOWER(COALESCE(source_type,'')) = 'self_profile')
+          )
+            AND LOWER(COALESCE(source_type,'')) = 'self_profile'
+            AND row_id NOT LIKE 'CARD_VIDEO_%'
+            AND LOWER(COALESCE(custom_config,'')) NOT LIKE '%"videostoragekind"%'
+          ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+          LIMIT 1
+        `, [profileId, profileId, profileId, profileId]).catch(() => null);
+        if (existingSelfProfile && existingSelfProfile.row_id) card.row_id = this.text(existingSelfProfile.row_id);
+      }
+    }
     const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
     let preserveExistingCardIdentity = false;
     if (existing) {
@@ -10318,6 +10341,13 @@ const ClaimModule = {
     return next || fallback;
   },
 
+  cleanText(value, fallback = '') {
+    const next = String(value ?? '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .trim();
+    return next || fallback;
+  },
+
   pick(payload, keys, fallback = '') {
     for (const key of keys) {
       const value = payload && payload[key];
@@ -10335,6 +10365,87 @@ const ClaimModule = {
     return { success: true, data: D1ReadModule.cardRow(card) };
   },
 
+  async findExistingSelfProfile(env, userId) {
+    const id = this.cleanText(userId);
+    if (!id) return null;
+    return await D1ReadModule.first(env, `
+      SELECT * FROM card_contacts
+      WHERE (
+        line_id = ? OR profile_user_id = ? OR owner_user_id = ?
+        OR (creator_id = ? AND LOWER(COALESCE(source_type,'')) = 'self_profile')
+      )
+        AND LOWER(COALESCE(source_type,'')) = 'self_profile'
+        AND row_id NOT LIKE 'CARD_VIDEO_%'
+        AND LOWER(COALESCE(custom_config,'')) NOT LIKE '%"videostoragekind"%'
+      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+      LIMIT 1
+    `, [id, id, id, id]).catch(() => null);
+  },
+
+  async promoteClaimedCardToSelfProfile(env, card, userId, networkId) {
+    const id = this.cleanText(userId);
+    if (!id || !card) return null;
+    const existing = await this.findExistingSelfProfile(env, id);
+    const sourceConfig = D1ReadModule.jsonObject(card.custom_config || '{}');
+    delete sourceConfig.cardType;
+    delete sourceConfig.cardVariant;
+    delete sourceConfig.videoCard;
+    delete sourceConfig.videoStorageKind;
+    delete sourceConfig.videoUrl;
+    delete sourceConfig.thumbnailUrl;
+    delete sourceConfig.videoPosterUrl;
+    sourceConfig.cardVersion = sourceConfig.cardVersion || sourceConfig.card_version || 'standard';
+    sourceConfig.layoutStyle = sourceConfig.layoutStyle || sourceConfig.layout || 'landscape';
+    sourceConfig.claimedFromCardId = this.cleanText(card.row_id);
+
+    const rowId = this.cleanText(existing && existing.row_id) || `CARD_STD_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const scannerId = this.cleanText(card.creator_id || card.owner_user_id);
+    const notes = [
+      this.cleanText(card.notes || (existing && existing.notes)),
+      scannerId && scannerId !== id ? `原掃描者：${scannerId}` : '',
+      `認領來源：${this.cleanText(card.row_id)}`
+    ].filter(Boolean).join('；');
+
+    const saved = await D1WriteModule.upsertCard({
+      authenticatedUserId: id,
+      authenticatedRole: 'admin',
+      userId: id,
+      data: {
+        rowId,
+        lineId: id,
+        creatorId: id,
+        ownerUserId: id,
+        profileUserId: id,
+        sourceType: 'self_profile',
+        visibility: 'private',
+        poolEligible: 0,
+        aiReviewStatus: this.cleanText(existing && existing.ai_review_status, 'pending'),
+        networkId: this.cleanText(networkId || card.network_id || (existing && existing.network_id), 'admin'),
+        name: this.cleanText(card.name || (existing && existing.name), id),
+        englishName: this.cleanText(card.english_name || (existing && existing.english_name)),
+        companyName: this.cleanText(card.company_name || (existing && existing.company_name)),
+        title: this.cleanText(card.title || (existing && existing.title)),
+        department: this.cleanText(card.department || (existing && existing.department)),
+        taxId: this.cleanText(card.tax_id || (existing && existing.tax_id)),
+        mobile: this.cleanText(card.mobile || (existing && existing.mobile)),
+        officePhone: this.cleanText(card.office_phone || (existing && existing.office_phone)),
+        extension: this.cleanText(card.extension || (existing && existing.extension)),
+        fax: this.cleanText(card.fax || (existing && existing.fax)),
+        email: this.cleanText(card.email || (existing && existing.email)),
+        website: this.cleanText(card.website || (existing && existing.website)),
+        socials: this.cleanText(card.socials || (existing && existing.socials)),
+        address: this.cleanText(card.address || (existing && existing.address)),
+        birthday: this.cleanText(card.birthday || (existing && existing.birthday)),
+        services: this.cleanText(card.services || (existing && existing.services)),
+        notes,
+        imageUrl: this.cleanText(card.image_url || (existing && existing.image_url)),
+        customConfig: JSON.stringify(sourceConfig),
+        tags: this.cleanText(card.tags || (existing && existing.tags))
+      }
+    }, env);
+    return saved && saved.success !== false ? saved.data : null;
+  },
+
   async claimCardAndRegister(payload, env) {
     const rowId = this.pick(payload, ['claimRowId', 'rowId', 'cardId', 'claim']);
     const userId = this.pick(payload, ['authenticatedUserId', 'userId', 'lineId']);
@@ -10345,16 +10456,26 @@ const ClaimModule = {
     if (!card) return { success: false, error: 'Card not found' };
     const existingOwner = this.text(card.line_id);
     if (existingOwner && existingOwner !== userId) return { success: false, error: 'Card already claimed by another user' };
+    const existingProfile = this.text(card.profile_user_id);
+    if (existingProfile && existingProfile !== userId && existingOwner !== userId) {
+      return { success: false, error: 'Card already claimed by another user' };
+    }
 
     const networkId = this.pick(payload, ['networkId', 'network_id'], this.text(card.network_id, 'admin'));
     const ownerUserId = this.text(card.owner_user_id, this.text(card.creator_id) || userId);
     await env.ACTMASTER_DB.prepare(`
       UPDATE card_contacts
-      SET line_id = ?, profile_user_id = ?, owner_user_id = ?, network_id = ?,
+      SET line_id = '', profile_user_id = ?, owner_user_id = ?, network_id = ?,
           source_type = CASE WHEN TRIM(COALESCE(source_type,'')) = '' THEN 'private_import' ELSE source_type END,
-          visibility = 'private', pool_eligible = 0, updated_at = CURRENT_TIMESTAMP
+          visibility = 'private', pool_eligible = 0,
+          notes = CASE
+            WHEN INSTR(COALESCE(notes,''), '已由本人認領') > 0 THEN notes
+            WHEN TRIM(COALESCE(notes,'')) = '' THEN '已由本人認領；保留為掃描者通訊錄原件'
+            ELSE notes || '；已由本人認領；保留為掃描者通訊錄原件'
+          END,
+          updated_at = CURRENT_TIMESTAMP
       WHERE row_id = ?
-    `).bind(userId, userId, ownerUserId, networkId, rowId).run();
+    `).bind(userId, ownerUserId, networkId, rowId).run();
 
     const profile = {
       userId,
@@ -10371,17 +10492,19 @@ const ClaimModule = {
     };
 
     const userResult = await D1WriteModule.upsertUser(profile, env);
+    const promotedCard = await this.promoteClaimedCardToSelfProfile(env, card, userId, networkId);
     if (env.ACTMASTER_KV) {
       try { await env.ACTMASTER_KV.delete(`U_PROFILE_${userId}`); } catch (e) {}
     }
-    const updatedCard = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
+    const updatedCard = promotedCard || await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
     return {
       success: true,
       data: {
         claimed: true,
-        rowId,
+        rowId: promotedCard && promotedCard.rowId ? promotedCard.rowId : rowId,
+        sourceRowId: rowId,
         userId,
-        card: D1ReadModule.cardRow(updatedCard || card),
+        card: promotedCard || D1ReadModule.cardRow(updatedCard || card),
         user: userResult && userResult.data ? userResult.data : profile
       }
     };
