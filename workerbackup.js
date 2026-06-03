@@ -3228,6 +3228,8 @@ const LineOACardCoolKeywordModule = {
       notes: this.text(ocrData.notes, `LINE OA 名片酷 OCR 建立；掃描者：${this.text(ocrData.scannerName || ocrData.scannerId || userId)}`),
       creatorId: userId,
       ownerUserId: userId,
+      scannerUserId: this.text(ocrData.scannerUserId || ocrData.scannerId || userId),
+      scannerName: this.text(ocrData.scannerName || userId),
       profileUserId: '',
       sourceType: 'private_import',
       visibility: 'private',
@@ -5705,6 +5707,8 @@ const D1ReadModule = {
     const alters = [
       "ALTER TABLE card_contacts ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE card_contacts ADD COLUMN profile_user_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN scanner_user_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN scanner_name TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE card_contacts ADD COLUMN source_type TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE card_contacts ADD COLUMN visibility TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE card_contacts ADD COLUMN pool_eligible INTEGER NOT NULL DEFAULT 0",
@@ -5725,6 +5729,7 @@ const D1ReadModule = {
     }
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_owner ON card_contacts(owner_user_id)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_profile ON card_contacts(profile_user_id)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_scanner ON card_contacts(scanner_user_id)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_pool ON card_contacts(pool_eligible, visibility)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_crm_status ON card_contacts(owner_user_id, crm_status, updated_at)').run();
     this.cardAccessSchemaReady = true;
@@ -6019,6 +6024,8 @@ const D1ReadModule = {
       creatorId: this.text(row.creator_id),
       ownerUserId: access.ownerUserId,
       profileUserId: access.profileUserId,
+      scannerUserId: this.text(row.scanner_user_id),
+      scannerName: this.text(row.scanner_name),
       sourceType: access.sourceType,
       visibility: access.visibility,
       poolEligible: access.poolEligible,
@@ -6440,14 +6447,20 @@ const D1ReadModule = {
     const rows = await this.all(env, `
       SELECT * FROM card_contacts
       WHERE (
-        creator_id IN (${placeholders})
-        OR owner_user_id IN (${placeholders})
+        scanner_user_id IN (${placeholders})
+        OR (
+          TRIM(COALESCE(scanner_user_id,'')) = ''
+          AND (
+            creator_id IN (${placeholders})
+            OR owner_user_id IN (${placeholders})
+          )
+        )
       )
       AND LOWER(COALESCE(source_type,'')) <> 'self_profile'
       AND LOWER(COALESCE(source_type,'')) <> 'referral_placeholder'
       ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
       LIMIT ${limit}
-    `, [...ids, ...ids]);
+    `, [...ids, ...ids, ...ids]);
     return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
   },
 
@@ -6801,6 +6814,8 @@ const D1WriteModule = {
       tags: this.pick(data, ['tags', '標籤']),
       owner_user_id: this.pick(data, ['ownerUserId', 'owner_user_id', '擁有人ID']),
       profile_user_id: this.pick(data, ['profileUserId', 'profile_user_id']),
+      scanner_user_id: this.pick(data, ['scannerUserId', 'scanner_user_id', 'scannerId', 'scanner_id']),
+      scanner_name: this.pick(data, ['scannerName', 'scanner_name']),
       source_type: this.pick(data, ['sourceType', 'source_type', '名片來源']),
       visibility: this.pick(data, ['visibility', '公開狀態']),
       pool_eligible: this.pick(data, ['poolEligible', 'pool_eligible']),
@@ -7383,7 +7398,7 @@ const D1WriteModule = {
         'line_id','name','english_name','company_name','title','department','tax_id','mobile','office_phone',
         'extension','fax','email','website','socials','address','birthday','personality','hobbies','wealth',
         'health','career','services','notes','creator_id','image_url','custom_config','network_id','tags',
-        'crm_status','crm_type','crm_next_action','crm_next_followup_at','crm_ai_suggestion'
+        'scanner_user_id','scanner_name','crm_status','crm_type','crm_next_action','crm_next_followup_at','crm_ai_suggestion'
       ].forEach(key => {
         if (card[key] === '' || card[key] === undefined || card[key] === null) card[key] = existing[key] || '';
       });
@@ -7415,13 +7430,19 @@ const D1WriteModule = {
     card.visibility = access.visibility;
     card.pool_eligible = access.poolEligible ? 1 : 0;
     card.ai_review_status = access.aiReviewStatus;
+    if (card.source_type === 'private_import' && !this.text(card.scanner_user_id)) {
+      card.scanner_user_id = this.text(payload.scannerUserId || payload.scannerId || sourceData.scannerUserId || sourceData.scannerId || card.creator_id || awardUserId);
+    }
+    if (card.source_type === 'private_import' && !this.text(card.scanner_name)) {
+      card.scanner_name = this.text(payload.scannerName || sourceData.scannerName || card.scanner_user_id);
+    }
     card.crm_status = card.crm_status || (access.isSelfProfile ? '個人名片' : '新名片');
     card.crm_type = card.crm_type || D1ReadModule.inferCrmType(card);
     card.crm_next_action = card.crm_next_action || D1ReadModule.inferCrmNextAction(card, card.crm_type);
     card.crm_ai_suggestion = card.crm_ai_suggestion || D1ReadModule.inferCrmSuggestion(card, card.crm_type, card.crm_next_action);
     await env.ACTMASTER_DB.prepare(`
-      INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,owner_user_id,profile_user_id,source_type,visibility,pool_eligible,ai_review_status,crm_status,crm_type,crm_next_action,crm_next_followup_at,crm_ai_suggestion,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+      INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,owner_user_id,profile_user_id,scanner_user_id,scanner_name,source_type,visibility,pool_eligible,ai_review_status,crm_status,crm_type,crm_next_action,crm_next_followup_at,crm_ai_suggestion,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
       ON CONFLICT(row_id) DO UPDATE SET
         line_id=excluded.line_id,name=excluded.name,english_name=excluded.english_name,company_name=excluded.company_name,title=excluded.title,
         department=excluded.department,tax_id=excluded.tax_id,mobile=excluded.mobile,office_phone=excluded.office_phone,
@@ -7429,12 +7450,13 @@ const D1WriteModule = {
         address=excluded.address,birthday=excluded.birthday,personality=excluded.personality,hobbies=excluded.hobbies,
         wealth=excluded.wealth,health=excluded.health,career=excluded.career,services=excluded.services,notes=excluded.notes,
         creator_id=excluded.creator_id,image_url=excluded.image_url,custom_config=excluded.custom_config,network_id=excluded.network_id,
-        tags=excluded.tags,owner_user_id=excluded.owner_user_id,profile_user_id=excluded.profile_user_id,source_type=excluded.source_type,
+        tags=excluded.tags,owner_user_id=excluded.owner_user_id,profile_user_id=excluded.profile_user_id,
+        scanner_user_id=excluded.scanner_user_id,scanner_name=excluded.scanner_name,source_type=excluded.source_type,
         visibility=excluded.visibility,pool_eligible=excluded.pool_eligible,ai_review_status=excluded.ai_review_status,
         crm_status=excluded.crm_status,crm_type=excluded.crm_type,crm_next_action=excluded.crm_next_action,
         crm_next_followup_at=excluded.crm_next_followup_at,crm_ai_suggestion=excluded.crm_ai_suggestion,
         updated_at=CURRENT_TIMESTAMP
-    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags,card.owner_user_id,card.profile_user_id,card.source_type,card.visibility,card.pool_eligible,card.ai_review_status,card.crm_status,card.crm_type,card.crm_next_action,card.crm_next_followup_at,card.crm_ai_suggestion).run();
+    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags,card.owner_user_id,card.profile_user_id,card.scanner_user_id,card.scanner_name,card.source_type,card.visibility,card.pool_eligible,card.ai_review_status,card.crm_status,card.crm_type,card.crm_next_action,card.crm_next_followup_at,card.crm_ai_suggestion).run();
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
     const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward && !isOwnCard);
     const awardedPoints = pointAward && pointAward.awarded ? pointAward.points : 0;

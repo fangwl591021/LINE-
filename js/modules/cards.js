@@ -139,6 +139,10 @@
     return safeText(card && (card["擁有人ID"] || card.ownerUserId || card["ownerUserId"])).trim();
   }
 
+  function getScannerId(card) {
+    return safeText(card && (card.scannerUserId || card.scannerId || card.scanner_user_id || card["scannerUserId"])).trim();
+  }
+
   function getCardLineId(card) {
     return safeText(card && (card["LINE ID"] || card.lineId || card["User ID"] || card.userId)).trim();
   }
@@ -173,7 +177,7 @@
     if (sourceType === "self_profile" || sourceType === "referral_placeholder") return false;
     const userId = getCurrentUserId();
     if (!userId) return false;
-    return getCreatorId(card) === userId || getOwnerId(card) === userId;
+    return getScannerId(card) === userId || getCreatorId(card) === userId || getOwnerId(card) === userId;
   }
 
   function getHarvestCards(cards) {
@@ -565,7 +569,7 @@
 
     if (canEdit && isCardCoolPrivateImport(card)) {
       const rowId = safeText(card.rowId || card["rowId"]);
-      const scanner = safeText(card.ownerName || card.scannerName || card.ownerUserId || card.creatorId || getCurrentUserId()).trim();
+      const scanner = safeText(card.scannerName || card.scannerUserId || card.scannerId || card.ownerName || card.ownerUserId || card.creatorId || getCurrentUserId()).trim();
       infoHtml = `
         <div class="rounded-3xl border border-blue-100 bg-blue-50 p-4">
           <div class="text-[12px] font-black text-blue-700 mb-3">名片酷匯入${scanner ? `｜掃描者：${escapeHTML(scanner)}` : ""}</div>
