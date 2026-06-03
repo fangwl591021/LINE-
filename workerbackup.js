@@ -10761,9 +10761,12 @@ const CardVersionResolverModule = {
         line_id = ? OR profile_user_id = ? OR owner_user_id = ?
         OR (creator_id = ? AND LOWER(COALESCE(source_type,'')) = 'self_profile')
       )
-      AND LOWER(COALESCE(source_type,'')) <> 'referral_placeholder'
+      AND (
+        LOWER(COALESCE(source_type,'')) IN ('self_profile', 'video_profile')
+        OR (LOWER(COALESCE(source_type,'')) = '' AND (line_id = ? OR profile_user_id = ?))
+      )
       ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
-    `, [userId, userId, userId, userId]);
+    `, [userId, userId, userId, userId, userId, userId]);
   },
 
   async createVersionFromBase(baseRow, userId, version, env) {
@@ -10833,12 +10836,16 @@ const CardVersionResolverModule = {
     if (!userId) return { success: false, error: 'Missing userId' };
     if (!env.ACTMASTER_DB) return { success: false, error: 'D1 unavailable' };
     const rows = await this.loadRowsForUser(userId, env);
-    const exact = rows.find(row => this.versionForRow(row) === version);
+    const staticRows = rows.filter(row => !this.isVideoRow(row));
+    const videoRows = rows.filter(row => this.isVideoRow(row));
+    const exact = version === 'video'
+      ? videoRows[0]
+      : staticRows.find(row => this.text(row.row_id).toUpperCase().startsWith(this.rowIdPrefix(version) + '_'));
     if (exact) {
       return { success: true, data: { rowId: this.text(exact.row_id), version, versionMatched: true, card: D1ReadModule.cardRow(exact) } };
     }
-    const staticBase = rows.find(row => !this.isVideoRow(row));
-    const base = version === 'video' ? rows.find(row => this.isVideoRow(row)) : staticBase;
+    const staticBase = staticRows[0];
+    const base = version === 'video' ? videoRows[0] : staticBase;
     if (options.createIfMissing || payload.createIfMissing === true || payload.createIfMissing === 'true') {
       const created = base ? await this.createVersionFromBase(base, userId, version, env) : null;
       if (created) return { success: true, data: { rowId: created.rowId, version, versionMatched: true, created: true, card: created } };

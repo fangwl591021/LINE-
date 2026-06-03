@@ -239,10 +239,23 @@ const Core = (function() {
             : window.allCards;
 
         window.currentUserCard = sourceCards.find(c => {
-            if (c['LINE ID'] && String(c['LINE ID']).trim() === uid) return true;
-            if (c['userId'] && String(c['userId']).trim() === uid) return true;
-            if (c['User ID'] && String(c['User ID']).trim() === uid) return true;
-            return false;
+            if (!c) return false;
+            const sourceType = String(c.sourceType || c.source_type || c['??靘?'] || '').trim();
+            if (sourceType === 'private_import' || sourceType === 'referral_placeholder' || sourceType === 'video_profile') return false;
+            const ids = [
+                c['LINE ID'],
+                c['userId'],
+                c['User ID'],
+                c.lineId,
+                c.line_id,
+                c.ownerUserId,
+                c.owner_user_id,
+                c.profileUserId,
+                c.profile_user_id,
+                c.creatorId,
+                c.creator_id
+            ];
+            return ids.some(value => String(value || '').trim() === uid);
         });
 
         console.log('[syncUserCardMatch] 配對結果:', window.currentUserCard ? '找到: ' + window.currentUserCard['姓名'] : '未找到');

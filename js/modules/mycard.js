@@ -99,6 +99,27 @@
     return String(value || '').trim();
   }
 
+  function getCurrentUserIdCandidates() {
+    var values = [
+      moduleAuth.getUserId && moduleAuth.getUserId(),
+      getDirectLineUserId(),
+      window.currentUserProfile && window.currentUserProfile.userId,
+      window.currentUserProfile && window.currentUserProfile.lineId,
+      window.currentUserProfile && window.currentUserProfile.sub,
+      window.currentUser && window.currentUser.userId,
+      window.currentUser && window.currentUser.lineId,
+      window.currentUser && window.currentUser.line_id,
+      window.currentUser && window.currentUser.pointLineId,
+      window.currentUser && window.currentUser.point_line_id
+    ];
+    var seen = {};
+    return values.map(normalizeId).filter(function(value) {
+      if (!value || seen[value]) return false;
+      seen[value] = true;
+      return true;
+    });
+  }
+
   function getCardSourceType(card) {
     return normalizeId(
       card && (card.sourceType || card.source_type || card['名片來源'])
@@ -106,12 +127,7 @@
   }
 
   function getCurrentOwnerUserId() {
-    return normalizeId(
-      moduleAuth.getUserId() ||
-      getDirectLineUserId() ||
-      (window.currentUserProfile && window.currentUserProfile.userId) ||
-      (window.currentUser && (window.currentUser.userId || window.currentUser.lineId || window.currentUser.line_id))
-    );
+    return getCurrentUserIdCandidates()[0] || '';
   }
 
   function isEditableOwnCard(card, version) {
@@ -343,20 +359,24 @@
 
   async function resolveMyCardVersion(version, createIfMissing) {
     if (typeof window.fetchAPI !== 'function') return null;
-    var userId = moduleAuth.getUserId() || getDirectLineUserId() || (window.currentUserProfile && window.currentUserProfile.userId) || '';
-    if (!userId) return null;
-    var res = await window.fetchAPI('resolveMyCardVersion', {
-      userId: userId,
-      lineUserId: userId,
-      version: normalizeCardVersion(version),
-      layout: versionToLayout(normalizeCardVersion(version)),
-      createIfMissing: !!createIfMissing
-    }, true);
-    var data = res && (res.data || res);
-    var card = data && data.card;
-    if (card && !card.error) {
-      addLoadedMyCard(card);
-      return card;
+    var userIds = getCurrentUserIdCandidates();
+    if (!userIds.length) return null;
+    var normalizedVersion = normalizeCardVersion(version);
+    for (var i = 0; i < userIds.length; i += 1) {
+      var userId = userIds[i];
+      var res = await window.fetchAPI('resolveMyCardVersion', {
+        userId: userId,
+        lineUserId: userId,
+        version: normalizedVersion,
+        layout: versionToLayout(normalizedVersion),
+        createIfMissing: !!createIfMissing
+      }, true);
+      var data = res && (res.data || res);
+      var card = data && data.card;
+      if (card && !card.error) {
+        addLoadedMyCard(card);
+        return card;
+      }
     }
     return null;
   }
