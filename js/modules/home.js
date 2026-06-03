@@ -662,6 +662,38 @@ const HomeModule = (function() {
         openSettingsSection_('details-my-ecard');
     };
 
+    function isOwnStaticProfileCard_(card) {
+        if (!card || !window.currentUserProfile) return false;
+        const uid = String(window.currentUserProfile.userId || '').trim();
+        if (!uid) return false;
+        const sourceType = String(card.sourceType || card.source_type || card['名片來源'] || '').trim();
+        if (sourceType === 'private_import' || sourceType === 'referral_placeholder' || sourceType === 'video_profile') return false;
+        const ids = [
+            card['LINE ID'],
+            card.userId,
+            card['User ID'],
+            card.lineId,
+            card.line_id,
+            card.ownerUserId,
+            card.owner_user_id,
+            card.profileUserId,
+            card.profile_user_id,
+            card.creatorId,
+            card.creator_id
+        ];
+        return ids.some(value => String(value || '').trim() === uid);
+    }
+
+    window.updateMyCardReminder = function() {
+        const btn = document.getElementById('home-my-card-button');
+        if (!btn) return;
+        const hasOwnCard = isOwnStaticProfileCard_(window.currentUserCard)
+            || (Array.isArray(window.allCards) && window.allCards.some(isOwnStaticProfileCard_));
+        const shouldRemind = !hasOwnCard;
+        btn.classList.toggle('needs-my-card', shouldRemind);
+        btn.setAttribute('aria-label', shouldRemind ? '請先建立我的名片' : '我的名片');
+    };
+
     window.scrollToHomeSalesAssistant = function() {
         const section = document.getElementById('home-sales-assistant-section');
         if (section && section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1640,6 +1672,7 @@ const HomeModule = (function() {
         const tasks = [window.loadUserActivities()];
         if (typeof window.loadCardData === 'function') tasks.push(window.loadCardData({ render: false }));
         await Promise.all(tasks);
+        if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
         return true;
     };
 

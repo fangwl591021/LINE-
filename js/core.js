@@ -307,6 +307,7 @@ const Core = (function() {
             if (options.render !== false && typeof window.renderCardList === 'function') {
                 window.renderCardList(cache);
             }
+            if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
             return cache;
         }
 
@@ -333,6 +334,7 @@ const Core = (function() {
             }
 
             window.syncUserCardMatch();
+            if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
 
             if (options.render !== false && typeof window.renderCardList === 'function') {
                 window.renderCardList(harvestMode ? window.harvestCards : window.allCards);

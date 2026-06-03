@@ -1694,6 +1694,36 @@ window.renderCardCoolReviewPage = async function(jobId, cardId = '') {
   }
 };
 
+window.applyUnregisteredHomeSession = function(options = {}) {
+  const profile = window.currentUserProfile || {};
+  const userId = String(profile.userId || options.userId || '').trim();
+  if (!userId) return false;
+
+  const info = {
+    userId,
+    lineId: userId,
+    name: profile.displayName || options.name || '',
+    pictureUrl: profile.pictureUrl || '',
+    role: 'user',
+    networkId: options.networkId || options.referrerId || 'admin',
+    referrerId: options.referrerId || '',
+    points: Number(options.points || 0),
+    isRegistered: false,
+    needsMyCardSetup: true
+  };
+
+  window.applyRegisteredUserSession(info);
+  try {
+    window.currentUser.needsMyCardSetup = true;
+  } catch (e) {}
+  window.goPage('home');
+  setTimeout(() => {
+    if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
+    if (typeof window.loadHomeData === 'function') window.loadHomeData();
+  }, 40);
+  return true;
+};
+
 window.reorderSettingsSections = function() {
   const page = document.getElementById('page-admin-settings');
   if (!page) return;
@@ -1917,10 +1947,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         } catch(e) {
           window.showToast(e.message || '名片綁定失敗', true);
-          window.goPage('register');
+          window.applyUnregisteredHomeSession?.({ referrerId: refId, networkId: netId });
         }
       } else {
-        window.goPage('register');
+        window.applyUnregisteredHomeSession?.({ referrerId: refId, networkId: netId });
       }
 
       if (shareCardId) {

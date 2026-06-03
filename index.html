@@ -59,6 +59,28 @@
     .home-quick-circle.has-unread-mail .home-quick-mail-icon {
       animation: inboxMailPulse 1.15s ease-in-out infinite;
     }
+    .home-quick-circle.needs-my-card .home-quick-icon {
+      animation: myCardPulse 1.15s ease-in-out infinite;
+    }
+    .home-quick-circle.needs-my-card {
+      border-color: rgba(37, 99, 235, 0.24);
+    }
+    @keyframes myCardPulse {
+      0%, 100% {
+        background: #fdf2f8;
+        color: #ec4899;
+        border-color: rgba(236, 72, 153, 0.32);
+        box-shadow: 0 8px 18px rgba(236, 72, 153, 0.18);
+        transform: translateY(0);
+      }
+      50% {
+        background: #eff6ff;
+        color: #2563eb;
+        border-color: rgba(37, 99, 235, 0.42);
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
+        transform: translateY(-1px);
+      }
+    }
     @keyframes inboxMailPulse {
       0%, 100% {
         background: #fdf2f8;
@@ -921,7 +943,7 @@
 
       <div class="mx-0 mt-3">
         <div class="grid grid-cols-3 gap-2.5">
-          <button onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : window.goPage('admin-settings')" class="home-quick-circle group">
+          <button id="home-my-card-button" onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : window.goPage('admin-settings')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined">contact_mail</span>
             <span class="home-quick-label">&#25105;&#30340;&#21517;&#29255;</span>
           </button>
@@ -2000,7 +2022,7 @@
 </div>
 
 <!-- ocr-lab route: ocr-lab.html -->
-<script src="js/core.js?v=7.26"></script>
+<script src="js/core.js?v=7.27"></script>
 <script src="js/navigation.js?v=7.9"></script>
 <script src="js/modules/cropper.js?v=7.16"></script>
 <script src="js/modules/cards.js?v=7.7"></script>
@@ -2010,12 +2032,12 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.43"></script>
+<script src="js/modules/home.js?v=7.44"></script>
 <script src="js/modules/inbox.js?v=1.11"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.36"></script>
+<script src="js/auth.js?v=10.37"></script>
 
 </body>
 </html>
