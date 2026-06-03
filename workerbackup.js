@@ -3659,14 +3659,11 @@ const PointModule = {
     const explicitPointUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || '').trim();
     const fallbackUserId = String(payload.authenticatedUserId || payload.userId || '').trim();
     const requestedLineUserId = explicitPointUserId || fallbackUserId;
-    let lineUserId = explicitPointUserId;
-    if (!lineUserId || lineUserId === fallbackUserId) {
-      const resolvedPointUserId = await this.resolvePointUserId(env, lineUserId || fallbackUserId).catch(() => '');
-      lineUserId = resolvedPointUserId || lineUserId || fallbackUserId;
-    }
+    const resolvedPointUserId = await this.resolvePointUserId(env, requestedLineUserId).catch(() => '');
+    let lineUserId = resolvedPointUserId || explicitPointUserId || fallbackUserId;
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
-    const lineUserIds = await this.resolvePointUserIds(env, requestedLineUserId || lineUserId).catch(() => [lineUserId]);
-    const queryLineUserIds = Array.from(new Set([lineUserId, ...lineUserIds, requestedLineUserId].map(id => String(id || '').trim()).filter(Boolean)));
+    const legacyLineUserIds = await this.resolvePointUserIds(env, requestedLineUserId || lineUserId).catch(() => [lineUserId]);
+    const queryLineUserIds = Array.from(new Set([lineUserId].map(id => String(id || '').trim()).filter(Boolean)));
 
     const makeBaseBody = (queryLineUserId) => ({
       api_key: apiKey,
@@ -3785,6 +3782,7 @@ const PointModule = {
         balanceByType,
         queriedLineUserId: lineUserId,
         queriedLineUserIds: queryLineUserIds,
+        legacyResolvedLineUserIds: legacyLineUserIds,
         requestedLineUserId,
         sampledRows: typedResult.list.length,
         pointType: typedResult.body.point_type || 'gift_money',
