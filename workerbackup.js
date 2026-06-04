@@ -2916,7 +2916,8 @@ const LineOACardCoolKeywordModule = {
   isKeyword(event) {
     const message = event?.message || {};
     if (message.type !== 'text') return false;
-    return this.text(message.text).replace(/\s+/g, '') === '名片酷';
+    const normalizedText = this.text(message.text).replace(/\s+/g, '').toLowerCase();
+    return normalizedText === '名片酷' || normalizedText === 'ai名片夾';
   },
 
   postbackSides(event) {
@@ -3149,7 +3150,7 @@ const LineOACardCoolKeywordModule = {
             type: 'postback',
             label: '一面',
             data: 'action=lineoa_cardcool_sides&sides=1',
-            displayText: '名片酷：一面'
+            displayText: 'AI名片夾：一面'
           }
         }, {
           type: 'action',
@@ -3157,7 +3158,7 @@ const LineOACardCoolKeywordModule = {
             type: 'postback',
             label: '二面',
             data: 'action=lineoa_cardcool_sides&sides=2',
-            displayText: '名片酷：二面'
+            displayText: 'AI名片夾：二面'
           }
         }]
       }
@@ -3169,7 +3170,7 @@ const LineOACardCoolKeywordModule = {
       type: 'text',
       text: sides === 2
         ? '請先上傳名片第 1 面照片。'
-        : '請上傳名片照片，我會辨識內容並建立到名片酷。',
+        : '請上傳名片照片，我會辨識內容並建立到 AI名片夾。',
       quickReply: {
         items: [{
           type: 'action',
@@ -3225,7 +3226,7 @@ const LineOACardCoolKeywordModule = {
       address: this.text(ocrData.address),
       services: this.text(ocrData.services || title || companyName),
       tags: this.text(ocrData.tags),
-      notes: this.text(ocrData.notes, `LINE OA 名片酷 OCR 建立；掃描者：${this.text(ocrData.scannerName || ocrData.scannerId || userId)}`),
+      notes: this.text(ocrData.notes, `LINE OA AI名片夾 OCR 建立；掃描者：${this.text(ocrData.scannerName || ocrData.scannerId || userId)}`),
       creatorId: userId,
       ownerUserId: userId,
       scannerUserId: this.text(ocrData.scannerUserId || ocrData.scannerId || userId),
@@ -3259,7 +3260,7 @@ const LineOACardCoolKeywordModule = {
     });
     const message = {
       type: 'flex',
-      altText: `${card.name || '名片酷'} 的電子名片`,
+      altText: `${card.name || 'AI名片夾'} 的電子名片`,
       contents: flex
     };
     const rowId = this.text(card.rowId || card.id);
@@ -3278,7 +3279,7 @@ const LineOACardCoolKeywordModule = {
             type: 'postback',
             label: '再發送',
             data: `action=lineoa_cardcool_send&cardId=${encodeURIComponent(rowId)}`,
-            displayText: '名片酷：發送名片'
+            displayText: 'AI名片夾：發送名片'
           }
         }]
       };

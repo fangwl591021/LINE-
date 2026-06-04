@@ -1611,7 +1611,7 @@ window.renderCardCoolReviewPage = async function(jobId, cardId = '') {
       <main class="min-h-screen bg-[#f8fafc] px-4 py-5 overflow-y-auto">
         <section class="max-w-md mx-auto bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
           <div class="px-5 py-4 border-b border-slate-100">
-            <div class="text-[12px] font-black text-blue-600 mb-1">名片酷 OCR</div>
+            <div class="text-[12px] font-black text-blue-600 mb-1">AI名片夾 OCR</div>
             <h1 class="text-[22px] font-black text-slate-900">核對名片資料</h1>
             <p class="text-[13px] font-bold text-slate-500 mt-1">請確認掃描結果，必要時修改後再儲存或發送到聊天室測試。</p>
           </div>

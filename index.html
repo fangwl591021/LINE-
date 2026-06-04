@@ -143,7 +143,7 @@
           <span class="material-symbols-outlined text-3xl icon-filled">person_add</span>
         </div>
         <h2 class="text-xl font-black text-center text-slate-800">建立專屬商務檔案</h2>
-        <p class="text-xs text-center text-slate-500 mb-6">請先完成設定以啟用 AI 智能配對與名片酷</p>
+        <p class="text-xs text-center text-slate-500 mb-6">請先完成設定以啟用 AI 智能配對與 AI名片夾</p>
 
         <div><label class="text-xs text-slate-500 font-bold ml-1">真實姓名</label><input id="reg-name" name="name" class="custom-input mt-1" type="text" autocomplete="name" autocapitalize="off" enterkeyhint="next" placeholder="例:王大明"></div>
         <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼</label><input id="reg-phone" name="tel" class="custom-input mt-1 font-mono" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next" placeholder="09xxxxxxxx"></div>
@@ -1050,7 +1050,7 @@
         <h3 class="font-black text-lg mb-3 text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">document_scanner</span> 掃描建立名片</h3>
 
         <div class="mt-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-[13px] leading-relaxed text-blue-800">
-          <div class="font-black">名片酷請用來掃描客戶或合作夥伴。</div>
+          <div class="font-black">AI名片夾請用來掃描客戶或合作夥伴。</div>
           <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>要建立自己的名片，請走「我的專屬名片」，系統才會綁定到本人資料。</span>
             <button type="button" onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : (window.openMyCardSettings ? window.openMyCardSettings(event) : window.goPage('admin-settings'))" class="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-white font-black active:scale-95 transition-transform">建立我的名片</button>
@@ -1800,7 +1800,7 @@
   </main>
 
   <nav id="bottom-nav" class="fixed bottom-0 w-full max-w-md bg-white/95 backdrop-blur-xl flex justify-evenly items-center px-1 py-2 z-40 pb-safe shadow-[0_-10px_20px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl border-t border-slate-100 hidden transition-all">
-    <button onclick="window.goPage('card')"        id="nav-btn-card"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">recent_patient</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">名片酷</span></button>
+    <button onclick="window.goPage('card')"        id="nav-btn-card"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">recent_patient</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">AI名片夾</span></button>
     <button onclick="window.goPage('matchmake')"  id="nav-btn-matchmake" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">psychology</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">配對</span></button>
     <button onclick="window.goPage('admin-settings')" id="nav-btn-admin-settings" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">person</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">設定</span></button>
     <button onclick="window.goPage('home')"        id="nav-btn-home"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">keyboard_return</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">返回</span></button>
@@ -2025,19 +2025,19 @@
 <script src="js/core.js?v=7.27"></script>
 <script src="js/navigation.js?v=7.9"></script>
 <script src="js/modules/cropper.js?v=7.16"></script>
-<script src="js/modules/cards.js?v=7.8"></script>
+<script src="js/modules/cards.js?v=7.9"></script>
 <script src="js/modules/ecard.js?v=7.39"></script>
 <script src="js/modules/mycard.js?v=8.58"></script>
 <script src="js/modules/matchmake.js?v=7.9"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.45"></script>
+<script src="js/modules/home.js?v=7.46"></script>
 <script src="js/modules/inbox.js?v=1.11"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.37"></script>
+<script src="js/auth.js?v=10.38"></script>
 
 </body>
 </html>

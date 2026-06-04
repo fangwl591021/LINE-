@@ -328,8 +328,8 @@
       list.innerHTML = `
         <div class="bg-white p-8 rounded-3xl text-center text-slate-400 border border-slate-100 shadow-sm">
           <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">contacts_product</span>
-          <p class="font-bold text-[13px]">目前沒有自己的收割名單</p>
-          <p class="text-[12px] mt-1">用名片酷掃描客戶或合作夥伴後，會出現在這裡。</p>
+          <p class="font-bold text-[13px]">目前沒有自己的收錄名單</p>
+          <p class="text-[12px] mt-1">用 AI名片夾掃描客戶或合作夥伴後，會出現在這裡。</p>
         </div>
       `;
       return;
@@ -390,8 +390,8 @@
       <div class="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-sm">
         <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <div class="font-black text-slate-900 text-[16px]">我的收割名單</div>
-            <div class="text-[12px] text-slate-400 font-bold mt-0.5">只列出自己用名片酷掃進來的資料</div>
+            <div class="font-black text-slate-900 text-[16px]">我的收錄名單</div>
+            <div class="text-[12px] text-slate-400 font-bold mt-0.5">只列出自己用 AI名片夾掃進來的資料</div>
           </div>
           <span class="text-[12px] font-black text-slate-400">${displayCards.length} 位</span>
         </div>
@@ -572,12 +572,12 @@
       const scanner = safeText(card.scannerName || card.scannerUserId || card.scannerId || card.ownerName || card.ownerUserId || card.creatorId || getCurrentUserId()).trim();
       infoHtml = `
         <div class="rounded-3xl border border-blue-100 bg-blue-50 p-4">
-          <div class="text-[12px] font-black text-blue-700 mb-3">名片酷匯入${scanner ? `｜掃描者：${escapeHTML(scanner)}` : ""}</div>
+          <div class="text-[12px] font-black text-blue-700 mb-3">AI名片夾匯入${scanner ? `｜掃描者：${escapeHTML(scanner)}` : ""}</div>
           <div class="grid grid-cols-2 gap-2">
             <button type="button"
                     onclick="window.openCardCoolReviewForCard('${escapeJS(rowId)}')"
                     class="rounded-2xl bg-blue-600 py-3 text-[13px] font-black text-white active:scale-[0.98]">
-              編輯名片酷
+              編輯 AI名片夾
             </button>
             <button type="button"
                     onclick="window.sendCardCoolCardToChat('${escapeJS(rowId)}')"
