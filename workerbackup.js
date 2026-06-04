@@ -5040,7 +5040,16 @@ const AIModule = {
     return {
       scope,
       contacts: rows
-        .map(row => D1ReadModule.cardRow(row))
+        .map(row => {
+          const card = D1ReadModule.cardRow(row);
+          if (scope === 'public' && card) {
+            card.visibility = 'public';
+            card.sourceType = 'self_profile';
+            card.poolEligible = true;
+            card.isPrivate = false;
+          }
+          return card;
+        })
         .filter(Boolean)
         .map(card => this.matchContactFromCard(card))
     };
