@@ -50,8 +50,8 @@ function renderMatchmakePoolMode_() {
 
   if (help) {
     help.textContent = scope === 'public'
-      ? '只使用已同意公開、通過 AI 健檢的本人名片，可跨店交流。'
-      : '只使用你自己掃描或建立的名片，不進入跨店配對。';
+      ? '規則：公開交流池只收錄本人同意公開且通過 AI 體檢的名片，可被跨店搜尋與配對；未通過或未公開不會進入。'
+      : '規則：我的名片池只使用你自己掃描、建立或認領的名片，僅供個人配對，不進入跨店配對，也不公開給其他店家搜尋。';
   }
   if (title) title.textContent = scope === 'public' ? '參與公開交流池' : '個人配對池';
   if (subtitle) subtitle.textContent = scope === 'public' ? '名片已公開，允許跨店搜尋' : '只使用我的名片資料，不公開';
