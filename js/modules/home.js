@@ -1141,8 +1141,6 @@ const HomeModule = (function() {
 
     window.loadUserActivities = async function() {
         if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-        if (typeof window.initHomeMatchmakeEmbed === 'function') window.initHomeMatchmakeEmbed();
-        if (typeof window.initMatchmakePage === 'function') window.initMatchmakePage();
         if (typeof window.loadHomeAnnouncements === 'function') window.loadHomeAnnouncements();
         if (typeof window.loadHomeSalesAssistant === 'function') window.loadHomeSalesAssistant();
 

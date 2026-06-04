@@ -39,10 +39,10 @@
     .custom-input { @apply w-full py-4 px-5 bg-slate-100 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-medium text-text-main; }
     .textarea-block { @apply w-full p-4 bg-slate-100 border-none rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 transition-all text-[15px] text-slate-800 resize-none leading-relaxed placeholder-slate-400; }
 
-    .nav-btn { @apply flex flex-col items-center justify-center transition-all flex-1 text-slate-400 h-full; min-width: 48px; }
+    .nav-btn { @apply flex flex-col items-center justify-center transition-all flex-1 text-blue-600 h-full; min-width: 48px; }
     .nav-btn .icon-box { @apply px-3 py-1.5 rounded-full transition-all flex items-center justify-center mb-0.5; }
-    .nav-active { @apply text-slate-800 font-bold; }
-    .nav-active .icon-box { @apply bg-slate-100 text-slate-800; }
+    .nav-active { @apply text-blue-700 font-bold; }
+    .nav-active .icon-box { @apply bg-blue-50 text-blue-700; }
     .nav-active .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
     .home-quick-circle { @apply flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform min-w-0 min-h-[104px] py-3 bg-white rounded-[26px] border border-slate-100 shadow-sm; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
     .home-quick-icon { @apply w-11 h-11 rounded-2xl bg-pink-50 text-pink-500 border border-pink-100 flex items-center justify-center shadow-sm text-[27px]; font-variation-settings: 'FILL' 1; }
@@ -1800,10 +1800,10 @@
   </main>
 
   <nav id="bottom-nav" class="fixed bottom-0 w-full max-w-md bg-white/95 backdrop-blur-xl flex justify-evenly items-center px-1 py-2 z-40 pb-safe shadow-[0_-10px_20px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl border-t border-slate-100 hidden transition-all">
-    <button onclick="window.goPage('home')"        id="nav-btn-home"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">home</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">首頁</span></button>
     <button onclick="window.goPage('card')"        id="nav-btn-card"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">recent_patient</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">名片酷</span></button>
-    <button onclick="window.scrollToHomeMatchmake()"  id="nav-btn-matchmake" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">psychology</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">配對</span></button>
+    <button onclick="window.goPage('matchmake')"  id="nav-btn-matchmake" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">psychology</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">配對</span></button>
     <button onclick="window.goPage('admin-settings')" id="nav-btn-admin-settings" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">person</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">設定</span></button>
+    <button onclick="window.goPage('home')"        id="nav-btn-home"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">keyboard_return</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">返回</span></button>
   </nav>
 
   <nav id="bottom-nav-admin" class="fixed bottom-0 w-full max-w-md bg-white border-t border-slate-100 flex justify-evenly items-center px-2 py-2 z-[80] pb-safe shadow-[0_-4px_15px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl hidden">
@@ -2032,7 +2032,7 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.44"></script>
+<script src="js/modules/home.js?v=7.45"></script>
 <script src="js/modules/inbox.js?v=1.11"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
