@@ -1808,6 +1808,7 @@
   <nav id="bottom-nav" class="fixed bottom-0 w-full max-w-md bg-white/95 backdrop-blur-xl flex justify-evenly items-center px-1 py-2 z-40 pb-safe shadow-[0_-10px_20px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl border-t border-slate-100 hidden transition-all">
     <button onclick="window.goPage('card')"        id="nav-btn-card"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">recent_patient</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">AI名片夾</span></button>
     <button onclick="window.goPage('matchmake')"  id="nav-btn-matchmake" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">psychology</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">配對</span></button>
+    <button onclick="window.openInboxSendCenter ? window.openInboxSendCenter() : window.goPage('inbox')" id="nav-btn-inbox" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">send</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">發訊</span></button>
     <button onclick="window.goPage('admin-settings')" id="nav-btn-admin-settings" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">person</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">設定</span></button>
     <button onclick="window.goPage('home')"        id="nav-btn-home"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">keyboard_return</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">返回</span></button>
   </nav>
@@ -2039,7 +2040,7 @@
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
 <script src="js/modules/home.js?v=7.46"></script>
-<script src="js/modules/inbox.js?v=1.13"></script>
+<script src="js/modules/inbox.js?v=1.14"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>

@@ -530,6 +530,15 @@
     if (open) window.updateInboxPointCostHint?.();
   };
 
+  window.openInboxSendCenter = function () {
+    window.inboxMode = "received";
+    window.goPage("inbox");
+    setTimeout(() => {
+      window.toggleInboxComposer?.(true);
+      $("inbox-composer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  };
+
   window.setInboxRecipientMode = function (mode) {
     const canBroadcast = window.hasAdminRights === true || String(window.currentRole || "").toLowerCase() === "admin";
     if (mode === "broadcast" && !canBroadcast) mode = "user";
