@@ -787,6 +787,11 @@
               <input id="store-point-amount" type="number" min="0" step="1" inputmode="numeric" class="custom-input !py-3 text-[20px] font-black" placeholder="例如 1000" oninput="window.updateStorePointPreview()">
             </div>
 
+            <div id="store-point-deduct-wrap" class="space-y-2">
+              <label class="text-[13px] font-black text-slate-600">本次折抵點數</label>
+              <input id="store-point-deduct" type="number" min="0" step="1" inputmode="numeric" class="custom-input !py-3 text-[20px] font-black" placeholder="手動輸入要扣除的點數" oninput="window.updateStorePointPreview()">
+            </div>
+
             <div id="store-point-preview" class="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed">
               請先輸入消費金額。
             </div>
@@ -1326,7 +1331,7 @@
             <span class="material-symbols-outlined text-amber-600">edit_square</span>
             <div>
               <h3 class="text-[17px] font-black text-slate-900">傳送訊息</h3>
-              <p class="text-[13px] text-amber-800 font-bold mt-1">一般訊息、課程邀約、訪談邀請每次扣 10 點；優惠券每次扣 50 點。</p>
+              <p class="text-[13px] text-amber-800 font-bold mt-1">一般訊息、課程邀約、訪談邀請與優惠券每次統一扣 10 點。</p>
             </div>
           </div>
           <span id="inbox-composer-icon" class="material-symbols-outlined text-amber-600 transition-transform">expand_more</span>
@@ -2033,11 +2038,11 @@
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
 <script src="js/modules/home.js?v=7.46"></script>
-<script src="js/modules/inbox.js?v=1.11"></script>
+<script src="js/modules/inbox.js?v=1.12"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.38"></script>
+<script src="js/auth.js?v=10.39"></script>
 
 </body>
 </html>

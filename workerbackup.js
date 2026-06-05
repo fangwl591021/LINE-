@@ -4257,8 +4257,29 @@ const PointModule = {
       eventName = '店家消費贈點';
       eventContent = `來源：${sourceLabel}；消費 NT$${amount.toLocaleString('zh-TW')}，1:1 贈送 ${points.toLocaleString('zh-TW')} 點`;
     } else {
-      const requestedDeduction = Math.floor(amount * 0.1);
-      const deductPoints = Math.min(requestedDeduction, balanceBefore);
+      const requestedDeduction = Math.floor(Number(payload.deductPoints || payload.discountPoints || payload.redeemPoints || 0));
+      if (!requestedDeduction || requestedDeduction <= 0) {
+        return {
+          success: false,
+          error: '請輸入本次折抵點數',
+          data: { amount, balanceBefore, requestedDeduction: 0, payableAmount: amount }
+        };
+      }
+      if (requestedDeduction > amount) {
+        return {
+          success: false,
+          error: '折抵點數不可大於消費金額',
+          data: { amount, balanceBefore, requestedDeduction, payableAmount: amount }
+        };
+      }
+      if (requestedDeduction > balanceBefore) {
+        return {
+          success: false,
+          error: '客戶可用點數不足',
+          data: { amount, balanceBefore, requestedDeduction, payableAmount: amount }
+        };
+      }
+      const deductPoints = requestedDeduction;
       if (!deductPoints || deductPoints <= 0) {
         return {
           success: false,
@@ -4345,7 +4366,7 @@ const PointModule = {
         points,
         changedPoints,
         payableAmount,
-        requestedDeduction: isReward ? 0 : Math.floor(amount * 0.1),
+        requestedDeduction: isReward ? 0 : Math.floor(Number(payload.deductPoints || payload.discountPoints || payload.redeemPoints || 0)),
         balanceBefore,
         balanceAfterEstimate: balanceBefore + points,
         eventName,
@@ -9598,7 +9619,7 @@ const D1InboxModule = {
     const messageType = this.text(payload.messageType || payload.type, 'message');
     const title = this.text(payload.title);
     const body = this.text(payload.body || payload.content);
-    const messageCost = messageType === 'coupon' ? 50 : 10;
+    const messageCost = 10;
     if (!senderUserId) return { success: false, error: 'Missing sender' };
     if (!rawQuery) return { success: false, error: 'Missing recipient query' };
     if (!title) return { success: false, error: 'Missing title' };
@@ -9813,7 +9834,7 @@ const D1InboxModule = {
     const messageType = this.text(payload.messageType || payload.type, 'message');
     const title = this.text(payload.title);
     const body = this.text(payload.body || payload.content);
-    const messageCost = messageType === 'coupon' ? 50 : 10;
+    const messageCost = 10;
     if (!senderUserId) return { success: false, error: 'Missing sender' };
     if (!rawCourseId) return { success: false, error: '請貼上課程編號' };
     if (!title) return { success: false, error: '請輸入標題' };
@@ -9902,7 +9923,7 @@ const D1InboxModule = {
     const messageId = this.text(payload.messageId || payload.message_id) || `MSG_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const networkId = this.text(payload.networkId || payload.authenticatedNetworkId || receiver.user.network_id || 'admin', 'admin');
     const expiresAt = this.text(payload.expiresAt || payload.expires_at);
-    const messageCost = messageType === 'coupon' ? 50 : 10;
+    const messageCost = 10;
     const pointUserId = await PointModule.resolvePointUserId(env, senderUserId);
     const wallet = await PointModule.queryUserPoints({ pointUserId, point_type: 'gift_money' }, env);
     if (!wallet || !wallet.success) return { success: false, error: (wallet && wallet.error) || '無法確認點數餘額' };

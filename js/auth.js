@@ -1348,10 +1348,13 @@ window.openStorePointScanner = async function() {
 window.updateStorePointPreview = function() {
   const preview = document.getElementById('store-point-preview');
   const amountInput = document.getElementById('store-point-amount');
+  const deductWrap = document.getElementById('store-point-deduct-wrap');
+  const deductInput = document.getElementById('store-point-deduct');
   if (!preview || !amountInput) return;
 
   const amount = Math.floor(Number(amountInput.value || 0));
   const mode = window.getStorePointMode();
+  if (deductWrap) deductWrap.classList.toggle('hidden', mode === 'reward');
   if (!amount || amount <= 0) {
     preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
     preview.textContent = '請先輸入消費金額。';
@@ -1364,12 +1367,14 @@ window.updateStorePointPreview = function() {
     return;
   }
 
-  const maxDeduct = Math.floor(amount * 0.1);
+  const requestedDeduct = Math.max(0, Math.floor(Number(deductInput?.value || 0)));
   const customerBalance = Number(window.storePointCustomer?.balance || 0);
-  const actualDeduct = customerBalance > 0 ? Math.min(maxDeduct, Math.floor(customerBalance)) : maxDeduct;
+  const actualDeduct = requestedDeduct;
   const payable = amount - actualDeduct;
   preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
-  preview.innerHTML = `最多可折抵 <b class="text-blue-600">${maxDeduct.toLocaleString('zh-TW')} 點</b>${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}，預估應收 NT$${payable.toLocaleString('zh-TW')}；店家操作扣 10 點。`;
+  preview.innerHTML = actualDeduct > 0
+    ? `本次折抵 <b class="text-blue-600">${actualDeduct.toLocaleString('zh-TW')} 點</b>${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}，預估應收 NT$${Math.max(0, payable).toLocaleString('zh-TW')}，店家操作扣 10 點。`
+    : `請手動輸入本次要折抵的點數${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}。店家操作扣 10 點。`;
 };
 
 window.renderStorePointCustomer = function(customer) {
@@ -1434,11 +1439,13 @@ window.resetStorePointCashier = function() {
   const icon = document.getElementById('store-point-cashier-icon');
   const customerInput = document.getElementById('store-point-customer');
   const amountInput = document.getElementById('store-point-amount');
+  const deductInput = document.getElementById('store-point-deduct');
   const preview = document.getElementById('store-point-preview');
   if (body) body.classList.add('hidden');
   if (icon) icon.textContent = 'expand_more';
   if (customerInput) customerInput.value = '';
   if (amountInput) amountInput.value = '';
+  if (deductInput) deductInput.value = '';
   window.renderStorePointCustomer(null);
   if (preview) {
     preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
@@ -1468,14 +1475,18 @@ window.submitStorePointCashier = async function(btn) {
   }
   const customerInput = document.getElementById('store-point-customer');
   const amountInput = document.getElementById('store-point-amount');
+  const deductInput = document.getElementById('store-point-deduct');
   const preview = document.getElementById('store-point-preview');
   const customerUserId = window.storePointCustomer?.customerPointUserId
     || window.extractPointCustomerId(customerInput?.value || '');
   const amount = Math.floor(Number(amountInput?.value || 0));
+  const deductPoints = Math.floor(Number(deductInput?.value || 0));
   const mode = window.getStorePointMode();
 
   if (!customerUserId) return window.showToast?.('請先掃描或輸入客戶帳號', true);
   if (!amount || amount <= 0) return window.showToast?.('請輸入正確消費金額', true);
+
+  if (mode !== 'reward' && (!deductPoints || deductPoints <= 0)) return window.showToast?.('請輸入本次折抵點數。', true);
 
   const oldText = btn ? btn.textContent : '';
   if (btn) {
@@ -1488,6 +1499,7 @@ window.submitStorePointCashier = async function(btn) {
     const res = await window.fetchAPI('storeAdjustCustomerPoints', {
       customerUserId,
       amount,
+      deductPoints,
       mode
     }, true);
     if (!res || res.error) throw new Error(res?.error || '點數處理失敗');

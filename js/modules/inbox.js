@@ -595,7 +595,7 @@
   };
 
   function inboxMessageCost(messageType) {
-    return messageType === "coupon" ? 50 : 10;
+    return 10;
   }
 
   window.updateInboxPointCostHint = function () {
