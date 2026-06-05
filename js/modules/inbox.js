@@ -594,6 +594,11 @@
       if (key === "broadcast") btn.classList.toggle("hidden", !canBroadcast);
     });
     window.refreshInboxRecipientAudienceHint?.(next);
+    if (next === "owned") {
+      if (query) query.value = "全部";
+      if (box) box.innerHTML = '<div class="text-[13px] text-slate-400 font-bold px-1">正在載入我的已用戶...</div>';
+      setTimeout(() => window.searchInboxRecipients?.(), 0);
+    }
   };
 
   window.refreshInboxRecipientAudienceHint = async function (mode) {
