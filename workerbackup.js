@@ -9629,7 +9629,17 @@ const D1InboxModule = {
       ? await this.broadcastRecipientSummary({ ...payload, keyword: rawQuery }, env)
       : await this.ownedActiveRecipientSummary({ ...payload, keyword: rawQuery }, env);
     if (summary.forbidden) return { success: false, error: 'Access Denied: Admin only action' };
-    const recipients = Array.isArray(summary.recipients) ? summary.recipients : [];
+    let recipients = Array.isArray(summary.recipients) ? summary.recipients : [];
+    const selectedIds = this.uniqueTextList(Array.isArray(payload.selectedUserIds)
+      ? payload.selectedUserIds
+      : this.text(payload.selectedUserIds).split(','));
+    if (selectedIds.length) {
+      const selectedSet = new Set(selectedIds);
+      recipients = recipients.filter(row => {
+        const ids = this.uniqueTextList([row.line_id, row.row_id, row.userId, row.user_id]);
+        return ids.some(id => selectedSet.has(id));
+      });
+    }
     if (!recipients.length) return { success: false, error: 'No eligible recipients' };
 
     const totalCost = recipients.length * messageCost;
@@ -9706,6 +9716,20 @@ const D1InboxModule = {
 
     if (this.text(payload.recipientMode || payload.mode) === 'owned') {
       const summary = await this.ownedActiveRecipientSummary({ ...payload, keyword }, env);
+      if (this.text(payload.listMode) === 'select') {
+        return {
+          success: true,
+          data: summary.recipients.map(row => ({
+            type: 'owned-user',
+            userId: this.text(row.line_id || row.row_id),
+            name: this.text(row.name, '未命名'),
+            phone: this.text(row.phone),
+            industry: this.text(row.industry),
+            subtitle: [this.text(row.phone), this.text(row.industry), this.text(row.network_id)].filter(Boolean).join(' / '),
+            badge: '可收信'
+          }))
+        };
+      }
       return {
         success: true,
         data: summary.recipients.length ? [{
@@ -9721,6 +9745,20 @@ const D1InboxModule = {
     if (this.text(payload.recipientMode || payload.mode) === 'broadcast') {
       const summary = await this.broadcastRecipientSummary({ ...payload, keyword }, env);
       if (summary.forbidden) return { success: false, error: 'Access Denied: Admin only action' };
+      if (this.text(payload.listMode) === 'select') {
+        return {
+          success: true,
+          data: summary.recipients.map(row => ({
+            type: 'broadcast-user',
+            userId: this.text(row.line_id || row.row_id),
+            name: this.text(row.name, '未命名'),
+            phone: this.text(row.phone),
+            industry: this.text(row.industry),
+            subtitle: [this.text(row.phone), this.text(row.industry), this.text(row.network_id)].filter(Boolean).join(' / '),
+            badge: '可收信'
+          }))
+        };
+      }
       return {
         success: true,
         data: summary.recipients.length ? [{

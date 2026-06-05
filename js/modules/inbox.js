@@ -34,6 +34,79 @@
     return !!(window.currentUserProfile?.userId && typeof window.fetchAPI === "function");
   }
 
+  const selectedInboxRecipients = new Set();
+  const selectableInboxRecipients = new Map();
+
+  function isGroupRecipientMode(mode) {
+    return mode === "owned" || mode === "broadcast";
+  }
+
+  function selectedInboxRecipientIds() {
+    return Array.from(selectedInboxRecipients).filter(Boolean);
+  }
+
+  function updateSelectedRecipientNotice() {
+    const notice = $("inbox-recipient-selection-notice");
+    if (!notice) return;
+    const count = selectedInboxRecipients.size;
+    const total = selectableInboxRecipients.size;
+    if (!total) {
+      notice.classList.add("hidden");
+      notice.textContent = "";
+      return;
+    }
+    const cost = count ? count * inboxMessageCost($("inbox-message-type")?.value || "message") : total * inboxMessageCost($("inbox-message-type")?.value || "message");
+    notice.className = "mt-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-[13px] font-black text-blue-700";
+    notice.textContent = count
+      ? `已勾選 ${count} 位，送出時只會發送給勾選名單，預估扣 ${cost} 點。`
+      : `已列出 ${total} 位；若不勾選，送出時會發送給全部符合名單，預估扣 ${cost} 點。`;
+  }
+
+  function clearRecipientSelection() {
+    selectedInboxRecipients.clear();
+    selectableInboxRecipients.clear();
+    updateSelectedRecipientNotice();
+  }
+
+  function renderSelectableRecipients(list, mode, query) {
+    const rows = Array.isArray(list) ? list : [];
+    clearRecipientSelection();
+    rows.forEach(user => {
+      const uid = String(user?.userId || "").trim();
+      if (uid) selectableInboxRecipients.set(uid, user);
+    });
+    const total = selectableInboxRecipients.size;
+    if (!total) return '<div class="text-[13px] text-red-400 font-bold px-1">找不到符合的收件人</div>';
+    const modeLabel = mode === "broadcast" ? "跨區 Admin" : "我的已用戶";
+    const safeQuery = escapeHTML(query || "全部");
+    const header = `
+      <div class="rounded-2xl border border-blue-100 bg-blue-50 p-3">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <p class="text-[13px] font-black text-blue-700">${escapeHTML(modeLabel)}：${total} 位可收件</p>
+            <p class="text-[11px] font-bold text-blue-500 mt-0.5 truncate">搜尋條件：${safeQuery}</p>
+          </div>
+          <button type="button" onclick="window.toggleAllInboxRecipients(true)" class="shrink-0 rounded-xl bg-white px-3 py-2 text-[12px] font-black text-blue-700 border border-blue-100 active:scale-95">全選</button>
+        </div>
+      </div>`;
+    const items = rows.map(user => {
+      const uid = String(user?.userId || "").trim();
+      const name = user?.name || "未命名";
+      const subtitle = user?.subtitle || [user?.phone, user?.industry].filter(Boolean).join(" / ") || uid;
+      return `
+        <label class="flex items-center gap-3 w-full p-3 rounded-2xl bg-slate-50 border border-slate-100 active:scale-[0.99] transition-all">
+          <input type="checkbox" class="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" data-inbox-recipient-id="${escapeHTML(uid)}" onchange="window.toggleInboxRecipientSelection('${escapeHTML(uid)}', this.checked)">
+          <div class="min-w-0 flex-1">
+            <p class="text-[15px] font-black text-slate-900 truncate">${escapeHTML(name)}</p>
+            <p class="text-[12px] text-slate-500 font-bold mt-1 truncate">${escapeHTML(subtitle)}</p>
+          </div>
+          <span class="shrink-0 rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 text-[11px] font-black">${escapeHTML(user?.badge || "可收信")}</span>
+        </label>`;
+    }).join("");
+    setTimeout(updateSelectedRecipientNotice, 0);
+    return header + items;
+  }
+
   function typeLabel(item) {
     return TYPE_LABELS[item?.messageType] || "一般訊息";
   }
@@ -490,6 +563,7 @@
     if (modeEl) modeEl.value = next;
     if (hidden) hidden.value = "";
     if (box) box.innerHTML = "";
+    clearRecipientSelection();
     if (query) {
       query.value = "";
       query.placeholder = next === "course" ? "貼上課程編號，例如 ACT_..." : "輸入姓名、電話或 LINE ID";
@@ -556,7 +630,7 @@
 
     box.innerHTML = '<div class="text-[13px] text-slate-400 font-bold px-1">搜尋中...</div>';
     try {
-      const rows = await window.fetchAPI("searchInboxRecipients", { keyword: query, recipientMode: mode }, true);
+      const rows = await window.fetchAPI("searchInboxRecipients", { keyword: query, recipientMode: mode, listMode: isGroupRecipientMode(mode) ? "select" : "" }, true);
       const list = Array.isArray(rows) ? rows : [];
       const hint = $("inbox-recipient-audience-hint");
       if (hint && ["course", "owned", "broadcast"].includes(mode) && list[0]?.badge) {
@@ -567,6 +641,10 @@
       }
       if (!list.length) {
         box.innerHTML = '<div class="text-[13px] text-red-400 font-bold px-1">找不到符合的收件人</div>';
+        return;
+      }
+      if (isGroupRecipientMode(mode)) {
+        box.innerHTML = renderSelectableRecipients(list, mode, query);
         return;
       }
       box.innerHTML = list.map(user => `
@@ -585,10 +663,30 @@
     }
   };
 
+  window.toggleInboxRecipientSelection = function (userId, checked) {
+    const uid = String(userId || "").trim();
+    if (!uid) return;
+    if (checked) selectedInboxRecipients.add(uid);
+    else selectedInboxRecipients.delete(uid);
+    updateSelectedRecipientNotice();
+  };
+
+  window.toggleAllInboxRecipients = function (checked) {
+    selectableInboxRecipients.forEach((_user, uid) => {
+      if (checked) selectedInboxRecipients.add(uid);
+      else selectedInboxRecipients.delete(uid);
+    });
+    document.querySelectorAll('[data-inbox-recipient-id]').forEach(input => {
+      input.checked = !!checked;
+    });
+    updateSelectedRecipientNotice();
+  };
+
   window.selectInboxRecipient = function (userId, name) {
     const hidden = $("inbox-recipient-id");
     const query = $("inbox-recipient-query");
     const box = $("inbox-recipient-results");
+    clearRecipientSelection();
     if (hidden) hidden.value = userId || "";
     if (query) query.value = name || userId || "";
     if (box) box.innerHTML = `<div class="rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 px-3 py-2 text-[13px] font-black">已選擇：${escapeHTML(name || userId)}</div>`;
@@ -607,6 +705,7 @@
       : `本次送出會扣除 ${cost} 點。`;
     const btn = $("btn-send-inbox-message");
     if (btn) btn.textContent = type === "coupon" ? `送出優惠券（扣 ${cost} 點）` : `送出訊息（扣 ${cost} 點）`;
+    updateSelectedRecipientNotice();
   };
 
   window.sendInboxMessage = async function (btn) {
@@ -617,6 +716,7 @@
     const title = $("inbox-message-title")?.value?.trim() || "";
     const body = $("inbox-message-body")?.value?.trim() || "";
     const cost = inboxMessageCost(messageType);
+    const selectedUserIds = isGroupRecipientMode(recipientMode) ? selectedInboxRecipientIds() : [];
     if (!receiverUserId && !receiverQuery) return window.showToast?.("請先選擇收件人", true);
     if (!title) return window.showToast?.("請輸入標題", true);
     if (!body) return window.showToast?.("請輸入內容", true);
@@ -628,7 +728,7 @@
       btn.classList.add("opacity-70");
     }
     try {
-      const res = await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, recipientMode, messageType, title, body }, true);
+      const res = await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, recipientMode, selectedUserIds, messageType, title, body }, true);
       const sentCount = Number((res && res.data && res.data.sentCount) || 1);
       const totalCost = Number((res && res.data && res.data.totalCost) || cost);
       window.showToast?.(`${messageType === "coupon" ? "優惠券" : "訊息"}已送出 ${sentCount} 位，扣除 ${totalCost} 點`);
@@ -640,6 +740,7 @@
       });
       const results = $("inbox-recipient-results");
       if (results) results.innerHTML = "";
+      clearRecipientSelection();
       window.updateInboxPointCostHint?.();
       window.toggleInboxComposer(false);
       window.switchInboxBox("sent");
