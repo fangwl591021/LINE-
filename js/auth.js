@@ -929,7 +929,7 @@ window.applyRegisteredUserSession = function(info) {
   } else {
     window.currentNetworkId = window.currentUser.networkId || window.currentUser.referrerId || window.currentUser.referrer_id || 'admin';
   }
-  window.currentStoreId = window.currentUser.storeid || (normalizedRole === 'store' ? window.currentNetworkId : '');
+  window.currentStoreId = window.currentUser.storeid || window.currentUser.storeId || ((normalizedRole === 'store' || normalizedRole === 'tenant') ? window.currentNetworkId : '');
 
   const bottomNav = document.getElementById('bottom-nav');
   if (bottomNav) bottomNav.classList.remove('hidden');
@@ -965,6 +965,7 @@ window.applyRegisteredUserSession = function(info) {
   if (tgToken && window.currentUser.tgToken) tgToken.value = window.currentUser.tgToken;
   if (tgChatId && window.currentUser.tgChatId) tgChatId.value = window.currentUser.tgChatId;
   if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
+  window.updateStorePointCashierVisibility?.();
 };
 
 window.refreshPointBalanceBadge = async function() {
@@ -1088,8 +1089,15 @@ window.loadPointsWallet = async function(force = false) {
 };
 
 window.canUseStorePointCashier = function() {
-  const role = String(window.userRole || window.currentUser?.role || '').toLowerCase();
-  return role === 'admin' || role === 'store';
+  const rawRole = String(window.userRole || window.currentUser?.role || '').trim();
+  const role = rawRole.toLowerCase();
+  return window.hasAdminRights === true
+    || role === 'admin'
+    || role === 'store'
+    || role === 'tenant'
+    || rawRole === '總管'
+    || rawRole === '店長'
+    || rawRole === '租戶';
 };
 
 window.updateStorePointCashierVisibility = function() {
