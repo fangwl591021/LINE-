@@ -181,7 +181,7 @@
   }
 
   function getHarvestCards(cards) {
-    return getVisibleCards(cards).filter(isHarvestCard);
+    return (Array.isArray(cards) ? cards : []).filter(isHarvestCard);
   }
 
   function canEditCard(card) {
@@ -436,7 +436,10 @@
   };
 
   window.openCardDetailByRowId = function (rowId) {
-    const sourceCards = getVisibleCards(window.allCards);
+    const sourceCards = [
+      ...getHarvestCards(Array.isArray(window.harvestCards) ? window.harvestCards : []),
+      ...getVisibleCards(Array.isArray(window.allCards) ? window.allCards : [])
+    ];
     const card = sourceCards.find(c => String(c.rowId || c["rowId"]) === String(rowId));
 
     if (card) {
