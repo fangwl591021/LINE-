@@ -137,9 +137,13 @@
     var sourceType = getCardSourceType(card);
     if (sourceType === 'private_import' || sourceType === 'referral_placeholder') return false;
     var lineId = normalizeId(card.lineId || card.line_id || card['LINE ID']);
-    var ownerId = normalizeId(card.ownerUserId || card.owner_user_id || card.ownerId || card.creatorId || card.creator_id);
+    var ownerId = normalizeId(card.ownerUserId || card.owner_user_id || card.ownerId);
     var profileId = normalizeId(card.profileUserId || card.profile_user_id || card.profileId);
+    var creatorId = normalizeId(card.creatorId || card.creator_id);
     var belongsToUser = lineId === userId || ownerId === userId || profileId === userId;
+    if (!belongsToUser && !lineId && !ownerId && !profileId && sourceType === 'self_profile') {
+      belongsToUser = creatorId === userId;
+    }
     if (!belongsToUser) return false;
     var targetVersion = normalizeCardVersion(version || getTargetCardVersion());
     if (targetVersion === 'video') return sourceType === 'video_profile' || isCardVersion(card, 'video');

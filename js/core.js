@@ -244,7 +244,7 @@ const Core = (function() {
             if (sourceType === 'private_import' || sourceType === 'referral_placeholder' || sourceType === 'video_profile') return false;
             const rowId = String(c.rowId || c.row_id || c['rowId'] || c['Row ID'] || '').trim().toUpperCase();
             if (rowId.indexOf('CARD_VIDEO_') === 0) return false;
-            const ids = [
+            const ownerIds = [
                 c['LINE ID'],
                 c['userId'],
                 c['User ID'],
@@ -253,11 +253,11 @@ const Core = (function() {
                 c.ownerUserId,
                 c.owner_user_id,
                 c.profileUserId,
-                c.profile_user_id,
-                c.creatorId,
-                c.creator_id
-            ];
-            return ids.some(value => String(value || '').trim() === uid);
+                c.profile_user_id
+            ].map(value => String(value || '').trim()).filter(Boolean);
+            if (ownerIds.some(value => value === uid)) return true;
+            const creatorId = String(c.creatorId || c.creator_id || '').trim();
+            return ownerIds.length === 0 && sourceType === 'self_profile' && creatorId === uid;
         });
 
         console.log('[syncUserCardMatch] 配對結果:', window.currentUserCard ? '找到: ' + window.currentUserCard['姓名'] : '未找到');

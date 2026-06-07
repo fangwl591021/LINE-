@@ -2589,7 +2589,7 @@ const LineOAMyVideoKeywordModule = {
       videoCard: true,
       videoStorageKind: 'dedicated_video_card',
       templateVersion: 'my-video-card-v1',
-      sourceType: 'self_profile',
+      sourceType: 'video_profile',
       visibility: 'private',
       isPrivate: true,
       layoutStyle: baseConfig.layoutStyle || baseConfig.layout || 'landscape',
@@ -2620,7 +2620,7 @@ const LineOAMyVideoKeywordModule = {
       creatorId: id,
       ownerUserId: id,
       profileUserId: id,
-      sourceType: 'self_profile',
+      sourceType: 'video_profile',
       visibility: 'private',
       poolEligible: 0,
       aiReviewStatus: 'pending',
@@ -6073,16 +6073,23 @@ const D1ReadModule = {
     const cfg = this.jsonObject(row && (row.custom_config || row.customConfig || row['自訂名片設定']));
     const creatorId = this.text(row && (row.creator_id || row.creatorId || row['建檔者ID']));
     const lineId = this.text(row && (row.line_id || row.lineId || row['LINE ID']));
+    const rowId = this.text(row && (row.row_id || row.rowId || row.id)).toUpperCase();
     const actorId = this.text(options.actorId);
     const ownerUserId = this.text(row && (row.owner_user_id || row.ownerUserId), creatorId || actorId || lineId);
     const profileUserId = this.text(row && (row.profile_user_id || row.profileUserId), lineId);
-    const explicitSource = this.text(row && (row.source_type || row.sourceType || cfg.sourceType));
+    const rawExplicitSource = this.text(row && (row.source_type || row.sourceType || cfg.sourceType));
+    const isDedicatedVideo = rowId.startsWith('CARD_VIDEO_') ||
+      cfg.videoCard === true ||
+      cfg.videoStorageKind === 'dedicated_video_card' ||
+      this.text(cfg.cardType).toLowerCase() === 'video' ||
+      this.text(cfg.cardVariant).toLowerCase() === 'video_card';
+    const explicitSource = isDedicatedVideo ? 'video_profile' : rawExplicitSource;
     const explicitVisibility = this.text(row && (row.visibility || cfg.visibility)).toLowerCase();
     const safetyStatus = this.text(row && (row.ai_review_status || row.aiReviewStatus), cfg.safetyReview ? (cfg.safetyReview.pass ? 'passed' : 'failed') : '');
-    const isSelfProfile = explicitSource === 'self_profile'
+    const isSelfProfile = !isDedicatedVideo && (explicitSource === 'self_profile'
       || (!!lineId && !!creatorId && lineId === creatorId)
-      || (!!lineId && !!ownerUserId && lineId === ownerUserId && (cfg.templateVersion || cfg.cardType || cfg.buttons));
-    const sourceType = explicitSource || (isSelfProfile ? 'self_profile' : 'private_import');
+      || (!!lineId && !!ownerUserId && lineId === ownerUserId && (cfg.templateVersion || cfg.cardType || cfg.buttons)));
+    const sourceType = isDedicatedVideo ? 'video_profile' : (explicitSource || (isSelfProfile ? 'self_profile' : 'private_import'));
     const cfgPrivate = cfg.isPrivate === true || cfg.private === true;
     const visibility = explicitVisibility || ((isSelfProfile && !cfgPrivate) ? 'public' : 'private');
     const hasStoredAccess = !!(explicitSource || explicitVisibility || this.text(row && row.ai_review_status));
@@ -7500,14 +7507,13 @@ const D1WriteModule = {
           SELECT row_id FROM card_contacts
           WHERE (
             line_id = ? OR profile_user_id = ? OR owner_user_id = ?
-            OR (creator_id = ? AND LOWER(COALESCE(source_type,'')) = 'self_profile')
           )
             AND LOWER(COALESCE(source_type,'')) = 'self_profile'
             AND row_id NOT LIKE 'CARD_VIDEO_%'
             AND LOWER(COALESCE(custom_config,'')) NOT LIKE '%"videostoragekind"%'
           ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
           LIMIT 1
-        `, [profileId, profileId, profileId, profileId]).catch(() => null);
+        `, [profileId, profileId, profileId]).catch(() => null);
         if (existingSelfProfile && existingSelfProfile.row_id) card.row_id = this.text(existingSelfProfile.row_id);
       }
     }
@@ -11049,14 +11055,13 @@ const CardVersionResolverModule = {
       SELECT * FROM card_contacts
       WHERE (
         line_id = ? OR profile_user_id = ? OR owner_user_id = ?
-        OR (creator_id = ? AND LOWER(COALESCE(source_type,'')) = 'self_profile')
       )
       AND (
         LOWER(COALESCE(source_type,'')) IN ('self_profile', 'video_profile')
         OR (LOWER(COALESCE(source_type,'')) = '' AND (line_id = ? OR profile_user_id = ?))
       )
       ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
-    `, [userId, userId, userId, userId, userId, userId]);
+    `, [userId, userId, userId, userId, userId]);
   },
 
   async createVersionFromBase(baseRow, userId, version, env) {
@@ -11088,9 +11093,9 @@ const CardVersionResolverModule = {
       data: {
         rowId,
         lineId: userId,
-        creatorId: base.creatorId || userId,
-        ownerUserId: base.ownerUserId || userId,
-        profileUserId: base.profileUserId || userId,
+        creatorId: userId,
+        ownerUserId: userId,
+        profileUserId: userId,
         sourceType: version === 'video' ? 'video_profile' : 'self_profile',
         visibility: 'private',
         networkId: base.networkId || 'admin',

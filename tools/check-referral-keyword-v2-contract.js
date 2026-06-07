@@ -13,9 +13,9 @@ function ok(condition, message) {
 }
 
 const moduleStart = worker.indexOf('const ReferralFriendKeywordModule = {');
-const cardCoolStart = worker.indexOf('const LineOACardCoolKeywordModule = {', moduleStart);
-const moduleEnd = cardCoolStart >= 0
-  ? cardCoolStart
+const nextModuleStart = worker.indexOf('const LineOAStoreSearchKeywordModule = {', moduleStart);
+const moduleEnd = nextModuleStart >= 0
+  ? nextModuleStart
   : worker.indexOf('// ==================== Point Service Module ====================', moduleStart);
 ok(moduleStart >= 0 && moduleEnd > moduleStart, 'referral friend keyword module exists');
 
