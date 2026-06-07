@@ -3205,6 +3205,55 @@ const LineOACardCoolKeywordModule = {
     return `data:${contentType};base64,${this.arrayBufferToBase64(buffer)}`;
   },
 
+  newImportEventId() {
+    if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') return `CIMP_${crypto.randomUUID()}`;
+    return `CIMP_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  },
+
+  async recordImportEvent(env, event = {}) {
+    if (!env || !env.ACTMASTER_DB) return null;
+    await D1ReadModule.ensureCardAccessColumns(env);
+    const eventId = this.text(event.eventId || event.event_id, this.newImportEventId());
+    const scannerUid = this.text(event.scannerUid || event.scanner_uid, 'admin');
+    const inviterUid = this.text(event.inviterUid || event.inviter_uid, 'admin');
+    const source = this.text(event.source, 'line_oa_cardcool');
+    const imageCount = Math.max(1, Number(event.imageCount || event.image_count || 1) || 1);
+    const rawMessageIds = Array.isArray(event.rawMessageIds || event.raw_message_ids)
+      ? JSON.stringify(event.rawMessageIds || event.raw_message_ids)
+      : this.text(event.rawMessageIds || event.raw_message_ids, '[]');
+    const status = this.text(event.status, 'received');
+    const cardRowId = this.text(event.cardRowId || event.card_row_id);
+    const rejectReason = this.text(event.rejectReason || event.reject_reason);
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO card_import_events (event_id,scanner_uid,inviter_uid,source,image_count,raw_message_ids,status,card_row_id,reject_reason,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+      ON CONFLICT(event_id) DO UPDATE SET
+        scanner_uid=excluded.scanner_uid,
+        inviter_uid=excluded.inviter_uid,
+        source=excluded.source,
+        image_count=excluded.image_count,
+        raw_message_ids=excluded.raw_message_ids,
+        status=excluded.status,
+        card_row_id=CASE WHEN excluded.card_row_id <> '' THEN excluded.card_row_id ELSE card_import_events.card_row_id END,
+        reject_reason=excluded.reject_reason,
+        updated_at=CURRENT_TIMESTAMP
+    `).bind(eventId, scannerUid, inviterUid, source, imageCount, rawMessageIds, status, cardRowId, rejectReason).run();
+    return eventId;
+  },
+
+  async markImportEvent(env, eventId, status, cardRowId = '', rejectReason = '') {
+    const id = this.text(eventId);
+    if (!id || !env || !env.ACTMASTER_DB) return;
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE card_import_events
+      SET status = ?,
+          card_row_id = CASE WHEN ? <> '' THEN ? ELSE card_row_id END,
+          reject_reason = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE event_id = ?
+    `).bind(this.text(status, 'received'), this.text(cardRowId), this.text(cardRowId), this.text(rejectReason), id).run();
+  },
+
   normalizeSavedCardPayload(userId, ocrData) {
     const name = this.text(ocrData.name || ocrData.companyName, '未命名名片');
     const companyName = this.text(ocrData.companyName);
@@ -3237,7 +3286,8 @@ const LineOACardCoolKeywordModule = {
       poolEligible: '0',
       aiReviewStatus: 'passed',
       imageUrl: this.text(ocrData.imageUrl),
-      customConfig: this.text(ocrData.customConfig)
+      customConfig: this.text(ocrData.customConfig),
+      sourceEventId: this.text(ocrData.sourceEventId || ocrData.importEventId)
     };
   },
 
@@ -3297,6 +3347,7 @@ const LineOACardCoolKeywordModule = {
   },
 
   async processImagesAndPushReview(userId, imageInputs, env) {
+    let importEventId = '';
     try {
       const images = [];
       for (const input of Array.isArray(imageInputs) ? imageInputs : []) {
@@ -3305,16 +3356,32 @@ const LineOACardCoolKeywordModule = {
         else images.push(await this.fetchLineImageDataUri(env, input));
       }
       if (!images.length) throw new Error('Missing image data');
+      try {
+        const rawMessageIds = (Array.isArray(imageInputs) ? imageInputs : [])
+          .filter(input => input && !String(input).startsWith('data:'))
+          .map(input => String(input));
+        importEventId = await this.recordImportEvent(env, {
+          scannerUid: userId,
+          inviterUid: 'admin',
+          imageCount: images.length,
+          rawMessageIds,
+          status: 'received'
+        }) || '';
+      } catch (eventError) {
+        console.error('Card cool import event record failed', eventError);
+      }
       const ocr = await AIModule.recognizeBusinessCardImages({ base64Images: images }, env);
       if (!ocr.success) throw new Error(ocr.error || '\u540d\u7247\u89e3\u6790\u5931\u6557');
+      if (importEventId) await this.markImportEvent(env, importEventId, 'review_ready').catch(eventError => console.error('Card cool import event ready failed', eventError));
       const scanner = await this.loadUserLabel(env, userId);
-      const cardData = { ...(ocr.data || {}), scannerId: userId, scannerName: scanner.name || userId };
+      const cardData = { ...(ocr.data || {}), scannerId: userId, scannerName: scanner.name || userId, importEventId, sourceEventId: importEventId };
       const jobId = crypto.randomUUID ? crypto.randomUUID() : `JOB_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const draft = await this.saveReviewDraft(env, {
         jobId,
         userId,
         card: cardData,
         uploadedUrls: ocr.data?.uploadedUrls || [],
+        importEventId,
         scanner,
         status: 'ready',
         createdAt: new Date().toISOString()
@@ -3324,6 +3391,7 @@ const LineOACardCoolKeywordModule = {
       return { success: true, jobId: draft.jobId };
     } catch (e) {
       console.error('Card cool async OCR failed', e);
+      if (importEventId) await this.markImportEvent(env, importEventId, 'rejected', '', e.message || String(e)).catch(eventError => console.error('Card cool import event reject failed', eventError));
       await this.pushLine(userId, [{
         type: 'text',
         text: e.message || '\u540d\u7247\u89e3\u6790\u5931\u6557\uff0c\u8acb\u78ba\u8a8d\u5716\u7247\u662f\u5b8c\u6574\u3001\u6e05\u695a\u7684\u540d\u7247\u5f8c\u518d\u8a66\u4e00\u6b21\u3002'
@@ -3351,10 +3419,17 @@ const LineOACardCoolKeywordModule = {
     const scanner = await this.loadUserLabel(env, userId);
     cardData.scannerId = this.text(cardData.scannerId, userId);
     cardData.scannerName = this.text(cardData.scannerName, scanner.name || userId);
+    if (!cardId && draft.importEventId) {
+      cardData.importEventId = this.text(draft.importEventId);
+      cardData.sourceEventId = this.text(draft.importEventId);
+    }
     const savePayload = this.normalizeSavedCardPayload(userId, cardData);
     if (cardId) savePayload.rowId = cardId;
     const saved = await D1WriteModule.upsertCard(savePayload, env);
     if (!saved || saved.success === false) return { success: false, error: saved?.error || '\u540d\u7247\u5132\u5b58\u5931\u6557' };
+    if (!cardId && draft.importEventId) {
+      await this.markImportEvent(env, draft.importEventId, 'created', saved.rowId || saved.data?.rowId || '').catch(eventError => console.error('Card cool import event created failed', eventError));
+    }
     if (!cardId && env.ACTMASTER_KV) await env.ACTMASTER_KV.delete(this.reviewKey(jobId)).catch(() => {});
     const shouldPush = payload.pushToChat !== false;
     const push = shouldPush ? await this.pushLine(userId, [this.buildSavedCardMessage(saved.data, userId, env)], env) : { success: false };
@@ -5748,7 +5823,13 @@ const D1ReadModule = {
       "ALTER TABLE card_contacts ADD COLUMN crm_type TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE card_contacts ADD COLUMN crm_next_action TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE card_contacts ADD COLUMN crm_next_followup_at TEXT NOT NULL DEFAULT ''",
-      "ALTER TABLE card_contacts ADD COLUMN crm_ai_suggestion TEXT NOT NULL DEFAULT ''"
+      "ALTER TABLE card_contacts ADD COLUMN crm_ai_suggestion TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN source_event_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN claimed_from_row_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN claimed_by_uid TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN claimed_at TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN merged_into_row_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE card_contacts ADD COLUMN archived_at TEXT NOT NULL DEFAULT ''"
     ];
     for (const sql of alters) {
       try {
@@ -5763,6 +5844,25 @@ const D1ReadModule = {
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_scanner ON card_contacts(scanner_user_id)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_pool ON card_contacts(pool_eligible, visibility)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_crm_status ON card_contacts(owner_user_id, crm_status, updated_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_source_event ON card_contacts(source_event_id)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_contacts_source_type_owner ON card_contacts(source_type, owner_user_id, updated_at)').run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS card_import_events (
+        event_id TEXT PRIMARY KEY,
+        scanner_uid TEXT NOT NULL,
+        inviter_uid TEXT NOT NULL DEFAULT 'admin',
+        source TEXT NOT NULL DEFAULT 'line_oa',
+        image_count INTEGER NOT NULL DEFAULT 1,
+        raw_message_ids TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'received',
+        card_row_id TEXT NOT NULL DEFAULT '',
+        reject_reason TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_import_events_scanner ON card_import_events(scanner_uid, status, updated_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_import_events_card ON card_import_events(card_row_id)').run();
     this.cardAccessSchemaReady = true;
   },
 
@@ -6057,6 +6157,12 @@ const D1ReadModule = {
       profileUserId: access.profileUserId,
       scannerUserId: this.text(row.scanner_user_id),
       scannerName: this.text(row.scanner_name),
+      sourceEventId: this.text(row.source_event_id),
+      claimedFromRowId: this.text(row.claimed_from_row_id),
+      claimedByUid: this.text(row.claimed_by_uid),
+      claimedAt: this.text(row.claimed_at),
+      mergedIntoRowId: this.text(row.merged_into_row_id),
+      archivedAt: this.text(row.archived_at),
       sourceType: access.sourceType,
       visibility: access.visibility,
       poolEligible: access.poolEligible,
@@ -6856,6 +6962,12 @@ const D1WriteModule = {
       crm_next_action: this.pick(data, ['crmNextAction', 'crm_next_action', '建議下一步']),
       crm_next_followup_at: this.pick(data, ['crmNextFollowupAt', 'crm_next_followup_at', '下次跟進時間']),
       crm_ai_suggestion: this.pick(data, ['crmAiSuggestion', 'crm_ai_suggestion', 'AI建議'])
+      , source_event_id: this.pick(data, ['sourceEventId', 'source_event_id', 'importEventId', 'import_event_id']),
+      claimed_from_row_id: this.pick(data, ['claimedFromRowId', 'claimed_from_row_id']),
+      claimed_by_uid: this.pick(data, ['claimedByUid', 'claimed_by_uid']),
+      claimed_at: this.pick(data, ['claimedAt', 'claimed_at']),
+      merged_into_row_id: this.pick(data, ['mergedIntoRowId', 'merged_into_row_id']),
+      archived_at: this.pick(data, ['archivedAt', 'archived_at'])
     };
   },
 
@@ -7488,6 +7600,24 @@ const D1WriteModule = {
         crm_next_followup_at=excluded.crm_next_followup_at,crm_ai_suggestion=excluded.crm_ai_suggestion,
         updated_at=CURRENT_TIMESTAMP
     `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags,card.owner_user_id,card.profile_user_id,card.scanner_user_id,card.scanner_name,card.source_type,card.visibility,card.pool_eligible,card.ai_review_status,card.crm_status,card.crm_type,card.crm_next_action,card.crm_next_followup_at,card.crm_ai_suggestion).run();
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE card_contacts
+      SET source_event_id = CASE WHEN ? <> '' THEN ? ELSE COALESCE(source_event_id,'') END,
+          claimed_from_row_id = CASE WHEN ? <> '' THEN ? ELSE COALESCE(claimed_from_row_id,'') END,
+          claimed_by_uid = CASE WHEN ? <> '' THEN ? ELSE COALESCE(claimed_by_uid,'') END,
+          claimed_at = CASE WHEN ? <> '' THEN ? ELSE COALESCE(claimed_at,'') END,
+          merged_into_row_id = CASE WHEN ? <> '' THEN ? ELSE COALESCE(merged_into_row_id,'') END,
+          archived_at = CASE WHEN ? <> '' THEN ? ELSE COALESCE(archived_at,'') END
+      WHERE row_id = ?
+    `).bind(
+      this.text(card.source_event_id), this.text(card.source_event_id),
+      this.text(card.claimed_from_row_id), this.text(card.claimed_from_row_id),
+      this.text(card.claimed_by_uid), this.text(card.claimed_by_uid),
+      this.text(card.claimed_at), this.text(card.claimed_at),
+      this.text(card.merged_into_row_id), this.text(card.merged_into_row_id),
+      this.text(card.archived_at), this.text(card.archived_at),
+      card.row_id
+    ).run();
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
     const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward && !isOwnCard);
     const awardedPoints = pointAward && pointAward.awarded ? pointAward.points : 0;
@@ -7571,6 +7701,7 @@ const D1ConsistencyModule = {
   async audit(payload, env) {
     if (!this.hasD1(env)) return { success: false, error: 'D1 is not configured' };
     await this.ensureIndexes(env);
+    await D1ReadModule.ensureCardAccessColumns(env);
     const missingUsers = await this.all(env, `
       SELECT c.row_id AS card_row_id, c.line_id, c.name, c.mobile, c.office_phone, c.title, c.company_name, c.network_id
       FROM card_contacts c
@@ -7616,6 +7747,64 @@ const D1ConsistencyModule = {
       )
       LIMIT 200
     `);
+    const importEventsWithoutCards = await this.all(env, `
+      SELECT e.event_id, e.scanner_uid, e.inviter_uid, e.status, e.card_row_id, e.created_at, e.updated_at
+      FROM card_import_events e
+      LEFT JOIN card_contacts c ON c.row_id = e.card_row_id
+      WHERE TRIM(COALESCE(e.card_row_id,'')) <> ''
+        AND e.status IN ('created','merged','claimed')
+        AND c.row_id IS NULL
+      ORDER BY e.updated_at DESC
+      LIMIT 200
+    `);
+    const privateCardsWithoutScanner = await this.all(env, `
+      SELECT row_id, line_id, creator_id, owner_user_id, name, mobile, office_phone, source_type, updated_at
+      FROM card_contacts
+      WHERE LOWER(COALESCE(source_type,'')) = 'private_import'
+        AND TRIM(COALESCE(scanner_user_id,'')) = ''
+      ORDER BY updated_at DESC
+      LIMIT 200
+    `);
+    const duplicatePrivateImports = await this.all(env, `
+      SELECT scanner_user_id, duplicate_key, COUNT(*) AS count, GROUP_CONCAT(row_id) AS card_row_ids, GROUP_CONCAT(name) AS names
+      FROM (
+        SELECT row_id, scanner_user_id, name,
+               COALESCE(NULLIF(TRIM(COALESCE(mobile,'')), ''), NULLIF(TRIM(COALESCE(office_phone,'')), ''), LOWER(TRIM(COALESCE(name,'')))) AS duplicate_key
+        FROM card_contacts
+        WHERE LOWER(COALESCE(source_type,'')) = 'private_import'
+          AND TRIM(COALESCE(scanner_user_id,'')) <> ''
+      )
+      WHERE TRIM(COALESCE(duplicate_key,'')) <> ''
+      GROUP BY scanner_user_id, duplicate_key
+      HAVING COUNT(*) > 1
+      LIMIT 200
+    `);
+    const personalVersionDuplicates = await this.all(env, `
+      SELECT owner_user_id, version_key, COUNT(*) AS count, GROUP_CONCAT(row_id) AS card_row_ids, GROUP_CONCAT(name) AS names
+      FROM (
+        SELECT row_id, owner_user_id, name,
+               CASE
+                 WHEN row_id LIKE 'CARD_VIDEO_%' OR custom_config LIKE '%"cardVersion":"video"%' OR custom_config LIKE '%"cardVariant":"video_card"%' THEN 'video'
+                 WHEN row_id LIKE 'CARD_POSTER_%' OR custom_config LIKE '%"cardVersion":"poster"%' THEN 'poster'
+                 WHEN row_id LIKE 'CARD_SQUARE_%' OR custom_config LIKE '%"cardVersion":"square"%' THEN 'square'
+                 ELSE 'standard'
+               END AS version_key
+        FROM card_contacts
+        WHERE LOWER(COALESCE(source_type,'')) IN ('self_profile','video_profile')
+          AND TRIM(COALESCE(owner_user_id,'')) <> ''
+      )
+      GROUP BY owner_user_id, version_key
+      HAVING COUNT(*) > 1
+      LIMIT 200
+    `);
+    const defaultAdminAttributions = await this.all(env, `
+      SELECT row_id, line_id, creator_id, owner_user_id, scanner_user_id, name, mobile, office_phone, source_type, updated_at
+      FROM card_contacts
+      WHERE LOWER(COALESCE(source_type,'')) = 'private_import'
+        AND TRIM(COALESCE(scanner_user_id,'')) = 'admin'
+      ORDER BY updated_at DESC
+      LIMIT 200
+    `);
     return {
       success: true,
       data: {
@@ -7624,13 +7813,23 @@ const D1ConsistencyModule = {
           duplicateCardLineIds: duplicateCards.length,
           placeholderUsers: placeholderUsers.length,
           placeholderCards: placeholderCards.length,
-          repairableMismatches: mismatches.length
+          repairableMismatches: mismatches.length,
+          importEventsWithoutCards: importEventsWithoutCards.length,
+          privateCardsWithoutScanner: privateCardsWithoutScanner.length,
+          duplicatePrivateImports: duplicatePrivateImports.length,
+          personalVersionDuplicates: personalVersionDuplicates.length,
+          defaultAdminAttributions: defaultAdminAttributions.length
         },
         missingUsers,
         duplicateCards,
         placeholderUsers,
         placeholderCards,
-        mismatches
+        mismatches,
+        importEventsWithoutCards,
+        privateCardsWithoutScanner,
+        duplicatePrivateImports,
+        personalVersionDuplicates,
+        defaultAdminAttributions
       }
     };
   },
