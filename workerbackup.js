@@ -11091,7 +11091,7 @@ const CardVersionResolverModule = {
         creatorId: base.creatorId || userId,
         ownerUserId: base.ownerUserId || userId,
         profileUserId: base.profileUserId || userId,
-        sourceType: 'self_profile',
+        sourceType: version === 'video' ? 'video_profile' : 'self_profile',
         visibility: 'private',
         networkId: base.networkId || 'admin',
         name: base.name,

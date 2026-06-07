@@ -242,6 +242,8 @@ const Core = (function() {
             if (!c) return false;
             const sourceType = String(c.sourceType || c.source_type || c['??靘?'] || '').trim();
             if (sourceType === 'private_import' || sourceType === 'referral_placeholder' || sourceType === 'video_profile') return false;
+            const rowId = String(c.rowId || c.row_id || c['rowId'] || c['Row ID'] || '').trim().toUpperCase();
+            if (rowId.indexOf('CARD_VIDEO_') === 0) return false;
             const ids = [
                 c['LINE ID'],
                 c['userId'],
