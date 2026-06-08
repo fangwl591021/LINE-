@@ -1825,6 +1825,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
+    const wantsCardCoolList = urlParams.get('mode') === 'cardcool-list';
     if (urlParams.get('mode') === 'cardcool-review') {
       await window.renderCardCoolReviewPage(urlParams.get('jobId') || '', urlParams.get('cardId') || urlParams.get('rowId') || '');
       return;
@@ -1909,9 +1910,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (isFresh) {
           cachedUserInfo = cached.info;
           window.applyRegisteredUserSession(cachedUserInfo);
-          window.goPage('home');
+          window.goPage(wantsCardCoolList ? 'card' : 'home');
           setTimeout(() => {
-            if (typeof window.loadHomeData === 'function') window.loadHomeData();
+            if (wantsCardCoolList && typeof window.loadCardData === 'function') {
+              window.loadCardData({ render: true, harvest: true, force: true });
+            } else if (typeof window.loadHomeData === 'function') {
+              window.loadHomeData();
+            }
           }, 40);
           usedCachedUser = true;
         }
@@ -2011,14 +2016,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ✅ 先顯示首頁，不等資料載入
     if (!shareCardId && !claimCardId && !usedCachedUser) {
-      window.goPage('home');
+      window.goPage(wantsCardCoolList ? 'card' : 'home');
     }
 
     // ✅ 背景非同步載入，不阻塞首頁第一幀；一般首頁只載活動，不碰名片庫圖片。
     const startBackgroundDataLoad = () => {
-      const dataLoad = (shareCardId || claimCardId)
-        ? window.loadAllData()
-        : window.loadHomeData();
+      const dataLoad = (wantsCardCoolList && typeof window.loadCardData === 'function')
+        ? window.loadCardData({ render: true, harvest: true, force: true })
+        : (shareCardId || claimCardId)
+          ? window.loadAllData()
+          : window.loadHomeData();
 
       dataLoad.then(() => {
       if (shareCardId) {

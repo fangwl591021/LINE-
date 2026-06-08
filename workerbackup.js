@@ -3012,6 +3012,12 @@ const LineOACardCoolKeywordModule = {
     return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
   },
 
+  buildListUrl(env) {
+    const liffId = env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y';
+    const params = new URLSearchParams({ mode: 'cardcool-list' });
+    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  },
+
   buildReviewMessage(jobId, data, env) {
     const name = this.text(data?.name || data?.companyName || '名片資料');
     return {
@@ -3139,7 +3145,7 @@ const LineOACardCoolKeywordModule = {
     return merged;
   },
 
-  buildSidesMessage() {
+  buildSidesMessage(env) {
     return {
       type: 'text',
       text: '請選擇這張名片有幾面。選完後再上傳名片照片；非名片圖片不會建立資料。',
@@ -3159,6 +3165,13 @@ const LineOACardCoolKeywordModule = {
             label: '二面',
             data: 'action=lineoa_cardcool_sides&sides=2',
             displayText: 'AI名片夾：二面'
+          }
+        }, {
+          type: 'action',
+          action: {
+            type: 'uri',
+            label: '觀看名單',
+            uri: this.buildListUrl(env)
           }
         }]
       }
@@ -3456,7 +3469,7 @@ const LineOACardCoolKeywordModule = {
 
       if (this.isKeyword(event)) {
         await this.clearState(env, userId);
-        const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildSidesMessage()] }, env);
+        const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildSidesMessage(env)] }, env);
         if (!result.success) console.error('Card cool side selector reply failed', result);
         return true;
       }
