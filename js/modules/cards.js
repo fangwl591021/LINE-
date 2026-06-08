@@ -177,7 +177,9 @@
     if (sourceType === "self_profile" || sourceType === "referral_placeholder") return false;
     const userId = getCurrentUserId();
     if (!userId) return false;
-    return getScannerId(card) === userId || getCreatorId(card) === userId || getOwnerId(card) === userId;
+    const scannerId = getScannerId(card);
+    if (scannerId) return scannerId === userId;
+    return getCreatorId(card) === userId || getOwnerId(card) === userId;
   }
 
   function getHarvestCards(cards) {

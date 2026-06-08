@@ -6860,6 +6860,10 @@ const D1WriteModule = {
     return fallback;
   },
 
+  isLineUserIdLike(value) {
+    return /^U[0-9A-Za-z]{20,}$/.test(this.text(value));
+  },
+
   role(value) {
     const next = this.text(value, 'user').toLowerCase();
     if (next === 'admin' || next === '總管') return 'admin';
@@ -7495,6 +7499,7 @@ const D1WriteModule = {
     const explicitRowId = this.pick(sourceData, ['rowId', 'row_id', 'id'], this.pick(payload, ['rowId', 'row_id', 'id']));
     const hasExplicitNetworkInput = ['networkId', 'network_id', '歸屬網'].some((key) => Object.prototype.hasOwnProperty.call(sourceData || {}, key));
     const explicitNetworkId = hasExplicitNetworkInput ? this.text(this.pick(sourceData, ['networkId', 'network_id', '歸屬網']), 'admin') : '';
+    const explicitOwnerTransferUserId = hasExplicitNetworkInput && this.isLineUserIdLike(explicitNetworkId) ? explicitNetworkId : '';
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
     if (!explicitRowId) {
       const provisionalAccess = D1ReadModule.inferCardAccess(card, { actorId: this.text(payload.authenticatedUserId || payload.userId) });
@@ -7519,6 +7524,7 @@ const D1WriteModule = {
     }
     const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
     let preserveExistingCardIdentity = false;
+    let privateImportOwnerTransferUserId = '';
     if (existing) {
       const actorId = this.text(payload.authenticatedUserId || payload.userId);
       const role = this.role(payload.authenticatedRole || payload.role);
@@ -7527,15 +7533,22 @@ const D1WriteModule = {
       const existingCreatorId = this.text(existing.creator_id);
       const existingOwnerId = this.text(existing.owner_user_id);
       const existingNetworkId = this.text(existing.network_id);
+      const existingSourceType = this.text(existing.source_type).toLowerCase();
       const isBoundToActor = !!(actorId && existingLineId && existingLineId === actorId);
       const isAdminSupportEdit = role === 'admin';
       const isUnboundOwner = !!(actorId && !existingLineId && (existingCreatorId === actorId || existingOwnerId === actorId));
       const isUnboundStoreManager = !!(role === 'store' && !existingLineId && networkId && existingNetworkId && networkId === existingNetworkId);
+      const isTransferableImport = existingSourceType !== 'self_profile'
+        && existingSourceType !== 'video_profile'
+        && existingSourceType !== 'referral_placeholder';
 
       if (!isBoundToActor && !isAdminSupportEdit && !isUnboundOwner && !isUnboundStoreManager) {
         return { success: false, error: 'Access Denied: cannot update this card' };
       }
-      preserveExistingCardIdentity = isAdminSupportEdit && !isBoundToActor;
+      privateImportOwnerTransferUserId = isAdminSupportEdit && explicitOwnerTransferUserId && isTransferableImport
+        ? explicitOwnerTransferUserId
+        : '';
+      preserveExistingCardIdentity = isAdminSupportEdit && !isBoundToActor && !privateImportOwnerTransferUserId;
     }
     const rawAwardUserId = this.text(payload.authenticatedUserId || card.creator_id || payload.creatorId || payload.userId);
     const awardUserId = await this.resolvePointAwardUserId(env, rawAwardUserId);
@@ -7562,6 +7575,17 @@ const D1WriteModule = {
       card.pool_eligible = existing.pool_eligible;
       card.ai_review_status = this.text(existing.ai_review_status);
       card.network_id = hasExplicitNetworkInput ? explicitNetworkId : this.text(existing.network_id, card.network_id);
+    }
+    if (existing && privateImportOwnerTransferUserId) {
+      card.creator_id = privateImportOwnerTransferUserId;
+      card.owner_user_id = privateImportOwnerTransferUserId;
+      card.scanner_user_id = privateImportOwnerTransferUserId;
+      card.scanner_name = privateImportOwnerTransferUserId;
+      card.source_type = this.text(card.source_type || existing.source_type, 'private_import');
+      card.visibility = this.text(card.visibility || existing.visibility, 'private');
+      const existingNetwork = this.text(existing.network_id);
+      const fallbackNetwork = this.text(payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
+      card.network_id = existingNetwork && !this.isLineUserIdLike(existingNetwork) ? existingNetwork : fallbackNetwork;
     }
     const inferredAccess = D1ReadModule.inferCardAccess(card, { actorId: awardUserId });
     const access = preserveExistingCardIdentity ? {
