@@ -405,6 +405,23 @@ const HomeModule = (function() {
             '&from=business-engine';
     };
 
+    window.openMemberHomeLink = function(btn) {
+        try {
+            const myUserId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+            if (!myUserId) {
+                window.showToast?.('請先完成 LINE 身分確認後再開啟會員主頁', true);
+                return;
+            }
+            const url = window.buildHomeInviteUrl ? window.buildHomeInviteUrl() : '';
+            if (!url) throw new Error('無法產生會員主頁連結');
+            if (btn) btn.disabled = true;
+            window.location.href = url;
+        } catch (e) {
+            if (btn) btn.disabled = false;
+            window.showToast?.(e.message || '會員主頁連結開啟失敗', true);
+        }
+    };
+
     window.refreshHomeProfileCard = function() {
         const card = document.getElementById('home-profile-card');
         if (!card) return;
