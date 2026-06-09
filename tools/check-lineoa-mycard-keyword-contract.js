@@ -21,7 +21,8 @@ ok(worker.includes('isLineOaMyCardCandidate(row)'), 'LINE OA my-card candidate f
 ok(worker.includes("if (!rowId.startsWith('CARD_')) return false;"), 'old numeric mother-site row ids are excluded from LINE OA my-card selector');
 ok(worker.includes('return !!(name && company && imageUrl);'), 'unbound generated cards without company are excluded from LINE OA my-card selector');
 ok(worker.includes('filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId))'), 'my-card keyword filters mother-site leftovers before rendering');
-ok(worker.includes("CASE WHEN source_type = 'self_profile' THEN 0 ELSE 1 END"), 'self-profile cards are prioritized');
+ok(worker.includes("AND LOWER(COALESCE(source_type, '')) = 'self_profile'"), 'my-card lookup only reads self-profile cards');
+ok(worker.includes("return list.filter(row => this.isLineOaMyCardCandidate(row));"), 'my-card selector never falls back to private-import cards');
 ok(worker.includes('async replySimpleMyCard(events, env)'), 'my-card keyword reply handler exists');
 ok(worker.includes('await this.findMySelfCards(env, userId)'), 'reply handler checks existing self cards first');
 ok(worker.includes('existingCards.length > 1'), 'multiple self cards render a selector first');

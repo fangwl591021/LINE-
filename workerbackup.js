@@ -1009,18 +1009,32 @@ const LineOAChatModule = {
         line_id IN (${placeholders})
         OR profile_user_id IN (${placeholders})
         OR owner_user_id IN (${placeholders})
-        OR creator_id IN (${placeholders})
+        OR (
+          COALESCE(line_id, '') = ''
+          AND COALESCE(profile_user_id, '') = ''
+          AND COALESCE(owner_user_id, '') = ''
+          AND creator_id IN (${placeholders})
+        )
       )
+      AND LOWER(COALESCE(source_type, '')) = 'self_profile'
+      AND row_id LIKE 'CARD_%'
       ORDER BY
-        CASE WHEN source_type = 'self_profile' THEN 0 ELSE 1 END,
         CASE WHEN line_id IN (${placeholders}) THEN 0 ELSE 1 END,
         COALESCE(updated_at, created_at) DESC,
         row_id DESC
       LIMIT 20
     `, [...safeIds, ...safeIds, ...safeIds, ...safeIds, ...safeIds]).catch(() => []);
     return rows.filter(row => {
-      const access = D1ReadModule.inferCardAccess(row);
-      return access.isSelfProfile || this.text(row.line_id) === id || this.text(row.profile_user_id) === id;
+      if (!this.isLineOaMyCardCandidate(row)) return false;
+      const lineId = this.text(row.line_id);
+      const profileId = this.text(row.profile_user_id);
+      const ownerId = this.text(row.owner_user_id);
+      const creatorId = this.text(row.creator_id);
+      const hasDirectOwner = lineId || profileId || ownerId;
+      return safeIds.includes(lineId) ||
+        safeIds.includes(profileId) ||
+        safeIds.includes(ownerId) ||
+        (!hasDirectOwner && safeIds.includes(creatorId));
     });
   },
 
@@ -1066,9 +1080,7 @@ const LineOAChatModule = {
 
   filterLineOaMyCardCandidates(rows) {
     const list = Array.isArray(rows) ? rows : [];
-    const candidates = list.filter(row => this.isLineOaMyCardCandidate(row));
-    if (candidates.length) return candidates;
-    return list.filter(row => !this.isLineOaVideoCard(row));
+    return list.filter(row => this.isLineOaMyCardCandidate(row));
   },
 
   normalizeCardButton(button) {
