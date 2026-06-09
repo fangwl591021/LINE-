@@ -13,7 +13,8 @@ const foundationChecks = [
   'tools/check-hard-admin-upsert-contract.js',
   'tools/check-lineoa-mycard-keyword-contract.js',
   'tools/check-lineoa-cardcool-keyword-contract.js',
-  'tools/check-referral-keyword-v2-contract.js'
+  'tools/check-referral-keyword-v2-contract.js',
+  'tools/check-member-home-keyword-contract.js'
 ];
 
 const fullChecks = [
@@ -25,6 +26,7 @@ const fullChecks = [
   'tools/check-lineoa-mycard-keyword-contract.js',
   'tools/check-lineoa-cardcool-keyword-contract.js',
   'tools/check-referral-keyword-v2-contract.js',
+  'tools/check-member-home-keyword-contract.js',
   'tools/check-auth-contract.js',
   'tools/check-share-contract.js',
   'tools/check-inbox-recipient-scope-contract.js',
