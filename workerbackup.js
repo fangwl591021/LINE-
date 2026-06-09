@@ -1760,8 +1760,6 @@ const LineOAChatModule = {
     if (simpleMyCardReplied) return new Response('OK', { status: 200 });
     const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);
     if (referralFriendReplied) return new Response('OK', { status: 200 });
-    const memberHomeReplied = await MemberHomeKeywordModule.reply(events, env);
-    if (memberHomeReplied) return new Response('OK', { status: 200 });
     const storeSearchReplied = await LineOAStoreSearchKeywordModule.reply(events, env);
     if (storeSearchReplied) return new Response('OK', { status: 200 });
     const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);
@@ -2298,82 +2296,6 @@ const ReferralFriendKeywordModule = {
       const message = this.buildMessage(inviteUrl, context);
       const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
       if (!result.success) console.error('Referral friend keyword reply failed', result);
-      return true;
-    }
-    return false;
-  }
-};
-
-const MemberHomeKeywordModule = {
-  text(value, fallback = '') {
-    const next = String(value ?? '').trim();
-    return next || fallback;
-  },
-
-  isKeyword(event) {
-    const message = event && event.message ? event.message : {};
-    if (message.type !== 'text') return false;
-    const text = this.text(message.text).replace(/\s+/g, '');
-    return text === '\u6703\u54e1\u4e3b\u9801';
-  },
-
-  buildMessage(inviteUrl) {
-    return {
-      type: 'flex',
-      altText: '\u6703\u54e1\u4e3b\u9801',
-      contents: {
-        type: 'bubble',
-        body: {
-          type: 'box',
-          layout: 'vertical',
-          paddingAll: '18px',
-          spacing: 'md',
-          contents: [
-            {
-              type: 'text',
-              text: '\u6703\u54e1\u4e3b\u9801',
-              size: 'lg',
-              weight: 'bold',
-              color: '#111827'
-            },
-            {
-              type: 'text',
-              text: '\u9ede\u4e0b\u65b9\u6309\u9215\u958b\u555f\u4f60\u7684\u5c08\u5c6c\u6703\u54e1\u4e3b\u9801\u9023\u7d50\u3002',
-              size: 'sm',
-              color: '#64748B',
-              wrap: true
-            },
-            {
-              type: 'button',
-              style: 'primary',
-              height: 'sm',
-              color: '#2563EB',
-              action: {
-                type: 'uri',
-                label: '\u958b\u555f\u6703\u54e1\u4e3b\u9801',
-                uri: inviteUrl
-              }
-            }
-          ]
-        }
-      }
-    };
-  },
-
-  async reply(events, env) {
-    for (const event of Array.isArray(events) ? events : []) {
-      if (!this.isKeyword(event)) continue;
-      const replyToken = this.text(event.replyToken);
-      const userId = LineOAChatModule.eventUserId(event);
-      if (!replyToken || !userId) continue;
-      const context = await ReferralFriendKeywordModule.resolveContext(env, userId);
-      if (!context || !context.referrerId) continue;
-      const inviteUrl = ReferralFriendKeywordModule.buildInviteUrl(context, env);
-      const result = await LineOAChatModule.replyLine({
-        replyToken,
-        messages: [this.buildMessage(inviteUrl)]
-      }, env);
-      if (!result.success) console.error('Member home keyword reply failed', result);
       return true;
     }
     return false;

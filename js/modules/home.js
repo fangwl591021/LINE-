@@ -405,23 +405,6 @@ const HomeModule = (function() {
             '&from=business-engine';
     };
 
-    window.openMemberHomeLink = function(btn) {
-        try {
-            const myUserId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
-            if (!myUserId) {
-                window.showToast?.('請先完成 LINE 身分確認後再開啟會員主頁', true);
-                return;
-            }
-            const url = window.buildHomeInviteUrl ? window.buildHomeInviteUrl() : '';
-            if (!url) throw new Error('無法產生會員主頁連結');
-            if (btn) btn.disabled = true;
-            window.location.href = url;
-        } catch (e) {
-            if (btn) btn.disabled = false;
-            window.showToast?.(e.message || '會員主頁連結開啟失敗', true);
-        }
-    };
-
     window.refreshHomeProfileCard = function() {
         const card = document.getElementById('home-profile-card');
         if (!card) return;
@@ -624,20 +607,6 @@ const HomeModule = (function() {
                 '<p class="text-[13px] text-slate-500 mt-2">回首頁即可直接使用，不必再切換頁籤。</p>' +
                 '<button onclick="window.goPage(&quot;home&quot;)" class="mt-4 px-5 py-3 rounded-2xl bg-[#06C755] text-white font-black active:scale-95 transition-transform">回首頁</button>' +
             '</div>';
-    };
-
-    window.scrollToHomeAnnouncements = function() {
-        const section = document.getElementById('home-announcements-section');
-        if (window.currentPage !== 'home' && typeof window.goPage === 'function') {
-            window.goPage('home');
-            setTimeout(() => window.scrollToHomeAnnouncements(), 160);
-            return;
-        }
-        if (section && section.scrollIntoView) {
-            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (typeof window.goPage === 'function') {
-            window.goPage('home');
-        }
     };
 
     window.scrollToHomeMatchmake = function() {
@@ -1158,7 +1127,6 @@ const HomeModule = (function() {
 
     window.loadUserActivities = async function() {
         if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-        if (typeof window.loadHomeAnnouncements === 'function') window.loadHomeAnnouncements();
         if (typeof window.loadHomeSalesAssistant === 'function') window.loadHomeSalesAssistant();
 
         if (typeof window.syncStoreSettingsToHome === 'function') {
