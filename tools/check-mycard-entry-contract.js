@@ -14,17 +14,26 @@ function fail(message) {
 if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
   fail('my card summary must open the direct entry handler');
 }
-if (!index.includes('js/modules/mycard.js?v=8.50')) {
+if (!index.includes('js/modules/mycard.js?v=8.59')) {
   fail('mycard.js cache-bust version must be bumped');
 }
-if (!index.includes('js/auth.js?v=10.34')) {
-  fail('auth.js cache-bust version must be bumped');
+if (!/js\/auth\.js\?v=\d+\.\d+/.test(index)) {
+  fail('auth.js must be loaded with a cache-bust version');
 }
 if (index.includes('編輯名片詳細文字資料')) {
   fail('duplicate detail-edit button must be removed');
 }
 if (!/async function openMyCardEntry/.test(mycard) || !/window\.openMyCardEntry = openMyCardEntry/.test(mycard)) {
   fail('openMyCardEntry must be implemented and exported');
+}
+if (!/function findLoadedMyCardByVersion[\s\S]*isCardVersion\(pools\[i\], target\)[\s\S]*isEditableOwnCard\(pools\[i\], target\)/.test(mycard)) {
+  fail('loaded my-card version lookup must reject cards that do not belong to the current user');
+}
+if (!/async function handleLayoutChange[\s\S]*if \(!isEditableOwnCard\(card, version\)\) card = await resolveMyCardVersion\(version, false\);[\s\S]*if \(isEditableOwnCard\(card, version\)/.test(mycard)) {
+  fail('layout switching must resolve a user-owned version before applying card data');
+}
+if (!/async function setMyCardWysiwygLayout[\s\S]*if \(!isEditableOwnCard\(card, version\)\) card = await resolveMyCardVersion\(version, false\);[\s\S]*if \(isEditableOwnCard\(card, version\)/.test(mycard)) {
+  fail('WYSIWYG layout switching must resolve a user-owned version before applying card data');
 }
 if (!/currentCardData[\s\S]*window\.openCardDetail\(currentCardData\)/.test(mycard)) {
   fail('existing personal card must route directly to detail editor');

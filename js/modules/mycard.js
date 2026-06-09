@@ -345,11 +345,11 @@
     if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
     if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
     for (var i = 0; i < pools.length; i += 1) {
-      if (pools[i] && isCardVersion(pools[i], target)) return pools[i];
+      if (pools[i] && isCardVersion(pools[i], target) && isEditableOwnCard(pools[i], target)) return pools[i];
     }
     if (target !== 'video') {
       for (var j = 0; j < pools.length; j += 1) {
-        if (pools[j] && cardVersionFromCard(pools[j]) !== 'video') return pools[j];
+        if (pools[j] && cardVersionFromCard(pools[j]) !== 'video' && isEditableOwnCard(pools[j], target)) return pools[j];
       }
     }
     return null;
@@ -607,8 +607,9 @@
   async function handleLayoutChange() {
     syncCurrentImageInput();
     var version = layoutToCardVersion(getLayout());
-    var card = findLoadedMyCardByVersion(version) || await resolveMyCardVersion(version, false);
-    if (card && cardVersionFromCard(card) !== 'video') {
+    var card = findLoadedMyCardByVersion(version);
+    if (!isEditableOwnCard(card, version)) card = await resolveMyCardVersion(version, false);
+    if (isEditableOwnCard(card, version) && cardVersionFromCard(card) !== 'video') {
       currentCardData = card;
       window.currentUserCard = card;
       hydrateMyECardStateFromCurrentCard();
@@ -1425,8 +1426,9 @@
     if (!cfg) return;
     layout = normalizeWysiwygLayout(layout);
     var version = layoutToCardVersion(layout);
-    var card = findLoadedMyCardByVersion(version) || await resolveMyCardVersion(version, false);
-    if (card && cardVersionFromCard(card) !== 'video') {
+    var card = findLoadedMyCardByVersion(version);
+    if (!isEditableOwnCard(card, version)) card = await resolveMyCardVersion(version, false);
+    if (isEditableOwnCard(card, version) && cardVersionFromCard(card) !== 'video') {
       currentCardData = card;
       window.currentUserCard = card;
       hydrateMyECardStateFromCurrentCard();
