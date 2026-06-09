@@ -1680,6 +1680,28 @@ const HomeModule = (function() {
         return true;
     };
 
+    function handleFollowDirectLink_() {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const open = String(params.get('open') || params.get('page') || '').toLowerCase();
+            if (!['follow', 'followup', 'followups', 'agenda', 'my-activities'].includes(open)) return;
+            let tries = 0;
+            const timer = setInterval(() => {
+                tries++;
+                if (typeof window.goPage === 'function' && window.currentUser) {
+                    clearInterval(timer);
+                    window.goPage('my-activities');
+                } else if (tries > 30) {
+                    clearInterval(timer);
+                }
+            }, 500);
+        } catch (e) {
+            console.warn('[home] follow direct link skipped:', e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', handleFollowDirectLink_);
+
     // === 3. 活動互動邏輯 ===
 
     window.openActivityDetail = function(activityId) {
