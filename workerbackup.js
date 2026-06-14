@@ -1088,7 +1088,16 @@ const LineOAChatModule = {
     const label = this.text(button.l || button.label || button.text || button.title);
     const uri = this.text(button.u || button.url || button.uri || button.href);
     const color = this.text(button.c || button.color, '#06C755');
-    return label && uri ? { l: label, u: uri, c: color } : null;
+    return label && uri ? { l: label, u: this.normalizeActionUri(uri), c: color } : null;
+  },
+
+  normalizeActionUri(uri) {
+    const value = this.text(uri).replace(/[\u200B-\u200D\uFEFF]/g, '');
+    if (!value) return '';
+    if (/^(https?|tel|mailto|line):/i.test(value)) return value;
+    const compactPhone = value.replace(/[\s().-]/g, '');
+    if (/^\+?\d{7,16}$/.test(compactPhone)) return 'tel:' + compactPhone;
+    return Utils.cleanURI(value);
   },
 
   normalizeCardButtons(buttons) {
