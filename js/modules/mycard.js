@@ -80,6 +80,45 @@
     return /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(raw) ? raw : (fallback || '#06C755');
   }
 
+  function normalizeMyCardActionUriForSave(value) {
+    var raw = String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    if (!raw) return { value: '', error: '請輸入按鈕連結。' };
+
+    if (/^mailto:/i.test(raw)) {
+      var mailtoEmail = raw.replace(/^mailto:/i, '').trim();
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailtoEmail)) return { value: 'mailto:' + mailtoEmail };
+      return { value: '', error: 'Email 格式錯誤，請確認 @ 與網域。' };
+    }
+
+    if (/^tel:/i.test(raw)) {
+      var telPhone = raw.replace(/^tel:/i, '').replace(/[\s().-]/g, '');
+      if (/^\+?\d{7,16}$/.test(telPhone)) return { value: 'tel:' + telPhone };
+      return { value: '', error: '電話格式錯誤，請輸入 7 到 16 碼電話。' };
+    }
+
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+      return { value: 'mailto:' + raw };
+    }
+
+    var compactPhone = raw.replace(/[\s().-]/g, '');
+    if (/^\+?\d{7,16}$/.test(compactPhone)) {
+      return { value: 'tel:' + compactPhone };
+    }
+
+    if (/^(https?:\/\/|line:\/\/)/i.test(raw)) {
+      if (/\s/.test(raw)) return { value: '', error: '網址不能包含空白。' };
+      return { value: raw };
+    }
+
+    if (/^(line\.me|lin\.ee|lihi\d?\.me|maps\.app\.goo\.gl|www\.)/i.test(raw) ||
+        /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(raw)) {
+      if (/\s/.test(raw)) return { value: '', error: '網址不能包含空白。' };
+      return { value: 'https://' + raw };
+    }
+
+    return { value: '', error: '連結格式錯誤，請輸入網址、電話或 Email。' };
+  }
+
   function normalizeMyCardButtons(buttons) {
     if (!Array.isArray(buttons)) return [];
     return buttons
@@ -93,6 +132,19 @@
       })
       .filter(function(button) { return !!(button && (button.l || button.u)); })
       .slice(0, 4);
+  }
+
+  function normalizeMyCardButtonsForSave(buttons) {
+    return normalizeMyCardButtons(buttons).map(function(button, index) {
+      if (!button.l) throw new Error('第 ' + (index + 1) + ' 顆按鈕缺少文字。');
+      var normalized = normalizeMyCardActionUriForSave(button.u);
+      if (normalized.error) throw new Error('第 ' + (index + 1) + ' 顆按鈕「' + button.l + '」' + normalized.error);
+      return {
+        l: button.l,
+        u: normalized.value,
+        c: safeCssColor(button.c, '#06C755')
+      };
+    });
   }
 
   function normalizeId(value) {
@@ -1243,7 +1295,8 @@
       cfg.imgRatioLandscape = '20:13';
       cfg.imgRatioPortrait = (myEcardRatios.portrait || '400:600').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
-      cfg.buttons = normalizeMyCardButtons(myEcardButtons);
+      cfg.buttons = normalizeMyCardButtonsForSave(myEcardButtons);
+      myEcardButtons = cfg.buttons.slice();
       syncVideoConfig(cfg);
       if (targetVersion !== 'video') {
         if (cfg.cardType === 'video') cfg.cardType = 'v1';
@@ -1303,7 +1356,8 @@
       cfg.imgRatioLandscape = '20:13';
       cfg.imgRatioPortrait = (myEcardRatios.portrait || '400:600').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
-      cfg.buttons = normalizeMyCardButtons(myEcardButtons);
+      cfg.buttons = normalizeMyCardButtonsForSave(myEcardButtons);
+      myEcardButtons = cfg.buttons.slice();
       syncVideoConfig(cfg);
       if (liveVersion !== 'video') {
         if (cfg.cardType === 'video') cfg.cardType = 'v1';

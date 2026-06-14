@@ -72,6 +72,61 @@ function buildGoogleMapsUrl(address) {
     : ECardAutoDefaults.addressUrl;
 }
 
+function normalizeECardActionUriForSave(value) {
+  const raw = String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  if (!raw) return { value: '', error: '請輸入按鈕連結。' };
+
+  if (/^mailto:/i.test(raw)) {
+    const email = raw.replace(/^mailto:/i, '').trim();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { value: 'mailto:' + email };
+    return { value: '', error: 'Email 格式錯誤，請確認 @ 與網域。' };
+  }
+
+  if (/^tel:/i.test(raw)) {
+    const phone = raw.replace(/^tel:/i, '').replace(/[\s().-]/g, '');
+    if (/^\+?\d{7,16}$/.test(phone)) return { value: 'tel:' + phone };
+    return { value: '', error: '電話格式錯誤，請輸入 7 到 16 碼電話。' };
+  }
+
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+    return { value: 'mailto:' + raw };
+  }
+
+  const compactPhone = raw.replace(/[\s().-]/g, '');
+  if (/^\+?\d{7,16}$/.test(compactPhone)) {
+    return { value: 'tel:' + compactPhone };
+  }
+
+  if (/^(https?:\/\/|line:\/\/)/i.test(raw)) {
+    if (/\s/.test(raw)) return { value: '', error: '網址不能包含空白。' };
+    return { value: raw };
+  }
+
+  if (/^(line\.me|lin\.ee|lihi\d?\.me|maps\.app\.goo\.gl|www\.)/i.test(raw) ||
+      /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(raw)) {
+    if (/\s/.test(raw)) return { value: '', error: '網址不能包含空白。' };
+    return { value: 'https://' + raw };
+  }
+
+  return { value: '', error: '連結格式錯誤，請輸入網址、電話或 Email。' };
+}
+
+function normalizeECardButtonsForSave(buttons) {
+  return (Array.isArray(buttons) ? buttons : []).map((button, index) => {
+    const label = String(button?.l || '').trim();
+    const uri = String(button?.u || '').trim();
+    if (!label && !uri) return null;
+    if (!label) throw new Error(`第 ${index + 1} 顆按鈕缺少文字。`);
+    const normalized = normalizeECardActionUriForSave(uri);
+    if (normalized.error) throw new Error(`第 ${index + 1} 顆按鈕「${label}」${normalized.error}`);
+    return {
+      l: label,
+      u: normalized.value,
+      c: /^#[0-9a-f]{6}$/i.test(button?.c || '') ? button.c : '#06C755'
+    };
+  }).filter(Boolean).slice(0, 4);
+}
+
 function getECardButtonKind(button, index) {
   const label = String(button?.l || '').toLowerCase();
   const url = String(button?.u || '').toLowerCase();
@@ -187,6 +242,7 @@ window.syncECardButtonsFromFields = function(options = {}) {
 window.buildECardConfigFromFields = function() {
   const layoutVal = document.querySelector('input[name="ecard-layout"]:checked')?.value || 'landscape';
   window.syncECardButtonsFromFields({ render: false });
+  window.currentEcardButtons = normalizeECardButtonsForSave(window.currentEcardButtons);
   return {
     layoutStyle: layoutVal,
     imgUrl: window.currentEcardImgs.landscape,
@@ -203,6 +259,8 @@ window.buildECardConfigFromFields = function() {
 };
 
 function cleanECardFlexUri(uri) {
+  const normalized = normalizeECardActionUriForSave(uri);
+  if (!normalized.error) return normalized.value;
   const value = String(uri || '').trim();
   if (/^https?:\/\//i.test(value)) return value;
   if (/^line:\/\//i.test(value)) return value;
@@ -711,7 +769,17 @@ window.saveECardConfig = async function() {
     btn.disabled = true;
   }
 
-  const cfg = window.buildECardConfigFromFields();
+  let cfg;
+  try {
+    cfg = window.buildECardConfigFromFields();
+  } catch (e) {
+    window.showToast(e.message || '按鈕連結格式錯誤，請修正後再儲存。', true);
+    if (btn) {
+      btn.innerHTML = '<span class="material-symbols-outlined text-[18px]">save</span> ?脣?';
+      btn.disabled = false;
+    }
+    return;
+  }
   const rowId = window.currentCard.rowId || window.currentCard["rowId"] || window.currentCard.id || "";
   if (!rowId) {
     window.showToast('⚠️ 儲存失敗：找不到名片編號，請重新整理後再試', true);

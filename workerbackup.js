@@ -1095,6 +1095,7 @@ const LineOAChatModule = {
     const value = this.text(uri).replace(/[\u200B-\u200D\uFEFF]/g, '');
     if (!value) return '';
     if (/^(https?|tel|mailto|line):/i.test(value)) return value;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'mailto:' + value;
     const compactPhone = value.replace(/[\s().-]/g, '');
     if (/^\+?\d{7,16}$/.test(compactPhone)) return 'tel:' + compactPhone;
     return Utils.cleanURI(value);
