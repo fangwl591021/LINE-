@@ -43,6 +43,12 @@ Before a functional edit, copy and fill:
 
 - `docs/release/change-work-order-template.md`
 
+Recommended command:
+
+```powershell
+npm run workorder:new -- my-feature "My feature title"
+```
+
 The work order must state:
 
 - the exact feature being changed

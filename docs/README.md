@@ -61,6 +61,12 @@
 
 每次改功能前先複製這份工作單，明確寫下本次只改什麼、禁止碰什麼、修改前後 guard 結果。這份用來防止小改動牽動 UID、名片版本、點數或 LIFF 路徑。
 
+可用指令建立新工作單：
+
+```powershell
+npm run workorder:new -- my-feature "My feature title"
+```
+
 ## 高風險區域
 
 以下區域修改前必須先看文件，不可直接改：
