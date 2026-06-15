@@ -43,6 +43,12 @@ Before a functional edit, copy and fill:
 
 - `docs/release/change-work-order-template.md`
 
+First, identify the change area:
+
+```powershell
+npm run scope:lookup -- my-card
+```
+
 Recommended command:
 
 ```powershell

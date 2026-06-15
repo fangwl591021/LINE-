@@ -1,0 +1,175 @@
+{
+  "schemaVersion": "change_risk_map_v1",
+  "areas": {
+    "my-card": {
+      "label": "我的名片 / 個人專屬名片",
+      "keywords": ["我的名片", "個人專屬名片", "LINE生成", "自建名片"],
+      "docs": [
+        "docs/rules/core-invariants.md",
+        "docs/flows/my-card.md",
+        "docs/data/card-ownership-and-versioning.md",
+        "docs/contracts/card-resolvers.md",
+        "docs/contracts/line-keywords.md"
+      ],
+      "checks": [
+        "tools/check-lineoa-mycard-keyword-contract.js",
+        "tools/check-mycard-entry-contract.js",
+        "tools/check-own-card-upload-contract.js",
+        "tools/check-card-resolver-contract.js"
+      ],
+      "regressionIds": ["MY-01", "MY-02", "MY-03", "MY-04", "MY-05", "MY-07"]
+    },
+    "ai-card-folder": {
+      "label": "AI名片夾 / 名片酷 / OCR掃描",
+      "keywords": ["AI名片夾", "名片酷", "OCR", "掃描名片", "收錄名單"],
+      "docs": [
+        "docs/rules/core-invariants.md",
+        "docs/flows/ai-card-folder.md",
+        "docs/data/card-ownership-and-versioning.md",
+        "docs/contracts/card-resolvers.md",
+        "docs/contracts/line-keywords.md"
+      ],
+      "checks": [
+        "tools/check-lineoa-cardcool-keyword-contract.js",
+        "tools/check-card-resolver-contract.js",
+        "tools/check-identity-bridge-contract.js"
+      ],
+      "regressionIds": ["AF-01", "AF-02", "AF-03", "AF-04", "AF-05", "AF-06"]
+    },
+    "identity-ownership": {
+      "label": "UID / 推薦人 / 歸屬網 / 掃描者",
+      "keywords": ["UID", "推薦人", "歸屬", "掃描者", "scannedBy", "boundUid"],
+      "docs": [
+        "docs/rules/core-invariants.md",
+        "docs/data/card-ownership-and-versioning.md",
+        "docs/contracts/card-resolvers.md",
+        "docs/auth-stability-contract.md"
+      ],
+      "checks": [
+        "tools/check-identity-bridge-contract.js",
+        "tools/check-hard-admin-upsert-contract.js",
+        "tools/check-admin-crm-referrer-contract.js",
+        "tools/check-card-resolver-contract.js"
+      ],
+      "regressionIds": ["OW-01", "OW-02", "OW-03", "OW-04", "OW-05", "OW-06"]
+    },
+    "card-versioning": {
+      "label": "名片版本：標準 / 滿版 / 正方 / 影音",
+      "keywords": ["標準", "滿版", "正方", "影音名片", "影片名片", "名片版本"],
+      "docs": [
+        "docs/data/card-ownership-and-versioning.md",
+        "docs/contracts/card-resolvers.md",
+        "docs/flows/my-card.md"
+      ],
+      "checks": [
+        "tools/check-card-resolver-contract.js",
+        "tools/check-lineoa-mycard-keyword-contract.js",
+        "tools/check-mycard-entry-contract.js"
+      ],
+      "regressionIds": ["CV-01", "CV-02", "CV-03", "CV-04", "CV-08", "CV-09", "CV-10"]
+    },
+    "line-keywords": {
+      "label": "LINE OA 關鍵字 / Webhook",
+      "keywords": ["關鍵字", "webhook", "我的名片", "影音名片", "推薦好友", "名片酷"],
+      "docs": [
+        "docs/contracts/line-keywords.md",
+        "docs/contracts/liff-routes.md",
+        "docs/rules/core-invariants.md"
+      ],
+      "checks": [
+        "tools/check-line-keywords-contract.js",
+        "tools/check-lineoa-mycard-keyword-contract.js",
+        "tools/check-lineoa-cardcool-keyword-contract.js",
+        "tools/check-referral-keyword-v2-contract.js",
+        "tools/check-route-contract.js"
+      ],
+      "regressionIds": ["SF-01", "SF-02", "SF-03", "SF-04"]
+    },
+    "liff-routes": {
+      "label": "LIFF 路由 / 分享 / 推播",
+      "keywords": ["LIFF", "shareTargetPicker", "分享", "推播", "傳送", "webCardId", "shareCardId"],
+      "docs": [
+        "docs/contracts/liff-routes.md",
+        "docs/contracts/button-actions.md",
+        "docs/contracts/line-keywords.md"
+      ],
+      "checks": [
+        "tools/check-liff-routes-contract.js",
+        "tools/check-share-contract.js",
+        "tools/check-button-actions-contract.js"
+      ],
+      "regressionIds": ["SF-01", "SF-02", "SF-03", "SF-04", "SF-05", "SF-06"]
+    },
+    "points-ledger": {
+      "label": "點數 / 發訊扣點 / 優惠券扣點 / 消費折抵",
+      "keywords": ["點數", "發訊", "優惠券", "扣點", "折抵", "ledger"],
+      "docs": [
+        "docs/contracts/points-ledger.md",
+        "docs/rules/core-invariants.md",
+        "docs/tests/regression-matrix.md"
+      ],
+      "checks": [
+        "tools/check-points-ledger-contract.js",
+        "tools/check-auth-contract.js",
+        "tools/check-checkin-display-contract.js"
+      ],
+      "regressionIds": ["PT-01", "PT-02", "PT-03", "PT-04", "PT-05", "PT-06", "PT-07"]
+    },
+    "button-actions": {
+      "label": "名片按鈕 URL / tel / mailto",
+      "keywords": ["按鈕", "電話", "Email", "mailto", "tel", "網址"],
+      "docs": [
+        "docs/contracts/button-actions.md",
+        "docs/flows/my-card.md",
+        "docs/data/card-ownership-and-versioning.md"
+      ],
+      "checks": [
+        "tools/check-button-actions-contract.js",
+        "tools/check-card-resolver-contract.js"
+      ],
+      "regressionIds": ["BT-01", "BT-02", "BT-03", "BT-04", "BT-05", "BT-06"]
+    },
+    "inbox-followup": {
+      "label": "收件匣 / 跟進 / 日曆提醒",
+      "keywords": ["收件匣", "跟進", "日曆", "提醒", "信件"],
+      "docs": [
+        "docs/rules/core-invariants.md",
+        "docs/tests/regression-matrix.md"
+      ],
+      "checks": [
+        "tools/check-inbox-recipient-scope-contract.js",
+        "tools/check-inbox-unread-icon-contract.js"
+      ],
+      "regressionIds": ["IN-01", "IN-02", "IN-03", "IN-04", "IN-05"]
+    },
+    "matchmake": {
+      "label": "AI配對 / 我的名片池 / 公開交流池",
+      "keywords": ["配對", "公開池", "公開交流池", "我的名片池", "AI媒合"],
+      "docs": [
+        "docs/rules/core-invariants.md",
+        "docs/contracts/card-resolvers.md",
+        "docs/tests/regression-matrix.md"
+      ],
+      "checks": [
+        "tools/check-matchmake-contract.js",
+        "tools/check-cardmaster-public-readiness-contract.js",
+        "tools/check-card-resolver-contract.js"
+      ],
+      "regressionIds": ["CV-05", "CV-06", "OW-01", "OW-02"]
+    },
+    "home-entry": {
+      "label": "首頁入口 / 底部導覽 / 新用戶入口",
+      "keywords": ["首頁", "底部導覽", "返回", "新用戶", "我的名片閃動"],
+      "docs": [
+        "docs/flows/my-card.md",
+        "docs/rules/core-invariants.md"
+      ],
+      "checks": [
+        "tools/check-home-design-contract.js",
+        "tools/check-home-profile-owner-controls-contract.js",
+        "tools/check-home-profile-restyle-contract.js"
+      ],
+      "regressionIds": ["NU-01", "NU-02", "NU-03", "NU-04", "NU-05"]
+    }
+  }
+}

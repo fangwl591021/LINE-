@@ -16,6 +16,7 @@
 | LINE OA keyword、LIFF、分享、Webhook | `docs/rules/core-invariants.md`、`docs/tests/regression-matrix.md` |
 | 上線或部署 | `docs/release/change-checklist.md` |
 | 單次功能修改 | `docs/release/change-work-order-template.md` |
+| 查詢修改風險範圍 | `docs/contracts/change-risk-map.json` |
 
 ## 文件清單
 
@@ -65,6 +66,17 @@
 
 ```powershell
 npm run workorder:new -- my-feature "My feature title"
+```
+
+### 風險區域對照表
+
+- `docs/contracts/change-risk-map.json`
+
+修改前可先查本次功能應讀哪些文件、跑哪些 contract：
+
+```powershell
+npm run scope:lookup -- my-card
+npm run scope:lookup -- 點數
 ```
 
 ## 高風險區域
