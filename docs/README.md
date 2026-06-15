@@ -15,6 +15,7 @@
 | 發訊、優惠券、點數扣除、點數同步 | `docs/rules/core-invariants.md`、`docs/tests/regression-matrix.md` |
 | LINE OA keyword、LIFF、分享、Webhook | `docs/rules/core-invariants.md`、`docs/tests/regression-matrix.md` |
 | 上線或部署 | `docs/release/change-checklist.md` |
+| 單次功能修改 | `docs/release/change-work-order-template.md` |
 
 ## 文件清單
 
@@ -53,6 +54,12 @@
 - `docs/release/change-checklist.md`
 
 每次修改前與部署前填寫。目的在於確認本次變更範圍、風險、測試與回復點。
+
+### 單次變更工作單
+
+- `docs/release/change-work-order-template.md`
+
+每次改功能前先複製這份工作單，明確寫下本次只改什麼、禁止碰什麼、修改前後 guard 結果。這份用來防止小改動牽動 UID、名片版本、點數或 LIFF 路徑。
 
 ## 高風險區域
 

@@ -37,6 +37,21 @@ To inspect the exact contracts included in the full guard:
 node tools/run-smoke-contracts.js --list --full
 ```
 
+## Required Work Order
+
+Before a functional edit, copy and fill:
+
+- `docs/release/change-work-order-template.md`
+
+The work order must state:
+
+- the exact feature being changed
+- files expected to be touched
+- files or systems that must not be touched
+- contracts read before editing
+- guard result before editing
+- guard result after editing
+
 ## Change Boundaries
 
 Before editing, identify which contract owns the affected behavior:
