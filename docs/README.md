@@ -143,3 +143,16 @@ npm run smoke:list
 ```
 
 `smoke` runs the foundation contracts. `smoke:full` runs every `tools/check-*-contract.js` script currently registered in the full guard.
+
+## GitHub Guard
+
+GitHub Actions runs the same full contract guard on:
+
+- push to `main`
+- pull requests targeting `main`
+
+Workflow file:
+
+- `.github/workflows/contract-guard.yml`
+
+The workflow intentionally does not run `npm install` because the guard scripts use only Node built-ins.
