@@ -14,7 +14,7 @@ function fail(message) {
 if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
   fail('my card summary must open the direct entry handler');
 }
-if (!index.includes('js/modules/mycard.js?v=8.59')) {
+if (!index.includes('js/modules/mycard.js?v=8.60')) {
   fail('mycard.js cache-bust version must be bumped');
 }
 if (!/js\/auth\.js\?v=\d+\.\d+/.test(index)) {

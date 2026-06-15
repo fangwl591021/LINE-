@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "guard:before": "node tools/run-change-guard.js before",
+    "guard:after": "node tools/run-change-guard.js after",
+    "smoke": "node tools/run-smoke-contracts.js",
+    "smoke:full": "node tools/run-smoke-contracts.js --full",
+    "smoke:list": "node tools/run-smoke-contracts.js --list --full"
+  }
+}

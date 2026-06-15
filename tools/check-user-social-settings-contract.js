@@ -10,7 +10,7 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!html.includes('js/auth.js?v=10.28')) {
+if (!html.includes('js/auth.js?v=10.41')) {
   fail('index.html must reference the bumped auth.js cache version');
 }
 

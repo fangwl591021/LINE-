@@ -10,8 +10,8 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!index.includes('名片酷請用來掃描客戶或合作夥伴')) {
-  fail('card scan page must warn that Card Cool is for customers/partners');
+if (!index.includes('名片酷請用來掃描客戶或合作夥伴') && !index.includes('AI名片夾請用來掃描客戶或合作夥伴')) {
+  fail('card scan page must warn that Card Cool / AI card folder is for customers/partners');
 }
 if (!index.includes('window.openMyCardEntry ? window.openMyCardEntry(event)')) {
   fail('card scan page must offer a direct personal-card entry');

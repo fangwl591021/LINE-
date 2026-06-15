@@ -31,12 +31,12 @@ function fail(message) {
   "window.claimDailyPointCheckin(this)",
   "window.goPage('card')",
   "window.shareMyCard(this)",
-  "window.goPage('inbox')"
+  "window.openInboxSendCenter ? window.openInboxSendCenter() : window.goPage('inbox')"
 ].forEach((needle) => {
   if (!index.includes(needle)) fail(`missing home action: ${needle}`);
 });
 
-if (!index.includes('js/auth.js?v=10.28')) {
+if (!index.includes('js/auth.js?v=10.41')) {
   fail('auth.js cache-bust version must be bumped for check-in UI change');
 }
 
@@ -60,11 +60,22 @@ if (!index.includes('id="top-nav"') ||
 if (!index.includes('id="bottom-nav"') || index.includes('body.home-page nav { display: none !important; }')) {
   fail('home page must not hide the bottom navigation');
 }
-if (!index.includes('js/navigation.js?v=7.7') ||
+[
+  ['nav-btn-card', "window.goPage('card')"],
+  ['nav-btn-matchmake', "window.goPage('matchmake')"],
+  ['nav-btn-inbox', "window.openInboxSendCenter ? window.openInboxSendCenter() : window.goPage('inbox')"],
+  ['nav-btn-admin-settings', "window.goPage('admin-settings')"],
+  ['nav-btn-home', "window.goPage('home')"]
+].forEach(([id, action]) => {
+  if (!index.includes(`id="${id}"`) || !index.includes(action)) {
+    fail(`bottom navigation must keep current action: ${id}`);
+  }
+});
+if (!index.includes('js/navigation.js?v=7.9') ||
     !navigation.includes("} else if (page === 'home')") ||
     !navigation.includes("if (bottomNav) bottomNav.classList.remove('hidden');") ||
     !navigation.includes("if (bottomNavAdmin) bottomNavAdmin.classList.add('hidden');")) {
-  fail('home page must always show the standard bottom navigation');
+  fail('home page must keep the user bottom navigation visible on home and hide admin navigation');
 }
 if (!index.includes('grid grid-cols-3 gap-2.5')) {
   fail('quick actions should render as separated action cards');
@@ -75,7 +86,7 @@ if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[23p
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
-if (!index.includes('js/modules/home.js?v=7.40')) {
+if (!index.includes('js/modules/home.js?v=7.50')) {
   fail('home.js cache-bust version must be bumped');
 }
 if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia')) {

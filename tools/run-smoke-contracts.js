@@ -21,6 +21,7 @@ const fullChecks = [
   'tools/check-route-contract.js',
   'tools/check-identity-diagnostic-contract.js',
   'tools/check-identity-repair-dry-run-contract.js',
+  'tools/check-identity-bridge-contract.js',
   'tools/check-hard-admin-upsert-contract.js',
   'tools/check-lineoa-mycard-keyword-contract.js',
   'tools/check-lineoa-cardcool-keyword-contract.js',
@@ -31,15 +32,37 @@ const fullChecks = [
   'tools/check-mycard-entry-contract.js',
   'tools/check-own-card-upload-contract.js',
   'tools/check-matchmake-contract.js',
-  'tools/check-admin-crm-referrer-contract.js'
+  'tools/check-admin-crm-referrer-contract.js',
+  'tools/check-cardmaster-public-readiness-contract.js',
+  'tools/check-home-profile-owner-controls-contract.js',
+  'tools/check-home-profile-restyle-contract.js',
+  'tools/check-home-design-contract.js',
+  'tools/check-checkin-display-contract.js',
+  'tools/check-inbox-unread-icon-contract.js',
+  'tools/check-local-gpt-key-hidden-contract.js',
+  'tools/check-today-fortune-contract.js',
+  'tools/check-user-social-settings-contract.js',
+  'tools/check-line-keywords-contract.js',
+  'tools/check-liff-routes-contract.js',
+  'tools/check-card-resolver-contract.js',
+  'tools/check-points-ledger-contract.js',
+  'tools/check-button-actions-contract.js'
 ];
 
 const requested = process.argv.slice(2);
+const listOnly = requested.includes('--list');
 const checks = requested.includes('--full')
   ? fullChecks
   : requested.length
-    ? requested.filter(arg => arg !== '--full')
+    ? requested.filter(arg => arg !== '--full' && arg !== '--list')
     : foundationChecks;
+
+if (listOnly) {
+  console.log(requested.includes('--full') ? 'Full smoke contracts:' : 'Foundation smoke contracts:');
+  checks.forEach((relativePath) => console.log(`- ${relativePath}`));
+  process.exit(0);
+}
+
 let failed = false;
 
 for (const relativePath of checks) {

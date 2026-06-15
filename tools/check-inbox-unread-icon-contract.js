@@ -22,7 +22,7 @@ if (!html.includes('@keyframes inboxMailPulse')) {
   fail('home page must define the unread mail two-color animation');
 }
 
-if (!html.includes('js/modules/inbox.js?v=1.10')) {
+if (!html.includes('js/modules/inbox.js?v=1.15')) {
   fail('index.html must reference the bumped inbox.js cache version');
 }
 
