@@ -125,7 +125,7 @@
       </div>
 
       <div class="flex items-center gap-2 shrink-0">
-      <button id="point-balance-badge" type="button" onclick="window.openPointsWallet()" class="hidden bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2.5 py-1 text-[11px] font-black whitespace-nowrap active:scale-95 transition-transform">0 點</button>
+      <button id="point-balance-badge" type="button" onclick="window.openPointsWallet()" class="hidden bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2.5 py-1 text-[11px] font-black whitespace-nowrap active:scale-95 transition-transform">讀取中</button>
       <img id="avatar" src="" class="w-8 h-8 rounded-full border border-slate-200 hidden object-cover shadow-sm">
       <button id="top-nav-switch" onclick="window.toggleAdminMode()" class="hidden w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
         <span class="material-symbols-outlined text-[18px]">swap_horiz</span>
@@ -712,7 +712,7 @@
           </div>
           <p class="text-[15px] font-black opacity-95 relative z-10">目前紅包餘額</p>
           <div class="relative z-10 mt-6 flex items-end justify-center gap-3">
-            <span id="points-wallet-balance" class="text-[64px] leading-none font-black tracking-tight">0</span>
+            <span id="points-wallet-balance" class="text-[64px] leading-none font-black tracking-tight">讀取中</span>
             <span class="text-[22px] font-black mb-2">點</span>
           </div>
         </section>
@@ -777,7 +777,7 @@
                 </div>
                 <div class="text-right">
                   <div class="text-[11px] font-bold text-slate-400">持有點數</div>
-                  <div id="store-point-customer-balance" class="text-[18px] font-black text-[#06C755]">0</div>
+                  <div id="store-point-customer-balance" class="text-[18px] font-black text-[#06C755]">-</div>
                 </div>
               </div>
             </div>
@@ -848,7 +848,7 @@
             <div class="pt-11 space-y-2 text-left">
               <button type="button" onclick="window.openPointsWallet()" class="home-profile-side-card w-full px-3 py-2.5 text-left active:scale-[0.99] transition-transform">
                 <span class="block text-[11px] font-black text-slate-500">可用點數</span>
-                <span id="home-profile-points" class="block mt-1 text-[23px] leading-none font-black text-pink-500 tracking-tight">0</span>
+                <span id="home-profile-points" class="block mt-1 text-[23px] leading-none font-black text-slate-400 tracking-tight">讀取中</span>
               </button>
               <button id="home-zodiac-weekly-btn" type="button" onclick="window.openTodayFortune?.()" class="hidden home-profile-side-card w-full px-3 py-2 active:scale-95 transition-transform items-center justify-center gap-2 whitespace-nowrap">
                 <span id="home-zodiac-weekly-icon" class="shrink-0 w-8 h-8 rounded-xl bg-white shadow-sm flex items-center justify-center text-[20px] leading-none text-pink-500">♎</span>
@@ -908,7 +908,7 @@
             <p class="mt-1.5 text-[12px] font-bold text-slate-500">可用點數</p>
             <div class="mt-0.5 flex items-center gap-2 flex-wrap">
               <button type="button" onclick="window.openPointsWallet()" class="text-left active:scale-[0.99] transition-transform">
-                <span id="home-profile-points" class="text-[26px] leading-none font-black text-pink-500 tracking-tight">0</span>
+                <span id="home-profile-points" class="text-[26px] leading-none font-black text-slate-400 tracking-tight">讀取中</span>
                 <span class="ml-1 text-[12px] font-black text-slate-600">點</span>
               </button>
               <button type="button" onclick="window.openPointsWallet()" class="hidden shrink-0 items-center gap-0.5 rounded-full bg-amber-50 text-amber-700 px-2 py-1 text-[10px] font-black active:scale-95 transition-transform">
@@ -2031,12 +2031,12 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.50"></script>
+<script src="js/modules/home.js?v=7.51"></script>
 <script src="js/modules/inbox.js?v=1.15"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.41"></script>
+<script src="js/auth.js?v=10.42"></script>
 
 </body>
 </html>

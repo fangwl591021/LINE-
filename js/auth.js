@@ -968,23 +968,71 @@ window.applyRegisteredUserSession = function(info) {
   window.updateStorePointCashierVisibility?.();
 };
 
+window.setPointWalletStatus = function(status, data = {}) {
+  window.pointWalletStatus = status || 'idle';
+  if (status === 'ready') {
+    const balance = Number(data.balance ?? data.latestBalance ?? data.typedBalance);
+    if (!Number.isFinite(balance)) return;
+    window.pointWalletData = {
+      ...(window.pointWalletData || {}),
+      ...data,
+      status: 'ready',
+      source: data.source || 'mother',
+      balance,
+      list: Array.isArray(data.list) ? data.list : (Array.isArray(window.pointWalletData?.list) ? window.pointWalletData.list : []),
+      loadedAt: Date.now(),
+      updatedAt: data.updatedAt || new Date().toISOString()
+    };
+  } else if (status === 'loading') {
+    if (!window.pointWalletData || window.pointWalletData.status !== 'ready') window.pointWalletData = null;
+  } else if (status === 'error') {
+    window.pointWalletError = data.error || data.message || 'Point balance unavailable';
+  }
+};
+
+window.renderPointBalanceState = function(status, data = {}) {
+  const resolvedStatus = status || window.pointWalletStatus || (window.pointWalletData?.status === 'ready' ? 'ready' : 'idle');
+  const balance = data.balance ?? window.pointWalletData?.balance;
+  const isReady = resolvedStatus === 'ready' && balance !== null && balance !== undefined && Number.isFinite(Number(balance));
+  const text = isReady ? Number(balance).toLocaleString('zh-TW') : (resolvedStatus === 'error' ? '無法讀取' : '讀取中');
+
+  document.querySelectorAll('#home-profile-points').forEach(el => {
+    el.textContent = text;
+    el.classList.toggle('text-slate-400', !isReady);
+    el.classList.toggle('text-pink-500', isReady);
+  });
+
+  const walletBalance = document.getElementById('points-wallet-balance');
+  if (walletBalance) walletBalance.textContent = text;
+
+  const badge = document.getElementById('point-balance-badge');
+  if (badge) {
+    badge.textContent = isReady ? `${Number(balance).toLocaleString('zh-TW')} 點` : text;
+    badge.classList.remove('hidden');
+    badge.classList.toggle('text-red-600', resolvedStatus === 'error');
+    badge.classList.toggle('text-emerald-700', resolvedStatus !== 'error');
+  }
+};
+
 window.refreshPointBalanceBadge = async function() {
   const badge = document.getElementById('point-balance-badge');
   const userId = window.currentUserProfile?.userId || '';
   if (!badge || !userId || typeof window.fetchAPI !== 'function') return;
 
   try {
+    window.setPointWalletStatus('loading');
+    window.renderPointBalanceState('loading');
     const data = await window.fetchPointWalletData_();
     if (!data) {
-      badge.classList.add('hidden');
+      window.setPointWalletStatus('error', { error: 'Point balance unavailable' });
+      window.renderPointBalanceState('error');
       return;
     }
-    const balance = Number(data.balance || 0);
-    badge.textContent = balance.toLocaleString('zh-TW') + ' 點';
-    badge.classList.remove('hidden');
+    window.renderPointBalanceState('ready', data);
     if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
   } catch (e) {
-    badge.classList.add('hidden');
+    window.setPointWalletStatus('error', { error: e.message || String(e) });
+    window.renderPointBalanceState('error');
     console.warn('[points] query skipped:', e.message || e);
   }
 };
@@ -996,24 +1044,30 @@ window.fetchPointWalletData_ = async function(force = false) {
     return window.pointWalletData;
   }
   const pointUserId = window.resolvePointUserIdForCurrentProfile?.(userId) || userId;
-  const res = await window.fetchAPI('queryUserPoints', {
+  const res = await window.fetchAPI(force ? 'queryUserPoints' : 'queryPointBalanceFast', {
     userId,
     pointUserId,
     pt_uid: pointUserId,
     page: 1,
-    per_page: 100,
+    per_page: force ? 100 : 20,
     point_type: 'gift_money'
   }, true);
   if (!res || res.error) return null;
   const data = res.data || res;
+  const balance = Number(data.balance ?? data.latestBalance ?? data.typedBalance);
+  if (!Number.isFinite(balance)) return null;
   window.pointWalletData = {
     ...data,
-    balance: Number(data.balance || data.latestBalance || data.typedBalance || 0) || 0,
+    status: 'ready',
+    source: data.source || 'mother',
+    balance,
     list: Array.isArray(data.list) ? data.list : [],
     queriedLineUserId: data.queriedLineUserId || pointUserId,
     balanceByType: data.balanceByType || null,
-    loadedAt: Date.now()
+    loadedAt: Date.now(),
+    updatedAt: data.updatedAt || new Date().toISOString()
   };
+  window.pointWalletStatus = 'ready';
   return window.pointWalletData;
 };
 
@@ -1029,16 +1083,19 @@ window.loadPointsWallet = async function(force = false) {
   window.updateStorePointCashierVisibility?.();
 
   if (force) window.pointWalletData = null;
+  window.setPointWalletStatus('loading');
+  window.renderPointBalanceState('loading');
   listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">載入點數紀錄中...</div>';
 
   const data = await window.fetchPointWalletData_(force);
   if (!data) {
-    balanceEl.textContent = '0';
+    window.setPointWalletStatus('error', { error: 'Point wallet unavailable' });
+    window.renderPointBalanceState('error');
     listEl.innerHTML = '<div class="py-10 text-center text-red-400 text-sm font-bold">暫時無法取得點數紀錄</div>';
     return;
   }
 
-  balanceEl.textContent = Number(data.balance || 0).toLocaleString('zh-TW');
+  window.renderPointBalanceState('ready', data);
   const rows = (Array.isArray(data.list) ? data.list : []).slice(0, 30);
   if (!rows.length) {
     listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">目前沒有點數異動紀錄</div>';
@@ -1081,11 +1138,7 @@ window.loadPointsWallet = async function(force = false) {
     `;
   }).join('');
 
-  const badge = document.getElementById('point-balance-badge');
-  if (badge) {
-    badge.textContent = Number(data.balance || 0).toLocaleString('zh-TW') + ' 點';
-    badge.classList.remove('hidden');
-  }
+  window.renderPointBalanceState('ready', data);
 };
 
 window.canUseStorePointCashier = function() {
@@ -1406,7 +1459,10 @@ window.renderStorePointCustomer = function(customer) {
     const metaParts = [customer.phone, customer.industry].filter(Boolean);
     meta.textContent = metaParts.length ? metaParts.join(' / ') : (customer.customerPointUserId || '-');
   }
-  if (balance) balance.textContent = Number(customer.balance || 0).toLocaleString('zh-TW') + ' 點';
+  if (balance) {
+    const hasBalance = customer.balance !== null && customer.balance !== undefined && Number.isFinite(Number(customer.balance));
+    balance.textContent = hasBalance ? Number(customer.balance).toLocaleString('zh-TW') + ' 點' : '無法讀取';
+  }
   card.classList.remove('hidden');
   window.updateStorePointPreview?.();
 };
@@ -1430,13 +1486,7 @@ window.lookupStorePointCustomer = async function() {
     window.renderStorePointCustomer(data);
     return data;
   } catch (e) {
-    window.renderStorePointCustomer({
-      name: '查無用戶資料',
-      phone: '',
-      industry: customerUserId,
-      customerPointUserId: customerUserId,
-      balance: 0
-    });
+    window.renderStorePointCustomer(null);
     window.showToast?.('客戶資料查詢失敗：' + (e.message || e), true);
     return null;
   }

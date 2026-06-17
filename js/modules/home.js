@@ -422,8 +422,11 @@ const HomeModule = (function() {
         const role = String(window.userRole || window.currentUser?.role || 'user').toLowerCase();
         const roleLabel = role === 'admin' ? '總管' : (role === 'store' || role === 'tenant' ? '店長' : '用戶');
         const roleIcon = role === 'admin' ? 'workspace_premium' : (role === 'store' || role === 'tenant' ? 'storefront' : 'person');
-        const balanceText = document.getElementById('point-balance-badge')?.textContent || '';
-        const balance = Number(String(balanceText).replace(/[^\d.-]/g, '')) || Number(window.pointWalletData?.balance || window.currentUser?.points || 0) || 0;
+        const pointReady = window.pointWalletData?.status === 'ready' && Number.isFinite(Number(window.pointWalletData?.balance));
+        const pointStatus = window.pointWalletStatus || (pointReady ? 'ready' : 'loading');
+        const pointText = pointReady
+            ? Number(window.pointWalletData.balance).toLocaleString('zh-TW')
+            : (pointStatus === 'error' ? '無法讀取' : '讀取中');
 
         const nameEl = document.getElementById('home-profile-name');
         const roleEl = document.getElementById('home-profile-role');
@@ -436,7 +439,11 @@ const HomeModule = (function() {
         if (roleEl) {
             roleEl.innerHTML = '<span class="material-symbols-outlined text-[14px] icon-filled">' + roleIcon + '</span>' + roleLabel;
         }
-        if (pointsEl) pointsEl.textContent = balance.toLocaleString('zh-TW');
+        if (pointsEl) {
+            pointsEl.textContent = pointText;
+            pointsEl.classList.toggle('text-slate-400', !pointReady);
+            pointsEl.classList.toggle('text-pink-500', pointReady);
+        }
         const avatarUrl = getHomeAvatarUrl_();
         if (avatarEl && avatarEl.getAttribute('src') !== avatarUrl) avatarEl.src = avatarUrl;
         if (hiddenAvatar) hiddenAvatar.value = avatarUrl;

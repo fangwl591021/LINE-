@@ -331,6 +331,7 @@ const SecurityModule = {
       'claimCardAndRegister',
       'deleteCard',
       'unlinkCard',
+      'queryPointBalanceFast',
       'queryUserPoints',
       'listPersonalTasks',
       'savePersonalTask',
@@ -395,7 +396,7 @@ const SecurityModule = {
     if (!actor && d1IdentityFallbackActions.has(action)) {
       actor = await this.getActorFromD1Identity(payload, env);
     }
-    if (!actor && action === 'queryUserPoints' && env.ACTMASTER_DB) {
+    if (!actor && (action === 'queryUserPoints' || action === 'queryPointBalanceFast') && env.ACTMASTER_DB) {
       const requestedUserId = this.text(payload.userId || payload.pointUserId || payload.LINE_user_id);
       const identity = requestedUserId
         ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
@@ -3614,6 +3615,52 @@ const PointModule = {
     return { data };
   },
 
+  async queryPointBalanceFast(payload, env) {
+    const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
+    if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
+
+    const explicitPointUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || '').trim();
+    const fallbackUserId = String(payload.authenticatedUserId || payload.userId || '').trim();
+    const requestedLineUserId = explicitPointUserId || fallbackUserId;
+    const resolvedPointUserId = await this.resolvePointUserId(env, requestedLineUserId).catch(() => '');
+    const lineUserId = resolvedPointUserId || explicitPointUserId || fallbackUserId;
+    if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
+
+    const pointType = String(payload.point_type || payload.pointType || 'gift_money').trim() || 'gift_money';
+    const body = {
+      api_key: apiKey,
+      LINE_user_id: lineUserId,
+      page: 1,
+      per_page: 20,
+      point_type: pointType
+    };
+    if (payload.shop_id || payload.shopId) body.shop_id = Number(payload.shop_id || payload.shopId);
+
+    const result = await this.fetchPointPage(body);
+    if (result.error) return { success: false, error: result.error, code: result.code };
+
+    const list = Array.isArray(result.data?.data?.list) ? result.data.data.list : [];
+    const pagination = result.data?.data?.pagination || {};
+    const balance = this.latestBalance(list);
+    return {
+      success: true,
+      data: {
+        status: 'ready',
+        source: 'mother',
+        balance,
+        latestBalance: balance,
+        typedBalance: balance,
+        pointType,
+        queriedLineUserId: lineUserId,
+        requestedLineUserId,
+        sampledRows: list.length,
+        total: this.number(pagination.total),
+        pagination,
+        updatedAt: new Date().toISOString()
+      }
+    };
+  },
+
   async insertUserPoint(payload, env) {
     const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
@@ -4231,7 +4278,7 @@ const PointModule = {
       }
     }
 
-    const wallet = await this.queryUserPoints({
+    const wallet = await this.queryPointBalanceFast({
       pointUserId: customerPointUserId,
       point_type: 'gift_money',
       page: 1,
@@ -12366,6 +12413,7 @@ async function dispatchAction(action, payload, request, env) {
     'getCardCoolDraft',
     'confirmCardCoolDraft',
     'sendCardCoolCardToChat',
+    'queryPointBalanceFast',
     'mlmListOrders',
     'getTenantBonusOrders',
     'prepareTenantCardPayment'
@@ -12799,6 +12847,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'calculateFateTags':      return await AIModule.fateTags(payload, env);
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
+    case 'queryPointBalanceFast':  return await PointModule.queryPointBalanceFast(payload || {}, env);
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
     case 'getStorePointCustomer':  return await PointModule.getStorePointCustomer(payload || {}, env);
@@ -12901,4 +12950,3 @@ export default {
     }
   }
 };
-
