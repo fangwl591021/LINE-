@@ -4221,6 +4221,85 @@ const PointModule = {
     return { match: canonicalMatches[0] || null, error: '' };
   },
 
+  async findStorePointCustomerCandidates(env, queryRaw) {
+    if (!env.ACTMASTER_DB) return { matches: [], error: '' };
+    const query = D1ReadModule.text(queryRaw);
+    if (!query) return { matches: [], error: '' };
+    const normalizedPhone = SecurityModule.normalizePhone(query);
+    const isPhone = normalizedPhone.length >= 7;
+    const isUid = /^U[0-9a-fA-F]{20,64}$/.test(query);
+    const like = `%${query}%`;
+    const phoneTail = normalizedPhone.slice(-9);
+
+    const userWhere = isUid
+      ? `line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?`
+      : isPhone
+        ? `phone LIKE ? OR phone LIKE ?`
+        : `name LIKE ? OR phone LIKE ? OR line_id LIKE ? OR row_id LIKE ?`;
+    const userBinds = isUid
+      ? [query, query, query, query]
+      : isPhone
+        ? [`%${normalizedPhone}%`, `%${phoneTail}%`]
+        : [like, like, like, like];
+    const cardWhere = isUid
+      ? `line_id = ? OR owner_user_id = ? OR profile_user_id = ? OR creator_id = ?`
+      : isPhone
+        ? `mobile LIKE ? OR mobile LIKE ? OR office_phone LIKE ? OR office_phone LIKE ?`
+        : `name LIKE ? OR mobile LIKE ? OR office_phone LIKE ? OR line_id LIKE ?`;
+    const cardBinds = isUid
+      ? [query, query, query, query]
+      : isPhone
+        ? [`%${normalizedPhone}%`, `%${phoneTail}%`, `%${normalizedPhone}%`, `%${phoneTail}%`]
+        : [like, like, like, like];
+
+    const userRows = await D1ReadModule.all(env, `
+      SELECT * FROM users
+      WHERE ${userWhere}
+      ORDER BY row_id DESC
+      LIMIT 20
+    `, userBinds).catch(() => []);
+    const cardRows = await D1ReadModule.all(env, `
+      SELECT * FROM card_contacts
+      WHERE ${cardWhere}
+      ORDER BY
+        CASE WHEN source_type = 'self_profile' THEN 0 ELSE 1 END,
+        COALESCE(updated_at, created_at) DESC,
+        row_id DESC
+      LIMIT 20
+    `, cardBinds).catch(() => []);
+
+    const matches = [];
+    const seen = new Set();
+    const addMatch = async (kind, row) => {
+      if (!row) return;
+      const rawId = kind === 'user'
+        ? D1ReadModule.text(row.line_id || row.row_id)
+        : D1ReadModule.text(row.line_id || row.profile_user_id || row.owner_user_id || row.claimed_by_uid);
+      const identity = rawId ? await D1ReadModule.findUserByIdentity(env, rawId).catch(() => null) : null;
+      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : (kind === 'user' ? D1ReadModule.userRow(row) : null);
+      const card = kind === 'card' ? D1ReadModule.cardRow(row) : null;
+      const id = D1ReadModule.text(user && user.userId) || D1ReadModule.text(identity && identity.canonicalId) || rawId;
+      const key = id || `card:${D1ReadModule.text(row.row_id)}`;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      matches.push({
+        kind: id ? (user ? 'user' : 'card') : 'card_unbound',
+        id,
+        row,
+        user,
+        card,
+        name: D1ReadModule.text(user && user.name) || D1ReadModule.text(card && card.name) || D1ReadModule.text(row.name),
+        phone: D1ReadModule.text(user && user.phone) || D1ReadModule.text(card && (card.mobile || card.officePhone)) || D1ReadModule.text(row.phone || row.mobile || row.office_phone),
+        industry: D1ReadModule.text(user && user.industry) || D1ReadModule.text(card && (card.title || card.companyName)) || D1ReadModule.text(row.industry || row.title || row.company_name),
+        avatarUrl: D1ReadModule.text(card && card.imageUrl),
+        needsBinding: !id
+      });
+    };
+    for (const row of userRows) await addMatch('user', row);
+    for (const row of cardRows) await addMatch('card', row);
+    return { matches, error: '' };
+  },
+
   async resolveStorePointCustomer(env, rawCustomerId) {
     const raw = D1ReadModule.text(rawCustomerId);
     if (!raw) return { customerPointUserId: '', rawCustomerId: raw, identity: null, user: null, card: null };
@@ -4249,6 +4328,43 @@ const PointModule = {
         if (phoneMatch.match.kind === 'user') matchedUser = D1ReadModule.userRow(phoneMatch.match.row);
         if (phoneMatch.match.kind === 'card') matchedCard = D1ReadModule.cardRow(phoneMatch.match.row);
       }
+    } else if (!/^U[0-9a-fA-F]{20,64}$/.test(raw)) {
+      const search = await this.findStorePointCustomerCandidates(env, raw);
+      if (search.error) return { error: search.error };
+      if (search.matches.length === 1) {
+        const match = search.matches[0];
+        if (match.needsBinding) {
+          return {
+            customerPointUserId: '',
+            rawCustomerId: raw,
+            matchedId: '',
+            identity: null,
+            user: null,
+            card: match.card || (match.kind === 'card' ? D1ReadModule.cardRow(match.row) : null),
+            needsBinding: true,
+            matchedBy: 'keyword_card_unbound'
+          };
+        }
+        matchedId = match.id;
+        matchedUser = match.user || null;
+        matchedCard = match.card || null;
+      } else if (search.matches.length > 1) {
+        return {
+          error: '',
+          needsSelection: true,
+          rawCustomerId: raw,
+          candidates: search.matches.slice(0, 10).map(match => ({
+            customerPointUserId: match.id,
+            name: match.name || '未命名',
+            phone: match.phone || '',
+            industry: match.industry || '',
+            avatarUrl: match.avatarUrl || '',
+            needsBinding: !!match.needsBinding,
+            canAdjust: !!match.id,
+            matchedBy: match.kind
+          }))
+        };
+      }
     }
 
     const customerPointUserId = await this.resolvePointUserId(env, matchedId);
@@ -4276,6 +4392,17 @@ const PointModule = {
     ).trim();
     const resolved = await this.resolveStorePointCustomer(env, rawCustomerId);
     if (resolved.error) return { success: false, error: resolved.error };
+    if (resolved.needsSelection) {
+      return {
+        success: true,
+        data: {
+          customerUserId: rawCustomerId,
+          matchedBy: 'keyword_candidates',
+          needsSelection: true,
+          candidates: resolved.candidates || []
+        }
+      };
+    }
     if (resolved.needsBinding) {
       const mappedCard = resolved.card || null;
       return {

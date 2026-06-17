@@ -1188,6 +1188,12 @@ window.loadStorePointCashierLogs = async function(force = false) {
     }, true);
     if (!res || res.error) throw new Error(res?.error || '收銀紀錄讀取失敗');
     const data = res.data || res;
+    if (data.needsSelection && Array.isArray(data.candidates)) {
+      window.renderStorePointCustomer(null);
+      window.renderStorePointCustomerCandidates(data.candidates);
+      window.showToast?.('找到多筆客戶，請先選擇正確對象', false);
+      return data;
+    }
     const rows = Array.isArray(data.list) ? data.list : [];
     window.storePointCashierLogsCache = { list: rows, loadedAt: Date.now() };
     renderStorePointCashierLogs(rows);
@@ -1441,6 +1447,56 @@ window.updateStorePointPreview = function() {
     : `請手動輸入本次要折抵的點數${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}。店家操作扣 10 點。`;
 };
 
+window.renderStorePointCustomerCandidates = function(candidates) {
+  const listEl = document.getElementById('store-point-customer-candidates');
+  if (!listEl) return;
+  const rows = Array.isArray(candidates) ? candidates : [];
+  window.storePointCustomerCandidates = rows;
+  if (!rows.length) {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    return;
+  }
+  listEl.classList.remove('hidden');
+  listEl.innerHTML = rows.map((item, index) => {
+    const name = item.name || '未命名';
+    const meta = [item.phone, item.industry, item.needsBinding ? '尚未綁定點數會員' : '可查點數'].filter(Boolean).join(' / ');
+    const disabled = item.needsBinding || !item.customerPointUserId;
+    return `
+      <button type="button" onclick="window.selectStorePointCustomerCandidate(${index})" class="w-full rounded-2xl border ${disabled ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-white'} px-4 py-3 text-left active:scale-[0.99] transition-transform">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-[14px] font-black text-slate-900 truncate">${window.escapeHTML ? window.escapeHTML(name) : name}</div>
+            <div class="text-[12px] font-bold ${disabled ? 'text-amber-700' : 'text-slate-500'} mt-1 truncate">${window.escapeHTML ? window.escapeHTML(meta || '-') : (meta || '-')}</div>
+          </div>
+          <span class="material-symbols-outlined text-[20px] ${disabled ? 'text-amber-500' : 'text-blue-500'}">${disabled ? 'info' : 'chevron_right'}</span>
+        </div>
+      </button>
+    `;
+  }).join('');
+};
+
+window.selectStorePointCustomerCandidate = async function(index) {
+  const item = Array.isArray(window.storePointCustomerCandidates) ? window.storePointCustomerCandidates[index] : null;
+  if (!item) return;
+  if (item.needsBinding || !item.customerPointUserId) {
+    window.renderStorePointCustomer({
+      ...item,
+      customerUserId: '',
+      customerPointUserId: '',
+      balance: null,
+      canAdjust: false,
+      message: '此候選尚未綁定點數會員，請請客戶先用 LINE 授權或掃客戶點數 QR。'
+    });
+    window.showToast?.('此候選尚未綁定點數會員，不能直接扣點', true);
+    return;
+  }
+  const input = document.getElementById('store-point-customer');
+  if (input) input.value = item.customerPointUserId;
+  window.renderStorePointCustomerCandidates([]);
+  await window.lookupStorePointCustomer();
+};
+
 window.renderStorePointCustomer = function(customer) {
   const card = document.getElementById('store-point-customer-card');
   const avatar = document.getElementById('store-point-customer-avatar');
@@ -1451,6 +1507,7 @@ window.renderStorePointCustomer = function(customer) {
   if (!customer) {
     window.storePointCustomer = null;
     card.classList.add('hidden');
+    window.renderStorePointCustomerCandidates?.([]);
     return;
   }
   window.storePointCustomer = customer;
@@ -1487,6 +1544,12 @@ window.lookupStorePointCustomer = async function() {
     const res = await window.fetchAPI('getStorePointCustomer', { customerUserId }, true);
     if (!res || res.error) throw new Error(res?.error || '查無客戶資料');
     const data = res.data || res;
+    if (data.needsSelection && Array.isArray(data.candidates)) {
+      window.renderStorePointCustomer(null);
+      window.renderStorePointCustomerCandidates(data.candidates);
+      window.showToast?.('找到多筆客戶，請先選擇正確對象', false);
+      return data;
+    }
     if (input && data.customerPointUserId && !data.needsBinding && input.value !== data.customerPointUserId) {
       input.value = data.customerPointUserId;
     }
@@ -1553,6 +1616,10 @@ window.submitStorePointCashier = async function(btn) {
   if (!amount || amount <= 0) return window.showToast?.('請輸入正確消費金額', true);
 
   if (mode !== 'reward' && (!deductPoints || deductPoints <= 0)) return window.showToast?.('請輸入本次折抵點數。', true);
+
+  if (window.storePointCustomer && window.storePointCustomer.canAdjust === false) {
+    return window.showToast?.(window.storePointCustomer.message || '此客戶尚未綁定點數會員，不能直接扣點', true);
+  }
 
   const oldText = btn ? btn.textContent : '';
   if (btn) {
