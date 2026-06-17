@@ -4456,10 +4456,6 @@ const PointModule = {
       page: 1,
       per_page: 20
     }, env);
-    if (!wallet || !wallet.success) {
-      return { success: false, error: wallet && wallet.error ? wallet.error : '無法取得客戶點數' };
-    }
-
     const displayName = D1ReadModule.text(user && user.name)
       || D1ReadModule.text(mappedCard && mappedCard.name)
       || D1ReadModule.text(mappedCard && mappedCard['姓名'])
@@ -4468,6 +4464,31 @@ const PointModule = {
       || D1ReadModule.text(mappedCard && (mappedCard.mobile || mappedCard['手機號碼']));
     const industry = D1ReadModule.text(user && user.industry)
       || D1ReadModule.text(mappedCard && (mappedCard.title || mappedCard.companyName || mappedCard['職稱'] || mappedCard['公司名稱']));
+
+    if (!wallet || wallet.success === false) {
+      return {
+        success: true,
+        data: {
+          customerUserId: rawCustomerId,
+          customerPointUserId,
+          canonicalUserId: D1ReadModule.text(identity && identity.canonicalId, customerPointUserId),
+          matchedBy: rawCustomerId === customerPointUserId ? 'uid' : 'local_customer_no_point_wallet',
+          needsBinding: true,
+          canAdjust: false,
+          name: displayName,
+          phone,
+          industry,
+          role: D1ReadModule.text(user && user.role, 'user'),
+          avatarUrl: D1ReadModule.text(mappedCard && mappedCard.imageUrl),
+          balance: null,
+          pointType: 'gift_money',
+          message: 'Customer found locally, but point wallet is not bound or unavailable. Please scan the customer point QR or bind point account first.',
+          pointError: wallet && wallet.error ? wallet.error : 'point wallet unavailable',
+          user,
+          card: mappedCard
+        }
+      };
+    }
 
     return {
       success: true,
