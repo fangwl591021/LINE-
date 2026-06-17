@@ -1425,7 +1425,7 @@ window.updateStorePointPreview = function() {
   if (window.storePointCustomer && window.storePointCustomer.canAdjust === false) {
     if (window.storePointCustomer.canAutoBindPointAccount && mode === 'reward') {
       preview.className = 'rounded-2xl bg-amber-50 border border-amber-200 p-4 text-[14px] text-amber-800 font-bold leading-relaxed';
-      preview.textContent = '\u5c1a\u672a\u5efa\u7acb\u6bcd\u7ad9\u9ede\u6578\u5e33\u6236\uff0c\u9001\u51fa\u5f8c\u6703\u5148\u88dc\u5efa\u6b78\u5c6c\uff0c\u518d\u5c07\u8d08\u9ede\u5beb\u5165\u6bcd\u7ad9\u3002';
+      preview.textContent = '\u6bcd\u7ad9\u5c1a\u672a\u627e\u5230\u9019\u500b\u9ede\u6578\u6703\u54e1\uff0c\u8acb\u5148\u6383\u63cf\u5ba2\u6236\u9ede\u6578 QR \u6216\u5b8c\u6210\u9ede\u6578\u901a\u7d81\u5b9a\u3002';
       if (deductWrap) deductWrap.classList.add('hidden');
       return;
     }
@@ -1542,7 +1542,7 @@ window.renderStorePointCustomer = function(customer) {
   if (bindHint) {
     if (customer.needsBinding && customer.canAutoBindPointAccount) {
       bindHint.classList.remove('hidden');
-      bindHint.textContent = '\u5df2\u627e\u5230\u672c\u5730\u5ba2\u6236\uff0c\u4f46\u6bcd\u7ad9\u9ede\u6578\u6b78\u5c6c\u5c1a\u672a\u5efa\u7acb\u3002\u5207\u5230\u6d88\u8cbb\u8d08\u9ede\u5f8c\u9001\u51fa\uff0c\u6703\u5148\u88dc\u5efa\u5e33\u6236\u518d\u5beb\u5165\u9ede\u6578\u3002';
+      bindHint.textContent = '\u5df2\u627e\u5230\u672c\u5730\u5ba2\u6236\uff0c\u4f46\u6bcd\u7ad9\u5c1a\u672a\u627e\u5230\u9ede\u6578\u6703\u54e1\u3002\u8acb\u6383\u63cf\u5ba2\u6236\u9ede\u6578 QR \u6216\u8acb\u5ba2\u6236\u5148\u5b8c\u6210\u9ede\u6578\u901a\u7d81\u5b9a\u3002';
     } else {
       bindHint.classList.add('hidden');
       bindHint.textContent = '';

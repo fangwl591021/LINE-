@@ -4624,7 +4624,7 @@ const PointModule = {
           matchedBy: rawCustomerId === customerPointUserId ? 'uid' : 'local_customer_no_point_wallet',
           needsBinding: true,
           canAdjust: false,
-          canAutoBindPointAccount: /^U[0-9a-fA-F]{20,64}$/.test(customerPointUserId),
+          canAutoBindPointAccount: false,
           bindCustomerUserId: customerPointUserId,
           name: displayName,
           phone,
@@ -4633,7 +4633,7 @@ const PointModule = {
           avatarUrl: D1ReadModule.text(mappedCard && mappedCard.imageUrl),
           balance: null,
           pointType: 'gift_money',
-          message: 'Customer found locally, but point wallet is not bound or unavailable. Please scan the customer point QR or bind point account first.',
+          message: '已找到本地客戶，但母站查無點數會員。請掃描客戶點數 QR 或先完成點數通綁定後再贈扣點。',
           pointError: wallet && wallet.error ? wallet.error : 'point wallet unavailable',
           user,
           card: mappedCard
@@ -4849,6 +4849,14 @@ const PointModule = {
         child_shop_name: sourceLabel,
         shop_remark: `source=${sourceLabel}; store_cashier_fee_refund operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
       }, env).catch(() => null);
+      const resultError = result && result.error ? String(result.error) : '';
+      if (/查無|對應會員|LINE_user_id|not\s*found|member/i.test(resultError)) {
+        return {
+          success: false,
+          error: '母站查無此點數會員，請先掃描客戶點數 QR 或完成點數通綁定後再操作。',
+          data: { requiresPointQr: true, customerPointUserId, pointResult: result }
+        };
+      }
       return { success: false, error: result && result.error ? result.error : '點數流水寫入失敗', data: result };
     }
 
