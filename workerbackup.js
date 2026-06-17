@@ -1910,6 +1910,51 @@ const LineOAChatModule = {
     };
   },
 
+  async repairRecentFollowPointAwards(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const limit = Math.min(100, Math.max(1, Math.floor(Number(payload.limit || 20))));
+    const requestedUserId = this.text(payload.userId || payload.lineUserId || payload.customerId || '');
+    await PointModule.ensureAwardTable(env);
+    const whereUser = requestedUserId ? 'AND m.user_id = ?' : '';
+    const binds = requestedUserId ? [requestedUserId, limit] : [limit];
+    const rows = await D1ReadModule.all(env, `
+      SELECT m.user_id, MIN(m.created_at) AS follow_at
+      FROM line_oa_messages m
+      LEFT JOIN point_awards a
+        ON a.user_id = m.user_id
+       AND a.card_id = 'line_oa_follow'
+       AND a.award_type = 'line_oa_follow'
+       AND a.status = 'sent'
+      WHERE m.event_type = 'follow'
+        AND m.user_id <> ''
+        AND a.award_id IS NULL
+        ${whereUser}
+      GROUP BY m.user_id
+      ORDER BY follow_at DESC
+      LIMIT ?
+    `, binds).catch(() => []);
+    const results = [];
+    for (const row of rows) {
+      const userId = this.text(row.user_id);
+      if (!userId) continue;
+      const profile = await this.fetchProfile(env, userId).catch(() => ({}));
+      const binding = await this.ensureLineOAPointBinding(env, userId, profile).catch(e => ({ success: false, error: e.message || String(e) }));
+      const award = await this.awardLineOAFollowPoints(env, userId, this.text(row.follow_at) || new Date().toISOString()).catch(e => ({
+        awarded: false,
+        error: e.message || String(e)
+      }));
+      results.push({ userId, followAt: this.text(row.follow_at), binding, award });
+    }
+    return {
+      success: true,
+      data: {
+        requestedUserId,
+        scanned: rows.length,
+        results
+      }
+    };
+  },
+
   async handleWebhook(request, env, ctx) {
     const rawBody = await request.text();
     const signature = request.headers.get('x-line-signature') || '';
@@ -13502,6 +13547,8 @@ async function dispatchAction(action, payload, request, env) {
       return await LineOAChatModule.crm(payload || {}, env);
     case 'repairLineOAFollowPointOnboarding':
       return await LineOAChatModule.repairFollowPointOnboarding(payload || {}, env);
+    case 'repairRecentLineOAFollowPointAwards':
+      return await LineOAChatModule.repairRecentFollowPointAwards(payload || {}, env);
     case 'getAdminPointProfile':
       return await AdminPointModule.profile(payload || {}, env);
     case 'adminAdjustCustomerPoints':
