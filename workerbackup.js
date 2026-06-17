@@ -4184,16 +4184,22 @@ const PointModule = {
       const normalized = SecurityModule.normalizePhone(rawPhone);
       if (!normalized || (normalized !== phone && !normalized.endsWith(tail) && !phone.endsWith(normalized.slice(-9)))) return;
       const id = kind === 'card'
-        ? D1ReadModule.text(row.line_id)
+        ? D1ReadModule.text(row.line_id || row.profile_user_id || row.claimed_by_uid)
         : D1ReadModule.text(row.line_id || row.row_id);
-      if (!id) return;
-      candidates.push({ kind, id, row });
+      if (!id && kind !== 'card') return;
+      candidates.push({ kind: id ? kind : 'card_unbound', id, row });
     };
     userRows.forEach(row => pushMatch('user', row, row.phone));
     cardRows.forEach(row => pushMatch('card', row, row.mobile || row.office_phone));
 
     const canonicalMatches = [];
     for (const item of candidates) {
+      if (!item.id) {
+        if (!canonicalMatches.some(match => match.kind === 'card_unbound' && match.row && match.row.row_id === item.row.row_id)) {
+          canonicalMatches.push({ kind: 'card_unbound', id: '', row: item.row });
+        }
+        continue;
+      }
       const identity = await D1ReadModule.findUserByIdentity(env, item.id).catch(() => null);
       const canonicalId = D1ReadModule.text(identity && identity.canonicalId, item.id);
       const user = identity && identity.user ? identity.user : null;
@@ -4208,7 +4214,9 @@ const PointModule = {
     }
 
     if (canonicalMatches.length > 1) {
-      return { match: null, error: '此手機號碼對應多位用戶，請改掃 QR 或貼上 UID' };
+      const boundMatches = canonicalMatches.filter(match => match.id);
+      if (boundMatches.length === 1) return { match: boundMatches[0], error: '' };
+      return { match: null, error: '手機對應多筆資料，請改掃 QR 或輸入客戶 UID' };
     }
     return { match: canonicalMatches[0] || null, error: '' };
   },
@@ -4225,6 +4233,18 @@ const PointModule = {
       const phoneMatch = await this.findCustomerByPhone(env, raw);
       if (phoneMatch.error) return { error: phoneMatch.error };
       if (phoneMatch.match) {
+        if (phoneMatch.match.kind === 'card_unbound') {
+          return {
+            customerPointUserId: '',
+            rawCustomerId: raw,
+            matchedId: '',
+            identity: null,
+            user: null,
+            card: D1ReadModule.cardRow(phoneMatch.match.row),
+            needsBinding: true,
+            matchedBy: 'phone_card_unbound'
+          };
+        }
         matchedId = phoneMatch.match.id;
         if (phoneMatch.match.kind === 'user') matchedUser = D1ReadModule.userRow(phoneMatch.match.row);
         if (phoneMatch.match.kind === 'card') matchedCard = D1ReadModule.cardRow(phoneMatch.match.row);
@@ -4256,6 +4276,30 @@ const PointModule = {
     ).trim();
     const resolved = await this.resolveStorePointCustomer(env, rawCustomerId);
     if (resolved.error) return { success: false, error: resolved.error };
+    if (resolved.needsBinding) {
+      const mappedCard = resolved.card || null;
+      return {
+        success: true,
+        data: {
+          customerUserId: rawCustomerId,
+          customerPointUserId: '',
+          canonicalUserId: '',
+          matchedBy: resolved.matchedBy || 'phone_card_unbound',
+          needsBinding: true,
+          canAdjust: false,
+          name: D1ReadModule.text(mappedCard && mappedCard.name, '未綁定名片'),
+          phone: D1ReadModule.text(mappedCard && (mappedCard.mobile || mappedCard['手機號碼'])),
+          industry: D1ReadModule.text(mappedCard && (mappedCard.title || mappedCard.companyName || mappedCard['職稱'] || mappedCard['公司名稱'])),
+          role: 'unbound_card',
+          avatarUrl: D1ReadModule.text(mappedCard && mappedCard.imageUrl),
+          balance: null,
+          pointType: 'gift_money',
+          message: '此手機找到名片，但尚未綁定會員/點數帳號，請請客戶先用 LINE 授權或掃客戶點數 QR。',
+          user: null,
+          card: mappedCard
+        }
+      };
+    }
     const customerPointUserId = resolved.customerPointUserId;
     if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
 
@@ -4305,6 +4349,8 @@ const PointModule = {
         customerPointUserId,
         canonicalUserId: D1ReadModule.text(identity && identity.canonicalId, customerPointUserId),
         matchedBy: rawCustomerId === customerPointUserId ? 'uid' : 'phone_or_identity',
+        needsBinding: false,
+        canAdjust: true,
         name: displayName,
         phone,
         industry,

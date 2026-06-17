@@ -1415,6 +1415,9 @@ window.updateStorePointPreview = function() {
 
   const amount = Math.floor(Number(amountInput.value || 0));
   const mode = window.getStorePointMode();
+  if (window.storePointCustomer && window.storePointCustomer.canAdjust === false) {
+    return window.showToast?.(window.storePointCustomer.message || '此客戶尚未綁定點數會員，不能直接扣點', true);
+  }
   if (deductWrap) deductWrap.classList.toggle('hidden', mode === 'reward');
   if (!amount || amount <= 0) {
     preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
@@ -1457,11 +1460,15 @@ window.renderStorePointCustomer = function(customer) {
   if (name) name.textContent = customer.name || '未命名用戶';
   if (meta) {
     const metaParts = [customer.phone, customer.industry].filter(Boolean);
-    meta.textContent = metaParts.length ? metaParts.join(' / ') : (customer.customerPointUserId || '-');
+    meta.textContent = customer.needsBinding
+      ? (metaParts.length ? metaParts.join(' / ') + ' / 尚未綁定點數會員' : '尚未綁定點數會員')
+      : (metaParts.length ? metaParts.join(' / ') : (customer.customerPointUserId || '-'));
   }
   if (balance) {
     const hasBalance = customer.balance !== null && customer.balance !== undefined && Number.isFinite(Number(customer.balance));
-    balance.textContent = hasBalance ? Number(customer.balance).toLocaleString('zh-TW') + ' 點' : '無法讀取';
+    balance.textContent = customer.needsBinding
+      ? '尚未綁定'
+      : (hasBalance ? Number(customer.balance).toLocaleString('zh-TW') + ' 點' : '無法讀取');
   }
   card.classList.remove('hidden');
   window.updateStorePointPreview?.();
@@ -1480,10 +1487,11 @@ window.lookupStorePointCustomer = async function() {
     const res = await window.fetchAPI('getStorePointCustomer', { customerUserId }, true);
     if (!res || res.error) throw new Error(res?.error || '查無客戶資料');
     const data = res.data || res;
-    if (input && data.customerPointUserId && input.value !== data.customerPointUserId) {
+    if (input && data.customerPointUserId && !data.needsBinding && input.value !== data.customerPointUserId) {
       input.value = data.customerPointUserId;
     }
     window.renderStorePointCustomer(data);
+    if (data.needsBinding) window.showToast?.(data.message || '找到名片，但尚未綁定點數會員', true);
     return data;
   } catch (e) {
     window.renderStorePointCustomer(null);
