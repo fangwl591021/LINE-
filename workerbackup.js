@@ -4648,15 +4648,17 @@ const PointModule = {
       || D1ReadModule.text(mappedCard && (mappedCard.title || mappedCard.companyName || mappedCard['職稱'] || mappedCard['公司名稱']));
 
     if (!wallet || wallet.success === false) {
+      const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
       return {
         success: true,
         data: {
           customerUserId: rawCustomerId,
           customerPointUserId,
           canonicalUserId: D1ReadModule.text(identity && identity.canonicalId, customerPointUserId),
-          matchedBy: rawCustomerId === customerPointUserId ? 'uid' : 'local_customer_no_point_wallet',
-          needsBinding: true,
-          canAdjust: false,
+          matchedBy: rawCustomerId === customerPointUserId ? 'uid_local_point' : 'local_customer_point_ledger',
+          needsBinding: false,
+          localPointOnly: true,
+          canAdjust: true,
           canAutoBindPointAccount: false,
           bindCustomerUserId: customerPointUserId,
           name: displayName,
@@ -4664,9 +4666,9 @@ const PointModule = {
           industry,
           role: D1ReadModule.text(user && user.role, 'user'),
           avatarUrl: D1ReadModule.text(mappedCard && mappedCard.imageUrl),
-          balance: null,
+          balance: localBalance,
           pointType: 'gift_money',
-          message: '已找到本地客戶，但母站查無點數會員。請掃描客戶點數 QR 或先完成點數通綁定後再贈扣點。',
+          message: '已找到本地客戶；母站尚未建立點數錢包，已改用本系統點數檔，可正常贈點與扣點。',
           pointError: wallet && wallet.error ? wallet.error : 'point wallet unavailable',
           user,
           card: mappedCard
@@ -4784,6 +4786,12 @@ const PointModule = {
       page: 1,
       per_page: 100
     }, env);
+    let customerPointSource = 'mother';
+    if (!wallet || !wallet.success) {
+      const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
+      wallet = { success: true, data: { balance: localBalance, list: [] }, localPointOnly: true };
+      customerPointSource = 'local';
+    }
     if (!wallet || !wallet.success) {
       if (autoBindPointAccount && isReward) wallet = { success: true, data: { balance: 0, list: [] } };
       else
@@ -4860,16 +4868,24 @@ const PointModule = {
       return { success: false, error: operatorDebit && operatorDebit.error ? operatorDebit.error : '店家操作扣點失敗，交易未送出', data: operatorDebit };
     }
 
-    const result = await this.insertUserPoint({
-      userId: customerPointUserId,
-      points,
-      pointType: 'gift_money',
-      eventName,
-      eventContent,
-      shop_user_lineid: actorId,
-      child_shop_name: sourceLabel,
-      shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
-    }, env);
+    const result = customerPointSource === 'local'
+      ? await AdminPointModule.adjust({
+          authenticatedUserId: actorId,
+          targetUserId: customerPointUserId,
+          mode: isReward ? 'grant' : 'deduct',
+          points: Math.abs(points),
+          note: `store cashier ${isReward ? 'reward' : 'redeem'}; source=${sourceLabel}; amount=${amount}; points=${Math.abs(points)}`
+        }, env)
+      : await this.insertUserPoint({
+          userId: customerPointUserId,
+          points,
+          pointType: 'gift_money',
+          eventName,
+          eventContent,
+          shop_user_lineid: actorId,
+          child_shop_name: sourceLabel,
+          shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
+        }, env);
 
     if (!result || !result.success) {
       await this.insertUserPoint({
@@ -4930,6 +4946,8 @@ const PointModule = {
         requestedDeduction: isReward ? 0 : Math.floor(Number(payload.deductPoints || payload.discountPoints || payload.redeemPoints || 0)),
         balanceBefore,
         balanceAfterEstimate: balanceBefore + points,
+        customerPointSource,
+        localPointOnly: customerPointSource === 'local',
         autoBoundPointAccount: !!autoBindResult,
         autoBindResult,
         eventName,
