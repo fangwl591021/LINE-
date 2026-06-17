@@ -1667,16 +1667,91 @@ const HomeModule = (function() {
         }
     };
 
-    window.loadHomeData = async function() {
-        const tasks = [window.loadUserActivities()];
-        if (typeof window.loadCardData === 'function') tasks.push(window.loadCardData({ render: false }));
-        await Promise.all(tasks);
+    function getHomeLoadRole_() {
+        const rawRole = String(window.userRole || window.currentUser?.role || 'user').trim();
+        const role = rawRole.toLowerCase();
+        if (window.hasAdminRights === true || role === 'admin' || rawRole === '蝮賜恣') return 'admin';
+        if (role === 'store' || role === 'tenant' || rawRole === '摨' || rawRole === '蝘') return 'tenant';
+        return 'user';
+    }
+
+    function runHomeBackgroundTask_(key, delayMs, task) {
+        window.__homeLoadTimers = window.__homeLoadTimers || {};
+        if (window.__homeLoadTimers[key]) clearTimeout(window.__homeLoadTimers[key]);
+        window.__homeLoadTimers[key] = setTimeout(async () => {
+            try {
+                await task();
+            } catch (e) {
+                console.warn('[home-load]', key, e && e.message ? e.message : e);
+            } finally {
+                delete window.__homeLoadTimers[key];
+            }
+        }, delayMs);
+    }
+
+    window.scheduleHomeDataLoadsByRole = function(options = {}) {
+        const role = getHomeLoadRole_();
+        const force = options.force === true;
+
+        if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
         if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
+
+        runHomeBackgroundTask_('store-settings', 80, async () => {
+            if (typeof window.syncStoreSettingsToHome === 'function') window.syncStoreSettingsToHome();
+            if (typeof window.refreshStoreSettingsInBackground === 'function') await window.refreshStoreSettingsInBackground();
+        });
+
+        if (role === 'tenant') {
+            runHomeBackgroundTask_('store-point-panel', 120, async () => {
+                window.updateStorePointCashierVisibility?.();
+            });
+            runHomeBackgroundTask_('cards-for-tenant', 900, async () => {
+                if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
+                if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
+            });
+            runHomeBackgroundTask_('activities-for-tenant', 1400, async () => {
+                if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
+            });
+            return true;
+        }
+
+        if (role === 'admin') {
+            runHomeBackgroundTask_('admin-sales-assistant', 240, async () => {
+                if (typeof window.loadHomeSalesAssistant === 'function') await window.loadHomeSalesAssistant();
+            });
+            runHomeBackgroundTask_('activities-for-admin', 1200, async () => {
+                if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
+            });
+            runHomeBackgroundTask_('cards-for-admin', 1800, async () => {
+                if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
+            });
+            return true;
+        }
+
+        runHomeBackgroundTask_('cards-for-user', 160, async () => {
+            if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
+            if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
+        });
+        runHomeBackgroundTask_('activities-for-user', 1300, async () => {
+            if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
+        });
+        return true;
+    };
+
+    window.loadHomeData = async function(options = {}) {
+        if (options && options.full === true) {
+            const tasks = [window.loadUserActivities()];
+            if (typeof window.loadCardData === 'function') tasks.push(window.loadCardData({ render: false, force: options.force === true, initPanels: false }));
+            await Promise.all(tasks);
+            if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
+            return true;
+        }
+        window.scheduleHomeDataLoadsByRole(options || {});
         return true;
     };
 
     window.loadAllData = async function() {
-        await window.loadHomeData();
+        await window.loadHomeData({ full: true, force: true });
         if (typeof window.initMyECard === 'function') window.initMyECard();
         return true;
     };
