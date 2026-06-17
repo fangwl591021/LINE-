@@ -295,6 +295,7 @@ const SecurityModule = {
       'getLineOAChatMonitor',
       'getLineOAChatAudience',
       'getLineOAChatCrm',
+      'repairLineOAFollowPointOnboarding',
       'uploadLineOAAsset',
       'sendLineOAChatReply',
       'updateLineOAChatThread',
@@ -1746,6 +1747,150 @@ const LineOAChatModule = {
     return { threadId, userId };
   },
 
+  followAwardPoints(env) {
+    const raw = env.LINE_OA_FOLLOW_POINTS ?? env.POINT_FOLLOW_POINTS ?? 10;
+    const points = Number(raw);
+    return Number.isFinite(points) && points > 0 ? points : 0;
+  },
+
+  async ensureLineOAPointBinding(env, userId, profile = {}) {
+    const lineId = this.text(userId);
+    if (!lineId || !env.ACTMASTER_DB) return { success: false, error: 'Missing LINE user id' };
+    await D1WriteModule.upsertUser({
+      userId: lineId,
+      name: this.text(profile.displayName || profile.name),
+      role: 'user'
+    }, env);
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE users
+      SET point_line_id = COALESCE(NULLIF(point_line_id, ''), ?),
+          identity_source = COALESCE(NULLIF(identity_source, ''), 'line_oa_follow'),
+          migrated_at = COALESCE(migrated_at, CURRENT_TIMESTAMP)
+      WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
+    `).bind(lineId, lineId, lineId, lineId, lineId).run();
+    await D1WriteModule.clearUserCache(env, lineId).catch(() => null);
+    const user = await D1ReadModule.first(env, `
+      SELECT * FROM users
+      WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
+      LIMIT 1
+    `, [lineId, lineId, lineId, lineId]).catch(() => null);
+    return {
+      success: true,
+      data: {
+        lineUserId: lineId,
+        pointUserId: D1ReadModule.text(user && user.point_line_id) || lineId,
+        user: user ? D1ReadModule.userRow(user, 'line_oa_follow') : null
+      }
+    };
+  },
+
+  async awardLineOAFollowPoints(env, userId, createdAt = '') {
+    const lineId = this.text(userId);
+    if (!lineId || !env.ACTMASTER_DB) return { awarded: false, reason: 'missing_user' };
+    const points = this.followAwardPoints(env);
+    if (!points) return { awarded: false, reason: 'disabled' };
+    await PointModule.ensureAwardTable(env);
+    const pointUserId = await PointModule.resolvePointUserId(env, lineId).catch(() => lineId);
+    const awardId = 'AWD_LINE_OA_FOLLOW_' + pointUserId;
+    const awardType = 'line_oa_follow';
+    const cardId = 'line_oa_follow';
+    const eventName = 'LINE OA follow reward';
+    const eventContent = 'Official account follow onboarding reward';
+    const existing = await D1ReadModule.first(env, `
+      SELECT * FROM point_awards
+      WHERE user_id = ? AND card_id = ? AND award_type = ?
+      LIMIT 1
+    `, [pointUserId, cardId, awardType]).catch(() => null);
+    if (existing && this.text(existing.status) === 'sent') {
+      return { awarded: false, reason: 'already_awarded', pointUserId };
+    }
+    if (!existing) {
+      const inserted = await env.ACTMASTER_DB.prepare(`
+        INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
+        VALUES (?, ?, ?, ?, ?, 'gift_money', 'pending', '{}', CURRENT_TIMESTAMP)
+      `).bind(awardId, pointUserId, cardId, awardType, points).run();
+      if (!inserted || !inserted.meta || Number(inserted.meta.changes || 0) === 0) {
+        return { awarded: false, reason: 'already_recorded', pointUserId };
+      }
+    }
+    const result = await PointModule.insertUserPoint({
+      userId: pointUserId,
+      points,
+      pointType: 'gift_money',
+      eventName,
+      eventContent,
+      shop_remark: ['line_oa_follow', createdAt || new Date().toISOString()].join(';')
+    }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE point_awards
+      SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ? AND card_id = ? AND award_type = ?
+    `).bind(
+      result && result.success ? 'sent' : 'failed',
+      JSON.stringify({ result, lineUserId: lineId, pointUserId, createdAt }),
+      pointUserId,
+      cardId,
+      awardType
+    ).run();
+    return result && result.success
+      ? { awarded: true, points, pointUserId, response: result.data }
+      : { awarded: false, points, pointUserId, error: (result && result.error) || 'Point award failed' };
+  },
+
+  async handleFollowPointOnboarding(env, event) {
+    const userId = this.eventUserId(event);
+    if (!env.ACTMASTER_DB || !userId || event?.type !== 'follow' || !userId.startsWith('U')) {
+      return { success: true, skipped: true };
+    }
+    const profile = await this.fetchProfile(env, userId).catch(() => ({}));
+    const binding = await this.ensureLineOAPointBinding(env, userId, profile);
+    const award = await this.awardLineOAFollowPoints(env, userId, this.eventTimestamp(event));
+    return {
+      success: binding.success !== false && !award.error,
+      data: { userId, binding, award }
+    };
+  },
+
+  async followPointOnboardingJob(env, events) {
+    const follows = (Array.isArray(events) ? events : []).filter(event => event && event.type === 'follow');
+    if (!follows.length) return { success: true, skipped: true };
+    const results = [];
+    for (const event of follows) {
+      results.push(await this.handleFollowPointOnboarding(env, event).catch(e => ({
+        success: false,
+        error: e.message || String(e)
+      })));
+    }
+    return { success: results.every(item => item && item.success !== false), data: { results } };
+  },
+
+  async repairFollowPointOnboarding(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const raw = this.text(payload.userId || payload.lineUserId || payload.customerId || payload.query || payload.keyword);
+    if (!raw) return { success: false, error: 'Missing userId or query' };
+    let userId = raw;
+    if (!/^U[0-9a-fA-F]{20,64}$/.test(raw)) {
+      const found = await PointModule.findStorePointCustomerCandidates(env, raw).catch(() => ({ matches: [] }));
+      const matches = Array.isArray(found && found.matches) ? found.matches.filter(item => this.text(item && item.id)) : [];
+      if (matches.length !== 1) {
+        return {
+          success: false,
+          needsSelection: matches.length > 1,
+          error: matches.length ? 'Multiple customers matched' : 'Customer not found',
+          data: { candidates: matches }
+        };
+      }
+      userId = this.text(matches[0].id);
+    }
+    const profile = await this.fetchProfile(env, userId).catch(() => ({}));
+    const binding = await this.ensureLineOAPointBinding(env, userId, profile);
+    const award = await this.awardLineOAFollowPoints(env, userId, this.text(payload.createdAt) || new Date().toISOString());
+    return {
+      success: binding.success !== false && !award.error,
+      data: { userId, binding, award }
+    };
+  },
+
   async handleWebhook(request, env, ctx) {
     const rawBody = await request.text();
     const signature = request.headers.get('x-line-signature') || '';
@@ -1756,12 +1901,15 @@ const LineOAChatModule = {
     if (!ok && events.length === 0) return new Response('OK', { status: 200 });
     await this.ensure(env);
     const saveJob = Promise.all(events.map(event => this.saveEvent(env, event).catch(e => console.error('LINE OA event save failed', e))));
+    const followPointJob = this.followPointOnboardingJob(env, events).catch(e => console.error('LINE OA follow point onboarding failed', e));
     const forwardJob = this.forwardToSecondSystem(rawBody, signature, env);
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(saveJob);
+      ctx.waitUntil(followPointJob);
       ctx.waitUntil(forwardJob);
     } else {
       await saveJob;
+      await followPointJob;
       await forwardJob;
     }
     const myVideoReplied = await LineOAMyVideoKeywordModule.reply(events, env, ctx);
@@ -13159,6 +13307,8 @@ async function dispatchAction(action, payload, request, env) {
       return await LineOAChatModule.audience(payload || {}, env);
     case 'getLineOAChatCrm':
       return await LineOAChatModule.crm(payload || {}, env);
+    case 'repairLineOAFollowPointOnboarding':
+      return await LineOAChatModule.repairFollowPointOnboarding(payload || {}, env);
     case 'uploadLineOAAsset':
       return await LineOAChatModule.uploadAsset(payload || {}, env);
     case 'sendLineOAChatReply':
