@@ -1689,6 +1689,79 @@ const HomeModule = (function() {
         }, delayMs);
     }
 
+    window.applySubsiteHomeFastData = function(data) {
+        if (!data || typeof data !== 'object') return false;
+
+        if (data.user && window.currentUser) {
+            window.currentUser = { ...window.currentUser, ...data.user };
+            window.userRole = data.role || window.currentUser.role || window.userRole;
+            window.currentNetworkId = window.currentUser.networkId || window.currentNetworkId || 'admin';
+            if (typeof window.applyUserPermissions === 'function') window.applyUserPermissions();
+        }
+
+        if (data.wallet) {
+            if (data.wallet.status === 'ready' && typeof window.setPointWalletStatus === 'function') {
+                window.setPointWalletStatus('ready', data.wallet);
+                if (typeof window.renderPointBalanceState === 'function') window.renderPointBalanceState('ready', data.wallet);
+            } else if (data.wallet.status === 'error' && typeof window.setPointWalletStatus === 'function') {
+                window.setPointWalletStatus('error', data.wallet);
+                if (typeof window.renderPointBalanceState === 'function') window.renderPointBalanceState('error', data.wallet);
+            }
+        }
+
+        if (data.cards && typeof data.cards === 'object') {
+            if (data.cards.ownCard) window.currentUserCard = data.cards.ownCard;
+            if (Array.isArray(data.cards.recentCards) && data.cards.recentCards.length) {
+                const existing = Array.isArray(window.allCards) ? window.allCards : [];
+                const byId = new Map(existing.map(card => [String(card && (card.rowId || card.id || card["rowId"] || '')), card]));
+                data.cards.recentCards.forEach(card => {
+                    const rowId = String(card && (card.rowId || card.id || card["rowId"] || ''));
+                    if (rowId && !byId.has(rowId)) byId.set(rowId, card);
+                });
+                window.allCards = Array.from(byId.values()).filter(Boolean);
+            }
+            if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
+        }
+
+        if (data.storePointCashier) {
+            window.subsiteHomeStorePointCashier = data.storePointCashier;
+            if (Array.isArray(data.storePointCashier.logs)) {
+                window.storePointCashierLogsCache = {
+                    list: data.storePointCashier.logs,
+                    loadedAt: Date.now()
+                };
+            }
+            window.updateStorePointCashierVisibility?.();
+        }
+
+        if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
+        return true;
+    };
+
+    window.loadSubsiteHomeFastData = async function(options = {}) {
+        const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+        if (!userId || typeof window.fetchAPI !== 'function') return null;
+        if (!options.force && window.subsiteHomeFastData && Date.now() - (window.subsiteHomeFastData.loadedAtMs || 0) < 30000) {
+            window.applySubsiteHomeFastData(window.subsiteHomeFastData);
+            return window.subsiteHomeFastData;
+        }
+
+        const pointUserId = window.resolvePointUserIdForCurrentProfile?.(userId) || userId;
+        const res = await window.fetchAPI('getSubsiteHome', {
+            userId,
+            pointUserId,
+            pt_uid: pointUserId,
+            point_type: 'gift_money',
+            cashierLogLimit: 10
+        }, true);
+        const data = res && res.data ? res.data : res;
+        if (data && !data.error) {
+            window.subsiteHomeFastData = { ...data, loadedAtMs: Date.now() };
+            window.applySubsiteHomeFastData(window.subsiteHomeFastData);
+        }
+        return data;
+    };
+
     window.scheduleHomeDataLoadsByRole = function(options = {}) {
         const role = getHomeLoadRole_();
         const force = options.force === true;
@@ -1696,43 +1769,47 @@ const HomeModule = (function() {
         if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
         if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
 
-        runHomeBackgroundTask_('store-settings', 80, async () => {
+        runHomeBackgroundTask_('subsite-home-fast', force ? 0 : 20, async () => {
+            await window.loadSubsiteHomeFastData?.({ force });
+        });
+
+        runHomeBackgroundTask_('store-settings', 180, async () => {
             if (typeof window.syncStoreSettingsToHome === 'function') window.syncStoreSettingsToHome();
             if (typeof window.refreshStoreSettingsInBackground === 'function') await window.refreshStoreSettingsInBackground();
         });
 
         if (role === 'tenant') {
-            runHomeBackgroundTask_('store-point-panel', 120, async () => {
+            runHomeBackgroundTask_('store-point-panel', 260, async () => {
                 window.updateStorePointCashierVisibility?.();
             });
-            runHomeBackgroundTask_('cards-for-tenant', 900, async () => {
+            runHomeBackgroundTask_('cards-for-tenant', 1100, async () => {
                 if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
                 if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
             });
-            runHomeBackgroundTask_('activities-for-tenant', 1400, async () => {
+            runHomeBackgroundTask_('activities-for-tenant', 1600, async () => {
                 if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
             });
             return true;
         }
 
         if (role === 'admin') {
-            runHomeBackgroundTask_('admin-sales-assistant', 240, async () => {
+            runHomeBackgroundTask_('admin-sales-assistant', 420, async () => {
                 if (typeof window.loadHomeSalesAssistant === 'function') await window.loadHomeSalesAssistant();
             });
-            runHomeBackgroundTask_('activities-for-admin', 1200, async () => {
+            runHomeBackgroundTask_('activities-for-admin', 1400, async () => {
                 if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
             });
-            runHomeBackgroundTask_('cards-for-admin', 1800, async () => {
+            runHomeBackgroundTask_('cards-for-admin', 2000, async () => {
                 if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
             });
             return true;
         }
 
-        runHomeBackgroundTask_('cards-for-user', 160, async () => {
+        runHomeBackgroundTask_('cards-for-user', 360, async () => {
             if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
             if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
         });
-        runHomeBackgroundTask_('activities-for-user', 1300, async () => {
+        runHomeBackgroundTask_('activities-for-user', 1500, async () => {
             if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
         });
         return true;

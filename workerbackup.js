@@ -331,6 +331,7 @@ const SecurityModule = {
       'claimCardAndRegister',
       'deleteCard',
       'unlinkCard',
+      'getSubsiteHome',
       'queryPointBalanceFast',
       'queryUserPoints',
       'listPersonalTasks',
@@ -396,7 +397,7 @@ const SecurityModule = {
     if (!actor && d1IdentityFallbackActions.has(action)) {
       actor = await this.getActorFromD1Identity(payload, env);
     }
-    if (!actor && (action === 'queryUserPoints' || action === 'queryPointBalanceFast') && env.ACTMASTER_DB) {
+    if (!actor && (action === 'queryUserPoints' || action === 'queryPointBalanceFast' || action === 'getSubsiteHome') && env.ACTMASTER_DB) {
       const requestedUserId = this.text(payload.userId || payload.pointUserId || payload.LINE_user_id);
       const identity = requestedUserId
         ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
@@ -4600,6 +4601,172 @@ const PointModule = {
         role,
         scope: role === 'admin' ? 'all' : 'own_store',
         list
+      }
+    };
+  }
+};
+
+const SubsiteHomeModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  effectiveRole(user, payload) {
+    const payloadRole = this.text(payload.authenticatedRole || payload.role);
+    const userRole = this.text(user && user.role);
+    return SecurityModule.normalizeRole(payloadRole || userRole || 'user');
+  },
+
+  canUseStorePointCashier(role) {
+    return role === 'admin' || role === 'store' || role === 'tenant';
+  },
+
+  isOwnSelfCard(card, userId) {
+    if (!card || !userId) return false;
+    const sourceType = this.text(card.sourceType || card.source_type).toLowerCase();
+    if (sourceType && sourceType !== 'self_profile') return false;
+    const ids = [
+      card.lineId,
+      card.userId,
+      card.ownerUserId,
+      card.profileUserId,
+      card.creatorId,
+      card['LINE ID']
+    ].map(value => this.text(value)).filter(Boolean);
+    return ids.includes(userId);
+  },
+
+  async getCardSummary(payload, env, userId) {
+    const empty = {
+      status: 'ready',
+      hasMyCard: false,
+      ownCard: null,
+      recentCards: [],
+      cardCount: 0,
+      scannedCardCount: 0,
+      updatedAt: new Date().toISOString()
+    };
+    if (!env.ACTMASTER_DB || !userId) return empty;
+
+    await D1ReadModule.ensureCardAccessColumns(env);
+    const ids = await D1ReadModule.identityIdsForUser(env, userId).catch(() => [userId]);
+    const safeIds = ids.filter(Boolean);
+    if (!safeIds.length) return empty;
+    const placeholders = safeIds.map(() => '?').join(',');
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM card_contacts
+      WHERE line_id IN (${placeholders})
+         OR creator_id IN (${placeholders})
+         OR owner_user_id IN (${placeholders})
+         OR profile_user_id IN (${placeholders})
+      ORDER BY
+        CASE WHEN source_type = 'self_profile' THEN 0 ELSE 1 END,
+        COALESCE(updated_at, created_at) DESC,
+        row_id DESC
+      LIMIT 12
+    `, [...safeIds, ...safeIds, ...safeIds, ...safeIds]).catch(() => []);
+    const cards = rows.map(row => D1ReadModule.cardRow(row)).filter(Boolean);
+    const ownCard = cards.find(card => this.isOwnSelfCard(card, userId))
+      || cards.find(card => card && card.isSelfProfile === true)
+      || null;
+    const scannedCardCount = cards.filter(card => {
+      const sourceType = this.text(card.sourceType || card.source_type).toLowerCase();
+      return sourceType && sourceType !== 'self_profile' && sourceType !== 'referral_placeholder';
+    }).length;
+    return {
+      ...empty,
+      hasMyCard: !!ownCard,
+      ownCard,
+      recentCards: cards.slice(0, 5),
+      cardCount: cards.length,
+      scannedCardCount
+    };
+  },
+
+  async getStorePointCashierSummary(payload, env, userId, role) {
+    const canUse = this.canUseStorePointCashier(role);
+    const summary = {
+      canUse,
+      status: canUse ? 'ready' : 'disabled',
+      logs: [],
+      scope: role === 'admin' ? 'all' : 'own_store',
+      updatedAt: new Date().toISOString()
+    };
+    if (!canUse || !env.ACTMASTER_DB || !userId) return summary;
+    const logs = await PointModule.listStorePointCashierLogs({
+      ...payload,
+      userId,
+      authenticatedUserId: userId,
+      authenticatedRole: role,
+      role,
+      limit: Math.min(10, Math.max(1, Number(payload.cashierLogLimit || 10) || 10))
+    }, env).catch(err => ({ success: false, error: err && err.message ? err.message : String(err) }));
+    if (!logs || logs.success === false) {
+      return { ...summary, status: 'error', error: logs && logs.error ? logs.error : 'cashier logs unavailable' };
+    }
+    const data = logs.data || logs;
+    return {
+      ...summary,
+      status: 'ready',
+      scope: data.scope || summary.scope,
+      logs: Array.isArray(data.list) ? data.list : []
+    };
+  },
+
+  async get(payload, env) {
+    const requestedUserId = this.text(payload.authenticatedUserId || payload.userId || payload.LINE_user_id);
+    if (!requestedUserId) return { success: false, error: 'Missing user id' };
+
+    const identity = env.ACTMASTER_DB
+      ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
+      : null;
+    const user = identity && identity.user ? D1ReadModule.userRow(identity.user, 'subsite_home') : null;
+    const canonicalUserId = this.text(user && user.userId) || this.text(identity && identity.canonicalId) || requestedUserId;
+    const role = this.effectiveRole(user, payload);
+    const pointUserId = this.text(payload.pointUserId || payload.pt_uid)
+      || this.text(user && user.pointLineId)
+      || await PointModule.resolvePointUserId(env, canonicalUserId).catch(() => canonicalUserId);
+
+    const [walletResult, cardSummary, cashierSummary] = await Promise.all([
+      PointModule.queryPointBalanceFast({
+        ...payload,
+        userId: canonicalUserId,
+        authenticatedUserId: canonicalUserId,
+        pointUserId,
+        pt_uid: pointUserId,
+        point_type: payload.point_type || payload.pointType || 'gift_money'
+      }, env).catch(err => ({ success: false, error: err && err.message ? err.message : String(err) })),
+      this.getCardSummary(payload, env, canonicalUserId).catch(err => ({
+        status: 'error',
+        error: err && err.message ? err.message : String(err),
+        hasMyCard: false,
+        ownCard: null,
+        recentCards: [],
+        cardCount: 0,
+        scannedCardCount: 0
+      })),
+      this.getStorePointCashierSummary(payload, env, canonicalUserId, role)
+    ]);
+
+    const wallet = walletResult && walletResult.success !== false
+      ? { ...(walletResult.data || walletResult), status: 'ready' }
+      : { status: 'error', error: walletResult && walletResult.error ? walletResult.error : 'point wallet unavailable' };
+
+    return {
+      success: true,
+      data: {
+        status: 'ready',
+        source: 'subsite_home_fast',
+        userId: canonicalUserId,
+        pointUserId,
+        role,
+        user,
+        wallet,
+        cards: cardSummary,
+        storePointCashier: cashierSummary,
+        loadedAt: new Date().toISOString()
       }
     };
   }
@@ -12413,6 +12580,7 @@ async function dispatchAction(action, payload, request, env) {
     'getCardCoolDraft',
     'confirmCardCoolDraft',
     'sendCardCoolCardToChat',
+    'getSubsiteHome',
     'queryPointBalanceFast',
     'mlmListOrders',
     'getTenantBonusOrders',
@@ -12847,6 +13015,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'calculateFateTags':      return await AIModule.fateTags(payload, env);
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
+    case 'getSubsiteHome':         return await SubsiteHomeModule.get(payload || {}, env);
     case 'queryPointBalanceFast':  return await PointModule.queryPointBalanceFast(payload || {}, env);
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
