@@ -4562,6 +4562,7 @@ const PointModule = {
           matchedBy: resolved.matchedBy || 'phone_card_unbound',
           needsBinding: true,
           canAdjust: false,
+          canAutoBindPointAccount: false,
           name: D1ReadModule.text(mappedCard && mappedCard.name, '未綁定名片'),
           phone: D1ReadModule.text(mappedCard && (mappedCard.mobile || mappedCard['手機號碼'])),
           industry: D1ReadModule.text(mappedCard && (mappedCard.title || mappedCard.companyName || mappedCard['職稱'] || mappedCard['公司名稱'])),
@@ -4623,6 +4624,8 @@ const PointModule = {
           matchedBy: rawCustomerId === customerPointUserId ? 'uid' : 'local_customer_no_point_wallet',
           needsBinding: true,
           canAdjust: false,
+          canAutoBindPointAccount: /^U[0-9a-fA-F]{20,64}$/.test(customerPointUserId),
+          bindCustomerUserId: customerPointUserId,
           name: displayName,
           phone,
           industry,
@@ -4701,11 +4704,27 @@ const PointModule = {
       payload.uid ||
       ''
     ).trim();
-    const resolvedCustomer = await this.resolveStorePointCustomer(env, rawCustomerId);
+    let resolvedCustomer = await this.resolveStorePointCustomer(env, rawCustomerId);
     if (resolvedCustomer.error) return { success: false, error: resolvedCustomer.error };
-    const customerPointUserId = resolvedCustomer.customerPointUserId;
     const amount = Math.floor(Number(payload.amount || payload.spendAmount || payload.total || 0));
     const mode = String(payload.mode || payload.operation || 'redeem').trim().toLowerCase();
+    const isReward = mode === 'reward' || mode === 'earn' || mode === 'add';
+    const autoBindPointAccount = payload.autoBindPointAccount === true || String(payload.autoBindPointAccount || '') === '1';
+    let customerPointUserId = resolvedCustomer.customerPointUserId;
+    let autoBindResult = null;
+    if (autoBindPointAccount && /^U[0-9a-fA-F]{20,64}$/.test(customerPointUserId || rawCustomerId)) {
+      const bindTarget = /^U[0-9a-fA-F]{20,64}$/.test(customerPointUserId) ? customerPointUserId : rawCustomerId;
+      autoBindResult = await LineOAChatModule.ensureLineOAPointBinding(env, bindTarget, {
+        name: D1ReadModule.text(resolvedCustomer.user && resolvedCustomer.user.name) ||
+          D1ReadModule.text(resolvedCustomer.card && resolvedCustomer.card.name)
+      }).catch(e => ({ success: false, error: e.message || String(e) }));
+      if (!autoBindResult || autoBindResult.success === false) {
+        return { success: false, error: autoBindResult && autoBindResult.error ? autoBindResult.error : 'Point account bind failed', data: { autoBindResult } };
+      }
+      resolvedCustomer = await this.resolveStorePointCustomer(env, bindTarget);
+      if (resolvedCustomer.error) return { success: false, error: resolvedCustomer.error };
+      customerPointUserId = resolvedCustomer.customerPointUserId || bindTarget;
+    }
 
     if (!actorId) return { success: false, error: 'Missing operator user id' };
     if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
@@ -4726,18 +4745,19 @@ const PointModule = {
       return { success: false, error: `店家操作點數不足，贈扣點功能每次需要 ${operatorFee} 點` };
     }
 
-    const wallet = await this.queryUserPoints({
+    let wallet = await this.queryUserPoints({
       pointUserId: customerPointUserId,
       point_type: 'gift_money',
       page: 1,
       per_page: 100
     }, env);
     if (!wallet || !wallet.success) {
+      if (autoBindPointAccount && isReward) wallet = { success: true, data: { balance: 0, list: [] } };
+      else
       return { success: false, error: wallet && wallet.error ? wallet.error : '無法取得客戶點數' };
     }
 
-    const balanceBefore = Math.max(0, Math.floor(Number(wallet.data?.balance || 0)));
-    const isReward = mode === 'reward' || mode === 'earn' || mode === 'add';
+    const balanceBefore = wallet && wallet.success ? Math.max(0, Math.floor(Number(wallet.data?.balance || 0))) : 0;
     let points = 0;
     let payableAmount = amount;
     let eventName = '';
@@ -4869,6 +4889,8 @@ const PointModule = {
         requestedDeduction: isReward ? 0 : Math.floor(Number(payload.deductPoints || payload.discountPoints || payload.redeemPoints || 0)),
         balanceBefore,
         balanceAfterEstimate: balanceBefore + points,
+        autoBoundPointAccount: !!autoBindResult,
+        autoBindResult,
         eventName,
         eventContent,
         operatorFee,

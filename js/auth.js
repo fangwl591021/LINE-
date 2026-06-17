@@ -1421,7 +1421,14 @@ window.updateStorePointPreview = function() {
 
   const amount = Math.floor(Number(amountInput.value || 0));
   const mode = window.getStorePointMode();
+  const canAutoBindReward = !!(window.storePointCustomer && window.storePointCustomer.canAutoBindPointAccount && mode === 'reward');
   if (window.storePointCustomer && window.storePointCustomer.canAdjust === false) {
+    if (window.storePointCustomer.canAutoBindPointAccount && mode === 'reward') {
+      preview.className = 'rounded-2xl bg-amber-50 border border-amber-200 p-4 text-[14px] text-amber-800 font-bold leading-relaxed';
+      preview.textContent = '\u5c1a\u672a\u5efa\u7acb\u6bcd\u7ad9\u9ede\u6578\u5e33\u6236\uff0c\u9001\u51fa\u5f8c\u6703\u5148\u88dc\u5efa\u6b78\u5c6c\uff0c\u518d\u5c07\u8d08\u9ede\u5beb\u5165\u6bcd\u7ad9\u3002';
+      if (deductWrap) deductWrap.classList.add('hidden');
+      return;
+    }
     return window.showToast?.(window.storePointCustomer.message || '此客戶尚未綁定點數會員，不能直接扣點', true);
   }
   if (deductWrap) deductWrap.classList.toggle('hidden', mode === 'reward');
@@ -1503,10 +1510,15 @@ window.renderStorePointCustomer = function(customer) {
   const name = document.getElementById('store-point-customer-name');
   const meta = document.getElementById('store-point-customer-meta');
   const balance = document.getElementById('store-point-customer-balance');
+  const bindHint = document.getElementById('store-point-bind-hint');
   if (!card) return;
   if (!customer) {
     window.storePointCustomer = null;
     card.classList.add('hidden');
+    if (bindHint) {
+      bindHint.classList.add('hidden');
+      bindHint.textContent = '';
+    }
     window.renderStorePointCustomerCandidates?.([]);
     return;
   }
@@ -1526,6 +1538,15 @@ window.renderStorePointCustomer = function(customer) {
     balance.textContent = customer.needsBinding
       ? '尚未綁定'
       : (hasBalance ? Number(customer.balance).toLocaleString('zh-TW') + ' 點' : '無法讀取');
+  }
+  if (bindHint) {
+    if (customer.needsBinding && customer.canAutoBindPointAccount) {
+      bindHint.classList.remove('hidden');
+      bindHint.textContent = '\u5df2\u627e\u5230\u672c\u5730\u5ba2\u6236\uff0c\u4f46\u6bcd\u7ad9\u9ede\u6578\u6b78\u5c6c\u5c1a\u672a\u5efa\u7acb\u3002\u5207\u5230\u6d88\u8cbb\u8d08\u9ede\u5f8c\u9001\u51fa\uff0c\u6703\u5148\u88dc\u5efa\u5e33\u6236\u518d\u5beb\u5165\u9ede\u6578\u3002';
+    } else {
+      bindHint.classList.add('hidden');
+      bindHint.textContent = '';
+    }
   }
   card.classList.remove('hidden');
   window.updateStorePointPreview?.();
@@ -1607,17 +1628,19 @@ window.submitStorePointCashier = async function(btn) {
   const deductInput = document.getElementById('store-point-deduct');
   const preview = document.getElementById('store-point-preview');
   const customerUserId = window.storePointCustomer?.customerPointUserId
+    || window.storePointCustomer?.bindCustomerUserId
     || window.extractPointCustomerId(customerInput?.value || '');
   const amount = Math.floor(Number(amountInput?.value || 0));
   const deductPoints = Math.floor(Number(deductInput?.value || 0));
   const mode = window.getStorePointMode();
+  const canAutoBindReward = !!(window.storePointCustomer && window.storePointCustomer.canAutoBindPointAccount && mode === 'reward');
 
   if (!customerUserId) return window.showToast?.('請先掃描或輸入客戶帳號', true);
   if (!amount || amount <= 0) return window.showToast?.('請輸入正確消費金額', true);
 
   if (mode !== 'reward' && (!deductPoints || deductPoints <= 0)) return window.showToast?.('請輸入本次折抵點數。', true);
 
-  if (window.storePointCustomer && window.storePointCustomer.canAdjust === false) {
+  if (window.storePointCustomer && window.storePointCustomer.canAdjust === false && !canAutoBindReward) {
     return window.showToast?.(window.storePointCustomer.message || '此客戶尚未綁定點數會員，不能直接扣點', true);
   }
 
@@ -1633,7 +1656,8 @@ window.submitStorePointCashier = async function(btn) {
       customerUserId,
       amount,
       deductPoints,
-      mode
+      mode,
+      autoBindPointAccount: canAutoBindReward
     }, true);
     if (!res || res.error) throw new Error(res?.error || '點數處理失敗');
     const data = res.data || res;
