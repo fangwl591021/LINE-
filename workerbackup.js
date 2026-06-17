@@ -1761,13 +1761,28 @@ const LineOAChatModule = {
       name: this.text(profile.displayName || profile.name),
       role: 'user'
     }, env);
-    await env.ACTMASTER_DB.prepare(`
-      UPDATE users
-      SET point_line_id = COALESCE(NULLIF(point_line_id, ''), ?),
-          identity_source = COALESCE(NULLIF(identity_source, ''), 'line_oa_follow'),
-          migrated_at = COALESCE(migrated_at, CURRENT_TIMESTAMP)
-      WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
-    `).bind(lineId, lineId, lineId, lineId, lineId).run();
+    const wallet = await PointModule.queryPointBalanceFast({
+      pointUserId: lineId,
+      point_type: 'gift_money',
+      page: 1,
+      per_page: 20
+    }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+    const pointVerified = !!(wallet && wallet.success);
+    if (pointVerified) {
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE users
+        SET point_line_id = COALESCE(NULLIF(point_line_id, ''), ?),
+            identity_source = COALESCE(NULLIF(identity_source, ''), 'line_oa_follow'),
+            migrated_at = COALESCE(migrated_at, CURRENT_TIMESTAMP)
+        WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
+      `).bind(lineId, lineId, lineId, lineId, lineId).run();
+    } else {
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE users
+        SET identity_source = COALESCE(NULLIF(identity_source, ''), 'line_oa_follow_unverified')
+        WHERE line_id = ? OR row_id = ?
+      `).bind(lineId, lineId).run();
+    }
     await D1WriteModule.clearUserCache(env, lineId).catch(() => null);
     const user = await D1ReadModule.first(env, `
       SELECT * FROM users
@@ -1779,6 +1794,8 @@ const LineOAChatModule = {
       data: {
         lineUserId: lineId,
         pointUserId: D1ReadModule.text(user && user.point_line_id) || lineId,
+        pointVerified,
+        wallet,
         user: user ? D1ReadModule.userRow(user, 'line_oa_follow') : null
       }
     };
@@ -1791,6 +1808,20 @@ const LineOAChatModule = {
     if (!points) return { awarded: false, reason: 'disabled' };
     await PointModule.ensureAwardTable(env);
     const pointUserId = await PointModule.resolvePointUserId(env, lineId).catch(() => lineId);
+    const wallet = await PointModule.queryPointBalanceFast({
+      pointUserId,
+      point_type: 'gift_money',
+      page: 1,
+      per_page: 20
+    }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+    if (!wallet || !wallet.success) {
+      return {
+        awarded: false,
+        reason: 'mother_point_member_not_found',
+        pointUserId,
+        error: wallet && wallet.error ? wallet.error : 'Point wallet unavailable'
+      };
+    }
     const awardId = 'AWD_LINE_OA_FOLLOW_' + pointUserId;
     const awardType = 'line_oa_follow';
     const cardId = 'line_oa_follow';
