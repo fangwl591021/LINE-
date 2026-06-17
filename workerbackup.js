@@ -1810,20 +1810,6 @@ const LineOAChatModule = {
     if (!points) return { awarded: false, reason: 'disabled' };
     await PointModule.ensureAwardTable(env);
     const pointUserId = await PointModule.resolvePointUserId(env, lineId).catch(() => lineId);
-    const wallet = await PointModule.queryPointBalanceFast({
-      pointUserId,
-      point_type: 'gift_money',
-      page: 1,
-      per_page: 20
-    }, env).catch(e => ({ success: false, error: e.message || String(e) }));
-    if (!wallet || !wallet.success) {
-      return {
-        awarded: false,
-        reason: 'mother_point_member_not_found',
-        pointUserId,
-        error: wallet && wallet.error ? wallet.error : 'Point wallet unavailable'
-      };
-    }
     const awardId = 'AWD_LINE_OA_FOLLOW_' + pointUserId;
     const awardType = 'line_oa_follow';
     const cardId = 'line_oa_follow';
