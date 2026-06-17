@@ -296,6 +296,8 @@ const SecurityModule = {
       'getLineOAChatAudience',
       'getLineOAChatCrm',
       'repairLineOAFollowPointOnboarding',
+      'getAdminPointProfile',
+      'adminAdjustCustomerPoints',
       'uploadLineOAAsset',
       'sendLineOAChatReply',
       'updateLineOAChatThread',
@@ -5006,6 +5008,132 @@ const PointModule = {
         list
       }
     };
+  }
+};
+
+const AdminPointModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  number(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  },
+
+  async ensure(env) {
+    if (!env.ACTMASTER_DB) throw new Error('Missing ACTMASTER_DB binding');
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS admin_point_ledger (
+        row_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT '',
+        actor_user_id TEXT NOT NULL DEFAULT '',
+        mode TEXT NOT NULL DEFAULT 'grant',
+        points REAL NOT NULL DEFAULT 0,
+        balance_after REAL NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'admin_local',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_admin_point_ledger_user_time ON admin_point_ledger(user_id, created_at)').run();
+  },
+
+  async resolveUser(env, rawUserId) {
+    const id = this.text(rawUserId);
+    if (!id) return { userId: '', user: null };
+    const identity = await D1ReadModule.findUserByIdentity(env, id).catch(() => null);
+    const row = identity && identity.user ? identity.user : null;
+    const userId = D1ReadModule.text(row && row.line_id) || D1ReadModule.text(identity && identity.canonicalId) || id;
+    return { userId, user: row ? D1ReadModule.userRow(row, 'admin_point') : null };
+  },
+
+  async localRows(env, userId, limit = 20) {
+    await this.ensure(env);
+    return await D1ReadModule.all(env, `
+      SELECT *
+      FROM admin_point_ledger
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, [userId, limit]).catch(() => []);
+  },
+
+  async localBalance(env, userId) {
+    await this.ensure(env);
+    const row = await D1ReadModule.first(env, `
+      SELECT COALESCE(SUM(points), 0) AS balance
+      FROM admin_point_ledger
+      WHERE user_id = ?
+    `, [userId]).catch(() => null);
+    return this.number(row && row.balance);
+  },
+
+  mapRow(row) {
+    return {
+      rowId: this.text(row.row_id),
+      userId: this.text(row.user_id),
+      actorUserId: this.text(row.actor_user_id),
+      mode: this.text(row.mode),
+      points: this.number(row.points),
+      balanceAfter: this.number(row.balance_after),
+      note: this.text(row.note),
+      source: this.text(row.source),
+      createdAt: this.text(row.created_at)
+    };
+  },
+
+  async profile(payload, env) {
+    const rawUserId = this.text(payload.userId || payload.targetUserId || payload.customerUserId || payload.LINE_user_id);
+    const resolved = await this.resolveUser(env, rawUserId);
+    if (!resolved.userId) return { success: false, error: 'Missing user id' };
+    const mother = await PointModule.queryUserPoints({
+      pointUserId: resolved.userId,
+      point_type: 'gift_money',
+      page: 1,
+      per_page: 20
+    }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+    const rows = await this.localRows(env, resolved.userId, 30);
+    const localBalance = await this.localBalance(env, resolved.userId);
+    const motherBalance = mother && mother.success ? this.number(mother.data && mother.data.balance) : null;
+    const motherRows = mother && mother.success && Array.isArray(mother.data && mother.data.list) ? mother.data.list : [];
+    return {
+      success: true,
+      data: {
+        userId: resolved.userId,
+        user: resolved.user,
+        source: mother && mother.success ? 'mother+local' : 'local',
+        motherAvailable: !!(mother && mother.success),
+        motherError: mother && mother.success ? '' : this.text(mother && mother.error, 'Mother point member not found'),
+        balance: (motherBalance === null ? 0 : motherBalance) + localBalance,
+        motherBalance,
+        localBalance,
+        rows: rows.map(row => this.mapRow(row)),
+        motherRows
+      }
+    };
+  },
+
+  async adjust(payload, env) {
+    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const rawUserId = this.text(payload.targetUserId || payload.customerUserId || payload.LINE_user_id);
+    const mode = this.text(payload.mode || payload.operation || 'grant').toLowerCase();
+    let points = Math.abs(this.number(payload.points || payload.amount || payload.get_point));
+    if (!rawUserId) return { success: false, error: 'Missing target user id' };
+    if (!points) return { success: false, error: 'Missing points' };
+    if (['deduct', 'debit', 'subtract'].includes(mode)) points = -points;
+    const resolved = await this.resolveUser(env, rawUserId);
+    const before = await this.localBalance(env, resolved.userId);
+    const after = before + points;
+    if (after < 0) return { success: false, error: 'Local point balance is insufficient' };
+    await this.ensure(env);
+    const rowId = `APL_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO admin_point_ledger (row_id,user_id,actor_user_id,mode,points,balance_after,note,source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'admin_local')
+    `).bind(rowId, resolved.userId, actorId, points >= 0 ? (mode === 'backfill' ? 'backfill' : 'grant') : 'deduct', points, after, this.text(payload.note)).run();
+    return await this.profile({ userId: resolved.userId }, env);
   }
 };
 
@@ -13370,6 +13498,10 @@ async function dispatchAction(action, payload, request, env) {
       return await LineOAChatModule.crm(payload || {}, env);
     case 'repairLineOAFollowPointOnboarding':
       return await LineOAChatModule.repairFollowPointOnboarding(payload || {}, env);
+    case 'getAdminPointProfile':
+      return await AdminPointModule.profile(payload || {}, env);
+    case 'adminAdjustCustomerPoints':
+      return await AdminPointModule.adjust(payload || {}, env);
     case 'uploadLineOAAsset':
       return await LineOAChatModule.uploadAsset(payload || {}, env);
     case 'sendLineOAChatReply':

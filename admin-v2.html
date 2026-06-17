@@ -974,6 +974,37 @@
         <input type="hidden" id="crm-user-id">
         <div id="crm-summary-cards" class="grid grid-cols-1 md:grid-cols-4 gap-4"></div>
 
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-emerald-600 text-[20px]">account_balance_wallet</span>
+              <h4 class="font-black text-slate-800">會員點數</h4>
+            </div>
+            <span id="crm-point-source" class="text-[12px] font-bold text-slate-400">尚未載入</span>
+          </div>
+          <div class="p-5 grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-5">
+            <div class="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-center">
+              <p class="text-[13px] font-black text-slate-400">可用點數餘額</p>
+              <div class="mt-2"><span id="crm-point-balance" class="text-5xl font-black text-red-600">-</span><span class="ml-2 text-lg font-black text-slate-400">點</span></div>
+              <p id="crm-point-note" class="mt-2 text-[12px] font-bold text-slate-500">-</p>
+              <div class="mt-5 grid grid-cols-3 gap-3">
+                <button type="button" onclick="adminCrmPointAdjust('grant')" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-700 font-black active:scale-95">贈點</button>
+                <button type="button" onclick="adminCrmPointAdjust('deduct')" class="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-red-600 font-black active:scale-95">扣點</button>
+                <button type="button" onclick="adminCrmPointAdjust('backfill')" class="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 text-indigo-700 font-black active:scale-95">補登舊點數</button>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-slate-100 overflow-hidden">
+              <div class="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+                <span class="material-symbols-outlined text-slate-500 text-[18px]">history</span>
+                <b class="text-sm text-slate-700">點數歷史紀錄</b>
+              </div>
+              <div id="crm-point-history" class="divide-y divide-slate-100 text-sm">
+                <div class="p-4 text-slate-400 font-bold">尚未載入</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
@@ -2815,6 +2846,67 @@
       return document.getElementById(id)?.value || '';
     }
 
+    function renderAdminCrmPointProfile(data = {}) {
+      const balanceEl = document.getElementById('crm-point-balance');
+      const sourceEl = document.getElementById('crm-point-source');
+      const noteEl = document.getElementById('crm-point-note');
+      const historyEl = document.getElementById('crm-point-history');
+      const balance = Number(data.balance || 0) || 0;
+      if (balanceEl) balanceEl.textContent = balance.toLocaleString('zh-TW');
+      if (sourceEl) sourceEl.textContent = data.motherAvailable ? '母站 + 本系統' : '本系統點數檔';
+      if (noteEl) noteEl.textContent = data.motherAvailable
+        ? `母站 ${Number(data.motherBalance || 0).toLocaleString('zh-TW')} 點，本系統 ${Number(data.localBalance || 0).toLocaleString('zh-TW')} 點`
+        : '母站尚未建檔，先使用本系統點數檔。';
+      const localRows = Array.isArray(data.rows) ? data.rows : [];
+      const motherRows = Array.isArray(data.motherRows) ? data.motherRows.slice(0, 8).map(row => ({
+        mode: row.event_name || row.eventName || '母站紀錄',
+        points: Number(row.get_point ?? row.point ?? row.points ?? 0) || 0,
+        note: row.event_content || row.eventContent || row.shop_remark || '',
+        createdAt: row.created_at || row.createdAt || ''
+      })) : [];
+      const rows = localRows.concat(motherRows).slice(0, 12);
+      if (historyEl) {
+        historyEl.innerHTML = rows.length ? rows.map(row => {
+          const points = Number(row.points || 0) || 0;
+          const positive = points >= 0;
+          return `<div class="px-4 py-3 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="font-black text-slate-800 truncate">${escapeHTML(row.mode || '點數調整')}</div>
+              <div class="text-[12px] text-slate-400 mt-0.5 truncate">${escapeHTML(row.note || '-')}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">${escapeHTML(row.createdAt || '')}</div>
+            </div>
+            <div class="font-black ${positive ? 'text-emerald-600' : 'text-red-600'}">${positive ? '+' : ''}${points.toLocaleString('zh-TW')}</div>
+          </div>`;
+        }).join('') : '<div class="p-4 text-slate-400 font-bold">尚無點數紀錄</div>';
+      }
+    }
+
+    async function loadAdminCrmPointProfile(userId) {
+      const historyEl = document.getElementById('crm-point-history');
+      if (historyEl) historyEl.innerHTML = '<div class="p-4 text-slate-400 font-bold">載入中...</div>';
+      const res = await fetchAPI('getAdminPointProfile', { userId });
+      renderAdminCrmPointProfile(res?.data || res || {});
+    }
+
+    async function adminCrmPointAdjust(mode) {
+      const userId = document.getElementById('crm-user-id')?.value || currentDistributorCrmUserId;
+      if (!userId) return showToast('找不到會員 UID', true);
+      const label = mode === 'deduct' ? '扣點' : (mode === 'backfill' ? '補登舊點數' : '贈點');
+      const raw = prompt(`${label}點數`, mode === 'deduct' ? '10' : '100');
+      if (raw === null) return;
+      const points = Math.abs(Number(raw || 0));
+      if (!points) return showToast('請輸入點數', true);
+      const note = prompt('備註', label) || label;
+      const res = await fetchAPI('adminAdjustCustomerPoints', {
+        targetUserId: userId,
+        mode,
+        points,
+        note
+      });
+      renderAdminCrmPointProfile(res?.data || res || {});
+      showToast(`${label}完成`);
+    }
+
     function fillDistributorCrm(user = {}) {
       const id = getUserId(user);
       const sponsor = getSponsorUser(user);
@@ -2880,6 +2972,10 @@
         <div class="text-[12px] text-slate-400 font-bold">${label}</div>
         <div class="crm-pill mt-2 ${cls}">${value}</div>
       </div>`).join('');
+      loadAdminCrmPointProfile(id).catch(err => {
+        console.error('admin CRM point profile failed', err);
+        renderAdminCrmPointProfile({ balance: 0, rows: [], motherAvailable: false, motherError: err.message || String(err) });
+      });
 
       document.getElementById('crm-fate-grid').innerHTML = renderAdminFateGrid(user);
 
