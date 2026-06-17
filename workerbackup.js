@@ -1820,7 +1820,7 @@ const LineOAChatModule = {
       WHERE user_id = ? AND card_id = ? AND award_type = ?
       LIMIT 1
     `, [pointUserId, cardId, awardType]).catch(() => null);
-    if (existing && this.text(existing.status) === 'sent') {
+    if (existing && ['sent', 'local_sent'].includes(this.text(existing.status))) {
       return { awarded: false, reason: 'already_awarded', pointUserId };
     }
     if (!existing) {
@@ -1840,20 +1840,32 @@ const LineOAChatModule = {
       eventContent,
       shop_remark: ['line_oa_follow', createdAt || new Date().toISOString()].join(';')
     }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
+    let status = result && result.success ? 'sent' : 'failed';
+    let localResult = null;
+    if (status === 'failed') {
+      localResult = await AdminPointModule.adjust({
+        authenticatedUserId: 'system',
+        targetUserId: pointUserId,
+        mode: 'grant',
+        points,
+        note: `LINE OA follow local wallet fallback; mother_error=${this.text(result && result.error, 'Point API failed')}; created_at=${createdAt || new Date().toISOString()}`
+      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+      if (localResult && localResult.success !== false) status = 'local_sent';
+    }
     await env.ACTMASTER_DB.prepare(`
       UPDATE point_awards
       SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
       WHERE user_id = ? AND card_id = ? AND award_type = ?
     `).bind(
-      result && result.success ? 'sent' : 'failed',
-      JSON.stringify({ result, lineUserId: lineId, pointUserId, createdAt }),
+      status,
+      JSON.stringify({ result, localResult, lineUserId: lineId, pointUserId, createdAt }),
       pointUserId,
       cardId,
       awardType
     ).run();
-    return result && result.success
-      ? { awarded: true, points, pointUserId, response: result.data }
-      : { awarded: false, points, pointUserId, error: (result && result.error) || 'Point award failed' };
+    if (status === 'sent') return { awarded: true, points, pointUserId, source: 'mother', response: result.data };
+    if (status === 'local_sent') return { awarded: true, points, pointUserId, source: 'local', motherError: (result && result.error) || 'Point award failed', localResult: localResult && (localResult.data || localResult) };
+    return { awarded: false, points, pointUserId, error: (result && result.error) || (localResult && localResult.error) || 'Point award failed' };
   },
 
   async handleFollowPointOnboarding(env, event) {
@@ -1921,10 +1933,10 @@ const LineOAChatModule = {
       SELECT m.user_id, MIN(m.created_at) AS follow_at
       FROM line_oa_messages m
       LEFT JOIN point_awards a
-        ON a.user_id = m.user_id
+       ON a.user_id = m.user_id
        AND a.card_id = 'line_oa_follow'
        AND a.award_type = 'line_oa_follow'
-       AND a.status = 'sent'
+       AND a.status IN ('sent', 'local_sent')
       WHERE m.event_type = 'follow'
         AND m.user_id <> ''
         AND a.award_id IS NULL
