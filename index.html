@@ -759,26 +759,26 @@
 
             <div class="space-y-2">
               <label class="text-[13px] font-black text-slate-600">客戶帳號 / 手機 / QR 內容</label>
-              <div class="grid grid-cols-[1fr_auto_auto] gap-2">
-                <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px]" placeholder="掃 QR、貼 UID，或輸入手機搜尋" onblur="window.lookupStorePointCustomer()" onkeydown="if(event.key==='Enter'){event.preventDefault();window.lookupStorePointCustomer()}">
-                <button type="button" onclick="window.lookupStorePointCustomer()" class="px-4 rounded-2xl bg-blue-50 text-blue-600 font-black active:scale-95 transition-transform">
+              <div class="grid grid-cols-2 gap-2">
+                <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px] col-span-2 min-w-0" placeholder="掃 QR、貼 UID，或輸入手機搜尋" onblur="window.lookupStorePointCustomer()" onkeydown="if(event.key==='Enter'){event.preventDefault();window.lookupStorePointCustomer()}">
+                <button type="button" onclick="window.lookupStorePointCustomer()" class="min-h-[48px] rounded-2xl bg-blue-50 text-blue-600 font-black active:scale-95 transition-transform">
                   查詢
                 </button>
-                <button type="button" onclick="window.openStorePointScanner()" class="px-4 rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center gap-1 cursor-pointer">
+                <button type="button" onclick="window.openStorePointScanner()" class="min-h-[48px] rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center justify-center gap-1 cursor-pointer">
                   <span class="material-symbols-outlined text-[18px]">qr_code_scanner</span>
                   掃碼
                 </button>
               </div>
               <div id="store-point-customer-candidates" class="hidden space-y-2"></div>
-              <div id="store-point-customer-card" class="hidden rounded-2xl bg-slate-50 border border-slate-100 p-3 grid grid-cols-[48px_1fr_auto] gap-3 items-center">
-                <img id="store-point-customer-avatar" src="" class="w-12 h-12 rounded-2xl object-cover bg-white border border-slate-200" alt="">
+              <div id="store-point-customer-card" class="hidden rounded-2xl bg-slate-50 border border-slate-100 p-3 grid grid-cols-[44px_minmax(0,1fr)_auto] gap-3 items-center">
+                <img id="store-point-customer-avatar" src="" class="w-11 h-11 rounded-2xl object-cover bg-white border border-slate-200" alt="">
                 <div class="min-w-0">
                   <div id="store-point-customer-name" class="text-[15px] font-black text-slate-900 truncate">-</div>
                   <div id="store-point-customer-meta" class="text-[12px] font-bold text-slate-400 mt-1 truncate">-</div>
                 </div>
-                <div class="text-right">
+                <div class="text-right shrink-0">
                   <div class="text-[11px] font-bold text-slate-400">持有點數</div>
-                  <div id="store-point-customer-balance" class="text-[18px] font-black text-[#06C755]">-</div>
+                  <div id="store-point-customer-balance" class="text-[18px] font-black text-[#06C755] whitespace-nowrap">-</div>
                 </div>
               </div>
               <div id="store-point-bind-hint" class="hidden rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-black leading-relaxed text-amber-800"></div>
