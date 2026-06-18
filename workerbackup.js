@@ -1772,7 +1772,14 @@ const LineOAChatModule = {
         },
         body: rawBody
       });
-      return { success: res.ok, status: res.status };
+      const text = await res.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (e) {
+        data = { rawText: text };
+      }
+      return { success: res.ok, status: res.status, data };
     } catch (e) {
       console.error('FORWARD_WEBHOOK_URL failed', e);
       return { success: false, error: e.message || String(e) };
@@ -2089,6 +2096,17 @@ const LineOAChatModule = {
     const storeSearchReplied = await LineOAStoreSearchKeywordModule.reply(events, env);
     if (storeSearchReplied) return new Response('OK', { status: 200 });
     const keywordRuleReply = await LineOAKeywordRuleModule.replyPayload(events, env);
+    if (keywordRuleReply) {
+      const forwardResult = await forwardJob.catch(e => ({ success: false, error: e.message || String(e) }));
+      const forwardReplyPayload = forwardResult && forwardResult.success
+        ? this.normalizeReplyPayload(forwardResult.data)
+        : null;
+      if (forwardReplyPayload) {
+        const replyResult = await this.replyLine(this.mergeReplyPayloads(forwardReplyPayload, keywordRuleReply), env);
+        if (!replyResult.success) console.error('LINE forward reply merge failed', replyResult);
+        return new Response('OK', { status: 200 });
+      }
+    }
     const gasRawBody = keywordRuleReply ? rawBody : await this.filterAutoReplyPayload(rawBody, events, env);
     if (!gasRawBody) {
       if (keywordRuleReply) console.warn('LINE OA keyword rule skipped because no mother reply payload is available');
