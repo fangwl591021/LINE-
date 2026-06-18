@@ -300,8 +300,8 @@ function routeSharedCardBadgeToPicker(flexMsg, shareUrl) {
   const actionUrl = appendCardAutoShareMode(shareUrl);
   if (!flexMsg || !actionUrl) return flexMsg;
   try {
-    if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
-      const first = flexMsg.header.contents[0];
+    if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents.length) {
+      const first = flexMsg.header.contents[flexMsg.header.contents.length - 1];
       const oldAction = first.action || {};
       first.action = first.type === 'button'
         ? { type: 'uri', label: oldAction.label || '分享名片', uri: actionUrl }

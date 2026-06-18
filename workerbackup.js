@@ -1207,8 +1207,9 @@ const LineOAChatModule = {
     });
     const editUrl = this.quickMyCardUrl(userId, env);
     const shareUrl = this.cardShareUrl(card.rowId, userId, card.networkId || 'admin', env, true);
-    if (flex?.header?.contents?.[0]) {
-      flex.header.contents[0].action = { type: 'uri', uri: shareUrl };
+    if (flex?.header?.contents?.length) {
+      const shareButton = flex.header.contents[flex.header.contents.length - 1];
+      shareButton.action = { type: 'uri', uri: shareUrl };
     }
     return {
       type: 'flex',

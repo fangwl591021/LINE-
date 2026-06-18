@@ -348,13 +348,31 @@ function buildECardHeroWithShareBadge(imgUrl, aspectRatio, badgeUrl) {
 
 function buildECardShareHeader(badgeUrl) {
   const shareActionUrl = appendECardShareMode(badgeUrl);
+  const likeActionUrl = buildECardLikeUrl(badgeUrl);
   if (!shareActionUrl) return undefined;
   return {
     type: 'box',
     layout: 'horizontal',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingAll: '8px',
     contents: [{
+      type: 'box',
+      layout: 'horizontal',
+      alignItems: 'center',
+      spacing: 'xs',
+      backgroundColor: '#F1F5F9',
+      width: '65px',
+      height: '25px',
+      cornerRadius: '6px',
+      paddingStart: '8px',
+      paddingEnd: '8px',
+      contents: [
+        { type: 'text', text: '\uD83D\uDC4D', size: 'xs', flex: 0 },
+        { type: 'text', text: '0', weight: 'bold', color: '#334155', size: 'xs', flex: 1 }
+      ],
+      action: likeActionUrl ? { type: 'uri', uri: likeActionUrl } : undefined
+    }, {
       type: 'box',
       layout: 'vertical',
       justifyContent: 'center',
@@ -932,12 +950,31 @@ function appendECardShareMode(url) {
   }
 }
 
+function buildECardLikeUrl(url) {
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    const cardId = parsed.searchParams.get("shareCardId") || parsed.searchParams.get("cardId") || "";
+    if (cardId) {
+      parsed.searchParams.delete("shareCardId");
+      parsed.searchParams.delete("cardId");
+      parsed.searchParams.delete("share");
+      parsed.searchParams.set("likeCardId", cardId);
+    } else {
+      parsed.searchParams.set("like", "1");
+    }
+    return parsed.toString();
+  } catch (e) {
+    return url;
+  }
+}
+
 function routeECardFlexHeaderShareToPicker(flexMsg, shareUrl) {
   const actionUrl = appendECardShareMode(shareUrl);
   if (!flexMsg || !actionUrl) return flexMsg;
   try {
-    if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
-      const headerItem = flexMsg.header.contents[0];
+    if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents.length) {
+      const headerItem = flexMsg.header.contents[flexMsg.header.contents.length - 1];
       const action = headerItem.action || {};
       headerItem.action = headerItem.type === "button"
         ? { type: "uri", label: action.label || "分享名片", uri: actionUrl }
