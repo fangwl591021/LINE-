@@ -2089,7 +2089,7 @@ const LineOAChatModule = {
     const storeSearchReplied = await LineOAStoreSearchKeywordModule.reply(events, env);
     if (storeSearchReplied) return new Response('OK', { status: 200 });
     const keywordRuleReply = await LineOAKeywordRuleModule.replyPayload(events, env);
-    const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);
+    const gasRawBody = keywordRuleReply ? rawBody : await this.filterAutoReplyPayload(rawBody, events, env);
     if (!gasRawBody) {
       if (keywordRuleReply) {
         const replyResult = await this.replyLine(keywordRuleReply, env);
