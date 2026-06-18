@@ -297,6 +297,9 @@ const SecurityModule = {
       'getLineOAChatCrm',
       'repairLineOAFollowPointOnboarding',
       'repairPointWalletSearchIndex',
+      'diagnosePointSync',
+      'listPointSyncJobs',
+      'enqueuePointSyncJob',
       'getAdminPointProfile',
       'adminAdjustCustomerPoints',
       'uploadLineOAAsset',
@@ -5172,6 +5175,7 @@ const PointModule = {
 
     const changedPoints = Math.abs(points);
     const ledgerId = `SPC_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    let syncJob = null;
     if (await this.ensureCashierLedgerTable(env)) {
       await env.ACTMASTER_DB.prepare(`
         INSERT INTO store_point_cashier_logs (
@@ -5193,6 +5197,24 @@ const PointModule = {
         JSON.stringify(result.data || result)
       ).run();
     }
+    if (customerPointSource === 'local') {
+      syncJob = await PointSyncModule.enqueue({
+        lineUserId: customerPointUserId,
+        source: isReward ? 'store_reward_local_wallet' : 'store_redeem_local_wallet',
+        sourceRef: ledgerId,
+        points,
+        pointType: 'gift_money',
+        createdBy: actorId,
+        payload: {
+          actorId,
+          amount,
+          mode: isReward ? 'reward' : 'redeem',
+          payableAmount,
+          balanceBefore,
+          balanceAfterEstimate: balanceBefore + points
+        }
+      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+    }
 
     return {
       success: true,
@@ -5211,6 +5233,7 @@ const PointModule = {
         localPointOnly: customerPointSource === 'local',
         localWalletRepaired: !!(customerLocalWalletIndex && customerLocalWalletIndex.success),
         localWalletIndex: customerLocalWalletIndex,
+        syncJob,
         autoBoundPointAccount: !!autoBindResult,
         autoBindResult,
         eventName,
@@ -5507,6 +5530,233 @@ const AdminPointModule = {
       VALUES (?, ?, ?, ?, ?, ?, ?, 'admin_local')
     `).bind(rowId, resolved.userId, actorId, points >= 0 ? (mode === 'backfill' ? 'backfill' : 'grant') : 'deduct', points, after, this.text(payload.note)).run();
     return await this.profile({ userId: resolved.userId }, env);
+  }
+};
+
+const PointSyncModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  number(value) {
+    const num = Number(value || 0);
+    return Number.isFinite(num) ? num : 0;
+  },
+
+  json(value) {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : (value || {});
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  async ensure(env) {
+    if (!env.ACTMASTER_DB) return false;
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS point_sync_jobs (
+        job_id TEXT PRIMARY KEY,
+        line_user_id TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT '',
+        source_ref TEXT NOT NULL DEFAULT '',
+        points REAL NOT NULL DEFAULT 0,
+        point_type TEXT NOT NULL DEFAULT 'gift_money',
+        status TEXT NOT NULL DEFAULT 'pending',
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT NOT NULL DEFAULT '',
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        result_json TEXT NOT NULL DEFAULT '{}',
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        synced_at TEXT NOT NULL DEFAULT ''
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_point_sync_jobs_user_status
+      ON point_sync_jobs(line_user_id, status, created_at)
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_point_sync_jobs_status_time
+      ON point_sync_jobs(status, created_at)
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_point_sync_jobs_source_ref
+      ON point_sync_jobs(source, source_ref)
+    `).run();
+    return true;
+  },
+
+  mapJob(row) {
+    return {
+      jobId: this.text(row.job_id),
+      lineUserId: this.text(row.line_user_id),
+      source: this.text(row.source),
+      sourceRef: this.text(row.source_ref),
+      points: this.number(row.points),
+      pointType: this.text(row.point_type, 'gift_money'),
+      status: this.text(row.status, 'pending'),
+      retryCount: Math.floor(this.number(row.retry_count)),
+      lastError: this.text(row.last_error),
+      payload: this.json(row.payload_json),
+      result: this.json(row.result_json),
+      createdBy: this.text(row.created_by),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at),
+      syncedAt: this.text(row.synced_at)
+    };
+  },
+
+  async enqueue(payload, env) {
+    if (!await this.ensure(env)) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const rawUserId = this.text(payload.lineUserId || payload.userId || payload.customerUserId || payload.LINE_user_id || payload.uid);
+    const lineUserId = rawUserId ? await PointModule.resolvePointUserId(env, rawUserId).catch(() => rawUserId) : '';
+    const points = this.number(payload.points || payload.get_point || payload.amount);
+    const source = this.text(payload.source || payload.awardType || payload.eventName || 'manual_sync');
+    const sourceRef = this.text(payload.sourceRef || payload.refId || payload.ledgerId || payload.awardId);
+    if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
+    if (!points) return { success: false, error: 'Missing points' };
+    const jobId = this.text(payload.jobId) || `PSJ_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const actorId = this.text(payload.authenticatedUserId || payload.createdBy || payload.userId);
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO point_sync_jobs (
+        job_id, line_user_id, source, source_ref, points, point_type,
+        status, payload_json, created_by, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, CURRENT_TIMESTAMP)
+    `).bind(
+      jobId,
+      lineUserId,
+      source,
+      sourceRef,
+      points,
+      this.text(payload.pointType || payload.point_type, 'gift_money'),
+      JSON.stringify(payload.payload || payload || {}),
+      actorId
+    ).run();
+    const row = await D1ReadModule.first(env, 'SELECT * FROM point_sync_jobs WHERE job_id = ?', [jobId]);
+    return { success: true, data: this.mapJob(row) };
+  },
+
+  async list(payload, env) {
+    if (!await this.ensure(env)) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const status = this.text(payload.status);
+    const rawUserId = this.text(payload.lineUserId || payload.userId || payload.customerUserId || payload.LINE_user_id || payload.uid);
+    const lineUserId = rawUserId ? await PointModule.resolvePointUserId(env, rawUserId).catch(() => rawUserId) : '';
+    const limit = Math.min(100, Math.max(1, Math.floor(this.number(payload.limit || 30))));
+    const where = [];
+    const binds = [];
+    if (status) {
+      where.push('status = ?');
+      binds.push(status);
+    }
+    if (lineUserId) {
+      where.push('line_user_id = ?');
+      binds.push(lineUserId);
+    }
+    binds.push(limit);
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM point_sync_jobs
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, binds);
+    return { success: true, data: rows.map(row => this.mapJob(row)) };
+  },
+
+  async recentForUser(env, userId, limit = 20) {
+    if (!env.ACTMASTER_DB || !userId) return [];
+    await this.ensure(env);
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM point_sync_jobs
+      WHERE line_user_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `, [userId, Math.min(50, Math.max(1, limit))]).catch(() => []);
+    return rows.map(row => this.mapJob(row));
+  },
+
+  async diagnose(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    await this.ensure(env);
+    const raw = this.text(payload.lineUserId || payload.userId || payload.customerUserId || payload.LINE_user_id || payload.uid || payload.query);
+    if (!raw) return { success: false, error: 'Missing query user id' };
+    const resolved = await PointModule.resolveStorePointCustomer(env, raw).catch(e => ({ error: e.message || String(e) }));
+    const pointUserId = this.text(resolved && resolved.customerPointUserId) || await PointModule.resolvePointUserId(env, raw).catch(() => raw) || raw;
+    const identity = pointUserId ? await D1ReadModule.findUserByIdentity(env, pointUserId).catch(() => null) : null;
+    const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
+    const mother = pointUserId ? await PointModule.queryPointBalanceFast({
+      pointUserId,
+      point_type: this.text(payload.pointType || payload.point_type, 'gift_money')
+    }, env).catch(e => ({ success: false, error: e.message || String(e) })) : null;
+    const localBalance = pointUserId ? await AdminPointModule.localBalance(env, pointUserId).catch(() => 0) : 0;
+    const jobs = pointUserId ? await this.recentForUser(env, pointUserId, Math.floor(this.number(payload.jobLimit || 20))) : [];
+    const search = await PointModule.findStorePointCustomerCandidates(env, raw).catch(e => ({ matches: [], error: e.message || String(e) }));
+    const userIndexRow = pointUserId ? await D1ReadModule.first(env, `
+      SELECT row_id, line_id, name, phone, role, network_id, point_line_id, legacy_line_id, identity_source, migrated_at
+      FROM users
+      WHERE row_id = ? OR line_id = ? OR point_line_id = ? OR legacy_line_id = ?
+      LIMIT 1
+    `, [pointUserId, pointUserId, pointUserId, pointUserId]).catch(() => null) : null;
+    const pendingPoints = jobs
+      .filter(job => job.status === 'pending' || job.status === 'failed')
+      .reduce((sum, job) => sum + this.number(job.points), 0);
+    const motherBalance = mother && mother.success ? this.number(mother.data && mother.data.balance) : null;
+    return {
+      success: true,
+      data: {
+        query: raw,
+        pointUserId,
+        resolved: {
+          matchedBy: this.text(resolved && resolved.matchedBy),
+          needsBinding: !!(resolved && resolved.needsBinding),
+          needsSelection: !!(resolved && resolved.needsSelection),
+          error: this.text(resolved && resolved.error),
+          candidates: resolved && Array.isArray(resolved.candidates) ? resolved.candidates : []
+        },
+        mother: {
+          available: !!(mother && mother.success),
+          balance: motherBalance,
+          error: mother && mother.success ? '' : this.text(mother && mother.error),
+          code: this.text(mother && mother.code)
+        },
+        local: {
+          indexed: !!userIndexRow,
+          balance: localBalance,
+          user,
+          indexRow: userIndexRow || null
+        },
+        sync: {
+          pendingCount: jobs.filter(job => job.status === 'pending').length,
+          failedCount: jobs.filter(job => job.status === 'failed').length,
+          pendingPoints,
+          jobs
+        },
+        searchIndex: {
+          candidateCount: Array.isArray(search.matches) ? search.matches.length : 0,
+          error: this.text(search.error),
+          candidates: Array.isArray(search.matches) ? search.matches.slice(0, 10).map(match => ({
+            kind: match.kind,
+            id: match.id,
+            name: match.name,
+            phone: match.phone,
+            industry: match.industry,
+            needsBinding: !!match.needsBinding
+          })) : []
+        },
+        summary: {
+          status: mother && mother.success ? (pendingPoints ? 'mother_ready_with_pending_local_sync' : 'mother_ready') : (localBalance ? 'local_only_needs_sync' : 'missing_wallet'),
+          operableBalance: motherBalance === null ? localBalance : motherBalance,
+          totalKnownBalance: (motherBalance === null ? 0 : motherBalance) + localBalance,
+          recommendedAction: mother && mother.success
+            ? (pendingPoints ? 'sync_pending_local_points_to_mother' : 'none')
+            : (localBalance ? 'register_or_bind_mother_wallet_then_sync' : 'create_mother_wallet_or_local_index')
+        }
+      }
+    };
   }
 };
 
@@ -14175,6 +14425,9 @@ async function dispatchAction(action, payload, request, env) {
     case 'storeAdjustCustomerPoints': return await PointModule.storeAdjustCustomerPoints(payload || {}, env);
     case 'listStorePointCashierLogs': return await PointModule.listStorePointCashierLogs(payload || {}, env);
     case 'repairPointWalletSearchIndex': return await PointModule.repairPointWalletSearchIndex(payload || {}, env);
+    case 'diagnosePointSync':    return await PointSyncModule.diagnose(payload || {}, env);
+    case 'listPointSyncJobs':    return await PointSyncModule.list(payload || {}, env);
+    case 'enqueuePointSyncJob':  return await PointSyncModule.enqueue(payload || {}, env);
     case 'getSocialLikeStats':     return await TrackingModule.getSocialLikeStats(payload || {}, env);
     case 'recordSocialLike':       return await TrackingModule.recordSocialLike(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
