@@ -300,6 +300,7 @@ const SecurityModule = {
       'diagnosePointSync',
       'listPointSyncJobs',
       'enqueuePointSyncJob',
+      'processPointSyncJobs',
       'getAdminPointProfile',
       'adminAdjustCustomerPoints',
       'uploadLineOAAsset',
@@ -5677,6 +5678,133 @@ const PointSyncModule = {
       LIMIT ?
     `, [userId, Math.min(50, Math.max(1, limit))]).catch(() => []);
     return rows.map(row => this.mapJob(row));
+  },
+
+  async updateJob(env, jobId, fields = {}) {
+    const status = this.text(fields.status);
+    const lastError = this.text(fields.lastError);
+    const resultJson = JSON.stringify(fields.result || {});
+    const syncedAt = status === 'synced' ? new Date().toISOString() : this.text(fields.syncedAt);
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE point_sync_jobs
+      SET status = COALESCE(NULLIF(?, ''), status),
+          retry_count = CASE WHEN ? = 1 THEN retry_count + 1 ELSE retry_count END,
+          last_error = ?,
+          result_json = ?,
+          updated_at = CURRENT_TIMESTAMP,
+          synced_at = CASE WHEN ? <> '' THEN ? ELSE synced_at END
+      WHERE job_id = ?
+    `).bind(
+      status,
+      fields.incrementRetry ? 1 : 0,
+      lastError,
+      resultJson,
+      syncedAt,
+      syncedAt,
+      jobId
+    ).run();
+  },
+
+  eventName(source, points) {
+    const labels = {
+      store_reward_local_wallet: '子站店家贈點同步',
+      store_redeem_local_wallet: '子站店家扣點同步',
+      new_user_join: '子站新會員同步',
+      card_scan_create: '子站名片建檔同步',
+      manual_sync: '手動點數同步'
+    };
+    return labels[this.text(source)] || (points >= 0 ? '子站點數補同步' : '子站點數扣抵同步');
+  },
+
+  eventContent(job) {
+    const points = this.number(job.points);
+    const action = points >= 0 ? '補入' : '扣除';
+    return `子站點數佇列同步：${action} ${Math.abs(points).toLocaleString('zh-TW')} 點；來源 ${this.text(job.source, 'unknown')}；job ${this.text(job.jobId)}`;
+  },
+
+  async processJob(job, env) {
+    if (!job || !job.jobId) return { success: false, error: 'Missing job' };
+    const points = this.number(job.points);
+    if (!job.lineUserId || !points) {
+      await this.updateJob(env, job.jobId, {
+        status: 'failed',
+        incrementRetry: true,
+        lastError: 'Missing line user id or points'
+      });
+      return { success: false, error: 'Missing line user id or points', jobId: job.jobId };
+    }
+    const result = await PointModule.insertUserPoint({
+      userId: job.lineUserId,
+      points,
+      pointType: job.pointType || 'gift_money',
+      eventName: this.eventName(job.source, points),
+      eventContent: this.eventContent(job),
+      shop_user_lineid: job.createdBy || '',
+      child_shop_name: 'LINE 子站同步',
+      shop_remark: `point_sync_job=${job.jobId}; source=${job.source}; source_ref=${job.sourceRef}`
+    }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+    if (result && result.success) {
+      await this.updateJob(env, job.jobId, {
+        status: 'synced',
+        lastError: '',
+        result: result.data || result
+      });
+      return { success: true, jobId: job.jobId, data: result.data || result };
+    }
+    const error = this.text(result && result.error, 'Point sync failed');
+    await this.updateJob(env, job.jobId, {
+      status: 'failed',
+      incrementRetry: true,
+      lastError: error,
+      result: result || {}
+    });
+    return { success: false, jobId: job.jobId, error };
+  },
+
+  async process(payload, env) {
+    if (!await this.ensure(env)) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const limit = Math.min(50, Math.max(1, Math.floor(this.number(payload.limit || 10))));
+    const maxRetry = Math.min(20, Math.max(1, Math.floor(this.number(payload.maxRetry || 5))));
+    const rawUserId = this.text(payload.lineUserId || payload.userId || payload.customerUserId || payload.LINE_user_id || payload.uid);
+    const lineUserId = rawUserId ? await PointModule.resolvePointUserId(env, rawUserId).catch(() => rawUserId) : '';
+    const binds = [maxRetry];
+    let userWhere = '';
+    if (lineUserId) {
+      userWhere = 'AND line_user_id = ?';
+      binds.push(lineUserId);
+    }
+    binds.push(limit);
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM point_sync_jobs
+      WHERE status IN ('pending', 'failed')
+        AND retry_count < ?
+        ${userWhere}
+      ORDER BY created_at ASC
+      LIMIT ?
+    `, binds);
+    const jobs = rows.map(row => this.mapJob(row));
+    const results = [];
+    for (const job of jobs) {
+      const locked = await env.ACTMASTER_DB.prepare(`
+        UPDATE point_sync_jobs
+        SET status = 'processing', updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = ? AND status IN ('pending', 'failed')
+      `).bind(job.jobId).run().catch(() => null);
+      if (!locked || ((locked.meta && Number(locked.meta.changes || 0)) === 0)) continue;
+      results.push(await this.processJob(job, env));
+    }
+    return {
+      success: true,
+      data: {
+        requested: limit,
+        picked: jobs.length,
+        processed: results.length,
+        synced: results.filter(item => item.success).length,
+        failed: results.filter(item => !item.success).length,
+        results
+      }
+    };
   },
 
   async diagnose(payload, env) {
@@ -14428,6 +14556,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'diagnosePointSync':    return await PointSyncModule.diagnose(payload || {}, env);
     case 'listPointSyncJobs':    return await PointSyncModule.list(payload || {}, env);
     case 'enqueuePointSyncJob':  return await PointSyncModule.enqueue(payload || {}, env);
+    case 'processPointSyncJobs': return await PointSyncModule.process(payload || {}, env);
     case 'getSocialLikeStats':     return await TrackingModule.getSocialLikeStats(payload || {}, env);
     case 'recordSocialLike':       return await TrackingModule.recordSocialLike(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
@@ -14465,8 +14594,16 @@ export default {
     const run = D1ActivityModule.sendActivityReminders({ source: 'cron' }, env).catch(err => {
       console.error('activity reminder cron failed', err);
     });
-    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(run);
-    else await run;
+    const pointSyncRun = PointSyncModule.process({ source: 'cron', limit: 10, maxRetry: 5 }, env).catch(err => {
+      console.error('point sync cron failed', err);
+    });
+    if (ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(run);
+      ctx.waitUntil(pointSyncRun);
+    } else {
+      await run;
+      await pointSyncRun;
+    }
   },
 
   async fetch(request, env, ctx) {
