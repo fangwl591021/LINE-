@@ -1593,6 +1593,8 @@ const LineOAChatModule = {
     const key = `line-oa/outbound/${Date.now()}_${filename}`;
     await env.IMG_BUCKET.put(key, decoded.bytes, { httpMetadata: { contentType } });
     const baseUrl = (env.R2_PUBLIC_URL || env.R2_WORKER_URL || 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev').replace(/\/$/, '');
+    const motherBalance = Number(wallet.data?.balance || 0) || 0;
+    const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
     return {
       success: true,
       data: {
@@ -4917,7 +4919,10 @@ const PointModule = {
         industry,
         role: D1ReadModule.text(user && user.role, 'user'),
         avatarUrl: D1ReadModule.text(mappedCard && mappedCard.imageUrl),
-        balance: Number(wallet.data?.balance || 0) || 0,
+        balance: motherBalance + localBalance,
+        motherBalance,
+        localBalance,
+        balanceSource: localBalance ? 'mother+local' : 'mother',
         pointType: 'gift_money',
         user,
         card: mappedCard
