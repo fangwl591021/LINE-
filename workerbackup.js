@@ -5612,8 +5612,10 @@ const PointSyncModule = {
 
   async enqueue(payload, env) {
     if (!await this.ensure(env)) return { success: false, error: 'Missing ACTMASTER_DB binding' };
-    const rawUserId = this.text(payload.lineUserId || payload.userId || payload.customerUserId || payload.LINE_user_id || payload.uid);
-    const lineUserId = rawUserId ? await PointModule.resolvePointUserId(env, rawUserId).catch(() => rawUserId) : '';
+    const rawUserId = this.text(payload.query || payload.lineUserId || payload.customerUserId || payload.LINE_user_id || payload.uid || payload.targetUserId);
+    const resolved = rawUserId ? await PointModule.resolveStorePointCustomer(env, rawUserId).catch(() => null) : null;
+    const lineUserId = this.text(resolved && resolved.customerPointUserId)
+      || (rawUserId ? await PointModule.resolvePointUserId(env, rawUserId).catch(() => rawUserId) : '');
     const points = this.number(payload.points || payload.get_point || payload.amount);
     const source = this.text(payload.source || payload.awardType || payload.eventName || 'manual_sync');
     const sourceRef = this.text(payload.sourceRef || payload.refId || payload.ledgerId || payload.awardId);
@@ -5643,8 +5645,10 @@ const PointSyncModule = {
   async list(payload, env) {
     if (!await this.ensure(env)) return { success: false, error: 'Missing ACTMASTER_DB binding' };
     const status = this.text(payload.status);
-    const rawUserId = this.text(payload.lineUserId || payload.userId || payload.customerUserId || payload.LINE_user_id || payload.uid);
-    const lineUserId = rawUserId ? await PointModule.resolvePointUserId(env, rawUserId).catch(() => rawUserId) : '';
+    const rawUserId = this.text(payload.query || payload.lineUserId || payload.customerUserId || payload.LINE_user_id || payload.uid || payload.targetUserId);
+    const resolved = rawUserId ? await PointModule.resolveStorePointCustomer(env, rawUserId).catch(() => null) : null;
+    const lineUserId = this.text(resolved && resolved.customerPointUserId)
+      || (rawUserId ? await PointModule.resolvePointUserId(env, rawUserId).catch(() => rawUserId) : '');
     const limit = Math.min(100, Math.max(1, Math.floor(this.number(payload.limit || 30))));
     const where = [];
     const binds = [];
@@ -5810,7 +5814,7 @@ const PointSyncModule = {
   async diagnose(payload, env) {
     if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
     await this.ensure(env);
-    const raw = this.text(payload.lineUserId || payload.userId || payload.customerUserId || payload.LINE_user_id || payload.uid || payload.query);
+    const raw = this.text(payload.query || payload.lineUserId || payload.customerUserId || payload.LINE_user_id || payload.uid || payload.targetUserId);
     if (!raw) return { success: false, error: 'Missing query user id' };
     const resolved = await PointModule.resolveStorePointCustomer(env, raw).catch(e => ({ error: e.message || String(e) }));
     const pointUserId = this.text(resolved && resolved.customerPointUserId) || await PointModule.resolvePointUserId(env, raw).catch(() => raw) || raw;

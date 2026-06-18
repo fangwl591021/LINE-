@@ -944,6 +944,29 @@
           </div>
         </section>
 
+        <section id="point-sync-diagnostics" class="hidden bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          <div class="p-5 border-b border-slate-100 bg-slate-50/70">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-[17px] font-black text-slate-900 flex items-center gap-2">
+                  <span class="material-symbols-outlined text-blue-600 icon-filled">troubleshoot</span>
+                  點數同步診斷
+                </h3>
+                <p class="text-[13px] text-slate-500 font-bold mt-1">查母站、本系統索引與待同步佇列。</p>
+              </div>
+              <button type="button" onclick="window.processPointSyncJobsFromPanel(this)" class="shrink-0 rounded-2xl bg-slate-900 px-3 py-2 text-white text-[12px] font-black active:scale-95 transition-transform">同步</button>
+            </div>
+          </div>
+          <div class="p-5 space-y-4">
+            <div class="grid grid-cols-[minmax(0,1fr)_88px] gap-2">
+              <input id="point-sync-query" class="custom-input !py-3 font-mono text-[13px] min-w-0" placeholder="輸入 UID、手機或姓名">
+              <button type="button" onclick="window.runPointSyncDiagnosis()" class="rounded-2xl bg-blue-50 text-blue-600 text-[14px] font-black active:scale-95 transition-transform">診斷</button>
+            </div>
+            <div id="point-sync-summary" class="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3 text-[13px] text-slate-500 font-bold leading-relaxed">尚未查詢。</div>
+            <div id="point-sync-result" class="space-y-3"></div>
+          </div>
+        </section>
+
         <section>
           <div class="flex items-center justify-between mb-4 px-1">
             <div class="flex items-center gap-2">
@@ -2169,7 +2192,7 @@
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.67"></script>
+<script src="js/auth.js?v=10.68"></script>
 
 </body>
 </html>

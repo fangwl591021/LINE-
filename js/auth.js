@@ -1530,7 +1530,20 @@ window.canUseStorePointCashier = function() {
     || rawRole === '租戶';
 };
 
+window.canUsePointSyncDiagnostics = function() {
+  const rawRole = String(window.userRole || window.currentUser?.role || '').trim();
+  const role = rawRole.toLowerCase();
+  return role === 'admin' || rawRole === '總管';
+};
+
+window.updatePointSyncDiagnosticVisibility = function() {
+  const panel = document.getElementById('point-sync-diagnostics');
+  if (!panel) return;
+  panel.classList.toggle('hidden', !window.canUsePointSyncDiagnostics());
+};
+
 window.updateStorePointCashierVisibility = function() {
+  window.updatePointSyncDiagnosticVisibility?.();
   const panel = document.getElementById('store-point-cashier');
   if (!panel) return;
   const canUse = window.canUseStorePointCashier();
@@ -1547,6 +1560,112 @@ window.toggleStorePointCashier = function() {
   body.classList.toggle('hidden', !willOpen);
   if (icon) icon.textContent = willOpen ? 'expand_less' : 'expand_more';
   if (willOpen) window.loadStorePointCashierLogs?.();
+};
+
+function pointSyncHtml(value) {
+  return window.escapeHTML ? window.escapeHTML(value ?? '') : String(value ?? '');
+}
+
+function pointSyncNumber(value) {
+  return Number(value || 0).toLocaleString('zh-TW');
+}
+
+function renderPointSyncJobs(jobs) {
+  const rows = Array.isArray(jobs) ? jobs : [];
+  if (!rows.length) {
+    return '<div class="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3 text-[13px] text-slate-400 font-bold text-center">沒有同步佇列紀錄</div>';
+  }
+  return rows.slice(0, 8).map(job => {
+    const status = String(job.status || 'pending');
+    const color = status === 'synced' ? 'text-emerald-600 bg-emerald-50' : (status === 'failed' ? 'text-red-600 bg-red-50' : 'text-amber-700 bg-amber-50');
+    const points = Number(job.points || 0);
+    return '<div class="rounded-2xl border border-slate-100 bg-white px-4 py-3">' +
+      '<div class="flex items-center justify-between gap-3">' +
+        '<div class="min-w-0">' +
+          '<div class="text-[13px] font-black text-slate-900 truncate">' + pointSyncHtml(job.source || '-') + '</div>' +
+          '<div class="text-[11px] font-bold text-slate-400 mt-1 truncate">' + pointSyncHtml(job.jobId || '') + '</div>' +
+        '</div>' +
+        '<div class="text-right shrink-0">' +
+          '<div class="text-[15px] font-black ' + (points >= 0 ? 'text-emerald-600' : 'text-red-500') + '">' + (points >= 0 ? '+' : '') + pointSyncNumber(points) + '</div>' +
+          '<div class="inline-flex mt-1 rounded-full px-2 py-0.5 text-[10px] font-black ' + color + '">' + pointSyncHtml(status) + '</div>' +
+        '</div>' +
+      '</div>' +
+      (job.lastError ? '<div class="mt-2 rounded-xl bg-red-50 px-3 py-2 text-[12px] font-bold text-red-600">' + pointSyncHtml(job.lastError) + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+window.renderPointSyncDiagnosis = function(data) {
+  const summaryEl = document.getElementById('point-sync-summary');
+  const resultEl = document.getElementById('point-sync-result');
+  if (!summaryEl || !resultEl) return;
+  const mother = data?.mother || {};
+  const local = data?.local || {};
+  const sync = data?.sync || {};
+  const search = data?.searchIndex || {};
+  const summary = data?.summary || {};
+  const status = String(summary.status || '');
+  summaryEl.className = 'rounded-2xl border px-4 py-3 text-[13px] font-black leading-relaxed ' + (
+    status.includes('missing') || status.includes('local_only') ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+  );
+  summaryEl.textContent = '狀態：' + (status || '-') + '；可操作 ' + pointSyncNumber(summary.operableBalance) + ' 點；已知合計 ' + pointSyncNumber(summary.totalKnownBalance) + ' 點；建議：' + (summary.recommendedAction || '-');
+  resultEl.innerHTML =
+    '<div class="grid grid-cols-2 gap-2">' +
+      '<div class="rounded-2xl bg-slate-50 border border-slate-100 p-3"><div class="text-[11px] font-black text-slate-400">母站</div><div class="text-[22px] font-black text-slate-900">' + (mother.available ? pointSyncNumber(mother.balance) : '失敗') + '</div><div class="text-[11px] font-bold text-red-500 truncate">' + pointSyncHtml(mother.error || '') + '</div></div>' +
+      '<div class="rounded-2xl bg-slate-50 border border-slate-100 p-3"><div class="text-[11px] font-black text-slate-400">本系統</div><div class="text-[22px] font-black text-slate-900">' + pointSyncNumber(local.balance) + '</div><div class="text-[11px] font-bold text-slate-400">' + (local.indexed ? '索引存在' : '索引缺失') + '</div></div>' +
+      '<div class="rounded-2xl bg-slate-50 border border-slate-100 p-3"><div class="text-[11px] font-black text-slate-400">待同步</div><div class="text-[22px] font-black text-amber-600">' + pointSyncNumber(sync.pendingPoints) + '</div><div class="text-[11px] font-bold text-slate-400">pending ' + pointSyncNumber(sync.pendingCount) + ' / failed ' + pointSyncNumber(sync.failedCount) + '</div></div>' +
+      '<div class="rounded-2xl bg-slate-50 border border-slate-100 p-3"><div class="text-[11px] font-black text-slate-400">搜尋索引</div><div class="text-[22px] font-black text-slate-900">' + pointSyncNumber(search.candidateCount) + '</div><div class="text-[11px] font-bold text-slate-400">候選筆數</div></div>' +
+    '</div>' +
+    '<div class="rounded-2xl bg-slate-900 text-white px-4 py-3 text-[12px] font-mono break-all">UID：' + pointSyncHtml(data?.pointUserId || '-') + '</div>' +
+    '<div class="space-y-2">' + renderPointSyncJobs(sync.jobs) + '</div>';
+};
+
+window.runPointSyncDiagnosis = async function() {
+  if (!window.canUsePointSyncDiagnostics()) return window.showToast?.('只有總管可使用點數診斷。', true);
+  const input = document.getElementById('point-sync-query');
+  const summaryEl = document.getElementById('point-sync-summary');
+  const query = String(input?.value || '').trim();
+  if (!query) return window.showToast?.('請輸入 UID、手機或姓名。', true);
+  if (summaryEl) {
+    summaryEl.className = 'rounded-2xl bg-blue-50 border border-blue-100 px-4 py-3 text-[13px] text-blue-700 font-black leading-relaxed';
+    summaryEl.textContent = '診斷中...';
+  }
+  const res = await window.fetchAPI('diagnosePointSync', { query, userId: window.currentUserProfile?.userId || '' }, true);
+  if (!res || res.error) {
+    if (summaryEl) {
+      summaryEl.className = 'rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-[13px] text-red-600 font-black leading-relaxed';
+      summaryEl.textContent = res?.error || '診斷失敗';
+    }
+    return window.showToast?.(res?.error || '診斷失敗', true);
+  }
+  window.renderPointSyncDiagnosis(res);
+};
+
+window.processPointSyncJobsFromPanel = async function(btn) {
+  if (!window.canUsePointSyncDiagnostics()) return window.showToast?.('只有總管可使用點數同步。', true);
+  const oldText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '處理中';
+    btn.classList.add('opacity-70');
+  }
+  try {
+    const query = String(document.getElementById('point-sync-query')?.value || '').trim();
+    const payload = { limit: 10, maxRetry: 5 };
+    if (query) payload.query = query;
+    const res = await window.fetchAPI('processPointSyncJobs', payload, true);
+    if (!res || res.error) throw new Error(res?.error || '同步處理失敗');
+    window.showToast?.('已處理 ' + pointSyncNumber(res.processed) + ' 筆，同步 ' + pointSyncNumber(res.synced) + ' 筆。', false);
+    if (query) await window.runPointSyncDiagnosis();
+  } catch (e) {
+    window.showToast?.(e.message || '同步處理失敗', true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = oldText || '同步';
+      btn.classList.remove('opacity-70');
+    }
+  }
 };
 
 window.loadStorePointCashierLogs = async function(force = false) {
