@@ -1553,7 +1553,11 @@ const LineOAChatModule = {
       const text = this.text(item.text);
       if (!text) return null;
       if (text.length > 5000) throw new Error('TEXT_TOO_LONG');
-      return { type: 'text', text };
+      const message = { type: 'text', text };
+      if (item.quickReply && Array.isArray(item.quickReply.items) && item.quickReply.items.length) {
+        message.quickReply = { items: item.quickReply.items.slice(0, 13) };
+      }
+      return message;
     }
     if (type === 'image') {
       const originalContentUrl = this.text(item.originalContentUrl || item.url);
@@ -2081,13 +2085,13 @@ const LineOAChatModule = {
     const gasResult = await this.forwardToGas(gasRawBody, env);
     if (gasResult.success) {
       const replyPayload = this.normalizeReplyPayload(gasResult.data);
-      const replyResult = await this.replyLine(this.mergeReplyPayloads(replyPayload, keywordRuleReply), env);
-      if (!replyResult.success) console.error('LINE Reply API failed', replyResult);
-    } else if (!gasResult.skipped) {
-      if (keywordRuleReply) {
-        const replyResult = await this.replyLine(keywordRuleReply, env);
-        if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
+      if (replyPayload) {
+        const replyResult = await this.replyLine(this.mergeReplyPayloads(replyPayload, keywordRuleReply), env);
+        if (!replyResult.success) console.error('LINE Reply API failed', replyResult);
+      } else if (keywordRuleReply) {
+        console.warn('LINE OA keyword rule skipped because GAS returned no replyPayload; avoid consuming mother-site replyToken');
       }
+    } else if (!gasResult.skipped) {
       console.error('GAS LINE_WEBHOOK failed', gasResult);
     } else if (keywordRuleReply) {
       const replyResult = await this.replyLine(keywordRuleReply, env);
