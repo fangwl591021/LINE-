@@ -301,9 +301,13 @@ function routeSharedCardBadgeToPicker(flexMsg, shareUrl) {
   if (!flexMsg || !actionUrl) return flexMsg;
   try {
     if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents.length) {
-      const first = flexMsg.header.contents[flexMsg.header.contents.length - 1];
-      const oldAction = first.action || {};
-      first.action = first.type === 'button'
+      const likeUrl = typeof window.buildECardLikeUrl === 'function' ? window.buildECardLikeUrl(shareUrl) : '';
+      if (likeUrl && flexMsg.header.contents[0]) {
+        flexMsg.header.contents[0].action = { type: 'uri', uri: likeUrl };
+      }
+      const shareButton = flexMsg.header.contents[flexMsg.header.contents.length - 1];
+      const oldAction = shareButton.action || {};
+      shareButton.action = shareButton.type === 'button'
         ? { type: 'uri', label: oldAction.label || '分享名片', uri: actionUrl }
         : { type: 'uri', uri: actionUrl };
     }
@@ -348,7 +352,8 @@ async function buildFlexForCardLink(card, options = {}) {
       config: shareConfig,
       referrerId,
       networkId,
-      liffId: window.POINT_LIFF_ID || window.DEFAULT_LIFF_ID || window.LIFF_ID
+      liffId: window.POINT_LIFF_ID || window.DEFAULT_LIFF_ID || window.LIFF_ID,
+      socialLikeLiffId: window.SOCIAL_LIKE_LIFF_ID || window.LIKE_LIFF_ID
     }, false);
   }
 

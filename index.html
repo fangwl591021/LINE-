@@ -137,18 +137,30 @@
 (function() {
   function collectParams() {
     var params = new URLSearchParams(window.location.search || '');
+    function mergeQueryText(text) {
+      if (!text) return;
+      var decoded = String(text);
+      for (var i = 0; i < 2; i++) {
+        try {
+          var next = decodeURIComponent(decoded);
+          if (next === decoded) break;
+          decoded = next;
+        } catch (e) {
+          break;
+        }
+      }
+      var query = decoded;
+      if (query.indexOf('?') >= 0) query = query.slice(query.indexOf('?') + 1);
+      query = query.replace(/^[^?]*\?/, '').replace(/^#/, '').replace(/^\?/, '');
+      new URLSearchParams(query).forEach(function(value, key) {
+        if (!params.has(key)) params.set(key, value);
+      });
+    }
     try {
       var hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
       hash.forEach(function(value, key) { if (!params.has(key)) params.set(key, value); });
     } catch (e) {}
-    var state = params.get('liff.state') || params.get('liff_state') || '';
-    if (state) {
-      try {
-        var decoded = decodeURIComponent(state);
-        var query = decoded.indexOf('?') >= 0 ? decoded.slice(decoded.indexOf('?') + 1) : decoded.replace(/^[^?]*\?/, '');
-        new URLSearchParams(query).forEach(function(value, key) { if (!params.has(key)) params.set(key, value); });
-      } catch (e) {}
-    }
+    mergeQueryText(params.get('liff.state') || params.get('liff_state') || params.get('state') || '');
     return params;
   }
   var params = collectParams();
@@ -2137,7 +2149,7 @@
 <script src="js/navigation.js?v=7.9"></script>
 <script src="js/modules/cropper.js?v=7.16"></script>
 <script src="js/modules/cards.js?v=7.9"></script>
-<script src="js/modules/ecard.js?v=7.45"></script>
+<script src="js/modules/ecard.js?v=7.46"></script>
 <script src="js/modules/mycard.js?v=8.62"></script>
 <script src="js/modules/matchmake.js?v=7.9"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>
@@ -2148,7 +2160,7 @@
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.57"></script>
+<script src="js/auth.js?v=10.58"></script>
 
 </body>
 </html>

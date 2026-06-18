@@ -979,6 +979,10 @@ function routeECardFlexHeaderShareToPicker(flexMsg, shareUrl) {
   if (!flexMsg || !actionUrl) return flexMsg;
   try {
     if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents.length) {
+      const likeUrl = buildECardLikeUrl(shareUrl);
+      if (likeUrl && flexMsg.header.contents[0]) {
+        flexMsg.header.contents[0].action = { type: "uri", uri: likeUrl };
+      }
       const headerItem = flexMsg.header.contents[flexMsg.header.contents.length - 1];
       const action = headerItem.action || {};
       headerItem.action = headerItem.type === "button"
@@ -990,6 +994,8 @@ function routeECardFlexHeaderShareToPicker(flexMsg, shareUrl) {
   }
   return flexMsg;
 }
+
+window.buildECardLikeUrl = buildECardLikeUrl;
 
 async function shareECardPlainLink(url, name) {
   const text = (name ? `這是 ${name} 的數位名片` : "這是我的數位名片") + "\n" + url;
