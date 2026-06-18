@@ -156,7 +156,7 @@
   if (!cardId) return;
   window.__ACTMASTER_INSTANT_LIKE_HANDLED = true;
   var style = document.createElement('style');
-  style.textContent = '#loading-screen,#app{display:none!important}body{background:#ffffff!important;min-height:100vh!important}';
+  style.textContent = 'html,body{margin:0!important;background:transparent!important;min-height:100vh!important;overflow:hidden!important}#loading-screen,#app{display:none!important}#instant-like-pop{background:transparent!important;padding-top:18vh!important}#instant-like-pop img{background:transparent!important;border:0!important;box-shadow:none!important;animation:instantLikePop 2s ease-out both}@keyframes instantLikePop{0%{opacity:0;transform:scale(.72) translateY(10px)}18%{opacity:1;transform:scale(1.05) translateY(0)}32%,82%{opacity:1;transform:scale(1) translateY(0)}100%{opacity:0;transform:scale(.96) translateY(-4px)}}';
   document.head.appendChild(style);
   document.write('<div id="instant-like-pop" style="position:fixed;inset:0;z-index:2147483647;display:flex;align-items:flex-start;justify-content:center;background:transparent;padding-top:22vh;pointer-events:none"><img src="https://s3.us-west-1.wasabisys.com/aitw/2026/06/6d0759e75079125c1b9d76165099d7d8.png" alt="感謝支持" style="display:block;width:270px;max-width:82vw;height:auto"></div>');
   function actorId() {
@@ -2125,7 +2125,7 @@
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.56"></script>
+<script src="js/auth.js?v=10.57"></script>
 
 </body>
 </html>

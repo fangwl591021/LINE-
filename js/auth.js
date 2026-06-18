@@ -1082,6 +1082,12 @@ window.showSocialLikeThanks = function() {
     box.id = 'social-like-thanks-pop';
     document.body.appendChild(box);
   }
+  if (!document.getElementById('social-like-pop-style')) {
+    const style = document.createElement('style');
+    style.id = 'social-like-pop-style';
+    style.textContent = '@keyframes socialLikePop{0%{opacity:0;transform:scale(.72) translateY(10px)}18%{opacity:1;transform:scale(1.05) translateY(0)}32%,82%{opacity:1;transform:scale(1) translateY(0)}100%{opacity:0;transform:scale(.96) translateY(-4px)}}#social-like-thanks-pop img{background:transparent!important;border:0!important;box-shadow:none!important;animation:socialLikePop 2s ease-out both}';
+    document.head.appendChild(style);
+  }
   box.className = 'fixed inset-x-0 top-[22%] z-[12000] mx-auto w-[270px] max-w-[82vw] pointer-events-none transition-opacity duration-200';
   box.innerHTML = '<img src="https://s3.us-west-1.wasabisys.com/aitw/2026/06/6d0759e75079125c1b9d76165099d7d8.png" alt="感謝支持" class="block w-full h-auto">';
   box.style.opacity = '1';
