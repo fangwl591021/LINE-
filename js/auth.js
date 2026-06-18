@@ -148,6 +148,53 @@ function writeFirstReferral(userId, referrerId, networkId) {
   return data;
 }
 
+function pendingMotherRegistrationKey(userId) {
+  return 'ACTMASTER_PENDING_MOTHER_REGISTRATION_' + String(userId || 'guest');
+}
+
+window.savePendingMotherRegistration = function(userId, payload, url) {
+  if (!userId || !payload) return;
+  try {
+    localStorage.setItem(pendingMotherRegistrationKey(userId), JSON.stringify({
+      payload,
+      url: url || '',
+      savedAt: Date.now()
+    }));
+  } catch (e) {}
+};
+
+window.clearPendingMotherRegistration = function(userId) {
+  try {
+    localStorage.removeItem(pendingMotherRegistrationKey(userId));
+  } catch (e) {}
+};
+
+window.resumePendingMotherRegistration = async function(userId) {
+  userId = String(userId || window.currentUserProfile?.userId || '').trim();
+  if (!userId || typeof window.fetchAPI !== 'function') return null;
+  let pending = null;
+  try {
+    pending = JSON.parse(localStorage.getItem(pendingMotherRegistrationKey(userId)) || 'null');
+  } catch (e) {}
+  if (!pending || !pending.payload || Date.now() - Number(pending.savedAt || 0) > 24 * 60 * 60 * 1000) return null;
+  const mother = await window.fetchAPI('queryPointBalanceFast', { userId, pointUserId: userId, point_type: 'gift_money' }, true).catch(e => ({ error: e && e.message ? e.message : String(e) }));
+  if (!mother || mother.error || mother.success === false) return { pending: true, mother };
+  const payload = { ...pending.payload, userId };
+  const saved = await window.fetchAPI('registerUser', payload, true);
+  if (!saved || saved.error) throw new Error(saved?.error || '子站會員資料同步失敗');
+  const refreshed = await window.fetchAPI('checkUser', { userId }, true).catch(() => null);
+  const info = refreshed && refreshed.isRegistered && refreshed.info
+    ? refreshed.info
+    : { ...payload, role: window.userRole || 'user' };
+  window.applyRegisteredUserSession(info);
+  try {
+    localStorage.setItem('ACTMASTER_USER_' + userId, JSON.stringify({ info, savedAt: Date.now() }));
+  } catch (e) {}
+  window.clearPendingMotherRegistration(userId);
+  window.showToast?.('母站註冊已確認，子站會員資料已同步。');
+  return { completed: true, info };
+};
+
 function resolveReferralForRegistration(urlRef, urlNet) {
   const userId = window.currentUserProfile?.userId || '';
   const first = readFirstReferral(userId) || writeFirstReferral(userId, urlRef || '', urlNet || 'admin') || {};
@@ -672,7 +719,8 @@ window.saveProfileRegistration = async function(event) {
         const link = await window.fetchAPI('getMotherRegistrationUrl', { userId }, true).catch(e => ({ error: e && e.message ? e.message : String(e) }));
         const url = link?.data?.url || link?.url || '';
         if (url) {
-          window.showToast('請先完成母站註冊，完成後回來再按一次儲存。', true);
+          window.savePendingMotherRegistration?.(userId, payload, url);
+          window.showToast('請先完成母站註冊，完成後回到子站會自動確認。', true);
           window.open(url, '_blank', 'noopener');
           return;
         }
@@ -2367,6 +2415,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔒 未註冊用戶邏輯
     if (!checkRes || checkRes.error || !checkRes.isRegistered) {
+      const resumedMotherRegistration = await window.resumePendingMotherRegistration?.(window.currentUserProfile.userId).catch(e => {
+        console.warn('Pending mother registration resume failed:', e);
+        return null;
+      });
+      if (resumedMotherRegistration && resumedMotherRegistration.completed) {
+        window.goPage('home');
+        if (typeof window.loadHomeData === 'function') window.loadHomeData();
+        return;
+      }
       if (usedCachedUser && cachedUserInfo && !shareCardId && !claimCardId) {
         console.warn('Auth check did not confirm membership; keeping cached session:', checkRes && (checkRes.error || checkRes.source || 'not_registered'));
         return;
