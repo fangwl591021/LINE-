@@ -296,6 +296,7 @@ const SecurityModule = {
       'getLineOAChatAudience',
       'getLineOAChatCrm',
       'repairLineOAFollowPointOnboarding',
+      'repairPointWalletSearchIndex',
       'getAdminPointProfile',
       'adminAdjustCustomerPoints',
       'uploadLineOAAsset',
@@ -5187,6 +5188,98 @@ const PointModule = {
         role,
         scope: role === 'admin' ? 'all' : 'own_store',
         list
+      }
+    };
+  },
+
+  async repairPointWalletSearchIndex(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const limit = Math.min(500, Math.max(1, Math.floor(Number(payload.limit || 200))));
+    const dryRun = payload.dryRun === true || String(payload.dryRun || '') === '1';
+    const uidPattern = /^U[0-9a-fA-F]{20,64}$/;
+    const candidates = [];
+    const seen = new Set();
+    const addCandidate = (source, id, profile = {}) => {
+      const userId = D1ReadModule.text(id);
+      if (!uidPattern.test(userId) || seen.has(userId)) return;
+      seen.add(userId);
+      candidates.push({ source, userId, profile });
+    };
+
+    const userRows = await D1ReadModule.all(env, `
+      SELECT row_id, line_id, name, phone, industry, network_id, role, point_line_id, legacy_line_id
+      FROM users
+      WHERE (line_id LIKE 'U%' OR row_id LIKE 'U%' OR point_line_id LIKE 'U%' OR legacy_line_id LIKE 'U%')
+      ORDER BY COALESCE(updated_at, created_at) DESC
+      LIMIT ?
+    `, [limit]).catch(() => []);
+    for (const row of userRows) {
+      addCandidate('users', row.line_id || row.point_line_id || row.legacy_line_id || row.row_id, {
+        name: row.name,
+        phone: row.phone,
+        industry: row.industry,
+        networkId: row.network_id
+      });
+    }
+
+    const threadRows = await D1ReadModule.all(env, `
+      SELECT user_id, display_name, picture_url
+      FROM line_oa_threads
+      WHERE user_id LIKE 'U%'
+      ORDER BY COALESCE(last_event_at, updated_at, created_at) DESC
+      LIMIT ?
+    `, [limit]).catch(() => []);
+    for (const row of threadRows) {
+      addCandidate('line_oa_threads', row.user_id, {
+        name: row.display_name,
+        avatarUrl: row.picture_url,
+        industry: 'LINE OA',
+        networkId: 'admin'
+      });
+    }
+
+    const cardRows = await D1ReadModule.all(env, `
+      SELECT line_id, profile_user_id, owner_user_id, claimed_by_uid, name, mobile, office_phone, title, company_name, network_id
+      FROM card_contacts
+      WHERE line_id LIKE 'U%' OR profile_user_id LIKE 'U%' OR owner_user_id LIKE 'U%' OR claimed_by_uid LIKE 'U%'
+      ORDER BY COALESCE(updated_at, created_at) DESC
+      LIMIT ?
+    `, [limit]).catch(() => []);
+    for (const row of cardRows) {
+      addCandidate('card_contacts', row.line_id || row.profile_user_id || row.owner_user_id || row.claimed_by_uid, {
+        name: row.name,
+        phone: row.mobile || row.office_phone,
+        industry: row.title || row.company_name,
+        networkId: row.network_id || 'admin'
+      });
+    }
+
+    const repaired = [];
+    const failed = [];
+    if (!dryRun) {
+      for (const item of candidates) {
+        const result = await this.ensureLocalPointWallet(env, item.userId, item.profile)
+          .catch(e => ({ success: false, error: e.message || String(e) }));
+        if (result && result.success) repaired.push({ userId: item.userId, source: item.source, rowId: result.rowId });
+        else failed.push({ userId: item.userId, source: item.source, error: result && result.error ? result.error : 'repair failed' });
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        dryRun,
+        scanned: {
+          users: userRows.length,
+          lineOAThreads: threadRows.length,
+          cards: cardRows.length
+        },
+        candidateCount: candidates.length,
+        repairedCount: dryRun ? 0 : repaired.length,
+        failedCount: failed.length,
+        candidates: dryRun ? candidates.slice(0, 50) : undefined,
+        repaired: repaired.slice(0, 50),
+        failed: failed.slice(0, 50)
       }
     };
   }
@@ -13971,6 +14064,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'getStorePointCustomer':  return await PointModule.getStorePointCustomer(payload || {}, env);
     case 'storeAdjustCustomerPoints': return await PointModule.storeAdjustCustomerPoints(payload || {}, env);
     case 'listStorePointCashierLogs': return await PointModule.listStorePointCashierLogs(payload || {}, env);
+    case 'repairPointWalletSearchIndex': return await PointModule.repairPointWalletSearchIndex(payload || {}, env);
     case 'getSocialLikeStats':     return await TrackingModule.getSocialLikeStats(payload || {}, env);
     case 'recordSocialLike':       return await TrackingModule.recordSocialLike(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
