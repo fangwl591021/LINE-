@@ -759,14 +759,14 @@
               <div>
                 <label class="text-sm font-black text-slate-700">回應類型</label>
                 <select id="lineoa-keyword-type" onchange="renderLineOAKeywordTypeFields()" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500">
-                  <option value="text">快速文字</option>
+                  <option value="quick_reply">快速回應</option>
                   <option value="flex">FLEX CARD</option>
                 </select>
               </div>
             </div>
             <div id="lineoa-keyword-text-fields">
-              <label class="text-sm font-black text-slate-700">快速回應內容</label>
-              <textarea id="lineoa-keyword-text" rows="5" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 focus:bg-white resize-none" placeholder="用戶輸入關鍵字後直接回覆的文字"></textarea>
+              <label class="text-sm font-black text-slate-700">Quick Reply 按鈕文字</label>
+              <textarea id="lineoa-keyword-text" rows="3" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 focus:bg-white resize-none" placeholder="例如：會員打卡"></textarea>
             </div>
             <div id="lineoa-keyword-flex-fields" class="hidden space-y-4">
               <div>
@@ -1664,8 +1664,8 @@
     }
 
     function renderLineOAKeywordTypeFields() {
-      const type = lineOAKeywordValue('lineoa-keyword-type') || 'text';
-      document.getElementById('lineoa-keyword-text-fields')?.classList.toggle('hidden', type !== 'text');
+      const type = lineOAKeywordValue('lineoa-keyword-type') || 'quick_reply';
+      document.getElementById('lineoa-keyword-text-fields')?.classList.toggle('hidden', type === 'flex');
       document.getElementById('lineoa-keyword-flex-fields')?.classList.toggle('hidden', type !== 'flex');
     }
 
@@ -1688,7 +1688,7 @@
       const type = document.getElementById('lineoa-keyword-type');
       const enabled = document.getElementById('lineoa-keyword-enabled');
       if (match) match.value = 'contains';
-      if (type) type.value = 'text';
+      if (type) type.value = 'quick_reply';
       if (enabled) enabled.checked = true;
       renderLineOAKeywordTypeFields();
     }
@@ -1716,7 +1716,7 @@
         const id = escapeHTML(rule.ruleId || rule.rule_id || '');
         const name = escapeHTML(rule.name || '未命名規則');
         const keyword = escapeHTML(rule.keyword || '-');
-        const type = rule.responseType || rule.response_type || 'text';
+        const type = rule.responseType || rule.response_type || 'quick_reply';
         const enabled = Number(rule.enabled ?? 1) === 1;
         const matchType = (rule.matchType || rule.match_type) === 'exact' ? '完全符合' : '包含';
         const label = escapeHTML(rule.flexLabel || rule.flex_label || rule.textContent || rule.text_content || '');
@@ -1726,7 +1726,7 @@
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-black text-slate-900 text-base">${name}</span>
                 <span class="px-2.5 py-1 rounded-full text-xs font-black ${enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}">${enabled ? '啟用' : '停用'}</span>
-                <span class="px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700">${type === 'flex' ? 'FLEX CARD' : '快速文字'}</span>
+                <span class="px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700">${type === 'flex' ? 'FLEX CARD' : '快速回應'}</span>
               </div>
               <div class="mt-2 text-sm font-bold text-slate-500">關鍵字：<span class="font-mono text-slate-800">${keyword}</span> / ${matchType}</div>
               ${label ? `<div class="mt-1 text-sm font-semibold text-slate-400 truncate">${label}</div>` : ''}
@@ -1750,7 +1750,7 @@
       setValue('lineoa-keyword-name', rule.name || '');
       setValue('lineoa-keyword-trigger', rule.keyword || '');
       setValue('lineoa-keyword-match', rule.matchType || rule.match_type || 'contains');
-      setValue('lineoa-keyword-type', rule.responseType || rule.response_type || 'text');
+      setValue('lineoa-keyword-type', (rule.responseType || rule.response_type) === 'flex' ? 'flex' : 'quick_reply');
       setValue('lineoa-keyword-text', rule.textContent || rule.text_content || '');
       setValue('lineoa-keyword-flex-label', rule.flexLabel || rule.flex_label || '');
       setValue('lineoa-keyword-button-text', rule.flexButtonText || rule.flex_button_text || '');
@@ -1767,7 +1767,7 @@
         name: lineOAKeywordValue('lineoa-keyword-name'),
         keyword: lineOAKeywordValue('lineoa-keyword-trigger'),
         matchType: lineOAKeywordValue('lineoa-keyword-match') || 'contains',
-        responseType: lineOAKeywordValue('lineoa-keyword-type') || 'text',
+        responseType: lineOAKeywordValue('lineoa-keyword-type') || 'quick_reply',
         textContent: lineOAKeywordValue('lineoa-keyword-text'),
         flexLabel: lineOAKeywordValue('lineoa-keyword-flex-label'),
         flexButtonText: lineOAKeywordValue('lineoa-keyword-button-text'),
@@ -1779,8 +1779,8 @@
         showToast('請填寫名稱與觸發關鍵字', true);
         return;
       }
-      if (payload.responseType === 'text' && !payload.textContent) {
-        showToast('請填寫快速回應內容', true);
+      if (payload.responseType === 'quick_reply' && !payload.textContent && !payload.flexLabel && !payload.flexButtonKeyword) {
+        showToast('請填寫 Quick Reply 按鈕文字', true);
         return;
       }
       if (payload.responseType === 'flex' && !payload.flexLabel && !payload.flexButtonKeyword) {

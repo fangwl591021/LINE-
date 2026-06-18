@@ -1514,6 +1514,19 @@ const LineOAChatModule = {
     };
   },
 
+  mergeReplyPayloads(primary, secondary) {
+    if (!primary && !secondary) return null;
+    if (!primary) return secondary;
+    if (!secondary) return primary;
+    if (!primary.replyToken || primary.replyToken !== secondary.replyToken) return primary;
+    const primaryMessages = Array.isArray(primary.messages) ? primary.messages : [];
+    const secondaryMessages = Array.isArray(secondary.messages) ? secondary.messages : [];
+    return {
+      replyToken: primary.replyToken,
+      messages: primaryMessages.slice(0, Math.max(0, 5 - secondaryMessages.length)).concat(secondaryMessages).slice(0, 5)
+    };
+  },
+
   async replyLine(replyPayload, env) {
     if (!replyPayload) return { success: true, skipped: true };
     if (!env.LINE_CHANNEL_ACCESS_TOKEN) return { success: false, error: 'Missing LINE_CHANNEL_ACCESS_TOKEN' };
@@ -2046,8 +2059,6 @@ const LineOAChatModule = {
       await followPointJob;
       await forwardJob;
     }
-    const keywordRuleReplied = await LineOAKeywordRuleModule.reply(events, env);
-    if (keywordRuleReplied) return new Response('OK', { status: 200 });
     const myVideoReplied = await LineOAMyVideoKeywordModule.reply(events, env, ctx);
     if (myVideoReplied) return new Response('OK', { status: 200 });
     const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);
@@ -2058,15 +2069,29 @@ const LineOAChatModule = {
     if (referralFriendReplied) return new Response('OK', { status: 200 });
     const storeSearchReplied = await LineOAStoreSearchKeywordModule.reply(events, env);
     if (storeSearchReplied) return new Response('OK', { status: 200 });
+    const keywordRuleReply = await LineOAKeywordRuleModule.replyPayload(events, env);
     const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);
-    if (!gasRawBody) return new Response('OK', { status: 200 });
+    if (!gasRawBody) {
+      if (keywordRuleReply) {
+        const replyResult = await this.replyLine(keywordRuleReply, env);
+        if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
+      }
+      return new Response('OK', { status: 200 });
+    }
     const gasResult = await this.forwardToGas(gasRawBody, env);
     if (gasResult.success) {
       const replyPayload = this.normalizeReplyPayload(gasResult.data);
-      const replyResult = await this.replyLine(replyPayload, env);
+      const replyResult = await this.replyLine(this.mergeReplyPayloads(replyPayload, keywordRuleReply), env);
       if (!replyResult.success) console.error('LINE Reply API failed', replyResult);
     } else if (!gasResult.skipped) {
+      if (keywordRuleReply) {
+        const replyResult = await this.replyLine(keywordRuleReply, env);
+        if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
+      }
       console.error('GAS LINE_WEBHOOK failed', gasResult);
+    } else if (keywordRuleReply) {
+      const replyResult = await this.replyLine(keywordRuleReply, env);
+      if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
     }
     return new Response('OK', { status: 200 });
   },
@@ -2503,7 +2528,8 @@ const LineOAKeywordRuleModule = {
   },
 
   sanitizeRule(payload = {}) {
-    const responseType = this.text(payload.responseType || payload.response_type, 'text') === 'flex' ? 'flex' : 'text';
+    const rawResponseType = this.text(payload.responseType || payload.response_type, 'quick_reply');
+    const responseType = rawResponseType === 'flex' ? 'flex' : 'quick_reply';
     const matchType = this.text(payload.matchType || payload.match_type, 'contains') === 'exact' ? 'exact' : 'contains';
     return {
       ruleId: this.text(payload.ruleId || payload.rule_id) || this.createId(),
@@ -2558,7 +2584,7 @@ const LineOAKeywordRuleModule = {
     const rule = this.sanitizeRule(payload || {});
     if (!rule.name) return { success: false, error: 'Missing rule name' };
     if (!rule.keyword) return { success: false, error: 'Missing keyword' };
-    if (rule.responseType === 'text' && !rule.textContent) return { success: false, error: 'Missing reply text' };
+    if (rule.responseType === 'quick_reply' && !rule.textContent && !rule.flexLabel && !rule.flexButtonKeyword) return { success: false, error: 'Missing quick reply label' };
     if (rule.responseType === 'flex' && !rule.flexLabel && !rule.flexButtonKeyword) return { success: false, error: 'Missing Flex label or button keyword' };
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO line_oa_keyword_rules (
@@ -2670,15 +2696,30 @@ const LineOAKeywordRuleModule = {
     };
   },
 
-  buildMessage(rule) {
-    if (rule.responseType === 'flex') return this.buildFlex(rule);
-    return { type: 'text', text: this.text(rule.textContent, rule.name).slice(0, 5000) };
+  buildQuickReply(rule) {
+    const label = this.text(rule.textContent || rule.flexLabel || rule.name, rule.keyword).slice(0, 20);
+    const text = this.text(rule.flexButtonKeyword || rule.flexLabel || rule.textContent, label).slice(0, 300);
+    return {
+      type: 'text',
+      text: this.text(rule.name, '請選擇功能').slice(0, 5000),
+      quickReply: {
+        items: [{
+          type: 'action',
+          action: { type: 'message', label, text }
+        }]
+      }
+    };
   },
 
-  async reply(events, env) {
-    if (!Array.isArray(events) || !events.length || !env.ACTMASTER_DB) return false;
+  buildMessage(rule) {
+    if (rule.responseType === 'flex') return this.buildFlex(rule);
+    return this.buildQuickReply(rule);
+  },
+
+  async replyPayload(events, env) {
+    if (!Array.isArray(events) || !events.length || !env.ACTMASTER_DB) return null;
     const rules = await this.activeRules(env);
-    if (!rules.length) return false;
+    if (!rules.length) return null;
     for (const event of events) {
       const message = event && event.message ? event.message : {};
       if (message.type !== 'text') continue;
@@ -2686,11 +2727,9 @@ const LineOAKeywordRuleModule = {
       if (!replyToken) continue;
       const rule = this.matchRule(rules, message.text);
       if (!rule) continue;
-      const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildMessage(rule)] }, env);
-      if (!result.success) console.error('LINE OA keyword rule reply failed', result);
-      return true;
+      return { replyToken, messages: [this.buildMessage(rule)] };
     }
-    return false;
+    return null;
   }
 };
 
