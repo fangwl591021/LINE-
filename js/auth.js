@@ -161,22 +161,52 @@ window.savePendingMotherRegistration = function(userId, payload, url) {
       savedAt: Date.now()
     }));
   } catch (e) {}
+  window.renderPendingMotherRegistration?.(userId);
 };
 
 window.clearPendingMotherRegistration = function(userId) {
   try {
     localStorage.removeItem(pendingMotherRegistrationKey(userId));
   } catch (e) {}
+  window.renderPendingMotherRegistration?.(userId);
+};
+
+window.readPendingMotherRegistration = function(userId) {
+  userId = String(userId || window.currentUserProfile?.userId || '').trim();
+  if (!userId) return null;
+  try {
+    const pending = JSON.parse(localStorage.getItem(pendingMotherRegistrationKey(userId)) || 'null');
+    if (!pending || !pending.payload || Date.now() - Number(pending.savedAt || 0) > 24 * 60 * 60 * 1000) return null;
+    return pending;
+  } catch (e) {
+    return null;
+  }
+};
+
+window.renderPendingMotherRegistration = function(userId) {
+  const box = document.getElementById('mother-registration-pending');
+  if (!box) return;
+  const pending = window.readPendingMotherRegistration(userId);
+  box.classList.toggle('hidden', !pending);
+};
+
+window.reopenPendingMotherRegistration = function(userId) {
+  const pending = window.readPendingMotherRegistration(userId);
+  if (pending && pending.url) window.open(pending.url, '_blank', 'noopener');
+  else window.showToast?.('找不到母站註冊連結，請重新按儲存。', true);
+};
+
+window.cancelPendingMotherRegistration = function(userId) {
+  window.clearPendingMotherRegistration(userId || window.currentUserProfile?.userId || '');
+  window.showToast?.('已取消等待母站註冊。');
 };
 
 window.resumePendingMotherRegistration = async function(userId) {
   userId = String(userId || window.currentUserProfile?.userId || '').trim();
   if (!userId || typeof window.fetchAPI !== 'function') return null;
-  let pending = null;
-  try {
-    pending = JSON.parse(localStorage.getItem(pendingMotherRegistrationKey(userId)) || 'null');
-  } catch (e) {}
-  if (!pending || !pending.payload || Date.now() - Number(pending.savedAt || 0) > 24 * 60 * 60 * 1000) return null;
+  const pending = window.readPendingMotherRegistration(userId);
+  if (!pending) return null;
+  window.renderPendingMotherRegistration(userId);
   const mother = await window.fetchAPI('queryPointBalanceFast', { userId, pointUserId: userId, point_type: 'gift_money' }, true).catch(e => ({ error: e && e.message ? e.message : String(e) }));
   if (!mother || mother.error || mother.success === false) return { pending: true, mother };
   const payload = { ...pending.payload, userId };
@@ -241,6 +271,7 @@ window.prepareRegistrationInputs = function() {
     'profile-industry',
     'profile-birthday'
   ].forEach(trackManualInputField);
+  window.renderPendingMotherRegistration?.(window.currentUserProfile?.userId || '');
 };
 
 function removeAutoShareParamsFromUrl() {
@@ -2423,6 +2454,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.goPage('home');
         if (typeof window.loadHomeData === 'function') window.loadHomeData();
         return;
+      }
+      if (resumedMotherRegistration && resumedMotherRegistration.pending) {
+        const details = document.getElementById('details-profile-registration');
+        if (details) details.open = true;
+        window.renderPendingMotherRegistration?.(window.currentUserProfile.userId);
       }
       if (usedCachedUser && cachedUserInfo && !shareCardId && !claimCardId) {
         console.warn('Auth check did not confirm membership; keeping cached session:', checkRes && (checkRes.error || checkRes.source || 'not_registered'));

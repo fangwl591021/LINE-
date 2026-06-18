@@ -398,6 +398,14 @@
             <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼</label><input id="profile-phone" class="custom-input mt-1 font-mono" type="tel"></div>
             <div><label class="text-xs text-slate-500 font-bold ml-1">主要業種</label><input id="profile-industry" class="custom-input mt-1" type="text"></div>
             <div><label class="text-xs text-slate-500 font-bold ml-1">出生年月日</label><input id="profile-birthday" class="custom-input mt-1 font-mono text-slate-500" type="date"></div>
+            <div id="mother-registration-pending" class="hidden rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[13px] font-bold leading-relaxed text-amber-900">
+              <div class="font-black">等待母站註冊完成</div>
+              <div class="mt-1 text-amber-800">完成母站註冊後回到此頁，系統會自動同步子站會員資料。</div>
+              <div class="mt-3 flex gap-2">
+                <button type="button" onclick="window.reopenPendingMotherRegistration?.()" class="flex-1 rounded-xl bg-white px-3 py-2 text-amber-800 shadow-sm">開啟母站註冊</button>
+                <button type="button" onclick="window.cancelPendingMotherRegistration?.()" class="rounded-xl bg-amber-100 px-3 py-2 text-amber-900">取消</button>
+              </div>
+            </div>
             <button id="btn-save-profile-registration" onclick="window.saveProfileRegistration(event)" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mt-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
               <span class="material-symbols-outlined text-[18px]">save</span> 建立 / 儲存會員資料
             </button>
@@ -2161,7 +2169,7 @@
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.63"></script>
+<script src="js/auth.js?v=10.64"></script>
 
 </body>
 </html>
