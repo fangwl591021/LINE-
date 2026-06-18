@@ -1427,6 +1427,7 @@
     let cardPage = 1;
     let bonusOrderPage = 1;
     let adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all', sort: 'recent' };
+    const ADMIN_CRM_FILTERS_KEY = 'LINE_ADMIN_CRM_FILTERS_V1';
     let selectedOrgRootId = '';
     let organizationTreeData = null;
     let currentDistributorCrmUserId = '';
@@ -3142,7 +3143,9 @@
           showToast(`有 ${sync.failed} 位已綁名片用戶補註冊失敗`, true);
         }
         allUsersData = mergeUsersWithBoundCards(users, cards);
-        userPage = 1;
+        loadSavedAdminCrmFilters();
+        applyAdminCrmFilterControls();
+        userPage = Math.max(1, userPage || 1);
         renderUsersTable(allUsersData);
       } else {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-400">載入失敗，請重新整理</td></tr>';
@@ -3216,6 +3219,40 @@
       });
     }
 
+    function normalizeAdminCrmFilters(filters = {}) {
+      return {
+        search: String(filters.search || ''),
+        status: String(filters.status || 'all'),
+        role: String(filters.role || 'all'),
+        fee: String(filters.fee || 'all'),
+        sort: String(filters.sort || 'recent')
+      };
+    }
+
+    function loadSavedAdminCrmFilters() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(ADMIN_CRM_FILTERS_KEY) || '{}');
+        adminCrmFilters = normalizeAdminCrmFilters(parsed);
+      } catch (_) {
+        adminCrmFilters = normalizeAdminCrmFilters(adminCrmFilters);
+      }
+    }
+
+    function saveAdminCrmFilters() {
+      try {
+        localStorage.setItem(ADMIN_CRM_FILTERS_KEY, JSON.stringify(normalizeAdminCrmFilters(adminCrmFilters)));
+      } catch (_) {}
+    }
+
+    function applyAdminCrmFilterControls() {
+      const filters = normalizeAdminCrmFilters(adminCrmFilters);
+      if (document.getElementById('admin-crm-search')) document.getElementById('admin-crm-search').value = filters.search;
+      if (document.getElementById('admin-crm-status-filter')) document.getElementById('admin-crm-status-filter').value = filters.status;
+      if (document.getElementById('admin-crm-role-filter')) document.getElementById('admin-crm-role-filter').value = filters.role;
+      if (document.getElementById('admin-crm-fee-filter')) document.getElementById('admin-crm-fee-filter').value = filters.fee;
+      if (document.getElementById('admin-crm-sort-filter')) document.getElementById('admin-crm-sort-filter').value = filters.sort;
+    }
+
     function updateCrmSummaryCards(totalList = [], visibleList = []) {
       const total = totalList.length;
       const active = totalList.filter(u => ['active', 'bound_card'].includes(String(getCrmStatus(u)).toLowerCase()) || u.source === 'bound_card').length;
@@ -3241,12 +3278,14 @@
         fee: document.getElementById('admin-crm-fee-filter')?.value || 'all',
         sort: document.getElementById('admin-crm-sort-filter')?.value || 'recent'
       };
+      saveAdminCrmFilters();
       userPage = 1;
       renderUsersTable(allUsersData);
     }
 
     function resetAdminCrmFilters() {
       adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all', sort: 'recent' };
+      saveAdminCrmFilters();
       if (document.getElementById('admin-crm-search')) document.getElementById('admin-crm-search').value = '';
       if (document.getElementById('admin-crm-status-filter')) document.getElementById('admin-crm-status-filter').value = 'all';
       if (document.getElementById('admin-crm-role-filter')) document.getElementById('admin-crm-role-filter').value = 'all';
@@ -4468,6 +4507,8 @@
         if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
           adminRole = check.info.role || 'store';
           adminNetworkId = check.info.networkId || check.info.storeId || 'admin';
+          loadSavedAdminCrmFilters();
+          applyAdminCrmFilterControls();
           document.getElementById('loading-screen').classList.add('fade-out');
           setTimeout(() => document.getElementById('loading-screen').remove(), 500);
           if (String(location.hash || '').includes('lineoa-monitor') || new URLSearchParams(location.search || '').get('tab') === 'lineoa-monitor') {
