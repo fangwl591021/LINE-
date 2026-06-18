@@ -3190,12 +3190,9 @@
 
     function getCrmSortTime(u) {
       const values = [
-        u.updatedAt, u.updated_at,
-        u.syncedAt, u.synced_at,
-        u.lastContactAt, u.last_contact_at,
-        u.lastLoginAt, u.last_login_at,
-        u.joinedAt, u.joined_at,
-        u.createdAt, u.created_at
+        u.cardCreatedAt, u.card_created_at,
+        u.createdAt, u.created_at,
+        u.joinedAt, u.joined_at
       ];
       for (const value of values) {
         if (!value) continue;
@@ -3287,6 +3284,7 @@
         const sourceText = u.source === 'bound_card' ? '名片綁定' : (u.source || 'LINE / 後台');
         const nextFollow = u.nextFollowUpAt ? formatDisplayTime(u.nextFollowUpAt) : '尚未排程';
         const lastInteraction = getLastInteraction(u);
+        const cardCreated = u.cardCreatedAt || u.createdAt || '';
         return `
         <tr>
           <td>
@@ -3330,6 +3328,7 @@
           <td>
             <div class="crm-next-block">
               <div class="crm-main-text">${escapeHTML(lastInteraction)}</div>
+              <div class="crm-sub-text">名片建立 ${escapeHTML(cardCreated ? formatDisplayTime(cardCreated) : '-')}</div>
               <div class="crm-sub-text">下次 ${escapeHTML(nextFollow)}</div>
               <div class="crm-sub-text">${isFollowUpDue(u) ? '今天以前應處理' : '狀態正常'}</div>
             </div>
@@ -3357,8 +3356,8 @@
       return String(value || '').trim();
     }
 
-    function getCardSortTimestamp(card = {}) {
-      return card.updatedAt || card.updated_at || card.syncedAt || card.createdAt || card.created_at || card['更新時間'] || card['建立時間'] || '';
+    function getCardCreatedTimestamp(card = {}) {
+      return card.createdAt || card.created_at || card['建立時間'] || card.updatedAt || card.updated_at || card['更新時間'] || '';
     }
 
     function buildUserPayloadFromBoundCard(card) {
@@ -3380,9 +3379,10 @@
         claimedCardRowId: card.rowId || '',
         companyName: company,
         title,
-        createdAt: card.createdAt || card.created_at || getCardSortTimestamp(card),
-        updatedAt: getCardSortTimestamp(card),
-        lastContactAt: getCardSortTimestamp(card),
+        cardCreatedAt: getCardCreatedTimestamp(card),
+        createdAt: getCardCreatedTimestamp(card),
+        updatedAt: card.updatedAt || card.updated_at || card['更新時間'] || getCardCreatedTimestamp(card),
+        lastContactAt: getCardCreatedTimestamp(card),
         profileStatus: phone ? 'active' : 'incomplete',
         source: 'bound_card'
       };
@@ -3390,19 +3390,20 @@
 
     function mergeUsersWithBoundCards(users, cards) {
       const merged = Array.isArray(users) ? [...users] : [];
-      const userIds = new Set(merged.map(u => normalizeLineId(u.userId)).filter(Boolean));
+      const userIds = new Set(merged.map(u => normalizeLineId(getUserId(u))).filter(Boolean));
       (Array.isArray(cards) ? cards : []).forEach(card => {
         const user = buildUserPayloadFromBoundCard(card);
         if (!user) return;
         if (userIds.has(user.userId)) {
-          const idx = merged.findIndex(u => normalizeLineId(u.userId) === user.userId);
+          const idx = merged.findIndex(u => normalizeLineId(getUserId(u)) === user.userId);
           if (idx >= 0) {
-            const cardTime = getCardSortTimestamp(card);
+            const cardCreated = getCardCreatedTimestamp(card);
             merged[idx] = {
               ...merged[idx],
-              updatedAt: merged[idx].updatedAt || merged[idx].updated_at || cardTime,
-              createdAt: merged[idx].createdAt || merged[idx].created_at || user.createdAt || cardTime,
-              lastContactAt: merged[idx].lastContactAt || merged[idx].last_contact_at || cardTime,
+              cardCreatedAt: merged[idx].cardCreatedAt || merged[idx].card_created_at || cardCreated,
+              updatedAt: merged[idx].updatedAt || merged[idx].updated_at || user.updatedAt || cardCreated,
+              createdAt: merged[idx].createdAt || merged[idx].created_at || user.createdAt || cardCreated,
+              lastContactAt: merged[idx].lastContactAt || merged[idx].last_contact_at || cardCreated,
               claimedCardRowId: merged[idx].claimedCardRowId || user.claimedCardRowId
             };
           }
