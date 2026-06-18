@@ -4240,6 +4240,53 @@ const PointModule = {
     return ids.length ? ids : [id];
   },
 
+  async ensureLocalPointWallet(env, userId, profile = {}) {
+    const id = D1ReadModule.text(userId);
+    if (!id || !env || !env.ACTMASTER_DB) return { success: false, error: 'Missing user id' };
+    const userColumns = [
+      "ALTER TABLE users ADD COLUMN point_line_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE users ADD COLUMN legacy_line_id TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE users ADD COLUMN identity_source TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE users ADD COLUMN migrated_at TEXT"
+    ];
+    for (const sql of userColumns) {
+      await env.ACTMASTER_DB.prepare(sql).run().catch(() => null);
+    }
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO users (
+        row_id, line_id, name, industry, phone, role, network_id,
+        point_line_id, identity_source, migrated_at
+      ) VALUES (?, ?, ?, ?, ?, 'user', ?, ?, 'store_point_wallet_repair', CURRENT_TIMESTAMP)
+      ON CONFLICT(row_id) DO UPDATE SET
+        line_id=CASE WHEN TRIM(COALESCE(users.line_id,'')) = '' THEN excluded.line_id ELSE users.line_id END,
+        name=CASE WHEN TRIM(COALESCE(users.name,'')) = '' THEN excluded.name ELSE users.name END,
+        industry=CASE WHEN TRIM(COALESCE(users.industry,'')) = '' THEN excluded.industry ELSE users.industry END,
+        phone=CASE WHEN TRIM(COALESCE(users.phone,'')) = '' THEN excluded.phone ELSE users.phone END,
+        network_id=CASE WHEN TRIM(COALESCE(users.network_id,'')) = '' THEN excluded.network_id ELSE users.network_id END,
+        point_line_id=CASE WHEN TRIM(COALESCE(users.point_line_id,'')) = '' THEN excluded.point_line_id ELSE users.point_line_id END,
+        identity_source=CASE WHEN TRIM(COALESCE(users.identity_source,'')) = '' THEN excluded.identity_source ELSE users.identity_source END,
+        migrated_at=COALESCE(users.migrated_at, CURRENT_TIMESTAMP)
+    `).bind(
+      id,
+      id,
+      D1ReadModule.text(profile.name || profile.displayName),
+      D1ReadModule.text(profile.industry || profile.title || profile.companyName),
+      D1ReadModule.text(profile.phone || profile.mobile),
+      D1ReadModule.text(profile.networkId || 'admin'),
+      id
+    ).run();
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE users
+      SET point_line_id = COALESCE(NULLIF(point_line_id, ''), ?),
+          identity_source = COALESCE(NULLIF(identity_source, ''), 'store_point_wallet_repair'),
+          migrated_at = COALESCE(migrated_at, CURRENT_TIMESTAMP)
+      WHERE line_id = ? OR row_id = ? OR legacy_line_id = ? OR point_line_id = ?
+    `).bind(id, id, id, id, id).run();
+    await AdminPointModule.ensure(env).catch(() => null);
+    await D1WriteModule.clearUserCache(env, id).catch(() => null);
+    return { success: true, pointUserId: id, source: 'local_wallet_index' };
+  },
+
   async ensureAwardTable(env) {
     await env.ACTMASTER_DB.prepare(`
       CREATE TABLE IF NOT EXISTS point_awards (
@@ -4509,6 +4556,13 @@ const PointModule = {
         row_id DESC
       LIMIT 20
     `, cardBinds).catch(() => []);
+    const threadRows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM line_oa_threads
+      WHERE ${isUid ? 'user_id = ?' : 'display_name LIKE ? OR user_id LIKE ?'}
+      ORDER BY COALESCE(last_event_at, updated_at, created_at) DESC
+      LIMIT 20
+    `, isUid ? [query] : [like, like]).catch(() => []);
 
     const matches = [];
     const seen = new Set();
@@ -4537,8 +4591,31 @@ const PointModule = {
         needsBinding: !id
       });
     };
+    const addThreadMatch = async (row) => {
+      const rawId = D1ReadModule.text(row && row.user_id);
+      if (!rawId) return;
+      const identity = await D1ReadModule.findUserByIdentity(env, rawId).catch(() => null);
+      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
+      const id = D1ReadModule.text(user && user.userId) || D1ReadModule.text(identity && identity.canonicalId) || rawId;
+      const key = id || `thread:${rawId}`;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      matches.push({
+        kind: user ? 'user' : 'line_oa_thread',
+        id,
+        row,
+        user,
+        card: null,
+        name: D1ReadModule.text(user && user.name) || D1ReadModule.text(row.display_name) || rawId,
+        phone: D1ReadModule.text(user && user.phone),
+        industry: D1ReadModule.text(user && user.industry) || 'LINE OA',
+        avatarUrl: D1ReadModule.text(row.picture_url),
+        needsBinding: false
+      });
+    };
     for (const row of userRows) await addMatch('user', row);
     for (const row of cardRows) await addMatch('card', row);
+    for (const row of threadRows) await addThreadMatch(row);
     return { matches, error: '' };
   },
 
@@ -4708,6 +4785,13 @@ const PointModule = {
     const industry = D1ReadModule.text(user && user.industry)
       || D1ReadModule.text(mappedCard && (mappedCard.title || mappedCard.companyName || mappedCard['職稱'] || mappedCard['公司名稱']));
 
+    const localWalletIndex = await this.ensureLocalPointWallet(env, customerPointUserId, {
+      name: displayName,
+      phone,
+      industry,
+      networkId: D1ReadModule.text(user && user.networkId) || D1ReadModule.text(mappedCard && mappedCard.networkId) || 'admin'
+    }).catch(e => ({ success: false, error: e.message || String(e) }));
+
     if (!wallet || wallet.success === false) {
       const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
       return {
@@ -4719,6 +4803,8 @@ const PointModule = {
           matchedBy: rawCustomerId === customerPointUserId ? 'uid_local_point' : 'local_customer_point_ledger',
           needsBinding: false,
           localPointOnly: true,
+          localWalletRepaired: !!(localWalletIndex && localWalletIndex.success),
+          localWalletIndex,
           canAdjust: true,
           canAutoBindPointAccount: false,
           bindCustomerUserId: customerPointUserId,
@@ -4746,6 +4832,8 @@ const PointModule = {
         matchedBy: rawCustomerId === customerPointUserId ? 'uid' : 'phone_or_identity',
         needsBinding: false,
         canAdjust: true,
+        localWalletRepaired: !!(localWalletIndex && localWalletIndex.success),
+        localWalletIndex,
         name: displayName,
         phone,
         industry,
@@ -4825,6 +4913,18 @@ const PointModule = {
     if (!actorId) return { success: false, error: 'Missing operator user id' };
     if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
     if (!amount || amount <= 0) return { success: false, error: '消費金額必須大於 0' };
+
+    const customerLocalWalletIndex = await this.ensureLocalPointWallet(env, customerPointUserId, {
+      name: D1ReadModule.text(resolvedCustomer.user && resolvedCustomer.user.name) ||
+        D1ReadModule.text(resolvedCustomer.card && resolvedCustomer.card.name),
+      phone: D1ReadModule.text(resolvedCustomer.user && resolvedCustomer.user.phone) ||
+        D1ReadModule.text(resolvedCustomer.card && (resolvedCustomer.card.mobile || resolvedCustomer.card.officePhone)),
+      industry: D1ReadModule.text(resolvedCustomer.user && resolvedCustomer.user.industry) ||
+        D1ReadModule.text(resolvedCustomer.card && (resolvedCustomer.card.title || resolvedCustomer.card.companyName)),
+      networkId: D1ReadModule.text(resolvedCustomer.user && resolvedCustomer.user.networkId) ||
+        D1ReadModule.text(resolvedCustomer.card && resolvedCustomer.card.networkId) ||
+        D1ReadModule.text(payload.authenticatedNetworkId || payload.networkId || 'admin')
+    }).catch(e => ({ success: false, error: e.message || String(e) }));
 
     const actorPointUserId = await this.resolvePointUserId(env, actorId);
     const actorWallet = await this.queryUserPoints({
@@ -5009,6 +5109,8 @@ const PointModule = {
         balanceAfterEstimate: balanceBefore + points,
         customerPointSource,
         localPointOnly: customerPointSource === 'local',
+        localWalletRepaired: !!(customerLocalWalletIndex && customerLocalWalletIndex.success),
+        localWalletIndex: customerLocalWalletIndex,
         autoBoundPointAccount: !!autoBindResult,
         autoBindResult,
         eventName,
