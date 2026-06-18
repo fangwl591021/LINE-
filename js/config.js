@@ -3,7 +3,7 @@
 const DEFAULT_LIFF_ID = "1660923784-vViMTZ1y";
 const NFC_LIFF_ID = "1660923784-cOH9Hvsv";
 const POINT_LIFF_ID = "1660923784-vViMTZ1y";
-const SOCIAL_LIKE_LIFF_ID = "";
+const SOCIAL_LIKE_LIFF_ID = "1660923784-NVioaXK7";
 const POINT_OA_URL = "https://lin.ee/sDW7u4T";
 const HARD_ADMIN_ACCOUNTS = [
   {

@@ -21,7 +21,7 @@ bucket_name = "linengine"
 [vars]
 # Set real secrets in Cloudflare Dashboard or with `wrangler secret put`.
 # SOCIAL_LIKE_LIFF_ID must be a LINE LIFF app whose view type is Compact.
-# SOCIAL_LIKE_LIFF_ID = ""
+SOCIAL_LIKE_LIFF_ID = "1660923784-NVioaXK7"
 # GAS_URL = "https://script.google.com/macros/s/.../exec"
 # LINE_CHANNEL_SECRET = ""
 # LINE_CHANNEL_ACCESS_TOKEN = ""
