@@ -1002,6 +1002,25 @@ window.initSocialLikeWidget = function(cardId, networkId) {
   window.loadSocialLikeStats(cardId, networkId || 'admin');
 };
 
+window.handleAutoSocialLikeEntry = async function(cardId, networkId) {
+  if (!cardId) return false;
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) loadingScreen.classList.add('hidden');
+  const app = document.getElementById('app');
+  if (app) {
+    app.innerHTML =
+      '<main class="min-h-screen bg-[#eef2f7] flex items-center justify-center px-6">' +
+        '<section class="w-full max-w-[320px] rounded-3xl bg-white p-6 text-center shadow-xl">' +
+          '<div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-[28px]">👍</div>' +
+          '<h1 class="text-[20px] font-black text-slate-900">感謝您的支持</h1>' +
+          '<p class="mt-2 text-[13px] font-bold text-slate-500">正在為這張名片加上支持紀錄</p>' +
+        '</section>' +
+      '</main>';
+  }
+  await window.recordSocialLike(cardId, networkId || 'admin');
+  return true;
+};
+
 window.applyRegisteredUserSession = function(info) {
   if (!info) return;
 
@@ -2108,6 +2127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     const shareCardId = urlParams.get('shareCardId');
+    const likeCardId = urlParams.get('likeCardId');
     const shouldSendCardToChat = shareCardId && (
       urlParams.get('send') === '1' ||
       urlParams.get('action') === 'send'
@@ -2120,6 +2140,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const claimCardId = urlParams.get('claim');
     const refId = urlParams.get('ref') || '';
     const netId = urlParams.get('net') || 'admin';
+
+    if (likeCardId) {
+      await window.handleAutoSocialLikeEntry?.(likeCardId, netId);
+      return;
+    }
 
     if (shouldSendCardToChat) {
       await handleAutoSendCardEntry(shareCardId, refId, netId);

@@ -6224,6 +6224,9 @@ const MessagingModule = {
     if (referrerId) badgeUrl += '&ref=' + referrerId;
     if (networkId) badgeUrl += '&net=' + networkId;
     const shareActionUrl = badgeUrl + '&share=1';
+    let likeActionUrl = 'https://liff.line.me/' + activeLiffId + '?likeCardId=' + card.rowId;
+    if (referrerId) likeActionUrl += '&ref=' + referrerId;
+    if (networkId) likeActionUrl += '&net=' + networkId;
 
     const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
     const imgUrl = (
@@ -6262,7 +6265,7 @@ const MessagingModule = {
             { type: "text", text: "\uD83D\uDC4D", size: "xs", flex: 0 },
             { type: "text", text: "0", weight: "bold", color: "#334155", size: "xs", flex: 1 }
           ],
-          action: { type: "uri", uri: badgeUrl }
+          action: { type: "uri", uri: likeActionUrl }
         }, {
           type: "box", layout: "vertical", justifyContent: "center", backgroundColor: "#FF0000", width: "65px", height: "25px", cornerRadius: "25px",
           contents: [{ type: "text", text: "分享", weight: "bold", align: "center", color: "#FFFFFF", size: "xs" }],
