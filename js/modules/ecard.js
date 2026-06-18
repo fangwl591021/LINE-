@@ -956,17 +956,18 @@ function buildECardLikeUrl(url) {
     const parsed = new URL(url);
     const cardId = parsed.searchParams.get("shareCardId") || parsed.searchParams.get("cardId") || "";
     if (cardId) {
-      parsed.searchParams.delete("shareCardId");
-      parsed.searchParams.delete("cardId");
-      parsed.searchParams.delete("share");
-      parsed.searchParams.set("likeCardId", cardId);
-    } else {
-      parsed.searchParams.set("like", "1");
+      const direct = new URL("https://fangwl591021.github.io/LINE-/");
+      direct.searchParams.set("likeCardId", cardId);
+      const ref = parsed.searchParams.get("ref");
+      const net = parsed.searchParams.get("net");
+      if (ref) direct.searchParams.set("ref", ref);
+      if (net) direct.searchParams.set("net", net);
+      return direct.toString();
     }
-    return parsed.toString();
   } catch (e) {
-    return url;
+    return "";
   }
+  return "";
 }
 
 function routeECardFlexHeaderShareToPicker(flexMsg, shareUrl) {

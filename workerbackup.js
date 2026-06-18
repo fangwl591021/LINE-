@@ -6238,7 +6238,7 @@ const MessagingModule = {
     if (referrerId) badgeUrl += '&ref=' + referrerId;
     if (networkId) badgeUrl += '&net=' + networkId;
     const shareActionUrl = badgeUrl + '&share=1';
-    let likeActionUrl = 'https://liff.line.me/' + activeLiffId + '?likeCardId=' + card.rowId;
+    let likeActionUrl = 'https://fangwl591021.github.io/LINE-/?likeCardId=' + encodeURIComponent(card.rowId);
     if (referrerId) likeActionUrl += '&ref=' + referrerId;
     if (networkId) likeActionUrl += '&net=' + networkId;
 
