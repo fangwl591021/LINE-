@@ -529,14 +529,14 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
     app.innerHTML =
       '<main class="min-h-screen bg-[#eef2f7] px-4 py-4">' +
         '<section class="max-w-[320px] mx-auto overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-md">' +
+          '<div class="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-white">' +
+            '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-[12px] font-black text-slate-600 active:scale-95 transition-transform">' +
+              '<span class="material-symbols-outlined text-[16px] text-amber-500">thumb_up</span>' +
+              '<span data-social-like-count>0</span>' +
+            '</button>' +
+            '<a href="' + window.escapeHTML(shareUrl) + '" class="rounded-full bg-red-500 px-3.5 py-1 text-[12px] font-black text-white shadow-sm">分享</a>' +
+          '</div>' +
           '<div class="relative border-b border-slate-100">' +
-            '<div class="absolute right-2 top-2 z-10 flex items-center gap-1.5">' +
-              '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">' +
-                '<span class="material-symbols-outlined text-[16px]">thumb_up</span>' +
-                '<span data-social-like-count>0</span>' +
-              '</button>' +
-              '<a href="' + window.escapeHTML(shareUrl) + '" class="rounded-full bg-red-500 px-3.5 py-1 text-[12px] font-black text-white shadow-sm">分享</a>' +
-            '</div>' +
             '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-contain bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">' +
           '</div>' +
           '<div class="px-4 py-4 text-center">' +

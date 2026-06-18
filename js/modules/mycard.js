@@ -1221,15 +1221,15 @@
 
     preview.innerHTML =
       '<div class="flex flex-col w-full">' +
+      '<div class="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-white">' +
+        '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-[12px] font-black text-slate-600 active:scale-95 transition-transform">' +
+          '<span class="material-symbols-outlined text-[16px] text-amber-500">thumb_up</span>' +
+          '<span data-social-like-count>0</span>' +
+        '</button>' +
+        '<div class="bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+      '</div>' +
       '<div class="relative w-full">' +
         mediaHtml +
-        '<div class="absolute top-3 right-3 flex items-center gap-1.5">' +
-          '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">' +
-            '<span class="material-symbols-outlined text-[16px]">thumb_up</span>' +
-            '<span data-social-like-count>0</span>' +
-          '</button>' +
-          '<div class="bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
-        '</div>' +
       '</div>' +
       '<div class="p-6 text-center">' +
         '<div class="font-black text-[22px] text-slate-800 mb-2">' + escapeHTML(name) + '</div>' +
@@ -1537,17 +1537,17 @@
     }).join('');
     preview.innerHTML =
       '<div class="bg-white rounded-[18px] overflow-hidden shadow-xl border border-slate-200">' +
+        '<div class="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-white">' +
+          '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-[12px] font-black text-slate-600 active:scale-95 transition-transform">' +
+            '<span class="material-symbols-outlined text-[16px] text-amber-500">thumb_up</span>' +
+            '<span data-social-like-count>0</span>' +
+          '</button>' +
+          '<div class="bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+        '</div>' +
         '<div class="relative bg-slate-100">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'image\')" class="block w-full text-left active:opacity-80">' +
             '<div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio:' + escapeAttr(ratio) + ';background-image:url(&quot;' + escapeAttr(imgUrl) + '&quot;);"></div>' +
           '</button>' +
-          '<div class="absolute top-3 right-3 flex items-center gap-1.5">' +
-            '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">' +
-              '<span class="material-symbols-outlined text-[16px]">thumb_up</span>' +
-              '<span data-social-like-count>0</span>' +
-            '</button>' +
-            '<div class="bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
-          '</div>' +
         '</div>' +
         '<div class="px-6 py-5 text-center">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'title\')" class="block w-full text-[24px] font-black text-slate-900 active:bg-blue-50 rounded-xl px-2 py-1">' + escapeHTML(cfg.title || '姓名') + '</button>' +
@@ -1828,18 +1828,18 @@
     preview.innerHTML =
       renderWysiwygLayoutSelector(cfg, false) +
       '<div class="my-wysiwyg-card-shell">' +
+        '<div class="flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-white">' +
+          '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-[12px] font-black text-slate-600 active:scale-95 transition-transform">' +
+            '<span class="material-symbols-outlined text-[16px] text-amber-500">thumb_up</span>' +
+            '<span data-social-like-count>0</span>' +
+          '</button>' +
+          '<div class="bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+        '</div>' +
         '<div class="relative bg-slate-100">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'image\')" class="my-wysiwyg-target block w-full text-left active:opacity-90 rounded-none border-0">' +
             '<span class="my-wysiwyg-edit-icon" style="top:12px;right:12px;"><span class="material-symbols-outlined">image</span></span>' +
             heroMediaHtml +
           '</button>' +
-          '<div class="absolute top-3 right-3 flex items-center gap-1.5">' +
-            '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">' +
-              '<span class="material-symbols-outlined text-[16px]">thumb_up</span>' +
-              '<span data-social-like-count>0</span>' +
-            '</button>' +
-            '<div class="bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
-          '</div>' +
         '</div>' +
         '<div class="px-6 py-5 text-center">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'title\')" class="my-wysiwyg-target block w-full text-[24px] font-black text-slate-900 rounded-xl px-2 py-1">' +
