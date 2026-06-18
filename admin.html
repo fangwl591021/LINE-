@@ -4214,12 +4214,19 @@
       let ratio = '20/13';
       if (layoutStyle === 'portrait') ratio = currentAdminEcardRatios.portrait.replace(':', '/') || '2/3';
       if (layoutStyle === 'square') ratio = '1/1';
+      const rowId = document.getElementById('edit-c-rowid')?.value || '';
 
       area.innerHTML = `
         <div class="flex flex-col w-full bg-white pb-6 rounded-b-[24px]">
           <div class="relative w-full">
             <div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
-            <div class="absolute top-3 right-3 bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>
+            <div class="absolute top-3 right-3 flex items-center gap-1.5">
+              <button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">
+                <span class="material-symbols-outlined text-[16px]">thumb_up</span>
+                <span data-social-like-count>0</span>
+              </button>
+              <div class="bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>
+            </div>
           </div>
           <div class="p-6 text-center">
             <div class="font-black text-[22px] text-slate-800 mb-2">${escapeHTML(name)}</div>
@@ -4227,6 +4234,9 @@
           </div>
           <div class="px-6">${currentEditButtons.map(b => `<div class="py-3 rounded-xl text-white text-center text-sm font-black mb-2" style="background:${b.c}">${escapeHTML(b.l)}</div>`).join('')}</div>
         </div>`;
+      if (rowId && typeof window.initSocialLikeWidget === 'function') {
+        setTimeout(() => window.initSocialLikeWidget(rowId, 'admin'), 0);
+      }
     }
 
     async function saveCardEdit() {
