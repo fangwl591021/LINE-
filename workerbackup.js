@@ -4914,6 +4914,9 @@ const PointModule = {
       };
     }
 
+    const motherBalance = this.number(wallet && wallet.data && wallet.data.balance);
+    const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
+
     return {
       success: true,
       data: {
