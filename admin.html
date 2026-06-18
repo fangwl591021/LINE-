@@ -3199,7 +3199,8 @@
       ];
       for (const value of values) {
         if (!value) continue;
-        const time = Date.parse(String(value).replace(' ', 'T'));
+        const normalized = String(value).trim().replace(/\//g, '-').replace(' ', 'T');
+        const time = Date.parse(normalized);
         if (Number.isFinite(time)) return time;
       }
       return 0;
@@ -3356,6 +3357,10 @@
       return String(value || '').trim();
     }
 
+    function getCardSortTimestamp(card = {}) {
+      return card.updatedAt || card.updated_at || card.syncedAt || card.createdAt || card.created_at || card['更新時間'] || card['建立時間'] || '';
+    }
+
     function buildUserPayloadFromBoundCard(card) {
       const userId = normalizeLineId(card['LINE ID'] || card.lineId);
       const rawName = String(card['姓名'] || card['英文名'] || '').trim();
@@ -3375,6 +3380,9 @@
         claimedCardRowId: card.rowId || '',
         companyName: company,
         title,
+        createdAt: card.createdAt || card.created_at || getCardSortTimestamp(card),
+        updatedAt: getCardSortTimestamp(card),
+        lastContactAt: getCardSortTimestamp(card),
         profileStatus: phone ? 'active' : 'incomplete',
         source: 'bound_card'
       };
@@ -3385,7 +3393,21 @@
       const userIds = new Set(merged.map(u => normalizeLineId(u.userId)).filter(Boolean));
       (Array.isArray(cards) ? cards : []).forEach(card => {
         const user = buildUserPayloadFromBoundCard(card);
-        if (!user || userIds.has(user.userId)) return;
+        if (!user) return;
+        if (userIds.has(user.userId)) {
+          const idx = merged.findIndex(u => normalizeLineId(u.userId) === user.userId);
+          if (idx >= 0) {
+            const cardTime = getCardSortTimestamp(card);
+            merged[idx] = {
+              ...merged[idx],
+              updatedAt: merged[idx].updatedAt || merged[idx].updated_at || cardTime,
+              createdAt: merged[idx].createdAt || merged[idx].created_at || user.createdAt || cardTime,
+              lastContactAt: merged[idx].lastContactAt || merged[idx].last_contact_at || cardTime,
+              claimedCardRowId: merged[idx].claimedCardRowId || user.claimedCardRowId
+            };
+          }
+          return;
+        }
         userIds.add(user.userId);
         merged.push(user);
       });
