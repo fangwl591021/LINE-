@@ -137,7 +137,7 @@
     }
     .crm-toolbar {
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) 170px 170px 170px auto;
+      grid-template-columns: minmax(260px, 1fr) 170px 170px 170px 170px auto;
       gap: 12px;
       align-items: center;
       padding: 16px 22px;
@@ -542,6 +542,10 @@
                 <option value="paid">年費成立</option>
                 <option value="unpaid">尚未成立</option>
                 <option value="due">待跟進</option>
+              </select>
+              <select id="admin-crm-sort-filter" onchange="updateAdminCrmFilters()" class="crm-filter-control">
+                <option value="recent">最近優先</option>
+                <option value="oldest">最久優先</option>
               </select>
               <div class="crm-toolbar-actions flex items-center gap-2">
                 <button onclick="resetAdminCrmFilters()" class="text-base border border-slate-200 text-slate-700 px-5 py-3 rounded-xl hover:bg-slate-50 flex items-center gap-2 font-black">
@@ -1422,7 +1426,7 @@
     let userPage = 1;
     let cardPage = 1;
     let bonusOrderPage = 1;
-    let adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all' };
+    let adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all', sort: 'recent' };
     let selectedOrgRootId = '';
     let organizationTreeData = null;
     let currentDistributorCrmUserId = '';
@@ -3184,6 +3188,36 @@
       });
     }
 
+    function getCrmSortTime(u) {
+      const values = [
+        u.updatedAt, u.updated_at,
+        u.syncedAt, u.synced_at,
+        u.lastContactAt, u.last_contact_at,
+        u.lastLoginAt, u.last_login_at,
+        u.joinedAt, u.joined_at,
+        u.createdAt, u.created_at
+      ];
+      for (const value of values) {
+        if (!value) continue;
+        const time = Date.parse(String(value).replace(' ', 'T'));
+        if (Number.isFinite(time)) return time;
+      }
+      return 0;
+    }
+
+    function sortAdminCrmUsers(users = []) {
+      const sort = String((adminCrmFilters && adminCrmFilters.sort) || 'recent');
+      const dir = sort === 'oldest' ? 1 : -1;
+      return [...users].sort((a, b) => {
+        const at = getCrmSortTime(a);
+        const bt = getCrmSortTime(b);
+        if (at && bt && at !== bt) return (at - bt) * dir;
+        if (at && !bt) return -1;
+        if (!at && bt) return 1;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hant');
+      });
+    }
+
     function updateCrmSummaryCards(totalList = [], visibleList = []) {
       const total = totalList.length;
       const active = totalList.filter(u => ['active', 'bound_card'].includes(String(getCrmStatus(u)).toLowerCase()) || u.source === 'bound_card').length;
@@ -3206,18 +3240,20 @@
         search: document.getElementById('admin-crm-search')?.value || '',
         status: document.getElementById('admin-crm-status-filter')?.value || 'all',
         role: document.getElementById('admin-crm-role-filter')?.value || 'all',
-        fee: document.getElementById('admin-crm-fee-filter')?.value || 'all'
+        fee: document.getElementById('admin-crm-fee-filter')?.value || 'all',
+        sort: document.getElementById('admin-crm-sort-filter')?.value || 'recent'
       };
       userPage = 1;
       renderUsersTable(allUsersData);
     }
 
     function resetAdminCrmFilters() {
-      adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all' };
+      adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all', sort: 'recent' };
       if (document.getElementById('admin-crm-search')) document.getElementById('admin-crm-search').value = '';
       if (document.getElementById('admin-crm-status-filter')) document.getElementById('admin-crm-status-filter').value = 'all';
       if (document.getElementById('admin-crm-role-filter')) document.getElementById('admin-crm-role-filter').value = 'all';
       if (document.getElementById('admin-crm-fee-filter')) document.getElementById('admin-crm-fee-filter').value = 'all';
+      if (document.getElementById('admin-crm-sort-filter')) document.getElementById('admin-crm-sort-filter').value = 'recent';
       userPage = 1;
       renderUsersTable(allUsersData);
     }
@@ -3226,7 +3262,7 @@
       const tbody = document.getElementById('users-table-body');
       const list = (Array.isArray(users) ? users : []).filter(hasDistributorProfileData);
       document.getElementById('stat-users').innerText = list.length;
-      const filteredList = getAdminCrmFilteredUsers(list);
+      const filteredList = sortAdminCrmUsers(getAdminCrmFilteredUsers(list));
       updateCrmSummaryCards(list, filteredList);
       if (filteredList.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有用戶資料</td></tr>';
