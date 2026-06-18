@@ -1730,6 +1730,15 @@ const LineOAChatModule = {
     const profile = await this.fetchProfile(env, userId);
     const displayName = profile.displayName || userId;
     const pictureUrl = profile.pictureUrl || '';
+    const walletIndex = PointModule && PointModule.ensureLocalPointWalletIndexFast
+      ? await PointModule.ensureLocalPointWalletIndexFast(env, userId, {
+          name: displayName,
+          displayName,
+          industry: 'LINE OA',
+          networkId: 'admin'
+        }).catch(e => ({ success: false, error: e.message || String(e) }))
+      : null;
+    if (walletIndex && walletIndex.success === false) console.error('LINE OA point wallet index failed', walletIndex.error);
 
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO line_oa_threads (
@@ -4286,6 +4295,43 @@ const PointModule = {
     await AdminPointModule.ensure(env).catch(() => null);
     await D1WriteModule.clearUserCache(env, id).catch(() => null);
     return { success: true, pointUserId: id, source: 'local_wallet_index' };
+  },
+
+  async ensureLocalPointWalletIndexFast(env, userId, profile = {}) {
+    const id = D1ReadModule.text(userId);
+    if (!id || !env || !env.ACTMASTER_DB) return { success: false, error: 'Missing user id' };
+    try {
+      await env.ACTMASTER_DB.prepare(`
+        INSERT INTO users (
+          row_id, line_id, name, industry, phone, role, network_id,
+          point_line_id, identity_source, migrated_at
+        ) VALUES (?, ?, ?, ?, ?, 'user', ?, ?, 'line_oa_chat_index', CURRENT_TIMESTAMP)
+        ON CONFLICT(row_id) DO UPDATE SET
+          line_id=CASE WHEN TRIM(COALESCE(users.line_id,'')) = '' THEN excluded.line_id ELSE users.line_id END,
+          name=CASE WHEN TRIM(COALESCE(users.name,'')) = '' THEN excluded.name ELSE users.name END,
+          industry=CASE WHEN TRIM(COALESCE(users.industry,'')) = '' THEN excluded.industry ELSE users.industry END,
+          phone=CASE WHEN TRIM(COALESCE(users.phone,'')) = '' THEN excluded.phone ELSE users.phone END,
+          network_id=CASE WHEN TRIM(COALESCE(users.network_id,'')) = '' THEN excluded.network_id ELSE users.network_id END,
+          point_line_id=CASE WHEN TRIM(COALESCE(users.point_line_id,'')) = '' THEN excluded.point_line_id ELSE users.point_line_id END,
+          identity_source=CASE WHEN TRIM(COALESCE(users.identity_source,'')) = '' THEN excluded.identity_source ELSE users.identity_source END,
+          migrated_at=COALESCE(users.migrated_at, CURRENT_TIMESTAMP)
+      `).bind(
+        id,
+        id,
+        D1ReadModule.text(profile.name || profile.displayName),
+        D1ReadModule.text(profile.industry || profile.title || profile.companyName || 'LINE OA'),
+        D1ReadModule.text(profile.phone || profile.mobile),
+        D1ReadModule.text(profile.networkId || 'admin'),
+        id
+      ).run();
+      return { success: true, pointUserId: id, source: 'line_oa_chat_index' };
+    } catch (e) {
+      return await this.ensureLocalPointWallet(env, id, {
+        ...profile,
+        industry: profile.industry || profile.title || profile.companyName || 'LINE OA',
+        networkId: profile.networkId || 'admin'
+      });
+    }
   },
 
   async ensureAwardTable(env) {
