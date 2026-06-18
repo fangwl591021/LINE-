@@ -2091,10 +2091,7 @@ const LineOAChatModule = {
     const keywordRuleReply = await LineOAKeywordRuleModule.replyPayload(events, env);
     const gasRawBody = keywordRuleReply ? rawBody : await this.filterAutoReplyPayload(rawBody, events, env);
     if (!gasRawBody) {
-      if (keywordRuleReply) {
-        const replyResult = await this.replyLine(keywordRuleReply, env);
-        if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
-      }
+      if (keywordRuleReply) console.warn('LINE OA keyword rule skipped because no mother reply payload is available');
       return new Response('OK', { status: 200 });
     }
     const gasResult = await this.forwardToGas(gasRawBody, env);
@@ -2109,8 +2106,7 @@ const LineOAChatModule = {
     } else if (!gasResult.skipped) {
       console.error('GAS LINE_WEBHOOK failed', gasResult);
     } else if (keywordRuleReply) {
-      const replyResult = await this.replyLine(keywordRuleReply, env);
-      if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
+      console.warn('LINE OA keyword rule skipped because GAS is not configured; avoid consuming mother-site replyToken');
     }
     return new Response('OK', { status: 200 });
   },
