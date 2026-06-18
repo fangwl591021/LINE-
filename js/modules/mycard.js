@@ -1223,7 +1223,13 @@
       '<div class="flex flex-col w-full">' +
       '<div class="relative w-full">' +
         mediaHtml +
-        '<div class="absolute top-3 right-3 bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+        '<div class="absolute top-3 right-3 flex items-center gap-1.5">' +
+          '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">' +
+            '<span class="material-symbols-outlined text-[16px]">thumb_up</span>' +
+            '<span data-social-like-count>0</span>' +
+          '</button>' +
+          '<div class="bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+        '</div>' +
       '</div>' +
       '<div class="p-6 text-center">' +
         '<div class="font-black text-[22px] text-slate-800 mb-2">' + escapeHTML(name) + '</div>' +
@@ -1231,6 +1237,17 @@
       '</div>' +
       (buttonHtml ? '<div class="px-6">' + buttonHtml + '</div>' : '') +
     '</div>';
+    initMyCardSocialLikeWidget();
+  }
+
+  function initMyCardSocialLikeWidget() {
+    var card = window.currentUserCard || currentCardData || {};
+    var cardId = String(card.rowId || card.cardRowId || card.id || card['rowId'] || '').trim();
+    if (cardId && typeof window.initSocialLikeWidget === 'function') {
+      setTimeout(function() {
+        window.initSocialLikeWidget(cardId, window.currentNetworkId || 'admin');
+      }, 0);
+    }
   }
 
   function setMyUploadImage(url, ratio) {
@@ -1524,7 +1541,13 @@
           '<button type="button" onclick="window.editMyCardWysiwygField(\'image\')" class="block w-full text-left active:opacity-80">' +
             '<div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio:' + escapeAttr(ratio) + ';background-image:url(&quot;' + escapeAttr(imgUrl) + '&quot;);"></div>' +
           '</button>' +
-          '<div class="absolute top-3 right-3 bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm pointer-events-none">分享</div>' +
+          '<div class="absolute top-3 right-3 flex items-center gap-1.5">' +
+            '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">' +
+              '<span class="material-symbols-outlined text-[16px]">thumb_up</span>' +
+              '<span data-social-like-count>0</span>' +
+            '</button>' +
+            '<div class="bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+          '</div>' +
         '</div>' +
         '<div class="px-6 py-5 text-center">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'title\')" class="block w-full text-[24px] font-black text-slate-900 active:bg-blue-50 rounded-xl px-2 py-1">' + escapeHTML(cfg.title || '姓名') + '</button>' +
@@ -1536,6 +1559,7 @@
       '</div>' +
       '<p class="text-center text-[12px] text-slate-500 font-bold mt-3">點圖片、文字或按鈕即可編輯。尚未按儲存前不會寫入資料庫。</p>';
     preview.insertAdjacentHTML('beforeend', renderMyCardCopyUrlPanelHtml());
+    initMyCardSocialLikeWidget();
   }
 
   function renderMyCardCopyUrlPanelHtml() {
@@ -1809,7 +1833,13 @@
             '<span class="my-wysiwyg-edit-icon" style="top:12px;right:12px;"><span class="material-symbols-outlined">image</span></span>' +
             heroMediaHtml +
           '</button>' +
-          '<div class="absolute top-3 right-3 bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm pointer-events-none">分享</div>' +
+          '<div class="absolute top-3 right-3 flex items-center gap-1.5">' +
+            '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">' +
+              '<span class="material-symbols-outlined text-[16px]">thumb_up</span>' +
+              '<span data-social-like-count>0</span>' +
+            '</button>' +
+            '<div class="bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+          '</div>' +
         '</div>' +
         '<div class="px-6 py-5 text-center">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'title\')" class="my-wysiwyg-target block w-full text-[24px] font-black text-slate-900 rounded-xl px-2 py-1">' +
@@ -1827,6 +1857,7 @@
       '</div>' +
       '<p class="text-center text-[12px] text-slate-300 font-bold mt-3">這是編輯畫布。儲存後才會更新名片設定。</p>';
     preview.insertAdjacentHTML('beforeend', renderMyCardCopyUrlPanelHtml());
+    initMyCardSocialLikeWidget();
   }
 
   function renderWysiwygEditor(type, index) {

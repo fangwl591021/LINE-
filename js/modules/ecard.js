@@ -742,7 +742,13 @@ window.updateECardPreview = function() {
     <div class="flex flex-col w-full">
       <div class="relative w-full">
         <div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio: ${ratio}; background-image:url('${imgUrl}');"></div>
-        <div class="absolute top-3 right-3 bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>
+        <div class="absolute top-3 right-3 flex items-center gap-1.5">
+          <button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1.5 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">
+            <span class="material-symbols-outlined text-[16px]">thumb_up</span>
+            <span data-social-like-count>0</span>
+          </button>
+          <div class="bg-[#EF4444] text-white text-[12px] font-bold px-4 py-1.5 rounded-full shadow-sm">分享</div>
+        </div>
       </div>
       <div class="p-6 text-center">
         <div class="font-black text-[22px] text-slate-800 mb-2">${escapeHTML(name)}</div>
@@ -751,6 +757,10 @@ window.updateECardPreview = function() {
       ${btnsHtml ? `<div class="px-6">${btnsHtml}</div>` : ''}
     </div>
   `;
+  const cardId = window.currentCard?.rowId || window.currentCard?.cardRowId || window.currentCard?.id || '';
+  if (cardId && typeof window.initSocialLikeWidget === 'function') {
+    setTimeout(() => window.initSocialLikeWidget(cardId, window.currentNetworkId || 'admin'), 0);
+  }
 };
 
 // 工具函數
