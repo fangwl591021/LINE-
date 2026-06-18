@@ -355,7 +355,26 @@ async function buildFlexForCardLink(card, options = {}) {
   if (!flexMsg || flexMsg.error) {
     throw new Error(flexMsg?.error || '無法產生 LINE 名片訊息');
   }
+  await enrichSharedCardLikeCount(flexMsg, card, networkId);
   routeSharedCardBadgeToPicker(flexMsg, shareUrl);
+  return flexMsg;
+}
+
+async function enrichSharedCardLikeCount(flexMsg, card, networkId) {
+  const cardId = String(card?.rowId || card?.cardRowId || card?.id || '').trim();
+  if (!cardId || !flexMsg?.header?.contents?.[0]?.contents || typeof window.fetchAPI !== 'function') return flexMsg;
+  try {
+    const res = await window.fetchAPI('getSocialLikeStats', {
+      shareCardId: cardId,
+      networkId: networkId || window.currentNetworkId || 'admin'
+    }, true);
+    const data = res && (res.data || res);
+    const count = String(Math.max(0, Number(data?.totalLikes || 0) || 0));
+    const likeContents = flexMsg.header.contents[0].contents;
+    if (likeContents[1] && likeContents[1].type === 'text') likeContents[1].text = count;
+  } catch (e) {
+    console.warn('[enrichSharedCardLikeCount] skipped:', e.message || e);
+  }
   return flexMsg;
 }
 
@@ -919,7 +938,7 @@ window.showSocialLikeThanks = function(message) {
   if (!box) {
     box = document.createElement('div');
     box.id = 'social-like-thanks-pop';
-    box.className = 'fixed inset-x-4 top-[42%] z-[12000] mx-auto max-w-[280px] rounded-3xl bg-slate-900 px-5 py-4 text-center text-white text-[16px] font-black shadow-2xl transition-opacity duration-200';
+    box.className = 'fixed inset-x-0 top-[42%] z-[12000] mx-auto w-fit max-w-[210px] rounded-2xl bg-slate-900 px-4 py-2.5 text-center text-white text-[14px] font-black shadow-xl transition-opacity duration-200';
     document.body.appendChild(box);
   }
   box.textContent = message || '感謝您的支持';
@@ -1018,6 +1037,38 @@ window.handleAutoSocialLikeEntry = async function(cardId, networkId) {
       '</main>';
   }
   await window.recordSocialLike(cardId, networkId || 'admin');
+  return true;
+};
+
+window.showSocialLikeThanks = function(message) {
+  let box = document.getElementById('social-like-thanks-pop');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'social-like-thanks-pop';
+    document.body.appendChild(box);
+  }
+  box.className = 'fixed inset-x-0 top-[42%] z-[12000] mx-auto w-fit max-w-[210px] rounded-2xl bg-slate-900 px-4 py-2.5 text-center text-white text-[14px] font-black shadow-xl transition-opacity duration-200';
+  const text = String(message || '').includes('今天') ? '今天已收到支持' : '感謝您的支持';
+  box.textContent = text;
+  box.style.opacity = '1';
+  box.classList.remove('hidden');
+  clearTimeout(window.__socialLikeThanksTimer);
+  window.__socialLikeThanksTimer = setTimeout(() => {
+    box.style.opacity = '0';
+    setTimeout(() => box.classList.add('hidden'), 220);
+  }, 2000);
+};
+
+window.handleAutoSocialLikeEntry = async function(cardId, networkId) {
+  if (!cardId) return false;
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) loadingScreen.classList.add('hidden');
+  await window.recordSocialLike(cardId, networkId || 'admin');
+  setTimeout(() => {
+    try {
+      if (typeof liff !== 'undefined' && liff && typeof liff.closeWindow === 'function') liff.closeWindow();
+    } catch (e) {}
+  }, 1800);
   return true;
 };
 

@@ -1221,6 +1221,16 @@ const LineOAChatModule = {
     };
   },
 
+  async attachSocialLikeCountToFlexMessage(message, row, env) {
+    const cardId = this.text(row?.row_id || row?.rowId || row?.id);
+    if (!message?.contents?.header?.contents?.[0]?.contents || !cardId) return message;
+    const stats = await TrackingModule.getSocialLikeStats({ cardId }, env).catch(() => null);
+    const count = String(Math.max(0, Number(stats?.data?.totalLikes || 0) || 0));
+    const likeContents = message.contents.header.contents[0].contents;
+    if (likeContents[1] && likeContents[1].type === 'text') likeContents[1].text = count;
+    return message;
+  },
+
   buildMyCardSelectorFlex(rows, userId, env) {
     const cards = (Array.isArray(rows) ? rows : []).slice(0, 10).map(row => D1ReadModule.cardRow(row)).filter(card => card && card.rowId);
     if (!cards.length) return null;
@@ -1403,10 +1413,12 @@ const LineOAChatModule = {
       const userId = this.eventUserId(event);
       if (!replyToken || !userId) continue;
       let message = null;
+      let messageCardRow = null;
       if (selectedRowId) {
         const selectedCard = this.filterLineOaMyCardCandidates([
           await this.findMySelfCardByRowId(env, userId, selectedRowId)
         ]).filter(Boolean)[0];
+        messageCardRow = selectedCard || null;
         message = selectedCard ? this.buildExistingMyCardFlex(selectedCard, userId, env) : null;
       } else if (showRowId !== null) {
         const cards = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
@@ -1414,6 +1426,7 @@ const LineOAChatModule = {
           ? cards.find(row => this.text(row.row_id) === showRowId)
           : cards[0];
         if (selectedCard) {
+          messageCardRow = selectedCard;
           message = this.buildExistingMyCardFlex(selectedCard, userId, env);
         } else {
           const profile = await this.fetchProfile(env, userId);
@@ -1425,9 +1438,10 @@ const LineOAChatModule = {
         message = existingCards.length > 1
           ? this.buildMyCardSelectorFlex(existingCards, userId, env)
           : (existingCards.length === 1
-            ? this.buildExistingMyCardFlex(existingCards[0], userId, env)
+            ? (messageCardRow = existingCards[0], this.buildExistingMyCardFlex(existingCards[0], userId, env))
             : this.buildSimpleMyCardFlex(profile, userId, env));
       }
+      if (messageCardRow) message = await this.attachSocialLikeCountToFlexMessage(message, messageCardRow, env);
       if (!message) continue;
       const replyResult = await this.replyLine({ replyToken, messages: [message] }, env);
       if (!replyResult.success) console.error('Simple my-card reply failed', replyResult);
@@ -6264,7 +6278,7 @@ const MessagingModule = {
           type: "box", layout: "horizontal", alignItems: "center", spacing: "xs", backgroundColor: "#F1F5F9", width: "65px", height: "25px", cornerRadius: "6px", paddingStart: "8px", paddingEnd: "8px",
           contents: [
             { type: "text", text: "\uD83D\uDC4D", size: "xs", flex: 0 },
-            { type: "text", text: "0", weight: "bold", color: "#334155", size: "xs", flex: 1 }
+            { type: "text", text: String(Math.max(0, Number(config.socialLikeCount || 0) || 0)), weight: "bold", color: "#334155", size: "xs", flex: 1 }
           ],
           action: { type: "uri", uri: likeActionUrl }
         }, {
