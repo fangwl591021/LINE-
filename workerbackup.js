@@ -1777,7 +1777,7 @@ const LineOAChatModule = {
   },
 
   followAwardPoints(env) {
-    const raw = env.LINE_OA_FOLLOW_POINTS ?? env.POINT_FOLLOW_POINTS ?? 10;
+    const raw = env.LINE_OA_FOLLOW_POINTS ?? env.POINT_FOLLOW_POINTS ?? 300;
     const points = Number(raw);
     return Number.isFinite(points) && points > 0 ? points : 0;
   },
@@ -7956,6 +7956,14 @@ const D1ReadModule = {
 };
 
 const D1WriteModule = {
+  cardScanAwardType() {
+    return 'card_scan_create';
+  },
+
+  cardScanAwardPoints() {
+    return 10;
+  },
+
   hasD1(env) {
     return !!(env && env.ACTMASTER_DB);
   },
@@ -8377,15 +8385,17 @@ const D1WriteModule = {
     await this.ensurePointAwardTable(env);
     const awardUserId = await this.resolvePointAwardUserId(env, userId);
     if (!awardUserId) return null;
+    const awardType = this.cardScanAwardType();
+    const awardPoints = this.cardScanAwardPoints();
     const awardId = 'AWD_CARD_SCAN_' + awardUserId + '_' + cardId;
     const eventName = '\u6383\u63cf\u540d\u7247\u8d08\u9ede';
     const correctionEventName = '\u6383\u63cf\u540d\u7247\u8d08\u9ede\u88dc\u6b63';
     const eventContent = '\u65b0\u589e\u4e0d\u91cd\u8907\u540d\u7247\uff1a' + (this.text(card.name) || cardId);
     const existingAward = await D1ReadModule.first(env, `
       SELECT * FROM point_awards
-      WHERE user_id = ? AND card_id = ? AND award_type = 'card_scan_create'
+      WHERE user_id = ? AND card_id = ? AND award_type = ?
       LIMIT 1
-    `, [awardUserId, cardId]).catch(() => null);
+    `, [awardUserId, cardId, awardType]).catch(() => null);
 
     if (existingAward) {
       const existingJson = this.jsonSafe(existingAward.response_json);
@@ -8399,7 +8409,7 @@ const D1WriteModule = {
 
       const retryResult = await PointModule.insertUserPoint({
         userId: awardUserId,
-        points: 10,
+        points: awardPoints,
         pointType: 'gift_money',
         eventName: this.text(existingAward.point_type) === 'system_point' ? correctionEventName : eventName,
         eventContent,
@@ -8419,21 +8429,21 @@ const D1WriteModule = {
       `).bind(awardUserId, retryResult && retryResult.success ? 'sent' : 'failed', JSON.stringify(nextJson), existingAward.award_id).run();
 
       return retryResult && retryResult.success
-        ? { awarded: true, points: 10, corrected: true, response: retryResult.data }
-        : { awarded: false, points: 10, error: (retryResult && retryResult.error) || 'Point award failed' };
+        ? { awarded: true, points: awardPoints, corrected: true, response: retryResult.data }
+        : { awarded: false, points: awardPoints, error: (retryResult && retryResult.error) || 'Point award failed' };
     }
 
     const inserted = await env.ACTMASTER_DB.prepare(`
       INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
       VALUES (?,?,?,?,?,?,?, '{}', CURRENT_TIMESTAMP)
-    `).bind(awardId, awardUserId, cardId, 'card_scan_create', 10, 'gift_money', 'pending').run();
+    `).bind(awardId, awardUserId, cardId, awardType, awardPoints, 'gift_money', 'pending').run();
     if (!inserted || !inserted.meta || Number(inserted.meta.changes || 0) === 0) {
       return { awarded: false, reason: 'already_awarded' };
     }
 
     const result = await PointModule.insertUserPoint({
       userId: awardUserId,
-      points: 10,
+      points: awardPoints,
       pointType: 'gift_money',
       eventName,
       eventContent,
@@ -8447,8 +8457,8 @@ const D1WriteModule = {
     `).bind(result && result.success ? 'sent' : 'failed', JSON.stringify(result || {}), awardId).run();
 
     return result && result.success
-      ? { awarded: true, points: 10, response: result.data }
-      : { awarded: false, points: 10, error: (result && result.error) || 'Point award failed' };
+      ? { awarded: true, points: awardPoints, response: result.data }
+      : { awarded: false, points: awardPoints, error: (result && result.error) || 'Point award failed' };
   },
 
   async confirmIdentityMerge(payload, env) {
