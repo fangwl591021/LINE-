@@ -1106,6 +1106,43 @@ window.handleAutoSocialLikeEntry = async function(cardId, networkId) {
   return true;
 };
 
+window.handleInstantSocialLikeEntry = function(cardId, networkId) {
+  if (!cardId) return false;
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) loadingScreen.classList.add('hidden');
+  window.showSocialLikeThanks();
+
+  const workerUrl = window.Config?.WORKER_URL || 'https://line-engine.fangwl591021.workers.dev';
+  const likerUserId = typeof window.getSocialLikeActorId === 'function'
+    ? window.getSocialLikeActorId()
+    : ('anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10));
+
+  fetch(workerUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'recordSocialLike',
+      payload: {
+        shareCardId: cardId,
+        likerUserId,
+        networkId: networkId || 'admin'
+      }
+    })
+  }).then(res => res.json())
+    .then(res => {
+      const data = res && (res.data || res);
+      if (data && typeof window.updateSocialLikeWidget === 'function') window.updateSocialLikeWidget(data);
+    })
+    .catch(e => console.warn('[handleInstantSocialLikeEntry] failed:', e.message || e));
+
+  setTimeout(() => {
+    try {
+      if (typeof liff !== 'undefined' && liff && typeof liff.closeWindow === 'function') liff.closeWindow();
+    } catch (e) {}
+  }, 1900);
+  return true;
+};
+
 window.applyRegisteredUserSession = function(info) {
   if (!info) return;
 
@@ -2116,6 +2153,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const initialUrlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
+    const instantLikeCardId = initialUrlParams.get('likeCardId');
+    if (instantLikeCardId) {
+      window.handleInstantSocialLikeEntry?.(instantLikeCardId, initialUrlParams.get('net') || 'admin');
+      return;
+    }
     const webCardId = initialUrlParams.get('webCardId') || (
       initialUrlParams.get('web') === '1' ? initialUrlParams.get('shareCardId') : ''
     );
