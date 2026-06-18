@@ -1521,6 +1521,21 @@ const LineOAChatModule = {
     if (!primary.replyToken || primary.replyToken !== secondary.replyToken) return primary;
     const primaryMessages = Array.isArray(primary.messages) ? primary.messages : [];
     const secondaryMessages = Array.isArray(secondary.messages) ? secondary.messages : [];
+    const quickReplyItems = secondaryMessages
+      .flatMap(message => Array.isArray(message?.quickReply?.items) ? message.quickReply.items : [])
+      .filter(Boolean)
+      .slice(0, 13);
+    if (quickReplyItems.length && primaryMessages.length) {
+      const messages = primaryMessages.slice(0, 5).map(message => ({ ...message }));
+      const targetIndex = messages.length - 1;
+      const existingItems = Array.isArray(messages[targetIndex]?.quickReply?.items)
+        ? messages[targetIndex].quickReply.items
+        : [];
+      messages[targetIndex].quickReply = {
+        items: existingItems.concat(quickReplyItems).slice(0, 13)
+      };
+      return { replyToken: primary.replyToken, messages };
+    }
     return {
       replyToken: primary.replyToken,
       messages: primaryMessages.slice(0, Math.max(0, 5 - secondaryMessages.length)).concat(secondaryMessages).slice(0, 5)
