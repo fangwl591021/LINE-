@@ -666,6 +666,19 @@ window.saveProfileRegistration = async function(event) {
 
     const check = await window.fetchAPI('checkUser', { userId }, true);
     const action = check && check.isRegistered ? 'updateUserProfile' : 'registerUser';
+    if (action === 'registerUser') {
+      const mother = await window.fetchAPI('queryPointBalanceFast', { userId, pointUserId: userId, point_type: 'gift_money' }, true).catch(e => ({ error: e && e.message ? e.message : String(e) }));
+      if (!mother || mother.error || mother.success === false) {
+        const link = await window.fetchAPI('getMotherRegistrationUrl', { userId }, true).catch(e => ({ error: e && e.message ? e.message : String(e) }));
+        const url = link?.data?.url || link?.url || '';
+        if (url) {
+          window.showToast('請先完成母站註冊，完成後回來再按一次儲存。', true);
+          window.open(url, '_blank', 'noopener');
+          return;
+        }
+        throw new Error(link?.error || mother?.error || '母站會員尚未建立，且無法取得母站註冊連結');
+      }
+    }
     const saved = await window.fetchAPI(action, payload, true);
     if (!saved || saved.error) throw new Error(saved?.error || '儲存失敗');
 

@@ -336,6 +336,7 @@ const SecurityModule = {
       'deleteCard',
       'unlinkCard',
       'getSubsiteHome',
+      'getMotherRegistrationUrl',
       'getSocialLikeStats',
       'queryPointBalanceFast',
       'queryUserPoints',
@@ -3829,6 +3830,20 @@ const PointModule = {
     url.searchParams.set('client_id', String(env.MOTHER_CUS_ACCOUNT_CLIENT_ID || '1660923784'));
     url.searchParams.set('redirect_uri', String(env.MOTHER_CUS_ACCOUNT_REDIRECT_URI || 'https://aiwe.cc/index.php/line_login/677/'));
     return url.toString();
+  },
+
+  async getMotherRegistrationUrl(payload, env) {
+    const requestedUserId = String(payload.authenticatedUserId || payload.userId || payload.LINE_user_id || payload.lineUserId || '').trim();
+    if (!requestedUserId) return { success: false, error: 'Missing LINE user id' };
+    const url = this.motherRegistrationUrl(env, requestedUserId);
+    if (!url) return { success: false, error: 'Mother registration token is not configured' };
+    return {
+      success: true,
+      data: {
+        userId: requestedUserId,
+        url
+      }
+    };
   },
 
   number(value) {
@@ -14130,6 +14145,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
     case 'getSubsiteHome':         return await SubsiteHomeModule.get(payload || {}, env);
+    case 'getMotherRegistrationUrl': return await PointModule.getMotherRegistrationUrl(payload || {}, env);
     case 'queryPointBalanceFast':  return await PointModule.queryPointBalanceFast(payload || {}, env);
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
