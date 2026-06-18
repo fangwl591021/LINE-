@@ -349,7 +349,7 @@ async function buildFlexForCardLink(card, options = {}) {
       referrerId,
       networkId,
       liffId: window.POINT_LIFF_ID || window.DEFAULT_LIFF_ID || window.LIFF_ID
-    }, true);
+    }, false);
   }
 
   if (!flexMsg || flexMsg.error) {
@@ -629,7 +629,7 @@ window.submitRegistration = async function() {
 
 window.saveProfileRegistration = async function(event) {
   const btn = event?.currentTarget || document.getElementById('btn-save-profile-registration');
-  const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+  const userId = window.getSocialLikeActorId();
   const name = (document.getElementById('profile-name')?.value || '').trim();
   const phone = (document.getElementById('profile-phone')?.value || '').trim();
   const industry = (document.getElementById('profile-industry')?.value || '').trim();
@@ -982,8 +982,24 @@ window.loadSocialLikeStats = async function(cardId, networkId) {
   }
 };
 
+window.getSocialLikeActorId = function() {
+  const lineId = String(window.currentUserProfile?.userId || window.currentUser?.userId || '').trim();
+  if (lineId) return lineId;
+  try {
+    const key = 'ACTMASTER_SOCIAL_LIKER_ID';
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = 'anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch (e) {
+    return 'anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
+};
+
 window.recordSocialLike = async function(cardId, networkId) {
-  const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+  const userId = window.getSocialLikeActorId();
   if (!cardId) return;
   if (!userId) {
     window.showToast?.('請先登入 LINE 後再按讚', true);
@@ -996,7 +1012,7 @@ window.recordSocialLike = async function(cardId, networkId) {
       shareCardId: cardId,
       likerUserId: userId,
       networkId: networkId || 'admin'
-    }, true);
+    }, false);
     const data = res && (res.data || res);
     if (data) window.updateSocialLikeWidget(data);
     window.showSocialLikeThanks(data && data.alreadyLikedToday ? '今天已經收到您的支持' : '感謝您的支持');
@@ -1050,6 +1066,24 @@ window.showSocialLikeThanks = function(message) {
   box.className = 'fixed inset-x-0 top-[42%] z-[12000] mx-auto w-fit max-w-[210px] rounded-2xl bg-slate-900 px-4 py-2.5 text-center text-white text-[14px] font-black shadow-xl transition-opacity duration-200';
   const text = String(message || '').includes('今天') ? '今天已收到支持' : '感謝您的支持';
   box.textContent = text;
+  box.style.opacity = '1';
+  box.classList.remove('hidden');
+  clearTimeout(window.__socialLikeThanksTimer);
+  window.__socialLikeThanksTimer = setTimeout(() => {
+    box.style.opacity = '0';
+    setTimeout(() => box.classList.add('hidden'), 220);
+  }, 2000);
+};
+
+window.showSocialLikeThanks = function() {
+  let box = document.getElementById('social-like-thanks-pop');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'social-like-thanks-pop';
+    document.body.appendChild(box);
+  }
+  box.className = 'fixed inset-x-0 top-[22%] z-[12000] mx-auto w-[270px] max-w-[82vw] pointer-events-none transition-opacity duration-200';
+  box.innerHTML = '<img src="https://s3.us-west-1.wasabisys.com/aitw/2026/06/6d0759e75079125c1b9d76165099d7d8.png" alt="感謝支持" class="block w-full h-auto">';
   box.style.opacity = '1';
   box.classList.remove('hidden');
   clearTimeout(window.__socialLikeThanksTimer);
