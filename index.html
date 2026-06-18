@@ -909,10 +909,16 @@
               <button type="button" onclick="window.showInviteLink?.()" class="block w-[66px] h-[66px] mx-auto rounded-lg bg-white overflow-hidden active:scale-95 transition-transform">
                 <img id="home-profile-qr" src="" class="w-full h-full object-contain" alt="QR Code">
               </button>
-              <button type="button" onclick="window.shareHomeProfileCard(this)" class="mt-1 w-full py-1.5 rounded-xl bg-pink-500 text-white text-[12px] font-black active:scale-95 transition-transform flex items-center justify-center gap-1 whitespace-nowrap">
-                分享
-                <span class="material-symbols-outlined text-[13px]">share</span>
-              </button>
+              <div class="mt-1 grid grid-cols-[auto_1fr] gap-1">
+                <button type="button" data-home-social-like-button data-social-like-button class="hidden h-7 min-w-[42px] items-center justify-center gap-0.5 rounded-xl border border-slate-200 bg-white/95 px-1.5 text-[11px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">
+                  <span class="material-symbols-outlined text-[14px]">thumb_up</span>
+                  <span data-social-like-count>0</span>
+                </button>
+                <button type="button" onclick="window.shareHomeProfileCard(this)" class="h-7 w-full rounded-xl bg-pink-500 text-white text-[12px] font-black active:scale-95 transition-transform flex items-center justify-center gap-1 whitespace-nowrap">
+                  分享
+                  <span class="material-symbols-outlined text-[13px]">share</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -960,10 +966,16 @@
             <button type="button" onclick="window.showInviteLink?.()" class="block w-[58px] h-[58px] mx-auto rounded-lg bg-white overflow-hidden active:scale-95 transition-transform">
               <img id="home-profile-qr" src="" class="w-full h-full object-contain" alt="QR Code">
             </button>
-            <button type="button" onclick="window.shareHomeProfileCard(this)" class="mt-1 w-full py-1.5 rounded-xl bg-pink-500 text-white text-[12px] font-black active:scale-95 transition-transform flex items-center justify-center gap-1 whitespace-nowrap">
-              分享
-              <span class="material-symbols-outlined text-[13px]">share</span>
-            </button>
+            <div class="mt-1 grid grid-cols-[auto_1fr] gap-1">
+              <button type="button" data-home-social-like-button data-social-like-button class="hidden h-7 min-w-[42px] items-center justify-center gap-0.5 rounded-xl border border-slate-200 bg-white/95 px-1.5 text-[11px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">
+                <span class="material-symbols-outlined text-[14px]">thumb_up</span>
+                <span data-social-like-count>0</span>
+              </button>
+              <button type="button" onclick="window.shareHomeProfileCard(this)" class="h-7 w-full rounded-xl bg-pink-500 text-white text-[12px] font-black active:scale-95 transition-transform flex items-center justify-center gap-1 whitespace-nowrap">
+                分享
+                <span class="material-symbols-outlined text-[13px]">share</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -2063,7 +2075,7 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.53"></script>
+<script src="js/modules/home.js?v=7.54"></script>
 <script src="js/modules/inbox.js?v=1.15"></script>
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>

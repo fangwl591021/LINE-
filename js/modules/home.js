@@ -405,6 +405,22 @@ const HomeModule = (function() {
             '&from=business-engine';
     };
 
+    function getHomeProfileCardId_() {
+        const card = window.currentUserCard || {};
+        return String(card.rowId || card.cardRowId || card.id || card['rowId'] || '').trim();
+    }
+
+    window.refreshHomeSocialLikeWidget = function() {
+        const cardId = getHomeProfileCardId_();
+        const buttons = document.querySelectorAll('[data-home-social-like-button]');
+        buttons.forEach(function(btn) {
+            btn.classList.toggle('hidden', !cardId);
+            btn.classList.toggle('inline-flex', !!cardId);
+        });
+        if (!cardId || typeof window.initSocialLikeWidget !== 'function') return;
+        window.initSocialLikeWidget(cardId, window.currentNetworkId || 'admin');
+    };
+
     window.openPartnerStores = function() {
         const url = 'https://aiwe.cc/index.php/search_linecard/?big_region=%E5%8C%97%E9%83%A8%E5%9C%B0%E5%8D%80&shop_id=78&submitted=1';
         if (typeof liff !== 'undefined' && typeof liff.openWindow === 'function') {
@@ -454,6 +470,7 @@ const HomeModule = (function() {
             if (qrEl.getAttribute('src') !== qrUrl) qrEl.src = qrUrl;
         }
         window.updateHomeProfileOwnerControls?.();
+        window.refreshHomeSocialLikeWidget?.();
         refreshHomeZodiacButton_();
     };
 
