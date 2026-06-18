@@ -133,6 +133,59 @@
   </style>
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
+<script>
+(function() {
+  function collectParams() {
+    var params = new URLSearchParams(window.location.search || '');
+    try {
+      var hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+      hash.forEach(function(value, key) { if (!params.has(key)) params.set(key, value); });
+    } catch (e) {}
+    var state = params.get('liff.state') || params.get('liff_state') || '';
+    if (state) {
+      try {
+        var decoded = decodeURIComponent(state);
+        var query = decoded.indexOf('?') >= 0 ? decoded.slice(decoded.indexOf('?') + 1) : decoded.replace(/^[^?]*\?/, '');
+        new URLSearchParams(query).forEach(function(value, key) { if (!params.has(key)) params.set(key, value); });
+      } catch (e) {}
+    }
+    return params;
+  }
+  var params = collectParams();
+  var cardId = params.get('likeCardId');
+  if (!cardId) return;
+  window.__ACTMASTER_INSTANT_LIKE_HANDLED = true;
+  var style = document.createElement('style');
+  style.textContent = '#loading-screen,#app{display:none!important}body{background:#ffffff!important;min-height:100vh!important}';
+  document.head.appendChild(style);
+  document.write('<div id="instant-like-pop" style="position:fixed;inset:0;z-index:2147483647;display:flex;align-items:flex-start;justify-content:center;background:transparent;padding-top:22vh;pointer-events:none"><img src="https://s3.us-west-1.wasabisys.com/aitw/2026/06/6d0759e75079125c1b9d76165099d7d8.png" alt="感謝支持" style="display:block;width:270px;max-width:82vw;height:auto"></div>');
+  function actorId() {
+    try {
+      var key = 'ACTMASTER_SOCIAL_LIKER_ID';
+      var id = localStorage.getItem(key);
+      if (!id) {
+        id = 'anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem(key, id);
+      }
+      return id;
+    } catch (e) {
+      return 'anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+    }
+  }
+  fetch('https://line-engine.fangwl591021.workers.dev', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'recordSocialLike',
+      payload: {
+        shareCardId: cardId,
+        likerUserId: actorId(),
+        networkId: params.get('net') || 'admin'
+      }
+    })
+  }).catch(function(e) { console.warn('[instant-social-like] failed:', e && e.message || e); });
+})();
+</script>
 
 <div id="loading-screen" class="fixed inset-0 bg-white z-[1000] flex flex-col items-center justify-center transition-opacity duration-300">
     <span class="material-symbols-outlined animate-spin text-5xl text-[#06C755] mb-4">autorenew</span>
@@ -2072,7 +2125,7 @@
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.54"></script>
+<script src="js/auth.js?v=10.55"></script>
 
 </body>
 </html>

@@ -2148,6 +2148,7 @@ window.reorderSettingsSections = function() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    if (window.__ACTMASTER_INSTANT_LIKE_HANDLED) return;
     if (typeof window.prepareRegistrationInputs === 'function') window.prepareRegistrationInputs();
     window.reorderSettingsSections();
     const initialUrlParams = typeof window.readActmasterInitialParams === 'function'
