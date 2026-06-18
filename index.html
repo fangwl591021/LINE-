@@ -33,7 +33,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
 
   <link rel="stylesheet" href="css/styles.css?v=7.4">
-  <script src="js/config.js?v=9.5"></script>
+  <script src="js/config.js?v=9.6"></script>
 
   <style type="text/tailwindcss">
     .custom-input { @apply w-full py-4 px-5 bg-slate-100 border-none rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-medium text-text-main; }
@@ -172,6 +172,19 @@
       return 'anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
     }
   }
+  function closeLikeWindow() {
+    setTimeout(function() {
+      try {
+        if (window.liff && typeof window.liff.closeWindow === 'function') {
+          window.liff.closeWindow();
+          return;
+        }
+      } catch (e) {}
+      try {
+        if (window.history.length > 1) window.history.back();
+      } catch (e) {}
+    }, 2000);
+  }
   fetch('https://line-engine.fangwl591021.workers.dev', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -184,6 +197,16 @@
       }
     })
   }).catch(function(e) { console.warn('[instant-social-like] failed:', e && e.message || e); });
+  var closeLiffId = String(params.get('likeLiffId') || window.SOCIAL_LIKE_LIFF_ID || window.LIKE_LIFF_ID || '').trim();
+  if (closeLiffId && window.liff && typeof window.liff.init === 'function') {
+    try {
+      window.liff.init({ liffId: closeLiffId }).then(closeLikeWindow).catch(closeLikeWindow);
+    } catch (e) {
+      closeLikeWindow();
+    }
+  } else {
+    closeLikeWindow();
+  }
 })();
 </script>
 
@@ -2114,7 +2137,7 @@
 <script src="js/navigation.js?v=7.9"></script>
 <script src="js/modules/cropper.js?v=7.16"></script>
 <script src="js/modules/cards.js?v=7.9"></script>
-<script src="js/modules/ecard.js?v=7.44"></script>
+<script src="js/modules/ecard.js?v=7.45"></script>
 <script src="js/modules/mycard.js?v=8.62"></script>
 <script src="js/modules/matchmake.js?v=7.9"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>

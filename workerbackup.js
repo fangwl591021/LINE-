@@ -1202,7 +1202,8 @@ const LineOAChatModule = {
       config,
       referrerId: userId,
       networkId: card.networkId || 'admin',
-      liffId: env.POINT_LIFF_ID || env.LIFF_ID
+      liffId: env.POINT_LIFF_ID || env.LIFF_ID,
+      socialLikeLiffId: env.SOCIAL_LIKE_LIFF_ID || env.LIKE_LIFF_ID
     });
     const editUrl = this.quickMyCardUrl(userId, env);
     const shareUrl = this.cardShareUrl(card.rowId, userId, card.networkId || 'admin', env, true);
@@ -3583,7 +3584,8 @@ const LineOACardCoolKeywordModule = {
       config,
       referrerId: userId,
       networkId: card.networkId || 'admin',
-      liffId: env.POINT_LIFF_ID || env.LIFF_ID
+      liffId: env.POINT_LIFF_ID || env.LIFF_ID,
+      socialLikeLiffId: env.SOCIAL_LIKE_LIFF_ID || env.LIKE_LIFF_ID
     });
     const message = {
       type: 'flex',
@@ -6231,14 +6233,17 @@ const MessagingModule = {
   },
 
   buildFlex(payload) {
-    const { card, config, referrerId, networkId, liffId } = payload;
+    const { card, config, referrerId, networkId, liffId, socialLikeLiffId } = payload;
     
     const activeLiffId = liffId || '1660923784-vViMTZ1y';
     let badgeUrl = 'https://liff.line.me/' + activeLiffId + '?shareCardId=' + card.rowId;
     if (referrerId) badgeUrl += '&ref=' + referrerId;
     if (networkId) badgeUrl += '&net=' + networkId;
     const shareActionUrl = badgeUrl + '&share=1';
-    let likeActionUrl = 'https://fangwl591021.github.io/LINE-/?likeCardId=' + encodeURIComponent(card.rowId);
+    const activeSocialLikeLiffId = String(socialLikeLiffId || config.socialLikeLiffId || '').trim();
+    let likeActionUrl = activeSocialLikeLiffId
+      ? 'https://liff.line.me/' + encodeURIComponent(activeSocialLikeLiffId) + '?likeCardId=' + encodeURIComponent(card.rowId) + '&likeLiffId=' + encodeURIComponent(activeSocialLikeLiffId)
+      : 'https://fangwl591021.github.io/LINE-/?likeCardId=' + encodeURIComponent(card.rowId);
     if (referrerId) likeActionUrl += '&ref=' + referrerId;
     if (networkId) likeActionUrl += '&net=' + networkId;
 

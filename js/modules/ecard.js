@@ -956,8 +956,12 @@ function buildECardLikeUrl(url) {
     const parsed = new URL(url);
     const cardId = parsed.searchParams.get("shareCardId") || parsed.searchParams.get("cardId") || "";
     if (cardId) {
-      const direct = new URL("https://fangwl591021.github.io/LINE-/");
+      const likeLiffId = String(window.SOCIAL_LIKE_LIFF_ID || window.LIKE_LIFF_ID || "").trim();
+      const direct = likeLiffId
+        ? new URL("https://liff.line.me/" + encodeURIComponent(likeLiffId))
+        : new URL("https://fangwl591021.github.io/LINE-/");
       direct.searchParams.set("likeCardId", cardId);
+      if (likeLiffId) direct.searchParams.set("likeLiffId", likeLiffId);
       const ref = parsed.searchParams.get("ref");
       const net = parsed.searchParams.get("net");
       if (ref) direct.searchParams.set("ref", ref);
