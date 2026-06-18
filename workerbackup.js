@@ -3818,6 +3818,19 @@ const PointModule = {
   apiUrl: 'https://aiwe.cc/index.php/wp-json/wetw-point/v1/query-user-point-list',
   insertApiUrl: 'https://aiwe.cc/index.php/wp-json/wetw-point/v1/insert-user-point',
 
+  motherRegistrationUrl(env, userId) {
+    const lineUserId = String(userId || '').trim();
+    const botToken = String(env.MOTHER_CUS_ACCOUNT_BOT_TOKEN || env.AIWE_CUS_ACCOUNT_BOT_TOKEN || '').trim();
+    if (!lineUserId || !botToken) return '';
+    const url = new URL(String(env.MOTHER_CUS_ACCOUNT_URL || 'https://aiwe.cc/index.php/cus_account/'));
+    url.searchParams.set('line_userid', lineUserId);
+    url.searchParams.set('bot_token', botToken);
+    url.searchParams.set('shop_id', String(env.MOTHER_CUS_ACCOUNT_SHOP_ID || env.POINT_SHOP_ID || 78));
+    url.searchParams.set('client_id', String(env.MOTHER_CUS_ACCOUNT_CLIENT_ID || '1660923784'));
+    url.searchParams.set('redirect_uri', String(env.MOTHER_CUS_ACCOUNT_REDIRECT_URI || 'https://aiwe.cc/index.php/line_login/677/'));
+    return url.toString();
+  },
+
   number(value) {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
@@ -4838,6 +4851,7 @@ const PointModule = {
       industry,
       networkId: D1ReadModule.text(user && user.networkId) || D1ReadModule.text(mappedCard && mappedCard.networkId) || 'admin'
     }).catch(e => ({ success: false, error: e.message || String(e) }));
+    const motherRegistrationUrl = this.motherRegistrationUrl(env, customerPointUserId);
 
     if (!wallet || wallet.success === false) {
       const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
@@ -4854,6 +4868,7 @@ const PointModule = {
           localWalletIndex,
           canAdjust: true,
           canAutoBindPointAccount: false,
+          motherRegistrationUrl,
           bindCustomerUserId: customerPointUserId,
           name: displayName,
           phone,
@@ -4881,6 +4896,7 @@ const PointModule = {
         canAdjust: true,
         localWalletRepaired: !!(localWalletIndex && localWalletIndex.success),
         localWalletIndex,
+        motherRegistrationUrl,
         name: displayName,
         phone,
         industry,

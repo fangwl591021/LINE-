@@ -1794,7 +1794,8 @@ window.renderStorePointCustomer = function(customer) {
       bindHint.textContent = '\u5df2\u627e\u5230\u672c\u5730\u5ba2\u6236\uff0c\u4f46\u6bcd\u7ad9\u5c1a\u672a\u627e\u5230\u9ede\u6578\u6703\u54e1\u3002\u8acb\u6383\u63cf\u5ba2\u6236\u9ede\u6578 QR \u6216\u8acb\u5ba2\u6236\u5148\u5b8c\u6210\u9ede\u6578\u901a\u7d81\u5b9a\u3002';
     } else if (customer.localPointOnly) {
       bindHint.className = 'rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-[13px] font-black leading-relaxed text-blue-800';
-      bindHint.textContent = '\u6bcd\u7ad9\u9322\u5305\u66ab\u6642\u4e0d\u53ef\u7528\uff0c\u672c\u6b21\u4f7f\u7528\u672c\u5730\u9ede\u6578\u9322\u5305\u8655\u7406\u3002';
+      bindHint.innerHTML = '\u6bcd\u7ad9\u9322\u5305\u66ab\u6642\u4e0d\u53ef\u7528\uff0c\u672c\u6b21\u4f7f\u7528\u672c\u5730\u9ede\u6578\u9322\u5305\u8655\u7406\u3002' +
+        (customer.motherRegistrationUrl ? '<a class="mt-2 inline-flex rounded-xl bg-white px-3 py-2 text-blue-700 shadow-sm" href="' + encodeURI(customer.motherRegistrationUrl) + '" target="_blank" rel="noopener">開啟母站註冊</a>' : '');
     } else if (customer.localWalletRepaired) {
       bindHint.className = 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] font-black leading-relaxed text-emerald-800';
       bindHint.textContent = '\u5df2\u88dc\u5efa\u9ede\u6578\u9322\u5305\u641c\u5c0b\u7d22\u5f15\uff0c\u53ef\u6b63\u5e38\u8d08\u6263\u9ede\u3002';
