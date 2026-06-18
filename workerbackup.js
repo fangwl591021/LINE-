@@ -6255,8 +6255,15 @@ const MessagingModule = {
     return {
       type: "bubble", size: bubbleSize,
       header: {
-        type: "box", layout: "horizontal", justifyContent: "flex-end", paddingAll: "8px",
+        type: "box", layout: "horizontal", justifyContent: "space-between", alignItems: "center", paddingAll: "8px",
         contents: [{
+          type: "box", layout: "horizontal", alignItems: "center", spacing: "xs", backgroundColor: "#F1F5F9", width: "65px", height: "25px", cornerRadius: "6px", paddingStart: "8px", paddingEnd: "8px",
+          contents: [
+            { type: "text", text: "\uD83D\uDC4D", size: "xs", flex: 0 },
+            { type: "text", text: "0", weight: "bold", color: "#334155", size: "xs", flex: 1 }
+          ],
+          action: { type: "uri", uri: badgeUrl }
+        }, {
           type: "box", layout: "vertical", justifyContent: "center", backgroundColor: "#FF0000", width: "65px", height: "25px", cornerRadius: "25px",
           contents: [{ type: "text", text: "分享", weight: "bold", align: "center", color: "#FFFFFF", size: "xs" }],
           action: { type: "uri", uri: shareActionUrl }
