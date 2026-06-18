@@ -192,7 +192,10 @@ window.renderPendingMotherRegistration = function(userId) {
 
 window.reopenPendingMotherRegistration = function(userId) {
   const pending = window.readPendingMotherRegistration(userId);
-  if (pending && pending.url) window.open(pending.url, '_blank', 'noopener');
+  if (pending && pending.url) {
+    window.lastPendingMotherRegistrationCheckAt = 0;
+    window.open(pending.url, '_blank', 'noopener');
+  }
   else window.showToast?.('找不到母站註冊連結，請重新按儲存。', true);
 };
 
@@ -223,6 +226,39 @@ window.resumePendingMotherRegistration = async function(userId) {
   window.clearPendingMotherRegistration(userId);
   window.showToast?.('母站註冊已確認，子站會員資料已同步。');
   return { completed: true, info };
+};
+
+window.checkPendingMotherRegistrationOnReturn = async function(options = {}) {
+  const userId = String(options.userId || window.currentUserProfile?.userId || '').trim();
+  if (!userId || !window.readPendingMotherRegistration(userId)) return null;
+  const now = Date.now();
+  const minInterval = Number(options.minIntervalMs || 8000);
+  if (!options.force && window.lastPendingMotherRegistrationCheckAt && now - window.lastPendingMotherRegistrationCheckAt < minInterval) {
+    return null;
+  }
+  window.lastPendingMotherRegistrationCheckAt = now;
+  const result = await window.resumePendingMotherRegistration(userId).catch(e => {
+    console.warn('Pending mother registration auto-check failed:', e);
+    return null;
+  });
+  if (result && result.completed) {
+    window.goPage?.('home');
+    if (typeof window.loadHomeData === 'function') window.loadHomeData();
+  } else if (result && result.pending) {
+    window.renderPendingMotherRegistration?.(userId);
+  }
+  return result;
+};
+
+window.installPendingMotherRegistrationReturnWatcher = function() {
+  if (window.pendingMotherRegistrationReturnWatcherInstalled) return;
+  window.pendingMotherRegistrationReturnWatcherInstalled = true;
+  window.addEventListener('focus', () => {
+    window.checkPendingMotherRegistrationOnReturn?.();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) window.checkPendingMotherRegistrationOnReturn?.();
+  });
 };
 
 function resolveReferralForRegistration(urlRef, urlNet) {
@@ -751,6 +787,7 @@ window.saveProfileRegistration = async function(event) {
         const url = link?.data?.url || link?.url || '';
         if (url) {
           window.savePendingMotherRegistration?.(userId, payload, url);
+          window.lastPendingMotherRegistrationCheckAt = 0;
           window.showToast('請先完成母站註冊，完成後回到子站會自動確認。', true);
           window.open(url, '_blank', 'noopener');
           return;
@@ -2316,6 +2353,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
       window.__fetchApiEnhanced = true;
     }
+    window.installPendingMotherRegistrationReturnWatcher?.();
 
     const avatarImg = document.getElementById('avatar');
     if (avatarImg && window.currentUserProfile.pictureUrl) {
