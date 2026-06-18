@@ -1927,7 +1927,7 @@ window.renderStorePointCustomer = function(customer) {
         (customer.motherRegistrationUrl ? '<a class="mt-2 inline-flex rounded-xl bg-white px-3 py-2 text-blue-700 shadow-sm" href="' + encodeURI(customer.motherRegistrationUrl) + '" target="_blank" rel="noopener">開啟母站註冊</a>' : '');
     } else if (customer.balanceSource === 'mother+local') {
       bindHint.className = 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] font-black leading-relaxed text-emerald-800';
-      bindHint.textContent = '點數已合併顯示：母站 ' + Number(customer.motherBalance || 0).toLocaleString('zh-TW') + ' 點，本系統 ' + Number(customer.localBalance || 0).toLocaleString('zh-TW') + ' 點。';
+      bindHint.textContent = '母站可操作 ' + Number(customer.motherBalance || 0).toLocaleString('zh-TW') + ' 點；本系統待同步 ' + Number(customer.localBalance || 0).toLocaleString('zh-TW') + ' 點；合計 ' + Number(customer.totalBalance || customer.balance || 0).toLocaleString('zh-TW') + ' 點。';
     } else if (customer.localWalletRepaired) {
       bindHint.className = 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] font-black leading-relaxed text-emerald-800';
       bindHint.textContent = '\u5df2\u88dc\u5efa\u9ede\u6578\u9322\u5305\u641c\u5c0b\u7d22\u5f15\uff0c\u53ef\u6b63\u5e38\u8d08\u6263\u9ede\u3002';
