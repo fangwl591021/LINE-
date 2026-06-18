@@ -516,6 +516,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
     const company = cardTextValue(card, ['公司名稱', 'companyName', 'company'], '');
     const title = cardTextValue(card, ['職稱', 'title', 'industry'], '');
     const desc = String(cfg.desc || cardTextValue(card, ['服務項目', 'services', 'description'], '')).trim();
+    const cardId = card.rowId || card.cardRowId || card.id || '';
     const shareUrl = appendCardAutoShareMode(buildPlainCardViewUrl(card, refId || '', netId || 'admin'));
     const buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
     const buttonHtml = buttons.map(button => {
@@ -529,7 +530,13 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
       '<main class="min-h-screen bg-[#eef2f7] px-4 py-4">' +
         '<section class="max-w-[320px] mx-auto overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-md">' +
           '<div class="relative border-b border-slate-100">' +
-            '<a href="' + window.escapeHTML(shareUrl) + '" class="absolute right-2 top-2 z-10 rounded-full bg-red-500 px-3.5 py-1 text-[12px] font-black text-white shadow-sm">分享</a>' +
+            '<div class="absolute right-2 top-2 z-10 flex items-center gap-1.5">' +
+              '<button type="button" data-social-like-button class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-2.5 py-1 text-[12px] font-black text-slate-600 shadow-sm active:scale-95 transition-transform">' +
+                '<span class="material-symbols-outlined text-[16px]">thumb_up</span>' +
+                '<span data-social-like-count>0</span>' +
+              '</button>' +
+              '<a href="' + window.escapeHTML(shareUrl) + '" class="rounded-full bg-red-500 px-3.5 py-1 text-[12px] font-black text-white shadow-sm">分享</a>' +
+            '</div>' +
             '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-contain bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">' +
           '</div>' +
           '<div class="px-4 py-4 text-center">' +
@@ -540,6 +547,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
           '</div>' +
         '</section>' +
       '</main>';
+    setTimeout(() => window.initSocialLikeWidget?.(cardId, netId || 'admin'), 0);
     return true;
   } catch (e) {
     app.innerHTML = '<main class="min-h-screen bg-[#eef2f7] px-4 py-4"><div class="max-w-[320px] mx-auto rounded-3xl bg-white p-5 text-center font-black text-red-500 shadow-sm">' + window.escapeHTML(e.message || '名片載入失敗') + '</div></main>';
@@ -904,6 +912,94 @@ window.recordShareCardVisitOnce = async function(params) {
     console.warn('[recordShareCardVisitOnce] skipped:', e.message || e);
     return null;
   }
+};
+
+window.showSocialLikeThanks = function(message) {
+  let box = document.getElementById('social-like-thanks-pop');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'social-like-thanks-pop';
+    box.className = 'fixed inset-x-4 top-[42%] z-[12000] mx-auto max-w-[280px] rounded-3xl bg-slate-900 px-5 py-4 text-center text-white text-[16px] font-black shadow-2xl transition-opacity duration-200';
+    document.body.appendChild(box);
+  }
+  box.textContent = message || '感謝您的支持';
+  box.style.opacity = '1';
+  box.classList.remove('hidden');
+  clearTimeout(window.__socialLikeThanksTimer);
+  window.__socialLikeThanksTimer = setTimeout(() => {
+    box.style.opacity = '0';
+    setTimeout(() => box.classList.add('hidden'), 220);
+  }, 2000);
+};
+
+window.updateSocialLikeWidget = function(data) {
+  const total = Number(data && (data.totalLikes ?? data.count ?? data.likes) || 0);
+  document.querySelectorAll('[data-social-like-count]').forEach(el => {
+    el.textContent = String(total);
+  });
+  document.querySelectorAll('[data-social-like-button]').forEach(btn => {
+    const liked = !!(data && (data.likedToday || data.alreadyLikedToday));
+    btn.dataset.likedToday = liked ? '1' : '0';
+    btn.classList.toggle('bg-blue-50', liked);
+    btn.classList.toggle('text-blue-600', liked);
+    btn.classList.toggle('border-blue-100', liked);
+  });
+};
+
+window.loadSocialLikeStats = async function(cardId, networkId) {
+  if (!cardId || typeof window.fetchAPI !== 'function') return null;
+  try {
+    const res = await window.fetchAPI('getSocialLikeStats', {
+      shareCardId: cardId,
+      networkId: networkId || 'admin',
+      userId: window.currentUserProfile?.userId || window.currentUser?.userId || ''
+    }, true);
+    const data = res && (res.data || res);
+    if (data) window.updateSocialLikeWidget(data);
+    return data;
+  } catch (e) {
+    console.warn('[loadSocialLikeStats] failed:', e.message || e);
+    return null;
+  }
+};
+
+window.recordSocialLike = async function(cardId, networkId) {
+  const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
+  if (!cardId) return;
+  if (!userId) {
+    window.showToast?.('請先登入 LINE 後再按讚', true);
+    return;
+  }
+  const buttons = document.querySelectorAll('[data-social-like-button]');
+  buttons.forEach(btn => { btn.disabled = true; btn.classList.add('opacity-70'); });
+  try {
+    const res = await window.fetchAPI('recordSocialLike', {
+      shareCardId: cardId,
+      likerUserId: userId,
+      networkId: networkId || 'admin'
+    }, true);
+    const data = res && (res.data || res);
+    if (data) window.updateSocialLikeWidget(data);
+    window.showSocialLikeThanks(data && data.alreadyLikedToday ? '今天已經收到您的支持' : '感謝您的支持');
+  } catch (e) {
+    console.warn('[recordSocialLike] failed:', e.message || e);
+    window.showToast?.(e.message || '按讚失敗，請稍後再試', true);
+  } finally {
+    buttons.forEach(btn => { btn.disabled = false; btn.classList.remove('opacity-70'); });
+  }
+};
+
+window.initSocialLikeWidget = function(cardId, networkId) {
+  if (!cardId) return;
+  document.querySelectorAll('[data-social-like-button]').forEach(btn => {
+    btn.dataset.cardId = cardId;
+    btn.onclick = function(evt) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      window.recordSocialLike(cardId, networkId || 'admin');
+    };
+  });
+  window.loadSocialLikeStats(cardId, networkId || 'admin');
 };
 
 window.applyRegisteredUserSession = function(info) {

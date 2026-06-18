@@ -335,6 +335,8 @@ const SecurityModule = {
       'deleteCard',
       'unlinkCard',
       'getSubsiteHome',
+      'getSocialLikeStats',
+      'recordSocialLike',
       'queryPointBalanceFast',
       'queryUserPoints',
       'listPersonalTasks',
@@ -11589,6 +11591,222 @@ const ClaimModule = {
 };
 
 const TrackingModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  todayKey() {
+    return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  },
+
+  async ensureSocialLikeTable(env) {
+    if (!env.ACTMASTER_DB) return false;
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS card_social_likes (
+        like_id TEXT PRIMARY KEY,
+        card_id TEXT NOT NULL,
+        owner_user_id TEXT NOT NULL DEFAULT '',
+        liker_user_id TEXT NOT NULL,
+        like_date TEXT NOT NULL,
+        reward_marker INTEGER NOT NULL DEFAULT 4,
+        owner_award_status TEXT NOT NULL DEFAULT 'pending',
+        liker_award_status TEXT NOT NULL DEFAULT 'pending',
+        response_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_card_social_likes_daily ON card_social_likes(card_id, liker_user_id, like_date)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_card_social_likes_card ON card_social_likes(card_id, created_at)').run();
+    return true;
+  },
+
+  async getSocialLikeStats(payload, env) {
+    const cardId = this.text(payload.shareCardId || payload.cardId || payload.rowId);
+    const viewerId = this.text(payload.authenticatedUserId || payload.userId || payload.visitorId || payload.likerUserId);
+    if (!cardId) return { success: false, error: 'Missing card id' };
+    if (!await this.ensureSocialLikeTable(env)) return { success: false, error: 'Missing ACTMASTER_DB' };
+
+    const totalRow = await D1ReadModule.first(env, 'SELECT COUNT(*) AS total FROM card_social_likes WHERE card_id = ?', [cardId]).catch(() => null);
+    const today = this.todayKey();
+    let likedToday = false;
+    if (viewerId) {
+      const row = await D1ReadModule.first(env, 'SELECT like_id FROM card_social_likes WHERE card_id = ? AND liker_user_id = ? AND like_date = ? LIMIT 1', [cardId, viewerId, today]).catch(() => null);
+      likedToday = !!row;
+    }
+    return {
+      success: true,
+      data: {
+        cardId,
+        totalLikes: Number(totalRow && totalRow.total || 0),
+        likedToday,
+        rewardMarker: 4,
+        dailyRewardLimit: true,
+        dateKey: today
+      }
+    };
+  },
+
+  async findSocialLikeCardOwner(cardId, env) {
+    const row = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [cardId]).catch(() => null);
+    const card = row ? D1ReadModule.cardRow(row) : null;
+    if (!card) return { card: null, ownerUserId: '' };
+    const ownerUserId = this.text(card.lineId || card.ownerUserId || card.profileUserId || card.creatorId || row.line_id || row.creator_id);
+    return { card, ownerUserId };
+  },
+
+  async hasRegisteredUser(userId, env) {
+    const id = this.text(userId);
+    if (!id || !env.ACTMASTER_DB) return false;
+    const row = await D1ReadModule.first(env, `
+      SELECT row_id FROM users
+      WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
+      LIMIT 1
+    `, [id, id, id, id]).catch(() => null);
+    return !!row;
+  },
+
+  async awardSocialLikePoints(payload, env) {
+    const recipientId = this.text(payload.recipientId);
+    const cardId = this.text(payload.cardId);
+    const likerId = this.text(payload.likerId);
+    const dateKey = this.text(payload.dateKey);
+    const awardType = this.text(payload.awardType);
+    const role = this.text(payload.role);
+    if (!recipientId || !cardId || !likerId || !dateKey || !awardType) {
+      return { success: false, skipped: true, error: 'Missing social like award context' };
+    }
+
+    await PointModule.ensureAwardTable(env);
+    const awardCardId = `${cardId}:${likerId}:${dateKey}`;
+    const awardId = `${awardType}_${dateKey}_${cardId}_${likerId}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 180);
+    const existing = await D1ReadModule.first(env, `
+      SELECT * FROM point_awards
+      WHERE user_id = ? AND card_id = ? AND award_type = ?
+      LIMIT 1
+    `, [recipientId, awardCardId, awardType]).catch(() => null);
+    if (existing && ['sent', 'local_sent'].includes(this.text(existing.status))) {
+      return { success: true, skipped: true, status: this.text(existing.status), existing };
+    }
+    if (!existing) {
+      await env.ACTMASTER_DB.prepare(`
+        INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
+        VALUES (?, ?, ?, ?, 10, 'gift_money', 'pending', '{}', CURRENT_TIMESTAMP)
+      `).bind(awardId, recipientId, awardCardId, awardType).run();
+    }
+
+    const remark = `marker=4;source=social_like;role=${role};cardId=${cardId};liker=${likerId};date=${dateKey}`;
+    const motherResult = await PointModule.insertUserPoint({
+      LINE_user_id: recipientId,
+      points: 10,
+      pointType: 'gift_money',
+      eventName: '社群按讚獎勵',
+      eventContent: role === 'liker' ? '按讚支持名片獎勵' : '名片獲得社群按讚獎勵',
+      shop_remark: remark
+    }, env);
+
+    let finalStatus = motherResult && motherResult.success ? 'sent' : 'failed';
+    let finalResult = motherResult;
+    if (finalStatus === 'failed' && env.ACTMASTER_DB) {
+      const localResult = await AdminPointModule.adjust({
+        authenticatedUserId: 'system',
+        targetUserId: recipientId,
+        mode: 'grant',
+        points: 10,
+        note: remark
+      }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
+      if (localResult && localResult.success) {
+        finalStatus = 'local_sent';
+        finalResult = { success: true, local: true, data: localResult };
+      } else {
+        finalResult = { success: false, mother: motherResult, local: localResult };
+      }
+    }
+
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE point_awards
+      SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE user_id = ? AND card_id = ? AND award_type = ?
+    `).bind(finalStatus, JSON.stringify(finalResult || {}), recipientId, awardCardId, awardType).run();
+    return { success: finalStatus === 'sent' || finalStatus === 'local_sent', status: finalStatus, result: finalResult };
+  },
+
+  async recordSocialLike(payload, env) {
+    const likerId = this.text(payload.authenticatedUserId || payload.userId || payload.visitorId || payload.likerUserId);
+    const cardId = this.text(payload.shareCardId || payload.cardId || payload.rowId);
+    const networkId = this.text(payload.networkId, 'admin');
+    if (!likerId || !cardId) return { success: false, error: 'Missing likerUserId or cardId' };
+    if (!await this.ensureSocialLikeTable(env)) return { success: false, error: 'Missing ACTMASTER_DB' };
+
+    const { ownerUserId } = await this.findSocialLikeCardOwner(cardId, env);
+    if (ownerUserId && ownerUserId === likerId) {
+      const stats = await this.getSocialLikeStats({ cardId, userId: likerId }, env);
+      return { success: true, data: { ...(stats.data || {}), skipped: true, reason: 'self_like' } };
+    }
+
+    const dateKey = this.todayKey();
+    const likeId = `CSL_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const inserted = await env.ACTMASTER_DB.prepare(`
+      INSERT OR IGNORE INTO card_social_likes (
+        like_id, card_id, owner_user_id, liker_user_id, like_date, reward_marker, response_json
+      ) VALUES (?, ?, ?, ?, ?, 4, ?)
+    `).bind(likeId, cardId, ownerUserId, likerId, dateKey, JSON.stringify({ networkId })).run();
+    const changed = Number(inserted && inserted.meta && inserted.meta.changes || 0);
+    if (!changed) {
+      const stats = await this.getSocialLikeStats({ cardId, userId: likerId }, env);
+      return { success: true, data: { ...(stats.data || {}), alreadyLikedToday: true, awarded: false } };
+    }
+
+    const awards = {};
+    if (ownerUserId) {
+      awards.owner = await this.awardSocialLikePoints({
+        recipientId: ownerUserId,
+        cardId,
+        likerId,
+        dateKey,
+        awardType: 'social_like_owner',
+        role: 'owner'
+      }, env);
+    } else {
+      awards.owner = { success: false, skipped: true, reason: 'missing_card_owner' };
+    }
+
+    if (await this.hasRegisteredUser(likerId, env)) {
+      awards.liker = await this.awardSocialLikePoints({
+        recipientId: likerId,
+        cardId,
+        likerId,
+        dateKey,
+        awardType: 'social_like_liker',
+        role: 'liker'
+      }, env);
+    } else {
+      awards.liker = { success: false, skipped: true, reason: 'liker_not_registered' };
+    }
+
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE card_social_likes
+      SET owner_award_status = ?, liker_award_status = ?, response_json = ?
+      WHERE like_id = ?
+    `).bind(
+      this.text(awards.owner && awards.owner.status, awards.owner && awards.owner.success ? 'sent' : 'skipped'),
+      this.text(awards.liker && awards.liker.status, awards.liker && awards.liker.success ? 'sent' : 'skipped'),
+      JSON.stringify({ networkId, awards }),
+      likeId
+    ).run();
+
+    const stats = await this.getSocialLikeStats({ cardId, userId: likerId }, env);
+    return {
+      success: true,
+      data: {
+        ...(stats.data || {}),
+        likeId,
+        awarded: true,
+        awards
+      }
+    };
+  },
+
   async recordShareCardVisit(payload, env) {
     const visitorId = payload.visitorId || payload.userId;
     const shareCardId = payload.shareCardId || '';
@@ -13622,6 +13840,8 @@ async function dispatchAction(action, payload, request, env) {
     case 'getStorePointCustomer':  return await PointModule.getStorePointCustomer(payload || {}, env);
     case 'storeAdjustCustomerPoints': return await PointModule.storeAdjustCustomerPoints(payload || {}, env);
     case 'listStorePointCashierLogs': return await PointModule.listStorePointCashierLogs(payload || {}, env);
+    case 'getSocialLikeStats':     return await TrackingModule.getSocialLikeStats(payload || {}, env);
+    case 'recordSocialLike':       return await TrackingModule.recordSocialLike(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
     case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);
