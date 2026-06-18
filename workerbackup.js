@@ -3886,14 +3886,26 @@ const PointModule = {
   },
 
   async fetchPointPage(body) {
-    const res = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const data = await res.json().catch(() => ({}));
+    let res = null;
+    let text = '';
+    try {
+      res = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      text = await res.text();
+    } catch (e) {
+      return { error: 'Mother point API unavailable: ' + (e && e.message ? e.message : String(e)), code: 'POINT_API_FETCH_FAILED', data: {} };
+    }
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (e) {
+      data = { rawText: text.slice(0, 300) };
+    }
     if (!res.ok || data.success === false) {
-      return { error: data.message || data.code || ('Point API HTTP ' + res.status), code: data.code || '', data };
+      return { error: data.message || data.code || ('Point API HTTP ' + res.status), code: data.code || ('HTTP_' + res.status), data };
     }
     return { data };
   },
@@ -4852,7 +4864,7 @@ const PointModule = {
       point_type: 'gift_money',
       page: 1,
       per_page: 20
-    }, env);
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
     const displayName = D1ReadModule.text(user && user.name)
       || D1ReadModule.text(mappedCard && mappedCard.name)
       || D1ReadModule.text(mappedCard && mappedCard['姓名'])
