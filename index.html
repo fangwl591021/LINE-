@@ -193,7 +193,8 @@
         }
       } catch (e) {}
       try {
-        if (window.history.length > 1) window.history.back();
+        var pop = document.getElementById('instant-like-pop');
+        if (pop) pop.style.display = 'none';
       } catch (e) {}
     }, 2000);
   }
@@ -2160,7 +2161,7 @@
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.58"></script>
+<script src="js/auth.js?v=10.59"></script>
 
 </body>
 </html>
