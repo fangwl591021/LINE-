@@ -306,6 +306,9 @@ const SecurityModule = {
       'uploadLineOAAsset',
       'sendLineOAChatReply',
       'updateLineOAChatThread',
+      'listLineOAKeywordRules',
+      'saveLineOAKeywordRule',
+      'deleteLineOAKeywordRule',
       'listAdminAnnouncements',
       'saveAnnouncement',
       'deleteAnnouncement'
@@ -877,6 +880,27 @@ const LineOAChatModule = {
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_threads_user ON line_oa_threads(user_id)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_messages_thread ON line_oa_messages(thread_id, created_at)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_messages_user ON line_oa_messages(user_id, created_at)').run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS line_oa_keyword_rules (
+        rule_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT '',
+        keyword TEXT NOT NULL DEFAULT '',
+        match_type TEXT NOT NULL DEFAULT 'contains',
+        response_type TEXT NOT NULL DEFAULT 'text',
+        text_content TEXT NOT NULL DEFAULT '',
+        flex_title TEXT NOT NULL DEFAULT '',
+        flex_label TEXT NOT NULL DEFAULT '',
+        flex_button_text TEXT NOT NULL DEFAULT '',
+        flex_button_keyword TEXT NOT NULL DEFAULT '',
+        flex_alt_text TEXT NOT NULL DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        priority INTEGER NOT NULL DEFAULT 100,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_keyword_rules_enabled ON line_oa_keyword_rules(enabled, priority, updated_at)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_keyword_rules_keyword ON line_oa_keyword_rules(keyword)').run();
     const optionalThreadColumns = [
       `ALTER TABLE line_oa_threads ADD COLUMN opportunity_stage TEXT NOT NULL DEFAULT 'new'`,
       `ALTER TABLE line_oa_threads ADD COLUMN opportunity_value INTEGER NOT NULL DEFAULT 0`,
@@ -2022,6 +2046,8 @@ const LineOAChatModule = {
       await followPointJob;
       await forwardJob;
     }
+    const keywordRuleReplied = await LineOAKeywordRuleModule.reply(events, env);
+    if (keywordRuleReplied) return new Response('OK', { status: 200 });
     const myVideoReplied = await LineOAMyVideoKeywordModule.reply(events, env, ctx);
     if (myVideoReplied) return new Response('OK', { status: 200 });
     const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);
@@ -2452,6 +2478,219 @@ const LineOAChatModule = {
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
       });
     }
+  }
+};
+
+const LineOAKeywordRuleModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  normalizeText(value) {
+    return this.text(value).replace(/\s+/g, '').toLowerCase();
+  },
+
+  async ensure(env) {
+    await LineOAChatModule.ensure(env);
+  },
+
+  createId() {
+    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+      return 'kw_' + globalThis.crypto.randomUUID().replace(/-/g, '');
+    }
+    return 'kw_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  },
+
+  sanitizeRule(payload = {}) {
+    const responseType = this.text(payload.responseType || payload.response_type, 'text') === 'flex' ? 'flex' : 'text';
+    const matchType = this.text(payload.matchType || payload.match_type, 'contains') === 'exact' ? 'exact' : 'contains';
+    return {
+      ruleId: this.text(payload.ruleId || payload.rule_id) || this.createId(),
+      name: this.text(payload.name).slice(0, 80),
+      keyword: this.text(payload.keyword).slice(0, 80),
+      matchType,
+      responseType,
+      textContent: this.text(payload.textContent || payload.text_content).slice(0, 2000),
+      flexTitle: this.text(payload.flexTitle || payload.flex_title || payload.name).slice(0, 80),
+      flexLabel: this.text(payload.flexLabel || payload.flex_label).slice(0, 120),
+      flexButtonText: this.text(payload.flexButtonText || payload.flex_button_text).slice(0, 40),
+      flexButtonKeyword: this.text(payload.flexButtonKeyword || payload.flex_button_keyword).slice(0, 80),
+      flexAltText: this.text(payload.flexAltText || payload.flex_alt_text).slice(0, 200),
+      enabled: Number(payload.enabled ?? 1) ? 1 : 0,
+      priority: Math.max(0, Math.min(9999, Number(payload.priority ?? 100) || 100))
+    };
+  },
+
+  mapRow(row = {}) {
+    return {
+      ruleId: row.rule_id,
+      name: row.name,
+      keyword: row.keyword,
+      matchType: row.match_type,
+      responseType: row.response_type,
+      textContent: row.text_content,
+      flexTitle: row.flex_title,
+      flexLabel: row.flex_label,
+      flexButtonText: row.flex_button_text,
+      flexButtonKeyword: row.flex_button_keyword,
+      flexAltText: row.flex_alt_text,
+      enabled: Number(row.enabled || 0),
+      priority: Number(row.priority || 100),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  },
+
+  async list(payload, env) {
+    await this.ensure(env);
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM line_oa_keyword_rules
+      ORDER BY enabled DESC, priority ASC, datetime(updated_at) DESC
+      LIMIT 300
+    `);
+    return { success: true, data: { rules: rows.map(row => this.mapRow(row)) } };
+  },
+
+  async save(payload, env) {
+    await this.ensure(env);
+    const rule = this.sanitizeRule(payload || {});
+    if (!rule.name) return { success: false, error: 'Missing rule name' };
+    if (!rule.keyword) return { success: false, error: 'Missing keyword' };
+    if (rule.responseType === 'text' && !rule.textContent) return { success: false, error: 'Missing reply text' };
+    if (rule.responseType === 'flex' && !rule.flexLabel && !rule.flexButtonKeyword) return { success: false, error: 'Missing Flex label or button keyword' };
+    await env.ACTMASTER_DB.prepare(`
+      INSERT INTO line_oa_keyword_rules (
+        rule_id,name,keyword,match_type,response_type,text_content,flex_title,flex_label,
+        flex_button_text,flex_button_keyword,flex_alt_text,enabled,priority,created_at,updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(rule_id) DO UPDATE SET
+        name=excluded.name,
+        keyword=excluded.keyword,
+        match_type=excluded.match_type,
+        response_type=excluded.response_type,
+        text_content=excluded.text_content,
+        flex_title=excluded.flex_title,
+        flex_label=excluded.flex_label,
+        flex_button_text=excluded.flex_button_text,
+        flex_button_keyword=excluded.flex_button_keyword,
+        flex_alt_text=excluded.flex_alt_text,
+        enabled=excluded.enabled,
+        priority=excluded.priority,
+        updated_at=CURRENT_TIMESTAMP
+    `).bind(
+      rule.ruleId,
+      rule.name,
+      rule.keyword,
+      rule.matchType,
+      rule.responseType,
+      rule.textContent,
+      rule.flexTitle,
+      rule.flexLabel,
+      rule.flexButtonText,
+      rule.flexButtonKeyword,
+      rule.flexAltText,
+      rule.enabled,
+      rule.priority
+    ).run();
+    return { success: true, data: { rule } };
+  },
+
+  async delete(payload, env) {
+    await this.ensure(env);
+    const ruleId = this.text(payload && (payload.ruleId || payload.rule_id));
+    if (!ruleId) return { success: false, error: 'Missing ruleId' };
+    await env.ACTMASTER_DB.prepare('DELETE FROM line_oa_keyword_rules WHERE rule_id = ?').bind(ruleId).run();
+    return { success: true, data: { ruleId } };
+  },
+
+  async activeRules(env) {
+    await this.ensure(env);
+    const rows = await D1ReadModule.all(env, `
+      SELECT *
+      FROM line_oa_keyword_rules
+      WHERE enabled = 1 AND keyword <> ''
+      ORDER BY priority ASC, datetime(updated_at) DESC
+      LIMIT 100
+    `);
+    return rows.map(row => this.mapRow(row));
+  },
+
+  matchRule(rules, rawText) {
+    const incoming = this.normalizeText(rawText);
+    if (!incoming) return null;
+    return rules.find(rule => {
+      const keyword = this.normalizeText(rule.keyword);
+      if (!keyword) return false;
+      return rule.matchType === 'exact' ? incoming === keyword : incoming.includes(keyword);
+    }) || null;
+  },
+
+  buildFlex(rule) {
+    const title = this.text(rule.flexTitle || rule.name, 'LINE 快速功能');
+    const label = this.text(rule.flexLabel, title);
+    const buttonText = this.text(rule.flexButtonText, label).slice(0, 20);
+    const buttonKeyword = this.text(rule.flexButtonKeyword, label || rule.keyword);
+    return {
+      type: 'flex',
+      altText: this.text(rule.flexAltText, title).slice(0, 200),
+      contents: {
+        type: 'bubble',
+        size: 'mega',
+        header: {
+          type: 'box',
+          layout: 'vertical',
+          paddingAll: '20px',
+          backgroundColor: '#06C755',
+          contents: [
+            { type: 'text', text: title, weight: 'bold', size: 'xl', color: '#FFFFFF', wrap: true }
+          ]
+        },
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          spacing: 'md',
+          contents: [
+            { type: 'text', text: label, weight: 'bold', size: 'lg', color: '#111827', wrap: true },
+            { type: 'text', text: '請點選下方按鈕繼續操作。', size: 'sm', color: '#6B7280', wrap: true }
+          ]
+        },
+        footer: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [{
+            type: 'button',
+            style: 'primary',
+            color: '#06C755',
+            action: { type: 'message', label: buttonText || '開始', text: buttonKeyword || label || title }
+          }]
+        }
+      }
+    };
+  },
+
+  buildMessage(rule) {
+    if (rule.responseType === 'flex') return this.buildFlex(rule);
+    return { type: 'text', text: this.text(rule.textContent, rule.name).slice(0, 5000) };
+  },
+
+  async reply(events, env) {
+    if (!Array.isArray(events) || !events.length || !env.ACTMASTER_DB) return false;
+    const rules = await this.activeRules(env);
+    if (!rules.length) return false;
+    for (const event of events) {
+      const message = event && event.message ? event.message : {};
+      if (message.type !== 'text') continue;
+      const replyToken = this.text(event.replyToken);
+      if (!replyToken) continue;
+      const rule = this.matchRule(rules, message.text);
+      if (!rule) continue;
+      const result = await LineOAChatModule.replyLine({ replyToken, messages: [this.buildMessage(rule)] }, env);
+      if (!result.success) console.error('LINE OA keyword rule reply failed', result);
+      return true;
+    }
+    return false;
   }
 };
 
@@ -14587,6 +14826,9 @@ async function dispatchAction(action, payload, request, env) {
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
     case 'deployRichMenu':         return await LineOAModule.deployRichMenu(payload, env);
+    case 'listLineOAKeywordRules': return await LineOAKeywordRuleModule.list(payload, env);
+    case 'saveLineOAKeywordRule':  return await LineOAKeywordRuleModule.save(payload, env);
+    case 'deleteLineOAKeywordRule': return await LineOAKeywordRuleModule.delete(payload, env);
     case 'extractLineVoomMedia':    return await LineOAModule.extractLineVoomMedia(payload, env);
     default:                       return await DBModule.forward(action, payload, env);
   }

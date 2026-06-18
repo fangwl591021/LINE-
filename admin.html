@@ -455,6 +455,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">dashboard_customize</span>
             LINE OA 選單
           </a>
+          <a href="#" onclick="switchTab('lineoa-keywords')" id="nav-lineoa-keywords" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">key</span>
+            LINE 關鍵字
+          </a>
         </div>
       </div>
     </nav>
@@ -713,6 +717,99 @@
 
         <div id="lineoa-monitor-content" class="space-y-6">
           <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 text-center text-slate-500 font-bold">請從左側選單重新點選「LINE OA 聊天室監控」，系統會開啟新版三欄工作台。</div>
+        </div>
+      </div>
+
+      <!-- Tab: LINE OA Keywords -->
+      <div id="tab-lineoa-keywords" class="tab-content hidden space-y-6">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 text-emerald-700 font-black text-sm mb-2">
+              <span class="material-symbols-outlined text-[20px]">key</span>
+              LINE OA 自動關鍵字
+            </div>
+            <h3 class="text-2xl font-black text-slate-900">快速回應與 FLEX CARD 觸發</h3>
+            <p class="text-sm text-slate-500 font-semibold mt-2">設定 LINE 用戶輸入關鍵字後要回覆文字，或送出可再觸發指定按鈕關鍵字的 Flex Card。</p>
+          </div>
+          <button onclick="resetLineOAKeywordForm()" class="px-5 py-3 rounded-xl bg-slate-900 text-white font-black text-sm flex items-center gap-2 active:scale-95 transition-transform">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            新增規則
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-6">
+          <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+            <input type="hidden" id="lineoa-keyword-rule-id">
+            <div>
+              <label class="text-sm font-black text-slate-700">名稱</label>
+              <input id="lineoa-keyword-name" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500 focus:bg-white" placeholder="例如：會員QR碼">
+            </div>
+            <div>
+              <label class="text-sm font-black text-slate-700">觸發關鍵字</label>
+              <input id="lineoa-keyword-trigger" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500 focus:bg-white" placeholder="例如：會員QR碼">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-sm font-black text-slate-700">比對方式</label>
+                <select id="lineoa-keyword-match" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500">
+                  <option value="contains">包含</option>
+                  <option value="exact">完全符合</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-sm font-black text-slate-700">回應類型</label>
+                <select id="lineoa-keyword-type" onchange="renderLineOAKeywordTypeFields()" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500">
+                  <option value="text">快速文字</option>
+                  <option value="flex">FLEX CARD</option>
+                </select>
+              </div>
+            </div>
+            <div id="lineoa-keyword-text-fields">
+              <label class="text-sm font-black text-slate-700">快速回應內容</label>
+              <textarea id="lineoa-keyword-text" rows="5" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 focus:bg-white resize-none" placeholder="用戶輸入關鍵字後直接回覆的文字"></textarea>
+            </div>
+            <div id="lineoa-keyword-flex-fields" class="hidden space-y-4">
+              <div>
+                <label class="text-sm font-black text-slate-700">對應內容標籤名稱</label>
+                <input id="lineoa-keyword-flex-label" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500 focus:bg-white" placeholder="例如：每日簽到">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-sm font-black text-slate-700">按鈕文字</label>
+                  <input id="lineoa-keyword-button-text" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500 focus:bg-white" placeholder="例如：前往簽到">
+                </div>
+                <div>
+                  <label class="text-sm font-black text-slate-700">按鈕關鍵字</label>
+                  <input id="lineoa-keyword-button-keyword" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500 focus:bg-white" placeholder="例如：每日簽到">
+                </div>
+              </div>
+              <p class="text-xs font-bold text-slate-400">按鈕使用 LINE message action，點下後送出「按鈕關鍵字」，可接到既有簽到、名片或其他關鍵字流程。</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700">
+                <input id="lineoa-keyword-enabled" type="checkbox" class="w-4 h-4 accent-emerald-600" checked>
+                啟用
+              </label>
+              <div>
+                <label class="text-sm font-black text-slate-700">優先序</label>
+                <input id="lineoa-keyword-priority" type="number" value="100" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500 focus:bg-white">
+              </div>
+            </div>
+            <button onclick="saveLineOAKeywordRule()" class="w-full px-5 py-4 rounded-xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-transform">
+              <span class="material-symbols-outlined text-[18px]">save</span>
+              儲存關鍵字規則
+            </button>
+          </section>
+
+          <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+              <h4 class="font-black text-slate-900">目前規則</h4>
+              <button onclick="loadLineOAKeywordRules(true)" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-black">重新整理</button>
+            </div>
+            <div id="lineoa-keyword-list" class="divide-y divide-slate-100">
+              <div class="p-8 text-center text-slate-400 font-bold">尚未載入</div>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -1450,6 +1547,7 @@
     let adminNetworkId = 'admin';
     let currentAdminEcardImgs = { landscape: '', portrait: '', square: '' };
     let currentAdminEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
+    let lineOAKeywordRules = [];
 
     function getAdminLiffEntryUrl() {
       const params = new URLSearchParams({
@@ -1558,6 +1656,150 @@
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'finance') loadFinanceStats();
       if (tabId === 'bonus') initBonusSystem();
+      if (tabId === 'lineoa-keywords') loadLineOAKeywordRules();
+    }
+
+    function lineOAKeywordValue(id) {
+      return String(document.getElementById(id)?.value || '').trim();
+    }
+
+    function renderLineOAKeywordTypeFields() {
+      const type = lineOAKeywordValue('lineoa-keyword-type') || 'text';
+      document.getElementById('lineoa-keyword-text-fields')?.classList.toggle('hidden', type !== 'text');
+      document.getElementById('lineoa-keyword-flex-fields')?.classList.toggle('hidden', type !== 'flex');
+    }
+
+    function resetLineOAKeywordForm() {
+      const fields = {
+        'lineoa-keyword-rule-id': '',
+        'lineoa-keyword-name': '',
+        'lineoa-keyword-trigger': '',
+        'lineoa-keyword-text': '',
+        'lineoa-keyword-flex-label': '',
+        'lineoa-keyword-button-text': '',
+        'lineoa-keyword-button-keyword': '',
+        'lineoa-keyword-priority': '100'
+      };
+      Object.entries(fields).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+      });
+      const match = document.getElementById('lineoa-keyword-match');
+      const type = document.getElementById('lineoa-keyword-type');
+      const enabled = document.getElementById('lineoa-keyword-enabled');
+      if (match) match.value = 'contains';
+      if (type) type.value = 'text';
+      if (enabled) enabled.checked = true;
+      renderLineOAKeywordTypeFields();
+    }
+
+    async function loadLineOAKeywordRules(force = false) {
+      if (lineOAKeywordRules.length && !force) {
+        renderLineOAKeywordRules();
+        return;
+      }
+      const box = document.getElementById('lineoa-keyword-list');
+      if (box) box.innerHTML = '<div class="p-8 text-center text-slate-400 font-bold">載入中...</div>';
+      const data = await fetchAPI('listLineOAKeywordRules', {}, { silent: true, omitDefaultUserId: true });
+      lineOAKeywordRules = Array.isArray(data?.rules) ? data.rules : (Array.isArray(data) ? data : []);
+      renderLineOAKeywordRules();
+    }
+
+    function renderLineOAKeywordRules() {
+      const box = document.getElementById('lineoa-keyword-list');
+      if (!box) return;
+      if (!lineOAKeywordRules.length) {
+        box.innerHTML = '<div class="p-8 text-center text-slate-400 font-bold">尚未建立關鍵字規則</div>';
+        return;
+      }
+      box.innerHTML = lineOAKeywordRules.map(rule => {
+        const id = escapeHTML(rule.ruleId || rule.rule_id || '');
+        const name = escapeHTML(rule.name || '未命名規則');
+        const keyword = escapeHTML(rule.keyword || '-');
+        const type = rule.responseType || rule.response_type || 'text';
+        const enabled = Number(rule.enabled ?? 1) === 1;
+        const matchType = (rule.matchType || rule.match_type) === 'exact' ? '完全符合' : '包含';
+        const label = escapeHTML(rule.flexLabel || rule.flex_label || rule.textContent || rule.text_content || '');
+        return `
+          <div class="p-5 flex flex-col lg:flex-row lg:items-center gap-4">
+            <div class="flex-1 min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-black text-slate-900 text-base">${name}</span>
+                <span class="px-2.5 py-1 rounded-full text-xs font-black ${enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}">${enabled ? '啟用' : '停用'}</span>
+                <span class="px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700">${type === 'flex' ? 'FLEX CARD' : '快速文字'}</span>
+              </div>
+              <div class="mt-2 text-sm font-bold text-slate-500">關鍵字：<span class="font-mono text-slate-800">${keyword}</span> / ${matchType}</div>
+              ${label ? `<div class="mt-1 text-sm font-semibold text-slate-400 truncate">${label}</div>` : ''}
+            </div>
+            <div class="flex gap-2">
+              <button type="button" onclick="editLineOAKeywordRule('${id}')" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-black">編輯</button>
+              <button type="button" onclick="deleteLineOAKeywordRule('${id}')" class="px-4 py-2 rounded-xl bg-red-50 text-red-600 text-sm font-black">刪除</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function editLineOAKeywordRule(ruleId) {
+      const rule = lineOAKeywordRules.find(item => String(item.ruleId || item.rule_id || '') === String(ruleId));
+      if (!rule) return;
+      const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value || '';
+      };
+      setValue('lineoa-keyword-rule-id', rule.ruleId || rule.rule_id || '');
+      setValue('lineoa-keyword-name', rule.name || '');
+      setValue('lineoa-keyword-trigger', rule.keyword || '');
+      setValue('lineoa-keyword-match', rule.matchType || rule.match_type || 'contains');
+      setValue('lineoa-keyword-type', rule.responseType || rule.response_type || 'text');
+      setValue('lineoa-keyword-text', rule.textContent || rule.text_content || '');
+      setValue('lineoa-keyword-flex-label', rule.flexLabel || rule.flex_label || '');
+      setValue('lineoa-keyword-button-text', rule.flexButtonText || rule.flex_button_text || '');
+      setValue('lineoa-keyword-button-keyword', rule.flexButtonKeyword || rule.flex_button_keyword || '');
+      setValue('lineoa-keyword-priority', String(rule.priority ?? 100));
+      const enabled = document.getElementById('lineoa-keyword-enabled');
+      if (enabled) enabled.checked = Number(rule.enabled ?? 1) === 1;
+      renderLineOAKeywordTypeFields();
+    }
+
+    async function saveLineOAKeywordRule() {
+      const payload = {
+        ruleId: lineOAKeywordValue('lineoa-keyword-rule-id'),
+        name: lineOAKeywordValue('lineoa-keyword-name'),
+        keyword: lineOAKeywordValue('lineoa-keyword-trigger'),
+        matchType: lineOAKeywordValue('lineoa-keyword-match') || 'contains',
+        responseType: lineOAKeywordValue('lineoa-keyword-type') || 'text',
+        textContent: lineOAKeywordValue('lineoa-keyword-text'),
+        flexLabel: lineOAKeywordValue('lineoa-keyword-flex-label'),
+        flexButtonText: lineOAKeywordValue('lineoa-keyword-button-text'),
+        flexButtonKeyword: lineOAKeywordValue('lineoa-keyword-button-keyword'),
+        enabled: document.getElementById('lineoa-keyword-enabled')?.checked ? 1 : 0,
+        priority: Number(lineOAKeywordValue('lineoa-keyword-priority') || 100)
+      };
+      if (!payload.name || !payload.keyword) {
+        showToast('請填寫名稱與觸發關鍵字', true);
+        return;
+      }
+      if (payload.responseType === 'text' && !payload.textContent) {
+        showToast('請填寫快速回應內容', true);
+        return;
+      }
+      if (payload.responseType === 'flex' && !payload.flexLabel && !payload.flexButtonKeyword) {
+        showToast('請填寫內容標籤或按鈕關鍵字', true);
+        return;
+      }
+      const data = await fetchAPI('saveLineOAKeywordRule', payload);
+      if (!data) return;
+      showToast('關鍵字規則已儲存');
+      resetLineOAKeywordForm();
+      await loadLineOAKeywordRules(true);
+    }
+
+    async function deleteLineOAKeywordRule(ruleId) {
+      if (!ruleId || !confirm('確定刪除這個關鍵字規則？')) return;
+      const data = await fetchAPI('deleteLineOAKeywordRule', { ruleId });
+      if (!data) return;
+      showToast('關鍵字規則已刪除');
+      await loadLineOAKeywordRules(true);
     }
 
     try {
