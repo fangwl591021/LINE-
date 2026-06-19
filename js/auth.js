@@ -2495,6 +2495,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
+    const earlyLineoaKeywordShareId = initialUrlParams.get('lineoaKeywordShare') || initialUrlParams.get('keywordShareRuleId') || '';
+    if (earlyLineoaKeywordShareId) {
+      await handleLineOAKeywordShareEntry(earlyLineoaKeywordShareId);
+      return;
+    }
+
     window.currentUserProfile = await liff.getProfile();
 
     // 🟢 【關鍵修復】在此處攔截 window.fetchAPI，自動為所有 API 請求注入 lineAccessToken 以通過 workerbackup.js 嚴格驗證
