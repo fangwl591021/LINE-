@@ -4880,6 +4880,87 @@ const PointModule = {
     return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
   },
 
+  async awardShareJoinPoints(payload, env) {
+    if (!env.ACTMASTER_DB) return { success: false, skipped: true, reason: 'missing_db' };
+    await this.ensureAwardTable(env);
+
+    const rawUserId = String(payload.userId || payload.LINE_user_id || payload.lineUserId || payload.authenticatedUserId || '').trim();
+    const pointUserId = await this.resolvePointUserId(env, rawUserId).catch(() => rawUserId);
+    const referrerId = String(payload.referrerId || payload.ref || payload['推薦人'] || payload['?刻鈭?'] || '').trim();
+    const networkId = String(payload.networkId || payload.net || payload.network_id || 'admin').trim() || 'admin';
+    const sourceRef = String(payload.claimRowId || payload.claimedCardRowId || payload.shareCardId || payload.cardId || referrerId || networkId || 'share_url').trim();
+    if (!pointUserId) return { success: false, skipped: true, reason: 'missing_user_id' };
+    if (!referrerId || referrerId === pointUserId) return { success: true, skipped: true, reason: 'not_share_join', pointUserId };
+
+    const awardType = 'share_url_join';
+    const awardId = `AWD_SHARE_JOIN_${pointUserId}`;
+    const existing = await D1ReadModule.first(env, `
+      SELECT *
+      FROM point_awards
+      WHERE award_id = ?
+         OR (user_id = ? AND award_type = ?)
+      LIMIT 1
+    `, [awardId, pointUserId, awardType]).catch(() => null);
+    if (existing && String(existing.status || '').trim() !== 'failed') {
+      return { success: true, awarded: false, alreadyAwarded: true, pointUserId, status: String(existing.status || '').trim() };
+    }
+
+    await this.ensureLocalPointWallet(env, pointUserId, payload).catch(() => null);
+    await env.ACTMASTER_DB.prepare(`
+      INSERT OR REPLACE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
+      VALUES (?, ?, ?, ?, 300, 'gift_money', 'pending', '{}', CURRENT_TIMESTAMP)
+    `).bind(awardId, pointUserId, sourceRef, awardType).run();
+
+    const remark = `source=share_url_join;referrer=${referrerId};network=${networkId};source_ref=${sourceRef}`;
+    const motherResult = await this.insertUserPoint({
+      LINE_user_id: pointUserId,
+      points: 300,
+      pointType: 'gift_money',
+      eventName: '子站分享網址加入',
+      eventContent: '透過分享網址加入子站，贈送 300 點',
+      shop_remark: remark
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
+
+    let finalStatus = motherResult && motherResult.success ? 'sent' : 'failed';
+    let finalResult = motherResult;
+    if (finalStatus === 'failed') {
+      await AdminPointModule.ensure(env);
+      const balanceBefore = await AdminPointModule.localBalance(env, pointUserId).catch(() => 0);
+      const balanceAfter = Number(balanceBefore || 0) + 300;
+      const localLedgerId = `APL_SHARE_JOIN_${pointUserId}`;
+      await env.ACTMASTER_DB.prepare(`
+        INSERT OR IGNORE INTO admin_point_ledger (row_id,user_id,actor_user_id,mode,points,balance_after,note,source)
+        VALUES (?, ?, 'system', 'grant', 300, ?, ?, 'share_url_join_local_wallet')
+      `).bind(localLedgerId, pointUserId, balanceAfter, `${remark}; mother_error=${String(motherResult && motherResult.error || 'mother_point_failed').slice(0, 180)}`).run();
+      const syncJob = await PointSyncModule.enqueue({
+        jobId: `PSJ_SHARE_JOIN_${pointUserId}`,
+        lineUserId: pointUserId,
+        source: 'share_url_join_local_wallet',
+        sourceRef: awardId,
+        points: 300,
+        pointType: 'gift_money',
+        createdBy: referrerId,
+        payload: { pointUserId, referrerId, networkId, sourceRef, localLedgerId }
+      }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
+      finalStatus = 'local_sent';
+      finalResult = { success: true, local: true, balanceBefore, balanceAfter, localLedgerId, syncJob, motherResult };
+    }
+
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE point_awards
+      SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE award_id = ?
+    `).bind(finalStatus, JSON.stringify(finalResult || {}), awardId).run();
+    return {
+      success: finalStatus === 'sent' || finalStatus === 'local_sent',
+      awarded: true,
+      points: 300,
+      pointUserId,
+      status: finalStatus,
+      result: finalResult
+    };
+  },
+
   async dailyCheckin(payload, env) {
     if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
     await this.ensureAwardTable(env);
@@ -6255,6 +6336,7 @@ const PointSyncModule = {
       store_reward_local_wallet: '子站店家贈點同步',
       store_redeem_local_wallet: '子站店家扣點同步',
       daily_checkin_local_wallet: '子站每日簽到同步',
+      share_url_join_local_wallet: '子站分享加入同步',
       new_user_join: '子站新會員同步',
       card_scan_create: '子站名片建檔同步',
       manual_sync: '手動點數同步'
@@ -12830,6 +12912,12 @@ const ClaimModule = {
     };
 
     const userResult = await D1WriteModule.upsertUser(profile, env);
+    const shareJoinAward = await PointModule.awardShareJoinPoints({
+      ...payload,
+      ...profile,
+      userId,
+      sourceRef: rowId
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
     if (env.ACTMASTER_KV) {
       try { await env.ACTMASTER_KV.delete(`U_PROFILE_${userId}`); } catch (e) {}
     }
@@ -12841,7 +12929,8 @@ const ClaimModule = {
         rowId,
         userId,
         card: D1ReadModule.cardRow(updatedCard || card),
-        user: userResult && userResult.data ? userResult.data : profile
+        user: userResult && userResult.data ? userResult.data : profile,
+        shareJoinAward
       }
     };
   }
@@ -14756,7 +14845,14 @@ async function dispatchAction(action, payload, request, env) {
     case 'registerUser': {
       try {
         const d1Result = await D1WriteModule.upsertUser(payload || {}, env);
-        if (d1Result) return d1Result;
+        if (d1Result) {
+          const shareJoinAward = await PointModule.awardShareJoinPoints(payload || {}, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
+          if (d1Result && typeof d1Result === 'object') {
+            d1Result.shareJoinAward = shareJoinAward;
+            if (d1Result.data && typeof d1Result.data === 'object') d1Result.data.shareJoinAward = shareJoinAward;
+          }
+          return d1Result;
+        }
       } catch (e) {
         console.error("D1 registerUser failed", e);
       }
