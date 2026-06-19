@@ -770,6 +770,11 @@
             </div>
             <div id="lineoa-keyword-flex-fields" class="hidden space-y-4">
               <div>
+                <label class="text-sm font-black text-slate-700">Flex JSON</label>
+                <textarea id="lineoa-keyword-flex-json" rows="8" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-mono outline-none focus:border-emerald-500 focus:bg-white resize-y" placeholder='可貼 LINE Flex Simulator JSON，例如 { "type": "bubble", ... } 或 { "type": "flex", "altText": "...", "contents": {...} }'></textarea>
+                <p class="mt-2 text-xs font-bold text-slate-400">貼上完整 Flex JSON 時會優先使用；留空則使用下方簡易欄位產生 Flex Card。</p>
+              </div>
+              <div>
                 <label class="text-sm font-black text-slate-700">對應內容標籤名稱</label>
                 <input id="lineoa-keyword-flex-label" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500 focus:bg-white" placeholder="例如：每日簽到">
               </div>
@@ -1675,6 +1680,7 @@
         'lineoa-keyword-name': '',
         'lineoa-keyword-trigger': '',
         'lineoa-keyword-text': '',
+        'lineoa-keyword-flex-json': '',
         'lineoa-keyword-flex-label': '',
         'lineoa-keyword-button-text': '',
         'lineoa-keyword-button-keyword': '',
@@ -1752,6 +1758,7 @@
       setValue('lineoa-keyword-match', rule.matchType || rule.match_type || 'contains');
       setValue('lineoa-keyword-type', (rule.responseType || rule.response_type) === 'flex' ? 'flex' : 'quick_reply');
       setValue('lineoa-keyword-text', rule.textContent || rule.text_content || '');
+      setValue('lineoa-keyword-flex-json', rule.flexJson || rule.flex_json || '');
       setValue('lineoa-keyword-flex-label', rule.flexLabel || rule.flex_label || '');
       setValue('lineoa-keyword-button-text', rule.flexButtonText || rule.flex_button_text || '');
       setValue('lineoa-keyword-button-keyword', rule.flexButtonKeyword || rule.flex_button_keyword || '');
@@ -1769,6 +1776,7 @@
         matchType: lineOAKeywordValue('lineoa-keyword-match') || 'contains',
         responseType: lineOAKeywordValue('lineoa-keyword-type') || 'quick_reply',
         textContent: lineOAKeywordValue('lineoa-keyword-text'),
+        flexJson: lineOAKeywordValue('lineoa-keyword-flex-json'),
         flexLabel: lineOAKeywordValue('lineoa-keyword-flex-label'),
         flexButtonText: lineOAKeywordValue('lineoa-keyword-button-text'),
         flexButtonKeyword: lineOAKeywordValue('lineoa-keyword-button-keyword'),
@@ -1783,8 +1791,14 @@
         showToast('請填寫 Quick Reply 按鈕文字', true);
         return;
       }
-      if (payload.responseType === 'flex' && !payload.flexLabel && !payload.flexButtonKeyword) {
-        showToast('請填寫內容標籤或按鈕關鍵字', true);
+      if (payload.responseType === 'flex' && payload.flexJson) {
+        try { JSON.parse(payload.flexJson); } catch (e) {
+          showToast('Flex JSON 格式錯誤：' + e.message, true);
+          return;
+        }
+      }
+      if (payload.responseType === 'flex' && !payload.flexJson && !payload.flexLabel && !payload.flexButtonKeyword) {
+        showToast('請貼 Flex JSON，或填寫內容標籤/按鈕關鍵字', true);
         return;
       }
       const data = await fetchAPI('saveLineOAKeywordRule', payload);

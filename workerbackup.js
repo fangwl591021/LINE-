@@ -893,6 +893,7 @@ const LineOAChatModule = {
         flex_button_text TEXT NOT NULL DEFAULT '',
         flex_button_keyword TEXT NOT NULL DEFAULT '',
         flex_alt_text TEXT NOT NULL DEFAULT '',
+        flex_json TEXT NOT NULL DEFAULT '',
         enabled INTEGER NOT NULL DEFAULT 1,
         priority INTEGER NOT NULL DEFAULT 100,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -901,6 +902,11 @@ const LineOAChatModule = {
     `).run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_keyword_rules_enabled ON line_oa_keyword_rules(enabled, priority, updated_at)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_keyword_rules_keyword ON line_oa_keyword_rules(keyword)').run();
+    try {
+      await env.ACTMASTER_DB.prepare(`ALTER TABLE line_oa_keyword_rules ADD COLUMN flex_json TEXT NOT NULL DEFAULT ''`).run();
+    } catch (e) {
+      if (!String(e?.message || e).toLowerCase().includes('duplicate column')) throw e;
+    }
     const optionalThreadColumns = [
       `ALTER TABLE line_oa_threads ADD COLUMN opportunity_stage TEXT NOT NULL DEFAULT 'new'`,
       `ALTER TABLE line_oa_threads ADD COLUMN opportunity_value INTEGER NOT NULL DEFAULT 0`,
@@ -2576,6 +2582,7 @@ const LineOAKeywordRuleModule = {
       flexButtonText: this.text(payload.flexButtonText || payload.flex_button_text).slice(0, 40),
       flexButtonKeyword: this.text(payload.flexButtonKeyword || payload.flex_button_keyword).slice(0, 80),
       flexAltText: this.text(payload.flexAltText || payload.flex_alt_text).slice(0, 200),
+      flexJson: this.text(payload.flexJson || payload.flex_json).slice(0, 12000),
       enabled: Number(payload.enabled ?? 1) ? 1 : 0,
       priority: Math.max(0, Math.min(9999, Number(payload.priority ?? 100) || 100))
     };
@@ -2594,6 +2601,7 @@ const LineOAKeywordRuleModule = {
       flexButtonText: row.flex_button_text,
       flexButtonKeyword: row.flex_button_keyword,
       flexAltText: row.flex_alt_text,
+      flexJson: row.flex_json || '',
       enabled: Number(row.enabled || 0),
       priority: Number(row.priority || 100),
       createdAt: row.created_at,
@@ -2618,12 +2626,17 @@ const LineOAKeywordRuleModule = {
     if (!rule.name) return { success: false, error: 'Missing rule name' };
     if (!rule.keyword) return { success: false, error: 'Missing keyword' };
     if (rule.responseType === 'quick_reply' && !rule.textContent && !rule.flexLabel && !rule.flexButtonKeyword) return { success: false, error: 'Missing quick reply label' };
-    if (rule.responseType === 'flex' && !rule.flexLabel && !rule.flexButtonKeyword) return { success: false, error: 'Missing Flex label or button keyword' };
+    if (rule.responseType === 'flex' && rule.flexJson) {
+      try { JSON.parse(rule.flexJson); } catch (e) {
+        return { success: false, error: `Invalid Flex JSON: ${e.message}` };
+      }
+    }
+    if (rule.responseType === 'flex' && !rule.flexJson && !rule.flexLabel && !rule.flexButtonKeyword) return { success: false, error: 'Missing Flex JSON, label, or button keyword' };
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO line_oa_keyword_rules (
         rule_id,name,keyword,match_type,response_type,text_content,flex_title,flex_label,
-        flex_button_text,flex_button_keyword,flex_alt_text,enabled,priority,created_at,updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        flex_button_text,flex_button_keyword,flex_alt_text,flex_json,enabled,priority,created_at,updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(rule_id) DO UPDATE SET
         name=excluded.name,
         keyword=excluded.keyword,
@@ -2635,6 +2648,7 @@ const LineOAKeywordRuleModule = {
         flex_button_text=excluded.flex_button_text,
         flex_button_keyword=excluded.flex_button_keyword,
         flex_alt_text=excluded.flex_alt_text,
+        flex_json=excluded.flex_json,
         enabled=excluded.enabled,
         priority=excluded.priority,
         updated_at=CURRENT_TIMESTAMP
@@ -2650,6 +2664,7 @@ const LineOAKeywordRuleModule = {
       rule.flexButtonText,
       rule.flexButtonKeyword,
       rule.flexAltText,
+      rule.flexJson,
       rule.enabled,
       rule.priority
     ).run();
@@ -2687,6 +2702,23 @@ const LineOAKeywordRuleModule = {
   },
 
   buildFlex(rule) {
+    if (this.text(rule.flexJson)) {
+      const parsed = JSON.parse(rule.flexJson);
+      if (parsed && parsed.type === 'flex' && parsed.contents) {
+        return {
+          ...parsed,
+          altText: this.text(parsed.altText || rule.flexAltText || rule.name, 'LINE Flex Card').slice(0, 400)
+        };
+      }
+      if (parsed && typeof parsed === 'object' && (parsed.type === 'bubble' || parsed.type === 'carousel')) {
+        return {
+          type: 'flex',
+          altText: this.text(rule.flexAltText || rule.name, 'LINE Flex Card').slice(0, 400),
+          contents: parsed
+        };
+      }
+      throw new Error('Invalid Flex JSON: expected flex message, bubble, or carousel');
+    }
     const title = this.text(rule.flexTitle || rule.name, 'LINE 快速功能');
     const label = this.text(rule.flexLabel, title);
     const buttonText = this.text(rule.flexButtonText, label).slice(0, 20);
