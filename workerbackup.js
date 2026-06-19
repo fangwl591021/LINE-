@@ -4880,6 +4880,86 @@ const PointModule = {
     return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
   },
 
+  async dailyCheckinLocalFallback(options = {}) {
+    const env = options.env;
+    const pointUserId = String(options.pointUserId || '').trim();
+    const rawUserId = String(options.rawUserId || pointUserId || '').trim();
+    const today = String(options.today || this.taipeiDate()).trim();
+    const awardId = String(options.awardId || `AWD_DAILY_${pointUserId}_${today}`).trim();
+    if (!env || !env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    if (!pointUserId) return { success: false, error: 'Missing userId' };
+
+    await this.ensureLocalPointWallet(env, pointUserId, options.profile || {}).catch(() => null);
+    await AdminPointModule.ensure(env);
+    const balanceBefore = await AdminPointModule.localBalance(env, pointUserId).catch(() => 0);
+    const localLedgerId = `APL_DAILY_${pointUserId}_${today}`;
+    const insert = await env.ACTMASTER_DB.prepare(`
+      INSERT OR IGNORE INTO admin_point_ledger (row_id,user_id,actor_user_id,mode,points,balance_after,note,source)
+      VALUES (?, ?, ?, 'grant', 10, ?, ?, 'daily_checkin_local_wallet')
+    `).bind(
+      localLedgerId,
+      pointUserId,
+      rawUserId || pointUserId,
+      Number(balanceBefore || 0) + 10,
+      `daily_checkin=${today}; fallback_reason=${String(options.reason || 'mother_unavailable').slice(0, 160)}`
+    ).run();
+    const inserted = Number(insert && insert.meta && insert.meta.changes || 0) > 0;
+    const balanceAfter = inserted
+      ? Number(balanceBefore || 0) + 10
+      : await AdminPointModule.localBalance(env, pointUserId).catch(() => balanceBefore);
+
+    await env.ACTMASTER_DB.prepare(`
+      INSERT OR REPLACE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
+      VALUES (?, ?, ?, 'daily_checkin', 10, 'gift_money', 'local_sent', ?, CURRENT_TIMESTAMP)
+    `).bind(
+      awardId,
+      pointUserId,
+      today,
+      JSON.stringify({
+        source: 'local_fallback',
+        inserted,
+        balanceBefore,
+        balanceAfter,
+        localLedgerId,
+        reason: options.reason || '',
+        mother: options.mother || null
+      })
+    ).run();
+
+    const syncJob = await PointSyncModule.enqueue({
+      jobId: `PSJ_DAILY_${pointUserId}_${today}`,
+      lineUserId: pointUserId,
+      source: 'daily_checkin_local_wallet',
+      sourceRef: awardId,
+      points: 10,
+      pointType: 'gift_money',
+      createdBy: rawUserId || pointUserId,
+      payload: {
+        userId: rawUserId || pointUserId,
+        pointUserId,
+        date: today,
+        localLedgerId,
+        fallbackReason: options.reason || ''
+      }
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
+
+    return {
+      success: true,
+      data: {
+        awarded: inserted,
+        alreadyChecked: !inserted,
+        points: inserted ? 10 : 0,
+        date: today,
+        balanceBefore,
+        balance: balanceAfter,
+        pointUserId,
+        source: 'local_fallback',
+        syncJob,
+        message: inserted ? 'Daily check-in recorded locally.' : 'Already checked in today.'
+      }
+    };
+  },
+
   async awardShareJoinPoints(payload, env) {
     if (!env.ACTMASTER_DB) return { success: false, skipped: true, reason: 'missing_db' };
     await this.ensureAwardTable(env);
@@ -5002,6 +5082,19 @@ const PointModule = {
       per_page: 100
     }, env);
     if (!beforeWallet || !beforeWallet.success) {
+      return await this.dailyCheckinLocalFallback({
+        env,
+        pointUserId,
+        rawUserId,
+        today,
+        awardId,
+        profile: {
+          displayName: payload.displayName || payload.name || '',
+          pictureUrl: payload.pictureUrl || ''
+        },
+        reason: beforeWallet && beforeWallet.error ? beforeWallet.error : 'mother_wallet_unavailable',
+        mother: beforeWallet || null
+      });
       await this.ensureLocalPointWallet(env, pointUserId, {
         displayName: payload.displayName || payload.name || '',
         pictureUrl: payload.pictureUrl || ''
@@ -5114,7 +5207,7 @@ const PointModule = {
       eventName: '點數家族每日簽到',
       eventContent: `點數家族 ${today} 每日簽到贈點`,
       shop_remark: `daily_checkin=${today}`
-    }, env);
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
 
     let afterWallet = null;
     let balanceAfter = balanceBefore;
@@ -5143,6 +5236,15 @@ const PointModule = {
     ).run();
 
     if (!verified) {
+      return await this.dailyCheckinLocalFallback({
+        env,
+        pointUserId,
+        rawUserId,
+        today,
+        awardId,
+        reason: result && result.error ? result.error : 'mother_verify_failed',
+        mother: { result, before: balanceBefore, after: balanceAfter, afterWallet }
+      });
       return {
         success: false,
         error: result && result.error ? result.error : '母站尚未確認點數入帳，請重新整理後再試',
