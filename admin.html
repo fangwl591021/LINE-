@@ -764,6 +764,14 @@
                 </select>
               </div>
             </div>
+            <div>
+              <label class="text-sm font-black text-slate-700">回覆模式</label>
+              <select id="lineoa-keyword-mode" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500">
+                <option value="standalone">獨立回覆</option>
+                <option value="attach_only">只附加母站</option>
+              </select>
+              <p class="mt-2 text-xs font-bold text-slate-400">一般子站關鍵字用「獨立回覆」；與母站同關鍵字時用「只附加母站」，避免搶 replyToken。</p>
+            </div>
             <div id="lineoa-keyword-text-fields">
               <label class="text-sm font-black text-slate-700">Quick Reply 按鈕文字</label>
               <textarea id="lineoa-keyword-text" rows="3" class="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 focus:bg-white resize-none" placeholder="例如：會員打卡"></textarea>
@@ -1679,6 +1687,7 @@
         'lineoa-keyword-rule-id': '',
         'lineoa-keyword-name': '',
         'lineoa-keyword-trigger': '',
+        'lineoa-keyword-mode': 'standalone',
         'lineoa-keyword-text': '',
         'lineoa-keyword-flex-json': '',
         'lineoa-keyword-flex-label': '',
@@ -1756,6 +1765,7 @@
       setValue('lineoa-keyword-name', rule.name || '');
       setValue('lineoa-keyword-trigger', rule.keyword || '');
       setValue('lineoa-keyword-match', rule.matchType || rule.match_type || 'contains');
+      setValue('lineoa-keyword-mode', rule.responseMode || rule.response_mode || 'standalone');
       setValue('lineoa-keyword-type', (rule.responseType || rule.response_type) === 'flex' ? 'flex' : 'quick_reply');
       setValue('lineoa-keyword-text', rule.textContent || rule.text_content || '');
       setValue('lineoa-keyword-flex-json', rule.flexJson || rule.flex_json || '');
@@ -1774,6 +1784,7 @@
         name: lineOAKeywordValue('lineoa-keyword-name'),
         keyword: lineOAKeywordValue('lineoa-keyword-trigger'),
         matchType: lineOAKeywordValue('lineoa-keyword-match') || 'contains',
+        responseMode: lineOAKeywordValue('lineoa-keyword-mode') || 'standalone',
         responseType: lineOAKeywordValue('lineoa-keyword-type') || 'quick_reply',
         textContent: lineOAKeywordValue('lineoa-keyword-text'),
         flexJson: lineOAKeywordValue('lineoa-keyword-flex-json'),

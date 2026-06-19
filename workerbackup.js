@@ -886,6 +886,7 @@ const LineOAChatModule = {
         name TEXT NOT NULL DEFAULT '',
         keyword TEXT NOT NULL DEFAULT '',
         match_type TEXT NOT NULL DEFAULT 'contains',
+        response_mode TEXT NOT NULL DEFAULT 'standalone',
         response_type TEXT NOT NULL DEFAULT 'text',
         text_content TEXT NOT NULL DEFAULT '',
         flex_title TEXT NOT NULL DEFAULT '',
@@ -904,6 +905,11 @@ const LineOAChatModule = {
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_line_oa_keyword_rules_keyword ON line_oa_keyword_rules(keyword)').run();
     try {
       await env.ACTMASTER_DB.prepare(`ALTER TABLE line_oa_keyword_rules ADD COLUMN flex_json TEXT NOT NULL DEFAULT ''`).run();
+    } catch (e) {
+      if (!String(e?.message || e).toLowerCase().includes('duplicate column')) throw e;
+    }
+    try {
+      await env.ACTMASTER_DB.prepare(`ALTER TABLE line_oa_keyword_rules ADD COLUMN response_mode TEXT NOT NULL DEFAULT 'standalone'`).run();
     } catch (e) {
       if (!String(e?.message || e).toLowerCase().includes('duplicate column')) throw e;
     }
@@ -2102,6 +2108,7 @@ const LineOAChatModule = {
     const storeSearchReplied = await LineOAStoreSearchKeywordModule.reply(events, env);
     if (storeSearchReplied) return new Response('OK', { status: 200 });
     const keywordRuleReply = await LineOAKeywordRuleModule.replyPayload(events, env);
+    const keywordAttachOnly = keywordRuleReply?.mode === 'attach_only';
     if (keywordRuleReply) {
       const forwardResult = await forwardJob.catch(e => ({ success: false, error: e.message || String(e) }));
       const forwardReplyPayload = forwardResult && forwardResult.success
@@ -2115,7 +2122,12 @@ const LineOAChatModule = {
     }
     const gasRawBody = keywordRuleReply ? rawBody : await this.filterAutoReplyPayload(rawBody, events, env);
     if (!gasRawBody) {
-      if (keywordRuleReply) console.warn('LINE OA keyword rule skipped because no mother reply payload is available');
+      if (keywordRuleReply && !keywordAttachOnly) {
+        const replyResult = await this.replyLine(keywordRuleReply, env);
+        if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
+      } else if (keywordRuleReply) {
+        console.warn('LINE OA keyword rule skipped because no mother reply payload is available');
+      }
       return new Response('OK', { status: 200 });
     }
     const gasResult = await this.forwardToGas(gasRawBody, env);
@@ -2124,11 +2136,17 @@ const LineOAChatModule = {
       if (replyPayload) {
         const replyResult = await this.replyLine(this.mergeReplyPayloads(replyPayload, keywordRuleReply), env);
         if (!replyResult.success) console.error('LINE Reply API failed', replyResult);
+      } else if (keywordRuleReply && !keywordAttachOnly) {
+        const replyResult = await this.replyLine(keywordRuleReply, env);
+        if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
       } else if (keywordRuleReply) {
         console.warn('LINE OA keyword rule skipped because GAS returned no replyPayload; avoid consuming mother-site replyToken');
       }
     } else if (!gasResult.skipped) {
       console.error('GAS LINE_WEBHOOK failed', gasResult);
+    } else if (keywordRuleReply && !keywordAttachOnly) {
+      const replyResult = await this.replyLine(keywordRuleReply, env);
+      if (!replyResult.success) console.error('LINE OA keyword rule reply failed', replyResult);
     } else if (keywordRuleReply) {
       console.warn('LINE OA keyword rule skipped because GAS is not configured; avoid consuming mother-site replyToken');
     }
@@ -2570,11 +2588,13 @@ const LineOAKeywordRuleModule = {
     const rawResponseType = this.text(payload.responseType || payload.response_type, 'quick_reply');
     const responseType = rawResponseType === 'flex' ? 'flex' : 'quick_reply';
     const matchType = this.text(payload.matchType || payload.match_type, 'contains') === 'exact' ? 'exact' : 'contains';
+    const responseMode = this.text(payload.responseMode || payload.response_mode, 'standalone') === 'attach_only' ? 'attach_only' : 'standalone';
     return {
       ruleId: this.text(payload.ruleId || payload.rule_id) || this.createId(),
       name: this.text(payload.name).slice(0, 80),
       keyword: this.text(payload.keyword).slice(0, 80),
       matchType,
+      responseMode,
       responseType,
       textContent: this.text(payload.textContent || payload.text_content).slice(0, 2000),
       flexTitle: this.text(payload.flexTitle || payload.flex_title || payload.name).slice(0, 80),
@@ -2594,6 +2614,7 @@ const LineOAKeywordRuleModule = {
       name: row.name,
       keyword: row.keyword,
       matchType: row.match_type,
+      responseMode: row.response_mode || 'standalone',
       responseType: row.response_type,
       textContent: row.text_content,
       flexTitle: row.flex_title,
@@ -2634,13 +2655,14 @@ const LineOAKeywordRuleModule = {
     if (rule.responseType === 'flex' && !rule.flexJson && !rule.flexLabel && !rule.flexButtonKeyword) return { success: false, error: 'Missing Flex JSON, label, or button keyword' };
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO line_oa_keyword_rules (
-        rule_id,name,keyword,match_type,response_type,text_content,flex_title,flex_label,
+        rule_id,name,keyword,match_type,response_mode,response_type,text_content,flex_title,flex_label,
         flex_button_text,flex_button_keyword,flex_alt_text,flex_json,enabled,priority,created_at,updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(rule_id) DO UPDATE SET
         name=excluded.name,
         keyword=excluded.keyword,
         match_type=excluded.match_type,
+        response_mode=excluded.response_mode,
         response_type=excluded.response_type,
         text_content=excluded.text_content,
         flex_title=excluded.flex_title,
@@ -2657,6 +2679,7 @@ const LineOAKeywordRuleModule = {
       rule.name,
       rule.keyword,
       rule.matchType,
+      rule.responseMode,
       rule.responseType,
       rule.textContent,
       rule.flexTitle,
@@ -2792,7 +2815,7 @@ const LineOAKeywordRuleModule = {
       if (!replyToken) continue;
       const rule = this.matchRule(rules, message.text);
       if (!rule) continue;
-      return { replyToken, messages: [this.buildMessage(rule)] };
+      return { replyToken, messages: [this.buildMessage(rule)], mode: rule.responseMode || 'standalone' };
     }
     return null;
   }
