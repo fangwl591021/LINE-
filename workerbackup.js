@@ -2724,21 +2724,44 @@ const LineOAKeywordRuleModule = {
     }) || null;
   },
 
-  buildFlex(rule) {
+  keywordShareUrl(rule, env) {
+    const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
+    const params = new URLSearchParams({ lineoaKeywordShare: this.text(rule.ruleId) });
+    return `https://liff.line.me/${encodeURIComponent(liffId)}?${params.toString()}`;
+  },
+
+  attachShareTargetPickerButtons(message, rule, env) {
+    const shareUrl = this.keywordShareUrl(rule, env);
+    const visit = node => {
+      if (!node || typeof node !== 'object') return;
+      if (node.type === 'button' && node.action && String(node.action.label || '').includes('分享好友')) {
+        node.action = { type: 'uri', label: String(node.action.label || '分享好友').slice(0, 20), uri: shareUrl };
+      }
+      for (const value of Object.values(node)) {
+        if (Array.isArray(value)) value.forEach(visit);
+        else if (value && typeof value === 'object') visit(value);
+      }
+    };
+    const cloned = JSON.parse(JSON.stringify(message));
+    visit(cloned.contents || cloned);
+    return cloned;
+  },
+
+  buildFlex(rule, env) {
     if (this.text(rule.flexJson)) {
       const parsed = JSON.parse(rule.flexJson);
       if (parsed && parsed.type === 'flex' && parsed.contents) {
-        return {
+        return this.attachShareTargetPickerButtons({
           ...parsed,
           altText: this.text(parsed.altText || rule.flexAltText || rule.name, 'LINE Flex Card').slice(0, 400)
-        };
+        }, rule, env);
       }
       if (parsed && typeof parsed === 'object' && (parsed.type === 'bubble' || parsed.type === 'carousel')) {
-        return {
+        return this.attachShareTargetPickerButtons({
           type: 'flex',
           altText: this.text(rule.flexAltText || rule.name, 'LINE Flex Card').slice(0, 400),
           contents: parsed
-        };
+        }, rule, env);
       }
       throw new Error('Invalid Flex JSON: expected flex message, bubble, or carousel');
     }
@@ -2746,7 +2769,7 @@ const LineOAKeywordRuleModule = {
     const label = this.text(rule.flexLabel, title);
     const buttonText = this.text(rule.flexButtonText, label).slice(0, 20);
     const buttonKeyword = this.text(rule.flexButtonKeyword, label || rule.keyword);
-    return {
+    return this.attachShareTargetPickerButtons({
       type: 'flex',
       altText: this.text(rule.flexAltText, title).slice(0, 200),
       contents: {
@@ -2781,7 +2804,7 @@ const LineOAKeywordRuleModule = {
           }]
         }
       }
-    };
+    }, rule, env);
   },
 
   buildQuickReply(rule) {
@@ -2799,8 +2822,8 @@ const LineOAKeywordRuleModule = {
     };
   },
 
-  buildMessage(rule) {
-    if (rule.responseType === 'flex') return this.buildFlex(rule);
+  buildMessage(rule, env) {
+    if (rule.responseType === 'flex') return this.buildFlex(rule, env);
     return this.buildQuickReply(rule);
   },
 
@@ -2815,9 +2838,20 @@ const LineOAKeywordRuleModule = {
       if (!replyToken) continue;
       const rule = this.matchRule(rules, message.text);
       if (!rule) continue;
-      return { replyToken, messages: [this.buildMessage(rule)], mode: rule.responseMode || 'standalone' };
+      return { replyToken, messages: [this.buildMessage(rule, env)], mode: rule.responseMode || 'standalone' };
     }
     return null;
+  },
+
+  async shareMessage(payload, env) {
+    await this.ensure(env);
+    const ruleId = this.text(payload.ruleId || payload.rule_id || payload.id);
+    if (!ruleId) return { success: false, error: 'Missing ruleId' };
+    const row = await D1ReadModule.first(env, 'SELECT * FROM line_oa_keyword_rules WHERE rule_id = ? AND enabled = 1 LIMIT 1', [ruleId]).catch(() => null);
+    if (!row) return { success: false, error: 'Keyword rule not found' };
+    const rule = this.mapRow(row);
+    if (rule.responseType !== 'flex') return { success: false, error: 'Only Flex rules can be shared' };
+    return { success: true, data: { message: this.buildFlex(rule, env), ruleId } };
   }
 };
 
@@ -15011,6 +15045,11 @@ export default {
         const authz = await SecurityModule.authorizeAction('getLineOAChatAudience', payload, request, env);
         if (!authz.allowed) return Utils.jsonResponse({ success: false, error: authz.error || 'Access Denied' }, 403);
         return Utils.jsonResponse(await LineOAChatModule.audience(payload, env));
+      }
+      if (request.method === 'GET' && url.pathname === '/api/line-oa/keyword-share') {
+        return Utils.jsonResponse(await LineOAKeywordRuleModule.shareMessage({
+          ruleId: url.searchParams.get('ruleId') || url.searchParams.get('id') || ''
+        }, env));
       }
       if (request.method === 'POST' && url.pathname === '/api/line-oa/upload-asset') {
         const payload = await request.json();
