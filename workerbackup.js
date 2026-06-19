@@ -4336,7 +4336,30 @@ const PointModule = {
     if (payload.shop_id || payload.shopId) body.shop_id = Number(payload.shop_id || payload.shopId);
 
     const result = await this.fetchPointPage(body);
-    if (result.error) return { success: false, error: result.error, code: result.code };
+    if (result.error) {
+      const localBalance = await AdminPointModule.localBalance(env, lineUserId).catch(() => 0);
+      if (env.ACTMASTER_DB && Number(localBalance || 0)) {
+        return {
+          success: true,
+          data: {
+            status: 'ready',
+            source: 'local',
+            motherError: result.error,
+            balance: Number(localBalance || 0),
+            latestBalance: Number(localBalance || 0),
+            typedBalance: Number(localBalance || 0),
+            pointType,
+            queriedLineUserId: lineUserId,
+            requestedLineUserId,
+            sampledRows: 0,
+            total: 0,
+            pagination: {},
+            updatedAt: new Date().toISOString()
+          }
+        };
+      }
+      return { success: false, error: result.error, code: result.code };
+    }
 
     const list = Array.isArray(result.data?.data?.list) ? result.data.data.list : [];
     const pagination = result.data?.data?.pagination || {};
@@ -4592,6 +4615,43 @@ const PointModule = {
     }
     if (!typedResults.length) {
       const firstError = await collectPages({ ...withFilters(makeBaseBody(lineUserId)), point_type: requestedType || 'gift_money' });
+      const localBalance = await AdminPointModule.localBalance(env, lineUserId).catch(() => 0);
+      const localRows = await AdminPointModule.localRows(env, lineUserId, 100).catch(() => []);
+      if (env.ACTMASTER_DB && (Number(localBalance || 0) || localRows.length)) {
+        const localList = localRows.map(row => ({
+          id: row.rowId,
+          event_name: row.note || 'Local point',
+          event_content: row.note || '',
+          shop_remark: row.source || 'local',
+          point_type: requestedType || 'gift_money',
+          get_point: Number(row.points || 0) || 0,
+          point: Number(row.points || 0) || 0,
+          points: Number(row.points || 0) || 0,
+          point_balance: Number(row.balanceAfter || 0) || 0,
+          created_at: row.createdAt || ''
+        }));
+        return {
+          success: true,
+          data: {
+            status: 'ready',
+            source: 'local',
+            motherError: firstError.error || 'Point query failed',
+            balance: Number(localBalance || 0),
+            latestBalance: Number(localBalance || 0),
+            typedBalance: Number(localBalance || 0),
+            allTypeBalance: Number(localBalance || 0),
+            balanceByType: { [requestedType || 'gift_money']: Number(localBalance || 0) },
+            pointType: requestedType || 'gift_money',
+            requestedPointType: requestedType || 'gift_money',
+            queriedLineUserId: lineUserId,
+            requestedLineUserId,
+            list: localList,
+            total: localList.length,
+            pagination: { total: localList.length, total_pages: 1, current_page: 1 },
+            updatedAt: new Date().toISOString()
+          }
+        };
+      }
       return { success: false, error: firstError.error || 'Point query failed', code: firstError.code };
     }
 
@@ -4831,6 +4891,29 @@ const PointModule = {
 
     const today = this.taipeiDate();
     const awardId = `AWD_DAILY_${pointUserId}_${today}`;
+    const existingAward = await D1ReadModule.first(env, `
+      SELECT *
+      FROM point_awards
+      WHERE award_id = ?
+         OR (user_id = ? AND card_id = ? AND award_type = 'daily_checkin')
+      LIMIT 1
+    `, [awardId, pointUserId, today]).catch(() => null);
+    if (existingAward && String(existingAward.status || '').trim() !== 'failed') {
+      const localBalance = await AdminPointModule.localBalance(env, pointUserId).catch(() => 0);
+      return {
+        success: true,
+        data: {
+          awarded: false,
+          alreadyChecked: true,
+          points: 0,
+          date: today,
+          balance: Number(localBalance || 0),
+          pointUserId,
+          source: String(existingAward.status || '').trim() || 'local',
+          message: 'Already checked in today.'
+        }
+      };
+    }
     const beforeWallet = await this.queryUserPoints({
       pointUserId,
       point_type: 'gift_money',
@@ -4838,6 +4921,64 @@ const PointModule = {
       per_page: 100
     }, env);
     if (!beforeWallet || !beforeWallet.success) {
+      await this.ensureLocalPointWallet(env, pointUserId, {
+        displayName: payload.displayName || payload.name || '',
+        pictureUrl: payload.pictureUrl || ''
+      }).catch(() => null);
+      await AdminPointModule.ensure(env);
+      const balanceBefore = await AdminPointModule.localBalance(env, pointUserId).catch(() => 0);
+      const balanceAfter = Number(balanceBefore || 0) + 10;
+      const localLedgerId = `APL_DAILY_${pointUserId}_${today}`;
+      await env.ACTMASTER_DB.prepare(`
+        INSERT OR IGNORE INTO admin_point_ledger (row_id,user_id,actor_user_id,mode,points,balance_after,note,source)
+        VALUES (?, ?, ?, 'grant', 10, ?, ?, 'daily_checkin_local_wallet')
+      `).bind(
+        localLedgerId,
+        pointUserId,
+        rawUserId || pointUserId,
+        balanceAfter,
+        `daily_checkin=${today}; mother_error=${String(beforeWallet && beforeWallet.error || 'mother_wallet_unavailable').slice(0, 180)}`
+      ).run();
+      await env.ACTMASTER_DB.prepare(`
+        INSERT OR REPLACE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
+        VALUES (?, ?, ?, 'daily_checkin', 10, 'gift_money', 'local_sent', ?, CURRENT_TIMESTAMP)
+      `).bind(
+        awardId,
+        pointUserId,
+        today,
+        JSON.stringify({ source: 'local_fallback', beforeWallet, balanceBefore, balanceAfter, localLedgerId })
+      ).run();
+      const syncJob = await PointSyncModule.enqueue({
+        jobId: `PSJ_DAILY_${pointUserId}_${today}`,
+        lineUserId: pointUserId,
+        source: 'daily_checkin_local_wallet',
+        sourceRef: awardId,
+        points: 10,
+        pointType: 'gift_money',
+        createdBy: rawUserId || pointUserId,
+        payload: {
+          userId: rawUserId || pointUserId,
+          pointUserId,
+          date: today,
+          localLedgerId,
+          motherError: beforeWallet && beforeWallet.error || ''
+        }
+      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
+      return {
+        success: true,
+        data: {
+          awarded: true,
+          alreadyChecked: false,
+          points: 10,
+          date: today,
+          balanceBefore,
+          balance: balanceAfter,
+          pointUserId,
+          source: 'local_fallback',
+          syncJob,
+          message: 'Daily check-in recorded locally.'
+        }
+      };
       return {
         success: false,
         error: beforeWallet && beforeWallet.error ? beforeWallet.error : '無法讀取母站點數',
@@ -6113,6 +6254,7 @@ const PointSyncModule = {
     const labels = {
       store_reward_local_wallet: '子站店家贈點同步',
       store_redeem_local_wallet: '子站店家扣點同步',
+      daily_checkin_local_wallet: '子站每日簽到同步',
       new_user_join: '子站新會員同步',
       card_scan_create: '子站名片建檔同步',
       manual_sync: '手動點數同步'
