@@ -192,7 +192,7 @@ const SecurityModule = {
     const tokenIdentity = env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined' && tokenId
       ? await D1ReadModule.findUserByIdentity(env, tokenId).catch(() => null)
       : null;
-    return {
+    return this.normalizeSimpleMyCardFlex({
       payloadUserId: this.maskId(payloadId),
       tokenUserId: this.maskId(tokenId),
       payloadRegistered: !!(payloadIdentity && payloadIdentity.user),
@@ -204,7 +204,7 @@ const SecurityModule = {
         this.text(payloadIdentity.canonicalId) &&
         this.text(payloadIdentity.canonicalId) === this.text(tokenIdentity.canonicalId)
       )
-    };
+    });
   },
 
   async getActor(payload, request, env) {
@@ -1336,15 +1336,37 @@ const LineOAChatModule = {
     return this.text(params.get('rowId'));
   },
 
+  normalizeSimpleMyCardFlex(message) {
+    const visit = node => {
+      if (!node || typeof node !== 'object') return;
+      if (node.type === 'text' && typeof node.text === 'string') {
+        const text = node.text;
+        if (text.includes('LINE') && (text.includes('頭貼') || text.includes('?剛票') || text.includes('雿輻'))) {
+          node.text = '請補上電話、連結與介紹，完成後即可分享這張名片。';
+        }
+        if (text.includes('快速建立電子名片') || text.includes('敹恍')) {
+          node.text = '補齊名片資料';
+        }
+      }
+      for (const value of Object.values(node)) {
+        if (Array.isArray(value)) value.forEach(visit);
+        else if (value && typeof value === 'object') visit(value);
+      }
+    };
+    visit(message);
+    return message;
+  },
+
   buildSimpleMyCardFlex(profile, userId, env) {
     const name = this.text(profile?.displayName, '我的名片');
-    const avatarUrl = this.text(profile?.pictureUrl);
+    const avatarUrl = '';
     const coverUrl = this.text(
       env.SIMPLE_MY_CARD_COVER_URL,
       'https://s3.us-west-1.wasabisys.com/aitw/2026/05/fe806f078850d66200c36a1daf125597.png'
     );
     const editUrl = this.quickMyCardUrl(userId, env);
-    const avatar = avatarUrl ? [{
+    const avatar = [];
+    const legacyAvatar = avatarUrl ? [{
       type: 'image',
       url: avatarUrl,
       size: 'sm',
