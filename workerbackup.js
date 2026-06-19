@@ -4880,6 +4880,22 @@ const PointModule = {
     return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
   },
 
+  async ensureSubsitePointWalletOnJoin(payload, env) {
+    if (!env || !env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const rawUserId = String(payload.userId || payload.LINE_user_id || payload.lineUserId || payload.authenticatedUserId || '').trim();
+    const pointUserId = await this.resolvePointUserId(env, rawUserId).catch(() => rawUserId);
+    if (!pointUserId) return { success: false, error: 'Missing userId' };
+    return await this.ensureLocalPointWallet(env, pointUserId, {
+      name: payload.name || payload.displayName || payload['姓名'] || '',
+      displayName: payload.displayName || payload.name || payload['姓名'] || '',
+      phone: payload.phone || payload.mobile || payload['手機號碼'] || '',
+      industry: payload.industry || payload.title || payload.companyName || '',
+      title: payload.title || payload.industry || '',
+      companyName: payload.companyName || payload.company || '',
+      networkId: payload.networkId || payload.net || payload.network_id || 'admin'
+    });
+  },
+
   async dailyCheckinLocalFallback(options = {}) {
     const env = options.env;
     const pointUserId = String(options.pointUserId || '').trim();
@@ -13014,6 +13030,11 @@ const ClaimModule = {
     };
 
     const userResult = await D1WriteModule.upsertUser(profile, env);
+    const pointWallet = await PointModule.ensureSubsitePointWalletOnJoin({
+      ...payload,
+      ...profile,
+      userId
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
     const shareJoinAward = await PointModule.awardShareJoinPoints({
       ...payload,
       ...profile,
@@ -13032,6 +13053,7 @@ const ClaimModule = {
         userId,
         card: D1ReadModule.cardRow(updatedCard || card),
         user: userResult && userResult.data ? userResult.data : profile,
+        pointWallet,
         shareJoinAward
       }
     };
@@ -14948,10 +14970,15 @@ async function dispatchAction(action, payload, request, env) {
       try {
         const d1Result = await D1WriteModule.upsertUser(payload || {}, env);
         if (d1Result) {
+          const pointWallet = await PointModule.ensureSubsitePointWalletOnJoin(payload || {}, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
           const shareJoinAward = await PointModule.awardShareJoinPoints(payload || {}, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
           if (d1Result && typeof d1Result === 'object') {
+            d1Result.pointWallet = pointWallet;
             d1Result.shareJoinAward = shareJoinAward;
-            if (d1Result.data && typeof d1Result.data === 'object') d1Result.data.shareJoinAward = shareJoinAward;
+            if (d1Result.data && typeof d1Result.data === 'object') {
+              d1Result.data.pointWallet = pointWallet;
+              d1Result.data.shareJoinAward = shareJoinAward;
+            }
           }
           return d1Result;
         }
