@@ -593,7 +593,7 @@ async function handleLineOAKeywordShareEntry(ruleId) {
       throw new Error('This LIFF app does not support shareTargetPicker.');
     }
 
-    const workerUrl = window.Config?.WORKER_URL || 'https://line-engine.fangwl591021.workers.dev';
+    const workerUrl = String(window.Config?.WORKER_URL || 'https://line-engine.fangwl591021.workers.dev').replace(/\/+$/, '');
     const res = await fetch(workerUrl + '/api/line-oa/keyword-share?ruleId=' + encodeURIComponent(id), {
       method: 'GET',
       headers: { 'Accept': 'application/json' }

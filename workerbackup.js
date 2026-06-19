@@ -15386,7 +15386,7 @@ export default {
         if (!authz.allowed) return Utils.jsonResponse({ success: false, error: authz.error || 'Access Denied' }, 403);
         return Utils.jsonResponse(await LineOAChatModule.audience(payload, env));
       }
-      if (request.method === 'GET' && url.pathname === '/api/line-oa/keyword-share') {
+      if (request.method === 'GET' && url.pathname.replace(/\/{2,}/g, '/') === '/api/line-oa/keyword-share') {
         return Utils.jsonResponse(await LineOAKeywordRuleModule.shareMessage({
           ruleId: url.searchParams.get('ruleId') || url.searchParams.get('id') || ''
         }, env));
