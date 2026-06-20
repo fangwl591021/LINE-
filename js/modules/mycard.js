@@ -199,7 +199,7 @@
     if (!belongsToUser) return false;
     var targetVersion = normalizeCardVersion(version || getTargetCardVersion());
     if (targetVersion === 'video') return sourceType === 'video_profile' || isCardVersion(card, 'video');
-    if (sourceType === 'video_profile') return false;
+    if (sourceType === 'video_profile') return true;
     return sourceType === 'self_profile' || sourceType === 'legacy_self_profile' || sourceType === '';
   }
 
@@ -393,12 +393,12 @@
   function myCardLookupScore(card) {
     if (!card) return -999;
     var sourceType = getCardSourceType(card);
-    if (sourceType === 'private_import' || sourceType === 'referral_placeholder' || sourceType === 'video_profile') return -999;
-    if (cardVersionFromCard(card) === 'video') return -999;
+    if (sourceType === 'private_import' || sourceType === 'referral_placeholder') return -999;
     var cfg = parseCardConfig(card);
     var rawConfig = String(card.customConfig || card.custom_config || card['自訂名片設定'] || '').trim();
     var imageUrl = String(card.imageUrl || card.image_url || card['名片圖檔'] || cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || '').trim();
     var score = 0;
+    if (sourceType === 'video_profile') score += 45;
     if (sourceType === 'self_profile' || sourceType === 'legacy_self_profile' || sourceType === '') score += 20;
     if (rawConfig && rawConfig !== '{}' && rawConfig !== '[]') score += 30;
     if (cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || cfg.desc || (Array.isArray(cfg.buttons) && cfg.buttons.length)) score += 30;

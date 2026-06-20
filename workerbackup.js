@@ -13614,11 +13614,11 @@ const CardVersionResolverModule = {
     if (!row) return -999;
     const sourceType = this.text(row.source_type).toLowerCase();
     if (sourceType === 'referral_placeholder' || sourceType === 'private_import') return -999;
-    if (this.isVideoRow(row)) return -999;
     const cfg = this.parseConfig(row);
     const rawConfig = this.text(row.custom_config || row.customConfig || row['自訂名片設定']);
     const imageUrl = this.text(row.image_url || row.imageUrl || cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare);
     let score = 0;
+    if (sourceType === 'video_profile') score += 45;
     if (sourceType === 'self_profile' || sourceType === 'legacy_self_profile' || sourceType === '') score += 20;
     if (rawConfig && rawConfig !== '{}' && rawConfig !== '[]') score += 30;
     if (cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || cfg.desc || (Array.isArray(cfg.buttons) && cfg.buttons.length)) score += 30;
@@ -13723,10 +13723,9 @@ const CardVersionResolverModule = {
     if (!userId) return { success: false, error: 'Missing userId' };
     if (!env.ACTMASTER_DB) return { success: false, error: 'D1 unavailable' };
     const rows = await this.loadRowsForUser(userId, env);
-    const staticRows = rows
-      .filter(row => !this.isVideoRow(row))
-      .sort((a, b) => this.rowLookupScore(b) - this.rowLookupScore(a));
-    const videoRows = rows.filter(row => this.isVideoRow(row));
+    const rankedRows = rows.slice().sort((a, b) => this.rowLookupScore(b) - this.rowLookupScore(a));
+    const staticRows = rankedRows.filter(row => !this.isVideoRow(row));
+    const videoRows = rankedRows.filter(row => this.isVideoRow(row));
     const exact = version === 'video'
       ? videoRows[0]
       : staticRows.find(row => this.text(row.row_id).toUpperCase().startsWith(this.rowIdPrefix(version) + '_'));
@@ -13734,7 +13733,7 @@ const CardVersionResolverModule = {
       return { success: true, data: { rowId: this.text(exact.row_id), version, versionMatched: true, card: D1ReadModule.cardRow(exact) } };
     }
     const staticBase = staticRows[0];
-    const base = version === 'video' ? videoRows[0] : staticBase;
+    const base = version === 'video' ? videoRows[0] : (rankedRows[0] || staticBase);
     if (options.createIfMissing || payload.createIfMissing === true || payload.createIfMissing === 'true') {
       const created = base ? await this.createVersionFromBase(base, userId, version, env) : null;
       if (created) return { success: true, data: { rowId: created.rowId, version, versionMatched: true, created: true, card: created } };
