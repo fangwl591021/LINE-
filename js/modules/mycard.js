@@ -399,6 +399,12 @@
     if (window.currentUserCard) pools.push(window.currentUserCard);
     if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
     if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
+    if (target === 'video') {
+      for (var k = 0; k < pools.length; k += 1) {
+        var videoRowId = String(getCardRowId(pools[k]) || '').toUpperCase();
+        if (videoRowId.indexOf('CARD_VIDEO_') === 0 && isEditableOwnCard(pools[k], target)) return pools[k];
+      }
+    }
     for (var i = 0; i < pools.length; i += 1) {
       if (pools[i] && isCardVersion(pools[i], target) && isEditableOwnCard(pools[i], target)) return pools[i];
     }

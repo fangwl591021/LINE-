@@ -13873,8 +13873,8 @@ const CardVersionResolverModule = {
     const staticRows = rows.filter(row => !this.isVideoRow(row));
     const videoRows = rows.filter(row => this.isVideoRow(row));
     const exact = version === 'video'
-      ? videoRows[0]
-      : staticRows.find(row => this.text(row.row_id).toUpperCase().startsWith(this.rowIdPrefix(version) + '_'));
+      ? (videoRows.find(row => this.text(row.row_id || row.rowId || row.id).toUpperCase().startsWith('CARD_VIDEO_')) || videoRows[0])
+      : staticRows.find(row => this.text(row.row_id || row.rowId || row.id).toUpperCase().startsWith(this.rowIdPrefix(version) + '_'));
     if (exact) {
       return { success: true, data: { rowId: this.text(exact.row_id), version, versionMatched: true, card: D1ReadModule.cardRow(exact) } };
     }
