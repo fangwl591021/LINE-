@@ -1083,7 +1083,7 @@ const LineOAChatModule = {
           AND creator_id IN (${placeholders})
         )
       )
-      AND LOWER(COALESCE(source_type, '')) IN ('self_profile', 'legacy_self_profile', 'video_profile')
+      AND LOWER(COALESCE(source_type, '')) IN ('self_profile', 'legacy_self_profile')
       AND row_id LIKE 'CARD_%'
       ORDER BY
         CASE WHEN line_id IN (${placeholders}) THEN 0 ELSE 1 END,
@@ -1112,19 +1112,6 @@ const LineOAChatModule = {
     return rows.find(row => this.text(row.row_id) === targetRowId) || null;
   },
 
-  async findMyCurrentCard(env, userId) {
-    const id = this.text(userId);
-    if (!id || !env.ACTMASTER_DB || typeof CardVersionResolverModule === 'undefined') return null;
-    try {
-      const result = await CardVersionResolverModule.resolve({ userId: id, version: 'standard' }, env, { createIfMissing: false });
-      const rowId = this.text(result?.data?.rowId);
-      if (rowId) return await this.findMySelfCardByRowId(env, id, rowId);
-    } catch (e) {
-      console.error('findMyCurrentCard resolver fallback', e);
-    }
-    return null;
-  },
-
   parseLineOaMyCardConfig(row) {
     const raw = this.text(row && (row.custom_config || row.customConfig || row['自訂名片設定']));
     if (!raw) return {};
@@ -1140,6 +1127,7 @@ const LineOAChatModule = {
     const rowId = this.text(row && row.row_id);
     const config = this.parseLineOaMyCardConfig(row);
     return rowId.startsWith('CARD_VIDEO_')
+      || config.cardType === 'video'
       || config.cardVariant === 'video_card'
       || config.videoCard === true
       || config.videoStorageKind === 'dedicated_video_card';
@@ -1148,7 +1136,7 @@ const LineOAChatModule = {
   isLineOaMyCardCandidate(row) {
     const rowId = this.text(row && row.row_id);
     const sourceType = this.text(row && row.source_type);
-    if (sourceType !== 'self_profile' && sourceType !== 'legacy_self_profile' && sourceType !== 'video_profile') return false;
+    if (sourceType !== 'self_profile' && sourceType !== 'legacy_self_profile') return false;
     if (!rowId.startsWith('CARD_')) return false;
     if (this.isLineOaVideoCard(row)) return false;
     const name = this.text(row && row.name);
@@ -1519,7 +1507,7 @@ const LineOAChatModule = {
         const cards = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
         const selectedCard = showRowId
           ? cards.find(row => this.text(row.row_id) === showRowId)
-          : (await this.findMyCurrentCard(env, userId) || cards[0]);
+          : cards[0];
         if (selectedCard) {
           messageCardRow = selectedCard;
           message = this.buildExistingMyCardFlex(selectedCard, userId, env);
@@ -1529,8 +1517,7 @@ const LineOAChatModule = {
         }
       } else {
         const profile = await this.fetchProfile(env, userId);
-        const currentCard = await this.findMyCurrentCard(env, userId);
-        const existingCards = currentCard ? [currentCard] : this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
+        const existingCards = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
         message = existingCards.length > 1
           ? this.buildMyCardSelectorFlex(existingCards, userId, env)
           : (existingCards.length === 1
@@ -3302,6 +3289,7 @@ const LineOAMyVideoKeywordModule = {
     return rowId.startsWith('CARD_VIDEO_')
       || config.cardVariant === 'video_card'
       || config.videoCard === true
+      || config.cardType === 'video'
       || config.videoStorageKind === 'dedicated_video_card';
   },
 
@@ -13671,7 +13659,7 @@ const CardVersionResolverModule = {
   versionForRow(row) {
     const rowId = this.text(row && (row.row_id || row.rowId || row.id)).toUpperCase();
     const cfg = this.parseConfig(row);
-    if (rowId.startsWith('CARD_VIDEO_') || cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || this.text(cfg.cardVariant).toLowerCase() === 'video_card') return 'video';
+    if (rowId.startsWith('CARD_VIDEO_') || cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || this.text(cfg.cardType).toLowerCase() === 'video' || this.text(cfg.cardVariant).toLowerCase() === 'video_card') return 'video';
     if (rowId.startsWith('CARD_POSTER_')) return 'poster';
     if (rowId.startsWith('CARD_SQUARE_')) return 'square';
     if (rowId.startsWith('CARD_STD_')) return 'standard';
@@ -13711,34 +13699,6 @@ const CardVersionResolverModule = {
     if (version === 'poster') return this.text(cfg.imgUrlPortrait, this.text(card.imageUrl || card.image_url || cfg.imgUrl));
     if (version === 'square') return this.text(cfg.imgUrlSquare, this.text(card.imageUrl || card.image_url || cfg.imgUrl));
     return this.text(cfg.imgUrl, this.text(card.imageUrl || card.image_url || cfg.imgUrlPortrait || cfg.imgUrlSquare));
-  },
-  cardForVersion(row, version) {
-    const card = D1ReadModule.cardRow(row);
-    const cfg = { ...this.parseConfig(row) };
-    const layout = this.layoutForVersion(version);
-    cfg.cardVersion = version;
-    cfg.layoutStyle = layout;
-    cfg.imgRatioLandscape = cfg.imgRatioLandscape || '20:13';
-    cfg.imgRatioPortrait = cfg.imgRatioPortrait || '400:600';
-    cfg.imgRatioSquare = cfg.imgRatioSquare || '1:1';
-    if (version !== 'video') {
-      delete cfg.cardType;
-      delete cfg.cardVariant;
-      delete cfg.videoCard;
-      delete cfg.videoStorageKind;
-      delete cfg.videoUrl;
-      delete cfg.videoPosterUrl;
-    }
-    const imageUrl = this.imageForVersion(card, cfg, version);
-    if (imageUrl) {
-      card.imageUrl = imageUrl;
-      card.image_url = imageUrl;
-      card['名片圖檔'] = imageUrl;
-    }
-    card.customConfig = JSON.stringify(cfg);
-    card.custom_config = card.customConfig;
-    card['自訂名片設定'] = card.customConfig;
-    return card;
   },
 
   async loadRowsForUser(userId, env) {
@@ -13831,7 +13791,7 @@ const CardVersionResolverModule = {
       ? videoRows[0]
       : staticRows.find(row => this.text(row.row_id).toUpperCase().startsWith(this.rowIdPrefix(version) + '_'));
     if (exact) {
-      return { success: true, data: { rowId: this.text(exact.row_id), version, versionMatched: true, card: this.cardForVersion(exact, version) } };
+      return { success: true, data: { rowId: this.text(exact.row_id), version, versionMatched: true, card: D1ReadModule.cardRow(exact) } };
     }
     const staticBase = staticRows[0];
     const base = version === 'video' ? videoRows[0] : (rankedRows[0] || staticBase);
@@ -13840,7 +13800,7 @@ const CardVersionResolverModule = {
       if (created) return { success: true, data: { rowId: created.rowId, version, versionMatched: true, created: true, card: created } };
     }
     if (base) {
-      return { success: true, data: { rowId: this.text(base.row_id), version, requestedVersion: version, versionMatched: false, card: this.cardForVersion(base, version) } };
+      return { success: true, data: { rowId: this.text(base.row_id), version: this.versionForRow(base), requestedVersion: version, versionMatched: false, card: D1ReadModule.cardRow(base) } };
     }
     return { success: false, error: 'Card not found' };
   }
