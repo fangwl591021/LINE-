@@ -556,16 +556,19 @@
                 <div class="flex items-center gap-1.5 bg-slate-200/50 p-1 rounded-xl">
                   <label class="flex-1 text-center cursor-pointer">
                     <input type="radio" name="my-ecard-layout" value="landscape" class="peer sr-only" checked onchange="window.changeMyLayout()">
-                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">標準(Mega)</div>
+                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">標準</div>
                   </label>
                   <label class="flex-1 text-center cursor-pointer">
                     <input type="radio" name="my-ecard-layout" value="portrait" class="peer sr-only" onchange="window.changeMyLayout()">
-                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">滿版(Giga)</div>
+                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">滿版</div>
                   </label>
                   <label class="flex-1 text-center cursor-pointer">
                     <input type="radio" name="my-ecard-layout" value="square" class="peer sr-only" onchange="window.changeMyLayout()">
-                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">正方(1:1)</div>
+                    <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">正方</div>
                   </label>
+                  <button id="btn-open-my-video-card" type="button" onclick="window.openMyCardVideoFlow(event)" disabled class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight cursor-not-allowed transition-all flex items-center justify-center gap-1">
+                    <span class="material-symbols-outlined text-[16px]">smart_display</span> 影音
+                  </button>
                 </div>
               </div>
 
@@ -578,7 +581,7 @@
                 </div>
               </div>
 
-              <div class="pt-2 border-t border-slate-200">
+              <div id="my-video-card-settings" class="pt-2 border-t border-slate-200">
                 <div class="flex items-center justify-between gap-3 mb-2">
                   <p class="font-bold text-sm text-slate-700 flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">smart_display</span> 影片版名片</p>
                   <label class="relative inline-flex items-center cursor-pointer shrink-0">
@@ -586,8 +589,12 @@
                     <div class="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:after:translate-x-4"></div>
                   </label>
                 </div>
-                <input id="my-v1-video-url" class="custom-input !py-2.5 !px-3 font-mono text-[13px] !bg-white" placeholder="影片網址，例如 https://...mp4" oninput="window.updateMyECardPreview()">
-                <p class="mt-2 text-[11px] text-slate-400 font-bold">開啟後分享名片會使用 LINE Flex video hero，封面圖片會作為縮圖。</p>
+                <div class="flex gap-2 items-center">
+                  <input id="my-v1-video-url" class="custom-input !py-2.5 !px-3 font-mono text-[13px] !bg-white" placeholder="影片網址，例如 https://...mp4" oninput="window.updateMyECardPreview()">
+                  <button type="button" onclick="document.getElementById('file-my-v1-video').click()" class="shrink-0 bg-slate-900 text-white px-3 py-2.5 rounded-xl text-sm font-bold cursor-pointer active:scale-95 transition-transform shadow-sm">上傳 MP4</button>
+                  <input type="file" id="file-my-v1-video" accept="video/mp4,.mp4" class="hidden" onchange="window.uploadVideoToR2(this, 'my-v1-video-url')">
+                </div>
+                <p class="mt-2 text-[11px] text-slate-400 font-bold">開啟後分享名片會使用 LINE Flex video hero，封面圖片會作為縮圖；上傳檔案限 MP4、200MB 內。</p>
               </div>
             </div>
 
@@ -1316,16 +1323,19 @@
               <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
                 <label class="flex-1 text-center cursor-pointer">
                   <input type="radio" name="ecard-layout" value="landscape" class="peer sr-only" checked onchange="window.changeOtherLayout()">
-                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">標準(Mega)</div>
+                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">標準</div>
                 </label>
                 <label class="flex-1 text-center cursor-pointer">
                   <input type="radio" name="ecard-layout" value="portrait" class="peer sr-only" onchange="window.changeOtherLayout()">
-                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">滿版(Giga)</div>
+                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">滿版</div>
                 </label>
                 <label class="flex-1 text-center cursor-pointer">
                   <input type="radio" name="ecard-layout" value="square" class="peer sr-only" onchange="window.changeOtherLayout()">
-                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">正方(1:1)</div>
+                  <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">正方</div>
                 </label>
+                <button id="btn-open-ecard-video-card" type="button" onclick="window.openECardVideoFlow(event)" disabled class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight cursor-not-allowed transition-all flex items-center justify-center gap-1">
+                  <span class="material-symbols-outlined text-[16px]">smart_display</span> 影音
+                </button>
               </div>
             </div>
 
@@ -1336,6 +1346,16 @@
                 <button onclick="document.getElementById('file-v1-img').click()" class="shrink-0 bg-slate-800 text-white px-3 py-2.5 rounded-xl text-sm font-bold cursor-pointer active:scale-95 transition-transform shadow-sm">上傳</button>
                 <input type="file" id="file-v1-img" accept="image/*" class="hidden" onchange="window.uploadCustomImageToR2(this, 'v1-img-url')">
               </div>
+            </div>
+
+            <div id="ecard-video-card-settings" class="hidden pt-2 border-t border-slate-100">
+              <p class="font-bold text-sm text-slate-700 flex items-center gap-1 mb-2"><span class="material-symbols-outlined text-[18px]">smart_display</span> 影片網址</p>
+              <div class="flex gap-2 items-center">
+                <input id="v1-video-url" class="custom-input !py-2.5 !px-3 font-mono text-[13px]" placeholder="影片網址，例如 https://...mp4" oninput="window.setECardVideoUrl(this.value)">
+                <button type="button" onclick="document.getElementById('file-v1-video').click()" class="shrink-0 bg-slate-900 text-white px-3 py-2.5 rounded-xl text-sm font-bold cursor-pointer active:scale-95 transition-transform shadow-sm">上傳 MP4</button>
+                <input type="file" id="file-v1-video" accept="video/mp4,.mp4" class="hidden" onchange="window.uploadVideoToR2(this, 'v1-video-url')">
+              </div>
+              <p class="mt-2 text-[11px] text-slate-400 font-bold">啟用後傳送至 LINE 會使用影片版 Flex 名片；上傳檔案限 MP4、200MB 內。</p>
             </div>
           </div>
 
@@ -2179,10 +2199,10 @@
 <!-- ocr-lab route: ocr-lab.html -->
 <script src="js/core.js?v=7.27"></script>
 <script src="js/navigation.js?v=7.9"></script>
-<script src="js/modules/cropper.js?v=7.16"></script>
+<script src="js/modules/cropper.js?v=7.17"></script>
 <script src="js/modules/cards.js?v=7.9"></script>
-<script src="js/modules/ecard.js?v=7.47"></script>
-<script src="js/modules/mycard.js?v=8.67"></script>
+<script src="js/modules/ecard.js?v=7.48"></script>
+<script src="js/modules/mycard.js?v=8.64"></script>
 <script src="js/modules/matchmake.js?v=7.9"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
@@ -2192,7 +2212,7 @@
 <script src="js/modules/settings.js?v=7.7"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
-<script src="js/auth.js?v=10.74"></script>
+<script src="js/auth.js?v=10.71"></script>
 
 </body>
 </html>

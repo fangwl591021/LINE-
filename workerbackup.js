@@ -298,7 +298,6 @@ const SecurityModule = {
       'repairLineOAFollowPointOnboarding',
       'repairPointWalletSearchIndex',
       'diagnosePointSync',
-      'listRecentR2Objects',
       'listPointSyncJobs',
       'enqueuePointSyncJob',
       'processPointSyncJobs',
@@ -655,6 +654,54 @@ const FeatureFlagModule = {
 };
 
 const StorageModule = {
+  text(value = '', fallback = '') {
+    const text = String(value ?? '').trim();
+    return text || fallback;
+  },
+
+  safeFilePart(value = '', fallback = 'media') {
+    return this.text(value, fallback)
+      .replace(/[\\/:*?"<>|#%{}^~[\]`]+/g, '_')
+      .replace(/\s+/g, '_')
+      .slice(0, 90) || fallback;
+  },
+
+  publicBaseUrl(env) {
+    return (env.R2_PUBLIC_URL || env.R2_WORKER_URL || 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev').replace(/\/$/, '');
+  },
+
+  async uploadMediaRequest(request, env) {
+    if (!env.IMG_BUCKET) return { success: false, error: 'IMG_BUCKET_MISSING' };
+    const url = new URL(request.url);
+    const mediaType = this.text(url.searchParams.get('type'), 'video').toLowerCase();
+    const rawFilename = this.text(url.searchParams.get('filename'), 'video.mp4');
+    const contentType = this.text(request.headers.get('content-type'), 'application/octet-stream').toLowerCase();
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    const maxBytes = mediaType === 'video' ? 200 * 1024 * 1024 : 20 * 1024 * 1024;
+    if (contentLength && contentLength > maxBytes) return { success: false, error: '檔案超過限制：影片需小於 200MB' };
+    if (mediaType === 'video') {
+      const isMp4 = contentType.includes('video/mp4') || /\.mp4$/i.test(rawFilename);
+      if (!isMp4) return { success: false, error: '目前影音名片僅支援 MP4 檔案' };
+    }
+    if (!request.body) return { success: false, error: 'MISSING_FILE' };
+    const ext = mediaType === 'video' ? 'mp4' : (contentType.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'bin';
+    const filename = this.safeFilePart(rawFilename.replace(/\.[^.]+$/, ''), mediaType);
+    const key = `card-media/${mediaType}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${filename}.${ext}`;
+    await env.IMG_BUCKET.put(key, request.body, {
+      httpMetadata: { contentType: mediaType === 'video' ? 'video/mp4' : contentType }
+    });
+    return {
+      success: true,
+      data: {
+        url: `${this.publicBaseUrl(env)}/${key}`,
+        key,
+        filename: `${filename}.${ext}`,
+        contentType: mediaType === 'video' ? 'video/mp4' : contentType,
+        size: contentLength || 0
+      }
+    };
+  },
+
   async upload(base64Image, env) {
     try {
       if (env.IMG_BUCKET) {
@@ -697,25 +744,7 @@ const StorageModule = {
       console.error("[Storage Error]", e);
       return '';
     }
-  },
-  async listRecentObjects(payload, env) {
-    if (!env.IMG_BUCKET || typeof env.IMG_BUCKET.list !== 'function') return { success: false, error: 'IMG_BUCKET_LIST_MISSING' };
-    const prefix = String(payload && payload.prefix || 'card_').trim() || 'card_';
-    const limit = Math.min(Math.max(parseInt(payload && payload.limit, 10) || 120, 1), 1000);
-    const cursor = String(payload && payload.cursor || '').trim() || undefined;
-    const listed = await env.IMG_BUCKET.list({ prefix, limit: Math.min(limit, 1000), cursor });
-    const baseUrl = (env.R2_PUBLIC_URL || env.R2_WORKER_URL || 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev').replace(/\/$/, '');
-    const objects = (listed.objects || []).map(obj => ({
-      key: obj.key,
-      url: baseUrl + '/' + obj.key,
-      size: obj.size || 0,
-      uploaded: obj.uploaded ? new Date(obj.uploaded).toISOString() : '',
-      etag: obj.etag || obj.httpEtag || '',
-      contentType: obj.httpMetadata && obj.httpMetadata.contentType || ''
-    })).sort((a, b) => String(b.key).localeCompare(String(a.key)));
-    return { success: true, data: { objects, truncated: !!listed.truncated, cursor: listed.cursor || '', prefix, limit } };
-  },
-
+  }
 };
 
 // ==================== 模組 3: AI 服務 (AI Module) ====================
@@ -1083,7 +1112,7 @@ const LineOAChatModule = {
           AND creator_id IN (${placeholders})
         )
       )
-      AND LOWER(COALESCE(source_type, '')) IN ('self_profile', 'legacy_self_profile')
+      AND LOWER(COALESCE(source_type, '')) = 'self_profile'
       AND row_id LIKE 'CARD_%'
       ORDER BY
         CASE WHEN line_id IN (${placeholders}) THEN 0 ELSE 1 END,
@@ -1136,7 +1165,7 @@ const LineOAChatModule = {
   isLineOaMyCardCandidate(row) {
     const rowId = this.text(row && row.row_id);
     const sourceType = this.text(row && row.source_type);
-    if (sourceType !== 'self_profile' && sourceType !== 'legacy_self_profile') return false;
+    if (sourceType !== 'self_profile') return false;
     if (!rowId.startsWith('CARD_')) return false;
     if (this.isLineOaVideoCard(row)) return false;
     const name = this.text(row && row.name);
@@ -8942,55 +8971,13 @@ const D1ReadModule = {
   async getPublicCardById(payload, env) {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
-    const rowId = this.text(payload.rowId, this.text(payload.cardId, this.text(payload.id, this.text(payload.webCardId, payload.shareCardId))));
+    const rowId = this.text(payload.rowId || payload.cardId || payload.id || payload.webCardId || payload.shareCardId);
     if (!rowId) return { success: false, error: 'Missing card id' };
     const row = await this.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
     if (!row) return { success: false, error: '找不到這張名片' };
-
-    const ownerIds = [
-      this.text(row.line_id),
-      this.text(row.owner_user_id),
-      this.text(row.profile_user_id),
-      this.text(row.creator_id)
-    ].filter(Boolean);
-    const sourceType = this.text(row.source_type).toLowerCase();
-    const sourceTypes = ['self_profile', 'legacy_self_profile', 'video_profile'];
-    const canResolveCurrent = ownerIds.length > 0 && sourceTypes.indexOf(sourceType) >= 0;
-    if (canResolveCurrent) {
-      const placeholders = ownerIds.map(() => '?').join(',');
-      const sql = [
-        'SELECT * FROM card_contacts',
-        'WHERE (',
-        '  line_id IN (' + placeholders + ')',
-        '  OR owner_user_id IN (' + placeholders + ')',
-        '  OR profile_user_id IN (' + placeholders + ')',
-        '  OR creator_id IN (' + placeholders + ')',
-        ')',
-        "AND LOWER(COALESCE(source_type,'')) IN ('video_profile','self_profile','legacy_self_profile')",
-        "AND TRIM(COALESCE(image_url,'')) <> ''",
-        'ORDER BY',
-        "  CASE LOWER(COALESCE(source_type,''))",
-        "    WHEN 'video_profile' THEN 0",
-        "    WHEN 'self_profile' THEN 1",
-        "    WHEN 'legacy_self_profile' THEN 2",
-        '    ELSE 9',
-        '  END',
-        "  , CASE WHEN TRIM(COALESCE(custom_config,'')) NOT IN ('', '{}', '[]') THEN 0 ELSE 1 END",
-        '  , COALESCE(updated_at, created_at) DESC',
-        '  , row_id DESC',
-        'LIMIT 1'
-      ].join(' ');
-      const current = await this.first(env, sql, [...ownerIds, ...ownerIds, ...ownerIds, ...ownerIds]).catch(() => null);
-      if (current) {
-        const card = this.cardRow(current);
-        card.requestedRowId = rowId;
-        card.resolvedFromRowId = rowId;
-        return { success: true, data: card };
-      }
-    }
-
     return { success: true, data: this.cardRow(row) };
   },
+
   crmContactRow(row) {
     if (!row) return null;
     const card = this.cardRow(row);
@@ -13671,23 +13658,6 @@ const CardVersionResolverModule = {
     return this.versionForRow(row) === 'video';
   },
 
-  rowLookupScore(row) {
-    if (!row) return -999;
-    const sourceType = this.text(row.source_type).toLowerCase();
-    if (sourceType === 'referral_placeholder' || sourceType === 'private_import') return -999;
-    const cfg = this.parseConfig(row);
-    const rawConfig = this.text(row.custom_config || row.customConfig || row['自訂名片設定']);
-    const imageUrl = this.text(row.image_url || row.imageUrl || cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare);
-    let score = 0;
-    if (sourceType === 'video_profile') score += 45;
-    if (sourceType === 'self_profile' || sourceType === 'legacy_self_profile' || sourceType === '') score += 20;
-    if (rawConfig && rawConfig !== '{}' && rawConfig !== '[]') score += 30;
-    if (cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || cfg.desc || (Array.isArray(cfg.buttons) && cfg.buttons.length)) score += 30;
-    if (imageUrl && !/images\.unsplash\.com|placehold\.co/i.test(imageUrl)) score += 20;
-    if (this.text(row.name)) score += 5;
-    return score;
-  },
-
   rowIdPrefix(version) {
     if (version === 'video') return 'CARD_VIDEO';
     if (version === 'poster') return 'CARD_POSTER';
@@ -13710,7 +13680,7 @@ const CardVersionResolverModule = {
         line_id = ? OR profile_user_id = ? OR owner_user_id = ?
       )
       AND (
-        LOWER(COALESCE(source_type,'')) IN ('self_profile', 'legacy_self_profile', 'video_profile')
+        LOWER(COALESCE(source_type,'')) IN ('self_profile', 'video_profile')
         OR (LOWER(COALESCE(source_type,'')) = '' AND (line_id = ? OR profile_user_id = ?))
       )
       ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
@@ -13784,9 +13754,8 @@ const CardVersionResolverModule = {
     if (!userId) return { success: false, error: 'Missing userId' };
     if (!env.ACTMASTER_DB) return { success: false, error: 'D1 unavailable' };
     const rows = await this.loadRowsForUser(userId, env);
-    const rankedRows = rows.slice().sort((a, b) => this.rowLookupScore(b) - this.rowLookupScore(a));
-    const staticRows = rankedRows.filter(row => !this.isVideoRow(row));
-    const videoRows = rankedRows.filter(row => this.isVideoRow(row));
+    const staticRows = rows.filter(row => !this.isVideoRow(row));
+    const videoRows = rows.filter(row => this.isVideoRow(row));
     const exact = version === 'video'
       ? videoRows[0]
       : staticRows.find(row => this.text(row.row_id).toUpperCase().startsWith(this.rowIdPrefix(version) + '_'));
@@ -13794,7 +13763,7 @@ const CardVersionResolverModule = {
       return { success: true, data: { rowId: this.text(exact.row_id), version, versionMatched: true, card: D1ReadModule.cardRow(exact) } };
     }
     const staticBase = staticRows[0];
-    const base = version === 'video' ? videoRows[0] : (rankedRows[0] || staticBase);
+    const base = version === 'video' ? videoRows[0] : staticBase;
     if (options.createIfMissing || payload.createIfMissing === true || payload.createIfMissing === 'true') {
       const created = base ? await this.createVersionFromBase(base, userId, version, env) : null;
       if (created) return { success: true, data: { rowId: created.rowId, version, versionMatched: true, created: true, card: created } };
@@ -15454,7 +15423,6 @@ async function dispatchAction(action, payload, request, env) {
     case 'd1BackfillFromGas':       return await D1BackfillModule.backfillFromGas(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
-    case 'listRecentR2Objects':   return await StorageModule.listRecentObjects(payload || {}, env);
     case 'deployRichMenu':         return await LineOAModule.deployRichMenu(payload, env);
     case 'listLineOAKeywordRules': return await LineOAKeywordRuleModule.list(payload, env);
     case 'saveLineOAKeywordRule':  return await LineOAKeywordRuleModule.save(payload, env);
@@ -15535,6 +15503,9 @@ export default {
       }
       if (url.pathname === '/newebpay/notify') {
         return await PaymentModule.handleNewebpayNotify(request, env, ctx || { waitUntil: promise => promise });
+      }
+      if (request.method === 'POST' && url.pathname === '/api/upload-media') {
+        return Utils.jsonResponse(await StorageModule.uploadMediaRequest(request, env));
       }
       if (request.method !== 'POST') return Utils.jsonResponse({ status: "ACTMASTER API v6.0 Running with Edge Security (Compatibility Mode)" });
       const body = await request.json();

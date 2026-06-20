@@ -229,6 +229,89 @@ function resolveECardButtonUrl(kind, found, autoUrl) {
   return existing;
 }
 
+window.currentEcardVideoEnabled = window.currentEcardVideoEnabled || false;
+window.currentEcardVideoUrl = window.currentEcardVideoUrl || '';
+
+function getECardRoleText() {
+  const profile = window.currentUserProfile || {};
+  const current = window.currentUser || {};
+  const candidates = [
+    window.userRole,
+    window.currentUserRole,
+    profile.role,
+    profile.userRole,
+    profile.accountRole,
+    profile.memberRole,
+    profile.type,
+    profile.identity,
+    profile.permission,
+    profile.roleLabel,
+    profile.roleName,
+    profile.title,
+    current.role,
+    current.userRole,
+    current.accountRole,
+    current.memberRole,
+    current.type,
+    current.identity,
+    current.permission,
+    current.roleLabel,
+    current.roleName,
+    current.title,
+    profile.isTenant ? 'tenant' : '',
+    current.isTenant ? 'tenant' : '',
+    profile.isStoreManager ? 'store manager' : '',
+    current.isStoreManager ? 'store manager' : '',
+    profile.isStoreOwner ? 'store owner' : '',
+    current.isStoreOwner ? 'store owner' : ''
+  ];
+  return candidates.filter(value => value !== null && value !== undefined && value !== '').join(' ').toLowerCase();
+}
+
+function canUseECardVideoFlow() {
+  const text = getECardRoleText();
+  return !!text && /admin|administrator|superadmin|tenant|store|shop|manager|merchant|vendor|dealer|owner|總管|管理員|租戶|店長|店家|商家|經銷商/.test(text);
+}
+
+window.updateECardVideoButtonState = function() {
+  const allowed = canUseECardVideoFlow();
+  const btn = document.getElementById('btn-open-ecard-video-card');
+  if (btn) {
+    btn.disabled = !allowed;
+    btn.setAttribute('aria-disabled', allowed ? 'false' : 'true');
+    btn.title = allowed ? '開啟影音名片' : '影音名片僅 admin 或租戶店長可使用';
+    btn.className = allowed
+      ? 'flex-1 py-2 rounded-lg bg-white text-blue-600 shadow-sm font-bold text-[12px] tracking-tight flex items-center justify-center gap-1 active:scale-95 transition-all'
+      : 'flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight flex items-center justify-center gap-1 cursor-not-allowed opacity-70 transition-all';
+  }
+  const section = document.getElementById('ecard-video-card-settings');
+  if (section) {
+    section.classList.toggle('hidden', !(allowed && window.currentEcardVideoEnabled));
+    section.classList.toggle('opacity-45', !allowed);
+  }
+  const input = document.getElementById('v1-video-url');
+  if (input) input.disabled = !allowed;
+};
+
+window.openECardVideoFlow = function(evt) {
+  if (evt && evt.preventDefault) evt.preventDefault();
+  window.updateECardVideoButtonState();
+  if (!canUseECardVideoFlow()) {
+    if (window.showToast) window.showToast('影音名片僅 admin 或租戶店長可使用。', true);
+    return;
+  }
+  window.currentEcardVideoEnabled = true;
+  window.updateECardVideoButtonState();
+  const input = document.getElementById('v1-video-url');
+  if (input) input.focus();
+  if (typeof window.updateECardPreview === 'function') window.updateECardPreview();
+};
+
+window.setECardVideoUrl = function(value) {
+  window.currentEcardVideoUrl = String(value || '').trim();
+  window.currentEcardVideoEnabled = !!window.currentEcardVideoUrl || window.currentEcardVideoEnabled;
+  if (typeof window.updateECardPreview === 'function') window.updateECardPreview();
+};
 window.syncECardButtonsFromFields = function(options = {}) {
   if (!window.currentCard && !options.card) return window.currentEcardButtons || [];
   window.currentEcardButtons = buildAutoECardButtons(options.card || window.currentCard, window.currentEcardButtons);
@@ -254,6 +337,8 @@ window.buildECardConfigFromFields = function() {
     desc: document.getElementById('edit-服務項目')?.value || '',
     descAlign: window.currentDescAlign || 'center',
     descColor: document.getElementById('edit-desc-color')?.value || '#666666',
+    cardType: (window.currentEcardVideoEnabled && (document.getElementById('v1-video-url')?.value || window.currentEcardVideoUrl)) ? 'video' : 'v1',
+    videoUrl: (window.currentEcardVideoEnabled && canUseECardVideoFlow()) ? String(document.getElementById('v1-video-url')?.value || window.currentEcardVideoUrl || '').trim() : '',
     buttons: window.currentEcardButtons
   };
 };
@@ -395,9 +480,7 @@ function buildECardShareHeader(badgeUrl) {
 
 function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
-  const legacySourceType = String(card && (card.sourceType || card.source_type || card['名片來源']) || '').trim().toLowerCase();
-  const preferPrimaryImage = config.preferPrimaryImage === true || legacySourceType === 'legacy_self_profile' || legacySourceType === 'self_profile';
-  const rawImgUrl = preferPrimaryImage ? (config.imgUrl || card['名片圖檔'] || config.imgUrlPortrait || config.imgUrlSquare) : (
+  const rawImgUrl = (
     layoutStyle === 'portrait' ? (config.imgUrlPortrait || config.imgUrl || card['名片圖檔']) :
     layoutStyle === 'square' ? (config.imgUrlSquare || config.imgUrl || card['名片圖檔']) :
     (config.imgUrl || config.imgUrlLandscape || card['名片圖檔'])
@@ -466,15 +549,11 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   config = Object.assign({}, savedConfig, config || {});
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
   const cardImageUrl = readECardCardValue(card, ['imageUrl', 'image_url', 'cardImage', 'card_image', '\u540d\u7247\u5716\u6a94']);
-  const sourceType = String(readECardCardValue(card, ['sourceType', 'source_type', '\u540d\u7247\u4f86\u6e90']) || '').trim().toLowerCase();
-  const preferPrimaryImage = config.preferPrimaryImage === true || sourceType === 'legacy_self_profile' || sourceType === 'self_profile';
-  const rawImgUrl = preferPrimaryImage
-    ? (config.imgUrl || cardImageUrl || config.imgUrlPortrait || config.imgUrlSquare)
-    : layoutStyle === 'portrait'
-      ? (config.imgUrlPortrait || config.imgUrl || cardImageUrl)
-      : (layoutStyle === 'square'
-        ? (config.imgUrlSquare || config.imgUrl || cardImageUrl)
-        : (config.imgUrl || config.imgUrlLandscape || cardImageUrl));
+  const rawImgUrl = layoutStyle === 'portrait'
+    ? (config.imgUrlPortrait || config.imgUrl || cardImageUrl)
+    : (layoutStyle === 'square'
+      ? (config.imgUrlSquare || config.imgUrl || cardImageUrl)
+      : (config.imgUrl || config.imgUrlLandscape || cardImageUrl));
   const imgUrl = cleanECardFlexImageUrl(rawImgUrl) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   const aspectRatio = layoutStyle === 'portrait'
     ? (config.imgRatioPortrait || '400:600')
@@ -621,12 +700,24 @@ window.initECardSettings = function(card) {
     };
   }
 
-  // 4. 按鈕列表
+  // 4. 影片設定
+  window.currentEcardVideoUrl = String(cfg.videoUrl || cfg.video_url || cfg.heroVideoUrl || '').trim();
+  window.currentEcardVideoEnabled = !!(window.currentEcardVideoUrl || cfg.cardType === 'video');
+  const videoInput = document.getElementById('v1-video-url');
+  if (videoInput) videoInput.value = window.currentEcardVideoUrl;
+  if (typeof window.updateECardVideoButtonState === 'function') window.updateECardVideoButtonState();
+
+  // 5. 按鈕列表
   window.currentEcardButtons = buildAutoECardButtons(card, Array.isArray(cfg.buttons) ? cfg.buttons : []);
   window.renderV1Buttons();
 
-  // 5. 強制刷新預覽畫面
+  // 6. 強制刷新預覽畫面
   window.updateECardPreview();
+  if (typeof window.updateECardVideoButtonState === 'function') {
+    window.updateECardVideoButtonState();
+    setTimeout(window.updateECardVideoButtonState, 300);
+    setTimeout(window.updateECardVideoButtonState, 1000);
+  }
 };
 
 /**

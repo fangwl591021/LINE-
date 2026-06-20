@@ -342,15 +342,12 @@ function buildCardShareConfig(card) {
       break;
     } catch (e) {}
   }
-  const sourceType = String(card?.sourceType || card?.source_type || card?.['名片來源'] || '').trim().toLowerCase();
-  const preferPrimaryImage = sourceType === 'legacy_self_profile' || sourceType === 'self_profile';
   return {
     ...cfg,
     layoutStyle: cfg.layoutStyle || cfg.layout || 'landscape',
-    preferPrimaryImage,
     imgUrl: cfg.imgUrl || card?.['名片圖檔'] || '',
-    imgUrlPortrait: preferPrimaryImage ? '' : (cfg.imgUrlPortrait || ''),
-    imgUrlSquare: preferPrimaryImage ? '' : (cfg.imgUrlSquare || ''),
+    imgUrlPortrait: cfg.imgUrlPortrait || '',
+    imgUrlSquare: cfg.imgUrlSquare || '',
     imgRatioLandscape: cfg.imgRatioLandscape || '20:13',
     imgRatioPortrait: cfg.imgRatioPortrait || '2:3',
     imgRatioSquare: cfg.imgRatioSquare || '1:1',
@@ -411,47 +408,6 @@ function appendCardAutoShareMode(url) {
   } catch (e) {
     return url + (url.includes('?') ? '&' : '?') + 'share=1';
   }
-}
-
-function renderSharedReadOnlyCard(card, refId, netId) {
-  const container = document.getElementById('ro-card-container');
-  const modal = document.getElementById('readonly-card-modal');
-  if (!container || !modal || !card || typeof window.getPreviewHTML !== 'function') return false;
-  const cardId = String(card.rowId || card.cardRowId || card.id || '').trim();
-  const cfg = buildCardShareConfig(card);
-  const cfgParams = {
-    imgUrl: cfg.imgUrl || card['名片圖檔'] || '',
-    imgRatio: cfg.imgRatioLandscape || '20:13',
-    buttons: cfg.buttons || [],
-    descAlign: cfg.descAlign || 'center',
-    descColor: cfg.descColor || '#666666',
-    layoutStyle: cfg.layoutStyle || 'landscape'
-  };
-  const shareUrl = appendCardAutoShareMode(buildPlainCardViewUrl(card, refId || '', netId || 'admin'));
-  container.innerHTML = window.getPreviewHTML(card, 'ro', cfgParams);
-  const shell = document.createElement('div');
-  shell.className = 'overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm';
-  const header = document.createElement('div');
-  header.className = 'flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-white';
-  const likeBtn = document.createElement('button');
-  likeBtn.type = 'button';
-  likeBtn.setAttribute('data-social-like-button', '');
-  likeBtn.className = 'inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-[12px] font-black text-slate-600 active:scale-95 transition-transform';
-  likeBtn.innerHTML = '<span class=material-symbols-outlined>thumb_up</span><span data-social-like-count>0</span>';
-  const shareLink = document.createElement('a');
-  shareLink.href = shareUrl;
-  shareLink.className = 'rounded-full bg-red-500 px-3.5 py-1 text-[12px] font-black text-white shadow-sm';
-  shareLink.textContent = '分享';
-  header.appendChild(likeBtn);
-  header.appendChild(shareLink);
-  while (container.firstChild) shell.appendChild(container.firstChild);
-  shell.insertBefore(header, shell.firstChild);
-  container.appendChild(shell);
-  modal.classList.remove('hidden');
-  if (cardId && typeof window.initSocialLikeWidget === 'function') {
-    setTimeout(() => window.initSocialLikeWidget(cardId, netId || 'admin'), 0);
-  }
-  return true;
 }
 
 function routeSharedCardBadgeToPicker(flexMsg, shareUrl) {
@@ -729,13 +685,11 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
       layout === 'square' ? (cfg.imgRatioSquare || '1:1') :
       (cfg.imgRatioLandscape || '20:13')
     ).replace(':', '/');
-    const imgUrl = cfg.preferPrimaryImage
-      ? (cfg.imgUrl || card['名片圖檔'] || cfg.imgUrlPortrait || cfg.imgUrlSquare || '')
-      : layout === 'portrait'
-        ? (cfg.imgUrlPortrait || cfg.imgUrl || card['名片圖檔'] || '')
-        : layout === 'square'
-          ? (cfg.imgUrlSquare || cfg.imgUrl || card['名片圖檔'] || '')
-          : (cfg.imgUrl || card['名片圖檔'] || '');
+    const imgUrl = layout === 'portrait'
+      ? (cfg.imgUrlPortrait || cfg.imgUrl || card['名片圖檔'] || '')
+      : layout === 'square'
+        ? (cfg.imgUrlSquare || cfg.imgUrl || card['名片圖檔'] || '')
+        : (cfg.imgUrl || card['名片圖檔'] || '');
     const name = cardTextValue(card, ['姓名', 'name', 'displayName'], '數位名片');
     const company = cardTextValue(card, ['公司名稱', 'companyName', 'company'], '');
     const title = cardTextValue(card, ['職稱', 'title', 'industry'], '');
@@ -2761,14 +2715,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (shareCardId) {
         try {
-          const sc = await loadCardByPublicId(shareCardId);
-          if (sc) {
-            if (shouldAutoShareCard) {
-              await window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId });
-              return;
+          const cData = await window.fetchAPI('getCardContacts', { networkId: 'admin', role: 'admin', userId: '' }, true);
+          if (cData && Array.isArray(cData)) {
+            const sc = cData.find(c => String(c.rowId) === String(shareCardId));
+            if (sc) {
+              if (shouldAutoShareCard) {
+                await window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId });
+                return;
+              }
+              window.roCardData = sc;
+              let cfg = {};
+              try { cfg = JSON.parse(sc['自訂名片設定'] || '{}'); } catch(e){}
+              let cfgParams = {
+                imgUrl: cfg.imgUrl || sc['名片圖檔'] || '',
+                imgRatio: cfg.imgRatioLandscape || '20:13',
+                buttons: cfg.buttons || [],
+                descAlign: cfg.descAlign || 'center',
+                descColor: cfg.descColor || '#666666',
+                layoutStyle: cfg.layoutStyle || 'landscape'
+              };
+              document.getElementById('ro-card-container').innerHTML = window.getPreviewHTML(sc, 'ro', cfgParams);
+              document.getElementById('readonly-card-modal').classList.remove('hidden');
             }
-            window.roCardData = sc;
-            renderSharedReadOnlyCard(sc, refId, netId);
           }
         } catch(e){}
       }
@@ -2796,23 +2764,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       dataLoad.then(() => {
       if (shareCardId) {
-        loadCardByPublicId(shareCardId).then(sc => {
-          if (sc) {
-            if (shouldAutoShareCard) {
-              window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId })
-                .catch(e => window.showToast?.(e.message || '分享失敗，請稍後再試', true));
-            } else {
-              window.roCardData = sc;
-              if (!renderSharedReadOnlyCard(sc, refId, netId) && typeof window.openCardDetail === 'function') window.openCardDetail(sc);
-            }
+        const sc = window.allCards.find(c => String(c.rowId) === String(shareCardId));
+        if (sc) {
+          if (shouldAutoShareCard) {
+            window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId })
+              .catch(e => window.showToast?.(e.message || '分享失敗，請稍後再試', true));
           } else {
-            window.showToast('找不到該名片', true);
-            window.goPage('home');
+            window.openCardDetail(sc);
           }
-        }).catch(e => {
-          window.showToast?.(e.message || '找不到該名片', true);
+        } else {
+          window.showToast('找不到該名片', true);
           window.goPage('home');
-        });
+        }
       } else if (claimCardId) {
         window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true).then(cardForClaim => {
           if (cardForClaim && cardForClaim.error) throw new Error(cardForClaim.error);

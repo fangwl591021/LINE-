@@ -996,3 +996,52 @@ window.confirmActiveCrop = function() {
     alert('系統找不到對應的預覽區塊 (' + modeId + ')，請重新整理');
   }
 };
+window.uploadVideoToR2 = async function(inputEl, targetInputId) {
+  const file = inputEl && inputEl.files ? inputEl.files[0] : null;
+  if (!file) return;
+  inputEl.value = '';
+
+  const maxBytes = 200 * 1024 * 1024;
+  const isMp4 = file.type === 'video/mp4' || /\.mp4$/i.test(file.name || '');
+  if (!isMp4) return window.showToast && window.showToast('目前僅支援 MP4 影片檔', true);
+  if (file.size > maxBytes) return window.showToast && window.showToast('影片檔案需小於 200MB', true);
+
+  const targetInput = document.getElementById(targetInputId);
+  if (!targetInput) return window.showToast && window.showToast('找不到影片網址欄位', true);
+  const originalVal = targetInput.value;
+  const workerUrl = (window.Config && window.Config.WORKER_URL) || window.WORKER_URL || '';
+  if (!workerUrl) return window.showToast && window.showToast('找不到 Worker 上傳端點', true);
+
+  targetInput.value = '影片上傳中...';
+  targetInput.disabled = true;
+  window.showToast && window.showToast('影片上傳中，請勿關閉視窗...');
+
+  try {
+    const uploadUrl = workerUrl.replace(/\/$/, '') + '/api/upload-media?type=video&filename=' + encodeURIComponent(file.name || 'video.mp4');
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'video/mp4' },
+      body: file
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || data.success === false) {
+      throw new Error((data && data.error) || '影片上傳失敗');
+    }
+    const result = data.data || data;
+    if (!result.url) throw new Error('影片上傳失敗：未取得網址');
+    targetInput.value = result.url;
+    if (targetInputId === 'v1-video-url' && typeof window.setECardVideoUrl === 'function') {
+      window.setECardVideoUrl(result.url);
+    } else if (targetInputId === 'my-v1-video-url') {
+      const toggle = document.getElementById('my-v1-video-enabled');
+      if (toggle) toggle.checked = true;
+      if (typeof window.updateMyECardPreview === 'function') window.updateMyECardPreview();
+    }
+    window.showToast && window.showToast('影片已上傳完成');
+  } catch (err) {
+    targetInput.value = originalVal;
+    window.showToast && window.showToast(err && err.message ? err.message : '影片上傳失敗', true);
+  } finally {
+    targetInput.disabled = false;
+  }
+};

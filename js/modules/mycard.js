@@ -31,6 +31,7 @@
   var wysiwygState = { cfg: null, field: '', buttonIndex: -1 };
   var myVideoDraftApplied = false;
   var myVideoDraftCache = null;
+  var myVideoModeRequested = false;
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
   var templateCoverUrl = 'assets/rental-template-cover.png';
   var templateAddressUrl = 'https://www.google.com/maps';
@@ -189,18 +190,18 @@
     var sourceType = getCardSourceType(card);
     if (sourceType === 'private_import' || sourceType === 'referral_placeholder') return false;
     var lineId = normalizeId(card.lineId || card.line_id || card['LINE ID']);
-    var ownerId = normalizeId(card.ownerUserId || card.owner_user_id || card.ownerId || card.creatorId || card.creator_id);
+    var ownerId = normalizeId(card.ownerUserId || card.owner_user_id || card.ownerId);
     var profileId = normalizeId(card.profileUserId || card.profile_user_id || card.profileId);
     var creatorId = normalizeId(card.creatorId || card.creator_id);
     var belongsToUser = lineId === userId || ownerId === userId || profileId === userId;
-    if (!belongsToUser && !lineId && !ownerId && !profileId && (sourceType === 'self_profile' || sourceType === 'legacy_self_profile')) {
+    if (!belongsToUser && !lineId && !ownerId && !profileId && sourceType === 'self_profile') {
       belongsToUser = creatorId === userId;
     }
     if (!belongsToUser) return false;
     var targetVersion = normalizeCardVersion(version || getTargetCardVersion());
     if (targetVersion === 'video') return sourceType === 'video_profile' || isCardVersion(card, 'video');
-    if (sourceType === 'video_profile') return true;
-    return sourceType === 'self_profile' || sourceType === 'legacy_self_profile' || sourceType === '';
+    if (sourceType === 'video_profile') return false;
+    return sourceType === 'self_profile' || sourceType === '';
   }
 
   function parseMyCardSocials(raw) {
@@ -362,6 +363,7 @@
   }
 
   function isMyCardVideoContext() {
+    if (myVideoModeRequested) return true;
     try {
       var params = new URLSearchParams(window.location.search || '');
       if (params.get('videoCard') === '1' || params.get('video') === '1') return true;
@@ -378,7 +380,7 @@
     if (!card) return '';
     var rowId = String(getCardRowId(card) || '').toUpperCase();
     var cfg = parseCardConfig(card);
-    if (rowId.indexOf('CARD_VIDEO_') === 0 || cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || String(cfg.cardVariant || '').toLowerCase() === 'video_card') return 'video';
+    if (rowId.indexOf('CARD_VIDEO_') === 0 || cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || String(cfg.cardType || '').toLowerCase() === 'video' || String(cfg.cardVariant || '').toLowerCase() === 'video_card') return 'video';
     if (rowId.indexOf('CARD_POSTER_') === 0) return 'poster';
     if (rowId.indexOf('CARD_SQUARE_') === 0) return 'square';
     if (rowId.indexOf('CARD_STD_') === 0) return 'standard';
@@ -390,38 +392,18 @@
     return cardVersionFromCard(card) === normalizeCardVersion(version);
   }
 
-  function myCardLookupScore(card) {
-    if (!card) return -999;
-    var sourceType = getCardSourceType(card);
-    if (sourceType === 'private_import' || sourceType === 'referral_placeholder') return -999;
-    var cfg = parseCardConfig(card);
-    var rawConfig = String(card.customConfig || card.custom_config || card['自訂名片設定'] || '').trim();
-    var imageUrl = String(card.imageUrl || card.image_url || card['名片圖檔'] || cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || '').trim();
-    var score = 0;
-    if (sourceType === 'video_profile') score += 45;
-    if (sourceType === 'self_profile' || sourceType === 'legacy_self_profile' || sourceType === '') score += 20;
-    if (rawConfig && rawConfig !== '{}' && rawConfig !== '[]') score += 30;
-    if (cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || cfg.desc || (Array.isArray(cfg.buttons) && cfg.buttons.length)) score += 30;
-    if (imageUrl && !/images\.unsplash\.com|placehold\.co/i.test(imageUrl)) score += 20;
-    if (String(card.name || card['姓名'] || '').trim()) score += 5;
-    return score;
-  }
-
   function findLoadedMyCardByVersion(version) {
     var target = normalizeCardVersion(version);
     var pools = [];
     if (window.currentUserCard) pools.push(window.currentUserCard);
     if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
     if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
-    var candidates = pools
-      .filter(function(card) { return card && isEditableOwnCard(card, target); })
-      .sort(function(a, b) { return myCardLookupScore(b) - myCardLookupScore(a); });
-    for (var i = 0; i < candidates.length; i += 1) {
-      if (isCardVersion(candidates[i], target)) return candidates[i];
+    for (var i = 0; i < pools.length; i += 1) {
+      if (pools[i] && isCardVersion(pools[i], target) && isEditableOwnCard(pools[i], target)) return pools[i];
     }
     if (target !== 'video') {
-      for (var j = 0; j < candidates.length; j += 1) {
-        if (cardVersionFromCard(candidates[j]) !== 'video') return candidates[j];
+      for (var j = 0; j < pools.length; j += 1) {
+        if (pools[j] && cardVersionFromCard(pools[j]) !== 'video' && isEditableOwnCard(pools[j], target)) return pools[j];
       }
     }
     return null;
@@ -500,6 +482,70 @@
     return {};
   }
 
+  function getMyCardRoleText() {
+    var profile = (moduleAuth && typeof moduleAuth.getUserProfile === 'function' && moduleAuth.getUserProfile()) || window.currentUserProfile || {};
+    var current = window.currentUser || {};
+    var candidates = [
+      window.userRole,
+      window.currentUserRole,
+      profile.role,
+      profile.userRole,
+      profile.accountRole,
+      profile.memberRole,
+      profile.type,
+      profile.identity,
+      profile.permission,
+      profile.roleLabel,
+      profile.roleName,
+      profile.title,
+      current.role,
+      current.userRole,
+      current.accountRole,
+      current.memberRole,
+      current.type,
+      current.identity,
+      current.permission,
+      current.roleLabel,
+      current.roleName,
+      current.title,
+      profile.isTenant ? 'tenant' : '',
+      current.isTenant ? 'tenant' : '',
+      profile.isStoreManager ? 'store manager' : '',
+      current.isStoreManager ? 'store manager' : '',
+      profile.isStoreOwner ? 'store owner' : '',
+      current.isStoreOwner ? 'store owner' : ''
+    ];
+    return candidates.filter(function(value) { return value !== null && value !== undefined && value !== ''; }).join(' ').toLowerCase();
+  }
+
+  function canUseMyCardVideoFlow() {
+    var text = getMyCardRoleText();
+    if (!text) return false;
+    return /admin|administrator|superadmin|tenant|store|shop|manager|merchant|vendor|dealer|owner|總管|管理員|租戶|店長|店家|商家|經銷商/.test(text);
+  }
+
+  function updateMyCardVideoButtonState() {
+    var allowed = canUseMyCardVideoFlow();
+    var btn = $('#btn-open-my-video-card');
+    if (btn) {
+      btn.disabled = !allowed;
+      btn.setAttribute('aria-disabled', allowed ? 'false' : 'true');
+      btn.title = allowed ? '開啟影音名片' : '影音名片僅 admin 或租戶店長可使用';
+      btn.className = allowed
+        ? 'flex-1 py-2 rounded-lg bg-white text-blue-600 shadow-sm font-bold text-[12px] tracking-tight flex items-center justify-center gap-1 active:scale-95 transition-all'
+        : 'flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight flex items-center justify-center gap-1 cursor-not-allowed opacity-70 transition-all';
+    }
+    var section = $('#my-video-card-settings');
+    if (section) section.classList.toggle('opacity-45', !allowed);
+    var toggle = $('#my-v1-video-enabled');
+    var input = $('#my-v1-video-url');
+    if (toggle) {
+      toggle.disabled = !allowed;
+      if (!allowed) toggle.checked = false;
+    }
+    if (input) input.disabled = !allowed;
+    if (!allowed && typeof updatePreview === 'function') updatePreview();
+  }
   function init() {
     bindOnce(document, 'change', 'input[name="my-ecard-layout"]', handleLayoutChange);
     bindOnce(document, 'click', '#btn-add-v1-button', addV1Button);
@@ -518,6 +564,9 @@
       }
     });
     injectWysiwygButton();
+    updateMyCardVideoButtonState();
+    setTimeout(updateMyCardVideoButtonState, 300);
+    setTimeout(updateMyCardVideoButtonState, 1000);
   }
 
   function bindOnce(root, eventName, selector, handler) {
@@ -609,6 +658,7 @@
   }
 
   async function load() {
+    updateMyCardVideoButtonState();
     moduleCore.showLoading(true);
 
     var emptyState = $('#my-ecard-empty-state');
@@ -677,6 +727,7 @@
   }
 
   async function handleLayoutChange() {
+    myVideoModeRequested = false;
     syncCurrentImageInput();
     var version = layoutToCardVersion(getLayout());
     var card = findLoadedMyCardByVersion(version);
@@ -1105,24 +1156,19 @@
     var actionUrl = appendShareMode(shareUrl);
     if (!flexMsg || !actionUrl) return flexMsg;
     try {
-      if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents.length) {
-        var likeUrl = typeof window.buildECardLikeUrl === 'function' ? window.buildECardLikeUrl(shareUrl) : '';
-        if (likeUrl && flexMsg.header.contents[0]) {
-          flexMsg.header.contents[0].action = { type: 'uri', uri: likeUrl };
-        }
-        var shareItem = flexMsg.header.contents[flexMsg.header.contents.length - 1];
-        if (shareItem) {
-          var action = shareItem.action || {};
-          shareItem.action = shareItem.type === 'button'
-            ? { type: 'uri', label: action.label || '分享名片', uri: actionUrl }
-            : { type: 'uri', uri: actionUrl };
-        }
+      if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
+        var headerItem = flexMsg.header.contents[0];
+        var action = headerItem.action || {};
+        headerItem.action = headerItem.type === 'button'
+          ? { type: 'uri', label: action.label || '分享名片', uri: actionUrl }
+          : { type: 'uri', uri: actionUrl };
       }
     } catch (e) {
       console.warn('[routeFlexHeaderShareToPicker] failed:', e);
     }
     return flexMsg;
   }
+
   async function sharePlainCardLink(shareUrl, cardName) {
     var text = '這是我的數位名片';
     if (cardName) text += '：' + cardName;
@@ -1497,9 +1543,9 @@
   function renderWysiwygLayoutSelector(cfg, inModal) {
     var current = normalizeWysiwygLayout((cfg && cfg.layoutStyle) || getLayout());
     var options = [
-      { value: 'landscape', label: '標準(Mega)' },
-      { value: 'portrait', label: '滿版(Giga)' },
-      { value: 'square', label: '正方(1:1)' }
+      { value: 'landscape', label: '標準' },
+      { value: 'portrait', label: '滿版' },
+      { value: 'square', label: '正方' }
     ];
     var wrapClass = inModal ? 'space-y-2' : 'max-w-[390px] mx-auto mb-3';
     var labelClass = inModal ? 'text-[13px] font-black text-slate-600' : 'text-[12px] font-black text-slate-300 mb-2';
@@ -1648,6 +1694,26 @@
     }
   }
 
+  async function openMyCardVideoFlow(evt) {
+    if (evt && evt.preventDefault) evt.preventDefault();
+    updateMyCardVideoButtonState();
+    if (!canUseMyCardVideoFlow()) {
+      if (window.showToast) window.showToast('影音名片僅 admin 或租戶店長可使用。', true);
+      return;
+    }
+    myVideoModeRequested = true;
+    try {
+      var videoCard = findLoadedMyCardByVersion('video') || await resolveMyCardVersion('video', true);
+      if (videoCard) {
+        currentCardData = videoCard;
+        window.currentUserCard = videoCard;
+        myEcardStateLoaded = false;
+      }
+    } catch (e) {
+      console.warn('[mycard] create video card failed:', e);
+    }
+    return openMyCardWysiwyg(evt);
+  }
   async function openMyCardWysiwyg(evt) {
     if (evt && evt.preventDefault) evt.preventDefault();
     var directWysiwyg = isWysiwygMyCardRequest();
@@ -2312,6 +2378,7 @@
     openMyCardDetail: openMyCardDetail,
     openQuicklyMyCard: openQuicklyMyCard,
     openMyCardWysiwyg: openMyCardWysiwyg,
+    openMyCardVideoFlow: openMyCardVideoFlow,
     shareMyCard: shareMyCard,
     showMyQRCode: showMyQRCode,
     updateButton: updateButton,
@@ -2325,6 +2392,8 @@
   window.openMyCardDetail = openMyCardDetail;
   window.openQuicklyMyCard = openQuicklyMyCard;
   window.openMyCardWysiwyg = openMyCardWysiwyg;
+  window.openMyCardVideoFlow = openMyCardVideoFlow;
+  window.updateMyCardVideoButtonState = updateMyCardVideoButtonState;
   window.closeMyCardWysiwyg = closeMyCardWysiwyg;
   window.closeMyCardWysiwygEditor = closeMyCardWysiwygEditor;
   window.editMyCardWysiwygField = editMyCardWysiwygField;
