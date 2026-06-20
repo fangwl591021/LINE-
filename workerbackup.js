@@ -1320,7 +1320,31 @@ const LineOAChatModule = {
     if (!addressUrl) return normalized;
     return normalized.concat([{ l: '店家地址', u: addressUrl, c: '#1E293B' }]).slice(0, 4);
   },
+  myCardVersionFromRowId(card, config = {}) {
+    const rowId = this.text(card?.rowId || card?.row_id || card?.id).toUpperCase();
+    if (rowId.startsWith('CARD_VIDEO_')) return 'video';
+    if (rowId.startsWith('CARD_POSTER_')) return 'poster';
+    if (rowId.startsWith('CARD_SQUARE_')) return 'square';
+    if (rowId.startsWith('CARD_STD_')) return 'standard';
+    const version = this.text(config.cardVersion || config.card_version).toLowerCase();
+    const layout = this.text(config.layoutStyle || config.layout).toLowerCase();
+    if (version === 'video' || config.videoCard === true) return 'video';
+    if (version === 'poster' || layout === 'portrait') return 'poster';
+    if (version === 'square' || layout === 'square') return 'square';
+    return 'standard';
+  },
 
+  myCardLayoutForVersion(version) {
+    if (version === 'poster') return 'portrait';
+    if (version === 'square') return 'square';
+    return 'landscape';
+  },
+
+  myCardImageForVersion(card, config, version) {
+    if (version === 'poster') return config.imgUrlPortrait || config.imgUrl || card.imageUrl;
+    if (version === 'square') return config.imgUrlSquare || config.imgUrl || card.imageUrl;
+    return config.imgUrl || config.imgUrlLandscape || card.imageUrl || config.imgUrlPortrait || config.imgUrlSquare;
+  },
   buildExistingMyCardFlex(row, userId, env) {
     const card = D1ReadModule.cardRow(row);
     if (!card || !card.rowId) return null;
@@ -1330,11 +1354,16 @@ const LineOAChatModule = {
     } catch (e) {
       config = {};
     }
+    const cardVersion = this.myCardVersionFromRowId(card, config);
+    const layoutStyle = this.myCardLayoutForVersion(cardVersion);
     config = {
       ...config,
-      layoutStyle: config.layoutStyle || config.layout || 'landscape',
-      imgUrl: config.imgUrl || config.imgUrlLandscape || card.imageUrl,
+      cardVersion,
+      layoutStyle,
+      imgUrl: this.myCardImageForVersion(card, config, cardVersion),
       imgRatioLandscape: config.imgRatioLandscape || '20:13',
+      imgRatioPortrait: config.imgRatioPortrait || '400:600',
+      imgRatioSquare: config.imgRatioSquare || '1:1',
       title: config.title || card.name,
       desc: config.desc || card.services || card.title || '',
       buttons: this.normalizeCardButtons(config.buttons)
