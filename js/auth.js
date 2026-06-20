@@ -1127,10 +1127,13 @@ window.showSocialLikeThanks = function(message) {
 
 window.updateSocialLikeWidget = function(data) {
   const total = Number(data && (data.totalLikes ?? data.count ?? data.likes) || 0);
+  const cardId = String(data && (data.cardId || data.shareCardId || data.rowId) || '').trim();
+  const matchesCard = el => !cardId || !el.dataset.socialLikeCardId || el.dataset.socialLikeCardId === cardId;
   document.querySelectorAll('[data-social-like-count]').forEach(el => {
-    el.textContent = String(total);
+    if (matchesCard(el)) el.textContent = String(total);
   });
   document.querySelectorAll('[data-social-like-button]').forEach(btn => {
+    if (!matchesCard(btn)) return;
     const liked = !!(data && (data.likedToday || data.alreadyLikedToday));
     btn.dataset.likedToday = liked ? '1' : '0';
     btn.classList.toggle('bg-blue-50', liked);
@@ -1179,8 +1182,10 @@ window.recordSocialLike = async function(cardId, networkId) {
     window.showToast?.('請先登入 LINE 後再按讚', true);
     return;
   }
+  cardId = String(cardId || '').trim();
   const buttons = document.querySelectorAll('[data-social-like-button]');
-  buttons.forEach(btn => { btn.disabled = true; btn.classList.add('opacity-70'); });
+  const activeButtons = Array.from(buttons).filter(btn => !btn.dataset.socialLikeCardId || btn.dataset.socialLikeCardId === cardId);
+  activeButtons.forEach(btn => { btn.disabled = true; btn.classList.add('opacity-70'); });
   try {
     const res = await window.fetchAPI('recordSocialLike', {
       shareCardId: cardId,
@@ -1194,21 +1199,27 @@ window.recordSocialLike = async function(cardId, networkId) {
     console.warn('[recordSocialLike] failed:', e.message || e);
     window.showToast?.(e.message || '按讚失敗，請稍後再試', true);
   } finally {
-    buttons.forEach(btn => { btn.disabled = false; btn.classList.remove('opacity-70'); });
+    activeButtons.forEach(btn => { btn.disabled = false; btn.classList.remove('opacity-70'); });
   }
 };
 
 window.initSocialLikeWidget = function(cardId, networkId) {
   if (!cardId) return;
+  const bindCardId = String(cardId || '').trim();
   document.querySelectorAll('[data-social-like-button]').forEach(btn => {
-    btn.dataset.cardId = cardId;
+    if (btn.dataset.socialLikeCardId && btn.dataset.socialLikeCardId !== bindCardId) return;
+    btn.dataset.cardId = bindCardId;
+    btn.dataset.socialLikeCardId = bindCardId;
     btn.onclick = function(evt) {
       evt.preventDefault();
       evt.stopPropagation();
-      window.recordSocialLike(cardId, networkId || 'admin');
+      window.recordSocialLike(bindCardId, networkId || 'admin');
     };
   });
-  window.loadSocialLikeStats(cardId, networkId || 'admin');
+  document.querySelectorAll('[data-social-like-count]').forEach(el => {
+    if (!el.dataset.socialLikeCardId) el.dataset.socialLikeCardId = bindCardId;
+  });
+  window.loadSocialLikeStats(bindCardId, networkId || 'admin');
 };
 
 window.handleAutoSocialLikeEntry = async function(cardId, networkId) {
