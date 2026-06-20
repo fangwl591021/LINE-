@@ -8923,13 +8923,55 @@ const D1ReadModule = {
   async getPublicCardById(payload, env) {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
-    const rowId = this.text(payload.rowId || payload.cardId || payload.id || payload.webCardId || payload.shareCardId);
+    const rowId = this.text(payload.rowId, this.text(payload.cardId, this.text(payload.id, this.text(payload.webCardId, payload.shareCardId))));
     if (!rowId) return { success: false, error: 'Missing card id' };
     const row = await this.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
     if (!row) return { success: false, error: '找不到這張名片' };
+
+    const ownerIds = [
+      this.text(row.line_id),
+      this.text(row.owner_user_id),
+      this.text(row.profile_user_id),
+      this.text(row.creator_id)
+    ].filter(Boolean);
+    const sourceType = this.text(row.source_type).toLowerCase();
+    const sourceTypes = ['self_profile', 'legacy_self_profile', 'video_profile'];
+    const canResolveCurrent = ownerIds.length > 0 && sourceTypes.indexOf(sourceType) >= 0;
+    if (canResolveCurrent) {
+      const placeholders = ownerIds.map(() => '?').join(',');
+      const sql = [
+        'SELECT * FROM card_contacts',
+        'WHERE (',
+        '  line_id IN (' + placeholders + ')',
+        '  OR owner_user_id IN (' + placeholders + ')',
+        '  OR profile_user_id IN (' + placeholders + ')',
+        '  OR creator_id IN (' + placeholders + ')',
+        ')',
+        "AND LOWER(COALESCE(source_type,'')) IN ('video_profile','self_profile','legacy_self_profile')",
+        "AND TRIM(COALESCE(image_url,'')) <> ''",
+        'ORDER BY',
+        "  CASE LOWER(COALESCE(source_type,''))",
+        "    WHEN 'video_profile' THEN 0",
+        "    WHEN 'self_profile' THEN 1",
+        "    WHEN 'legacy_self_profile' THEN 2",
+        '    ELSE 9',
+        '  END',
+        "  , CASE WHEN TRIM(COALESCE(custom_config,'')) NOT IN ('', '{}', '[]') THEN 0 ELSE 1 END",
+        '  , COALESCE(updated_at, created_at) DESC',
+        '  , row_id DESC',
+        'LIMIT 1'
+      ].join(' ');
+      const current = await this.first(env, sql, [...ownerIds, ...ownerIds, ...ownerIds, ...ownerIds]).catch(() => null);
+      if (current) {
+        const card = this.cardRow(current);
+        card.requestedRowId = rowId;
+        card.resolvedFromRowId = rowId;
+        return { success: true, data: card };
+      }
+    }
+
     return { success: true, data: this.cardRow(row) };
   },
-
   crmContactRow(row) {
     if (!row) return null;
     const card = this.cardRow(row);
