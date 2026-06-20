@@ -51,8 +51,23 @@ function parseStoredECardConfig(card) {
   return {};
 }
 
+
+function firstPhoneForTel(value) {
+  const raw = String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/＋/g, '+').trim();
+  if (!raw) return '';
+  const candidates = raw.match(/(?:\+?886|00886)?[\s().-]*0?9(?:[\s().-]*\d){8}|\+?\d(?:[\s().-]*\d){6,14}/g) || [];
+  for (const candidate of candidates) {
+    let phone = candidate.replace(/[^0-9+]/g, '');
+    if (phone.startsWith('00886')) phone = '+886' + phone.slice(5);
+    if (/^\+?\d{7,16}$/.test(phone)) return phone;
+  }
+  const compact = raw.replace(/[^0-9+]/g, '');
+  if (/^09\d{18,}$/.test(compact)) return compact.slice(0, 10);
+  if (/^\+?\d{7,16}$/.test(compact)) return compact;
+  return '';
+}
 function normalizeTelValue(value) {
-  const clean = String(value || '').replace(/[^0-9+]/g, '');
+  const clean = firstPhoneForTel(value);
   return clean ? 'tel:' + clean : 'tel:XXXXXXXXXX';
 }
 
@@ -83,8 +98,8 @@ function normalizeECardActionUriForSave(value) {
   }
 
   if (/^tel:/i.test(raw)) {
-    const phone = raw.replace(/^tel:/i, '').replace(/[\s().-]/g, '');
-    if (/^\+?\d{7,16}$/.test(phone)) return { value: 'tel:' + phone };
+    const phone = firstPhoneForTel(raw.replace(/^tel:/i, ''));
+    if (phone) return { value: 'tel:' + phone };
     return { value: '', error: '電話格式錯誤，請輸入 7 到 16 碼電話。' };
   }
 
@@ -92,8 +107,8 @@ function normalizeECardActionUriForSave(value) {
     return { value: 'mailto:' + raw };
   }
 
-  const compactPhone = raw.replace(/[\s().-]/g, '');
-  if (/^\+?\d{7,16}$/.test(compactPhone)) {
+  const compactPhone = firstPhoneForTel(raw);
+  if (compactPhone) {
     return { value: 'tel:' + compactPhone };
   }
 

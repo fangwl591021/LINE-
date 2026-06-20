@@ -37,8 +37,23 @@
   var templateCoverUrl = 'assets/rental-template-cover.png';
   var templateAddressUrl = 'https://www.google.com/maps';
 
+
+  function firstPhoneForTel(value) {
+    var raw = String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/＋/g, '+').trim();
+    if (!raw) return '';
+    var candidates = raw.match(/(?:\+?886|00886)?[\s().-]*0?9(?:[\s().-]*\d){8}|\+?\d(?:[\s().-]*\d){6,14}/g) || [];
+    for (var i = 0; i < candidates.length; i++) {
+      var phone = candidates[i].replace(/[^0-9+]/g, '');
+      if (phone.indexOf('00886') === 0) phone = '+886' + phone.slice(5);
+      if (/^\+?\d{7,16}$/.test(phone)) return phone;
+    }
+    var compact = raw.replace(/[^0-9+]/g, '');
+    if (/^09\d{18,}$/.test(compact)) return compact.slice(0, 10);
+    if (/^\+?\d{7,16}$/.test(compact)) return compact;
+    return '';
+  }
   function getTemplateButtons(phone) {
-    var cleanPhone = String(phone || '').replace(/[^0-9+]/g, '');
+    var cleanPhone = firstPhoneForTel(phone);
     return [
       { l: '加LINE好友', u: 'https://lin.ee/y7h8BUF', c: '#06C755' },
       { l: '行動電話', u: cleanPhone ? 'tel:' + cleanPhone : 'tel:XXXXXXXXXX', c: '#3b82f6' },
@@ -93,8 +108,8 @@
     }
 
     if (/^tel:/i.test(raw)) {
-      var telPhone = raw.replace(/^tel:/i, '').replace(/[\s().-]/g, '');
-      if (/^\+?\d{7,16}$/.test(telPhone)) return { value: 'tel:' + telPhone };
+      var telPhone = firstPhoneForTel(raw.replace(/^tel:/i, ''));
+      if (telPhone) return { value: 'tel:' + telPhone };
       return { value: '', error: '電話格式錯誤，請輸入 7 到 16 碼電話。' };
     }
 
@@ -102,8 +117,8 @@
       return { value: 'mailto:' + raw };
     }
 
-    var compactPhone = raw.replace(/[\s().-]/g, '');
-    if (/^\+?\d{7,16}$/.test(compactPhone)) {
+    var compactPhone = firstPhoneForTel(raw);
+    if (compactPhone) {
       return { value: 'tel:' + compactPhone };
     }
 
@@ -250,7 +265,7 @@
   function autoMyCardButtons(card) {
     var buttons = [];
     var lineUrl = lineUrlFromMyCard(card);
-    var phone = String(readCardValue(card, ['mobile', 'phone', 'officePhone', 'office_phone', '\u624b\u6a5f\u865f\u78bc', '\u624b\u6a5f']) || '').replace(/[^0-9+]/g, '');
+    var phone = firstPhoneForTel(readCardValue(card, ['mobile', 'phone', 'officePhone', 'office_phone', '\u624b\u6a5f\u865f\u78bc', '\u624b\u6a5f']));
     var addressUrl = mapUrlFromMyCardAddress(readCardValue(card, ['address', '\u5730\u5740']));
     if (lineUrl) buttons.push({ l: '\u52a0LINE\u597d\u53cb', u: lineUrl, c: '#06C755' });
     if (phone) buttons.push({ l: '\u884c\u52d5\u96fb\u8a71', u: 'tel:' + phone, c: '#3B82F6' });
