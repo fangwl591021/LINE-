@@ -1540,21 +1540,28 @@
     return String((cfg && cfg.imgRatioLandscape) || '20:13').replace(':', '/');
   }
 
+  function currentWysiwygVersion(cfg) {
+    if ((cfg && (cfg.cardType === 'video' || cfg.videoCard === true || cfg.cardVersion === 'video') && cfg.videoUrl) || cardVersionFromCard(currentCardData) === 'video') return 'video';
+    return layoutToCardVersion(normalizeWysiwygLayout((cfg && cfg.layoutStyle) || getLayout()));
+  }
+
   function renderWysiwygLayoutSelector(cfg, inModal) {
-    var current = normalizeWysiwygLayout((cfg && cfg.layoutStyle) || getLayout());
+    var current = currentWysiwygVersion(cfg);
     var options = [
       { value: 'landscape', label: '標準' },
       { value: 'portrait', label: '滿版' },
-      { value: 'square', label: '正方' }
+      { value: 'square', label: '正方' },
+      { value: 'video', label: '影音' }
     ];
     var wrapClass = inModal ? 'space-y-2' : 'max-w-[390px] mx-auto mb-3';
     var labelClass = inModal ? 'text-[13px] font-black text-slate-600' : 'text-[12px] font-black text-slate-300 mb-2';
-    var shellClass = inModal ? 'grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1' : 'grid grid-cols-3 gap-1 rounded-2xl bg-white/10 p-1';
+    var shellClass = inModal ? 'grid grid-cols-4 gap-1 rounded-2xl bg-slate-100 p-1' : 'grid grid-cols-4 gap-1 rounded-2xl bg-white/10 p-1';
     var html = '<div class="' + wrapClass + '">' +
       '<div class="' + labelClass + '">名片版型</div>' +
       '<div class="' + shellClass + '">';
     html += options.map(function(option) {
-      var active = option.value === current;
+      var optionVersion = option.value === 'video' ? 'video' : layoutToCardVersion(option.value);
+      var active = optionVersion === current;
       var cls = active
         ? 'bg-white text-blue-600 shadow-sm'
         : (inModal ? 'text-slate-500' : 'text-slate-300');
@@ -1562,10 +1569,34 @@
     }).join('');
     return html + '</div></div>';
   }
-
   async function setMyCardWysiwygLayout(layout) {
     var cfg = wysiwygState.cfg;
     if (!cfg) return;
+    if (layout === 'video') {
+      if (!canUseMyCardVideoFlow()) {
+        if (window.showToast) window.showToast('影音名片僅 admin 或租戶店長可使用。', true);
+        return;
+      }
+      myVideoModeRequested = true;
+      var videoCard = findLoadedMyCardByVersion('video') || await resolveMyCardVersion('video', false);
+      if (!isEditableOwnCard(videoCard, 'video')) {
+        if (window.showToast) window.showToast('尚未找到影音名片', true);
+        return;
+      }
+      currentCardData = videoCard;
+      window.currentUserCard = videoCard;
+      hydrateMyECardStateFromCurrentCard();
+      cfg = parseCardConfig(videoCard);
+      wysiwygState.cfg = cfg;
+      syncVideoFieldsFromConfig(cfg);
+      var videoImgInput = $('#my-v1-img-url');
+      if (videoImgInput) videoImgInput.value = currentWysiwygImage(cfg);
+      updatePreview();
+      renderMyCardWysiwyg();
+      if (wysiwygState.field === 'image') renderWysiwygEditor('image', wysiwygState.buttonIndex);
+      return;
+    }
+    myVideoModeRequested = false;
     layout = normalizeWysiwygLayout(layout);
     var version = layoutToCardVersion(layout);
     var card = findLoadedMyCardByVersion(version);
@@ -1590,7 +1621,6 @@
     renderMyCardWysiwyg();
     if (wysiwygState.field === 'image') renderWysiwygEditor('image', wysiwygState.buttonIndex);
   }
-
   function renderMyCardWysiwyg() {
     var preview = document.getElementById('my-card-wysiwyg-preview');
     if (!preview || !wysiwygState.cfg) return;
