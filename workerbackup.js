@@ -1064,7 +1064,7 @@ const LineOAChatModule = {
           AND creator_id IN (${placeholders})
         )
       )
-      AND LOWER(COALESCE(source_type, '')) = 'self_profile'
+      AND LOWER(COALESCE(source_type, '')) IN ('self_profile', 'legacy_self_profile')
       AND row_id LIKE 'CARD_%'
       ORDER BY
         CASE WHEN line_id IN (${placeholders}) THEN 0 ELSE 1 END,
@@ -1117,7 +1117,7 @@ const LineOAChatModule = {
   isLineOaMyCardCandidate(row) {
     const rowId = this.text(row && row.row_id);
     const sourceType = this.text(row && row.source_type);
-    if (sourceType !== 'self_profile') return false;
+    if (sourceType !== 'self_profile' && sourceType !== 'legacy_self_profile') return false;
     if (!rowId.startsWith('CARD_')) return false;
     if (this.isLineOaVideoCard(row)) return false;
     const name = this.text(row && row.name);
@@ -13610,6 +13610,23 @@ const CardVersionResolverModule = {
     return this.versionForRow(row) === 'video';
   },
 
+  rowLookupScore(row) {
+    if (!row) return -999;
+    const sourceType = this.text(row.source_type).toLowerCase();
+    if (sourceType === 'referral_placeholder' || sourceType === 'private_import') return -999;
+    if (this.isVideoRow(row)) return -999;
+    const cfg = this.parseConfig(row);
+    const rawConfig = this.text(row.custom_config || row.customConfig || row['自訂名片設定']);
+    const imageUrl = this.text(row.image_url || row.imageUrl || cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare);
+    let score = 0;
+    if (sourceType === 'self_profile' || sourceType === 'legacy_self_profile' || sourceType === '') score += 20;
+    if (rawConfig && rawConfig !== '{}' && rawConfig !== '[]') score += 30;
+    if (cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || cfg.desc || (Array.isArray(cfg.buttons) && cfg.buttons.length)) score += 30;
+    if (imageUrl && !/images\.unsplash\.com|placehold\.co/i.test(imageUrl)) score += 20;
+    if (this.text(row.name)) score += 5;
+    return score;
+  },
+
   rowIdPrefix(version) {
     if (version === 'video') return 'CARD_VIDEO';
     if (version === 'poster') return 'CARD_POSTER';
@@ -13632,7 +13649,7 @@ const CardVersionResolverModule = {
         line_id = ? OR profile_user_id = ? OR owner_user_id = ?
       )
       AND (
-        LOWER(COALESCE(source_type,'')) IN ('self_profile', 'video_profile')
+        LOWER(COALESCE(source_type,'')) IN ('self_profile', 'legacy_self_profile', 'video_profile')
         OR (LOWER(COALESCE(source_type,'')) = '' AND (line_id = ? OR profile_user_id = ?))
       )
       ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
@@ -13706,7 +13723,9 @@ const CardVersionResolverModule = {
     if (!userId) return { success: false, error: 'Missing userId' };
     if (!env.ACTMASTER_DB) return { success: false, error: 'D1 unavailable' };
     const rows = await this.loadRowsForUser(userId, env);
-    const staticRows = rows.filter(row => !this.isVideoRow(row));
+    const staticRows = rows
+      .filter(row => !this.isVideoRow(row))
+      .sort((a, b) => this.rowLookupScore(b) - this.rowLookupScore(a));
     const videoRows = rows.filter(row => this.isVideoRow(row));
     const exact = version === 'video'
       ? videoRows[0]

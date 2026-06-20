@@ -390,18 +390,38 @@
     return cardVersionFromCard(card) === normalizeCardVersion(version);
   }
 
+  function myCardLookupScore(card) {
+    if (!card) return -999;
+    var sourceType = getCardSourceType(card);
+    if (sourceType === 'private_import' || sourceType === 'referral_placeholder' || sourceType === 'video_profile') return -999;
+    if (cardVersionFromCard(card) === 'video') return -999;
+    var cfg = parseCardConfig(card);
+    var rawConfig = String(card.customConfig || card.custom_config || card['自訂名片設定'] || '').trim();
+    var imageUrl = String(card.imageUrl || card.image_url || card['名片圖檔'] || cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || '').trim();
+    var score = 0;
+    if (sourceType === 'self_profile' || sourceType === 'legacy_self_profile' || sourceType === '') score += 20;
+    if (rawConfig && rawConfig !== '{}' && rawConfig !== '[]') score += 30;
+    if (cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || cfg.desc || (Array.isArray(cfg.buttons) && cfg.buttons.length)) score += 30;
+    if (imageUrl && !/images\.unsplash\.com|placehold\.co/i.test(imageUrl)) score += 20;
+    if (String(card.name || card['姓名'] || '').trim()) score += 5;
+    return score;
+  }
+
   function findLoadedMyCardByVersion(version) {
     var target = normalizeCardVersion(version);
     var pools = [];
     if (window.currentUserCard) pools.push(window.currentUserCard);
     if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
     if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
-    for (var i = 0; i < pools.length; i += 1) {
-      if (pools[i] && isCardVersion(pools[i], target) && isEditableOwnCard(pools[i], target)) return pools[i];
+    var candidates = pools
+      .filter(function(card) { return card && isEditableOwnCard(card, target); })
+      .sort(function(a, b) { return myCardLookupScore(b) - myCardLookupScore(a); });
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (isCardVersion(candidates[i], target)) return candidates[i];
     }
     if (target !== 'video') {
-      for (var j = 0; j < pools.length; j += 1) {
-        if (pools[j] && cardVersionFromCard(pools[j]) !== 'video' && isEditableOwnCard(pools[j], target)) return pools[j];
+      for (var j = 0; j < candidates.length; j += 1) {
+        if (cardVersionFromCard(candidates[j]) !== 'video') return candidates[j];
       }
     }
     return null;
