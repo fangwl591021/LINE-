@@ -3674,7 +3674,8 @@ const LineOAMyVideoKeywordModule = {
         if (this.isKeyword(event)) {
           const existingVideo = await this.findDedicatedVideoCard(env, userId);
           if (existingVideo) {
-            const message = this.buildExistingVideoCardFlex(existingVideo, userId, env);
+            let message = this.buildExistingVideoCardFlex(existingVideo, userId, env);
+            if (message) message = await LineOAChatModule.attachSocialLikeCountToFlexMessage(message, existingVideo, env);
             if (message) {
               const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
               if (!result.success) console.error('Existing my video reply failed', result);
