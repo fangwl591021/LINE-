@@ -32,6 +32,7 @@
   var myVideoDraftApplied = false;
   var myVideoDraftCache = null;
   var myVideoModeRequested = false;
+  var myVideoModeSuppressed = false;
   var introTemplate = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
   var templateCoverUrl = 'assets/rental-template-cover.png';
   var templateAddressUrl = 'https://www.google.com/maps';
@@ -314,8 +315,8 @@
     return !!(toggle && toggle.checked);
   }
   function isMyCardVideoEditingMode() {
+    if (myVideoModeSuppressed) return false;
     if (myVideoModeRequested) return true;
-    if (cardVersionFromCard(currentCardData) === 'video') return true;
     try {
       var params = new URLSearchParams(window.location.search || '');
       return params.get('videoCard') === '1' || params.get('video') === '1' || params.get('cardVersion') === 'video' || params.get('version') === 'video';
@@ -1588,7 +1589,7 @@
   }
 
   function currentWysiwygVersion(cfg) {
-    if ((cfg && (cfg.cardType === 'video' || cfg.videoCard === true || cfg.cardVersion === 'video') && cfg.videoUrl) || cardVersionFromCard(currentCardData) === 'video') return 'video';
+    if (isMyCardVideoEditingMode() && cfg && (cfg.cardType === 'video' || cfg.videoCard === true || cfg.cardVersion === 'video') && cfg.videoUrl) return 'video';
     return layoutToCardVersion(normalizeWysiwygLayout((cfg && cfg.layoutStyle) || getLayout()));
   }
 
@@ -1625,6 +1626,7 @@
         return;
       }
       myVideoModeRequested = true;
+      myVideoModeSuppressed = false;
       var videoCard = findLoadedMyCardByVersion('video') || await resolveMyCardVersion('video', false);
       if (!isEditableOwnCard(videoCard, 'video')) {
         if (window.showToast) window.showToast('尚未找到影音名片', true);
@@ -1658,6 +1660,12 @@
     }
     cfg.layoutStyle = layout;
     cfg.cardVersion = version;
+    if (cfg.cardType === 'video') cfg.cardType = 'v1';
+    delete cfg.cardVariant;
+    delete cfg.videoCard;
+    delete cfg.videoStorageKind;
+    delete cfg.videoUrl;
+    delete cfg.videoPosterUrl;
     if (layout === 'portrait') cfg.imgRatioPortrait = cfg.imgRatioPortrait || '400:600';
     if (layout === 'square') cfg.imgRatioSquare = cfg.imgRatioSquare || '1:1';
     if (layout === 'landscape') cfg.imgRatioLandscape = cfg.imgRatioLandscape || '20:13';
@@ -1781,6 +1789,7 @@
       return;
     }
     myVideoModeRequested = true;
+    myVideoModeSuppressed = false;
     try {
       var videoCard = findLoadedMyCardByVersion('video') || await resolveMyCardVersion('video', true);
       if (videoCard) {
