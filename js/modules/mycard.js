@@ -313,6 +313,33 @@
     var toggle = $('#my-v1-video-enabled');
     return !!(toggle && toggle.checked);
   }
+  function isMyCardVideoEditingMode() {
+    if (myVideoModeRequested) return true;
+    if (cardVersionFromCard(currentCardData) === 'video') return true;
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      return params.get('videoCard') === '1' || params.get('video') === '1' || params.get('cardVersion') === 'video' || params.get('version') === 'video';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function syncMyCardVideoPanelVisibility() {
+    var allowed = canUseMyCardVideoFlow();
+    var editingVideo = isMyCardVideoEditingMode();
+    var section = $('#my-video-card-settings');
+    if (section) {
+      section.classList.toggle('hidden', !editingVideo);
+      section.classList.toggle('opacity-45', !allowed);
+    }
+    var toggle = $('#my-v1-video-enabled');
+    var input = $('#my-v1-video-url');
+    if (toggle) {
+      toggle.disabled = !allowed || !editingVideo;
+      if (!allowed) toggle.checked = false;
+    }
+    if (input) input.disabled = !allowed || !editingVideo;
+  }
 
   function applyVideoConfigToFields(cfg) {
     var videoInput = $('#my-v1-video-url');
@@ -550,15 +577,7 @@
         ? 'flex-1 py-2 rounded-lg bg-white text-blue-600 shadow-sm font-bold text-[12px] tracking-tight flex items-center justify-center gap-1 active:scale-95 transition-all'
         : 'flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight flex items-center justify-center gap-1 cursor-not-allowed opacity-70 transition-all';
     }
-    var section = $('#my-video-card-settings');
-    if (section) section.classList.toggle('opacity-45', !allowed);
-    var toggle = $('#my-v1-video-enabled');
-    var input = $('#my-v1-video-url');
-    if (toggle) {
-      toggle.disabled = !allowed;
-      if (!allowed) toggle.checked = false;
-    }
-    if (input) input.disabled = !allowed;
+    syncMyCardVideoPanelVisibility();
     if (!allowed && typeof updatePreview === 'function') updatePreview();
   }
   function init() {
@@ -754,6 +773,7 @@
     }
     var imgInput = $('#my-v1-img-url');
     if (imgInput) imgInput.value = myEcardImgs[getLayout()] || '';
+    updateMyCardVideoButtonState();
     updatePreview();
   }
 
@@ -1297,7 +1317,7 @@
     var align = cfg.descAlign || 'center';
     var ratio = layout === 'portrait' ? (myEcardRatios.portrait || '400:600').replace(':', '/') : (layout === 'square' ? '1/1' : '20/13');
     var videoUrl = getVideoUrlInput() || cfg.videoUrl || '';
-    var videoEnabled = isVideoModeEnabled() && !!videoUrl;
+    var videoEnabled = isMyCardVideoEditingMode() && isVideoModeEnabled() && !!videoUrl;
     var mediaHtml = videoEnabled
       ? '<video class="w-full bg-slate-100 object-cover" style="aspect-ratio:' + ratio + ';" src="' + escapeHTML(videoUrl) + '" poster="' + escapeHTML(imgUrl) + '" controls playsinline muted></video>'
       : '<div class="w-full bg-slate-100 bg-cover bg-center" style="aspect-ratio:' + ratio + ';background-image:url(&quot;' + escapeHTML(imgUrl) + '&quot;);"></div>';
@@ -1618,6 +1638,7 @@
       syncVideoFieldsFromConfig(cfg);
       var videoImgInput = $('#my-v1-img-url');
       if (videoImgInput) videoImgInput.value = currentWysiwygImage(cfg);
+      updateMyCardVideoButtonState();
       updatePreview();
       renderMyCardWysiwyg();
       if (wysiwygState.field === 'image') renderWysiwygEditor('image', wysiwygState.buttonIndex);
@@ -1644,6 +1665,7 @@
     var imgInput = $('#my-v1-img-url');
     if (imgInput) imgInput.value = currentWysiwygImage(cfg);
     writeCurrentCardConfig(cfg);
+    updateMyCardVideoButtonState();
     updatePreview();
     renderMyCardWysiwyg();
     if (wysiwygState.field === 'image') renderWysiwygEditor('image', wysiwygState.buttonIndex);
