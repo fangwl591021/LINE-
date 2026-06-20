@@ -1386,10 +1386,14 @@ const LineOAChatModule = {
     }
     const version = this.text(cfg.cardVersion || cfg.card_version).toLowerCase();
     const layout = this.text(cfg.layoutStyle || cfg.layout).toLowerCase();
-    if (rowId.startsWith('CARD_VIDEO_') || version === 'video' || cfg.videoCard === true) return '影音';
-    if (rowId.startsWith('CARD_POSTER_') || version === 'poster' || layout === 'portrait') return '滿版';
-    if (rowId.startsWith('CARD_SQUARE_') || version === 'square' || layout === 'square') return '正方';
-    if (rowId.startsWith('CARD_STD_') || version === 'standard' || layout === 'landscape') return '標準';
+    if (rowId.startsWith('CARD_VIDEO_')) return '影音';
+    if (rowId.startsWith('CARD_POSTER_')) return '滿版';
+    if (rowId.startsWith('CARD_SQUARE_')) return '正方';
+    if (rowId.startsWith('CARD_STD_')) return '標準';
+    if (version === 'video' || cfg.videoCard === true) return '影音';
+    if (version === 'poster' || layout === 'portrait') return '滿版';
+    if (version === 'square' || layout === 'square') return '正方';
+    if (version === 'standard' || layout === 'landscape') return '標準';
     return this.text(card?.name, '名片');
   },
   buildMyCardSelectorFlex(rows, userId, env) {
