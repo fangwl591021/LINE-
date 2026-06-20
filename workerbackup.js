@@ -1334,15 +1334,19 @@ const LineOAChatModule = {
     return 'standard';
   },
 
-  myCardLayoutForVersion(version) {
+  myCardLayoutForVersion(version, config = {}) {
     if (version === 'poster') return 'portrait';
     if (version === 'square') return 'square';
+    if (version === 'video') {
+      const layout = this.text(config.layoutStyle || config.layout || 'landscape').toLowerCase();
+      return layout === 'square' ? 'square' : 'landscape';
+    }
     return 'landscape';
   },
 
   myCardImageForVersion(card, config, version) {
     if (version === 'poster') return config.imgUrlPortrait || config.imgUrl || card.imageUrl;
-    if (version === 'square') return config.imgUrlSquare || config.imgUrl || card.imageUrl;
+    if (version === 'square' || version === 'video') return config.imgUrlSquare || config.previewUrl || config.thumbnailUrl || config.imgUrl || card.imageUrl;
     return config.imgUrl || config.imgUrlLandscape || card.imageUrl || config.imgUrlPortrait || config.imgUrlSquare;
   },
   buildExistingMyCardFlex(row, userId, env) {
@@ -1355,7 +1359,7 @@ const LineOAChatModule = {
       config = {};
     }
     const cardVersion = this.myCardVersionFromRowId(card, config);
-    const layoutStyle = this.myCardLayoutForVersion(cardVersion);
+    const layoutStyle = this.myCardLayoutForVersion(cardVersion, config);
     config = {
       ...config,
       cardVersion,
@@ -1636,7 +1640,11 @@ const LineOAChatModule = {
         ]).filter(Boolean)[0];
         if (!selectedCard) selectedCard = await this.findMyVideoCardByRowId(env, userId, selectedRowId);
         messageCardRow = selectedCard || null;
-        message = selectedCard ? this.buildExistingMyCardFlex(selectedCard, userId, env) : null;
+        message = selectedCard
+          ? (this.isLineOaVideoCard(selectedCard) && typeof LineOAMyVideoKeywordModule !== 'undefined'
+            ? LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(selectedCard, userId, env)
+            : this.buildExistingMyCardFlex(selectedCard, userId, env))
+          : null;
       } else if (showRowId !== null) {
         const cards = await this.myCardSelectorRows(env, userId);
         const selectedCard = showRowId
@@ -1644,7 +1652,9 @@ const LineOAChatModule = {
           : cards[0];
         if (selectedCard) {
           messageCardRow = selectedCard;
-          message = this.buildExistingMyCardFlex(selectedCard, userId, env);
+          message = this.isLineOaVideoCard(selectedCard) && typeof LineOAMyVideoKeywordModule !== 'undefined'
+            ? LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(selectedCard, userId, env)
+            : this.buildExistingMyCardFlex(selectedCard, userId, env);
         } else {
           const profile = await this.fetchProfile(env, userId);
           message = this.buildSimpleMyCardFlex(profile, userId, env);
@@ -1655,7 +1665,7 @@ const LineOAChatModule = {
         message = existingCards.length > 1
           ? this.buildMyCardSelectorFlex(existingCards, userId, env)
           : (existingCards.length === 1
-            ? (messageCardRow = existingCards[0], this.buildExistingMyCardFlex(existingCards[0], userId, env))
+            ? (messageCardRow = existingCards[0], (this.isLineOaVideoCard(existingCards[0]) && typeof LineOAMyVideoKeywordModule !== 'undefined' ? LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(existingCards[0], userId, env) : this.buildExistingMyCardFlex(existingCards[0], userId, env)))
             : this.buildSimpleMyCardFlex(profile, userId, env));
       }
       if (messageCardRow) message = await this.attachSocialLikeCountToFlexMessage(message, messageCardRow, env);
@@ -3433,7 +3443,7 @@ const LineOAMyVideoKeywordModule = {
   },
 
   async findDedicatedVideoCard(env, userId) {
-    const rows = await LineOAChatModule.findMySelfCards(env, userId);
+    const rows = await LineOAChatModule.findMyVideoCards(env, userId);
     return (Array.isArray(rows) ? rows : []).find(row => this.isDedicatedVideoCard(row)) || null;
   },
 
