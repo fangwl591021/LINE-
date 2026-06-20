@@ -1141,6 +1141,60 @@ const LineOAChatModule = {
     return rows.find(row => this.text(row.row_id) === targetRowId) || null;
   },
 
+  async findMyVideoCards(env, userId) {
+    const id = this.text(userId);
+    if (!id || !env.ACTMASTER_DB) return [];
+    await D1ReadModule.ensureCardAccessColumns(env);
+    const ids = await D1ReadModule.identityIdsForUser(env, id).catch(() => [id]);
+    const safeIds = (Array.isArray(ids) ? ids : [id]).map(v => this.text(v)).filter(Boolean);
+    if (!safeIds.length) return [];
+    const placeholders = safeIds.map(() => '?').join(',');
+    const rows = await D1ReadModule.all(env, `
+      SELECT * FROM card_contacts
+      WHERE (
+        line_id IN (${placeholders})
+        OR profile_user_id IN (${placeholders})
+        OR owner_user_id IN (${placeholders})
+        OR creator_id IN (${placeholders})
+      )
+      AND row_id LIKE 'CARD_VIDEO_%'
+      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+      LIMIT 5
+    `, [...safeIds, ...safeIds, ...safeIds, ...safeIds]).catch(() => []);
+    return rows.filter(row => {
+      const config = this.parseLineOaMyCardConfig(row);
+      return this.isLineOaVideoCard(row) && this.text(config.videoUrl);
+    });
+  },
+
+  async findMyVideoCardByRowId(env, userId, rowId) {
+    const targetRowId = this.text(rowId);
+    if (!targetRowId) return null;
+    const rows = await this.findMyVideoCards(env, userId);
+    return rows.find(row => this.text(row.row_id) === targetRowId) || null;
+  },
+
+  myCardVersionOrder(row) {
+    const card = D1ReadModule.cardRow(row);
+    const label = this.myCardVersionLabel(card);
+    if (label === '標準') return 10;
+    if (label === '滿版') return 20;
+    if (label === '正方') return 30;
+    if (label === '影音') return 40;
+    return 90;
+  },
+
+  async myCardSelectorRows(env, userId) {
+    const normalRows = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
+    const videoRows = await this.findMyVideoCards(env, userId);
+    const seen = new Set();
+    return normalRows.concat(videoRows).filter(row => {
+      const rowId = this.text(row && row.row_id);
+      if (!rowId || seen.has(rowId)) return false;
+      seen.add(rowId);
+      return true;
+    }).sort((a, b) => this.myCardVersionOrder(a) - this.myCardVersionOrder(b));
+  },
   parseLineOaMyCardConfig(row) {
     const raw = this.text(row && (row.custom_config || row.customConfig || row['自訂名片設定']));
     if (!raw) return {};
@@ -1544,13 +1598,14 @@ const LineOAChatModule = {
       let message = null;
       let messageCardRow = null;
       if (selectedRowId) {
-        const selectedCard = this.filterLineOaMyCardCandidates([
+        let selectedCard = this.filterLineOaMyCardCandidates([
           await this.findMySelfCardByRowId(env, userId, selectedRowId)
         ]).filter(Boolean)[0];
+        if (!selectedCard) selectedCard = await this.findMyVideoCardByRowId(env, userId, selectedRowId);
         messageCardRow = selectedCard || null;
         message = selectedCard ? this.buildExistingMyCardFlex(selectedCard, userId, env) : null;
       } else if (showRowId !== null) {
-        const cards = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
+        const cards = await this.myCardSelectorRows(env, userId);
         const selectedCard = showRowId
           ? cards.find(row => this.text(row.row_id) === showRowId)
           : cards[0];
@@ -1563,7 +1618,7 @@ const LineOAChatModule = {
         }
       } else {
         const profile = await this.fetchProfile(env, userId);
-        const existingCards = this.filterLineOaMyCardCandidates(await this.findMySelfCards(env, userId));
+        const existingCards = await this.myCardSelectorRows(env, userId);
         message = existingCards.length > 1
           ? this.buildMyCardSelectorFlex(existingCards, userId, env)
           : (existingCards.length === 1
