@@ -13761,10 +13761,11 @@ const CardVersionResolverModule = {
   versionForRow(row) {
     const rowId = this.text(row && (row.row_id || row.rowId || row.id)).toUpperCase();
     const cfg = this.parseConfig(row);
-    if (rowId.startsWith('CARD_VIDEO_') || cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || this.text(cfg.cardType).toLowerCase() === 'video' || this.text(cfg.cardVariant).toLowerCase() === 'video_card') return 'video';
+    if (rowId.startsWith('CARD_VIDEO_')) return 'video';
     if (rowId.startsWith('CARD_POSTER_')) return 'poster';
     if (rowId.startsWith('CARD_SQUARE_')) return 'square';
     if (rowId.startsWith('CARD_STD_')) return 'standard';
+    if (cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || this.text(cfg.cardType).toLowerCase() === 'video' || this.text(cfg.cardVariant).toLowerCase() === 'video_card') return 'video';
     if (cfg.cardVersion || cfg.card_version) return this.normalizeVersion(cfg.cardVersion || cfg.card_version);
     return this.normalizeVersion(cfg.layoutStyle || cfg.layout || 'standard');
   },

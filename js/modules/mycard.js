@@ -380,10 +380,11 @@
     if (!card) return '';
     var rowId = String(getCardRowId(card) || '').toUpperCase();
     var cfg = parseCardConfig(card);
-    if (rowId.indexOf('CARD_VIDEO_') === 0 || cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || String(cfg.cardType || '').toLowerCase() === 'video' || String(cfg.cardVariant || '').toLowerCase() === 'video_card') return 'video';
+    if (rowId.indexOf('CARD_VIDEO_') === 0) return 'video';
     if (rowId.indexOf('CARD_POSTER_') === 0) return 'poster';
     if (rowId.indexOf('CARD_SQUARE_') === 0) return 'square';
     if (rowId.indexOf('CARD_STD_') === 0) return 'standard';
+    if (cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || String(cfg.cardType || '').toLowerCase() === 'video' || String(cfg.cardVariant || '').toLowerCase() === 'video_card') return 'video';
     if (cfg.cardVersion || cfg.card_version) return normalizeCardVersion(cfg.cardVersion || cfg.card_version);
     return normalizeCardVersion(cfg.layoutStyle || cfg.layout || 'standard');
   }
