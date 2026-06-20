@@ -2761,17 +2761,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (shareCardId) {
         try {
-          const cData = await window.fetchAPI('getCardContacts', { networkId: 'admin', role: 'admin', userId: '' }, true);
-          if (cData && Array.isArray(cData)) {
-            const sc = cData.find(c => String(c.rowId) === String(shareCardId));
-            if (sc) {
-              if (shouldAutoShareCard) {
-                await window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId });
-                return;
-              }
-              window.roCardData = sc;
-              renderSharedReadOnlyCard(sc, refId, netId);
+          const sc = await loadCardByPublicId(shareCardId);
+          if (sc) {
+            if (shouldAutoShareCard) {
+              await window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId });
+              return;
             }
+            window.roCardData = sc;
+            renderSharedReadOnlyCard(sc, refId, netId);
           }
         } catch(e){}
       }
@@ -2799,19 +2796,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       dataLoad.then(() => {
       if (shareCardId) {
-        const sc = window.allCards.find(c => String(c.rowId) === String(shareCardId));
-        if (sc) {
-          if (shouldAutoShareCard) {
-            window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId })
-              .catch(e => window.showToast?.(e.message || '分享失敗，請稍後再試', true));
+        loadCardByPublicId(shareCardId).then(sc => {
+          if (sc) {
+            if (shouldAutoShareCard) {
+              window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId })
+                .catch(e => window.showToast?.(e.message || '分享失敗，請稍後再試', true));
+            } else {
+              window.roCardData = sc;
+              if (!renderSharedReadOnlyCard(sc, refId, netId) && typeof window.openCardDetail === 'function') window.openCardDetail(sc);
+            }
           } else {
-            window.roCardData = sc;
-            if (!renderSharedReadOnlyCard(sc, refId, netId) && typeof window.openCardDetail === 'function') window.openCardDetail(sc);
+            window.showToast('找不到該名片', true);
+            window.goPage('home');
           }
-        } else {
-          window.showToast('找不到該名片', true);
+        }).catch(e => {
+          window.showToast?.(e.message || '找不到該名片', true);
           window.goPage('home');
-        }
+        });
       } else if (claimCardId) {
         window.fetchAPI('getCardForClaim', { claimRowId: claimCardId }, true).then(cardForClaim => {
           if (cardForClaim && cardForClaim.error) throw new Error(cardForClaim.error);
