@@ -410,6 +410,47 @@ function appendCardAutoShareMode(url) {
   }
 }
 
+function renderSharedReadOnlyCard(card, refId, netId) {
+  const container = document.getElementById('ro-card-container');
+  const modal = document.getElementById('readonly-card-modal');
+  if (!container || !modal || !card || typeof window.getPreviewHTML !== 'function') return false;
+  const cardId = String(card.rowId || card.cardRowId || card.id || '').trim();
+  const cfg = buildCardShareConfig(card);
+  const cfgParams = {
+    imgUrl: cfg.imgUrl || card['名片圖檔'] || '',
+    imgRatio: cfg.imgRatioLandscape || '20:13',
+    buttons: cfg.buttons || [],
+    descAlign: cfg.descAlign || 'center',
+    descColor: cfg.descColor || '#666666',
+    layoutStyle: cfg.layoutStyle || 'landscape'
+  };
+  const shareUrl = appendCardAutoShareMode(buildPlainCardViewUrl(card, refId || '', netId || 'admin'));
+  container.innerHTML = window.getPreviewHTML(card, 'ro', cfgParams);
+  const shell = document.createElement('div');
+  shell.className = 'overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm';
+  const header = document.createElement('div');
+  header.className = 'flex items-center justify-between gap-3 px-4 py-2 border-b border-slate-100 bg-white';
+  const likeBtn = document.createElement('button');
+  likeBtn.type = 'button';
+  likeBtn.setAttribute('data-social-like-button', '');
+  likeBtn.className = 'inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-[12px] font-black text-slate-600 active:scale-95 transition-transform';
+  likeBtn.innerHTML = '<span class=material-symbols-outlined>thumb_up</span><span data-social-like-count>0</span>';
+  const shareLink = document.createElement('a');
+  shareLink.href = shareUrl;
+  shareLink.className = 'rounded-full bg-red-500 px-3.5 py-1 text-[12px] font-black text-white shadow-sm';
+  shareLink.textContent = '分享';
+  header.appendChild(likeBtn);
+  header.appendChild(shareLink);
+  while (container.firstChild) shell.appendChild(container.firstChild);
+  shell.insertBefore(header, shell.firstChild);
+  container.appendChild(shell);
+  modal.classList.remove('hidden');
+  if (cardId && typeof window.initSocialLikeWidget === 'function') {
+    setTimeout(() => window.initSocialLikeWidget(cardId, netId || 'admin'), 0);
+  }
+  return true;
+}
+
 function routeSharedCardBadgeToPicker(flexMsg, shareUrl) {
   const actionUrl = appendCardAutoShareMode(shareUrl);
   if (!flexMsg || !actionUrl) return flexMsg;
@@ -2724,18 +2765,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
               }
               window.roCardData = sc;
-              let cfg = {};
-              try { cfg = JSON.parse(sc['自訂名片設定'] || '{}'); } catch(e){}
-              let cfgParams = {
-                imgUrl: cfg.imgUrl || sc['名片圖檔'] || '',
-                imgRatio: cfg.imgRatioLandscape || '20:13',
-                buttons: cfg.buttons || [],
-                descAlign: cfg.descAlign || 'center',
-                descColor: cfg.descColor || '#666666',
-                layoutStyle: cfg.layoutStyle || 'landscape'
-              };
-              document.getElementById('ro-card-container').innerHTML = window.getPreviewHTML(sc, 'ro', cfgParams);
-              document.getElementById('readonly-card-modal').classList.remove('hidden');
+              renderSharedReadOnlyCard(sc, refId, netId);
             }
           }
         } catch(e){}
@@ -2770,7 +2800,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.shareCardFromLink(sc, { referrerId: window.currentUserProfile?.userId || refId, networkId: netId })
               .catch(e => window.showToast?.(e.message || '分享失敗，請稍後再試', true));
           } else {
-            window.openCardDetail(sc);
+            window.roCardData = sc;
+            if (!renderSharedReadOnlyCard(sc, refId, netId) && typeof window.openCardDetail === 'function') window.openCardDetail(sc);
           }
         } else {
           window.showToast('找不到該名片', true);

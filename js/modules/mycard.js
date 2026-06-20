@@ -1105,19 +1105,24 @@
     var actionUrl = appendShareMode(shareUrl);
     if (!flexMsg || !actionUrl) return flexMsg;
     try {
-      if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents[0]) {
-        var headerItem = flexMsg.header.contents[0];
-        var action = headerItem.action || {};
-        headerItem.action = headerItem.type === 'button'
-          ? { type: 'uri', label: action.label || '分享名片', uri: actionUrl }
-          : { type: 'uri', uri: actionUrl };
+      if (flexMsg.header && Array.isArray(flexMsg.header.contents) && flexMsg.header.contents.length) {
+        var likeUrl = typeof window.buildECardLikeUrl === 'function' ? window.buildECardLikeUrl(shareUrl) : '';
+        if (likeUrl && flexMsg.header.contents[0]) {
+          flexMsg.header.contents[0].action = { type: 'uri', uri: likeUrl };
+        }
+        var shareItem = flexMsg.header.contents[flexMsg.header.contents.length - 1];
+        if (shareItem) {
+          var action = shareItem.action || {};
+          shareItem.action = shareItem.type === 'button'
+            ? { type: 'uri', label: action.label || '分享名片', uri: actionUrl }
+            : { type: 'uri', uri: actionUrl };
+        }
       }
     } catch (e) {
       console.warn('[routeFlexHeaderShareToPicker] failed:', e);
     }
     return flexMsg;
   }
-
   async function sharePlainCardLink(shareUrl, cardName) {
     var text = '這是我的數位名片';
     if (cardName) text += '：' + cardName;
