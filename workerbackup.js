@@ -298,6 +298,7 @@ const SecurityModule = {
       'repairLineOAFollowPointOnboarding',
       'repairPointWalletSearchIndex',
       'diagnosePointSync',
+      'listRecentR2Objects',
       'listPointSyncJobs',
       'enqueuePointSyncJob',
       'processPointSyncJobs',
@@ -696,7 +697,25 @@ const StorageModule = {
       console.error("[Storage Error]", e);
       return '';
     }
-  }
+  },
+  async listRecentObjects(payload, env) {
+    if (!env.IMG_BUCKET || typeof env.IMG_BUCKET.list !== 'function') return { success: false, error: 'IMG_BUCKET_LIST_MISSING' };
+    const prefix = String(payload && payload.prefix || 'card_').trim() || 'card_';
+    const limit = Math.min(Math.max(parseInt(payload && payload.limit, 10) || 120, 1), 1000);
+    const cursor = String(payload && payload.cursor || '').trim() || undefined;
+    const listed = await env.IMG_BUCKET.list({ prefix, limit: Math.min(limit, 1000), cursor });
+    const baseUrl = (env.R2_PUBLIC_URL || env.R2_WORKER_URL || 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev').replace(/\/$/, '');
+    const objects = (listed.objects || []).map(obj => ({
+      key: obj.key,
+      url: baseUrl + '/' + obj.key,
+      size: obj.size || 0,
+      uploaded: obj.uploaded ? new Date(obj.uploaded).toISOString() : '',
+      etag: obj.etag || obj.httpEtag || '',
+      contentType: obj.httpMetadata && obj.httpMetadata.contentType || ''
+    })).sort((a, b) => String(b.key).localeCompare(String(a.key)));
+    return { success: true, data: { objects, truncated: !!listed.truncated, cursor: listed.cursor || '', prefix, limit } };
+  },
+
 };
 
 // ==================== 模組 3: AI 服務 (AI Module) ====================
@@ -15435,6 +15454,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'd1BackfillFromGas':       return await D1BackfillModule.backfillFromGas(payload, env);
     case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
+    case 'listRecentR2Objects':   return await StorageModule.listRecentObjects(payload || {}, env);
     case 'deployRichMenu':         return await LineOAModule.deployRichMenu(payload, env);
     case 'listLineOAKeywordRules': return await LineOAKeywordRuleModule.list(payload, env);
     case 'saveLineOAKeywordRule':  return await LineOAKeywordRuleModule.save(payload, env);
