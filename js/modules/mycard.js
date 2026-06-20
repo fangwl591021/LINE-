@@ -515,6 +515,14 @@
       profile.isStoreOwner ? 'store owner' : '',
       current.isStoreOwner ? 'store owner' : ''
     ];
+    var roleBadge = document.querySelector('.role-badge, #role-badge, [data-role-badge], #tenant-role-badge');
+    if (roleBadge) candidates.push(roleBadge.textContent || '');
+    var adminBadge = Array.prototype.slice.call(document.querySelectorAll('span, div, button'))
+      .map(function(el) { return String(el.textContent || '').trim(); })
+      .filter(function(text) { return text === 'ADMIN' || text === '總管' || text === '店長' || text === '租戶'; })
+      .slice(0, 3)
+      .join(' ');
+    if (adminBadge) candidates.push(adminBadge);
     return candidates.filter(function(value) { return value !== null && value !== undefined && value !== ''; }).join(' ').toLowerCase();
   }
 
@@ -1322,7 +1330,10 @@
   }
 
   function setMyUploadImage(url, ratio) {
-    var layout = ratio ? layoutFromImageRatio(ratio, getLayout()) : getLayout();
+    var wysiwygOpen = !!(wysiwygState && wysiwygState.cfg && !document.getElementById('my-card-wysiwyg-modal')?.classList.contains('hidden'));
+    var layout = wysiwygOpen
+      ? normalizeWysiwygLayout(wysiwygState.cfg.layoutStyle || getActiveMyCardLayout())
+      : (ratio ? layoutFromImageRatio(ratio, getLayout()) : getLayout());
     var cleanUrl = String(url || '').trim();
     if (!cleanUrl) return;
 
@@ -1332,7 +1343,7 @@
 
     var imgInput = $('#my-v1-img-url');
     if (imgInput) imgInput.value = cleanUrl;
-    if (wysiwygState.cfg && !document.getElementById('my-card-wysiwyg-modal')?.classList.contains('hidden')) {
+    if (wysiwygOpen) {
       wysiwygState.cfg.layoutStyle = layout;
       if (layout === 'portrait') wysiwygState.cfg.imgUrlPortrait = cleanUrl;
       else if (layout === 'square') wysiwygState.cfg.imgUrlSquare = cleanUrl;
@@ -1344,8 +1355,16 @@
       renderMyCardWysiwyg();
       var wysiwygImageInput = document.getElementById('my-wysiwyg-image-input');
       if (wysiwygImageInput) wysiwygImageInput.value = cleanUrl;
+      closeMyCardWysiwygEditor();
     }
     updatePreview();
+  }
+
+  function activeImageForCardVersion(cfg, version) {
+    cfg = cfg || {};
+    if (version === 'poster') return cfg.imgUrlPortrait || cfg.imgUrl || '';
+    if (version === 'square') return cfg.imgUrlSquare || cfg.imgUrl || '';
+    return cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || '';
   }
 
   async function saveMyECardConfig(evt) {
@@ -1397,17 +1416,18 @@
 
       var rowId = await ensureCurrentCardRowId();
       if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
+      var activeImageUrl = activeImageForCardVersion(cfg, targetVersion);
       var res = await window.fetchAPI('updateCard', {
         rowId: rowId,
         userId: (window.currentUserProfile && window.currentUserProfile.userId) || '',
         data: {
-          '名片圖檔': cfg.imgUrl,
+          '名片圖檔': activeImageUrl,
           '自訂名片設定': JSON.stringify(cfg)
         }
       }, true);
       if (res && !res.error) {
         var rawCfg = JSON.stringify(cfg);
-        currentCardData['名片圖檔'] = cfg.imgUrl;
+        currentCardData['名片圖檔'] = activeImageUrl;
         currentCardData['自訂名片設定'] = rawCfg;
         currentCardData.customConfig = rawCfg;
         currentCardData.custom_config = rawCfg;
