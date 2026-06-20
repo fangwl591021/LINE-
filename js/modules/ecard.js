@@ -395,7 +395,9 @@ function buildECardShareHeader(badgeUrl) {
 
 function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
-  const rawImgUrl = (
+  const legacySourceType = String(card && (card.sourceType || card.source_type || card['名片來源']) || '').trim().toLowerCase();
+  const preferPrimaryImage = config.preferPrimaryImage === true || legacySourceType === 'legacy_self_profile' || legacySourceType === 'self_profile';
+  const rawImgUrl = preferPrimaryImage ? (config.imgUrl || card['名片圖檔'] || config.imgUrlPortrait || config.imgUrlSquare) : (
     layoutStyle === 'portrait' ? (config.imgUrlPortrait || config.imgUrl || card['名片圖檔']) :
     layoutStyle === 'square' ? (config.imgUrlSquare || config.imgUrl || card['名片圖檔']) :
     (config.imgUrl || config.imgUrlLandscape || card['名片圖檔'])
@@ -464,11 +466,15 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   config = Object.assign({}, savedConfig, config || {});
   const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
   const cardImageUrl = readECardCardValue(card, ['imageUrl', 'image_url', 'cardImage', 'card_image', '\u540d\u7247\u5716\u6a94']);
-  const rawImgUrl = layoutStyle === 'portrait'
-    ? (config.imgUrlPortrait || config.imgUrl || cardImageUrl)
-    : (layoutStyle === 'square'
-      ? (config.imgUrlSquare || config.imgUrl || cardImageUrl)
-      : (config.imgUrl || config.imgUrlLandscape || cardImageUrl));
+  const sourceType = String(readECardCardValue(card, ['sourceType', 'source_type', '\u540d\u7247\u4f86\u6e90']) || '').trim().toLowerCase();
+  const preferPrimaryImage = config.preferPrimaryImage === true || sourceType === 'legacy_self_profile' || sourceType === 'self_profile';
+  const rawImgUrl = preferPrimaryImage
+    ? (config.imgUrl || cardImageUrl || config.imgUrlPortrait || config.imgUrlSquare)
+    : layoutStyle === 'portrait'
+      ? (config.imgUrlPortrait || config.imgUrl || cardImageUrl)
+      : (layoutStyle === 'square'
+        ? (config.imgUrlSquare || config.imgUrl || cardImageUrl)
+        : (config.imgUrl || config.imgUrlLandscape || cardImageUrl));
   const imgUrl = cleanECardFlexImageUrl(rawImgUrl) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   const aspectRatio = layoutStyle === 'portrait'
     ? (config.imgRatioPortrait || '400:600')

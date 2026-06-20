@@ -342,12 +342,15 @@ function buildCardShareConfig(card) {
       break;
     } catch (e) {}
   }
+  const sourceType = String(card?.sourceType || card?.source_type || card?.['名片來源'] || '').trim().toLowerCase();
+  const preferPrimaryImage = sourceType === 'legacy_self_profile' || sourceType === 'self_profile';
   return {
     ...cfg,
     layoutStyle: cfg.layoutStyle || cfg.layout || 'landscape',
+    preferPrimaryImage,
     imgUrl: cfg.imgUrl || card?.['名片圖檔'] || '',
-    imgUrlPortrait: cfg.imgUrlPortrait || '',
-    imgUrlSquare: cfg.imgUrlSquare || '',
+    imgUrlPortrait: preferPrimaryImage ? '' : (cfg.imgUrlPortrait || ''),
+    imgUrlSquare: preferPrimaryImage ? '' : (cfg.imgUrlSquare || ''),
     imgRatioLandscape: cfg.imgRatioLandscape || '20:13',
     imgRatioPortrait: cfg.imgRatioPortrait || '2:3',
     imgRatioSquare: cfg.imgRatioSquare || '1:1',
@@ -726,11 +729,13 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
       layout === 'square' ? (cfg.imgRatioSquare || '1:1') :
       (cfg.imgRatioLandscape || '20:13')
     ).replace(':', '/');
-    const imgUrl = layout === 'portrait'
-      ? (cfg.imgUrlPortrait || cfg.imgUrl || card['名片圖檔'] || '')
-      : layout === 'square'
-        ? (cfg.imgUrlSquare || cfg.imgUrl || card['名片圖檔'] || '')
-        : (cfg.imgUrl || card['名片圖檔'] || '');
+    const imgUrl = cfg.preferPrimaryImage
+      ? (cfg.imgUrl || card['名片圖檔'] || cfg.imgUrlPortrait || cfg.imgUrlSquare || '')
+      : layout === 'portrait'
+        ? (cfg.imgUrlPortrait || cfg.imgUrl || card['名片圖檔'] || '')
+        : layout === 'square'
+          ? (cfg.imgUrlSquare || cfg.imgUrl || card['名片圖檔'] || '')
+          : (cfg.imgUrl || card['名片圖檔'] || '');
     const name = cardTextValue(card, ['姓名', 'name', 'displayName'], '數位名片');
     const company = cardTextValue(card, ['公司名稱', 'companyName', 'company'], '');
     const title = cardTextValue(card, ['職稱', 'title', 'industry'], '');
