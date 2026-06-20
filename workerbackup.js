@@ -1321,12 +1321,29 @@ const LineOAChatModule = {
     return message;
   },
 
+  myCardVersionLabel(card) {
+    const rowId = this.text(card?.rowId || card?.row_id || card?.id).toUpperCase();
+    let cfg = {};
+    try {
+      const raw = card?.customConfig || card?.custom_config || card?.['自訂名片設定'];
+      cfg = raw && typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+    } catch (e) {
+      cfg = {};
+    }
+    const version = this.text(cfg.cardVersion || cfg.card_version).toLowerCase();
+    const layout = this.text(cfg.layoutStyle || cfg.layout).toLowerCase();
+    if (rowId.startsWith('CARD_VIDEO_') || version === 'video' || cfg.videoCard === true) return '影音';
+    if (rowId.startsWith('CARD_POSTER_') || version === 'poster' || layout === 'portrait') return '滿版';
+    if (rowId.startsWith('CARD_SQUARE_') || version === 'square' || layout === 'square') return '正方';
+    if (rowId.startsWith('CARD_STD_') || version === 'standard' || layout === 'landscape') return '標準';
+    return this.text(card?.name, '名片');
+  },
   buildMyCardSelectorFlex(rows, userId, env) {
     const cards = (Array.isArray(rows) ? rows : []).slice(0, 10).map(row => D1ReadModule.cardRow(row)).filter(card => card && card.rowId);
     if (!cards.length) return null;
     const editUrl = this.quickMyCardUrl(userId, env);
     const buttons = cards.map((card, index) => {
-      const label = this.text(card.name, `名片 ${index + 1}`).slice(0, 20);
+      const label = this.myCardVersionLabel(card).slice(0, 20);
       return {
         type: 'button',
         style: 'secondary',
