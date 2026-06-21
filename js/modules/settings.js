@@ -28,13 +28,13 @@ function normalizeRichmanCouponSettings(input) {
   };
 }
 
-function normalizeRichmanCouponList(input, fallbackSingle) {
+function normalizeRichmanCouponList(input, fallbackSingle, options) {
   const rawList = Array.isArray(input) ? input : [];
-  const list = rawList.map(normalizeRichmanCouponSettings).filter(coupon => coupon.title || coupon.body);
+  const normalized = rawList.map(normalizeRichmanCouponSettings);
+  const list = options && options.keepBlank ? normalized : normalized.filter(coupon => coupon.title || coupon.body);
   if (list.length) return list;
   return [normalizeRichmanCouponSettings(fallbackSingle || RICHMAN_COUPON_DEFAULTS)];
 }
-
 function richmanCouponEscape(value) {
   return String(value || '').replace(/[&<>"']/g, function(ch) {
     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] || ch;
@@ -619,7 +619,7 @@ function renderRichmanCouponList(list) {
   const box = document.getElementById('richman-coupon-list');
   const count = document.getElementById('richman-coupon-count');
   if (!box) return;
-  const coupons = normalizeRichmanCouponList(list, RICHMAN_COUPON_DEFAULTS);
+  const coupons = normalizeRichmanCouponList(list, RICHMAN_COUPON_DEFAULTS, { keepBlank: true });
   window.richmanCouponSettingsDraft = coupons;
   if (count) {
     const enabledCount = coupons.filter(coupon => coupon.enabled).length;
