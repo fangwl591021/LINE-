@@ -1,6 +1,36 @@
 /* ==================== 系統參數與設定模組 ==================== */
 
 const LOCAL_OPENAI_KEY_STORAGE = 'line_engine_local_openai_api_key';
+const RICHMAN_COUPON_DEFAULTS = {
+  enabled: true,
+  title: '',
+  body: '',
+  validDays: 30,
+  redeemLimit: 'once'
+};
+
+function normalizeRichmanCouponSettings(input) {
+  const raw = input && typeof input === 'object' ? input : {};
+  const validDays = Math.max(1, Math.min(365, Number(raw.validDays || raw.valid_days || 30) || 30));
+  const redeemLimit = String(raw.redeemLimit || raw.redeem_limit || 'once') === 'manual' ? 'manual' : 'once';
+  return {
+    enabled: raw.enabled === undefined ? true : !!raw.enabled,
+    title: String(raw.title || '').trim().slice(0, 80),
+    body: String(raw.body || raw.description || '').trim().slice(0, 1000),
+    validDays,
+    redeemLimit,
+    updatedAt: raw.updatedAt || raw.updated_at || ''
+  };
+}
+
+function setRichmanCouponStatus(message, isError) {
+  const status = document.getElementById('richman-coupon-status');
+  if (!status) return;
+  status.textContent = message;
+  status.className = 'rounded-2xl border p-4 text-[13px] font-bold leading-relaxed ' + (isError
+    ? 'bg-red-50 border-red-100 text-red-600'
+    : 'bg-slate-50 border-slate-100 text-slate-500');
+}
 
 window.loadLocalGptKeySettings = function() {
   const input = document.getElementById('local-gpt-api-key');
@@ -52,8 +82,11 @@ window.saveStoreBanner = async function(e) {
   btn.disabled = true;
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
 
-  // 封裝設定資料
+  const cachedSettings = (typeof window.readCachedStoreSettings === 'function'
+    ? window.readCachedStoreSettings(window.currentNetworkId)
+    : null) || {};
   const settings = {
+    ...cachedSettings,
     siteName: document.getElementById('input-site-name').value.trim(),
     bannerUrl: document.getElementById('input-store-banner').value.trim(),
     showBanner: document.getElementById('toggle-show-banner').checked,
@@ -559,6 +592,81 @@ window.extractVoomMediaForSettings = async function(event) {
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = originalHtml || '解析';
+    }
+  }
+};
+
+window.loadRichmanCouponSettings = async function() {
+  const titleEl = document.getElementById('richman-coupon-title');
+  const bodyEl = document.getElementById('richman-coupon-body');
+  const validDaysEl = document.getElementById('richman-coupon-valid-days');
+  const redeemLimitEl = document.getElementById('richman-coupon-redeem-limit');
+  const enabledEl = document.getElementById('richman-coupon-enabled');
+  if (!titleEl || !bodyEl || !validDaysEl || !redeemLimitEl || !enabledEl) return;
+
+  setRichmanCouponStatus('讀取優惠券設定中...', false);
+  let d = null;
+  try {
+    const res = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId });
+    d = window.normalizeStoreSettings ? window.normalizeStoreSettings(res) : (res && res.data ? res.data : res);
+    if (d && typeof window.writeCachedStoreSettings === 'function') window.writeCachedStoreSettings(d, window.currentNetworkId);
+  } catch (e) {
+    d = typeof window.readCachedStoreSettings === 'function' ? window.readCachedStoreSettings(window.currentNetworkId) : null;
+  }
+
+  const coupon = normalizeRichmanCouponSettings((d && d.couponSettings) || RICHMAN_COUPON_DEFAULTS);
+  titleEl.value = coupon.title;
+  bodyEl.value = coupon.body;
+  validDaysEl.value = coupon.validDays;
+  redeemLimitEl.value = coupon.redeemLimit;
+  enabledEl.checked = !!coupon.enabled;
+  setRichmanCouponStatus(coupon.title ? '已載入優惠券設定。' : '尚未設定優惠券內容。', false);
+};
+
+window.saveRichmanCouponSettings = async function(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById('btn-save-richman-coupon');
+  const title = document.getElementById('richman-coupon-title')?.value?.trim() || '';
+  const body = document.getElementById('richman-coupon-body')?.value?.trim() || '';
+  const validDays = Number(document.getElementById('richman-coupon-valid-days')?.value || 30) || 30;
+  const redeemLimit = document.getElementById('richman-coupon-redeem-limit')?.value || 'once';
+  const enabled = !!document.getElementById('richman-coupon-enabled')?.checked;
+
+  if (!title) return window.showToast?.('請輸入優惠券名稱', true);
+  if (!body) return window.showToast?.('請輸入優惠內容', true);
+
+  const oldHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
+  }
+
+  try {
+    let base = typeof window.readCachedStoreSettings === 'function' ? (window.readCachedStoreSettings(window.currentNetworkId) || {}) : {};
+    try {
+      const current = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId }, true);
+      base = (window.normalizeStoreSettings ? window.normalizeStoreSettings(current) : (current && current.data ? current.data : current)) || base;
+    } catch (e2) {}
+
+    const couponSettings = normalizeRichmanCouponSettings({ title, body, validDays, redeemLimit, enabled, updatedAt: new Date().toISOString() });
+    const payload = {
+      ...base,
+      couponSettings,
+      networkId: window.currentNetworkId || 'admin'
+    };
+    const res = await window.fetchAPI('saveStoreSettings', payload);
+    if (!res || res.success === false) throw new Error(res?.error || '儲存失敗');
+    const saved = window.normalizeStoreSettings ? window.normalizeStoreSettings(res) : (res.data || payload);
+    if (typeof window.writeCachedStoreSettings === 'function') window.writeCachedStoreSettings(saved || payload, payload.networkId);
+    setRichmanCouponStatus('優惠券設定已儲存，可提供大富翁流程讀取。', false);
+    window.showToast?.('優惠券設定已儲存');
+  } catch (err) {
+    setRichmanCouponStatus('儲存失敗：' + (err.message || err), true);
+    window.showToast?.('優惠券設定儲存失敗', true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = oldHtml;
     }
   }
 };

@@ -7971,10 +7971,25 @@ const D1StoreSettingsModule = {
       showBanner: payload.showBanner === undefined ? true : !!payload.showBanner,
       youtubeUrl: String(payload.youtubeUrl || '').trim(),
       showYoutube: payload.showYoutube === undefined ? true : !!payload.showYoutube,
+      couponSettings: this.normalizeCouponSettings(payload.couponSettings || payload.richmanCoupon || {}),
       updatedAt: new Date().toISOString()
     };
   },
 
+
+  normalizeCouponSettings(input = {}) {
+    const raw = input && typeof input === 'object' ? input : {};
+    const validDays = Math.max(1, Math.min(365, Math.floor(Number(raw.validDays || raw.valid_days || 30) || 30)));
+    const redeemLimit = String(raw.redeemLimit || raw.redeem_limit || 'once') === 'manual' ? 'manual' : 'once';
+    return {
+      enabled: raw.enabled === undefined ? true : !!raw.enabled,
+      title: String(raw.title || '').trim().slice(0, 80),
+      body: String(raw.body || raw.description || '').trim().slice(0, 1000),
+      validDays,
+      redeemLimit,
+      updatedAt: String(raw.updatedAt || raw.updated_at || '').trim()
+    };
+  },
   async ensure(env) {
     if (!env.ACTMASTER_DB) throw new Error('D1 database unavailable');
     await env.ACTMASTER_DB.prepare(`
