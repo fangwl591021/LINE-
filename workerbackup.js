@@ -7999,7 +7999,9 @@ const D1StoreSettingsModule = {
       .map(item => this.normalizeCouponSettings(item))
       .filter(item => item.title || item.body)
       .slice(0, 20);
-  },  async ensure(env) {
+  },
+
+  async ensure(env) {
     if (!env.ACTMASTER_DB) throw new Error('D1 database unavailable');
     await env.ACTMASTER_DB.prepare(`
       CREATE TABLE IF NOT EXISTS app_meta (
@@ -8025,6 +8027,28 @@ const D1StoreSettingsModule = {
     }
   },
 
+  async listCoupons(payload = {}, env) {
+    const settings = await this.get(payload, env);
+    const networkId = String(payload.networkId || 'admin').trim() || 'admin';
+    if (!settings || !settings.data) {
+      return { success: true, data: { networkId, coupons: [], defaultCoupon: null, count: 0, updatedAt: '' } };
+    }
+    const includeDisabled = payload.includeDisabled === true || String(payload.includeDisabled || '').toLowerCase() === 'true';
+    const rawList = this.normalizeCouponSettingsList(settings.data.couponSettingsList || []);
+    const fallback = this.normalizeCouponSettings(settings.data.couponSettings || {});
+    const sourceList = rawList.length ? rawList : (fallback.title || fallback.body ? [fallback] : []);
+    const coupons = sourceList.filter(coupon => includeDisabled || coupon.enabled);
+    return {
+      success: true,
+      data: {
+        networkId,
+        coupons,
+        defaultCoupon: coupons[0] || null,
+        count: coupons.length,
+        updatedAt: settings.data.updatedAt || ''
+      }
+    };
+  },
   async save(payload = {}, env) {
     await this.ensure(env);
     const data = this.normalize(payload);
@@ -15094,6 +15118,7 @@ async function dispatchAction(action, payload, request, env) {
     'getPublicActivities',
     'getActivityById',
     'getStoreSettings',
+    'listRichmanCoupons',
     'listAnnouncements',
     'uploadImageToR2',
     'resolveMyCardVersion',
@@ -15321,7 +15346,14 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await DBModule.forward(action, payload, env);
     }
-    case 'saveStoreSettings': {
+    case 'listRichmanCoupons': {
+      try {
+        return await D1StoreSettingsModule.listCoupons(payload || {}, env);
+      } catch (e) {
+        console.error("D1 listRichmanCoupons failed", e);
+        return { success: false, error: e && e.message ? e.message : 'listRichmanCoupons failed' };
+      }
+    }    case 'saveStoreSettings': {
       try {
         const d1Result = await D1StoreSettingsModule.save(payload || {}, env);
         if (d1Result && d1Result.success !== false) return d1Result;
