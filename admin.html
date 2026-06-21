@@ -646,8 +646,11 @@
             </div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
+            <button onclick="syncCardsToRichman()" class="text-sm border border-blue-200 text-blue-700 bg-blue-50 px-4 py-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 shadow-sm font-bold">
+              <span class="material-symbols-outlined text-[16px]">sync</span> 同步 Richman
+            </button>
             <button onclick="exportCardsForRichman()" class="text-sm border border-emerald-200 text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg hover:bg-emerald-100 flex items-center gap-1 shadow-sm font-bold">
-              <span class="material-symbols-outlined text-[16px]">download</span> 匯出 Richman
+              <span class="material-symbols-outlined text-[16px]">download</span> 匯出備份
             </button>
             <button onclick="loadCards()" class="text-sm border border-slate-200 text-slate-600 bg-white px-4 py-2 rounded-lg hover:bg-slate-50 flex items-center gap-1 shadow-sm">
               <span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理
@@ -4008,6 +4011,58 @@
       await loadCards();
     }
 
+    async function getRichmanAdminToken() {
+      const key = 'RICHMAN_ADMIN_TOKEN';
+      const saved = localStorage.getItem(key) || '';
+      const token = window.prompt('請輸入 Richman ADMIN_TOKEN', saved);
+      if (!token || !token.trim()) throw new Error('未輸入 Richman ADMIN_TOKEN');
+      localStorage.setItem(key, token.trim());
+      return token.trim();
+    }
+
+    async function syncCardsToRichman() {
+      const cards = Array.isArray(allCardsData) ? allCardsData : [];
+      if (!cards.length) {
+        showToast('請先載入全站名片庫，再同步 Richman', true);
+        return;
+      }
+
+      let token = '';
+      try {
+        token = await getRichmanAdminToken();
+      } catch (error) {
+        showToast(error.message || '缺少 Richman ADMIN_TOKEN', true);
+        return;
+      }
+
+      const btn = document.querySelector('button[onclick="syncCardsToRichman()"]');
+      const originalHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span> 同步中...';
+      }
+
+      try {
+        const form = new FormData();
+        form.append('action', 'importLineActionCards');
+        form.append('cardsJson', JSON.stringify(cards));
+        const response = await fetch('https://richman.fangwl591021.workers.dev/', {
+          method: 'POST',
+          headers: { 'x-admin-token': token },
+          body: form
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.success === false) throw new Error(payload.message || payload.error || `HTTP ${response.status}`);
+        showToast(`已同步 ${payload.imported || cards.length} 筆到 Richman D1`);
+      } catch (error) {
+        showToast(`同步 Richman 失敗：${error.message || error}`, true);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
+      }
+    }
     async function exportCardsForRichman() {
       const cards = Array.isArray(allCardsData) ? allCardsData : [];
       if (!cards.length) {
@@ -4035,7 +4090,7 @@
         URL.revokeObjectURL(url);
       } catch (_) {}
 
-      showToast(copied ? `已複製並下載 ${cards.length} 筆 Richman 匯入資料` : `已下載 ${cards.length} 筆 Richman 匯入資料`);
+      showToast(copied ? `已複製並下載 ${cards.length} 筆 Richman 備份資料` : `已下載 ${cards.length} 筆 Richman 備份資料`);
       window.open('https://fangwl591021.github.io/richman/data_admin.html', '_blank', 'noopener');
     }
     async function loadCards() {
