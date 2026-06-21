@@ -645,9 +645,14 @@
               </select>
             </div>
           </div>
-          <button onclick="loadCards()" class="text-sm border border-slate-200 text-slate-600 bg-white px-4 py-2 rounded-lg hover:bg-slate-50 flex items-center gap-1 shrink-0 shadow-sm">
-            <span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理
-          </button>
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="exportCardsForRichman()" class="text-sm border border-emerald-200 text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg hover:bg-emerald-100 flex items-center gap-1 shadow-sm font-bold">
+              <span class="material-symbols-outlined text-[16px]">download</span> 匯出 Richman
+            </button>
+            <button onclick="loadCards()" class="text-sm border border-slate-200 text-slate-600 bg-white px-4 py-2 rounded-lg hover:bg-slate-50 flex items-center gap-1 shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理
+            </button>
+          </div>
         </div>
 
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -4003,6 +4008,36 @@
       await loadCards();
     }
 
+    async function exportCardsForRichman() {
+      const cards = Array.isArray(allCardsData) ? allCardsData : [];
+      if (!cards.length) {
+        showToast('請先載入全站名片庫，再匯出 Richman 資料', true);
+        return;
+      }
+
+      const json = JSON.stringify(cards, null, 2);
+      const fileName = `richman-line-action-cards-${new Date().toISOString().slice(0, 10)}.json`;
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(json);
+        copied = true;
+      } catch (_) {}
+
+      try {
+        const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (_) {}
+
+      showToast(copied ? `已複製並下載 ${cards.length} 筆 Richman 匯入資料` : `已下載 ${cards.length} 筆 Richman 匯入資料`);
+      window.open('https://fangwl591021.github.io/richman/data_admin.html', '_blank', 'noopener');
+    }
     async function loadCards() {
       ensureDuplicateBindingsPanel();
       const tbody = document.getElementById('cards-table-body');
