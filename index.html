@@ -514,34 +514,16 @@
         </summary>
         <div class="p-5 pt-0 border-t border-slate-50 space-y-4">
           <p class="text-[12px] text-slate-500 font-bold leading-relaxed">先設定預設優惠券內容，之後提供大富翁遊戲與收件匣優惠券共用。</p>
-          <div>
-            <label class="text-xs text-slate-500 font-bold ml-1">優惠券名稱</label>
-            <input id="richman-coupon-title" class="custom-input mt-1" type="text" placeholder="例如：商圈見面禮">
-          </div>
-          <div>
-            <label class="text-xs text-slate-500 font-bold ml-1">優惠內容</label>
-            <textarea id="richman-coupon-body" class="textarea-block mt-1 !h-28" placeholder="例如：憑券到店消費享 9 折優惠"></textarea>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="flex items-center justify-between gap-3">
             <div>
-              <label class="text-xs text-slate-500 font-bold ml-1">有效天數</label>
-              <input id="richman-coupon-valid-days" class="custom-input mt-1" type="number" min="1" max="365" inputmode="numeric" value="30">
+              <div class="text-[13px] text-slate-700 font-black">優惠券清單</div>
+              <div id="richman-coupon-count" class="text-[12px] text-slate-400 font-bold mt-1">尚未載入</div>
             </div>
-            <div>
-              <label class="text-xs text-slate-500 font-bold ml-1">核銷次數</label>
-              <select id="richman-coupon-redeem-limit" class="custom-input mt-1">
-                <option value="once">每人限用一次</option>
-                <option value="manual">現場人工判定</option>
-              </select>
-            </div>
+            <button type="button" onclick="window.addRichmanCouponSetting()" class="shrink-0 px-3 py-2 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 text-[13px] font-black active:scale-95 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[17px]">add</span> 新增
+            </button>
           </div>
-          <label class="flex items-center justify-between rounded-2xl bg-slate-50 border border-slate-100 p-4">
-            <span class="text-[13px] text-slate-700 font-black">啟用給大富翁使用</span>
-            <span class="relative inline-flex items-center cursor-pointer shrink-0">
-              <input type="checkbox" id="richman-coupon-enabled" class="sr-only peer" checked>
-              <span class="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-amber-500 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:after:translate-x-4"></span>
-            </span>
-          </label>
+          <div id="richman-coupon-list" class="space-y-3"></div>
           <div id="richman-coupon-status" class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-[13px] text-slate-500 font-bold leading-relaxed">尚未載入優惠券設定。</div>
           <button id="btn-save-richman-coupon" type="button" onclick="window.saveRichmanCouponSettings(event)" class="w-full bg-[#06C755] text-white py-3.5 rounded-xl font-bold shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1">
             <span class="material-symbols-outlined text-[18px]">save</span> 儲存優惠券設定
@@ -2251,7 +2233,7 @@
 <script src="js/modules/admin.js?v=8.8"></script>
 <script src="js/modules/home.js?v=7.55"></script>
 <script src="js/modules/inbox.js?v=1.15"></script>
-<script src="js/modules/settings.js?v=7.8"></script>
+<script src="js/modules/settings.js?v=7.9"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.4"></script>
 <script src="js/auth.js?v=10.72"></script>

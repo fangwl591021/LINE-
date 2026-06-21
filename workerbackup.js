@@ -7971,7 +7971,8 @@ const D1StoreSettingsModule = {
       showBanner: payload.showBanner === undefined ? true : !!payload.showBanner,
       youtubeUrl: String(payload.youtubeUrl || '').trim(),
       showYoutube: payload.showYoutube === undefined ? true : !!payload.showYoutube,
-      couponSettings: this.normalizeCouponSettings(payload.couponSettings || payload.richmanCoupon || {}),
+      couponSettings: this.normalizeCouponSettings(payload.couponSettings || payload.richmanCoupon || this.normalizeCouponSettingsList(payload.couponSettingsList || [])[0] || {}),
+      couponSettingsList: this.normalizeCouponSettingsList(payload.couponSettingsList || payload.richmanCoupons || payload.coupons || []),
       updatedAt: new Date().toISOString()
     };
   },
@@ -7982,6 +7983,7 @@ const D1StoreSettingsModule = {
     const validDays = Math.max(1, Math.min(365, Math.floor(Number(raw.validDays || raw.valid_days || 30) || 30)));
     const redeemLimit = String(raw.redeemLimit || raw.redeem_limit || 'once') === 'manual' ? 'manual' : 'once';
     return {
+      id: String(raw.id || raw.couponId || raw.coupon_id || '').trim().slice(0, 80),
       enabled: raw.enabled === undefined ? true : !!raw.enabled,
       title: String(raw.title || '').trim().slice(0, 80),
       body: String(raw.body || raw.description || '').trim().slice(0, 1000),
@@ -7990,7 +7992,14 @@ const D1StoreSettingsModule = {
       updatedAt: String(raw.updatedAt || raw.updated_at || '').trim()
     };
   },
-  async ensure(env) {
+
+  normalizeCouponSettingsList(input = []) {
+    const rawList = Array.isArray(input) ? input : [];
+    return rawList
+      .map(item => this.normalizeCouponSettings(item))
+      .filter(item => item.title || item.body)
+      .slice(0, 20);
+  },  async ensure(env) {
     if (!env.ACTMASTER_DB) throw new Error('D1 database unavailable');
     await env.ACTMASTER_DB.prepare(`
       CREATE TABLE IF NOT EXISTS app_meta (

@@ -9,11 +9,16 @@ const RICHMAN_COUPON_DEFAULTS = {
   redeemLimit: 'once'
 };
 
+function createRichmanCouponId() {
+  return 'coupon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
 function normalizeRichmanCouponSettings(input) {
   const raw = input && typeof input === 'object' ? input : {};
   const validDays = Math.max(1, Math.min(365, Number(raw.validDays || raw.valid_days || 30) || 30));
   const redeemLimit = String(raw.redeemLimit || raw.redeem_limit || 'once') === 'manual' ? 'manual' : 'once';
   return {
+    id: String(raw.id || raw.couponId || '').trim().slice(0, 80) || createRichmanCouponId(),
     enabled: raw.enabled === undefined ? true : !!raw.enabled,
     title: String(raw.title || '').trim().slice(0, 80),
     body: String(raw.body || raw.description || '').trim().slice(0, 1000),
@@ -23,6 +28,18 @@ function normalizeRichmanCouponSettings(input) {
   };
 }
 
+function normalizeRichmanCouponList(input, fallbackSingle) {
+  const rawList = Array.isArray(input) ? input : [];
+  const list = rawList.map(normalizeRichmanCouponSettings).filter(coupon => coupon.title || coupon.body);
+  if (list.length) return list;
+  return [normalizeRichmanCouponSettings(fallbackSingle || RICHMAN_COUPON_DEFAULTS)];
+}
+
+function richmanCouponEscape(value) {
+  return String(value || '').replace(/[&<>"']/g, function(ch) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] || ch;
+  });
+}
 function setRichmanCouponStatus(message, isError) {
   const status = document.getElementById('richman-coupon-status');
   if (!status) return;
@@ -596,13 +613,90 @@ window.extractVoomMediaForSettings = async function(event) {
   }
 };
 
+window.richmanCouponSettingsDraft = Array.isArray(window.richmanCouponSettingsDraft) ? window.richmanCouponSettingsDraft : [];
+
+function renderRichmanCouponList(list) {
+  const box = document.getElementById('richman-coupon-list');
+  const count = document.getElementById('richman-coupon-count');
+  if (!box) return;
+  const coupons = normalizeRichmanCouponList(list, RICHMAN_COUPON_DEFAULTS);
+  window.richmanCouponSettingsDraft = coupons;
+  if (count) {
+    const enabledCount = coupons.filter(coupon => coupon.enabled).length;
+    count.textContent = '目前 ' + coupons.length + ' 種，啟用 ' + enabledCount + ' 種';
+  }
+  box.innerHTML = coupons.map(function(coupon, index) {
+    const id = richmanCouponEscape(coupon.id);
+    return `
+      <div class="rounded-2xl border border-slate-100 bg-white shadow-sm p-4 space-y-3" data-richman-coupon-row data-richman-coupon-id="${id}">
+        <div class="flex items-center justify-between gap-3">
+          <div class="font-black text-slate-800 text-[14px]">優惠券 ${index + 1}</div>
+          <button type="button" onclick="window.removeRichmanCouponSetting('${id}')" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-500 text-[12px] font-black active:scale-95 ${coupons.length <= 1 ? 'opacity-40 pointer-events-none' : ''}">刪除</button>
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 font-bold ml-1">優惠券名稱</label>
+          <input data-field="title" class="custom-input mt-1" type="text" maxlength="80" value="${richmanCouponEscape(coupon.title)}" placeholder="例如：商圈見面禮">
+        </div>
+        <div>
+          <label class="text-xs text-slate-500 font-bold ml-1">優惠內容</label>
+          <textarea data-field="body" class="textarea-block mt-1 !h-24" maxlength="1000" placeholder="例如：憑券到店消費享 9 折優惠">${richmanCouponEscape(coupon.body)}</textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-slate-500 font-bold ml-1">有效天數</label>
+            <input data-field="validDays" class="custom-input mt-1" type="number" min="1" max="365" inputmode="numeric" value="${Number(coupon.validDays || 30)}">
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 font-bold ml-1">核銷次數</label>
+            <select data-field="redeemLimit" class="custom-input mt-1">
+              <option value="once" ${coupon.redeemLimit === 'once' ? 'selected' : ''}>每人限用一次</option>
+              <option value="manual" ${coupon.redeemLimit === 'manual' ? 'selected' : ''}>現場人工判定</option>
+            </select>
+          </div>
+        </div>
+        <label class="flex items-center justify-between rounded-2xl bg-slate-50 border border-slate-100 p-4">
+          <span class="text-[13px] text-slate-700 font-black">啟用給大富翁使用</span>
+          <span class="relative inline-flex items-center cursor-pointer shrink-0">
+            <input type="checkbox" data-field="enabled" class="sr-only peer" ${coupon.enabled ? 'checked' : ''}>
+            <span class="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-amber-500 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:after:translate-x-4"></span>
+          </span>
+        </label>
+      </div>`;
+  }).join('');
+}
+
+function collectRichmanCouponSettings() {
+  const rows = Array.from(document.querySelectorAll('[data-richman-coupon-row]'));
+  return rows.map(function(row) {
+    return normalizeRichmanCouponSettings({
+      id: row.getAttribute('data-richman-coupon-id') || createRichmanCouponId(),
+      title: row.querySelector('[data-field="title"]')?.value || '',
+      body: row.querySelector('[data-field="body"]')?.value || '',
+      validDays: row.querySelector('[data-field="validDays"]')?.value || 30,
+      redeemLimit: row.querySelector('[data-field="redeemLimit"]')?.value || 'once',
+      enabled: !!row.querySelector('[data-field="enabled"]')?.checked,
+      updatedAt: new Date().toISOString()
+    });
+  });
+}
+
+window.addRichmanCouponSetting = function() {
+  const current = collectRichmanCouponSettings();
+  current.push(normalizeRichmanCouponSettings({ ...RICHMAN_COUPON_DEFAULTS, id: createRichmanCouponId() }));
+  renderRichmanCouponList(current);
+  setRichmanCouponStatus('已新增一種優惠券，請填寫內容後儲存。', false);
+};
+
+window.removeRichmanCouponSetting = function(id) {
+  const current = collectRichmanCouponSettings();
+  if (current.length <= 1) return;
+  renderRichmanCouponList(current.filter(coupon => coupon.id !== id));
+  setRichmanCouponStatus('已移除優惠券，請儲存後生效。', false);
+};
+
 window.loadRichmanCouponSettings = async function() {
-  const titleEl = document.getElementById('richman-coupon-title');
-  const bodyEl = document.getElementById('richman-coupon-body');
-  const validDaysEl = document.getElementById('richman-coupon-valid-days');
-  const redeemLimitEl = document.getElementById('richman-coupon-redeem-limit');
-  const enabledEl = document.getElementById('richman-coupon-enabled');
-  if (!titleEl || !bodyEl || !validDaysEl || !redeemLimitEl || !enabledEl) return;
+  const listEl = document.getElementById('richman-coupon-list');
+  if (!listEl) return;
 
   setRichmanCouponStatus('讀取優惠券設定中...', false);
   let d = null;
@@ -614,26 +708,19 @@ window.loadRichmanCouponSettings = async function() {
     d = typeof window.readCachedStoreSettings === 'function' ? window.readCachedStoreSettings(window.currentNetworkId) : null;
   }
 
-  const coupon = normalizeRichmanCouponSettings((d && d.couponSettings) || RICHMAN_COUPON_DEFAULTS);
-  titleEl.value = coupon.title;
-  bodyEl.value = coupon.body;
-  validDaysEl.value = coupon.validDays;
-  redeemLimitEl.value = coupon.redeemLimit;
-  enabledEl.checked = !!coupon.enabled;
-  setRichmanCouponStatus(coupon.title ? '已載入優惠券設定。' : '尚未設定優惠券內容。', false);
+  const coupons = normalizeRichmanCouponList(d && d.couponSettingsList, d && d.couponSettings);
+  renderRichmanCouponList(coupons);
+  setRichmanCouponStatus(coupons.some(coupon => coupon.title || coupon.body) ? '已載入 ' + coupons.length + ' 種優惠券設定。' : '尚未設定優惠券內容。', false);
 };
 
 window.saveRichmanCouponSettings = async function(e) {
   if (e) e.preventDefault();
   const btn = document.getElementById('btn-save-richman-coupon');
-  const title = document.getElementById('richman-coupon-title')?.value?.trim() || '';
-  const body = document.getElementById('richman-coupon-body')?.value?.trim() || '';
-  const validDays = Number(document.getElementById('richman-coupon-valid-days')?.value || 30) || 30;
-  const redeemLimit = document.getElementById('richman-coupon-redeem-limit')?.value || 'once';
-  const enabled = !!document.getElementById('richman-coupon-enabled')?.checked;
+  const couponSettingsList = collectRichmanCouponSettings();
 
-  if (!title) return window.showToast?.('請輸入優惠券名稱', true);
-  if (!body) return window.showToast?.('請輸入優惠內容', true);
+  if (!couponSettingsList.length) return window.showToast?.('請至少建立一種優惠券', true);
+  const incomplete = couponSettingsList.find(coupon => !coupon.title || !coupon.body);
+  if (incomplete) return window.showToast?.('每種優惠券都需要名稱與優惠內容', true);
 
   const oldHtml = btn ? btn.innerHTML : '';
   if (btn) {
@@ -648,17 +735,19 @@ window.saveRichmanCouponSettings = async function(e) {
       base = (window.normalizeStoreSettings ? window.normalizeStoreSettings(current) : (current && current.data ? current.data : current)) || base;
     } catch (e2) {}
 
-    const couponSettings = normalizeRichmanCouponSettings({ title, body, validDays, redeemLimit, enabled, updatedAt: new Date().toISOString() });
+    const primaryCoupon = couponSettingsList.find(coupon => coupon.enabled) || couponSettingsList[0];
     const payload = {
       ...base,
-      couponSettings,
+      couponSettings: primaryCoupon,
+      couponSettingsList,
       networkId: window.currentNetworkId || 'admin'
     };
     const res = await window.fetchAPI('saveStoreSettings', payload);
     if (!res || res.success === false) throw new Error(res?.error || '儲存失敗');
     const saved = window.normalizeStoreSettings ? window.normalizeStoreSettings(res) : (res.data || payload);
     if (typeof window.writeCachedStoreSettings === 'function') window.writeCachedStoreSettings(saved || payload, payload.networkId);
-    setRichmanCouponStatus('優惠券設定已儲存，可提供大富翁流程讀取。', false);
+    renderRichmanCouponList(couponSettingsList);
+    setRichmanCouponStatus('已儲存 ' + couponSettingsList.length + ' 種優惠券設定，可提供大富翁流程讀取。', false);
     window.showToast?.('優惠券設定已儲存');
   } catch (err) {
     setRichmanCouponStatus('儲存失敗：' + (err.message || err), true);
