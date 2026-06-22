@@ -282,6 +282,23 @@
     return '';
   }
 
+  function fallbackMyCardDescription(card) {
+    return readCardValue(card, [
+      'desc',
+      'description',
+      'services',
+      'service',
+      'serviceItems',
+      '服務項目',
+      '服務內容',
+      '名片服務說明',
+      '自我介紹',
+      '介紹',
+      '職稱',
+      '公司名稱'
+    ]);
+  }
+
   function show(el, visible) {
     if (el) el.classList.toggle('hidden', !visible);
   }
@@ -1328,7 +1345,7 @@
     var imgUrl = myEcardImgs[layout] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
     var cfg = parseCardConfig(currentCardData);
     var name = cfg.title || (currentCardData && currentCardData['姓名']) || profile.displayName || '姓名';
-    var desc = cfg.desc || (currentCardData ? (currentCardData['服務項目'] || currentCardData['職稱'] || currentCardData['公司名稱'] || '') : '');
+    var desc = cfg.desc || fallbackMyCardDescription(currentCardData);
     var color = cfg.descColor || '#666666';
     var align = cfg.descAlign || 'center';
     var ratio = layout === 'portrait' ? (myEcardRatios.portrait || '400:600').replace(':', '/') : (layout === 'square' ? '1/1' : '20/13');
@@ -1535,7 +1552,7 @@
     var cfg = buildCurrentShareConfig();
     var profile = moduleAuth.getUserProfile() || {};
     var name = readCardValue(currentCardData, ['name', '姓名', 'displayName']) || profile.displayName || '';
-    var desc = readCardValue(currentCardData, ['services', 'title', '職稱', '服務項目', '名片服務說明']) || '';
+    var desc = fallbackMyCardDescription(currentCardData) || '';
     cfg.title = String(cfg.title || name || '').trim();
     cfg.desc = String(cfg.desc || desc || '').trim();
     cfg.layoutStyle = cfg.layoutStyle || getLayout();
@@ -1701,6 +1718,7 @@
     var ratio = wysiwygLayoutRatio(layout, cfg);
     var imgUrl = currentWysiwygImage(cfg);
     var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+    var displayDesc = cfg.desc || fallbackMyCardDescription(currentCardData);
     var isVideoHero = cfg.cardType === 'video' && cfg.videoUrl;
     var heroMediaHtml = isVideoHero
       ? '<video class="w-full object-cover bg-slate-100" style="aspect-ratio:' + escapeAttr(ratio) + ';" src="' + escapeAttr(cfg.videoUrl) + '" poster="' + escapeAttr(imgUrl || 'https://placehold.co/800x520?text=Cover') + '" controls playsinline muted></video>'
@@ -2008,6 +2026,7 @@
     ratio = String(ratio).replace(':', '/');
     var imgUrl = currentWysiwygImage(cfg);
     var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
+    var displayDesc = cfg.desc || fallbackMyCardDescription(currentCardData);
     var isVideoHero = cfg.cardType === 'video' && cfg.videoUrl;
     var fallbackImg = 'https://placehold.co/800x520?text=Cover';
     var heroMediaHtml = isVideoHero
@@ -2042,7 +2061,7 @@
           '</button>' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'desc\')" class="my-wysiwyg-target block w-full mt-3 text-[15px] leading-relaxed whitespace-pre-wrap rounded-xl px-3 py-3" style="color:' + escapeAttr(safeCssColor(cfg.descColor, '#666666')) + ';text-align:' + escapeAttr(cfg.descAlign || 'center') + ';">' +
             '<span class="my-wysiwyg-edit-icon"><span class="material-symbols-outlined">notes</span></span>' +
-            escapeHTML(cfg.desc || '點這裡編輯名片說明').replace(/\n/g, '<br>') +
+            escapeHTML(displayDesc || '點這裡編輯名片說明').replace(/\n/g, '<br>') +
           '</button>' +
         '</div>' +
         '<div class="px-5 pb-5">' + buttonHtml +
