@@ -648,8 +648,6 @@
 
   async function resolveCurrentUserCard(force) {
     var targetVersion = getTargetCardVersion();
-    if (window.currentUserCard && !force && isEditableOwnCard(window.currentUserCard, targetVersion) && isCardVersion(window.currentUserCard, targetVersion)) return window.currentUserCard;
-
     var videoDraft = null;
     if (isWysiwygMyCardRequest() && getMyVideoDraftId()) {
       try {
@@ -710,12 +708,12 @@
       }
     }
 
-    var versionCard = findLoadedMyCardByVersion(targetVersion);
+    var versionCard = await resolveMyCardVersion(targetVersion, false);
     if (isEditableOwnCard(versionCard, targetVersion)) {
       window.currentUserCard = versionCard;
       return versionCard;
     }
-    versionCard = await resolveMyCardVersion(targetVersion, false);
+    versionCard = findLoadedMyCardByVersion(targetVersion);
     if (isEditableOwnCard(versionCard, targetVersion)) {
       window.currentUserCard = versionCard;
       return versionCard;
