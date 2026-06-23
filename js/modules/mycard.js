@@ -444,8 +444,8 @@
     if (rowId.indexOf('CARD_POSTER_') === 0) return 'poster';
     if (rowId.indexOf('CARD_SQUARE_') === 0) return 'square';
     if (rowId.indexOf('CARD_STD_') === 0) return 'standard';
-    if (cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || String(cfg.cardType || '').toLowerCase() === 'video' || String(cfg.cardVariant || '').toLowerCase() === 'video_card') return 'video';
     if (cfg.cardVersion || cfg.card_version) return normalizeCardVersion(cfg.cardVersion || cfg.card_version);
+    if (cfg.videoCard === true || cfg.videoStorageKind === 'dedicated_video_card' || String(cfg.cardVariant || '').toLowerCase() === 'video_card') return 'video';
     return normalizeCardVersion(cfg.layoutStyle || cfg.layout || 'standard');
   }
 
@@ -1662,13 +1662,12 @@
       }
       myVideoModeRequested = true;
       myVideoModeSuppressed = false;
-      var videoCard = findLoadedMyCardByVersion('video') || await resolveMyCardVersion('video', false);
+      var videoCard = await resolveMyCardVersion('video', false) || findLoadedMyCardByVersion('video');
       if (!isEditableOwnCard(videoCard, 'video')) {
         if (window.showToast) window.showToast('尚未找到影音名片', true);
         return;
       }
-      currentCardData = videoCard;
-      window.currentUserCard = videoCard;
+      setActiveMyCard(videoCard);
       hydrateMyECardStateFromCurrentCard();
       cfg = parseCardConfig(videoCard);
       wysiwygState.cfg = cfg;
@@ -1826,10 +1825,9 @@
     myVideoModeRequested = true;
     myVideoModeSuppressed = false;
     try {
-      var videoCard = findLoadedMyCardByVersion('video') || await resolveMyCardVersion('video', true);
+      var videoCard = await resolveMyCardVersion('video', true) || findLoadedMyCardByVersion('video');
       if (videoCard) {
-        currentCardData = videoCard;
-        window.currentUserCard = videoCard;
+        setActiveMyCard(videoCard);
         myEcardStateLoaded = false;
       }
     } catch (e) {
