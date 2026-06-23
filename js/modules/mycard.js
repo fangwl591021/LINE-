@@ -456,9 +456,9 @@
   function findLoadedMyCardByVersion(version) {
     var target = normalizeCardVersion(version);
     var pools = [];
-    if (window.currentUserCard) pools.push(window.currentUserCard);
     if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
     if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
+    if (window.currentUserCard) pools.push(window.currentUserCard);
     if (target === 'video') {
       for (var k = 0; k < pools.length; k += 1) {
         var videoRowId = String(getCardRowId(pools[k]) || '').toUpperCase();
@@ -468,10 +468,17 @@
     for (var i = 0; i < pools.length; i += 1) {
       if (pools[i] && isCardVersion(pools[i], target) && isEditableOwnCard(pools[i], target)) return pools[i];
     }
-    if (target !== 'video') {
-      for (var j = 0; j < pools.length; j += 1) {
-        if (pools[j] && cardVersionFromCard(pools[j]) !== 'video' && isEditableOwnCard(pools[j], target)) return pools[j];
-      }
+    return null;
+  }
+
+  function findLoadedOwnedNonVideoCard() {
+    var pools = [];
+    if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
+    if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
+    if (window.currentUserCard) pools.push(window.currentUserCard);
+    for (var i = 0; i < pools.length; i += 1) {
+      var card = pools[i];
+      if (card && cardVersionFromCard(card) !== 'video' && isEditableOwnCard(card, 'standard')) return card;
     }
     return null;
   }
@@ -480,6 +487,14 @@
     if (!card) return;
     var rowId = getCardRowId(card);
     if (Array.isArray(window.allCards) && rowId && !findLoadedMyCardByRowId(rowId)) window.allCards.unshift(card);
+  }
+
+  function setActiveMyCard(card) {
+    if (!card) return null;
+    currentCardData = card;
+    window.currentUserCard = card;
+    addLoadedMyCard(card);
+    return card;
   }
 
   async function resolveMyCardVersion(version, createIfMissing) {
@@ -675,8 +690,7 @@
       var requestedCard = findLoadedMyCardByRowId(requestedRowId);
       if (requestedCard) {
         if (isEditableOwnCard(requestedCard, targetVersion) && (!wysiwygState.cfg || isCardVersion(requestedCard, targetVersion))) {
-          window.currentUserCard = requestedCard;
-          return requestedCard;
+          return setActiveMyCard(requestedCard);
         }
       }
       if (typeof window.fetchAPI === 'function') {
@@ -685,11 +699,7 @@
           var card = cardRes && (cardRes.card || cardRes.data || cardRes);
           if (card && !card.error) {
             if (isEditableOwnCard(card, targetVersion) && (!wysiwygState.cfg || isCardVersion(card, targetVersion))) {
-              window.currentUserCard = card;
-              if (Array.isArray(window.allCards) && !findLoadedMyCardByRowId(requestedRowId)) {
-                window.allCards.unshift(card);
-              }
-              return card;
+              return setActiveMyCard(card);
             }
           }
         } catch (e) {
@@ -699,26 +709,23 @@
       if (videoDraft && videoDraft.card) {
         var draftCardRowId = getCardRowId(videoDraft.card);
         if (!draftCardRowId || draftCardRowId === requestedRowId) {
-          window.currentUserCard = videoDraft.card;
-          if (Array.isArray(window.allCards) && !findLoadedMyCardByRowId(requestedRowId)) {
-            window.allCards.unshift(videoDraft.card);
-          }
-          return videoDraft.card;
+          return setActiveMyCard(videoDraft.card);
         }
       }
     }
 
     var versionCard = await resolveMyCardVersion(targetVersion, false);
     if (isEditableOwnCard(versionCard, targetVersion)) {
-      window.currentUserCard = versionCard;
-      return versionCard;
+      return setActiveMyCard(versionCard);
     }
     versionCard = findLoadedMyCardByVersion(targetVersion);
     if (isEditableOwnCard(versionCard, targetVersion)) {
-      window.currentUserCard = versionCard;
-      return versionCard;
+      return setActiveMyCard(versionCard);
     }
-    if (targetVersion !== 'video' && isEditableOwnCard(window.currentUserCard, targetVersion) && cardVersionFromCard(window.currentUserCard) !== 'video') return window.currentUserCard;
+    if (targetVersion !== 'video') {
+      var legacyCard = findLoadedOwnedNonVideoCard();
+      if (legacyCard) return setActiveMyCard(legacyCard);
+    }
     return null;
   }
 
@@ -729,7 +736,7 @@
     var emptyState = $('#my-ecard-empty-state');
     var editState = $('#my-ecard-edit-state');
 
-    currentCardData = await resolveCurrentUserCard(!window.currentUserCard);
+    currentCardData = await resolveCurrentUserCard(true);
 
     if (!currentCardData) {
       show(emptyState, true);
@@ -795,11 +802,10 @@
     myVideoModeRequested = false;
     syncCurrentImageInput();
     var version = layoutToCardVersion(getLayout());
-    var card = findLoadedMyCardByVersion(version);
-    if (!isEditableOwnCard(card, version)) card = await resolveMyCardVersion(version, false);
+    var card = await resolveMyCardVersion(version, false);
+    if (!isEditableOwnCard(card, version)) card = findLoadedMyCardByVersion(version);
     if (isEditableOwnCard(card, version) && cardVersionFromCard(card) !== 'video') {
-      currentCardData = card;
-      window.currentUserCard = card;
+      setActiveMyCard(card);
       hydrateMyECardStateFromCurrentCard();
     }
     var imgInput = $('#my-v1-img-url');
@@ -849,9 +855,9 @@
     var target = String(rowId || '').trim();
     if (!target) return null;
     var pools = [];
-    if (window.currentUserCard) pools.push(window.currentUserCard);
     if (Array.isArray(window.allCards)) pools = pools.concat(window.allCards);
     if (Array.isArray(window.myCards)) pools = pools.concat(window.myCards);
+    if (window.currentUserCard) pools.push(window.currentUserCard);
     for (var i = 0; i < pools.length; i += 1) {
       var card = pools[i];
       if (card && getCardRowId(card) === target) return card;
@@ -1437,7 +1443,7 @@
     }
 
     try {
-      currentCardData = await resolveCurrentUserCard(!currentCardData) || currentCardData;
+      currentCardData = await resolveCurrentUserCard(true) || currentCardData;
       if (!currentCardData) throw new Error('\u627e\u4e0d\u5230\u53ef\u5132\u5b58\u7684\u5c08\u5c6c\u540d\u7247');
 
       syncCurrentImageInput();
@@ -1447,8 +1453,7 @@
       if (!isCardVersion(currentCardData, targetVersion)) {
         var versionCard = await resolveMyCardVersion(targetVersion, true);
         if (versionCard) {
-          currentCardData = versionCard;
-          window.currentUserCard = versionCard;
+          setActiveMyCard(versionCard);
         }
       }
       var cfg = parseCardConfig(currentCardData);
@@ -1489,7 +1494,7 @@
         currentCardData['自訂名片設定'] = rawCfg;
         currentCardData.customConfig = rawCfg;
         currentCardData.custom_config = rawCfg;
-        window.currentUserCard = currentCardData;
+        setActiveMyCard(currentCardData);
         if (window.showToast) window.showToast('✅ 專屬名片設定已儲存');
       } else {
         throw new Error((res && res.error) || '儲存失敗');
@@ -1679,11 +1684,10 @@
     myVideoModeRequested = false;
     layout = normalizeWysiwygLayout(layout);
     var version = layoutToCardVersion(layout);
-    var card = findLoadedMyCardByVersion(version);
-    if (!isEditableOwnCard(card, version)) card = await resolveMyCardVersion(version, false);
+    var card = await resolveMyCardVersion(version, false);
+    if (!isEditableOwnCard(card, version)) card = findLoadedMyCardByVersion(version);
     if (isEditableOwnCard(card, version) && cardVersionFromCard(card) !== 'video') {
-      currentCardData = card;
-      window.currentUserCard = card;
+      setActiveMyCard(card);
       hydrateMyECardStateFromCurrentCard();
       cfg = parseCardConfig(card);
       wysiwygState.cfg = cfg;
@@ -1839,7 +1843,7 @@
     if (directWysiwyg) ensureWysiwygModal().classList.remove('hidden');
     else moduleCore.showLoading(true);
     try {
-      currentCardData = await resolveCurrentUserCard(!currentCardData);
+      currentCardData = await resolveCurrentUserCard(true);
       if (!currentCardData) {
         var preview = document.getElementById('my-card-wysiwyg-preview');
         if (directWysiwyg && preview) {
@@ -2417,12 +2421,10 @@
   }
 
   async function shareMyCard(btn) {
+    currentCardData = await resolveCurrentUserCard(true) || currentCardData;
     if (!currentCardData) {
-      currentCardData = await resolveCurrentUserCard(true);
-      if (!currentCardData) {
-        if (window.showToast) window.showToast('尚未建立專屬名片', true);
-        return;
-      }
+      if (window.showToast) window.showToast('尚未建立專屬名片', true);
+      return;
     }
 
     var originalHtml = btn ? btn.innerHTML : '';
