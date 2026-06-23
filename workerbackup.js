@@ -1209,8 +1209,10 @@ const LineOAChatModule = {
   isLineOaVideoCard(row) {
     const rowId = this.text(row && row.row_id);
     const config = this.parseLineOaMyCardConfig(row);
-    return rowId.startsWith('CARD_VIDEO_')
-      || config.cardType === 'video'
+    const explicitVersion = this.text(config.cardVersion || config.card_version).toLowerCase();
+    if (rowId.startsWith('CARD_VIDEO_')) return true;
+    if (['standard', 'poster', 'portrait', 'square'].includes(explicitVersion)) return false;
+    return explicitVersion === 'video'
       || config.cardVariant === 'video_card'
       || config.videoCard === true
       || config.videoStorageKind === 'dedicated_video_card';
@@ -13355,23 +13357,68 @@ const TrackingModule = {
     return true;
   },
 
+  async findSocialLikeCard(cardId, env) {
+    const id = this.text(cardId);
+    if (!id || !env.ACTMASTER_DB) return null;
+    return await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [id]).catch(() => null);
+  },
+
+  socialLikeOwnerIdFromRow(row) {
+    if (!row) return '';
+    return this.text(row.line_id || row.owner_user_id || row.profile_user_id || row.creator_id);
+  },
+
+  async resolveSocialLikeCardId(cardId, env) {
+    const requestedId = this.text(cardId);
+    if (!requestedId || !env.ACTMASTER_DB) return requestedId;
+    const row = await this.findSocialLikeCard(requestedId, env);
+    if (!row) return requestedId;
+    const ownerUserId = this.socialLikeOwnerIdFromRow(row);
+    if (!ownerUserId) return requestedId;
+    const baseRow = await D1ReadModule.first(env, `
+      SELECT * FROM card_contacts
+      WHERE (line_id = ? OR owner_user_id = ? OR profile_user_id = ? OR creator_id = ?)
+        AND LOWER(COALESCE(source_type, '')) = 'self_profile'
+        AND row_id LIKE 'CARD_%'
+        AND row_id NOT LIKE 'CARD_VIDEO_%'
+        AND LOWER(COALESCE(custom_config,'')) NOT LIKE '%"cardversion":"video"%'
+        AND LOWER(COALESCE(custom_config,'')) NOT LIKE '%"cardvariant":"video_card"%'
+        AND LOWER(COALESCE(custom_config,'')) NOT LIKE '%"videostoragekind":"dedicated_video_card"%'
+      ORDER BY
+        CASE
+          WHEN row_id LIKE 'CARD_STD_%' THEN 0
+          WHEN LOWER(COALESCE(custom_config,'')) LIKE '%"cardversion":"standard"%' THEN 1
+          ELSE 2
+        END,
+        COALESCE(updated_at, created_at) DESC,
+        row_id DESC
+      LIMIT 1
+    `, [ownerUserId, ownerUserId, ownerUserId, ownerUserId]).catch(() => null);
+    return this.text(baseRow && baseRow.row_id) || requestedId;
+  },
+
   async getSocialLikeStats(payload, env) {
     const cardId = this.text(payload.shareCardId || payload.cardId || payload.rowId);
     const viewerId = this.text(payload.authenticatedUserId || payload.userId || payload.visitorId || payload.likerUserId);
     if (!cardId) return { success: false, error: 'Missing card id' };
     if (!await this.ensureSocialLikeTable(env)) return { success: false, error: 'Missing ACTMASTER_DB' };
 
-    const totalRow = await D1ReadModule.first(env, 'SELECT COUNT(*) AS total FROM card_social_likes WHERE card_id = ?', [cardId]).catch(() => null);
+    const likeCardId = await this.resolveSocialLikeCardId(cardId, env);
+    if (likeCardId !== cardId) {
+      await env.ACTMASTER_DB.prepare('UPDATE OR IGNORE card_social_likes SET card_id = ? WHERE card_id = ?').bind(likeCardId, cardId).run().catch(() => null);
+    }
+    const totalRow = await D1ReadModule.first(env, 'SELECT COUNT(*) AS total FROM card_social_likes WHERE card_id = ?', [likeCardId]).catch(() => null);
     const today = this.todayKey();
     let likedToday = false;
     if (viewerId) {
-      const row = await D1ReadModule.first(env, 'SELECT like_id FROM card_social_likes WHERE card_id = ? AND liker_user_id = ? AND like_date = ? LIMIT 1', [cardId, viewerId, today]).catch(() => null);
+      const row = await D1ReadModule.first(env, 'SELECT like_id FROM card_social_likes WHERE card_id = ? AND liker_user_id = ? AND like_date = ? LIMIT 1', [likeCardId, viewerId, today]).catch(() => null);
       likedToday = !!row;
     }
     return {
       success: true,
       data: {
-        cardId,
+        cardId: likeCardId,
+        requestedCardId: cardId,
         totalLikes: Number(totalRow && totalRow.total || 0),
         likedToday,
         rewardMarker: 4,
@@ -13472,9 +13519,13 @@ const TrackingModule = {
     if (!likerId || !cardId) return { success: false, error: 'Missing likerUserId or cardId' };
     if (!await this.ensureSocialLikeTable(env)) return { success: false, error: 'Missing ACTMASTER_DB' };
 
-    const { ownerUserId } = await this.findSocialLikeCardOwner(cardId, env);
+    const likeCardId = await this.resolveSocialLikeCardId(cardId, env);
+    if (likeCardId !== cardId) {
+      await env.ACTMASTER_DB.prepare('UPDATE OR IGNORE card_social_likes SET card_id = ? WHERE card_id = ?').bind(likeCardId, cardId).run().catch(() => null);
+    }
+    const { ownerUserId } = await this.findSocialLikeCardOwner(likeCardId, env);
     if (ownerUserId && ownerUserId === likerId) {
-      const stats = await this.getSocialLikeStats({ cardId, userId: likerId }, env);
+      const stats = await this.getSocialLikeStats({ cardId: likeCardId, userId: likerId }, env);
       return { success: true, data: { ...(stats.data || {}), skipped: true, reason: 'self_like' } };
     }
 
@@ -13484,10 +13535,10 @@ const TrackingModule = {
       INSERT OR IGNORE INTO card_social_likes (
         like_id, card_id, owner_user_id, liker_user_id, like_date, reward_marker, response_json
       ) VALUES (?, ?, ?, ?, ?, 4, ?)
-    `).bind(likeId, cardId, ownerUserId, likerId, dateKey, JSON.stringify({ networkId })).run();
+    `).bind(likeId, likeCardId, ownerUserId, likerId, dateKey, JSON.stringify({ networkId, requestedCardId: cardId })).run();
     const changed = Number(inserted && inserted.meta && inserted.meta.changes || 0);
     if (!changed) {
-      const stats = await this.getSocialLikeStats({ cardId, userId: likerId }, env);
+      const stats = await this.getSocialLikeStats({ cardId: likeCardId, userId: likerId }, env);
       return { success: true, data: { ...(stats.data || {}), alreadyLikedToday: true, awarded: false } };
     }
 
@@ -13495,7 +13546,7 @@ const TrackingModule = {
     if (ownerUserId) {
       awards.owner = await this.awardSocialLikePoints({
         recipientId: ownerUserId,
-        cardId,
+        cardId: likeCardId,
         likerId,
         dateKey,
         awardType: 'social_like_owner',
@@ -13508,7 +13559,7 @@ const TrackingModule = {
     if (await this.hasRegisteredUser(likerId, env)) {
       awards.liker = await this.awardSocialLikePoints({
         recipientId: likerId,
-        cardId,
+        cardId: likeCardId,
         likerId,
         dateKey,
         awardType: 'social_like_liker',
@@ -13529,12 +13580,13 @@ const TrackingModule = {
       likeId
     ).run();
 
-    const stats = await this.getSocialLikeStats({ cardId, userId: likerId }, env);
+    const stats = await this.getSocialLikeStats({ cardId: likeCardId, userId: likerId }, env);
     return {
       success: true,
       data: {
         ...(stats.data || {}),
         likeId,
+        requestedCardId: cardId,
         awarded: true,
         awards
       }

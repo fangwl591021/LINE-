@@ -1127,8 +1127,13 @@ window.showSocialLikeThanks = function(message) {
 
 window.updateSocialLikeWidget = function(data) {
   const total = Number(data && (data.totalLikes ?? data.count ?? data.likes) || 0);
-  const cardId = String(data && (data.cardId || data.shareCardId || data.rowId) || '').trim();
-  const matchesCard = el => !cardId || !el.dataset.socialLikeCardId || el.dataset.socialLikeCardId === cardId;
+  const cardIds = new Set([
+    data && data.cardId,
+    data && data.shareCardId,
+    data && data.rowId,
+    data && data.requestedCardId
+  ].map(value => String(value || '').trim()).filter(Boolean));
+  const matchesCard = el => !cardIds.size || !el.dataset.socialLikeCardId || cardIds.has(el.dataset.socialLikeCardId);
   document.querySelectorAll('[data-social-like-count]').forEach(el => {
     if (matchesCard(el)) el.textContent = String(total);
   });
