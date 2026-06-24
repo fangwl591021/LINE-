@@ -1127,18 +1127,21 @@ window.showSocialLikeThanks = function(message) {
 
 window.updateSocialLikeWidget = function(data) {
   const total = Number(data && (data.totalLikes ?? data.count ?? data.likes) || 0);
-  const cardIds = new Set([
-    data && data.cardId,
-    data && data.shareCardId,
-    data && data.rowId,
-    data && data.requestedCardId
-  ].map(value => String(value || '').trim()).filter(Boolean));
+  const canonicalCardId = String(data && (data.cardId || data.shareCardId || data.rowId) || '').trim();
+  const requestedCardId = String(data && data.requestedCardId || '').trim();
+  const cardIds = new Set([canonicalCardId, requestedCardId].filter(Boolean));
   const matchesCard = el => !cardIds.size || !el.dataset.socialLikeCardId || cardIds.has(el.dataset.socialLikeCardId);
   document.querySelectorAll('[data-social-like-count]').forEach(el => {
-    if (matchesCard(el)) el.textContent = String(total);
+    if (!matchesCard(el)) return;
+    el.textContent = String(total);
+    if (canonicalCardId) el.dataset.socialLikeCardId = canonicalCardId;
   });
   document.querySelectorAll('[data-social-like-button]').forEach(btn => {
     if (!matchesCard(btn)) return;
+    if (canonicalCardId) {
+      btn.dataset.cardId = canonicalCardId;
+      btn.dataset.socialLikeCardId = canonicalCardId;
+    }
     const liked = !!(data && (data.likedToday || data.alreadyLikedToday));
     btn.dataset.likedToday = liked ? '1' : '0';
     btn.classList.toggle('bg-blue-50', liked);
@@ -1212,17 +1215,16 @@ window.initSocialLikeWidget = function(cardId, networkId) {
   if (!cardId) return;
   const bindCardId = String(cardId || '').trim();
   document.querySelectorAll('[data-social-like-button]').forEach(btn => {
-    if (btn.dataset.socialLikeCardId && btn.dataset.socialLikeCardId !== bindCardId) return;
     btn.dataset.cardId = bindCardId;
     btn.dataset.socialLikeCardId = bindCardId;
     btn.onclick = function(evt) {
       evt.preventDefault();
       evt.stopPropagation();
-      window.recordSocialLike(bindCardId, networkId || 'admin');
+      window.recordSocialLike(btn.dataset.socialLikeCardId || bindCardId, networkId || 'admin');
     };
   });
   document.querySelectorAll('[data-social-like-count]').forEach(el => {
-    if (!el.dataset.socialLikeCardId) el.dataset.socialLikeCardId = bindCardId;
+    el.dataset.socialLikeCardId = bindCardId;
   });
   window.loadSocialLikeStats(bindCardId, networkId || 'admin');
 };
