@@ -382,6 +382,10 @@
     if (videoToggle) videoToggle.checked = !!(cfg && cfg.cardType === 'video' && videoUrl);
   }
 
+  function syncVideoFieldsFromConfig(cfg) {
+    applyVideoConfigToFields(cfg);
+    syncMyCardVideoPanelVisibility();
+  }
   function syncVideoConfig(cfg) {
     cfg = cfg || {};
     var videoInput = $('#my-v1-video-url');
@@ -389,9 +393,11 @@
     if (!videoInput && !videoToggle) {
       return cfg;
     }
-    var videoUrl = getVideoUrlInput();
-    if (isVideoModeEnabled() && videoUrl) {
+    var editingVideo = isMyCardVideoEditingMode();
+    var videoUrl = getVideoUrlInput() || (editingVideo && cfg.videoUrl ? String(cfg.videoUrl).trim() : '');
+    if (editingVideo && videoUrl) {
       cfg.cardType = 'video';
+      cfg.cardVersion = 'video';
       cfg.videoUrl = videoUrl;
     } else if (!videoToggle && cfg.cardType === 'video' && cfg.videoUrl) {
       return cfg;
@@ -1607,6 +1613,7 @@
   }
 
   function currentWysiwygImage(cfg) {
+    if (currentWysiwygVersion(cfg) === 'video') return cfg.imgUrl || cfg.thumbnailUrl || cfg.videoPosterUrl || myEcardImgs.landscape || '';
     var layout = normalizeWysiwygLayout(cfg.layoutStyle || getLayout());
     if (layout === 'portrait') return cfg.imgUrlPortrait || cfg.imgUrl || myEcardImgs.portrait || '';
     if (layout === 'square') return cfg.imgUrlSquare || cfg.imgUrl || myEcardImgs.square || '';
@@ -1627,7 +1634,7 @@
   }
 
   function currentWysiwygVersion(cfg) {
-    if (isMyCardVideoEditingMode() && cfg && (cfg.cardType === 'video' || cfg.videoCard === true || cfg.cardVersion === 'video') && cfg.videoUrl) return 'video';
+    if (isMyCardVideoEditingMode() && cfg && (cfg.cardType === 'video' || cfg.videoCard === true || cfg.cardVersion === 'video' || cfg.videoStorageKind === 'dedicated_video_card')) return 'video';
     return layoutToCardVersion(normalizeWysiwygLayout((cfg && cfg.layoutStyle) || getLayout()));
   }
 
@@ -2025,7 +2032,8 @@
     var preview = document.getElementById('my-card-wysiwyg-preview');
     if (!preview || !wysiwygState.cfg) return;
     var cfg = wysiwygState.cfg;
-    var layout = cfg.layoutStyle || getLayout();
+    var activeVersion = currentWysiwygVersion(cfg);
+    var layout = activeVersion === 'video' ? 'landscape' : (cfg.layoutStyle || getLayout());
     var ratio = layout === 'portrait' ? (cfg.imgRatioPortrait || '400/600') : (layout === 'square' ? '1/1' : '20/13');
     ratio = String(ratio).replace(':', '/');
     var imgUrl = currentWysiwygImage(cfg);
