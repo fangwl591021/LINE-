@@ -391,14 +391,22 @@ function toAbsoluteECardUrl(url) {
   }
 }
 
+function encodeECardHttpsUrl(value) {
+  const text = String(value || '').trim();
+  if (!/^https:\/\//i.test(text)) return '';
+  try {
+    return new URL(text).toString();
+  } catch (e) {
+    return encodeURI(text);
+  }
+}
+
 function cleanECardFlexImageUrl(url) {
-  const value = toAbsoluteECardUrl(url);
-  return /^https:\/\//i.test(value) ? value : '';
+  return encodeECardHttpsUrl(toAbsoluteECardUrl(url));
 }
 
 function cleanECardFlexHttpsUri(uri) {
-  const value = toAbsoluteECardUrl(uri);
-  return /^https:\/\//i.test(value) ? value : '';
+  return encodeECardHttpsUrl(toAbsoluteECardUrl(uri));
 }
 
 function buildECardHeroWithShareBadge(imgUrl, aspectRatio, badgeUrl) {

@@ -344,7 +344,6 @@ const SecurityModule = {
       'unlinkCard',
       'getSubsiteHome',
       'getMotherRegistrationUrl',
-      'getSocialLikeStats',
       'queryPointBalanceFast',
       'queryUserPoints',
       'listPersonalTasks',
@@ -7860,6 +7859,15 @@ JSON格式：{"Personality":"","Hobbies":"","Wealth":"","Health":"","Career":""}
 
 // ==================== 模組 4: 訊息構建 (Messaging Module) ====================
 const MessagingModule = {
+  cleanHttpsUrl(value) {
+    const text = String(value || '').trim();
+    if (!/^https:\/\//i.test(text)) return '';
+    try {
+      return new URL(text).toString();
+    } catch (e) {
+      return encodeURI(text);
+    }
+  },
   flexTextAlign(value) {
     const align = String(value || '').trim().toLowerCase();
     if (align === 'left') return 'start';
@@ -7903,8 +7911,9 @@ const MessagingModule = {
       }));
 
     let hero = { type: "image", url: imgUrl, size: "full", aspectRatio: aspectRatio, aspectMode: imageAspectMode, action: { type: "uri", uri: badgeUrl } };
-    if (config.cardType === 'video' && config.videoUrl) {
-      hero = { type: "video", url: config.videoUrl, previewUrl: imgUrl, aspectRatio: aspectRatio, altContent: { type: "image", size: "full", aspectRatio: aspectRatio, aspectMode: imageAspectMode, url: imgUrl, action: { type: "uri", uri: badgeUrl } } };
+    const videoUrl = this.cleanHttpsUrl(config.videoUrl);
+    if (config.cardType === 'video' && videoUrl) {
+      hero = { type: "video", url: videoUrl, previewUrl: imgUrl, aspectRatio: aspectRatio, altContent: { type: "image", size: "full", aspectRatio: aspectRatio, aspectMode: imageAspectMode, url: imgUrl, action: { type: "uri", uri: badgeUrl } } };
     }
 
     const titleText = (config.title || card['姓名'] || ' ').trim() || ' ';
