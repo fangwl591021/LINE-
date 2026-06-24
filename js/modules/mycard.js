@@ -736,7 +736,9 @@
     var emptyState = $('#my-ecard-empty-state');
     var editState = $('#my-ecard-edit-state');
 
+    myVideoModeRequested = isMyCardVideoContext();
     currentCardData = await resolveCurrentUserCard(true);
+    if (cardVersionFromCard(currentCardData) !== 'video') myVideoModeRequested = false;
 
     if (!currentCardData) {
       show(emptyState, true);
@@ -800,6 +802,7 @@
 
   async function handleLayoutChange() {
     myVideoModeRequested = false;
+    myVideoModeSuppressed = true;
     syncCurrentImageInput();
     var version = layoutToCardVersion(getLayout());
     var card = await resolveMyCardVersion(version, false);
@@ -1681,6 +1684,7 @@
       return;
     }
     myVideoModeRequested = false;
+    myVideoModeSuppressed = true;
     layout = normalizeWysiwygLayout(layout);
     var version = layoutToCardVersion(layout);
     var card = await resolveMyCardVersion(version, false);
