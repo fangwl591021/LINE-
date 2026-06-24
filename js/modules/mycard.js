@@ -1178,24 +1178,6 @@
     }
   }
 
-  async function enrichMyCardFlexLikeCount(flexMsg, cardId) {
-    if (!cardId || !flexMsg || !flexMsg.header || !Array.isArray(flexMsg.header.contents) || typeof window.fetchAPI !== 'function') return flexMsg;
-    try {
-      var res = await window.fetchAPI('getSocialLikeStats', {
-        shareCardId: cardId,
-        networkId: window.currentNetworkId || 'admin',
-        userId: (window.currentUserProfile && window.currentUserProfile.userId) || (window.currentUser && window.currentUser.userId) || ''
-      }, true);
-      var data = res && (res.data || res);
-      var total = String(Math.max(0, Number(data && data.totalLikes || 0) || 0));
-      var likeContents = flexMsg.header.contents[0] && flexMsg.header.contents[0].contents;
-      if (Array.isArray(likeContents) && likeContents[1] && likeContents[1].type === 'text') likeContents[1].text = total;
-      if (data && typeof window.updateSocialLikeWidget === 'function') window.updateSocialLikeWidget(data);
-    } catch (e) {
-      console.warn('[mycard] enrich like count skipped:', e && e.message ? e.message : e);
-    }
-    return flexMsg;
-  }
   function buildMyCardWebUrl(rowId) {
     var cardId = rowId || getCardRowId(currentCardData);
     var referrerId = moduleAuth.getUserId();
@@ -2473,7 +2455,6 @@
           liffId: moduleConfig.POINT_LIFF_ID || window.POINT_LIFF_ID || moduleConfig.LIFF_ID
         }, true);
       if (flexMsg && !flexMsg.error) {
-        await enrichMyCardFlexLikeCount(flexMsg, rowId);
         routeFlexHeaderShareToPicker(flexMsg, shareUrl);
         window.__lastMyCardShareMessages = [{
           type: 'flex',
