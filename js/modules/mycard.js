@@ -196,9 +196,12 @@
   }
 
   function getCurrentOwnerUserId() {
-  return getCurrentUserIdCandidates()[0] ||
-    (window.currentUserProfile && window.currentUserProfile.userId) ||
+  var fromCandidates = getCurrentUserIdCandidates()[0];
+  if (fromCandidates) return fromCandidates;
+  // fallback: 直接讀全域，避免 moduleAuth 在初始化時鎖死空值
+  return (window.currentUserProfile && window.currentUserProfile.userId) ||
     (window.currentUser && window.currentUser.userId) ||
+    (window.currentUser && window.currentUser.lineId) ||
     '';
 }
 
