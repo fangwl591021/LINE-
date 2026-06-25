@@ -113,24 +113,28 @@
       return { value: '', error: '電話格式錯誤，請輸入 7 到 16 碼電話。' };
     }
 
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
-      return { value: 'mailto:' + raw };
-    }
-
-    var compactPhone = firstPhoneForTel(raw);
-    if (compactPhone) {
-      return { value: 'tel:' + compactPhone };
-    }
-
-    if (/^(https?:\/\/|line:\/\/)/i.test(raw)) {
+    // 優先保留安全的通訊協定 (例如 https, http, line, sms, liff 等)，避免被誤判為電話號碼
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) {
+      if (/^(javascript|vbscript|data|file):/i.test(raw)) return { value: '', error: '不支援此連結格式。' };
       if (/\s/.test(raw)) return { value: '', error: '網址不能包含空白。' };
       return { value: raw };
     }
 
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+      return { value: 'mailto:' + raw };
+    }
+
+    // 檢查是否為無協定網域 (例如 www.example.com)，需在判斷裸電話號碼之前
     if (/^(line\.me|lin\.ee|lihi\d?\.me|maps\.app\.goo\.gl|www\.)/i.test(raw) ||
         /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(raw)) {
       if (/\s/.test(raw)) return { value: '', error: '網址不能包含空白。' };
       return { value: 'https://' + raw };
+    }
+
+    // 最後才嘗試提取裸電話號碼
+    var compactPhone = firstPhoneForTel(raw);
+    if (compactPhone) {
+      return { value: 'tel:' + compactPhone };
     }
 
     return { value: '', error: '連結格式錯誤，請輸入網址、電話或 Email。' };
