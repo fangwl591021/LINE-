@@ -196,8 +196,11 @@
   }
 
   function getCurrentOwnerUserId() {
-    return getCurrentUserIdCandidates()[0] || '';
-  }
+  return getCurrentUserIdCandidates()[0] ||
+    (window.currentUserProfile && window.currentUserProfile.userId) ||
+    (window.currentUser && window.currentUser.userId) ||
+    '';
+}
 
   function isEditableOwnCard(card, version) {
     if (!card) return false;
