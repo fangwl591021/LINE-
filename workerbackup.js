@@ -8853,17 +8853,44 @@ const D1ReadModule = {
     const placeholders = ids.map(() => '?').join(',');
     const cards = await this.all(env, `
       SELECT * FROM card_contacts
-      WHERE line_id IN (${placeholders}) OR creator_id IN (${placeholders})
-      ORDER BY row_id DESC
+      WHERE line_id IN (${placeholders})
+         OR profile_user_id IN (${placeholders})
+         OR owner_user_id IN (${placeholders})
+         OR claimed_by_uid IN (${placeholders})
+         OR (
+           creator_id IN (${placeholders})
+           AND LOWER(COALESCE(source_type,'')) = 'self_profile'
+           AND TRIM(COALESCE(line_id,'')) = ''
+           AND TRIM(COALESCE(owner_user_id,'')) = ''
+           AND TRIM(COALESCE(profile_user_id,'')) = ''
+         )
+      ORDER BY
+        CASE
+          WHEN line_id IN (${placeholders}) THEN 0
+          WHEN profile_user_id IN (${placeholders}) THEN 1
+          WHEN owner_user_id IN (${placeholders}) THEN 2
+          WHEN claimed_by_uid IN (${placeholders}) THEN 3
+          ELSE 4
+        END,
+        CASE WHEN LOWER(COALESCE(source_type,'')) = 'self_profile' THEN 0 ELSE 1 END,
+        COALESCE(updated_at, created_at) DESC,
+        row_id DESC
       LIMIT 50
-    `, [...ids, ...ids]).catch(() => []);
+    `, [
+      ...ids, ...ids, ...ids, ...ids, ...ids,
+      ...ids, ...ids, ...ids, ...ids
+    ]).catch(() => []);
 
     const account = this.hardAdminAccountFromIdentity(id, link);
     if (account) {
       const ownCard = cards.find(card => this.cardMatchesHardAdmin(card, account));
       if (ownCard) return ownCard;
     }
-    return cards.find(card => this.text(card.line_id) === id) || cards[0] || null;
+    return cards.find(card => ids.includes(this.text(card.line_id))) ||
+      cards.find(card => ids.includes(this.text(card.profile_user_id))) ||
+      cards.find(card => ids.includes(this.text(card.owner_user_id))) ||
+      cards[0] ||
+      null;
   },
 
   async upsertBoundUserFromCard(env, card, options = {}) {
@@ -13921,17 +13948,44 @@ const CardVersionResolverModule = {
   async loadRowsForUser(userId, env) {
     if (!env.ACTMASTER_DB || !userId) return [];
     await D1ReadModule.ensureCardAccessColumns(env);
+    const ids = await D1ReadModule.identityIdsForUser(env, userId).catch(() => [this.text(userId)].filter(Boolean));
+    const safeIds = ids.map(id => this.text(id)).filter(Boolean);
+    if (!safeIds.length) return [];
+    const placeholders = safeIds.map(() => '?').join(',');
     return await D1ReadModule.all(env, `
       SELECT * FROM card_contacts
       WHERE (
-        line_id = ? OR profile_user_id = ? OR owner_user_id = ?
+        line_id IN (${placeholders})
+        OR profile_user_id IN (${placeholders})
+        OR owner_user_id IN (${placeholders})
+        OR claimed_by_uid IN (${placeholders})
+        OR (
+          creator_id IN (${placeholders})
+          AND LOWER(COALESCE(source_type,'')) = 'self_profile'
+          AND TRIM(COALESCE(line_id,'')) = ''
+          AND TRIM(COALESCE(owner_user_id,'')) = ''
+          AND TRIM(COALESCE(profile_user_id,'')) = ''
+        )
       )
       AND (
         LOWER(COALESCE(source_type,'')) IN ('self_profile', 'video_profile')
-        OR (LOWER(COALESCE(source_type,'')) = '' AND (line_id = ? OR profile_user_id = ?))
+        OR (LOWER(COALESCE(source_type,'')) = '' AND (line_id IN (${placeholders}) OR profile_user_id IN (${placeholders})))
       )
-      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
-    `, [userId, userId, userId, userId, userId]);
+      ORDER BY
+        CASE
+          WHEN line_id IN (${placeholders}) THEN 0
+          WHEN profile_user_id IN (${placeholders}) THEN 1
+          WHEN owner_user_id IN (${placeholders}) THEN 2
+          WHEN claimed_by_uid IN (${placeholders}) THEN 3
+          ELSE 4
+        END,
+        COALESCE(updated_at, created_at) DESC,
+        row_id DESC
+    `, [
+      ...safeIds, ...safeIds, ...safeIds, ...safeIds, ...safeIds,
+      ...safeIds, ...safeIds,
+      ...safeIds, ...safeIds, ...safeIds, ...safeIds
+    ]);
   },
 
   async createVersionFromBase(baseRow, userId, version, env) {
