@@ -3480,7 +3480,7 @@ const LineOAMyVideoKeywordModule = {
       sourceType: 'video_profile',
       visibility: 'private',
       isPrivate: true,
-      layoutStyle: baseConfig.layoutStyle || baseConfig.layout || 'landscape',
+      layoutStyle: 'landscape',
       imgUrl: thumbnailUrl,
       imgUrlLandscape: thumbnailUrl,
       videoUrl,
