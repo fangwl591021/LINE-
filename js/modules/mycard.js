@@ -1044,12 +1044,11 @@
       if (!videoUrl) throw new Error('影片草稿缺少影片網址');
       cfg.cardType = 'video';
       cfg.videoUrl = videoUrl;
-      var layout = cfg.layoutStyle || getLayout();
       if (thumbnailUrl) {
-        if (layout === 'portrait') cfg.imgUrlPortrait = thumbnailUrl;
-        else if (layout === 'square') cfg.imgUrlSquare = thumbnailUrl;
-        else cfg.imgUrl = thumbnailUrl;
-        myEcardImgs[layout] = thumbnailUrl;
+        cfg.imgUrl = thumbnailUrl;
+        cfg.thumbnailUrl = thumbnailUrl;
+        cfg.previewUrl = thumbnailUrl;
+        myEcardImgs.landscape = thumbnailUrl;
         var imgInput = $('#my-v1-img-url');
         if (imgInput) imgInput.value = thumbnailUrl;
       }
@@ -1434,7 +1433,13 @@
       wysiwygState.cfg.layoutStyle = layout;
       if (layout === 'portrait') wysiwygState.cfg.imgUrlPortrait = cleanUrl;
       else if (layout === 'square') wysiwygState.cfg.imgUrlSquare = cleanUrl;
-      else wysiwygState.cfg.imgUrl = cleanUrl;
+      else {
+        wysiwygState.cfg.imgUrl = cleanUrl;
+        if (currentWysiwygVersion(wysiwygState.cfg) === 'video') {
+          wysiwygState.cfg.thumbnailUrl = cleanUrl;
+          wysiwygState.cfg.previewUrl = cleanUrl;
+        }
+      }
       if (layout === 'portrait') wysiwygState.cfg.imgRatioPortrait = String(ratio || '400:600').replace('/', ':');
       else if (layout === 'square') wysiwygState.cfg.imgRatioSquare = '1:1';
       else wysiwygState.cfg.imgRatioLandscape = String(ratio || myEcardRatios.landscape || '20:13').replace('/', ':');
@@ -1447,10 +1452,34 @@
     updatePreview();
   }
 
+  function applyCurrentVersionMediaToConfig(cfg, targetVersion, layout) {
+    cfg = cfg || {};
+    targetVersion = normalizeCardVersion(targetVersion);
+    layout = normalizeWysiwygLayout(layout || versionToLayout(targetVersion));
+    if (targetVersion === 'poster') {
+      cfg.imgUrlPortrait = myEcardImgs.portrait || cfg.imgUrlPortrait || '';
+      cfg.imgRatioPortrait = String(myEcardRatios.portrait || cfg.imgRatioPortrait || '400:600').replace('/', ':');
+    } else if (targetVersion === 'square') {
+      cfg.imgUrlSquare = myEcardImgs.square || cfg.imgUrlSquare || '';
+      cfg.imgRatioSquare = '1:1';
+    } else {
+      var landscapeUrl = targetVersion === 'video'
+        ? (cfg.thumbnailUrl || cfg.previewUrl || cfg.imgUrl || myEcardImgs.landscape || '')
+        : (myEcardImgs.landscape || cfg.imgUrl || '');
+      cfg.imgUrl = landscapeUrl;
+      cfg.imgRatioLandscape = String(myEcardRatios.landscape || cfg.imgRatioLandscape || '20:13').replace('/', ':');
+      if (targetVersion === 'video') {
+        cfg.thumbnailUrl = landscapeUrl;
+        cfg.previewUrl = landscapeUrl;
+      }
+    }
+    return cfg;
+  }
   function activeImageForCardVersion(cfg, version) {
     cfg = cfg || {};
     if (version === 'poster') return cfg.imgUrlPortrait || cfg.imgUrl || '';
     if (version === 'square') return cfg.imgUrlSquare || cfg.imgUrl || '';
+    if (version === 'video') return cfg.thumbnailUrl || cfg.previewUrl || cfg.imgUrl || '';
     return cfg.imgUrl || cfg.imgUrlPortrait || cfg.imgUrlSquare || '';
   }
 
@@ -1482,12 +1511,7 @@
       var cfg = parseCardConfig(currentCardData);
       cfg.cardVersion = targetVersion;
       cfg.layoutStyle = layout;
-      cfg.imgUrl = myEcardImgs.landscape;
-      cfg.imgUrlPortrait = myEcardImgs.portrait;
-      cfg.imgUrlSquare = myEcardImgs.square;
-      cfg.imgRatioLandscape = String(myEcardRatios.landscape || cfg.imgRatioLandscape || '20:13').replace('/', ':');
-      cfg.imgRatioPortrait = (myEcardRatios.portrait || '400:600').replace('/', ':');
-      cfg.imgRatioSquare = '1:1';
+      applyCurrentVersionMediaToConfig(cfg, targetVersion, layout);
       cfg.buttons = normalizeMyCardButtonsForSave(myEcardButtons);
       myEcardButtons = cfg.buttons.slice();
       syncVideoConfig(cfg);
@@ -1544,12 +1568,7 @@
       var liveVersion = isMyCardVideoContext() ? 'video' : layoutToCardVersion(liveLayout.value || cfg.layoutStyle || 'landscape');
       cfg.cardVersion = liveVersion;
       cfg.layoutStyle = liveLayout.value || cfg.layoutStyle || 'landscape';
-      cfg.imgUrl = myEcardImgs.landscape || cfg.imgUrl || '';
-      cfg.imgUrlPortrait = myEcardImgs.portrait || cfg.imgUrlPortrait || '';
-      cfg.imgUrlSquare = myEcardImgs.square || cfg.imgUrlSquare || '';
-      cfg.imgRatioLandscape = String(myEcardRatios.landscape || cfg.imgRatioLandscape || '20:13').replace('/', ':');
-      cfg.imgRatioPortrait = (myEcardRatios.portrait || '400:600').replace('/', ':');
-      cfg.imgRatioSquare = '1:1';
+      applyCurrentVersionMediaToConfig(cfg, liveVersion, cfg.layoutStyle);
       cfg.buttons = normalizeMyCardButtonsForSave(myEcardButtons);
       myEcardButtons = cfg.buttons.slice();
       syncVideoConfig(cfg);
@@ -1599,7 +1618,7 @@
   }
 
   function currentWysiwygImage(cfg) {
-    if (currentWysiwygVersion(cfg) === 'video') return cfg.imgUrl || cfg.thumbnailUrl || cfg.videoPosterUrl || myEcardImgs.landscape || '';
+    if (currentWysiwygVersion(cfg) === 'video') return cfg.thumbnailUrl || cfg.previewUrl || cfg.imgUrl || cfg.videoPosterUrl || myEcardImgs.landscape || '';
     var layout = normalizeWysiwygLayout(cfg.layoutStyle || getLayout());
     if (layout === 'portrait') return cfg.imgUrlPortrait || cfg.imgUrl || myEcardImgs.portrait || '';
     if (layout === 'square') return cfg.imgUrlSquare || cfg.imgUrl || myEcardImgs.square || '';
@@ -1994,8 +2013,13 @@
     if (wysiwygState.field === 'image') {
       var imgInput = document.getElementById('my-wysiwyg-image-input');
       var url = imgInput ? String(imgInput.value || '').trim() : '';
-      var layout = cfg.layoutStyle || getLayout();
-      if (layout === 'portrait') cfg.imgUrlPortrait = url;
+      var version = currentWysiwygVersion(cfg);
+      var layout = version === 'video' ? 'landscape' : normalizeWysiwygLayout(cfg.layoutStyle || getLayout());
+      if (version === 'video') {
+        cfg.imgUrl = url;
+        cfg.thumbnailUrl = url;
+        cfg.previewUrl = url;
+      } else if (layout === 'portrait') cfg.imgUrlPortrait = url;
       else if (layout === 'square') cfg.imgUrlSquare = url;
       else cfg.imgUrl = url;
       myEcardImgs[layout] = url;
