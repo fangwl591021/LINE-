@@ -446,7 +446,7 @@ function buildECardHeroWithShareBadge(imgUrl, aspectRatio, badgeUrl) {
   };
 }
 
-function buildECardShareHeader(badgeUrl) {
+function buildECardShareHeader(badgeUrl, likeCount) {
   const shareActionUrl = appendECardShareMode(badgeUrl);
   const likeActionUrl = buildECardLikeUrl(badgeUrl);
   if (!shareActionUrl) return undefined;
@@ -469,7 +469,7 @@ function buildECardShareHeader(badgeUrl) {
       paddingEnd: '8px',
       contents: [
         { type: 'text', text: '\uD83D\uDC4D', size: 'xs', flex: 0 },
-        { type: 'text', text: '0', weight: 'bold', color: '#334155', size: 'xs', flex: 1 }
+        { type: 'text', text: String(Math.max(0, Number(likeCount || 0) || 0)), weight: 'bold', color: '#334155', size: 'xs', flex: 1 }
       ],
       action: likeActionUrl ? { type: 'uri', uri: likeActionUrl } : undefined
     }, {
@@ -562,20 +562,24 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
 function buildLocalECardFlexMessage(card, config, shareUrl) {
   const savedConfig = parseStoredECardConfig(card);
   config = Object.assign({}, savedConfig, config || {});
-  const layoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
+  const rawLayoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
+  const cleanVideoUrl = cleanECardFlexHttpsUri(config.videoUrl || config.video_url || config.heroVideoUrl || '');
+  const isVideoCard = !!cleanVideoUrl || config.cardType === 'video' || config.cardVersion === 'video' || config.videoCard === true;
+  const layoutStyle = isVideoCard ? 'landscape' : rawLayoutStyle;
   const cardImageUrl = readECardCardValue(card, ['imageUrl', 'image_url', 'cardImage', 'card_image', '\u540d\u7247\u5716\u6a94']);
-  const rawImgUrl = layoutStyle === 'portrait'
-    ? (config.imgUrlPortrait || config.imgUrl || cardImageUrl)
-    : (layoutStyle === 'square'
-      ? (config.imgUrlSquare || config.imgUrl || cardImageUrl)
-      : (config.imgUrl || config.imgUrlLandscape || cardImageUrl));
+  const rawImgUrl = isVideoCard
+    ? (config.thumbnailUrl || config.previewUrl || config.imgUrl || config.imgUrlLandscape || cardImageUrl || config.imgUrlSquare)
+    : (layoutStyle === 'portrait'
+      ? (config.imgUrlPortrait || config.imgUrl || cardImageUrl)
+      : (layoutStyle === 'square'
+        ? (config.imgUrlSquare || config.imgUrl || cardImageUrl)
+        : (config.imgUrl || config.imgUrlLandscape || cardImageUrl)));
   const imgUrl = cleanECardFlexImageUrl(rawImgUrl) || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
   const aspectRatio = layoutStyle === 'portrait'
     ? (config.imgRatioPortrait || '400:600')
     : (layoutStyle === 'square' ? (config.imgRatioSquare || '1:1') : (config.imgRatioLandscape || '20:13'));
   const imageAspectMode = 'cover';
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
-  const cleanVideoUrl = cleanECardFlexHttpsUri(config.videoUrl || config.video_url || config.heroVideoUrl || '');
   const titleText = String(config.title || readECardCardValue(card, ['name', 'title', '\u59d3\u540d']) || '\u6578\u4f4d\u540d\u7247').trim() || '\u6578\u4f4d\u540d\u7247';
   const bodyText = String(config.desc || readECardCardValue(card, ['services', 'description', 'desc', '\u670d\u52d9\u9805\u76ee']) || ' ').trim() || ' ';
   const buttonSource = Array.isArray(config.buttons) && config.buttons.length ? config.buttons : buildAutoECardButtons(card, []);
@@ -599,7 +603,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   const bubble = {
     type: 'bubble',
     size: layoutStyle === 'portrait' ? 'giga' : 'mega',
-    header: buildECardShareHeader(badgeUrl),
+    header: buildECardShareHeader(badgeUrl, config.socialLikeCount),
     hero: cleanVideoUrl ? {
       type: 'video',
       url: cleanVideoUrl,

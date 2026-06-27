@@ -2243,6 +2243,21 @@
     }
   }
 
+  async function attachUnifiedLikeCountToConfig(cfg, rowId) {
+    if (!cfg || !rowId || typeof window.fetchAPI !== 'function') return cfg;
+    try {
+      var res = await window.fetchAPI('getSocialLikeStats', {
+        shareCardId: rowId,
+        networkId: window.currentNetworkId || 'admin',
+        userId: (window.currentUserProfile && window.currentUserProfile.userId) || ''
+      }, true);
+      var data = res && (res.data || res);
+      if (data && data.totalLikes !== undefined) cfg.socialLikeCount = Math.max(0, Number(data.totalLikes || 0) || 0);
+    } catch (e) {
+      console.warn('[mycard] unified like count skipped:', e && (e.message || e));
+    }
+    return cfg;
+  }
   async function shareMyCard(btn) {
     currentCardData = await resolveCurrentUserCard(true) || currentCardData;
     if (!currentCardData) {
@@ -2257,7 +2272,7 @@
       if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
       currentCardData.rowId = currentCardData.rowId || rowId;
       var shareUrl = buildMyCardShareUrl(rowId);
-      var shareConfig = buildCurrentShareConfig();
+      var shareConfig = await attachUnifiedLikeCountToConfig(buildCurrentShareConfig(), rowId);
       var flexMsg = typeof window.buildLocalECardFlexMessage === 'function'
         ? window.buildLocalECardFlexMessage(currentCardData, shareConfig, shareUrl)
         : await window.fetchAPI('buildFlexMessage', {

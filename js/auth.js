@@ -456,6 +456,16 @@ async function buildFlexForCardLink(card, options = {}) {
   const networkId = options.networkId || window.currentNetworkId || 'admin';
   const shareUrl = buildPlainCardViewUrl(card, referrerId, networkId);
   const shareConfig = buildCardShareConfig(card);
+  const shareCardId = String(card?.rowId || card?.cardRowId || card?.id || '').trim();
+  if (shareCardId && typeof window.fetchAPI === 'function') {
+    try {
+      const stats = await window.fetchAPI('getSocialLikeStats', { shareCardId, networkId }, true);
+      const data = stats && (stats.data || stats);
+      if (data && data.totalLikes !== undefined) shareConfig.socialLikeCount = Math.max(0, Number(data.totalLikes || 0) || 0);
+    } catch (e) {
+      console.warn('[buildFlexForCardLink] like count skipped:', e.message || e);
+    }
+  }
   let flexMsg = null;
 
   if (typeof window.buildLocalECardFlexMessage === 'function') {
