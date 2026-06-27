@@ -1367,7 +1367,8 @@ const LineOAChatModule = {
 
   myCardImageForVersion(card, config, version) {
     if (version === 'poster') return config.imgUrlPortrait || config.imgUrl || card.imageUrl;
-    if (version === 'square' || version === 'video') return config.imgUrlSquare || config.previewUrl || config.thumbnailUrl || config.imgUrl || card.imageUrl;
+    if (version === 'square') return config.imgUrlSquare || config.imgUrl || card.imageUrl;
+    if (version === 'video') return config.thumbnailUrl || config.previewUrl || config.imgUrl || config.imgUrlLandscape || card.imageUrl || config.imgUrlSquare;
     return config.imgUrl || config.imgUrlLandscape || card.imageUrl || config.imgUrlPortrait || config.imgUrlSquare;
   },
   buildExistingMyCardFlex(row, userId, env) {
@@ -13424,6 +13425,28 @@ const TrackingModule = {
     return this.text(baseRow && baseRow.row_id) || requestedId;
   },
 
+  async socialLikeSiblingCardIds(cardId, env) {
+    const requestedId = this.text(cardId);
+    const ids = new Set([requestedId].filter(Boolean));
+    if (!requestedId || !env.ACTMASTER_DB) return [...ids];
+    const row = await this.findSocialLikeCard(requestedId, env);
+    const ownerUserId = this.socialLikeOwnerIdFromRow(row);
+    if (!ownerUserId) return [...ids];
+    const rows = await D1ReadModule.all(env, `
+      SELECT row_id FROM card_contacts
+      WHERE (line_id = ? OR owner_user_id = ? OR profile_user_id = ? OR creator_id = ?)
+        AND LOWER(COALESCE(source_type, '')) IN ('self_profile', 'video_profile')
+        AND row_id LIKE 'CARD_%'
+    `, [ownerUserId, ownerUserId, ownerUserId, ownerUserId]).catch(() => []);
+    for (const item of rows || []) {
+      const rowId = this.text(item && item.row_id);
+      if (rowId) ids.add(rowId);
+    }
+    const canonicalId = await this.resolveSocialLikeCardId(requestedId, env).catch(() => requestedId);
+    if (canonicalId) ids.add(canonicalId);
+    return [...ids];
+  },
+
   async getSocialLikeStats(payload, env) {
     const cardId = this.text(payload.shareCardId || payload.cardId || payload.rowId);
     const viewerId = this.text(payload.authenticatedUserId || payload.userId || payload.visitorId || payload.likerUserId);
@@ -13431,14 +13454,24 @@ const TrackingModule = {
     if (!await this.ensureSocialLikeTable(env)) return { success: false, error: 'Missing ACTMASTER_DB' };
 
     const likeCardId = await this.resolveSocialLikeCardId(cardId, env);
-    if (likeCardId !== cardId) {
-      await env.ACTMASTER_DB.prepare('UPDATE OR IGNORE card_social_likes SET card_id = ? WHERE card_id = ?').bind(likeCardId, cardId).run().catch(() => null);
-    }
-    const totalRow = await D1ReadModule.first(env, 'SELECT COUNT(*) AS total FROM card_social_likes WHERE card_id = ?', [likeCardId]).catch(() => null);
+    const siblingIds = await this.socialLikeSiblingCardIds(cardId, env);
+    const placeholders = siblingIds.map(() => '?').join(',');
+    const totalRow = await D1ReadModule.first(env, `
+      SELECT COUNT(*) AS total FROM (
+        SELECT liker_user_id, like_date
+        FROM card_social_likes
+        WHERE card_id IN (${placeholders})
+        GROUP BY liker_user_id, like_date
+      )
+    `, siblingIds).catch(() => null);
     const today = this.todayKey();
     let likedToday = false;
     if (viewerId) {
-      const row = await D1ReadModule.first(env, 'SELECT like_id FROM card_social_likes WHERE card_id = ? AND liker_user_id = ? AND like_date = ? LIMIT 1', [likeCardId, viewerId, today]).catch(() => null);
+      const row = await D1ReadModule.first(env, `
+        SELECT like_id FROM card_social_likes
+        WHERE card_id IN (${placeholders}) AND liker_user_id = ? AND like_date = ?
+        LIMIT 1
+      `, [...siblingIds, viewerId, today]).catch(() => null);
       likedToday = !!row;
     }
     return {
@@ -13454,7 +13487,6 @@ const TrackingModule = {
       }
     };
   },
-
   async findSocialLikeCardOwner(cardId, env) {
     const row = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [cardId]).catch(() => null);
     const card = row ? D1ReadModule.cardRow(row) : null;

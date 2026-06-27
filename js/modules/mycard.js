@@ -1374,7 +1374,7 @@
     var desc = cfg.desc || fallbackMyCardDescription(currentCardData);
     var color = cfg.descColor || '#666666';
     var align = cfg.descAlign || 'center';
-    var ratio = layout === 'portrait' ? (myEcardRatios.portrait || '400:600').replace(':', '/') : (layout === 'square' ? '1/1' : '20/13');
+    var ratio = layout === 'portrait' ? (myEcardRatios.portrait || '400:600').replace(':', '/') : (layout === 'square' ? '1/1' : (myEcardRatios.landscape || '20:13').replace(':', '/'));
     var videoUrl = getVideoUrlInput() || cfg.videoUrl || '';
     var videoEnabled = isMyCardVideoEditingMode() && isVideoModeEnabled() && !!videoUrl;
     var mediaHtml = videoEnabled
@@ -1437,7 +1437,7 @@
       else wysiwygState.cfg.imgUrl = cleanUrl;
       if (layout === 'portrait') wysiwygState.cfg.imgRatioPortrait = String(ratio || '400:600').replace('/', ':');
       else if (layout === 'square') wysiwygState.cfg.imgRatioSquare = '1:1';
-      else wysiwygState.cfg.imgRatioLandscape = '20:13';
+      else wysiwygState.cfg.imgRatioLandscape = String(ratio || myEcardRatios.landscape || '20:13').replace('/', ':');
       writeCurrentCardConfig(wysiwygState.cfg);
       renderMyCardWysiwyg();
       var wysiwygImageInput = document.getElementById('my-wysiwyg-image-input');
@@ -1485,7 +1485,7 @@
       cfg.imgUrl = myEcardImgs.landscape;
       cfg.imgUrlPortrait = myEcardImgs.portrait;
       cfg.imgUrlSquare = myEcardImgs.square;
-      cfg.imgRatioLandscape = '20:13';
+      cfg.imgRatioLandscape = String(myEcardRatios.landscape || cfg.imgRatioLandscape || '20:13').replace('/', ':');
       cfg.imgRatioPortrait = (myEcardRatios.portrait || '400:600').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
       cfg.buttons = normalizeMyCardButtonsForSave(myEcardButtons);
@@ -1547,7 +1547,7 @@
       cfg.imgUrl = myEcardImgs.landscape || cfg.imgUrl || '';
       cfg.imgUrlPortrait = myEcardImgs.portrait || cfg.imgUrlPortrait || '';
       cfg.imgUrlSquare = myEcardImgs.square || cfg.imgUrlSquare || '';
-      cfg.imgRatioLandscape = '20:13';
+      cfg.imgRatioLandscape = String(myEcardRatios.landscape || cfg.imgRatioLandscape || '20:13').replace('/', ':');
       cfg.imgRatioPortrait = (myEcardRatios.portrait || '400:600').replace('/', ':');
       cfg.imgRatioSquare = '1:1';
       cfg.buttons = normalizeMyCardButtonsForSave(myEcardButtons);
@@ -1848,8 +1848,7 @@
     var cfg = wysiwygState.cfg;
     var activeVersion = currentWysiwygVersion(cfg);
     var layout = activeVersion === 'video' ? 'landscape' : (cfg.layoutStyle || getLayout());
-    var ratio = layout === 'portrait' ? (cfg.imgRatioPortrait || '400/600') : (layout === 'square' ? '1/1' : '20/13');
-    ratio = String(ratio).replace(':', '/');
+    var ratio = wysiwygLayoutRatio(layout, cfg);
     var imgUrl = currentWysiwygImage(cfg);
     var buttons = Array.isArray(cfg.buttons) ? cfg.buttons : [];
     var displayDesc = cfg.desc || fallbackMyCardDescription(currentCardData);
