@@ -344,7 +344,6 @@ const SecurityModule = {
       'unlinkCard',
       'getSubsiteHome',
       'getMotherRegistrationUrl',
-      'getSocialLikeStats',
       'queryPointBalanceFast',
       'queryUserPoints',
       'listPersonalTasks',
