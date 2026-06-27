@@ -689,17 +689,24 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
     if (!card) throw new Error('找不到這張名片');
 
     const cfg = buildCardShareConfig(card);
-    const layout = cfg.layoutStyle || 'landscape';
+    const videoUrl = String(cfg.videoUrl || cfg.video_url || cfg.heroVideoUrl || '').trim();
+    const isVideoCard = !!videoUrl || cfg.cardType === 'video' || cfg.cardVersion === 'video' || cfg.videoCard === true;
+    const layout = isVideoCard ? 'landscape' : (cfg.layoutStyle || 'landscape');
     const ratio = String(
       layout === 'portrait' ? (cfg.imgRatioPortrait || '400:600') :
       layout === 'square' ? (cfg.imgRatioSquare || '1:1') :
       (cfg.imgRatioLandscape || '20:13')
     ).replace(':', '/');
-    const imgUrl = layout === 'portrait'
-      ? (cfg.imgUrlPortrait || cfg.imgUrl || card['名片圖檔'] || '')
-      : layout === 'square'
-        ? (cfg.imgUrlSquare || cfg.imgUrl || card['名片圖檔'] || '')
-        : (cfg.imgUrl || card['名片圖檔'] || '');
+    const imgUrl = isVideoCard
+      ? (cfg.thumbnailUrl || cfg.previewUrl || cfg.imgUrl || cfg.imgUrlLandscape || card['名片圖檔'] || cfg.imgUrlSquare || '')
+      : (layout === 'portrait'
+        ? (cfg.imgUrlPortrait || cfg.imgUrl || card['名片圖檔'] || '')
+        : layout === 'square'
+          ? (cfg.imgUrlSquare || cfg.imgUrl || card['名片圖檔'] || '')
+          : (cfg.imgUrl || card['名片圖檔'] || ''));
+    const mediaHtml = isVideoCard && videoUrl
+      ? '<video src="' + window.escapeHTML(videoUrl) + '" poster="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-contain bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" controls playsinline preload="metadata"></video>'
+      : '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-contain bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">';
     const name = cardTextValue(card, ['姓名', 'name', 'displayName'], '數位名片');
     const company = cardTextValue(card, ['公司名稱', 'companyName', 'company'], '');
     const title = cardTextValue(card, ['職稱', 'title', 'industry'], '');
@@ -725,7 +732,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
             '<a href="' + window.escapeHTML(shareUrl) + '" class="rounded-full bg-red-500 px-3.5 py-1 text-[12px] font-black text-white shadow-sm">分享</a>' +
           '</div>' +
           '<div class="relative border-b border-slate-100">' +
-            '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-contain bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">' +
+            mediaHtml +
           '</div>' +
           '<div class="px-4 py-4 text-center">' +
             '<h1 class="text-[22px] font-black text-slate-900 leading-tight">' + window.escapeHTML(name) + '</h1>' +
