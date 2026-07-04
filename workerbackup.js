@@ -344,6 +344,7 @@ const SecurityModule = {
       'unlinkCard',
       'getSubsiteHome',
       'getMotherRegistrationUrl',
+      'ensureMotherLineMember',
       'queryPointBalanceFast',
       'queryUserPoints',
       'listPersonalTasks',
@@ -2078,6 +2079,13 @@ const LineOAChatModule = {
       name: this.text(profile.displayName || profile.name),
       role: 'user'
     }, env);
+    const motherMember = await PointModule.ensureMotherLineMember({
+      userId: lineId,
+      LINE_user_id: lineId,
+      displayName: this.text(profile.displayName || profile.name),
+      pictureUrl: this.text(profile.pictureUrl || profile.picture_url),
+      statusMessage: this.text(profile.statusMessage || profile.status_message)
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
     const wallet = await PointModule.queryPointBalanceFast({
       pointUserId: lineId,
       point_type: 'gift_money',
@@ -2113,6 +2121,7 @@ const LineOAChatModule = {
         pointUserId: D1ReadModule.text(user && user.point_line_id) || lineId,
         pointVerified,
         wallet,
+        motherMember,
         user: user ? D1ReadModule.userRow(user, 'line_oa_follow') : null
       }
     };
@@ -4459,6 +4468,76 @@ const PointModule = {
     };
   },
 
+  motherLineMemberApiUrl(env) {
+    return String(env.MOTHER_LINE_MEMBER_API_URL || 'https://aiwe.cc/index.php/wp-json/wetw/v1/check-or-create-line-user').trim();
+  },
+
+  motherLineMemberApiKey(env) {
+    return String(env.MOTHER_LINE_MEMBER_API_KEY || env.WETW_MASTER_API_KEY || env.AIWE_MEMBER_API_KEY || '').trim();
+  },
+
+  async ensureMotherLineMember(payload = {}, env) {
+    const apiKey = this.motherLineMemberApiKey(env);
+    const lineUserId = String(payload.LINE_user_id || payload.lineUserId || payload.userId || payload.pointUserId || payload.pt_uid || payload.authenticatedUserId || '').trim();
+    if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
+    if (!apiKey) return { success: true, skipped: true, reason: 'missing_mother_member_api_key', lineUserId };
+
+    const body = {
+      api_key: apiKey,
+      shop_id: Number(payload.shop_id || payload.shopId || env.MOTHER_CUS_ACCOUNT_SHOP_ID || env.POINT_SHOP_ID || 78),
+      LINE_user_id: lineUserId
+    };
+    const displayName = String(payload.LINE_display_name || payload.displayName || payload.name || payload['姓名'] || '').trim();
+    const statusMessage = String(payload.LINE_status_message || payload.statusMessage || '').trim();
+    const pictureUrl = String(payload.LINE_picture_url || payload.pictureUrl || payload.avatarUrl || payload.picture || '').trim();
+    if (displayName) body.LINE_display_name = displayName;
+    if (statusMessage) body.LINE_status_message = statusMessage;
+    if (pictureUrl) body.LINE_picture_url = pictureUrl;
+
+    let res;
+    let data = {};
+    try {
+      res = await fetch(this.motherLineMemberApiUrl(env), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const text = await res.text();
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (e) {
+        data = { rawText: text.slice(0, 300) };
+      }
+    } catch (e) {
+      return { success: false, error: 'Mother member API unavailable: ' + (e && e.message ? e.message : String(e)), lineUserId };
+    }
+    if (!res.ok || data.success === false) {
+      return { success: false, error: data.message || data.code || ('Mother member API HTTP ' + res.status), code: data.code || ('HTTP_' + res.status), data, lineUserId };
+    }
+    if (env.ACTMASTER_DB) {
+      await this.ensureLocalPointWallet(env, lineUserId, {
+        name: displayName,
+        displayName,
+        networkId: payload.networkId || payload.network_id || 'admin'
+      }).catch(() => null);
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE users
+        SET point_line_id = COALESCE(NULLIF(point_line_id, ''), ?),
+            identity_source = COALESCE(NULLIF(identity_source, ''), 'mother_member_api'),
+            migrated_at = COALESCE(migrated_at, CURRENT_TIMESTAMP)
+        WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
+      `).bind(lineUserId, lineUserId, lineUserId, lineUserId, lineUserId).run().catch(() => null);
+      await D1WriteModule.clearUserCache(env, lineUserId).catch(() => null);
+    }
+    return {
+      success: true,
+      lineUserId,
+      code: String(data.code || ''),
+      created: String(data.code || '') === 'register_success',
+      alreadyMember: String(data.code || '') === 'already_member',
+      data
+    };
+  },
   number(value) {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
@@ -4597,10 +4676,20 @@ const PointModule = {
     const lineUserId = await this.resolvePointUserId(env, rawLineUserId).catch(() => rawLineUserId);
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
+    const motherMember = await this.ensureMotherLineMember({
+      ...payload,
+      LINE_user_id: lineUserId,
+      lineUserId,
+      userId: lineUserId
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
+    if (motherMember && motherMember.success === false) {
+      return { success: false, error: 'Mother member setup failed: ' + (motherMember.error || motherMember.code || 'unknown'), motherMember };
+    }
+
     const body = {
       api_key: apiKey,
       LINE_user_id: lineUserId,
-      shop_id: Number(payload.shop_id || payload.shopId || env.POINT_SHOP_ID || 35),
+      shop_id: Number(payload.shop_id || payload.shopId || env.POINT_SHOP_ID || env.MOTHER_CUS_ACCOUNT_SHOP_ID || 78),
       event_name: String(payload.event_name || payload.eventName || '掃描名片贈點'),
       event_content: String(payload.event_content || payload.eventContent || '新增不重複名片，系統自動贈點'),
       point_type: String(payload.point_type || payload.pointType || 'system_point'),
@@ -4610,7 +4699,7 @@ const PointModule = {
       child_shop_renew: Number(payload.child_shop_renew || 0),
       shop_remark: String(payload.shop_remark || '')
     };
-    if (!body.get_point) return { success: false, error: 'Missing point amount' };
+    if (!body.get_point) return { success: false, error: 'Missing point amount', motherMember };
 
     const res = await fetch(this.insertApiUrl, {
       method: 'POST',
@@ -4619,11 +4708,10 @@ const PointModule = {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.success === false) {
-      return { success: false, error: data.message || data.code || ('Point insert API HTTP ' + res.status), data };
+      return { success: false, error: data.message || data.code || ('Point insert API HTTP ' + res.status), data, motherMember };
     }
-    return { success: true, data };
+    return { success: true, data, motherMember };
   },
-
   async enrichPointRowsWithCashierLogs(env, lineUserId, rows) {
     if (!env.ACTMASTER_DB || !lineUserId || !Array.isArray(rows) || !rows.length) return rows;
     await this.ensureCashierLedgerTable(env);
@@ -5092,7 +5180,7 @@ const PointModule = {
     const rawUserId = String(payload.userId || payload.LINE_user_id || payload.lineUserId || payload.authenticatedUserId || '').trim();
     const pointUserId = await this.resolvePointUserId(env, rawUserId).catch(() => rawUserId);
     if (!pointUserId) return { success: false, error: 'Missing userId' };
-    return await this.ensureLocalPointWallet(env, pointUserId, {
+    const profile = {
       name: payload.name || payload.displayName || payload['姓名'] || '',
       displayName: payload.displayName || payload.name || payload['姓名'] || '',
       phone: payload.phone || payload.mobile || payload['手機號碼'] || '',
@@ -5100,9 +5188,24 @@ const PointModule = {
       title: payload.title || payload.industry || '',
       companyName: payload.companyName || payload.company || '',
       networkId: payload.networkId || payload.net || payload.network_id || 'admin'
-    });
+    };
+    const motherMember = await this.ensureMotherLineMember({
+      ...payload,
+      ...profile,
+      LINE_user_id: pointUserId,
+      lineUserId: pointUserId,
+      userId: pointUserId
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
+    const localWallet = await this.ensureLocalPointWallet(env, pointUserId, profile);
+    return {
+      ...localWallet,
+      motherMember,
+      data: {
+        ...(localWallet && localWallet.data ? localWallet.data : {}),
+        motherMember
+      }
+    };
   },
-
   async dailyCheckinLocalFallback(options = {}) {
     const env = options.env;
     const pointUserId = String(options.pointUserId || '').trim();
@@ -6360,7 +6463,6 @@ const AdminPointModule = {
     const next = String(value ?? '').trim();
     return next || fallback;
   },
-
   number(value) {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
@@ -6486,7 +6588,6 @@ const PointSyncModule = {
     const next = String(value ?? '').trim();
     return next || fallback;
   },
-
   number(value) {
     const num = Number(value || 0);
     return Number.isFinite(num) ? num : 0;
@@ -15727,6 +15828,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
     case 'getSubsiteHome':         return await SubsiteHomeModule.get(payload || {}, env);
     case 'getMotherRegistrationUrl': return await PointModule.getMotherRegistrationUrl(payload || {}, env);
+    case 'ensureMotherLineMember': return await PointModule.ensureMotherLineMember(payload || {}, env);
     case 'queryPointBalanceFast':  return await PointModule.queryPointBalanceFast(payload || {}, env);
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
