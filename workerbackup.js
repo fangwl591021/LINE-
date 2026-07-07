@@ -2175,17 +2175,19 @@ const LineOAChatModule = {
       eventContent,
       shop_remark: ['line_oa_follow', createdAt || new Date().toISOString()].join(';')
     }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
-    let status = result && result.success ? 'sent' : 'failed';
-    let localResult = null;
-    if (status === 'failed') {
-      localResult = await AdminPointModule.adjust({
-        authenticatedUserId: 'system',
-        targetUserId: pointUserId,
-        mode: 'grant',
+    let status = result && result.success ? 'sent' : 'pending_sync';
+    let syncJob = null;
+    if (status === 'pending_sync') {
+      syncJob = await PointSyncModule.enqueue({
+        jobId: `PSJ_LINE_OA_FOLLOW_${pointUserId}`,
+        lineUserId: pointUserId,
+        source: 'line_oa_follow',
+        sourceRef: awardId,
         points,
-        note: `LINE OA follow local wallet fallback; mother_error=${this.text(result && result.error, 'Point API failed')}; created_at=${createdAt || new Date().toISOString()}`
-      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
-      if (localResult && localResult.success !== false) status = 'local_sent';
+        pointType: 'gift_money',
+        createdBy: 'system',
+        payload: { lineUserId: lineId, pointUserId, createdAt, motherResult: result }
+      }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
     }
     await env.ACTMASTER_DB.prepare(`
       UPDATE point_awards
@@ -2193,14 +2195,13 @@ const LineOAChatModule = {
       WHERE user_id = ? AND card_id = ? AND award_type = ?
     `).bind(
       status,
-      JSON.stringify({ result, localResult, lineUserId: lineId, pointUserId, createdAt }),
+      JSON.stringify({ result, syncJob, lineUserId: lineId, pointUserId, createdAt, sourceOfTruth: 'mother' }),
       pointUserId,
       cardId,
       awardType
     ).run();
     if (status === 'sent') return { awarded: true, points, pointUserId, source: 'mother', response: result.data };
-    if (status === 'local_sent') return { awarded: true, points, pointUserId, source: 'local', motherError: (result && result.error) || 'Point award failed', localResult: localResult && (localResult.data || localResult) };
-    return { awarded: false, points, pointUserId, error: (result && result.error) || (localResult && localResult.error) || 'Point award failed' };
+    return { awarded: false, points, pointUserId, source: 'mother_pending', syncJob, error: (result && result.error) || 'Point award queued for mother sync' };
   },
 
   async handleFollowPointOnboarding(env, event) {
@@ -5299,85 +5300,34 @@ const PointModule = {
 
   async awardShareJoinPoints(payload, env) {
     if (!env.ACTMASTER_DB) return { success: false, skipped: true, reason: 'missing_db' };
-    await this.ensureAwardTable(env);
-
     const rawUserId = String(payload.userId || payload.LINE_user_id || payload.lineUserId || payload.authenticatedUserId || '').trim();
     const pointUserId = await this.resolvePointUserId(env, rawUserId).catch(() => rawUserId);
     const referrerId = String(payload.referrerId || payload.ref || payload['推薦人'] || payload['?刻鈭?'] || '').trim();
     const networkId = String(payload.networkId || payload.net || payload.network_id || 'admin').trim() || 'admin';
     const sourceRef = String(payload.claimRowId || payload.claimedCardRowId || payload.shareCardId || payload.cardId || referrerId || networkId || 'share_url').trim();
     if (!pointUserId) return { success: false, skipped: true, reason: 'missing_user_id' };
-    if (!referrerId || referrerId === pointUserId) return { success: true, skipped: true, reason: 'not_share_join', pointUserId };
 
-    const awardType = 'share_url_join';
-    const awardId = `AWD_SHARE_JOIN_${pointUserId}`;
-    const existing = await D1ReadModule.first(env, `
-      SELECT *
-      FROM point_awards
-      WHERE award_id = ?
-         OR (user_id = ? AND award_type = ?)
-      LIMIT 1
-    `, [awardId, pointUserId, awardType]).catch(() => null);
-    if (existing && String(existing.status || '').trim() !== 'failed') {
-      return { success: true, awarded: false, alreadyAwarded: true, pointUserId, status: String(existing.status || '').trim() };
-    }
-
-    await this.ensureLocalPointWallet(env, pointUserId, payload).catch(() => null);
-    await env.ACTMASTER_DB.prepare(`
-      INSERT OR REPLACE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
-      VALUES (?, ?, ?, ?, 300, 'gift_money', 'pending', '{}', CURRENT_TIMESTAMP)
-    `).bind(awardId, pointUserId, sourceRef, awardType).run();
-
-    const remark = `source=share_url_join;referrer=${referrerId};network=${networkId};source_ref=${sourceRef}`;
-    const motherResult = await this.insertUserPoint({
+    const pointWallet = await this.ensureSubsitePointWalletOnJoin({
+      ...payload,
+      userId: pointUserId,
       LINE_user_id: pointUserId,
-      points: 300,
-      pointType: 'gift_money',
-      eventName: '子站分享網址加入',
-      eventContent: '透過分享網址加入子站，贈送 300 點',
-      shop_remark: remark
+      lineUserId: pointUserId,
+      networkId
     }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
 
-    let finalStatus = motherResult && motherResult.success ? 'sent' : 'failed';
-    let finalResult = motherResult;
-    if (finalStatus === 'failed') {
-      await AdminPointModule.ensure(env);
-      const balanceBefore = await AdminPointModule.localBalance(env, pointUserId).catch(() => 0);
-      const balanceAfter = Number(balanceBefore || 0) + 300;
-      const localLedgerId = `APL_SHARE_JOIN_${pointUserId}`;
-      await env.ACTMASTER_DB.prepare(`
-        INSERT OR IGNORE INTO admin_point_ledger (row_id,user_id,actor_user_id,mode,points,balance_after,note,source)
-        VALUES (?, ?, 'system', 'grant', 300, ?, ?, 'share_url_join_local_wallet')
-      `).bind(localLedgerId, pointUserId, balanceAfter, `${remark}; mother_error=${String(motherResult && motherResult.error || 'mother_point_failed').slice(0, 180)}`).run();
-      const syncJob = await PointSyncModule.enqueue({
-        jobId: `PSJ_SHARE_JOIN_${pointUserId}`,
-        lineUserId: pointUserId,
-        source: 'share_url_join_local_wallet',
-        sourceRef: awardId,
-        points: 300,
-        pointType: 'gift_money',
-        createdBy: referrerId,
-        payload: { pointUserId, referrerId, networkId, sourceRef, localLedgerId }
-      }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
-      finalStatus = 'local_sent';
-      finalResult = { success: true, local: true, balanceBefore, balanceAfter, localLedgerId, syncJob, motherResult };
-    }
-
-    await env.ACTMASTER_DB.prepare(`
-      UPDATE point_awards
-      SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE award_id = ?
-    `).bind(finalStatus, JSON.stringify(finalResult || {}), awardId).run();
     return {
-      success: finalStatus === 'sent' || finalStatus === 'local_sent',
-      awarded: true,
-      points: 300,
+      success: true,
+      awarded: false,
+      skipped: true,
+      reason: 'join_points_are_owned_by_line_oa_follow',
       pointUserId,
-      status: finalStatus,
-      result: finalResult
+      referrerId,
+      networkId,
+      sourceRef,
+      pointWallet,
+      message: '子站加入只同步會員與點數錢包索引；300 點由 LINE 加好友流程發放。'
     };
   },
-
   async dailyCheckin(payload, env) {
     if (!env.ACTMASTER_DB) return { success: false, error: 'Missing ACTMASTER_DB binding' };
     await this.ensureAwardTable(env);
@@ -6774,6 +6724,7 @@ const PointSyncModule = {
       store_redeem_local_wallet: '子站店家扣點同步',
       daily_checkin_local_wallet: '子站每日簽到同步',
       share_url_join_local_wallet: '子站分享加入同步',
+      line_oa_follow: 'LINE 加好友贈點同步',
       new_user_join: '子站新會員同步',
       card_scan_create: '子站名片建檔同步',
       manual_sync: '手動點數同步'
@@ -6790,6 +6741,15 @@ const PointSyncModule = {
   async processJob(job, env) {
     if (!job || !job.jobId) return { success: false, error: 'Missing job' };
     const points = this.number(job.points);
+    const source = this.text(job.source);
+    if (points > 0 && ['share_url_join_local_wallet', 'new_user_join'].includes(source)) {
+      await this.updateJob(env, job.jobId, {
+        status: 'synced',
+        lastError: '',
+        result: { skipped: true, reason: 'join_points_are_owned_by_line_oa_follow', source, points }
+      });
+      return { success: true, skipped: true, jobId: job.jobId, reason: 'join_points_are_owned_by_line_oa_follow' };
+    }
     if (!job.lineUserId || !points) {
       await this.updateJob(env, job.jobId, {
         status: 'failed',
