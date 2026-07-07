@@ -2167,14 +2167,25 @@ const LineOAChatModule = {
         return { awarded: false, reason: 'already_recorded', pointUserId };
       }
     }
-    const result = await PointModule.insertUserPoint({
-      userId: pointUserId,
-      points,
-      pointType: 'gift_money',
-      eventName,
-      eventContent,
-      shop_remark: ['line_oa_follow', createdAt || new Date().toISOString()].join(';')
-    }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
+    const motherMember = await PointModule.ensureMotherLineMember({
+      userId: lineId,
+      LINE_user_id: lineId
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e), lineUserId: lineId }));
+
+    let result = null;
+    if (motherMember && motherMember.success === false) {
+      result = { success: false, error: motherMember.error || 'Mother member creation failed', motherMember };
+    } else {
+      result = await PointModule.insertUserPoint({
+        userId: pointUserId,
+        points,
+        pointType: 'gift_money',
+        eventName,
+        eventContent,
+        shop_remark: ['line_oa_follow', createdAt || new Date().toISOString()].join(';')
+      }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
+      result.motherMember = motherMember;
+    }
     let status = result && result.success ? 'sent' : 'pending_sync';
     let syncJob = null;
     if (status === 'pending_sync') {
