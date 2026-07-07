@@ -383,6 +383,8 @@ const HomeModule = (function() {
     };
 
     window.buildHomeInviteUrl = function() {
+        const motherInviteUrl = window.buildMemberInviteUrl ? window.buildMemberInviteUrl() : '';
+        if (motherInviteUrl) return motherInviteUrl;
         const myUserId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
         const myStoreId = window.currentUser?.storeid || '';
         const tracking = (myStoreId ? myStoreId + '_' : '') + String(myUserId || '').substring(0, 10);
