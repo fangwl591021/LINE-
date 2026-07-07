@@ -2114,6 +2114,16 @@ const LineOAChatModule = {
       WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?
       LIMIT 1
     `, [lineId, lineId, lineId, lineId]).catch(() => null);
+    const crmPlaceholder = user
+      ? await D1WriteModule.ensureReferralPlaceholderCard(env, {
+          ...user,
+          referrer_id: D1ReadModule.text(user.referrer_id) || 'admin',
+          source_type: 'line_oa_follow',
+          crm_status: '已加好友未建名片',
+          crm_type: 'LINE 加好友',
+          notes: 'LINE 加好友後自動建立；待本人建立正式名片。'
+        }).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }))
+      : null;
     return {
       success: true,
       data: {
@@ -2122,6 +2132,7 @@ const LineOAChatModule = {
         pointVerified,
         wallet,
         motherMember,
+        crmPlaceholder,
         user: user ? D1ReadModule.userRow(user, 'line_oa_follow') : null
       }
     };
@@ -4473,7 +4484,7 @@ const PointModule = {
   },
 
   motherLineMemberApiKey(env) {
-    return String(env.MOTHER_LINE_MEMBER_API_KEY || env.WETW_MASTER_API_KEY || env.AIWE_MEMBER_API_KEY || '').trim();
+    return String(env.MOTHER_LINE_MEMBER_API_KEY || env.WETW_MASTER_API_KEY || env.AIWE_MEMBER_API_KEY || env.MOTHER_CUS_ACCOUNT_BOT_TOKEN || env.AIWE_CUS_ACCOUNT_BOT_TOKEN || '').trim();
   },
 
   async ensureMotherLineMember(payload = {}, env) {
@@ -9696,9 +9707,9 @@ const D1WriteModule = {
     const title = this.text(user.industry);
     const imageUrl = this.text(user.picture_url || user.pictureUrl || user.avatarUrl || user.avatar_url);
     const networkId = this.text(user.network_id, 'admin');
-    const crmStatus = '\u5df2\u8a3b\u518a\u672a\u5efa\u540d\u7247';
-    const crmType = '\u9080\u7d04\u8a3b\u518a';
-    const note = '\u63a8\u85a6\u9023\u7d50\u6388\u6b0a\u5f8c\u81ea\u52d5\u5efa\u7acb\uff1b\u5f85\u672c\u4eba\u5efa\u7acb\u6b63\u5f0f\u540d\u7247\u3002';
+    const crmStatus = this.text(user.crm_status, '\u5df2\u8a3b\u518a\u672a\u5efa\u540d\u7247');
+    const crmType = this.text(user.crm_type, '\u9080\u7d04\u8a3b\u518a');
+    const note = this.text(user.notes, '\u63a8\u85a6\u9023\u7d50\u6388\u6b0a\u5f8c\u81ea\u52d5\u5efa\u7acb\uff1b\u5f85\u672c\u4eba\u5efa\u7acb\u6b63\u5f0f\u540d\u7247\u3002');
 
     if (existing) {
       await env.ACTMASTER_DB.prepare(`
