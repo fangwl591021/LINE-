@@ -407,6 +407,17 @@ const HomeModule = (function() {
             '&from=business-engine';
     };
 
+    window.openProfileRegistrationPanel = function() {
+        if (typeof window.goPage === 'function') window.goPage('admin-settings');
+        setTimeout(function() {
+            if (typeof window.prepareRegistrationInputs === 'function') window.prepareRegistrationInputs();
+            const details = document.getElementById('details-profile-registration');
+            if (details) {
+                details.open = true;
+                try { details.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { details.scrollIntoView(); }
+            }
+        }, 80);
+    };
     function getHomeProfileCardId_() {
         const card = window.currentUserCard || {};
         return String(card.rowId || card.cardRowId || card.id || card['rowId'] || '').trim();
@@ -428,9 +439,6 @@ const HomeModule = (function() {
         if (!card) return;
 
         const name = window.currentUser?.name || window.currentUserProfile?.displayName || '會員';
-        const role = String(window.userRole || window.currentUser?.role || 'user').toLowerCase();
-        const roleLabel = role === 'admin' ? '總管' : (role === 'store' || role === 'tenant' ? '店長' : '用戶');
-        const roleIcon = role === 'admin' ? 'workspace_premium' : (role === 'store' || role === 'tenant' ? 'storefront' : 'person');
         const pointReady = window.pointWalletData?.status === 'ready' && Number.isFinite(Number(window.pointWalletData?.balance));
         const pointStatus = window.pointWalletStatus || (pointReady ? 'ready' : 'loading');
         const pointText = pointReady
@@ -438,16 +446,15 @@ const HomeModule = (function() {
             : (pointStatus === 'error' ? '無法讀取' : '讀取中');
 
         const nameEl = document.getElementById('home-profile-name');
-        const roleEl = document.getElementById('home-profile-role');
         const pointsEl = document.getElementById('home-profile-points');
         const avatarEl = document.getElementById('home-profile-avatar');
         const hiddenAvatar = document.getElementById('home-profile-avatar-url');
         const qrEl = document.getElementById('home-profile-qr');
 
         if (nameEl) nameEl.textContent = name;
-        if (roleEl) {
-            roleEl.innerHTML = '<span class="material-symbols-outlined text-[14px] icon-filled">' + roleIcon + '</span>' + roleLabel;
-        }
+        document.querySelectorAll('#home-profile-role').forEach(function(el) {
+            el.innerHTML = '<span class="material-symbols-outlined text-[14px] icon-filled">person</span>會員註冊';
+        });
         if (pointsEl) {
             pointsEl.textContent = pointText;
             pointsEl.classList.toggle('text-slate-400', !pointReady);

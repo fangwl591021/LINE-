@@ -1049,10 +1049,7 @@
               <input id="home-profile-avatar-file" type="file" accept="image/*" class="hidden" onchange="window.uploadHomeProfileAvatar(this)">
               <input id="home-profile-avatar-url" type="hidden">
               <h2 id="home-profile-name" class="mt-2 mx-auto block max-w-[168px] truncate text-[22px] font-black text-slate-900 tracking-tight leading-tight">會員</h2>
-              <span id="home-profile-role" class="mt-1.5 inline-flex items-center gap-1 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 px-2.5 py-1 text-[11px] font-black">
-                <span class="material-symbols-outlined text-[13px] icon-filled">workspace_premium</span>
-                一般會員
-              </span>
+              <button id="home-profile-role" type="button" onclick="window.openProfileRegistrationPanel?.()" class="mt-1.5 inline-flex items-center gap-1 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-1 text-[11px] font-black active:scale-95 transition-transform"><span class="material-symbols-outlined text-[13px] icon-filled">person</span>會員註冊</button>
             </div>
 
             <div class="home-profile-side-card shrink-0 mt-11 p-2 text-center">
@@ -1085,10 +1082,7 @@
           <div class="min-w-0 flex-1">
             <div class="flex flex-col items-start gap-1 min-w-0">
               <h2 id="home-profile-name" class="block w-full truncate text-[20px] font-black text-slate-900 tracking-tight leading-tight">會員</h2>
-              <span id="home-profile-role" class="shrink-0 inline-flex items-center gap-1 rounded-full bg-pink-100 text-pink-600 px-2 py-0.5 text-[10px] font-black">
-                <span class="material-symbols-outlined text-[13px] icon-filled">workspace_premium</span>
-                用戶
-              </span>
+              <button id="home-profile-role" type="button" onclick="window.openProfileRegistrationPanel?.()" class="shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 text-[10px] font-black active:scale-95 transition-transform"><span class="material-symbols-outlined text-[13px] icon-filled">person</span>會員註冊</button>
             </div>
             <p class="mt-1.5 text-[12px] font-bold text-slate-500">可用點數</p>
             <div class="mt-0.5 flex items-center gap-2 flex-wrap">
@@ -2231,7 +2225,7 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.56"></script>
+<script src="js/modules/home.js?v=7.57"></script>
 <script src="js/modules/inbox.js?v=1.15"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
