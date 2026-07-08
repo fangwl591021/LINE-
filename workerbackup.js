@@ -4496,7 +4496,7 @@ const PointModule = {
   },
 
   motherLineMemberApiKey(env) {
-    return String(env.MOTHER_LINE_MEMBER_API_KEY || env.WETW_MASTER_API_KEY || env.AIWE_MEMBER_API_KEY || env.MOTHER_CUS_ACCOUNT_BOT_TOKEN || env.AIWE_CUS_ACCOUNT_BOT_TOKEN || '').trim();
+    return String(env.MOTHER_LINE_MEMBER_API_KEY || env.WETW_MASTER_API_KEY || env.AIWE_MEMBER_API_KEY || env.POINT_API_KEY || env.WETW_POINT_API_KEY || env.MOTHER_CUS_ACCOUNT_BOT_TOKEN || env.AIWE_CUS_ACCOUNT_BOT_TOKEN || '').trim();
   },
 
   async ensureMotherLineMember(payload = {}, env) {
