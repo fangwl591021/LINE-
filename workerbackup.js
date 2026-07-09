@@ -5817,6 +5817,48 @@ const PointModule = {
     return { customerPointUserId, rawCustomerId: raw, matchedId, identity, user, card };
   },
 
+  cashierSessionKey(sessionId) {
+    return 'STORE_CASHIER_SESSION_' + String(sessionId || '').trim();
+  },
+
+  async createStorePointCashierSession(env, payload = {}) {
+    if (!env.ACTMASTER_KV) return null;
+    const actorId = String(payload.actorId || '').trim();
+    const customerPointUserId = String(payload.customerPointUserId || '').trim();
+    if (!actorId || !customerPointUserId) return null;
+    const actorPointUserId = String(payload.actorPointUserId || actorId).trim();
+    const sessionId = 'SCS_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    const session = {
+      sessionId,
+      actorId,
+      actorPointUserId,
+      customerPointUserId,
+      customerPointSource: String(payload.customerPointSource || 'mother'),
+      balance: this.number(payload.balance),
+      motherBalance: this.number(payload.motherBalance),
+      localBalance: this.number(payload.localBalance),
+      actorBalance: this.number(payload.actorBalance),
+      actorCanOperate: this.number(payload.actorBalance) >= 10,
+      motherReady: payload.motherReady === true,
+      createdAt: new Date().toISOString()
+    };
+    await env.ACTMASTER_KV.put(this.cashierSessionKey(sessionId), JSON.stringify(session), { expirationTtl: 180 }).catch(() => null);
+    return session;
+  },
+
+  async loadStorePointCashierSession(env, sessionId, actorId, customerPointUserId) {
+    if (!env.ACTMASTER_KV || !sessionId) return null;
+    const raw = await env.ACTMASTER_KV.get(this.cashierSessionKey(sessionId)).catch(() => null);
+    if (!raw) return null;
+    let session = null;
+    try { session = JSON.parse(raw); } catch (e) { return null; }
+    if (String(session.actorId || '') !== String(actorId || '')) return null;
+    if (String(session.customerPointUserId || '') !== String(customerPointUserId || '')) return null;
+    const ageMs = Date.now() - Date.parse(session.createdAt || 0);
+    if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 180000) return null;
+    return session;
+  },
+
   async getStorePointCustomer(payload, env) {
     const rawCustomerId = String(
       payload.customerUserId ||
@@ -5909,9 +5951,19 @@ const PointModule = {
       networkId: D1ReadModule.text(user && user.networkId) || D1ReadModule.text(mappedCard && mappedCard.networkId) || 'admin'
     }).catch(e => ({ success: false, error: e.message || String(e) }));
     const motherRegistrationUrl = this.motherRegistrationUrl(env, customerPointUserId);
+    const actorId = String(payload.authenticatedUserId || payload.userId || '').trim();
+    const actorPointUserId = actorId ? await this.resolvePointUserId(env, actorId).catch(() => actorId) : '';
+    const [customerMotherReady, actorMotherReady, actorWallet] = await Promise.all([
+      this.ensureMotherLineMember({ ...payload, LINE_user_id: customerPointUserId, lineUserId: customerPointUserId, userId: customerPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) })),
+      actorPointUserId ? this.ensureMotherLineMember({ ...payload, LINE_user_id: actorPointUserId, lineUserId: actorPointUserId, userId: actorPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) })) : Promise.resolve({ success: true, skipped: true }),
+      actorPointUserId ? this.queryUserPoints({ pointUserId: actorPointUserId, point_type: 'gift_money', page: 1, per_page: 1 }, env).catch(e => ({ success: false, error: e.message || String(e) })) : Promise.resolve(null)
+    ]);
+    const actorBalance = actorWallet && actorWallet.success ? Math.floor(Number(actorWallet.data?.balance || 0)) : 0;
+    const motherReady = (!customerMotherReady || customerMotherReady.success !== false) && (!actorMotherReady || actorMotherReady.success !== false);
 
     if (!wallet || wallet.success === false) {
       const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
+      const cashierSession = await this.createStorePointCashierSession(env, { actorId, actorPointUserId, customerPointUserId, customerPointSource: 'local', balance: localBalance, localBalance, actorBalance, motherReady });
       return {
         success: true,
         data: {
@@ -5927,6 +5979,10 @@ const PointModule = {
           canAutoBindPointAccount: false,
           motherRegistrationUrl,
           bindCustomerUserId: customerPointUserId,
+          cashierSessionId: cashierSession && cashierSession.sessionId,
+          cashierPreparedAt: cashierSession && cashierSession.createdAt,
+          cashierReady: !!cashierSession,
+          actorCanOperate: !cashierSession || cashierSession.actorCanOperate,
           name: displayName,
           phone,
           industry,
@@ -5945,6 +6001,7 @@ const PointModule = {
 
     const motherBalance = this.number(wallet && wallet.data && wallet.data.balance);
     const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
+    const cashierSession = await this.createStorePointCashierSession(env, { actorId, actorPointUserId, customerPointUserId, customerPointSource: 'mother', balance: motherBalance, motherBalance, localBalance, actorBalance, motherReady });
 
     return {
       success: true,
@@ -5958,6 +6015,10 @@ const PointModule = {
         localWalletRepaired: !!(localWalletIndex && localWalletIndex.success),
         localWalletIndex,
         motherRegistrationUrl,
+        cashierSessionId: cashierSession && cashierSession.sessionId,
+        cashierPreparedAt: cashierSession && cashierSession.createdAt,
+        cashierReady: !!cashierSession,
+        actorCanOperate: !cashierSession || cashierSession.actorCanOperate,
         name: displayName,
         phone,
         industry,
@@ -6055,12 +6116,15 @@ const PointModule = {
     }).catch(e => ({ success: false, error: e.message || String(e) }));
 
     const actorPointUserId = await this.resolvePointUserId(env, actorId);
-    const actorWallet = await this.queryUserPoints({
-      pointUserId: actorPointUserId,
-      point_type: 'gift_money',
-      page: 1,
-      per_page: 20
-    }, env);
+    const cashierSession = await this.loadStorePointCashierSession(env, payload.cashierSessionId, actorId, customerPointUserId);
+    const actorWallet = cashierSession && cashierSession.actorCanOperate
+      ? { success: true, data: { balance: cashierSession.actorBalance }, prepared: true }
+      : await this.queryUserPoints({
+          pointUserId: actorPointUserId,
+          point_type: 'gift_money',
+          page: 1,
+          per_page: 20
+        }, env);
     if (!actorWallet || !actorWallet.success) {
       return { success: false, error: actorWallet && actorWallet.error ? actorWallet.error : '無法取得店家操作點數' };
     }
@@ -6069,13 +6133,15 @@ const PointModule = {
       return { success: false, error: `店家操作點數不足，贈扣點功能每次需要 ${operatorFee} 點` };
     }
 
-    let wallet = await this.queryUserPoints({
-      pointUserId: customerPointUserId,
-      point_type: 'gift_money',
-      page: 1,
-      per_page: 100
-    }, env);
-    let customerPointSource = 'mother';
+    let wallet = cashierSession
+      ? { success: true, data: { balance: cashierSession.balance }, prepared: true }
+      : await this.queryUserPoints({
+          pointUserId: customerPointUserId,
+          point_type: 'gift_money',
+          page: 1,
+          per_page: 100
+        }, env);
+    let customerPointSource = cashierSession ? (cashierSession.customerPointSource || 'mother') : 'mother';
     if (!wallet || !wallet.success) {
       const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
       wallet = { success: true, data: { balance: localBalance, list: [] }, localPointOnly: true };
@@ -6102,16 +6168,18 @@ const PointModule = {
       || actorId;
     const sourceLabel = sourceName.length > 28 ? sourceName.slice(0, 28) + '...' : sourceName;
 
-    const pointMemberIds = Array.from(new Set([actorPointUserId, customerPointUserId].filter(Boolean)));
-    const pointMemberResults = await Promise.all(pointMemberIds.map(lineUserId => this.ensureMotherLineMember({
-      ...payload,
-      LINE_user_id: lineUserId,
-      lineUserId,
-      userId: lineUserId
-    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e), lineUserId }))));
-    const failedPointMember = pointMemberResults.find(item => item && item.success === false);
-    if (failedPointMember) {
-      return { success: false, error: 'Mother member setup failed: ' + (failedPointMember.error || failedPointMember.code || 'unknown'), data: { motherMember: failedPointMember } };
+    if (!cashierSession || cashierSession.motherReady !== true) {
+      const pointMemberIds = Array.from(new Set([actorPointUserId, customerPointUserId].filter(Boolean)));
+      const pointMemberResults = await Promise.all(pointMemberIds.map(lineUserId => this.ensureMotherLineMember({
+        ...payload,
+        LINE_user_id: lineUserId,
+        lineUserId,
+        userId: lineUserId
+      }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e), lineUserId }))));
+      const failedPointMember = pointMemberResults.find(item => item && item.success === false);
+      if (failedPointMember) {
+        return { success: false, error: 'Mother member setup failed: ' + (failedPointMember.error || failedPointMember.code || 'unknown'), data: { motherMember: failedPointMember } };
+      }
     }
 
     if (isReward) {

@@ -2222,6 +2222,7 @@ window.submitStorePointCashier = async function(btn) {
       amount,
       deductPoints,
       mode,
+      cashierSessionId: window.storePointCustomer?.cashierSessionId || '',
       autoBindPointAccount: canAutoBindReward
     }, true);
     if (!res || res.error) throw new Error(res?.error || '點數處理失敗');
