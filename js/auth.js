@@ -2117,6 +2117,31 @@ window.renderStorePointCustomer = function(customer) {
   window.updateStorePointPreview?.();
 };
 
+window.prepareStorePointCashierSession = async function(customer) {
+  if (!customer || customer.needsBinding || !customer.customerPointUserId) return null;
+  const activeCustomerId = customer.customerPointUserId;
+  try {
+    const res = await window.fetchAPI('prepareStorePointCashierSession', { customerUserId: activeCustomerId }, true);
+    if (!res || res.error) return null;
+    const data = res.data || res;
+    if (!window.storePointCustomer || window.storePointCustomer.customerPointUserId !== activeCustomerId) return data;
+    window.storePointCustomer = {
+      ...window.storePointCustomer,
+      cashierSessionId: data.cashierSessionId || '',
+      cashierPreparedAt: data.cashierPreparedAt || '',
+      cashierReady: data.cashierReady === true,
+      cashierPreparing: false,
+      actorCanOperate: data.actorCanOperate
+    };
+    return data;
+  } catch (e) {
+    if (window.storePointCustomer && window.storePointCustomer.customerPointUserId === activeCustomerId) {
+      window.storePointCustomer.cashierPreparing = false;
+    }
+    return null;
+  }
+};
+
 window.lookupStorePointCustomer = async function() {
   if (!window.canUseStorePointCashier()) return null;
   const input = document.getElementById('store-point-customer');

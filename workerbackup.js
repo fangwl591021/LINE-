@@ -329,6 +329,7 @@ const SecurityModule = {
       'extractLineVoomMedia',
       'storeAdjustCustomerPoints',
       'getStorePointCustomer',
+      'prepareStorePointCashierSession',
       'listStorePointCashierLogs'
     ]);
     const ownTokenRequired = new Set([
@@ -5951,19 +5952,9 @@ const PointModule = {
       networkId: D1ReadModule.text(user && user.networkId) || D1ReadModule.text(mappedCard && mappedCard.networkId) || 'admin'
     }).catch(e => ({ success: false, error: e.message || String(e) }));
     const motherRegistrationUrl = this.motherRegistrationUrl(env, customerPointUserId);
-    const actorId = String(payload.authenticatedUserId || payload.userId || '').trim();
-    const actorPointUserId = actorId ? await this.resolvePointUserId(env, actorId).catch(() => actorId) : '';
-    const [customerMotherReady, actorMotherReady, actorWallet] = await Promise.all([
-      this.ensureMotherLineMember({ ...payload, LINE_user_id: customerPointUserId, lineUserId: customerPointUserId, userId: customerPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) })),
-      actorPointUserId ? this.ensureMotherLineMember({ ...payload, LINE_user_id: actorPointUserId, lineUserId: actorPointUserId, userId: actorPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) })) : Promise.resolve({ success: true, skipped: true }),
-      actorPointUserId ? this.queryUserPoints({ pointUserId: actorPointUserId, point_type: 'gift_money', page: 1, per_page: 1 }, env).catch(e => ({ success: false, error: e.message || String(e) })) : Promise.resolve(null)
-    ]);
-    const actorBalance = actorWallet && actorWallet.success ? Math.floor(Number(actorWallet.data?.balance || 0)) : 0;
-    const motherReady = (!customerMotherReady || customerMotherReady.success !== false) && (!actorMotherReady || actorMotherReady.success !== false);
 
     if (!wallet || wallet.success === false) {
       const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
-      const cashierSession = await this.createStorePointCashierSession(env, { actorId, actorPointUserId, customerPointUserId, customerPointSource: 'local', balance: localBalance, localBalance, actorBalance, motherReady });
       return {
         success: true,
         data: {
@@ -5979,10 +5970,10 @@ const PointModule = {
           canAutoBindPointAccount: false,
           motherRegistrationUrl,
           bindCustomerUserId: customerPointUserId,
-          cashierSessionId: cashierSession && cashierSession.sessionId,
-          cashierPreparedAt: cashierSession && cashierSession.createdAt,
-          cashierReady: !!cashierSession,
-          actorCanOperate: !cashierSession || cashierSession.actorCanOperate,
+          cashierSessionId: '',
+          cashierPreparedAt: '',
+          cashierReady: false,
+          cashierPreparing: true,
           name: displayName,
           phone,
           industry,
@@ -6001,7 +5992,6 @@ const PointModule = {
 
     const motherBalance = this.number(wallet && wallet.data && wallet.data.balance);
     const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
-    const cashierSession = await this.createStorePointCashierSession(env, { actorId, actorPointUserId, customerPointUserId, customerPointSource: 'mother', balance: motherBalance, motherBalance, localBalance, actorBalance, motherReady });
 
     return {
       success: true,
@@ -6015,10 +6005,10 @@ const PointModule = {
         localWalletRepaired: !!(localWalletIndex && localWalletIndex.success),
         localWalletIndex,
         motherRegistrationUrl,
-        cashierSessionId: cashierSession && cashierSession.sessionId,
-        cashierPreparedAt: cashierSession && cashierSession.createdAt,
-        cashierReady: !!cashierSession,
-        actorCanOperate: !cashierSession || cashierSession.actorCanOperate,
+        cashierSessionId: '',
+        cashierPreparedAt: '',
+        cashierReady: false,
+        cashierPreparing: true,
         name: displayName,
         phone,
         industry,
@@ -6032,6 +6022,72 @@ const PointModule = {
         pointType: 'gift_money',
         user,
         card: mappedCard
+      }
+    };
+  },
+
+  async prepareStorePointCashierSession(payload, env) {
+    const rawCustomerId = String(
+      payload.customerUserId ||
+      payload.targetUserId ||
+      payload.pointUserId ||
+      payload.LINE_user_id ||
+      payload.uid ||
+      ''
+    ).trim();
+    const actorId = String(payload.authenticatedUserId || payload.userId || '').trim();
+    if (!actorId) return { success: false, error: 'Missing operator user id' };
+    const resolved = await this.resolveStorePointCustomer(env, rawCustomerId);
+    if (resolved.error) return { success: false, error: resolved.error };
+    if (resolved.needsSelection || resolved.needsBinding) {
+      return { success: false, error: 'Customer is not ready for cashier session' };
+    }
+    const customerPointUserId = resolved.customerPointUserId;
+    if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
+
+    const actorPointUserId = await this.resolvePointUserId(env, actorId).catch(() => actorId);
+    const [wallet, customerMotherReady, actorMotherReady, actorWallet] = await Promise.all([
+      this.queryPointBalanceFast({
+        pointUserId: customerPointUserId,
+        point_type: 'gift_money',
+        page: 1,
+        per_page: 20
+      }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) })),
+      this.ensureMotherLineMember({ ...payload, LINE_user_id: customerPointUserId, lineUserId: customerPointUserId, userId: customerPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) })),
+      actorPointUserId ? this.ensureMotherLineMember({ ...payload, LINE_user_id: actorPointUserId, lineUserId: actorPointUserId, userId: actorPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) })) : Promise.resolve({ success: true, skipped: true }),
+      actorPointUserId ? this.queryUserPoints({ pointUserId: actorPointUserId, point_type: 'gift_money', page: 1, per_page: 1 }, env).catch(e => ({ success: false, error: e.message || String(e) })) : Promise.resolve(null)
+    ]);
+    const actorBalance = actorWallet && actorWallet.success ? Math.floor(Number(actorWallet.data?.balance || 0)) : 0;
+    const motherReady = (!customerMotherReady || customerMotherReady.success !== false) && (!actorMotherReady || actorMotherReady.success !== false);
+    let customerPointSource = 'mother';
+    let balance = this.number(wallet && wallet.data && wallet.data.balance);
+    let motherBalance = balance;
+    const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
+    if (!wallet || wallet.success === false) {
+      customerPointSource = 'local';
+      balance = localBalance;
+      motherBalance = 0;
+    }
+    const cashierSession = await this.createStorePointCashierSession(env, {
+      actorId,
+      actorPointUserId,
+      customerPointUserId,
+      customerPointSource,
+      balance,
+      motherBalance,
+      localBalance,
+      actorBalance,
+      motherReady
+    });
+    if (!cashierSession) return { success: false, error: 'Cashier session unavailable' };
+    return {
+      success: true,
+      data: {
+        customerPointUserId,
+        cashierSessionId: cashierSession.sessionId,
+        cashierPreparedAt: cashierSession.createdAt,
+        cashierReady: true,
+        actorCanOperate: cashierSession.actorCanOperate
       }
     };
   },
@@ -15900,6 +15956,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
     case 'getStorePointCustomer':  return await PointModule.getStorePointCustomer(payload || {}, env);
+    case 'prepareStorePointCashierSession': return await PointModule.prepareStorePointCashierSession(payload || {}, env);
     case 'storeAdjustCustomerPoints': return await PointModule.storeAdjustCustomerPoints(payload || {}, env);
     case 'listStorePointCashierLogs': return await PointModule.listStorePointCashierLogs(payload || {}, env);
     case 'repairPointWalletSearchIndex': return await PointModule.repairPointWalletSearchIndex(payload || {}, env);
