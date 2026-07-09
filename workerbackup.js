@@ -4699,16 +4699,18 @@ const PointModule = {
     const lineUserId = await this.resolvePointUserId(env, rawLineUserId).catch(() => rawLineUserId);
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
-    const motherMember = await this.ensureMotherLineMember({
-      ...payload,
-      LINE_user_id: lineUserId,
-      lineUserId,
-      userId: lineUserId
-    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
-    if (motherMember && motherMember.success === false) {
-      return { success: false, error: 'Mother member setup failed: ' + (motherMember.error || motherMember.code || 'unknown'), motherMember };
+    let motherMember = { success: true, skipped: true, reason: 'skip_mother_member_setup', lineUserId };
+    if (payload.skipMotherMemberSetup !== true) {
+      motherMember = await this.ensureMotherLineMember({
+        ...payload,
+        LINE_user_id: lineUserId,
+        lineUserId,
+        userId: lineUserId
+      }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
+      if (motherMember && motherMember.success === false) {
+        return { success: false, error: 'Mother member setup failed: ' + (motherMember.error || motherMember.code || 'unknown'), motherMember };
+      }
     }
-
     const body = {
       api_key: apiKey,
       LINE_user_id: lineUserId,
@@ -6100,6 +6102,18 @@ const PointModule = {
       || actorId;
     const sourceLabel = sourceName.length > 28 ? sourceName.slice(0, 28) + '...' : sourceName;
 
+    const pointMemberIds = Array.from(new Set([actorPointUserId, customerPointUserId].filter(Boolean)));
+    const pointMemberResults = await Promise.all(pointMemberIds.map(lineUserId => this.ensureMotherLineMember({
+      ...payload,
+      LINE_user_id: lineUserId,
+      lineUserId,
+      userId: lineUserId
+    }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e), lineUserId }))));
+    const failedPointMember = pointMemberResults.find(item => item && item.success === false);
+    if (failedPointMember) {
+      return { success: false, error: 'Mother member setup failed: ' + (failedPointMember.error || failedPointMember.code || 'unknown'), data: { motherMember: failedPointMember } };
+    }
+
     if (isReward) {
       points = amount;
       eventName = '店家消費贈點';
@@ -6149,7 +6163,8 @@ const PointModule = {
       eventContent: `執行${isReward ? '消費贈點' : '消費折抵'}，扣除 ${operatorFee} 點操作費`,
       shop_user_lineid: actorId,
       child_shop_name: sourceLabel,
-      shop_remark: `source=${sourceLabel}; store_cashier_fee operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
+      shop_remark: `source=${sourceLabel}; store_cashier_fee operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
+      skipMotherMemberSetup: true
     }, env);
     if (!operatorDebit || !operatorDebit.success) {
       return { success: false, error: operatorDebit && operatorDebit.error ? operatorDebit.error : '店家操作扣點失敗，交易未送出', data: operatorDebit };
@@ -6171,7 +6186,8 @@ const PointModule = {
           eventContent,
           shop_user_lineid: actorId,
           child_shop_name: sourceLabel,
-          shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
+          shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
+          skipMotherMemberSetup: true
         }, env);
 
     if (!result || !result.success) {
@@ -6183,7 +6199,8 @@ const PointModule = {
         eventContent: `客戶${isReward ? '消費贈點' : '消費折抵'}寫入失敗，退回 ${operatorFee} 點操作費`,
         shop_user_lineid: actorId,
         child_shop_name: sourceLabel,
-        shop_remark: `source=${sourceLabel}; store_cashier_fee_refund operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`
+        shop_remark: `source=${sourceLabel}; store_cashier_fee_refund operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
+        skipMotherMemberSetup: true
       }, env).catch(() => null);
       const resultError = result && result.error ? String(result.error) : '';
       if (/查無|對應會員|LINE_user_id|not\s*found|member/i.test(resultError)) {

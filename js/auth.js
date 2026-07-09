@@ -2237,9 +2237,9 @@ window.submitStorePointCashier = async function(btn) {
     }
     window.showToast?.(message, false);
     window.pointWalletData = null;
-    await window.refreshPointBalanceBadge?.();
     window.storePointCashierLogsCache = null;
-    await window.loadStorePointCashierLogs?.(true);
+    Promise.resolve(window.refreshPointBalanceBadge?.()).catch(() => null);
+    Promise.resolve(window.loadStorePointCashierLogs?.(true)).catch(() => null);
     window.resetStorePointCashier?.();
   } catch (e) {
     const msg = e.message || e || '點數處理失敗';
