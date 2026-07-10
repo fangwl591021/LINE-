@@ -1456,32 +1456,36 @@ const LineOAChatModule = {
     const cards = (Array.isArray(rows) ? rows : []).slice(0, 10).map(row => D1ReadModule.cardRow(row)).filter(card => card && card.rowId);
     if (!cards.length) return null;
     const editUrl = this.quickMyCardUrl(userId, env);
-    const buttons = cards.map((card, index) => {
+    const selectActionForCard = card => {
       const label = this.myCardVersionLabel(card).slice(0, 20);
       return {
-        type: 'button',
-        style: 'secondary',
-        height: 'sm',
-        action: {
-          type: 'postback',
-          label,
-          data: new URLSearchParams({
-            action: 'lineoa_mycard_select',
-            rowId: card.rowId
-          }).toString(),
-          displayText: label
-        }
+        type: 'postback',
+        label,
+        data: new URLSearchParams({
+          action: 'lineoa_mycard_select',
+          rowId: card.rowId
+        }).toString(),
+        displayText: label
       };
-    });
+    };
+    const buttons = cards.map(card => ({
+      type: 'button',
+      style: 'secondary',
+      height: 'sm',
+      action: selectActionForCard(card)
+    }));
+    const quickReplyItems = this.myCardQuickReplyItems(userId, env)
+      .concat(cards.map(card => ({ type: 'action', action: selectActionForCard(card) })))
+      .slice(0, 13);
     return {
       type: 'flex',
       altText: '選擇我的名片',
       quickReply: {
-        items: this.myCardQuickReplyItems(userId, env)
+        items: quickReplyItems
       },
       contents: {
         type: 'bubble',
-        size: 'mega',
+        size: 'kilo',
         body: {
           type: 'box',
           layout: 'vertical',
