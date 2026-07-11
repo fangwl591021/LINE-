@@ -20,6 +20,20 @@
 
 ## 文件清單
 
+### 治理與導入
+
+- `docs/governance/aiwe-dev-system-adoption-checklist.md`
+
+定義 `aiwe-dev-system` 如何作為 LINE 專案的規範與知識來源。此導入只整理文件與保護規則，不接入 runtime、不搬主程式、不修改功能程式。
+
+### 安全稽核
+
+- `docs/security/security-audit-phase-1.md`
+- `docs/security/action-authorization-policy.md`
+
+Phase 1 安全稽核，只盤點 `workerbackup.js` 的認證、授權、D1 identity fallback、硬編碼管理員與點數異動風險；本階段不修改正式功能。
+
+Phase 2A Action Authorization Policy 定義 `dispatchAction()` 的集中式 action policy、deny-by-default 原則、public action 清單與 D1 fallback action 清單。
 ### 核心規則
 
 - `docs/rules/core-invariants.md`

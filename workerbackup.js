@@ -57,6 +57,151 @@ const NewebPayCrypto = {
   }
 };
 
+// ==================== Action Authorization Policy ====================
+const ACTION_POLICIES = {
+  checkUser: { access: 'public', legacyAuthSkip: true, note: 'login_status_probe' },
+  getCardForClaim: { access: 'public', legacyAuthSkip: true },
+  getPublicCardById: { access: 'public' },
+  getPublicActivities: { access: 'public', legacyAuthSkip: true },
+  getStoreSettings: { access: 'public', legacyAuthSkip: true },
+  listRichmanCoupons: { access: 'public', legacyAuthSkip: true },
+  listAnnouncements: { access: 'public', legacyAuthSkip: true },
+  registerUser: { access: 'public', note: 'initial_registration' },
+  joinActivity: { access: 'public', note: 'public_activity_registration' },
+  getSocialLikeStats: { access: 'public' },
+  recordShareCardVisit: { access: 'public' },
+
+  updateUserProfile: { access: 'authenticated', ownership: 'self' },
+  linkUserIdentity: { access: 'authenticated', ownership: 'self' },
+  getCardContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
+  getCardHarvestContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
+  getCrmContacts: { access: 'authenticated', ownership: 'tenant-resource', tenantScoped: true, allowD1Fallback: true },
+  saveCard: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  updateCard: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  claimCardAndRegister: { access: 'authenticated', ownership: 'self' },
+  deleteCard: { access: 'authenticated', ownership: 'resource-owner-or-tenant' },
+  unlinkCard: { access: 'authenticated', ownership: 'resource-owner' },
+  getSubsiteHome: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
+  getMotherRegistrationUrl: { access: 'authenticated', ownership: 'self' },
+  ensureMotherLineMember: { access: 'authenticated', ownership: 'self' },
+  queryPointBalanceFast: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
+  queryUserPoints: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
+  dailyPointCheckin: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  listPersonalTasks: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  savePersonalTask: { access: 'authenticated', ownership: 'self' },
+  completePersonalTask: { access: 'authenticated', ownership: 'self' },
+  deletePersonalTask: { access: 'authenticated', ownership: 'self' },
+  getInboxCount: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  listInboxItems: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  listSentInboxItems: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  getInboxItem: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  markInboxRead: { access: 'authenticated', ownership: 'self' },
+  searchInboxRecipients: { access: 'authenticated', tenantScoped: true },
+  sendInboxMessage: { access: 'authenticated', tenantScoped: true },
+  redeemInboxCoupon: { access: 'authenticated', ownership: 'self' },
+  getWebPushConfig: { access: 'authenticated' },
+  saveWebPushSubscription: { access: 'authenticated', ownership: 'self' },
+  deleteWebPushSubscription: { access: 'authenticated', ownership: 'self' },
+  getPersonalAssistantCore: { access: 'authenticated', ownership: 'self' },
+  savePersonalAssistantCore: { access: 'authenticated', ownership: 'self' },
+  matchmakeContacts: { access: 'authenticated', ownership: 'self' },
+  mlmCreateOrder: { access: 'authenticated', ownership: 'self-or-manager' },
+  createTenantBonusOrder: { access: 'authenticated', ownership: 'self-or-manager' },
+  nfcCheckin: { access: 'authenticated' },
+  getActivityById: { access: 'authenticated', legacyAuthSkip: true },
+  cancelActivityRegistration: { access: 'authenticated', ownership: 'self' },
+  cancelRegistration: { access: 'authenticated', ownership: 'self' },
+  unregisterActivity: { access: 'authenticated', ownership: 'self' },
+  removeActivityRegistration: { access: 'authenticated', ownership: 'self' },
+  mlmListBonusTransactions: { access: 'authenticated', ownership: 'self-or-manager' },
+  mlmGetMemberTree: { access: 'authenticated', ownership: 'self-or-manager' },
+  mlmGetOrganizationTree: { access: 'authenticated', ownership: 'self-or-manager' },
+  getMyActivities: { access: 'authenticated', ownership: 'self' },
+  getUserActivities: { access: 'authenticated', ownership: 'self' },
+  getMyRegistrations: { access: 'authenticated', ownership: 'self' },
+  getUserRegistrations: { access: 'authenticated', ownership: 'self' },
+  mlmListOrders: { access: 'authenticated', ownership: 'self-or-manager', legacyAuthSkip: true },
+  mlmGetReferralStats: { access: 'authenticated', ownership: 'self' },
+  mlmPreviewBonusPlan: { access: 'authenticated', ownership: 'self-or-manager' },
+  prepareTenantCardPayment: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
+  recognizeCardWithGPT4o: { access: 'authenticated' },
+  calculateFateTags: { access: 'authenticated' },
+  reviewCardSafety: { access: 'authenticated' },
+  generateCardCopy: { access: 'authenticated' },
+  resolveMyCardVersion: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
+  getMyVideoDraft: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
+  getCardCoolDraft: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
+  confirmCardCoolDraft: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
+  sendCardCoolCardToChat: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
+  recordSocialLike: { access: 'authenticated', ownership: 'self' },
+  uploadImageToR2: { access: 'authenticated', legacyAuthSkip: true },
+
+  bulkAddRegistrants: { access: 'manager', tenantScoped: true },
+  updateActivity: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  removeAct: { access: 'manager', tenantScoped: true },
+  setActivityStatus: { access: 'manager', tenantScoped: true },
+  duplicateActivity: { access: 'manager', tenantScoped: true },
+  getActivityRegistrants: { access: 'manager', tenantScoped: true },
+  confirmPayment: { access: 'manager', tenantScoped: true },
+  toggleCheckin: { access: 'manager', tenantScoped: true },
+  getInboxMonitor: { access: 'manager', tenantScoped: true },
+  saveStoreSettings: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  getStoreKnowledgeBase: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  saveStoreKnowledgeBase: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  searchStoreKnowledgeBase: { access: 'manager', tenantScoped: true },
+  extractLineVoomMedia: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  storeAdjustCustomerPoints: { access: 'manager', tenantScoped: true },
+  getStorePointCustomer: { access: 'manager', tenantScoped: true },
+  prepareStorePointCashierSession: { access: 'manager', tenantScoped: true },
+  listStorePointCashierLogs: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  updateCrmContact: { access: 'manager', tenantScoped: true, ownership: 'tenant-resource' },
+  getActivities: { access: 'manager', tenantScoped: true },
+  getAllActivities: { access: 'manager', tenantScoped: true },
+
+  updateUserRole: { access: 'admin' },
+  adminSyncBoundCardUser: { access: 'admin', allowD1Fallback: true },
+  mlmMarkOrderPaid: { access: 'admin' },
+  mlmCancelOrder: { access: 'admin' },
+  mlmRefundOrder: { access: 'admin' },
+  mlmCreateSettlementBatch: { access: 'admin' },
+  mlmLockSettlementBatch: { access: 'admin' },
+  mlmListSettlementBatches: { access: 'admin' },
+  mlmPreviewMonthlySettlement: { access: 'admin' },
+  mlmMarkSettlementPaid: { access: 'admin' },
+  markTenantOrderPaid: { access: 'admin' },
+  cancelTenantBonusOrder: { access: 'admin' },
+  auditDataConsistency: { access: 'admin' },
+  repairDataConsistency: { access: 'admin' },
+  previewIdentityMigration: { access: 'admin' },
+  confirmIdentityMerge: { access: 'admin' },
+  listDuplicateCardBindings: { access: 'admin' },
+  resolveDuplicateCardBinding: { access: 'admin' },
+  deployRichMenu: { access: 'admin' },
+  getLineOAChatMonitor: { access: 'admin', allowD1Fallback: true },
+  getLineOAChatAudience: { access: 'admin', allowD1Fallback: true },
+  getLineOAChatCrm: { access: 'admin', allowD1Fallback: true },
+  repairLineOAFollowPointOnboarding: { access: 'admin' },
+  repairRecentLineOAFollowPointAwards: { access: 'admin' },
+  repairPointWalletSearchIndex: { access: 'admin' },
+  diagnosePointSync: { access: 'admin' },
+  listPointSyncJobs: { access: 'admin' },
+  enqueuePointSyncJob: { access: 'admin' },
+  processPointSyncJobs: { access: 'admin' },
+  getAdminPointProfile: { access: 'admin' },
+  adminAdjustCustomerPoints: { access: 'admin' },
+  uploadLineOAAsset: { access: 'admin', allowD1Fallback: true },
+  sendLineOAChatReply: { access: 'admin', allowD1Fallback: true },
+  updateLineOAChatThread: { access: 'admin', allowD1Fallback: true },
+  listLineOAKeywordRules: { access: 'admin' },
+  saveLineOAKeywordRule: { access: 'admin' },
+  deleteLineOAKeywordRule: { access: 'admin' },
+  listAdminAnnouncements: { access: 'admin' },
+  saveAnnouncement: { access: 'admin' },
+  deleteAnnouncement: { access: 'admin' },
+  d1BackfillFromGas: { access: 'admin' },
+  getAllUsers: { access: 'admin' },
+  buildFlexMessage: { access: 'admin' }
+};
 // ==================== 模組 0: 資安防護 (Security Module) ====================
 const SecurityModule = {
   hardAdminAccounts: [
@@ -272,155 +417,30 @@ const SecurityModule = {
   },
 
   async authorizeAction(action, payload, request, env) {
-    const adminOnly = new Set([
-      'updateUserRole',
-      'adminSyncBoundCardUser',
-      'mlmMarkOrderPaid',
-      'mlmCancelOrder',
-      'mlmRefundOrder',
-      'mlmCreateSettlementBatch',
-      'mlmLockSettlementBatch',
-      'mlmListSettlementBatches',
-      'mlmPreviewMonthlySettlement',
-      'mlmMarkSettlementPaid',
-      'markTenantOrderPaid',
-      'cancelTenantBonusOrder',
-      'auditDataConsistency',
-      'repairDataConsistency',
-      'previewIdentityMigration',
-      'confirmIdentityMerge',
-      'listDuplicateCardBindings',
-      'resolveDuplicateCardBinding',
-      'deployRichMenu',
-      'getLineOAChatMonitor',
-      'getLineOAChatAudience',
-      'getLineOAChatCrm',
-      'repairLineOAFollowPointOnboarding',
-      'repairPointWalletSearchIndex',
-      'diagnosePointSync',
-      'listPointSyncJobs',
-      'enqueuePointSyncJob',
-      'processPointSyncJobs',
-      'getAdminPointProfile',
-      'adminAdjustCustomerPoints',
-      'uploadLineOAAsset',
-      'sendLineOAChatReply',
-      'updateLineOAChatThread',
-      'listLineOAKeywordRules',
-      'saveLineOAKeywordRule',
-      'deleteLineOAKeywordRule',
-      'listAdminAnnouncements',
-      'saveAnnouncement',
-      'deleteAnnouncement'
-    ]);
-    const managerOnly = new Set([
-      'bulkAddRegistrants',
-      'updateActivity',
-      'removeAct',
-      'setActivityStatus',
-      'duplicateActivity',
-      'getActivityRegistrants',
-      'confirmPayment',
-      'toggleCheckin',
-      'getInboxMonitor',
-      'saveStoreSettings',
-      'getStoreKnowledgeBase',
-      'saveStoreKnowledgeBase',
-      'extractLineVoomMedia',
-      'storeAdjustCustomerPoints',
-      'getStorePointCustomer',
-      'prepareStorePointCashierSession',
-      'listStorePointCashierLogs'
-    ]);
-    const ownTokenRequired = new Set([
-      'updateUserProfile',
-      'linkUserIdentity',
-      'getCardContacts',
-      'getCardHarvestContacts',
-      'getCrmContacts',
-      'saveCard',
-      'updateCard',
-      'claimCardAndRegister',
-      'deleteCard',
-      'unlinkCard',
-      'getSubsiteHome',
-      'getMotherRegistrationUrl',
-      'ensureMotherLineMember',
-      'queryPointBalanceFast',
-      'queryUserPoints',
-      'listPersonalTasks',
-      'savePersonalTask',
-      'completePersonalTask',
-      'deletePersonalTask',
-      'getInboxCount',
-      'listInboxItems',
-      'listSentInboxItems',
-      'getInboxItem',
-      'markInboxRead',
-      'searchInboxRecipients',
-      'sendInboxMessage',
-      'redeemInboxCoupon',
-      'getWebPushConfig',
-      'saveWebPushSubscription',
-      'deleteWebPushSubscription',
-      'dailyPointCheckin',
-      'getPersonalAssistantCore',
-      'savePersonalAssistantCore',
-      'matchmakeContacts',
-      'mlmCreateOrder',
-      'createTenantBonusOrder',
-      'nfcCheckin',
-      'getActivityById',
-      'cancelActivityRegistration',
-      'cancelRegistration',
-      'unregisterActivity',
-      'removeActivityRegistration',
-      'mlmListBonusTransactions',
-      'mlmGetMemberTree',
-      'mlmGetOrganizationTree'
-    ]);
-    const d1IdentityFallbackActions = new Set([
-      'saveCard',
-      'updateCard',
-      'saveStoreSettings',
-      'getStoreKnowledgeBase',
-      'saveStoreKnowledgeBase',
-      'updateActivity',
-      'dailyPointCheckin',
-      'extractLineVoomMedia',
-      'getLineOAChatMonitor',
-      'getLineOAChatAudience',
-      'getLineOAChatCrm',
-      'uploadLineOAAsset',
-      'sendLineOAChatReply',
-      'updateLineOAChatThread',
-      'adminSyncBoundCardUser',
-      'getCrmContacts',
-      'listPersonalTasks',
-      'getInboxCount',
-      'listInboxItems',
-      'listSentInboxItems',
-      'getInboxItem'
-    ]);
+    const policy = this.getActionPolicy(action);
+    if (!policy) {
+      this.logUnknownAction(action);
+      return { allowed: false, error: 'Access Denied: ACTION_POLICY_NOT_FOUND' };
+    }
 
-    if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(action)) {
-      return { allowed: true, actor: null };
+    if (policy.access === 'public') {
+      return { allowed: true, actor: null, policy };
     }
 
     let actor = await this.getActor(payload, request, env);
-    if (!actor && d1IdentityFallbackActions.has(action)) {
+    if (!actor && policy.allowD1Fallback) {
       actor = await this.getActorFromD1Identity(payload, env);
     }
-    if (!actor && (action === 'queryUserPoints' || action === 'queryPointBalanceFast' || action === 'getSubsiteHome') && env.ACTMASTER_DB) {
+    if (!actor && policy.allowD1Fallback && (action === 'queryUserPoints' || action === 'queryPointBalanceFast' || action === 'getSubsiteHome') && env.ACTMASTER_DB) {
       const requestedUserId = this.text(payload.userId || payload.pointUserId || payload.LINE_user_id);
       const identity = requestedUserId
         ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
         : null;
       if (identity && identity.user) {
-        return { allowed: true, actor: null };
+        return { allowed: true, actor: null, policy };
       }
     }
-    if (!actor && (action === 'getCardContacts' || action === 'getCardHarvestContacts') && env.ACTMASTER_DB) {
+    if (!actor && policy.allowD1Fallback && (action === 'getCardContacts' || action === 'getCardHarvestContacts') && env.ACTMASTER_DB) {
       const requestedUserId = this.text(payload.userId || payload.authenticatedUserId || payload.authUserId || payload.operatorId);
       const identity = requestedUserId
         ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
@@ -436,12 +456,14 @@ const SecurityModule = {
             userId: user.userId,
             role: user.role,
             networkId: user.networkId,
-            token: ''
-          }
+            token: '',
+            source: 'd1_identity_fallback'
+          },
+          policy
         };
       }
     }
-    if (!actor && action === 'listStorePointCashierLogs' && env.ACTMASTER_DB) {
+    if (!actor && policy.allowD1Fallback && action === 'listStorePointCashierLogs' && env.ACTMASTER_DB) {
       const requestedUserId = this.text(payload.userId || payload.authenticatedUserId);
       const identity = requestedUserId
         ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
@@ -457,8 +479,10 @@ const SecurityModule = {
             userId: user.userId,
             role: user.role,
             networkId: user.networkId,
-            token: ''
-          }
+            token: '',
+            source: 'd1_identity_fallback'
+          },
+          policy
         };
       }
     }
@@ -468,11 +492,11 @@ const SecurityModule = {
     payload.authenticatedRole = actor.role;
     payload.authenticatedNetworkId = actor.networkId;
 
-    if (adminOnly.has(action) && actor.role !== 'admin') {
+    if (policy.access === 'admin' && actor.role !== 'admin') {
       return { allowed: false, error: 'Access Denied: Admin only action' };
     }
 
-    if (managerOnly.has(action) && !this.canManage(actor.role)) {
+    if (policy.access === 'manager' && !this.canManage(actor.role)) {
       return { allowed: false, error: 'Access Denied: Manager role required' };
     }
 
@@ -501,7 +525,7 @@ const SecurityModule = {
       payload.userId = actor.userId;
     }
 
-    return { allowed: true, actor };
+    return { allowed: true, actor, policy };
   },
   // 驗證 LIFF Token，確保 userId 未被偽造
   async verifyLineAuth(userId, token, env) {
@@ -15475,28 +15499,7 @@ async function dispatchAction(action, payload, request, env) {
   }
   const actor = authz.actor;
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
-  const legacyAuthSkipActions = new Set([
-    'checkUser',
-    'queryUserPoints',
-    'getCardContacts',
-    'getCardHarvestContacts',
-    'getPublicActivities',
-    'getActivityById',
-    'getStoreSettings',
-    'listRichmanCoupons',
-    'listAnnouncements',
-    'uploadImageToR2',
-    'resolveMyCardVersion',
-    'getMyVideoDraft',
-    'getCardCoolDraft',
-    'confirmCardCoolDraft',
-    'sendCardCoolCardToChat',
-    'getSubsiteHome',
-    'queryPointBalanceFast',
-    'mlmListOrders',
-    'getTenantBonusOrders',
-    'prepareTenantCardPayment'
-  ]);
+  const legacyAuthSkipActions = SecurityModule.legacyAuthSkipActions();
   if (payload.userId && !actor && !legacyAuthSkipActions.has(action)) {
     const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace('Bearer ', '');
     if (token) {

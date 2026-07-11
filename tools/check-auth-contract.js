@@ -9,12 +9,12 @@ const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 const checks = [
   {
-    name: 'dailyPointCheckin is in D1 identity fallback actions',
-    pass: /d1IdentityFallbackActions[\s\S]*['"]dailyPointCheckin['"]/.test(worker)
+    name: 'dailyPointCheckin explicitly allows D1 identity fallback in action policy',
+    pass: /dailyPointCheckin:\s*\{[^}]*allowD1Fallback:\s*true/.test(worker)
   },
   {
-    name: 'extractLineVoomMedia is in D1 identity fallback actions',
-    pass: /d1IdentityFallbackActions[\s\S]*['"]extractLineVoomMedia['"]/.test(worker)
+    name: 'extractLineVoomMedia explicitly allows D1 identity fallback in action policy',
+    pass: /extractLineVoomMedia:\s*\{[^}]*allowD1Fallback:\s*true/.test(worker)
   },
   {
     name: 'D1 identity fallback accepts pointUserId',
