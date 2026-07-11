@@ -27,7 +27,7 @@ const ACTION_POLICIES = {
 | `access` | 必填。權限等級：`public`、`authenticated`、`manager`、`admin`。 |
 | `ownership` | 資源歸屬提示，例如 `self`、`tenant-resource`、`resource-owner`。Phase 2A 先文件化，深入驗證留到 Phase 2B。 |
 | `tenantScoped` | 表示此 action 應受租戶或店家範圍限制。 |
-| `allowD1Fallback` | 只有明確為 `true` 時，才允許沒有 LINE token 時使用 D1 identity fallback。 |
+| `allowD1Fallback` | 只有明確為 `true` 時，才允許沒有 LINE token 時使用 D1 identity fallback；Phase 2B 起還必須有可信來源標記。 |
 | `legacyAuthSkip` | 過渡期欄位。表示 dispatchAction 的舊 LIFF token 二次驗證可暫時略過。不可拿來推論 public。 |
 | `note` | 稽核備註，不參與授權判斷。 |
 
@@ -70,13 +70,8 @@ const ACTION_POLICIES = {
 
 ## D1 Fallback Action 清單
 
-目前仍允許 D1 identity fallback 的 action 共 27 個：
+目前仍允許 D1 identity fallback 的 action 共 12 個：
 
-- `getCardContacts`
-- `getCardHarvestContacts`
-- `getCrmContacts`
-- `saveCard`
-- `updateCard`
 - `getSubsiteHome`
 - `queryPointBalanceFast`
 - `queryUserPoints`
@@ -86,21 +81,11 @@ const ACTION_POLICIES = {
 - `listInboxItems`
 - `listSentInboxItems`
 - `getInboxItem`
-- `updateActivity`
-- `saveStoreSettings`
 - `getStoreKnowledgeBase`
-- `saveStoreKnowledgeBase`
 - `extractLineVoomMedia`
 - `listStorePointCashierLogs`
-- `adminSyncBoundCardUser`
-- `getLineOAChatMonitor`
-- `getLineOAChatAudience`
-- `getLineOAChatCrm`
-- `uploadLineOAAsset`
-- `sendLineOAChatReply`
-- `updateLineOAChatThread`
 
-Phase 2A 只把 fallback 收斂到 policy 控制，避免破壞正式流程；是否能完全移除或改為更嚴格 owner/tenant 驗證，留到 Phase 2B。
+Phase 2B 已將名片寫入、CRM、高風險管理與 LINE OA 管理 action 移出 D1 fallback。仍保留的 fallback 必須有可信來源標記；點數快速查詢的 legacy resource compatibility branch 留到 Phase 2C 拆分。
 
 ## 新增 Action 必要步驟
 
@@ -129,13 +114,17 @@ npm run smoke
 npm run smoke:full
 ```
 
-## Phase 2B 尚待處理
+## Phase 2B / Phase 2C 狀態
 
-以下風險不在 Phase 2A 範圍內：
+Phase 2B 已處理：
 
-- `saveCard`、`updateCard` 的深入 owner 驗證。
-- `getCrmContacts` 的租戶資料邊界強化。
-- D1 identity fallback 是否能逐步移除。
+- `saveCard`、`updateCard` 的可信 actor 與 owner 驗證。
+- `getCardContacts`、`getCardHarvestContacts`、`getCrmContacts`、`updateCrmContact` 的 resource owner / tenant scope 邊界。
+- 高風險 action 的 D1 fallback 收斂。
+
+Phase 2C 尚待處理：
+
+- 點數快速查詢 legacy resource fallback 拆分。
 - hard admin 判定移除與正式角色來源整理。
 - cashier idempotency、點數同步唯一鍵與補償流程。
 - 資料庫 schema 或 bindings 調整。

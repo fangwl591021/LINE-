@@ -73,11 +73,11 @@ const ACTION_POLICIES = {
 
   updateUserProfile: { access: 'authenticated', ownership: 'self' },
   linkUserIdentity: { access: 'authenticated', ownership: 'self' },
-  getCardContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
-  getCardHarvestContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
-  getCrmContacts: { access: 'authenticated', ownership: 'tenant-resource', tenantScoped: true, allowD1Fallback: true },
-  saveCard: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
-  updateCard: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
+  getCardContacts: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
+  getCardHarvestContacts: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
+  getCrmContacts: { access: 'authenticated', ownership: 'tenant-resource', tenantScoped: true },
+  saveCard: { access: 'authenticated', ownership: 'self' },
+  updateCard: { access: 'authenticated', ownership: 'self' },
   claimCardAndRegister: { access: 'authenticated', ownership: 'self' },
   deleteCard: { access: 'authenticated', ownership: 'resource-owner-or-tenant' },
   unlinkCard: { access: 'authenticated', ownership: 'resource-owner' },
@@ -137,7 +137,7 @@ const ACTION_POLICIES = {
   uploadImageToR2: { access: 'authenticated', legacyAuthSkip: true },
 
   bulkAddRegistrants: { access: 'manager', tenantScoped: true },
-  updateActivity: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  updateActivity: { access: 'manager', tenantScoped: true },
   removeAct: { access: 'manager', tenantScoped: true },
   setActivityStatus: { access: 'manager', tenantScoped: true },
   duplicateActivity: { access: 'manager', tenantScoped: true },
@@ -145,9 +145,9 @@ const ACTION_POLICIES = {
   confirmPayment: { access: 'manager', tenantScoped: true },
   toggleCheckin: { access: 'manager', tenantScoped: true },
   getInboxMonitor: { access: 'manager', tenantScoped: true },
-  saveStoreSettings: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  saveStoreSettings: { access: 'manager', tenantScoped: true },
   getStoreKnowledgeBase: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
-  saveStoreKnowledgeBase: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
+  saveStoreKnowledgeBase: { access: 'manager', tenantScoped: true },
   searchStoreKnowledgeBase: { access: 'manager', tenantScoped: true },
   extractLineVoomMedia: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
   storeAdjustCustomerPoints: { access: 'manager', tenantScoped: true },
@@ -159,7 +159,7 @@ const ACTION_POLICIES = {
   getAllActivities: { access: 'manager', tenantScoped: true },
 
   updateUserRole: { access: 'admin' },
-  adminSyncBoundCardUser: { access: 'admin', allowD1Fallback: true },
+  adminSyncBoundCardUser: { access: 'admin' },
   mlmMarkOrderPaid: { access: 'admin' },
   mlmCancelOrder: { access: 'admin' },
   mlmRefundOrder: { access: 'admin' },
@@ -177,9 +177,9 @@ const ACTION_POLICIES = {
   listDuplicateCardBindings: { access: 'admin' },
   resolveDuplicateCardBinding: { access: 'admin' },
   deployRichMenu: { access: 'admin' },
-  getLineOAChatMonitor: { access: 'admin', allowD1Fallback: true },
-  getLineOAChatAudience: { access: 'admin', allowD1Fallback: true },
-  getLineOAChatCrm: { access: 'admin', allowD1Fallback: true },
+  getLineOAChatMonitor: { access: 'admin' },
+  getLineOAChatAudience: { access: 'admin' },
+  getLineOAChatCrm: { access: 'admin' },
   repairLineOAFollowPointOnboarding: { access: 'admin' },
   repairRecentLineOAFollowPointAwards: { access: 'admin' },
   repairPointWalletSearchIndex: { access: 'admin' },
@@ -189,9 +189,9 @@ const ACTION_POLICIES = {
   processPointSyncJobs: { access: 'admin' },
   getAdminPointProfile: { access: 'admin' },
   adminAdjustCustomerPoints: { access: 'admin' },
-  uploadLineOAAsset: { access: 'admin', allowD1Fallback: true },
-  sendLineOAChatReply: { access: 'admin', allowD1Fallback: true },
-  updateLineOAChatThread: { access: 'admin', allowD1Fallback: true },
+  uploadLineOAAsset: { access: 'admin' },
+  sendLineOAChatReply: { access: 'admin' },
+  updateLineOAChatThread: { access: 'admin' },
   listLineOAKeywordRules: { access: 'admin' },
   saveLineOAKeywordRule: { access: 'admin' },
   deleteLineOAKeywordRule: { access: 'admin' },
@@ -371,44 +371,42 @@ const SecurityModule = {
     return { userId, role, networkId, token };
   },
 
+  trustedD1FallbackSources: new Set(['server_verified', 'signed_session', 'line_webhook', 'internal_worker']),
+
+  trustedD1FallbackSource(payload = {}) {
+    const data = payload && typeof payload.data === 'object' ? payload.data : {};
+    return this.text(
+      payload.trustedIdentitySource ||
+      payload.__trustedIdentitySource ||
+      data.trustedIdentitySource ||
+      data.__trustedIdentitySource
+    );
+  },
+
   async getActorFromD1Identity(payload, env) {
     if (!env.ACTMASTER_DB || typeof D1ReadModule === 'undefined') return null;
+    const source = this.trustedD1FallbackSource(payload);
+    if (!this.trustedD1FallbackSources.has(source)) return null;
     const data = payload && typeof payload.data === 'object' ? payload.data : {};
     const requestedUserId = this.text(
       payload.authenticatedUserId ||
       payload.authUserId ||
       payload.operatorId ||
-      payload.targetUserId ||
-      payload.pointUserId ||
-      payload.pt_uid ||
-      payload.userId ||
-      payload.lineId ||
-      payload.LINE_user_id ||
-      payload.ownerUserId ||
-      payload.creatorId ||
       data.authenticatedUserId ||
       data.authUserId ||
-      data.operatorId ||
-      data.pointUserId ||
-      data.pt_uid ||
-      data.userId ||
-      data.lineId ||
-      data.LINE_user_id ||
-      data['LINE ID'] ||
-      data.ownerUserId ||
-      data.creatorId ||
-      data['建檔者ID']
+      data.operatorId
     );
     if (!requestedUserId) return null;
     const identity = await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null);
-    const user = identity && identity.user ? D1ReadModule.userRow(identity.user, 'd1_actor_fallback') : null;
+    const user = identity && identity.user ? D1ReadModule.userRow(identity.user, 'trusted_d1_actor_fallback') : null;
     if (!user || !user.userId) return null;
     return {
       userId: user.userId,
       role: user.role,
       networkId: user.networkId,
       token: '',
-      source: 'd1_identity_fallback'
+      source: 'trusted_d1_identity_fallback',
+      identitySource: source
     };
   },
 
@@ -440,52 +438,7 @@ const SecurityModule = {
         return { allowed: true, actor: null, policy };
       }
     }
-    if (!actor && policy.allowD1Fallback && (action === 'getCardContacts' || action === 'getCardHarvestContacts') && env.ACTMASTER_DB) {
-      const requestedUserId = this.text(payload.userId || payload.authenticatedUserId || payload.authUserId || payload.operatorId);
-      const identity = requestedUserId
-        ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
-        : null;
-      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
-      if (user && user.userId) {
-        payload.authenticatedUserId = user.userId;
-        payload.authenticatedRole = user.role;
-        payload.authenticatedNetworkId = user.networkId;
-        return {
-          allowed: true,
-          actor: {
-            userId: user.userId,
-            role: user.role,
-            networkId: user.networkId,
-            token: '',
-            source: 'd1_identity_fallback'
-          },
-          policy
-        };
-      }
-    }
-    if (!actor && policy.allowD1Fallback && action === 'listStorePointCashierLogs' && env.ACTMASTER_DB) {
-      const requestedUserId = this.text(payload.userId || payload.authenticatedUserId);
-      const identity = requestedUserId
-        ? await D1ReadModule.findUserByIdentity(env, requestedUserId).catch(() => null)
-        : null;
-      const user = identity && identity.user ? D1ReadModule.userRow(identity.user) : null;
-      if (user && this.canManage(user.role)) {
-        payload.authenticatedUserId = user.userId;
-        payload.authenticatedRole = user.role;
-        payload.authenticatedNetworkId = user.networkId;
-        return {
-          allowed: true,
-          actor: {
-            userId: user.userId,
-            role: user.role,
-            networkId: user.networkId,
-            token: '',
-            source: 'd1_identity_fallback'
-          },
-          policy
-        };
-      }
-    }
+
     if (!actor) return { allowed: false, error: 'Access Denied: Missing or invalid LINE Token' };
 
     payload.authenticatedUserId = actor.userId;
@@ -6703,7 +6656,7 @@ const AdminPointModule = {
   },
 
   async adjust(payload, env) {
-    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const actorId = this.text(payload.authenticatedUserId);
     const rawUserId = this.text(payload.targetUserId || payload.customerUserId || payload.LINE_user_id);
     const mode = this.text(payload.mode || payload.operation || 'grant').toLowerCase();
     let points = Math.abs(this.number(payload.points || payload.amount || payload.get_point));
@@ -9396,12 +9349,20 @@ const D1ReadModule = {
     await this.ensureCardAccessColumns(env);
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
     const role = this.role(payload.authenticatedRole || 'user');
-    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const actorId = this.text(payload.authenticatedUserId);
     let rows = [];
     if (role === 'admin') {
       rows = await this.all(env, `SELECT * FROM card_contacts ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`);
+    } else if (role === 'store' && this.text(payload.authenticatedNetworkId)) {
+      rows = await this.all(env, `
+        SELECT * FROM card_contacts
+        WHERE network_id = ?
+        ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+        LIMIT ${limit}
+      `, [this.text(payload.authenticatedNetworkId)]);
     } else if (actorId) {
       const ids = await this.identityIdsForUser(env, actorId);
+      if (!ids.length) ids.push(actorId);
       const placeholders = ids.map(() => '?').join(',');
       rows = await this.all(env, `
         SELECT * FROM card_contacts
@@ -9418,7 +9379,7 @@ const D1ReadModule = {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
-    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const actorId = this.text(payload.authenticatedUserId);
     if (!actorId) return { success: true, data: [] };
     const ids = await this.identityIdsForUser(env, actorId);
     if (!ids.length) ids.push(actorId);
@@ -9500,7 +9461,7 @@ const D1ReadModule = {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
     const role = this.role(payload.authenticatedRole || payload.role);
-    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const actorId = this.text(payload.authenticatedUserId);
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
     const baseSelect = `
       SELECT c.*, u.name AS owner_name, u.store_id AS owner_store_id
@@ -9510,8 +9471,16 @@ const D1ReadModule = {
     let rows = [];
     if (role === 'admin') {
       rows = await this.all(env, `${baseSelect} ORDER BY COALESCE(c.updated_at, c.created_at) DESC, c.row_id DESC LIMIT ${limit}`);
+    } else if (role === 'store' && this.text(payload.authenticatedNetworkId)) {
+      rows = await this.all(env, `
+        ${baseSelect}
+        WHERE c.network_id = ?
+        ORDER BY COALESCE(c.updated_at, c.created_at) DESC, c.row_id DESC
+        LIMIT ${limit}
+      `, [this.text(payload.authenticatedNetworkId)]);
     } else if (actorId) {
       const ids = await this.identityIdsForUser(env, actorId);
+      if (!ids.length) ids.push(actorId);
       const placeholders = ids.map(() => '?').join(',');
       rows = await this.all(env, `
         ${baseSelect}
@@ -9528,15 +9497,17 @@ const D1ReadModule = {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
     const rowId = this.text(payload.rowId || payload.cardRowId);
-    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const actorId = this.text(payload.authenticatedUserId);
     const role = this.role(payload.authenticatedRole || payload.role);
     if (!rowId) return { success: false, error: 'Missing card row id' };
     const row = await this.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
     if (!row) return { success: false, error: '找不到名片資料' };
     if (role !== 'admin') {
+      const isStoreManager = role === 'store' && this.text(payload.authenticatedNetworkId) && this.text(payload.authenticatedNetworkId) === this.text(row.network_id);
       const ids = actorId ? await this.identityIdsForUser(env, actorId) : [];
       const ownerId = this.text(row.owner_user_id || row.creator_id || row.line_id);
-      if (!ids.includes(ownerId) && !ids.includes(this.text(row.creator_id)) && !ids.includes(this.text(row.profile_user_id))) {
+      const isResourceOwner = ids.includes(ownerId) || ids.includes(this.text(row.creator_id)) || ids.includes(this.text(row.profile_user_id)) || ids.includes(this.text(row.line_id));
+      if (!isStoreManager && !isResourceOwner) {
         return { success: false, error: '無權限更新此客戶資料' };
       }
     }
@@ -10342,16 +10313,17 @@ const D1WriteModule = {
     const card = this.normalizeCard(payload);
     const sourceData = payload.data || payload.card || payload;
     const explicitRowId = this.pick(sourceData, ['rowId', 'row_id', 'id'], this.pick(payload, ['rowId', 'row_id', 'id']));
-    const hasExplicitNetworkInput = ['networkId', 'network_id', '歸屬網'].some((key) => Object.prototype.hasOwnProperty.call(sourceData || {}, key));
-    const explicitNetworkId = hasExplicitNetworkInput ? this.text(this.pick(sourceData, ['networkId', 'network_id', '歸屬網']), 'admin') : '';
-    const explicitOwnerTransferUserId = hasExplicitNetworkInput && this.isLineUserIdLike(explicitNetworkId) ? explicitNetworkId : '';
+    const actorId = this.text(payload.authenticatedUserId);
+    const role = this.role(payload.authenticatedRole || 'user');
+    const networkId = this.text(payload.authenticatedNetworkId, 'admin');
+    if (!actorId) return { success: false, error: 'Access Denied: Missing authenticated actor' };
     if (!card.row_id) return { success: false, error: 'Missing card rowId' };
     if (!explicitRowId) {
-      const provisionalAccess = D1ReadModule.inferCardAccess(card, { actorId: this.text(payload.authenticatedUserId || payload.userId) });
+      const provisionalAccess = D1ReadModule.inferCardAccess(card, { actorId });
       const isStaticSelfProfile = provisionalAccess && provisionalAccess.sourceType === 'self_profile'
         && !String(card.row_id || '').startsWith('CARD_VIDEO_')
         && String(card.custom_config || '').toLowerCase().indexOf('"videostoragekind"') < 0;
-      const profileId = this.text(card.line_id || provisionalAccess.profileUserId || payload.authenticatedUserId || payload.userId);
+      const profileId = this.text(card.line_id || provisionalAccess.profileUserId || actorId);
       if (isStaticSelfProfile && profileId) {
         const existingSelfProfile = await D1ReadModule.first(env, `
           SELECT row_id FROM card_contacts
@@ -10369,33 +10341,26 @@ const D1WriteModule = {
     }
     const existing = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [card.row_id]);
     let preserveExistingCardIdentity = false;
-    let privateImportOwnerTransferUserId = '';
     if (existing) {
-      const actorId = this.text(payload.authenticatedUserId || payload.userId);
-      const role = this.role(payload.authenticatedRole || payload.role);
-      const networkId = this.text(payload.authenticatedNetworkId || payload.networkId);
       const existingLineId = this.text(existing.line_id);
       const existingCreatorId = this.text(existing.creator_id);
       const existingOwnerId = this.text(existing.owner_user_id);
+      const existingProfileId = this.text(existing.profile_user_id);
       const existingNetworkId = this.text(existing.network_id);
-      const existingSourceType = this.text(existing.source_type).toLowerCase();
-      const isBoundToActor = !!(actorId && existingLineId && existingLineId === actorId);
+      const actorIds = await D1ReadModule.identityIdsForUser(env, actorId).catch(() => [actorId]);
+      if (!actorIds.length) actorIds.push(actorId);
+      const isResourceOwner = [existingLineId, existingCreatorId, existingOwnerId, existingProfileId]
+        .filter(Boolean)
+        .some(id => actorIds.includes(id));
       const isAdminSupportEdit = role === 'admin';
-      const isUnboundOwner = !!(actorId && !existingLineId && (existingCreatorId === actorId || existingOwnerId === actorId));
-      const isUnboundStoreManager = !!(role === 'store' && !existingLineId && networkId && existingNetworkId && networkId === existingNetworkId);
-      const isTransferableImport = existingSourceType !== 'self_profile'
-        && existingSourceType !== 'video_profile'
-        && existingSourceType !== 'referral_placeholder';
+      const isStoreManager = !!(role === 'store' && networkId && existingNetworkId && networkId === existingNetworkId);
 
-      if (!isBoundToActor && !isAdminSupportEdit && !isUnboundOwner && !isUnboundStoreManager) {
+      if (!isResourceOwner && !isAdminSupportEdit && !isStoreManager) {
         return { success: false, error: 'Access Denied: cannot update this card' };
       }
-      privateImportOwnerTransferUserId = isAdminSupportEdit && explicitOwnerTransferUserId && isTransferableImport
-        ? explicitOwnerTransferUserId
-        : '';
-      preserveExistingCardIdentity = isAdminSupportEdit && !isBoundToActor && !privateImportOwnerTransferUserId;
+      preserveExistingCardIdentity = true;
     }
-    const rawAwardUserId = this.text(payload.authenticatedUserId || card.creator_id || payload.creatorId || payload.userId);
+    const rawAwardUserId = actorId;
     const awardUserId = await this.resolvePointAwardUserId(env, rawAwardUserId);
     const cardLineId = await this.resolvePointAwardUserId(env, card.line_id);
     const isOwnCard = !!(cardLineId && awardUserId && cardLineId === awardUserId);
@@ -10419,19 +10384,10 @@ const D1WriteModule = {
       card.visibility = this.text(existing.visibility);
       card.pool_eligible = existing.pool_eligible;
       card.ai_review_status = this.text(existing.ai_review_status);
-      card.network_id = hasExplicitNetworkInput ? explicitNetworkId : this.text(existing.network_id, card.network_id);
+      card.network_id = this.text(existing.network_id, card.network_id);
     }
-    if (existing && privateImportOwnerTransferUserId) {
-      card.creator_id = privateImportOwnerTransferUserId;
-      card.owner_user_id = privateImportOwnerTransferUserId;
-      card.scanner_user_id = privateImportOwnerTransferUserId;
-      card.scanner_name = privateImportOwnerTransferUserId;
-      card.source_type = this.text(card.source_type || existing.source_type, 'private_import');
-      card.visibility = this.text(card.visibility || existing.visibility, 'private');
-      const existingNetwork = this.text(existing.network_id);
-      const fallbackNetwork = this.text(payload.authenticatedNetworkId || payload.networkId || 'admin', 'admin');
-      card.network_id = existingNetwork && !this.isLineUserIdLike(existingNetwork) ? existingNetwork : fallbackNetwork;
-    }
+
+    const explicitTargetOwnerId = this.text(card.owner_user_id || card.profile_user_id || card.line_id);
     const inferredAccess = D1ReadModule.inferCardAccess(card, { actorId: awardUserId });
     const access = preserveExistingCardIdentity ? {
       ...inferredAccess,
@@ -10441,7 +10397,23 @@ const D1WriteModule = {
       visibility: this.text(card.visibility, inferredAccess.visibility),
       poolEligible: Number(card.pool_eligible) === 1,
       aiReviewStatus: this.text(card.ai_review_status, inferredAccess.aiReviewStatus)
-    } : inferredAccess;
+    } : { ...inferredAccess };
+    if (!existing && (access.sourceType === 'self_profile' || access.sourceType === 'video_profile')) {
+      card.line_id = actorId;
+      card.creator_id = actorId;
+      access.ownerUserId = actorId;
+      access.profileUserId = actorId;
+      card.network_id = networkId;
+    }
+    if (!existing && access.sourceType === 'private_import') {
+      card.creator_id = actorId;
+      card.scanner_user_id = this.text(card.scanner_user_id, actorId);
+      if (!explicitTargetOwnerId) {
+        access.ownerUserId = '';
+        access.profileUserId = '';
+      }
+      card.network_id = networkId;
+    }
     card.owner_user_id = access.ownerUserId;
     card.profile_user_id = access.profileUserId;
     card.source_type = access.sourceType;
@@ -10515,9 +10487,9 @@ const D1WriteModule = {
     if (!rowId) return { success: false, error: 'Missing card rowId' };
     const card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
     if (!card) return { success: false, error: 'Card not found' };
-    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const actorId = this.text(payload.authenticatedUserId);
     const role = this.role(payload.authenticatedRole || payload.role);
-    const networkId = this.text(payload.authenticatedNetworkId || payload.networkId);
+    const networkId = this.text(payload.authenticatedNetworkId);
     const isOwner = actorId && (actorId === this.text(card.creator_id) || actorId === this.text(card.line_id));
     const isStoreManager = role === 'store' && networkId && networkId === this.text(card.network_id);
     if (role !== 'admin' && !isStoreManager && !isOwner) {
@@ -10533,7 +10505,7 @@ const D1WriteModule = {
     if (!rowId) return { success: false, error: 'Missing card rowId' };
     const card = await D1ReadModule.first(env, 'SELECT * FROM card_contacts WHERE row_id = ? LIMIT 1', [rowId]);
     if (!card) return { success: false, error: 'Card not found' };
-    const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const actorId = this.text(payload.authenticatedUserId);
     const role = this.role(payload.authenticatedRole || payload.role);
     const isOwner = actorId && (actorId === this.text(card.creator_id) || actorId === this.text(card.line_id));
     if (role !== 'admin' && !isOwner) {

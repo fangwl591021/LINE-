@@ -512,3 +512,21 @@ if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(
 - 靜態檢查 Phase 1 風險是否存在。
 - 目前預期會失敗，作為 Phase 2 修補前的安全紅線。
 - 未加入 `tools/run-smoke-contracts.js`，避免影響既有發版 guard。
+
+## 9. Phase 2B 修補狀態
+
+Phase 2B 已新增 `docs/security/trusted-identity-and-tenant-boundary.md` 與 `tools/check-security-phase-2b-contract.js`。
+
+已處理：
+
+- `getActorFromD1Identity()` 不再信任 `targetUserId`、`pointUserId`、`userId`、`LINE_user_id`、`ownerUserId`、`creatorId` 等前端目標/資源欄位。
+- 高風險名片寫入、CRM、LINE OA 管理與管理修復 action 移出 D1 fallback。
+- `saveCard` / `updateCard` 改為必須有已驗證 actor，既有名片更新保留歸屬欄位。
+- `getCardContacts`、`getCardHarvestContacts`、`getCrmContacts`、`updateCrmContact` 改用 `authenticatedUserId` / `authenticatedNetworkId` 控制資源與租戶範圍。
+
+仍待 Phase 2C：
+
+- 點數 cashier idempotency。
+- 點數同步唯一鍵。
+- 點數快速查詢 legacy resource fallback 拆分。
+- hard admin 正式化。

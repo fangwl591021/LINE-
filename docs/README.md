@@ -30,10 +30,13 @@
 
 - `docs/security/security-audit-phase-1.md`
 - `docs/security/action-authorization-policy.md`
+- `docs/security/trusted-identity-and-tenant-boundary.md`
 
 Phase 1 安全稽核，只盤點 `workerbackup.js` 的認證、授權、D1 identity fallback、硬編碼管理員與點數異動風險；本階段不修改正式功能。
 
 Phase 2A Action Authorization Policy 定義 `dispatchAction()` 的集中式 action policy、deny-by-default 原則、public action 清單與 D1 fallback action 清單。
+
+Phase 2B Trusted Identity and Tenant Boundary 定義可信 actor 來源、名片資源所有權、CRM 租戶邊界與高風險 D1 fallback 收斂規則。
 ### 核心規則
 
 - `docs/rules/core-invariants.md`
