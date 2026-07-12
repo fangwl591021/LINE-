@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const args = process.argv.slice(2);
@@ -45,6 +46,10 @@ async function runReadOnlyChecks(baseUrl) {
 
 async function main() {
   report('MODE', readOnly ? 'READ_ONLY=true' : 'READ_ONLY=false');
+  const isolation = spawnSync(process.execPath, [path.join(root, 'tools', 'check-staging-resource-isolation.js')], { cwd: root, encoding: 'utf8' });
+  if (isolation.stdout) process.stdout.write(isolation.stdout);
+  if (isolation.stderr) process.stderr.write(isolation.stderr);
+  if (isolation.status !== 0) blockers.push('STAGING_RESOURCE_ISOLATION_FAILED: inspect check-staging-resource-isolation.js output');
   if (!/^\[env\.staging\]\s*$/m.test(config)) blockers.push('STAGING_ENV_MISSING: wrangler.toml has no [env.staging] configuration');
   if (!endpoint) blockers.push('STAGING_ENDPOINT_MISSING: provide --endpoint only after an isolated staging endpoint exists');
   if (endpoint && !stagingHostAllowed(endpoint)) blockers.push('STAGING_HOST_REJECTED: endpoint host must contain staging or be in STAGING_ALLOWED_HOSTS');

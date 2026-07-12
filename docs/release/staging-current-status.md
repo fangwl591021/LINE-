@@ -2,23 +2,20 @@
 
 Date: 2026-07-12
 
+## Provisioned Isolation
+
+- A distinct staging D1 database, KV namespace, and R2 bucket have been created and bound in `[env.staging]`.
+- `line-engine-staging` is configured as a separate Worker name with `workers_dev = true`.
+- `STAGING_POINT_MODE = "mock"` prevents any approved staging test from using the production point wallet.
+- Read-only `wrangler d1 migrations list ACTMASTER_DB --remote --env staging` shows all migrations `0001` through `0014` pending; no migration was applied.
+
+## Remaining Blockers
+
+- No staging-only LINE Messaging API channel, access token, secret, LIFF app, or verified webhook endpoint.
+- No staging mother-site write API or sandbox point authority.
+- No staging secrets have been configured.
+- The staging Worker has not been deployed, so its workers.dev URL has not been runtime-verified.
+
 ## Result
 
-**BLOCKED.** `wrangler.toml` has no `[env.staging]` configuration. The only declared Worker/D1/KV/R2 resources are the default environment, so this repository cannot prove that staging is independent from production.
-
-## Consequences
-
-- No `wrangler d1 migrations list --remote --env staging` was executed.
-- No remote schema audit was executed.
-- No staging migration, deploy, bootstrap, LINE test, point test, or tenant test was executed.
-- D1, KV, R2, LINE channel, webhook endpoint, point wallet, platform admin tables, and mother-site write API must all be treated as shared or unknown until an explicit staging environment is configured.
-
-## Required Before Proceeding
-
-1. Add an isolated `[env.staging]` Worker configuration.
-2. Use separate D1, KV, R2, LINE channel, LIFF ID, webhook endpoint, point wallet, and mother-site write API/sandbox.
-3. Configure staging-only secrets through Cloudflare; record statuses in the checklist without values.
-4. Export a masked read-only staging schema snapshot and count evidence.
-5. Run the staging readiness and read-only validation tools against the approved staging hostname.
-
-The offline example snapshot proves the migration preflight logic only. It is not evidence of a live staging schema.
+Resource isolation for D1, KV, and R2 is configured. LINE, LIFF, webhook, mother-site write, and external point authority remain blocked. Do not run staging migration or write tests until every required external integration is isolated.
