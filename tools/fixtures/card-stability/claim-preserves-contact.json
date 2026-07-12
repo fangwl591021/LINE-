@@ -1,0 +1,35 @@
+{
+  "actorCanonicalId": "usr_claimant_020",
+  "entrySource": "claim_card",
+  "requestedVersion": "standard",
+  "operation": "claim",
+  "claimContext": {
+    "collectorCanonicalId": "usr_inviter_020",
+    "inviterCanonicalId": "usr_inviter_020"
+  },
+  "candidates": [
+    {
+      "row_id": "CONTACT_MASKED_020",
+      "source_type": "claimed_contact",
+      "scanner_user_id": "usr_inviter_020",
+      "creator_id": "usr_inviter_020",
+      "recognized_person_uid": "usr_claimant_020",
+      "bound_user_id": "usr_claimant_020",
+      "inviter_user_id": "usr_inviter_020",
+      "custom_config": { "cardVersion": "standard" }
+    },
+    {
+      "row_id": "CARD_STD_MASKED_020",
+      "source_type": "claimed_personal",
+      "owner_user_id": "usr_claimant_020",
+      "bound_user_id": "usr_claimant_020",
+      "inviter_user_id": "usr_inviter_020",
+      "custom_config": { "cardVersion": "standard" }
+    }
+  ],
+  "expected": {
+    "contactPreserved": true,
+    "personalCreatedOrLinked": true,
+    "inviterPreserved": true
+  }
+}
