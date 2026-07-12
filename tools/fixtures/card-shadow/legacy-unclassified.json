@@ -1,0 +1,5 @@
+{
+  "actor": { "liffUserId": "U_ACTOR_A", "networkId": "network-a" },
+  "entrySource": "my_card", "requestedVersion": "standard", "networkId": "network-a",
+  "candidates": [{ "row_id": "LEGACY_CARD_A", "owner_user_id": "U_ACTOR_A", "network_id": "network-a", "custom_config": { "cardVersion": "standard" } }]
+}

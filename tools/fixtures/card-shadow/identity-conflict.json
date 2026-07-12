@@ -1,0 +1,5 @@
+{
+  "actor": { "liffUserId": "U_TRUSTED_A", "ownerUserId": "U_PAYLOAD_B", "networkId": "network-a" },
+  "entrySource": "my_card", "requestedVersion": "standard", "networkId": "network-a",
+  "candidates": [{ "row_id": "CARD_STD_A", "source_type": "self_profile", "owner_user_id": "U_TRUSTED_A", "network_id": "network-a", "custom_config": { "cardVersion": "standard" } }]
+}

@@ -1,0 +1,6 @@
+{
+  "actor": { "authenticatedUserId": "U_ACTOR_A", "networkId": "network-a" },
+  "entrySource": "ai_card_folder", "requestedVersion": "any", "networkId": "network-a",
+  "candidates": [{ "row_id": "CARD_STD_PERSONAL", "source_type": "self_profile", "owner_user_id": "U_ACTOR_A", "network_id": "network-a", "custom_config": { "cardVersion": "standard" } }],
+  "legacyResult": { "cardId": "CARD_STD_PERSONAL", "cardType": "personal" }
+}

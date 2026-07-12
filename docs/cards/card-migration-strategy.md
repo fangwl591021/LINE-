@@ -155,3 +155,6 @@ Rollback：停止 target write，legacy 仍為正式來源；以 event replay �
 ## 第一修補批次
 
 CS-1 僅包含 canonical identity adapter、masked shadow resolver trace、schema snapshot audit、personal uniqueness create guard contract，以及 claim/merge audit contract。claim 目標語意固定為：保留 contact collection、建立或連結唯一 personal、固定 inviter；不得修改現行名片結果、UI 或 D1 正式資料。
+## CS-1A gate
+
+Before any migration or runtime shadow hook, fixture-only resolver parity must remain green. This branch contains no production migration, remote D1 action, or data repair. Divergence output is proposal-only and masked.
