@@ -1,0 +1,19 @@
+{
+  "actorCanonicalId": "usr_demo_030",
+  "entrySource": "line_oa_my_card",
+  "requestedVersion": "standard",
+  "action": "read",
+  "candidates": [
+    {
+      "row_id": "CONTACT_MASKED_030",
+      "source_type": "private_import",
+      "scanner_user_id": "usr_demo_030",
+      "recognized_person_uid": "usr_demo_031",
+      "custom_config": { "cardVersion": "standard" }
+    }
+  ],
+  "expected": {
+    "diagnostic": "MY_CARD_RESOLVED_CONTACT",
+    "finalCard": null
+  }
+}
