@@ -169,3 +169,6 @@ All resolver fixtures are masked and fixture-only. They do not import the Worker
 ## CS-0 exit condition
 
 The next batch must remain shadow-only: canonical identity adapter, masked resolver comparison, and explicit claim/merge audit contract. It must not alter current card selection, contact ownership, UI, Worker runtime, or D1 data until a complete local schema snapshot and reviewed migration plan exist.
+## CS-1A shadow-read preparation
+
+CS-1A adds only independent modules and fixtures under `src/modules/cards/` and `tools/fixtures/card-shadow/`. These modules are not wired into the Worker or browser. They provide canonical identity, source/version classification, a shadow resolver, and masked legacy comparison for a future approved shadow-read hook. No ownership value, card row, or legacy resolver changes in CS-1A.

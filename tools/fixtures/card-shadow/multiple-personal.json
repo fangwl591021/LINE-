@@ -1,0 +1,8 @@
+{
+  "actor": { "webhookUserId": "U_ACTOR_A", "networkId": "network-a" },
+  "entrySource": "line_oa_my_card", "requestedVersion": "standard", "networkId": "network-a",
+  "candidates": [
+    { "row_id": "CARD_STD_ONE", "source_type": "self_profile", "owner_user_id": "U_ACTOR_A", "network_id": "network-a", "custom_config": { "cardVersion": "standard" } },
+    { "row_id": "CARD_STD_TWO", "source_type": "self_upload", "profile_user_id": "U_ACTOR_A", "network_id": "network-a", "custom_config": { "cardVersion": "standard" } }
+  ], "legacyResult": { "cardId": "CARD_STD_ONE", "cardType": "personal" }
+}
