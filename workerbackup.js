@@ -5803,15 +5803,348 @@ const PointModule = {
     return 'STORE_CASHIER_SESSION_' + String(sessionId || '').trim();
   },
 
+  secureId(prefix) {
+    const safePrefix = String(prefix || 'ID').replace(/[^A-Za-z0-9_]/g, '') || 'ID';
+    if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+      return `${safePrefix}_${globalThis.crypto.randomUUID()}`;
+    }
+    return `${safePrefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  },
+
+  sessionExpiryIso(createdAt = new Date()) {
+    const createdMs = createdAt instanceof Date ? createdAt.getTime() : Date.parse(createdAt);
+    return new Date((Number.isFinite(createdMs) ? createdMs : Date.now()) + 180000).toISOString();
+  },
+
+  safeJson(value) {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : (value || {});
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  normalizeIdempotencyKey(payload = {}, context = {}) {
+    const explicit = D1ReadModule.text(
+      payload.idempotencyKey ||
+      payload.requestId ||
+      payload.transactionKey ||
+      payload.clientRequestId ||
+      payload.client_request_id
+    );
+    const raw = explicit || (context.cashierSessionId ? `cashier:${context.cashierSessionId}` : '');
+    return raw.replace(/[^A-Za-z0-9:_./-]/g, '').slice(0, 160);
+  },
+
+  cashierTransactionFingerprint(input = {}) {
+    const normalized = {
+      tenantId: D1ReadModule.text(input.tenantId, 'admin'),
+      actorUserId: D1ReadModule.text(input.actorUserId),
+      actorPointUserId: D1ReadModule.text(input.actorPointUserId),
+      customerPointUserId: D1ReadModule.text(input.customerPointUserId),
+      operationType: D1ReadModule.text(input.operationType),
+      amount: Math.floor(Number(input.amount || 0)),
+      points: Math.floor(Number(input.points || 0)),
+      requestedDeduction: Math.floor(Number(input.requestedDeduction || 0)),
+      cashierSessionId: D1ReadModule.text(input.cashierSessionId)
+    };
+    return JSON.stringify(normalized);
+  },
+
+  async ensureStorePointTransactionTables(env) {
+    if (!env.ACTMASTER_DB) return false;
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS store_point_cashier_sessions (
+        session_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL DEFAULT 'admin',
+        network_id TEXT NOT NULL DEFAULT 'admin',
+        actor_user_id TEXT NOT NULL DEFAULT '',
+        actor_point_user_id TEXT NOT NULL DEFAULT '',
+        customer_user_id TEXT NOT NULL DEFAULT '',
+        customer_point_user_id TEXT NOT NULL DEFAULT '',
+        customer_point_source TEXT NOT NULL DEFAULT 'mother',
+        operation_type TEXT NOT NULL DEFAULT 'any',
+        expected_amount REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'prepared',
+        balance REAL NOT NULL DEFAULT 0,
+        mother_balance REAL NOT NULL DEFAULT 0,
+        local_balance REAL NOT NULL DEFAULT 0,
+        actor_balance REAL NOT NULL DEFAULT 0,
+        actor_can_operate INTEGER NOT NULL DEFAULT 0,
+        mother_ready INTEGER NOT NULL DEFAULT 0,
+        idempotency_key TEXT NOT NULL DEFAULT '',
+        transaction_id TEXT NOT NULL DEFAULT '',
+        result_json TEXT NOT NULL DEFAULT '{}',
+        last_error TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TEXT NOT NULL DEFAULT '',
+        processing_at TEXT NOT NULL DEFAULT '',
+        consumed_at TEXT NOT NULL DEFAULT '',
+        completed_at TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS store_point_cashier_transactions (
+        transaction_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL DEFAULT 'admin',
+        network_id TEXT NOT NULL DEFAULT 'admin',
+        idempotency_key TEXT NOT NULL DEFAULT '',
+        cashier_session_id TEXT NOT NULL DEFAULT '',
+        actor_user_id TEXT NOT NULL DEFAULT '',
+        actor_point_user_id TEXT NOT NULL DEFAULT '',
+        customer_user_id TEXT NOT NULL DEFAULT '',
+        customer_point_user_id TEXT NOT NULL DEFAULT '',
+        operation_type TEXT NOT NULL DEFAULT '',
+        amount REAL NOT NULL DEFAULT 0,
+        points REAL NOT NULL DEFAULT 0,
+        before_balance REAL NOT NULL DEFAULT 0,
+        after_balance REAL NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'mother',
+        source_ref TEXT NOT NULL DEFAULT '',
+        external_transaction_id TEXT NOT NULL DEFAULT '',
+        request_fingerprint TEXT NOT NULL DEFAULT '',
+        response_json TEXT NOT NULL DEFAULT '{}',
+        external_result_json TEXT NOT NULL DEFAULT '{}',
+        reconciliation_status TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'reserved',
+        error_code TEXT NOT NULL DEFAULT '',
+        error_message TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        completed_at TEXT NOT NULL DEFAULT ''
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_store_point_tx_tenant_actor_key
+      ON store_point_cashier_transactions(tenant_id, actor_user_id, idempotency_key)
+      WHERE idempotency_key <> ''
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_store_point_tx_session_once
+      ON store_point_cashier_transactions(cashier_session_id)
+      WHERE cashier_session_id <> ''
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_store_point_tx_status_time
+      ON store_point_cashier_transactions(status, updated_at)
+    `).run();
+    return true;
+  },
+
+  mapCashierTransaction(row) {
+    if (!row) return null;
+    return {
+      transactionId: D1ReadModule.text(row.transaction_id),
+      tenantId: D1ReadModule.text(row.tenant_id, 'admin'),
+      actorUserId: D1ReadModule.text(row.actor_user_id),
+      idempotencyKey: D1ReadModule.text(row.idempotency_key),
+      cashierSessionId: D1ReadModule.text(row.cashier_session_id),
+      requestFingerprint: D1ReadModule.text(row.request_fingerprint),
+      status: D1ReadModule.text(row.status),
+      errorCode: D1ReadModule.text(row.error_code),
+      errorMessage: D1ReadModule.text(row.error_message),
+      response: this.safeJson(row.response_json),
+      externalResult: this.safeJson(row.external_result_json)
+    };
+  },
+
+  async reserveStorePointTransaction(env, input = {}) {
+    if (!await this.ensureStorePointTransactionTables(env)) {
+      return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    }
+    const tenantId = D1ReadModule.text(input.tenantId, 'admin');
+    const actorId = D1ReadModule.text(input.actorUserId);
+    const idempotencyKey = D1ReadModule.text(input.idempotencyKey);
+    if (!idempotencyKey) return { success: false, error: 'IDEMPOTENCY_KEY_REQUIRED' };
+    const existing = await D1ReadModule.first(env, `
+      SELECT *
+      FROM store_point_cashier_transactions
+      WHERE tenant_id = ? AND actor_user_id = ? AND idempotency_key = ?
+      LIMIT 1
+    `, [tenantId, actorId, idempotencyKey]).catch(() => null);
+    const fingerprint = this.cashierTransactionFingerprint(input);
+    if (existing) {
+      const tx = this.mapCashierTransaction(existing);
+      if (tx.requestFingerprint && tx.requestFingerprint !== fingerprint) {
+        return { success: false, error: 'IDEMPOTENCY_CONFLICT', data: { transactionId: tx.transactionId } };
+      }
+      if ((tx.status === 'completed' || tx.status === 'completed_reconcile_pending') && tx.response && tx.response.success === true) {
+        return { success: true, replay: true, transaction: tx, response: tx.response };
+      }
+      if (['reserved', 'processing', 'pending_verification'].includes(tx.status)) {
+        return { success: false, error: 'POINT_TRANSACTION_UNKNOWN_STATE', data: { transactionId: tx.transactionId, status: tx.status } };
+      }
+      if (tx.status === 'failed_final') {
+        return { success: false, error: tx.errorMessage || tx.errorCode || 'POINT_TRANSACTION_FAILED', data: { transactionId: tx.transactionId, status: tx.status } };
+      }
+      return { success: true, retry: true, transaction: tx };
+    }
+    const transactionId = this.secureId('SPT');
+    try {
+      await env.ACTMASTER_DB.prepare(`
+        INSERT INTO store_point_cashier_transactions (
+          transaction_id, tenant_id, network_id, idempotency_key, cashier_session_id,
+          actor_user_id, actor_point_user_id, customer_user_id, customer_point_user_id,
+          operation_type, amount, points, source, request_fingerprint, status, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', CURRENT_TIMESTAMP)
+      `).bind(
+        transactionId,
+        tenantId,
+        D1ReadModule.text(input.networkId || tenantId, 'admin'),
+        idempotencyKey,
+        D1ReadModule.text(input.cashierSessionId),
+        actorId,
+        D1ReadModule.text(input.actorPointUserId),
+        D1ReadModule.text(input.customerUserId),
+        D1ReadModule.text(input.customerPointUserId),
+        D1ReadModule.text(input.operationType),
+        Number(input.amount || 0),
+        Number(input.points || 0),
+        D1ReadModule.text(input.source, 'mother'),
+        fingerprint
+      ).run();
+    } catch (e) {
+      const sessionId = D1ReadModule.text(input.cashierSessionId);
+      const bySession = sessionId ? await D1ReadModule.first(env, 'SELECT * FROM store_point_cashier_transactions WHERE cashier_session_id = ? LIMIT 1', [sessionId]).catch(() => null) : null;
+      if (bySession) {
+        const tx = this.mapCashierTransaction(bySession);
+        return { success: false, error: 'CASHIER_SESSION_ALREADY_USED', data: { transactionId: tx.transactionId, status: tx.status } };
+      }
+      throw e;
+    }
+    const row = await D1ReadModule.first(env, 'SELECT * FROM store_point_cashier_transactions WHERE transaction_id = ? LIMIT 1', [transactionId]);
+    return { success: true, transaction: this.mapCashierTransaction(row), created: true };
+  },
+
+  async markStorePointTransaction(env, transactionId, fields = {}) {
+    if (!env.ACTMASTER_DB || !transactionId) return;
+    const status = D1ReadModule.text(fields.status);
+    const errorCode = D1ReadModule.text(fields.errorCode);
+    const errorMessage = D1ReadModule.text(fields.errorMessage);
+    const responseJson = JSON.stringify(fields.response || {});
+    const externalJson = JSON.stringify(fields.externalResult || {});
+    const completedAt = status && status.startsWith('completed') ? new Date().toISOString() : '';
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE store_point_cashier_transactions
+      SET status = COALESCE(NULLIF(?, ''), status),
+          before_balance = COALESCE(?, before_balance),
+          after_balance = COALESCE(?, after_balance),
+          source_ref = COALESCE(NULLIF(?, ''), source_ref),
+          external_transaction_id = COALESCE(NULLIF(?, ''), external_transaction_id),
+          response_json = CASE WHEN ? <> '{}' THEN ? ELSE response_json END,
+          external_result_json = CASE WHEN ? <> '{}' THEN ? ELSE external_result_json END,
+          reconciliation_status = COALESCE(NULLIF(?, ''), reconciliation_status),
+          error_code = ?,
+          error_message = ?,
+          updated_at = CURRENT_TIMESTAMP,
+          completed_at = CASE WHEN ? <> '' THEN ? ELSE completed_at END
+      WHERE transaction_id = ?
+    `).bind(
+      status,
+      fields.beforeBalance ?? null,
+      fields.afterBalance ?? null,
+      D1ReadModule.text(fields.sourceRef),
+      D1ReadModule.text(fields.externalTransactionId),
+      responseJson,
+      responseJson,
+      externalJson,
+      externalJson,
+      D1ReadModule.text(fields.reconciliationStatus),
+      errorCode,
+      errorMessage,
+      completedAt,
+      completedAt,
+      transactionId
+    ).run().catch(() => null);
+  },
+
+  async consumeStorePointCashierSession(env, input = {}) {
+    if (!input.sessionId) return { success: true, skipped: true };
+    if (!await this.ensureStorePointTransactionTables(env)) return { success: false, error: 'Missing ACTMASTER_DB binding' };
+    const row = await D1ReadModule.first(env, 'SELECT * FROM store_point_cashier_sessions WHERE session_id = ? LIMIT 1', [input.sessionId]).catch(() => null);
+    if (!row) return { success: false, error: 'CASHIER_SESSION_EXPIRED' };
+    const tenantId = D1ReadModule.text(input.tenantId, 'admin');
+    const now = new Date().toISOString();
+    if (D1ReadModule.text(row.actor_user_id) !== D1ReadModule.text(input.actorId)) return { success: false, error: 'CASHIER_SESSION_ACTOR_MISMATCH' };
+    if (D1ReadModule.text(row.customer_point_user_id) !== D1ReadModule.text(input.customerPointUserId)) return { success: false, error: 'CASHIER_SESSION_CUSTOMER_MISMATCH' };
+    if (D1ReadModule.text(row.tenant_id, 'admin') !== tenantId) return { success: false, error: 'CASHIER_SESSION_TENANT_MISMATCH' };
+    if (D1ReadModule.text(row.expires_at) && D1ReadModule.text(row.expires_at) <= now) {
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE store_point_cashier_sessions
+        SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+        WHERE session_id = ? AND status = 'prepared'
+      `).bind(input.sessionId).run().catch(() => null);
+      return { success: false, error: 'CASHIER_SESSION_EXPIRED' };
+    }
+    const status = D1ReadModule.text(row.status, 'prepared');
+    if (status === 'completed') return { success: false, error: 'CASHIER_SESSION_ALREADY_USED' };
+    if (status === 'processing') return { success: false, error: 'CASHIER_SESSION_PROCESSING' };
+    if (status !== 'prepared') return { success: false, error: 'CASHIER_SESSION_ALREADY_USED' };
+    const updated = await env.ACTMASTER_DB.prepare(`
+      UPDATE store_point_cashier_sessions
+      SET status = 'processing',
+          operation_type = ?,
+          expected_amount = ?,
+          idempotency_key = ?,
+          transaction_id = ?,
+          processing_at = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE session_id = ?
+        AND status = 'prepared'
+        AND expires_at > ?
+    `).bind(
+      D1ReadModule.text(input.operationType),
+      Number(input.amount || 0),
+      D1ReadModule.text(input.idempotencyKey),
+      D1ReadModule.text(input.transactionId),
+      now,
+      input.sessionId,
+      now
+    ).run();
+    if (!updated || Number(updated.meta && updated.meta.changes || 0) < 1) {
+      return { success: false, error: 'CASHIER_SESSION_PROCESSING' };
+    }
+    return { success: true };
+  },
+
+  async completeStorePointCashierSession(env, sessionId, result = {}) {
+    if (!env.ACTMASTER_DB || !sessionId) return;
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE store_point_cashier_sessions
+      SET status = 'completed',
+          consumed_at = CURRENT_TIMESTAMP,
+          completed_at = CURRENT_TIMESTAMP,
+          result_json = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE session_id = ?
+    `).bind(JSON.stringify(result || {}), sessionId).run().catch(() => null);
+  },
+
+  async failStorePointCashierSession(env, sessionId, error, retryable = false) {
+    if (!env.ACTMASTER_DB || !sessionId) return;
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE store_point_cashier_sessions
+      SET status = ?,
+          last_error = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE session_id = ?
+    `).bind(retryable ? 'failed_retryable' : 'failed_final', D1ReadModule.text(error), sessionId).run().catch(() => null);
+  },
   async createStorePointCashierSession(env, payload = {}) {
     if (!env.ACTMASTER_KV) return null;
     const actorId = String(payload.actorId || '').trim();
     const customerPointUserId = String(payload.customerPointUserId || '').trim();
     if (!actorId || !customerPointUserId) return null;
     const actorPointUserId = String(payload.actorPointUserId || actorId).trim();
-    const sessionId = 'SCS_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    const createdAt = new Date();
+    const sessionId = this.secureId('SCS');
+    const expiresAt = this.sessionExpiryIso(createdAt);
     const session = {
       sessionId,
+      tenantId: D1ReadModule.text(payload.tenantId || payload.networkId, 'admin'),
+      networkId: D1ReadModule.text(payload.networkId || payload.tenantId, 'admin'),
       actorId,
       actorPointUserId,
       customerPointUserId,
@@ -5822,8 +6155,37 @@ const PointModule = {
       actorBalance: this.number(payload.actorBalance),
       actorCanOperate: this.number(payload.actorBalance) >= 10,
       motherReady: payload.motherReady === true,
-      createdAt: new Date().toISOString()
+      status: 'prepared',
+      createdAt: createdAt.toISOString(),
+      expiresAt
     };
+    if (env.ACTMASTER_DB && await this.ensureStorePointTransactionTables(env).catch(() => false)) {
+      await env.ACTMASTER_DB.prepare(`
+        INSERT OR REPLACE INTO store_point_cashier_sessions (
+          session_id, tenant_id, network_id, actor_user_id, actor_point_user_id,
+          customer_user_id, customer_point_user_id, customer_point_source,
+          status, balance, mother_balance, local_balance, actor_balance,
+          actor_can_operate, mother_ready, created_at, expires_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).bind(
+        sessionId,
+        session.tenantId,
+        session.networkId,
+        actorId,
+        actorPointUserId,
+        D1ReadModule.text(payload.customerUserId || customerPointUserId),
+        customerPointUserId,
+        session.customerPointSource,
+        session.balance,
+        session.motherBalance,
+        session.localBalance,
+        session.actorBalance,
+        session.actorCanOperate ? 1 : 0,
+        session.motherReady ? 1 : 0,
+        session.createdAt,
+        session.expiresAt
+      ).run().catch(() => null);
+    }
     await env.ACTMASTER_KV.put(this.cashierSessionKey(sessionId), JSON.stringify(session), { expirationTtl: 180 }).catch(() => null);
     return session;
   },
@@ -5838,6 +6200,16 @@ const PointModule = {
     if (String(session.customerPointUserId || '') !== String(customerPointUserId || '')) return null;
     const ageMs = Date.now() - Date.parse(session.createdAt || 0);
     if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 180000) return null;
+    if (env.ACTMASTER_DB) {
+      const row = await D1ReadModule.first(env, 'SELECT status, expires_at, tenant_id, network_id FROM store_point_cashier_sessions WHERE session_id = ? LIMIT 1', [sessionId]).catch(() => null);
+      if (row) {
+        const status = D1ReadModule.text(row.status, 'prepared');
+        if (status !== 'prepared') return null;
+        if (D1ReadModule.text(row.expires_at) && D1ReadModule.text(row.expires_at) <= new Date().toISOString()) return null;
+        session.tenantId = D1ReadModule.text(row.tenant_id, session.tenantId || 'admin');
+        session.networkId = D1ReadModule.text(row.network_id, session.networkId || session.tenantId || 'admin');
+      }
+    }
     return session;
   },
 
@@ -6053,6 +6425,9 @@ const PointModule = {
       actorId,
       actorPointUserId,
       customerPointUserId,
+      customerUserId: rawCustomerId,
+      tenantId: D1ReadModule.text(payload.authenticatedNetworkId || payload.networkId, 'admin'),
+      networkId: D1ReadModule.text(payload.authenticatedNetworkId || payload.networkId, 'admin'),
       customerPointSource,
       balance,
       motherBalance,
@@ -6153,7 +6528,43 @@ const PointModule = {
     }).catch(e => ({ success: false, error: e.message || String(e) }));
 
     const actorPointUserId = await this.resolvePointUserId(env, actorId);
+    const tenantId = D1ReadModule.text(
+      payload.authenticatedNetworkId ||
+      payload.networkId ||
+      (resolvedCustomer.user && resolvedCustomer.user.networkId) ||
+      (resolvedCustomer.card && resolvedCustomer.card.networkId) ||
+      'admin'
+    );
+    const operationType = isReward ? 'reward' : 'redeem';
+    const requestedDeductionForIdempotency = isReward ? 0 : Math.floor(Number(payload.deductPoints || payload.discountPoints || payload.redeemPoints || 0));
+    const idempotencyKey = this.normalizeIdempotencyKey(payload, { cashierSessionId: payload.cashierSessionId });
+    if (!idempotencyKey) return { success: false, error: 'IDEMPOTENCY_KEY_REQUIRED' };
+    const reservedTransaction = await this.reserveStorePointTransaction(env, {
+      tenantId,
+      networkId: tenantId,
+      actorUserId: actorId,
+      actorPointUserId,
+      customerUserId: rawCustomerId,
+      customerPointUserId,
+      operationType,
+      amount,
+      points: isReward ? amount : -requestedDeductionForIdempotency,
+      requestedDeduction: requestedDeductionForIdempotency,
+      cashierSessionId: D1ReadModule.text(payload.cashierSessionId),
+      idempotencyKey,
+      source: 'store_point_cashier'
+    });
+    if (reservedTransaction && reservedTransaction.replay && reservedTransaction.response) return reservedTransaction.response;
+    if (!reservedTransaction || reservedTransaction.success === false) {
+      return { success: false, error: reservedTransaction && reservedTransaction.error ? reservedTransaction.error : 'POINT_TRANSACTION_UNKNOWN_STATE', data: reservedTransaction && reservedTransaction.data };
+    }
+    const transactionId = reservedTransaction.transaction && reservedTransaction.transaction.transactionId;
+
     const cashierSession = await this.loadStorePointCashierSession(env, payload.cashierSessionId, actorId, customerPointUserId);
+    if (payload.cashierSessionId && !cashierSession) {
+      await this.markStorePointTransaction(env, transactionId, { status: 'failed_final', errorCode: 'CASHIER_SESSION_EXPIRED', errorMessage: 'CASHIER_SESSION_EXPIRED' });
+      return { success: false, error: 'CASHIER_SESSION_EXPIRED' };
+    }
     const actorWallet = cashierSession && cashierSession.actorCanOperate
       ? { success: true, data: { balance: cashierSession.actorBalance }, prepared: true }
       : await this.queryUserPoints({
@@ -6163,11 +6574,16 @@ const PointModule = {
           per_page: 20
         }, env);
     if (!actorWallet || !actorWallet.success) {
-      return { success: false, error: actorWallet && actorWallet.error ? actorWallet.error : '無法取得店家操作點數' };
+      const error = actorWallet && actorWallet.error ? actorWallet.error : '無法取得店家操作點數';
+      await this.markStorePointTransaction(env, transactionId, { status: 'failed_retryable', errorCode: 'ACTOR_WALLET_UNAVAILABLE', errorMessage: error });
+      await this.failStorePointCashierSession(env, cashierSession && cashierSession.sessionId, error, true);
+      return { success: false, error };
     }
     const actorBalance = Math.floor(Number(actorWallet.data?.balance || 0));
     if (actorBalance < operatorFee) {
-      return { success: false, error: `店家操作點數不足，贈扣點功能每次需要 ${operatorFee} 點` };
+      const error = `店家操作點數不足，贈扣點功能每次需要 ${operatorFee} 點`;
+      await this.markStorePointTransaction(env, transactionId, { status: 'failed_final', errorCode: 'ACTOR_POINT_INSUFFICIENT', errorMessage: error });
+      return { success: false, error };
     }
 
     let wallet = cashierSession
@@ -6215,7 +6631,9 @@ const PointModule = {
       }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e), lineUserId }))));
       const failedPointMember = pointMemberResults.find(item => item && item.success === false);
       if (failedPointMember) {
-        return { success: false, error: 'Mother member setup failed: ' + (failedPointMember.error || failedPointMember.code || 'unknown'), data: { motherMember: failedPointMember } };
+        const error = 'Mother member setup failed: ' + (failedPointMember.error || failedPointMember.code || 'unknown');
+        await this.markStorePointTransaction(env, transactionId, { status: 'failed_retryable', errorCode: 'MOTHER_MEMBER_SETUP_FAILED', errorMessage: error });
+        return { success: false, error, data: { motherMember: failedPointMember } };
       }
     }
 
@@ -6226,6 +6644,7 @@ const PointModule = {
     } else {
       const requestedDeduction = Math.floor(Number(payload.deductPoints || payload.discountPoints || payload.redeemPoints || 0));
       if (!requestedDeduction || requestedDeduction <= 0) {
+        await this.markStorePointTransaction(env, transactionId, { status: 'failed_final', errorCode: 'VALIDATION_FAILED', errorMessage: '請輸入本次折抵點數' });
         return {
           success: false,
           error: '請輸入本次折抵點數',
@@ -6233,6 +6652,7 @@ const PointModule = {
         };
       }
       if (requestedDeduction > amount) {
+        await this.markStorePointTransaction(env, transactionId, { status: 'failed_final', errorCode: 'VALIDATION_FAILED', errorMessage: '折抵點數不可大於消費金額' });
         return {
           success: false,
           error: '折抵點數不可大於消費金額',
@@ -6240,6 +6660,7 @@ const PointModule = {
         };
       }
       if (requestedDeduction > balanceBefore) {
+        await this.markStorePointTransaction(env, transactionId, { status: 'failed_final', errorCode: 'VALIDATION_FAILED', errorMessage: '客戶可用點數不足' });
         return {
           success: false,
           error: '客戶可用點數不足',
@@ -6248,6 +6669,7 @@ const PointModule = {
       }
       const deductPoints = requestedDeduction;
       if (!deductPoints || deductPoints <= 0) {
+        await this.markStorePointTransaction(env, transactionId, { status: 'failed_final', errorCode: 'VALIDATION_FAILED', errorMessage: '客戶可用點數不足，無法折抵' });
         return {
           success: false,
           error: '客戶可用點數不足，無法折抵',
@@ -6260,6 +6682,25 @@ const PointModule = {
       eventContent = `來源：${sourceLabel}；消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${deductPoints.toLocaleString('zh-TW')} 點，應收 NT$${payableAmount.toLocaleString('zh-TW')}`;
     }
 
+    if (cashierSession) {
+      const consumed = await this.consumeStorePointCashierSession(env, {
+        sessionId: cashierSession.sessionId,
+        actorId,
+        actorPointUserId,
+        customerPointUserId,
+        tenantId,
+        operationType,
+        amount,
+        idempotencyKey,
+        transactionId
+      });
+      if (!consumed || consumed.success === false) {
+        const error = consumed && consumed.error ? consumed.error : 'CASHIER_SESSION_PROCESSING';
+        await this.markStorePointTransaction(env, transactionId, { status: 'failed_final', errorCode: error, errorMessage: error });
+        return { success: false, error };
+      }
+    }
+    await this.markStorePointTransaction(env, transactionId, { status: 'processing' });
     const operatorDebit = await this.insertUserPoint({
       userId: actorPointUserId,
       points: -operatorFee,
@@ -6272,7 +6713,10 @@ const PointModule = {
       skipMotherMemberSetup: true
     }, env);
     if (!operatorDebit || !operatorDebit.success) {
-      return { success: false, error: operatorDebit && operatorDebit.error ? operatorDebit.error : '店家操作扣點失敗，交易未送出', data: operatorDebit };
+      const error = operatorDebit && operatorDebit.error ? operatorDebit.error : '店家操作扣點失敗，交易未送出';
+      await this.markStorePointTransaction(env, transactionId, { status: 'failed_retryable', errorCode: 'OPERATOR_DEBIT_FAILED', errorMessage: error, externalResult: operatorDebit || {} });
+      await this.failStorePointCashierSession(env, cashierSession && cashierSession.sessionId, error, true);
+      return { success: false, error, data: operatorDebit };
     }
 
     const result = customerPointSource === 'local'
@@ -6282,7 +6726,7 @@ const PointModule = {
           mode: isReward ? 'grant' : 'deduct',
           points: Math.abs(points),
           note: `store cashier ${isReward ? 'reward' : 'redeem'}; source=${sourceLabel}; amount=${amount}; points=${Math.abs(points)}`
-        }, env)
+        }, env).catch(e => ({ success: false, error: e.message || String(e), unknown: true }))
       : await this.insertUserPoint({
           userId: customerPointUserId,
           points,
@@ -6293,7 +6737,7 @@ const PointModule = {
           child_shop_name: sourceLabel,
           shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
           skipMotherMemberSetup: true
-        }, env);
+        }, env).catch(e => ({ success: false, error: e.message || String(e), unknown: true }));
 
     if (!result || !result.success) {
       await this.insertUserPoint({
@@ -6308,6 +6752,14 @@ const PointModule = {
         skipMotherMemberSetup: true
       }, env).catch(() => null);
       const resultError = result && result.error ? String(result.error) : '';
+      const unknownState = !!(result && result.unknown) || /timeout|timed\s*out|network|fetch failed|aborted/i.test(resultError);
+      if (unknownState) {
+        await this.markStorePointTransaction(env, transactionId, { status: 'pending_verification', errorCode: 'POINT_TRANSACTION_UNKNOWN_STATE', errorMessage: resultError || 'unknown point transaction state', externalResult: result || {} });
+        await this.failStorePointCashierSession(env, cashierSession && cashierSession.sessionId, resultError || 'unknown point transaction state', true);
+        return { success: false, error: resultError || 'POINT_TRANSACTION_UNKNOWN_STATE', data: result };
+      }
+      await this.markStorePointTransaction(env, transactionId, { status: 'failed_final', errorCode: 'CUSTOMER_POINT_WRITE_FAILED', errorMessage: resultError || '點數流水寫入失敗', externalResult: result || {} });
+      await this.failStorePointCashierSession(env, cashierSession && cashierSession.sessionId, resultError || '點數流水寫入失敗', false);
       if (/查無|對應會員|LINE_user_id|not\s*found|member/i.test(resultError)) {
         return {
           success: false,
@@ -6319,28 +6771,33 @@ const PointModule = {
     }
 
     const changedPoints = Math.abs(points);
-    const ledgerId = `SPC_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const ledgerId = transactionId || this.secureId('SPC');
     let syncJob = null;
-    if (await this.ensureCashierLedgerTable(env)) {
-      await env.ACTMASTER_DB.prepare(`
-        INSERT INTO store_point_cashier_logs (
-          log_id, actor_user_id, customer_user_id, customer_point_user_id,
-          mode, amount, points, payable_amount, balance_before, balance_after_estimate,
-          point_type, point_response_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'gift_money', ?)
-      `).bind(
-        ledgerId,
-        actorId,
-        rawCustomerId,
-        customerPointUserId,
-        isReward ? 'reward' : 'redeem',
-        amount,
-        points,
-        payableAmount,
-        balanceBefore,
-        balanceBefore + points,
-        JSON.stringify(result.data || result)
-      ).run();
+    let cashierLogError = '';
+    try {
+      if (await this.ensureCashierLedgerTable(env)) {
+        await env.ACTMASTER_DB.prepare(`
+          INSERT INTO store_point_cashier_logs (
+            log_id, actor_user_id, customer_user_id, customer_point_user_id,
+            mode, amount, points, payable_amount, balance_before, balance_after_estimate,
+            point_type, point_response_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'gift_money', ?)
+        `).bind(
+          ledgerId,
+          actorId,
+          rawCustomerId,
+          customerPointUserId,
+          isReward ? 'reward' : 'redeem',
+          amount,
+          points,
+          payableAmount,
+          balanceBefore,
+          balanceBefore + points,
+          JSON.stringify(result.data || result)
+        ).run();
+      }
+    } catch (e) {
+      cashierLogError = e && e.message ? e.message : String(e);
     }
     if (customerPointSource === 'local') {
       syncJob = await PointSyncModule.enqueue({
@@ -6361,7 +6818,7 @@ const PointModule = {
       }, env).catch(e => ({ success: false, error: e.message || String(e) }));
     }
 
-    return {
+    const response = {
       success: true,
       data: {
         ledgerId,
@@ -6388,6 +6845,19 @@ const PointModule = {
         insertResult: result.data || result
       }
     };
+    const reconciliationPending = !!cashierLogError || (syncJob && syncJob.success === false);
+    await this.markStorePointTransaction(env, transactionId, {
+      status: reconciliationPending ? 'completed_reconcile_pending' : 'completed',
+      beforeBalance: balanceBefore,
+      afterBalance: balanceBefore + points,
+      sourceRef: ledgerId,
+      externalTransactionId: D1ReadModule.text(result && result.data && (result.data.log_id || result.data.row_id || result.data.id)),
+      externalResult: result.data || result,
+      response,
+      reconciliationStatus: cashierLogError ? 'cashier_log_pending' : (syncJob && syncJob.success === false ? 'local_sync_pending' : '')
+    });
+    await this.completeStorePointCashierSession(env, cashierSession && cashierSession.sessionId, response);
+    return response;
   },
 
   async listStorePointCashierLogs(payload, env) {
@@ -6704,6 +7174,7 @@ const PointSyncModule = {
         line_user_id TEXT NOT NULL DEFAULT '',
         source TEXT NOT NULL DEFAULT '',
         source_ref TEXT NOT NULL DEFAULT '',
+        event_key TEXT NOT NULL DEFAULT '',
         points REAL NOT NULL DEFAULT 0,
         point_type TEXT NOT NULL DEFAULT 'gift_money',
         status TEXT NOT NULL DEFAULT 'pending',
@@ -6725,9 +7196,35 @@ const PointSyncModule = {
       CREATE INDEX IF NOT EXISTS idx_point_sync_jobs_status_time
       ON point_sync_jobs(status, created_at)
     `).run();
+    try {
+      await env.ACTMASTER_DB.prepare("ALTER TABLE point_sync_jobs ADD COLUMN event_key TEXT NOT NULL DEFAULT ''").run();
+    } catch (e) {
+      const msg = String(e && e.message || e).toLowerCase();
+      if (!msg.includes('duplicate column')) throw e;
+    }
     await env.ACTMASTER_DB.prepare(`
       CREATE INDEX IF NOT EXISTS idx_point_sync_jobs_source_ref
       ON point_sync_jobs(source, source_ref)
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_point_sync_jobs_event_key
+      ON point_sync_jobs(event_key)
+      WHERE event_key <> ''
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS point_sync_event_keys (
+        event_key TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL DEFAULT '',
+        source_ref TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_point_sync_event_keys_source_ref
+      ON point_sync_event_keys(source, source_ref)
     `).run();
     return true;
   },
@@ -6738,6 +7235,7 @@ const PointSyncModule = {
       lineUserId: this.text(row.line_user_id),
       source: this.text(row.source),
       sourceRef: this.text(row.source_ref),
+      eventKey: this.text(row.event_key),
       points: this.number(row.points),
       pointType: this.text(row.point_type, 'gift_money'),
       status: this.text(row.status, 'pending'),
@@ -6752,6 +7250,17 @@ const PointSyncModule = {
     };
   },
 
+  eventKey(payload = {}, resolved = {}) {
+    const explicit = this.text(payload.eventKey || payload.event_key || payload.idempotencyKey || payload.transactionId || payload.ledgerId);
+    if (explicit) return explicit.replace(/[^A-Za-z0-9:_./-]/g, '').slice(0, 180);
+    const source = this.text(payload.source || payload.awardType || payload.eventName || 'manual_sync');
+    const sourceRef = this.text(payload.sourceRef || payload.refId || payload.ledgerId || payload.awardId);
+    const lineUserId = this.text(resolved.lineUserId || payload.lineUserId || payload.customerUserId || payload.LINE_user_id || payload.uid || payload.targetUserId);
+    const points = this.number(payload.points || payload.get_point || payload.amount);
+    const pointType = this.text(payload.pointType || payload.point_type, 'gift_money');
+    if (!sourceRef) return '';
+    return [lineUserId, source, sourceRef, pointType, points].map(part => String(part || '').replace(/[|\s]+/g, '_')).join('|').slice(0, 220);
+  },
   async enqueue(payload, env) {
     if (!await this.ensure(env)) return { success: false, error: 'Missing ACTMASTER_DB binding' };
     const rawUserId = this.text(payload.query || payload.lineUserId || payload.customerUserId || payload.LINE_user_id || payload.uid || payload.targetUserId);
@@ -6763,18 +7272,31 @@ const PointSyncModule = {
     const sourceRef = this.text(payload.sourceRef || payload.refId || payload.ledgerId || payload.awardId);
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
     if (!points) return { success: false, error: 'Missing points' };
-    const jobId = this.text(payload.jobId) || `PSJ_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const jobId = this.text(payload.jobId) || (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function' ? `PSJ_${globalThis.crypto.randomUUID()}` : `PSJ_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
     const actorId = this.text(payload.authenticatedUserId || payload.createdBy || payload.userId);
+    const eventKey = this.eventKey(payload, { lineUserId }) || `legacy|${source}|${sourceRef || jobId}`;
+    const claimed = await env.ACTMASTER_DB.prepare(`
+      INSERT OR IGNORE INTO point_sync_event_keys (event_key, job_id, source, source_ref, status, updated_at)
+      VALUES (?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP)
+    `).bind(eventKey, jobId, source, sourceRef).run();
+    if (!claimed || Number(claimed.meta && claimed.meta.changes || 0) < 1) {
+      const existingKey = await D1ReadModule.first(env, 'SELECT job_id FROM point_sync_event_keys WHERE event_key = ? LIMIT 1', [eventKey]).catch(() => null);
+      const existingJobId = this.text(existingKey && existingKey.job_id);
+      const existingJob = existingJobId ? await D1ReadModule.first(env, 'SELECT * FROM point_sync_jobs WHERE job_id = ? LIMIT 1', [existingJobId]).catch(() => null) : null;
+      if (existingJob) return { success: true, duplicate: true, data: this.mapJob(existingJob) };
+      return { success: false, error: 'POINT_SYNC_EVENT_ALREADY_QUEUED', data: { eventKey, jobId: existingJobId } };
+    }
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO point_sync_jobs (
-        job_id, line_user_id, source, source_ref, points, point_type,
+        job_id, line_user_id, source, source_ref, event_key, points, point_type,
         status, payload_json, created_by, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, CURRENT_TIMESTAMP)
     `).bind(
       jobId,
       lineUserId,
       source,
       sourceRef,
+      eventKey,
       points,
       this.text(payload.pointType || payload.point_type, 'gift_money'),
       JSON.stringify(payload.payload || payload || {}),

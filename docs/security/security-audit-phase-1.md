@@ -530,3 +530,22 @@ Phase 2B 已新增 `docs/security/trusted-identity-and-tenant-boundary.md` 與 `
 - 點數同步唯一鍵。
 - 點數快速查詢 legacy resource fallback 拆分。
 - hard admin 正式化。
+## Phase 2C Status - Point Transaction Consistency
+
+Phase 2C addresses the Phase 1 point-cashier findings without changing UI or API success response shape.
+
+Mitigated in Phase 2C:
+
+- `storeAdjustCustomerPoints` now reserves a transaction idempotency record before point mutation.
+- Same `tenant_id + actor_user_id + idempotency_key` replays the first completed response or rejects mismatched fingerprints.
+- `cashierSessionId` is represented in D1 and can transition from `prepared` to `processing` only once.
+- Validation failures finalize the reserved transaction instead of leaving it reusable.
+- Mother-site timeout or unknown write state is marked `pending_verification`.
+- Mother-site success followed by local ledger or sync failure is marked `completed_reconcile_pending`.
+- Point sync queue now uses an explicit event key sidecar to prevent duplicate compensation jobs.
+
+Remaining for later phases:
+
+- Frontend should send an explicit client request id instead of relying on legacy `cashier:{cashierSessionId}` fallback.
+- A reconciliation admin view is still needed for `pending_verification` and `completed_reconcile_pending` rows.
+- Hard admin cleanup remains outside Phase 2C.

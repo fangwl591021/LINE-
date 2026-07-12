@@ -198,3 +198,9 @@ Workflow file:
 - `.github/workflows/contract-guard.yml`
 
 The workflow intentionally does not run `npm install` because the guard scripts use only Node built-ins.
+
+## Phase 2C 文件補充
+
+- `docs/security/point-transaction-idempotency.md`
+
+Phase 2C Point Transaction Idempotency 定義店家點數收銀交易冪等、cashier session 單次使用、點數同步 event key 與補償狀態。

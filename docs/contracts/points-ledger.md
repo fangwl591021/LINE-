@@ -94,3 +94,12 @@
 - 店家贈扣點工具仍存在。
 - 折抵交易雙方都能看到明細。
 - loading 狀態會恢復。
+
+## Phase 2C 交易一致性
+
+- 店家點數收銀必須先建立 `store_point_cashier_transactions` 交易紀錄。
+- 同一 `tenant_id + actor_user_id + idempotency_key` 不可重複執行點數異動。
+- 同一 `cashierSessionId` 只能成功進入一次 processing。
+- 母站成功但本地 log 或 sync queue 失敗時，交易標記 `completed_reconcile_pending`，不得重送母站扣點。
+- 母站 timeout、network error 或狀態不明時，交易標記 `pending_verification`，不得把餘額當 0，也不得重新產生第二筆交易。
+- 本地 fallback 的 sync queue 必須使用唯一 `event_key`，避免補償同步重複入帳。

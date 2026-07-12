@@ -124,3 +124,12 @@
 - PT-03 至 PT-05
 
 若其中任何一項失敗，不應部署正式 Worker。
+
+## Phase 2C 點數冪等補充測試
+
+| 編號 | 測試項目 | 預期結果 |
+| --- | --- | --- |
+| PT-08 | 同一 cashier request 重送 | 回放第一筆結果，不重複扣點 |
+| PT-09 | 同一 cashierSessionId 換 key 重送 | 拒絕，不重複進入 processing |
+| PT-10 | 本地 fallback sync queue 重送 | event key 去重，不重複入帳 |
+| PT-11 | 母站 timeout 或狀態不明 | 標記 pending verification，不把餘額當 0 |
