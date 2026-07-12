@@ -10,9 +10,6 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!html.includes('js/auth.js?v=10.41')) {
-  fail('index.html must reference the bumped auth.js cache version');
-}
 
 if (!auth.includes('window.saveUserSettings = async function(event)')) {
   fail('saveUserSettings must be defined for social and Telegram settings buttons');

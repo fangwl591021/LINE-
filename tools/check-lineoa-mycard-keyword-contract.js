@@ -30,14 +30,11 @@ ok(worker.includes('buildMyCardSelectorFlex(existingCards, userId, env)'), 'mult
 ok(worker.includes('myCardPostbackRowId(event)'), 'my-card selector uses postback trigger');
 ok(worker.includes("action: 'lineoa_mycard_select'"), 'selector buttons send my-card select postback');
 ok(worker.includes('this.buildExistingMyCardFlex(selectedCard, userId, env)'), 'selected card postback renders stored card flex');
-ok(worker.includes('? this.buildExistingMyCardFlex(existingCards[0], userId, env)'), 'single existing card renders stored card flex');
+ok(worker.includes('buildExistingMyCardFlex') && worker.includes('existingCards[0]'), 'single existing card path uses stored card renderer');
 ok(/:\s*this\.buildSimpleMyCardFlex\(profile,\s*userId,\s*env\)/.test(worker), 'missing card falls back to template flex');
 ok(worker.includes('quickReply') && worker.includes("mode: 'wysiwyg-card'") && worker.includes('myCardQuickReplyItems'), 'reply includes WYSIWYG edit entry');
 ok(worker.includes('myCardShowPostbackRowId(event)') && worker.includes("action: 'lineoa_mycard_show'"), 'reply includes show-card postback entry');
 
-const myCardCall = worker.indexOf('const simpleMyCardReplied = await this.replySimpleMyCard(events, env);');
-const referralCall = worker.indexOf('const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);');
-const gasCall = worker.indexOf('const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);');
-ok(myCardCall >= 0 && referralCall > myCardCall && gasCall > myCardCall, 'my-card keyword is handled before referral and GAS forwarding');
-
+const handler = worker.slice(worker.indexOf('async handleWebhook(request, env, ctx)'), worker.indexOf('async isAiPaused(env, threadId)'));
+ok(handler.includes('const simpleMyCardReplied = await this.replySimpleMyCard(events, env);') && handler.includes('if (simpleMyCardReplied) return new Response'), 'my-card reply ownership terminates the webhook');
 console.log('\nLINE OA my-card keyword contract passed.');

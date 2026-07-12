@@ -29,8 +29,6 @@ ok(moduleSource.includes("point_from: 'lineoa-referral-keyword-v2'"), 'invite UR
 ok(moduleSource.includes("action: { type: 'uri', uri: inviteUrl }"), 'QR image opens invite URL');
 ok(moduleSource.includes("label: '\\u5206\\u4eab'"), 'share button exists');
 
-const referralCall = worker.indexOf('const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);');
-const gasCall = worker.indexOf('const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);');
-ok(referralCall >= 0 && gasCall > referralCall, 'referral keyword is handled before GAS forwarding');
-
+const handler = worker.slice(worker.indexOf('async handleWebhook(request, env, ctx)'), worker.indexOf('async isAiPaused(env, threadId)'));
+ok(handler.includes('const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);') && handler.includes('if (referralFriendReplied) return new Response'), 'referral reply ownership terminates the webhook');
 console.log('\nReferral keyword v2 contract passed.');
