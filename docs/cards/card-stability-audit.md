@@ -172,3 +172,7 @@ The next batch must remain shadow-only: canonical identity adapter, masked resol
 ## CS-1A shadow-read preparation
 
 CS-1A adds only independent modules and fixtures under `src/modules/cards/` and `tools/fixtures/card-shadow/`. These modules are not wired into the Worker or browser. They provide canonical identity, source/version classification, a shadow resolver, and masked legacy comparison for a future approved shadow-read hook. No ownership value, card row, or legacy resolver changes in CS-1A.
+
+## CS-1A High fix
+
+Personal aggregate existence is now modeled independently from requested-version entry selection in the fixture-only shadow resolver. This preserves the one-active-personal invariant without changing any runtime resolver or write path.

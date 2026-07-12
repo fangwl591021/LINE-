@@ -20,6 +20,12 @@ const cases = [
   ['version-prefix-config-conflict.json', (r) => r.candidates[0].classification.diagnostics.includes('PREFIX_CONFIG_VERSION_CONFLICT')],
   ['video-request-standard-only.json', (r) => !r.selectedCardId && r.candidates[0].exclusionReasons.includes('VERSION_MISMATCH')],
   ['line-create-existing-personal.json', (r) => has(r, 'EXISTING_PERSONAL_CREATE_ATTEMPT') && r.invariantDecision === 'BLOCK_CREATE_AND_ROUTE_TO_EDIT'],
+  ['line-create-existing-video-personal.json', (r) => has(r, 'EXISTING_PERSONAL_CREATE_ATTEMPT') && !r.selectedCardId && r.personalExistenceCandidates.length === 1 && r.invariantDecision === 'BLOCK_CREATE_AND_ROUTE_TO_EDIT'],
+  ['line-create-existing-giga-personal.json', (r) => has(r, 'EXISTING_PERSONAL_CREATE_ATTEMPT') && !r.selectedCardId && r.personalExistenceCandidates.length === 1 && r.invariantDecision === 'BLOCK_CREATE_AND_ROUTE_TO_EDIT'],
+  ['line-create-existing-square-personal.json', (r) => has(r, 'EXISTING_PERSONAL_CREATE_ATTEMPT') && !r.selectedCardId && r.personalExistenceCandidates.length === 1 && r.invariantDecision === 'BLOCK_CREATE_AND_ROUTE_TO_EDIT'],
+  ['line-create-other-users-personal.json', (r) => !has(r, 'EXISTING_PERSONAL_CREATE_ATTEMPT') && has(r, 'ACTOR_IDENTITY_MISMATCH') && r.personalExistenceCandidates.length === 0],
+  ['line-create-other-network-personal.json', (r) => !has(r, 'EXISTING_PERSONAL_CREATE_ATTEMPT') && has(r, 'TENANT_BOUNDARY') && r.personalExistenceCandidates.length === 0],
+  ['line-create-contact-only.json', (r) => !has(r, 'EXISTING_PERSONAL_CREATE_ATTEMPT') && r.personalExistenceCandidates.length === 0 && r.invariantDecision === 'NO_WRITE_DECISION_THIS_SHADOW_READ'],
   ['legacy-shadow-same.json', (r) => r.legacyComparison.divergenceCode === 'MATCH'],
   ['legacy-shadow-different-card.json', (r) => r.legacyComparison.divergenceCode === 'LEGACY_SELECTED_DIFFERENT_CARD'],
   ['legacy-selected-contact-for-my-card.json', (r) => r.legacyComparison.divergenceCode === 'LEGACY_SELECTED_CONTACT_FOR_MY_CARD']

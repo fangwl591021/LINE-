@@ -25,31 +25,41 @@ function resolveCardShadow(input = {}) {
     const identities = classification.identityEvidence;
     const ownerIds = [identities.ownerUserId, identities.profileUserId, identities.boundUserId, identities.lineId].filter(Boolean);
     const networkId = String(candidate.network_id || candidate.networkId || '');
-    if (input.networkId && networkId && networkId !== String(input.networkId)) reasons.push('TENANT_BOUNDARY');
+    const identityMatch = Boolean(actor.canonicalActorId && ownerIds.includes(actor.canonicalActorId));
+    const networkMatch = Boolean(input.networkId && networkId && networkId === String(input.networkId));
+    const active = candidate.active !== false && candidate.is_active !== false && candidate.is_active !== 0 && !candidate.deleted_at && !candidate.deletedAt && !candidate.merged_into && !candidate.mergedInto && !['deleted', 'merged', 'inactive'].includes(String(candidate.status || '').toLowerCase());
+    if (input.networkId && networkId && !networkMatch) reasons.push('TENANT_BOUNDARY');
     if (isMyCard(entrySource) && classification.cardType !== 'personal') reasons.push('MY_CARD_RESOLVED_CONTACT');
     if (isAiFolder(entrySource) && classification.cardType !== 'contact') reasons.push('PERSONAL_EXCLUDED_FROM_AI_FOLDER');
     if (requestedVersion !== 'any' && classification.version !== requestedVersion) reasons.push('VERSION_MISMATCH');
-    if (classification.cardType === 'personal' && actor.canonicalActorId && !ownerIds.includes(actor.canonicalActorId)) reasons.push('ACTOR_IDENTITY_MISMATCH');
+    if (classification.cardType === 'personal' && actor.canonicalActorId && !identityMatch) reasons.push('ACTOR_IDENTITY_MISMATCH');
     if (isAiFolder(entrySource) && identities.scannerUserId !== actor.canonicalActorId) reasons.push('SCANNER_MISMATCH');
     return {
       cardId: masked(cardId(candidate)), rawCardId: cardId(candidate), classification: {
         ...classification,
         identityEvidence: maskedEvidence(classification.identityEvidence)
       },
+      identityMatch,
+      networkMatch,
+      active,
       exclusionReasons: [...new Set(reasons)],
       permission: { read: reasons.length === 0, edit: reasons.length === 0 && classification.cardType === 'personal' }
     };
   });
 
   const eligible = examined.filter((candidate) => candidate.exclusionReasons.length === 0);
-  const personal = eligible.filter((candidate) => candidate.classification.cardType === 'personal');
+  const entryPersonal = eligible.filter((candidate) => candidate.classification.cardType === 'personal');
+  // Aggregate existence ignores entry/version exclusions, but stays actor/network/active scoped.
+  const personalExistenceCandidates = examined.filter((candidate) =>
+    candidate.classification.cardType === 'personal' && candidate.identityMatch && candidate.networkMatch && candidate.active
+  );
   if (isMyCard(entrySource) && examined.some((candidate) => candidate.exclusionReasons.includes('MY_CARD_RESOLVED_CONTACT'))) diagnostics.push('MY_CARD_RESOLVED_CONTACT');
   if (isAiFolder(entrySource) && examined.some((candidate) => candidate.exclusionReasons.includes('PERSONAL_EXCLUDED_FROM_AI_FOLDER'))) diagnostics.push('PERSONAL_EXCLUDED_FROM_AI_FOLDER');
-  if (personal.length > 1) diagnostics.push('MULTIPLE_PERSONAL');
-  if (isLineCreate(input.action, entrySource) && personal.length > 0) diagnostics.push('EXISTING_PERSONAL_CREATE_ATTEMPT');
+  if (entryPersonal.length > 1) diagnostics.push('MULTIPLE_PERSONAL');
+  if (isLineCreate(input.action, entrySource) && personalExistenceCandidates.length > 0) diagnostics.push('EXISTING_PERSONAL_CREATE_ATTEMPT');
   if (eligible.length > 1) diagnostics.push('MULTIPLE_ELIGIBLE_CARDS');
   if (!eligible.length) diagnostics.push('NOT_FOUND');
-  for (const code of ['IDENTITY_CONFLICT', 'TENANT_BOUNDARY', 'LEGACY_UNCLASSIFIED', 'VERSION_MISMATCH', 'PREFIX_CONFIG_VERSION_CONFLICT']) {
+  for (const code of ['ACTOR_IDENTITY_MISMATCH', 'IDENTITY_CONFLICT', 'TENANT_BOUNDARY', 'LEGACY_UNCLASSIFIED', 'VERSION_MISMATCH', 'PREFIX_CONFIG_VERSION_CONFLICT']) {
     if (examined.some((candidate) => candidate.exclusionReasons.includes(code) || candidate.classification.diagnostics.includes(code))) diagnostics.push(code);
   }
   const selected = eligible.length === 1 && !diagnostics.includes('MULTIPLE_PERSONAL') ? eligible[0] : null;
@@ -57,10 +67,12 @@ function resolveCardShadow(input = {}) {
     resolverVersion: 'cs-1a-shadow-v1', actor: { canonicalActorId: masked(actor.canonicalActorId), canonicalSource: actor.canonicalSource, trusted: actor.trusted, networkId: masked(actor.networkId) },
     entrySource, requestedVersion, candidateCount: examined.length,
     candidates: examined.map(({ rawCardId, ...candidate }) => candidate),
-    eligibleCandidates: eligible.map((candidate) => candidate.cardId), selectedCardId: selected ? selected.cardId : '',
+    eligibleCandidates: eligible.map((candidate) => candidate.cardId),
+    personalExistenceCandidates: personalExistenceCandidates.map((candidate) => candidate.cardId),
+    selectedCardId: selected ? selected.cardId : '',
     permission: selected ? selected.permission : { read: false, edit: false },
     diagnostics: [...new Set(diagnostics)],
-    invariantDecision: isLineCreate(input.action, entrySource) && personal.length > 0 ? 'BLOCK_CREATE_AND_ROUTE_TO_EDIT' : 'NO_WRITE_DECISION_THIS_SHADOW_READ'
+    invariantDecision: isLineCreate(input.action, entrySource) && personalExistenceCandidates.length > 0 ? 'BLOCK_CREATE_AND_ROUTE_TO_EDIT' : 'NO_WRITE_DECISION_THIS_SHADOW_READ'
   };
   result.legacyComparison = compareLegacyAndShadowResolution({ legacyResult: input.legacyResult, shadowResult: { ...result, selectedCardId: selected ? selected.rawCardId : '' } });
   return result;

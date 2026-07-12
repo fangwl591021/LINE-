@@ -52,3 +52,7 @@ Any runtime hook requires a separately approved feature flag, try/catch failure
 isolation, masked telemetry, and proof that its returned API result is still the
 legacy result. CS-1A does not authorize a Worker hook, migration, ownership
 change, or UI change.
+
+## CS-1A High fix: aggregate existence is version-independent
+
+For LINE create, `personalExistenceCandidates` is deliberately separate from entry eligibility. It requires a Personal candidate with canonical actor identity match, network match, and active state; it ignores `requestedVersion` and entry-specific exclusions. Therefore an existing video, giga, square, or standard Personal aggregate blocks a new standard LINE-generated Personal card. A different actor, different network, inactive/merged/deleted row, or contact-only candidate does not block. `selectedCardId` remains derived only from normal entry eligibility and is never reused as the existence guard.

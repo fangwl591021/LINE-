@@ -1,0 +1,5 @@
+{
+  "actor": { "liffUserId": "U_ACTOR_A", "networkId": "network-a" },
+  "entrySource": "line_create", "action": "line_generate", "requestedVersion": "standard", "networkId": "network-a",
+  "candidates": [{ "row_id": "CARD_VIDEO_A", "source_type": "video_profile", "owner_user_id": "U_ACTOR_A", "network_id": "network-a", "custom_config": { "cardVersion": "video" } }]
+}
