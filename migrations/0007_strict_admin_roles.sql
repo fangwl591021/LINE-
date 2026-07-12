@@ -6,12 +6,12 @@ SET role = 'user'
 WHERE role = 'admin'
   AND NOT (
     (
-      line_id IN ('Uf729764dbb5b652a5a90a467320bea29', 'U050397a077bef628b317b0bbedeb2187')
-      AND (name LIKE '%方萬隆%' OR name LIKE '%Tonyfang%' OR phone = '0927136847')
+      line_id IN ('REDACTED_PLATFORM_ADMIN_UID_A', 'REDACTED_PLATFORM_ADMIN_UID_B')
+      AND (name LIKE '%REDACTED_ADMIN_NAME_A%' OR name LIKE '%REDACTED_ADMIN_NAME_B%' OR phone = 'REDACTED_PHONE_A')
     )
     OR
     (
-      line_id IN ('U58eb5c1a747450140ce1335af709ae55', 'Ue9a59cf9b2969ec78b6bfdc2a4cfca08')
-      AND (name LIKE '%楊滄棋%' OR phone = '0986919171')
+      line_id IN ('REDACTED_PLATFORM_ADMIN_UID_C', 'REDACTED_PLATFORM_ADMIN_UID_D')
+      AND (name LIKE '%REDACTED_ADMIN_NAME_C%' OR phone = 'REDACTED_PHONE_B')
     )
   );

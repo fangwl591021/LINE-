@@ -332,14 +332,14 @@ if (!adminOnly.has(action) && !managerOnly.has(action) && !ownTokenRequired.has(
 
 目前硬編碼：
 
-- 方萬隆：
-  - ids: `Uf729764dbb5b652a5a90a467320bea29`, `U050397a077bef628b317b0bbedeb2187`
-  - phone: `0927136847`
-  - names: `方萬隆`, `Tonyfang`
-- 楊滄棋：
-  - ids: `U58eb5c1a747450140ce1335af709ae55`, `Ue9a59cf9b2969ec78b6bfdc2a4cfca08`
-  - phone: `0986919171`
-  - names: `楊滄棋`
+- REDACTED_ADMIN_NAME_A：
+  - ids: `REDACTED_PLATFORM_ADMIN_UID_A`, `REDACTED_PLATFORM_ADMIN_UID_B`
+  - phone: `REDACTED_PHONE_A`
+  - names: `REDACTED_ADMIN_NAME_A`, `REDACTED_ADMIN_NAME_B`
+- REDACTED_ADMIN_NAME_C：
+  - ids: `REDACTED_PLATFORM_ADMIN_UID_C`, `REDACTED_PLATFORM_ADMIN_UID_D`
+  - phone: `REDACTED_PHONE_B`
+  - names: `REDACTED_ADMIN_NAME_C`
 
 ### 4.2 hardAdminIds
 

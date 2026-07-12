@@ -204,3 +204,5 @@ The workflow intentionally does not run `npm install` because the guard scripts 
 - `docs/security/point-transaction-idempotency.md`
 
 Phase 2C Point Transaction Idempotency 定義店家點數收銀交易冪等、cashier session 單次使用、點數同步 event key 與補償狀態。
+
+- Security: docs/security/platform-admin-role-model.md`n- Sensitive data remediation: docs/security/repository-sensitive-data-remediation.md`n- Release readiness: docs/release/security-release-readiness.md`n
