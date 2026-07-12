@@ -226,3 +226,10 @@ Use the local D1 fixture before production migrations. Run the cache-bust and ke
 - `docs/tests/staging-cashier-idempotency-matrix.md`
 
 Use `npm run staging:readiness` for the masked snapshot contract. `npm run staging:security` is intentionally read-only and blocks when `wrangler.toml` lacks an isolated `[env.staging]`.
+## Phase 3C Isolated Staging Environment
+
+- `docs/release/staging-environment-inventory.md`
+- `docs/release/staging-current-status.md`
+- `tools/check-staging-resource-isolation.js`
+
+D1, KV, and R2 are isolated in `[env.staging]`. The isolation gate remains intentionally blocked until staging-only LINE/LIFF and mother-site write resources are configured.

@@ -33,3 +33,41 @@ MOTHER_LINE_MEMBER_API_URL = "https://aiwe.cc/index.php/wp-json/wetw/v1/check-or
 # LINE_CHANNEL_SECRET = ""
 # LINE_CHANNEL_ACCESS_TOKEN = ""
 # FORWARD_WEBHOOK_URL = ""
+[env.staging]
+name = "line-engine-staging"
+main = "workerbackup.js"
+compatibility_date = "2026-04-23"
+workers_dev = true
+
+[[env.staging.kv_namespaces]]
+binding = "ACTMASTER_KV"
+id = "999c9afee23e418a92ad9879a3a318cb"
+
+[[env.staging.d1_databases]]
+binding = "ACTMASTER_DB"
+database_name = "line-engine-staging-db"
+database_id = "70a45006-1c8c-44bb-b31c-1f4715f910bc"
+
+[[env.staging.r2_buckets]]
+binding = "IMG_BUCKET"
+bucket_name = "line-engine-staging-assets"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+STAGING_POINT_MODE = "mock"
+STAGING_ALLOWED_HOSTS = "line-engine-staging.fangwl591021.workers.dev"
+STAGING_WEBHOOK_URL = "https://line-engine-staging.fangwl591021.workers.dev/line-webhook"
+SOCIAL_LIKE_LIFF_ID = ""
+LINE_OA_FOLLOW_POINTS = "0"
+MOTHER_CUS_ACCOUNT_URL = ""
+MOTHER_CUS_ACCOUNT_SHOP_ID = ""
+MOTHER_CUS_ACCOUNT_CLIENT_ID = ""
+MOTHER_CUS_ACCOUNT_REDIRECT_URI = ""
+MOTHER_LINE_MEMBER_API_URL = ""
+# Set staging-only values in Cloudflare before any LINE/LIFF test.
+# SOCIAL_LIKE_LIFF_ID = "STAGING_LIFF_ID"
+# LINE_CHANNEL_SECRET = ""
+# LINE_CHANNEL_ACCESS_TOKEN = ""
+# ADMIN_BOOTSTRAP_SECRET = ""
+# MOTHER_LINE_MEMBER_API_KEY = ""
+# MOTHER_LINE_MEMBER_API_URL = "https://staging.example.invalid/..."
