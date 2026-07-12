@@ -1,0 +1,62 @@
+#!/usr/bin/env node
+'use strict';
+
+const assert = require('assert');
+const { isCardShadowResolverEnabled, runCardShadowHook, resolveWithCardShadow } = require('../src/modules/cards/card-shadow-hook');
+
+for (const [value, expected] of [['', false], [undefined, false], ['false', false], ['0', false], ['off', false], ['no', false], ['true', true], ['1', true], ['on', true], ['yes', true]]) {
+  assert.strictEqual(isCardShadowResolverEnabled({ CARD_SHADOW_RESOLVER_ENABLED: value }), expected, `flag ${value}`);
+}
+
+const baseInput = () => ({
+  entrySource: 'my_card', requestedVersion: 'standard', mode: 'read', action: 'resolve', networkId: 'network-a',
+  actor: { liffUserId: 'U_RAW_ACTOR' }, candidates: [{ row_id: 'CARD_RAW_1', custom_config: { videoUrl: 'https://video.example/raw' } }],
+  legacyResult: { cardId: 'CARD_LEGACY_RAW', name: 'Raw Name', phone: '0912345678', email: 'raw@example.com' }
+});
+
+const noLog = [];
+assert.strictEqual(runCardShadowHook({ ...baseInput(), env: {}, logger: (event) => noLog.push(event) }).executed, false);
+assert.strictEqual(noLog.length, 0, 'disabled flag must not log');
+
+const events = [];
+const success = runCardShadowHook({
+  ...baseInput(), env: { CARD_SHADOW_RESOLVER_ENABLED: 'true', CARD_SHADOW_HASH_SALT: 'fixture-salt' }, logger: (event) => events.push(event),
+  shadowRunner: () => ({ ok: true, result: { resolverVersion: 'fixture', candidateCount: 1, eligibleCandidates: ['CARD_RAW_1'], diagnostics: ['MATCH'], legacyComparison: { legacyMaskedCardId: 'CAR***', shadowMaskedCardId: 'CAR***', divergenceCode: 'MATCH' } } })
+});
+assert.deepStrictEqual(success, { enabled: true, executed: true, ok: true, divergenceCode: 'MATCH', diagnostic: '' });
+assert.deepStrictEqual(Object.keys(events[0]).sort(), ['candidateCount', 'diagnostics', 'divergenceCode', 'durationBucket', 'eligibleCount', 'entrySource', 'legacyMaskedCardId', 'mode', 'requestedVersion', 'resolverVersion', 'shadowMaskedCardId', 'timestamp', 'type'].sort());
+const serializedLog = JSON.stringify(events[0]);
+for (const forbidden of ['U_RAW_ACTOR', 'Raw Name', '0912345678', 'raw@example.com', 'custom_config', 'https://video.example/raw', 'CARD_RAW_1']) assert.ok(!serializedLog.includes(forbidden), `log leaked ${forbidden}`);
+
+const originalCandidates = baseInput().candidates;
+const originalActor = { liffUserId: 'U_RAW_ACTOR' };
+const originalLegacy = { status: 200, message: 'legacy remains' };
+runCardShadowHook({ ...baseInput(), candidates: originalCandidates, actor: originalActor, legacyResult: originalLegacy, env: { CARD_SHADOW_RESOLVER_ENABLED: 'on' }, shadowRunner: (input) => { input.candidates[0].row_id = 'MUTATED'; input.actor.liffUserId = 'MUTATED'; input.legacyResult.message = 'MUTATED'; return { ok: false, diagnostic: 'BAD' }; } });
+assert.strictEqual(originalCandidates[0].row_id, 'CARD_RAW_1', 'shadow runner must not mutate candidate input');
+assert.strictEqual(originalActor.liffUserId, 'U_RAW_ACTOR', 'shadow runner must not mutate actor input');
+assert.strictEqual(originalLegacy.message, 'legacy remains', 'shadow runner must not mutate legacy input');
+
+for (const failure of [() => { throw new Error('secret message'); }, () => ({ ok: false, diagnostic: 'RAW_MESSAGE_NOT_ALLOWED' })]) {
+  const outcome = runCardShadowHook({ ...baseInput(), env: { CARD_SHADOW_RESOLVER_ENABLED: '1' }, logger: () => { throw new Error('logger throws'); }, shadowRunner: failure });
+  assert.strictEqual(outcome.enabled, true);
+  assert.strictEqual(outcome.ok, false);
+}
+
+const failureEvents = [];
+runCardShadowHook({ ...baseInput(), env: { CARD_SHADOW_RESOLVER_ENABLED: 'yes' }, logger: (event) => failureEvents.push(event), shadowRunner: () => { throw new Error('raw secret message and stack'); } });
+const serializedFailure = JSON.stringify(failureEvents[0]);
+assert.ok(!serializedFailure.includes('raw secret message') && !serializedFailure.includes('stack'), 'failure log must not expose message or stack');
+async function testLegacyReference() {
+  const legacy = { status: 200, body: { preserved: true } };
+  for (const options of [
+    { env: {} },
+    { env: { CARD_SHADOW_RESOLVER_ENABLED: 'true' }, shadowInputFactory: () => { throw new Error('factory'); } },
+    { env: { CARD_SHADOW_RESOLVER_ENABLED: 'true' }, shadowInputFactory: () => ({ ...baseInput(), shadowRunner: () => { throw new Error('shadow'); } }), logger: () => { throw new Error('logger'); } },
+    { env: { CARD_SHADOW_RESOLVER_ENABLED: 'true' }, shadowInputFactory: () => ({ ...baseInput(), candidates: 'malformed' }) }
+  ]) {
+    const returned = await resolveWithCardShadow({ legacyResolver: () => legacy, ...options });
+    assert.strictEqual(returned, legacy, 'legacy object reference must be returned unchanged');
+  }
+}
+
+testLegacyReference().then(() => console.log('Card shadow hook tests passed')).catch((error) => { console.error(error.stack); process.exit(1); });
