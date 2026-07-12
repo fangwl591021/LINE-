@@ -1,0 +1,25 @@
+{
+  "actorCanonicalId": "usr_demo_001",
+  "entrySource": "line_oa_my_card",
+  "requestedVersion": "standard",
+  "operation": "view",
+  "candidates": [
+    {
+      "row_id": "CARD_STD_MASKED_001",
+      "source_type": "self_profile",
+      "owner_user_id": "usr_demo_001",
+      "custom_config": { "cardVersion": "standard" }
+    },
+    {
+      "row_id": "CONTACT_MASKED_001",
+      "source_type": "private_import",
+      "scanner_user_id": "usr_demo_001",
+      "recognized_person_uid": "usr_demo_002",
+      "custom_config": { "cardVersion": "standard" }
+    }
+  ],
+  "expected": {
+    "diagnostic": "resolved",
+    "finalSourceType": "self_profile"
+  }
+}
