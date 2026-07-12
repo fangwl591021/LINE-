@@ -216,3 +216,13 @@ Phase 2C Point Transaction Idempotency 定義店家點數收銀交易冪等、ca
 - `docs/release/staging-security-validation-plan.md`
 
 Use the local D1 fixture before production migrations. Run the cache-bust and keyword reply-ownership contracts before the smoke and guard suites.
+## Phase 3B Staging Readiness
+
+- `docs/release/staging-secrets-checklist.md`
+- `docs/release/staging-rollback-plan.md`
+- `docs/release/staging-current-status.md`
+- `docs/security/staging-platform-admin-bootstrap-test-plan.md`
+- `docs/tests/staging-tenant-isolation-matrix.md`
+- `docs/tests/staging-cashier-idempotency-matrix.md`
+
+Use `npm run staging:readiness` for the masked snapshot contract. `npm run staging:security` is intentionally read-only and blocks when `wrangler.toml` lacks an isolated `[env.staging]`.
