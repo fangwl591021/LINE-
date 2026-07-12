@@ -1,0 +1,30 @@
+{
+  "actorCanonicalId": "U_ACTOR_A",
+  "entrySource": "my_card",
+  "requestedVersion": "standard",
+  "candidates": [
+    {
+      "row_id": "CARD_STD_DEMO001",
+      "line_id": "U_ACTOR_A",
+      "owner_user_id": "U_ACTOR_A",
+      "profile_user_id": "U_ACTOR_A",
+      "source_type": "self_profile",
+      "custom_config": { "cardVersion": "standard" }
+    },
+    {
+      "row_id": "CARD_VIDEO_DEMO001",
+      "line_id": "U_ACTOR_A",
+      "owner_user_id": "U_ACTOR_A",
+      "profile_user_id": "U_ACTOR_A",
+      "source_type": "video_profile",
+      "custom_config": { "cardVersion": "video", "videoStorageKind": "dedicated_video_card" }
+    },
+    {
+      "row_id": "IMPORT_DEMO001",
+      "creator_id": "U_SCANNER_A",
+      "scanner_user_id": "U_SCANNER_A",
+      "source_type": "private_import",
+      "custom_config": { "cardVersion": "standard" }
+    }
+  ]
+}
