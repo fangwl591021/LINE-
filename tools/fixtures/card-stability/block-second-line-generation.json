@@ -1,0 +1,19 @@
+{
+  "actorCanonicalId": "usr_demo_010",
+  "entrySource": "line_generated_create",
+  "requestedVersion": "standard",
+  "operation": "create_personal",
+  "candidates": [
+    {
+      "row_id": "CARD_STD_MASKED_010",
+      "source_type": "claimed_personal",
+      "owner_user_id": "usr_demo_010",
+      "bound_user_id": "usr_demo_010",
+      "custom_config": { "cardVersion": "standard" }
+    }
+  ],
+  "expected": {
+    "diagnostic": "EXISTING_PERSONAL_CREATE_ATTEMPT",
+    "decision": "BLOCK_CREATE_AND_ROUTE_TO_EDIT"
+  }
+}
