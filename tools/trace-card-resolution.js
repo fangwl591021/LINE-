@@ -69,7 +69,10 @@ const traced = candidates.map((c) => {
   if (versionInfo.prefix && versionInfo.explicit && versionInfo.prefix !== versionInfo.explicit) warnings.push('PREFIX_CONFIG_VERSION_CONFLICT');
   if ((source === 'claimed' || source === 'claimed_contact') && !scanner) warnings.push('CLAIM_CONTACT_LOST');
   if ((source === 'claimed' || source === 'claimed_contact') && !recognized) warnings.push('CLAIM_POINTER_MISSING');
-  if (/claimed/.test(source) && scanner && inviter && scanner !== inviter) warnings.push('INVITER_CONFLICT');
+  if (/claimed/.test(source) && scanner && inviter && scanner !== inviter) {
+    const authorization = String(c.inviter_authorization_evidence || c.inviterAuthorizationEvidence || '').trim();
+    warnings.push(authorization ? 'INVITER_DIFFERENCE_AUTHORIZED' : 'INVITER_CONFLICT');
+  }
 
   return {
     card: mask(c.row_id || c.card_id || c.id),
@@ -98,7 +101,8 @@ if (eligible.length > 1) diagnostics.push('MULTIPLE_ELIGIBLE_CARDS');
 if (isPersonalEntry() && personalEligible.length > 1) diagnostics.push('MULTIPLE_PERSONAL');
 if (isLineCreateAction() && personalEligible.length > 0) diagnostics.push('EXISTING_PERSONAL_CREATE_ATTEMPT');
 if (traced.some((x) => x.exclusionReasons.includes('MY_CARD_RESOLVED_CONTACT'))) diagnostics.push('MY_CARD_RESOLVED_CONTACT');
-for (const code of ['CLAIM_CONTACT_LOST','CLAIM_POINTER_MISSING','INVITER_CONFLICT','PREFIX_CONFIG_VERSION_CONFLICT']) {
+if (traced.some((x) => x.exclusionReasons.includes('PERSONAL_EXCLUDED_FROM_AI_FOLDER'))) diagnostics.push('PERSONAL_EXCLUDED_FROM_AI_FOLDER');
+for (const code of ['CLAIM_CONTACT_LOST','CLAIM_POINTER_MISSING','INVITER_CONFLICT','INVITER_DIFFERENCE_AUTHORIZED','PREFIX_CONFIG_VERSION_CONFLICT']) {
   if (traced.some((x) => x.warnings.includes(code))) diagnostics.push(code);
 }
 

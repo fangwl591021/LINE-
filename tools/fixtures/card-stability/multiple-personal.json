@@ -1,0 +1,9 @@
+{
+  "actorCanonicalId": "U_ACTOR_MULTI",
+  "entrySource": "my_card",
+  "requestedVersion": "standard",
+  "candidates": [
+    { "row_id": "CARD_STD_MULTI_A", "owner_user_id": "U_ACTOR_MULTI", "profile_user_id": "U_ACTOR_MULTI", "source_type": "self_profile", "custom_config": { "cardVersion": "standard" } },
+    { "row_id": "CARD_STD_MULTI_B", "owner_user_id": "U_ACTOR_MULTI", "profile_user_id": "U_ACTOR_MULTI", "source_type": "self_profile", "custom_config": { "cardVersion": "standard" } }
+  ]
+}

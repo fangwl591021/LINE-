@@ -1,0 +1,8 @@
+{
+  "actorCanonicalId": "U_SCANNER_B",
+  "entrySource": "ai_card_folder",
+  "requestedVersion": "standard",
+  "candidates": [
+    { "row_id": "CONTACT_INVITER_CONFLICT", "scanner_user_id": "U_SCANNER_B", "inviter_user_id": "U_OTHER_AGENT", "bound_user_id": "U_CLAIMANT_B", "source_type": "claimed_contact", "custom_config": { "cardVersion": "standard" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "actorCanonicalId": "U_VERSION_A",
+  "entrySource": "my_card",
+  "requestedVersion": "standard",
+  "candidates": [
+    { "row_id": "CARD_STD_VERSION_CONFLICT", "owner_user_id": "U_VERSION_A", "profile_user_id": "U_VERSION_A", "source_type": "self_profile", "custom_config": { "cardVersion": "video" } }
+  ]
+}

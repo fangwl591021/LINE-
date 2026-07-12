@@ -1,0 +1,8 @@
+{
+  "actorCanonicalId": "U_SCANNER_C",
+  "entrySource": "ai_card_folder",
+  "requestedVersion": "standard",
+  "candidates": [
+    { "row_id": "CONTACT_INVITER_AUTHORIZED", "scanner_user_id": "U_SCANNER_C", "inviter_user_id": "U_AUTHORIZED_AGENT", "inviter_authorization_evidence": "delegation-record-masked", "bound_user_id": "U_CLAIMANT_C", "source_type": "claimed_contact", "custom_config": { "cardVersion": "standard" } }
+  ]
+}

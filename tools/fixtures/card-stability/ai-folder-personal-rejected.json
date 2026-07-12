@@ -1,0 +1,8 @@
+{
+  "actorCanonicalId": "U_OWNER_FOLDER",
+  "entrySource": "ai_card_folder",
+  "requestedVersion": "standard",
+  "candidates": [
+    { "row_id": "CARD_STD_FOLDER_PERSONAL", "owner_user_id": "U_OWNER_FOLDER", "profile_user_id": "U_OWNER_FOLDER", "source_type": "self_profile", "custom_config": { "cardVersion": "standard" } }
+  ]
+}

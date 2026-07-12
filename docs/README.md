@@ -195,12 +195,3 @@ Workflow file:
 - `.github/workflows/contract-guard.yml`
 
 The workflow intentionally does not run `npm install` because the guard scripts use only Node built-ins.
-## Card Stabilization 0
-
-- `docs/cards/card-stability-audit.md`
-- `docs/cards/card-target-model.md`
-- `docs/cards/card-migration-strategy.md`
-- `tools/audit-card-stability.js`
-- `tools/trace-card-resolution.js`
-
-Card Stabilization 0 is a read-only audit of card entrypoints, identity fields, source types, version detection, and resolver divergence. The tools operate only on local snapshots and reject remote/write modes.

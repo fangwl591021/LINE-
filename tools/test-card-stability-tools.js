@@ -52,7 +52,51 @@ const cases = [
       return result.diagnostics.includes('MY_CARD_RESOLVED_CONTACT') && result.finalCard === null;
     },
     expectation: 'my-card entry rejects contact-only candidate'
-  }
+  },
+  {
+    file: 'multiple-personal.json',
+    check(result) {
+      return result.diagnostics.includes('MULTIPLE_PERSONAL') &&
+        result.diagnostics.includes('MULTIPLE_ELIGIBLE_CARDS') &&
+        result.finalCard === null && result.ambiguity === true;
+    },
+    expectation: 'multiple personal candidates remain ambiguous'
+  },
+  {
+    file: 'claim-contact-lost.json',
+    check(result) { return result.diagnostics.includes('CLAIM_CONTACT_LOST'); },
+    expectation: 'claimed contact without scanner history is flagged'
+  },
+  {
+    file: 'claim-pointer-missing.json',
+    check(result) { return result.diagnostics.includes('CLAIM_POINTER_MISSING'); },
+    expectation: 'claimed contact without recognized pointer is flagged'
+  },
+  {
+    file: 'inviter-conflict.json',
+    check(result) {
+      return result.diagnostics.includes('INVITER_CONFLICT') && !result.diagnostics.includes('INVITER_DIFFERENCE_AUTHORIZED');
+    },
+    expectation: 'unauthorized inviter and scanner difference is flagged'
+  },
+  {
+    file: 'inviter-authorized-difference.json',
+    check(result) {
+      return result.diagnostics.includes('INVITER_DIFFERENCE_AUTHORIZED') && !result.diagnostics.includes('INVITER_CONFLICT');
+    },
+    expectation: 'authorized inviter difference remains reviewable without conflict'
+  },
+  {
+    file: 'prefix-config-version-conflict.json',
+    check(result) { return result.diagnostics.includes('PREFIX_CONFIG_VERSION_CONFLICT'); },
+    expectation: 'row prefix and config version conflict is flagged'
+  },
+  {
+    file: 'ai-folder-personal-rejected.json',
+    check(result) {
+      return result.diagnostics.includes('PERSONAL_EXCLUDED_FROM_AI_FOLDER') && result.finalCard === null;
+    },
+    expectation: 'AI card folder excludes a personal candidate'  }
 ];
 
 let failed = 0;

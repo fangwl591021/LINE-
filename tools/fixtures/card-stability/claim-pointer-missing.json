@@ -1,0 +1,8 @@
+{
+  "actorCanonicalId": "U_SCANNER_A",
+  "entrySource": "ai_card_folder",
+  "requestedVersion": "standard",
+  "candidates": [
+    { "row_id": "CONTACT_CLAIM_POINTER", "scanner_user_id": "U_SCANNER_A", "source_type": "claimed_contact", "custom_config": { "cardVersion": "standard" } }
+  ]
+}

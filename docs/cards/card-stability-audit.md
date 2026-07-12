@@ -145,3 +145,27 @@
 4. 把 claim 定義為「保留 contact collection + 建立／連結唯一 personal + 固定 inviter」。
 5. 新增 `EXISTING_PERSONAL_CREATE_ATTEMPT`、`CLAIM_CONTACT_LOST`、`INVITER_CONFLICT` divergence。
 6. divergence 歸零前不得切換正式讀取。
+
+## Fixture validation (2026-07-12)
+
+All resolver fixtures are masked and fixture-only. They do not import the Worker, access D1, mutate data, or use a network connection.
+
+| Fixture | Expected diagnostic / invariant | Result |
+| --- | --- | --- |
+| `unique-personal.json` | one personal resolves; contact is rejected | PASS |
+| `block-second-line-generation.json` | `EXISTING_PERSONAL_CREATE_ATTEMPT`, `BLOCK_CREATE_AND_ROUTE_TO_EDIT` | PASS |
+| `claim-preserves-contact.json` | contact remains represented with linked personal evidence | PASS; trace is intentionally ambiguous outside a dedicated claim projection |
+| `my-card-contact-rejected.json` | `MY_CARD_RESOLVED_CONTACT`, no final card | PASS |
+| `multiple-personal.json` | `MULTIPLE_PERSONAL`, `MULTIPLE_ELIGIBLE_CARDS`, no final card | PASS |
+| `claim-contact-lost.json` | `CLAIM_CONTACT_LOST` | PASS |
+| `claim-pointer-missing.json` | `CLAIM_POINTER_MISSING` | PASS |
+| `inviter-conflict.json` | `INVITER_CONFLICT` when no authorization evidence exists | PASS |
+| `inviter-authorized-difference.json` | `INVITER_DIFFERENCE_AUTHORIZED`; reviewable, not a conflict | PASS |
+| `prefix-config-version-conflict.json` | `PREFIX_CONFIG_VERSION_CONFLICT` | PASS |
+| `ai-folder-personal-rejected.json` | `PERSONAL_EXCLUDED_FROM_AI_FOLDER`, no final card | PASS |
+
+`migrations/0001_core_schema.sql` still has no full `card_contacts` `CREATE TABLE`, so the schema audit reports data checks as `not_evaluable` rather than inventing columns or data findings. A future approved local SQLite audit must hash the local file before and after execution and keep the database outside production/staging resources.
+
+## CS-0 exit condition
+
+The next batch must remain shadow-only: canonical identity adapter, masked resolver comparison, and explicit claim/merge audit contract. It must not alter current card selection, contact ownership, UI, Worker runtime, or D1 data until a complete local schema snapshot and reviewed migration plan exist.
