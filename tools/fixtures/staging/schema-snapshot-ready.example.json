@@ -1,0 +1,40 @@
+{
+  "kind": "line-staging-schema-snapshot",
+  "environment": "staging",
+  "source": "masked-readonly-example",
+  "verification": "example_only",
+  "capturedAt": "2026-07-12T00:00:00.000Z",
+  "tables": [
+    "users",
+    "card_contacts",
+    "d1_migrations",
+    "points_ledger",
+    "point_sync_jobs"
+  ],
+  "indexes": [],
+  "triggers": [],
+  "migrations": [
+    "0001_core_schema.sql",
+    "0002_activity_runtime_columns.sql",
+    "0002_settlement_schema.sql",
+    "0003_identity_migration.sql",
+    "0004_point_awards.sql",
+    "0005_activity_network_scope.sql",
+    "0006_activity_effective_network.sql",
+    "0007_strict_admin_roles.sql",
+    "0008_personal_tasks.sql",
+    "0009_inbox_items.sql",
+    "0010_inbox_coupon_redeem.sql",
+    "0011_line_oa_chat_monitor.sql",
+    "0012_store_ai_knowledge.sql"
+  ],
+  "counts": {
+    "users": "masked",
+    "card_contacts": "masked",
+    "point_ledger": "masked",
+    "cashier_sessions": "masked",
+    "cashier_transactions": "masked",
+    "point_sync_jobs": "masked",
+    "platform_admin_roles": "masked"
+  }
+}
