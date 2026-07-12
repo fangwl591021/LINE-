@@ -2,7 +2,7 @@
   "actorCanonicalId": "usr_demo_010",
   "entrySource": "line_generated_create",
   "requestedVersion": "standard",
-  "operation": "create_personal",
+  "action": "line_generated_create",
   "candidates": [
     {
       "row_id": "CARD_STD_MASKED_010",
