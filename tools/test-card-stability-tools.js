@@ -17,7 +17,13 @@ const cases = [
   {
     file: 'unique-personal.json',
     check(result) {
-      return result.diagnostics.includes('RESOLVED') && result.finalCard;
+      const readablePersonal = result.candidateCards.filter((item) =>
+        item.type === 'personal' && item.permission.read
+      );
+      const rejectedContact = result.candidateCards.some((item) =>
+        item.type === 'contact' && item.exclusionReasons.includes('MY_CARD_RESOLVED_CONTACT')
+      );
+      return Boolean(result.finalCard) && readablePersonal.length === 1 && rejectedContact;
     },
     expectation: 'unique personal resolves while contact is excluded'
   },
