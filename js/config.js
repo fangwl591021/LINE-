@@ -7,16 +7,16 @@ const SOCIAL_LIKE_LIFF_ID = "1660923784-NVioaXK7";
 const POINT_OA_URL = "https://lin.ee/sDW7u4T";
 const HARD_ADMIN_ACCOUNTS = [
   {
-    label: "方萬隆",
-    ids: ["Uf729764dbb5b652a5a90a467320bea29", "U050397a077bef628b317b0bbedeb2187"],
-    phones: ["0927136847"],
-    names: ["方萬隆", "Tonyfang"]
+    label: "REDACTED_ADMIN_NAME_A",
+    ids: ["REDACTED_PLATFORM_ADMIN_UID_A", "REDACTED_PLATFORM_ADMIN_UID_B"],
+    phones: ["REDACTED_PHONE_A"],
+    names: ["REDACTED_ADMIN_NAME_A", "REDACTED_ADMIN_NAME_B"]
   },
   {
-    label: "楊滄棋",
-    ids: ["U58eb5c1a747450140ce1335af709ae55", "Ue9a59cf9b2969ec78b6bfdc2a4cfca08"],
-    phones: ["0986919171"],
-    names: ["楊滄棋"]
+    label: "REDACTED_ADMIN_NAME_C",
+    ids: ["REDACTED_PLATFORM_ADMIN_UID_C", "REDACTED_PLATFORM_ADMIN_UID_D"],
+    phones: ["REDACTED_PHONE_B"],
+    names: ["REDACTED_ADMIN_NAME_C"]
   }
 ];
 const HARD_ADMIN_IDS = HARD_ADMIN_ACCOUNTS.flatMap(account => account.ids);

@@ -135,6 +135,8 @@ const ACTION_POLICIES = {
   sendCardCoolCardToChat: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
   recordSocialLike: { access: 'authenticated', ownership: 'self' },
   uploadImageToR2: { access: 'authenticated', legacyAuthSkip: true },
+  getMyPlatformRole: { access: 'authenticated', ownership: 'self' },
+  bootstrapPlatformAdmin: { access: 'authenticated', ownership: 'self', note: 'one_time_secret_bootstrap' },
 
   bulkAddRegistrants: { access: 'manager', tenantScoped: true },
   updateActivity: { access: 'manager', tenantScoped: true },
@@ -159,6 +161,9 @@ const ACTION_POLICIES = {
   getAllActivities: { access: 'manager', tenantScoped: true },
 
   updateUserRole: { access: 'admin' },
+  listPlatformAdminRoles: { access: 'admin' },
+  grantPlatformAdminRole: { access: 'admin' },
+  revokePlatformAdminRole: { access: 'admin' },
   adminSyncBoundCardUser: { access: 'admin' },
   mlmMarkOrderPaid: { access: 'admin' },
   mlmCancelOrder: { access: 'admin' },
@@ -204,84 +209,18 @@ const ACTION_POLICIES = {
 };
 // ==================== 模組 0: 資安防護 (Security Module) ====================
 const SecurityModule = {
-  hardAdminAccounts: [
-    {
-      label: '方萬隆',
-      ids: ['Uf729764dbb5b652a5a90a467320bea29', 'U050397a077bef628b317b0bbedeb2187'],
-      phones: ['0927136847'],
-      names: ['方萬隆', 'Tonyfang']
-    },
-    {
-      label: '楊滄棋',
-      ids: ['U58eb5c1a747450140ce1335af709ae55', 'Ue9a59cf9b2969ec78b6bfdc2a4cfca08'],
-      phones: ['0986919171'],
-      names: ['楊滄棋']
-    }
-  ],
-  hardAdminIds: new Set([
-    'Uf729764dbb5b652a5a90a467320bea29',
-    'U050397a077bef628b317b0bbedeb2187',
-    'U58eb5c1a747450140ce1335af709ae55',
-    'Ue9a59cf9b2969ec78b6bfdc2a4cfca08'
-  ]),
-
   text(value) {
     return String(value ?? '').trim();
   },
 
   normalizeRole(value) {
     const role = this.text(value).toLowerCase();
-    if (role === 'admin' || role === '總管') return 'admin';
     if (role === 'store' || role === 'tenant' || role === '店長' || role === '租戶') return 'store';
     return 'user';
   },
 
-  normalizePhone(value) {
-    return this.text(value).replace(/\D/g, '');
-  },
-
-  hasHardAdminId(userId, user = {}) {
-    const ids = [
-      userId,
-      user.line_id,
-      user.row_id,
-      user.legacy_line_id,
-      user.point_line_id,
-      user.legacyLineId,
-      user.pointLineId,
-      user.identityLink && user.identityLink.oldLineId,
-      user.identityLink && user.identityLink.newLineId
-    ].map(value => this.text(value)).filter(Boolean);
-    return this.hardAdminAccounts.some(account => ids.some(id => account.ids.includes(id)));
-  },
-
-  isHardAdmin(userId, user = {}) {
-    const ids = [
-      userId,
-      user.line_id,
-      user.row_id,
-      user.legacy_line_id,
-      user.point_line_id,
-      user.legacyLineId,
-      user.pointLineId,
-      user.identityLink && user.identityLink.oldLineId,
-      user.identityLink && user.identityLink.newLineId
-    ].map(value => this.text(value)).filter(Boolean);
-    const name = this.text(user.name || user.displayName || user.user_name);
-    const phone = this.normalizePhone(user.phone || user.mobile);
-    return this.hardAdminAccounts.some(account => {
-      const idMatch = ids.some(id => account.ids.includes(id));
-      const phoneMatch = !!phone && account.phones.includes(phone);
-      const nameMatch = !!name && account.names.some(allowed => name.includes(allowed));
-      if (idMatch) return phoneMatch || nameMatch;
-      return phoneMatch && nameMatch;
-    });
-  },
-
-  sanitizeRole(userId, role, user = {}) {
-    if (this.isHardAdmin(userId, user)) return 'admin';
-    const normalized = this.normalizeRole(role);
-    return normalized === 'admin' ? 'user' : normalized;
+  sanitizeRole(_userId, role, _user = {}) {
+    return this.normalizeRole(role);
   },
 
   effectiveNetworkId(userId, role, user = {}) {
@@ -360,15 +299,14 @@ const SecurityModule = {
 
     let role = 'user';
     let networkId = 'admin';
-    if (this.isHardAdmin(userId)) role = 'admin';
     if (env.ACTMASTER_DB && typeof D1ReadModule !== 'undefined') {
-      const user = await D1ReadModule.first(env, 'SELECT role, network_id, referrer_id, name, phone FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
-      if (user) {
-        role = this.sanitizeRole(userId, user.role, user);
-        networkId = this.effectiveNetworkId(userId, role, user);
-      }
+      const user = await D1ReadModule.first(env, 'SELECT role, network_id, referrer_id FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [userId, userId]);
+      if (user) { role = this.sanitizeRole(userId, user.role, user); networkId = this.effectiveNetworkId(userId, role, user); }
+      const platformRole = await AdminRoleModule.getPlatformRole(userId, env);
+      if (platformRole === 'platform_admin') { role = 'admin'; networkId = 'admin'; }
+      return { userId, role, networkId, token, platformRole };
     }
-    return { userId, role, networkId, token };
+    return { userId, role, networkId, token, platformRole: '' };
   },
 
   trustedD1FallbackSources: new Set(['server_verified', 'signed_session', 'line_webhook', 'internal_worker']),
@@ -547,6 +485,22 @@ const SecurityModule = {
   }
 };
 
+// ==================== Platform Admin Roles ====================
+const AdminRoleModule = {
+  roles: new Set(['platform_admin','platform_support','platform_auditor']),
+  text(v,f=''){const x=String(v??'').trim();return x||f;},
+  requestId(p={}){return this.text(p.requestId||p.idempotencyKey)||(crypto.randomUUID?crypto.randomUUID():`ADM_${Date.now()}`);},
+  async identity(userId,env){const requested=this.text(userId);const i=env.ACTMASTER_DB&&typeof D1ReadModule!=='undefined'?await D1ReadModule.findUserByIdentity(env,requested).catch(()=>null):null;const u=i&&i.user;return {userId:this.text(u&&(u.line_id||u.row_id),requested),canonicalUserId:this.text(i&&i.canonicalId,this.text(u&&(u.line_id||u.row_id),requested))};},
+  async getPlatformRole(userId,env){if(!env.ACTMASTER_DB)return '';const i=await this.identity(userId,env);const ids=[...new Set([this.text(userId),i.userId,i.canonicalUserId].filter(Boolean))];if(!ids.length)return '';const q=ids.map(()=>'?').join(',');try{const row=await D1ReadModule.first(env,`SELECT role FROM platform_admin_roles WHERE status='active' AND (user_id IN (${q}) OR canonical_user_id IN (${q})) ORDER BY CASE role WHEN 'platform_admin' THEN 0 ELSE 1 END LIMIT 1`,[...ids,...ids]);return this.roles.has(this.text(row&&row.role))?this.text(row.role):'';}catch(e){console.warn('[PlatformAdmin] role lookup unavailable',e&&e.message);return'';}},
+  async count(env){const r=await D1ReadModule.first(env,"SELECT COUNT(*) AS count FROM platform_admin_roles WHERE role='platform_admin' AND status='active'").catch(()=>null);return Number(r&&r.count)||0;},
+  async audit(env,e){await env.ACTMASTER_DB.prepare('INSERT INTO platform_admin_role_audit (audit_id,actor_user_id,target_user_id,operation,old_role,new_role,reason,request_id,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(`ARA_${crypto.randomUUID?crypto.randomUUID():Date.now()}`,this.text(e.actor),this.text(e.target),this.text(e.operation),this.text(e.oldRole),this.text(e.newRole),this.text(e.reason),this.text(e.requestId),JSON.stringify(e.metadata||{}),new Date().toISOString()).run();},
+  async write(env,input){const i=await this.identity(input.targetUserId,env),role=this.text(input.role);if(!i.userId||!this.roles.has(role))return{success:false,error:'Invalid platform role target'};const old=await D1ReadModule.first(env,'SELECT * FROM platform_admin_roles WHERE user_id=? AND role=? LIMIT 1',[i.userId,role]).catch(()=>null);const now=new Date().toISOString();await env.ACTMASTER_DB.prepare(`INSERT INTO platform_admin_roles (user_id,canonical_user_id,role,status,granted_by,granted_at,reason,metadata_json) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id,role) DO UPDATE SET canonical_user_id=excluded.canonical_user_id,status='active',granted_by=excluded.granted_by,granted_at=excluded.granted_at,revoked_by=NULL,revoked_at=NULL,reason=excluded.reason,metadata_json=excluded.metadata_json`).bind(i.userId,i.canonicalUserId,role,'active',this.text(input.actor),now,this.text(input.reason),JSON.stringify(input.metadata||{})).run();await this.audit(env,{actor:input.actor,target:i.userId,operation:old&&old.status==='active'?'grant_refresh':'grant',oldRole:old&&old.status==='active'?role:'',newRole:role,reason:input.reason,requestId:input.requestId,metadata:{canonicalUserId:i.canonicalUserId}});return{success:true,data:{userId:i.userId,canonicalUserId:i.canonicalUserId,role,status:'active'}};},
+  async getMyRole(p,env){const id=this.text(p.authenticatedUserId);if(!id)return{success:false,error:'Access Denied: Missing authenticated actor'};const role=await this.getPlatformRole(id,env);return{success:true,data:{userId:id,role:role||'none',isPlatformAdmin:role==='platform_admin'}};},
+  async bootstrap(p,env){const id=this.text(p.authenticatedUserId),expected=this.text(env.ADMIN_BOOTSTRAP_SECRET),provided=this.text(p.bootstrapSecret||p.adminBootstrapSecret);if(!id)return{success:false,error:'Access Denied: Missing authenticated actor'};if(!expected||!provided||provided!==expected)return{success:false,error:'Access Denied: Invalid bootstrap secret'};if(await this.count(env))return{success:false,error:'Platform admin bootstrap is already completed'};const req=this.requestId(p),claim=await env.ACTMASTER_DB.prepare(`INSERT OR IGNORE INTO platform_admin_bootstrap_state (bootstrap_key,initialized_by,initialized_at,request_id) VALUES ('platform_admin',?,?,?)`).bind(id,new Date().toISOString(),req).run();if(!(Number(claim&&claim.meta&&claim.meta.changes)||0))return{success:false,error:'Platform admin bootstrap is already completed'};const out=await this.write(env,{actor:id,targetUserId:id,role:'platform_admin',reason:'one_time_secret_bootstrap',requestId:req,metadata:{bootstrap:true}});return out.success?{success:true,data:{...out.data,bootstrap:'completed'}}:out;},
+  async list(_p,env){const rows=await D1ReadModule.all(env,'SELECT user_id,canonical_user_id,role,status,granted_by,granted_at,revoked_by,revoked_at,reason FROM platform_admin_roles ORDER BY granted_at DESC,user_id ASC').catch(()=>[]);return{success:true,data:rows.map(r=>({userId:this.text(r.user_id),canonicalUserId:this.text(r.canonical_user_id),role:this.text(r.role),status:this.text(r.status),grantedBy:this.text(r.granted_by),grantedAt:this.text(r.granted_at),revokedBy:this.text(r.revoked_by),revokedAt:this.text(r.revoked_at),reason:this.text(r.reason)}))};},
+  async grant(p,env){return this.write(env,{actor:this.text(p.authenticatedUserId),targetUserId:this.text(p.targetUserId||p.targetLineId),role:this.text(p.role||p.platformRole),reason:this.text(p.reason,'platform_admin_grant'),requestId:this.requestId(p)});},
+  async revoke(p,env){const actor=this.text(p.authenticatedUserId),i=await this.identity(this.text(p.targetUserId||p.targetLineId),env),role=this.text(p.role||p.platformRole);if(!actor||!i.userId||!this.roles.has(role))return{success:false,error:'Invalid platform role target'};const old=await D1ReadModule.first(env,'SELECT * FROM platform_admin_roles WHERE user_id=? AND role=? LIMIT 1',[i.userId,role]).catch(()=>null);if(!old||this.text(old.status)!=='active')return{success:false,error:'Platform role is not active'};if(role==='platform_admin'&&await this.count(env)<=1)return{success:false,error:'Cannot revoke the last active platform admin'};await env.ACTMASTER_DB.prepare(`UPDATE platform_admin_roles SET status='revoked',revoked_by=?,revoked_at=?,reason=? WHERE user_id=? AND role=? AND status='active'`).bind(actor,new Date().toISOString(),this.text(p.reason,'platform_admin_revoke'),i.userId,role).run();await this.audit(env,{actor,target:i.userId,operation:'revoke',oldRole:role,newRole:'',reason:this.text(p.reason,'platform_admin_revoke'),requestId:this.requestId(p),metadata:{canonicalUserId:i.canonicalUserId}});return{success:true,data:{userId:i.userId,canonicalUserId:i.canonicalUserId,role,status:'revoked'}};}
+};
 // ==================== 模組 1: 核心工具 (Core Utils) ====================
 const Utils = {
   zwsp: String.fromCharCode(8203),
@@ -3402,7 +3356,6 @@ const LineOAMyVideoKeywordModule = {
   async loadActor(env, userId) {
     const id = this.text(userId);
     if (!id) return { role: 'user', user: null };
-    if (SecurityModule.isHardAdmin(id)) return { role: 'admin', user: null };
     if (!D1ReadModule.hasD1(env)) return { role: 'user', user: null };
     const identity = await D1ReadModule.findUserByIdentity(env, id).catch(() => null);
     const user = identity && identity.user;
@@ -9546,24 +9499,6 @@ const D1ReadModule = {
     };
   },
 
-  cardMatchesHardAdmin(card, account) {
-    if (!card || !account) return false;
-    const name = this.text(card.name);
-    const phone = SecurityModule.normalizePhone(card.mobile || card.office_phone);
-    const phoneMatch = !!phone && account.phones.includes(phone);
-    const nameMatch = !!name && account.names.some(allowed => name.includes(allowed));
-    return phoneMatch && nameMatch;
-  },
-
-  hardAdminAccountFromIdentity(userId, link) {
-    const ids = [
-      userId,
-      link && link.old_line_id,
-      link && link.new_line_id
-    ].map(value => this.text(value)).filter(Boolean);
-    return SecurityModule.hardAdminAccounts.find(account => ids.some(id => account.ids.includes(id))) || null;
-  },
-
   async findBestBoundCard(env, userId, identity = {}) {
     const id = this.text(userId);
     const link = identity && identity.link;
@@ -9608,11 +9543,6 @@ const D1ReadModule = {
       ...ids, ...ids, ...ids, ...ids
     ]).catch(() => []);
 
-    const account = this.hardAdminAccountFromIdentity(id, link);
-    if (account) {
-      const ownCard = cards.find(card => this.cardMatchesHardAdmin(card, account));
-      if (ownCard) return ownCard;
-    }
     return cards.find(card => ids.includes(this.text(card.line_id))) ||
       cards.find(card => ids.includes(this.text(card.profile_user_id))) ||
       cards.find(card => ids.includes(this.text(card.owner_user_id))) ||
@@ -9695,16 +9625,10 @@ const D1ReadModule = {
 
     const card = await this.findBestBoundCard(env, userId, identity);
     if (card) {
-      const account = this.hardAdminAccountFromIdentity(userId, identity.link);
-      const isLinkedHardAdmin = !!(account && this.cardMatchesHardAdmin(card, account));
       const profile = await this.upsertBoundUserFromCard(env, card, {
-        userId,
-        role: isLinkedHardAdmin ? 'admin' : 'user',
-        networkId: isLinkedHardAdmin ? 'admin' : this.text(card.network_id, 'admin'),
-        legacyLineId: identity.link && identity.link.old_line_id,
-        pointLineId: identity.link && identity.link.new_line_id,
-        identitySource: identity.link ? 'identity_bound_card' : '',
-        source: isLinkedHardAdmin ? 'hard_admin_bound_card' : 'bound_card'
+        userId, role: 'user', networkId: this.text(card.network_id, 'admin'),
+        legacyLineId: identity.link && identity.link.old_line_id, pointLineId: identity.link && identity.link.new_line_id,
+        identitySource: identity.link ? 'identity_bound_card' : '', source: 'bound_card'
       });
       if (profile && env.ACTMASTER_KV) {
         await env.ACTMASTER_KV.put(`U_PROFILE_${userId}`, JSON.stringify(profile), { expirationTtl: 600 });
@@ -9736,10 +9660,9 @@ const D1ReadModule = {
     const cachedPhone = this.text(payload.phone || payload.cachedPhone);
     const oldName = this.text(oldUser.name);
     const oldPhone = this.text(oldUser.phone);
-    const isHardAdmin = SecurityModule.isHardAdmin(oldUserId, oldUser);
     const nameOk = cachedName && oldName && cachedName === oldName;
     const phoneOk = cachedPhone && oldPhone && cachedPhone === oldPhone;
-    if (!isHardAdmin && !nameOk && !phoneOk) {
+    if (!nameOk && !phoneOk) {
       return { success: false, error: '舊帳號驗證不足，請由管理員合併身份' };
     }
 
@@ -9751,8 +9674,8 @@ const D1ReadModule = {
       `).bind(
         oldUserId,
         newUserId,
-        phoneOk ? 'phone_cache' : (nameOk ? 'name_cache' : 'hard_admin'),
-        phoneOk || isHardAdmin ? 'high' : 'medium',
+        phoneOk ? 'phone_cache' : 'name_cache',
+        phoneOk ? 'high' : 'medium',
         'active',
         'linked during LIFF identity recovery'
       ).run();
@@ -9778,7 +9701,7 @@ const D1ReadModule = {
       oldUser.region || '',
       oldUser.address || '',
       oldUser.socials || '',
-      isHardAdmin ? 'admin' : (oldUser.role || 'user'),
+      SecurityModule.sanitizeRole(newUserId, oldUser.role || 'user'),
       oldUser.store_id || '',
       oldUser.referrer_id || '',
       oldUser.network_id || 'admin',
@@ -10164,7 +10087,7 @@ const D1ReadModule = {
         usersWithoutPointId,
         boundCardsWithoutUser,
         duplicatePhones,
-        hardAdminIds: Array.from(SecurityModule.hardAdminIds || [])
+        platformRoles: 'd1_backed'
       }
     };
   }
@@ -10395,24 +10318,6 @@ const D1WriteModule = {
       ['name','industry','gender','phone','birthday','region','address','socials','store_id','referrer_id','network_id','tg_token','tg_chat_id'].forEach(key => {
         if (user[key] === '' || user[key] === undefined || user[key] === null || user[key] === '未命名') user[key] = existing[key] || '';
       });
-      const existingHardAdminId = SecurityModule.hasHardAdminId(user.line_id, existing);
-      const incomingHardAdminVerified = SecurityModule.isHardAdmin(user.line_id, {
-        ...existing,
-        row_id: user.row_id || existing.row_id,
-        line_id: user.line_id || existing.line_id,
-        legacy_line_id: user.legacy_line_id || existing.legacy_line_id,
-        point_line_id: user.point_line_id || existing.point_line_id,
-        name: user.name,
-        displayName: user.displayName,
-        user_name: user.user_name,
-        phone: user.phone,
-        mobile: user.mobile
-      });
-      if (existingHardAdminId && !incomingHardAdminVerified) {
-        ['name','industry','gender','phone','birthday','region','address','socials','store_id','tg_token','tg_chat_id'].forEach(key => {
-          user[key] = existing[key] || '';
-        });
-      }
       if (existing.referrer_id && String(existing.referrer_id).trim() && !canOverrideReferrer) {
         user.referrer_id = existing.referrer_id;
         user.network_id = existing.network_id || user.network_id;
@@ -10466,7 +10371,6 @@ const D1WriteModule = {
     if (role === 'admin') return { success: false, error: 'Admin role cannot be assigned from role editor' };
     const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [targetUserId, targetUserId]);
     if (!existing) return { success: false, error: '找不到指定用戶' };
-    if (SecurityModule.isHardAdmin(targetUserId, existing)) return { success: false, error: 'Hard admin role cannot be modified' };
     await env.ACTMASTER_DB.prepare('UPDATE users SET role = ? WHERE line_id = ? OR row_id = ?').bind(role, targetUserId, targetUserId).run();
     await this.clearUserCache(env, targetUserId);
     return { success: true, data: { userId: targetUserId, role, source: 'd1_write' } };
@@ -10480,7 +10384,6 @@ const D1WriteModule = {
     if (role === 'admin') return { success: false, error: 'Admin role cannot be assigned from role editor' };
 
     let existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ? LIMIT 1', [targetUserId, targetUserId, targetUserId, targetUserId]).catch(() => null);
-    if (existing && SecurityModule.isHardAdmin(targetUserId, existing)) return { success: false, error: 'Hard admin role cannot be modified' };
     if (!existing) {
       const card = await D1ReadModule.first(env, `
         SELECT * FROM card_contacts
@@ -10516,7 +10419,6 @@ const D1WriteModule = {
 
   bestRole(...roles) {
     const normalized = roles.map(role => this.role(role));
-    if (normalized.includes('admin')) return 'admin';
     if (normalized.includes('store')) return 'store';
     return 'user';
   },
@@ -16133,6 +16035,11 @@ async function dispatchAction(action, payload, request, env) {
       }
       return { success: false, error: '身份合併失敗' };
     }
+    case 'getMyPlatformRole': return await AdminRoleModule.getMyRole(payload || {}, env);
+    case 'bootstrapPlatformAdmin': return await AdminRoleModule.bootstrap(payload || {}, env);
+    case 'listPlatformAdminRoles': return await AdminRoleModule.list(payload || {}, env);
+    case 'grantPlatformAdminRole': return await AdminRoleModule.grant(payload || {}, env);
+    case 'revokePlatformAdminRole': return await AdminRoleModule.revoke(payload || {}, env);
     case 'updateUserRole': {
       try {
         const d1Result = await D1WriteModule.updateUserRole(payload || {}, env);

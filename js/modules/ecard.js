@@ -768,7 +768,7 @@ window.renderV1Buttons = function() {
         </label>
         <label class="block">
           <span class="block text-[13px] font-bold text-slate-600 mb-2">網址 / 電話 / LINE 連結</span>
-          <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://... 或 tel:0927136847" class="min-w-0 w-full text-base font-mono bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.currentEcardButtons[${i}].u=this.value; window.updateECardPreview()">
+          <input type="text" value="${escapeHTML(b.u || '')}" placeholder="https://... 或 tel:09xxxxxxxx" class="min-w-0 w-full text-base font-mono bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.currentEcardButtons[${i}].u=this.value; window.updateECardPreview()">
         </label>
         <div class="grid grid-cols-2 gap-2">
           <button type="button" onclick="window.moveV1Button(${i}, -1)" ${i === 0 ? 'disabled' : ''} class="h-11 rounded-xl border border-blue-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span></button>

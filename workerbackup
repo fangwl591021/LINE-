@@ -60,8 +60,8 @@ const NewebPayCrypto = {
 // ==================== 模組 0: 資安防護 (Security Module) ====================
 const SecurityModule = {
   hardAdminIds: new Set([
-    'Uf729764dbb5b652a5a90a467320bea29',
-    'U58eb5c1a747450140ce1335af709ae55'
+    'REDACTED_PLATFORM_ADMIN_UID_A',
+    'REDACTED_PLATFORM_ADMIN_UID_C'
   ]),
 
   text(value) {
