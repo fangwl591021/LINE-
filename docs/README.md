@@ -205,4 +205,14 @@ The workflow intentionally does not run `npm install` because the guard scripts 
 
 Phase 2C Point Transaction Idempotency 定義店家點數收銀交易冪等、cashier session 單次使用、點數同步 event key 與補償狀態。
 
-- Security: docs/security/platform-admin-role-model.md`n- Sensitive data remediation: docs/security/repository-sensitive-data-remediation.md`n- Release readiness: docs/release/security-release-readiness.md`n
+- Security: docs/security/platform-admin-role-model.md
+- Sensitive data remediation: docs/security/repository-sensitive-data-remediation.md
+- Release readiness: docs/release/security-release-readiness.md
+
+## Phase 3A Local D1 and Smoke
+
+- `docs/database/local-d1-rebuild.md`
+- `docs/tests/phase-3a-smoke-baseline.md`
+- `docs/release/staging-security-validation-plan.md`
+
+Use the local D1 fixture before production migrations. Run the cache-bust and keyword reply-ownership contracts before the smoke and guard suites.

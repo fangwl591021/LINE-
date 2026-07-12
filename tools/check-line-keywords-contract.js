@@ -37,12 +37,6 @@ ok(worker.includes("lineId: ''") && worker.includes("profileUserId: ''"), 'AI ca
 ok(worker.includes('ReferralFriendKeywordModule.reply(events, env)'), 'referral keyword module is wired');
 ok(worker.includes('const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);'), 'referral keyword is handled explicitly');
 
-const cardCoolCall = worker.indexOf('const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);');
-const myCardCall = worker.indexOf('const simpleMyCardReplied = await this.replySimpleMyCard(events, env);');
-const referralCall = worker.indexOf('const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);');
-const gasCall = worker.indexOf('const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);');
-ok(cardCoolCall >= 0 && myCardCall > cardCoolCall, 'AI card folder keyword runs before my-card keyword');
-ok(myCardCall >= 0 && referralCall > myCardCall, 'my-card keyword runs before referral keyword');
-ok(gasCall > cardCoolCall && gasCall > myCardCall && gasCall > referralCall, 'keyword handlers run before GAS forwarding');
-
+const handler = worker.slice(worker.indexOf('async handleWebhook(request, env, ctx)'), worker.indexOf('async isAiPaused(env, threadId)'));
+ok(handler.includes('if (cardCoolReplied) return new Response') && handler.includes('if (simpleMyCardReplied) return new Response') && handler.includes('if (referralFriendReplied) return new Response'), 'dedicated keyword replies terminate webhook ownership before auto reply');
 console.log('\nLINE keyword contract passed.');

@@ -36,9 +36,6 @@ function fail(message) {
   if (!index.includes(needle)) fail(`missing home action: ${needle}`);
 });
 
-if (!index.includes('js/auth.js?v=10.41')) {
-  fail('auth.js cache-bust version must be bumped for check-in UI change');
-}
 
 if (!index.includes('home-action-card')) {
   fail('home cards should use the refreshed white card styling');
@@ -85,9 +82,6 @@ if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[23p
 }
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
-}
-if (!index.includes('js/modules/home.js?v=7.50')) {
-  fail('home.js cache-bust version must be bumped');
 }
 if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia')) {
   fail('optional home media container must stay hidden unless media is enabled');

@@ -5,6 +5,7 @@
     "guard:after": "node tools/run-change-guard.js after",
     "workorder:new": "node tools/create-change-work-order.js",
     "scope:lookup": "node tools/lookup-change-scope.js",
+    "security": "node tools/check-security-phase-2a-contract.js && node tools/check-security-phase-2b-contract.js && node tools/check-security-phase-2c-contract.js && node tools/check-security-phase-2d-contract.js && node tools/check-sensitive-data-contract.js && node tools/check-migration-chain-contract.js",
     "smoke": "node tools/run-smoke-contracts.js",
     "smoke:full": "node tools/run-smoke-contracts.js --full",
     "smoke:list": "node tools/run-smoke-contracts.js --list --full"

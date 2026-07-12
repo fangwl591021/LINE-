@@ -44,10 +44,6 @@ ok(aiSource.includes('NON_BUSINESS_CARD'), 'non-card images are rejected');
 ok(aiSource.includes('Missing image data'), 'OCR recognizer validates image input');
 ok(worker.includes('normalizePhoneForTel') && worker.includes('886') && worker.includes('86'), 'OCR recognizer normalizes international phone codes');
 
-const cardCoolCall = worker.indexOf('const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);');
-const myCardCall = worker.indexOf('const simpleMyCardReplied = await this.replySimpleMyCard(events, env);');
-const gasCall = worker.indexOf('const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);');
-ok(cardCoolCall >= 0 && myCardCall > cardCoolCall, 'card cool keyword runs before my-card keyword');
-ok(gasCall > cardCoolCall, 'card cool keyword runs before GAS forwarding');
-
+const handler = worker.slice(worker.indexOf('async handleWebhook(request, env, ctx)'), worker.indexOf('async isAiPaused(env, threadId)'));
+ok(handler.includes('const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);') && handler.includes('if (cardCoolReplied) return new Response'), 'card cool reply ownership terminates the webhook');
 console.log('\nLINE OA card cool keyword contract passed.');
