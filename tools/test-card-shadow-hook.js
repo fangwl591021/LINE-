@@ -3,6 +3,7 @@
 
 const assert = require('assert');
 const { isCardShadowResolverEnabled, runCardShadowHook, resolveWithCardShadow } = require('../src/modules/cards/card-shadow-hook');
+const { cardShadowComparisonLog, cardShadowFailureLog } = require('../src/modules/cards/card-shadow-log');
 
 for (const [value, expected] of [['', false], [undefined, false], ['false', false], ['0', false], ['off', false], ['no', false], ['true', true], ['1', true], ['on', true], ['yes', true]]) {
   assert.strictEqual(isCardShadowResolverEnabled({ CARD_SHADOW_RESOLVER_ENABLED: value }), expected, `flag ${value}`);
@@ -27,6 +28,26 @@ assert.deepStrictEqual(success, { enabled: true, executed: true, ok: true, diver
 assert.deepStrictEqual(Object.keys(events[0]).sort(), ['candidateCount', 'diagnostics', 'divergenceCode', 'durationBucket', 'eligibleCount', 'entrySource', 'legacyMaskedCardId', 'mode', 'requestedVersion', 'resolverVersion', 'shadowMaskedCardId', 'timestamp', 'type'].sort());
 const serializedLog = JSON.stringify(events[0]);
 for (const forbidden of ['U_RAW_ACTOR', 'Raw Name', '0912345678', 'raw@example.com', 'custom_config', 'https://video.example/raw', 'CARD_RAW_1']) assert.ok(!serializedLog.includes(forbidden), `log leaked ${forbidden}`);
+
+const hostileLog = cardShadowComparisonLog({
+  shadowResult: { resolverVersion: 'https://bad.example/u/U123', candidateCount: 0, eligibleCandidates: [], legacyComparison: { divergenceCode: 'MATCH' } },
+  entrySource: 'raw@example.com /line?uid=U1234567890', requestedVersion: '0912345678', mode: 'request body with spaces'
+});
+assert.strictEqual(hostileLog.resolverVersion, 'unknown');
+assert.strictEqual(hostileLog.entrySource, 'UNKNOWN_ENTRY');
+assert.strictEqual(hostileLog.requestedVersion, 'unknown');
+assert.strictEqual(hostileLog.mode, 'unknown');
+for (const forbidden of ['bad.example', 'raw@example.com', '0912345678', 'U1234567890', 'request body']) assert.ok(!JSON.stringify(hostileLog).includes(forbidden), `sanitized comparison log leaked ${forbidden}`);
+
+const hostileFailure = cardShadowFailureLog({
+  resolverVersion: 'resolver raw@example.com', entrySource: 'https://bad.example/?phone=0912345678', requestedVersion: 'U1234567890', errorType: 'TypeError raw@example.com', diagnostic: 'failure with secret text'
+});
+assert.strictEqual(hostileFailure.resolverVersion, 'unknown');
+assert.strictEqual(hostileFailure.entrySource, 'UNKNOWN_ENTRY');
+assert.strictEqual(hostileFailure.requestedVersion, 'unknown');
+assert.strictEqual(hostileFailure.errorType, 'Error');
+assert.strictEqual(hostileFailure.diagnostic, 'SHADOW_HOOK_FAILED');
+for (const forbidden of ['bad.example', 'raw@example.com', '0912345678', 'U1234567890', 'secret text']) assert.ok(!JSON.stringify(hostileFailure).includes(forbidden), `sanitized failure log leaked ${forbidden}`);
 
 const originalCandidates = baseInput().candidates;
 const originalActor = { liffUserId: 'U_RAW_ACTOR' };
