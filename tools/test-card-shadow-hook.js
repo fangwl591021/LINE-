@@ -49,6 +49,30 @@ assert.strictEqual(hostileFailure.errorType, 'Error');
 assert.strictEqual(hostileFailure.diagnostic, 'SHADOW_HOOK_FAILED');
 for (const forbidden of ['bad.example', 'raw@example.com', '0912345678', 'U1234567890', 'secret text']) assert.ok(!JSON.stringify(hostileFailure).includes(forbidden), `sanitized failure log leaked ${forbidden}`);
 
+const normalizedLog = cardShadowComparisonLog({
+  shadowResult: { resolverVersion: 'cs-1a-shadow-v1', candidateCount: 0, eligibleCandidates: [], diagnostics: ['MATCH', 'U1234567890'], legacyComparison: { divergenceCode: 'MATCH' } },
+  entrySource: 'MY_CARD', requestedVersion: 'poster', mode: 'READ'
+});
+assert.strictEqual(normalizedLog.entrySource, 'my_card');
+assert.strictEqual(normalizedLog.requestedVersion, 'giga');
+assert.strictEqual(normalizedLog.mode, 'read');
+assert.strictEqual(normalizedLog.resolverVersion, 'cs-1a-shadow-v1');
+assert.deepStrictEqual(normalizedLog.diagnostics, ['MATCH']);
+
+const uidTokenLog = cardShadowComparisonLog({
+  shadowResult: { resolverVersion: 'U1234567890', candidateCount: 0, eligibleCandidates: [], legacyComparison: { divergenceCode: 'U1234567890' } },
+  entrySource: 'not_an_entry', requestedVersion: 'raw@example.com', mode: '0912345678'
+});
+assert.strictEqual(uidTokenLog.entrySource, 'UNKNOWN_ENTRY');
+assert.strictEqual(uidTokenLog.resolverVersion, 'unknown');
+assert.strictEqual(uidTokenLog.requestedVersion, 'unknown');
+assert.strictEqual(uidTokenLog.mode, 'unknown');
+assert.strictEqual(uidTokenLog.divergenceCode, 'UNKNOWN');
+assert.ok(!JSON.stringify(uidTokenLog).includes('U1234567890'), 'UID-like token must not enter comparison log');
+
+const uidTokenFailure = cardShadowFailureLog({ errorType: 'U1234567890', diagnostic: 'U1234567890' });
+assert.strictEqual(uidTokenFailure.errorType, 'Error');
+assert.strictEqual(uidTokenFailure.diagnostic, 'SHADOW_HOOK_FAILED');
 const originalCandidates = baseInput().candidates;
 const originalActor = { liffUserId: 'U_RAW_ACTOR' };
 const originalLegacy = { status: 200, message: 'legacy remains' };
@@ -67,6 +91,24 @@ const failureEvents = [];
 runCardShadowHook({ ...baseInput(), env: { CARD_SHADOW_RESOLVER_ENABLED: 'yes' }, logger: (event) => failureEvents.push(event), shadowRunner: () => { throw new Error('raw secret message and stack'); } });
 const serializedFailure = JSON.stringify(failureEvents[0]);
 assert.ok(!serializedFailure.includes('raw secret message') && !serializedFailure.includes('stack'), 'failure log must not expose message or stack');
+async function testFlagOffDoesNotInvokeCallbacks() {
+  for (const value of [undefined, 'false', 'off', 'no', '0']) {
+    let factoryCalls = 0;
+    let runnerCalls = 0;
+    let loggerCalls = 0;
+    const legacy = {};
+    const returned = await resolveWithCardShadow({
+      legacyResolver: () => legacy,
+      env: { CARD_SHADOW_RESOLVER_ENABLED: value },
+      shadowInputFactory: () => { factoryCalls += 1; return { ...baseInput(), shadowRunner: () => { runnerCalls += 1; return { ok: true, result: {} }; } }; },
+      logger: () => { loggerCalls += 1; }
+    });
+    assert.strictEqual(returned, legacy);
+    assert.strictEqual(factoryCalls, 0, 'flag disabled factory');
+    assert.strictEqual(runnerCalls, 0, 'flag disabled runner');
+    assert.strictEqual(loggerCalls, 0, 'flag disabled logger');
+  }
+}
 async function testLegacyReference() {
   const legacy = { status: 200, body: { preserved: true } };
   for (const options of [
@@ -80,4 +122,4 @@ async function testLegacyReference() {
   }
 }
 
-testLegacyReference().then(() => console.log('Card shadow hook tests passed')).catch((error) => { console.error(error.stack); process.exit(1); });
+Promise.all([testFlagOffDoesNotInvokeCallbacks(), testLegacyReference()]).then(() => console.log('Card shadow hook tests passed')).catch((error) => { console.error(error.stack); process.exit(1); });

@@ -18,3 +18,7 @@ URLs, images, video, custom config, request/event bodies, tokens, and secrets.
 Any future Worker hook needs separate approval, a feature flag, try/catch
 isolation, no additional query when disabled, and proof that legacy response,
 status, headers, and body remain unchanged. Rollback is flag-off.
+
+## Final log value allowlist
+
+Structured-log values are normalized, not merely character-filtered. Entry source is limited to `my_card`, `ai_card_folder`, `public_card_read`, `crm_card_read`, or `UNKNOWN_ENTRY`. Requested version is limited to `standard`, `giga`, `square`, `video`, `any`, or `unknown`; `poster` normalizes to `giga`. Mode is limited to `read`, `shadow`, `probe`, or `unknown`. Resolver versions, error types, diagnostics, and divergence codes are explicit static allowlists. Unknown, URL-like, email-like, phone-like, UID-like, and request-like values fall back to safe constants and are never emitted.
