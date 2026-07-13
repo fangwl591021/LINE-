@@ -176,3 +176,11 @@ CS-1A adds only independent modules and fixtures under `src/modules/cards/` and 
 ## CS-1A High fix
 
 Personal aggregate existence is now modeled independently from requested-version entry selection in the fixture-only shadow resolver. This preserves the one-active-personal invariant without changing any runtime resolver or write path.
+
+## CS-1B shadow hook foundation
+
+CS-1B adds a feature-flagged, isolated wrapper module only. It is not imported by `workerbackup.js`. With the flag disabled it does not invoke the factory, shadow runner, or logger. With the flag enabled it clones shadow inputs, catches all telemetry failures, and returns the exact legacy object reference. No new D1 query, write, ownership mutation, or response mutation is introduced.
+
+## CS-1B final verification
+
+The shadow-hook foundation now has both key and value allowlists for structured logs. This remains an isolated module: no Worker import, no D1 query, no D1 write, and no runtime feature-flag enablement were introduced.

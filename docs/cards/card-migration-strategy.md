@@ -158,3 +158,7 @@ CS-1 僅包含 canonical identity adapter、masked shadow resolver trace、schem
 ## CS-1A gate
 
 Before any migration or runtime shadow hook, fixture-only resolver parity must remain green. This branch contains no production migration, remote D1 action, or data repair. Divergence output is proposal-only and masked.
+
+## CS-1B hook rollback boundary
+
+The future shadow hook rollback is `CARD_SHADOW_RESOLVER_ENABLED=off`. This foundation has no runtime integration, migration, or data transformation. Any later integration must prove flag-off performs no additional query and that the legacy response object, status, headers, and body remain unchanged.
