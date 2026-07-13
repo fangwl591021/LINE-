@@ -4,6 +4,10 @@
  */
 
 // ==================== 金流加密工具 (NewebPay MPG) ====================
+import {
+  isMyCardResolverV2Enabled,
+  resolveMyCardRuntime
+} from './src/modules/cards/my-card-runtime-adapter.mjs';
 const NewebPayCrypto = {
   encoder: new TextEncoder(),
 
@@ -1071,6 +1075,33 @@ const LineOAChatModule = {
     return text === '我的名片';
   },
 
+  myCardResolverV2ErrorMessage(status) {
+    if (status === 'MULTIPLE_PERSONAL') {
+      return { type: 'text', text: '\u76ee\u524d\u540d\u7247\u8cc7\u6599\u9700\u8981\u6574\u7406\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u6216\u806f\u7d61\u7ba1\u7406\u54e1\u3002' };
+    }
+    if (status === 'IDENTITY_MISSING') {
+      return { type: 'text', text: '\u76ee\u524d\u7121\u6cd5\u78ba\u8a8d\u60a8\u7684 LINE \u8eab\u5206\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002' };
+    }
+    return { type: 'text', text: '\u5c1a\u672a\u5efa\u7acb\u53ef\u986f\u793a\u7684\u6a19\u6e96\u540d\u7247\uff0c\u8acb\u5148\u5b8c\u6210\u5efa\u7acb\u3002' };
+  },
+
+  async resolveSimpleMyCardV2(event, env) {
+    // This keyword path trusts only the signed LINE webhook source identity.
+    const actorId = this.text(event?.source?.userId);
+    const networkId = this.text(env.LINE_OA_NETWORK_ID, 'admin') || 'admin';
+    if (!actorId) {
+      return { message: this.myCardResolverV2ErrorMessage('IDENTITY_MISSING'), card: null, resolution: { ok: false, status: 'IDENTITY_MISSING' } };
+    }
+    try {
+      const resolution = await resolveMyCardRuntime({ db: env.ACTMASTER_DB, actorId, networkId, requestedVersion: 'standard' });
+      if (!resolution.ok) return { message: this.myCardResolverV2ErrorMessage(resolution.status), card: null, resolution };
+      return { message: this.buildExistingMyCardFlex(resolution.card, actorId, env), card: resolution.card, resolution };
+    } catch (error) {
+      // Never fall back to legacy/contact selection when the enabled resolver fails.
+      console.error('My card V2 resolver failed', error?.name || 'Error');
+      return { message: { type: 'text', text: '\u76ee\u524d\u7121\u6cd5\u8b80\u53d6\u540d\u7247\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002' }, card: null, resolution: { ok: false, status: 'NOT_FOUND' } };
+    }
+  },
   quickMyCardUrl(userId, env, rowId = '') {
     const liffId = this.text(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
     const params = new URLSearchParams({
@@ -1685,7 +1716,11 @@ const LineOAChatModule = {
       if (!replyToken || !userId) continue;
       let message = null;
       let messageCardRow = null;
-      if (selectedRowId) {
+      if (isKeyword && isMyCardResolverV2Enabled(env)) {
+        const resolved = await this.resolveSimpleMyCardV2(event, env);
+        message = resolved.message;
+        messageCardRow = resolved.card;
+      } else if (selectedRowId) {
         let selectedCard = this.filterLineOaMyCardCandidates([
           await this.findMySelfCardByRowId(env, userId, selectedRowId)
         ]).filter(Boolean)[0];

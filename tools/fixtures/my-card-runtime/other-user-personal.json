@@ -1,0 +1,1 @@
+{"actorId":"U_ACTOR","networkId":"tenant-a","requestedVersion":"standard","candidates":[{"row_id":"CARD_STD_OTHER","owner_user_id":"U_OTHER","network_id":"tenant-a","source_type":"self_profile","is_active":1}],"expected":{"status":"NOT_FOUND"}}

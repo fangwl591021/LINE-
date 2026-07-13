@@ -1,0 +1,1 @@
+{"actorId":"U_ACTOR","networkId":"tenant-a","requestedVersion":"giga","candidates":[{"row_id":"CARD_POSTER_1","owner_user_id":"U_ACTOR","network_id":"tenant-a","source_type":"line_generated","is_active":1}],"expected":{"status":"RESOLVED","cardId":"CARD_POSTER_1"}}

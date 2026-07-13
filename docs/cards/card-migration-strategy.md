@@ -162,3 +162,11 @@ Before any migration or runtime shadow hook, fixture-only resolver parity must r
 ## CS-1B hook rollback boundary
 
 The future shadow hook rollback is `CARD_SHADOW_RESOLVER_ENABLED=off`. This foundation has no runtime integration, migration, or data transformation. Any later integration must prove flag-off performs no additional query and that the legacy response object, status, headers, and body remain unchanged.
+## CS-2A runtime read gate
+
+CS-2A is the first production-read integration, limited to the LINE OA exact
+`my card` keyword. It is feature-flagged and defaults to legacy behavior. The
+V2 path performs one bounded `SELECT` only, trusts the signed webhook actor,
+and does not mutate ownership, source type, card data, or migrations. Flag-off
+runs no V2 query. Ambiguous, contact-only, cross-network, legacy, and missing
+static-version outcomes do not select a fallback card.
