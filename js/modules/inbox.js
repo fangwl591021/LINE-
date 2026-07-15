@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const $ = id => document.getElementById(id);
 
   const TYPE_LABELS = {
@@ -58,8 +58,8 @@
     const cost = count ? count * inboxMessageCost($("inbox-message-type")?.value || "message") : total * inboxMessageCost($("inbox-message-type")?.value || "message");
     notice.className = "mt-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-[13px] font-black text-blue-700";
     notice.textContent = count
-      ? `已勾選 ${count} 位，送出時只會發送給勾選名單，預估扣 ${cost} 點。`
-      : `已列出 ${total} 位；若不勾選，送出時會發送給全部符合名單，預估扣 ${cost} 點。`;
+      ? `已勾選 ${count} 位，送出時只會免費發送給勾選名單。`
+      : `已列出 ${total} 位；若不勾選，送出時會免費發送給全部符合名單。`;
   }
 
   function clearRecipientSelection() {
@@ -707,7 +707,7 @@
   };
 
   function inboxMessageCost(messageType) {
-    return 10;
+    return 0;
   }
 
   window.updateInboxPointCostHint = function () {
@@ -715,10 +715,10 @@
     const cost = inboxMessageCost(type);
     const hint = $("inbox-point-cost-hint");
     if (hint) hint.textContent = type === "coupon"
-      ? `優惠券寄出會扣除 ${cost} 點，且只能核銷一次。`
-      : `本次送出會扣除 ${cost} 點。`;
+      ? `優惠券免費傳送，且只能核銷一次。`
+      : (type === "course" || type === "activity") ? "課程邀約免費傳送。" : type === "interview" ? "訪談邀請免費傳送。" : "一般訊息免費傳送。";
     const btn = $("btn-send-inbox-message");
-    if (btn) btn.textContent = type === "coupon" ? `送出優惠券（扣 ${cost} 點）` : `送出訊息（扣 ${cost} 點）`;
+    if (btn) btn.textContent = type === "coupon" ? "免費送出優惠券" : "免費送出訊息";
     updateSelectedRecipientNotice();
   };
 
@@ -745,7 +745,7 @@
       const res = await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, recipientMode, selectedUserIds, messageType, title, body }, true);
       const sentCount = Number((res && res.data && res.data.sentCount) || 1);
       const totalCost = Number((res && res.data && res.data.totalCost) || cost);
-      window.showToast?.(`${messageType === "coupon" ? "優惠券" : "訊息"}已送出 ${sentCount} 位，扣除 ${totalCost} 點`);
+      window.showToast?.(`${messageType === "coupon" ? "優惠券" : "訊息"}已免費送出 ${sentCount} 位`);
       window.pointWalletData = null;
       window.refreshPointBalanceBadge?.();
       ["inbox-message-title", "inbox-message-body", "inbox-recipient-id", "inbox-recipient-query"].forEach(id => {
@@ -763,7 +763,7 @@
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = oldText || `送出訊息（扣 ${cost} 點）`;
+        btn.textContent = oldText || "免費送出訊息";
         btn.classList.remove("opacity-70");
       }
     }

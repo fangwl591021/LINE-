@@ -1,4 +1,4 @@
-/* ==================== 系統啟動與權限驗證 ==================== */
+﻿/* ==================== 系統啟動與權限驗證 ==================== */
 
 if (typeof window.addUserSocial !== 'function') {
   window.addUserSocial = function(type = 'LINE', url = '') {
@@ -1994,7 +1994,7 @@ window.updateStorePointPreview = function() {
 
   if (mode === 'reward') {
     preview.className = 'rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
-    preview.innerHTML = `消費金額 NT$${amount.toLocaleString('zh-TW')}，將贈送客戶 <b class="text-[#06C755]">${amount.toLocaleString('zh-TW')} 點</b>；店家操作扣 10 點。`;
+    preview.innerHTML = `消費金額 NT$${amount.toLocaleString('zh-TW')}，將贈送客戶 <b class="text-[#06C755]">${amount.toLocaleString('zh-TW')} 點</b>；店家免費操作。`;
     return;
   }
 
@@ -2004,8 +2004,8 @@ window.updateStorePointPreview = function() {
   const payable = amount - actualDeduct;
   preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
   preview.innerHTML = actualDeduct > 0
-    ? `本次折抵 <b class="text-blue-600">${actualDeduct.toLocaleString('zh-TW')} 點</b>${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}，預估應收 NT$${Math.max(0, payable).toLocaleString('zh-TW')}，店家操作扣 10 點。`
-    : `請手動輸入本次要折抵的點數${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}。店家操作扣 10 點。`;
+    ? `本次折抵 <b class="text-blue-600">${actualDeduct.toLocaleString('zh-TW')} 點</b>${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}，預估應收 NT$${Math.max(0, payable).toLocaleString('zh-TW')}，店家免費操作。`
+    : `請手動輸入本次要折抵的點數${customerBalance ? `，目前可用 ${customerBalance.toLocaleString('zh-TW')} 點` : ''}。店家免費操作。`;
 };
 
 window.renderStorePointCustomerCandidates = function(candidates) {
@@ -2255,8 +2255,8 @@ window.submitStorePointCashier = async function(btn) {
     const changed = Number(data.changedPoints || Math.abs(data.points || 0)).toLocaleString('zh-TW');
     const payable = Number(data.payableAmount || 0).toLocaleString('zh-TW');
     const message = data.mode === 'reward'
-      ? `已完成消費贈點：${changed} 點，店家已扣 10 點`
-      : `已完成折抵：${changed} 點，應收 NT$${payable}，店家已扣 10 點`;
+      ? `已完成消費贈點：${changed} 點，店家免費操作`
+      : `已完成折抵：${changed} 點，應收 NT$${payable}，店家免費操作`;
     if (preview) {
       preview.className = 'rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
       preview.textContent = message;

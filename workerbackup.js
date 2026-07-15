@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
  * 特點：導入 Cloudflare KV 進行毫秒級身分驗證，並新增 LINE Token 強制核對與 OpenAI 流量防護機制
  */
@@ -5867,7 +5867,7 @@ const PointModule = {
       motherBalance: this.number(payload.motherBalance),
       localBalance: this.number(payload.localBalance),
       actorBalance: this.number(payload.actorBalance),
-      actorCanOperate: this.number(payload.actorBalance) >= 10,
+      actorCanOperate: true,
       motherReady: payload.motherReady === true,
       createdAt: new Date().toISOString()
     };
@@ -6074,19 +6074,17 @@ const PointModule = {
     if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
 
     const actorPointUserId = await this.resolvePointUserId(env, actorId).catch(() => actorId);
-    const [wallet, customerMotherReady, actorMotherReady, actorWallet] = await Promise.all([
+    const [wallet, customerMotherReady] = await Promise.all([
       this.queryPointBalanceFast({
         pointUserId: customerPointUserId,
         point_type: 'gift_money',
         page: 1,
         per_page: 20
       }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) })),
-      this.ensureMotherLineMember({ ...payload, LINE_user_id: customerPointUserId, lineUserId: customerPointUserId, userId: customerPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) })),
-      actorPointUserId ? this.ensureMotherLineMember({ ...payload, LINE_user_id: actorPointUserId, lineUserId: actorPointUserId, userId: actorPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) })) : Promise.resolve({ success: true, skipped: true }),
-      actorPointUserId ? this.queryUserPoints({ pointUserId: actorPointUserId, point_type: 'gift_money', page: 1, per_page: 1 }, env).catch(e => ({ success: false, error: e.message || String(e) })) : Promise.resolve(null)
+      this.ensureMotherLineMember({ ...payload, LINE_user_id: customerPointUserId, lineUserId: customerPointUserId, userId: customerPointUserId }, env).catch(e => ({ success: false, error: e.message || String(e) }))
     ]);
-    const actorBalance = actorWallet && actorWallet.success ? Math.floor(Number(actorWallet.data?.balance || 0)) : 0;
-    const motherReady = (!customerMotherReady || customerMotherReady.success !== false) && (!actorMotherReady || actorMotherReady.success !== false);
+    const actorBalance = 0;
+    const motherReady = (!customerMotherReady || customerMotherReady.success !== false);
     let customerPointSource = 'mother';
     let balance = this.number(wallet && wallet.data && wallet.data.balance);
     let motherBalance = balance;
@@ -6151,7 +6149,7 @@ const PointModule = {
   },
 
   async storeAdjustCustomerPoints(payload, env) {
-    const operatorFee = 10;
+    const operatorFee = 0;
     const actorId = String(payload.authenticatedUserId || payload.userId || '').trim();
     const rawCustomerId = String(
       payload.customerUserId ||
@@ -6199,23 +6197,7 @@ const PointModule = {
         D1ReadModule.text(payload.authenticatedNetworkId || payload.networkId || 'admin')
     }).catch(e => ({ success: false, error: e.message || String(e) }));
 
-    const actorPointUserId = await this.resolvePointUserId(env, actorId);
     const cashierSession = await this.loadStorePointCashierSession(env, payload.cashierSessionId, actorId, customerPointUserId);
-    const actorWallet = cashierSession && cashierSession.actorCanOperate
-      ? { success: true, data: { balance: cashierSession.actorBalance }, prepared: true }
-      : await this.queryUserPoints({
-          pointUserId: actorPointUserId,
-          point_type: 'gift_money',
-          page: 1,
-          per_page: 20
-        }, env);
-    if (!actorWallet || !actorWallet.success) {
-      return { success: false, error: actorWallet && actorWallet.error ? actorWallet.error : '無法取得店家操作點數' };
-    }
-    const actorBalance = Math.floor(Number(actorWallet.data?.balance || 0));
-    if (actorBalance < operatorFee) {
-      return { success: false, error: `店家操作點數不足，贈扣點功能每次需要 ${operatorFee} 點` };
-    }
 
     let wallet = cashierSession
       ? { success: true, data: { balance: cashierSession.balance }, prepared: true }
@@ -6253,7 +6235,7 @@ const PointModule = {
     const sourceLabel = sourceName.length > 28 ? sourceName.slice(0, 28) + '...' : sourceName;
 
     if (!cashierSession || cashierSession.motherReady !== true) {
-      const pointMemberIds = Array.from(new Set([actorPointUserId, customerPointUserId].filter(Boolean)));
+      const pointMemberIds = Array.from(new Set([customerPointUserId].filter(Boolean)));
       const pointMemberResults = await Promise.all(pointMemberIds.map(lineUserId => this.ensureMotherLineMember({
         ...payload,
         LINE_user_id: lineUserId,
@@ -6307,20 +6289,7 @@ const PointModule = {
       eventContent = `來源：${sourceLabel}；消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${deductPoints.toLocaleString('zh-TW')} 點，應收 NT$${payableAmount.toLocaleString('zh-TW')}`;
     }
 
-    const operatorDebit = await this.insertUserPoint({
-      userId: actorPointUserId,
-      points: -operatorFee,
-      pointType: 'gift_money',
-      eventName: '店家點數操作扣點',
-      eventContent: `執行${isReward ? '消費贈點' : '消費折抵'}，扣除 ${operatorFee} 點操作費`,
-      shop_user_lineid: actorId,
-      child_shop_name: sourceLabel,
-      shop_remark: `source=${sourceLabel}; store_cashier_fee operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
-      skipMotherMemberSetup: true
-    }, env);
-    if (!operatorDebit || !operatorDebit.success) {
-      return { success: false, error: operatorDebit && operatorDebit.error ? operatorDebit.error : '店家操作扣點失敗，交易未送出', data: operatorDebit };
-    }
+    const operatorFeeResult = { status: 'free', skipped: true, pointType: 'gift_money', points: 0 };
 
     const result = customerPointSource === 'local'
       ? await AdminPointModule.adjust({
@@ -6343,17 +6312,6 @@ const PointModule = {
         }, env);
 
     if (!result || !result.success) {
-      await this.insertUserPoint({
-        userId: actorPointUserId,
-        points: operatorFee,
-        pointType: 'gift_money',
-        eventName: '店家點數操作退點',
-        eventContent: `客戶${isReward ? '消費贈點' : '消費折抵'}寫入失敗，退回 ${operatorFee} 點操作費`,
-        shop_user_lineid: actorId,
-        child_shop_name: sourceLabel,
-        shop_remark: `source=${sourceLabel}; store_cashier_fee_refund operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
-        skipMotherMemberSetup: true
-      }, env).catch(() => null);
       const resultError = result && result.error ? String(result.error) : '';
       if (/查無|對應會員|LINE_user_id|not\s*found|member/i.test(resultError)) {
         return {
@@ -6431,7 +6389,7 @@ const PointModule = {
         eventName,
         eventContent,
         operatorFee,
-        operatorFeeResult: operatorDebit.data || operatorDebit,
+        operatorFeeResult,
         insertResult: result.data || result
       }
     };
@@ -12693,7 +12651,7 @@ const D1InboxModule = {
     const messageType = this.text(payload.messageType || payload.type, 'message');
     const title = this.text(payload.title);
     const body = this.text(payload.body || payload.content);
-    const messageCost = 10;
+    const messageCost = 0;
     if (!senderUserId) return { success: false, error: 'Missing sender' };
     if (!rawQuery) return { success: false, error: 'Missing recipient query' };
     if (!title) return { success: false, error: 'Missing title' };
@@ -12716,12 +12674,6 @@ const D1InboxModule = {
     }
     if (!recipients.length) return { success: false, error: 'No eligible recipients' };
 
-    const totalCost = recipients.length * messageCost;
-    const pointUserId = await PointModule.resolvePointUserId(env, senderUserId);
-    const wallet = await PointModule.queryUserPoints({ pointUserId, point_type: 'gift_money' }, env);
-    if (!wallet || !wallet.success) return { success: false, error: (wallet && wallet.error) || 'Point balance unavailable' };
-    const balance = Number(wallet.data && wallet.data.balance || 0) || 0;
-    if (balance < totalCost) return { success: false, error: `Point balance is not enough. Need ${totalCost}.` };
 
     const sent = [];
     const failed = [];
@@ -12946,7 +12898,7 @@ const D1InboxModule = {
     const messageType = this.text(payload.messageType || payload.type, 'message');
     const title = this.text(payload.title);
     const body = this.text(payload.body || payload.content);
-    const messageCost = 10;
+    const messageCost = 0;
     if (!senderUserId) return { success: false, error: 'Missing sender' };
     if (!rawCourseId) return { success: false, error: '請貼上課程編號' };
     if (!title) return { success: false, error: '請輸入標題' };
@@ -12957,12 +12909,6 @@ const D1InboxModule = {
     const recipients = Array.isArray(summary.recipients) ? summary.recipients : [];
     if (!recipients.length) return { success: false, error: '這個課程目前沒有可收信的已註冊學員' };
 
-    const totalCost = recipients.length * messageCost;
-    const pointUserId = await PointModule.resolvePointUserId(env, senderUserId);
-    const wallet = await PointModule.queryUserPoints({ pointUserId, point_type: 'gift_money' }, env);
-    if (!wallet || !wallet.success) return { success: false, error: (wallet && wallet.error) || '無法讀取點數餘額' };
-    const balance = Number(wallet.data && wallet.data.balance || 0) || 0;
-    if (balance < totalCost) return { success: false, error: `點數不足，群發 ${recipients.length} 位需要 ${totalCost} 點` };
 
     const sent = [];
     const failed = [];
@@ -13035,15 +12981,10 @@ const D1InboxModule = {
     const messageId = this.text(payload.messageId || payload.message_id) || `MSG_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const networkId = this.text(payload.networkId || payload.authenticatedNetworkId || receiver.user.network_id || 'admin', 'admin');
     const expiresAt = this.text(payload.expiresAt || payload.expires_at);
-    const messageCost = 10;
-    const pointUserId = await PointModule.resolvePointUserId(env, senderUserId);
-    const wallet = await PointModule.queryUserPoints({ pointUserId, point_type: 'gift_money' }, env);
-    if (!wallet || !wallet.success) return { success: false, error: (wallet && wallet.error) || '無法確認點數餘額' };
-    const balance = Number(wallet.data && wallet.data.balance || 0) || 0;
-    if (balance < messageCost) return { success: false, error: `點數不足，${messageType === 'coupon' ? '寄送優惠券' : '傳送訊息'}需要 ${messageCost} 點` };
+    const messageCost = 0;
 
     const pointPayload = { ...(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}) };
-    pointPayload.pointCharge = { pointType: 'gift_money', points: -messageCost, status: 'pending', messageType };
+    pointPayload.pointCharge = { pointType: 'gift_money', points: 0, status: 'free', messageType };
     if (messageType === 'coupon') {
       pointPayload.coupon = { status: 'issued', issuedAt: new Date().toISOString(), singleUse: true };
     }
@@ -13069,28 +13010,7 @@ const D1InboxModule = {
       expiresAt
     ).run();
 
-    const debit = await PointModule.insertUserPoint({
-      userId: pointUserId,
-      points: -messageCost,
-      pointType: 'gift_money',
-      eventName: '收件匣傳訊扣點',
-      eventContent: `傳送${this.text(messageType, 'message')}給 ${this.text(receiver.user.name, receiverUserId)}，扣除 ${messageCost} 點`,
-      shop_remark: `messageId=${messageId};receiver=${receiverUserId};messageType=${messageType};cost=${messageCost}`
-    }, env);
 
-    if (!debit || !debit.success) {
-      await env.ACTMASTER_DB.prepare('DELETE FROM inbox_items WHERE message_id = ?').bind(messageId).run().catch(() => null);
-      return { success: false, error: (debit && debit.error) || '扣點失敗，訊息未送出' };
-    }
-
-    await env.ACTMASTER_DB.prepare(`
-      UPDATE inbox_items
-      SET payload_json = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE message_id = ?
-    `).bind(JSON.stringify({
-      ...pointPayload,
-      pointCharge: { pointType: 'gift_money', points: -messageCost, status: 'sent', messageType, response: debit.data || null }
-    }), messageId).run();
 
     await WebPushModule.notifyUser(receiverUserId, {
       title: '你有一封新訊息',
