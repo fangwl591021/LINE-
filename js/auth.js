@@ -2547,6 +2547,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.currentUserProfile = await liff.getProfile();
 
+    // Admin uses a separate shell; redirect before home-only point/profile refreshes.
+    const adminEntryParams = typeof window.readActmasterInitialParams === 'function'
+      ? window.readActmasterInitialParams()
+      : new URLSearchParams(window.location.search);
+    if (adminEntryParams.get('admin') === '1' || adminEntryParams.get('adminPage') === '1') {
+      // Keep a stable document URL so the browser can reuse the cached admin shell.
+      window.location.replace('admin.html?from_liff=1');
+      return;
+    }
+
     // 🟢 【關鍵修復】在此處攔截 window.fetchAPI，自動為所有 API 請求注入 lineAccessToken 以通過 workerbackup.js 嚴格驗證
     if (typeof window.fetchAPI === 'function' && !window.__fetchApiEnhanced) {
       const originalFetch = window.fetchAPI;
@@ -2612,7 +2622,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     if (urlParams.get('admin') === '1' || urlParams.get('adminPage') === '1') {
-      window.location.replace('admin.html?from_liff=1&t=' + Date.now());
+      // Keep a stable document URL so the browser can reuse the cached admin shell.
+      window.location.replace('admin.html?from_liff=1');
       return;
     }
     const shareCardId = urlParams.get('shareCardId');
