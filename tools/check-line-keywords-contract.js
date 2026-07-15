@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
@@ -40,9 +40,10 @@ ok(worker.includes('const referralFriendReplied = await ReferralFriendKeywordMod
 const cardCoolCall = worker.indexOf('const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);');
 const myCardCall = worker.indexOf('const simpleMyCardReplied = await this.replySimpleMyCard(events, env);');
 const referralCall = worker.indexOf('const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);');
-const gasCall = worker.indexOf('const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);');
+const keywordRuleCall = worker.indexOf('const keywordRuleReply = await LineOAKeywordRuleModule.replyPayload(events, env);');
+const gasFilterCall = worker.indexOf('const gasRawBody = keywordRuleReply ? rawBody : await this.filterAutoReplyPayload(rawBody, events, env);');
 ok(cardCoolCall >= 0 && myCardCall > cardCoolCall, 'AI card folder keyword runs before my-card keyword');
 ok(myCardCall >= 0 && referralCall > myCardCall, 'my-card keyword runs before referral keyword');
-ok(gasCall > cardCoolCall && gasCall > myCardCall && gasCall > referralCall, 'keyword handlers run before GAS forwarding');
+ok(keywordRuleCall > cardCoolCall && keywordRuleCall > myCardCall && keywordRuleCall > referralCall && gasFilterCall > keywordRuleCall, 'keyword handlers run before keyword-rule merge and GAS forwarding');
 
 console.log('\nLINE keyword contract passed.');

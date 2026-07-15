@@ -1,5 +1,6 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
+const { assertCacheBust } = require('./check-cache-bust-contract');
 
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -10,8 +11,10 @@ function fail(message) {
   process.exit(1);
 }
 
-if (!html.includes('js/auth.js?v=10.41')) {
-  fail('index.html must reference the bumped auth.js cache version');
+try {
+  assertCacheBust('js/auth.js');
+} catch (e) {
+  fail(e.message);
 }
 
 if (!auth.includes('window.saveUserSettings = async function(event)')) {

@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
@@ -17,7 +17,7 @@ function ok(condition, message) {
 ok(contract.includes('tel:<phone>') && contract.includes('mailto:<email>') && contract.includes('https://'), 'button contract documents tel/mailto/http normalization');
 
 ok(worker.includes('normalizeActionUri'), 'worker action URI normalizer exists');
-ok(worker.includes("if (/^(https?|tel|mailto|line):/i.test(value)) return value;"), 'worker preserves safe schemes');
+ok(worker.includes('if (/^tel:/i.test(value))') && worker.includes('if (/^(https?|mailto|line):/i.test(value)) return value;'), 'worker preserves and normalizes safe schemes');
 ok(worker.includes("return 'mailto:' + value"), 'worker auto-adds mailto for email');
 ok(worker.includes("return 'tel:' + compactPhone"), 'worker auto-adds tel for phone');
 ok(worker.includes('normalizePhoneForTel') && worker.includes('886') && worker.includes('86'), 'worker normalizes Taiwan and international phone prefixes');
