@@ -4528,6 +4528,10 @@ const PointModule = {
     return String(env.MOTHER_LINE_MEMBER_API_KEY || env.WETW_MASTER_API_KEY || env.AIWE_MEMBER_API_KEY || env.POINT_API_KEY || env.WETW_POINT_API_KEY || env.MOTHER_CUS_ACCOUNT_BOT_TOKEN || env.AIWE_CUS_ACCOUNT_BOT_TOKEN || '').trim();
   },
 
+  pointApiKey(env) {
+    return String(env.POINT_API_KEY || env.WETW_POINT_API_KEY || env.MOTHER_LINE_MEMBER_API_KEY || env.WETW_MASTER_API_KEY || env.AIWE_MEMBER_API_KEY || '').trim();
+  },
+
   async ensureMotherLineMember(payload = {}, env) {
     const apiKey = this.motherLineMemberApiKey(env);
     const lineUserId = String(payload.LINE_user_id || payload.lineUserId || payload.userId || payload.pointUserId || payload.pt_uid || payload.authenticatedUserId || '').trim();
@@ -4653,7 +4657,7 @@ const PointModule = {
   },
 
   async queryPointBalanceFast(payload, env) {
-    const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
+    const apiKey = this.pointApiKey(env);
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
 
     const explicitPointUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || '').trim();
@@ -4722,7 +4726,7 @@ const PointModule = {
   },
 
   async insertUserPoint(payload, env) {
-    const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
+    const apiKey = this.pointApiKey(env);
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
     const rawLineUserId = String(payload.LINE_user_id || payload.lineUserId || payload.userId || '').trim();
     const lineUserId = await this.resolvePointUserId(env, rawLineUserId).catch(() => rawLineUserId);
@@ -4884,7 +4888,7 @@ const PointModule = {
   },
 
   async queryUserPoints(payload, env) {
-    const apiKey = env.POINT_API_KEY || env.WETW_POINT_API_KEY;
+    const apiKey = this.pointApiKey(env);
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
 
     const explicitPointUserId = String(payload.pointUserId || payload.pt_uid || payload.LINE_user_id || '').trim();

@@ -1479,7 +1479,7 @@ window.fetchPointWalletData_ = async function(force = false) {
     return window.pointWalletData;
   }
   const pointUserId = window.resolvePointUserIdForCurrentProfile?.(userId) || userId;
-  const res = await window.fetchAPI(force ? 'queryUserPoints' : 'queryPointBalanceFast', {
+  let res = await window.fetchAPI(force ? 'queryUserPoints' : 'queryPointBalanceFast', {
     userId,
     pointUserId,
     pt_uid: pointUserId,
@@ -1487,6 +1487,16 @@ window.fetchPointWalletData_ = async function(force = false) {
     per_page: force ? 100 : 20,
     point_type: 'gift_money'
   }, true);
+  if ((!res || res.error) && !force) {
+    res = await window.fetchAPI('queryUserPoints', {
+      userId,
+      pointUserId,
+      pt_uid: pointUserId,
+      page: 1,
+      per_page: 100,
+      point_type: 'gift_money'
+    }, true).catch(() => null);
+  }
   if (!res || res.error) return null;
   const data = res.data || res;
   const balance = Number(data.balance ?? data.latestBalance ?? data.typedBalance);
