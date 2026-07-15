@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
@@ -30,7 +30,8 @@ ok(moduleSource.includes("action: { type: 'uri', uri: inviteUrl }"), 'QR image o
 ok(moduleSource.includes("label: '\\u5206\\u4eab'"), 'share button exists');
 
 const referralCall = worker.indexOf('const referralFriendReplied = await ReferralFriendKeywordModule.reply(events, env);');
-const gasCall = worker.indexOf('const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);');
-ok(referralCall >= 0 && gasCall > referralCall, 'referral keyword is handled before GAS forwarding');
+const keywordRuleCall = worker.indexOf('const keywordRuleReply = await LineOAKeywordRuleModule.replyPayload(events, env);');
+const gasFilterCall = worker.indexOf('const gasRawBody = keywordRuleReply ? rawBody : await this.filterAutoReplyPayload(rawBody, events, env);');
+ok(referralCall >= 0 && keywordRuleCall > referralCall && gasFilterCall > referralCall, 'referral keyword is handled before keyword-rule merge and GAS forwarding');
 
 console.log('\nReferral keyword v2 contract passed.');

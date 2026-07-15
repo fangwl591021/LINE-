@@ -1,5 +1,6 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
+const { assertCacheBust } = require('./check-cache-bust-contract');
 
 const root = path.resolve(__dirname, '..');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -16,8 +17,10 @@ if (!index.includes('名片酷請用來掃描客戶或合作夥伴') && !index.i
 if (!index.includes('window.openMyCardEntry ? window.openMyCardEntry(event)')) {
   fail('card scan page must offer a direct personal-card entry');
 }
-if (!index.includes('js/modules/cropper.js?v=7.16')) {
-  fail('cropper.js cache-bust version must be bumped');
+try {
+  assertCacheBust('js/modules/cropper.js');
+} catch (e) {
+  fail(e.message);
 }
 
 if (!/function looksLikeOwnCardUpload/.test(cropper)) {

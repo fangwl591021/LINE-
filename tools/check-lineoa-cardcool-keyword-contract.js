@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
@@ -46,8 +46,9 @@ ok(worker.includes('normalizePhoneForTel') && worker.includes('886') && worker.i
 
 const cardCoolCall = worker.indexOf('const cardCoolReplied = await LineOACardCoolKeywordModule.reply(events, env, ctx);');
 const myCardCall = worker.indexOf('const simpleMyCardReplied = await this.replySimpleMyCard(events, env);');
-const gasCall = worker.indexOf('const gasRawBody = await this.filterAutoReplyPayload(rawBody, events, env);');
+const keywordRuleCall = worker.indexOf('const keywordRuleReply = await LineOAKeywordRuleModule.replyPayload(events, env);');
+const gasFilterCall = worker.indexOf('const gasRawBody = keywordRuleReply ? rawBody : await this.filterAutoReplyPayload(rawBody, events, env);');
 ok(cardCoolCall >= 0 && myCardCall > cardCoolCall, 'card cool keyword runs before my-card keyword');
-ok(gasCall > cardCoolCall, 'card cool keyword runs before GAS forwarding');
+ok(keywordRuleCall > cardCoolCall && gasFilterCall > cardCoolCall, 'card cool keyword runs before keyword-rule merge and GAS forwarding');
 
 console.log('\nLINE OA card cool keyword contract passed.');

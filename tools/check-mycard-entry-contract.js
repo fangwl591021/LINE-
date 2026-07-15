@@ -1,5 +1,6 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
+const { assertCacheBust } = require('./check-cache-bust-contract');
 
 const root = path.resolve(__dirname, '..');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -14,8 +15,10 @@ function fail(message) {
 if (!index.includes('onclick="window.openMyCardEntry(event)"')) {
   fail('my card summary must open the direct entry handler');
 }
-if (!index.includes('js/modules/mycard.js?v=8.60')) {
-  fail('mycard.js cache-bust version must be bumped');
+try {
+  assertCacheBust('js/modules/mycard.js');
+} catch (e) {
+  fail(e.message);
 }
 if (!/js\/auth\.js\?v=\d+\.\d+/.test(index)) {
   fail('auth.js must be loaded with a cache-bust version');
@@ -29,10 +32,10 @@ if (!/async function openMyCardEntry/.test(mycard) || !/window\.openMyCardEntry 
 if (!/function findLoadedMyCardByVersion[\s\S]*isCardVersion\(pools\[i\], target\)[\s\S]*isEditableOwnCard\(pools\[i\], target\)/.test(mycard)) {
   fail('loaded my-card version lookup must reject cards that do not belong to the current user');
 }
-if (!/async function handleLayoutChange[\s\S]*if \(!isEditableOwnCard\(card, version\)\) card = await resolveMyCardVersion\(version, false\);[\s\S]*if \(isEditableOwnCard\(card, version\)/.test(mycard)) {
+if (!/async function handleLayoutChange[\s\S]*var card = await resolveMyCardVersion\(version, false\);[\s\S]*if \(!isEditableOwnCard\(card, version\)\) card = findLoadedMyCardByVersion\(version\);[\s\S]*if \(isEditableOwnCard\(card, version\)/.test(mycard)) {
   fail('layout switching must resolve a user-owned version before applying card data');
 }
-if (!/async function setMyCardWysiwygLayout[\s\S]*if \(!isEditableOwnCard\(card, version\)\) card = await resolveMyCardVersion\(version, false\);[\s\S]*if \(isEditableOwnCard\(card, version\)/.test(mycard)) {
+if (!/async function setMyCardWysiwygLayout[\s\S]*var card = await resolveMyCardVersion\(version, false\);[\s\S]*if \(!isEditableOwnCard\(card, version\)\) card = findLoadedMyCardByVersion\(version\);[\s\S]*if \(isEditableOwnCard\(card, version\)/.test(mycard)) {
   fail('WYSIWYG layout switching must resolve a user-owned version before applying card data');
 }
 if (!/currentCardData[\s\S]*window\.openCardDetail\(currentCardData\)/.test(mycard)) {

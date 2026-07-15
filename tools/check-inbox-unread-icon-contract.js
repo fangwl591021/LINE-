@@ -1,5 +1,6 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
+const { assertCacheBust } = require('./check-cache-bust-contract');
 
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -22,8 +23,10 @@ if (!html.includes('@keyframes inboxMailPulse')) {
   fail('home page must define the unread mail two-color animation');
 }
 
-if (!html.includes('js/modules/inbox.js?v=1.15')) {
-  fail('index.html must reference the bumped inbox.js cache version');
+try {
+  assertCacheBust('js/modules/inbox.js');
+} catch (e) {
+  fail(e.message);
 }
 
 if (!inbox.includes('button.classList.add("has-unread-mail")')) {

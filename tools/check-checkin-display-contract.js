@@ -1,5 +1,6 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
+const { assertCacheBust } = require('./check-cache-bust-contract');
 
 const root = path.resolve(__dirname, '..');
 const auth = fs.readFileSync(path.join(root, 'js', 'auth.js'), 'utf8');
@@ -29,8 +30,10 @@ if (!claim.includes('oldHtml') || !claim.includes('btn.innerHTML = oldHtml')) {
 if (/btn\.textContent\s*=\s*oldText/.test(claim)) {
   fail('daily check-in button must not restore with textContent only');
 }
-if (!index.includes('js/auth.js?v=10.41')) {
-  fail('auth.js cache-bust version must be bumped');
+try {
+  assertCacheBust('js/auth.js');
+} catch (e) {
+  fail(e.message);
 }
 
 console.log('Check-in display contract passed.');

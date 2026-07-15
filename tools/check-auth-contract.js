@@ -1,5 +1,6 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
+const { assertCacheBust } = require('./check-cache-bust-contract');
 
 const root = path.resolve(__dirname, '..');
 const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
@@ -61,7 +62,7 @@ const checks = [
   },
   {
     name: 'auth and core cache bust versions were bumped',
-    pass: /js\/core\.js\?v=7\.27/.test(index) && /js\/auth\.js\?v=10\.41/.test(index)
+    pass: (() => { try { assertCacheBust('js/core.js'); assertCacheBust('js/auth.js'); return true; } catch (e) { return false; } })()
   }
 ];
 
