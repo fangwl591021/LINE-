@@ -1,5 +1,6 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
+const { assertCacheBust } = require('./check-cache-bust-contract');
 
 const root = path.resolve(__dirname, '..');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -16,8 +17,10 @@ if (!index.includes('onclick="window.openTodayFortune?.()"')) {
 if (!index.includes('&#20170;&#26085;')) {
   fail('home fortune button must be labeled Today');
 }
-if (!index.includes('js/modules/home.js?v=7.50')) {
-  fail('home.js cache-bust version must be bumped');
+try {
+  assertCacheBust('js/modules/home.js');
+} catch (e) {
+  fail(e.message);
 }
 if (!index.includes('weekly-zodiac-theme-label') ||
     !index.includes('weekly-zodiac-summary-label') ||
