@@ -328,6 +328,21 @@ const SecurityModule = {
     return `${text.slice(0, 10)}...${text.slice(-6)}`;
   },
 
+  getActionPolicy(action) {
+    const key = this.text(action);
+    return key ? ACTION_POLICIES[key] || null : null;
+  },
+
+  legacyAuthSkipActions() {
+    return new Set(Object.entries(ACTION_POLICIES)
+      .filter(([, policy]) => policy && policy.legacyAuthSkip === true)
+      .map(([action]) => action));
+  },
+
+  logUnknownAction(action) {
+    const safeAction = this.text(action).replace(/[^a-zA-Z0-9_:-]/g, '').slice(0, 80) || 'unknown';
+    console.warn('Unknown action denied by policy:', safeAction);
+  },
   async authMismatchDiagnostic(payloadUserId, tokenUserId, env) {
     const payloadId = this.text(payloadUserId);
     const tokenId = this.text(tokenUserId);
