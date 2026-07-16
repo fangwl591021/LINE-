@@ -803,7 +803,7 @@ const HomeModule = (function() {
         if (!list) return;
         const suggestions = buildOnboardingSuggestions_(contacts);
         if (!suggestions.length) {
-            list.innerHTML = '<div class="bg-white rounded-[26px] border border-emerald-100 shadow-sm p-4 text-[13px] text-emerald-700 font-bold leading-relaxed">目前基礎設定已完成。下一步可以固定每天整理新增名片、追蹤回覆，讓 AI名片夾變成真正的業務管線。</div>';
+            list.innerHTML = '<div class="bg-white rounded-[26px] border border-emerald-100 shadow-sm p-5 min-h-[104px] flex items-center text-[13px] text-emerald-700 font-bold leading-relaxed">目前基礎設定已完成。下一步可以固定每天整理新增名片、追蹤回覆，讓 AI名片夾變成真正的業務管線。</div>';
             return;
         }
         const toneMap = {
@@ -815,7 +815,7 @@ const HomeModule = (function() {
         list.innerHTML = suggestions.map(function(item, index) {
             const tone = toneMap[item.tone] || toneMap.blue;
             return `
-                <button type="button" onclick="${item.onclick}" class="w-full bg-white rounded-[26px] border border-pink-100 shadow-sm p-3.5 text-left active:scale-[0.99] transition-transform">
+                <button type="button" onclick="${item.onclick}" class="w-full min-h-[112px] bg-white rounded-[26px] border border-pink-100 shadow-sm p-4 text-left active:scale-[0.99] transition-transform flex items-center">
                     <div class="flex items-center gap-3">
                         <span class="material-symbols-outlined icon-filled w-14 h-14 rounded-2xl bg-pink-50 text-pink-500 border border-pink-100 flex items-center justify-center shrink-0 text-[30px]">${item.icon}</span>
                         <div class="min-w-0 flex-1">
@@ -838,7 +838,7 @@ const HomeModule = (function() {
     window.loadHomeSalesAssistant = async function() {
         const list = document.getElementById('home-sales-assistant-list');
         if (!list || typeof window.fetchAPI !== 'function') return;
-        list.innerHTML = '<div class="bg-white rounded-[26px] border border-slate-100 shadow-sm p-4 text-[13px] text-slate-400 font-bold text-center">正在整理今日建議...</div>';
+        list.innerHTML = '<div class="bg-white rounded-[26px] border border-slate-100 shadow-sm p-5 min-h-[104px] flex items-center justify-center text-[13px] text-slate-400 font-bold text-center">正在整理今日建議...</div>';
         try {
             const res = await window.fetchAPI('getCrmContacts', { limit: 80 }, true);
             const contacts = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
@@ -848,7 +848,7 @@ const HomeModule = (function() {
                 .filter(item => String(item.sourceType || '') !== 'self_profile')
                 .slice(0, 3);
             if (!rows.length) {
-                list.innerHTML = '<div class="bg-white rounded-[26px] border border-slate-100 shadow-sm p-4 text-[13px] text-slate-400 font-bold text-center">今天沒有待跟進名片。新增名片後，系統會在這裡提醒下一步。</div>';
+                list.innerHTML = '<div class="bg-white rounded-[26px] border border-slate-100 shadow-sm p-5 min-h-[104px] flex items-center justify-center text-[13px] text-slate-400 font-bold text-center">今天沒有待跟進名片。新增名片後，系統會在這裡提醒下一步。</div>';
                 return;
             }
             list.innerHTML = rows.map(item => {
@@ -858,7 +858,7 @@ const HomeModule = (function() {
                 const suggestion = window.escapeHTML(item.crmAiSuggestion || '');
                 const rowId = window.escapeJS(item.rowId || item.cardRowId || '');
                 return `
-                    <button type="button" onclick="window.openCardDetailById ? window.openCardDetailById('${rowId}') : window.goPage('card')" class="w-full bg-white rounded-[26px] border border-pink-100 shadow-sm p-3.5 text-left active:scale-[0.99] transition-transform">
+                    <button type="button" onclick="window.openCardDetailById ? window.openCardDetailById('${rowId}') : window.goPage('card')" class="w-full min-h-[112px] bg-white rounded-[26px] border border-pink-100 shadow-sm p-4 text-left active:scale-[0.99] transition-transform flex items-center">
                         <div class="flex items-center justify-between gap-3">
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2 flex-wrap">
