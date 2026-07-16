@@ -416,7 +416,7 @@ window.showInviteLink = function() {
   // QR Code
   const qrImg = document.getElementById('invite-qr-img');
   if (qrImg) {
-    qrImg.src = 'https://quickchart.io/qr?text=' + encodeURIComponent(inviteUrl) + '&size=240&margin=2';
+    qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=' + encodeURIComponent(inviteUrl);
   }
 
   if (modal) modal.classList.remove('hidden');

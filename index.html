@@ -1022,6 +1022,15 @@
     <div id="page-home" class="hidden space-y-3 animate-in fade-in pb-10">
 
       <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 overflow-hidden rounded-b-xl bg-white shadow-sm">
+        <div class="bg-white px-4 py-3 text-center">
+          <button id="home-profile-avatar-button" type="button" onclick="window.handleHomeAvatarClick?.()" class="relative mx-auto block w-[74px] h-[74px] rounded-full bg-white border-[4px] border-white shadow-md overflow-hidden active:scale-95 transition-transform">
+            <img id="home-profile-avatar" src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" class="w-full h-full object-cover" alt="Profile">
+            <span id="home-profile-avatar-edit-badge" class="hidden absolute right-0 bottom-0 w-7 h-7 rounded-full bg-pink-500 text-white border-2 border-white items-center justify-center shadow-sm">
+              <span class="material-symbols-outlined text-[15px] icon-filled">photo_camera</span>
+            </span>
+          </button>
+          <h2 id="home-profile-name" class="mt-1.5 mx-auto block max-w-[190px] truncate text-[22px] font-black text-slate-900 tracking-tight leading-tight">會員</h2>
+        </div>
         <div class="grid grid-cols-2 bg-[#2fb36a] text-white">
           <button type="button" onclick="window.openPointsWallet()" class="home-top-shortcut">
             <span class="material-symbols-outlined">account_balance_wallet</span>
@@ -1040,10 +1049,8 @@
         </div>
         <span id="home-header-site-name" class="hidden">AI工坊</span>
         <button id="home-top-nav-switch" onclick="window.toggleAdminMode()" class="hidden"></button>
-        <img id="home-profile-qr" src="" class="hidden" alt="QR Code">
         <input id="home-profile-avatar-file" type="file" accept="image/*" class="hidden" onchange="window.uploadHomeProfileAvatar(this)">
         <input id="home-profile-avatar-url" type="hidden">
-        <span id="home-profile-name" class="hidden">會員</span>
         <button id="home-profile-role" type="button" onclick="window.openProfileRegistrationPanel?.()" class="hidden">會員註冊</button>
       </section>
 
@@ -2212,11 +2219,11 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.59"></script>
+<script src="js/modules/home.js?v=7.60"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
-<script src="js/modules/crm.js?v=7.5"></script>
+<script src="js/modules/crm.js?v=7.6"></script>
 <script src="js/auth.js?v=10.82"></script>
 
 </body>
