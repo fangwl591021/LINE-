@@ -360,6 +360,16 @@ const HomeModule = (function() {
         modal.classList.remove('hidden');
     };
 
+    window.openHomeZodiacFortune = function() {
+        const birthday = parseHomeBirthday_();
+        const zodiac = getHomeZodiac_(birthday);
+        if (!zodiac) {
+            if (window.showToast) window.showToast('請先在會員註冊填寫生日，才能查看星座運勢', true);
+            if (typeof window.openProfileRegistrationPanel === 'function') window.openProfileRegistrationPanel();
+            return;
+        }
+        window.openTodayFortune();
+    };
     window.openWeeklyZodiac = function() {
         const birthday = parseHomeBirthday_();
         const zodiac = getHomeZodiac_(birthday);

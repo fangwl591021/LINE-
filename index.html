@@ -894,9 +894,9 @@
               <div>
                 <h3 class="text-[17px] font-black text-slate-900 flex items-center gap-2">
                   <span class="material-symbols-outlined text-[#06C755] icon-filled">point_of_sale</span>
-                  店家點數收銀
+                  會員收銀機
                 </h3>
-                <p class="text-[13px] text-slate-500 font-bold mt-1">掃客戶帳戶後，可免費操作折抵扣點或消費贈點。</p>
+                <p class="text-[13px] text-slate-500 font-bold mt-1">掃描客戶 QR 碼或輸入電話可折抵扣點或消費贈點。</p>
               </div>
               <button type="button" tabindex="-1" class="pointer-events-none w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center transition-transform">
                 <span id="store-point-cashier-icon" class="material-symbols-outlined text-slate-500">expand_more</span>
@@ -918,7 +918,7 @@
             <div class="space-y-2">
               <label class="text-[13px] font-black text-slate-600">客戶帳號 / 手機 / QR 內容</label>
               <div id="store-point-customer-row" class="grid grid-cols-2 gap-2">
-                <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px] col-span-2 min-w-0" placeholder="掃 QR、貼 UID，或輸入手機搜尋" onblur="window.lookupStorePointCustomer()" onkeydown="if(event.key==='Enter'){event.preventDefault();window.lookupStorePointCustomer()}">
+                <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px] col-span-2 min-w-0" placeholder="輸入手機號碼，或按右下掃碼" onblur="window.lookupStorePointCustomer()" onkeydown="if(event.key==='Enter'){event.preventDefault();window.lookupStorePointCustomer()}">
                 <button type="button" onclick="window.lookupStorePointCustomer()" class="min-h-[48px] rounded-2xl bg-blue-50 text-blue-600 font-black active:scale-95 transition-transform">
                   查詢
                 </button>
@@ -949,7 +949,7 @@
 
             <div id="store-point-deduct-wrap" class="space-y-2">
               <label class="text-[13px] font-black text-slate-600">本次折抵點數</label>
-              <input id="store-point-deduct" type="number" min="0" step="1" inputmode="numeric" class="custom-input !py-3 text-[20px] font-black" placeholder="手動輸入要扣除的點數" oninput="window.updateStorePointPreview()">
+              <input id="store-point-deduct" type="number" min="0" step="1" inputmode="numeric" class="custom-input !py-3 text-[20px] font-black" placeholder="手動輸入要扣除的購物金點數" oninput="window.updateStorePointPreview()">
             </div>
 
             <div id="store-point-preview" class="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed">
@@ -1030,7 +1030,7 @@
           <div class="-mt-9 grid grid-cols-[108px_1fr_96px] gap-2 items-start">
             <div class="pt-11 space-y-2 text-left">
               <button type="button" onclick="window.openPointsWallet()" class="home-profile-side-card w-full px-3 py-2.5 text-left active:scale-[0.99] transition-transform">
-                <span class="block text-[11px] font-black text-slate-500">可用點數</span>
+                <span class="block text-[11px] font-black text-slate-500">購物金</span>
                 <span id="home-profile-points" class="block mt-1 text-[23px] leading-none font-black text-slate-400 tracking-tight">讀取中</span>
               </button>
               <button id="home-zodiac-weekly-btn" type="button" onclick="window.openTodayFortune?.()" class="hidden home-profile-side-card w-full px-3 py-2 active:scale-95 transition-transform items-center justify-center gap-2 whitespace-nowrap">
@@ -1084,7 +1084,7 @@
               <h2 id="home-profile-name" class="block w-full truncate text-[20px] font-black text-slate-900 tracking-tight leading-tight">會員</h2>
               <button id="home-profile-role" type="button" onclick="window.openProfileRegistrationPanel?.()" class="shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 text-[10px] font-black active:scale-95 transition-transform"><span class="material-symbols-outlined text-[13px] icon-filled">person</span>會員註冊</button>
             </div>
-            <p class="mt-1.5 text-[12px] font-bold text-slate-500">可用點數</p>
+            <p class="mt-1.5 text-[12px] font-bold text-slate-500">購物金</p>
             <div class="mt-0.5 flex items-center gap-2 flex-wrap">
               <button type="button" onclick="window.openPointsWallet()" class="text-left active:scale-[0.99] transition-transform">
                 <span id="home-profile-points" class="text-[26px] leading-none font-black text-slate-400 tracking-tight">讀取中</span>
@@ -1129,30 +1129,38 @@
 
       <div class="mx-0 mt-3">
         <div class="grid grid-cols-3 gap-2.5">
-          <button id="home-my-card-button" onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : window.goPage('admin-settings')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">contact_mail</span>
-            <span class="home-quick-label">&#25105;&#30340;&#21517;&#29255;</span>
+          <button type="button" onclick="window.openProfileRegistrationPanel?.()" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">person</span>
+            <span class="home-quick-label">會員註冊</span>
           </button>
           <button onclick="window.goPage('card')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined">document_scanner</span>
             <span class="home-quick-label">AI名片夾</span>
           </button>
+          <button onclick="window.claimDailyPointCheckin(this)" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">redeem</span>
+            <span class="home-quick-label">&#31805;&#21040;&#36104;&#40670;</span>
+          </button>
           <button onclick="window.goPage('my-activities')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined">event_note</span>
             <span class="home-quick-label">&#36319;&#36914;</span>
+          </button>
+          <button id="home-my-card-button" onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : window.goPage('admin-settings')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">contact_mail</span>
+            <span class="home-quick-label">&#25105;&#30340;&#21517;&#29255;</span>
           </button>
           <button id="inbox-nav-button" onclick="window.goPage('inbox')" class="home-quick-circle group relative">
             <span class="home-quick-icon home-quick-mail-icon material-symbols-outlined">mail</span>
             <span class="home-quick-label">收件匣</span>
             <span id="inbox-unread-badge" class="hidden absolute top-0 right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-5 text-center shadow-sm">0</span>
           </button>
-          <button onclick="window.claimDailyPointCheckin(this)" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">redeem</span>
-            <span class="home-quick-label">&#31805;&#21040;&#36104;&#40670;</span>
-          </button>
           <button type="button" onclick="window.openPartnerStores && window.openPartnerStores()" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined">storefront</span>
             <span class="home-quick-label">&#21512;&#20316;&#24215;&#23478;</span>
+          </button>
+          <button type="button" onclick="window.openHomeZodiacFortune?.()" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined">stars</span>
+            <span class="home-quick-label">星座運勢</span>
           </button>
         </div>
       </div>
@@ -2225,12 +2233,12 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.57"></script>
+<script src="js/modules/home.js?v=7.58"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.5"></script>
-<script src="js/auth.js?v=10.81"></script>
+<script src="js/auth.js?v=10.82"></script>
 
 </body>
 </html>

@@ -2221,7 +2221,7 @@ window.scanStorePointQr = async function(input) {
 
 window.submitStorePointCashier = async function(btn) {
   if (!window.canUseStorePointCashier()) {
-    return window.showToast?.('只有店長或總管可以使用店家點數收銀', true);
+    return window.showToast?.('只有店長或總管可以使用會員收銀機', true);
   }
   const customerInput = document.getElementById('store-point-customer');
   const amountInput = document.getElementById('store-point-amount');
