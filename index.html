@@ -44,9 +44,14 @@
     .nav-active { @apply text-blue-700 font-bold; }
     .nav-active .icon-box { @apply bg-blue-50 text-blue-700; }
     .nav-active .material-symbols-outlined { font-variation-settings: 'FILL' 1; }
-    .home-quick-circle { @apply flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform min-w-0 min-h-[104px] py-3 bg-white rounded-[26px] border border-slate-100 shadow-sm; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
-    .home-quick-icon { @apply w-11 h-11 rounded-2xl bg-pink-50 text-pink-500 border border-pink-100 flex items-center justify-center shadow-sm text-[27px]; font-variation-settings: 'FILL' 1; }
-    .home-quick-label { @apply text-[14px] font-black text-slate-800 leading-tight text-center whitespace-nowrap; }
+    .home-quick-circle { @apply flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-transform min-w-0 min-h-[64px] py-2 bg-transparent rounded-none border-0 shadow-none; }
+    .home-quick-icon { @apply w-8 h-8 flex items-center justify-center text-[29px]; font-variation-settings: 'FILL' 0; }
+    .home-quick-label { @apply text-[11px] font-black text-slate-800 leading-tight text-center whitespace-nowrap; }
+    .home-top-shortcut { @apply flex items-center justify-center gap-2 min-h-[86px] bg-[#2fb36a] text-white active:scale-[0.99] transition-transform; }
+    .home-top-shortcut + .home-top-shortcut { @apply border-l border-white/25; }
+    .home-top-shortcut .material-symbols-outlined { font-size: 32px; font-variation-settings: 'FILL' 0; }
+    .home-top-shortcut-label { @apply block text-[13px] font-black leading-tight; }
+    .home-top-shortcut-value { @apply block mt-0.5 text-[12px] font-black leading-tight text-white/95; }
     .home-profile-hero {
       background-color: #06C755;
       background-image: radial-gradient(rgba(255,255,255,0.2) 1px, transparent 1px);
@@ -1016,56 +1021,30 @@
     <!-- ==================== 首頁 ==================== -->
     <div id="page-home" class="hidden space-y-3 animate-in fade-in pb-10">
 
-      <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1">
-        <div class="home-profile-hero relative h-[72px] -mx-4">
-          <div class="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-3">
-            <span id="home-header-site-name" class="min-w-0 truncate whitespace-nowrap text-[22px] font-black text-white tracking-tight leading-tight drop-shadow-sm">AI工坊</span>
-            <button id="home-top-nav-switch" onclick="window.toggleAdminMode()" class="hidden shrink-0 w-9 h-9 rounded-full bg-white/18 border border-white/25 text-white flex items-center justify-center active:scale-90 transition-transform shadow-sm backdrop-blur">
-              <span class="material-symbols-outlined text-[20px]">swap_horiz</span>
-            </button>
-          </div>
+      <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 overflow-hidden rounded-b-xl bg-white shadow-sm">
+        <div class="grid grid-cols-2 bg-[#2fb36a] text-white">
+          <button type="button" onclick="window.openPointsWallet()" class="home-top-shortcut">
+            <span class="material-symbols-outlined">account_balance_wallet</span>
+            <span class="text-left">
+              <span class="home-top-shortcut-label">購物金</span>
+              <span id="home-profile-points" class="home-top-shortcut-value">讀取中</span>
+            </span>
+          </button>
+          <button type="button" onclick="window.showInviteLink?.()" class="home-top-shortcut">
+            <span class="material-symbols-outlined">qr_code_2</span>
+            <span class="text-left">
+              <span class="home-top-shortcut-label">專屬QR</span>
+              <span class="home-top-shortcut-value">分享</span>
+            </span>
+          </button>
         </div>
-
-        <div class="relative px-0 pb-1">
-          <div class="-mt-9 grid grid-cols-[108px_1fr_96px] gap-2 items-start">
-            <div class="pt-11 space-y-2 text-left">
-              <button type="button" onclick="window.openPointsWallet()" class="home-profile-side-card w-full px-3 py-2.5 text-left active:scale-[0.99] transition-transform">
-                <span class="block text-[11px] font-black text-slate-500">購物金</span>
-                <span id="home-profile-points" class="block mt-1 text-[23px] leading-none font-black text-slate-400 tracking-tight">讀取中</span>
-              </button>
-              <button id="home-zodiac-weekly-btn" type="button" onclick="window.openTodayFortune?.()" class="hidden home-profile-side-card w-full px-3 py-2 active:scale-95 transition-transform items-center justify-center gap-2 whitespace-nowrap">
-                <span id="home-zodiac-weekly-icon" class="shrink-0 w-8 h-8 rounded-xl bg-white shadow-sm flex items-center justify-center text-[20px] leading-none text-pink-500">♎</span>
-                <span id="home-zodiac-weekly-label" class="inline-flex items-center text-[13px] font-black text-slate-800 leading-none">&#20170;&#26085;</span>
-              </button>
-            </div>
-
-            <div class="min-w-0 text-center">
-              <button id="home-profile-avatar-button" type="button" onclick="window.handleHomeAvatarClick?.()" class="relative mx-auto block w-[88px] h-[88px] rounded-full bg-white border-[5px] border-white shadow-lg overflow-hidden active:scale-95 transition-transform">
-                <img id="home-profile-avatar" src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" class="w-full h-full object-cover" alt="Profile">
-                <span id="home-profile-avatar-edit-badge" class="hidden absolute right-0 bottom-0 w-8 h-8 rounded-full bg-pink-500 text-white border-2 border-white items-center justify-center shadow-sm">
-                  <span class="material-symbols-outlined text-[17px] icon-filled">photo_camera</span>
-                </span>
-              </button>
-              <input id="home-profile-avatar-file" type="file" accept="image/*" class="hidden" onchange="window.uploadHomeProfileAvatar(this)">
-              <input id="home-profile-avatar-url" type="hidden">
-              <h2 id="home-profile-name" class="mt-2 mx-auto block max-w-[168px] truncate text-[22px] font-black text-slate-900 tracking-tight leading-tight">會員</h2>
-              <button id="home-profile-role" type="button" onclick="window.openProfileRegistrationPanel?.()" class="mt-1.5 inline-flex items-center gap-1 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-1 text-[11px] font-black active:scale-95 transition-transform"><span class="material-symbols-outlined text-[13px] icon-filled">person</span>會員註冊</button>
-            </div>
-
-            <div class="home-profile-side-card shrink-0 mt-11 p-2 text-center">
-              <p class="text-[11px] font-black text-slate-700 mb-1 leading-tight">專屬 QR</p>
-              <button type="button" onclick="window.showInviteLink?.()" class="block w-[66px] h-[66px] mx-auto rounded-lg bg-white overflow-hidden active:scale-95 transition-transform">
-                <img id="home-profile-qr" src="" class="w-full h-full object-contain" alt="QR Code">
-              </button>
-              <div class="mt-1">
-                <button type="button" onclick="window.shareHomeProfileCard(this)" class="h-7 w-full rounded-xl bg-pink-500 text-white text-[12px] font-black active:scale-95 transition-transform flex items-center justify-center gap-1 whitespace-nowrap">
-                  分享
-                  <span class="material-symbols-outlined text-[13px]">share</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <span id="home-header-site-name" class="hidden">AI工坊</span>
+        <button id="home-top-nav-switch" onclick="window.toggleAdminMode()" class="hidden"></button>
+        <img id="home-profile-qr" src="" class="hidden" alt="QR Code">
+        <input id="home-profile-avatar-file" type="file" accept="image/*" class="hidden" onchange="window.uploadHomeProfileAvatar(this)">
+        <input id="home-profile-avatar-url" type="hidden">
+        <span id="home-profile-name" class="hidden">會員</span>
+        <button id="home-profile-role" type="button" onclick="window.openProfileRegistrationPanel?.()" class="hidden">會員註冊</button>
       </section>
 
       <section id="home-profile-card-legacy" class="hidden">
@@ -1127,40 +1106,40 @@
         </div>
       </div>
 
-      <div class="mx-0 mt-3">
-        <div class="grid grid-cols-3 gap-2.5">
+      <div class="mx-0 bg-white px-2 pt-3 pb-4 shadow-sm">
+        <div class="grid grid-cols-4 gap-y-4 gap-x-1">
           <button type="button" onclick="window.openProfileRegistrationPanel?.()" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">person</span>
+            <span class="home-quick-icon material-symbols-outlined text-violet-600">edit_note</span>
             <span class="home-quick-label">會員註冊</span>
           </button>
-          <button onclick="window.goPage('card')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">document_scanner</span>
-            <span class="home-quick-label">AI名片夾</span>
-          </button>
-          <button onclick="window.claimDailyPointCheckin(this)" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">redeem</span>
-            <span class="home-quick-label">&#31805;&#21040;&#36104;&#40670;</span>
-          </button>
-          <button onclick="window.goPage('my-activities')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">event_note</span>
-            <span class="home-quick-label">&#36319;&#36914;</span>
-          </button>
           <button id="home-my-card-button" onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : window.goPage('admin-settings')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">contact_mail</span>
+            <span class="home-quick-icon material-symbols-outlined text-pink-500">badge</span>
             <span class="home-quick-label">&#25105;&#30340;&#21517;&#29255;</span>
           </button>
+          <button onclick="window.goPage('card')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-orange-500">wallet</span>
+            <span class="home-quick-label">AI名片夾</span>
+          </button>
+          <button type="button" onclick="window.openHomeZodiacFortune?.()" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-purple-500">water_drop</span>
+            <span class="home-quick-label">星座運勢</span>
+          </button>
+          <button onclick="window.claimDailyPointCheckin(this)" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-red-500">redeem</span>
+            <span class="home-quick-label">簽到贈點</span>
+          </button>
+          <button onclick="window.goPage('my-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-slate-900">calendar_month</span>
+            <span class="home-quick-label">跟進</span>
+          </button>
           <button id="inbox-nav-button" onclick="window.goPage('inbox')" class="home-quick-circle group relative">
-            <span class="home-quick-icon home-quick-mail-icon material-symbols-outlined">mail</span>
-            <span class="home-quick-label">收件匣</span>
+            <span class="home-quick-icon home-quick-mail-icon material-symbols-outlined text-slate-900">mail</span>
+            <span class="home-quick-label">收件夾</span>
             <span id="inbox-unread-badge" class="hidden absolute top-0 right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-5 text-center shadow-sm">0</span>
           </button>
           <button type="button" onclick="window.openPartnerStores && window.openPartnerStores()" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">storefront</span>
-            <span class="home-quick-label">&#21512;&#20316;&#24215;&#23478;</span>
-          </button>
-          <button type="button" onclick="window.openHomeZodiacFortune?.()" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined">stars</span>
-            <span class="home-quick-label">星座運勢</span>
+            <span class="home-quick-icon material-symbols-outlined text-red-500">handshake</span>
+            <span class="home-quick-label">合作店家</span>
           </button>
         </div>
       </div>
@@ -2233,7 +2212,7 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.58"></script>
+<script src="js/modules/home.js?v=7.59"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
