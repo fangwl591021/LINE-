@@ -806,25 +806,18 @@ const HomeModule = (function() {
             list.innerHTML = '<div class="home-advice-empty bg-white rounded-[26px] border border-emerald-100 shadow-sm text-[13px] text-emerald-700 font-bold leading-relaxed">目前基礎設定已完成。下一步可以固定每天整理新增名片、追蹤回覆，讓 AI名片夾變成真正的業務管線。</div>';
             return;
         }
-        const toneMap = {
-            blue: 'bg-blue-50 text-blue-600 border-blue-100',
-            emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-            amber: 'bg-amber-50 text-amber-600 border-amber-100',
-            pink: 'bg-pink-50 text-pink-600 border-pink-100'
-        };
         list.innerHTML = suggestions.map(function(item, index) {
-            const tone = toneMap[item.tone] || toneMap.blue;
             return `
                 <button type="button" onclick="${item.onclick}" class="home-advice-card w-full bg-white rounded-[26px] border border-pink-100 shadow-sm text-left active:scale-[0.99] transition-transform">
-                    <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined icon-filled w-14 h-14 rounded-2xl bg-pink-50 text-pink-500 border border-pink-100 flex items-center justify-center shrink-0 text-[30px]">${item.icon}</span>
+                    <div class="home-advice-row">
+                        <span class="home-advice-icon material-symbols-outlined icon-filled bg-pink-50 text-pink-500 border border-pink-100">${item.icon}</span>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center justify-between gap-3">
-                                <h4 class="font-black text-slate-900 text-[15px] leading-snug">${window.escapeHTML(item.title)}</h4>
-                                <span class="text-[11px] font-black text-slate-400 whitespace-nowrap">建議 ${index + 1}</span>
+                                <h4 class="home-advice-title">${window.escapeHTML(item.title)}</h4>
+                                <span class="home-advice-meta">建議 ${index + 1}</span>
                             </div>
-                            <p class="mt-1 text-[13px] text-slate-500 font-bold leading-relaxed line-clamp-2">${window.escapeHTML(item.body)}</p>
-                            <div class="mt-2 inline-flex items-center gap-1 text-[13px] font-black text-pink-500">
+                            <p class="home-advice-body line-clamp-2">${window.escapeHTML(item.body)}</p>
+                            <div class="home-advice-action">
                                 ${window.escapeHTML(item.action)}
                                 <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
                             </div>
@@ -859,14 +852,15 @@ const HomeModule = (function() {
                 const rowId = window.escapeJS(item.rowId || item.cardRowId || '');
                 return `
                     <button type="button" onclick="window.openCardDetailById ? window.openCardDetailById('${rowId}') : window.goPage('card')" class="home-advice-card w-full bg-white rounded-[26px] border border-pink-100 shadow-sm text-left active:scale-[0.99] transition-transform">
-                        <div class="flex items-center justify-between gap-3">
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="font-black text-slate-900 text-[16px]">${name}</span>
-                                    <span class="px-2 py-1 rounded-full bg-pink-50 text-pink-600 text-[11px] font-black">${type}</span>
+                        <div class="home-advice-row">
+                            <span class="home-advice-icon material-symbols-outlined icon-filled bg-pink-50 text-pink-500 border border-pink-100">support_agent</span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between gap-3">
+                                    <h4 class="home-advice-title">${name}</h4>
+                                    <span class="home-advice-meta">${type}</span>
                                 </div>
-                                <p class="mt-1 text-[13px] font-bold text-slate-600">建議：${action}</p>
-                                ${suggestion ? `<p class="mt-2 text-[12px] text-slate-400 font-bold leading-relaxed line-clamp-2">${suggestion}</p>` : ''}
+                                <p class="home-advice-body line-clamp-2">建議：${action}</p>
+                                ${suggestion ? '<p class="home-advice-body !mt-1 line-clamp-1">' + suggestion + '</p>' : ''}
                             </div>
                             <span class="material-symbols-outlined text-slate-300 shrink-0">chevron_right</span>
                         </div>
