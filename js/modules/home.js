@@ -723,10 +723,43 @@ const HomeModule = (function() {
     };
 
     window.scrollToHomeSalesAssistant = function() {
-        const section = document.getElementById('home-sales-assistant-section');
-        if (section && section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const section = document.getElementById('home-sales-assistant-section') || document.getElementById('home-sales-assistant-list');
+        if (section) {
+            section.classList.remove('hidden');
+            if (section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     };
 
+    window.openHomeLowerPanel = function(type) {
+        const map = {
+            onboarding: 'home-onboarding-ai-list',
+            assistant: 'home-sales-assistant-list'
+        };
+        const targetId = map[type] || map.onboarding;
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        ['home-onboarding-ai-list', 'home-sales-assistant-list'].forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', id !== targetId);
+        });
+        if (!target.innerHTML.trim() && typeof window.loadHomeSalesAssistant === 'function') {
+            window.loadHomeSalesAssistant();
+        }
+        target.classList.remove('hidden');
+        if (target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    window.openHomeActivityCategory = function(type) {
+        if (typeof window.goPage === 'function') window.goPage('active');
+        setTimeout(function() {
+            const map = { activity: '例會', course: '課程', social: '聯誼', other: '其他' };
+            const value = map[type] || '例會';
+            ['q-type', 'f-type', 's-type'].forEach(function(id) {
+                const select = document.getElementById(id);
+                if (select) select.value = value;
+            });
+        }, 120);
+    };
     function buildOnboardingSuggestions_(contacts) {
         const rows = Array.isArray(contacts) ? contacts : [];
         const current = window.currentUser || {};
