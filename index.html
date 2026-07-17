@@ -52,6 +52,10 @@
     .home-top-shortcut .material-symbols-outlined { font-size: 36px; font-variation-settings: 'FILL' 0; }
     .home-top-shortcut-label { @apply block text-[15px] font-black leading-tight; }
     .home-top-shortcut-value { @apply block mt-1 text-[14px] font-black leading-tight text-white/95; }
+    .home-lower-panel { @apply bg-white border-y border-slate-100 shadow-sm; }
+    .home-section-kicker { @apply text-[15px] font-black text-slate-500 leading-none; }
+    .home-lower-panel .home-quick-circle { min-height: 72px; }
+    .home-lower-panel .home-quick-label { @apply text-[13px]; }
     .home-advice-card { min-height: 132px; display: flex; align-items: center; padding: 20px 22px !important; }
     .home-advice-card > .home-advice-row { width: 100%; display: flex; align-items: center; gap: 16px; }
     .home-advice-icon { width: 58px; height: 58px; border-radius: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 30px; }
@@ -1176,69 +1180,80 @@
         </div>
       </div>
 
-      <section id="home-onboarding-ai-section" class="mx-0 mt-7 pt-[10px]">
-        <h3 class="font-black text-[22px] text-slate-800 mb-4 flex items-center gap-2">
-          <span class="material-symbols-outlined text-pink-500 icon-filled">emoji_objects</span>
-          AI &#19978;&#25163;&#24314;&#35696;
-        </h3>
-        <div id="home-onboarding-ai-list" class="space-y-3">
-          <div class="bg-white rounded-3xl border border-amber-100 shadow-sm p-5 text-[13px] text-slate-400 font-bold text-center">正在判斷下一步...</div>
+      <section class="home-lower-panel mx-0 mt-5 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
+        <h3 class="home-section-kicker">&#65;&#73;&#26381;&#21209;</h3>
+        <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
+          <button type="button" onclick="window.showToast?.('&#19978;&#25163;&#24314;&#35696;')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-violet-600">fact_check</span>
+            <span class="home-quick-label !text-[13px]">&#19978;&#25163;&#24314;&#35696;</span>
+          </button>
+          <button type="button" onclick="window.showToast?.('&#26989;&#21209;&#21161;&#29702;')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-pink-500">smart_toy</span>
+            <span class="home-quick-label !text-[13px]">&#26989;&#21209;&#21161;&#29702;</span>
+          </button>
+          <button type="button" onclick="window.goPage('matchmake')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-purple-500">extension</span>
+            <span class="home-quick-label !text-[13px]">&#37197;&#23565;</span>
+          </button>
+          <button type="button" onclick="window.goPage('my-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-slate-900">calendar_month</span>
+            <span class="home-quick-label !text-[13px]">&#36319;&#36914;</span>
+          </button>
+          <button type="button" onclick="window.goPage('inbox')" class="home-quick-circle group relative">
+            <span class="home-quick-icon material-symbols-outlined text-indigo-600">mail</span>
+            <span class="home-quick-label !text-[13px]">&#25910;&#20449;&#22846;</span>
+          </button>
         </div>
+        <div id="home-onboarding-ai-list" class="hidden"></div>
+        <div id="home-sales-assistant-list" class="hidden"></div>
+        <div id="home-matchmake-slot" class="hidden"></div>
       </section>
 
-      <section id="home-sales-assistant-section" class="mx-0 mt-6 pt-[10px]">
-        <h3 class="font-black text-[22px] text-slate-800 mb-4 flex items-center gap-2">
-          <span class="material-symbols-outlined text-pink-500 icon-filled">support_agent</span>
-          &#20170;&#26085;&#26989;&#21209;&#21161;&#29702;
-        </h3>
-        <div id="home-sales-assistant-list" class="space-y-3">
-          <div class="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 text-[13px] text-slate-400 font-bold text-center">正在整理今日建議...</div>
-        </div>
-      </section>
-
-      <div id="home-matchmake-slot" class="mx-0 mt-5"></div>
-
-      <section id="home-feature-section" class="mx-0 mt-5">
-        <h3 class="font-black text-[20px] text-slate-800 mb-3 flex items-center gap-2">
-          <span class="material-symbols-outlined text-pink-500 icon-filled">stars</span>
-          &#31934;&#36984;&#21151;&#33021;
-        </h3>
-        <div class="grid grid-cols-2 gap-3">
-          <button type="button" onclick="window.goPage('admin-crm')" class="home-action-card p-4 text-left active:scale-[0.99] transition-transform flex items-center gap-3">
-            <span class="home-quick-icon material-symbols-outlined !w-12 !h-12 !text-[26px]">groups</span>
-            <span class="min-w-0">
-              <span class="block text-[15px] font-black text-slate-900">&#25105;&#30340;&#23458;&#25142;</span>
-              <span class="block text-[12px] font-bold text-slate-400 mt-0.5">&#23458;&#25142;&#31649;&#29702;&#33287;&#36861;&#36452;</span>
-            </span>
+      <section id="home-feature-section" class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
+        <h3 class="home-section-kicker">&#31934;&#36984;&#21151;&#33021;</h3>
+        <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
+          <button type="button" onclick="window.goPage('admin-crm')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-pink-500">groups</span>
+            <span class="home-quick-label !text-[13px]">&#25105;&#30340;&#23458;&#25142;</span>
           </button>
-          <button type="button" onclick="window.goPage('admin-stats')" class="home-action-card p-4 text-left active:scale-[0.99] transition-transform flex items-center gap-3">
-            <span class="home-quick-icon material-symbols-outlined !w-12 !h-12 !text-[26px]">pie_chart</span>
-            <span class="min-w-0">
-              <span class="block text-[15px] font-black text-slate-900">&#25976;&#25818;&#20998;&#26512;</span>
-              <span class="block text-[12px] font-bold text-slate-400 mt-0.5">&#26989;&#21209;&#25976;&#25818;&#32317;&#35261;</span>
-            </span>
+          <button type="button" onclick="window.goPage('admin-stats')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-red-500">monitoring</span>
+            <span class="home-quick-label !text-[13px]">&#25976;&#25818;&#20998;&#26512;</span>
           </button>
-          <button type="button" onclick="window.goPage('my-activities')" class="home-action-card p-4 text-left active:scale-[0.99] transition-transform flex items-center gap-3">
-            <span class="home-quick-icon material-symbols-outlined !w-12 !h-12 !text-[26px]">bookmark_star</span>
-            <span class="min-w-0">
-              <span class="block text-[15px] font-black text-slate-900">&#20219;&#21209;&#31649;&#29702;</span>
-              <span class="block text-[12px] font-bold text-slate-400 mt-0.5">&#24453;&#36774;&#20107;&#38917;&#36861;&#36452;</span>
-            </span>
+          <button type="button" onclick="window.goPage('my-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-slate-900">task</span>
+            <span class="home-quick-label !text-[13px]">&#20219;&#21209;&#31649;&#29702;</span>
           </button>
-          <button type="button" onclick="window.openPointsWallet()" class="home-action-card p-4 text-left active:scale-[0.99] transition-transform flex items-center gap-3">
-            <span class="home-quick-icon material-symbols-outlined !w-12 !h-12 !text-[26px]">redeem</span>
-            <span class="min-w-0">
-              <span class="block text-[15px] font-black text-slate-900">&#40670;&#25976;&#21830;&#22478;</span>
-              <span class="block text-[12px] font-bold text-slate-400 mt-0.5">&#40670;&#25976;&#20812;&#25563;&#22909;&#31150;</span>
-            </span>
+          <button type="button" onclick="window.openPointsWallet()" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-yellow-500 icon-filled">monetization_on</span>
+            <span class="home-quick-label !text-[13px]">&#40670;&#25976;&#26597;&#35426;</span>
           </button>
         </div>
       </section>
 
-      <div class="mx-1 mt-8">
-        <h3 class="font-black text-lg text-slate-800 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary icon-filled">event_available</span> 近期活動報名</h3>
-        <div id="user-activities-list" class="space-y-4"></div>
-      </div>
+      <section class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
+        <h3 class="home-section-kicker">&#36817;&#26399;&#27963;&#21205;</h3>
+        <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
+          <button type="button" onclick="window.goPage('admin-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-orange-500">groups</span>
+            <span class="home-quick-label !text-[13px]">&#27963;&#21205;</span>
+          </button>
+          <button type="button" onclick="window.goPage('admin-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-pink-500">co_present</span>
+            <span class="home-quick-label !text-[13px]">&#35506;&#31243;</span>
+          </button>
+          <button type="button" onclick="window.goPage('admin-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-slate-900">celebration</span>
+            <span class="home-quick-label !text-[13px]">&#32879;&#35522;</span>
+          </button>
+          <button type="button" onclick="window.goPage('admin-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-slate-900">festival</span>
+            <span class="home-quick-label !text-[13px]">&#20854;&#23427;</span>
+          </button>
+        </div>
+        <div id="user-activities-list" class="hidden"></div>
+      </section>
+
     </div>
 
     <!-- ==================== 名片列表頁 ==================== -->
