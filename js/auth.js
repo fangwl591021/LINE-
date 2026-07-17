@@ -750,10 +750,33 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
   }
 }
 
+const PRIVACY_TERMS_URL = 'https://aiwe.cc/index.php/term/';
+
+window.openPrivacyTermsModal = function() {
+  const modal = document.getElementById('privacy-terms-modal');
+  const frame = document.getElementById('privacy-terms-iframe');
+  if (frame && frame.getAttribute('src') !== PRIVACY_TERMS_URL) frame.setAttribute('src', PRIVACY_TERMS_URL);
+  if (modal) modal.classList.remove('hidden');
+};
+
+window.closePrivacyTermsModal = function() {
+  document.getElementById('privacy-terms-modal')?.classList.add('hidden');
+};
+
+window.requirePrivacyTermsAgreement = function(checkboxId) {
+  const checkbox = document.getElementById(checkboxId);
+  if (!checkbox || checkbox.checked) return true;
+  window.showToast?.('請先閱讀並勾選同意個資聲明', true);
+  try { checkbox.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { checkbox.scrollIntoView(); }
+  checkbox.focus?.();
+  return false;
+};
+
 window.submitRegistration = async function() {
   const name = document.getElementById('reg-name').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
   if (!name || !phone) return window.showToast('姓名與手機為必填', true);
+  if (!window.requirePrivacyTermsAgreement('reg-privacy-agree')) return;
 
   const btn = document.getElementById('btn-register');
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 註冊中...';
@@ -813,6 +836,7 @@ window.saveProfileRegistration = async function(event) {
 
   if (!userId) return window.showToast('請先重新登入後再補完資料', true);
   if (!name || !phone) return window.showToast('真實姓名與手機號碼必填', true);
+  if (!window.requirePrivacyTermsAgreement('profile-privacy-agree')) return;
 
   const originalHtml = btn ? btn.innerHTML : '';
   if (btn) {
@@ -863,6 +887,7 @@ window.submitClaimRegistration = async function() {
   const name = document.getElementById('claim-name').value.trim();
   const phone = document.getElementById('claim-phone').value.trim();
   if (!name || !phone) return window.showToast('姓名與手機為必填', true);
+  if (!window.requirePrivacyTermsAgreement('claim-privacy-agree')) return;
 
   const btn = document.getElementById('btn-claim-register');
   btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 處理綁定中...';
