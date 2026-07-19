@@ -1173,9 +1173,9 @@
             <span class="home-quick-label">收件夾</span>
             <span id="inbox-unread-badge" class="hidden absolute top-0 right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-5 text-center shadow-sm">0</span>
           </button>
-          <button type="button" onclick="window.openPartnerStores && window.openPartnerStores()" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-red-500">handshake</span>
-            <span class="home-quick-label">合作店家</span>
+          <button type="button" onclick="window.goPage('platform-shop')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-purple-600">storefront</span>
+            <span class="home-quick-label">線上商城</span>
           </button>
         </div>
       </div>
@@ -2023,6 +2023,41 @@
       <div id="crm-person-content"></div>
     </div>
 
+
+    <!-- ==================== 平台商城 ==================== -->
+    <div id="page-platform-shop" class="hidden animate-in fade-in mx-1 pb-24 pt-2">
+      <div class="flex items-center gap-3 mb-4 px-1">
+        <button type="button" onclick="window.goPage('home')" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm">
+          <span class="material-symbols-outlined text-[22px]">arrow_back</span>
+        </button>
+        <div class="min-w-0">
+          <h2 class="text-2xl font-black text-slate-800 tracking-tight">線上商城</h2>
+          <p class="text-[12px] text-slate-400 font-bold mt-0.5">平台統一上架，會員購物金折抵。</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div class="px-5 py-5 bg-emerald-50 border-b border-emerald-100">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-[12px] font-black text-emerald-600 tracking-wide">PLATFORM SHOP</p>
+              <h3 class="text-xl font-black text-slate-800 mt-1">平台精選商品</h3>
+              <p class="text-[13px] font-bold text-slate-500 mt-2 leading-relaxed">每件商品可設定可折抵點數，結帳金額由系統依品項規則計算。</p>
+            </div>
+            <span id="platform-shop-count" class="shrink-0 px-3 py-1.5 rounded-full bg-white text-emerald-600 text-[12px] font-black border border-emerald-100">讀取中</span>
+          </div>
+        </div>
+        <div id="platform-shop-status" class="hidden mx-5 mt-5 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-[13px] font-bold text-amber-700"></div>
+        <div id="platform-shop-list" class="p-5 space-y-4"></div>
+        <div id="platform-shop-empty" class="hidden px-5 pb-6">
+          <div class="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
+            <span class="material-symbols-outlined text-[42px] text-slate-300">storefront</span>
+            <p class="mt-2 text-[15px] font-black text-slate-700">尚未上架商品</p>
+            <p class="mt-1 text-[12px] font-bold text-slate-400">商城已獨立建置，等待平台商品資料上架後顯示。</p>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <nav id="bottom-nav" class="fixed bottom-0 w-full max-w-md bg-white/95 backdrop-blur-xl flex justify-evenly items-center px-1 py-2 z-40 pb-safe shadow-[0_-10px_20px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl border-t border-slate-100 hidden transition-all">
@@ -2277,6 +2312,7 @@
 <script src="js/modules/home.js?v=7.66"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
+<script src="js/modules/platform-shop.js?v=1.0"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.6"></script>
 <script src="js/auth.js?v=10.83"></script>

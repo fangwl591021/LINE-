@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
@@ -9,6 +9,10 @@ const readme = fs.readFileSync(path.join(root, 'docs', 'README.md'), 'utf8');
 const riskMap = fs.readFileSync(path.join(root, 'docs', 'contracts', 'change-risk-map.json'), 'utf8');
 const regression = fs.readFileSync(path.join(root, 'docs', 'tests', 'regression-matrix.md'), 'utf8');
 const checklist = fs.readFileSync(path.join(root, 'docs', 'release', 'change-checklist.md'), 'utf8');
+const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const navigationJs = fs.readFileSync(path.join(root, 'js', 'navigation.js'), 'utf8');
+const platformShopJs = fs.readFileSync(path.join(root, 'js', 'modules', 'platform-shop.js'), 'utf8');
+const platformShopData = JSON.parse(fs.readFileSync(path.join(root, 'data', 'platform-shop-products.json'), 'utf8'));
 
 function ok(condition, message) {
   if (!condition) {
@@ -107,4 +111,29 @@ includesAll(checklist, [
   '合作店家只能核銷被指派的商城憑證'
 ], 'release checklist includes platform-shop safety gates');
 
+
+includesAll(indexHtml, [
+  'id="page-platform-shop"',
+  "window.goPage('platform-shop')",
+  '線上商城',
+  'js/modules/platform-shop.js?v='
+], 'front-end exposes an isolated platform-shop route');
+
+includesAll(navigationJs, [
+  "page === 'platform-shop'",
+  'window.loadPlatformShop'
+], 'navigation initializes the platform-shop page');
+
+includesAll(platformShopJs, [
+  'platform-shop-products.json',
+  'window.loadPlatformShop',
+  'pointRedeemType',
+  'pointRedeemValue',
+  '即將開放'
+], 'platform-shop module is read-only catalog shell with redemption metadata');
+
+ok(!platformShopJs.includes('storeAdjustCustomerPoints'), 'platform-shop module does not call store cashier point flow');
+ok(!platformShopJs.includes('insertUserPoint'), 'platform-shop module does not write point ledger');
+ok(!platformShopJs.includes('fetchAPI'), 'platform-shop module does not call Worker actions');
+ok(Array.isArray(platformShopData.products), 'platform-shop catalog data has products array');
 console.log('\nPlatform shop contract passed.');
