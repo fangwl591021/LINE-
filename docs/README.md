@@ -13,6 +13,7 @@
 | AI名片夾、OCR、掃描名片、收錄名單 | `docs/flows/ai-card-folder.md` |
 | 標準 / 滿版 / 正方 / 影音名片 | `docs/data/card-ownership-and-versioning.md` |
 | 發訊、優惠券、點數扣除、點數同步 | `docs/rules/core-invariants.md`、`docs/tests/regression-matrix.md` |
+| 平台商城、會員點數折抵、合作店家核銷 | `docs/platform-shop/architecture.md`、`docs/platform-shop/data-and-actions.md`、`docs/platform-shop/implementation-plan.md` |
 | LINE OA keyword、LIFF、分享、Webhook | `docs/rules/core-invariants.md`、`docs/tests/regression-matrix.md` |
 | 上線或部署 | `docs/release/change-checklist.md` |
 | 單次功能修改 | `docs/release/change-work-order-template.md` |
@@ -34,6 +35,15 @@
 Phase 1 安全稽核，只盤點 `workerbackup.js` 的認證、授權、D1 identity fallback、硬編碼管理員與點數異動風險；本階段不修改正式功能。
 
 Phase 2A Action Authorization Policy 定義 `dispatchAction()` 的集中式 action policy、deny-by-default 原則、public action 清單與 D1 fallback action 清單。
+
+### 平台商城
+
+- `docs/platform-shop/architecture.md`
+- `docs/platform-shop/data-and-actions.md`
+- `docs/platform-shop/implementation-plan.md`
+
+定義平台商城的導入邊界：平台統一上架、會員使用自己的點數折抵、合作店家只負責履約或核銷。商城不得混用既有 `orders` 租戶年費 / 獎金流程，也不得重用店家點數收銀作為商城折抵流程。
+
 ### 核心規則
 
 - `docs/rules/core-invariants.md`

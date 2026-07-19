@@ -157,7 +157,23 @@
       ],
       "regressionIds": ["CV-05", "CV-06", "OW-01", "OW-02"]
     },
-    "home-entry": {
+    "platform-shop": {
+      "label": "平台商城 / 商品 / 點數折抵 / 合作店家核銷",
+      "keywords": ["平台商城", "商城", "線上商城", "商品", "購物車", "結帳", "點數折抵", "商品折抵", "核銷", "合作店家"],
+      "docs": [
+        "docs/platform-shop/architecture.md",
+        "docs/platform-shop/data-and-actions.md",
+        "docs/platform-shop/implementation-plan.md",
+        "docs/contracts/points-ledger.md",
+        "docs/security/action-authorization-policy.md"
+      ],
+      "checks": [
+        "tools/check-platform-shop-contract.js",
+        "tools/check-points-ledger-contract.js",
+        "tools/check-auth-contract.js"
+      ],
+      "regressionIds": ["SHOP-01", "SHOP-02", "SHOP-03", "SHOP-04", "SHOP-05"]
+    },    "home-entry": {
       "label": "首頁入口 / 底部導覽 / 新用戶入口",
       "keywords": ["首頁", "底部導覽", "返回", "新用戶", "我的名片閃動"],
       "docs": [

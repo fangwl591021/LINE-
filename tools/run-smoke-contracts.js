@@ -50,7 +50,8 @@ const fullChecks = [
   'tools/check-liff-routes-contract.js',
   'tools/check-card-resolver-contract.js',
   'tools/check-points-ledger-contract.js',
-  'tools/check-button-actions-contract.js'
+  'tools/check-button-actions-contract.js',
+  'tools/check-platform-shop-contract.js'
 ];
 
 const requested = process.argv.slice(2);
