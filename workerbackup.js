@@ -6109,9 +6109,15 @@ const PointModule = {
     let motherBalance = balance;
     const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
     if (!wallet || wallet.success === false) {
-      customerPointSource = 'local';
-      balance = localBalance;
-      motherBalance = 0;
+      return {
+        success: false,
+        error: '母站點數錢包暫時無法讀取，無法建立收銀通道。',
+        data: {
+          customerPointUserId,
+          pointError: wallet && wallet.error ? wallet.error : 'mother wallet unavailable',
+          localBalance
+        }
+      };
     }
     const cashierSession = await this.createStorePointCashierSession(env, {
       actorId,
@@ -6228,14 +6234,19 @@ const PointModule = {
         }, env);
     let customerPointSource = cashierSession ? (cashierSession.customerPointSource || 'mother') : 'mother';
     if (!wallet || !wallet.success) {
-      const localBalance = await AdminPointModule.localBalance(env, customerPointUserId).catch(() => 0);
-      wallet = { success: true, data: { balance: localBalance, list: [] }, localPointOnly: true };
-      customerPointSource = 'local';
-    }
-    if (!wallet || !wallet.success) {
-      if (autoBindPointAccount && isReward) wallet = { success: true, data: { balance: 0, list: [] } };
-      else
       return { success: false, error: wallet && wallet.error ? wallet.error : '無法取得客戶點數' };
+    }
+    if (customerPointSource !== 'mother') {
+      return {
+        success: false,
+        error: '此客戶目前尚未完成母站點數錢包同步；本次未送出點數。',
+        data: {
+          customerPointUserId,
+          customerPointSource,
+          cashierSessionId: payload.cashierSessionId || '',
+          requiresMotherWallet: true
+        }
+      };
     }
 
     const balanceBefore = wallet && wallet.success ? Math.max(0, Math.floor(Number(wallet.data?.balance || 0))) : 0;
@@ -6310,25 +6321,17 @@ const PointModule = {
 
     const operatorFeeResult = { status: 'free', skipped: true, pointType: 'gift_money', points: 0 };
 
-    const result = customerPointSource === 'local'
-      ? await AdminPointModule.adjust({
-          authenticatedUserId: actorId,
-          targetUserId: customerPointUserId,
-          mode: isReward ? 'grant' : 'deduct',
-          points: Math.abs(points),
-          note: `store cashier ${isReward ? 'reward' : 'redeem'}; source=${sourceLabel}; amount=${amount}; points=${Math.abs(points)}`
-        }, env)
-      : await this.insertUserPoint({
-          userId: customerPointUserId,
-          points,
-          pointType: 'gift_money',
-          eventName,
-          eventContent,
-          shop_user_lineid: actorId,
-          child_shop_name: sourceLabel,
-          shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
-          skipMotherMemberSetup: true
-        }, env);
+    const result = await this.insertUserPoint({
+      userId: customerPointUserId,
+      points,
+      pointType: 'gift_money',
+      eventName,
+      eventContent,
+      shop_user_lineid: actorId,
+      child_shop_name: sourceLabel,
+      shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
+      skipMotherMemberSetup: true
+    }, env);
 
     if (!result || !result.success) {
       const resultError = result && result.error ? String(result.error) : '';
@@ -6344,7 +6347,7 @@ const PointModule = {
 
     const changedPoints = Math.abs(points);
     const ledgerId = `SPC_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    let syncJob = null;
+    const syncJob = null;
     if (await this.ensureCashierLedgerTable(env)) {
       await env.ACTMASTER_DB.prepare(`
         INSERT INTO store_point_cashier_logs (
@@ -6363,26 +6366,13 @@ const PointModule = {
         payableAmount,
         balanceBefore,
         balanceBefore + points,
-        JSON.stringify(result.data || result)
+        JSON.stringify({
+          pointResult: result.data || result,
+          customerPointSource: 'mother',
+          syncStatus: 'synced',
+          localPointOnly: false
+        })
       ).run();
-    }
-    if (customerPointSource === 'local') {
-      syncJob = await PointSyncModule.enqueue({
-        lineUserId: customerPointUserId,
-        source: isReward ? 'store_reward_local_wallet' : 'store_redeem_local_wallet',
-        sourceRef: ledgerId,
-        points,
-        pointType: 'gift_money',
-        createdBy: actorId,
-        payload: {
-          actorId,
-          amount,
-          mode: isReward ? 'reward' : 'redeem',
-          payableAmount,
-          balanceBefore,
-          balanceAfterEstimate: balanceBefore + points
-        }
-      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
     }
 
     return {

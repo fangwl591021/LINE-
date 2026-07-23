@@ -2157,7 +2157,12 @@ window.prepareStorePointCashierSession = async function(customer) {
   const activeCustomerId = customer.customerPointUserId;
   try {
     const res = await window.fetchAPI('prepareStorePointCashierSession', { customerUserId: activeCustomerId }, true);
-    if (!res || res.error) return null;
+    if (!res || res.error) {
+      if (window.storePointCustomer && window.storePointCustomer.customerPointUserId === activeCustomerId) {
+        window.storePointCustomer.cashierPreparing = false;
+      }
+      return null;
+    }
     const data = res.data || res;
     if (!window.storePointCustomer || window.storePointCustomer.customerPointUserId !== activeCustomerId) return data;
     window.storePointCustomer = {
@@ -2287,11 +2292,14 @@ window.submitStorePointCashier = async function(btn) {
     }, true);
     if (!res || res.error) throw new Error(res?.error || '點數處理失敗');
     const data = res.data || res;
+    if (data.localPointOnly || (data.customerPointSource && data.customerPointSource !== 'mother')) {
+      throw new Error('本次未確認母站入帳，請稍後重試。');
+    }
     const changed = Number(data.changedPoints || Math.abs(data.points || 0)).toLocaleString('zh-TW');
     const payable = Number(data.payableAmount || 0).toLocaleString('zh-TW');
     const message = data.mode === 'reward'
-      ? `已完成消費贈點：${changed} 點，店家免費操作`
-      : `已完成折抵：${changed} 點，應收 NT$${payable}，店家免費操作`;
+      ? `已完成消費贈點：${changed} 點，母站已入帳`
+      : `已完成折抵：${changed} 點，應收 NT$${payable}，母站已入帳`;
     if (preview) {
       preview.className = 'rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
       preview.textContent = message;

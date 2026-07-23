@@ -28,9 +28,13 @@ ok(auth.includes('ACTMASTER_POINT_UID_') && auth.includes('pointUserId') && auth
 
 ok(index.includes('可免費操作折抵扣點或消費贈點'), 'store point UI states free operation');
 ok(index.includes('一般訊息、課程邀約、訪談邀請與優惠券皆免費傳送'), 'inbox UI states free sends');
-ok(auth.includes('店家免費操作'), 'store point client preview and success use free operation copy');
+ok(auth.includes('母站已入帳'), 'store point client success requires mother posting confirmation');
 ok(worker.includes('const operatorFee = 0'), 'store point worker uses zero operator fee');
 ok(worker.includes('operatorFeeResult = { status: \'free\''), 'store point worker marks operator fee as free/skipped');
+ok(worker.includes('母站點數錢包暫時無法讀取，無法建立收銀通道'), 'store point cashier session rejects unreadable mother wallet');
+ok(worker.includes('此客戶目前尚未完成母站點數錢包同步'), 'store point cashier submit rejects local-only point source');
+notIncludes(worker, "const result = customerPointSource === 'local'", 'store point cashier does not succeed through local wallet adjustment');
+notIncludes(worker, "source: isReward ? 'store_reward_local_wallet'", 'store point cashier does not enqueue local wallet sync as success');
 ok(worker.includes('const messageCost = 0'), 'message/coupon worker uses zero send cost');
 ok(worker.includes("pointPayload.pointCharge = { pointType: 'gift_money', points: 0, status: 'free', messageType }"), 'inbox payload records free point charge');
 
