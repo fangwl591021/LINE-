@@ -444,6 +444,169 @@ const HomeModule = (function() {
         window.open(url, '_blank', 'noopener');
     };
 
+    function isBusinessHomeV2Enabled_() {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const value = String(params.get('home') || params.get('view') || '').toLowerCase();
+            return value === 'v2' || value === 'business' || value === 'business-home-v2';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function getBusinessHomeText_(selector, fallback) {
+        const el = document.querySelector(selector);
+        const text = el ? String(el.textContent || '').trim() : '';
+        return text || fallback;
+    }
+
+    function getBusinessHomeCount_(items) {
+        return Array.isArray(items) ? String(items.length) : '--';
+    }
+
+    function syncBusinessHomeV2_() {
+        if (!isBusinessHomeV2Enabled_()) return;
+        const host = document.getElementById('business-home-v2');
+        if (!host || host.dataset.ready !== '1') return;
+        const avatarUrl = getHomeAvatarUrl_();
+        const avatarEl = document.getElementById('business-home-v2-avatar');
+        if (avatarEl && avatarEl.getAttribute('src') !== avatarUrl) avatarEl.src = avatarUrl;
+        const name = window.currentUser?.name || window.currentUserProfile?.displayName || getBusinessHomeText_('#home-profile-name', '會員');
+        const points = getBusinessHomeText_('#home-profile-points', '讀取中');
+        const cards = window.myCards || window.allCards || [];
+        const activities = window.allActivities || [];
+        const map = {
+            'business-home-v2-name': name,
+            'business-home-v2-points': points,
+            'business-home-v2-stat-points': points,
+            'business-home-v2-stat-cards': getBusinessHomeCount_(cards),
+            'business-home-v2-stat-activities': getBusinessHomeCount_(activities)
+        };
+        Object.keys(map).forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = map[id];
+        });
+    }
+
+    window.openBusinessHomeV2Action = function(action, evt) {
+        switch (action) {
+            case 'register':
+                return window.openProfileRegistrationPanel?.();
+            case 'points':
+                return window.openPointsWallet?.();
+            case 'invite':
+                return window.showInviteLink?.();
+            case 'myCard':
+                return window.openMyCardEntry ? window.openMyCardEntry(evt || null) : window.goPage?.('admin-settings');
+            case 'cardFolder':
+                return window.goPage?.('card');
+            case 'zodiac':
+                return window.openHomeZodiacFortune?.();
+            case 'checkin':
+                return window.claimDailyPointCheckin?.(null);
+            case 'shop':
+                return window.goPage?.('platform-shop');
+            case 'matchmake':
+                return window.goPage?.('matchmake');
+            case 'activities':
+            case 'active':
+                return window.goPage?.('active');
+            case 'agenda':
+                return window.goPage?.('my-activities');
+            case 'inbox':
+                return window.goPage?.('inbox');
+            case 'settings':
+                return window.goPage?.('admin-settings');
+            default:
+                return window.showToast?.('功能整理中');
+        }
+    };
+
+    function renderBusinessHomeV2_() {
+        if (!isBusinessHomeV2Enabled_()) return;
+        const host = document.getElementById('business-home-v2');
+        if (!host) return;
+        document.body.classList.add('business-home-v2-active');
+        host.classList.remove('hidden');
+        if (host.dataset.ready === '1') {
+            syncBusinessHomeV2_();
+            return;
+        }
+        host.dataset.ready = '1';
+        host.innerHTML = `
+            <div class="business-home-v2-shell">
+                <section class="business-home-v2-hero">
+                    <div class="business-home-v2-profile">
+                        <div>
+                            <img id="business-home-v2-avatar" class="business-home-v2-avatar" src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" alt="Profile">
+                            <div class="mt-3 text-[13px] font-black text-white"><span id="business-home-v2-name" class="business-home-v2-name">會員</span>，早安！</div>
+                            <button type="button" onclick="window.openBusinessHomeV2Action('register')" class="mt-2 rounded-lg border border-amber-300/60 px-2 py-1 text-[11px] font-black text-amber-200"><span class="material-symbols-outlined align-middle text-[13px]">workspace_premium</span> 會員專區</button>
+                        </div>
+                        <div>
+                            <div class="business-home-v2-brand">AI商脈</div>
+                            <div class="mt-1 text-[16px] font-black text-amber-200">讓人脈成為商機</div>
+                        </div>
+                        <div class="business-home-v2-score">
+                            <div class="text-[13px] font-bold text-white/70">康立智能 K 點</div>
+                            <div id="business-home-v2-points" class="business-home-v2-score-value">讀取中</div>
+                            <button type="button" onclick="window.openBusinessHomeV2Action('invite')" class="business-home-v2-qr"><span class="material-symbols-outlined align-middle text-[20px]">qr_code_2</span> 專屬 QR</button>
+                        </div>
+                    </div>
+                </section>
+                <section class="business-home-v2-card">
+                    <div class="business-home-v2-card-title"><span class="material-symbols-outlined align-middle text-[21px] text-emerald-700">monitoring</span> 今日商務摘要</div>
+                    <div class="business-home-v2-stats">
+                        <button type="button" onclick="window.openBusinessHomeV2Action('points')" class="business-home-v2-stat"><span class="material-symbols-outlined">paid</span><div>商脈點數</div><strong id="business-home-v2-stat-points">--</strong></button>
+                        <button type="button" onclick="window.openBusinessHomeV2Action('cardFolder')" class="business-home-v2-stat"><span class="material-symbols-outlined">contact_mail</span><div>新增名片</div><strong id="business-home-v2-stat-cards">--</strong></button>
+                        <button type="button" onclick="window.openBusinessHomeV2Action('matchmake')" class="business-home-v2-stat"><span class="material-symbols-outlined">handshake</span><div>AI推薦合作</div><strong>--</strong></button>
+                        <button type="button" onclick="window.openBusinessHomeV2Action('activities')" class="business-home-v2-stat"><span class="material-symbols-outlined">event</span><div>今日活動</div><strong id="business-home-v2-stat-activities">--</strong></button>
+                        <button type="button" onclick="window.openBusinessHomeV2Action('shop')" class="business-home-v2-stat"><span class="material-symbols-outlined">storefront</span><div>附近合作夥伴</div><strong>--</strong></button>
+                    </div>
+                </section>
+                <section class="business-home-v2-section"><h3 class="business-home-v2-title">常用工具</h3><div class="business-home-v2-grid">
+                    <button type="button" onclick="window.openBusinessHomeV2Action('myCard', event)" class="business-home-v2-tool"><span class="material-symbols-outlined">badge</span>名片收藏</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('matchmake')" class="business-home-v2-tool"><span class="material-symbols-outlined">bar_chart</span>商脈分析</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('cardFolder')" class="business-home-v2-tool"><span class="material-symbols-outlined">groups</span>AI媒合</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('agenda')" class="business-home-v2-tool"><span class="material-symbols-outlined">calendar_month</span>我的行事曆</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('settings')" class="business-home-v2-tool"><span class="material-symbols-outlined">school</span>系統教學</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('inbox')" class="business-home-v2-tool"><span class="material-symbols-outlined">smart_toy</span>AI助理</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('zodiac')" class="business-home-v2-tool"><span class="material-symbols-outlined">trending_up</span>今日趨勢</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('active')" class="business-home-v2-tool"><span class="material-symbols-outlined">diversity_3</span>商務活動</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('shop')" class="business-home-v2-tool"><span class="material-symbols-outlined">menu_book</span>AI學院</button>
+                </div></section>
+                <section class="business-home-v2-section"><h3 class="business-home-v2-title">為你推薦</h3><div class="business-home-v2-recommend">
+                    <button type="button" onclick="window.openBusinessHomeV2Action('matchmake')" class="business-home-v2-tile is-green"><span class="material-symbols-outlined text-amber-300">emoji_events</span><span>熱門合作夥伴<small>精選優質合作夥伴</small></span></button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('cardFolder')" class="business-home-v2-tile is-green"><span class="material-symbols-outlined text-amber-300">stars</span><span>AI推薦合作<small>AI為你精準媒合</small></span></button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('register')" class="business-home-v2-tile"><span class="material-symbols-outlined text-emerald-600">person_add</span><span>新加入夥伴<small>最新加入的商業人脈</small></span></button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('zodiac')" class="business-home-v2-tile is-gold"><span class="material-symbols-outlined text-white">workspace_premium</span><span>本週人氣排行<small>本週最受關注夥伴</small></span></button>
+                </div></section>
+                <section class="business-home-v2-section"><div class="flex items-center justify-between"><h3 class="business-home-v2-title">今日活動</h3><button type="button" onclick="window.openBusinessHomeV2Action('activities')" class="mb-3 text-[12px] font-black text-emerald-700">查看全部 ›</button></div><div class="business-home-v2-grid">
+                    <button type="button" onclick="window.openBusinessHomeV2Action('activities')" class="business-home-v2-tool"><span class="material-symbols-outlined">diversity_2</span>創業者聚會</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('activities')" class="business-home-v2-tool"><span class="material-symbols-outlined">co_present</span>課程講座</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('activities')" class="business-home-v2-tool"><span class="material-symbols-outlined">handshake</span>交流活動</button>
+                </div></section>
+                <section class="business-home-v2-section"><h3 class="business-home-v2-title">AI專屬商機推薦</h3><div class="business-home-v2-panel">
+                    <div class="business-home-v2-row"><span>1　LINE 官方帳號顧問</span><strong>92%</strong></div>
+                    <div class="business-home-v2-row"><span>2　室內設計</span><strong>88%</strong></div>
+                    <div class="business-home-v2-row"><span>3　搬家公司</span><strong>85%</strong></div>
+                    <div class="business-home-v2-row"><span>4　保險顧問</span><strong>83%</strong></div>
+                    <div class="business-home-v2-row"><span>5　地政士</span><strong>80%</strong></div>
+                </div></section>
+                <section class="business-home-v2-section"><h3 class="business-home-v2-title">AI內容工具</h3><div class="business-home-v2-grid">
+                    <button type="button" onclick="window.openBusinessHomeV2Action('myCard', event)" class="business-home-v2-tool"><span class="material-symbols-outlined">web</span>公司資料<br>轉個人網站</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('shop')" class="business-home-v2-tool"><span class="material-symbols-outlined">description</span>商品DM<br>轉行銷網站</button>
+                    <button type="button" onclick="window.openBusinessHomeV2Action('settings')" class="business-home-v2-tool"><span class="material-symbols-outlined">rocket_launch</span>更多工具<br>即將推出</button>
+                </div></section>
+                <nav class="business-home-v2-bottom">
+                    <button type="button" onclick="window.goPage?.('home')"><span class="material-symbols-outlined">home</span>首頁</button>
+                    <button type="button" onclick="window.goPage?.('card')"><span class="material-symbols-outlined">groups</span>人脈</button>
+                    <button type="button" onclick="window.goPage?.('matchmake')"><span class="material-symbols-outlined">track_changes</span>商機</button>
+                    <button type="button" onclick="window.goPage?.('active')"><span class="material-symbols-outlined">event</span>活動</button>
+                    <button type="button" onclick="window.goPage?.('admin-settings')"><span class="material-symbols-outlined">person</span>我的</button>
+                </nav>
+            </div>`;
+        syncBusinessHomeV2_();
+    }
     window.refreshHomeProfileCard = function() {
         const card = document.getElementById('home-profile-card');
         if (!card) return;
@@ -481,6 +644,7 @@ const HomeModule = (function() {
         }
         window.updateHomeProfileOwnerControls?.();
         refreshHomeZodiacButton_();
+        syncBusinessHomeV2_();
     };
 
     window.shareHomeProfileCard = async function(btn) {
@@ -2020,9 +2184,12 @@ const HomeModule = (function() {
 
     // === 模組初始化入口 ===
     function init() {
+        renderBusinessHomeV2_();
         window.syncStoreSettingsToHome();
         window.renderHomeActivities();
     }
+
+    setTimeout(renderBusinessHomeV2_, 0);
 
     return { init };
 })();

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW" class="light">
 <head>
   <meta charset="utf-8">
@@ -117,6 +117,53 @@
     .home-action-card { @apply bg-white rounded-3xl border border-slate-100 shadow-sm; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06); }
     body.home-page #top-nav { display: none !important; }
     body.home-page #main { padding-top: 0; }
+    body.business-home-v2-active #page-home > :not(#business-home-v2) { display: none !important; }
+    body.business-home-v2-active #bottom-nav { display: none !important; }
+    .business-home-v2-shell { background: #f4f6f1; color: #073b31; min-height: calc(100vh - 88px); padding-bottom: 96px; }
+    .business-home-v2-hero { position: relative; overflow: hidden; background: radial-gradient(circle at 88% 2%, rgba(228,190,82,.28), transparent 24%), linear-gradient(135deg, #053b33, #00634e 58%, #08362f); color: white; padding: 24px 18px 78px; border-bottom-left-radius: 26px; border-bottom-right-radius: 26px; }
+    .business-home-v2-hero::after { content: ''; position: absolute; inset: 0; background: repeating-radial-gradient(circle at 90% 15%, rgba(255,255,255,.13) 0 1px, transparent 1px 8px); opacity: .55; pointer-events: none; }
+    .business-home-v2-profile { position: relative; z-index: 1; display: grid; grid-template-columns: 72px minmax(0,1fr) 142px; gap: 14px; align-items: start; }
+    .business-home-v2-avatar { width: 68px; height: 68px; border-radius: 999px; border: 3px solid rgba(255,255,255,.92); object-fit: cover; background: white; box-shadow: 0 12px 24px rgba(0,0,0,.2); }
+    .business-home-v2-brand { font-size: 30px; line-height: 1.05; font-weight: 900; letter-spacing: 0; }
+    .business-home-v2-name { display: inline; font-weight: 900; }
+    .business-home-v2-qr { border: 1px solid rgba(249,220,140,.65); border-radius: 13px; background: linear-gradient(135deg, #f7d574, #f1bd43); color: #123b2f; min-width: 92px; padding: 9px 10px; font-size: 13px; line-height: 1.15; font-weight: 900; box-shadow: 0 10px 22px rgba(0,0,0,.18); }
+    .business-home-v2-score { position: relative; z-index: 1; border-left: 1px solid rgba(255,255,255,.28); padding-left: 16px; min-height: 104px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 10px; }
+    .business-home-v2-score-value { color: #f4c64c; font-size: 48px; line-height: .9; font-weight: 900; letter-spacing: 0; }
+    .business-home-v2-card { margin: -52px 12px 18px; background: white; border: 1px solid rgba(15,23,42,.08); border-radius: 18px; box-shadow: 0 14px 34px rgba(15,23,42,.14); overflow: hidden; position: relative; z-index: 2; }
+    .business-home-v2-card-title { padding: 15px 16px 8px; font-size: 19px; font-weight: 900; color: #083f35; }
+    .business-home-v2-stats { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); padding: 8px 10px 14px; gap: 8px; }
+    .business-home-v2-stat { min-height: 86px; border: 1px solid #e5eee9; border-radius: 10px; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 8px 5px; text-align: center; font-size: 12px; font-weight: 900; color: #173d35; }
+    .business-home-v2-stat .material-symbols-outlined { color: #08735d; font-size: 25px; }
+    .business-home-v2-stat strong { display: block; color: #0b6b57; font-size: 21px; line-height: 1.05; }
+    .business-home-v2-section { margin: 0 16px 20px; }
+    .business-home-v2-title { font-size: 20px; line-height: 1.2; font-weight: 900; color: #064338; margin: 0 0 12px; }
+    .business-home-v2-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 11px; }
+    .business-home-v2-tool { min-height: 74px; border: 1px solid #dbe8e2; border-radius: 10px; background: white; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; font-size: 15px; font-weight: 900; color: #0b4a3e; box-shadow: 0 5px 16px rgba(15,23,42,.05); }
+    .business-home-v2-tool .material-symbols-outlined { color: #08735d; font-size: 26px; }
+    .business-home-v2-recommend { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .business-home-v2-tile { min-height: 72px; border-radius: 10px; border: 1px solid #d6e6df; background: #fff; display: flex; align-items: center; gap: 10px; padding: 12px; font-size: 14px; font-weight: 900; color: #0b4a3e; text-align: left; box-shadow: 0 5px 16px rgba(15,23,42,.05); }
+    .business-home-v2-tile.is-green { background: linear-gradient(135deg, #00634e, #0b7b5f); color: white; border-color: #00634e; }
+    .business-home-v2-tile.is-gold { background: linear-gradient(135deg, #d9aa3d, #be8d24); color: white; border-color: #c9962d; }
+    .business-home-v2-tile small { display: block; margin-top: 2px; font-size: 11px; opacity: .75; font-weight: 800; }
+    .business-home-v2-panel { background: white; border: 1px solid #dbe8e2; border-radius: 14px; padding: 12px 14px; box-shadow: 0 5px 16px rgba(15,23,42,.05); }
+    .business-home-v2-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid #edf2f7; font-size: 14px; font-weight: 800; }
+    .business-home-v2-row:last-child { border-bottom: 0; }
+    .business-home-v2-note { margin-top: 10px; border: 1px solid #d8e7e0; background: #f2faf6; border-radius: 10px; padding: 10px 12px; color: #4b635b; font-size: 12px; font-weight: 800; line-height: 1.5; }
+    .business-home-v2-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; max-width: 520px; margin: 0 auto; height: 70px; background: #005846; color: white; display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); box-shadow: 0 -8px 24px rgba(15,23,42,.15); }
+    .business-home-v2-bottom button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; font-weight: 900; }
+    .business-home-v2-bottom button:first-child { color: #f4c64c; }
+    .business-home-v2-bottom .material-symbols-outlined { font-size: 26px; }
+    @media (max-width: 420px) {
+      .business-home-v2-profile { grid-template-columns: 56px minmax(0,1fr) 108px; gap: 10px; }
+      .business-home-v2-avatar { width: 56px; height: 56px; }
+      .business-home-v2-brand { font-size: 24px; }
+      .business-home-v2-score { min-height: 92px; padding-left: 10px; }
+      .business-home-v2-score-value { font-size: 38px; }
+      .business-home-v2-stats { grid-template-columns: repeat(5, minmax(56px,1fr)); overflow-x: auto; }
+      .business-home-v2-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+      .business-home-v2-tool { min-height: 68px; font-size: 13px; flex-direction: column; }
+      .business-home-v2-recommend { grid-template-columns: 1fr; }
+    }
     #store-point-cashier,
     #store-point-cashier > div:first-child,
     #store-point-cashier-body {
@@ -1049,6 +1096,7 @@
 
     <!-- ==================== 首頁 ==================== -->
     <div id="page-home" class="hidden space-y-0 animate-in fade-in pb-10">
+      <div id="business-home-v2" class="hidden"></div>
 
       <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 bg-white shadow-sm">
         <div class="bg-white px-4 py-3 text-center">
@@ -2309,7 +2357,7 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.66"></script>
+<script src="js/modules/home.js?v=7.67"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/platform-shop.js?v=1.0"></script>
