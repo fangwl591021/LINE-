@@ -447,7 +447,14 @@ const HomeModule = (function() {
     function isBusinessHomeV2Enabled_() {
         try {
             const params = new URLSearchParams(window.location.search || '');
-            const value = String(params.get('home') || params.get('view') || '').toLowerCase();
+            const hashParams = new URLSearchParams(String(window.location.hash || '').replace(/^#/, ''));
+            const liffState = String(params.get('liff.state') || '').replace(/^\?/, '');
+            const liffParams = new URLSearchParams(liffState);
+            const value = String(
+                params.get('home') || params.get('view') ||
+                hashParams.get('home') || hashParams.get('view') ||
+                liffParams.get('home') || liffParams.get('view') || ''
+            ).toLowerCase();
             return value === 'v2' || value === 'business' || value === 'business-home-v2';
         } catch (e) {
             return false;
