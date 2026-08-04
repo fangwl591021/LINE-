@@ -1389,6 +1389,91 @@ const HomeModule = (function() {
         }
     };
 
+    function recurringTaskTimeLabel_(task) {
+        const time = String(task.startTime || '').match(/T(\d{2}:\d{2})/)?.[1] || '';
+        if (task.recurrenceType === 'daily') return time ? `每天 ${time}` : '每天';
+        const date = String(task.scheduledFor || '').slice(5).replace('-', '/');
+        return [date ? `本週 ${date}` : '本週', time].filter(Boolean).join(' ');
+    }
+
+    function renderHomeRecurringTaskList_(elementId, tasks, emptyText) {
+        const target = document.getElementById(elementId);
+        if (!target) return;
+        if (!tasks.length) {
+            target.innerHTML = `<div class="py-3 text-center text-[12px] font-bold text-slate-400">${emptyText}</div>`;
+            return;
+        }
+        target.innerHTML = tasks.map(task => {
+            const done = task.currentOccurrenceDone === true;
+            return `
+                <div class="rounded-2xl border ${done ? 'border-slate-100 bg-slate-50 opacity-60' : 'border-slate-200 bg-white'} px-3 py-2.5 flex items-center gap-3">
+                    <span class="material-symbols-outlined ${done ? 'text-[#06C755] icon-filled' : 'text-slate-300'}">${done ? 'check_circle' : 'radio_button_unchecked'}</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-[13px] font-black text-slate-800 truncate">${window.escapeHTML(task.title || '待辦事項')}</span>
+                        <span class="block text-[11px] font-bold text-slate-400 mt-0.5">${window.escapeHTML(recurringTaskTimeLabel_(task))}</span>
+                    </span>
+                    ${done ? '<span class="text-[11px] font-black text-[#06C755]">已完成</span>' : `<button type="button" onclick="window.completeHomeRecurringTask(${task.homeIndex})" class="px-3 py-1.5 rounded-xl bg-emerald-50 text-[#06C755] text-[12px] font-black active:scale-95">完成</button>`}
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.renderHomeRecurringTasks = function(tasks) {
+        const recurring = (Array.isArray(tasks) ? tasks : [])
+            .filter(task => ['daily', 'weekly'].includes(String(task.recurrenceType || '')))
+            .map((task, homeIndex) => ({ ...task, homeIndex }));
+        window.homeRecurringTasks = recurring;
+        const daily = recurring.filter(task => task.recurrenceType === 'daily');
+        const weekly = recurring.filter(task => task.recurrenceType === 'weekly');
+        const dailyRemaining = daily.filter(task => !task.currentOccurrenceDone).length;
+        const weeklyRemaining = weekly.filter(task => !task.currentOccurrenceDone).length;
+        const dailyCount = document.getElementById('home-daily-task-count');
+        const weeklyCount = document.getElementById('home-weekly-task-count');
+        if (dailyCount) dailyCount.textContent = String(dailyRemaining);
+        if (weeklyCount) weeklyCount.textContent = String(weeklyRemaining);
+        renderHomeRecurringTaskList_('home-daily-task-list', daily, daily.length ? '今日待辦已完成' : '尚未設定每日待辦');
+        renderHomeRecurringTaskList_('home-weekly-task-list', weekly, weekly.length ? '本週待辦已完成' : '尚未設定每週待辦');
+        return recurring;
+    };
+
+    window.loadHomeRecurringTasks = async function() {
+        try {
+            const tasks = await window.fetchAPI('listPersonalTasks', {}, true);
+            return window.renderHomeRecurringTasks(Array.isArray(tasks) ? tasks : []);
+        } catch (e) {
+            ['home-daily-task-list', 'home-weekly-task-list'].forEach(id => {
+                const target = document.getElementById(id);
+                if (target) target.innerHTML = '<div class="py-3 text-center text-[12px] font-bold text-red-400">待辦載入失敗</div>';
+            });
+            return [];
+        }
+    };
+
+    window.toggleHomeRecurringTaskPanel = function(force) {
+        const content = document.getElementById('home-recurring-task-content');
+        const toggle = document.getElementById('home-recurring-task-toggle');
+        if (!content) return;
+        const shouldOpen = force === undefined ? content.classList.contains('hidden') : !!force;
+        content.classList.toggle('hidden', !shouldOpen);
+        toggle?.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+        const icon = document.getElementById('home-recurring-task-content-icon');
+        if (icon) icon.textContent = shouldOpen ? 'expand_less' : 'expand_more';
+        if (shouldOpen && !Array.isArray(window.homeRecurringTasks)) window.loadHomeRecurringTasks();
+    };
+
+    window.completeHomeRecurringTask = async function(index) {
+        const task = (window.homeRecurringTasks || [])[index];
+        if (!task || task.currentOccurrenceDone) return;
+        try {
+            const result = await window.fetchAPI('completePersonalTask', { taskId: task.taskId }, true);
+            if (result && result.error) throw new Error(result.error);
+            window.showToast('本期待辦已完成');
+            await window.loadHomeRecurringTasks();
+        } catch (e) {
+            window.showToast(e.message || '完成待辦失敗', true);
+        }
+    };
+
     function ensurePersonalAgendaPanel_() {
         const page = document.getElementById('page-my-activities');
         if (!page || document.getElementById('personal-agenda-panel')) return;
@@ -1433,6 +1518,11 @@ const HomeModule = (function() {
                                 <option value="todo">待辦</option>
                             </select>
                         </div>
+                        <select id="agenda-recurrence" class="custom-input !py-3 !px-3 text-[13px]">
+                            <option value="none">單次待辦</option>
+                            <option value="daily">每日重複</option>
+                            <option value="weekly">每週重複（依開始日期）</option>
+                        </select>
                         <input id="agenda-related" class="custom-input !py-3" placeholder="對象 / 客戶 / 名片名稱">
                         <textarea id="agenda-notes" class="textarea-block !h-20" placeholder="備註"></textarea>
                         <div class="grid grid-cols-2 gap-3">
@@ -1531,11 +1621,16 @@ const HomeModule = (function() {
                 return rows;
             }
             list.innerHTML = rows.slice(0, 10).map((task, index) => {
-                const done = String(task.status || '') === 'done';
+                const recurring = ['daily', 'weekly'].includes(String(task.recurrenceType || ''));
+                const done = recurring ? task.currentOccurrenceDone === true : String(task.status || '') === 'done';
+                const recurrenceLabel = task.recurrenceType === 'daily' ? '每日' : task.recurrenceType === 'weekly' ? '每週' : '';
                 return `
                     <div class="p-4 flex items-start justify-between gap-3 ${done ? 'opacity-60' : ''}">
                         <div class="min-w-0">
-                            <div class="text-[15px] font-black text-slate-800 leading-snug">${window.escapeHTML(task.title || '跟進提醒')}</div>
+                            <div class="text-[15px] font-black text-slate-800 leading-snug flex items-center gap-2">
+                                <span>${window.escapeHTML(task.title || '跟進提醒')}</span>
+                                ${recurrenceLabel ? `<span class="shrink-0 px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 text-[10px] font-black">${recurrenceLabel}</span>` : ''}
+                            </div>
                             <div class="text-[13px] text-slate-500 mt-1">${window.escapeHTML(formatAgendaTime_(task.startTime))}</div>
                             ${task.relatedName ? `<div class="text-[12px] text-blue-600 font-bold mt-1">${window.escapeHTML(task.relatedName)}</div>` : ''}
                             ${task.notes ? `<div class="text-[12px] text-slate-400 mt-1 line-clamp-2">${window.escapeHTML(task.notes)}</div>` : ''}
@@ -1562,6 +1657,7 @@ const HomeModule = (function() {
             title,
             startTime: String(document.getElementById('agenda-start')?.value || '').trim(),
             taskType: document.getElementById('agenda-type')?.value || 'followup',
+            recurrenceType: document.getElementById('agenda-recurrence')?.value || 'none',
             relatedName: document.getElementById('agenda-related')?.value || '',
             notes: document.getElementById('agenda-notes')?.value || '',
             remindMinutes: document.getElementById('agenda-remind')?.value || 30
@@ -1578,9 +1674,12 @@ const HomeModule = (function() {
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
+            const recurrence = document.getElementById('agenda-recurrence');
+            if (recurrence) recurrence.value = 'none';
             window.toggleAgendaForm(false);
             window.showToast('已建立跟進提醒，可點「加入日曆」加入 Google');
             await window.loadPersonalAgenda();
+            await window.loadHomeRecurringTasks?.();
         } catch (e) {
             window.showToast(e.message || '儲存失敗', true);
         } finally {
@@ -1602,6 +1701,7 @@ const HomeModule = (function() {
         const res = await window.fetchAPI('completePersonalTask', { taskId: task.taskId }, true);
         if (res && res.error) return window.showToast(res.error, true);
         await window.loadPersonalAgenda();
+        await window.loadHomeRecurringTasks?.();
     };
 
     window.deletePersonalAgendaTask = async function(index) {
@@ -1610,6 +1710,7 @@ const HomeModule = (function() {
         const res = await window.fetchAPI('deletePersonalTask', { taskId: task.taskId }, true);
         if (res && res.error) return window.showToast(res.error, true);
         await window.loadPersonalAgenda();
+        await window.loadHomeRecurringTasks?.();
     };
 
     window.loadMyActivities = async function() {
@@ -2002,6 +2103,10 @@ const HomeModule = (function() {
             if (typeof window.refreshStoreSettingsInBackground === 'function') await window.refreshStoreSettingsInBackground();
         });
 
+        runHomeBackgroundTask_('home-recurring-tasks', 520, async () => {
+            if (typeof window.loadHomeRecurringTasks === 'function') await window.loadHomeRecurringTasks();
+        });
+
         if (role === 'tenant') {
             runHomeBackgroundTask_('store-point-panel', 260, async () => {
                 window.updateStorePointCashierVisibility?.();
@@ -2042,6 +2147,7 @@ const HomeModule = (function() {
     window.loadHomeData = async function(options = {}) {
         if (options && options.full === true) {
             const tasks = [window.loadUserActivities()];
+            if (typeof window.loadHomeRecurringTasks === 'function') tasks.push(window.loadHomeRecurringTasks());
             if (typeof window.loadCardData === 'function') tasks.push(window.loadCardData({ render: false, force: options.force === true, initPanels: false }));
             await Promise.all(tasks);
             if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();

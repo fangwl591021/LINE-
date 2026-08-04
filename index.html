@@ -1228,6 +1228,47 @@
         </div>
       </div>
 
+      <section id="home-recurring-task-panel" class="mx-0 mt-4 bg-white shadow-sm border-y border-slate-100">
+        <button id="home-recurring-task-toggle" type="button" onclick="window.toggleHomeRecurringTaskPanel?.()" class="w-full px-5 py-4 flex items-center justify-between gap-3 text-left active:bg-slate-50" aria-expanded="false" aria-controls="home-recurring-task-content">
+          <span class="min-w-0 flex items-center gap-3">
+            <span class="w-10 h-10 rounded-2xl bg-emerald-50 text-[#06C755] flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined icon-filled">task_alt</span>
+            </span>
+            <span class="min-w-0">
+              <span class="block text-[16px] font-black text-slate-800">今日／本週待辦</span>
+              <span class="block text-[12px] text-slate-500 mt-0.5">
+                今日 <strong id="home-daily-task-count" class="text-[#06C755]">0</strong>
+                ・本週 <strong id="home-weekly-task-count" class="text-violet-600">0</strong>
+              </span>
+            </span>
+          </span>
+          <span id="home-recurring-task-content-icon" class="material-symbols-outlined text-slate-400 transition-transform">expand_more</span>
+        </button>
+        <div id="home-recurring-task-content" class="hidden border-t border-slate-100">
+          <div class="px-5 py-4">
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <h3 class="text-[13px] font-black text-slate-700">每日待辦</h3>
+              <span class="text-[11px] font-bold text-slate-400">每天重新計算</span>
+            </div>
+            <div id="home-daily-task-list" class="space-y-2">
+              <div class="py-3 text-center text-[12px] font-bold text-slate-400">載入中...</div>
+            </div>
+          </div>
+          <div class="px-5 py-4 border-t border-slate-100">
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <h3 class="text-[13px] font-black text-slate-700">每週待辦</h3>
+              <span class="text-[11px] font-bold text-slate-400">每週一重新計算</span>
+            </div>
+            <div id="home-weekly-task-list" class="space-y-2">
+              <div class="py-3 text-center text-[12px] font-bold text-slate-400">載入中...</div>
+            </div>
+          </div>
+          <button type="button" onclick="window.goPage('my-activities')" class="w-full px-5 py-3 border-t border-slate-100 text-[13px] font-black text-blue-600 active:bg-blue-50">
+            管理跟進行事曆
+          </button>
+        </div>
+      </section>
+
       <section class="home-lower-panel mx-0 mt-5 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
         <h3 class="home-section-kicker">&#65;&#73;&#26381;&#21209;</h3>
         <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
@@ -2357,7 +2398,7 @@
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
-<script src="js/modules/home.js?v=7.68"></script>
+<script src="js/modules/home.js?v=7.69"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/platform-shop.js?v=1.0"></script>
