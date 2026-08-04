@@ -11471,6 +11471,7 @@ const D1PersonalTaskModule = {
         remind_minutes INTEGER NOT NULL DEFAULT 30,
         notes TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'pending',
+        recurrence_type TEXT NOT NULL DEFAULT 'none' CHECK (recurrence_type IN ('none', 'daily', 'weekly')),
         google_event_url TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -11479,6 +11480,20 @@ const D1PersonalTaskModule = {
     `).run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_personal_tasks_user_time ON personal_tasks(user_id, start_time)').run();
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_personal_tasks_user_status ON personal_tasks(user_id, status)').run();
+    await env.ACTMASTER_DB.prepare(`
+      CREATE TABLE IF NOT EXISTS personal_task_occurrences (
+        occurrence_id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        occurrence_key TEXT NOT NULL,
+        scheduled_for TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'done',
+        completed_at TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await env.ACTMASTER_DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_personal_task_occurrences_task_key ON personal_task_occurrences(task_id, occurrence_key)').run();
+    await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_personal_task_occurrences_user_schedule ON personal_task_occurrences(user_id, scheduled_for)').run();
   },
 
   taskRow(row) {
@@ -11495,6 +11510,7 @@ const D1PersonalTaskModule = {
       remindMinutes: this.number(row.remind_minutes, 30),
       notes: this.text(row.notes),
       status: this.text(row.status, 'pending'),
+      recurrenceType: this.text(row.recurrence_type, 'none'),
       googleEventUrl: this.text(row.google_event_url),
       createdAt: this.text(row.created_at),
       updatedAt: this.text(row.updated_at),
@@ -11504,6 +11520,46 @@ const D1PersonalTaskModule = {
 
   ownUserId(payload) {
     return this.text(payload.authenticatedUserId || payload.userId);
+  },
+
+  taipeiDate(now = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Taipei',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(now).reduce((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  },
+
+  weekStart(dateText) {
+    const date = new Date(`${dateText}T00:00:00Z`);
+    const offset = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - offset);
+    return date.toISOString().slice(0, 10);
+  },
+
+  occurrencePeriod(recurrenceType, now = new Date(), startTime = '') {
+    const date = this.taipeiDate(now);
+    if (recurrenceType === 'daily') {
+      return { occurrenceKey: `D:${date}`, scheduledFor: date };
+    }
+    const monday = this.weekStart(date);
+    const anchorMatch = this.text(startTime).match(/^(\d{4}-\d{2}-\d{2})/);
+    if (!anchorMatch) {
+      return { occurrenceKey: `W:${monday}`, scheduledFor: monday };
+    }
+    const anchorDate = new Date(`${anchorMatch[1]}T00:00:00Z`);
+    const weekdayOffset = (anchorDate.getUTCDay() + 6) % 7;
+    const scheduledDate = new Date(`${monday}T00:00:00Z`);
+    scheduledDate.setUTCDate(scheduledDate.getUTCDate() + weekdayOffset);
+    return {
+      occurrenceKey: `W:${monday}`,
+      scheduledFor: scheduledDate.toISOString().slice(0, 10)
+    };
   },
 
   async list(payload, env) {
@@ -11518,7 +11574,41 @@ const D1PersonalTaskModule = {
                updated_at DESC
       LIMIT 200
     `, [userId]);
-    return { success: true, data: rows.map(row => this.taskRow(row)).filter(Boolean) };
+    const tasks = rows.map(row => this.taskRow(row)).filter(Boolean);
+    const today = this.taipeiDate();
+    const dailyKey = `D:${today}`;
+    const weeklyKey = `W:${this.weekStart(today)}`;
+    const occurrences = await D1ReadModule.all(env, `
+      SELECT task_id, occurrence_key, completed_at
+      FROM personal_task_occurrences
+      WHERE user_id = ? AND status = 'done' AND occurrence_key IN (?, ?)
+    `, [userId, dailyKey, weeklyKey]);
+    const completedByKey = new Map(
+      occurrences.map(row => [`${this.text(row.task_id)}|${this.text(row.occurrence_key)}`, this.text(row.completed_at)])
+    );
+    return {
+      success: true,
+      data: tasks.map(task => {
+        if (!['daily', 'weekly'].includes(task.recurrenceType)) {
+          return {
+            ...task,
+            currentOccurrenceKey: '',
+            currentOccurrenceDone: false,
+            currentOccurrenceCompletedAt: '',
+            scheduledFor: ''
+          };
+        }
+        const period = this.occurrencePeriod(task.recurrenceType, new Date(), task.startTime);
+        const completedAt = completedByKey.get(`${task.taskId}|${period.occurrenceKey}`) || '';
+        return {
+          ...task,
+          currentOccurrenceKey: period.occurrenceKey,
+          currentOccurrenceDone: Boolean(completedAt),
+          currentOccurrenceCompletedAt: completedAt,
+          scheduledFor: period.scheduledFor
+        };
+      })
+    };
   },
 
   async save(payload, env) {
@@ -11529,6 +11619,10 @@ const D1PersonalTaskModule = {
     const title = this.text(payload.title);
     if (!title) return { success: false, error: '請輸入標題' };
     const taskType = this.text(payload.taskType || payload.task_type, 'followup');
+    const recurrenceType = this.text(payload.recurrenceType || payload.recurrence_type, 'none').toLowerCase();
+    if (!['none', 'daily', 'weekly'].includes(recurrenceType)) {
+      return { success: false, error: '循環類型不正確' };
+    }
     const relatedName = this.text(payload.relatedName || payload.related_name);
     const relatedCardId = this.text(payload.relatedCardId || payload.related_card_id);
     const startTime = this.text(payload.startTime || payload.start_time);
@@ -11540,8 +11634,8 @@ const D1PersonalTaskModule = {
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO personal_tasks (
         task_id,user_id,title,task_type,related_name,related_card_id,start_time,end_time,
-        remind_minutes,notes,status,google_event_url,created_at,updated_at,completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '')
+        remind_minutes,notes,status,recurrence_type,google_event_url,created_at,updated_at,completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, '')
       ON CONFLICT(task_id) DO UPDATE SET
         title=excluded.title,
         task_type=excluded.task_type,
@@ -11551,10 +11645,11 @@ const D1PersonalTaskModule = {
         end_time=excluded.end_time,
         remind_minutes=excluded.remind_minutes,
         notes=excluded.notes,
+        recurrence_type=excluded.recurrence_type,
         google_event_url=excluded.google_event_url,
         updated_at=CURRENT_TIMESTAMP
       WHERE personal_tasks.user_id = excluded.user_id
-    `).bind(taskId, userId, title, taskType, relatedName, relatedCardId, startTime, endTime, remindMinutes, notes, googleEventUrl).run();
+    `).bind(taskId, userId, title, taskType, relatedName, relatedCardId, startTime, endTime, remindMinutes, notes, recurrenceType, googleEventUrl).run();
 
     const row = await D1ReadModule.first(env, 'SELECT * FROM personal_tasks WHERE task_id = ? AND user_id = ? LIMIT 1', [taskId, userId]);
     return { success: true, data: this.taskRow(row) };
@@ -11565,6 +11660,33 @@ const D1PersonalTaskModule = {
     const userId = this.ownUserId(payload);
     const taskId = this.text(payload.taskId || payload.task_id);
     if (!userId || !taskId) return { success: false, error: 'Missing taskId' };
+    const task = await D1ReadModule.first(
+      env,
+      "SELECT * FROM personal_tasks WHERE task_id = ? AND user_id = ? AND status <> 'deleted' LIMIT 1",
+      [taskId, userId]
+    );
+    if (!task) return { success: false, error: '找不到待辦事項' };
+    const recurrenceType = this.text(task.recurrence_type, 'none');
+    if (status === 'done' && ['daily', 'weekly'].includes(recurrenceType)) {
+      const completedAt = new Date().toISOString();
+      const { occurrenceKey, scheduledFor } = this.occurrencePeriod(recurrenceType, new Date(), task.start_time);
+      const occurrenceId = `${taskId}:${occurrenceKey}`;
+      await env.ACTMASTER_DB.prepare(`
+        INSERT INTO personal_task_occurrences (
+          occurrence_id,task_id,user_id,occurrence_key,scheduled_for,status,completed_at,created_at
+        ) VALUES (?, ?, ?, ?, ?, 'done', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(task_id, occurrence_key) DO NOTHING
+      `).bind(occurrenceId, taskId, userId, occurrenceKey, scheduledFor, completedAt).run();
+      await env.ACTMASTER_DB.prepare(`
+        UPDATE personal_tasks
+        SET status = 'pending', completed_at = '', updated_at = CURRENT_TIMESTAMP
+        WHERE task_id = ? AND user_id = ?
+      `).bind(taskId, userId).run();
+      return {
+        success: true,
+        data: { taskId, status: 'done', recurrenceType, occurrenceKey, scheduledFor, recurring: true }
+      };
+    }
     const completedAt = status === 'done' ? new Date().toISOString() : '';
     await env.ACTMASTER_DB.prepare(`
       UPDATE personal_tasks

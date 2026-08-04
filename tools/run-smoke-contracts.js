@@ -51,7 +51,10 @@ const fullChecks = [
   'tools/check-card-resolver-contract.js',
   'tools/check-points-ledger-contract.js',
   'tools/check-button-actions-contract.js',
-  'tools/check-platform-shop-contract.js'
+  'tools/check-platform-shop-contract.js',
+  'tools/check-personal-task-recurrence-schema-contract.js',
+  'tools/check-personal-task-recurrence-worker-contract.js',
+  'tools/check-home-recurring-task-panel-contract.js'
 ];
 
 const requested = process.argv.slice(2);
