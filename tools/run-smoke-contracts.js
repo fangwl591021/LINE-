@@ -52,7 +52,8 @@ const fullChecks = [
   'tools/check-points-ledger-contract.js',
   'tools/check-button-actions-contract.js',
   'tools/check-platform-shop-contract.js',
-  'tools/check-personal-task-recurrence-schema-contract.js'
+  'tools/check-personal-task-recurrence-schema-contract.js',
+  'tools/check-personal-task-recurrence-worker-contract.js'
 ];
 
 const requested = process.argv.slice(2);
