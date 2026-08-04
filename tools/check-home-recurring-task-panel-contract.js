@@ -45,6 +45,12 @@ for (const marker of [
   if (!home.includes(marker)) fail(`home module must include ${marker}`);
 }
 
+if (!home.includes('tasks.slice(0, limit)') ||
+    !home.includes("'home-daily-task-list', daily, daily.length ? '今日待辦已完成' : '尚未設定每日待辦', 3") ||
+    !home.includes("'home-weekly-task-list', weekly, weekly.length ? '本週待辦已完成' : '尚未設定每週待辦', 2")) {
+  fail('home panel must cap previews to three daily and two weekly tasks');
+}
+
 if (!home.includes('id="agenda-recurrence"')) {
   fail('agenda form must offer recurrence selection');
 }

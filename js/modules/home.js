@@ -1396,14 +1396,15 @@ const HomeModule = (function() {
         return [date ? `本週 ${date}` : '本週', time].filter(Boolean).join(' ');
     }
 
-    function renderHomeRecurringTaskList_(elementId, tasks, emptyText) {
+    function renderHomeRecurringTaskList_(elementId, tasks, emptyText, limit) {
         const target = document.getElementById(elementId);
         if (!target) return;
         if (!tasks.length) {
             target.innerHTML = `<div class="py-3 text-center text-[12px] font-bold text-slate-400">${emptyText}</div>`;
             return;
         }
-        target.innerHTML = tasks.map(task => {
+        const visibleTasks = tasks.slice(0, limit);
+        target.innerHTML = visibleTasks.map(task => {
             const done = task.currentOccurrenceDone === true;
             return `
                 <div class="rounded-2xl border ${done ? 'border-slate-100 bg-slate-50 opacity-60' : 'border-slate-200 bg-white'} px-3 py-2.5 flex items-center gap-3">
@@ -1415,9 +1416,10 @@ const HomeModule = (function() {
                     ${done ? '<span class="text-[11px] font-black text-[#06C755]">已完成</span>' : `<button type="button" onclick="window.completeHomeRecurringTask(${task.homeIndex})" class="px-3 py-1.5 rounded-xl bg-emerald-50 text-[#06C755] text-[12px] font-black active:scale-95">完成</button>`}
                 </div>
             `;
-        }).join('');
+        }).join('') + (tasks.length > visibleTasks.length
+            ? `<div class="pt-2 text-center text-[12px] font-bold text-slate-400">尚有 ${tasks.length - visibleTasks.length} 項待辦</div>`
+            : '');
     }
-
     window.renderHomeRecurringTasks = function(tasks) {
         const recurring = (Array.isArray(tasks) ? tasks : [])
             .filter(task => ['daily', 'weekly'].includes(String(task.recurrenceType || '')))
@@ -1431,8 +1433,8 @@ const HomeModule = (function() {
         const weeklyCount = document.getElementById('home-weekly-task-count');
         if (dailyCount) dailyCount.textContent = String(dailyRemaining);
         if (weeklyCount) weeklyCount.textContent = String(weeklyRemaining);
-        renderHomeRecurringTaskList_('home-daily-task-list', daily, daily.length ? '今日待辦已完成' : '尚未設定每日待辦');
-        renderHomeRecurringTaskList_('home-weekly-task-list', weekly, weekly.length ? '本週待辦已完成' : '尚未設定每週待辦');
+        renderHomeRecurringTaskList_('home-daily-task-list', daily, daily.length ? '今日待辦已完成' : '尚未設定每日待辦', 3);
+        renderHomeRecurringTaskList_('home-weekly-task-list', weekly, weekly.length ? '本週待辦已完成' : '尚未設定每週待辦', 2);
         return recurring;
     };
 
