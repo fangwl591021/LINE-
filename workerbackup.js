@@ -1,4 +1,6 @@
-﻿/**
+import { CustomerImportModule } from './worker/customer-import.mjs';
+
+/**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
  * 特點：導入 Cloudflare KV 進行毫秒級身分驗證，並新增 LINE Token 強制核對與 OpenAI 流量防護機制
  */
@@ -76,6 +78,14 @@ const ACTION_POLICIES = {
   getCardContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
   getCardHarvestContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
   getCrmContacts: { access: 'authenticated', ownership: 'tenant-resource', tenantScoped: true, allowD1Fallback: true },
+  listCustomers: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  saveCustomer: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  archiveCustomer: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  createCustomerImportBatch: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  previewCustomerImportRows: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  commitCustomerImportBatch: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  getCustomerImportBatch: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  rollbackCustomerImportBatch: { access: 'authenticated', ownership: 'self', tenantScoped: true },
   saveCard: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
   updateCard: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
   claimCardAndRegister: { access: 'authenticated', ownership: 'self' },
@@ -15642,6 +15652,22 @@ async function dispatchAction(action, payload, request, env) {
         return { success: false, error: e && e.message ? e.message : 'resolveMyCardVersion failed' };
       }
     }
+    case 'listCustomers':
+      return await CustomerImportModule.listCustomers(payload || {}, env);
+    case 'saveCustomer':
+      return await CustomerImportModule.saveCustomer(payload || {}, env);
+    case 'archiveCustomer':
+      return await CustomerImportModule.archiveCustomer(payload || {}, env);
+    case 'createCustomerImportBatch':
+      return await CustomerImportModule.createBatch(payload || {}, env);
+    case 'previewCustomerImportRows':
+      return await CustomerImportModule.previewRows(payload || {}, env);
+    case 'commitCustomerImportBatch':
+      return await CustomerImportModule.commitBatch(payload || {}, env);
+    case 'getCustomerImportBatch':
+      return await CustomerImportModule.getBatch(payload || {}, env);
+    case 'rollbackCustomerImportBatch':
+      return await CustomerImportModule.rollbackBatch(payload || {}, env);
     case 'getCrmContacts': {
       try {
         const d1Result = await D1ReadModule.getCrmContacts(payload || {}, env);
