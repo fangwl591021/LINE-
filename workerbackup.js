@@ -12203,7 +12203,7 @@ const AdminCustomerImportMonitorModule = {
       SELECT b.batch_id,b.network_id,b.owner_user_id,b.source_type,b.source_name,b.state,
              b.total_rows,b.ready_rows,b.error_rows,b.created_rows,b.updated_rows,b.skipped_rows,b.checkpoint,
              b.created_at,b.updated_at,b.completed_at,b.rolled_back_at,
-             COALESCE((SELECT u.name FROM users u WHERE u.line_id=b.owner_user_id OR u.row_id=b.owner_user_id ORDER BY u.updated_at DESC LIMIT 1),'') AS owner_name
+             COALESCE((SELECT u.name FROM users u WHERE u.line_id=b.owner_user_id OR u.row_id=b.owner_user_id LIMIT 1),'') AS owner_name
       FROM customer_import_batches b
       ${where}
       ORDER BY b.created_at DESC
@@ -12219,7 +12219,7 @@ const AdminCustomerImportMonitorModule = {
       SELECT b.batch_id,b.network_id,b.owner_user_id,b.source_type,b.source_name,b.state,
              b.total_rows,b.ready_rows,b.error_rows,b.created_rows,b.updated_rows,b.skipped_rows,b.checkpoint,
              b.created_at,b.updated_at,b.completed_at,b.rolled_back_at,
-             COALESCE((SELECT u.name FROM users u WHERE u.line_id=b.owner_user_id OR u.row_id=b.owner_user_id ORDER BY u.updated_at DESC LIMIT 1),'') AS owner_name
+             COALESCE((SELECT u.name FROM users u WHERE u.line_id=b.owner_user_id OR u.row_id=b.owner_user_id LIMIT 1),'') AS owner_name
       FROM customer_import_batches b WHERE b.batch_id=? LIMIT 1
     `, [batchId]);
     if (!row) return { success: false, error: 'BATCH_NOT_FOUND' };
