@@ -425,6 +425,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">manage_accounts</span>
             經銷商 CRM
           </a>
+          <a href="#" onclick="switchTab('customer-imports')" id="nav-customer-imports" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">upload_file</span>
+            客戶名單匯入
+          </a>
           <a href="#" onclick="switchTab('activities')" id="nav-activities" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
             全站活動監控
@@ -591,6 +595,60 @@
           </section>
         </div>
 
+      </div>
+
+      <!-- Tab: Customer Import Monitor -->
+      <div id="tab-customer-imports" class="tab-content hidden space-y-6">
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-2xl font-black text-slate-900">客戶名單匯入監控</h3>
+                <span class="status-pill status-blue">唯讀</span>
+              </div>
+              <p class="mt-2 text-sm font-semibold text-slate-500">查看匯入批次、錯誤與 AI 費用狀態；不顯示用戶客戶的電話、Email、地址、生日或備註。</p>
+            </div>
+            <button onclick="loadAdminCustomerImports(true)" class="shrink-0 text-sm border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl hover:bg-slate-50 flex items-center gap-2 font-black">
+              <span class="material-symbols-outlined text-[18px]">refresh</span>重新整理
+            </button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 p-6 bg-slate-50">
+            <div class="bg-white rounded-xl border border-slate-200 p-5"><p class="text-xs font-bold text-slate-500">客戶資料總筆數</p><strong id="customer-import-kpi-total" class="block mt-2 text-3xl font-black text-slate-900">-</strong><span id="customer-import-kpi-owners" class="block mt-2 text-xs font-semibold text-slate-400">- 位用戶</span></div>
+            <div class="bg-white rounded-xl border border-slate-200 p-5"><p class="text-xs font-bold text-slate-500">今日匯入</p><strong id="customer-import-kpi-today" class="block mt-2 text-3xl font-black text-blue-700">-</strong><span id="customer-import-kpi-created" class="block mt-2 text-xs font-semibold text-slate-400">新增 - 筆</span></div>
+            <div class="bg-white rounded-xl border border-slate-200 p-5"><p class="text-xs font-bold text-slate-500">需要注意</p><strong id="customer-import-kpi-attention" class="block mt-2 text-3xl font-black text-red-600">-</strong><span class="block mt-2 text-xs font-semibold text-slate-400">失敗或部分失敗批次</span></div>
+            <div class="bg-white rounded-xl border border-slate-200 p-5"><p class="text-xs font-bold text-slate-500">AI 待處理</p><strong id="customer-import-kpi-ai-pending" class="block mt-2 text-3xl font-black text-purple-700">-</strong><span id="customer-import-kpi-ai-switch" class="block mt-2 text-xs font-semibold text-slate-400">總開關 -</span></div>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-5 border-b border-slate-100 grid grid-cols-1 lg:grid-cols-[1fr_180px_180px_auto] gap-3">
+              <div class="flex items-center gap-2 border border-slate-200 rounded-xl px-3 bg-white"><span class="material-symbols-outlined text-slate-400">search</span><input id="customer-import-search" oninput="scheduleAdminCustomerImportSearch()" class="w-full py-2.5 text-sm outline-none" placeholder="搜尋用戶、批次編號或檔案名稱"></div>
+              <select id="customer-import-state" onchange="applyAdminCustomerImportFilters()" class="border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700"><option value="">全部狀態</option><option value="completed">完成</option><option value="partial_failed">部分失敗</option><option value="failed">失敗</option><option value="importing">匯入中</option><option value="ready">等待確認</option><option value="rolled_back">已回復</option></select>
+              <select id="customer-import-source" onchange="applyAdminCustomerImportFilters()" class="border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700"><option value="">全部來源</option><option value="xlsx">XLSX</option><option value="xls">XLS</option><option value="csv">CSV</option></select>
+              <button onclick="resetAdminCustomerImportFilters()" class="border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-black text-slate-600">清除</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="data-table readable-table min-w-[1050px]">
+                <thead><tr><th>用戶／來源</th><th>批次</th><th>資料列</th><th>處理結果</th><th>狀態</th><th>時間</th><th class="text-right">詳情</th></tr></thead>
+                <tbody id="customer-import-table-body"><tr><td colspan="7" class="text-center py-10 text-slate-400">尚未載入</td></tr></tbody>
+              </table>
+            </div>
+            <div class="px-5 py-4 border-t border-slate-100 flex items-center justify-between gap-3"><span id="customer-import-result-count" class="text-xs font-bold text-slate-500">0 筆</span><div class="flex gap-2"><button id="customer-import-prev" onclick="changeAdminCustomerImportPage(-1)" class="border border-slate-200 rounded-lg px-3 py-2 text-xs font-black disabled:opacity-40">上一頁</button><button id="customer-import-next" onclick="changeAdminCustomerImportPage(1)" class="border border-slate-200 rounded-lg px-3 py-2 text-xs font-black disabled:opacity-40">下一頁</button></div></div>
+          </div>
+
+          <aside class="space-y-6">
+            <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <h4 class="font-black text-slate-900">AI 分析與費用</h4>
+              <div class="mt-4 space-y-3 text-sm"><div class="flex justify-between"><span class="text-slate-500">執行時段</span><strong id="customer-import-ai-window">-</strong></div><div class="flex justify-between"><span class="text-slate-500">每日上限</span><strong id="customer-import-ai-daily">-</strong></div><div class="flex justify-between"><span class="text-slate-500">預估費用</span><strong id="customer-import-ai-estimate">-</strong></div><div class="flex justify-between"><span class="text-slate-500">核准上限</span><strong id="customer-import-ai-approved">-</strong></div><div class="flex justify-between"><span class="text-slate-500">實際費用</span><strong id="customer-import-ai-actual">-</strong></div></div>
+              <p class="mt-4 rounded-xl bg-amber-50 px-3 py-3 text-xs font-bold leading-relaxed text-amber-800">此頁只監控費用，不會開啟 AI、核准批次或立即執行分析。</p>
+            </section>
+            <section id="customer-import-detail" class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <h4 class="font-black text-slate-900">批次安全詳情</h4>
+              <p class="mt-3 text-sm font-semibold text-slate-400">點選任一批次查看錯誤統計與該用戶 AI 成本摘要。</p>
+            </section>
+          </aside>
+        </section>
       </div>
 
       <!-- Tab: Activities -->
@@ -1569,6 +1627,10 @@
     let currentAdminEcardImgs = { landscape: '', portrait: '', square: '' };
     let currentAdminEcardRatios = { landscape: '20:13', portrait: '2:3', square: '1:1' };
     let lineOAKeywordRules = [];
+    let adminCustomerImportPage = 0;
+    let adminCustomerImportTotal = 0;
+    let adminCustomerImportSearchTimer = 0;
+    const ADMIN_CUSTOMER_IMPORT_PAGE_SIZE = 25;
 
     function getAdminLiffEntryUrl() {
       const params = new URLSearchParams({
@@ -1675,6 +1737,7 @@
         }
       }
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
+      if (tabId === 'customer-imports') loadAdminCustomerImports(false);
       if (tabId === 'finance') loadFinanceStats();
       if (tabId === 'bonus') initBonusSystem();
       if (tabId === 'lineoa-keywords') loadLineOAKeywordRules();
@@ -4610,6 +4673,129 @@
       return toDateTimeLocal_(raw);
     }
 
+    function adminCustomerImportNumber(value) {
+      return Number(value || 0).toLocaleString('zh-TW');
+    }
+
+    function adminCustomerImportUsd(microusd) {
+      return `US$ ${(Number(microusd || 0) / 1000000).toFixed(4)}`;
+    }
+
+    function adminCustomerImportTime(value) {
+      if (!value) return '-';
+      const parsed = new Date(String(value).replace(' ', 'T') + (String(value).includes('Z') ? '' : 'Z'));
+      return Number.isNaN(parsed.getTime()) ? escapeHTML(value) : parsed.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
+    }
+
+    function adminCustomerImportState(value) {
+      const states = {
+        draft: ['草稿', 'status-gray'], reading: ['讀取中', 'status-blue'], mapping: ['欄位配對', 'status-blue'],
+        validating: ['檢查中', 'status-blue'], ready: ['等待確認', 'status-amber'], importing: ['匯入中', 'status-blue'],
+        completed: ['完成', 'status-green'], partial_failed: ['部分失敗', 'status-amber'], failed: ['失敗', 'status-red'], rolled_back: ['已回復', 'status-slate']
+      };
+      return states[String(value || '')] || [String(value || '未知'), 'status-gray'];
+    }
+
+    async function loadAdminCustomerImports(force) {
+      if (force) adminCustomerImportPage = 0;
+      const overview = await fetchAPI('getAdminCustomerImportOverview');
+      if (overview) renderAdminCustomerImportOverview(overview);
+      await loadAdminCustomerImportBatches();
+    }
+
+    function renderAdminCustomerImportOverview(data) {
+      const customers = data.customers || {};
+      const imports = data.imports || {};
+      const ai = data.ai || {};
+      document.getElementById('customer-import-kpi-total').innerText = adminCustomerImportNumber(customers.total);
+      document.getElementById('customer-import-kpi-owners').innerText = `${adminCustomerImportNumber(customers.owners)} 位用戶`;
+      document.getElementById('customer-import-kpi-today').innerText = adminCustomerImportNumber(imports.todayBatches);
+      document.getElementById('customer-import-kpi-created').innerText = `新增 ${adminCustomerImportNumber(imports.todayCreated)} 筆`;
+      document.getElementById('customer-import-kpi-attention').innerText = adminCustomerImportNumber(imports.attentionBatches);
+      document.getElementById('customer-import-kpi-ai-pending').innerText = adminCustomerImportNumber(ai.pendingJobs);
+      document.getElementById('customer-import-kpi-ai-switch').innerText = ai.masterEnabled ? '總開關已開啟' : '總開關已關閉';
+      document.getElementById('customer-import-kpi-ai-switch').className = `block mt-2 text-xs font-semibold ${ai.masterEnabled ? 'text-emerald-600' : 'text-slate-400'}`;
+      document.getElementById('customer-import-ai-window').innerText = `${Number(ai.offpeakStartHourTaipei ?? 2)}:00–${Number(ai.offpeakEndHourTaipei ?? 5)}:00`;
+      document.getElementById('customer-import-ai-daily').innerText = `${adminCustomerImportNumber(ai.maxJobsPerDay)} 筆`;
+      document.getElementById('customer-import-ai-estimate').innerText = adminCustomerImportUsd(ai.estimatedCostMicrousd);
+      document.getElementById('customer-import-ai-approved').innerText = adminCustomerImportUsd(ai.approvedLimitMicrousd);
+      document.getElementById('customer-import-ai-actual').innerText = adminCustomerImportUsd(ai.actualCostMicrousd);
+    }
+
+    async function loadAdminCustomerImportBatches() {
+      const payload = {
+        query: document.getElementById('customer-import-search')?.value || '',
+        state: document.getElementById('customer-import-state')?.value || '',
+        sourceType: document.getElementById('customer-import-source')?.value || '',
+        limit: ADMIN_CUSTOMER_IMPORT_PAGE_SIZE,
+        offset: adminCustomerImportPage * ADMIN_CUSTOMER_IMPORT_PAGE_SIZE
+      };
+      const result = await fetchAPI('listAdminCustomerImportBatches', payload);
+      if (!result) return;
+      adminCustomerImportTotal = Number(result.total || 0);
+      const items = Array.isArray(result.items) ? result.items : [];
+      const body = document.getElementById('customer-import-table-body');
+      body.innerHTML = items.length ? items.map(item => {
+        const state = adminCustomerImportState(item.state);
+        const batchId = escapeHTML(item.batchId || '');
+        const encodedBatchId = encodeURIComponent(item.batchId || '');
+        return `<tr>
+          <td><div class="table-main-text">${escapeHTML(item.ownerName || '未命名用戶')}</div><div class="table-sub-text font-mono">${escapeHTML(item.ownerUserId || '')}</div><span class="mt-2 inline-flex rounded-full bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">${escapeHTML(String(item.sourceType || '').toUpperCase())}</span></td>
+          <td><div class="table-main-text">${escapeHTML(item.sourceName || '未提供檔名')}</div><div class="table-sub-text font-mono">${batchId}</div></td>
+          <td><div class="table-main-text">${adminCustomerImportNumber(item.totalRows)} 筆</div><div class="table-sub-text">檢查點 ${adminCustomerImportNumber(item.checkpoint)}</div></td>
+          <td><div class="text-sm font-bold text-emerald-700">新增 ${adminCustomerImportNumber(item.createdRows)}</div><div class="table-sub-text">更新 ${adminCustomerImportNumber(item.updatedRows)}・略過 ${adminCustomerImportNumber(item.skippedRows)}・錯誤 ${adminCustomerImportNumber(item.errorRows)}</div></td>
+          <td><span class="status-pill ${state[1]}">${escapeHTML(state[0])}</span></td>
+          <td><div class="table-main-text">${adminCustomerImportTime(item.createdAt)}</div><div class="table-sub-text">完成 ${adminCustomerImportTime(item.completedAt)}</div></td>
+          <td class="text-right"><button onclick="openAdminCustomerImportSummary('${encodedBatchId}')" class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">查看統計</button></td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="7" class="text-center py-12 text-slate-400 font-bold">沒有符合條件的匯入批次</td></tr>';
+      const start = adminCustomerImportTotal ? payload.offset + 1 : 0;
+      const end = Math.min(payload.offset + items.length, adminCustomerImportTotal);
+      document.getElementById('customer-import-result-count').innerText = `${start}–${end}／共 ${adminCustomerImportNumber(adminCustomerImportTotal)} 筆`;
+      document.getElementById('customer-import-prev').disabled = adminCustomerImportPage <= 0;
+      document.getElementById('customer-import-next').disabled = payload.offset + items.length >= adminCustomerImportTotal;
+    }
+
+    function scheduleAdminCustomerImportSearch() {
+      clearTimeout(adminCustomerImportSearchTimer);
+      adminCustomerImportSearchTimer = setTimeout(() => { adminCustomerImportPage = 0; loadAdminCustomerImportBatches(); }, 300);
+    }
+
+    function applyAdminCustomerImportFilters() {
+      adminCustomerImportPage = 0;
+      loadAdminCustomerImportBatches();
+    }
+
+    function resetAdminCustomerImportFilters() {
+      document.getElementById('customer-import-search').value = '';
+      document.getElementById('customer-import-state').value = '';
+      document.getElementById('customer-import-source').value = '';
+      adminCustomerImportPage = 0;
+      loadAdminCustomerImportBatches();
+    }
+
+    function changeAdminCustomerImportPage(direction) {
+      const next = Math.max(0, adminCustomerImportPage + Number(direction || 0));
+      if (next * ADMIN_CUSTOMER_IMPORT_PAGE_SIZE >= adminCustomerImportTotal && direction > 0) return;
+      adminCustomerImportPage = next;
+      loadAdminCustomerImportBatches();
+    }
+
+    async function openAdminCustomerImportSummary(encodedBatchId) {
+      const batchId = decodeURIComponent(encodedBatchId || '');
+      const result = await fetchAPI('getAdminCustomerImportBatchSummary', { batchId });
+      if (!result) return;
+      const batch = result.batch || {};
+      const ai = result.ownerAi || {};
+      const rows = Array.isArray(result.rowSummary) ? result.rowSummary : [];
+      const host = document.getElementById('customer-import-detail');
+      host.innerHTML = `<div class="flex items-start justify-between gap-3"><div><h4 class="font-black text-slate-900">批次安全詳情</h4><p class="mt-1 text-xs font-mono text-slate-400 break-all">${escapeHTML(batch.batchId || '')}</p></div><span class="status-pill ${adminCustomerImportState(batch.state)[1]}">${escapeHTML(adminCustomerImportState(batch.state)[0])}</span></div>
+        <div class="mt-4 rounded-xl bg-slate-50 p-4 text-sm space-y-2"><div class="flex justify-between gap-3"><span class="text-slate-500">用戶</span><strong class="text-right">${escapeHTML(batch.ownerName || '')}</strong></div><div class="flex justify-between gap-3"><span class="text-slate-500">來源</span><strong class="text-right">${escapeHTML(batch.sourceName || '')}</strong></div><div class="flex justify-between gap-3"><span class="text-slate-500">處理結果</span><strong class="text-right">新增 ${adminCustomerImportNumber(batch.createdRows)}／更新 ${adminCustomerImportNumber(batch.updatedRows)}／略過 ${adminCustomerImportNumber(batch.skippedRows)}</strong></div></div>
+        <h5 class="mt-5 text-xs font-black text-slate-500">列狀態與錯誤代碼</h5><div class="mt-2 space-y-2">${rows.length ? rows.map(row => `<div class="rounded-lg border border-slate-200 px-3 py-2 flex justify-between gap-3 text-xs"><span class="font-mono text-slate-600">${escapeHTML(row.code || 'NONE')}・${escapeHTML(row.status || '')}・${escapeHTML(row.decision || '')}</span><strong>${adminCustomerImportNumber(row.count)}</strong></div>`).join('') : '<p class="text-xs font-bold text-slate-400">沒有列狀態資料</p>'}</div>
+        <h5 class="mt-5 text-xs font-black text-slate-500">該用戶 AI 費用摘要</h5><div class="mt-2 rounded-xl bg-purple-50 p-4 text-xs font-bold text-purple-900 space-y-2"><div class="flex justify-between"><span>可分析客戶</span><strong>${adminCustomerImportNumber(ai.eligibleCustomers)}</strong></div><div class="flex justify-between"><span>預估／核准／實際</span><strong>${adminCustomerImportUsd(ai.estimatedCostMicrousd)}／${adminCustomerImportUsd(ai.approvedLimitMicrousd)}／${adminCustomerImportUsd(ai.actualCostMicrousd)}</strong></div></div>
+        <p class="mt-4 text-[11px] font-bold leading-relaxed text-slate-400">此資料僅為該用戶整體 AI 批次統計，不代表本次匯入已啟動分析。</p>`;
+    }
+
     async function loadFinanceStats() {
       const stats = await fetchAPI('getAdminStats');
       if (stats) {
@@ -4925,5 +5111,3 @@
   </script>
 </body>
 </html>
-
-
