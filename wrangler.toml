@@ -39,6 +39,12 @@ MOTHER_LINE_MEMBER_API_URL = "https://aiwe.cc/index.php/wp-json/wetw/v1/check-or
 name = "line-engine-staging"
 workers_dev = true
 
+[env.staging.assets]
+directory = ".staging-assets"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api", "/api/*"]
+
 [env.staging.triggers]
 crons = []
 
