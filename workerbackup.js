@@ -1,4 +1,6 @@
-﻿/**
+import { CustomerImportModule } from './worker/customer-import.mjs';
+
+/**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
  * 特點：導入 Cloudflare KV 進行毫秒級身分驗證，並新增 LINE Token 強制核對與 OpenAI 流量防護機制
  */
@@ -76,6 +78,15 @@ const ACTION_POLICIES = {
   getCardContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
   getCardHarvestContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
   getCrmContacts: { access: 'authenticated', ownership: 'tenant-resource', tenantScoped: true, allowD1Fallback: true },
+  listCustomers: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  saveCustomer: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  archiveCustomer: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  createCustomerImportBatch: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  suggestCustomerImportMapping: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  previewCustomerImportRows: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  commitCustomerImportBatch: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  getCustomerImportBatch: { access: 'authenticated', ownership: 'self', tenantScoped: true },
+  rollbackCustomerImportBatch: { access: 'authenticated', ownership: 'self', tenantScoped: true },
   saveCard: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
   updateCard: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
   claimCardAndRegister: { access: 'authenticated', ownership: 'self' },
@@ -15542,6 +15553,64 @@ const MLMModule = {
   }
 };
 
+const CUSTOMER_IMPORT_AI_TARGETS = new Set([
+  '', 'name', 'mobile', 'email', 'company', 'title', 'address', 'birthday',
+  'category', 'status', 'lastContactAt', 'nextFollowupAt', 'notes', 'externalId'
+]);
+
+function parseCustomerImportMappingJson(value) {
+  const raw = String(value || '').replace(/```json/gi, '```');
+  const fenced = raw.match(/```\s*([\s\S]*?)```/);
+  const source = fenced?.[1] || raw;
+  const object = source.match(/\{[\s\S]*\}/);
+  if (!object) throw new Error('AI_MAPPING_INVALID_RESPONSE');
+  return JSON.parse(object[0]);
+}
+
+async function suggestCustomerImportMapping(payload, env) {
+  const columns = (Array.isArray(payload.columns) ? payload.columns : [])
+    .slice(0, 50)
+    .map((column, index) => ({
+      index: Number.isInteger(Number(column?.index)) ? Number(column.index) : index,
+      header: String(column?.header || '').normalize('NFKC').trim().slice(0, 80),
+      samples: (Array.isArray(column?.samples) ? column.samples : [])
+        .slice(0, 3)
+        .map(value => String(value ?? '').normalize('NFKC').trim().slice(0, 80))
+    }));
+  if (!columns.length) return { success: false, error: 'AI_MAPPING_COLUMNS_REQUIRED' };
+
+  const prompt = [
+    '你是 CRM 客戶名單欄位配對器。只回傳 JSON，不要解釋。',
+    '可用 target：name,mobile,email,company,title,address,birthday,category,status,lastContactAt,nextFollowupAt,notes,externalId；無法判斷用空字串。',
+    '同一 target 最多使用一次。不得根據樣本推斷健康、財務、行銷同意或其他敏感屬性。',
+    'confidence 只能是 high、medium、low。reason 使用繁體中文且不超過 30 字。',
+    '輸出格式：{"columns":[{"index":0,"target":"name","confidence":"high","reason":"欄名為姓名"}]}',
+    JSON.stringify({ columns })
+  ].join('\n');
+
+  try {
+    const result = await AIModule.callOpenAI(env, {
+      model: AIModule.openAITextModel(env),
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0,
+      response_format: { type: 'json_object' }
+    }, payload.clientOpenAIKey);
+    const parsed = parseCustomerImportMappingJson(result?.choices?.[0]?.message?.content || '');
+    const used = new Set();
+    const suggestions = (Array.isArray(parsed.columns) ? parsed.columns : []).slice(0, columns.length).map(item => {
+      const index = Number(item?.index);
+      let target = CUSTOMER_IMPORT_AI_TARGETS.has(String(item?.target || '')) ? String(item.target || '') : '';
+      if (target && used.has(target)) target = '';
+      if (target) used.add(target);
+      const confidence = ['high', 'medium', 'low'].includes(String(item?.confidence || '')) ? String(item.confidence) : 'low';
+      return { index, target, confidence, reason: String(item?.reason || '').slice(0, 30) };
+    }).filter(item => Number.isInteger(item.index) && item.index >= 0 && item.index < columns.length);
+    return { success: true, data: { suggestions, source: 'ai' } };
+  } catch (error) {
+    return { success: true, data: { suggestions: [], source: 'rules', warning: 'AI_MAPPING_FALLBACK' } };
+  }
+}
+
 // ==================== 請求分發器 (Action Dispatcher) ====================
 async function dispatchAction(action, payload, request, env) {
   const authz = await SecurityModule.authorizeAction(action, payload, request, env);
@@ -15578,7 +15647,7 @@ async function dispatchAction(action, payload, request, env) {
   }
 
   // 2. 資安防護：OpenAI 限流機制
-  const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy'];
+  const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy', 'suggestCustomerImportMapping'];
   if (aiActions.includes(action) && (actor?.userId || payload.userId)) {
     const allowed = await SecurityModule.checkRateLimit(actor?.userId || payload.userId, action, env, actor?.role || payload.role);
     if (!allowed) {
@@ -15642,6 +15711,24 @@ async function dispatchAction(action, payload, request, env) {
         return { success: false, error: e && e.message ? e.message : 'resolveMyCardVersion failed' };
       }
     }
+    case 'listCustomers':
+      return await CustomerImportModule.listCustomers(payload || {}, env);
+    case 'saveCustomer':
+      return await CustomerImportModule.saveCustomer(payload || {}, env);
+    case 'archiveCustomer':
+      return await CustomerImportModule.archiveCustomer(payload || {}, env);
+    case 'createCustomerImportBatch':
+      return await CustomerImportModule.createBatch(payload || {}, env);
+    case 'suggestCustomerImportMapping':
+      return await suggestCustomerImportMapping(payload || {}, env);
+    case 'previewCustomerImportRows':
+      return await CustomerImportModule.previewRows(payload || {}, env);
+    case 'commitCustomerImportBatch':
+      return await CustomerImportModule.commitBatch(payload || {}, env);
+    case 'getCustomerImportBatch':
+      return await CustomerImportModule.getBatch(payload || {}, env);
+    case 'rollbackCustomerImportBatch':
+      return await CustomerImportModule.rollbackBatch(payload || {}, env);
     case 'getCrmContacts': {
       try {
         const d1Result = await D1ReadModule.getCrmContacts(payload || {}, env);

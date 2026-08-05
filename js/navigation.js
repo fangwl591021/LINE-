@@ -14,6 +14,7 @@ window.goPage = function(page, isInitLoad = false) {
     if (page === 'admin-activities') window.loadAdminActivities();
     else if (page === 'home') window.loadUserActivities();
     else if (page === 'card' && typeof window.loadCardData === 'function') window.loadCardData({ render: true, harvest: true });
+    else if (page === 'customers' && typeof window.initCustomersPage === 'function') window.initCustomersPage();
     else if (page === 'matchmake' && typeof window.initMatchmakePage === 'function') window.initMatchmakePage();
     else if (page === 'admin-stats') window.loadAdminStats();
     else if (page === 'my-activities') window.loadMyActivities();

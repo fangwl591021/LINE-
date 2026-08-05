@@ -26,7 +26,7 @@ ok(contract.includes('新操作不得產生操作者 `-10` 或失敗退回 `+10`
 ok(worker.includes('resolvePointUserId') && worker.includes('pointUserId') && worker.includes('pt_uid'), 'worker resolves canonical point identity bridge');
 ok(auth.includes('ACTMASTER_POINT_UID_') && auth.includes('pointUserId') && auth.includes('pt_uid'), 'frontend sends bridged point uid');
 
-ok(index.includes('可免費操作折抵扣點或消費贈點'), 'store point UI states free operation');
+ok(index.includes('掃描客戶 QR 碼或輸入電話可折抵扣點或消費贈點'), 'store point UI keeps the current cashier operation guidance');
 ok(index.includes('一般訊息、課程邀約、訪談邀請與優惠券皆免費傳送'), 'inbox UI states free sends');
 ok(auth.includes('母站已入帳'), 'store point client success requires mother posting confirmation');
 ok(worker.includes('const operatorFee = 0'), 'store point worker uses zero operator fee');
