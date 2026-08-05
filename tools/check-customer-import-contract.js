@@ -5,6 +5,9 @@ const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'migrations', '0016_customer_import_foundation.sql'), 'utf8');
 const moduleSource = fs.readFileSync(path.join(root, 'worker', 'customer-import.mjs'), 'utf8');
 const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
+const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const navigation = fs.readFileSync(path.join(root, 'js', 'navigation.js'), 'utf8');
+const customers = fs.readFileSync(path.join(root, 'js', 'modules', 'customers.js'), 'utf8');
 
 function expect(condition, message) {
   if (!condition) {
@@ -34,5 +37,15 @@ for (const action of ['listCustomers','saveCustomer','archiveCustomer','createCu
   expect(worker.includes(`${action}: { access: 'authenticated'`), `${action} must be authenticated`);
   expect(worker.includes(`case '${action}':`), `${action} must be routed`);
 }
+expect(index.includes('id="page-customers"'), 'My customers page must exist');
+expect(index.includes("window.goPage('customers')"), 'home entry must open My customers');
+expect(index.includes('xlsx-0.20.3/package/dist/xlsx.full.min.js'), 'spreadsheet parser must use the pinned official browser build');
+expect(index.includes('js/modules/customers.js?v=1.0'), 'customer controller must be loaded with a cache-bust');
+expect(navigation.includes("page === 'customers'") && navigation.includes('window.initCustomersPage'), 'navigation must initialize the customer page');
+for (const marker of ['LIMITS', 'fileBytes: 5 * 1024 * 1024', 'rows: 500', "['xlsx','xls','csv']", 'previewCustomerImportRows', 'confirmAuthority: true', 'customer-authority-confirm', 'rollbackCustomerImportBatch']) {
+  expect(customers.includes(marker), `customer UI must include ${marker}`);
+}
+expect(customers.indexOf("previewCustomerImportRows") < customers.indexOf("commitCustomerImportBatch"), 'preview must precede commit');
+expect(!customers.includes("saveCard") && !customers.includes("card_contacts"), 'customer UI must not write business cards');
 
 console.log('Customer import contract passed.');
