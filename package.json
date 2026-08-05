@@ -8,6 +8,7 @@
     "smoke": "node tools/run-smoke-contracts.js",
     "smoke:full": "node tools/run-smoke-contracts.js --full",
     "smoke:list": "node tools/run-smoke-contracts.js --list --full",
-    "test:customer-import": "node test/customer-import.test.mjs"
+    "test:customer-import": "node test/customer-import.test.mjs",
+    "test:customer-tags": "node test/customer-tag-analysis.test.mjs"
   }
 }

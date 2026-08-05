@@ -1,9 +1,9 @@
 name = "line-engine"
-main = "workerbackup.js"
+main = "worker-entry.mjs"
 compatibility_date = "2026-04-23"
 
 [triggers]
-crons = ["0 1 * * *"]
+crons = ["0 1 * * *", "*/15 18-20 * * *"]
 
 [[kv_namespaces]]
 binding = "ACTMASTER_KV"
@@ -29,6 +29,7 @@ MOTHER_CUS_ACCOUNT_CLIENT_ID = "1660923784"
 MOTHER_CUS_ACCOUNT_REDIRECT_URI = "https://aiwe.cc/index.php/line_login/677/"
 MOTHER_LINE_MEMBER_API_URL = "https://aiwe.cc/index.php/wp-json/wetw/v1/check-or-create-line-user"
 # Secret required: MOTHER_LINE_MEMBER_API_KEY
+# Secret required: CUSTOMER_TAG_APPROVER_IDS (comma-separated LINE user IDs)
 # GAS_URL = "https://script.google.com/macros/s/.../exec"
 # LINE_CHANNEL_SECRET = ""
 # LINE_CHANNEL_ACCESS_TOKEN = ""

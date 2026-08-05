@@ -27,7 +27,8 @@
 
   const state = {
     customers: [], workbook: null, sheetName: '', matrix: [], headers: [], mapping: {}, mappingHints: {}, mappedRows: [],
-    batchId: '', previewRows: [], sourceName: '', sourceType: '', sessionKey: '', busy: false
+    batchId: '', previewRows: [], sourceName: '', sourceType: '', sessionKey: '', busy: false,
+    tagProfiles: new Map(), tagControl: null, estimatedTagBatch: null
   };
 
   function el(id) { return document.getElementById(id); }
@@ -70,7 +71,17 @@
 
   window.initCustomersPage = async function () {
     if (!el('page-customers')) return;
+    await window.loadCustomerTagProfiles();
     await window.loadCustomers();
+    if (typeof window.isHardAdminUser === 'function' && window.isHardAdminUser(window.currentUserProfile?.userId, window.currentUser || {})) {
+      await window.loadCustomerTagControl();
+    }
+  };
+
+  window.loadCustomerTagProfiles = async function () {
+    const result = await window.fetchAPI('listCustomerTagProfiles', {}, true);
+    const rows = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : []);
+    state.tagProfiles = new Map(rows.map(row => [String(row.customerId || ''), row]));
   };
 
   window.loadCustomers = async function () {
@@ -98,6 +109,9 @@
     list.innerHTML = customers.map((customer, index) => {
       const phone = String(customer.mobile || '').trim();
       const email = String(customer.email || '').trim();
+      const tagProfile = state.tagProfiles.get(String(customer.customerId || ''));
+      const tagItems = [['個性','personality'],['興趣','hobbies'],['財富','wealth'],['健康','health'],['事業','career']];
+      const tagHtml = tagProfile ? tagItems.map(([label,key]) => `<span class="rounded-full px-2 py-1 text-[10px] font-black ${tagProfile[key] ? 'bg-violet-50 text-violet-700' : 'bg-slate-50 text-slate-400'}">${label}${tagProfile[key] ? '：' + escape(tagProfile[key]) : ''}</span>`).join('') : '<span class="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-400">尚未申請 AI 分析</span>';
       return `<article class="rounded-3xl bg-white border border-slate-100 shadow-sm p-4">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
@@ -107,12 +121,82 @@
           </div>
           <button type="button" onclick="window.openCustomerForm(${index})" class="w-9 h-9 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center"><span class="material-symbols-outlined text-[20px]">edit</span></button>
         </div>
+        <div class="mt-3 flex flex-wrap gap-1.5">${tagHtml}</div>
         <div class="mt-3 flex gap-2">
           ${phone ? `<a href="tel:${escape(phone.replace(/[^+\d]/g, ''))}" class="flex-1 rounded-2xl bg-blue-50 text-blue-600 py-2.5 text-center text-xs font-black">撥打電話</a>` : ''}
           ${email ? `<a href="mailto:${escape(email)}" class="flex-1 rounded-2xl bg-violet-50 text-violet-600 py-2.5 text-center text-xs font-black">寄 Email</a>` : ''}
         </div>
       </article>`;
     }).join('');
+  };
+
+  function usd(microusd) { return (Number(microusd || 0) / 1000000).toLocaleString('zh-TW', { style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 6 }); }
+  function isTony() {
+    return !!state.tagControl;
+  }
+
+  window.loadCustomerTagControl = async function () {
+    const result = await window.fetchAPI('getCustomerTagAnalysisControl', {}, true);
+    if (result?.error) return;
+    const data = result?.settings ? result : (result?.data || {});
+    state.tagControl = data;
+    showPanel('customer-tag-admin-control', true);
+    const settings = data.settings || {};
+    el('customer-tag-master-enabled').checked = Number(settings.master_enabled || 0) === 1;
+    el('customer-tag-offpeak-start').value = Number(settings.offpeak_start_hour_taipei ?? 2);
+    el('customer-tag-offpeak-end').value = Number(settings.offpeak_end_hour_taipei ?? 5);
+    el('customer-tag-per-run').value = Number(settings.max_jobs_per_run ?? 5);
+    el('customer-tag-per-day').value = Number(settings.max_jobs_per_day ?? 100);
+    el('customer-tag-control-status').textContent = el('customer-tag-master-enabled').checked ? '總開關已開' : '總開關關閉';
+    const latest = Array.isArray(data.prices) ? data.prices.find(row => Number(row.enabled) === 1) : null;
+    if (latest) {
+      el('customer-tag-provider').value = latest.provider || 'openai'; el('customer-tag-model').value = latest.model || '';
+      el('customer-tag-input-price').value = Number(latest.input_price_microusd_per_million || 0) / 1000000;
+      el('customer-tag-output-price').value = Number(latest.output_price_microusd_per_million || 0) / 1000000;
+    }
+  };
+
+  window.saveCustomerTagControl = async function () {
+    if (!isTony()) return window.showToast('只有 Tony 可以變更此開關', true);
+    setBusy(true);
+    const result = await window.fetchAPI('saveCustomerTagAnalysisControl', { masterEnabled: el('customer-tag-master-enabled').checked, offpeakStartHourTaipei: Number(el('customer-tag-offpeak-start').value), offpeakEndHourTaipei: Number(el('customer-tag-offpeak-end').value), maxJobsPerRun: Number(el('customer-tag-per-run').value), maxJobsPerDay: Number(el('customer-tag-per-day').value) }, true);
+    setBusy(false);
+    if (result?.error) return window.showToast(result.error, true);
+    window.showToast('分析開關與離峰限制已儲存'); await window.loadCustomerTagControl();
+  };
+
+  window.saveCustomerTagPrice = async function () {
+    if (!isTony()) return window.showToast('只有 Tony 可以設定價格', true);
+    const input = Number(el('customer-tag-input-price').value); const output = Number(el('customer-tag-output-price').value);
+    if (!el('customer-tag-model').value.trim() || !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return window.showToast('請填入有效模型與價格', true);
+    setBusy(true);
+    const result = await window.fetchAPI('saveCustomerTagModelPrice', { provider: el('customer-tag-provider').value, model: el('customer-tag-model').value, inputPriceMicrousdPerMillion: Math.round(input * 1000000), outputPriceMicrousdPerMillion: Math.round(output * 1000000) }, true);
+    setBusy(false);
+    if (result?.error) return window.showToast(result.error, true);
+    window.showToast('模型價格已建立最新驗證快照');
+  };
+
+  window.estimateCustomerTagBatch = async function () {
+    if (!isTony()) return window.showToast('只有 Tony 可以建立估價', true);
+    setBusy(true);
+    const result = await window.fetchAPI('estimateCustomerTagAnalysisBatch', { provider: el('customer-tag-provider').value, model: el('customer-tag-model').value }, true);
+    setBusy(false);
+    if (result?.error) return window.showToast(result.error === 'MODEL_PRICE_REQUIRED' ? '請先儲存模型價格' : result.error, true);
+    const batch = result?.batchId ? result : result?.data;
+    state.estimatedTagBatch = batch;
+    const host = el('customer-tag-estimate'); showPanel('customer-tag-estimate', true); showPanel('customer-tag-approve-button', true);
+    host.innerHTML = `<strong class="block text-sm text-slate-800">${Number(batch.eligibleCustomers || 0).toLocaleString()} 位客戶</strong><span class="mt-1 block">基準估價 ${usd(batch.estimatedCostMicrousd)}；含 35% 緩衝的最高核准額 ${usd(batch.estimatedHighCostMicrousd)}。</span><span class="mt-2 block text-amber-700">這只是估價，不會啟動分析。價格或客戶集合變動時必須重新估價。</span>`;
+  };
+
+  window.approveCustomerTagBatch = async function () {
+    const batch = state.estimatedTagBatch;
+    if (!isTony() || !batch?.batchId) return window.showToast('請先由 Tony 建立估價', true);
+    if (!window.confirm(`核准最高費用 ${usd(batch.estimatedHighCostMicrousd)}？總開關與離峰限制仍會生效。`)) return;
+    setBusy(true);
+    const result = await window.fetchAPI('approveCustomerTagAnalysisBatch', { batchId: batch.batchId, maxCostMicrousd: Number(batch.estimatedHighCostMicrousd) }, true);
+    setBusy(false);
+    if (result?.error) return window.showToast(result.error, true);
+    showPanel('customer-tag-approve-button', false); window.showToast('批次已核准，僅能在離峰且總開關開啟時處理');
   };
 
   let searchTimer = 0;
