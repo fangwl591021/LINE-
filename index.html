@@ -1301,7 +1301,7 @@
       <section id="home-feature-section" class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
         <h3 class="home-section-kicker">&#31934;&#36984;&#21151;&#33021;</h3>
         <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
-          <button type="button" onclick="window.goPage('admin-crm')" class="home-quick-circle group">
+          <button type="button" onclick="window.goPage('customers')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-pink-500">groups</span>
             <span class="home-quick-label !text-[13px]">&#25105;&#30340;&#23458;&#25142;</span>
           </button>
@@ -1343,6 +1343,96 @@
         <div id="user-activities-list" class="hidden"></div>
       </section>
 
+    </div>
+
+    <!-- ==================== 我的客戶 ==================== -->
+    <div id="page-customers" class="hidden animate-in fade-in pb-10 mx-1 pt-2">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-3">
+          <button type="button" onclick="window.goPage('home')" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm"><span class="material-symbols-outlined">arrow_back</span></button>
+          <div><h2 class="text-2xl font-black text-slate-800">我的客戶</h2><p class="text-[11px] font-bold text-slate-400">私人客戶資料，不會進入公開名片池</p></div>
+        </div>
+        <span class="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-[#06C755]"><strong id="customer-total-count">0</strong> 人</span>
+      </div>
+
+      <section class="rounded-3xl bg-gradient-to-br from-[#063f35] to-[#08755d] p-5 text-white shadow-lg shadow-emerald-900/10">
+        <p class="text-xs font-bold text-white/70">客戶關係中心</p>
+        <h3 class="mt-1 text-xl font-black">把既有名單變成每天可行動的客戶資料</h3>
+        <p class="mt-2 text-xs font-bold leading-relaxed text-white/75">上傳檔案後會先預覽、檢查重複，確認後才寫入；原始 Excel 不會上傳保存。</p>
+        <div class="mt-4 grid grid-cols-2 gap-3">
+          <button data-customer-action type="button" onclick="window.openCustomerForm(-1)" class="rounded-2xl bg-white py-3 text-sm font-black text-[#075c4a] active:scale-95"><span class="material-symbols-outlined align-middle text-[20px]">person_add</span> 手動新增</button>
+          <button data-customer-action type="button" onclick="window.openCustomerImport()" class="rounded-2xl bg-[#e4be52] py-3 text-sm font-black text-slate-900 active:scale-95"><span class="material-symbols-outlined align-middle text-[20px]">upload_file</span> 匯入名單</button>
+        </div>
+      </section>
+
+      <div class="relative mt-4">
+        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+        <input id="customer-search" oninput="window.searchCustomers()" class="custom-input !pl-12" placeholder="搜尋姓名、公司、手機或 Email">
+      </div>
+      <div id="customer-list" class="mt-4 space-y-3"></div>
+    </div>
+
+    <div id="customer-form-panel" class="hidden fixed inset-0 z-[120] overflow-y-auto bg-slate-950/45 backdrop-blur-sm">
+      <div class="mx-auto min-h-full max-w-md bg-slate-50 px-5 pb-10 pt-5">
+        <div class="flex items-center justify-between"><h2 id="customer-form-title" class="text-xl font-black text-slate-800">新增客戶</h2><button type="button" onclick="document.getElementById('customer-form-panel').classList.add('hidden')" class="w-10 h-10 rounded-full bg-white text-slate-500 shadow-sm"><span class="material-symbols-outlined">close</span></button></div>
+        <input id="customer-id" type="hidden">
+        <div class="mt-5 space-y-3 rounded-3xl bg-white p-5 shadow-sm">
+          <input id="customer-name" class="custom-input" placeholder="客戶姓名＊">
+          <div class="grid grid-cols-2 gap-3"><input id="customer-mobile" class="custom-input" type="tel" inputmode="tel" placeholder="手機"><input id="customer-email" class="custom-input" type="email" inputmode="email" placeholder="Email"></div>
+          <div class="grid grid-cols-2 gap-3"><input id="customer-company" class="custom-input" placeholder="公司名稱"><input id="customer-title" class="custom-input" placeholder="職稱"></div>
+          <input id="customer-address" class="custom-input" placeholder="地址">
+          <div class="grid grid-cols-2 gap-3"><input id="customer-birthday" class="custom-input" type="date"><input id="customer-category" class="custom-input" placeholder="客戶類型"></div>
+          <select id="customer-status" class="custom-input"><option value="new">新客戶</option><option value="contacted">已聯絡</option><option value="qualified">有意願</option><option value="quoted">已報價</option><option value="won">已成交</option><option value="lost">未成交</option><option value="inactive">暫停</option></select>
+          <div class="grid grid-cols-2 gap-3"><label class="text-[11px] font-black text-slate-500">最後聯絡<input id="customer-lastContactAt" class="custom-input mt-1" type="date"></label><label class="text-[11px] font-black text-slate-500">下次跟進<input id="customer-nextFollowupAt" class="custom-input mt-1" type="datetime-local"></label></div>
+          <textarea id="customer-notes" class="textarea-block !h-28" placeholder="客戶備註"></textarea>
+        </div>
+        <button data-customer-action type="button" onclick="window.saveCustomerForm()" class="mt-4 w-full rounded-2xl bg-[#06C755] py-4 text-base font-black text-white shadow-md active:scale-95">儲存客戶</button>
+        <button id="customer-archive-button" type="button" onclick="window.archiveCurrentCustomer()" class="hidden mt-3 w-full rounded-2xl border border-red-200 bg-white py-3 text-sm font-black text-red-500">封存客戶</button>
+      </div>
+    </div>
+
+    <div id="customer-import-panel" class="hidden fixed inset-0 z-[120] overflow-y-auto bg-slate-100">
+      <div class="mx-auto min-h-full max-w-md px-4 pb-12 pt-4">
+        <div class="sticky top-0 z-10 -mx-4 -mt-4 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-4 backdrop-blur-xl">
+          <div><h2 class="text-xl font-black text-slate-800">匯入客戶名單</h2><p class="text-[10px] font-bold text-slate-400">先預覽，再確認寫入</p></div>
+          <button type="button" onclick="document.getElementById('customer-import-panel').classList.add('hidden')" class="w-10 h-10 rounded-full bg-slate-100 text-slate-500"><span class="material-symbols-outlined">close</span></button>
+        </div>
+
+        <section class="mt-4 rounded-3xl bg-white p-5 shadow-sm">
+          <div class="flex items-center gap-3"><span class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">1</span><div><h3 class="font-black text-slate-800">選擇 Excel／CSV</h3><p class="text-[11px] font-bold text-slate-400">支援 .xlsx、.xls、.csv，最多 5 MB／500 筆</p></div></div>
+          <input id="customer-file-input" type="file" accept=".xlsx,.xls,.csv" onchange="window.handleCustomerFile(this)" class="mt-4 block w-full text-xs font-bold text-slate-500 file:mr-3 file:rounded-xl file:border-0 file:bg-blue-50 file:px-4 file:py-3 file:font-black file:text-blue-600">
+          <p id="customer-import-file-summary" class="mt-3 text-xs font-bold text-slate-400">尚未選擇檔案</p>
+        </section>
+
+        <section id="customer-import-workbook-step" class="hidden mt-4 rounded-3xl bg-white p-5 shadow-sm">
+          <div class="flex items-center gap-3"><span class="w-10 h-10 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center font-black">2</span><h3 class="font-black text-slate-800">選擇工作表與標題列</h3></div>
+          <label class="mt-4 block text-[11px] font-black text-slate-500">工作表<select id="customer-sheet-select" onchange="window.prepareCustomerSheet()" class="custom-input mt-1"></select></label>
+          <label class="mt-3 block text-[11px] font-black text-slate-500">欄位名稱所在列<select id="customer-header-row" onchange="window.buildCustomerMapping()" class="custom-input mt-1"></select></label>
+          <p id="customer-workbook-summary" class="mt-3 text-xs font-bold text-slate-400"></p>
+        </section>
+
+        <section id="customer-import-mapping-step" class="hidden mt-4 rounded-3xl bg-white p-5 shadow-sm">
+          <div class="flex items-center gap-3"><span class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-black">3</span><div><h3 class="font-black text-slate-800">確認欄位配對</h3><p class="text-[11px] font-bold text-slate-400">客戶姓名必填，同一目標不可重複</p></div></div>
+          <div id="customer-mapping-list" class="mt-4 space-y-3"></div>
+          <label class="mt-4 block text-[11px] font-black text-slate-500">遇到手機／Email／編號重複時<select id="customer-duplicate-resolution" class="custom-input mt-1"><option value="skip">保留原資料，略過重複列</option><option value="fill_blanks">只補齊原資料的空白欄位</option></select></label>
+          <button data-customer-action type="button" onclick="window.previewCustomerImport()" class="mt-4 w-full rounded-2xl bg-slate-900 py-4 text-sm font-black text-white">產生匯入預覽</button>
+        </section>
+
+        <section id="customer-import-preview-step" class="hidden mt-4 rounded-3xl bg-white p-5 shadow-sm">
+          <div class="flex items-center gap-3"><span class="w-10 h-10 rounded-2xl bg-emerald-50 text-[#06C755] flex items-center justify-center font-black">4</span><h3 class="font-black text-slate-800">確認匯入結果</h3></div>
+          <div id="customer-preview-summary" class="mt-4"></div>
+          <div id="customer-preview-list" class="mt-3 max-h-80 overflow-y-auto"></div>
+          <label class="mt-4 flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-xs font-bold leading-relaxed text-amber-800"><input id="customer-authority-confirm" type="checkbox" class="mt-0.5 rounded border-amber-300 text-[#06C755]"><span>我確認有權管理並匯入這份客戶資料；匯入不代表客戶已同意接收行銷訊息。</span></label>
+          <button data-customer-action type="button" onclick="window.commitCustomerImport()" class="mt-4 w-full rounded-2xl bg-[#06C755] py-4 text-sm font-black text-white">確認並開始匯入</button>
+        </section>
+
+        <section id="customer-import-result-step" class="hidden mt-4 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+          <h3 class="font-black text-emerald-800">匯入處理結果</h3><p id="customer-import-result-text" class="mt-2 text-xs font-bold leading-relaxed text-emerald-700"></p>
+          <div class="mt-4 grid grid-cols-2 gap-3"><button type="button" onclick="document.getElementById('customer-import-panel').classList.add('hidden'); window.goPage('customers')" class="rounded-2xl bg-[#06C755] py-3 text-xs font-black text-white">查看我的客戶</button><button type="button" onclick="window.rollbackCustomerImport()" class="rounded-2xl border border-red-200 bg-white py-3 text-xs font-black text-red-500">回復本次匯入</button></div>
+        </section>
+
+        <p id="customer-import-status" class="mt-4 text-center text-xs font-black text-slate-400"></p>
+      </div>
     </div>
 
     <!-- ==================== 名片列表頁 ==================== -->
@@ -2399,6 +2489,8 @@
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
 <script src="js/modules/home.js?v=7.70"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="js/modules/customers.js?v=1.0"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/platform-shop.js?v=1.0"></script>
