@@ -131,7 +131,9 @@ export const CustomerImportModule = {
     const existing = await first(env, `SELECT * FROM customer_records WHERE customer_id = ? AND network_id = ? AND owner_user_id = ? LIMIT 1`, [customerId, networkId, ownerUserId]);
     if (payload.customerId && !existing) return { success: false, error: 'CUSTOMER_NOT_FOUND' };
     const duplicate = await exactDuplicate(env, networkId, ownerUserId, customer);
-    if (!existing && duplicate) return { success: false, error: 'EXACT_DUPLICATE_REVIEW_REQUIRED', duplicateCustomerId: duplicate.customer_id };
+    if (duplicate && duplicate.customer_id !== existing?.customer_id) {
+      return { success: false, error: 'EXACT_DUPLICATE_REVIEW_REQUIRED', duplicateCustomerId: duplicate.customer_id };
+    }
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO customer_records (customer_id,network_id,owner_user_id,name,mobile,normalized_mobile,email,normalized_email,company,title,address,birthday,category,status,last_contact_at,next_followup_at,notes,external_id,source_type,source_badge,is_private,is_public,marketing_consent,version,created_at,updated_at,archived_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'manual','手動',1,0,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'')
@@ -152,8 +154,13 @@ export const CustomerImportModule = {
     const { ownerUserId, networkId } = scope(payload);
     const sourceType = text(payload.sourceType || payload.source_type, 20).toLowerCase();
     if (!SOURCE_TYPES.has(sourceType) || sourceType === 'manual') return { success: false, error: 'SOURCE_TYPE_INVALID' };
+    const idempotencyKey = text(payload.idempotencyKey, 160);
+    if (idempotencyKey) {
+      const existing = await first(env, `SELECT batch_id,state,source_type FROM customer_import_batches WHERE network_id=? AND owner_user_id=? AND idempotency_key=? LIMIT 1`, [networkId,ownerUserId,idempotencyKey]);
+      if (existing) return { success: true, existed: true, data: { batchId: existing.batch_id, state: existing.state, sourceType: existing.source_type } };
+    }
     const batchId = id('CIB');
-    await env.ACTMASTER_DB.prepare(`INSERT INTO customer_import_batches (batch_id,network_id,owner_user_id,initiated_by,source_type,source_name,state,mapping_json,idempotency_key,total_rows,ready_rows,error_rows,created_rows,updated_rows,skipped_rows,checkpoint,created_at,updated_at) VALUES (?,?,?,?,?,?,'mapping','{}',?,0,0,0,0,0,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`).bind(batchId,networkId,ownerUserId,ownerUserId,sourceType,text(payload.sourceName || payload.fileName,240),text(payload.idempotencyKey,160) || batchId).run();
+    await env.ACTMASTER_DB.prepare(`INSERT INTO customer_import_batches (batch_id,network_id,owner_user_id,initiated_by,source_type,source_name,state,mapping_json,idempotency_key,total_rows,ready_rows,error_rows,created_rows,updated_rows,skipped_rows,checkpoint,created_at,updated_at) VALUES (?,?,?,?,?,?,'mapping','{}',?,0,0,0,0,0,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`).bind(batchId,networkId,ownerUserId,ownerUserId,sourceType,text(payload.sourceName || payload.fileName,240),idempotencyKey || batchId).run();
     return { success: true, data: { batchId, state: 'mapping', sourceType } };
   },
 
@@ -163,19 +170,26 @@ export const CustomerImportModule = {
     if (!rows.length) return { success: false, error: 'ROWS_REQUIRED' };
     const { ownerUserId, networkId } = scope(payload);
     const summary = { total: rows.length, ready: 0, duplicate: 0, error: 0 };
+    await env.ACTMASTER_DB.prepare(`DELETE FROM customer_import_rows WHERE batch_id=? AND network_id=? AND owner_user_id=? AND status='previewed'`).bind(batch.batch_id,networkId,ownerUserId).run();
     for (let index = 0; index < rows.length; index++) {
       const rowNumber = Number(rows[index].rowNumber || index + 1);
       const customer = normalizeCustomer(rows[index].data || rows[index]);
       const errors = validateCustomer(customer);
       const duplicate = errors.length ? null : await exactDuplicate(env, networkId, ownerUserId, customer);
-      const decision = errors.length ? 'error' : duplicate ? 'duplicate' : 'create';
+      const stagedDuplicate = errors.length || duplicate ? null : await first(env, `
+        SELECT row_number FROM customer_import_rows
+        WHERE batch_id=? AND network_id=? AND owner_user_id=? AND row_number<>?
+          AND ((?<>'' AND normalized_mobile=?) OR (?<>'' AND normalized_email=?) OR (?<>'' AND external_id=?))
+        LIMIT 1
+      `, [batch.batch_id,networkId,ownerUserId,rowNumber,customer.normalizedMobile,customer.normalizedMobile,customer.normalizedEmail,customer.normalizedEmail,customer.externalId,customer.externalId]);
+      const decision = errors.length ? 'error' : duplicate || stagedDuplicate ? 'duplicate' : 'create';
       summary[decision === 'create' ? 'ready' : decision]++;
       const resolution = text(rows[index].resolution, 30).toLowerCase();
       await env.ACTMASTER_DB.prepare(`
-        INSERT INTO customer_import_rows (batch_id,row_number,network_id,owner_user_id,normalized_json,validation_json,duplicate_customer_id,decision,resolution,status,error_code,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,'previewed',?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-        ON CONFLICT(batch_id,row_number) DO UPDATE SET normalized_json=excluded.normalized_json,validation_json=excluded.validation_json,duplicate_customer_id=excluded.duplicate_customer_id,decision=excluded.decision,resolution=excluded.resolution,status='previewed',error_code=excluded.error_code,updated_at=CURRENT_TIMESTAMP
-      `).bind(batch.batch_id,rowNumber,networkId,ownerUserId,JSON.stringify(customer),JSON.stringify(errors),text(duplicate?.customer_id,160),decision,RESOLUTIONS.has(resolution)?resolution:(duplicate?'skip':'create'),errors[0]||'').run();
+        INSERT INTO customer_import_rows (batch_id,row_number,network_id,owner_user_id,normalized_json,normalized_mobile,normalized_email,external_id,validation_json,duplicate_customer_id,decision,resolution,status,error_code,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'previewed',?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+        ON CONFLICT(batch_id,row_number) DO UPDATE SET normalized_json=excluded.normalized_json,normalized_mobile=excluded.normalized_mobile,normalized_email=excluded.normalized_email,external_id=excluded.external_id,validation_json=excluded.validation_json,duplicate_customer_id=excluded.duplicate_customer_id,decision=excluded.decision,resolution=excluded.resolution,status='previewed',error_code=excluded.error_code,updated_at=CURRENT_TIMESTAMP
+      `).bind(batch.batch_id,rowNumber,networkId,ownerUserId,JSON.stringify(customer),customer.normalizedMobile,customer.normalizedEmail,customer.externalId,JSON.stringify(errors),text(duplicate?.customer_id,160),decision,RESOLUTIONS.has(resolution)?resolution:(duplicate||stagedDuplicate?'skip':'create'),errors[0]||(stagedDuplicate?'DUPLICATE_IN_BATCH':'')).run();
     }
     await env.ACTMASTER_DB.prepare(`UPDATE customer_import_batches SET state='ready',mapping_json=?,total_rows=?,ready_rows=?,error_rows=?,updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND network_id=? AND owner_user_id=?`).bind(JSON.stringify(payload.mapping || {}),summary.total,summary.ready+summary.duplicate,summary.error,batch.batch_id,networkId,ownerUserId).run();
     return { success: true, data: { batchId: batch.batch_id, state: 'ready', summary } };
@@ -194,7 +208,13 @@ export const CustomerImportModule = {
         const resolution = RESOLUTIONS.has(row.resolution) ? row.resolution : 'skip';
         if (row.error_code || resolution === 'skip') {
           counts.skipped++;
-          await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='skipped',committed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=? AND status='previewed'`).bind(batch.batch_id,row.row_number).run();
+          await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='skipped',committed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=? AND network_id=? AND owner_user_id=? AND status='previewed'`).bind(batch.batch_id,row.row_number,networkId,ownerUserId).run();
+          continue;
+        }
+        const currentDuplicate = await exactDuplicate(env, networkId, ownerUserId, customer);
+        if (!row.duplicate_customer_id && currentDuplicate) {
+          counts.skipped++;
+          await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='skipped',error_code='DUPLICATE_CHANGED_AFTER_PREVIEW',duplicate_customer_id=?,committed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=? AND network_id=? AND owner_user_id=? AND status='previewed'`).bind(currentDuplicate.customer_id,batch.batch_id,row.row_number,networkId,ownerUserId).run();
           continue;
         }
         const existing = row.duplicate_customer_id ? await first(env, `SELECT * FROM customer_records WHERE customer_id=? AND network_id=? AND owner_user_id=? AND archived_at=''`, [row.duplicate_customer_id,networkId,ownerUserId]) : null;
@@ -208,13 +228,13 @@ export const CustomerImportModule = {
           counts.created++;
         }
         const saved = await first(env, `SELECT version FROM customer_records WHERE customer_id=? AND network_id=? AND owner_user_id=?`, [customerId,networkId,ownerUserId]);
-        await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='committed',customer_id=?,before_json=?,applied_customer_version=?,committed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=? AND status='previewed'`).bind(customerId,beforeJson,Number(saved?.version||1),batch.batch_id,row.row_number).run();
+        await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='committed',customer_id=?,before_json=?,applied_customer_version=?,committed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=? AND network_id=? AND owner_user_id=? AND status='previewed'`).bind(customerId,beforeJson,Number(saved?.version||1),batch.batch_id,row.row_number,networkId,ownerUserId).run();
       } catch (error) {
         counts.failed++;
-        await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='failed',error_code='COMMIT_ROW_FAILED',updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=?`).bind(batch.batch_id,row.row_number).run();
+        await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='failed',error_code='COMMIT_ROW_FAILED',updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=? AND network_id=? AND owner_user_id=?`).bind(batch.batch_id,row.row_number,networkId,ownerUserId).run();
       }
     }
-    const remaining = await first(env, `SELECT COUNT(*) AS count FROM customer_import_rows WHERE batch_id=? AND status='previewed'`, [batch.batch_id]);
+    const remaining = await first(env, `SELECT COUNT(*) AS count FROM customer_import_rows WHERE batch_id=? AND network_id=? AND owner_user_id=? AND status='previewed'`, [batch.batch_id,networkId,ownerUserId]);
     const state = Number(remaining?.count||0) > 0 ? 'importing' : counts.failed ? 'partial_failed' : 'completed';
     await env.ACTMASTER_DB.prepare(`UPDATE customer_import_batches SET state=?,created_rows=created_rows+?,updated_rows=updated_rows+?,skipped_rows=skipped_rows+?,checkpoint=checkpoint+?,updated_at=CURRENT_TIMESTAMP,completed_at=CASE WHEN ?='completed' THEN CURRENT_TIMESTAMP ELSE completed_at END WHERE batch_id=? AND network_id=? AND owner_user_id=?`).bind(state,counts.created,counts.updated,counts.skipped,rows.length,state,batch.batch_id,networkId,ownerUserId).run();
     return { success: true, data: { batchId: batch.batch_id, state, counts, remaining: Number(remaining?.count||0) } };
@@ -240,7 +260,7 @@ export const CustomerImportModule = {
         const before = JSON.parse(row.before_json);
         await env.ACTMASTER_DB.prepare(`UPDATE customer_records SET name=?,mobile=?,normalized_mobile=?,email=?,normalized_email=?,company=?,title=?,address=?,birthday=?,category=?,status=?,last_contact_at=?,next_followup_at=?,notes=?,external_id=?,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE customer_id=? AND network_id=? AND owner_user_id=? AND version=?`).bind(before.name,before.mobile,before.normalized_mobile,before.email,before.normalized_email,before.company,before.title,before.address,before.birthday,before.category,before.status,before.last_contact_at,before.next_followup_at,before.notes,before.external_id,row.customer_id,networkId,ownerUserId,row.applied_customer_version).run();
       }
-      await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='rolled_back',updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=?`).bind(batch.batch_id,row.row_number).run();
+      await env.ACTMASTER_DB.prepare(`UPDATE customer_import_rows SET status='rolled_back',updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND row_number=? AND network_id=? AND owner_user_id=?`).bind(batch.batch_id,row.row_number,networkId,ownerUserId).run();
       result.rolledBack++;
     }
     const state = result.blocked ? 'partial_failed' : 'rolled_back';
