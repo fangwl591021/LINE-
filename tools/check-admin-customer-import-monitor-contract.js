@@ -34,6 +34,7 @@ expect(monitor.includes('FROM customer_import_batches'), 'monitor must read impo
 expect(monitor.includes('GROUP BY COALESCE'), 'detail must aggregate safe error codes');
 expect(monitor.includes('customer_tag_analysis_settings'), 'monitor must show AI kill-switch settings');
 expect(monitor.includes('customer_tag_analysis_batches'), 'monitor must show AI cost aggregates');
+expect(!monitor.includes('u.updated_at'), 'monitor must remain compatible with the legacy users table');
 expect(!/SELECT\s+\*\s+FROM\s+customer_records/i.test(monitor), 'monitor must not fetch customer records');
 for (const privateField of ['normalized_json', 'normalized_mobile', 'normalized_email', 'mobile', 'email', 'address', 'birthday', 'notes']) {
   expect(!new RegExp(`\\b${privateField}\\b`, 'i').test(monitor), `monitor must not expose ${privateField}`);
