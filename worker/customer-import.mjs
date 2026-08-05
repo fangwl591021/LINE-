@@ -2,6 +2,14 @@ const SOURCE_TYPES = new Set(['manual', 'csv', 'xlsx', 'xls']);
 const CUSTOMER_STATUSES = new Set(['new', 'contacted', 'qualified', 'quoted', 'won', 'lost', 'inactive']);
 const RESOLUTIONS = new Set(['create', 'fill_blanks', 'skip']);
 
+export function resolveImportResolution(decision, requestedResolution) {
+  const nextDecision = text(decision, 30).toLowerCase();
+  const requested = text(requestedResolution, 30).toLowerCase();
+  if (nextDecision === 'create') return 'create';
+  if (nextDecision === 'duplicate') return requested === 'fill_blanks' ? 'fill_blanks' : 'skip';
+  return 'skip';
+}
+
 export function text(value, max = 500) {
   return String(value ?? '').normalize('NFKC').trim().slice(0, max);
 }
@@ -184,12 +192,12 @@ export const CustomerImportModule = {
       `, [batch.batch_id,networkId,ownerUserId,rowNumber,customer.normalizedMobile,customer.normalizedMobile,customer.normalizedEmail,customer.normalizedEmail,customer.externalId,customer.externalId]);
       const decision = errors.length ? 'error' : duplicate || stagedDuplicate ? 'duplicate' : 'create';
       summary[decision === 'create' ? 'ready' : decision]++;
-      const resolution = text(rows[index].resolution, 30).toLowerCase();
+      const resolution = resolveImportResolution(decision, rows[index].resolution);
       await env.ACTMASTER_DB.prepare(`
         INSERT INTO customer_import_rows (batch_id,row_number,network_id,owner_user_id,normalized_json,normalized_mobile,normalized_email,external_id,validation_json,duplicate_customer_id,decision,resolution,status,error_code,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'previewed',?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
         ON CONFLICT(batch_id,row_number) DO UPDATE SET normalized_json=excluded.normalized_json,normalized_mobile=excluded.normalized_mobile,normalized_email=excluded.normalized_email,external_id=excluded.external_id,validation_json=excluded.validation_json,duplicate_customer_id=excluded.duplicate_customer_id,decision=excluded.decision,resolution=excluded.resolution,status='previewed',error_code=excluded.error_code,updated_at=CURRENT_TIMESTAMP
-      `).bind(batch.batch_id,rowNumber,networkId,ownerUserId,JSON.stringify(customer),customer.normalizedMobile,customer.normalizedEmail,customer.externalId,JSON.stringify(errors),text(duplicate?.customer_id,160),decision,RESOLUTIONS.has(resolution)?resolution:(duplicate||stagedDuplicate?'skip':'create'),errors[0]||(stagedDuplicate?'DUPLICATE_IN_BATCH':'')).run();
+      `).bind(batch.batch_id,rowNumber,networkId,ownerUserId,JSON.stringify(customer),customer.normalizedMobile,customer.normalizedEmail,customer.externalId,JSON.stringify(errors),text(duplicate?.customer_id,160),decision,resolution,errors[0]||(stagedDuplicate?'DUPLICATE_IN_BATCH':'')).run();
     }
     await env.ACTMASTER_DB.prepare(`UPDATE customer_import_batches SET state='ready',mapping_json=?,total_rows=?,ready_rows=?,error_rows=?,updated_at=CURRENT_TIMESTAMP WHERE batch_id=? AND network_id=? AND owner_user_id=?`).bind(JSON.stringify(payload.mapping || {}),summary.total,summary.ready+summary.duplicate,summary.error,batch.batch_id,networkId,ownerUserId).run();
     return { success: true, data: { batchId: batch.batch_id, state: 'ready', summary } };
