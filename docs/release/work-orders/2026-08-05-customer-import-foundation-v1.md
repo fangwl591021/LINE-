@@ -6,7 +6,7 @@
 | --- | --- |
 | 日期 | 2026-08-05 |
 | 需求來源 | Tony／LINE- 我的客戶 |
-| 目標功能 | 建立與名片分離的客戶資料與 Excel／CSV 匯入後端基礎 |
+| 目標功能 | 建立與名片分離的客戶中心、手動維護與 Excel／CSV 預覽匯入流程 |
 | 起始 commit | ef2f4f3 |
 | 是否部署 | 否 |
 | 是否執行 Remote D1 | 否 |
@@ -17,7 +17,7 @@
 - 新增匯入批次、匯入列與名片連結資料表。
 - 新增手動客戶 CRUD 與匯入 preview／commit／rollback actions。
 - 新增手機、Email 正規化、強重複判斷及公式注入防護。
-- 新增 focused tests 與靜態 contract checker。
+- 新增「我的客戶」行動版頁面、搜尋、手動新增／編輯／封存。\n- 新增 Excel／CSV 選表、標題列、欄位對應、重複策略、預覽、確認匯入、結果與回復 UI。\n- 新增 5 MB／500 列 V1 限制與 CSV 匯入範本下載。\n- 新增 focused tests 與靜態 contract checker。
 
 ## 3. 本次禁止碰什麼
 
@@ -42,7 +42,7 @@
 - `node --check worker/customer-import.mjs`
 - `node test/customer-import.test.mjs`
 - SQLite in-memory 重複執行 `0016_customer_import_foundation.sql`
-- 遠端 `workerbackup.js` ES module syntax check
+- 遠端 `workerbackup.js` ES module syntax check\n- `node --check js/modules/customers.js`\n- 客戶頁面、導覽、範本、preview-before-commit 與名片資料隔離靜態檢查
 - `node tools/check-customer-import-contract.js`（完整 checkout 後執行）
 
 ## 6. 上線判斷
