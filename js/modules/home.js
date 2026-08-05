@@ -1392,8 +1392,9 @@ const HomeModule = (function() {
     function recurringTaskTimeLabel_(task) {
         const time = String(task.startTime || '').match(/T(\d{2}:\d{2})/)?.[1] || '';
         if (task.recurrenceType === 'daily') return time ? `每天 ${time}` : '每天';
-        const date = String(task.scheduledFor || '').slice(5).replace('-', '/');
-        return [date ? `本週 ${date}` : '本週', time].filter(Boolean).join(' ');
+        const date = String(task.homeScheduledDate || task.scheduledFor || task.startTime || '').slice(5, 10).replace('-', '/');
+        if (task.recurrenceType === 'weekly') return [date ? `每週 ${date}` : '每週', time].filter(Boolean).join(' ');
+        return [date, time].filter(Boolean).join(' ') || '未設定時間';
     }
 
     function renderHomeRecurringTaskList_(elementId, tasks, emptyText, limit) {
@@ -1405,7 +1406,7 @@ const HomeModule = (function() {
         }
         const visibleTasks = tasks.slice(0, limit);
         target.innerHTML = visibleTasks.map(task => {
-            const done = task.currentOccurrenceDone === true;
+            const done = task.homeDone === true;
             return `
                 <div class="rounded-2xl border ${done ? 'border-slate-100 bg-slate-50 opacity-60' : 'border-slate-200 bg-white'} px-3 py-2.5 flex items-center gap-3">
                     <span class="material-symbols-outlined ${done ? 'text-[#06C755] icon-filled' : 'text-slate-300'}">${done ? 'check_circle' : 'radio_button_unchecked'}</span>
@@ -1421,21 +1422,20 @@ const HomeModule = (function() {
             : '');
     }
     window.renderHomeRecurringTasks = function(tasks) {
-        const recurring = (Array.isArray(tasks) ? tasks : [])
-            .filter(task => ['daily', 'weekly'].includes(String(task.recurrenceType || '')))
-            .map((task, homeIndex) => ({ ...task, homeIndex }));
-        window.homeRecurringTasks = recurring;
-        const daily = recurring.filter(task => task.recurrenceType === 'daily');
-        const weekly = recurring.filter(task => task.recurrenceType === 'weekly');
-        const dailyRemaining = daily.filter(task => !task.currentOccurrenceDone).length;
-        const weeklyRemaining = weekly.filter(task => !task.currentOccurrenceDone).length;
+        const buckets = window.HomeTaskBuckets?.bucket(tasks) || { today: [], week: [] };
+        const combined = [...buckets.today, ...buckets.week].map((task, homeIndex) => ({ ...task, homeIndex }));
+        const daily = combined.slice(0, buckets.today.length);
+        const weekly = combined.slice(buckets.today.length);
+        window.homeRecurringTasks = combined;
+        const dailyRemaining = daily.filter(task => !task.homeDone).length;
+        const weeklyRemaining = weekly.filter(task => !task.homeDone).length;
         const dailyCount = document.getElementById('home-daily-task-count');
         const weeklyCount = document.getElementById('home-weekly-task-count');
         if (dailyCount) dailyCount.textContent = String(dailyRemaining);
         if (weeklyCount) weeklyCount.textContent = String(weeklyRemaining);
-        renderHomeRecurringTaskList_('home-daily-task-list', daily, daily.length ? '今日待辦已完成' : '尚未設定每日待辦', 3);
-        renderHomeRecurringTaskList_('home-weekly-task-list', weekly, weekly.length ? '本週待辦已完成' : '尚未設定每週待辦', 2);
-        return recurring;
+        renderHomeRecurringTaskList_('home-daily-task-list', daily, daily.length ? '今日待辦已完成' : '今天沒有待辦', 3);
+        renderHomeRecurringTaskList_('home-weekly-task-list', weekly, weekly.length ? '本週待辦已完成' : '本週沒有其他待辦', 2);
+        return combined;
     };
 
     window.loadHomeRecurringTasks = async function() {
@@ -1465,7 +1465,7 @@ const HomeModule = (function() {
 
     window.completeHomeRecurringTask = async function(index) {
         const task = (window.homeRecurringTasks || [])[index];
-        if (!task || task.currentOccurrenceDone) return;
+        if (!task || task.homeDone) return;
         try {
             const result = await window.fetchAPI('completePersonalTask', { taskId: task.taskId }, true);
             if (result && result.error) throw new Error(result.error);
