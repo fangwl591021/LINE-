@@ -1,6 +1,8 @@
 {
   "private": true,
   "scripts": {
+    "build:staging-assets": "node tools/build-staging-assets.js",
+    "deploy:staging": "npm run build:staging-assets && wrangler deploy --env staging",
     "guard:before": "node tools/run-change-guard.js before",
     "guard:after": "node tools/run-change-guard.js after",
     "workorder:new": "node tools/create-change-work-order.js",
