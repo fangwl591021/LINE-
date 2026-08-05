@@ -27,7 +27,7 @@
 
   const state = {
     customers: [], workbook: null, sheetName: '', matrix: [], headers: [], mapping: {}, mappedRows: [],
-    batchId: '', previewRows: [], sourceName: '', sourceType: '', busy: false
+    batchId: '', previewRows: [], sourceName: '', sourceType: '', sessionKey: '', busy: false
   };
 
   function el(id) { return document.getElementById(id); }
@@ -151,6 +151,7 @@
   window.openCustomerImport = function () {
     state.workbook = null; state.matrix = []; state.headers = []; state.mapping = {}; state.mappedRows = [];
     state.batchId = ''; state.previewRows = []; state.sourceName = ''; state.sourceType = '';
+    state.sessionKey = window.crypto && typeof window.crypto.randomUUID === 'function' ? window.crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
     if (el('customer-file-input')) el('customer-file-input').value = '';
     if (el('customer-import-file-summary')) el('customer-import-file-summary').textContent = '尚未選擇檔案';
     showPanel('customer-import-workbook-step', false);
@@ -234,7 +235,7 @@
     try {
       const created = await window.fetchAPI('createCustomerImportBatch', {
         sourceType: state.sourceType, sourceName: state.sourceName,
-        idempotencyKey: `${state.sourceName}:${state.mappedRows.length}:${state.sheetName}`
+        idempotencyKey: state.sessionKey
       }, true);
       if (created?.error) throw new Error(created.error);
       state.batchId = created.batchId;
@@ -271,8 +272,10 @@
         if (result?.error) throw new Error(result.error);
         if (result.state !== 'importing') break;
       }
+      const report = await window.fetchAPI('getCustomerImportBatch', { batchId: state.batchId }, true);
+      const batch = report?.batch || {};
       el('customer-import-result-text').textContent = result?.state === 'completed'
-        ? `匯入完成：新增 ${result.counts?.created || 0}、更新 ${result.counts?.updated || 0}、略過 ${result.counts?.skipped || 0}`
+        ? `匯入完成：新增 ${batch.created_rows || 0}、更新 ${batch.updated_rows || 0}、略過 ${batch.skipped_rows || 0}`
         : '部分資料尚未完成，請保留此批次並稍後重試。';
       showPanel('customer-import-result-step', true);
       window.showToast(result?.state === 'completed' ? '客戶匯入完成' : '匯入部分完成');
