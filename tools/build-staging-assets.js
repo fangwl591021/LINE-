@@ -18,15 +18,22 @@ for (const directory of directories) {
 }
 
 const configPath = path.join(output, 'js', 'config.js');
-const config = fs.readFileSync(configPath, 'utf8');
+let config = fs.readFileSync(configPath, 'utf8');
 const productionLine = 'const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/";';
 const stagingLine = 'const WORKER_URL = window.location.origin + "/api";';
+const productionLiffLine = 'const DEFAULT_LIFF_ID = "1660923784-vViMTZ1y";';
+const stagingLiffLine = 'const DEFAULT_LIFF_ID = "1660923784-YgP3TNDr";';
 
-if (!config.includes(productionLine)) {
-  throw new Error('Staging build stopped: expected WORKER_URL declaration was not found.');
+for (const expected of [productionLine, productionLiffLine]) {
+  if (!config.includes(expected)) {
+    throw new Error(`Staging build stopped: expected config declaration was not found: ${expected}`);
+  }
 }
 
-fs.writeFileSync(configPath, config.replace(productionLine, stagingLine));
+config = config
+  .replace(productionLine, stagingLine)
+  .replace(productionLiffLine, stagingLiffLine);
+fs.writeFileSync(configPath, config);
 
 const forbidden = ['wrangler.toml', 'workerbackup.js', 'migrations', 'tools', 'docs'];
 for (const entry of forbidden) {
