@@ -38,7 +38,7 @@ for (const marker of [
   'window.renderHomeRecurringTasks = function',
   "window.fetchAPI('listPersonalTasks'",
   "window.fetchAPI('completePersonalTask'",
-  "['daily', 'weekly'].includes",
+  'window.HomeTaskBuckets?.bucket(tasks)',
   "recurrenceType: document.getElementById('agenda-recurrence')?.value || 'none'",
   "runHomeBackgroundTask_('home-recurring-tasks'"
 ]) {
@@ -46,8 +46,8 @@ for (const marker of [
 }
 
 if (!home.includes('tasks.slice(0, limit)') ||
-    !home.includes("'home-daily-task-list', daily, daily.length ? '今日待辦已完成' : '尚未設定每日待辦', 3") ||
-    !home.includes("'home-weekly-task-list', weekly, weekly.length ? '本週待辦已完成' : '尚未設定每週待辦', 2")) {
+    !home.includes("'home-daily-task-list', daily, daily.length ? '今日待辦已完成' : '今天沒有待辦', 3") ||
+    !home.includes("'home-weekly-task-list', weekly, weekly.length ? '本週待辦已完成' : '本週沒有其他待辦', 2")) {
   fail('home panel must cap previews to three daily and two weekly tasks');
 }
 
@@ -60,6 +60,7 @@ if (/value="monthly"|recurrenceType\s*===\s*['"]monthly['"]/i.test(home)) {
 }
 
 try {
+  assertCacheBust('js/modules/home-task-buckets.mjs');
   assertCacheBust('js/modules/home.js');
 } catch (error) {
   fail(error.message);
