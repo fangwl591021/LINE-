@@ -37,6 +37,7 @@ MOTHER_LINE_MEMBER_API_URL = "https://aiwe.cc/index.php/wp-json/wetw/v1/check-or
 # Staging is intentionally isolated. Always deploy with: wrangler deploy --env staging
 [env.staging]
 name = "line-engine-staging"
+main = "staging-entry.js"
 workers_dev = true
 
 [env.staging.assets]
