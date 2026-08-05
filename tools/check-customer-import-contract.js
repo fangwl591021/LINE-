@@ -33,7 +33,7 @@ expect(moduleSource.includes('DUPLICATE_CHANGED_AFTER_PREVIEW'), 'commit must re
 expect(moduleSource.includes('applied_customer_version'), 'rollback must be version aware');
 expect(!/\b(?:INSERT\s+INTO|UPDATE)\s+card_contacts\b/i.test(moduleSource), 'customer import must not write business cards');
 expect(worker.startsWith("import { CustomerImportModule } from './worker/customer-import.mjs';"), 'worker must import customer module');
-for (const action of ['listCustomers','saveCustomer','archiveCustomer','createCustomerImportBatch','previewCustomerImportRows','commitCustomerImportBatch','getCustomerImportBatch','rollbackCustomerImportBatch']) {
+for (const action of ['listCustomers','saveCustomer','archiveCustomer','createCustomerImportBatch','suggestCustomerImportMapping','previewCustomerImportRows','commitCustomerImportBatch','getCustomerImportBatch','rollbackCustomerImportBatch']) {
   expect(worker.includes(`${action}: { access: 'authenticated'`), `${action} must be authenticated`);
   expect(worker.includes(`case '${action}':`), `${action} must be routed`);
 }
@@ -45,6 +45,10 @@ expect(navigation.includes("page === 'customers'") && navigation.includes('windo
 for (const marker of ['LIMITS', 'fileBytes: 5 * 1024 * 1024', 'rows: 500', "['xlsx','xls','csv']", 'previewCustomerImportRows', 'confirmAuthority: true', 'customer-authority-confirm', 'rollbackCustomerImportBatch']) {
   expect(customers.includes(marker), `customer UI must include ${marker}`);
 }
+expect(customers.includes('maskedAiSample'), 'AI samples must be de-identified before upload');
+expect(customers.includes('suggestCustomerImportMapping'), 'customer UI must request AI mapping suggestions');
+expect(worker.includes("warning: 'AI_MAPPING_FALLBACK'"), 'AI mapping must have a deterministic fallback');
+expect(worker.includes("confidence === 'high'") || customers.includes("confidence === 'high'"), 'AI mapping must expose confidence');
 expect(customers.includes('window.downloadCustomerTemplate'), 'customer template download must exist');
 expect(customers.indexOf("previewCustomerImportRows") < customers.indexOf("commitCustomerImportBatch"), 'preview must precede commit');
 expect(!customers.includes("saveCard") && !customers.includes("card_contacts"), 'customer UI must not write business cards');

@@ -26,7 +26,7 @@
   };
 
   const state = {
-    customers: [], workbook: null, sheetName: '', matrix: [], headers: [], mapping: {}, mappedRows: [],
+    customers: [], workbook: null, sheetName: '', matrix: [], headers: [], mapping: {}, mappingHints: {}, mappedRows: [],
     batchId: '', previewRows: [], sourceName: '', sourceType: '', sessionKey: '', busy: false
   };
 
@@ -45,6 +45,17 @@
       if (aliases.some(alias => cleanHeader(alias) === normalized)) return target;
     }
     return '';
+  }
+  function maskedAiSample(value) {
+    const raw = String(value ?? '').normalize('NFKC').trim().slice(0, 80);
+    if (!raw) return '';
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return 'a***@' + raw.split('@').pop();
+    if (/^[+\d\s().-]{7,}$/.test(raw)) return raw.replace(/\d/g, '#');
+    if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/.test(raw)) return 'YYYY-MM-DD';
+    return `<text:${Array.from(raw).length}>`;
+  }
+  function confidenceLabel(value) {
+    return ({ high: 'AI 高信心', medium: 'AI 中信心', low: 'AI 低信心' })[value] || '規則建議';
   }
   function setBusy(next, message = '') {
     state.busy = !!next;
@@ -217,17 +228,51 @@
     const headerIndex = Number(el('customer-header-row')?.value || 0);
     state.headers = (state.matrix[headerIndex] || []).map((value, index) => String(value || `欄位 ${index + 1}`).trim()).slice(0, 50);
     state.mapping = {};
+    state.mappingHints = {};
     const host = el('customer-mapping-list');
     host.innerHTML = state.headers.map((header, index) => {
       const suggested = autoTarget(header);
       state.mapping[index] = suggested;
       const options = TARGETS.map(([value, label]) => `<option value="${value}" ${value === suggested ? 'selected' : ''}>${label}</option>`).join('');
       const sample = state.matrix[headerIndex + 1]?.[index] ?? '';
-      return `<div class="rounded-2xl border border-slate-200 bg-white p-3"><p class="text-xs font-black text-slate-700">${escape(header)}</p><p class="mt-1 text-[10px] font-bold text-slate-400 truncate">範例：${escape(sample)}</p><select data-map-index="${index}" onchange="window.updateCustomerMapping(${index}, this.value)" class="custom-input !py-2.5 mt-2 text-xs">${options}</select></div>`;
+      return `<div class="rounded-2xl border border-slate-200 bg-white p-3"><div class="flex items-center justify-between gap-2"><p class="text-xs font-black text-slate-700">${escape(header)}</p><span id="customer-map-hint-${index}" class="text-[9px] font-black text-slate-400">規則建議</span></div><p class="mt-1 text-[10px] font-bold text-slate-400 truncate">範例：${escape(sample)}</p><select data-map-index="${index}" onchange="window.updateCustomerMapping(${index}, this.value)" class="custom-input !py-2.5 mt-2 text-xs">${options}</select></div>`;
     }).join('');
     const rowCount = Math.max(0, state.matrix.length - headerIndex - 1);
     el('customer-workbook-summary').textContent = `${state.sheetName}・約 ${Math.min(rowCount, LIMITS.rows)} 筆資料・最多讀取 ${LIMITS.rows} 筆`;
     showPanel('customer-import-mapping-step', true);
+    window.requestCustomerAiMapping(headerIndex);
+  };
+
+  window.requestCustomerAiMapping = async function (headerIndex) {
+    const columns = state.headers.map((header, index) => ({
+      index,
+      header,
+      samples: state.matrix.slice(headerIndex + 1, headerIndex + 4).map(row => maskedAiSample(row?.[index])).filter(Boolean)
+    }));
+    if (!columns.length || typeof window.fetchAPI !== 'function') return;
+    const status = el('customer-import-status');
+    if (status) status.textContent = 'AI 正在判斷欄位語意；資料樣本已去識別化';
+    const result = await window.fetchAPI('suggestCustomerImportMapping', { columns }, true);
+    const suggestions = Array.isArray(result?.suggestions) ? result.suggestions : [];
+    if (!suggestions.length) {
+      if (status) status.textContent = 'AI 暫時無法使用，已保留規則建議，可手動調整';
+      return;
+    }
+    suggestions.forEach(item => {
+      const index = Number(item.index);
+      if (!Number.isInteger(index) || index < 0 || index >= state.headers.length) return;
+      state.mapping[index] = item.target || '';
+      const select = document.querySelector(`[data-map-index="${index}"]`);
+      if (select) select.value = state.mapping[index];
+      state.mappingHints[index] = item;
+      const hint = el(`customer-map-hint-${index}`);
+      if (hint) {
+        hint.textContent = confidenceLabel(item.confidence);
+        hint.title = item.reason || '';
+        hint.className = `text-[9px] font-black ${item.confidence === 'high' ? 'text-emerald-600' : item.confidence === 'medium' ? 'text-amber-600' : 'text-red-500'}`;
+      }
+    });
+    if (status) status.textContent = 'AI 欄位建議已完成；低信心欄位請人工確認';
   };
 
   window.updateCustomerMapping = function (index, value) { state.mapping[index] = value; };

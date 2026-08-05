@@ -163,7 +163,7 @@ const Core = (function() {
             }
             safePayload.userId = safePayload.userId !== undefined ? safePayload.userId : window.currentUserProfile?.userId;
 
-            const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy'];
+            const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy', 'suggestCustomerImportMapping'];
             if (aiActions.includes(action)) {
                 try {
                     const localOpenAIKey = String(localStorage.getItem('line_engine_local_openai_api_key') || '').trim();
