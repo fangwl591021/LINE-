@@ -45,6 +45,7 @@ expect(navigation.includes("page === 'customers'") && navigation.includes('windo
 for (const marker of ['LIMITS', 'fileBytes: 5 * 1024 * 1024', 'rows: 500', "['xlsx','xls','csv']", 'previewCustomerImportRows', 'confirmAuthority: true', 'customer-authority-confirm', 'rollbackCustomerImportBatch']) {
   expect(customers.includes(marker), `customer UI must include ${marker}`);
 }
+expect(customers.includes('window.downloadCustomerTemplate'), 'customer template download must exist');
 expect(customers.indexOf("previewCustomerImportRows") < customers.indexOf("commitCustomerImportBatch"), 'preview must precede commit');
 expect(!customers.includes("saveCard") && !customers.includes("card_contacts"), 'customer UI must not write business cards');
 
