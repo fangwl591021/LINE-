@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS customer_import_rows (
   network_id TEXT NOT NULL,
   owner_user_id TEXT NOT NULL,
   normalized_json TEXT NOT NULL DEFAULT '{}',
+  normalized_mobile TEXT NOT NULL DEFAULT '',
+  normalized_email TEXT NOT NULL DEFAULT '',
+  external_id TEXT NOT NULL DEFAULT '',
   validation_json TEXT NOT NULL DEFAULT '[]',
   duplicate_customer_id TEXT NOT NULL DEFAULT '',
   decision TEXT NOT NULL DEFAULT '',
@@ -82,6 +85,9 @@ CREATE TABLE IF NOT EXISTS customer_import_rows (
 );
 
 CREATE INDEX IF NOT EXISTS idx_customer_import_rows_owner_status ON customer_import_rows(network_id, owner_user_id, batch_id, status, row_number);
+CREATE INDEX IF NOT EXISTS idx_customer_import_rows_batch_mobile ON customer_import_rows(batch_id, normalized_mobile);
+CREATE INDEX IF NOT EXISTS idx_customer_import_rows_batch_email ON customer_import_rows(batch_id, normalized_email);
+CREATE INDEX IF NOT EXISTS idx_customer_import_rows_batch_external ON customer_import_rows(batch_id, external_id);
 
 CREATE TABLE IF NOT EXISTS customer_contact_links (
   link_id TEXT PRIMARY KEY,
