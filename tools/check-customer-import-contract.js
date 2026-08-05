@@ -43,7 +43,7 @@ for (const action of ['listCustomers','saveCustomer','archiveCustomer','createCu
 expect(index.includes('id="page-customers"'), 'My customers page must exist');
 expect(index.includes("window.goPage('customers')"), 'home entry must open My customers');
 expect(index.includes('xlsx-0.20.3/package/dist/xlsx.full.min.js'), 'spreadsheet parser must use the pinned official browser build');
-expect(index.includes('js/modules/customers.js?v=1.0'), 'customer controller must be loaded with a cache-bust');
+expect(index.includes('js/modules/customers.js?v=1.1'), 'customer controller must be loaded with the current cache-bust');
 expect(navigation.includes("page === 'customers'") && navigation.includes('window.initCustomersPage'), 'navigation must initialize the customer page');
 for (const marker of ['LIMITS', 'fileBytes: 5 * 1024 * 1024', 'rows: 500', "['xlsx','xls','csv']", 'previewCustomerImportRows', 'confirmAuthority: true', 'customer-authority-confirm', 'rollbackCustomerImportBatch']) {
   expect(customers.includes(marker), `customer UI must include ${marker}`);

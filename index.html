@@ -1366,6 +1366,22 @@
         <button type="button" onclick="window.downloadCustomerTemplate()" class="mt-3 w-full rounded-2xl border border-white/25 bg-white/10 py-2.5 text-xs font-black text-white active:scale-95"><span class="material-symbols-outlined align-middle text-[18px]">download</span> 下載客戶匯入範本（CSV）</button>
       </section>
 
+      <section class="mt-4 rounded-3xl border border-violet-100 bg-white p-5 shadow-sm">
+        <div class="flex items-start justify-between gap-3"><div><p class="text-xs font-black text-violet-600">客戶五大標籤</p><h3 class="mt-1 text-lg font-black text-slate-800">個性・興趣・財富・健康・事業</h3></div><span class="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">獨立於名片收藏</span></div>
+        <p class="mt-2 text-[11px] font-bold leading-relaxed text-slate-500">只整理客戶資料中明確存在的資訊，不推測健康或財富。匯入完成不會自動分析。</p>
+      </section>
+
+      <section id="customer-tag-admin-control" class="hidden mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+        <div class="flex items-start justify-between gap-3"><div><p class="text-xs font-black text-amber-700">Tony 核准中心</p><h3 class="mt-1 text-lg font-black text-slate-800">離峰 AI 分析與費用上限</h3></div><span id="customer-tag-control-status" class="rounded-full bg-white px-3 py-1 text-[10px] font-black text-slate-500">載入中</span></div>
+        <label class="mt-4 flex items-center justify-between rounded-2xl bg-white p-4 text-sm font-black text-slate-700"><span>AI 分析總開關<br><small class="font-bold text-slate-400">預設關閉；核准批次也不代表立即執行</small></span><input id="customer-tag-master-enabled" type="checkbox" class="h-5 w-5 rounded border-amber-300 text-[#06C755]"></label>
+        <div class="mt-3 grid grid-cols-2 gap-3"><label class="text-[10px] font-black text-slate-500">離峰開始（台北）<input id="customer-tag-offpeak-start" type="number" min="0" max="23" value="2" class="custom-input mt-1"></label><label class="text-[10px] font-black text-slate-500">離峰結束（台北）<input id="customer-tag-offpeak-end" type="number" min="1" max="24" value="5" class="custom-input mt-1"></label><label class="text-[10px] font-black text-slate-500">每輪最多筆數<input id="customer-tag-per-run" type="number" min="1" max="50" value="5" class="custom-input mt-1"></label><label class="text-[10px] font-black text-slate-500">每日最多筆數<input id="customer-tag-per-day" type="number" min="1" max="10000" value="100" class="custom-input mt-1"></label></div>
+        <button data-customer-action type="button" onclick="window.saveCustomerTagControl()" class="mt-3 w-full rounded-2xl border border-amber-300 bg-white py-3 text-xs font-black text-amber-800">儲存開關與離峰限制</button>
+        <div class="mt-4 border-t border-amber-200 pt-4"><p class="text-xs font-black text-slate-700">模型價格（USD／100 萬 tokens）</p><div class="mt-2 grid grid-cols-2 gap-3"><input id="customer-tag-provider" value="openai" class="custom-input" placeholder="供應商"><input id="customer-tag-model" class="custom-input" placeholder="模型名稱"><input id="customer-tag-input-price" type="number" min="0" step="0.000001" class="custom-input" placeholder="輸入單價"><input id="customer-tag-output-price" type="number" min="0" step="0.000001" class="custom-input" placeholder="輸出單價"></div><button data-customer-action type="button" onclick="window.saveCustomerTagPrice()" class="mt-3 w-full rounded-2xl border border-amber-300 bg-white py-3 text-xs font-black text-amber-800">驗證並儲存價格</button></div>
+        <button data-customer-action type="button" onclick="window.estimateCustomerTagBatch()" class="mt-4 w-full rounded-2xl bg-slate-900 py-4 text-sm font-black text-white">計算本批可能費用</button>
+        <div id="customer-tag-estimate" class="hidden mt-3 rounded-2xl bg-white p-4 text-xs font-bold leading-relaxed text-slate-600"></div>
+        <button id="customer-tag-approve-button" data-customer-action type="button" onclick="window.approveCustomerTagBatch()" class="hidden mt-3 w-full rounded-2xl bg-[#06C755] py-4 text-sm font-black text-white">Tony 核准此預算上限</button>
+      </section>
+
       <div class="relative mt-4">
         <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
         <input id="customer-search" oninput="window.searchCustomers()" class="custom-input !pl-12" placeholder="搜尋姓名、公司、手機或 Email">
@@ -2491,7 +2507,7 @@
 <script src="js/modules/admin.js?v=8.8"></script>
 <script src="js/modules/home.js?v=7.70"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="js/modules/customers.js?v=1.0"></script>
+<script src="js/modules/customers.js?v=1.1"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/platform-shop.js?v=1.0"></script>
