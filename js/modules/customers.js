@@ -161,6 +161,22 @@
     showPanel('customer-import-panel', true);
   };
 
+  window.downloadCustomerTemplate = function () {
+    const rows = [
+      ['客戶姓名','手機號碼','Email','公司名稱','職稱','地址','生日','客戶類型','客戶狀態','最後聯絡日期','下次跟進日期','備註','客戶編號'],
+      ['王小明','0912345678','demo@example.com','範例公司','經理','','1980-01-01','潛在客戶','new','','','','C0001']
+    ];
+    const csv = '\uFEFF' + rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'customer-import-template.csv';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   window.handleCustomerFile = async function (input) {
     const file = input?.files?.[0];
     if (!file) return;
