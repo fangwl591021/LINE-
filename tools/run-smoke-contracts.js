@@ -55,7 +55,8 @@ const fullChecks = [
   'tools/check-personal-task-recurrence-schema-contract.js',
   'tools/check-personal-task-recurrence-worker-contract.js',
   'tools/check-home-recurring-task-panel-contract.js',
-  'tools/check-customer-import-contract.js'
+  'tools/check-customer-import-contract.js',
+  'tools/check-admin-customer-import-monitor-contract.js'
 ];
 
 const requested = process.argv.slice(2);

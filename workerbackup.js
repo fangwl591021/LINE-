@@ -207,6 +207,9 @@ const ACTION_POLICIES = {
   saveLineOAKeywordRule: { access: 'admin' },
   deleteLineOAKeywordRule: { access: 'admin' },
   listAdminAnnouncements: { access: 'admin' },
+  getAdminCustomerImportOverview: { access: 'admin' },
+  listAdminCustomerImportBatches: { access: 'admin' },
+  getAdminCustomerImportBatchSummary: { access: 'admin' },
   saveAnnouncement: { access: 'admin' },
   deleteAnnouncement: { access: 'admin' },
   d1BackfillFromGas: { access: 'admin' },
@@ -12078,6 +12081,189 @@ const D1StoreKnowledgeBaseModule = {
   }
 };
 
+const AdminCustomerImportMonitorModule = {
+  text(value, fallback = '') {
+    const next = String(value ?? '').trim();
+    return next || fallback;
+  },
+
+  number(value, fallback = 0) {
+    const next = Number(value);
+    return Number.isFinite(next) ? next : fallback;
+  },
+
+  batchRow(row) {
+    if (!row) return null;
+    return {
+      batchId: this.text(row.batch_id),
+      ownerUserId: this.text(row.owner_user_id),
+      ownerName: this.text(row.owner_name, '未命名用戶'),
+      networkId: this.text(row.network_id),
+      sourceType: this.text(row.source_type),
+      sourceName: this.text(row.source_name),
+      state: this.text(row.state),
+      totalRows: this.number(row.total_rows),
+      readyRows: this.number(row.ready_rows),
+      errorRows: this.number(row.error_rows),
+      createdRows: this.number(row.created_rows),
+      updatedRows: this.number(row.updated_rows),
+      skippedRows: this.number(row.skipped_rows),
+      checkpoint: this.number(row.checkpoint),
+      createdAt: this.text(row.created_at),
+      updatedAt: this.text(row.updated_at),
+      completedAt: this.text(row.completed_at),
+      rolledBackAt: this.text(row.rolled_back_at)
+    };
+  },
+
+  async overview(payload, env) {
+    const customer = await D1ReadModule.first(env, `
+      SELECT COUNT(*) AS total_customers, COUNT(DISTINCT owner_user_id) AS owner_count
+      FROM customer_records
+      WHERE archived_at = ''
+    `).catch(() => null);
+    const imports = await D1ReadModule.first(env, `
+      SELECT COUNT(*) AS total_batches,
+             SUM(CASE WHEN date(created_at, '+8 hours') = date('now', '+8 hours') THEN 1 ELSE 0 END) AS today_batches,
+             SUM(CASE WHEN date(created_at, '+8 hours') = date('now', '+8 hours') THEN created_rows ELSE 0 END) AS today_created,
+             SUM(CASE WHEN state IN ('failed','partial_failed') THEN 1 ELSE 0 END) AS attention_batches
+      FROM customer_import_batches
+    `).catch(() => null);
+    const settings = await D1ReadModule.first(env, `
+      SELECT master_enabled,offpeak_start_hour_taipei,offpeak_end_hour_taipei,max_jobs_per_run,max_jobs_per_day,updated_at
+      FROM customer_tag_analysis_settings WHERE settings_key='global'
+    `).catch(() => null);
+    const ai = await D1ReadModule.first(env, `
+      SELECT COUNT(*) AS total_batches,
+             SUM(CASE WHEN state IN ('approved','running') THEN 1 ELSE 0 END) AS active_batches,
+             SUM(estimated_cost_microusd) AS estimated_cost_microusd,
+             SUM(max_cost_microusd) AS approved_limit_microusd,
+             SUM(actual_cost_microusd) AS actual_cost_microusd
+      FROM customer_tag_analysis_batches
+    `).catch(() => null);
+    const jobs = await D1ReadModule.first(env, `
+      SELECT SUM(CASE WHEN status IN ('pending','leased') THEN 1 ELSE 0 END) AS pending_jobs,
+             SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed_jobs,
+             SUM(CASE WHEN status IN ('failed','insufficient') THEN 1 ELSE 0 END) AS attention_jobs
+      FROM customer_tag_analysis_jobs
+    `).catch(() => null);
+    return {
+      success: true,
+      data: {
+        customers: {
+          total: this.number(customer?.total_customers),
+          owners: this.number(customer?.owner_count)
+        },
+        imports: {
+          totalBatches: this.number(imports?.total_batches),
+          todayBatches: this.number(imports?.today_batches),
+          todayCreated: this.number(imports?.today_created),
+          attentionBatches: this.number(imports?.attention_batches)
+        },
+        ai: {
+          masterEnabled: this.number(settings?.master_enabled) === 1,
+          offpeakStartHourTaipei: this.number(settings?.offpeak_start_hour_taipei, 2),
+          offpeakEndHourTaipei: this.number(settings?.offpeak_end_hour_taipei, 5),
+          maxJobsPerRun: this.number(settings?.max_jobs_per_run, 5),
+          maxJobsPerDay: this.number(settings?.max_jobs_per_day, 100),
+          totalBatches: this.number(ai?.total_batches),
+          activeBatches: this.number(ai?.active_batches),
+          pendingJobs: this.number(jobs?.pending_jobs),
+          completedJobs: this.number(jobs?.completed_jobs),
+          attentionJobs: this.number(jobs?.attention_jobs),
+          estimatedCostMicrousd: this.number(ai?.estimated_cost_microusd),
+          approvedLimitMicrousd: this.number(ai?.approved_limit_microusd),
+          actualCostMicrousd: this.number(ai?.actual_cost_microusd),
+          updatedAt: this.text(settings?.updated_at)
+        }
+      }
+    };
+  },
+
+  async list(payload, env) {
+    const allowedStates = new Set(['draft','reading','mapping','validating','ready','importing','completed','partial_failed','failed','rolled_back']);
+    const allowedSources = new Set(['xlsx','xls','csv','manual']);
+    const state = allowedStates.has(this.text(payload.state)) ? this.text(payload.state) : '';
+    const sourceType = allowedSources.has(this.text(payload.sourceType).toLowerCase()) ? this.text(payload.sourceType).toLowerCase() : '';
+    const query = this.text(payload.query).slice(0, 80);
+    const limit = Math.min(Math.max(this.number(payload.limit, 25), 1), 100);
+    const offset = Math.max(this.number(payload.offset, 0), 0);
+    const conditions = [];
+    const binds = [];
+    if (state) { conditions.push('b.state = ?'); binds.push(state); }
+    if (sourceType) { conditions.push('b.source_type = ?'); binds.push(sourceType); }
+    if (query) {
+      const like = `%${query.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
+      conditions.push(`(b.batch_id LIKE ? ESCAPE '\\' OR b.owner_user_id LIKE ? ESCAPE '\\' OR b.source_name LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM users uq WHERE (uq.line_id=b.owner_user_id OR uq.row_id=b.owner_user_id) AND uq.name LIKE ? ESCAPE '\\'))`);
+      binds.push(like, like, like, like);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const total = await D1ReadModule.first(env, `SELECT COUNT(*) AS count FROM customer_import_batches b ${where}`, binds);
+    const rows = await D1ReadModule.all(env, `
+      SELECT b.batch_id,b.network_id,b.owner_user_id,b.source_type,b.source_name,b.state,
+             b.total_rows,b.ready_rows,b.error_rows,b.created_rows,b.updated_rows,b.skipped_rows,b.checkpoint,
+             b.created_at,b.updated_at,b.completed_at,b.rolled_back_at,
+             COALESCE((SELECT u.name FROM users u WHERE u.line_id=b.owner_user_id OR u.row_id=b.owner_user_id ORDER BY u.updated_at DESC LIMIT 1),'') AS owner_name
+      FROM customer_import_batches b
+      ${where}
+      ORDER BY b.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...binds, limit, offset]);
+    return { success: true, data: { items: rows.map(row => this.batchRow(row)), total: this.number(total?.count), limit, offset } };
+  },
+
+  async summary(payload, env) {
+    const batchId = this.text(payload.batchId).slice(0, 160);
+    if (!batchId) return { success: false, error: 'BATCH_ID_REQUIRED' };
+    const row = await D1ReadModule.first(env, `
+      SELECT b.batch_id,b.network_id,b.owner_user_id,b.source_type,b.source_name,b.state,
+             b.total_rows,b.ready_rows,b.error_rows,b.created_rows,b.updated_rows,b.skipped_rows,b.checkpoint,
+             b.created_at,b.updated_at,b.completed_at,b.rolled_back_at,
+             COALESCE((SELECT u.name FROM users u WHERE u.line_id=b.owner_user_id OR u.row_id=b.owner_user_id ORDER BY u.updated_at DESC LIMIT 1),'') AS owner_name
+      FROM customer_import_batches b WHERE b.batch_id=? LIMIT 1
+    `, [batchId]);
+    if (!row) return { success: false, error: 'BATCH_NOT_FOUND' };
+    const errors = await D1ReadModule.all(env, `
+      SELECT COALESCE(NULLIF(error_code,''),'NONE') AS code,status,decision,COUNT(*) AS count
+      FROM customer_import_rows
+      WHERE batch_id=? AND network_id=? AND owner_user_id=?
+      GROUP BY COALESCE(NULLIF(error_code,''),'NONE'),status,decision
+      ORDER BY count DESC
+      LIMIT 50
+    `, [batchId, row.network_id, row.owner_user_id]);
+    const ai = await D1ReadModule.first(env, `
+      SELECT COUNT(*) AS total_batches,
+             SUM(CASE WHEN state IN ('approved','running') THEN 1 ELSE 0 END) AS active_batches,
+             SUM(eligible_customers) AS eligible_customers,
+             SUM(estimated_cost_microusd) AS estimated_cost_microusd,
+             SUM(max_cost_microusd) AS approved_limit_microusd,
+             SUM(actual_cost_microusd) AS actual_cost_microusd
+      FROM customer_tag_analysis_batches
+      WHERE network_id=? AND owner_user_id=?
+    `, [row.network_id, row.owner_user_id]).catch(() => null);
+    return {
+      success: true,
+      data: {
+        batch: this.batchRow(row),
+        rowSummary: errors.map(item => ({
+          code: this.text(item.code),
+          status: this.text(item.status),
+          decision: this.text(item.decision),
+          count: this.number(item.count)
+        })),
+        ownerAi: {
+          totalBatches: this.number(ai?.total_batches),
+          activeBatches: this.number(ai?.active_batches),
+          eligibleCustomers: this.number(ai?.eligible_customers),
+          estimatedCostMicrousd: this.number(ai?.estimated_cost_microusd),
+          approvedLimitMicrousd: this.number(ai?.approved_limit_microusd),
+          actualCostMicrousd: this.number(ai?.actual_cost_microusd)
+        }
+      }
+    };
+  }
+};
+
 const D1AnnouncementModule = {
   text(value, fallback = '') {
     const next = String(value ?? '').trim();
@@ -16020,6 +16206,12 @@ async function dispatchAction(action, payload, request, env) {
       return await D1AnnouncementModule.list(payload || {}, env, false);
     case 'listAdminAnnouncements':
       return await D1AnnouncementModule.list(payload || {}, env, true);
+    case 'getAdminCustomerImportOverview':
+      return await AdminCustomerImportMonitorModule.overview(payload || {}, env);
+    case 'listAdminCustomerImportBatches':
+      return await AdminCustomerImportMonitorModule.list(payload || {}, env);
+    case 'getAdminCustomerImportBatchSummary':
+      return await AdminCustomerImportMonitorModule.summary(payload || {}, env);
     case 'saveAnnouncement':
       return await D1AnnouncementModule.save(payload || {}, env);
     case 'deleteAnnouncement':
