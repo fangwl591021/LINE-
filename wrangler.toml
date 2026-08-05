@@ -33,3 +33,35 @@ MOTHER_LINE_MEMBER_API_URL = "https://aiwe.cc/index.php/wp-json/wetw/v1/check-or
 # LINE_CHANNEL_SECRET = ""
 # LINE_CHANNEL_ACCESS_TOKEN = ""
 # FORWARD_WEBHOOK_URL = ""
+
+# Staging is intentionally isolated. Always deploy with: wrangler deploy --env staging
+[env.staging]
+name = "line-engine-staging"
+workers_dev = true
+
+[env.staging.triggers]
+crons = []
+
+[[env.staging.kv_namespaces]]
+binding = "ACTMASTER_KV"
+id = "999c9afee23e418a92ad9879a3a318cb"
+
+[[env.staging.d1_databases]]
+binding = "ACTMASTER_DB"
+database_name = "line-engine-staging-db"
+database_id = "70a45006-1c8c-44bb-b31c-1f4715f910bc"
+migrations_dir = "migrations"
+
+[[env.staging.r2_buckets]]
+binding = "IMG_BUCKET"
+bucket_name = "line-engine-staging-assets"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+SOCIAL_LIKE_LIFF_ID = "1660923784-NVioaXK7"
+LINE_OA_FOLLOW_POINTS = "300"
+MOTHER_CUS_ACCOUNT_URL = "https://aiwe.cc/index.php/cus_account/"
+MOTHER_CUS_ACCOUNT_SHOP_ID = "78"
+MOTHER_CUS_ACCOUNT_CLIENT_ID = "1660923784"
+MOTHER_CUS_ACCOUNT_REDIRECT_URI = "https://aiwe.cc/index.php/line_login/677/"
+MOTHER_LINE_MEMBER_API_URL = "https://aiwe.cc/index.php/wp-json/wetw/v1/check-or-create-line-user"
