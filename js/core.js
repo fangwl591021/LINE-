@@ -185,7 +185,10 @@ const Core = (function() {
             }
 
             const controller = new AbortController();
-            const timeoutMs = action === 'checkUser' ? 10000 : 18000;
+            const customerImportLongActions = ['previewCustomerImportRows', 'commitCustomerImportBatch'];
+            const timeoutMs = action === 'checkUser'
+                ? 10000
+                : (customerImportLongActions.includes(action) ? 60000 : 18000);
             const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             const res = await fetch(Config.WORKER_URL, {
                 method: 'POST',
