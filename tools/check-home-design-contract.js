@@ -49,7 +49,7 @@ if (!index.includes('home-action-card')) {
 if (!index.includes('overflow-y-auto overflow-x-hidden')) {
   fail('main app surface should prevent horizontal overflow on mobile');
 }
-if (!index.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1"')) {
+if (!index.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 bg-white shadow-sm"')) {
   fail('profile panel should keep the v2 layout without an outer frame');
 }
 if (!index.includes('home-profile-hero')) {
@@ -80,10 +80,10 @@ if (!index.includes('js/navigation.js?v=7.9') ||
     !navigation.includes("if (bottomNavAdmin) bottomNavAdmin.classList.add('hidden');")) {
   fail('home page must keep the user bottom navigation visible on home and hide admin navigation');
 }
-if (!index.includes('grid grid-cols-3 gap-2.5')) {
-  fail('quick actions should render as separated action cards');
+if (!index.includes('grid grid-cols-4 gap-y-4 gap-x-1')) {
+  fail('quick actions should keep the current four-column mobile grid');
 }
-if (!index.includes('hidden space-y-3 animate-in') || !index.includes('text-[23px] leading-none')) {
+if (!index.includes('hidden space-y-0 animate-in') || !index.includes('text-[26px] leading-none')) {
   fail('home top spacing and point size should stay compact');
 }
 if (!index.includes('id="home-feature-section"')) {

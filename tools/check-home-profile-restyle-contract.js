@@ -19,8 +19,8 @@ if (!html.includes('id="home-header-site-name"') ||
   fail('home title and switch must live on the green hero in white');
 }
 
-if (!html.includes('grid grid-cols-[108px_1fr_96px]')) {
-  fail('profile card must move points and QR into the left and right side columns');
+if (!html.includes('grid grid-cols-2 bg-[#2fb36a] text-white')) {
+  fail('profile card must keep points and QR in the two green shortcut columns');
 }
 
 if (html.includes('<span class="ml-0.5 text-[11px] font-black text-slate-600">點</span>')) {
@@ -35,7 +35,7 @@ if (!html.includes('id="home-profile-card"')) {
   fail('missing active home profile card');
 }
 
-if (!html.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1"')) {
+if (!html.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 bg-white shadow-sm"')) {
   fail('active home profile card should not render an outer frame');
 }
 
@@ -65,8 +65,8 @@ if (html.includes('profile-edit-button')) {
   fail('profile card should not render the old top-right edit button');
 }
 
-if (!html.includes('grid grid-cols-3 gap-2.5')) {
-  fail('home quick actions must use separated card grid spacing');
+if (!html.includes('grid grid-cols-4 gap-y-4 gap-x-1')) {
+  fail('home quick actions must keep the current four-column mobile grid');
 }
 
 console.log('Home profile restyle contract passed.');
