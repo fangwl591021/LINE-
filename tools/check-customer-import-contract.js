@@ -31,6 +31,8 @@ expect(moduleSource.includes("status='previewed'"), 'commit must consume preview
 expect(moduleSource.includes('normalized_mobile = ?') && moduleSource.includes('normalized_email = ?'), 'dedupe must use normalized stable keys');
 expect(moduleSource.includes('DUPLICATE_IN_BATCH'), 'preview must detect duplicate rows inside one batch');
 expect(moduleSource.includes('DUPLICATE_CHANGED_AFTER_PREVIEW'), 'commit must recheck duplicates after preview');
+expect(moduleSource.includes("if (nextDecision === 'create') return 'create'"), 'new preview rows must not inherit the duplicate skip resolution');
+expect(moduleSource.includes("requested === 'fill_blanks' ? 'fill_blanks' : 'skip'"), 'duplicate rows must only allow skip or fill-blanks resolution');
 expect(moduleSource.includes('applied_customer_version'), 'rollback must be version aware');
 expect(!/\b(?:INSERT\s+INTO|UPDATE)\s+card_contacts\b/i.test(moduleSource), 'customer import must not write business cards');
 expect(worker.startsWith("import { CustomerImportModule } from './worker/customer-import.mjs';"), 'worker must import customer module');
