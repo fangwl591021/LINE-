@@ -144,7 +144,9 @@ const ACTION_POLICIES = {
   getCardCoolDraft: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
   confirmCardCoolDraft: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
   sendCardCoolCardToChat: { access: 'authenticated', ownership: 'self', legacyAuthSkip: true },
-  recordSocialLike: { access: 'authenticated', ownership: 'self' },
+  // A liker acts on a shared card that is normally owned by someone else.
+  // The handler derives the liker from the verified LIFF actor and rejects self-likes.
+  recordSocialLike: { access: 'authenticated' },
   uploadImageToR2: { access: 'authenticated', legacyAuthSkip: true },
 
   bulkAddRegistrants: { access: 'manager', tenantScoped: true },
@@ -14083,8 +14085,7 @@ const TrackingModule = {
     }
     const { ownerUserId } = await this.findSocialLikeCardOwner(likeCardId, env);
     if (ownerUserId && ownerUserId === likerId) {
-      const stats = await this.getSocialLikeStats({ cardId: likeCardId, userId: likerId }, env);
-      return { success: true, data: { ...(stats.data || {}), skipped: true, reason: 'self_like' } };
+      return { success: false, error: '不能對自己的名片按讚' };
     }
 
     const dateKey = this.todayKey();
