@@ -1224,9 +1224,13 @@ window.recordSocialLike = async function(cardId, networkId) {
       likerUserId: userId,
       networkId: networkId || 'admin'
     }, false);
+    if (!res || res.success === false || res.error) {
+      throw new Error((res && res.error) || '按讚失敗，請稍後再試');
+    }
     const data = res && (res.data || res);
     if (data) window.updateSocialLikeWidget(data);
     window.showSocialLikeThanks(data && data.alreadyLikedToday ? '今天已經收到您的支持' : '感謝您的支持');
+    return data;
   } catch (e) {
     console.warn('[recordSocialLike] failed:', e.message || e);
     window.showToast?.(e.message || '按讚失敗，請稍後再試', true);
@@ -1329,35 +1333,12 @@ window.handleAutoSocialLikeEntry = async function(cardId, networkId) {
   return true;
 };
 
-window.handleInstantSocialLikeEntry = function(cardId, networkId) {
+window.handleInstantSocialLikeEntry = async function(cardId, networkId) {
   if (!cardId) return false;
   const loadingScreen = document.getElementById('loading-screen');
   if (loadingScreen) loadingScreen.classList.add('hidden');
-  window.showSocialLikeThanks();
-
-  const workerUrl = window.Config?.WORKER_URL || 'https://line-engine.fangwl591021.workers.dev';
-  const likerUserId = typeof window.getSocialLikeActorId === 'function'
-    ? window.getSocialLikeActorId()
-    : ('anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10));
-
-  fetch(workerUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'recordSocialLike',
-      payload: {
-        shareCardId: cardId,
-        likerUserId,
-        networkId: networkId || 'admin'
-      }
-    })
-  }).then(res => res.json())
-    .then(res => {
-      const data = res && (res.data || res);
-      if (data && typeof window.updateSocialLikeWidget === 'function') window.updateSocialLikeWidget(data);
-    })
-    .catch(e => console.warn('[handleInstantSocialLikeEntry] failed:', e.message || e));
-
+  const data = await window.recordSocialLike(cardId, networkId || 'admin');
+  if (!data) return false;
   setTimeout(() => {
     try {
       if (typeof liff !== 'undefined' && liff && typeof liff.closeWindow === 'function') liff.closeWindow();
@@ -2552,10 +2533,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
     const instantLikeCardId = initialUrlParams.get('likeCardId');
-    if (instantLikeCardId) {
-      window.handleInstantSocialLikeEntry?.(instantLikeCardId, initialUrlParams.get('net') || 'admin');
-      return;
-    }
     const webCardId = initialUrlParams.get('webCardId') || (
       initialUrlParams.get('web') === '1' ? initialUrlParams.get('shareCardId') : ''
     );
@@ -2621,6 +2598,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
+    if (instantLikeCardId) {
+      await window.handleInstantSocialLikeEntry?.(instantLikeCardId, initialUrlParams.get('net') || 'admin');
+      return;
+    }
     const wantsCardCoolList = urlParams.get('mode') === 'cardcool-list';
     if (urlParams.get('mode') === 'cardcool-review') {
       await window.renderCardCoolReviewPage(urlParams.get('jobId') || '', urlParams.get('cardId') || urlParams.get('rowId') || '');
