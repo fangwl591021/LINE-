@@ -1458,6 +1458,33 @@
                 </label>
               </div>
             </div>
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div>
+                <p class="text-sm font-bold text-slate-700">名片分享網址</p>
+                <p class="mt-1 text-xs text-slate-500">傳送與分享僅在 LINE APP 內可用。</p>
+              </div>
+              <div class="space-y-2">
+                <label class="block text-xs font-bold text-slate-500">開啟名片</label>
+                <div class="flex gap-2">
+                  <input id="admin-card-share-url-view" type="text" readonly class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 outline-none font-mono" placeholder="名片儲存後顯示網址">
+                  <button type="button" onclick="copyAdminCardShareUrl('admin-card-share-url-view')" class="rounded-lg bg-white px-3 py-2 text-xs font-bold text-blue-600 border border-blue-100 hover:bg-blue-50">複製</button>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <label class="block text-xs font-bold text-slate-500">傳送目前聊天室</label>
+                <div class="flex gap-2">
+                  <input id="admin-card-share-url-send" type="text" readonly class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 outline-none font-mono" placeholder="名片儲存後顯示網址">
+                  <button type="button" onclick="copyAdminCardShareUrl('admin-card-share-url-send')" class="rounded-lg bg-white px-3 py-2 text-xs font-bold text-blue-600 border border-blue-100 hover:bg-blue-50">複製</button>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <label class="block text-xs font-bold text-slate-500">分享給好友</label>
+                <div class="flex gap-2">
+                  <input id="admin-card-share-url-picker" type="text" readonly class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 outline-none font-mono" placeholder="名片儲存後顯示網址">
+                  <button type="button" onclick="copyAdminCardShareUrl('admin-card-share-url-picker')" class="rounded-lg bg-white px-3 py-2 text-xs font-bold text-blue-600 border border-blue-100 hover:bg-blue-50">複製</button>
+                </div>
+              </div>
+            </div>
 
             <div>
               <label class="block text-sm font-bold text-slate-500 mb-1.5">名片服務說明 (支援換行)</label>
@@ -4854,7 +4881,50 @@
       switchModalTab('crm');
       document.getElementById('modal-card-edit').classList.remove('hidden');
       document.getElementById('modal-card-edit').classList.add('flex');
+      refreshAdminCardShareUrls(card);
       updateAdminCardPreview();
+    }
+
+    function refreshAdminCardShareUrls(card) {
+      const rowId = String(card?.rowId || '').trim();
+      const referrerId = String(card?.['LINE ID'] || card?.lineId || card?.ownerUserId || card?.profileUserId || '').trim();
+      const networkId = String(card?.['歸屬網'] || card?.networkId || 'admin').trim() || 'admin';
+      const base = new URL('https://liff.line.me/' + encodeURIComponent(LIFF_ID));
+      if (rowId) base.searchParams.set('shareCardId', rowId);
+      if (referrerId) base.searchParams.set('ref', referrerId);
+      base.searchParams.set('net', networkId);
+
+      const urls = {
+        'admin-card-share-url-view': rowId ? base.toString() : '',
+        'admin-card-share-url-send': '',
+        'admin-card-share-url-picker': ''
+      };
+      if (rowId) {
+        const sendUrl = new URL(base);
+        sendUrl.searchParams.set('send', '1');
+        urls['admin-card-share-url-send'] = sendUrl.toString();
+        const pickerUrl = new URL(base);
+        pickerUrl.searchParams.set('share', '1');
+        urls['admin-card-share-url-picker'] = pickerUrl.toString();
+      }
+      Object.entries(urls).forEach(([id, value]) => {
+        const input = document.getElementById(id);
+        if (input) input.value = value;
+      });
+    }
+
+    async function copyAdminCardShareUrl(inputId) {
+      const input = document.getElementById(inputId);
+      const value = String(input?.value || '').trim();
+      if (!value) return showToast('請先儲存名片後再取得分享網址', true);
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch (e) {
+        input.focus();
+        input.select();
+        document.execCommand('copy');
+      }
+      showToast('名片分享網址已複製');
     }
 
     function getAdminCardLayout() {
