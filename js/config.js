@@ -187,9 +187,8 @@ window.buildPointLiffUrl = function(params) {
   return 'https://liff.line.me/' + encodeURIComponent(window.POINT_LIFF_ID || POINT_LIFF_ID) + '?' + targetParams.toString();
 };
 
-window.MOTHER_MEMBER_SHARE_URL = window.MOTHER_MEMBER_SHARE_URL || 'https://aiwe.cc/index.php/short_url/963';
-window.buildMemberInviteUrl = function() {
-  return String(window.MOTHER_MEMBER_SHARE_URL || '').trim();
+window.buildMemberInviteUrl = function(params) {
+  return window.buildPointLiffUrl ? window.buildPointLiffUrl(params || {}) : '';
 };
 
 // 舊版模組大量使用 $/jQuery；若頁面未事先載入，於 parser 階段同步補上。

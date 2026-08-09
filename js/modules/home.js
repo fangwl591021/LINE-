@@ -400,20 +400,21 @@ const HomeModule = (function() {
     };
 
     window.buildHomeInviteUrl = function() {
-        const motherInviteUrl = window.buildMemberInviteUrl ? window.buildMemberInviteUrl() : '';
-        if (motherInviteUrl) return motherInviteUrl;
         const myUserId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
         const myStoreId = window.currentUser?.storeid || '';
         const tracking = (myStoreId ? myStoreId + '_' : '') + String(myUserId || '').substring(0, 10);
+        const inviteParams = {
+            ref: myUserId,
+            net: window.currentNetworkId || 'admin',
+            via: tracking,
+            point_friend: '1',
+            point_from: 'lineoa-referral-keyword-v2',
+            from: 'business-engine'
+        };
+        const memberInviteUrl = window.buildMemberInviteUrl ? window.buildMemberInviteUrl(inviteParams) : '';
+        if (memberInviteUrl) return memberInviteUrl;
         if (window.buildPointLiffUrl) {
-            return window.buildPointLiffUrl({
-                ref: myUserId,
-                net: window.currentNetworkId || 'admin',
-                via: tracking,
-                point_friend: '1',
-                point_from: 'lineoa-referral-keyword-v2',
-                from: 'business-engine'
-            });
+            return window.buildPointLiffUrl(inviteParams);
         }
         return 'https://liff.line.me/' + encodeURIComponent(window.LIFF_ID || '') +
             '?ref=' + encodeURIComponent(myUserId) +
