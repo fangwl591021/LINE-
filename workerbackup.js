@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
 
 /**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
@@ -11644,6 +11645,15 @@ const D1PersonalTaskModule = {
     const relatedCardId = this.text(payload.relatedCardId || payload.related_card_id);
     const startTime = this.text(payload.startTime || payload.start_time);
     const endTime = this.text(payload.endTime || payload.end_time);
+    const inputSource = this.text(payload.inputSource || payload.input_source, 'manual').toLowerCase();
+    if (inputSource === 'voice' && !startTime) {
+      return { success: false, error: 'AI 尚未確認日期或時間，請補充後再儲存' };
+    }
+    if (startTime && !isTaipeiLocalDateTime(startTime)) return { success: false, error: '開始時間格式不正確' };
+    if (endTime && !isTaipeiLocalDateTime(endTime)) return { success: false, error: '結束時間格式不正確' };
+    if (startTime && endTime && taipeiDateTimeEpoch(endTime) <= taipeiDateTimeEpoch(startTime)) {
+      return { success: false, error: '結束時間必須晚於開始時間' };
+    }
     const remindMinutes = this.number(payload.remindMinutes || payload.remind_minutes, 30);
     const notes = this.text(payload.notes);
     const googleEventUrl = this.text(payload.googleEventUrl || payload.google_event_url);
@@ -11676,12 +11686,9 @@ const D1PersonalTaskModule = {
     const userId = this.ownUserId(payload);
     if (!userId) return { success: false, error: 'Missing userId' };
     const clean = value => this.text(value).slice(0, 2000);
-    const normalizeDateTime = value => {
-      const text = clean(value).replace(' ', 'T');
-      return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text) ? text : '';
-    };
+    const normalizeDateTime = value => normalizeTaipeiDateTime(clean(value));
     const parseProposal = async transcript => {
-      const prompt = `你是繁體中文個人行事曆助理。依 Asia/Taipei 時區，把使用者文字整理成待辦草稿。\n目前時間：${new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Taipei' }).replace(' ', 'T')}\n內容：${clean(transcript)}\n只回傳 JSON，欄位為 title,startTime,endTime,taskType,relatedName,notes,remindMinutes,recurrenceType,needsConfirmation。\n規則：日期或時間不明確時 startTime、endTime 留空，needsConfirmation=true；未指定結束時間時為開始後 60 分鐘；taskType 只能 followup、visit、payment、event、todo；recurrenceType 只能 none、daily、weekly；remindMinutes 只能 10、30、60、1440；不得捏造人物、地點或日期。`;
+      const prompt = `你是繁體中文個人行事曆助理。依 Asia/Taipei 時區，把使用者文字整理成待辦草稿。\n目前時間：${new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Taipei' }).replace(' ', 'T')}\n內容：${clean(transcript)}\n只回傳 JSON，欄位為 title,startTime,endTime,taskType,relatedName,location,notes,remindMinutes,recurrenceType,needsConfirmation。\n規則：startTime、endTime 必須使用 YYYY-MM-DDTHH:mm；相對日期依 Asia/Taipei 與目前時間換算；日期或時間不明確時 startTime、endTime 留空且 needsConfirmation=true；未指定結束時間時為開始後 60 分鐘；taskType 只能 followup、visit、payment、event、todo；recurrenceType 只能 none、daily、weekly；remindMinutes 只能 10、30、60、1440；不得捏造人物、地點或日期。`;
       const result = await AIModule.callOpenAI(env, {
         model: env.OPENAI_TEXT_MODEL || env.OPENAI_MODEL || 'gpt-4o-mini',
         temperature: 0.1,
@@ -11701,6 +11708,7 @@ const D1PersonalTaskModule = {
           endTime: normalizeDateTime(parsed.endTime),
           taskType,
           relatedName: clean(parsed.relatedName).slice(0, 120),
+          location: clean(parsed.location).slice(0, 300),
           notes: clean(parsed.notes).slice(0, 1000),
           remindMinutes,
           recurrenceType,

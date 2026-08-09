@@ -1574,6 +1574,7 @@ const HomeModule = (function() {
         window.toggleMyActivitySection('personal-agenda-content', true);
         const shouldOpen = force === undefined ? form.classList.contains('hidden') : !!force;
         form.classList.toggle('hidden', !shouldOpen);
+        if (!shouldOpen) window.personalAgendaVoiceDraft = null;
         if (shouldOpen) {
             const start = document.getElementById('agenda-start');
             if (start && !start.value) {
@@ -1598,8 +1599,13 @@ const HomeModule = (function() {
     }
 
     function buildGoogleCalendarUrl_(task) {
-        const start = task.startTime ? new Date(task.startTime) : new Date();
-        const end = task.endTime ? new Date(task.endTime) : new Date(start.getTime() + 30 * 60 * 1000);
+        const start = task.startTime ? new Date(task.startTime) : null;
+        if (!start || Number.isNaN(start.getTime())) return '';
+        const parsedEnd = task.endTime ? new Date(task.endTime) : null;
+        const end = parsedEnd && !Number.isNaN(parsedEnd.getTime())
+            ? parsedEnd
+            : new Date(start.getTime() + 60 * 60 * 1000);
+        if (end.getTime() <= start.getTime()) return '';
         const fmt = d => {
             const pad = n => String(n).padStart(2, '0');
             return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
@@ -1744,11 +1750,25 @@ const HomeModule = (function() {
 
     function applyPersonalAgendaVoiceDraft_(data) {
         const proposal = data?.proposal || {};
-        const fields = { 'agenda-title': proposal.title, 'agenda-start': proposal.startTime, 'agenda-end': proposal.endTime, 'agenda-type': proposal.taskType, 'agenda-related': proposal.relatedName, 'agenda-notes': proposal.notes, 'agenda-remind': proposal.remindMinutes, 'agenda-recurrence': proposal.recurrenceType };
+        const fields = {
+            'agenda-title': proposal.title || '',
+            'agenda-start': proposal.startTime || '',
+            'agenda-end': proposal.endTime || '',
+            'agenda-type': proposal.taskType || 'followup',
+            'agenda-related': proposal.relatedName || '',
+            'agenda-location': proposal.location || '',
+            'agenda-notes': proposal.notes || '',
+            'agenda-remind': proposal.remindMinutes || 30,
+            'agenda-recurrence': proposal.recurrenceType || 'none'
+        };
         Object.entries(fields).forEach(([id, value]) => {
             const el = document.getElementById(id);
-            if (el && value !== undefined && value !== null && value !== '') el.value = String(value);
+            if (el) el.value = String(value);
         });
+        window.personalAgendaVoiceDraft = {
+            active: true,
+            needsConfirmation: Boolean(proposal.needsConfirmation)
+        };
         setAgendaVoiceStatus_(proposal.needsConfirmation ? 'AI 已整理草稿，請補確認日期或時間後再儲存。' : 'AI 已整理草稿，請確認內容後再儲存。');
     }
 
@@ -1808,15 +1828,31 @@ const HomeModule = (function() {
     window.savePersonalAgendaTask = async function(btn) {
         const title = String(document.getElementById('agenda-title')?.value || '').trim();
         if (!title) return window.showToast('請輸入提醒標題', true);
+        const startTime = String(document.getElementById('agenda-start')?.value || '').trim();
+        const endTime = String(document.getElementById('agenda-end')?.value || '').trim();
+        const voiceDraft = window.personalAgendaVoiceDraft;
+        if (voiceDraft?.active && !startTime) {
+            return window.showToast('AI 尚未確認日期或時間，請補充後再儲存', true);
+        }
+        if (startTime && Number.isNaN(new Date(startTime).getTime())) {
+            return window.showToast('開始時間格式不正確', true);
+        }
+        if (endTime && Number.isNaN(new Date(endTime).getTime())) {
+            return window.showToast('結束時間格式不正確', true);
+        }
+        if (startTime && endTime && new Date(endTime).getTime() <= new Date(startTime).getTime()) {
+            return window.showToast('結束時間必須晚於開始時間', true);
+        }
         const payload = {
             title,
-            startTime: String(document.getElementById('agenda-start')?.value || '').trim(),
-            endTime: String(document.getElementById('agenda-end')?.value || '').trim(),
+            startTime,
+            endTime,
             taskType: document.getElementById('agenda-type')?.value || 'followup',
             recurrenceType: document.getElementById('agenda-recurrence')?.value || 'none',
             relatedName: document.getElementById('agenda-related')?.value || '',
             notes: [document.getElementById('agenda-location')?.value ? ('地點：' + document.getElementById('agenda-location').value) : '', document.getElementById('agenda-notes')?.value || ''].filter(Boolean).join('\\n'),
-            remindMinutes: document.getElementById('agenda-remind')?.value || 30
+            remindMinutes: document.getElementById('agenda-remind')?.value || 30,
+            inputSource: voiceDraft?.active ? 'voice' : 'manual'
         };
         const oldHtml = btn ? btn.innerHTML : '';
         if (btn) {
@@ -1826,12 +1862,17 @@ const HomeModule = (function() {
         try {
             const res = await window.fetchAPI('savePersonalTask', payload, true);
             if (res && res.error) throw new Error(res.error);
-            ['agenda-title', 'agenda-related', 'agenda-notes'].forEach(id => {
+            ['agenda-title', 'agenda-start', 'agenda-end', 'agenda-related', 'agenda-location', 'agenda-notes'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
+            const taskType = document.getElementById('agenda-type');
+            if (taskType) taskType.value = 'followup';
+            const remind = document.getElementById('agenda-remind');
+            if (remind) remind.value = '30';
             const recurrence = document.getElementById('agenda-recurrence');
             if (recurrence) recurrence.value = 'none';
+            window.personalAgendaVoiceDraft = null;
             window.toggleAgendaForm(false);
             window.showToast('已建立跟進提醒，可點「加入日曆」加入 Google');
             await window.loadPersonalAgenda();
@@ -1848,7 +1889,10 @@ const HomeModule = (function() {
 
     window.addAgendaTaskToGoogle = function(index) {
         const task = (window.personalAgendaTasks || [])[index];
-        if (task) window.open(buildGoogleCalendarUrl_(task), '_blank');
+        if (!task) return;
+        const calendarUrl = buildGoogleCalendarUrl_(task);
+        if (!calendarUrl) return window.showToast('請先設定行程日期與時間', true);
+        window.open(calendarUrl, '_blank');
     };
 
     window.completePersonalAgendaTask = async function(index) {
