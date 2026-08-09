@@ -433,7 +433,7 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
             全站活動監控
           </a>
-          <a href="#" onclick="switchTab('cards')" id="nav-cards" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+          <a href="#" onclick="switchTab('checkin-content')" id="nav-checkin-content" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold"><span class="material-symbols-outlined mr-3 text-[20px]">redeem</span>簽到內容管理</a><a href="#" onclick="switchTab('cards')" id="nav-cards" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">badge</span>
             全站名片庫
           </a>
@@ -651,6 +651,19 @@
         </section>
       </div>
 
+      <!-- Tab: System Checkin Content -->
+      <div id="tab-checkin-content" class="tab-content hidden space-y-6">
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
+            <div><h3 class="text-2xl font-black text-slate-900">簽到內容管理</h3><p class="mt-2 text-sm font-semibold text-slate-500">系統級簽到贈點內容；可啟用、停用、編輯與刪除，不隸屬任何租戶活動。</p></div>
+            <button onclick="newSystemCheckinContent()" class="bg-[#06C755] text-white px-4 py-2.5 rounded-xl font-black">新增簽到內容</button>
+          </div>
+          <div class="p-6 grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
+            <div class="space-y-3"><input id="checkin-content-title" class="w-full border border-slate-200 rounded-xl px-4 py-3" placeholder="內容名稱"><textarea id="checkin-content-text" class="w-full h-40 border border-slate-200 rounded-xl px-4 py-3" placeholder="簽到贈點文字"></textarea><label class="flex items-center gap-2 font-bold"><input id="checkin-content-enabled" type="checkbox" class="w-5 h-5 accent-emerald-600">啟用</label><button onclick="saveSystemCheckinContent()" class="w-full bg-blue-600 text-white rounded-xl py-3 font-black">儲存內容</button></div>
+            <div><div id="system-checkin-content-list" class="space-y-3"><div class="text-slate-400 font-bold">尚未載入</div></div></div>
+          </div>
+        </section>
+      </div>
       <!-- Tab: Activities -->
       <div id="tab-activities" class="tab-content hidden space-y-6">
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -1738,7 +1751,18 @@
       }
     }
 
-    function switchTab(tabId) {
+    let editingSystemCheckinContentId = '';
+    async function loadSystemCheckinContents() {
+      const box = document.getElementById('system-checkin-content-list');
+      if (!box) return;
+      const res = await fetchAPI('listSystemCheckinContents', {}, { silent: true });
+      const items = normalizeListResponse(res);
+      box.innerHTML = items.length ? items.map(item => '<div class="border border-slate-200 rounded-xl p-4 flex items-center justify-between gap-3"><div><div class="font-black text-slate-800">'+escapeHTML(item.title || '未命名')+'</div><div class="text-xs text-slate-400 mt-1">'+(item.enabled ? '啟用中' : '停用')+'</div></div><div class="flex gap-2"><button onclick="editSystemCheckinContent('+JSON.stringify(item.id)+')" class="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 font-bold">編輯</button><button onclick="deleteSystemCheckinContent('+JSON.stringify(item.id)+')" class="px-3 py-2 rounded-lg bg-red-50 text-red-600 font-bold">刪除</button></div></div>').join('') : '<div class="text-slate-400 font-bold">目前沒有簽到內容</div>';
+    }
+    function newSystemCheckinContent() { editingSystemCheckinContentId = ''; document.getElementById('checkin-content-title').value = ''; document.getElementById('checkin-content-text').value = ''; document.getElementById('checkin-content-enabled').checked = false; }
+    async function editSystemCheckinContent(id) { const res = await fetchAPI('listSystemCheckinContents', {}, { silent: true }); const item = normalizeListResponse(res).find(x => x.id === id); if (!item) return; editingSystemCheckinContentId = id; document.getElementById('checkin-content-title').value = item.title || ''; document.getElementById('checkin-content-text').value = item.text || ''; document.getElementById('checkin-content-enabled').checked = item.enabled === true; }
+    async function saveSystemCheckinContent() { const title = document.getElementById('checkin-content-title').value.trim(); if (!title) return showToast('請輸入內容名稱', true); const res = await fetchAPI('saveSystemCheckinContent', { id: editingSystemCheckinContentId, title, text: document.getElementById('checkin-content-text').value.trim(), enabled: document.getElementById('checkin-content-enabled').checked }); if (res) { showToast('簽到內容已儲存'); await loadSystemCheckinContents(); } }
+    async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽到內容？')) return; const res = await fetchAPI('deleteSystemCheckinContent', { id }); if (res) { showToast('簽到內容已刪除'); await loadSystemCheckinContents(); } }    function switchTab(tabId) {
       if (tabId === 'lineoa-monitor') {
         openLineOAMonitorTool();
         tabId = 'users';
@@ -1768,6 +1792,7 @@
       if (tabId === 'finance') loadFinanceStats();
       if (tabId === 'bonus') initBonusSystem();
       if (tabId === 'lineoa-keywords') loadLineOAKeywordRules();
+      if (tabId === 'checkin-content') loadSystemCheckinContents();
     }
 
     function lineOAKeywordValue(id) {
@@ -4442,6 +4467,7 @@
             <span class="px-2 py-1 rounded-full text-[10px] font-bold ${statusClass}">
               ${meta.status}
             </span>
+              ${statusButton}
           </td>
           <td class="text-right">
             <div class="inline-flex items-center gap-2">
@@ -4451,7 +4477,6 @@
               <button type="button" onclick="duplicateActivityFromMonitor('${meta.encodedId}', this)" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-bold transition-colors">
                 <span class="material-symbols-outlined text-[16px]">content_copy</span> 複製
               </button>
-              ${statusButton}
             </div>
           </td>
         </tr>`;
