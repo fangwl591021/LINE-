@@ -1510,6 +1510,7 @@
         <div class="flex border-b border-slate-100">
           <button class="flex-1 py-4 font-bold text-sm text-blue-600 border-b-2 border-blue-600 transition-colors" id="tab-info" onclick="window.switchTab('info')">📋 聯絡資料</button>
           <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-edit" onclick="window.switchTab('edit')">✏️ 編輯內容</button>
+          <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-tags" onclick="window.switchTab('tags')">✨ 五大標籤</button>
           <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-ecard" onclick="window.switchTab('ecard')">🪪 數位名片</button>
         </div>
 
@@ -1567,6 +1568,15 @@
 
           <div><label class="text-xs text-slate-500 font-bold ml-1">備註 (管理員用)</label><textarea id="edit-建檔人/備註" class="custom-input !py-3 mt-1 !h-auto" rows="2"></textarea></div>
           <button id="btn-save" type="button" onclick="window.saveCardEdit()" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mt-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1"><span class="material-symbols-outlined text-[18px]">save</span> 儲存變更</button>
+        </div>
+
+        <!-- Tab: 五大標籤 -->
+        <div id="tab-content-tags" class="hidden px-5 py-5 bg-white">
+          <div class="mb-4">
+            <h3 class="font-black text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-pink-500">auto_awesome</span>五大標籤</h3>
+            <p class="mt-1 text-[12px] font-bold text-slate-400">個性、興趣、財富、健康、事業</p>
+          </div>
+          <div id="card-fate-tags-grid" class="flex gap-3 overflow-x-auto pb-2"></div>
         </div>
 
         <!-- Tab: 數位名片 -->
@@ -2503,9 +2513,9 @@
 
 <!-- ocr-lab route: ocr-lab.html -->
 <script src="js/core.js?v=7.27"></script>
-<script src="js/navigation.js?v=7.9"></script>
+<script src="js/navigation.js?v=7.91"></script>
 <script src="js/modules/cropper.js?v=7.17"></script>
-<script src="js/modules/cards.js?v=7.9"></script>
+<script src="js/modules/cards.js?v=7.91"></script>
 <script src="js/modules/ecard.js?v=7.50"></script>
 <script src="js/modules/mycard.js?v=8.80"></script>
 <script src="js/modules/matchmake.js?v=7.9"></script>

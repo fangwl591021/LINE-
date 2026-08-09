@@ -713,15 +713,37 @@
     }
   };
 
+  const CARD_FATE_TAG_FIELDS = [
+    { key: "personality", label: "個性", icon: "psychology", tone: "border-indigo-100 bg-indigo-50 text-indigo-700" },
+    { key: "hobbies", label: "興趣", icon: "interests", tone: "border-sky-100 bg-sky-50 text-sky-700" },
+    { key: "wealth", label: "財富", icon: "payments", tone: "border-amber-100 bg-amber-50 text-amber-800" },
+    { key: "health", label: "健康", icon: "health_and_safety", tone: "border-emerald-100 bg-emerald-50 text-emerald-700" },
+    { key: "career", label: "事業", icon: "work", tone: "border-rose-100 bg-rose-50 text-rose-700" }
+  ];
+
+  window.renderCardFateTags = function () {
+    const grid = $("card-fate-tags-grid");
+    const card = window.currentCard;
+    if (!grid || !card) return;
+
+    grid.innerHTML = CARD_FATE_TAG_FIELDS.map((field) => {
+      const value = safeText(card[field.key] || card[field.label]).trim() || "尚未設定";
+      return `<div class="min-w-[132px] flex-1 rounded-2xl border p-3 ${field.tone}">
+        <div class="flex items-center gap-1.5 text-[12px] font-black"><span class="material-symbols-outlined text-[17px]">${field.icon}</span>${field.label}</div>
+        <p class="mt-2 text-sm font-bold leading-snug text-slate-700 break-words">${escapeHTML(value)}</p>
+      </div>`;
+    }).join("");
+  };
+
   window.switchTab = function (tab) {
     if (!window.currentCard) return;
 
-    if (tab !== "info" && !canEditCard(window.currentCard)) {
+    if (tab !== "info" && tab !== "tags" && !canEditCard(window.currentCard)) {
       showToast("權限不足，無法編輯此名片", true);
       return;
     }
 
-    ["info", "edit", "ecard"].forEach(t => {
+    ["info", "edit", "tags", "ecard"].forEach(t => {
       const content = $("tab-content-" + t);
       const btn = $("tab-" + t);
 
@@ -742,6 +764,8 @@
       activeBtn.classList.remove("text-slate-400", "border-transparent");
       activeBtn.classList.add("text-blue-600", "border-blue-600");
     }
+
+    if (tab === "tags") window.renderCardFateTags();
   };
 
   window.saveCardEdit = async function () {

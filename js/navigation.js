@@ -109,7 +109,7 @@ window.toggleAdminMode = function() {
 
 // 名片詳細頁的 Tab 切換
 window.switchTab = function(tab) {
-  ['info','edit','ecard'].forEach(t => {
+  ['info','edit','tags','ecard'].forEach(t => {
     document.getElementById('tab-content-' + t).classList.toggle('hidden', t !== tab);
     const btn = document.getElementById('tab-' + t);
     if (t === tab) {
@@ -123,6 +123,9 @@ window.switchTab = function(tab) {
   if (tab === 'ecard') {
     window.renderECardSettings();
     window.updateECardPreview();
+  }
+  if (tab === 'tags' && typeof window.renderCardFateTags === 'function') {
+    window.renderCardFateTags();
   }
 };
 
