@@ -1515,40 +1515,26 @@ const HomeModule = (function() {
                     </div>
                 </div>
                 <div id="personal-agenda-content">
-                    <div id="personal-agenda-form" class="hidden p-5 border-b border-slate-100 bg-slate-50/60 space-y-3">
-                        <div class="flex items-center justify-between gap-3 rounded-2xl bg-violet-50 border border-violet-100 px-3 py-2.5">
-                            <div class="min-w-0"><div class="text-[13px] font-black text-violet-700">AI 語音新增</div><div id="agenda-voice-status" class="text-[11px] text-violet-500 mt-0.5">說出日期、時間與行程，會先整理成草稿。</div></div>
-                            <button id="agenda-voice-button" type="button" onclick="window.recordPersonalAgendaVoice(this)" class="shrink-0 px-3 py-2 rounded-xl bg-violet-600 text-white text-[12px] font-black active:scale-95"><span class="material-symbols-outlined align-[-2px] text-[16px]">mic</span> 語音</button>
-                        </div>
-                        <input id="agenda-title" class="custom-input !py-3" placeholder="例：回訪王小姐、提醒收款、準備活動">
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="space-y-1"><div class="text-[11px] font-bold text-slate-500">開始</div><input id="agenda-start" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local"></div>
-                            <div class="space-y-1"><div class="text-[11px] font-bold text-slate-500">結束</div><input id="agenda-end" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local"></div>
-                            <select id="agenda-type" class="col-span-2 custom-input !py-3 !px-3 text-[13px]">
-                                <option value="followup">客戶跟進</option>
-                                <option value="visit">拜訪</option>
-                                <option value="payment">收款</option>
-                                <option value="event">活動提醒</option>
-                                <option value="todo">待辦</option>
-                            </select>
-                        </div>
-                        <select id="agenda-recurrence" class="custom-input !py-3 !px-3 text-[13px]">
-                            <option value="none">單次待辦</option>
-                            <option value="daily">每日重複</option>
-                            <option value="weekly">每週重複（依開始日期）</option>
-                        </select>
-                        <input id="agenda-related" class="custom-input !py-3" placeholder="對象 / 客戶 / 名片名稱">
-                        <textarea id="agenda-notes" class="textarea-block !h-20" placeholder="備註"></textarea>
-                        <div class="grid grid-cols-2 gap-3">
-                            <select id="agenda-remind" class="custom-input !py-3 !px-3 text-[13px]">
-                                <option value="10">10 分鐘前提醒</option>
-                                <option value="30" selected>30 分鐘前提醒</option>
-                                <option value="1440">1 天前提醒</option>
-                            </select>
-                            <button type="button" onclick="window.savePersonalAgendaTask(this)" class="bg-[#06C755] text-white rounded-2xl font-black active:scale-95">儲存</button>
-                        </div>
+                    <div id="personal-agenda-filters" class="px-5 pt-5 pb-3 border-b border-slate-100">
+                        <div class="text-[11px] font-black tracking-wide text-rose-500">顯示篩選</div>
+                        <div class="flex items-center justify-between gap-3"><div class="text-[18px] font-black text-slate-800">我的行事曆標籤</div><button type="button" onclick="window.addPersonalAgendaLabel()" class="px-3 py-2 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[12px] font-black">＋ 自訂標籤</button></div>
+                        <p class="text-[12px] text-slate-500 mt-1">點擊標籤可顯示／隱藏行事曆內容。</p>
+                        <div id="personal-agenda-labels" class="flex gap-2 overflow-x-auto pt-3 pb-1"></div>
                     </div>
-                    <div class="px-4 pt-4 border-b border-slate-100">
+                    <div id="personal-agenda-form" class="hidden fixed inset-0 z-[80] bg-slate-900/50 p-3 sm:p-6">
+                        <div class="mx-auto mt-4 max-h-[calc(100vh-2rem)] max-w-xl overflow-y-auto rounded-[26px] bg-white shadow-2xl">
+                            <div class="sticky top-0 z-10 bg-white px-5 pt-5 pb-3"><div class="text-[11px] font-black tracking-wide text-rose-500">新增行程</div><div class="flex items-center justify-between gap-3"><h3 class="text-[23px] font-black text-slate-900">安排新行程</h3><button type="button" onclick="window.toggleAgendaForm(false)" class="w-10 h-10 rounded-full bg-rose-50 text-rose-700 font-black">×</button></div></div>
+                            <div class="px-5 pb-5 space-y-3">
+                                <div class="flex items-center justify-between gap-3 rounded-2xl bg-blue-600 px-4 py-3 text-white"><div><div class="text-[15px] font-black">AI 語音新增</div><div id="agenda-voice-status" class="text-[11px] text-blue-100 mt-0.5">直接說出日期、時間與行程，AI 會整理成草稿。</div></div><button id="agenda-voice-button" type="button" onclick="window.recordPersonalAgendaVoice(this)" class="shrink-0 rounded-full bg-white px-3 py-2 text-[12px] font-black text-emerald-700"><span class="material-symbols-outlined align-[-2px] text-[16px]">mic</span> 開始錄音</button></div>
+                                <div class="text-[12px] font-bold text-slate-500">行程名稱</div><input id="agenda-title" class="custom-input !py-3" placeholder="例如：與王先生討論合作">
+                                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3 space-y-3"><div class="text-[12px] font-bold text-slate-500">行程分類</div><div class="flex gap-2 overflow-x-auto"><button type="button" onclick="window.setAgendaType('payment')" class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-black text-slate-600">工作</button><button type="button" onclick="window.setAgendaType('todo')" class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-black text-slate-600">家庭</button><button type="button" onclick="window.setAgendaType('followup')" class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-black text-slate-600">約訪</button><button type="button" onclick="window.setAgendaType('event')" class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-black text-slate-600">學習</button></div><select id="agenda-type" class="custom-input !py-3 !px-3 text-[13px]"><option value="followup">約訪／客戶跟進</option><option value="visit">拜訪</option><option value="payment">工作／收款</option><option value="event">學習／活動</option><option value="todo">家庭／未分類</option></select></div>
+                                <div class="grid grid-cols-2 gap-3"><div><div class="text-[12px] font-bold text-slate-500 mb-1">開始時間</div><input id="agenda-start" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local"></div><div><div class="text-[12px] font-bold text-slate-500 mb-1">結束時間</div><input id="agenda-end" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local"></div></div>
+                                <div class="text-[12px] font-bold text-slate-500">會面／追蹤對象（選填）</div><input id="agenda-related" class="custom-input !py-3" placeholder="搜尋姓名、公司或職稱"><div id="agenda-related-preview" class="rounded-xl bg-slate-50 px-3 py-2 text-[12px] text-slate-400">尚未選擇對象</div>
+                                <div class="grid grid-cols-2 gap-3"><select id="agenda-recurrence" class="custom-input !py-3 !px-3 text-[13px]"><option value="none">不重複</option><option value="daily">每日</option><option value="weekly">每週</option></select><select id="agenda-remind" class="custom-input !py-3 !px-3 text-[13px]"><option value="10">10 分鐘前</option><option value="30" selected>30 分鐘前</option><option value="60">1 小時前</option><option value="1440">1 天前</option></select></div>
+                                <input id="agenda-location" class="custom-input !py-3" placeholder="地點"><textarea id="agenda-notes" class="textarea-block !h-20" placeholder="備註"></textarea><button type="button" onclick="window.savePersonalAgendaTask(this)" class="w-full bg-[#06C755] py-3 text-white rounded-2xl font-black active:scale-95">儲存行程</button>
+                            </div>
+                        </div>
+                    </div>                    <div class="px-4 pt-4 border-b border-slate-100">
                         <div class="flex items-center justify-between gap-2 mb-3"><button type="button" onclick="window.changePersonalAgendaMonth(-1)" class="w-9 h-9 rounded-full bg-slate-50 text-slate-600"><span class="material-symbols-outlined">chevron_left</span></button><b id="personal-agenda-month-title" class="text-[15px] text-slate-800"></b><button type="button" onclick="window.changePersonalAgendaMonth(1)" class="w-9 h-9 rounded-full bg-slate-50 text-slate-600"><span class="material-symbols-outlined">chevron_right</span></button></div>
                         <div class="grid grid-cols-7 text-center text-[10px] font-black text-slate-400 mb-1"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
                         <div id="personal-agenda-calendar-grid" class="grid grid-cols-7 gap-1 pb-4"></div>
@@ -1645,6 +1631,35 @@ const HomeModule = (function() {
         return startKey === dateKey;
     }
 
+    const AGENDA_LABELS_ = [
+        { key: 'company', label: '公司', color: 'emerald', types: ['followup', 'visit'] },
+        { key: 'uncategorized', label: '未分類', color: 'rose', types: ['todo'] },
+        { key: 'birthday', label: '生日', color: 'amber', types: ['event'] },
+        { key: 'work', label: '工作', color: 'blue', types: ['payment'] }
+    ];
+    function agendaFilteredRows_(rows) {
+        const active = window.personalAgendaActiveLabels || AGENDA_LABELS_.map(item => item.key);
+        if (active.length === AGENDA_LABELS_.length) return rows;
+        const allowed = new Set(AGENDA_LABELS_.filter(item => active.includes(item.key)).flatMap(item => item.types));
+        return rows.filter(task => allowed.has(String(task.taskType || 'todo')));
+    }
+    function renderPersonalAgendaLabels_() {
+        const host = document.getElementById('personal-agenda-labels');
+        if (!host) return;
+        const active = window.personalAgendaActiveLabels || AGENDA_LABELS_.map(item => item.key);
+        host.innerHTML = AGENDA_LABELS_.map(item => `<button type="button" onclick="window.togglePersonalAgendaLabel('${item.key}')" class="shrink-0 rounded-full border px-3 py-2 text-[12px] font-black ${active.includes(item.key) ? 'bg-emerald-50 border-emerald-300 text-slate-700' : 'bg-slate-50 border-slate-200 text-slate-400'}"><span class="inline-block w-2 h-2 rounded-full bg-${item.color}-500 mr-1"></span>${item.label} <span class="text-[10px]">${active.includes(item.key) ? '顯示' : '隱藏'}</span></button>`).join('');
+    }
+    window.togglePersonalAgendaLabel = function(key) {
+        const all = AGENDA_LABELS_.map(item => item.key);
+        const active = new Set(window.personalAgendaActiveLabels || all);
+        active.has(key) ? active.delete(key) : active.add(key);
+        window.personalAgendaActiveLabels = [...active];
+        renderPersonalAgendaLabels_();
+        const rows = window.personalAgendaTasks || [];
+        renderPersonalAgendaCalendar_(rows); renderPersonalAgendaList_(rows);
+    };
+    window.addPersonalAgendaLabel = function() { window.showToast('自訂標籤將於後續版本儲存，目前可先使用預設標籤', false); };
+    window.setAgendaType = function(type) { const el = document.getElementById('agenda-type'); if (el) el.value = type; };
     function renderPersonalAgendaCalendar_(rows) {
         const grid = document.getElementById('personal-agenda-calendar-grid');
         const title = document.getElementById('personal-agenda-month-title');
@@ -1653,6 +1668,7 @@ const HomeModule = (function() {
         const year = month.getFullYear();
         const monthIndex = month.getMonth();
         const todayKey = agendaDateKey_(new Date());
+        rows = agendaFilteredRows_(rows);
         const selectedKey = window.personalAgendaSelectedDate || todayKey;
         title.textContent = `${year} 年 ${monthIndex + 1} 月`;
         const firstDay = new Date(year, monthIndex, 1).getDay();
@@ -1673,13 +1689,14 @@ const HomeModule = (function() {
         const list = document.getElementById('personal-agenda-list');
         if (!list) return;
         const selectedKey = window.personalAgendaSelectedDate || agendaDateKey_(new Date());
-        const selectedRows = rows.filter(task => agendaTaskMatchesDate_(task, selectedKey));
+        const sourceRows = rows;
+        const selectedRows = agendaFilteredRows_(rows).filter(task => agendaTaskMatchesDate_(task, selectedKey));
         if (!selectedRows.length) {
             list.innerHTML = `<div class="p-5 text-center text-slate-400 text-sm font-bold">${selectedKey} 尚無待辦</div>`;
             return;
         }
         list.innerHTML = `<div class="px-4 pt-4 text-[12px] font-black text-slate-500">${selectedKey} 的行程</div>` + selectedRows.map(task => {
-            const index = rows.indexOf(task);
+            const index = (window.personalAgendaTasks || sourceRows).indexOf(task);
             const recurring = ['daily', 'weekly'].includes(String(task.recurrenceType || ''));
             const done = recurring ? task.currentOccurrenceDone === true : String(task.status || '') === 'done';
             const recurrenceLabel = task.recurrenceType === 'daily' ? '每日' : task.recurrenceType === 'weekly' ? '每週' : '';
@@ -1709,6 +1726,7 @@ const HomeModule = (function() {
             window.personalAgendaTasks = rows;
             if (!window.personalAgendaSelectedDate) window.personalAgendaSelectedDate = agendaDateKey_(new Date());
             if (!(window.personalAgendaMonth instanceof Date)) window.personalAgendaMonth = new Date();
+            renderPersonalAgendaLabels_();
             renderPersonalAgendaCalendar_(rows);
             renderPersonalAgendaList_(rows);
             return rows;
@@ -1797,7 +1815,7 @@ const HomeModule = (function() {
             taskType: document.getElementById('agenda-type')?.value || 'followup',
             recurrenceType: document.getElementById('agenda-recurrence')?.value || 'none',
             relatedName: document.getElementById('agenda-related')?.value || '',
-            notes: document.getElementById('agenda-notes')?.value || '',
+            notes: [document.getElementById('agenda-location')?.value ? ('地點：' + document.getElementById('agenda-location').value) : '', document.getElementById('agenda-notes')?.value || ''].filter(Boolean).join('\\n'),
             remindMinutes: document.getElementById('agenda-remind')?.value || 30
         };
         const oldHtml = btn ? btn.innerHTML : '';
