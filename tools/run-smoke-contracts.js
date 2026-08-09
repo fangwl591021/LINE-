@@ -14,6 +14,7 @@ const foundationChecks = [
   'tools/check-lineoa-mycard-keyword-contract.js',
   'tools/check-lineoa-cardcool-keyword-contract.js',
   'tools/check-referral-keyword-v2-contract.js',
+  'tools/check-referral-attribution-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js'
 ];
@@ -28,6 +29,7 @@ const fullChecks = [
   'tools/check-lineoa-mycard-keyword-contract.js',
   'tools/check-lineoa-cardcool-keyword-contract.js',
   'tools/check-referral-keyword-v2-contract.js',
+  'tools/check-referral-attribution-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js',
   'tools/check-auth-contract.js',
