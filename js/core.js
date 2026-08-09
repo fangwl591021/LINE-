@@ -185,7 +185,7 @@ const Core = (function() {
             }
 
             const controller = new AbortController();
-            const customerImportLongActions = ['previewCustomerImportRows', 'commitCustomerImportBatch'];
+            const customerImportLongActions = ['previewCustomerImportRows', 'commitCustomerImportBatch', 'parsePersonalTaskVoice'];
             const timeoutMs = action === 'checkUser'
                 ? 10000
                 : (customerImportLongActions.includes(action) ? 60000 : 18000);

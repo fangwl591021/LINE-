@@ -102,6 +102,7 @@ const ACTION_POLICIES = {
   savePersonalTask: { access: 'authenticated', ownership: 'self' },
   completePersonalTask: { access: 'authenticated', ownership: 'self' },
   deletePersonalTask: { access: 'authenticated', ownership: 'self' },
+  parsePersonalTaskVoice: { access: 'authenticated', ownership: 'self' },
   getInboxCount: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
   listInboxItems: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
   listSentInboxItems: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
@@ -11671,6 +11672,74 @@ const D1PersonalTaskModule = {
     return { success: true, data: this.taskRow(row) };
   },
 
+  async parseVoiceDraft(payload, env) {
+    const userId = this.ownUserId(payload);
+    if (!userId) return { success: false, error: 'Missing userId' };
+    const clean = value => this.text(value).slice(0, 2000);
+    const normalizeDateTime = value => {
+      const text = clean(value).replace(' ', 'T');
+      return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text) ? text : '';
+    };
+    const parseProposal = async transcript => {
+      const prompt = `你是繁體中文個人行事曆助理。依 Asia/Taipei 時區，把使用者文字整理成待辦草稿。\n目前時間：${new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Taipei' }).replace(' ', 'T')}\n內容：${clean(transcript)}\n只回傳 JSON，欄位為 title,startTime,endTime,taskType,relatedName,notes,remindMinutes,recurrenceType,needsConfirmation。\n規則：日期或時間不明確時 startTime、endTime 留空，needsConfirmation=true；未指定結束時間時為開始後 60 分鐘；taskType 只能 followup、visit、payment、event、todo；recurrenceType 只能 none、daily、weekly；remindMinutes 只能 10、30、60、1440；不得捏造人物、地點或日期。`;
+      const result = await AIModule.callOpenAI(env, {
+        model: env.OPENAI_TEXT_MODEL || env.OPENAI_MODEL || 'gpt-4o-mini',
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'user', content: prompt }]
+      });
+      let parsed = {};
+      try { parsed = JSON.parse(result.choices?.[0]?.message?.content || '{}'); } catch (e) {}
+      const taskType = ['followup', 'visit', 'payment', 'event', 'todo'].includes(clean(parsed.taskType)) ? clean(parsed.taskType) : 'followup';
+      const recurrenceType = ['none', 'daily', 'weekly'].includes(clean(parsed.recurrenceType)) ? clean(parsed.recurrenceType) : 'none';
+      const remindMinutes = [10, 30, 60, 1440].includes(Number(parsed.remindMinutes)) ? Number(parsed.remindMinutes) : 30;
+      return {
+        transcript: clean(transcript).slice(0, 500),
+        proposal: {
+          title: clean(parsed.title).slice(0, 100) || clean(transcript).slice(0, 100),
+          startTime: normalizeDateTime(parsed.startTime),
+          endTime: normalizeDateTime(parsed.endTime),
+          taskType,
+          relatedName: clean(parsed.relatedName).slice(0, 120),
+          notes: clean(parsed.notes).slice(0, 1000),
+          remindMinutes,
+          recurrenceType,
+          needsConfirmation: Boolean(parsed.needsConfirmation) || !normalizeDateTime(parsed.startTime)
+        }
+      };
+    };
+
+    const transcript = clean(payload.transcript).slice(0, 500);
+    if (transcript) return { success: true, data: await parseProposal(transcript) };
+
+    const durationMs = Number(payload.durationMs || 0);
+    const mimeType = clean(payload.mimeType).toLowerCase().split(';')[0];
+    const allowed = new Set(['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/x-m4a']);
+    const encoded = String(payload.audioBase64 || '').replace(/^data:[^,]+,/, '').replace(/\s/g, '');
+    if (!Number.isFinite(durationMs) || durationMs <= 0 || durationMs > 15000) return { success: false, error: '語音長度最多 15 秒' };
+    if (!allowed.has(mimeType) || !encoded) return { success: false, error: '不支援這個語音格式' };
+    let bytes;
+    try { bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0)); } catch (e) { return { success: false, error: '語音資料格式不正確' }; }
+    if (!bytes.length || bytes.byteLength > 1500000) return { success: false, error: '語音檔案過大，請縮短後再試' };
+    const keys = AIModule.getOpenAIKeys(env);
+    if (!keys.length) return { success: false, error: 'AI 語音服務尚未設定' };
+    const extension = mimeType === 'audio/mp4' || mimeType === 'audio/x-m4a' ? 'm4a' : mimeType.split('/')[1] || 'webm';
+    let transcription = '';
+    let lastError = '';
+    for (const key of keys) {
+      try {
+        const form = new FormData();
+        form.append('model', env.OPENAI_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe');
+        form.append('file', new Blob([bytes], { type: mimeType }), `agenda.${extension}`);
+        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result.text) { transcription = clean(result.text).slice(0, 500); break; }
+        lastError = result.error?.message || `OpenAI HTTP ${response.status}`;
+      } catch (e) { lastError = e.message || String(e); }
+    }
+    if (!transcription) return { success: false, error: lastError || 'AI 語音辨識失敗' };
+    return { success: true, data: await parseProposal(transcription) };
+  },
   async setStatus(payload, env, status) {
     await this.ensure(env);
     const userId = this.ownUserId(payload);
@@ -16203,6 +16272,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1PersonalTaskModule.setStatus(payload || {}, env, 'done');
     case 'deletePersonalTask':
       return await D1PersonalTaskModule.setStatus(payload || {}, env, 'deleted');
+    case 'parsePersonalTaskVoice':
+      return await D1PersonalTaskModule.parseVoiceDraft(payload || {}, env);
     case 'listAnnouncements':
       return await D1AnnouncementModule.list(payload || {}, env, false);
     case 'listAdminAnnouncements':

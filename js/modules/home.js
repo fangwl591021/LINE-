@@ -1516,10 +1516,15 @@ const HomeModule = (function() {
                 </div>
                 <div id="personal-agenda-content">
                     <div id="personal-agenda-form" class="hidden p-5 border-b border-slate-100 bg-slate-50/60 space-y-3">
+                        <div class="flex items-center justify-between gap-3 rounded-2xl bg-violet-50 border border-violet-100 px-3 py-2.5">
+                            <div class="min-w-0"><div class="text-[13px] font-black text-violet-700">AI 語音新增</div><div id="agenda-voice-status" class="text-[11px] text-violet-500 mt-0.5">說出日期、時間與行程，會先整理成草稿。</div></div>
+                            <button id="agenda-voice-button" type="button" onclick="window.recordPersonalAgendaVoice(this)" class="shrink-0 px-3 py-2 rounded-xl bg-violet-600 text-white text-[12px] font-black active:scale-95"><span class="material-symbols-outlined align-[-2px] text-[16px]">mic</span> 語音</button>
+                        </div>
                         <input id="agenda-title" class="custom-input !py-3" placeholder="例：回訪王小姐、提醒收款、準備活動">
                         <div class="grid grid-cols-2 gap-3">
-                            <input id="agenda-start" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local">
-                            <select id="agenda-type" class="custom-input !py-3 !px-3 text-[13px]">
+                            <div class="space-y-1"><div class="text-[11px] font-bold text-slate-500">開始</div><input id="agenda-start" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local"></div>
+                            <div class="space-y-1"><div class="text-[11px] font-bold text-slate-500">結束</div><input id="agenda-end" class="custom-input !py-3 !px-3 text-[13px]" type="datetime-local"></div>
+                            <select id="agenda-type" class="col-span-2 custom-input !py-3 !px-3 text-[13px]">
                                 <option value="followup">客戶跟進</option>
                                 <option value="visit">拜訪</option>
                                 <option value="payment">收款</option>
@@ -1542,6 +1547,11 @@ const HomeModule = (function() {
                             </select>
                             <button type="button" onclick="window.savePersonalAgendaTask(this)" class="bg-[#06C755] text-white rounded-2xl font-black active:scale-95">儲存</button>
                         </div>
+                    </div>
+                    <div class="px-4 pt-4 border-b border-slate-100">
+                        <div class="flex items-center justify-between gap-2 mb-3"><button type="button" onclick="window.changePersonalAgendaMonth(-1)" class="w-9 h-9 rounded-full bg-slate-50 text-slate-600"><span class="material-symbols-outlined">chevron_left</span></button><b id="personal-agenda-month-title" class="text-[15px] text-slate-800"></b><button type="button" onclick="window.changePersonalAgendaMonth(1)" class="w-9 h-9 rounded-full bg-slate-50 text-slate-600"><span class="material-symbols-outlined">chevron_right</span></button></div>
+                        <div class="grid grid-cols-7 text-center text-[10px] font-black text-slate-400 mb-1"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+                        <div id="personal-agenda-calendar-grid" class="grid grid-cols-7 gap-1 pb-4"></div>
                     </div>
                     <div id="personal-agenda-list" class="divide-y divide-slate-100">
                         <div class="py-8 text-center text-slate-400 text-sm font-bold">載入跟進提醒中...</div>
@@ -1584,6 +1594,8 @@ const HomeModule = (function() {
                 const d = new Date(Date.now() + 60 * 60 * 1000);
                 d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
                 start.value = toDatetimeLocal_(d);
+                const end = document.getElementById('agenda-end');
+                if (end && !end.value) end.value = toDatetimeLocal_(new Date(d.getTime() + 60 * 60 * 1000));
             }
         }
     };
@@ -1616,6 +1628,76 @@ const HomeModule = (function() {
         return 'https://calendar.google.com/calendar/render?' + params.toString();
     }
 
+    function agendaDateKey_(date) {
+        const d = date instanceof Date ? date : new Date(date);
+        if (Number.isNaN(d.getTime())) return '';
+        return toDatetimeLocal_(d).slice(0, 10);
+    }
+
+    function agendaTaskMatchesDate_(task, dateKey) {
+        const start = new Date(task.startTime || '');
+        if (Number.isNaN(start.getTime()) || !dateKey) return false;
+        const startKey = agendaDateKey_(start);
+        if (dateKey < startKey) return false;
+        const recurrence = String(task.recurrenceType || 'none');
+        if (recurrence === 'daily') return true;
+        if (recurrence === 'weekly') return new Date(`${dateKey}T12:00:00`).getDay() === start.getDay();
+        return startKey === dateKey;
+    }
+
+    function renderPersonalAgendaCalendar_(rows) {
+        const grid = document.getElementById('personal-agenda-calendar-grid');
+        const title = document.getElementById('personal-agenda-month-title');
+        if (!grid || !title) return;
+        const month = window.personalAgendaMonth instanceof Date ? window.personalAgendaMonth : new Date();
+        const year = month.getFullYear();
+        const monthIndex = month.getMonth();
+        const todayKey = agendaDateKey_(new Date());
+        const selectedKey = window.personalAgendaSelectedDate || todayKey;
+        title.textContent = `${year} 年 ${monthIndex + 1} 月`;
+        const firstDay = new Date(year, monthIndex, 1).getDay();
+        const days = new Date(year, monthIndex + 1, 0).getDate();
+        const cells = [];
+        for (let i = 0; i < firstDay; i += 1) cells.push('<span></span>');
+        for (let day = 1; day <= days; day += 1) {
+            const dateKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const count = rows.filter(task => agendaTaskMatchesDate_(task, dateKey)).length;
+            const isSelected = dateKey === selectedKey;
+            const isToday = dateKey === todayKey;
+            cells.push(`<button type="button" onclick="window.selectPersonalAgendaDate('${dateKey}')" class="relative h-9 rounded-xl text-[12px] font-black ${isSelected ? 'bg-[#06C755] text-white' : isToday ? 'bg-emerald-50 text-emerald-700' : 'text-slate-700 active:bg-slate-100'}">${day}${count ? `<i class="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-violet-500'}"></i>` : ''}</button>`);
+        }
+        grid.innerHTML = cells.join('');
+    }
+
+    function renderPersonalAgendaList_(rows) {
+        const list = document.getElementById('personal-agenda-list');
+        if (!list) return;
+        const selectedKey = window.personalAgendaSelectedDate || agendaDateKey_(new Date());
+        const selectedRows = rows.filter(task => agendaTaskMatchesDate_(task, selectedKey));
+        if (!selectedRows.length) {
+            list.innerHTML = `<div class="p-5 text-center text-slate-400 text-sm font-bold">${selectedKey} 尚無待辦</div>`;
+            return;
+        }
+        list.innerHTML = `<div class="px-4 pt-4 text-[12px] font-black text-slate-500">${selectedKey} 的行程</div>` + selectedRows.map(task => {
+            const index = rows.indexOf(task);
+            const recurring = ['daily', 'weekly'].includes(String(task.recurrenceType || ''));
+            const done = recurring ? task.currentOccurrenceDone === true : String(task.status || '') === 'done';
+            const recurrenceLabel = task.recurrenceType === 'daily' ? '每日' : task.recurrenceType === 'weekly' ? '每週' : '';
+            return `<div class="p-4 flex items-start justify-between gap-3 ${done ? 'opacity-60' : ''}"><div class="min-w-0"><div class="text-[15px] font-black text-slate-800 leading-snug flex items-center gap-2"><span>${window.escapeHTML(task.title || '跟進提醒')}</span>${recurrenceLabel ? `<span class="shrink-0 px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 text-[10px] font-black">${recurrenceLabel}</span>` : ''}</div><div class="text-[13px] text-slate-500 mt-1">${window.escapeHTML(formatAgendaTime_(task.startTime))}</div>${task.relatedName ? `<div class="text-[12px] text-blue-600 font-bold mt-1">${window.escapeHTML(task.relatedName)}</div>` : ''}${task.notes ? `<div class="text-[12px] text-slate-400 mt-1 line-clamp-2">${window.escapeHTML(task.notes)}</div>` : ''}</div><div class="shrink-0 flex flex-col gap-2"><button type="button" onclick="window.addAgendaTaskToGoogle(${index})" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[12px] font-black">加入日曆</button>${done ? '' : `<button type="button" onclick="window.completePersonalAgendaTask(${index})" class="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-[12px] font-black">完成</button>`}<button type="button" onclick="window.deletePersonalAgendaTask(${index})" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 text-[12px] font-black">刪除</button></div></div>`;
+        }).join('');
+    }
+
+    window.changePersonalAgendaMonth = function(offset) {
+        const month = window.personalAgendaMonth instanceof Date ? window.personalAgendaMonth : new Date();
+        window.personalAgendaMonth = new Date(month.getFullYear(), month.getMonth() + Number(offset || 0), 1);
+        renderPersonalAgendaCalendar_(window.personalAgendaTasks || []);
+    };
+
+    window.selectPersonalAgendaDate = function(dateKey) {
+        window.personalAgendaSelectedDate = dateKey;
+        renderPersonalAgendaCalendar_(window.personalAgendaTasks || []);
+        renderPersonalAgendaList_(window.personalAgendaTasks || []);
+    };
     window.loadPersonalAgenda = async function() {
         ensurePersonalAgendaPanel_();
         const list = document.getElementById('personal-agenda-list');
@@ -1625,46 +1707,93 @@ const HomeModule = (function() {
             const tasks = await window.fetchAPI('listPersonalTasks', {}, true);
             const rows = Array.isArray(tasks) ? tasks : [];
             window.personalAgendaTasks = rows;
-            if (!rows.length) {
-                list.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">尚未建立跟進提醒</div>';
-                return rows;
-            }
-            list.innerHTML = rows.slice(0, 10).map((task, index) => {
-                const recurring = ['daily', 'weekly'].includes(String(task.recurrenceType || ''));
-                const done = recurring ? task.currentOccurrenceDone === true : String(task.status || '') === 'done';
-                const recurrenceLabel = task.recurrenceType === 'daily' ? '每日' : task.recurrenceType === 'weekly' ? '每週' : '';
-                return `
-                    <div class="p-4 flex items-start justify-between gap-3 ${done ? 'opacity-60' : ''}">
-                        <div class="min-w-0">
-                            <div class="text-[15px] font-black text-slate-800 leading-snug flex items-center gap-2">
-                                <span>${window.escapeHTML(task.title || '跟進提醒')}</span>
-                                ${recurrenceLabel ? `<span class="shrink-0 px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 text-[10px] font-black">${recurrenceLabel}</span>` : ''}
-                            </div>
-                            <div class="text-[13px] text-slate-500 mt-1">${window.escapeHTML(formatAgendaTime_(task.startTime))}</div>
-                            ${task.relatedName ? `<div class="text-[12px] text-blue-600 font-bold mt-1">${window.escapeHTML(task.relatedName)}</div>` : ''}
-                            ${task.notes ? `<div class="text-[12px] text-slate-400 mt-1 line-clamp-2">${window.escapeHTML(task.notes)}</div>` : ''}
-                        </div>
-                        <div class="shrink-0 flex flex-col gap-2">
-                            <button type="button" onclick="window.addAgendaTaskToGoogle(${index})" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[12px] font-black active:scale-95">加入日曆</button>
-                            ${done ? '' : `<button type="button" onclick="window.completePersonalAgendaTask(${index})" class="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-600 text-[12px] font-black active:scale-95">完成</button>`}
-                            <button type="button" onclick="window.deletePersonalAgendaTask(${index})" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 text-[12px] font-black active:scale-95">刪除</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+            if (!window.personalAgendaSelectedDate) window.personalAgendaSelectedDate = agendaDateKey_(new Date());
+            if (!(window.personalAgendaMonth instanceof Date)) window.personalAgendaMonth = new Date();
+            renderPersonalAgendaCalendar_(rows);
+            renderPersonalAgendaList_(rows);
             return rows;
         } catch (e) {
             list.innerHTML = '<div class="py-8 text-center text-red-400 text-sm font-bold">跟進提醒載入失敗</div>';
             return [];
         }
     };
+    function setAgendaVoiceStatus_(message, isError) {
+        const status = document.getElementById('agenda-voice-status');
+        if (!status) return;
+        status.textContent = message;
+        status.className = `text-[11px] mt-0.5 ${isError ? 'text-red-500' : 'text-violet-500'}`;
+    }
 
+    function applyPersonalAgendaVoiceDraft_(data) {
+        const proposal = data?.proposal || {};
+        const fields = { 'agenda-title': proposal.title, 'agenda-start': proposal.startTime, 'agenda-end': proposal.endTime, 'agenda-type': proposal.taskType, 'agenda-related': proposal.relatedName, 'agenda-notes': proposal.notes, 'agenda-remind': proposal.remindMinutes, 'agenda-recurrence': proposal.recurrenceType };
+        Object.entries(fields).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el && value !== undefined && value !== null && value !== '') el.value = String(value);
+        });
+        setAgendaVoiceStatus_(proposal.needsConfirmation ? 'AI 已整理草稿，請補確認日期或時間後再儲存。' : 'AI 已整理草稿，請確認內容後再儲存。');
+    }
+
+    async function submitPersonalAgendaVoice_(payload, button) {
+        setAgendaVoiceStatus_('AI 正在整理語音內容...');
+        const result = await window.fetchAPI('parsePersonalTaskVoice', payload, true);
+        if (!result || result.error) throw new Error(result?.error || 'AI 語音辨識失敗');
+        applyPersonalAgendaVoiceDraft_(result);
+        return result;
+    }
+
+    window.recordPersonalAgendaVoice = async function(button) {
+        window.toggleAgendaForm(true);
+        if (window.personalAgendaRecorder?.state === 'recording') {
+            window.personalAgendaRecorder.stop();
+            return;
+        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+            if (!SpeechRecognition) return setAgendaVoiceStatus_('此裝置不支援語音輸入，請改用文字建立。', true);
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'zh-TW';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+            setAgendaVoiceStatus_('請開始說出日期、時間與行程。');
+            recognition.onresult = async event => {
+                try { await submitPersonalAgendaVoice_({ transcript: event.results[0][0].transcript }, button); } catch (e) { setAgendaVoiceStatus_(e.message || 'AI 語音辨識失敗', true); }
+            };
+            recognition.onerror = () => setAgendaVoiceStatus_('語音辨識失敗，請改用文字建立。', true);
+            recognition.start();
+            return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const preferred = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(type => MediaRecorder.isTypeSupported?.(type));
+        const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
+        const chunks = [];
+        const startedAt = Date.now();
+        window.personalAgendaRecorder = recorder;
+        recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+        recorder.onstop = async () => {
+            clearTimeout(window.personalAgendaRecordTimer);
+            stream.getTracks().forEach(track => track.stop());
+            window.personalAgendaRecorder = null;
+            if (button) { button.disabled = true; button.innerHTML = '處理中...'; }
+            try {
+                const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+                const audioBase64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '')); reader.onerror = reject; reader.readAsDataURL(blob); });
+                await submitPersonalAgendaVoice_({ audioBase64, mimeType: blob.type || 'audio/webm', durationMs: Math.min(15000, Date.now() - startedAt) }, button);
+            } catch (e) { setAgendaVoiceStatus_(e.message || 'AI 語音辨識失敗', true); }
+            finally { if (button) { button.disabled = false; button.innerHTML = '<span class="material-symbols-outlined align-[-2px] text-[16px]">mic</span> 語音'; } }
+        };
+        recorder.start();
+        if (button) button.innerHTML = '<span class="material-symbols-outlined align-[-2px] text-[16px]">stop</span> 結束';
+        setAgendaVoiceStatus_('錄音中，請在 15 秒內說完。');
+        window.personalAgendaRecordTimer = setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, 15000);
+    };
     window.savePersonalAgendaTask = async function(btn) {
         const title = String(document.getElementById('agenda-title')?.value || '').trim();
         if (!title) return window.showToast('請輸入提醒標題', true);
         const payload = {
             title,
             startTime: String(document.getElementById('agenda-start')?.value || '').trim(),
+            endTime: String(document.getElementById('agenda-end')?.value || '').trim(),
             taskType: document.getElementById('agenda-type')?.value || 'followup',
             recurrenceType: document.getElementById('agenda-recurrence')?.value || 'none',
             relatedName: document.getElementById('agenda-related')?.value || '',

@@ -54,6 +54,7 @@ const fullChecks = [
   'tools/check-platform-shop-contract.js',
   'tools/check-personal-task-recurrence-schema-contract.js',
   'tools/check-personal-task-recurrence-worker-contract.js',
+  'tools/check-personal-agenda-voice-contract.js',
   'tools/check-home-recurring-task-panel-contract.js',
   'tools/check-customer-import-contract.js',
   'tools/check-admin-customer-import-monitor-contract.js'
