@@ -576,7 +576,7 @@ const HomeModule = (function() {
                         <button type="button" onclick="window.openBusinessHomeV2Action('activities')" class="business-home-v2-stat"><span class="material-symbols-outlined">event</span><div>今日活動</div><strong id="business-home-v2-stat-activities">--</strong></button>
                         <button type="button" onclick="window.openBusinessHomeV2Action('shop')" class="business-home-v2-stat"><span class="material-symbols-outlined">storefront</span><div>附近合作夥伴</div><strong>--</strong></button>
                     </div>
-                </section>\n                 <section id="home-daily-checkin-board-v2" class="business-home-v2-section"><div class="flex items-center gap-2 border-b border-slate-200 pb-2"><button type="button" data-checkin-tab="cards" onclick="window.setHomeCheckinTab?.('cards')" class="rounded-lg bg-[#bd5b7a] px-3 py-2 text-[12px] font-black text-white">簽到贈點</button><button type="button" data-checkin-tab="announcements" onclick="window.setHomeCheckinTab?.('announcements')" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-black text-[#bd5b7a]">行政公告</button></div><div id="home-checkin-board-content-v2" class="mt-3"></div></section>
+                </section>\n
                 <section class="business-home-v2-section"><h3 class="business-home-v2-title">常用工具</h3><div class="business-home-v2-grid">
                     <button type="button" onclick="window.openBusinessHomeV2Action('myCard', event)" class="business-home-v2-tool"><span class="material-symbols-outlined">badge</span>名片收藏</button>
                     <button type="button" onclick="window.openBusinessHomeV2Action('matchmake')" class="business-home-v2-tool"><span class="material-symbols-outlined">bar_chart</span>商脈分析</button>
@@ -1196,7 +1196,6 @@ const HomeModule = (function() {
     };
 
     function renderHomeActivityFilters_(types) {
-        renderHomeCheckinBoard_();
         const list = document.getElementById('user-activities-list');
         if (!list || !list.parentElement) return;
 
@@ -1219,31 +1218,7 @@ const HomeModule = (function() {
         }).join('');
     }
 
-    window.homeCheckinTab = 'cards';
-    window.setHomeCheckinTab = function(tab) {
-        window.homeCheckinTab = tab === 'announcements' ? 'announcements' : 'cards';
-        document.querySelectorAll('[data-checkin-tab]').forEach(btn => {
-            const active = btn.dataset.checkinTab === window.homeCheckinTab;
-            btn.className = active ? 'shrink-0 rounded-t-xl border border-b-0 border-slate-200 bg-[#bd5b7a] px-4 py-2 text-[13px] font-black text-white' : 'shrink-0 rounded-t-xl border border-slate-200 bg-white px-4 py-2 text-[13px] font-black text-[#bd5b7a]';
-        });
-        renderHomeCheckinBoard_();
-    };
-    function renderHomeCheckinBoard_() {
-        const target = document.getElementById('home-checkin-board-content') || document.getElementById('home-checkin-board-content-v2');
-        if (!target) return;
-        if (window.homeCheckinTab === 'announcements') { target.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">目前沒有行政公告</div>'; return; }
-        const activities = (Array.isArray(window.allActivities) ? window.allActivities : []).filter(canSeePublicActivity_).filter(a => getPublicActivityStatus_(a) === '上架').slice(-6).reverse();
-        if (!activities.length) { target.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">目前沒有簽到活動</div>'; return; }
-        target.innerHTML = '<div class="flex gap-3 overflow-x-auto snap-x snap-mandatory hide-scrollbar pb-1">' + activities.map(a => {
-            const id = window.escapeJS(getPublicActivityId_(a));
-            const title = window.escapeHTML(a.activityName || a.name || a.title || a['活動名稱'] || '簽到活動');
-            const desc = window.escapeHTML(a.description || a['活動說明'] || '完成活動即可參加簽到贈點');
-            const img = window.escapeHTML(a.imageUrl || a.image_url || a['宣傳圖'] || '');
-            return '<article class="min-w-[82%] snap-start overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">' + (img ? '<img src="' + img + '" alt="" class="block aspect-[4/3] w-full object-cover" loading="lazy">' : '<div class="flex aspect-[4/3] items-center justify-center bg-gradient-to-br from-[#f9e9ee] to-[#fff7e8] text-5xl">🎁</div>') + '<div class="p-3"><h4 class="line-clamp-1 text-[16px] font-black text-slate-800">' + title + '</h4><p class="mt-1 line-clamp-2 text-[12px] leading-relaxed text-slate-500">' + desc + '</p><div class="mt-3 grid grid-cols-2 gap-2"><button type="button" onclick="window.openActivityDetail(\'' + id + '\')" class="rounded-xl bg-[#bd5b7a] py-2.5 text-[13px] font-black text-white">開始觀看</button><button type="button" onclick="window.openActivityDetail(\'' + id + '\')" class="rounded-xl bg-[#f8e9df] py-2.5 text-[13px] font-black text-[#bd5b7a]">詳細說明</button></div></div></article>';
-        }).join('') + '</div>';
-    }
     window.renderHomeActivities = function() {
-        renderHomeCheckinBoard_();
         const list = document.getElementById('user-activities-list');
         if (!list) return;
 
