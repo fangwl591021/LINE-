@@ -47,8 +47,9 @@
     .home-quick-circle { @apply flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-transform min-w-0 min-h-[64px] py-2 bg-transparent rounded-none border-0 shadow-none; }
     .home-quick-icon { @apply w-8 h-8 flex items-center justify-center text-[29px]; font-variation-settings: 'FILL' 0; }
     .home-quick-label { @apply text-[11px] font-black text-slate-800 leading-tight text-center whitespace-nowrap; }
-    .home-top-shortcut { @apply flex items-center justify-center gap-3 min-h-[96px] bg-[#2fb36a] text-white active:scale-[0.99] transition-transform; }
+    .home-top-shortcut { @apply flex items-center justify-center gap-3 min-h-[108px] bg-transparent text-white active:scale-[0.99] transition-transform; }
     .home-top-shortcut + .home-top-shortcut { @apply border-l border-white/25; }
+    .home-top-shortcut .home-quick-label { @apply text-white; }
     .home-top-shortcut .material-symbols-outlined { font-size: 36px; font-variation-settings: 'FILL' 0; }
     .home-top-shortcut-label { @apply block text-[15px] font-black leading-tight; }
     .home-top-shortcut-value { @apply block mt-1 text-[14px] font-black leading-tight text-white/95; }
@@ -1104,7 +1105,7 @@
       <div id="business-home-v2" class="hidden"></div>
 
       <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 shadow-sm">
-        <div class="grid grid-cols-3 overflow-hidden bg-[#2fb36a] text-white">
+        <div class="grid grid-cols-4 overflow-hidden bg-gradient-to-r from-[#36b86c] via-[#20a95e] to-[#087d4d] text-white">
           <div class="min-h-[108px] border-r border-white/25 px-2 py-2 text-center">
             <button id="home-profile-avatar-button" type="button" onclick="window.handleHomeAvatarClick?.()" aria-label="開啟會員專區" class="relative mx-auto block h-[52px] w-[52px] overflow-hidden rounded-full border-[3px] border-white bg-white shadow-md active:scale-95 transition-transform">
               <img id="home-profile-avatar" src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" class="h-full w-full object-cover" alt="Profile">
@@ -1124,6 +1125,13 @@
             </span>
           </button>
 
+          <button type="button" onclick="window.claimDailyPointCheckin(this)" class="home-top-shortcut min-h-[108px] flex-col gap-1 px-2">
+            <span class="material-symbols-outlined">redeem</span>
+            <span class="text-center">
+              <span class="home-top-shortcut-label home-quick-label">簽到贈點</span>
+              <span class="home-top-shortcut-value text-[12px]">每日 10 點</span>
+            </span>
+          </button>
           <button type="button" onclick="window.showInviteLink?.()" class="home-top-shortcut min-h-[108px] flex-col gap-1 px-2">
             <span class="material-symbols-outlined">qr_code_2</span>
             <span class="text-center">
@@ -1215,9 +1223,9 @@
             <span class="home-quick-icon material-symbols-outlined text-purple-500">water_drop</span>
             <span class="home-quick-label">星座運勢</span>
           </button>
-          <button onclick="window.claimDailyPointCheckin(this)" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-red-500">redeem</span>
-            <span class="home-quick-label">簽到贈點</span>
+          <button type="button" onclick="window.goPage('my-activities')" class="home-quick-circle group">
+            <span class="home-quick-icon material-symbols-outlined text-slate-900">event_note</span>
+            <span class="home-quick-label">個人行事曆</span>
           </button>
           <button onclick="window.goPage('my-activities')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-slate-900">calendar_month</span>
