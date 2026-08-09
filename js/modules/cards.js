@@ -726,13 +726,34 @@
     const card = window.currentCard;
     if (!grid || !card) return;
 
-    grid.innerHTML = CARD_FATE_TAG_FIELDS.map((field) => {
+    const tagPanels = CARD_FATE_TAG_FIELDS.map((field) => {
       const value = safeText(card[field.key] || card[field.label]).trim() || "尚未設定";
-      return `<div class="min-w-[132px] flex-1 rounded-2xl border p-3 ${field.tone}">
-        <div class="flex items-center gap-1.5 text-[12px] font-black"><span class="material-symbols-outlined text-[17px]">${field.icon}</span>${field.label}</div>
-        <p class="mt-2 text-sm font-bold leading-snug text-slate-700 break-words">${escapeHTML(value)}</p>
-      </div>`;
-    }).join("");
+      return `<details class="rounded-2xl border ${field.tone}">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-black">
+          <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[19px]">${field.icon}</span>${field.label}</span>
+          <span class="material-symbols-outlined text-slate-400">expand_more</span>
+        </summary>
+        <p class="border-t border-current/10 px-4 py-3 text-sm font-bold leading-relaxed text-slate-700 break-words">${escapeHTML(value)}</p>
+      </details>`;
+    });
+
+    const birthday = safeText(card.birthday || card["生日"]).trim();
+    const fate = typeof window.getZodiacProfileForBirthday === "function" ? window.getZodiacProfileForBirthday(birthday) : null;
+    const fateText = fate ? [
+      fate.zodiac ? `${fate.zodiac.symbol} ${fate.zodiac.name}` : "",
+      fate.chinese ? `生肖${fate.chinese.name}` : "",
+      fate.life ? `生命靈數 ${fate.life.number}：${fate.life.theme}` : ""
+    ].filter(Boolean).join(" · ") : "尚未填寫完整生日，無法解析星座命理。";
+    tagPanels.push(`<details class="rounded-2xl border border-violet-100 bg-violet-50 text-violet-700">
+      <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-black">
+        <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[19px]">auto_awesome</span>星座命理</span>
+        <span class="material-symbols-outlined text-slate-400">expand_more</span>
+      </summary>
+      <p class="border-t border-violet-100 px-4 py-3 text-sm font-bold leading-relaxed text-slate-700 break-words">${escapeHTML(fateText)}</p>
+    </details>`);
+
+    grid.className = "space-y-3";
+    grid.innerHTML = tagPanels.join("");
   };
 
   window.switchTab = function (tab) {

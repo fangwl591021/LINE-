@@ -251,6 +251,15 @@ const HomeModule = (function() {
         return { number: total, theme: item[0], tip: item[1] };
     }
 
+    window.getZodiacProfileForBirthday = function(rawBirthday) {
+        const raw = String(rawBirthday || "").trim();
+        const match = raw.match(/(?:(\d{4})\D+)?(\d{1,2})\D+(\d{1,2})/);
+        if (!match) return null;
+        const birthday = { year: Number(match[1]) || null, month: Number(match[2]), day: Number(match[3]) };
+        if (!birthday.month || !birthday.day) return null;
+        return { zodiac: getHomeZodiac_(birthday), chinese: getHomeChineseZodiac_(birthday), life: getHomeLifeNumber_(birthday) };
+    };
+
     function hashHomeFortuneSeed_(text) {
         let hash = 0;
         for (let i = 0; i < text.length; i++) {
