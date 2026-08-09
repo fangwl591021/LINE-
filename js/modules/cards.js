@@ -389,7 +389,7 @@
     `;
 
     list.innerHTML = `
-      <div class="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-sm">
+      <div class="bg-white overflow-hidden border-y border-slate-100">
         <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div>
             <div class="font-black text-slate-900 text-[16px]">我的收錄名單</div>
