@@ -653,18 +653,17 @@
 
       <!-- Tab: System Checkin Content -->
       <div id="tab-checkin-content" class="tab-content hidden space-y-6">
-        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
-            <div><h3 class="text-2xl font-black text-slate-900">簽到內容管理</h3><p class="mt-2 text-sm font-semibold text-slate-500">系統級簽到贈點內容；可啟用、停用、編輯與刪除，不隸屬任何租戶活動。</p></div>
-            <button onclick="newSystemCheckinContent()" class="bg-[#06C755] text-white px-4 py-2.5 rounded-xl font-black">新增簽到內容</button>
-          </div>
-          <div class="p-6 grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
-            <div class="space-y-3"><input id="checkin-content-title" class="w-full border border-slate-200 rounded-xl px-4 py-3" placeholder="內容名稱"><textarea id="checkin-content-text" class="w-full h-40 border border-slate-200 rounded-xl px-4 py-3" placeholder="簽到贈點文字"></textarea><label class="flex items-center gap-2 font-bold"><input id="checkin-content-enabled" type="checkbox" class="w-5 h-5 accent-emerald-600">啟用</label><button onclick="saveSystemCheckinContent()" class="w-full bg-blue-600 text-white rounded-xl py-3 font-black">儲存內容</button></div>
-            <div><div id="system-checkin-content-list" class="space-y-3"><div class="text-slate-400 font-bold">尚未載入</div></div></div>
-          </div>
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div><h2 class="text-2xl font-black text-slate-900">簽到內容管理</h2><p class="mt-2 text-sm text-slate-500">新增圖片或影片，設定觀看門檻與贈點內容</p></div>
+          <button onclick="newSystemCheckinContent()" class="bg-[#06C755] text-white px-5 py-3 rounded-xl font-black">新增簽到內容</button>
+        </div>
+        <section class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between gap-4 mb-5"><div><h3 class="text-xl font-black text-slate-900">簽到贈點活動目錄</h3><p class="mt-1 text-sm text-slate-500">點擊「活動狀態」即可直接啟用或停用；也可搜尋、編輯、改名與刪除。</p></div><span id="system-checkin-content-count" class="text-sm text-slate-500"></span></div>
+          <div class="mb-4"><input id="system-checkin-content-search" oninput="loadSystemCheckinContents()" class="w-full max-w-md border border-slate-200 rounded-xl px-4 py-3" placeholder="搜尋標籤名稱…" autocomplete="off"></div>
+          <div class="overflow-x-auto border border-slate-200 rounded-xl"><table class="w-full text-left"><thead class="bg-slate-50 text-slate-600 text-sm"><tr><th class="px-4 py-3">標籤名稱</th><th class="px-4 py-3">活動狀態（可切換）</th><th class="px-4 py-3">輪播頁數</th><th class="px-4 py-3">建立時間</th><th class="px-4 py-3">操作</th></tr></thead><tbody id="system-checkin-content-list"></tbody></table></div>
+          <div id="system-checkin-content-editor" class="hidden mt-6 border-t border-slate-200 pt-6"><div class="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4"><input id="checkin-content-title" class="border border-slate-200 rounded-xl px-4 py-3" placeholder="標籤名稱"><textarea id="checkin-content-text" class="h-32 border border-slate-200 rounded-xl px-4 py-3" placeholder="簽到贈點內容"></textarea></div><div class="mt-4 flex items-center gap-4"><label class="flex items-center gap-2 font-bold"><input id="checkin-content-enabled" type="checkbox" class="w-5 h-5 accent-emerald-600">啟用活動</label><button onclick="saveSystemCheckinContent()" class="bg-blue-600 text-white rounded-xl px-5 py-3 font-black">儲存內容</button><button onclick="newSystemCheckinContent()" class="border border-slate-200 rounded-xl px-5 py-3 font-bold">取消</button></div></div>
         </section>
-      </div>
-      <!-- Tab: Activities -->
+      </div>      <!-- Tab: Activities -->
       <div id="tab-activities" class="tab-content hidden space-y-6">
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div class="flex items-center gap-4">
@@ -1762,7 +1761,37 @@
     function newSystemCheckinContent() { editingSystemCheckinContentId = ''; document.getElementById('checkin-content-title').value = ''; document.getElementById('checkin-content-text').value = ''; document.getElementById('checkin-content-enabled').checked = false; }
     async function editSystemCheckinContent(id) { const res = await fetchAPI('listSystemCheckinContents', {}, { silent: true }); const item = normalizeListResponse(res).find(x => x.id === id); if (!item) return; editingSystemCheckinContentId = id; document.getElementById('checkin-content-title').value = item.title || ''; document.getElementById('checkin-content-text').value = item.text || ''; document.getElementById('checkin-content-enabled').checked = item.enabled === true; }
     async function saveSystemCheckinContent() { const title = document.getElementById('checkin-content-title').value.trim(); if (!title) return showToast('請輸入內容名稱', true); const res = await fetchAPI('saveSystemCheckinContent', { id: editingSystemCheckinContentId, title, text: document.getElementById('checkin-content-text').value.trim(), enabled: document.getElementById('checkin-content-enabled').checked }); if (res) { showToast('簽到內容已儲存'); await loadSystemCheckinContents(); } }
-    async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽到內容？')) return; const res = await fetchAPI('deleteSystemCheckinContent', { id }); if (res) { showToast('簽到內容已刪除'); await loadSystemCheckinContents(); } }    function switchTab(tabId) {
+    async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽到內容？')) return; const res = await fetchAPI('deleteSystemCheckinContent', { id }); if (res) { showToast('簽到內容已刪除'); await loadSystemCheckinContents(); } }    async function loadSystemCheckinContents() {
+      const box = document.getElementById('system-checkin-content-list');
+      if (!box) return;
+      const res = await fetchAPI('listSystemCheckinContents', {}, { silent: true });
+      systemCheckinContentItems = normalizeListResponse(res);
+      const input = document.getElementById('system-checkin-content-search');
+      const q = String(input && input.value || '').trim().toLowerCase();
+      const items = systemCheckinContentItems.filter(function(x) { return !q || String(x.title || '').toLowerCase().includes(q); });
+      const count = document.getElementById('system-checkin-content-count');
+      if (count) count.textContent = '共 ' + items.length + ' 組活動';
+      box.innerHTML = items.length ? items.map(function(item) {
+        const label = escapeHTML(item.title || '未命名');
+        const action = item.enabled === true ? '啟用' : '停用';
+        const id = JSON.stringify(item.id);
+        return '<tr class="border-t border-slate-100"><td class="px-4 py-4 font-bold">' + label + '</td><td class="px-4 py-4"><button onclick="toggleSystemCheckinContent(' + id + ')" class="px-4 py-2 rounded-full font-bold">' + action + '</button></td><td class="px-4 py-4">1 頁</td><td class="px-4 py-4">已儲存</td><td class="px-4 py-4"><button onclick="editSystemCheckinContent(' + id + ')">編輯</button> <button onclick="renameSystemCheckinContent(' + id + ')">改名</button> <button onclick="deleteSystemCheckinContent(' + id + ')">刪除</button></td></tr>';
+      }).join('') : '<tr><td colspan="5" class="px-4 py-8 text-center">找不到符合的標籤活動</td></tr>';
+    }
+    async function toggleSystemCheckinContent(id) {
+      const item = systemCheckinContentItems.find(function(x) { return x.id === id; });
+      if (!item) return;
+      const res = await fetchAPI('saveSystemCheckinContent', { id: id, title: item.title, text: item.text || '', enabled: item.enabled !== true });
+      if (res) await loadSystemCheckinContents();
+    }
+    async function renameSystemCheckinContent(id) {
+      const item = systemCheckinContentItems.find(function(x) { return x.id === id; });
+      if (!item) return;
+      const title = prompt('請輸入新的標籤名稱', item.title || '');
+      if (!title) return;
+      const res = await fetchAPI('renameSystemCheckinContent', { id: id, title: title.trim() });
+      if (res) await loadSystemCheckinContents();
+    }    function switchTab(tabId) {
       if (tabId === 'lineoa-monitor') {
         openLineOAMonitorTool();
         tabId = 'users';
