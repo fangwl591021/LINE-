@@ -221,6 +221,38 @@
     return parts.join(" / ") || "尚未補充說明";
   }
 
+
+  const CARD_INDUSTRY_RULES = [
+    ["健康醫療", /醫療|診所|醫院|藥局|健康|保健|復健|牙醫|護理|中醫|營養/i],
+    ["美容美業", /美容|美髮|美甲|美睫|彩妝|造型|SPA|芳療|美體/i],
+    ["餐飲食品", /餐飲|食品|餐廳|咖啡|飲料|烘焙|便當|料理|食材/i],
+    ["零售電商", /零售|電商|購物|批發|百貨|選物|網拍|商城/i],
+    ["直銷／社群電商", /直銷|社群電商|團購|微商|代理|經銷/i],
+    ["金融保險", /金融|保險|理財|投資|銀行|證券|貸款/i],
+    ["科技資訊", /科技|資訊|軟體|系統|AI|網路|數位|程式/i],
+    ["工商專業服務", /設計|顧問|法律|會計|工程|建築|行銷|廣告|貿易|人力|清潔/i]
+  ];
+
+  function getCardIndustry(card) {
+    const explicit = safeText(card && (card["業種"] || card["產業"] || card.industry || card.industryName)).trim();
+    const source = [explicit, card && card["服務項目"], card && card.services, card && card["標籤"], card && card["公司名稱"]].map(safeText).join(" ");
+    const matched = CARD_INDUSTRY_RULES.find(([, pattern]) => pattern.test(source));
+    return matched ? matched[0] : (explicit || "其他行業");
+  }
+
+  function getCardListSource() {
+    return getHarvestCards(Array.isArray(window.harvestCards) ? window.harvestCards : window.allCards);
+  }
+
+  function applyCardListFilters() {
+    const input = $("search-card-input");
+    const keyword = input ? input.value.toLowerCase().trim() : "";
+    const industry = safeText(window.cardIndustryFilter || "全部");
+    return getCardListSource().filter(card => {
+      const text = [card["姓名"], card["英文名"], card["公司名稱"], card["職稱"], card["手機號碼"], card["公司電話"], card["電子郵件"], card["服務項目"], card["標籤"], getCardIndustry(card)].map(safeText).join(" ").toLowerCase();
+      return (!keyword || text.includes(keyword)) && (industry === "全部" || getCardIndustry(card) === industry);
+    });
+  }
   function getCardUpdatedAt(card) {
     return safeText(card && (card.updatedAt || card.updated_at || card["更新時間"] || card.createdAt || card.created_at || card["建立時間"])).trim();
   }
@@ -365,6 +397,7 @@
           <div class="flex-1 min-w-0">
             <div class="font-black text-slate-900 text-[15px] leading-tight truncate">${escapeHTML(getCardTitle(card))}</div>
             <div class="text-[13px] text-slate-500 font-medium truncate mt-1">${escapeHTML(subtitle)}</div>
+            <span class="inline-flex mt-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">${escapeHTML(getCardIndustry(card))}</span>
           </div>
           <div class="shrink-0 self-start pt-0.5 text-right">
             <div class="text-[12px] text-slate-400 font-medium whitespace-nowrap">${escapeHTML(timeText)}</div>
@@ -409,34 +442,19 @@
   };
 
   window.filterCards = function () {
-    const input = $("search-card-input");
-    const keyword = input ? input.value.toLowerCase().trim() : "";
-
-    if (!keyword) {
-      window.renderCardList(Array.isArray(window.allCards) ? window.allCards : []);
-      return;
-    }
-
-    const sourceCards = getHarvestCards(Array.isArray(window.harvestCards) ? window.harvestCards : window.allCards);
-    const filtered = sourceCards.filter(card => {
-      const str = [
-        card["姓名"],
-        card["英文名"],
-        card["公司名稱"],
-        card["職稱"],
-        card["手機號碼"],
-        card["公司電話"],
-        card["電子郵件"],
-        card["服務項目"],
-        card["標籤"]
-      ].map(safeText).join(" ").toLowerCase();
-
-      return str.includes(keyword);
-    });
-
-    window.renderCardList(filtered);
+    window.renderCardList(applyCardListFilters());
   };
 
+  window.setCardIndustryFilter = function (industry) {
+    window.cardIndustryFilter = safeText(industry || "全部") || "全部";
+    document.querySelectorAll("[data-card-industry]").forEach(button => {
+      const active = button.dataset.cardIndustry === window.cardIndustryFilter;
+      button.className = active
+        ? "shrink-0 rounded-full bg-emerald-600 px-4 py-2 text-[13px] font-black text-white"
+        : "shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-[13px] font-bold text-slate-600";
+    });
+    window.filterCards();
+  };
   window.openCardDetailByRowId = function (rowId) {
     const sourceCards = [
       ...getHarvestCards(Array.isArray(window.harvestCards) ? window.harvestCards : []),
