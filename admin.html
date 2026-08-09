@@ -383,7 +383,24 @@
 
     /* 修復空轉閃爍 */
     #loading-screen.fade-out { opacity: 0; pointer-events: none; }
-  </style>
+    <style>
+    .checkin-copy-page{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,36%);gap:14px;align-items:start}
+    .checkin-page-head,.checkin-directory-panel,.checkin-editor,.checkin-preview{background:#fff;border:1px solid #dbe3ee;border-radius:18px;padding:20px}
+    .checkin-page-head{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between}
+    .checkin-page-head h2{margin:0;font-size:24px}.checkin-page-head p,.checkin-directory-head p,.checkin-editor p{margin:6px 0 0;color:#718096}
+    .checkin-primary,.checkin-secondary{height:40px;border-radius:10px;padding:0 16px;font-weight:850;cursor:pointer}
+    .checkin-primary{border:0;background:#06c755;color:#fff}.checkin-secondary{border:1px solid #b6ecc8;background:#effcf4;color:#067a35}
+    .checkin-directory-panel{grid-column:1/-1}.checkin-directory-head h3{margin:0;font-size:22px}
+    .checkin-directory-toolbar{display:flex;justify-content:space-between;gap:12px;margin:18px 0 12px}
+    .checkin-directory-toolbar input{width:450px;max-width:100%;height:42px;border:1px solid #dbe3ee;border-radius:10px;padding:0 13px;font:inherit}
+    .checkin-directory-table-wrap{overflow:auto;border:1px solid #e5eaf1;border-radius:12px}
+    .checkin-directory-table{width:100%;min-width:760px;border-collapse:collapse}.checkin-directory-table th{background:#f8fafc;color:#718096;padding:13px;text-align:left}.checkin-directory-table td{padding:13px;border-top:1px solid #edf1f5}
+    .checkin-directory-table button{border:1px solid #b6ecc8;border-radius:8px;background:#effcf4;color:#067a35;padding:8px 10px;font-weight:800;cursor:pointer}
+    .checkin-directory-pager{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:16px;color:#718096}
+    .checkin-editor{grid-column:1}.checkin-editor-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.checkin-editor-head div{display:flex;gap:8px}
+    .checkin-editor-grid{display:grid;grid-template-columns:1fr 1.5fr;gap:12px;margin-top:14px}.checkin-editor label{display:grid;gap:7px;font-weight:800;color:#344054}.checkin-editor input,.checkin-editor textarea{width:100%;border:1px solid #dbe3ee;border-radius:10px;padding:10px;font:inherit}.checkin-editor textarea{min-height:110px;resize:vertical}.checkin-switch{display:flex!important;display:flex;align-items:center;gap:8px;margin-top:14px}.checkin-switch input{width:18px}.checkin-preview{grid-column:2;position:sticky;top:16px;min-height:240px}.checkin-preview span{display:block;color:#718096;font-size:13px;margin-top:5px}.checkin-preview pre{margin-top:14px;background:#101828;color:#e5e7eb;padding:12px;border-radius:10px;min-height:180px;white-space:pre-wrap;font-size:12px}
+    @media(max-width:900px){.checkin-copy-page{grid-template-columns:1fr}.checkin-editor,.checkin-preview{grid-column:1}.checkin-preview{position:static}.checkin-editor-grid{grid-template-columns:1fr}}
+  .checkin-page-card{border:1px solid #dbe4ef;border-radius:12px;padding:14px;margin-top:12px;background:#fff}.checkin-page-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.checkin-page-card-head button{border:0;background:#fff1f2;color:#be123c;border-radius:8px;padding:6px 10px;font-weight:700}.checkin-page-card label{display:block;margin-top:8px;font-size:13px;color:#475569}.checkin-page-card input{display:block;width:100%;margin-top:5px;border:1px solid #dbe4ef;border-radius:8px;padding:9px}</style>.checkin-page-card{border:1px solid #dbe4ef;border-radius:12px;padding:14px;margin-top:12px;background:#fff}.checkin-page-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.checkin-page-card-head button{border:0;background:#fff1f2;color:#be123c;border-radius:8px;padding:6px 10px;font-weight:700}.checkin-page-card label{display:block;margin-top:8px;font-size:13px;color:#475569}.checkin-page-card input{display:block;width:100%;margin-top:5px;border:1px solid #dbe4ef;border-radius:8px;padding:9px}</style>
 </head>
 <body class="text-slate-800 h-screen flex overflow-hidden relative">
 
@@ -656,18 +673,42 @@
       </div>
 
       <!-- Tab: System Checkin Content -->
-      <div id="tab-checkin-content" class="tab-content hidden space-y-6">
-        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div><h2 class="text-2xl font-black text-slate-900">簽到內容管理</h2><p class="mt-2 text-sm text-slate-500">新增圖片或影片，設定觀看門檻與贈點內容</p></div>
-          <button onclick="newSystemCheckinContent()" class="bg-[#06C755] text-white px-5 py-3 rounded-xl font-black">新增簽到內容</button>
+      <div id="tab-checkin-content" class="tab-content hidden checkin-copy-page">
+        <div class="checkin-page-head">
+          <div><h2>簽到內容管理</h2><p>新增圖片或影片，設定觀看門檻與贈點內容</p></div>
+          <button id="templateNewGroup" class="checkin-primary" type="button" onclick="newSystemCheckinContent()">新增簽到內容</button>
         </div>
-        <section class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <div class="flex items-center justify-between gap-4 mb-5"><div><h3 class="text-xl font-black text-slate-900">簽到贈點活動目錄</h3><p class="mt-1 text-sm text-slate-500">點擊「活動狀態」即可直接啟用或停用；也可搜尋、編輯、改名與刪除。</p></div><span id="system-checkin-content-count" class="text-sm text-slate-500"></span></div>
-          <div class="mb-4"><input id="system-checkin-content-search" oninput="loadSystemCheckinContents()" class="w-full max-w-md border border-slate-200 rounded-xl px-4 py-3" placeholder="搜尋標籤名稱…" autocomplete="off"></div>
-          <div class="overflow-x-auto border border-slate-200 rounded-xl"><table class="w-full text-left"><thead class="bg-slate-50 text-slate-600 text-sm"><tr><th class="px-4 py-3">標籤名稱</th><th class="px-4 py-3">活動狀態（可切換）</th><th class="px-4 py-3">輪播頁數</th><th class="px-4 py-3">建立時間</th><th class="px-4 py-3">操作</th></tr></thead><tbody id="system-checkin-content-list"></tbody></table></div>
-          <div id="system-checkin-content-editor" class="hidden mt-6 border-t border-slate-200 pt-6"><div class="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4"><input id="checkin-content-title" class="border border-slate-200 rounded-xl px-4 py-3" placeholder="標籤名稱"><textarea id="checkin-content-text" class="h-32 border border-slate-200 rounded-xl px-4 py-3" placeholder="簽到贈點內容"></textarea></div><div class="mt-4 flex items-center gap-4"><label class="flex items-center gap-2 font-bold"><input id="checkin-content-enabled" type="checkbox" class="w-5 h-5 accent-emerald-600">啟用活動</label><button onclick="saveSystemCheckinContent()" class="bg-blue-600 text-white rounded-xl px-5 py-3 font-black">儲存內容</button><button onclick="newSystemCheckinContent()" class="border border-slate-200 rounded-xl px-5 py-3 font-bold">取消</button></div></div>
+        <section class="checkin-directory-panel" aria-label="簽到贈點活動目錄">
+          <div class="checkin-directory-head">
+            <div><h3>簽到贈點活動目錄</h3><p>點擊「活動狀態」即可直接啟用或停用；也可搜尋、分頁、編輯、改名與刪除。</p></div>
+          </div>
+          <div class="checkin-directory-toolbar">
+            <input id="templateDirectorySearch" type="search" placeholder="搜尋標籤名稱…" autocomplete="off" oninput="loadSystemCheckinContents()">
+            <span id="templateDirectoryCount"></span>
+          </div>
+          <div class="checkin-directory-table-wrap">
+            <table class="checkin-directory-table">
+              <thead><tr><th>標籤名稱</th><th>活動狀態（可切換）</th><th>輪播頁數</th><th>建立時間</th><th>操作</th></tr></thead>
+              <tbody id="templateGroupDirectory"></tbody>
+            </table>
+          </div>
+          <div class="checkin-directory-pager">
+            <button id="templateDirectoryPrev" type="button" class="checkin-secondary">上一頁</button>
+            <span id="templateDirectoryPage">第 1 / 1 頁</span>
+            <button id="templateDirectoryNext" type="button" class="checkin-secondary">下一頁</button>
+          </div>
         </section>
-      </div>      <!-- Tab: Activities -->
+        <section id="system-checkin-content-editor" class="checkin-editor hidden">
+          <div class="checkin-editor-head"><strong>頁面設定</strong><div><button id="templateAddPage" type="button" class="checkin-secondary" onclick="addSystemCheckinPage()">新增頁面</button><button id="templateSave" type="button" class="checkin-primary" onclick="saveSystemCheckinContent()">儲存模板</button></div></div>
+          <p>圖片請使用 2:3 直式，建議 800 × 1200 px；影片由影片庫導入。</p>
+          <div class="checkin-editor-grid"><label>標籤名稱<input id="checkin-content-title" placeholder="例如：每日簽到"></label><label>活動說明<textarea id="checkin-content-text" placeholder="簽到贈點內容"></textarea></label></div>
+          <label class="checkin-switch"><input id="checkin-content-enabled" type="checkbox"> 啟用輪播活動</label>
+          <div id="templatePages"></div>
+          <div id="templateInlineStatus"></div>
+        </section>
+        <aside class="checkin-preview"><strong>即時預覽</strong><span>2:3 等比預覽｜建議 800 × 1200 px</span><pre id="templatePreview"></pre></aside>
+      </div>
+      <!-- Tab: Activities -->
       <div id="tab-activities" class="tab-content hidden space-y-6">
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div class="flex items-center gap-4">
@@ -1818,24 +1859,75 @@
 
     let editingSystemCheckinContentId = '';
     async function loadSystemCheckinContents() {
-      const box = document.getElementById('system-checkin-content-list');
+      const box = document.getElementById('templateGroupDirectory');
       if (!box) return;
       const res = await fetchAPI('listSystemCheckinContents', {}, { silent: true });
       const items = normalizeListResponse(res);
       box.innerHTML = items.length ? items.map(item => '<div class="border border-slate-200 rounded-xl p-4 flex items-center justify-between gap-3"><div><div class="font-black text-slate-800">'+escapeHTML(item.title || '未命名')+'</div><div class="text-xs text-slate-400 mt-1">'+(item.enabled ? '啟用中' : '停用')+'</div></div><div class="flex gap-2"><button onclick="editSystemCheckinContent('+JSON.stringify(item.id)+')" class="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 font-bold">編輯</button><button onclick="deleteSystemCheckinContent('+JSON.stringify(item.id)+')" class="px-3 py-2 rounded-lg bg-red-50 text-red-600 font-bold">刪除</button></div></div>').join('') : '<div class="text-slate-400 font-bold">目前沒有簽到內容</div>';
     }
-    function newSystemCheckinContent() { editingSystemCheckinContentId = ''; document.getElementById('checkin-content-title').value = ''; document.getElementById('checkin-content-text').value = ''; document.getElementById('checkin-content-enabled').checked = false; document.getElementById('system-checkin-content-editor')?.classList.remove('hidden'); document.getElementById('checkin-content-title')?.focus(); }
-    async function editSystemCheckinContent(id) { const res = await fetchAPI('listSystemCheckinContents', {}, { silent: true }); const item = normalizeListResponse(res).find(x => x.id === id); if (!item) return; editingSystemCheckinContentId = id; document.getElementById('checkin-content-title').value = item.title || ''; document.getElementById('checkin-content-text').value = item.text || ''; document.getElementById('checkin-content-enabled').checked = item.enabled === true; document.getElementById('system-checkin-content-editor')?.classList.remove('hidden'); }
-    async function saveSystemCheckinContent() { const title = document.getElementById('checkin-content-title').value.trim(); if (!title) return showToast('請輸入內容名稱', true); const res = await fetchAPI('saveSystemCheckinContent', { id: editingSystemCheckinContentId, title, text: document.getElementById('checkin-content-text').value.trim(), enabled: document.getElementById('checkin-content-enabled').checked }); if (res) { showToast('簽到內容已儲存'); await loadSystemCheckinContents(); } }
-    async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽到內容？')) return; const res = await fetchAPI('deleteSystemCheckinContent', { id }); if (res) { showToast('簽到內容已刪除'); await loadSystemCheckinContents(); } }    async function loadSystemCheckinContents() {
-      const box = document.getElementById('system-checkin-content-list');
+
+function renderSystemCheckinPages() {
+  const box = document.getElementById('templatePages');
+  if (!box) return;
+  box.innerHTML = editingSystemCheckinPages.length ? editingSystemCheckinPages.map(function(page, index) {
+    return '<div class="checkin-page-card"><div class="checkin-page-card-head"><strong>第 ' + (index + 1) + ' 頁</strong><button type="button" onclick="removeSystemCheckinPage(' + index + ')">刪除</button></div>' + '<label>圖片或影片網址<input data-checkin-page-url="' + index + '" value="' + escapeHTML(page.url || '') + '" placeholder="https://..."></label>' + '<label>按鈕文字<input data-checkin-page-button="' + index + '" value="' + escapeHTML(page.buttonText || '') + '" placeholder="例如：開始簽到"></label>' + '<label>按鈕連結<input data-checkin-page-link="' + index + '" value="' + escapeHTML(page.buttonUri || '') + '" placeholder="https://..."></label></div>';
+  }).join('') : '<div class="text-slate-400 font-bold">尚未新增頁面，請按「新增頁面」。</div>';
+  box.querySelectorAll('input').forEach(function(input) { input.addEventListener('input', collectSystemCheckinPages); });
+  renderSystemCheckinPreview();
+}
+function collectSystemCheckinPages() {
+  editingSystemCheckinPages = editingSystemCheckinPages.map(function(page, index) {
+    const url = document.querySelector('[data-checkin-page-url="' + index + '"]');
+    const button = document.querySelector('[data-checkin-page-button="' + index + '"]');
+    const link = document.querySelector('[data-checkin-page-link="' + index + '"]');
+    return Object.assign({}, page, { url: url ? url.value.trim() : page.url || '', buttonText: button ? button.value.trim() : page.buttonText || '', buttonUri: link ? link.value.trim() : page.buttonUri || '' });
+  });
+  renderSystemCheckinPreview();
+}
+function renderSystemCheckinPreview() {
+  const preview = document.getElementById('templatePreview');
+  if (preview) preview.textContent = JSON.stringify({ title: document.getElementById('checkin-content-title')?.value || '', text: document.getElementById('checkin-content-text')?.value || '', enabled: !!document.getElementById('checkin-content-enabled')?.checked, pages: editingSystemCheckinPages }, null, 2);
+}
+function removeSystemCheckinPage(index) { collectSystemCheckinPages(); editingSystemCheckinPages.splice(index, 1); renderSystemCheckinPages(); }
+function addSystemCheckinPage() { collectSystemCheckinPages(); editingSystemCheckinPages.push({ url: '', buttonText: '', buttonUri: '' }); renderSystemCheckinPages(); }
+function newSystemCheckinContent() {
+  editingSystemCheckinContentId = '';
+  editingSystemCheckinPages = [];
+  document.getElementById('checkin-content-title').value = '';
+  document.getElementById('checkin-content-text').value = '';
+  document.getElementById('checkin-content-enabled').checked = false;
+  document.getElementById('system-checkin-content-editor')?.classList.remove('hidden');
+  renderSystemCheckinPages();
+  document.getElementById('checkin-content-title')?.focus();
+}
+async function editSystemCheckinContent(id) {
+  const res = await fetchAPI('listSystemCheckinContents', {}, { silent: true });
+  const item = normalizeListResponse(res).find(x => x.id === id);
+  if (!item) return;
+  editingSystemCheckinContentId = id;
+  editingSystemCheckinPages = Array.isArray(item.pages) ? item.pages.map(function(page) { return Object.assign({}, page); }) : [];
+  document.getElementById('checkin-content-title').value = item.title || '';
+  document.getElementById('checkin-content-text').value = item.text || '';
+  document.getElementById('checkin-content-enabled').checked = item.enabled === true;
+  document.getElementById('system-checkin-content-editor')?.classList.remove('hidden');
+  renderSystemCheckinPages();
+}
+async function saveSystemCheckinContent() {
+  collectSystemCheckinPages();
+  const title = document.getElementById('checkin-content-title').value.trim();
+  if (!title) return showToast('請輸入內容名稱', true);
+  const res = await fetchAPI('saveSystemCheckinContent', { id: editingSystemCheckinContentId, title, altText: title, text: document.getElementById('checkin-content-text').value.trim(), enabled: document.getElementById('checkin-content-enabled').checked, pages: editingSystemCheckinPages });
+  if (res) { showToast('簽到內容已儲存'); await loadSystemCheckinContents(); }
+}
+async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽到內容？')) return; const res = await fetchAPI('deleteSystemCheckinContent', { id }); if (res) { showToast('簽到內容已刪除'); await loadSystemCheckinContents(); } }    async function loadSystemCheckinContents() {
+      const box = document.getElementById('templateGroupDirectory');
       if (!box) return;
       const res = await fetchAPI('listSystemCheckinContents', {}, { silent: true });
       systemCheckinContentItems = normalizeListResponse(res);
-      const input = document.getElementById('system-checkin-content-search');
+      const input = document.getElementById('templateDirectorySearch');
       const q = String(input && input.value || '').trim().toLowerCase();
       const items = systemCheckinContentItems.filter(function(x) { return !q || String(x.title || '').toLowerCase().includes(q); });
-      const count = document.getElementById('system-checkin-content-count');
+      const count = document.getElementById('templateDirectoryCount');
       if (count) count.textContent = '共 ' + items.length + ' 組活動';
       box.innerHTML = items.length ? items.map(function(item) {
         const label = escapeHTML(item.title || '未命名');

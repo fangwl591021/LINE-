@@ -71,6 +71,7 @@ const ACTION_POLICIES = {
   getStoreSettings: { access: 'public', legacyAuthSkip: true },
   listRichmanCoupons: { access: 'public', legacyAuthSkip: true },
   listAnnouncements: { access: 'public', legacyAuthSkip: true },
+  getSystemTicker: { access: 'public', legacyAuthSkip: true },
   registerUser: { access: 'public', note: 'initial_registration' },
   joinActivity: { access: 'public', note: 'public_activity_registration' },
   getSocialLikeStats: { access: 'public' },
@@ -228,6 +229,11 @@ const ACTION_POLICIES = {
   archivePointRedemptionPartner: { access: 'admin' },
   saveAnnouncement: { access: 'admin' },
   deleteAnnouncement: { access: 'admin' },
+  saveSystemTicker: { access: 'admin' },
+  listSystemCheckinContents: { access: 'admin' },
+  saveSystemCheckinContent: { access: 'admin' },
+  renameSystemCheckinContent: { access: 'admin' },
+  deleteSystemCheckinContent: { access: 'admin' },
   d1BackfillFromGas: { access: 'admin' },
   getAllUsers: { access: 'admin' },
   buildFlexMessage: { access: 'admin' }
@@ -12470,6 +12476,68 @@ const D1AnnouncementModule = {
   }
 };
 
+const SystemTickerModule = {
+  async ensure(env) {
+    await env.ACTMASTER_DB.prepare("CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+  },
+  async get(env) {
+    await this.ensure(env);
+    const row = await D1ReadModule.first(env, "SELECT value FROM app_meta WHERE key = 'system_ticker' LIMIT 1");
+    let data = { enabled: false, text: '' };
+    try { if (row?.value) data = { ...data, ...JSON.parse(row.value) }; } catch {}
+    return { success: true, data: { enabled: data.enabled === true, text: String(data.text || '').slice(0, 500) } };
+  },
+  async save(payload, env) {
+    await this.ensure(env);
+    const data = { enabled: payload?.enabled === true, text: String(payload?.text || '').trim().slice(0, 500) };
+    await env.ACTMASTER_DB.prepare("INSERT INTO app_meta(key,value,updated_at) VALUES ('system_ticker', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(JSON.stringify(data)).run();
+    return { success: true, data };
+  }
+};
+const SystemCheckinContentModule = {
+  async ensure(env) {
+    await env.ACTMASTER_DB.prepare("CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").run();
+  },
+  async read(env) {
+    await this.ensure(env);
+    const row = await D1ReadModule.first(env, "SELECT value FROM app_meta WHERE key IN ('checkin_reward_templates', 'system_checkin_contents') ORDER BY CASE key WHEN 'checkin_reward_templates' THEN 0 ELSE 1 END LIMIT 1");
+    try {
+      const parsed = row?.value ? JSON.parse(row.value) : [];
+      return Array.isArray(parsed) ? parsed.map(item => ({ ...item, title: String(item.title || item.altText || '未命名簽到內容'), altText: String(item.altText || item.title || '未命名簽到內容'), enabled: item.enabled !== false, active: item.active !== false, text: String(item.text || ''), pages: Array.isArray(item.pages) ? item.pages : [] })) : [];
+    } catch { return []; }
+  },
+  async write(env, items) {
+    const value = JSON.stringify(items);
+    await env.ACTMASTER_DB.batch([
+      env.ACTMASTER_DB.prepare("INSERT INTO app_meta(key,value,updated_at) VALUES ('checkin_reward_templates', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(value),
+      env.ACTMASTER_DB.prepare("INSERT INTO app_meta(key,value,updated_at) VALUES ('checkin_reward_template', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(JSON.stringify(items[0] || null)),
+      env.ACTMASTER_DB.prepare("INSERT INTO app_meta(key,value,updated_at) VALUES ('system_checkin_contents', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP").bind(value)
+    ]);
+    return { success: true, data: items };
+  },
+  async list(env) { return { success: true, data: await this.read(env) }; },
+  async save(payload, env) {
+    const items = await this.read(env);
+    const id = String(payload?.id || '').trim() || ('checkin_' + Date.now());
+    const now = new Date().toISOString();
+    const previous = items.find(x => x.id === id) || {};
+    const title = String(payload?.title || payload?.altText || previous.title || '未命名簽到內容').trim().slice(0, 80);
+    const next = { ...previous, id, title, altText: String(payload?.altText || title).trim().slice(0, 80), enabled: payload?.enabled === true || payload?.active === true, active: payload?.active !== false && payload?.enabled !== false, text: String(payload?.text || previous.text || '').trim().slice(0, 500), campaignId: String(payload?.campaignId || previous.campaignId || ('campaign_' + id)).trim(), rotationMode: payload?.rotationMode === 'random' ? 'random' : String(payload?.rotationMode || previous.rotationMode || 'sequential'), pages: Array.isArray(payload?.pages) ? payload.pages.slice(0, 12) : (Array.isArray(previous.pages) ? previous.pages : []), updatedAt: now, createdAt: previous.createdAt || now };
+    const out = items.some(x => x.id === id) ? items.map(x => x.id === id ? next : x) : [next, ...items];
+    return await this.write(env, out);
+  },
+  async rename(payload, env) {
+    const items = await this.read(env);
+    const id = String(payload?.id || '').trim();
+    const title = String(payload?.title || '').trim().slice(0, 80);
+    if (!id || !title) return { success: false, error: '缺少內容 ID 或名稱' };
+    return await this.write(env, items.map(x => x.id === id ? { ...x, title, updatedAt: new Date().toISOString() } : x));
+  },
+  async remove(payload, env) {
+    const id = String(payload?.id || '').trim();
+    return await this.write(env, (await this.read(env)).filter(x => x.id !== id));
+  }
+};
 const D1InboxModule = {
   text(value, fallback = '') {
     const next = String(value ?? '').trim();
@@ -16322,6 +16390,8 @@ async function dispatchAction(action, payload, request, env) {
       return await D1PersonalTaskModule.setStatus(payload || {}, env, 'deleted');
     case 'parsePersonalTaskVoice':
       return await D1PersonalTaskModule.parseVoiceDraft(payload || {}, env);
+    case 'getSystemTicker':
+      return await SystemTickerModule.get(env);
     case 'listAnnouncements':
       return await D1AnnouncementModule.list(payload || {}, env, false);
     case 'listAdminAnnouncements':
@@ -16342,6 +16412,15 @@ async function dispatchAction(action, payload, request, env) {
       return await D1AnnouncementModule.save(payload || {}, env);
     case 'deleteAnnouncement':
       return await D1AnnouncementModule.remove(payload || {}, env);
+    case 'listSystemCheckinContents':
+      return await SystemCheckinContentModule.list(env);
+    case 'saveSystemCheckinContent':
+      return await SystemCheckinContentModule.save(payload || {}, env);
+    case 'renameSystemCheckinContent':
+      return await SystemCheckinContentModule.rename(payload || {}, env);
+    case 'deleteSystemCheckinContent':
+      return await SystemCheckinContentModule.remove(payload || {}, env);    case 'saveSystemTicker':
+      return await SystemTickerModule.save(payload || {}, env);
     case 'updateCrmContact':
       return await D1ReadModule.updateCrmContact(payload || {}, env);
     case 'getInboxCount':
