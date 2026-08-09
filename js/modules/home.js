@@ -117,22 +117,20 @@ const HomeModule = (function() {
     };
 
     window.updateHomeProfileOwnerControls = function() {
-        const isOwner = window.isHomeProfileOwner();
         const avatarBtn = document.getElementById('home-profile-avatar-button');
         const avatarBadge = document.getElementById('home-profile-avatar-edit-badge');
         if (avatarBadge) {
-            avatarBadge.classList.toggle('hidden', !isOwner);
-            avatarBadge.classList.toggle('flex', isOwner);
+            avatarBadge.classList.add('hidden');
+            avatarBadge.classList.remove('flex');
         }
         if (avatarBtn) {
-            avatarBtn.classList.toggle('active:scale-95', isOwner);
-            avatarBtn.classList.toggle('cursor-default', !isOwner);
+            avatarBtn.classList.add('active:scale-95');
+            avatarBtn.classList.remove('cursor-default');
         }
     };
 
     window.handleHomeAvatarClick = function() {
-        if (!window.isHomeProfileOwner()) return;
-        document.getElementById('home-profile-avatar-file')?.click();
+        window.openProfileRegistrationPanel?.();
     };
 
     function parseHomeBirthday_() {

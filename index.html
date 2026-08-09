@@ -115,8 +115,12 @@
       }
     }
     .home-action-card { @apply bg-white rounded-3xl border border-slate-100 shadow-sm; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06); }
+    body.home-page { background: #fff; }
     body.home-page #top-nav { display: none !important; }
-    body.home-page #main { padding-top: 0; }
+    body.home-page #main { padding: 0 0 104px; width: 100%; max-width: 520px; }
+    body.home-page #page-home { padding-bottom: 0; }
+    body.home-page .home-profile-v2 { box-shadow: none; }
+    body.home-page .home-lower-panel { border: 0; box-shadow: none; }
     body.business-home-v2-active #page-home > :not(#business-home-v2) { display: none !important; }
     body.business-home-v2-active #bottom-nav { display: none !important; }
     .business-home-v2-shell { background: #f4f6f1; color: #073b31; min-height: calc(100vh - 88px); padding-bottom: 96px; }
@@ -1101,10 +1105,10 @@
       <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 shadow-sm">
         <div class="grid grid-cols-3 overflow-hidden bg-[#2fb36a] text-white">
           <div class="min-h-[132px] border-r border-white/25 px-2 py-3 text-center">
-            <button id="home-profile-avatar-button" type="button" onclick="window.handleHomeAvatarClick?.()" class="relative mx-auto block h-[62px] w-[62px] overflow-hidden rounded-full border-[3px] border-white bg-white shadow-md active:scale-95 transition-transform">
+            <button id="home-profile-avatar-button" type="button" onclick="window.handleHomeAvatarClick?.()" aria-label="開啟會員專區" class="relative mx-auto block h-[62px] w-[62px] overflow-hidden rounded-full border-[3px] border-white bg-white shadow-md active:scale-95 transition-transform">
               <img id="home-profile-avatar" src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" class="h-full w-full object-cover" alt="Profile">
               <span id="home-profile-avatar-edit-badge" class="hidden absolute bottom-0 right-0 h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-pink-500 text-white shadow-sm">
-                <span class="material-symbols-outlined text-[13px] icon-filled">photo_camera</span>
+                <span class="material-symbols-outlined text-[13px] icon-filled">person</span>
               </span>
             </button>
             <h2 id="home-profile-name" class="mx-auto mt-1 max-w-full truncate px-1 text-[16px] font-black leading-tight text-white">會員</h2>
@@ -2508,7 +2512,7 @@
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
 <script src="js/modules/home-task-buckets.mjs?v=1.0"></script>
-<script src="js/modules/home.js?v=7.71"></script>
+<script src="js/modules/home.js?v=7.72"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="js/modules/customers.js?v=1.1"></script>
 <script src="js/modules/inbox.js?v=1.16"></script>
