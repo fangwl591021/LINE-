@@ -576,7 +576,7 @@ const HomeModule = (function() {
                         <button type="button" onclick="window.openBusinessHomeV2Action('activities')" class="business-home-v2-stat"><span class="material-symbols-outlined">event</span><div>今日活動</div><strong id="business-home-v2-stat-activities">--</strong></button>
                         <button type="button" onclick="window.openBusinessHomeV2Action('shop')" class="business-home-v2-stat"><span class="material-symbols-outlined">storefront</span><div>附近合作夥伴</div><strong>--</strong></button>
                     </div>
-                </section>
+                </section>\n                 <section id="home-daily-checkin-board-v2" class="business-home-v2-section"><div class="flex items-center gap-2 border-b border-slate-200 pb-2"><button type="button" data-checkin-tab="cards" onclick="window.setHomeCheckinTab?.('cards')" class="rounded-lg bg-[#bd5b7a] px-3 py-2 text-[12px] font-black text-white">簽到贈點</button><button type="button" data-checkin-tab="announcements" onclick="window.setHomeCheckinTab?.('announcements')" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-black text-[#bd5b7a]">行政公告</button></div><div id="home-checkin-board-content-v2" class="mt-3"></div></section>
                 <section class="business-home-v2-section"><h3 class="business-home-v2-title">常用工具</h3><div class="business-home-v2-grid">
                     <button type="button" onclick="window.openBusinessHomeV2Action('myCard', event)" class="business-home-v2-tool"><span class="material-symbols-outlined">badge</span>名片收藏</button>
                     <button type="button" onclick="window.openBusinessHomeV2Action('matchmake')" class="business-home-v2-tool"><span class="material-symbols-outlined">bar_chart</span>商脈分析</button>
@@ -1229,7 +1229,7 @@ const HomeModule = (function() {
         renderHomeCheckinBoard_();
     };
     function renderHomeCheckinBoard_() {
-        const target = document.getElementById('home-checkin-board-content');
+        const target = document.getElementById('home-checkin-board-content') || document.getElementById('home-checkin-board-content-v2');
         if (!target) return;
         if (window.homeCheckinTab === 'announcements') { target.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">目前沒有行政公告</div>'; return; }
         const activities = (Array.isArray(window.allActivities) ? window.allActivities : []).filter(canSeePublicActivity_).filter(a => getPublicActivityStatus_(a) === '上架').slice(-6).reverse();
