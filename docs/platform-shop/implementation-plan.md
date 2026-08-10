@@ -106,6 +106,7 @@ git diff --check
 前端原則：
 
 - 目前首頁「線上商城」依營運需求導向 AIWE 商城搜尋頁；內建會員商城頁保留作為後續正式商城入口。
+- 在 LINE LIFF 環境使用 `liff.openWindow({ external: false })` 於 LINE 內開啟；非 LIFF 環境採同頁導向。
 - 商品管理不放在店家設定。
 - 合作店家核銷入口與商品管理入口分開。
 
