@@ -1,5 +1,6 @@
 import legacyWorker from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
+import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -66,14 +67,34 @@ export default {
       const action = text(body?.action);
       if (TAG_ACTIONS.has(action)) return await handleTagAction(request, env, action, body?.payload || {});
     }
-    return await legacyWorker.fetch(request, env, ctx);
+    const response = await legacyWorker.fetch(request, env, ctx);
+    if (request.method === 'POST') {
+      const body = await request.clone().json().catch(() => null);
+      const action = text(body?.action);
+      if ((action === 'saveCard' || action === 'updateCard') && response.ok) {
+        const result = await response.clone().json().catch(() => null);
+        const rowId = text(result?.data?.rowId || result?.rowId || body?.payload?.rowId || body?.payload?.row_id);
+        if (rowId) {
+          const enqueue = CardFateTagAnalysisModule.enqueueCard(rowId, env).catch(error => {
+            console.error('card fate tag enqueue failed', text(error?.message) || 'UNKNOWN');
+          });
+          if (ctx?.waitUntil) ctx.waitUntil(enqueue);
+          else await enqueue;
+        }
+      }
+    }
+    return response;
   },
 
   async scheduled(controller, env, ctx) {
     if (controller?.cron === '*/15 18-20 * * *') {
-      const run = CustomerTagAnalysisModule.processOffPeak(env, new Date()).catch(error => {
-        console.error('customer tag analysis cron failed', text(error?.message) || 'UNKNOWN');
-      });
+      const now = new Date();
+      const run = Promise.allSettled([
+        CustomerTagAnalysisModule.processOffPeak(env, now),
+        CardFateTagAnalysisModule.processOffPeak(env, now)
+      ]).then(results => results.forEach((result, index) => {
+        if (result.status === 'rejected') console.error(index === 0 ? 'customer tag analysis cron failed' : 'card fate tag analysis cron failed', text(result.reason?.message) || 'UNKNOWN');
+      }));
       if (ctx?.waitUntil) ctx.waitUntil(run);
       else await run;
       return;
