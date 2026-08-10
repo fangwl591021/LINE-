@@ -17,7 +17,8 @@ const foundationChecks = [
   'tools/check-referral-attribution-contract.js',
   'tools/check-home-top-shortcut-click-contract.js',
   'tools/check-home-service-menu-contract.js',
-  'tools/check-card-customer-switch-contract.js',\n  'tools/check-card-fate-tag-pipeline-contract.js',
+  'tools/check-card-customer-switch-contract.js',
+  'tools/check-card-fate-tag-pipeline-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js'
 ];
@@ -35,7 +36,8 @@ const fullChecks = [
   'tools/check-referral-attribution-contract.js',
   'tools/check-home-top-shortcut-click-contract.js',
   'tools/check-home-service-menu-contract.js',
-  'tools/check-card-customer-switch-contract.js',\n  'tools/check-card-fate-tag-pipeline-contract.js',
+  'tools/check-card-customer-switch-contract.js',
+  'tools/check-card-fate-tag-pipeline-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js',
   'tools/check-auth-contract.js',
@@ -87,7 +89,8 @@ let failed = false;
 
 for (const relativePath of checks) {
   const scriptPath = path.resolve(root, relativePath);
-  console.log(`\n== ${relativePath} ==`);
+  console.log(`
+== ${relativePath} ==`);
   const result = spawnSync(node, [scriptPath], {
     cwd: root,
     stdio: 'inherit',
@@ -100,8 +103,10 @@ for (const relativePath of checks) {
 }
 
 if (failed) {
-  console.error('\nSmoke contracts failed. Do not deploy this build.');
+  console.error('
+Smoke contracts failed. Do not deploy this build.');
   process.exit(1);
 }
 
-console.log('\nSmoke contracts passed.');
+console.log('
+Smoke contracts passed.');
