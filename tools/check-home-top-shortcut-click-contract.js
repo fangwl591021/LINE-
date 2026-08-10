@@ -38,9 +38,16 @@ expect(
 );
 expect(
   html.includes('font-size: 30px; line-height: 1;') &&
-    html.includes('h-[46px] w-[46px]') &&
+    html.includes('home-profile-avatar-frame') &&
     html.includes('text-[13px] font-black leading-tight'),
   'shortcut icons, avatar and labels must keep the compact layout'
+);
+expect(
+  html.includes('width: 46px; height: 46px; min-width: 46px; min-height: 46px; max-width: 46px; max-height: 46px;') &&
+    html.includes('flex: 0 0 46px; aspect-ratio: 1 / 1; border-radius: 9999px;') &&
+    html.includes('.home-profile-avatar-frame > img') &&
+    html.includes('border-radius: inherit; object-fit: cover;'),
+  'Android must not flex-shrink or stretch the profile avatar into an oval'
 );
 
 console.log('Home top shortcut click contract passed.');
