@@ -119,6 +119,35 @@ window.Config = {
 
 window.__actmasterLiffInit = window.__actmasterLiffInit || { liffId: '', promise: null };
 
+window.buildActmasterCleanLiffUrl = function() {
+  const params = typeof window.readActmasterInitialParams === 'function'
+    ? window.readActmasterInitialParams()
+    : new URLSearchParams(window.location.search || '');
+  [
+    'code', 'state', 'liff.state', 'liffClientId', 'liffRedirectUri',
+    'error', 'error_description'
+  ].forEach(key => params.delete(key));
+  const query = params.toString();
+  return window.location.origin + window.location.pathname + (query ? '?' + query : '');
+};
+
+window.recoverActmasterInvalidLiffAuthorization = function(error) {
+  const details = [error?.code, error?.message, error?.cause?.code, error?.cause?.message]
+    .map(value => String(value || '').toLowerCase())
+    .join(' ');
+  if (!details.includes('invalid authorization code')) return false;
+
+  const recoveryKey = 'ACTMASTER_LIFF_INVALID_CODE_RECOVERY_V1';
+  const currentUrl = window.location.href;
+  try {
+    if (sessionStorage.getItem(recoveryKey) === currentUrl) return false;
+    sessionStorage.setItem(recoveryKey, currentUrl);
+  } catch (e) {}
+
+  window.location.replace(window.buildActmasterCleanLiffUrl());
+  return true;
+};
+
 window.initActmasterLiff = async function(liffId, options = {}) {
   const id = String(liffId || window.LIFF_ID || '').trim();
   if (!id) throw new Error('Missing LIFF ID');
@@ -135,6 +164,7 @@ window.initActmasterLiff = async function(liffId, options = {}) {
   });
   try {
     await window.__actmasterLiffInit.promise;
+    try { sessionStorage.removeItem('ACTMASTER_LIFF_INVALID_CODE_RECOVERY_V1'); } catch (e) {}
     return true;
   } catch (err) {
     window.__actmasterLiffInit = { liffId: '', promise: null };
@@ -145,7 +175,11 @@ window.initActmasterLiff = async function(liffId, options = {}) {
 window.ensureActmasterLiffLogin = function(options = {}) {
   if (!window.liff || typeof window.liff.isLoggedIn !== 'function') return false;
   if (window.liff.isLoggedIn()) return true;
-  const redirectUri = options.redirectUri || window.location.href;
+  const requestedRedirectUri = String(options.redirectUri || window.location.href);
+  const hasOAuthParams = /[?&](?:code|state|liff\.state|liffClientId|liffRedirectUri|error|error_description)=/i.test(requestedRedirectUri);
+  const redirectUri = hasOAuthParams && typeof window.buildActmasterCleanLiffUrl === 'function'
+    ? window.buildActmasterCleanLiffUrl()
+    : requestedRedirectUri;
   if (typeof window.liff.login === 'function') window.liff.login({ redirectUri });
   return false;
 };
