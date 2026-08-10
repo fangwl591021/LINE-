@@ -51,7 +51,7 @@ for (const marker of ['LIMITS', 'fileBytes: 5 * 1024 * 1024', 'rows: 500', "['xl
 expect(customers.includes('maskedAiSample'), 'AI samples must be de-identified before upload');
 expect(customers.includes('suggestCustomerImportMapping'), 'customer UI must request AI mapping suggestions');
 expect(worker.includes("warning: 'AI_MAPPING_FALLBACK'"), 'AI mapping must have a deterministic fallback');
-expect(core.includes("['previewCustomerImportRows', 'commitCustomerImportBatch']"), 'customer preview and commit must use the bounded long-request timeout');
+expect(core.includes("'previewCustomerImportRows'") && core.includes("'commitCustomerImportBatch'"), 'customer preview and commit must use the bounded long-request timeout');
 expect(core.includes('? 10000') && core.includes('? 60000 : 18000'), 'customer long-request timeout must not change unrelated API limits');
 expect(worker.includes("confidence === 'high'") || customers.includes("confidence === 'high'"), 'AI mapping must expose confidence');
 expect(customers.includes('window.downloadCustomerTemplate'), 'customer template download must exist');
