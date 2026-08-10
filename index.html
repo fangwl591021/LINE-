@@ -47,13 +47,13 @@
     .home-quick-circle { @apply flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-transform min-w-0 min-h-[64px] py-2 bg-transparent rounded-none border-0 shadow-none; }
     .home-quick-icon { @apply w-8 h-8 flex items-center justify-center text-[29px]; font-variation-settings: 'FILL' 0; }
     .home-quick-label { @apply text-[11px] font-black text-slate-800 leading-tight text-center whitespace-nowrap; }
-    .home-top-shortcut { @apply flex w-full items-center justify-center gap-3 min-h-[108px] bg-transparent text-white active:scale-[0.99] transition-transform; touch-action: manipulation; }
+    .home-top-shortcut { @apply flex w-full items-center justify-center gap-2 bg-transparent text-white active:scale-[0.99] transition-transform; height: 108px; padding-top: 10px; padding-bottom: 10px; touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     .home-top-shortcut > * { pointer-events: none; }
     .home-top-shortcut + .home-top-shortcut { @apply border-l border-white/25; }
     .home-top-shortcut .home-quick-label { @apply text-white; }
-    .home-top-shortcut .material-symbols-outlined { font-size: 36px; font-variation-settings: 'FILL' 0; }
-    .home-top-shortcut-label { @apply block text-[15px] font-black leading-tight; }
-    .home-top-shortcut-value { @apply block mt-1 text-[14px] font-black leading-tight text-white/95; }
+    .home-top-shortcut .material-symbols-outlined { font-size: 30px; line-height: 1; font-variation-settings: 'FILL' 0; }
+    .home-top-shortcut-label { @apply block text-[13px] font-black leading-tight; }
+    .home-top-shortcut-value { @apply block mt-1 text-[12px] font-black leading-tight text-white/95; }
     .home-lower-panel { @apply bg-white border-y border-slate-100 shadow-sm; }
     .home-section-kicker { @apply text-[15px] font-black text-slate-500 leading-none; }
     .home-lower-panel .home-quick-circle { min-height: 72px; }
@@ -1108,37 +1108,37 @@
 
       <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 shadow-sm">
         <div class="grid grid-cols-4 overflow-hidden bg-gradient-to-r from-[#36b86c] via-[#20a95e] to-[#087d4d] text-white">
-          <button id="home-profile-avatar-button" type="button" data-home-top-action="profile" onclick="window.handleHomeAvatarClick?.()" aria-label="開啟會員專區" class="home-top-shortcut min-h-[108px] flex-col gap-0 border-r border-white/25 px-2 py-2 text-center">
-            <span class="relative mx-auto block h-[52px] w-[52px] overflow-hidden rounded-full border-[3px] border-white bg-white shadow-md">
+          <button id="home-profile-avatar-button" type="button" data-home-top-action="profile" onclick="window.handleHomeAvatarClick?.()" aria-label="開啟會員專區" class="home-top-shortcut flex-col gap-1 border-r border-white/25 px-2 text-center">
+            <span class="relative mx-auto block h-[46px] w-[46px] overflow-hidden rounded-full border-2 border-white bg-white shadow-md">
               <img id="home-profile-avatar" src="https://upload.wikimedia.org/wikipedia/commons/4/41/LINE_logo.svg" class="h-full w-full object-cover" alt="Profile">
               <span id="home-profile-avatar-edit-badge" class="hidden absolute bottom-0 right-0 h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-pink-500 text-white shadow-sm">
                 <span class="material-symbols-outlined text-[13px] icon-filled">person</span>
               </span>
             </span>
-            <h2 id="home-profile-name" class="mx-auto mt-1 max-w-full truncate px-1 text-[15px] font-black leading-tight text-white">會員</h2>
-            <span class="mt-0.5 block text-[11px] font-bold text-white/85">會員專區</span>
+            <h2 id="home-profile-name" class="mx-auto max-w-full truncate px-1 text-[13px] font-black leading-tight text-white">會員</h2>
+            <span class="block text-[10px] font-bold leading-tight text-white/85">會員專區</span>
           </button>
 
-          <button type="button" data-home-top-action="points" onclick="window.openPointsWallet()" class="home-top-shortcut min-h-[108px] flex-col gap-1 px-2">
+          <button type="button" data-home-top-action="points" onclick="window.openPointsWallet()" class="home-top-shortcut flex-col gap-2 px-2">
             <span class="material-symbols-outlined">account_balance_wallet</span>
             <span class="text-center">
               <span class="home-top-shortcut-label">購物金</span>
-              <span id="home-profile-points" class="home-top-shortcut-value text-[20px]">讀取中</span>
+              <span id="home-profile-points" class="home-top-shortcut-value text-[16px]">讀取中</span>
             </span>
           </button>
 
-          <button type="button" data-home-top-action="checkin" onclick="window.claimDailyPointCheckin(this)" class="home-top-shortcut min-h-[108px] flex-col gap-1 px-2">
+          <button type="button" data-home-top-action="checkin" onclick="window.claimDailyPointCheckin(this)" class="home-top-shortcut flex-col gap-2 px-2">
             <span class="material-symbols-outlined">redeem</span>
             <span class="text-center">
               <span class="home-top-shortcut-label home-quick-label">簽到贈點</span>
-              <span class="home-top-shortcut-value text-[12px]">每日 10 點</span>
+              <span class="home-top-shortcut-value text-[11px]">每日 10 點</span>
             </span>
           </button>
-          <button type="button" data-home-top-action="invite" onclick="window.showInviteLink?.()" class="home-top-shortcut min-h-[108px] flex-col gap-1 px-2">
+          <button type="button" data-home-top-action="invite" onclick="window.showInviteLink?.()" class="home-top-shortcut flex-col gap-2 px-2">
             <span class="material-symbols-outlined">qr_code_2</span>
             <span class="text-center">
               <span class="home-top-shortcut-label">專屬 QR</span>
-              <span class="home-top-shortcut-value text-[20px]">分享</span>
+              <span class="home-top-shortcut-value text-[16px]">分享</span>
             </span>
           </button>
         </div>
