@@ -1308,10 +1308,6 @@
       <section id="home-feature-section" class="home-lower-panel mx-0 mt-4 bg-white px-6 py-7 shadow-sm border-y border-slate-100">
         <h3 class="home-section-kicker">&#31934;&#36984;&#21151;&#33021;</h3>
         <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
-          <button type="button" onclick="window.goPage('customers')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-pink-500">groups</span>
-            <span class="home-quick-label !text-[13px]">&#25105;&#30340;&#23458;&#25142;</span>
-          </button>
           <button type="button" onclick="window.goPage('admin-stats')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-red-500">monitoring</span>
             <span class="home-quick-label !text-[13px]">&#25976;&#25818;&#20998;&#26512;</span>
@@ -1354,6 +1350,10 @@
 
     <!-- ==================== 我的客戶 ==================== -->
     <div id="page-customers" class="hidden animate-in fade-in pb-10 mx-1 pt-2">
+      <nav class="card-customer-switch mb-4 grid grid-cols-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-1" aria-label="名片與客戶切換">
+        <button type="button" onclick="window.goPage('card')" class="rounded-xl px-4 py-3 text-[14px] font-black text-slate-500 active:scale-[0.98]">名片收藏</button>
+        <button type="button" aria-current="page" class="rounded-xl bg-white px-4 py-3 text-[14px] font-black text-emerald-700 shadow-sm active:scale-[0.98]">我的客戶</button>
+      </nav>
       <div class="flex items-center justify-between gap-3 mb-4">
         <div class="flex items-center gap-3">
           <button type="button" onclick="window.goPage('home')" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm"><span class="material-symbols-outlined">arrow_back</span></button>
@@ -1461,6 +1461,10 @@
 
     <!-- ==================== 名片列表頁 ==================== -->
     <div id="page-card" class="hidden space-y-0 animate-in fade-in">
+      <nav class="card-customer-switch mx-1 mb-4 grid grid-cols-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-1" aria-label="名片與客戶切換">
+        <button type="button" aria-current="page" class="rounded-xl bg-white px-4 py-3 text-[14px] font-black text-emerald-700 shadow-sm active:scale-[0.98]">名片收藏</button>
+        <button type="button" onclick="window.goPage('customers')" class="rounded-xl px-4 py-3 text-[14px] font-black text-slate-500 active:scale-[0.98]">我的客戶</button>
+      </nav>
       <div class="bg-white p-5 border-y border-slate-100">
         <h3 class="font-black text-lg mb-3 text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">document_scanner</span> 掃描建立名片</h3>
 
