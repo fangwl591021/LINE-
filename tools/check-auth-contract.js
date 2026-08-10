@@ -5,6 +5,7 @@ const { assertCacheBust } = require('./check-cache-bust-contract');
 const root = path.resolve(__dirname, '..');
 const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
 const auth = fs.readFileSync(path.join(root, 'js', 'auth.js'), 'utf8');
+const config = fs.readFileSync(path.join(root, 'js', 'config.js'), 'utf8');
 const core = fs.readFileSync(path.join(root, 'js', 'core.js'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
@@ -61,8 +62,26 @@ const checks = [
       !/LINE 授權已失效，正在重新登入\.\.\.', true/.test(core)
   },
   {
+    name: 'LIFF init automatically handles external browser login',
+    pass: /initActmasterLiff\(LIFF_ID, \{ withLoginOnExternalBrowser: true \}\)/.test(auth)
+  },
+  {
+    name: 'invalid LIFF authorization code safely recovers once with clean URL',
+    pass: /recoverActmasterInvalidLiffAuthorization/.test(config) &&
+      /invalid authorization code/.test(config) &&
+      /ACTMASTER_LIFF_INVALID_CODE_RECOVERY_V1/.test(config) &&
+      /location\.replace\(window\.buildActmasterCleanLiffUrl\(\)\)/.test(config) &&
+      /recoverActmasterInvalidLiffAuthorization\?\.\(err\)/.test(auth)
+  },
+  {
+    name: 'LIFF recovery removes OAuth parameters but preserves application parameters',
+    pass: /'code', 'state', 'liff\.state', 'liffClientId', 'liffRedirectUri'/.test(config) &&
+      /hasOAuthParams/.test(config) &&
+      !/new URL\(window\.location\.origin \+ window\.location\.pathname\)/.test(config)
+  },
+  {
     name: 'auth and core cache bust versions were bumped',
-    pass: (() => { try { assertCacheBust('js/core.js'); assertCacheBust('js/auth.js'); return true; } catch (e) { return false; } })()
+    pass: (() => { try { assertCacheBust('js/config.js'); assertCacheBust('js/core.js'); assertCacheBust('js/auth.js'); return true; } catch (e) { return false; } })()
   }
 ];
 
