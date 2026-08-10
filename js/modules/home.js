@@ -520,7 +520,7 @@ const HomeModule = (function() {
             case 'checkin':
                 return window.claimDailyPointCheckin?.(null);
             case 'shop':
-                return window.goPage?.('platform-shop');
+                return window.openPartnerStores?.();
             case 'matchmake':
                 return window.goPage?.('matchmake');
             case 'activities':
