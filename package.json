@@ -10,7 +10,8 @@
     "smoke:list": "node tools/run-smoke-contracts.js --list --full",
     "test:customer-import": "node test/customer-import.test.mjs",
     "test:admin-customer-import-monitor": "node tools/check-admin-customer-import-monitor-contract.js",
-    "test:customer-tags": "node test/customer-tag-analysis.test.mjs",\n    "test:card-fate-tags": "node test/card-fate-tag-analysis.test.mjs && node tools/check-card-fate-tag-pipeline-contract.js",
+    "test:customer-tags": "node test/customer-tag-analysis.test.mjs",
+    "test:card-fate-tags": "node test/card-fate-tag-analysis.test.mjs && node tools/check-card-fate-tag-pipeline-contract.js",
     "test:home-agenda-counters": "node test/home-task-buckets.test.mjs",
     "test:personal-agenda-time": "node test/personal-agenda-time.test.mjs"
   }
