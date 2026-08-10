@@ -744,8 +744,14 @@
     const card = window.currentCard;
     if (!grid || !card) return;
 
+    const analysisStatus = safeText(card.fateAnalysisStatus || card.fate_analysis_status).trim().toLowerCase();
+    const pendingText = analysisStatus === "failed"
+      ? "AI 分析暫時失敗，系統將於離峰時段自動重試。"
+      : analysisStatus === "insufficient"
+        ? "資料不足，請補充姓名、電話、生日、公司或職稱。"
+        : "已排入 AI 分析，將於離峰時段自動完成。";
     const tagPanels = CARD_FATE_TAG_FIELDS.map((field) => {
-      const value = safeText(card[field.key] || card[field.label]).trim() || "尚未設定";
+      const value = safeText(card[field.key] || card[field.label]).trim() || pendingText;
       return `<details class="rounded-2xl border ${field.tone}">
         <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-black">
           <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[19px]">${field.icon}</span>${field.label}</span>
