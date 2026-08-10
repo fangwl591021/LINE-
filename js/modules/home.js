@@ -672,7 +672,7 @@ const HomeModule = (function() {
             const inviteUrl = window.buildHomeInviteUrl ? window.buildHomeInviteUrl() : '';
             if (!inviteUrl) throw new Error('找不到邀約連結');
             const displayName = window.currentUser?.name || window.currentUserProfile?.displayName || 'LINE 好友';
-            const text = displayName + ' 邀請你加入點數通\n' + inviteUrl;
+            const text = displayName + ' 邀請你加入 AI商脈系統\n' + inviteUrl;
             if (typeof liff !== 'undefined' && liff && liff.isLoggedIn && liff.isLoggedIn() && liff.isApiAvailable && liff.isApiAvailable('shareTargetPicker')) {
                 await liff.shareTargetPicker([{ type: 'text', text }]);
                 window.showToast?.('邀約連結已送出');
@@ -2452,7 +2452,7 @@ const HomeModule = (function() {
             if (typeof liff !== 'undefined' && typeof liff.openWindow === 'function') {
                 liff.openWindow({ url: oaUrl, external: true });
             }
-            window.showToast('已開啟點數通官方帳號，加入後可回來查看活動紀錄');
+            window.showToast('已開啟 AI商脈系統官方帳號，加入後可回來查看活動紀錄');
         } catch (e) {
             console.warn('[activity] point friendship check skipped:', e);
         }
