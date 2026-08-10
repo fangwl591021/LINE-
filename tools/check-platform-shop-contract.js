@@ -126,9 +126,13 @@ includesAll(indexHtml, [
 includesAll(fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8'), [
   'window.openPartnerStores = function()',
   'https://aiwe.cc/index.php/search_linecard/?big_region=%E5%8C%97%E9%83%A8%E5%9C%B0%E5%8D%80&shop_id=78&submitted=1',
+  'liff.openWindow({ url, external: false });',
+  'window.location.assign(url);',
   "case 'shop':",
   'return window.openPartnerStores?.();'
 ], 'home shop actions use the approved AIWE shop URL');
+
+ok(!fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8').includes("window.open(url, '_blank', 'noopener');"), 'home shop fallback does not open a new browser tab');
 
 includesAll(navigationJs, [
   "page === 'platform-shop'",
