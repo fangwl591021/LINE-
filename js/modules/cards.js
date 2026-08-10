@@ -39,6 +39,18 @@
     return String(value);
   }
 
+  function getCardRowId(card) {
+    return safeText(card && (card.rowId || card["rowId"] || card.row_id || card.id)).trim();
+  }
+
+  function replaceCardInCache(cacheName, card) {
+    const rowId = getCardRowId(card);
+    const cache = window[cacheName];
+    if (!rowId || !Array.isArray(cache)) return;
+    const index = cache.findIndex(item => getCardRowId(item) === rowId);
+    if (index >= 0) cache[index] = card;
+  }
+
   function escapeHTML(value) {
     if (typeof window.escapeHTML === "function") return window.escapeHTML(value);
     return safeText(value)
@@ -455,14 +467,35 @@
     });
     window.filterCards();
   };
-  window.openCardDetailByRowId = function (rowId) {
+  window.openCardDetailByRowId = async function (rowId) {
+    const requestedRowId = safeText(rowId).trim();
+    if (!requestedRowId) {
+      showToast("找不到這張名片", true);
+      return;
+    }
     const sourceCards = [
       ...getHarvestCards(Array.isArray(window.harvestCards) ? window.harvestCards : []),
       ...getVisibleCards(Array.isArray(window.allCards) ? window.allCards : [])
     ];
-    const card = sourceCards.find(c => String(c.rowId || c["rowId"]) === String(rowId));
+    let card = sourceCards.find(c => getCardRowId(c) === requestedRowId);
 
-    if (card) {
+    // Resolve the clicked row before opening its detail page. A stale list object must
+    // never leak the previous card's five-tag values into the selected card.
+    if (typeof window.fetchAPI === "function") {
+      try {
+        const result = await window.fetchAPI("getPublicCardById", { rowId: requestedRowId }, true);
+        const freshCard = result && (result.card || result.data || result);
+        if (freshCard && getCardRowId(freshCard) === requestedRowId) {
+          card = freshCard;
+          replaceCardInCache("harvestCards", freshCard);
+          replaceCardInCache("allCards", freshCard);
+        }
+      } catch (error) {
+        console.warn("[openCardDetailByRowId] exact card lookup failed:", error);
+      }
+    }
+
+    if (card && getCardRowId(card) === requestedRowId) {
       window.openCardDetail(card);
     } else {
       showToast("找不到這張名片", true);
@@ -507,6 +540,7 @@
     if (!card) return;
 
     window.currentCard = card;
+    window.currentCardRowId = getCardRowId(card);
     window.cardDetailReturnPage = window.currentPage || "card";
 
     const canEdit = canEditCard(card);
@@ -741,8 +775,13 @@
 
   window.renderCardFateTags = function () {
     const grid = $("card-fate-tags-grid");
+    const selectedRowId = safeText(window.currentCardRowId).trim();
     const card = window.currentCard;
     if (!grid || !card) return;
+    if (!selectedRowId || getCardRowId(card) !== selectedRowId) {
+      grid.innerHTML = '<div class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">名片資料切換中，請重新開啟此名片。</div>';
+      return;
+    }
 
     const analysisStatus = safeText(card.fateAnalysisStatus || card.fate_analysis_status).trim().toLowerCase();
     const pendingText = analysisStatus === "failed"
