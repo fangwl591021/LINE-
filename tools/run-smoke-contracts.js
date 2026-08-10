@@ -89,8 +89,7 @@ let failed = false;
 
 for (const relativePath of checks) {
   const scriptPath = path.resolve(root, relativePath);
-  console.log(`
-== ${relativePath} ==`);
+  console.log(`\n== ${relativePath} ==`);
   const result = spawnSync(node, [scriptPath], {
     cwd: root,
     stdio: 'inherit',
@@ -103,10 +102,8 @@ for (const relativePath of checks) {
 }
 
 if (failed) {
-  console.error('
-Smoke contracts failed. Do not deploy this build.');
+  console.error('\nSmoke contracts failed. Do not deploy this build.');
   process.exit(1);
 }
 
-console.log('
-Smoke contracts passed.');
+console.log('\nSmoke contracts passed.');
