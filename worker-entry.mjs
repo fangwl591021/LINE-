@@ -61,19 +61,19 @@ async function handleTagAction(request, env, action, payload) {
 
 export default {
   async fetch(request, env, ctx) {
+    let postBody = null;
     if (request.method === 'POST') {
       const copy = request.clone();
-      const body = await copy.json().catch(() => null);
-      const action = text(body?.action);
-      if (TAG_ACTIONS.has(action)) return await handleTagAction(request, env, action, body?.payload || {});
+      postBody = await copy.json().catch(() => null);
+      const action = text(postBody?.action);
+      if (TAG_ACTIONS.has(action)) return await handleTagAction(request, env, action, postBody?.payload || {});
     }
     const response = await legacyWorker.fetch(request, env, ctx);
     if (request.method === 'POST') {
-      const body = await request.clone().json().catch(() => null);
-      const action = text(body?.action);
+      const action = text(postBody?.action);
       if ((action === 'saveCard' || action === 'updateCard') && response.ok) {
         const result = await response.clone().json().catch(() => null);
-        const rowId = text(result?.data?.rowId || result?.rowId || body?.payload?.rowId || body?.payload?.row_id);
+        const rowId = text(result?.data?.rowId || result?.rowId || postBody?.payload?.rowId || postBody?.payload?.row_id);
         if (rowId) {
           const enqueue = CardFateTagAnalysisModule.enqueueCard(rowId, env).catch(error => {
             console.error('card fate tag enqueue failed', text(error?.message) || 'UNKNOWN');

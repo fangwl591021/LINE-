@@ -16,6 +16,8 @@ assert(migration.includes("fate_analysis_status = 'queued'"));
 assert(entry.includes("action === 'saveCard' || action === 'updateCard'"));
 assert(entry.includes('CardFateTagAnalysisModule.enqueueCard'));
 assert(entry.includes('CardFateTagAnalysisModule.processOffPeak'));
+assert(entry.includes('let postBody = null'));
+assert.equal((entry.match(/request\.clone\(\)/g) || []).length, 1);
 assert(moduleSource.includes('max_jobs_per_run'));
 assert(moduleSource.includes('max_jobs_per_day'));
 assert(moduleSource.includes('max_attempts'));
