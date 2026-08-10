@@ -32,5 +32,15 @@ expect(
   html.includes('.home-top-shortcut > * { pointer-events: none; }'),
   'shortcut children must delegate hit testing to the parent button'
 );
+expect(
+  html.includes('height: 108px; padding-top: 10px; padding-bottom: 10px;'),
+  'shortcuts must use a fixed vertically centered Android-safe hit area'
+);
+expect(
+  html.includes('font-size: 30px; line-height: 1;') &&
+    html.includes('h-[46px] w-[46px]') &&
+    html.includes('text-[13px] font-black leading-tight'),
+  'shortcut icons, avatar and labels must keep the compact layout'
+);
 
 console.log('Home top shortcut click contract passed.');
