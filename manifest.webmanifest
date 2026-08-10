@@ -1,12 +1,12 @@
 {
-  "name": "LINE 商業名片智能系統",
-  "short_name": "商機引擎",
+  "name": "AI商脈系統",
+  "short_name": "AI商脈",
   "start_url": "./?source=pwa",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#06C755",
-  "description": "名片、活動、收件匣與業務互動工具",
+  "description": "整合名片、人脈、推薦、活動與業務互動的 AI商脈系統",
   "icons": [
     {
       "src": "assets/entry-banner.png",
