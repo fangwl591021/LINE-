@@ -753,12 +753,12 @@ const HomeModule = (function() {
         const headerName = document.getElementById('header-site-name');
         if (headerName && d.siteName !== undefined) {
             const siteName = String(d.siteName || '').trim();
-            headerName.innerText = (!siteName || siteName === 'LINE商機引擎') ? 'AI工坊' : siteName;
+            headerName.innerText = (!siteName || siteName === 'LINE商機引擎' || siteName === 'AI商脈系統') ? 'AI工坊' : siteName;
         }
         const homeHeaderName = document.getElementById('home-header-site-name');
         if (homeHeaderName && d.siteName !== undefined) {
             const siteName = String(d.siteName || '').trim();
-            homeHeaderName.innerText = (!siteName || siteName === 'LINE商機引擎') ? 'AI工坊' : siteName;
+            homeHeaderName.innerText = (!siteName || siteName === 'LINE商機引擎' || siteName === 'AI商脈系統') ? 'AI工坊' : siteName;
         }
 
         const bannerImg = document.getElementById('home-main-banner');
