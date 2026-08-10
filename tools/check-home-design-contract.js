@@ -49,7 +49,7 @@ if (!index.includes('home-action-card')) {
 if (!index.includes('overflow-y-auto overflow-x-hidden')) {
   fail('main app surface should prevent horizontal overflow on mobile');
 }
-if (!index.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 bg-white shadow-sm"')) {
+if (!index.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 shadow-sm"')) {
   fail('profile panel should keep the v2 layout without an outer frame');
 }
 if (!index.includes('home-profile-hero')) {
@@ -57,7 +57,7 @@ if (!index.includes('home-profile-hero')) {
 }
 if (!index.includes('id="top-nav"') ||
     !index.includes('body.home-page #top-nav { display: none !important; }') ||
-    !index.includes('body.home-page #main { padding-top: 0; }')) {
+    !(index.includes('body.home-page #main { padding-top: 0; }') || index.includes('body.home-page #main { padding: 0 '))) {
   fail('home page should move the white nav title into the green hero');
 }
 if (!index.includes('id="bottom-nav"') || index.includes('body.home-page nav { display: none !important; }')) {
