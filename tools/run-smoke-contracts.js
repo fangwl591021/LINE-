@@ -16,6 +16,7 @@ const foundationChecks = [
   'tools/check-referral-keyword-v2-contract.js',
   'tools/check-referral-attribution-contract.js',
   'tools/check-home-top-shortcut-click-contract.js',
+  'tools/check-home-service-menu-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js'
 ];
@@ -32,6 +33,7 @@ const fullChecks = [
   'tools/check-referral-keyword-v2-contract.js',
   'tools/check-referral-attribution-contract.js',
   'tools/check-home-top-shortcut-click-contract.js',
+  'tools/check-home-service-menu-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js',
   'tools/check-auth-contract.js',
