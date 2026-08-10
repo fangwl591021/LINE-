@@ -120,8 +120,9 @@ includesAll(indexHtml, [
 
 includesAll(indexHtml, [
   'onclick="window.openPartnerStores?.()"',
-  'aria-label="開啟線上商城"'
-], 'home online-shop shortcut opens the configured external shop');
+  'aria-label="開啟折抵店家"',
+  '<span class="home-quick-label">折抵店家</span>'
+], 'home redeem-store shortcut opens the configured external shop');
 
 includesAll(fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8'), [
   'window.openPartnerStores = function()',
