@@ -465,6 +465,9 @@ function normalizeSavedCard(saveRes, cardPayload) {
     merged["rowId"] = rowId;
   }
   if (!merged.updated_at && !merged.created_at && !merged.updatedAt) merged.updatedAt = new Date().toISOString();
+  const hasAllFateTags = ["personality", "hobbies", "wealth", "health", "career"]
+    .every(key => String(merged[key] || "").trim());
+  if (!hasAllFateTags && !merged.fateAnalysisStatus) merged.fateAnalysisStatus = "queued";
   return merged;
 }
 

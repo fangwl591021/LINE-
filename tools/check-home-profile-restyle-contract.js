@@ -19,8 +19,8 @@ if (!html.includes('id="home-header-site-name"') ||
   fail('home title and switch must live on the green hero in white');
 }
 
-if (!html.includes('grid grid-cols-2 bg-[#2fb36a] text-white')) {
-  fail('profile card must keep points and QR in the two green shortcut columns');
+if (!html.includes('grid grid-cols-4 overflow-hidden bg-gradient-to-r')) {
+  fail('profile card must keep the four green shortcut columns');
 }
 
 if (html.includes('<span class="ml-0.5 text-[11px] font-black text-slate-600">點</span>')) {
@@ -35,7 +35,7 @@ if (!html.includes('id="home-profile-card"')) {
   fail('missing active home profile card');
 }
 
-if (!html.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 bg-white shadow-sm"')) {
+if (!html.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 shadow-sm"')) {
   fail('active home profile card should not render an outer frame');
 }
 
