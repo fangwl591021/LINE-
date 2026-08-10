@@ -114,10 +114,21 @@ includesAll(checklist, [
 
 includesAll(indexHtml, [
   'id="page-platform-shop"',
-  "window.goPage('platform-shop')",
   '線上商城',
   'js/modules/platform-shop.js?v='
 ], 'front-end exposes an isolated platform-shop route');
+
+includesAll(indexHtml, [
+  'onclick="window.openPartnerStores?.()"',
+  'aria-label="開啟線上商城"'
+], 'home online-shop shortcut opens the configured external shop');
+
+includesAll(fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8'), [
+  'window.openPartnerStores = function()',
+  'https://aiwe.cc/index.php/search_linecard/?big_region=%E5%8C%97%E9%83%A8%E5%9C%B0%E5%8D%80&shop_id=78&submitted=1',
+  "case 'shop':",
+  'return window.openPartnerStores?.();'
+], 'home shop actions use the approved AIWE shop URL');
 
 includesAll(navigationJs, [
   "page === 'platform-shop'",
