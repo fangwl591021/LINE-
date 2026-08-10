@@ -2545,7 +2545,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     if (typeof window.initActmasterLiff === 'function') {
-      await window.initActmasterLiff(LIFF_ID);
+      await window.initActmasterLiff(LIFF_ID, { withLoginOnExternalBrowser: true });
     } else {
       await liff.init({ liffId: LIFF_ID });
     }
@@ -2887,6 +2887,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
   } catch (err) {
+    if (window.recoverActmasterInvalidLiffAuthorization?.(err)) return;
     document.getElementById('loading-text').innerText = "系統連線失敗";
     console.error(err);
   }
