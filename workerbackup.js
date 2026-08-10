@@ -8997,6 +8997,8 @@ const D1ReadModule = {
       tags: this.text(row.tags),
       createdAt: this.text(row.created_at),
       updatedAt: this.text(row.updated_at),
+      fateAnalysisStatus: this.text(row.fate_analysis_status, 'not_requested'),
+      fateAnalyzedAt: this.text(row.fate_analyzed_at),
       'LINE ID': this.text(row.line_id),
       ['\u500b\u6027']: this.text(row.personality),
       ['\u8208\u8da3']: this.text(row.hobbies),
