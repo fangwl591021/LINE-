@@ -357,8 +357,10 @@ const Core = (function() {
 
     // === 5. LIFF 分享 ===
     window.triggerFlexSharing = async function(flexMsg, altText) {
+        window.__lastFlexShareFailureReason = '';
         try {
             if (typeof liff === 'undefined' || !liff) {
+                window.__lastFlexShareFailureReason = 'not_liff';
                 window.showToast('目前不在 LINE LIFF 環境，改用連結分享', true);
                 return false;
             }
@@ -370,6 +372,7 @@ const Core = (function() {
                 }
             }
             if (!liff.isLoggedIn()) {
+                window.__lastFlexShareFailureReason = 'not_logged_in';
                 if (typeof window.ensureActmasterLiffLogin === 'function') {
                     window.ensureActmasterLiffLogin({ redirectUri: window.location.href });
                 } else {
@@ -384,6 +387,7 @@ const Core = (function() {
                     contents: flexMsg
                 }]);
                 if (!result.ok) {
+                    window.__lastFlexShareFailureReason = result.reason || 'share_failed';
                     const reasonText = result.reason === 'share_unavailable'
                         ? '您的環境不支援分享功能'
                         : (result.reason === 'cancelled_or_not_opened' ? '尚未完成分享，請重新點選分享並選擇好友' : '請先登入 LINE LIFF');
@@ -394,6 +398,7 @@ const Core = (function() {
                 return true;
             }
             if (!liff.isApiAvailable('shareTargetPicker')) {
+                window.__lastFlexShareFailureReason = 'share_unavailable';
                 window.showToast('您的環境不支援分享功能', true);
                 return false;
             }
@@ -403,13 +408,15 @@ const Core = (function() {
                 contents: flexMsg
             };
             const result = await liff.shareTargetPicker([message]);
-            if (!result) {
+            if (result === false) {
+                window.__lastFlexShareFailureReason = 'cancelled_or_not_opened';
                 window.showToast('尚未完成分享，請重新點選分享並選擇好友', true);
                 return false;
             }
             window.showToast('✅ 已成功發送！');
             return true;
         } catch (err) {
+            window.__lastFlexShareFailureReason = (err && err.code) || 'share_error';
             window.showToast('發送失敗：' + (err.message || '未知錯誤'), true);
             return false;
         }

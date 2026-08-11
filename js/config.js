@@ -188,7 +188,9 @@ window.actmasterShareTargetPicker = async function(messages) {
   if (!window.liff || typeof window.liff.isLoggedIn !== 'function' || !window.liff.isLoggedIn()) return { ok: false, reason: 'not_logged_in' };
   if (typeof window.liff.isApiAvailable !== 'function' || !window.liff.isApiAvailable('shareTargetPicker')) return { ok: false, reason: 'share_unavailable' };
   const result = await window.liff.shareTargetPicker(messages);
-  if (!result) return { ok: false, reason: 'cancelled_or_not_opened' };
+  // LINE may resolve the Promise without a value after a successful share.
+  // Only an explicit false is treated as cancellation.
+  if (result === false) return { ok: false, reason: 'cancelled_or_not_opened' };
   return { ok: true, result };
 };
 

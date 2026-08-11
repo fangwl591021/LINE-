@@ -1025,7 +1025,17 @@ window.shareECardToLine = async function(btnId) {
       };
       console.log('[shareECardToLine] shareTargetPicker messages:', window.__lastECardShareMessages);
       const shared = await window.triggerFlexSharing(flexMsg, "您收到一張數位名片");
-      if (shared === false) return;
+      if (shared !== true) {
+        const reason = String(window.__lastFlexShareFailureReason || '');
+        const canRelaunchInLiff = fallbackUrl && ['not_liff', 'not_logged_in', 'share_unavailable'].includes(reason);
+        if (canRelaunchInLiff) {
+          const pickerUrl = appendECardShareMode(fallbackUrl);
+          window.showToast('正在開啟 LINE 通訊錄...');
+          if (window.location && typeof window.location.assign === 'function') window.location.assign(pickerUrl);
+          else window.location.href = pickerUrl;
+        }
+        return;
+      }
     } else if (fallbackUrl) {
       window.showToast('無法產生 LINE 名片訊息，請稍後再試', true);
     }
