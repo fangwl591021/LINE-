@@ -364,7 +364,7 @@ const Core = (function() {
                 window.showToast('目前不在 LINE LIFF 環境，改用連結分享', true);
                 return false;
             }
-            if (typeof window.initActmasterLiff === 'function') {
+            if (typeof window.initActmasterLiff === 'function' && !window.__actmasterLiffInit?.ready) {
                 try {
                     await window.initActmasterLiff(window.LIFF_ID || window.Config?.LIFF_ID, { withLoginOnExternalBrowser: true });
                 } catch (initErr) {
