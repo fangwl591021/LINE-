@@ -59,7 +59,7 @@ Migration：`migrations/0019_point_redemption_partner_directory.sql`
 ## Phase 1.5：總管管理後台
 
 - `listAdminPointRedemptionPartners`、`savePointRedemptionPartner`、`archivePointRedemptionPartner` 均為 admin-only action。
-- 總管可在「設定與參數 → 合作店家管理」建立或修改店家、主要據點與折抵政策。
+- 總管可在「AI商脈系統後台 → 系統管理 → 合作店家管理」建立或修改店家、主要據點與折抵政策。
 - 新店家預設為 `draft`，必須明確改成 `active` 才會出現在前台。
 - 停用採軟封存：店家改為 `archived`、據點改為 `hidden`，不直接刪除資料。
 - 圖片、LINE、網站及地圖欄位只允許 `http`／`https`，拒絕 `javascript:` 等危險協定。

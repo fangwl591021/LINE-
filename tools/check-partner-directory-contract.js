@@ -11,6 +11,8 @@ const navigation = read('js/navigation.js');
 const home = read('js/modules/home.js');
 const frontend = read('js/modules/partner-directory.js');
 const adminFrontend = read('js/modules/admin-partners.js');
+const adminDashboard = read('admin.html');
+const adminDashboardModule = read('js/modules/admin-partners-dashboard.js');
 const docs = read('docs/point-redemption/phase-1-partner-directory.md');
 
 function ok(condition, message) {
@@ -106,6 +108,28 @@ includesAll(adminFrontend, [
   "String(window.userRole || '').toLowerCase() !== 'admin'",
   '店家會從前台目錄隱藏，但資料仍保留'
 ], 'admin UI enforces role guard and soft archive messaging');
+
+includesAll(adminDashboard, [
+  "switchTab('partners')",
+  'id="nav-partners"',
+  '合作店家管理',
+  'id="tab-partners"',
+  'id="partner-admin-name"',
+  'id="partner-admin-redeem-enabled"',
+  'id="partner-admin-branch"',
+  "adminRole !== 'admin'",
+  "if (tabId === 'partners') loadPartnerAdmin();",
+  'js/modules/admin-partners-dashboard.js?v='
+], 'standalone admin dashboard exposes partner management only to admin');
+
+includesAll(adminDashboardModule, [
+  "fetchAPI('listAdminPointRedemptionPartners'",
+  "fetchAPI('savePointRedemptionPartner'",
+  "fetchAPI('archivePointRedemptionPartner'",
+  'clearPartnerAdminForm',
+  'editPartnerAdmin',
+  '歷史資料仍保留'
+], 'standalone admin dashboard wires list, save, edit and archive flows');
 
 includesAll(navigation, ["page === 'partner-directory'", 'window.loadPartnerDirectory'], 'navigation initializes partner directory');
 includesAll(navigation, ["page === 'admin-partners'", 'window.loadAdminPointRedemptionPartners'], 'navigation initializes admin partner management');

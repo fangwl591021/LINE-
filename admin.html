@@ -437,6 +437,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">badge</span>
             全站名片庫
           </a>
+          <a href="#" onclick="switchTab('partners')" id="nav-partners" class="nav-item hidden flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">storefront</span>
+            合作店家管理
+          </a>
         </div>
       </div>
 
@@ -748,6 +752,60 @@
             </table>
           </div>
           <div id="cards-pager" class="px-5 py-4 bg-white border-t border-slate-100 flex items-center justify-end gap-3 text-sm font-bold text-slate-600"></div>
+        </div>
+      </div>
+
+      <!-- Tab: Point Redemption Partners -->
+      <div id="tab-partners" class="tab-content hidden space-y-6">
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div><h2 class="text-2xl font-black text-slate-900">合作店家管理</h2><p class="mt-2 text-sm text-slate-500">建立折抵店家、主要服務據點與未來點數折抵政策；本階段不執行扣點。</p></div>
+          <div class="flex gap-3"><button onclick="clearPartnerAdminForm()" class="border border-slate-200 px-5 py-3 rounded-xl font-black text-slate-600">新增店家</button><button onclick="loadPartnerAdmin()" class="bg-blue-600 text-white px-5 py-3 rounded-xl font-black">重新整理</button></div>
+        </div>
+
+        <div class="grid grid-cols-1 2xl:grid-cols-[minmax(420px,560px)_1fr] gap-6 items-start">
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-5 bg-emerald-50 border-b border-emerald-100"><h3 id="partner-admin-form-title" class="text-xl font-black text-slate-900">新增合作店家</h3><p class="mt-1 text-xs font-bold text-emerald-700">新資料預設為草稿，改成啟用後才會顯示於前台。</p></div>
+            <div class="p-6 space-y-5">
+              <input id="partner-admin-handle" type="hidden"><input id="partner-admin-location-handle" type="hidden">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="md:col-span-2 text-sm font-bold text-slate-600">店家名稱 *<input id="partner-admin-name" maxlength="160" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3" placeholder="請輸入真實店家名稱"></label>
+                <label class="text-sm font-bold text-slate-600">類別<input id="partner-admin-category" maxlength="80" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3" placeholder="餐飲、美容、生活服務"></label>
+                <label class="text-sm font-bold text-slate-600">狀態<select id="partner-admin-status" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3"><option value="draft">草稿</option><option value="active">啟用</option><option value="hidden">隱藏</option><option value="suspended">暫停</option></select></label>
+                <label class="md:col-span-2 text-sm font-bold text-slate-600">簡介<input id="partner-admin-summary" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3" placeholder="前台店家卡片說明"></label>
+                <label class="md:col-span-2 text-sm font-bold text-slate-600">詳細介紹<textarea id="partner-admin-description" maxlength="2000" class="mt-1 w-full h-24 border border-slate-200 rounded-xl px-4 py-3"></textarea></label>
+                <label class="text-sm font-bold text-slate-600">店家電話<input id="partner-admin-phone" maxlength="80" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3"></label>
+                <label class="text-sm font-bold text-slate-600">排序<input id="partner-admin-sort" type="number" min="0" value="9999" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3"></label>
+                <label class="md:col-span-2 text-sm font-bold text-slate-600">Logo 網址<input id="partner-admin-logo" type="url" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs" placeholder="https://..."></label>
+                <label class="md:col-span-2 text-sm font-bold text-slate-600">封面圖片網址<input id="partner-admin-cover" type="url" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs" placeholder="https://..."></label>
+                <label class="md:col-span-2 text-sm font-bold text-slate-600">LINE 網址<input id="partner-admin-line" type="url" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs" placeholder="https://line.me/..."></label>
+                <label class="md:col-span-2 text-sm font-bold text-slate-600">官方網站<input id="partner-admin-website" type="url" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs" placeholder="https://..."></label>
+              </div>
+
+              <div class="rounded-xl bg-amber-50 border border-amber-100 p-4 space-y-4">
+                <label class="flex items-center justify-between gap-3 font-black text-amber-900"><span>顯示規劃開放點數折抵</span><input id="partner-admin-redeem-enabled" type="checkbox" class="w-5 h-5 accent-amber-600"></label>
+                <div class="grid grid-cols-2 gap-3"><label class="text-xs font-black text-amber-800">折抵比例上限 %<input id="partner-admin-max-percent" type="number" min="0" max="100" value="0" class="mt-1 w-full border border-amber-200 rounded-xl px-3 py-3"></label><label class="text-xs font-black text-amber-800">最低消費 NT$<input id="partner-admin-min-spend" type="number" min="0" value="0" class="mt-1 w-full border border-amber-200 rounded-xl px-3 py-3"></label></div>
+                <label class="text-xs font-black text-amber-800">政策說明<input id="partner-admin-policy-note" maxlength="500" class="mt-1 w-full border border-amber-200 rounded-xl px-3 py-3" placeholder="僅為政策預覽，尚未執行扣點"></label>
+              </div>
+
+              <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-4">
+                <h4 class="font-black text-slate-800">主要服務據點</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <label class="md:col-span-2 text-xs font-black text-slate-600">分店名稱<input id="partner-admin-branch" maxlength="160" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-3"></label>
+                  <label class="text-xs font-black text-slate-600">縣市<input id="partner-admin-city" maxlength="80" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-3" placeholder="桃園市"></label><label class="text-xs font-black text-slate-600">區域<input id="partner-admin-district" maxlength="80" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-3" placeholder="中壢區"></label>
+                  <label class="md:col-span-2 text-xs font-black text-slate-600">地址<input id="partner-admin-address" maxlength="300" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-3"></label>
+                  <label class="text-xs font-black text-slate-600">據點電話<input id="partner-admin-location-phone" maxlength="80" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-3"></label><label class="text-xs font-black text-slate-600">據點狀態<select id="partner-admin-location-status" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-3"><option value="active">啟用</option><option value="hidden">隱藏</option><option value="closed">歇業</option></select></label>
+                  <label class="md:col-span-2 text-xs font-black text-slate-600">營業時間<input id="partner-admin-hours" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-3"></label>
+                  <label class="md:col-span-2 text-xs font-black text-slate-600">Google Maps 網址<input id="partner-admin-maps" type="url" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-3 font-mono text-xs" placeholder="https://..."></label>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3"><button onclick="clearPartnerAdminForm()" class="border border-slate-200 rounded-xl py-3 font-black text-slate-600">清空</button><button id="partner-admin-save" onclick="savePartnerAdmin(this)" class="bg-emerald-600 text-white rounded-xl py-3 font-black">儲存店家</button></div>
+            </div>
+          </section>
+
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between"><div><h3 class="text-xl font-black text-slate-900">合作店家清單</h3><p class="mt-1 text-sm text-slate-500">停用採軟封存，不會刪除歷史資料。</p></div><span id="partner-admin-count" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">0 家</span></div>
+            <div id="partner-admin-list" class="divide-y divide-slate-100"><div class="p-10 text-center text-sm font-bold text-slate-400">尚未載入</div></div>
+          </section>
         </div>
       </div>
 
@@ -1822,6 +1880,7 @@
       if (tabId === 'bonus') initBonusSystem();
       if (tabId === 'lineoa-keywords') loadLineOAKeywordRules();
       if (tabId === 'checkin-content') loadSystemCheckinContents();
+      if (tabId === 'partners') loadPartnerAdmin();
     }
 
     function lineOAKeywordValue(id) {
@@ -5207,6 +5266,7 @@
         if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
           adminRole = check.info.role || 'store';
           adminNetworkId = check.info.networkId || check.info.storeId || 'admin';
+          document.getElementById('nav-partners')?.classList.toggle('hidden', adminRole !== 'admin');
           loadSavedAdminCrmFilters();
           applyAdminCrmFilterControls();
           document.getElementById('loading-screen').classList.add('fade-out');
@@ -5233,5 +5293,6 @@
 
     document.addEventListener("DOMContentLoaded", initAdmin);
   </script>
+  <script src="js/modules/admin-partners-dashboard.js?v=1.0"></script>
 </body>
 </html>
