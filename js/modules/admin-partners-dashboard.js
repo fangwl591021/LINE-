@@ -1,4 +1,5 @@
 let adminPartnerRows = [];
+let partnerAdminSourceCards = [];
 
 function partnerAdminValue(id) {
   return String(document.getElementById(id)?.value || '').trim();
@@ -18,10 +19,76 @@ function partnerAdminSet(id, value) {
   if (element) element.value = value ?? '';
 }
 
+function partnerAdminSetIfEmpty(id, value) {
+  if (!partnerAdminValue(id) && String(value ?? '').trim()) partnerAdminSet(id, value);
+}
+
+function partnerAdminCardValue(card, ...keys) {
+  for (const key of keys) {
+    const value = card?.[key];
+    if (String(value ?? '').trim()) return String(value).trim();
+  }
+  return '';
+}
+
+function partnerAdminCardLabel(card) {
+  const company = partnerAdminCardValue(card, 'companyName', '公司名稱');
+  const name = partnerAdminCardValue(card, 'name', '姓名');
+  const phone = partnerAdminCardValue(card, 'officePhone', '公司電話', 'mobile', '手機號碼');
+  return [company, name, phone].filter(Boolean).join('｜') || '未命名收藏名片';
+}
+
+async function loadPartnerAdminSourceCards() {
+  const select = document.getElementById('partner-admin-card-select');
+  if (!select) return;
+  select.innerHTML = '<option value="">載入收藏名片中...</option>';
+  try {
+    const response = await fetchAPI('getCardHarvestContacts', { limit: 200 });
+    const cards = Array.isArray(response) ? response
+      : (Array.isArray(response?.data) ? response.data
+        : (Array.isArray(response?.contacts) ? response.contacts : []));
+    partnerAdminSourceCards = cards.filter(card => partnerAdminCardValue(card, 'rowId', 'id'));
+    select.innerHTML = '<option value="">請選擇收藏名片</option>' + partnerAdminSourceCards.map(card => {
+      const rowId = partnerAdminCardValue(card, 'rowId', 'id');
+      return `<option value="${partnerAdminEscape(rowId)}">${partnerAdminEscape(partnerAdminCardLabel(card))}</option>`;
+    }).join('');
+    const status = document.getElementById('partner-admin-card-status');
+    if (status && !partnerAdminSourceCards.length) status.textContent = '目前沒有可用的收藏名片，請先到「收藏名片」掃描或上傳。';
+  } catch (error) {
+    partnerAdminSourceCards = [];
+    select.innerHTML = '<option value="">收藏名片載入失敗</option>';
+  }
+}
+
+function applyPartnerAdminSourceCard() {
+  const selectedRowId = partnerAdminValue('partner-admin-card-select');
+  const card = partnerAdminSourceCards.find(item => partnerAdminCardValue(item, 'rowId', 'id') === selectedRowId);
+  if (!card) return showToast('請先選擇一張收藏名片', true);
+  const company = partnerAdminCardValue(card, 'companyName', '公司名稱');
+  const name = partnerAdminCardValue(card, 'name', '姓名');
+  const officePhone = partnerAdminCardValue(card, 'officePhone', '公司電話');
+  const mobile = partnerAdminCardValue(card, 'mobile', '手機號碼');
+  const phone = officePhone || mobile;
+  partnerAdminSet('partner-admin-source-card', selectedRowId);
+  partnerAdminSetIfEmpty('partner-admin-name', company || (name === '未命名' ? '' : name));
+  partnerAdminSetIfEmpty('partner-admin-contact-name', name === '未命名' ? '' : name);
+  partnerAdminSetIfEmpty('partner-admin-contact-email', partnerAdminCardValue(card, 'email', 'Email'));
+  partnerAdminSetIfEmpty('partner-admin-tax-id', partnerAdminCardValue(card, 'taxId', '統一編號'));
+  partnerAdminSetIfEmpty('partner-admin-phone', phone);
+  partnerAdminSetIfEmpty('partner-admin-website', partnerAdminCardValue(card, 'website', '公司網站'));
+  partnerAdminSetIfEmpty('partner-admin-branch', company || (name === '未命名' ? '' : name));
+  partnerAdminSetIfEmpty('partner-admin-address', partnerAdminCardValue(card, 'address', '地址'));
+  partnerAdminSetIfEmpty('partner-admin-location-phone', phone);
+  const status = document.getElementById('partner-admin-card-status');
+  if (status) status.textContent = `已從「${partnerAdminCardLabel(card)}」帶入空白欄位，請確認後再儲存。`;
+  showToast('已帶入收藏名片資料');
+}
+
 function clearPartnerAdminForm() {
-  ['partner-admin-handle', 'partner-admin-location-handle', 'partner-admin-name', 'partner-admin-category',
+  ['partner-admin-handle', 'partner-admin-location-handle', 'partner-admin-source-card', 'partner-admin-name', 'partner-admin-category',
     'partner-admin-summary', 'partner-admin-description', 'partner-admin-phone', 'partner-admin-logo',
     'partner-admin-cover', 'partner-admin-line', 'partner-admin-website', 'partner-admin-policy-note',
+    'partner-admin-contact-name', 'partner-admin-contact-email', 'partner-admin-tax-id',
     'partner-admin-branch', 'partner-admin-city', 'partner-admin-district', 'partner-admin-address',
     'partner-admin-location-phone', 'partner-admin-hours', 'partner-admin-maps'].forEach(id => partnerAdminSet(id, ''));
   partnerAdminSet('partner-admin-status', 'draft');
@@ -33,6 +100,9 @@ function clearPartnerAdminForm() {
   if (enabled) enabled.checked = false;
   const title = document.getElementById('partner-admin-form-title');
   if (title) title.textContent = '新增合作店家';
+  partnerAdminSet('partner-admin-card-select', '');
+  const cardStatus = document.getElementById('partner-admin-card-status');
+  if (cardStatus) cardStatus.textContent = '';
 }
 
 function partnerAdminPayload() {
@@ -51,6 +121,12 @@ function partnerAdminPayload() {
       lineUrl: partnerAdminValue('partner-admin-line'),
       websiteUrl: partnerAdminValue('partner-admin-website')
     },
+    contact: {
+      name: partnerAdminValue('partner-admin-contact-name'),
+      email: partnerAdminValue('partner-admin-contact-email'),
+      taxId: partnerAdminValue('partner-admin-tax-id')
+    },
+    sourceCardRowId: partnerAdminValue('partner-admin-source-card'),
     redeemPolicy: {
       enabled: document.getElementById('partner-admin-redeem-enabled')?.checked === true,
       maxRedeemPercent: partnerAdminNumber('partner-admin-max-percent'),
@@ -93,6 +169,7 @@ function renderPartnerAdminRows() {
 async function loadPartnerAdmin() {
   const list = document.getElementById('partner-admin-list');
   if (list) list.innerHTML = '<div class="p-10 text-center text-sm font-bold text-slate-400">載入合作店家中...</div>';
+  loadPartnerAdminSourceCards();
   const response = await fetchAPI('listAdminPointRedemptionPartners', { limit: 50 });
   if (!response) return;
   adminPartnerRows = Array.isArray(response.partners) ? response.partners : [];
@@ -117,6 +194,9 @@ function editPartnerAdmin(partnerHandle) {
   partnerAdminSet('partner-admin-cover', partner.coverImageUrl);
   partnerAdminSet('partner-admin-line', partner.lineUrl);
   partnerAdminSet('partner-admin-website', partner.websiteUrl);
+  partnerAdminSet('partner-admin-contact-name', partner.contact?.name);
+  partnerAdminSet('partner-admin-contact-email', partner.contact?.email);
+  partnerAdminSet('partner-admin-tax-id', partner.contact?.taxId);
   partnerAdminSet('partner-admin-max-percent', policy.maxRedeemPercent || 0);
   partnerAdminSet('partner-admin-min-spend', policy.minSpendAmount || 0);
   partnerAdminSet('partner-admin-policy-note', policy.note);
@@ -132,6 +212,10 @@ function editPartnerAdmin(partnerHandle) {
   partnerAdminSet('partner-admin-location-status', location.status || 'active');
   const title = document.getElementById('partner-admin-form-title');
   if (title) title.textContent = `修改：${partner.name}`;
+  partnerAdminSet('partner-admin-source-card', '');
+  partnerAdminSet('partner-admin-card-select', '');
+  const cardStatus = document.getElementById('partner-admin-card-status');
+  if (cardStatus) cardStatus.textContent = partner.sourceCardLinked ? '此店家已保留收藏名片來源關聯；重新選擇才會更新來源。' : '';
   document.getElementById('tab-partners')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 

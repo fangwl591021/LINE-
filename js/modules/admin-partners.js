@@ -1,4 +1,5 @@
 (function() {
+  let partnerSourceCards = [];
   const text = (id) => String(document.getElementById(id)?.value || '').trim();
   const number = (id) => Number.parseInt(text(id), 10) || 0;
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -13,6 +14,61 @@
     const element = document.getElementById(id);
     if (element) element.value = value ?? '';
   }
+
+  function setIfEmpty(id, value) {
+    if (!text(id) && String(value ?? '').trim()) setValue(id, value);
+  }
+
+  function cardValue(card, ...keys) {
+    for (const key of keys) {
+      const value = card?.[key];
+      if (String(value ?? '').trim()) return String(value).trim();
+    }
+    return '';
+  }
+
+  function cardLabel(card) {
+    return [cardValue(card, 'companyName', '公司名稱'), cardValue(card, 'name', '姓名'), cardValue(card, 'officePhone', '公司電話', 'mobile', '手機號碼')].filter(Boolean).join('｜') || '未命名收藏名片';
+  }
+
+  async function loadSourceCards() {
+    const select = document.getElementById('admin-partner-card-select');
+    if (!select) return;
+    select.innerHTML = '<option value="">載入收藏名片中…</option>';
+    try {
+      const response = await window.fetchAPI('getCardHarvestContacts', { limit: 200 }, true);
+      const cards = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : (Array.isArray(response?.contacts) ? response.contacts : []));
+      partnerSourceCards = cards.filter((card) => cardValue(card, 'rowId', 'id'));
+      select.innerHTML = '<option value="">請選擇收藏名片</option>' + partnerSourceCards.map((card) => `<option value="${escapeHtml(cardValue(card, 'rowId', 'id'))}">${escapeHtml(cardLabel(card))}</option>`).join('');
+      const status = document.getElementById('admin-partner-card-status');
+      if (status && !partnerSourceCards.length) status.textContent = '目前沒有可用的收藏名片，請先到「收藏名片」掃描或上傳。';
+    } catch (error) {
+      partnerSourceCards = [];
+      select.innerHTML = '<option value="">收藏名片載入失敗</option>';
+    }
+  }
+
+  window.applyAdminPointRedemptionSourceCard = function() {
+    const selectedRowId = text('admin-partner-card-select');
+    const card = partnerSourceCards.find((item) => cardValue(item, 'rowId', 'id') === selectedRowId);
+    if (!card) return message('請先選擇一張收藏名片', true);
+    const company = cardValue(card, 'companyName', '公司名稱');
+    const name = cardValue(card, 'name', '姓名');
+    const phone = cardValue(card, 'officePhone', '公司電話') || cardValue(card, 'mobile', '手機號碼');
+    setValue('admin-partner-source-card', selectedRowId);
+    setIfEmpty('admin-partner-name', company || (name === '未命名' ? '' : name));
+    setIfEmpty('admin-partner-contact-name', name === '未命名' ? '' : name);
+    setIfEmpty('admin-partner-contact-email', cardValue(card, 'email', 'Email'));
+    setIfEmpty('admin-partner-tax-id', cardValue(card, 'taxId', '統一編號'));
+    setIfEmpty('admin-partner-phone', phone);
+    setIfEmpty('admin-partner-website-url', cardValue(card, 'website', '公司網站'));
+    setIfEmpty('admin-partner-branch-name', company || (name === '未命名' ? '' : name));
+    setIfEmpty('admin-partner-address', cardValue(card, 'address', '地址'));
+    setIfEmpty('admin-partner-location-phone', phone);
+    const status = document.getElementById('admin-partner-card-status');
+    if (status) status.textContent = `已從「${cardLabel(card)}」帶入空白欄位，請確認後再儲存。`;
+    message('已帶入收藏名片資料；店家仍為草稿。', false);
+  };
 
   function readPayload() {
     return {
@@ -30,6 +86,12 @@
         lineUrl: text('admin-partner-line-url'),
         websiteUrl: text('admin-partner-website-url')
       },
+      contact: {
+        name: text('admin-partner-contact-name'),
+        email: text('admin-partner-contact-email'),
+        taxId: text('admin-partner-tax-id')
+      },
+      sourceCardRowId: text('admin-partner-source-card'),
       redeemPolicy: {
         enabled: document.getElementById('admin-partner-redeem-enabled')?.checked === true,
         maxRedeemPercent: number('admin-partner-max-percent'),
@@ -60,9 +122,10 @@
   }
 
   window.clearAdminPointRedemptionPartnerForm = function() {
-    ['admin-partner-handle', 'admin-partner-location-handle', 'admin-partner-name', 'admin-partner-category',
+    ['admin-partner-handle', 'admin-partner-location-handle', 'admin-partner-source-card', 'admin-partner-name', 'admin-partner-category',
       'admin-partner-summary', 'admin-partner-description', 'admin-partner-phone', 'admin-partner-logo-url',
       'admin-partner-cover-url', 'admin-partner-line-url', 'admin-partner-website-url', 'admin-partner-policy-note',
+      'admin-partner-contact-name', 'admin-partner-contact-email', 'admin-partner-tax-id',
       'admin-partner-branch-name', 'admin-partner-city', 'admin-partner-district', 'admin-partner-address',
       'admin-partner-location-phone', 'admin-partner-hours', 'admin-partner-maps-url'].forEach((id) => setValue(id, ''));
     setValue('admin-partner-status', 'draft');
@@ -74,6 +137,9 @@
     if (enabled) enabled.checked = false;
     const title = document.getElementById('admin-partner-form-title');
     if (title) title.textContent = '新增合作店家';
+    setValue('admin-partner-card-select', '');
+    const cardStatus = document.getElementById('admin-partner-card-status');
+    if (cardStatus) cardStatus.textContent = '';
     message('', false);
   };
 
@@ -95,6 +161,9 @@
     setValue('admin-partner-cover-url', partner.coverImageUrl);
     setValue('admin-partner-line-url', partner.lineUrl);
     setValue('admin-partner-website-url', partner.websiteUrl);
+    setValue('admin-partner-contact-name', partner.contact?.name);
+    setValue('admin-partner-contact-email', partner.contact?.email);
+    setValue('admin-partner-tax-id', partner.contact?.taxId);
     setValue('admin-partner-max-percent', policy.maxRedeemPercent || 0);
     setValue('admin-partner-min-spend', policy.minSpendAmount || 0);
     setValue('admin-partner-policy-note', policy.note);
@@ -110,6 +179,10 @@
     setValue('admin-partner-location-status', location.status || 'active');
     const title = document.getElementById('admin-partner-form-title');
     if (title) title.textContent = `修改：${partner.name}`;
+    setValue('admin-partner-source-card', '');
+    setValue('admin-partner-card-select', '');
+    const cardStatus = document.getElementById('admin-partner-card-status');
+    if (cardStatus) cardStatus.textContent = partner.sourceCardLinked ? '此店家已保留收藏名片來源關聯；重新選擇才會更新來源。' : '';
     document.getElementById('page-admin-partners')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -151,6 +224,7 @@
       list.innerHTML = '<div class="rounded-3xl border border-rose-100 bg-rose-50 p-6 text-center text-[13px] font-black text-rose-600">此功能僅限總管使用。</div>';
       return;
     }
+    await loadSourceCards();
     list.innerHTML = '<div class="py-8 text-center text-[13px] font-bold text-slate-400">載入合作店家中…</div>';
     try {
       const response = await window.fetchAPI('listAdminPointRedemptionPartners', { limit: 50 }, true);

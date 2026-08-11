@@ -4,6 +4,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 const migration = read('migrations/0019_point_redemption_partner_directory.sql');
+const cardOnboardingMigration = read('migrations/0020_partner_card_onboarding.sql');
 const worker = read('workerbackup.js');
 const moduleSource = read('worker/partner-directory.mjs');
 const indexHtml = read('index.html');
@@ -39,6 +40,15 @@ includesAll(migration, [
 ], 'migration defines isolated partner, location and policy skeleton');
 
 ok(!migration.includes('INSERT INTO point_redemption_partners'), 'migration does not seed fake production partners');
+
+includesAll(cardOnboardingMigration, [
+  'contact_name TEXT NOT NULL',
+  'contact_email TEXT NOT NULL',
+  'tax_id TEXT NOT NULL',
+  'source_card_row_id TEXT NOT NULL',
+  'idx_point_redemption_partners_source_card'
+], 'card onboarding migration stores private admin contact fields and source provenance');
+ok(!cardOnboardingMigration.includes('INSERT INTO'), 'card onboarding migration does not seed or copy production card data');
 
 includesAll(worker, [
   "listPointRedemptionPartners: { access: 'public'",
@@ -83,6 +93,14 @@ includesAll(moduleSource, [
   "只允許 http 或 https 網址"
 ], 'admin module supports validated upsert and recoverable archive');
 
+includesAll(moduleSource, [
+  "scanner_user_id = ?2",
+  "NOT IN ('self_profile', 'referral_placeholder')",
+  'sourceCardLinked:',
+  'contact: {',
+  'point_redemption_partners.source_card_row_id'
+], 'partner save validates collected-card provenance and keeps private fields admin-only');
+
 includesAll(indexHtml, [
   'id="page-partner-directory"',
   'id="partner-directory-query"',
@@ -98,6 +116,8 @@ includesAll(indexHtml, [
   'id="admin-partner-name"',
   'id="admin-partner-redeem-enabled"',
   'id="admin-partner-branch-name"',
+  'id="admin-partner-card-select"',
+  'id="admin-partner-contact-name"',
   'js/modules/admin-partners.js?v='
 ], 'admin UI includes partner, policy and primary location form');
 
@@ -109,6 +129,14 @@ includesAll(adminFrontend, [
   '店家會從前台目錄隱藏，但資料仍保留'
 ], 'admin UI enforces role guard and soft archive messaging');
 
+includesAll(adminFrontend, [
+  "window.fetchAPI('getCardHarvestContacts'",
+  'window.applyAdminPointRedemptionSourceCard',
+  "sourceCardRowId: text('admin-partner-source-card')",
+  "setIfEmpty('admin-partner-name'"
+], 'member admin UI imports only collected-card fields into a draft partner form');
+ok(indexHtml.includes('不會改變名片擁有權'), 'member admin explains that card import does not transfer card ownership');
+
 includesAll(adminDashboard, [
   "switchTab('partners')",
   'id="nav-partners"',
@@ -117,6 +145,8 @@ includesAll(adminDashboard, [
   'id="partner-admin-name"',
   'id="partner-admin-redeem-enabled"',
   'id="partner-admin-branch"',
+  'id="partner-admin-card-select"',
+  'id="partner-admin-contact-name"',
   "adminRole !== 'admin'",
   "if (tabId === 'partners') loadPartnerAdmin();",
   'js/modules/admin-partners-dashboard.js?v='
@@ -130,6 +160,13 @@ includesAll(adminDashboardModule, [
   'editPartnerAdmin',
   '歷史資料仍保留'
 ], 'standalone admin dashboard wires list, save, edit and archive flows');
+
+includesAll(adminDashboardModule, [
+  "fetchAPI('getCardHarvestContacts'",
+  'applyPartnerAdminSourceCard',
+  "sourceCardRowId: partnerAdminValue('partner-admin-source-card')",
+  "partnerAdminSetIfEmpty('partner-admin-name'"
+], 'standalone admin imports a scoped collected card without replacing existing form values');
 
 includesAll(navigation, ["page === 'partner-directory'", 'window.loadPartnerDirectory'], 'navigation initializes partner directory');
 includesAll(navigation, ["page === 'admin-partners'", 'window.loadAdminPointRedemptionPartners'], 'navigation initializes admin partner management');
