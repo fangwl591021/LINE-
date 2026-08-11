@@ -63,6 +63,8 @@ const fullChecks = [
   'tools/check-points-ledger-contract.js',
   'tools/check-button-actions-contract.js',
   'tools/check-platform-shop-contract.js',
+  'tools/check-partner-directory-contract.js',
+  'test/partner-directory.test.mjs',
   'tools/check-personal-task-recurrence-schema-contract.js',
   'tools/check-personal-task-recurrence-worker-contract.js',
   'tools/check-personal-agenda-voice-contract.js',
