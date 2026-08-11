@@ -10,6 +10,7 @@ const indexHtml = read('index.html');
 const navigation = read('js/navigation.js');
 const home = read('js/modules/home.js');
 const frontend = read('js/modules/partner-directory.js');
+const adminFrontend = read('js/modules/admin-partners.js');
 const docs = read('docs/point-redemption/phase-1-partner-directory.md');
 
 function ok(condition, message) {
@@ -44,6 +45,15 @@ includesAll(worker, [
   "case 'getPointRedemptionPartner': return await PartnerDirectoryModule.get"
 ], 'Worker policy and dispatch expose read-only directory actions');
 
+includesAll(worker, [
+  "listAdminPointRedemptionPartners: { access: 'admin'",
+  "savePointRedemptionPartner: { access: 'admin'",
+  "archivePointRedemptionPartner: { access: 'admin'",
+  "case 'listAdminPointRedemptionPartners':",
+  "case 'savePointRedemptionPartner':",
+  "case 'archivePointRedemptionPartner':"
+], 'Worker policy and dispatch keep partner management admin-only');
+
 includesAll(moduleSource, [
   'MAX_DIRECTORY_LIMIT = 50',
   "p.status = 'active'",
@@ -54,10 +64,22 @@ includesAll(moduleSource, [
   'locationHandle:'
 ], 'directory module bounds and binds active-only public reads');
 
-['storeAdjustCustomerPoints', 'insertUserPoint', 'INSERT INTO', 'UPDATE point_', 'DELETE FROM'].forEach((needle) => {
+['storeAdjustCustomerPoints', 'insertUserPoint', 'DELETE FROM'].forEach((needle) => {
   ok(!moduleSource.includes(needle), `directory Worker module does not contain ${needle}`);
   ok(!frontend.includes(needle), `directory frontend does not contain ${needle}`);
+  ok(!adminFrontend.includes(needle), `directory admin frontend does not contain ${needle}`);
 });
+
+includesAll(moduleSource, [
+  'async adminList(payload, env)',
+  'async save(payload, env)',
+  'async archive(payload, env)',
+  'crypto.randomUUID()',
+  'ON CONFLICT(partner_handle) DO UPDATE',
+  "status = 'archived'",
+  "status = 'hidden'",
+  "只允許 http 或 https 網址"
+], 'admin module supports validated upsert and recoverable archive');
 
 includesAll(indexHtml, [
   'id="page-partner-directory"',
@@ -68,7 +90,25 @@ includesAll(indexHtml, [
   'js/modules/partner-directory.js?v='
 ], 'frontend includes searchable internal partner directory');
 
+includesAll(indexHtml, [
+  'id="admin-partner-management-entry"',
+  'id="page-admin-partners"',
+  'id="admin-partner-name"',
+  'id="admin-partner-redeem-enabled"',
+  'id="admin-partner-branch-name"',
+  'js/modules/admin-partners.js?v='
+], 'admin UI includes partner, policy and primary location form');
+
+includesAll(adminFrontend, [
+  "window.fetchAPI('listAdminPointRedemptionPartners'",
+  "window.fetchAPI('savePointRedemptionPartner'",
+  "window.fetchAPI('archivePointRedemptionPartner'",
+  "String(window.userRole || '').toLowerCase() !== 'admin'",
+  '店家會從前台目錄隱藏，但資料仍保留'
+], 'admin UI enforces role guard and soft archive messaging');
+
 includesAll(navigation, ["page === 'partner-directory'", 'window.loadPartnerDirectory'], 'navigation initializes partner directory');
+includesAll(navigation, ["page === 'admin-partners'", 'window.loadAdminPointRedemptionPartners'], 'navigation initializes admin partner management');
 includesAll(home, ['window.openPartnerStores = function()', "window.goPage('partner-directory');"], 'home shortcut stays inside the application');
 includesAll(frontend, [
   "window.fetchAPI('listPointRedemptionPartners'",
@@ -86,4 +126,3 @@ includesAll(docs, [
 ], 'Phase 1 contract documents scope, privacy, APIs and release gate');
 
 console.log('\nPartner directory contract passed.');
-

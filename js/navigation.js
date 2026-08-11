@@ -21,6 +21,7 @@ window.goPage = function(page, isInitLoad = false) {
     else if (page === 'inbox' && typeof window.loadInbox === 'function') window.loadInbox();
     else if (page === 'platform-shop' && typeof window.loadPlatformShop === 'function') window.loadPlatformShop();
     else if (page === 'partner-directory' && typeof window.loadPartnerDirectory === 'function') window.loadPartnerDirectory();
+    else if (page === 'admin-partners' && typeof window.loadAdminPointRedemptionPartners === 'function') window.loadAdminPointRedemptionPartners();
     else if (page === 'admin-announcements' && typeof window.loadAdminAnnouncements === 'function') window.loadAdminAnnouncements();
     else if (page === 'admin-crm') window.loadCrm();
     else if (page === 'tenant-upgrade' && typeof window.initTenantUpgradePage === 'function') window.initTenantUpgradePage();

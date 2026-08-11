@@ -99,6 +99,10 @@
 - [ ] 搜尋與篩選使用 prepared statement，查詢筆數上限為 50。
 - [ ] 首頁「折抵店家」進入站內目錄，不開啟外部空白頁。
 - [ ] Phase 1 不扣點、不建立訂單／核銷／結算，也不呼叫店家點數收銀流程。
+- [ ] 店家管理 actions 全部為 admin-only，非總管無法列出或修改。
+- [ ] 新店家預設為草稿，只有 active 店家與據點顯示於前台。
+- [ ] 停用採 archived／hidden 軟封存，不直接刪除店家與據點。
+- [ ] 店家網址欄位拒絕非 http／https 協定。
 ### LINE / LIFF / Webhook
 
 - [ ] shareTargetPicker 只在具備正確 scope 的 LIFF 使用。
