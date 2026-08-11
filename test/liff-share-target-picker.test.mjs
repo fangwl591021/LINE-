@@ -45,7 +45,7 @@ assert.equal(cancelled.ok, false);
 assert.equal(cancelled.reason, 'cancelled_or_not_opened');
 
 const ecardSource = fs.readFileSync(new URL('../js/modules/ecard.js', import.meta.url), 'utf8');
-const shareHandler = ecardSource.match(/window\\.shareECardToLine\\s*=\\s*async function[\\s\\S]*?\\n};/)?.[0] || '';
+const shareHandler = ecardSource.match(/window\.shareECardToLine\s*=\s*async function[\s\S]*?\n};/)?.[0] || '';
 assert.ok(shareHandler.includes('isInLiffClient'));
 assert.ok(shareHandler.includes('window.location.href = directShareUrl'));
 assert.ok(shareHandler.indexOf('window.location.href = directShareUrl') < shareHandler.indexOf('await window.triggerFlexSharing'));
