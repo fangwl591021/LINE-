@@ -217,6 +217,9 @@ const ACTION_POLICIES = {
   getAdminCustomerImportOverview: { access: 'admin' },
   listAdminCustomerImportBatches: { access: 'admin' },
   getAdminCustomerImportBatchSummary: { access: 'admin' },
+  listAdminPointRedemptionPartners: { access: 'admin' },
+  savePointRedemptionPartner: { access: 'admin' },
+  archivePointRedemptionPartner: { access: 'admin' },
   saveAnnouncement: { access: 'admin' },
   deleteAnnouncement: { access: 'admin' },
   d1BackfillFromGas: { access: 'admin' },
@@ -16302,6 +16305,12 @@ async function dispatchAction(action, payload, request, env) {
       return await AdminCustomerImportMonitorModule.list(payload || {}, env);
     case 'getAdminCustomerImportBatchSummary':
       return await AdminCustomerImportMonitorModule.summary(payload || {}, env);
+    case 'listAdminPointRedemptionPartners':
+      return await PartnerDirectoryModule.adminList(payload || {}, env);
+    case 'savePointRedemptionPartner':
+      return await PartnerDirectoryModule.save(payload || {}, env);
+    case 'archivePointRedemptionPartner':
+      return await PartnerDirectoryModule.archive(payload || {}, env);
     case 'saveAnnouncement':
       return await D1AnnouncementModule.save(payload || {}, env);
     case 'deleteAnnouncement':

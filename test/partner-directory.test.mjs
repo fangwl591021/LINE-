@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { PartnerDirectoryModule } from '../worker/partner-directory.mjs';
 
-function fakeEnv(rows) {
+function fakeEnv(rows, firstRows = []) {
   const calls = [];
+  const batches = [];
   return {
     calls,
+    batches,
     ACTMASTER_DB: {
       prepare(sql) {
         const call = { sql, bindings: [] };
@@ -16,8 +18,15 @@ function fakeEnv(rows) {
           },
           async all() {
             return { results: rows };
+          },
+          async first() {
+            return firstRows.shift() || null;
           }
         };
+      },
+      async batch(statements) {
+        batches.push(statements);
+        return statements.map(() => ({ success: true }));
       }
     }
   };
@@ -47,7 +56,11 @@ const rows = [{
   longitude: 121.5,
   maps_url: 'https://maps.example.com',
   location_phone: '02-1111-2222',
-  business_hours: '09:00-18:00'
+  business_hours: '09:00-18:00',
+  partner_status: 'active',
+  partner_sort_order: 1,
+  location_status: 'active',
+  location_sort_order: 1
 }];
 
 {
@@ -62,6 +75,43 @@ const rows = [{
   assert.match(env.calls[0].sql, /p\.status = 'active'/);
   assert.match(env.calls[0].sql, /l\.status = 'active'/);
   assert.deepEqual(env.calls[0].bindings, ['餐飲', '台北市', '測試', '%測試%', 50]);
+}
+
+{
+  const env = fakeEnv(rows);
+  const result = await PartnerDirectoryModule.adminList({ limit: 10 }, env);
+  assert.equal(result.success, true);
+  assert.equal(result.partners[0].status, 'active');
+  assert.equal(result.partners[0].locations[0].status, 'active');
+  assert.match(env.calls[0].sql, /FROM point_redemption_partners p/);
+}
+
+{
+  const env = fakeEnv([], [{ partner_id: 7 }]);
+  const result = await PartnerDirectoryModule.save({
+    partner: { name: '正式測試店家', category: '餐飲', status: 'active', websiteUrl: 'https://example.com' },
+    redeemPolicy: { enabled: true, maxRedeemPercent: 20, minSpendAmount: 100 },
+    location: { branchName: '中壢店', city: '桃園市', district: '中壢區', status: 'active' }
+  }, env);
+  assert.equal(result.success, true);
+  assert.match(result.partnerHandle, /^partner_/);
+  assert.match(result.locationHandle, /^location_/);
+  assert.equal(env.batches.length, 1);
+  assert.equal(env.batches[0].length, 2);
+  assert.match(env.calls[0].sql, /ON CONFLICT\(partner_handle\) DO UPDATE/);
+}
+
+await assert.rejects(
+  () => PartnerDirectoryModule.save({ partner: { name: '危險網址', websiteUrl: 'javascript:alert(1)' } }, fakeEnv([], [{ partner_id: 8 }])),
+  /只允許 http 或 https 網址/
+);
+
+{
+  const env = fakeEnv([], [{ partner_id: 7 }]);
+  const result = await PartnerDirectoryModule.archive({ partnerHandle: 'partner_demo' }, env);
+  assert.equal(result.success, true);
+  assert.equal(result.status, 'archived');
+  assert.equal(env.batches[0].length, 2);
 }
 
 {
@@ -81,4 +131,3 @@ const rows = [{
 }
 
 console.log('Partner directory module tests passed.');
-

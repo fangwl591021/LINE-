@@ -56,3 +56,12 @@ Migration：`migrations/0019_point_redemption_partner_directory.sql`
 3. Wrangler dry-run 通過。
 4. 上正式環境前另行審核並套用 migration；本 Phase 實作本身不自動套用遠端 D1。
 
+## Phase 1.5：總管管理後台
+
+- `listAdminPointRedemptionPartners`、`savePointRedemptionPartner`、`archivePointRedemptionPartner` 均為 admin-only action。
+- 總管可在「設定與參數 → 合作店家管理」建立或修改店家、主要據點與折抵政策。
+- 新店家預設為 `draft`，必須明確改成 `active` 才會出現在前台。
+- 停用採軟封存：店家改為 `archived`、據點改為 `hidden`，不直接刪除資料。
+- 圖片、LINE、網站及地圖欄位只允許 `http`／`https`，拒絕 `javascript:` 等危險協定。
+- 後台只能設定未來折抵政策；仍不得執行扣點、付款、核銷或結算。
+- 不預載測試店家；第一家店家必須使用經確認的真實資料建檔。

@@ -170,7 +170,7 @@
         "test/partner-directory.test.mjs",
         "tools/check-points-ledger-contract.js"
       ],
-      "regressionIds": ["PARTNER-01", "PARTNER-02", "PARTNER-03", "PARTNER-04", "PARTNER-05", "PARTNER-06"]
+      "regressionIds": ["PARTNER-01", "PARTNER-02", "PARTNER-03", "PARTNER-04", "PARTNER-05", "PARTNER-06", "PARTNER-07", "PARTNER-08", "PARTNER-09", "PARTNER-10"]
     },
     "platform-shop": {
       "label": "平台商城 / 商品 / 點數折抵 / 合作店家核銷",
