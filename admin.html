@@ -766,7 +766,12 @@
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-6 py-5 bg-emerald-50 border-b border-emerald-100"><h3 id="partner-admin-form-title" class="text-xl font-black text-slate-900">新增合作店家</h3><p class="mt-1 text-xs font-bold text-emerald-700">新資料預設為草稿，改成啟用後才會顯示於前台。</p></div>
             <div class="p-6 space-y-5">
-              <input id="partner-admin-handle" type="hidden"><input id="partner-admin-location-handle" type="hidden">
+              <input id="partner-admin-handle" type="hidden"><input id="partner-admin-location-handle" type="hidden"><input id="partner-admin-source-card" type="hidden">
+              <div class="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                <div class="flex items-start gap-3"><span class="material-symbols-outlined text-blue-600">badge</span><div class="min-w-0 flex-1"><h4 class="font-black text-blue-900">從收藏名片建立店家</h4><p class="mt-1 text-xs font-bold leading-5 text-blue-700">選擇自己收藏的名片，自動帶入公司、聯絡與地址資料；不會改變名片擁有權，也不會自動啟用店家。</p></div></div>
+                <div class="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3"><select id="partner-admin-card-select" class="w-full border border-blue-200 rounded-xl bg-white px-4 py-3 text-sm font-bold"><option value="">載入收藏名片中...</option></select><button type="button" onclick="applyPartnerAdminSourceCard()" class="rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white">自動填寫</button></div>
+                <p id="partner-admin-card-status" class="mt-2 text-xs font-bold text-blue-700"></p>
+              </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label class="md:col-span-2 text-sm font-bold text-slate-600">店家名稱 *<input id="partner-admin-name" maxlength="160" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3" placeholder="請輸入真實店家名稱"></label>
                 <label class="text-sm font-bold text-slate-600">類別<input id="partner-admin-category" maxlength="80" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3" placeholder="餐飲、美容、生活服務"></label>
@@ -775,6 +780,9 @@
                 <label class="md:col-span-2 text-sm font-bold text-slate-600">詳細介紹<textarea id="partner-admin-description" maxlength="2000" class="mt-1 w-full h-24 border border-slate-200 rounded-xl px-4 py-3"></textarea></label>
                 <label class="text-sm font-bold text-slate-600">店家電話<input id="partner-admin-phone" maxlength="80" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3"></label>
                 <label class="text-sm font-bold text-slate-600">排序<input id="partner-admin-sort" type="number" min="0" value="9999" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3"></label>
+                <label class="text-sm font-bold text-slate-600">聯絡人<input id="partner-admin-contact-name" maxlength="160" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3"></label>
+                <label class="text-sm font-bold text-slate-600">聯絡 Email<input id="partner-admin-contact-email" type="email" maxlength="320" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3"></label>
+                <label class="md:col-span-2 text-sm font-bold text-slate-600">統一編號<input id="partner-admin-tax-id" maxlength="40" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3"></label>
                 <label class="md:col-span-2 text-sm font-bold text-slate-600">Logo 網址<input id="partner-admin-logo" type="url" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs" placeholder="https://..."></label>
                 <label class="md:col-span-2 text-sm font-bold text-slate-600">封面圖片網址<input id="partner-admin-cover" type="url" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs" placeholder="https://..."></label>
                 <label class="md:col-span-2 text-sm font-bold text-slate-600">LINE 網址<input id="partner-admin-line" type="url" maxlength="500" class="mt-1 w-full border border-slate-200 rounded-xl px-4 py-3 font-mono text-xs" placeholder="https://line.me/..."></label>
@@ -5293,6 +5301,6 @@
 
     document.addEventListener("DOMContentLoaded", initAdmin);
   </script>
-  <script src="js/modules/admin-partners-dashboard.js?v=1.0"></script>
+  <script src="js/modules/admin-partners-dashboard.js?v=1.1"></script>
 </body>
 </html>

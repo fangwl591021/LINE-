@@ -43,6 +43,10 @@ const rows = [{
   partner_phone: '02-1234-5678',
   line_url: 'https://line.me/R/ti/p/@demo',
   website_url: 'https://example.com',
+  contact_name: '測試聯絡人',
+  contact_email: 'partner@example.com',
+  tax_id: '12345678',
+  source_card_row_id: 'CARD_IMPORTED_1',
   point_redeem_enabled: 1,
   max_redeem_percent: 20,
   min_spend_amount: 100,
@@ -72,6 +76,8 @@ const rows = [{
   assert.equal(result.partners[0].locations.length, 1);
   assert.equal(result.partners[0].redeemPolicy.maxRedeemPercent, 20);
   assert.equal('partnerId' in result.partners[0], false);
+  assert.equal('contact' in result.partners[0], false);
+  assert.equal('sourceCardLinked' in result.partners[0], false);
   assert.match(env.calls[0].sql, /p\.status = 'active'/);
   assert.match(env.calls[0].sql, /l\.status = 'active'/);
   assert.deepEqual(env.calls[0].bindings, ['餐飲', '台北市', '測試', '%測試%', 50]);
@@ -83,7 +89,39 @@ const rows = [{
   assert.equal(result.success, true);
   assert.equal(result.partners[0].status, 'active');
   assert.equal(result.partners[0].locations[0].status, 'active');
+  assert.equal(result.partners[0].contact.name, '測試聯絡人');
+  assert.equal(result.partners[0].contact.email, 'partner@example.com');
+  assert.equal(result.partners[0].contact.taxId, '12345678');
+  assert.equal(result.partners[0].sourceCardLinked, true);
   assert.match(env.calls[0].sql, /FROM point_redemption_partners p/);
+}
+
+{
+  const env = fakeEnv([], [{ row_id: 'CARD_IMPORTED_1' }, { partner_id: 9 }]);
+  const result = await PartnerDirectoryModule.save({
+    authenticatedUserId: 'U_ADMIN',
+    sourceCardRowId: 'CARD_IMPORTED_1',
+    partner: { name: '名片建立店家', status: 'draft' },
+    contact: { name: '名片聯絡人', email: 'card@example.com', taxId: '87654321' }
+  }, env);
+  assert.equal(result.success, true);
+  assert.match(env.calls[0].sql, /scanner_user_id = \?2/);
+  assert.match(env.calls[0].sql, /NOT IN \('self_profile', 'referral_placeholder'\)/);
+  assert.deepEqual(env.calls[0].bindings, ['CARD_IMPORTED_1', 'U_ADMIN']);
+  assert.match(env.calls[1].sql, /source_card_row_id/);
+  assert.match(env.calls[1].sql, /point_redemption_partners\.source_card_row_id/);
+  assert.ok(env.calls[1].bindings.includes('card@example.com'));
+  assert.ok(env.calls[1].bindings.includes('87654321'));
+}
+
+{
+  const result = await PartnerDirectoryModule.save({
+    authenticatedUserId: 'U_ADMIN',
+    sourceCardRowId: 'CARD_NOT_OWNED',
+    partner: { name: '不可冒用店家' }
+  }, fakeEnv([], [null]));
+  assert.equal(result.success, false);
+  assert.match(result.error, /找不到可用的收藏名片/);
 }
 
 {

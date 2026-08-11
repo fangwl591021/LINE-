@@ -85,7 +85,19 @@ function publicPartner(row) {
   };
 }
 
-function groupRows(rows) {
+function adminPartner(row) {
+  return {
+    ...publicPartner(row),
+    contact: {
+      name: text(row.contact_name),
+      email: text(row.contact_email, 320),
+      taxId: text(row.tax_id, 40)
+    },
+    sourceCardLinked: Boolean(text(row.source_card_row_id, 160))
+  };
+}
+
+function groupRows(rows, options = {}) {
   const partners = [];
   const byHandle = new Map();
   for (const row of rows || []) {
@@ -93,7 +105,7 @@ function groupRows(rows) {
     if (!handle) continue;
     let partner = byHandle.get(handle);
     if (!partner) {
-      partner = publicPartner(row);
+      partner = options.admin === true ? adminPartner(row) : publicPartner(row);
       byHandle.set(handle, partner);
       partners.push(partner);
     }
@@ -110,7 +122,8 @@ function baseSelect() {
     SELECT
       p.partner_handle, p.name, p.category, p.summary, p.description,
       p.logo_url, p.cover_image_url, p.phone AS partner_phone,
-      p.line_url, p.website_url,
+      p.line_url, p.website_url, p.contact_name, p.contact_email, p.tax_id,
+      p.source_card_row_id,
       p.status AS partner_status, p.sort_order AS partner_sort_order,
       COALESCE(pp.point_redeem_enabled, 0) AS point_redeem_enabled,
       COALESCE(pp.max_redeem_percent, 0) AS max_redeem_percent,
@@ -197,13 +210,14 @@ export const PartnerDirectoryModule = {
         l.sort_order ASC, l.branch_name COLLATE NOCASE ASC
       LIMIT ?1
     `).bind(limit * 20).all();
-    const partners = groupRows(result?.results || []).slice(0, limit);
+    const partners = groupRows(result?.results || [], { admin: true }).slice(0, limit);
     return { success: true, partners, count: partners.length };
   },
 
   async save(payload, env) {
     if (!env?.ACTMASTER_DB) return { success: false, error: '合作店家資料庫尚未設定' };
     const partner = payload?.partner && typeof payload.partner === 'object' ? payload.partner : payload || {};
+    const contact = payload?.contact && typeof payload.contact === 'object' ? payload.contact : {};
     const policy = payload?.redeemPolicy && typeof payload.redeemPolicy === 'object' ? payload.redeemPolicy : {};
     const location = payload?.location && typeof payload.location === 'object' ? payload.location : {};
 
@@ -211,19 +225,45 @@ export const PartnerDirectoryModule = {
     if (!name) return { success: false, error: '請輸入店家名稱' };
     const partnerHandle = text(partner.partnerHandle, 120) || handle('partner');
     const status = partnerStatus(partner.status);
+    const sourceCardRowId = text(payload?.sourceCardRowId, 160);
+    if (sourceCardRowId) {
+      const actorId = text(payload?.authenticatedUserId, 160);
+      const sourceCard = actorId ? await env.ACTMASTER_DB.prepare(`
+        SELECT row_id
+        FROM card_contacts
+        WHERE row_id = ?1
+          AND (
+            scanner_user_id = ?2
+            OR (
+              TRIM(COALESCE(scanner_user_id, '')) = ''
+              AND (creator_id = ?2 OR owner_user_id = ?2)
+            )
+          )
+          AND LOWER(COALESCE(source_type, '')) NOT IN ('self_profile', 'referral_placeholder')
+        LIMIT 1
+      `).bind(sourceCardRowId, actorId).first() : null;
+      if (!sourceCard?.row_id) return { success: false, error: '找不到可用的收藏名片，請重新選擇' };
+    }
     const maxRedeemPercent = Math.min(100, Math.max(0, Number.parseInt(policy.maxRedeemPercent, 10) || 0));
     const minSpendAmount = Math.max(0, Number.parseInt(policy.minSpendAmount, 10) || 0);
 
     const savedPartner = await env.ACTMASTER_DB.prepare(`
       INSERT INTO point_redemption_partners (
         partner_handle, name, category, summary, description, logo_url,
-        cover_image_url, phone, line_url, website_url, status, sort_order, updated_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, CURRENT_TIMESTAMP)
+        cover_image_url, phone, line_url, website_url, contact_name, contact_email,
+        tax_id, source_card_row_id, status, sort_order, updated_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, CURRENT_TIMESTAMP)
       ON CONFLICT(partner_handle) DO UPDATE SET
         name = excluded.name, category = excluded.category, summary = excluded.summary,
         description = excluded.description, logo_url = excluded.logo_url,
         cover_image_url = excluded.cover_image_url, phone = excluded.phone,
         line_url = excluded.line_url, website_url = excluded.website_url,
+        contact_name = excluded.contact_name, contact_email = excluded.contact_email,
+        tax_id = excluded.tax_id,
+        source_card_row_id = CASE
+          WHEN excluded.source_card_row_id <> '' THEN excluded.source_card_row_id
+          ELSE point_redemption_partners.source_card_row_id
+        END,
         status = excluded.status, sort_order = excluded.sort_order, updated_at = CURRENT_TIMESTAMP
       RETURNING partner_id
     `).bind(
@@ -237,6 +277,10 @@ export const PartnerDirectoryModule = {
       text(partner.phone, 80),
       safeHttpUrl(partner.lineUrl, 'LINE 網址'),
       safeHttpUrl(partner.websiteUrl, '官方網站'),
+      text(contact.name, 160),
+      text(contact.email, 320),
+      text(contact.taxId, 40),
+      sourceCardRowId,
       status,
       Math.max(0, Number.parseInt(partner.sortOrder, 10) || 9999)
     ).first();

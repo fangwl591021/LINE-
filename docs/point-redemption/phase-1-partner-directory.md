@@ -63,5 +63,8 @@ Migration：`migrations/0019_point_redemption_partner_directory.sql`
 - 新店家預設為 `draft`，必須明確改成 `active` 才會出現在前台。
 - 停用採軟封存：店家改為 `archived`、據點改為 `hidden`，不直接刪除資料。
 - 圖片、LINE、網站及地圖欄位只允許 `http`／`https`，拒絕 `javascript:` 等危險協定。
+- 新增店家可選擇目前總管「自己收藏」的名片，自動帶入公司、聯絡人、電話、Email、統編、網站與地址空白欄位。
+- 名片僅作為建檔來源：不改變名片擁有權、不綁定名片本人為店家帳號、不自動啟用店家，也不執行扣點。
+- `contact_name`、`contact_email`、`tax_id` 與 `source_card_row_id` 僅供總管建檔與追溯，公開店家 API 不回傳。
 - 後台只能設定未來折抵政策；仍不得執行扣點、付款、核銷或結算。
 - 不預載測試店家；第一家店家必須使用經確認的真實資料建檔。

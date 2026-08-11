@@ -2208,6 +2208,13 @@
         <div class="p-5 space-y-4">
           <input id="admin-partner-handle" type="hidden">
           <input id="admin-partner-location-handle" type="hidden">
+          <input id="admin-partner-source-card" type="hidden">
+          <div class="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+            <p class="text-[14px] font-black text-blue-800">從收藏名片建立店家</p>
+            <p class="mt-1 text-[12px] font-bold leading-5 text-blue-600">只帶入自己收藏名片的公司、聯絡與地址欄位，不會改變名片擁有權或自動啟用店家。</p>
+            <div class="mt-3 grid grid-cols-[1fr_auto] gap-2"><select id="admin-partner-card-select" class="custom-input !py-3"><option value="">載入收藏名片中…</option></select><button type="button" onclick="window.applyAdminPointRedemptionSourceCard()" class="rounded-2xl bg-blue-600 px-4 text-[12px] font-black text-white">自動填寫</button></div>
+            <p id="admin-partner-card-status" class="mt-2 text-[12px] font-bold text-blue-600"></p>
+          </div>
 
           <div class="grid grid-cols-2 gap-3">
             <label class="col-span-2 text-[12px] font-black text-slate-600">店家名稱 *<input id="admin-partner-name" maxlength="160" class="custom-input !py-3 mt-1" placeholder="例如：品牌共好咖啡"></label>
@@ -2217,6 +2224,9 @@
             <label class="col-span-2 text-[12px] font-black text-slate-600">詳細介紹<textarea id="admin-partner-description" maxlength="2000" class="textarea-block !h-24 mt-1" placeholder="店家與服務介紹"></textarea></label>
             <label class="text-[12px] font-black text-slate-600">店家電話<input id="admin-partner-phone" maxlength="80" class="custom-input !py-3 mt-1" type="tel"></label>
             <label class="text-[12px] font-black text-slate-600">排序<input id="admin-partner-sort-order" class="custom-input !py-3 mt-1" type="number" min="0" value="9999"></label>
+            <label class="text-[12px] font-black text-slate-600">聯絡人<input id="admin-partner-contact-name" maxlength="160" class="custom-input !py-3 mt-1"></label>
+            <label class="text-[12px] font-black text-slate-600">聯絡 Email<input id="admin-partner-contact-email" maxlength="320" class="custom-input !py-3 mt-1" type="email"></label>
+            <label class="col-span-2 text-[12px] font-black text-slate-600">統一編號<input id="admin-partner-tax-id" maxlength="40" class="custom-input !py-3 mt-1"></label>
             <label class="col-span-2 text-[12px] font-black text-slate-600">Logo 網址<input id="admin-partner-logo-url" maxlength="500" class="custom-input !py-3 mt-1 font-mono text-[12px]" type="url" placeholder="https://..."></label>
             <label class="col-span-2 text-[12px] font-black text-slate-600">封面圖片網址<input id="admin-partner-cover-url" maxlength="500" class="custom-input !py-3 mt-1 font-mono text-[12px]" type="url" placeholder="https://..."></label>
             <label class="col-span-2 text-[12px] font-black text-slate-600">LINE 網址<input id="admin-partner-line-url" maxlength="500" class="custom-input !py-3 mt-1 font-mono text-[12px]" type="url" placeholder="https://line.me/..."></label>
@@ -2690,7 +2700,7 @@
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/platform-shop.js?v=1.0"></script>
 <script src="js/modules/partner-directory.js?v=1.0"></script>
-<script src="js/modules/admin-partners.js?v=1.0"></script>
+<script src="js/modules/admin-partners.js?v=1.1"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.7"></script>
 <script src="js/auth.js?v=10.87"></script>
