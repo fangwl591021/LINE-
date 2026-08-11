@@ -39,6 +39,17 @@ if (!html.includes('id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 sha
   fail('active home profile card should not render an outer frame');
 }
 
+const activeProfileCard = html.match(/<section id="home-profile-card"[\s\S]*?<\/section>/)?.[0] || '';
+if (!activeProfileCard) {
+  fail('cannot inspect active home profile card');
+}
+if (activeProfileCard.includes('id="home-profile-name"')) {
+  fail('active green profile shortcut must not display the member name');
+}
+if (!activeProfileCard.includes('會員專區')) {
+  fail('active green profile shortcut must keep the member-area label');
+}
+
 [
   'id="home-profile-avatar-button"',
   'id="home-profile-avatar-edit-badge"'
