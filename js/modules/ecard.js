@@ -986,6 +986,16 @@ window.shareECardToLine = async function(btnId) {
     return;
   }
 
+  const directRowId = window.currentCard.rowId || window.currentCard["rowId"] || window.currentCard.id || "";
+  const directShareUrl = appendECardShareMode(buildECardShareUrl(directRowId));
+  const isInLiffClient = typeof liff !== 'undefined' && liff && typeof liff.isInClient === 'function' && liff.isInClient();
+  if (!isInLiffClient && directShareUrl) {
+    // Keep navigation synchronous with the tap. Waiting first causes Android
+    // WebViews to leave an about:blank popup behind.
+    window.location.href = directShareUrl;
+    return;
+  }
+
   const btn = document.getElementById(btnId);
   const oriHtml = btn?.innerHTML;
   if (btn) {
