@@ -1,5 +1,6 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
+import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
 
 /**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
@@ -73,6 +74,8 @@ const ACTION_POLICIES = {
   joinActivity: { access: 'public', note: 'public_activity_registration' },
   getSocialLikeStats: { access: 'public' },
   recordShareCardVisit: { access: 'public' },
+  listPointRedemptionPartners: { access: 'public', note: 'public_partner_directory' },
+  getPointRedemptionPartner: { access: 'public', note: 'public_partner_directory' },
 
   updateUserProfile: { access: 'authenticated', ownership: 'self' },
   linkUserIdentity: { access: 'authenticated', ownership: 'self' },
@@ -16391,6 +16394,8 @@ async function dispatchAction(action, payload, request, env) {
     case 'getSocialLikeStats':     return await TrackingModule.getSocialLikeStats(payload || {}, env);
     case 'recordSocialLike':       return await TrackingModule.recordSocialLike(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
+    case 'listPointRedemptionPartners': return await PartnerDirectoryModule.list(payload || {}, env);
+    case 'getPointRedemptionPartner': return await PartnerDirectoryModule.get(payload || {}, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
     case 'createTenantBonusOrder': return await TenantOrderModule.createTenantBonusOrder(payload, env);
     case 'markTenantOrderPaid':    return await TenantOrderModule.markTenantOrderPaid(payload, env);

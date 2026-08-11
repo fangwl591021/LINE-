@@ -14,6 +14,7 @@
 | 標準 / 滿版 / 正方 / 影音名片 | `docs/data/card-ownership-and-versioning.md` |
 | 發訊、優惠券、點數扣除、點數同步 | `docs/rules/core-invariants.md`、`docs/tests/regression-matrix.md` |
 | 平台商城、會員點數折抵、合作店家核銷 | `docs/platform-shop/architecture.md`、`docs/platform-shop/data-and-actions.md`、`docs/platform-shop/implementation-plan.md` |
+| 合作店家目錄、據點與折抵政策骨架 | `docs/point-redemption/phase-1-partner-directory.md` |
 | LINE OA keyword、LIFF、分享、Webhook | `docs/rules/core-invariants.md`、`docs/tests/regression-matrix.md` |
 | 上線或部署 | `docs/release/change-checklist.md` |
 | 單次功能修改 | `docs/release/change-work-order-template.md` |
@@ -43,6 +44,12 @@ Phase 2A Action Authorization Policy 定義 `dispatchAction()` 的集中式 acti
 - `docs/platform-shop/implementation-plan.md`
 
 定義平台商城的導入邊界：平台統一上架、會員使用自己的點數折抵、合作店家只負責履約或核銷。商城不得混用既有 `orders` 租戶年費 / 獎金流程，也不得重用店家點數收銀作為商城折抵流程。
+
+### 合作店家目錄
+
+- `docs/point-redemption/phase-1-partner-directory.md`
+
+定義折抵店家的唯讀目錄、D1 店家／據點／政策骨架與公開 API 契約。Phase 1 不扣點、不交易、不建立核銷碼。
 
 ### 核心規則
 

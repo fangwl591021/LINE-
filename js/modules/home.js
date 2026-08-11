@@ -444,12 +444,7 @@ const HomeModule = (function() {
     window.refreshHomeSocialLikeWidget = function() {};
 
     window.openPartnerStores = function() {
-        const url = 'https://aiwe.cc/index.php/search_linecard/?big_region=%E5%8C%97%E9%83%A8%E5%9C%B0%E5%8D%80&shop_id=78&submitted=1';
-        if (typeof liff !== 'undefined' && typeof liff.openWindow === 'function') {
-            liff.openWindow({ url, external: false });
-            return;
-        }
-        window.location.assign(url);
+        window.goPage('partner-directory');
     };
 
     function isBusinessHomeV2Enabled_() {
