@@ -42,6 +42,7 @@ const fullChecks = [
   'tools/check-change-risk-map-contract.js',
   'tools/check-auth-contract.js',
   'tools/check-share-contract.js',
+  'test/liff-share-target-picker.test.mjs',
   'tools/check-inbox-recipient-scope-contract.js',
   'tools/check-mycard-entry-contract.js',
   'tools/check-own-card-upload-contract.js',
