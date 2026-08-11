@@ -117,7 +117,7 @@ window.Config = {
   API_URL: WORKER_URL.replace(/\/$/, '')
 };
 
-window.__actmasterLiffInit = window.__actmasterLiffInit || { liffId: '', promise: null };
+window.__actmasterLiffInit = window.__actmasterLiffInit || { liffId: '', promise: null, ready: false };
 
 window.buildActmasterCleanLiffUrl = function() {
   const params = typeof window.readActmasterInitialParams === 'function'
@@ -158,16 +158,18 @@ window.initActmasterLiff = async function(liffId, options = {}) {
   }
 
   window.__actmasterLiffInit.liffId = id;
+  window.__actmasterLiffInit.ready = false;
   window.__actmasterLiffInit.promise = window.liff.init({
     liffId: id,
     withLoginOnExternalBrowser: options.withLoginOnExternalBrowser === true
   });
   try {
     await window.__actmasterLiffInit.promise;
+    window.__actmasterLiffInit.ready = true;
     try { sessionStorage.removeItem('ACTMASTER_LIFF_INVALID_CODE_RECOVERY_V1'); } catch (e) {}
     return true;
   } catch (err) {
-    window.__actmasterLiffInit = { liffId: '', promise: null };
+    window.__actmasterLiffInit = { liffId: '', promise: null, ready: false };
     throw err;
   }
 };
