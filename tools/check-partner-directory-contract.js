@@ -170,7 +170,14 @@ includesAll(adminDashboardModule, [
 
 includesAll(navigation, ["page === 'partner-directory'", 'window.loadPartnerDirectory'], 'navigation initializes partner directory');
 includesAll(navigation, ["page === 'admin-partners'", 'window.loadAdminPointRedemptionPartners'], 'navigation initializes admin partner management');
-includesAll(home, ['window.openPartnerStores = function()', "window.goPage('partner-directory');"], 'home shortcut stays inside the application');
+includesAll(home, [
+  "const PUBLIC_PARTNER_STORE_URL = 'https://aiwe.cc/index.php/search_linecard/?shop_id=78&submitted=1';",
+  'window.openPartnerStores = function()',
+  'window.location.assign(PUBLIC_PARTNER_STORE_URL);'
+], 'home shortcut temporarily opens the public partner directory');
+['line_userid=', 'bot_token=', 'client_id=', 'redirect_uri='].forEach((parameter) => {
+  ok(!home.includes(parameter), `public partner URL excludes ${parameter}`);
+});
 includesAll(frontend, [
   "window.fetchAPI('listPointRedemptionPartners'",
   "window.fetchAPI('getPointRedemptionPartner'",
