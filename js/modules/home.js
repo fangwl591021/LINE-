@@ -443,8 +443,10 @@ const HomeModule = (function() {
 
     window.refreshHomeSocialLikeWidget = function() {};
 
+    const PUBLIC_PARTNER_STORE_URL = 'https://aiwe.cc/index.php/search_linecard/?shop_id=78&submitted=1';
+
     window.openPartnerStores = function() {
-        window.goPage('partner-directory');
+        window.location.assign(PUBLIC_PARTNER_STORE_URL);
     };
 
     function isBusinessHomeV2Enabled_() {

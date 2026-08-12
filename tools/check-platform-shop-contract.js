@@ -126,12 +126,18 @@ includesAll(indexHtml, [
 
 includesAll(fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8'), [
   'window.openPartnerStores = function()',
-  "window.goPage('partner-directory');",
+  "const PUBLIC_PARTNER_STORE_URL = 'https://aiwe.cc/index.php/search_linecard/?shop_id=78&submitted=1';",
+  'window.location.assign(PUBLIC_PARTNER_STORE_URL);',
   "case 'shop':",
   'return window.openPartnerStores?.();'
-], 'home shop actions open the internal partner directory');
+], 'home shop actions open the temporary public partner directory');
 
-ok(!fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8').includes("window.open(url, '_blank', 'noopener');"), 'home shop fallback does not open a new browser tab');
+const homeSource = fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8');
+['line_userid=', 'bot_token=', 'client_id=', 'redirect_uri='].forEach((parameter) => {
+  ok(!homeSource.includes(parameter), `temporary public partner URL excludes ${parameter}`);
+});
+
+ok(!homeSource.includes("window.open(url, '_blank', 'noopener');"), 'home shop fallback does not open a new browser tab');
 
 includesAll(navigationJs, [
   "page === 'platform-shop'",
