@@ -157,21 +157,87 @@ window.initActmasterLiff = async function(liffId, options = {}) {
     return window.__actmasterLiffInit.promise;
   }
 
-  window.__actmasterLiffInit.liffId = id;
-  window.__actmasterLiffInit.ready = false;
-  window.__actmasterLiffInit.promise = window.liff.init({
-    liffId: id,
-    withLoginOnExternalBrowser: options.withLoginOnExternalBrowser === true
-  });
-  try {
-    await window.__actmasterLiffInit.promise;
-    window.__actmasterLiffInit.ready = true;
-    try { sessionStorage.removeItem('ACTMASTER_LIFF_INVALID_CODE_RECOVERY_V1'); } catch (e) {}
-    return true;
-  } catch (err) {
-    window.__actmasterLiffInit = { liffId: '', promise: null, ready: false };
-    throw err;
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    window.__actmasterLiffInit.liffId = id;
+    window.__actmasterLiffInit.ready = false;
+    window.__actmasterLiffInit.promise = window.liff.init({
+      liffId: id,
+      withLoginOnExternalBrowser: options.withLoginOnExternalBrowser === true
+    });
+    try {
+      await window.__actmasterLiffInit.promise;
+      window.__actmasterLiffInit.ready = true;
+      try { sessionStorage.removeItem('ACTMASTER_LIFF_INVALID_CODE_RECOVERY_V1'); } catch (e) {}
+      return true;
+    } catch (err) {
+      lastError = err;
+      window.__actmasterLiffInit = { liffId: '', promise: null, ready: false };
+      const details = String(err?.code || '') + ' ' + String(err?.message || '');
+      if (/invalid authorization code/i.test(details) || attempt > 0) break;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
   }
+  throw lastError || new Error('LINE LIFF 初始化失敗');
+};
+
+window.getActmasterLiffProfile = async function() {
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await window.liff.getProfile();
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  throw lastError || new Error('無法取得 LINE 個人資料');
+};
+
+window.recoverActmasterStartupOnce = function(error) {
+  const details = [error?.code, error?.message, error?.cause?.code, error?.cause?.message]
+    .map(value => String(value || '').toLowerCase())
+    .join(' ');
+  if (details.includes('invalid authorization code')) return false;
+
+  const key = 'ACTMASTER_STARTUP_RECOVERY_V1';
+  const now = Date.now();
+  try {
+    const previous = Number(sessionStorage.getItem(key) || 0);
+    if (previous && now - previous < 2 * 60 * 1000) return false;
+    sessionStorage.setItem(key, String(now));
+  } catch (e) {
+    return false;
+  }
+
+  const loadingText = document.getElementById('loading-text');
+  if (loadingText) loadingText.textContent = '正在重新連線…';
+  window.__actmasterLiffInit = { liffId: '', promise: null, ready: false };
+  setTimeout(() => window.location.replace(window.buildActmasterCleanLiffUrl()), 700);
+  return true;
+};
+
+window.showActmasterStartupFailure = function() {
+  const loadingScreen = document.getElementById('loading-screen');
+  const loadingText = document.getElementById('loading-text');
+  if (loadingText) loadingText.textContent = '系統暫時無法連線';
+  if (!loadingScreen || document.getElementById('actmaster-startup-retry')) return;
+
+  const hint = document.createElement('p');
+  hint.className = 'mt-3 px-8 text-center text-[13px] font-bold text-slate-500';
+  hint.textContent = '請確認網路後重新連線，不需要重新註冊。';
+  const retry = document.createElement('button');
+  retry.id = 'actmaster-startup-retry';
+  retry.type = 'button';
+  retry.className = 'mt-5 min-h-12 rounded-2xl bg-[#06C755] px-8 text-[15px] font-black text-white active:scale-95';
+  retry.textContent = '重新連線';
+  retry.addEventListener('click', () => {
+    try { sessionStorage.removeItem('ACTMASTER_STARTUP_RECOVERY_V1'); } catch (e) {}
+    retry.disabled = true;
+    retry.textContent = '重新連線中…';
+    window.location.replace(window.buildActmasterCleanLiffUrl());
+  });
+  loadingScreen.append(hint, retry);
 };
 
 window.ensureActmasterLiffLogin = function(options = {}) {

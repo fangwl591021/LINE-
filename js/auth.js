@@ -2565,7 +2565,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    window.currentUserProfile = await liff.getProfile();
+    window.currentUserProfile = typeof window.getActmasterLiffProfile === 'function'
+      ? await window.getActmasterLiffProfile()
+      : await liff.getProfile();
 
     if (
       typeof window.ensureActmasterPointFriendship === 'function' &&
@@ -2895,7 +2897,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   } catch (err) {
     if (window.recoverActmasterInvalidLiffAuthorization?.(err)) return;
-    document.getElementById('loading-text').innerText = "系統連線失敗";
+    if (window.recoverActmasterStartupOnce?.(err)) return;
+    if (typeof window.showActmasterStartupFailure === 'function') {
+      window.showActmasterStartupFailure();
+    } else {
+      document.getElementById('loading-text').innerText = "系統暫時無法連線";
+    }
     console.error(err);
   }
 });
