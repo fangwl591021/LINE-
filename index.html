@@ -636,7 +636,7 @@
           <div id="my-ecard-empty-state" class="hidden space-y-4">
             <p class="text-[13px] text-slate-500 font-medium mt-2 leading-relaxed">您尚未建立專屬名片。<br>請直接拍照掃描實體名片,讓 AI 自動建檔綁定;或一鍵使用 LINE 資料產生。</p>
             <div class="flex gap-3">
-              <button onclick="document.getElementById('myCameraInput').click()" class="flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm">
+              <button type="button" onclick="window.openBusinessCardCamera('mycard', event)" class="flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm">
                 <span class="material-symbols-outlined text-3xl">photo_camera</span>
                 <span class="text-[13px]">拍照掃描</span>
               </button>
@@ -1487,7 +1487,7 @@
         </div>
 
         <div class="flex gap-3 mt-4">
-          <button onclick="document.getElementById('cameraInput').click()" class="flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm">
+          <button type="button" onclick="window.openBusinessCardCamera('collected', event)" class="flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm">
             <span class="material-symbols-outlined text-3xl">photo_camera</span>
             <span class="text-[13px]">拍照掃描</span>
           </button>
@@ -2701,6 +2701,27 @@
   </div>
 </div>
 
+<div id="business-card-camera-modal" class="hidden fixed inset-0 z-[2400] w-full max-w-md mx-auto left-0 right-0 bg-black flex-col" role="dialog" aria-modal="true" aria-labelledby="business-card-camera-title">
+  <header class="shrink-0 flex items-center justify-between gap-3 px-4 py-3 pt-safe bg-slate-950 text-white border-b border-white/10">
+    <button id="business-card-camera-close" type="button" onclick="window.closeBusinessCardCamera()" class="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center active:scale-90" aria-label="關閉相機">
+      <span class="material-symbols-outlined">close</span>
+    </button>
+    <div class="min-w-0 text-center">
+      <h2 id="business-card-camera-title" class="text-[16px] font-black">拍攝名片</h2>
+      <p class="text-[11px] font-bold text-white/60">請將名片完整放入畫面</p>
+    </div>
+    <span class="w-11" aria-hidden="true"></span>
+  </header>
+  <div class="relative flex-1 min-h-0 bg-black flex items-center justify-center overflow-hidden">
+    <video id="business-card-camera-video" class="w-full h-full object-contain bg-black" autoplay muted playsinline></video>
+    <div class="pointer-events-none absolute inset-[8%] border-2 border-white/80 rounded-2xl shadow-[0_0_0_999px_rgba(0,0,0,0.22)]"></div>
+    <div id="business-card-camera-status" class="absolute left-4 right-4 bottom-4 rounded-2xl bg-black/70 px-4 py-3 text-center text-[13px] font-bold text-white">正在開啟後鏡頭…</div>
+  </div>
+  <footer class="shrink-0 bg-slate-950 px-5 pt-4 pb-safe flex items-center justify-center">
+    <button id="business-card-camera-shutter" type="button" onclick="window.captureBusinessCardPhoto()" disabled class="w-20 h-20 rounded-full border-[6px] border-white bg-white/20 disabled:opacity-40 active:scale-90 transition-transform" aria-label="拍攝名片"></button>
+  </footer>
+</div>
+
 <div id="cropper-modal" class="hidden fixed inset-0 bg-black/90 z-[2300] flex flex-col w-full max-w-md mx-auto left-0 right-0">
   <div class="flex-1 w-full h-full overflow-hidden flex items-center justify-center p-4">
     <img id="cropper-image" class="max-w-full max-h-full">
@@ -2748,6 +2769,7 @@
 <script src="js/core.js?v=7.29"></script>
 <script src="js/navigation.js?v=7.91"></script>
 <script src="js/modules/cropper.js?v=7.17"></script>
+<script src="js/modules/business-card-camera.js?v=1.0"></script>
 <script src="js/modules/cards.js?v=7.97"></script>
 <script src="js/modules/ecard.js?v=7.52"></script>
 <script src="js/modules/mycard.js?v=8.80"></script>
