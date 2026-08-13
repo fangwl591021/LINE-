@@ -147,7 +147,7 @@ ok(!frontend.includes('window.location'), 'drawer does not navigate away from th
 ok(!frontend.includes('storeAdjustCustomerPoints'), 'Phase 0-2 frontend does not call point cashier');
 
 includesAll(navigation, ["page === 'exchange-zone'", 'window.loadExchangeZone'], 'navigation initializes exchange feed');
-ok(wrangler.includes('EXCHANGE_ZONE_ACCESS_MODE = "private"'), 'production config keeps exchange zone private by default');
+ok(wrangler.includes('EXCHANGE_ZONE_ACCESS_MODE = "open"'), 'production config formally opens the exchange zone to authenticated members');
 ok(!wrangler.includes('EXCHANGE_ZONE_PRIVATE_TESTER_IDS = '), 'private tester identities are not committed to public config');
 
 ['points_ledger', 'insertUserPoint', 'storeAdjustCustomerPoints', 'createOrder', 'payment'].forEach((needle) => {

@@ -23,7 +23,7 @@ bucket_name = "linengine"
 # SOCIAL_LIKE_LIFF_ID must be a LINE LIFF app whose view type is Compact.
 SOCIAL_LIKE_LIFF_ID = "1660923784-NVioaXK7"
 LINE_OA_FOLLOW_POINTS = "300"
-EXCHANGE_ZONE_ACCESS_MODE = "private"
+EXCHANGE_ZONE_ACCESS_MODE = "open"
 MOTHER_CUS_ACCOUNT_URL = "https://aiwe.cc/index.php/cus_account/"
 MOTHER_CUS_ACCOUNT_SHOP_ID = "78"
 MOTHER_CUS_ACCOUNT_CLIENT_ID = "1660923784"
