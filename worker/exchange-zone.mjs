@@ -103,15 +103,28 @@ function selectColumns() {
   return `
     SELECT
       p.post_handle, p.title, p.body, p.contact_tags_json,
-      p.author_user_id, p.card_row_id, p.published_at, p.created_at,
-      COALESCE((
-        SELECT u.name FROM users u
-        WHERE u.line_id = p.author_user_id OR u.row_id = p.author_user_id
-        ORDER BY CASE WHEN u.line_id = p.author_user_id THEN 0 ELSE 1 END
-        LIMIT 1
-      ), '會員') AS author_name
+      p.author_user_id, p.card_row_id, p.published_at, p.created_at
     FROM exchange_zone_posts p
   `;
+}
+
+async function withAuthor(db, row) {
+  const fallback = { ...row, author_name: '會員' };
+  const authorUserId = text(row?.author_user_id, 180);
+  if (!authorUserId) return fallback;
+  try {
+    const author = await db.prepare(`
+      SELECT u.name
+      FROM users u
+      WHERE u.line_id = ?1 OR u.row_id = ?1
+      ORDER BY CASE WHEN u.line_id = ?1 THEN 0 ELSE 1 END
+      LIMIT 1
+    `).bind(authorUserId).first();
+    return { ...row, author_name: text(author?.name, 80) || '會員' };
+  } catch (error) {
+    console.warn('Exchange zone author hydration skipped:', String(error?.message || error).slice(0, 240));
+    return fallback;
+  }
 }
 
 function withoutCard(row) {
@@ -159,6 +172,10 @@ async function withPublicCard(db, row) {
     console.warn('Exchange zone public card hydration skipped:', String(error?.message || error).slice(0, 240));
     return fallback;
   }
+}
+
+async function hydratedPost(db, row) {
+  return withPublicCard(db, await withAuthor(db, row));
 }
 
 function isPublishSchemaError(error) {
@@ -283,7 +300,7 @@ export const ExchangeZoneModule = {
         LIMIT ?1
       `).bind(limit).all();
     }
-    const hydrated = await Promise.all((result?.results || []).map((row) => withPublicCard(env.ACTMASTER_DB, row)));
+    const hydrated = await Promise.all((result?.results || []).map((row) => hydratedPost(env.ACTMASTER_DB, row)));
     const posts = hydrated.map((row) => publicPost(row, false)).filter((post) => post.postHandle);
     return { success: true, access, posts, count: posts.length };
   },
@@ -311,7 +328,7 @@ export const ExchangeZoneModule = {
         LIMIT 1
       `).bind(postHandle).first();
     }
-    const hydrated = row ? await withPublicCard(env.ACTMASTER_DB, row) : null;
+    const hydrated = row ? await hydratedPost(env.ACTMASTER_DB, row) : null;
     return hydrated
       ? { success: true, access, post: publicPost(hydrated, true) }
       : { success: false, error: '找不到這則交流內容' };
