@@ -134,6 +134,23 @@ function selectColumns() {
   `;
 }
 
+function isPublishSchemaError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return message.includes('exchange_zone_publish_operations')
+    || message.includes('no such column: p.expires_at')
+    || message.includes('no such column: expires_at')
+    || message.includes('no such column: point_cost')
+    || message.includes('no such column: publish_operation_id');
+}
+
+function migrationRequired() {
+  return {
+    success: false,
+    error: '交流專區資料庫更新尚未完成，請先套用 0022 migration',
+    code: 'EXCHANGE_ZONE_MIGRATION_REQUIRED'
+  };
+}
+
 function denied(access) {
   return {
     success: false,
@@ -221,13 +238,24 @@ export const ExchangeZoneModule = {
     if (!env?.ACTMASTER_DB) return { success: false, error: '交流專區資料庫尚未設定' };
 
     const limit = boundedLimit(payload?.limit);
-    const result = await env.ACTMASTER_DB.prepare(`
-      ${selectColumns()}
-      WHERE p.status = 'published'
-        AND (p.expires_at = '' OR p.expires_at > CURRENT_TIMESTAMP)
-      ORDER BY COALESCE(NULLIF(p.published_at, ''), p.created_at) DESC, p.post_id DESC
-      LIMIT ?1
-    `).bind(limit).all();
+    let result;
+    try {
+      result = await env.ACTMASTER_DB.prepare(`
+        ${selectColumns()}
+        WHERE p.status = 'published'
+          AND (p.expires_at = '' OR p.expires_at > CURRENT_TIMESTAMP)
+        ORDER BY COALESCE(NULLIF(p.published_at, ''), p.created_at) DESC, p.post_id DESC
+        LIMIT ?1
+      `).bind(limit).all();
+    } catch (error) {
+      if (!isPublishSchemaError(error)) throw error;
+      result = await env.ACTMASTER_DB.prepare(`
+        ${selectColumns()}
+        WHERE p.status = 'published'
+        ORDER BY COALESCE(NULLIF(p.published_at, ''), p.created_at) DESC, p.post_id DESC
+        LIMIT ?1
+      `).bind(limit).all();
+    }
     const posts = (result?.results || []).map((row) => publicPost(row, false)).filter((post) => post.postHandle);
     return { success: true, access, posts, count: posts.length };
   },
@@ -239,12 +267,22 @@ export const ExchangeZoneModule = {
 
     const postHandle = text(payload?.postHandle, 120);
     if (!postHandle) return { success: false, error: '缺少交流內容識別碼' };
-    const row = await env.ACTMASTER_DB.prepare(`
-      ${selectColumns()}
-      WHERE p.post_handle = ?1 AND p.status = 'published'
-        AND (p.expires_at = '' OR p.expires_at > CURRENT_TIMESTAMP)
-      LIMIT 1
-    `).bind(postHandle).first();
+    let row;
+    try {
+      row = await env.ACTMASTER_DB.prepare(`
+        ${selectColumns()}
+        WHERE p.post_handle = ?1 AND p.status = 'published'
+          AND (p.expires_at = '' OR p.expires_at > CURRENT_TIMESTAMP)
+        LIMIT 1
+      `).bind(postHandle).first();
+    } catch (error) {
+      if (!isPublishSchemaError(error)) throw error;
+      row = await env.ACTMASTER_DB.prepare(`
+        ${selectColumns()}
+        WHERE p.post_handle = ?1 AND p.status = 'published'
+        LIMIT 1
+      `).bind(postHandle).first();
+    }
     return row
       ? { success: true, access, post: publicPost(row, true) }
       : { success: false, error: '找不到這則交流內容' };
@@ -263,7 +301,13 @@ export const ExchangeZoneModule = {
     const authorUserId = text(actor?.userId, 180);
     if (!authorUserId) return { success: false, error: '缺少登入會員識別資料' };
 
-    const prior = await existingPublish(env.ACTMASTER_DB, authorUserId, input.idempotencyKey);
+    let prior;
+    try {
+      prior = await existingPublish(env.ACTMASTER_DB, authorUserId, input.idempotencyKey);
+    } catch (error) {
+      if (isPublishSchemaError(error)) return migrationRequired();
+      throw error;
+    }
     if (prior) return duplicateResult(prior, access);
 
     const operationId = `exop_${crypto.randomUUID()}`;
@@ -387,6 +431,7 @@ export const ExchangeZoneModule = {
         };
       }
       await markOperation(env.ACTMASTER_DB, operationId, 'failed', 'EXCHANGE_PUBLISH_FAILED', { message: text(error?.message, 240) }).catch(() => {});
+      if (isPublishSchemaError(error)) return migrationRequired();
       return { success: false, error: '刊登失敗，尚未扣點', code: 'EXCHANGE_PUBLISH_FAILED' };
     }
   }

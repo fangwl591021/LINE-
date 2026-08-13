@@ -54,6 +54,11 @@ includesAll(moduleSource, [
   "LOWER(COALESCE(c.visibility, '')) = 'public'",
   'EXCHANGE_PUBLISH_REFUND_PENDING'
 ], 'publish flow is opaque, idempotent, owner-card-bound, debit-first and compensating');
+includesAll(moduleSource, [
+  'EXCHANGE_ZONE_MIGRATION_REQUIRED',
+  '請先套用 0022 migration',
+  'isPublishSchemaError(error)'
+], 'missing Phase 3 schema returns an actionable error instead of an opaque 500');
 ['authorUserId:', 'cardRowId:', 'operationId: operationId'].forEach((needle) => {
   ok(!moduleSource.includes(needle), `public response does not expose ${needle}`);
 });
@@ -72,6 +77,12 @@ includesAll(frontend, [
   '聯絡標籤（最多 3 個）',
   '發布成功才扣'
 ], 'compose drawer submits text, allowlisted tags, own-card intent and an idempotency key');
+includesAll(frontend, [
+  'renderPublishSuccess(result)',
+  '刊登完成',
+  '返回交流專區',
+  '沒有重複扣點'
+], 'successful publish renders a persistent in-drawer confirmation');
 ok(!frontend.includes('window.open('), 'publish experience stays inside the right-side drawer');
 ok(!frontend.includes('window.location'), 'publish experience does not navigate away');
 
