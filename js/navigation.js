@@ -3,7 +3,12 @@
 function refreshNativeBusinessCardCameraInput(inputId) {
   const current = document.getElementById(inputId);
   if (!current || current.type !== 'file') return null;
-  const fresh = current.cloneNode(true);
+  const fresh = document.createElement('input');
+  Array.from(current.attributes || []).forEach(attribute => {
+    if (attribute.name !== 'value') fresh.setAttribute(attribute.name, attribute.value);
+  });
+  fresh.type = 'file';
+  fresh.id = inputId;
   fresh.value = '';
   fresh.setAttribute('accept', 'image/*');
   fresh.setAttribute('capture', 'environment');
@@ -16,6 +21,24 @@ window.refreshBusinessCardCameraInputs = function(scope) {
   if (!scope || scope === 'collected') refreshNativeBusinessCardCameraInput('cameraInput');
   if (!scope || scope === 'mycard') refreshNativeBusinessCardCameraInput('myCameraInput');
 };
+
+function refreshBusinessCardCameraBeforeNativeClick(event) {
+  const target = event && event.target;
+  const label = target && target.closest ? target.closest('label') : null;
+  if (!label) return;
+  const input = label.querySelector('#cameraInput, #myCameraInput');
+  if (!input) return;
+  refreshNativeBusinessCardCameraInput(input.id);
+}
+
+// Android LINE WebView may reuse a file chooser after returning from the
+// camera. Recreate the input on the trusted press that precedes the label's
+// native click, without issuing a synthetic input.click().
+if (window.PointerEvent) {
+  document.addEventListener('pointerdown', refreshBusinessCardCameraBeforeNativeClick, true);
+} else {
+  document.addEventListener('touchstart', refreshBusinessCardCameraBeforeNativeClick, true);
+}
 
 window.goPage = function(page, isInitLoad = false) {
   if (page === 'profile') page = 'admin-settings';
