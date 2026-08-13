@@ -12,10 +12,10 @@ function ok(condition, message) {
   console.log(`OK ${message}`);
 }
 
-ok(html.includes("onclick=\"document.getElementById('cameraInput').click()\""), 'collected-card camera button directly invokes the proven native input flow');
-ok(html.includes("onclick=\"document.getElementById('myCameraInput').click()\""), 'my-card camera button directly invokes the proven native input flow');
-ok(/<input type="file" id="cameraInput" accept="image\/\*" capture="environment" class="hidden"/m.test(html), 'collected-card input requests the native rear camera');
-ok(/<input type="file" id="myCameraInput" accept="image\/\*" capture="environment" class="hidden"/m.test(html), 'my-card input requests the native rear camera');
+ok(/<label[^>]*>(?:(?!<\/label>)[\s\S])*?<input type="file" id="cameraInput" accept="image\/\*" capture="environment" hidden/m.test(html), 'collected-card photo label directly owns the native rear-camera input');
+ok(/<label[^>]*>(?:(?!<\/label>)[\s\S])*?<input type="file" id="myCameraInput" accept="image\/\*" capture="environment" hidden/m.test(html), 'my-card photo label directly owns the native rear-camera input');
+ok(!html.includes("onclick=\"document.getElementById('cameraInput').click()\""), 'collected-card camera does not use a synthetic input click');
+ok(!html.includes("onclick=\"document.getElementById('myCameraInput').click()\""), 'my-card camera does not use a synthetic input click');
 ok(!/<label[^>]*>[\s\S]*?<input type="file" id="(?:my)?CameraInput"[^>]*class="absolute inset-0/m.test(html), 'camera inputs are not transparent overlays that Android treats as generic uploads');
 ok(html.includes("document.getElementById('galleryInput').click()"), 'collected-card album button keeps the existing gallery picker');
 ok(html.includes("document.getElementById('myGalleryInput').click()"), 'my-card album button keeps the existing gallery picker');
