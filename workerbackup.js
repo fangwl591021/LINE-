@@ -81,6 +81,7 @@ const ACTION_POLICIES = {
   listExchangeZonePosts: { access: 'authenticated', note: 'private_exchange_zone_read' },
   getExchangeZonePost: { access: 'authenticated', note: 'private_exchange_zone_read' },
   publishExchangeZonePost: { access: 'authenticated', ownership: 'self', note: 'private_exchange_zone_publish' },
+  updateExchangeZonePost: { access: 'authenticated', ownership: 'self', note: 'private_exchange_zone_update' },
 
   updateUserProfile: { access: 'authenticated', ownership: 'self' },
   linkUserIdentity: { access: 'authenticated', ownership: 'self' },
@@ -16411,6 +16412,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'getExchangeZoneAccess': return ExchangeZoneModule.access(payload || {}, env, actor);
     case 'listExchangeZonePosts': return await ExchangeZoneModule.list(payload || {}, env, actor);
     case 'getExchangeZonePost': return await ExchangeZoneModule.get(payload || {}, env, actor);
+    case 'updateExchangeZonePost': return await ExchangeZoneModule.update(payload || {}, env, actor);
     case 'publishExchangeZonePost': return await ExchangeZoneModule.publish(payload || {}, env, actor, {
       balance: async (userId) => {
         const wallet = await PointModule.queryUserPoints({
