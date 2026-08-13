@@ -636,11 +636,11 @@
           <div id="my-ecard-empty-state" class="hidden space-y-4">
             <p class="text-[13px] text-slate-500 font-medium mt-2 leading-relaxed">您尚未建立專屬名片。<br>請直接拍照掃描實體名片,讓 AI 自動建檔綁定;或一鍵使用 LINE 資料產生。</p>
             <div class="flex gap-3">
-              <label class="relative flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm overflow-hidden">
+              <button type="button" onclick="document.getElementById('myCameraInput').click()" class="flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm">
                 <span class="material-symbols-outlined text-3xl">photo_camera</span>
                 <span class="text-[13px]">拍照掃描</span>
-                <input type="file" id="myCameraInput" accept="image/*" capture="environment" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="window.recognizeMyCard(this)" aria-label="開啟後鏡頭拍攝自己的名片">
-              </label>
+              </button>
+              <input type="file" id="myCameraInput" accept="image/*" capture="environment" class="hidden" onchange="window.recognizeMyCard(this)">
 
               <button onclick="document.getElementById('myGalleryInput').click()" class="flex-1 bg-slate-50 text-slate-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-slate-200 shadow-sm">
                 <span class="material-symbols-outlined text-3xl">image</span>
@@ -1487,11 +1487,11 @@
         </div>
 
         <div class="flex gap-3 mt-4">
-          <label class="relative flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm overflow-hidden">
+          <button type="button" onclick="document.getElementById('cameraInput').click()" class="flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm">
             <span class="material-symbols-outlined text-3xl">photo_camera</span>
             <span class="text-[13px]">拍照掃描</span>
-            <input type="file" id="cameraInput" accept="image/*" capture="environment" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="window.recognizeCard(this)" aria-label="開啟後鏡頭拍攝收藏名片">
-          </label>
+          </button>
+          <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden" onchange="window.recognizeCard(this)">
 
           <button onclick="document.getElementById('galleryInput').click()" class="flex-1 bg-slate-50 text-slate-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-slate-200 shadow-sm">
             <span class="material-symbols-outlined text-3xl">image</span>
