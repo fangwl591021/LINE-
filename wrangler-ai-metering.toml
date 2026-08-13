@@ -1,0 +1,26 @@
+name = "line-engine-ai-metering-test"
+main = "worker-entry-metered.mjs"
+compatibility_date = "2026-04-23"
+
+[[kv_namespaces]]
+binding = "ACTMASTER_KV"
+id = "6785c24db6eb4080b48ce091c81d631c"
+
+[[d1_databases]]
+binding = "ACTMASTER_DB"
+database_name = "actmaster_db"
+database_id = "8a0107f9-000d-4810-b6bf-5d599b699195"
+
+[[r2_buckets]]
+binding = "IMG_BUCKET"
+bucket_name = "linengine"
+
+[vars]
+SOCIAL_LIKE_LIFF_ID = "1660923784-NVioaXK7"
+LINE_OA_FOLLOW_POINTS = "300"
+EXCHANGE_ZONE_ACCESS_MODE = "open"
+MOTHER_CUS_ACCOUNT_URL = "https://aiwe.cc/index.php/cus_account/"
+MOTHER_CUS_ACCOUNT_SHOP_ID = "78"
+MOTHER_CUS_ACCOUNT_CLIENT_ID = "1660923784"
+MOTHER_CUS_ACCOUNT_REDIRECT_URI = "https://aiwe.cc/index.php/line_login/677/"
+MOTHER_LINE_MEMBER_API_URL = "https://aiwe.cc/index.php/wp-json/wetw/v1/check-or-create-line-user"
