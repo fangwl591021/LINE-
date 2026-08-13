@@ -100,12 +100,26 @@ includesAll(overlay, [
   "anchor.target = '_blank'",
   "anchor.rel = 'noopener noreferrer'",
   'preview.imageUrl',
-  'preview.description'
-], 'exchange detail linkifies HTTPS URLs and renders first-link preview metadata safely');
+  'preview.description',
+  "icon.textContent = 'language'"
+], 'exchange detail linkifies HTTPS URLs and renders first-link preview metadata with a visible fallback card');
+
+includesAll(overlay, [
+  'youtubeVideoId',
+  "host === 'youtu.be'",
+  "host === 'youtube.com'",
+  "['shorts', 'embed', 'live']",
+  'renderYouTubeEmbed',
+  'https://www.youtube-nocookie.com/embed/',
+  'playsinline=1',
+  'iframe.allowFullscreen = true',
+  "section.dataset.exchangeYoutube = '1'",
+  '可直接在貼文內播放'
+], 'YouTube watch, short, live and youtu.be links embed safely inside exchange detail');
 
 ok(!frontend.includes('max-h-[420px]'), 'exchange detail no longer renders the old oversized card image');
 ok(!frontend.includes('window.open('), 'exchange enhancements do not open a new browser window');
 ok(!frontend.includes('window.location'), 'exchange enhancements do not navigate away from the LIFF app');
 ok(!overlay.includes('innerHTML = preview.'), 'link preview metadata is rendered with DOM textContent rather than unsafe HTML');
 
-console.log('\nExchange zone like, compact-card, owner-action and link-preview contract passed.');
+console.log('\nExchange zone like, compact-card, owner-action, link-preview and YouTube contract passed.');
