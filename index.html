@@ -2383,20 +2383,23 @@
     </div>
 
     <!-- ==================== 交流專區 ==================== -->
-    <div id="page-exchange-zone" class="hidden animate-in fade-in mx-1 pb-24 pt-2">
-      <div class="flex items-center gap-3 mb-4 px-1">
-        <button type="button" onclick="window.goPage('home')" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 active:scale-90 transition-transform shadow-sm" aria-label="返回首頁">
-          <span class="material-symbols-outlined text-[22px]">arrow_back</span>
-        </button>
+    <div id="page-exchange-zone" class="hidden fixed inset-0 z-[110] max-w-md mx-auto bg-slate-950/35" role="dialog" aria-modal="true" aria-labelledby="exchange-zone-panel-title">
+      <button id="exchange-zone-panel-backdrop" type="button" class="absolute inset-0 w-full h-full cursor-default" aria-label="關閉交流專區"></button>
+      <aside id="exchange-zone-panel" class="absolute right-0 top-0 h-full h-[100dvh] w-[92%] max-w-[410px] translate-x-full bg-slate-50 shadow-2xl transition-transform duration-200 ease-out flex flex-col pt-safe">
+      <header class="shrink-0 flex items-center gap-3 px-5 py-4 border-b border-slate-100 bg-white">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
-            <h2 class="text-2xl font-black text-slate-800 tracking-tight">交流專區</h2>
+            <h2 id="exchange-zone-panel-title" class="text-2xl font-black text-slate-800 tracking-tight">交流專區</h2>
             <span id="exchange-zone-private-badge" class="rounded-full bg-amber-50 border border-amber-100 px-2 py-1 text-[10px] font-black text-amber-700">私人測試</span>
           </div>
           <p class="text-[12px] text-slate-400 font-bold mt-0.5">商脈夥伴的公開文字與聯絡方式。</p>
         </div>
-      </div>
+        <button id="exchange-zone-panel-close" type="button" class="w-10 h-10 shrink-0 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center active:scale-90 transition-transform" aria-label="關閉交流專區">
+          <span class="material-symbols-outlined text-[24px]">close</span>
+        </button>
+      </header>
 
+      <div class="flex-1 overflow-y-auto overscroll-contain p-3 pb-safe">
       <section class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden" aria-labelledby="exchange-zone-title">
         <div class="px-5 py-5 border-b border-slate-100">
           <div class="flex items-start justify-between gap-3">
@@ -2418,6 +2421,8 @@
           </div>
         </div>
       </section>
+      </div>
+      </aside>
 
       <div id="exchange-zone-drawer" class="hidden fixed inset-0 z-[120] max-w-md mx-auto bg-slate-950/35" role="dialog" aria-modal="true" aria-labelledby="exchange-zone-drawer-title">
         <button id="exchange-zone-drawer-backdrop" type="button" class="absolute inset-0 w-full h-full cursor-default" aria-label="關閉交流內容"></button>
@@ -2758,7 +2763,7 @@
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/platform-shop.js?v=1.0"></script>
 <script src="js/modules/partner-directory.js?v=1.0"></script>
-<script src="js/modules/exchange-zone.js?v=1.0"></script>
+<script src="js/modules/exchange-zone.js?v=1.1"></script>
 <script src="js/modules/admin-partners.js?v=1.1"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.7"></script>
