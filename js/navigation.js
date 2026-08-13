@@ -1,45 +1,32 @@
 /* ==================== 導航與模式切換 ==================== */
 
-function refreshNativeBusinessCardCameraInput(inputId) {
+function mountNativeBusinessCardCameraInput(labelId, inputId, handlerName) {
+  const label = document.getElementById(labelId);
+  if (!label) return null;
   const current = document.getElementById(inputId);
-  if (!current || current.type !== 'file') return null;
+  if (current) current.remove();
   const fresh = document.createElement('input');
-  Array.from(current.attributes || []).forEach(attribute => {
-    if (attribute.name !== 'value') fresh.setAttribute(attribute.name, attribute.value);
-  });
   fresh.type = 'file';
   fresh.id = inputId;
-  fresh.value = '';
-  fresh.setAttribute('accept', 'image/*');
-  fresh.setAttribute('capture', 'environment');
+  fresh.accept = 'image/*';
+  fresh.capture = 'environment';
   fresh.hidden = true;
-  current.replaceWith(fresh);
+  fresh.onchange = function(event) {
+    const handler = window[handlerName];
+    if (typeof handler === 'function') handler(event.currentTarget);
+  };
+  label.appendChild(fresh);
   return fresh;
 }
 
 window.refreshBusinessCardCameraInputs = function(scope) {
-  if (!scope || scope === 'collected') refreshNativeBusinessCardCameraInput('cameraInput');
-  if (!scope || scope === 'mycard') refreshNativeBusinessCardCameraInput('myCameraInput');
+  if (!scope || scope === 'collected') {
+    mountNativeBusinessCardCameraInput('collected-card-camera-label', 'cameraInput', 'recognizeCard');
+  }
+  if (!scope || scope === 'mycard') {
+    mountNativeBusinessCardCameraInput('my-card-camera-label', 'myCameraInput', 'recognizeMyCard');
+  }
 };
-
-function refreshBusinessCardCameraBeforeNativeClick(event) {
-  const target = event && event.target;
-  const label = target && target.closest ? target.closest('label') : null;
-  if (!label) return;
-  const input = label.querySelector('#cameraInput, #myCameraInput');
-  if (!input) return;
-  refreshNativeBusinessCardCameraInput(input.id);
-}
-
-// Android LINE WebView may reuse a file chooser after returning from the
-// camera. Recreate the input on the trusted press that precedes the label's
-// native click, without issuing a synthetic input.click().
-if (window.PointerEvent) {
-  document.addEventListener('pointerdown', refreshBusinessCardCameraBeforeNativeClick, true);
-} else {
-  document.addEventListener('touchstart', refreshBusinessCardCameraBeforeNativeClick, true);
-}
-
 window.goPage = function(page, isInitLoad = false) {
   if (page === 'profile') page = 'admin-settings';
   window.previousPage = window.currentPage || '';
