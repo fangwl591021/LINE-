@@ -14,6 +14,7 @@
     "test:card-fate-tags": "node test/card-fate-tag-analysis.test.mjs && node test/card-detail-fate-tag-identity.test.mjs && node tools/check-card-fate-tag-pipeline-contract.js",
     "test:liff-share-picker": "node test/liff-share-target-picker.test.mjs",
     "test:home-agenda-counters": "node test/home-task-buckets.test.mjs",
-    "test:personal-agenda-time": "node test/personal-agenda-time.test.mjs"
+    "test:personal-agenda-time": "node test/personal-agenda-time.test.mjs",
+    "test:exchange-zone": "node tools/check-exchange-zone-contract.js && node test/exchange-zone.test.mjs"
   }
 }

@@ -1,6 +1,7 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
 import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
+import { ExchangeZoneModule } from './worker/exchange-zone.mjs';
 
 /**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
@@ -76,6 +77,9 @@ const ACTION_POLICIES = {
   recordShareCardVisit: { access: 'public' },
   listPointRedemptionPartners: { access: 'public', note: 'public_partner_directory' },
   getPointRedemptionPartner: { access: 'public', note: 'public_partner_directory' },
+  getExchangeZoneAccess: { access: 'authenticated', note: 'private_exchange_zone_gate' },
+  listExchangeZonePosts: { access: 'authenticated', note: 'private_exchange_zone_read' },
+  getExchangeZonePost: { access: 'authenticated', note: 'private_exchange_zone_read' },
 
   updateUserProfile: { access: 'authenticated', ownership: 'self' },
   linkUserIdentity: { access: 'authenticated', ownership: 'self' },
@@ -16403,6 +16407,9 @@ async function dispatchAction(action, payload, request, env) {
     case 'getSocialLikeStats':     return await TrackingModule.getSocialLikeStats(payload || {}, env);
     case 'recordSocialLike':       return await TrackingModule.recordSocialLike(payload || {}, env);
     case 'recordShareCardVisit':   return await TrackingModule.recordShareCardVisit(payload, env);
+    case 'getExchangeZoneAccess': return ExchangeZoneModule.access(payload || {}, env, actor);
+    case 'listExchangeZonePosts': return await ExchangeZoneModule.list(payload || {}, env, actor);
+    case 'getExchangeZonePost': return await ExchangeZoneModule.get(payload || {}, env, actor);
     case 'listPointRedemptionPartners': return await PartnerDirectoryModule.list(payload || {}, env);
     case 'getPointRedemptionPartner': return await PartnerDirectoryModule.get(payload || {}, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
