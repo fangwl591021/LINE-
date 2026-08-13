@@ -530,13 +530,60 @@
     if (open) window.updateInboxPointCostHint?.();
   };
 
+  function resetExchangeInquiryRecipient() {
+    const exchangeHandle = $("inbox-exchange-post-handle");
+    const query = $("inbox-recipient-query");
+    const modeButtons = $("inbox-recipient-mode-buttons");
+    const searchButton = $("inbox-recipient-search-button");
+    if (exchangeHandle) exchangeHandle.value = "";
+    if (query) query.readOnly = false;
+    modeButtons?.classList.remove("hidden");
+    searchButton?.classList.remove("hidden");
+  }
+
   window.openInboxSendCenter = function () {
+    resetExchangeInquiryRecipient();
     window.inboxMode = "received";
     window.goPage("inbox");
     setTimeout(() => {
       window.toggleInboxComposer?.(true);
       $("inbox-composer")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
+  };
+
+  window.openInboxExchangeInquiry = function (post) {
+    const postHandle = String(post?.postHandle || "").trim();
+    if (!postHandle) return window.showToast?.("找不到交流內容，無法寄信", true);
+    const recipientName = String(post?.author?.name || "交流內容作者").trim();
+    const postTitle = String(post?.title || "交流內容").trim();
+    window.inboxMode = "received";
+    window.goPage("inbox");
+    setTimeout(() => {
+      window.setInboxRecipientMode?.("user");
+      const exchangeHandle = $("inbox-exchange-post-handle");
+      const receiverId = $("inbox-recipient-id");
+      const query = $("inbox-recipient-query");
+      const results = $("inbox-recipient-results");
+      const title = $("inbox-message-title");
+      const body = $("inbox-message-body");
+      const messageType = $("inbox-message-type");
+      if (exchangeHandle) exchangeHandle.value = postHandle;
+      if (receiverId) receiverId.value = "";
+      if (query) {
+        query.value = recipientName;
+        query.readOnly = true;
+      }
+      $("inbox-recipient-mode-buttons")?.classList.add("hidden");
+      $("inbox-recipient-search-button")?.classList.add("hidden");
+      if (results) results.innerHTML = `<div class="rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-700 px-3 py-2 text-[13px] font-black">寄給：${escapeHTML(recipientName)}（由交流貼文帶入）</div>`;
+      if (messageType) messageType.value = "message";
+      if (title) title.value = `對「${postTitle}」有興趣`;
+      if (body) body.value = `您好，我對您刊登的「${postTitle}」有興趣，想進一步了解與交流。`;
+      window.toggleInboxComposer?.(true);
+      window.updateInboxPointCostHint?.();
+      $("inbox-composer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      body?.focus();
+    }, 240);
   };
 
   window.setInboxRecipientMode = function (mode) {
@@ -726,12 +773,13 @@
     const receiverUserId = $("inbox-recipient-id")?.value?.trim() || "";
     const receiverQuery = $("inbox-recipient-query")?.value?.trim() || "";
     const recipientMode = $("inbox-recipient-mode")?.value || "user";
+    const exchangePostHandle = $("inbox-exchange-post-handle")?.value?.trim() || "";
     const messageType = $("inbox-message-type")?.value || "message";
     const title = $("inbox-message-title")?.value?.trim() || "";
     const body = $("inbox-message-body")?.value?.trim() || "";
     const cost = inboxMessageCost(messageType);
     const selectedUserIds = isGroupRecipientMode(recipientMode) ? selectedInboxRecipientIds() : [];
-    if (!receiverUserId && !receiverQuery) return window.showToast?.("請先選擇收件人", true);
+    if (!exchangePostHandle && !receiverUserId && !receiverQuery) return window.showToast?.("請先選擇收件人", true);
     if (!title) return window.showToast?.("請輸入標題", true);
     if (!body) return window.showToast?.("請輸入內容", true);
 
@@ -742,7 +790,7 @@
       btn.classList.add("opacity-70");
     }
     try {
-      const res = await window.fetchAPI("sendInboxMessage", { receiverUserId, receiverQuery, recipientMode, selectedUserIds, messageType, title, body }, true);
+      const res = await window.fetchAPI("sendInboxMessage", { exchangePostHandle, receiverUserId, receiverQuery, recipientMode, selectedUserIds, messageType, title, body }, true);
       const sentCount = Number((res && res.data && res.data.sentCount) || 1);
       const totalCost = Number((res && res.data && res.data.totalCost) || cost);
       window.showToast?.(`${messageType === "coupon" ? "優惠券" : "訊息"}已免費送出 ${sentCount} 位`);
@@ -754,6 +802,7 @@
       });
       const results = $("inbox-recipient-results");
       if (results) results.innerHTML = "";
+      resetExchangeInquiryRecipient();
       clearRecipientSelection();
       window.updateInboxPointCostHint?.();
       window.toggleInboxComposer(false);

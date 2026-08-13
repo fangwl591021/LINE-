@@ -13377,6 +13377,20 @@ const D1InboxModule = {
     await this.ensure(env);
     const senderUserId = this.ownUserId(payload);
     let receiverUserId = this.text(payload.receiverUserId || payload.receiver_user_id || payload.toUserId);
+    const exchangePostHandle = this.text(payload.exchangePostHandle || payload.exchange_post_handle);
+    let exchangeRecipientAuthorized = false;
+    if (exchangePostHandle) {
+      const exchangePost = await D1ReadModule.first(env, `
+        SELECT author_user_id
+        FROM exchange_zone_posts
+        WHERE post_handle = ? AND status = 'published'
+          AND (expires_at = '' OR expires_at > CURRENT_TIMESTAMP)
+        LIMIT 1
+      `, [exchangePostHandle]).catch(() => null);
+      receiverUserId = this.text(exchangePost && exchangePost.author_user_id);
+      if (!receiverUserId) return { success: false, error: '這則交流內容已失效，無法寄送站內信' };
+      exchangeRecipientAuthorized = true;
+    }
     if (!receiverUserId && this.text(payload.receiverQuery || payload.keyword)) {
       const found = await this.searchRecipients({ ...payload, keyword: payload.receiverQuery || payload.keyword }, env);
       receiverUserId = this.text(found && found.data && found.data[0] && found.data[0].userId);
@@ -13396,8 +13410,14 @@ const D1InboxModule = {
 
     const receiver = await D1ReadModule.findUserByIdentity(env, receiverUserId).catch(() => null);
     if (!receiver || !receiver.user) return { success: false, error: '找不到收件人' };
+    const senderIdentityIds = await this.identityIds(env, senderUserId).catch(() => [senderUserId]);
+    const receiverIdentityIds = this.uniqueTextList([
+      receiver.canonicalId,
+      ...this.recipientIdentityValues(receiver.user)
+    ]);
+    if (this.intersects(senderIdentityIds, receiverIdentityIds)) return { success: false, error: '不能寄給自己' };
     if (!this.isActiveRecipient(receiver.user)) return { success: false, error: '對方尚未完成會員註冊，無法接收站內訊息' };
-    if (!await this.canReachRecipient(payload, receiver.user, env)) return { success: false, error: '收件人不在可傳送範圍內' };
+    if (!exchangeRecipientAuthorized && !await this.canReachRecipient(payload, receiver.user, env)) return { success: false, error: '收件人不在可傳送範圍內' };
 
     const title = this.text(payload.title, '新訊息');
     const body = this.text(payload.body || payload.content);
@@ -13410,6 +13430,7 @@ const D1InboxModule = {
     const messageCost = 0;
 
     const pointPayload = { ...(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}) };
+    if (exchangeRecipientAuthorized) pointPayload.exchangeInquiry = { postHandle: exchangePostHandle };
     pointPayload.pointCharge = { pointType: 'gift_money', points: 0, status: 'free', messageType };
     if (messageType === 'coupon') {
       pointPayload.coupon = { status: 'issued', issuedAt: new Date().toISOString(), singleUse: true };

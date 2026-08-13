@@ -8,6 +8,7 @@ const worker = read('workerbackup.js');
 const workerModule = read('worker/exchange-zone.mjs');
 const html = read('index.html');
 const frontend = read('js/modules/exchange-zone.js');
+const inboxFrontend = read('js/modules/inbox.js');
 const navigation = read('js/navigation.js');
 const wrangler = read('wrangler.toml');
 const docs = read('docs/exchange-zone/phase-0-2-private-read-only.md');
@@ -128,6 +129,18 @@ includesAll(frontend, [
   'card?.buttons',
   'safeActionUrl'
 ], 'owner can edit without another charge and attached public cards render safe action buttons');
+includesAll(frontend, [
+  'exchange-zone-inquiry-button',
+  '有興趣・寄站內信',
+  'window.openInboxExchangeInquiry(post)'
+], 'other members can enter a pre-addressed inbox inquiry from an exchange post');
+includesAll(inboxFrontend, [
+  'window.openInboxExchangeInquiry = function (post)',
+  'inbox-exchange-post-handle',
+  'query.readOnly = true',
+  'exchangePostHandle'
+], 'inbox composer receives only the opaque exchange post handle and locks the displayed recipient');
+ok(!inboxFrontend.includes('authorUserId') && !inboxFrontend.includes('author_user_id'), 'inbox inquiry frontend never receives the post author internal identity');
 ok(!frontend.includes("window.goPage?.('exchange-zone')"), 'exchange entry opens the right-side panel without page navigation');
 ok(!frontend.includes('window.open('), 'drawer does not open a new browser window');
 ok(!frontend.includes('window.location'), 'drawer does not navigate away from the current application');

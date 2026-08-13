@@ -1798,7 +1798,7 @@
         <div id="inbox-composer" class="hidden border-t border-amber-200 bg-white p-5 space-y-4">
           <div>
             <label class="block text-[13px] text-slate-500 font-black mb-2">收件人</label>
-            <div class="grid grid-cols-2 gap-2 mb-2">
+            <div id="inbox-recipient-mode-buttons" class="grid grid-cols-2 gap-2 mb-2">
               <button type="button" id="inbox-recipient-mode-user" onclick="window.setInboxRecipientMode?.('user')" class="py-2 rounded-2xl bg-slate-900 text-white text-[13px] font-black active:scale-95">姓名 / 電話</button>
               <button type="button" id="inbox-recipient-mode-course" onclick="window.setInboxRecipientMode?.('course')" class="py-2 rounded-2xl bg-amber-50 text-amber-700 border border-amber-200 text-[13px] font-black active:scale-95">課程編號</button>
               <button type="button" id="inbox-recipient-mode-owned" onclick="window.setInboxRecipientMode?.('owned')" class="py-2 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[13px] font-black active:scale-95">我的已用戶</button>
@@ -1807,10 +1807,11 @@
             <div id="inbox-recipient-audience-hint" class="hidden mb-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-[13px] font-bold text-slate-500"></div>
             <div class="flex gap-2">
               <input id="inbox-recipient-query" class="custom-input !py-3 !px-4 text-[15px]" placeholder="輸入姓名、電話或 LINE ID">
-              <button type="button" onclick="window.searchInboxRecipients()" class="shrink-0 px-4 rounded-2xl bg-slate-900 text-white text-[14px] font-black active:scale-95">搜尋</button>
+              <button id="inbox-recipient-search-button" type="button" onclick="window.searchInboxRecipients()" class="shrink-0 px-4 rounded-2xl bg-slate-900 text-white text-[14px] font-black active:scale-95">搜尋</button>
             </div>
             <input type="hidden" id="inbox-recipient-mode" value="user">
             <input type="hidden" id="inbox-recipient-id">
+            <input type="hidden" id="inbox-exchange-post-handle">
             <div id="inbox-recipient-results" class="mt-3 space-y-2"></div>
             <div id="inbox-recipient-selection-notice" class="hidden"></div>
           </div>
@@ -2777,11 +2778,11 @@
 <script src="js/modules/home.js?v=7.81"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="js/modules/customers.js?v=1.1"></script>
-<script src="js/modules/inbox.js?v=1.16"></script>
+<script src="js/modules/inbox.js?v=1.17"></script>
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/platform-shop.js?v=1.0"></script>
 <script src="js/modules/partner-directory.js?v=1.0"></script>
-<script src="js/modules/exchange-zone.js?v=1.4"></script>
+<script src="js/modules/exchange-zone.js?v=1.5"></script>
 <script src="js/modules/admin-partners.js?v=1.1"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.7"></script>
