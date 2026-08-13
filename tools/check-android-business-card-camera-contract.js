@@ -3,6 +3,7 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const navigation = fs.readFileSync(path.join(root, 'js/navigation.js'), 'utf8');
 
 function ok(condition, message) {
   if (!condition) {
@@ -24,5 +25,13 @@ ok(!html.includes('js/modules/business-card-camera.js'), 'failed getUserMedia ca
 ok(!html.includes('navigator.mediaDevices.getUserMedia'), 'main page does not request WebView camera permission');
 ok(html.includes('onchange="window.recognizeCard(this)"'), 'collected-card native input keeps existing crop and OCR');
 ok(html.includes('onchange="window.recognizeMyCard(this)"'), 'my-card native input keeps existing crop and OCR');
+
+
+ok(html.includes('js/navigation.js?v=7.92'), 'camera input refresh navigation is cache-busted');
+ok(navigation.includes("refreshNativeBusinessCardCameraInput(inputId)"), 'navigation can recreate a fresh native camera input');
+ok(navigation.includes("fresh.setAttribute('capture', 'environment')"), 'fresh camera input explicitly requests the rear camera');
+ok(navigation.includes("current.replaceWith(fresh)"), 'stale startup camera input is replaced after page entry');
+ok(navigation.includes("page === 'card') window.refreshBusinessCardCameraInputs('collected')"), 'collected-card camera input refreshes when its page opens');
+ok(navigation.includes("page === 'admin-settings') window.refreshBusinessCardCameraInputs('mycard')"), 'my-card camera input refreshes when its page opens');
 
 console.log('\nNative LIFF business-card camera contract passed.');
