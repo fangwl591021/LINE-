@@ -290,7 +290,7 @@
       ? state.access.contactTags
       : ['合作邀約', '商品服務', '活動邀請', '人才交流', '其他'];
     content.innerHTML = `
-      <form id="exchange-zone-compose-form" class="space-y-5">
+      <form id="exchange-zone-compose-form" class="space-y-5" autocomplete="off" data-form-type="other">
         <input type="hidden" name="postHandle" value="${escapeHtml(editing ? existingPost.postHandle : '')}">
         <input type="hidden" name="idempotencyKey" value="${escapeHtml(idempotencyKey())}">
         <div class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] font-bold text-amber-800">
@@ -298,11 +298,11 @@
         </div>
         <label class="block">
           <span class="text-[13px] font-black text-slate-700">標題</span>
-          <input name="title" value="${escapeHtml(editing ? existingPost.title : '')}" required minlength="2" maxlength="80" autocomplete="off" class="mt-2 w-full min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-[15px] font-bold text-slate-800 outline-none focus:border-emerald-400" placeholder="例如：尋找異業合作夥伴">
+          <input name="title" value="${escapeHtml(editing ? existingPost.title : '')}" required minlength="2" maxlength="80" autocomplete="off" inputmode="text" autocapitalize="sentences" data-form-type="other" data-1p-ignore data-lpignore="true" class="mt-2 w-full min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-[15px] font-bold text-slate-800 outline-none focus:border-emerald-400" placeholder="例如：尋找異業合作夥伴">
         </label>
         <label class="block">
           <span class="text-[13px] font-black text-slate-700">交流內容</span>
-          <textarea name="body" required minlength="10" maxlength="2000" rows="7" class="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium leading-6 text-slate-800 outline-none focus:border-emerald-400 resize-none" placeholder="請介紹您希望交流、合作或宣傳的內容">${escapeHtml(editing ? existingPost.body : '')}</textarea>
+          <textarea name="body" required minlength="10" maxlength="2000" rows="7" autocomplete="off" inputmode="text" autocapitalize="sentences" data-form-type="other" data-1p-ignore data-lpignore="true" class="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium leading-6 text-slate-800 outline-none focus:border-emerald-400 resize-none" placeholder="請介紹您希望交流、合作或宣傳的內容">${escapeHtml(editing ? existingPost.body : '')}</textarea>
         </label>
         <fieldset>
           <legend class="text-[13px] font-black text-slate-700">聯絡標籤（最多 3 個）</legend>
@@ -329,7 +329,6 @@
     }
     showDrawer(trigger);
     renderCompose();
-    setTimeout(() => document.querySelector('#exchange-zone-compose-form [name="title"]')?.focus(), 50);
   };
 
   async function publishCompose(form) {
