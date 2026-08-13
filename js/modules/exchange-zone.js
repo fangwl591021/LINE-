@@ -3,6 +3,9 @@
     initialized: false,
     loading: false,
     access: { mode: 'private', allowed: false, canManage: false },
+    panelOpen: false,
+    panelTrigger: null,
+    panelCloseTimer: null,
     drawerOpen: false,
     lastTrigger: null,
     closeTimer: null
@@ -105,7 +108,34 @@
       window.showToast?.('交流專區尚未開放', true);
       return;
     }
-    window.goPage?.('exchange-zone');
+    const root = document.getElementById('page-exchange-zone');
+    const panel = document.getElementById('exchange-zone-panel');
+    if (!root || !panel) return;
+    if (state.panelCloseTimer) clearTimeout(state.panelCloseTimer);
+    state.panelTrigger = document.activeElement;
+    state.panelOpen = true;
+    root.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    requestAnimationFrame(() => {
+      panel.classList.remove('translate-x-full');
+      document.getElementById('exchange-zone-panel-close')?.focus();
+    });
+    window.loadExchangeZone?.();
+  };
+
+  window.closeExchangeZonePanel = function() {
+    const root = document.getElementById('page-exchange-zone');
+    const panel = document.getElementById('exchange-zone-panel');
+    if (!root || !panel || !state.panelOpen) return;
+    if (state.drawerOpen) window.closeExchangeZoneDrawer?.();
+    state.panelOpen = false;
+    panel.classList.add('translate-x-full');
+    document.body.classList.remove('overflow-hidden');
+    state.panelCloseTimer = setTimeout(() => {
+      root.classList.add('hidden');
+      if (state.panelTrigger && typeof state.panelTrigger.focus === 'function') state.panelTrigger.focus();
+      state.panelTrigger = null;
+    }, 210);
   };
 
   function renderList(posts) {
@@ -215,7 +245,7 @@
     if (!drawer || !panel || !state.drawerOpen) return;
     state.drawerOpen = false;
     panel.classList.add('translate-x-full');
-    document.body.classList.remove('overflow-hidden');
+    if (!state.panelOpen) document.body.classList.remove('overflow-hidden');
     state.closeTimer = setTimeout(() => {
       drawer.classList.add('hidden');
       if (state.lastTrigger && typeof state.lastTrigger.focus === 'function') state.lastTrigger.focus();
@@ -248,8 +278,12 @@
     });
     document.getElementById('exchange-zone-drawer-close')?.addEventListener('click', () => window.closeExchangeZoneDrawer());
     document.getElementById('exchange-zone-drawer-backdrop')?.addEventListener('click', () => window.closeExchangeZoneDrawer());
+    document.getElementById('exchange-zone-panel-close')?.addEventListener('click', () => window.closeExchangeZonePanel());
+    document.getElementById('exchange-zone-panel-backdrop')?.addEventListener('click', () => window.closeExchangeZonePanel());
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && state.drawerOpen) window.closeExchangeZoneDrawer();
+      if (event.key !== 'Escape') return;
+      if (state.drawerOpen) window.closeExchangeZoneDrawer();
+      else if (state.panelOpen) window.closeExchangeZonePanel();
     });
   }
 

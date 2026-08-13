@@ -74,6 +74,9 @@ includesAll(html, [
   'id="home-exchange-zone-button"',
   'class="hidden home-quick-circle group"',
   'id="page-exchange-zone"',
+  'id="exchange-zone-panel"',
+  'id="exchange-zone-panel-close"',
+  'id="exchange-zone-panel-backdrop"',
   'id="exchange-zone-list"',
   'id="exchange-zone-empty"',
   'id="exchange-zone-drawer"',
@@ -90,6 +93,9 @@ includesAll(frontend, [
   "window.fetchAPI('listExchangeZonePosts'",
   "window.fetchAPI('getExchangeZonePost'",
   "button.classList.toggle('hidden', !state.access.allowed)",
+  "root.classList.remove('hidden')",
+  "panel.classList.remove('translate-x-full')",
+  'window.closeExchangeZonePanel',
   "panel.classList.remove('translate-x-full')",
   "panel.classList.add('translate-x-full')",
   "document.body.classList.add('overflow-hidden')",
@@ -98,6 +104,7 @@ includesAll(frontend, [
   'cardAvailable',
   'contactTags'
 ], 'frontend fails closed, preserves page context and renders text, tags and public card preview');
+ok(!frontend.includes("window.goPage?.('exchange-zone')"), 'exchange entry opens the right-side panel without page navigation');
 ok(!frontend.includes('window.open('), 'drawer does not open a new browser window');
 ok(!frontend.includes('window.location'), 'drawer does not navigate away from the current application');
 ok(!frontend.includes('storeAdjustCustomerPoints'), 'Phase 0-2 frontend does not call point cashier');
