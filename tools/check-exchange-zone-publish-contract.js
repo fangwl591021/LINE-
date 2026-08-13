@@ -70,7 +70,7 @@ includesAll(html, [
   '刊登一則文字交流內容 10 點，有效 7 天'
 ], 'right-side exchange panel contains a 10-point compose entry');
 includesAll(frontend, [
-  "window.fetchAPI('publishExchangeZonePost'",
+  "window.fetchAPI(editing ? 'updateExchangeZonePost' : 'publishExchangeZonePost'",
   'window.openExchangeZoneCompose',
   'attachMyCard',
   'idempotencyKey',
@@ -78,7 +78,7 @@ includesAll(frontend, [
   '發布成功才扣'
 ], 'compose drawer submits text, allowlisted tags, own-card intent and an idempotency key');
 includesAll(frontend, [
-  'renderPublishSuccess(result)',
+  'renderPublishSuccess(result, editing)',
   '刊登完成',
   '返回交流專區',
   '沒有重複扣點'
