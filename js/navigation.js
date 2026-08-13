@@ -1,5 +1,22 @@
 /* ==================== 導航與模式切換 ==================== */
 
+function refreshNativeBusinessCardCameraInput(inputId) {
+  const current = document.getElementById(inputId);
+  if (!current || current.type !== 'file') return null;
+  const fresh = current.cloneNode(true);
+  fresh.value = '';
+  fresh.setAttribute('accept', 'image/*');
+  fresh.setAttribute('capture', 'environment');
+  fresh.hidden = true;
+  current.replaceWith(fresh);
+  return fresh;
+}
+
+window.refreshBusinessCardCameraInputs = function(scope) {
+  if (!scope || scope === 'collected') refreshNativeBusinessCardCameraInput('cameraInput');
+  if (!scope || scope === 'mycard') refreshNativeBusinessCardCameraInput('myCameraInput');
+};
+
 window.goPage = function(page, isInitLoad = false) {
   if (page === 'profile') page = 'admin-settings';
   window.previousPage = window.currentPage || '';
@@ -9,6 +26,9 @@ window.goPage = function(page, isInitLoad = false) {
   document.querySelectorAll('[id^="page"]').forEach(el => el.classList.add('hidden'));
   const targetPage = document.getElementById('page-' + page);
   if (targetPage) targetPage.classList.remove('hidden');
+
+  if (page === 'card') window.refreshBusinessCardCameraInputs('collected');
+  else if (page === 'admin-settings') window.refreshBusinessCardCameraInputs('mycard');
 
   if (!isInitLoad) {
     if (page === 'admin-activities') window.loadAdminActivities();
