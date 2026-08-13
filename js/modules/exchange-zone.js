@@ -243,7 +243,14 @@
       <div class="mt-5">${tagsHtml(post?.contactTags)}</div>
       <article class="mt-5 whitespace-pre-wrap break-words text-[15px] leading-7 font-medium text-slate-700">${escapeHtml(post?.body || '')}</article>
       ${cardHtml}
+      ${!post?.canEdit ? `<button id="exchange-zone-inquiry-button" type="button" class="mt-6 w-full min-h-14 rounded-2xl bg-[#06C755] px-4 text-[15px] font-black text-white flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98]"><span class="material-symbols-outlined text-[21px]">mail</span>有興趣・寄站內信</button>` : ''}
       ${post?.canEdit ? `<button id="exchange-zone-edit-button" type="button" class="mt-6 w-full min-h-13 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-[15px] font-black text-blue-700 flex items-center justify-center gap-2 active:scale-[0.98]"><span class="material-symbols-outlined text-[20px]">edit</span>編輯這則內容</button>` : ''}`;
+    document.getElementById('exchange-zone-inquiry-button')?.addEventListener('click', () => {
+      if (typeof window.openInboxExchangeInquiry !== 'function') return window.showToast?.('收件夾尚未載入，請稍後重試', true);
+      window.closeExchangeZoneDrawer?.();
+      window.closeExchangeZonePanel?.();
+      setTimeout(() => window.openInboxExchangeInquiry(post), 230);
+    });
     document.getElementById('exchange-zone-edit-button')?.addEventListener('click', () => renderCompose(post));
   }
 
