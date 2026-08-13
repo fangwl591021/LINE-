@@ -18,9 +18,11 @@ function fakeEnv(options = {}) {
             return this;
           },
           async all() {
+            if (options.failExpires && sql.includes('p.expires_at')) throw new Error('D1_ERROR: no such column: p.expires_at');
             return { results: options.rows || [] };
           },
           async first() {
+            if (options.failExpires && sql.includes('p.expires_at')) throw new Error('D1_ERROR: no such column: p.expires_at');
             return options.first || null;
           }
         };
@@ -124,6 +126,25 @@ const row = {
   assert.equal(env.calls.length, 0);
 }
 
+{
+  const env = fakeEnv({ mode: 'private', privateTesterIds: 'U_OWNER', rows: [row], failExpires: true });
+  const result = await ExchangeZoneModule.list({ limit: 10 }, env, admin);
+  assert.equal(result.success, true);
+  assert.equal(result.count, 1);
+  assert.equal(env.calls.length, 2);
+  assert.match(env.calls[0].sql, /p\.expires_at/);
+  assert.doesNotMatch(env.calls[1].sql, /p\.expires_at/);
+}
+
+{
+  const env = fakeEnv({ mode: 'open', first: row, failExpires: true });
+  const result = await ExchangeZoneModule.get({ postHandle: 'post_opaque_demo' }, env, member);
+  assert.equal(result.success, true);
+  assert.equal(result.post.postHandle, 'post_opaque_demo');
+  assert.equal(env.calls.length, 2);
+  assert.doesNotMatch(env.calls[1].sql, /p\.expires_at/);
+}
+
 function publishEnv(options = {}) {
   const operations = [];
   const posts = [];
@@ -175,6 +196,7 @@ function publishEnv(options = {}) {
         },
         async first() {
           if (sql.includes('exchange_zone_publish_operations')) {
+            if (options.missingPublishSchema) throw new Error('D1_ERROR: no such table: exchange_zone_publish_operations');
             return operations.find((row) => row.author_user_id === call.bindings[0] && row.idempotency_key === call.bindings[1]) || null;
           }
           return null;
@@ -224,6 +246,15 @@ const publishPayload = {
   attachMyCard: true,
   idempotencyKey: 'exchange_test_key_0001'
 };
+
+{
+  const env = publishEnv({ missingPublishSchema: true });
+  const points = pointsService(100);
+  const result = await ExchangeZoneModule.publish(publishPayload, env, admin, points);
+  assert.equal(result.code, 'EXCHANGE_ZONE_MIGRATION_REQUIRED');
+  assert.match(result.error, /0022 migration/);
+  assert.equal(points.adjustments.length, 0);
+}
 
 {
   const env = publishEnv();

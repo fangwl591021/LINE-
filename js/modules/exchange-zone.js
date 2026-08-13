@@ -331,9 +331,8 @@
         idempotencyKey: String(data.get('idempotencyKey') || '')
       }, true);
       if (result?.success === false) throw new Error(result.error || '刊登失敗');
-      window.showToast?.(result?.alreadyPublished ? '內容已刊登，未重複扣點' : `刊登成功，已扣 ${result?.chargedPoints || state.access.publishCost} 點`);
-      window.closeExchangeZoneDrawer?.();
       await window.loadExchangeZone?.();
+      renderPublishSuccess(result);
     } catch (error) {
       if (errorBox) {
         errorBox.textContent = error?.message || '刊登失敗，請稍後再試';
@@ -346,6 +345,25 @@
         button.innerHTML = `<span class="material-symbols-outlined text-[21px]">send</span>確認發布並扣 ${state.access.publishCost} 點`;
       }
     }
+  }
+
+  function renderPublishSuccess(result) {
+    const title = document.getElementById('exchange-zone-drawer-title');
+    const content = document.getElementById('exchange-zone-drawer-content');
+    if (title) title.textContent = '刊登完成';
+    if (!content) return;
+    const duplicated = result?.alreadyPublished === true;
+    const charged = duplicated ? 0 : Number(result?.chargedPoints || state.access.publishCost);
+    content.innerHTML = `
+      <section class="min-h-full flex items-center justify-center py-8">
+        <div class="w-full rounded-3xl border border-emerald-100 bg-emerald-50/70 px-5 py-8 text-center">
+          <span class="material-symbols-outlined text-[64px] text-emerald-500" aria-hidden="true">check_circle</span>
+          <h4 class="mt-3 text-2xl font-black text-slate-800">刊登完成</h4>
+          <p class="mt-3 text-[14px] font-bold leading-6 text-slate-600">${duplicated ? '這則內容先前已成功刊登，本次沒有重複扣點。' : `已扣除 ${charged} 點，內容將公開顯示 ${state.access.publishDays} 天。`}</p>
+          <button id="exchange-zone-success-close" type="button" class="mt-6 w-full min-h-13 rounded-2xl bg-emerald-500 px-4 text-[15px] font-black text-white active:scale-[0.98]">返回交流專區</button>
+        </div>
+      </section>`;
+    document.getElementById('exchange-zone-success-close')?.addEventListener('click', () => window.closeExchangeZoneDrawer?.());
   }
 
   window.closeExchangeZoneDrawer = function() {
