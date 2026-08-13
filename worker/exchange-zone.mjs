@@ -1,3 +1,5 @@
+import { getExchangeZoneLikeState, hydrateExchangeZoneLikes, toggleExchangeZoneLike } from './exchange-zone-likes.mjs';
+
 const MAX_POSTS = 50;
 const PUBLISH_COST = 10;
 const PUBLISH_DAYS = 7;
@@ -171,7 +173,9 @@ function publicPost(row, detail = false, actor = null) {
       avatarUrl: avatarUrl(row?.author_avatar_url)
     },
     cardAvailable,
-    canEdit: Boolean(text(actor?.userId, 180) && text(row?.author_user_id, 180) === text(actor?.userId, 180))
+    canEdit: Boolean(text(actor?.userId, 180) && text(row?.author_user_id, 180) === text(actor?.userId, 180)),
+    likeCount: Math.max(0, Number(row?.likeCount) || 0),
+    likedByMe: row?.likedByMe === true
   };
 
   if (detail) {
@@ -403,7 +407,13 @@ export const ExchangeZoneModule = {
       `).bind(limit).all();
     }
     const hydrated = await Promise.all((result?.results || []).map((row) => hydratedPost(env.ACTMASTER_DB, row)));
-    const posts = hydrated.map((row) => publicPost(row, false, actor)).filter((post) => post.postHandle);
+    let likeHydrated = hydrated;
+    try {
+      likeHydrated = await hydrateExchangeZoneLikes(env.ACTMASTER_DB, hydrated, actor?.userId);
+    } catch (error) {
+      console.warn('Exchange zone like hydration skipped:', String(error?.message || error).slice(0, 240));
+    }
+    const posts = likeHydrated.map((row) => publicPost(row, false, actor)).filter((post) => post.postHandle);
     return { success: true, access, posts, count: posts.length };
   },
 
@@ -430,7 +440,14 @@ export const ExchangeZoneModule = {
         LIMIT 1
       `).bind(postHandle).first();
     }
-    const hydrated = row ? await hydratedPost(env.ACTMASTER_DB, row) : null;
+    let hydrated = row ? await hydratedPost(env.ACTMASTER_DB, row) : null;
+    if (hydrated) {
+      try {
+        hydrated = { ...hydrated, ...(await getExchangeZoneLikeState(env.ACTMASTER_DB, postHandle, actor?.userId)) };
+      } catch (error) {
+        console.warn('Exchange zone like state skipped:', String(error?.message || error).slice(0, 240));
+      }
+    }
     return hydrated
       ? { success: true, access, post: publicPost(hydrated, true, actor) }
       : { success: false, error: '找不到這則交流內容' };
@@ -440,6 +457,11 @@ export const ExchangeZoneModule = {
     const access = accessFor(actor, env);
     if (!access.allowed) return denied(access);
     if (!env?.ACTMASTER_DB) return { success: false, error: '交流專區資料庫尚未設定' };
+
+    if (payload?.toggleLike === true) {
+      return toggleExchangeZoneLike(env.ACTMASTER_DB, payload, actor);
+    }
+
     const authorUserId = text(actor?.userId, 180);
     const postHandle = text(payload?.postHandle, 120);
     if (!authorUserId || !postHandle) return { success: false, error: '缺少交流內容識別資料' };
