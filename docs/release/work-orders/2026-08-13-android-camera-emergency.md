@@ -6,16 +6,16 @@
 | --- | --- |
 | 日期 | 2026-08-13 |
 | 起始 commit | `61507e3` |
-| 問題 | Android LINE WebView 對 JavaScript 代點隱藏 file input 的支援不穩定，可能把「拍照掃描」降級為一般上傳選擇器 |
-| 目標 | Android LINE LIFF 使用頁內後鏡頭；iOS 與外部瀏覽器保留原生 input；相簿上傳維持原流程 |
+| 問題 | 點數 LIFF Endpoint 先進入 `point-bridge.html`，再跳到 GitHub Pages 原始網址；Android 落入 LINE 內建瀏覽器而非主 LIFF 執行環境 |
+| 目標 | 主系統直接成為既有點數 LIFF 的 Endpoint，好友檢查留在主系統，恢復原生名片相機流程 |
 
 ## 允許範圍
 
-- 只修改兩個「拍照掃描」入口與相關前端契約。
+- 撤回無法在 Android LINE 內建瀏覽器取得權限的黑色 `getUserMedia` 相機。
+- 兩個「拍照掃描」入口恢復直接原生 `capture="environment"` input。
 - 拍攝完成後仍交給既有 `recognizeCard`／`recognizeMyCard` 裁切及 OCR 流程。
-- Android LINE LIFF 以 `getUserMedia` 開啟頁內後鏡頭，首次僅需接受一次系統授權提示。
-- iOS 與外部瀏覽器保留 `capture="environment"` 原生流程。
-- 權限拒絕時只提供重新開啟或改用相簿，不要求用戶自行進入 Android 設定。
+- 將 `point-bridge.html` 的好友檢查能力搬到主系統初始化，僅以 `liff.isInClient()` 判定真正 LIFF。
+- 程式先部署；LINE Developers Endpoint 完成切換前不修改 bridge 導向，避免循環。
 
 ## 禁止範圍
 
@@ -25,13 +25,14 @@
 
 ## 根因與決策
 
-歷史檢查顯示相機 input 自 2026-05-08 起一直保留 `capture="environment"`，但 Android LINE WebView 仍可能把它降級為一般上傳選擇器；直接覆蓋原生 input 也無法改變宿主 WebView 的決策。本次採平台分流：僅 Android 且確認位於 LINE 用戶端時使用 `getUserMedia`，其他平台沿用原生 input。Android 首次由系統顯示一次授權提示，之後直接開啟；拒絕時在原畫面提供重新開啟與相簿備援。
+Git 歷史顯示，2026-05-12 的 `6dd2221` 將 `point-bridge.html` 完成好友檢查後的目標，從主系統 LIFF URL 改為 GitHub Pages 原始網址。相機 input 本身仍持續保有 `capture="environment"`。Android 截圖顯示頁面帶有 LINE 內建瀏覽器工具列，且原始網址下的 `getUserMedia` 被拒絕，因此根因是入口容器改變，而不是 OCR 或相機 input 被刪除。本次保留既有 LIFF ID `1660923784-vViMTZ1y`，先讓主頁具備完整好友檢查，再將 LINE Developers Endpoint 從 `/point-bridge.html` 切至 `/LINE-/`。
 
 ## 驗證
 
-- Android business-card camera focused contract。
+- Native LIFF business-card camera contract。
+- Main LIFF endpoint cutover contract。
 - JavaScript syntax check。
 - 完整 smoke contracts。
 - `git diff --check`。
 
-本次不需要 migration 或 Worker 部署；合併後只更新 GitHub Pages 前端。
+本次不需要 migration 或 Worker 部署；GitHub Pages 部署完成後，需在 LINE Developers 將 LIFF `1660923784-vViMTZ1y` 的 Endpoint URL 改為 `https://fangwl591021.github.io/LINE-/`。
