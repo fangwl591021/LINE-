@@ -7,7 +7,7 @@
 - 標題 2–80 字，內文 10–2000 字，聯絡標籤最多 3 個且必須在後端白名單內。
 - 可以選擇附上「自己的公開名片」。後端自行尋找登入者的 `self_profile + public` 名片，前端不傳內部名片 ID。
 - 刪除不退點。本階段尚未提供刪除介面。
-- `EXCHANGE_ZONE_ACCESS_MODE` 仍為 `private`，未列入私測名單的會員看不到入口，也不能呼叫刊登 API。
+- 正式上線後，`EXCHANGE_ZONE_ACCESS_MODE` 設為 `open`，所有已驗證會員可看見入口、閱讀公開貼文並刊登內容。
 
 ## 點數安全
 
@@ -20,7 +20,7 @@ Cloudflare D1 與外部點數 API 不共用同一個資料庫交易，因此極�
 
 ## 上線順序
 
-1. 保留 `EXCHANGE_ZONE_ACCESS_MODE = "private"`。
+1. 正式環境設定 `EXCHANGE_ZONE_ACCESS_MODE = "open"`；若需緊急關閉，可暫時切回 `private`。
 2. 套用 `0022_exchange_zone_publish.sql`。
 3. 部署 Worker 與前端。
 4. 只用私測帳號驗證不足額、成功刊登、重送與退款案例。
