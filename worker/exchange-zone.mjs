@@ -103,30 +103,62 @@ function selectColumns() {
   return `
     SELECT
       p.post_handle, p.title, p.body, p.contact_tags_json,
-      p.published_at, p.created_at,
+      p.author_user_id, p.card_row_id, p.published_at, p.created_at,
       COALESCE((
         SELECT u.name FROM users u
         WHERE u.line_id = p.author_user_id OR u.row_id = p.author_user_id
         ORDER BY CASE WHEN u.line_id = p.author_user_id THEN 0 ELSE 1 END
         LIMIT 1
-      ), '會員') AS author_name,
-      COALESCE(c.image_url, '') AS author_avatar_url,
-      CASE WHEN c.row_id IS NULL THEN 0 ELSE 1 END AS card_available,
-      COALESCE(c.name, '') AS card_name,
-      COALESCE(c.company_name, '') AS card_company_name,
-      COALESCE(c.title, '') AS card_title,
-      COALESCE(c.image_url, '') AS card_image_url
+      ), '會員') AS author_name
     FROM exchange_zone_posts p
-    LEFT JOIN card_contacts c
-      ON c.row_id = p.card_row_id
-      AND LOWER(COALESCE(c.source_type, '')) = 'self_profile'
-      AND LOWER(COALESCE(c.visibility, '')) = 'public'
-      AND (
-        c.line_id = p.author_user_id
-        OR c.owner_user_id = p.author_user_id
-        OR c.profile_user_id = p.author_user_id
-      )
   `;
+}
+
+function withoutCard(row) {
+  return {
+    ...row,
+    author_avatar_url: '',
+    card_available: 0,
+    card_name: '',
+    card_company_name: '',
+    card_title: '',
+    card_image_url: ''
+  };
+}
+
+async function withPublicCard(db, row) {
+  const fallback = withoutCard(row);
+  const cardRowId = text(row?.card_row_id, 180);
+  const authorUserId = text(row?.author_user_id, 180);
+  if (!cardRowId || !authorUserId) return fallback;
+  try {
+    const card = await db.prepare(`
+      SELECT c.row_id, c.name, c.company_name, c.title, c.image_url
+      FROM card_contacts c
+      WHERE c.row_id = ?1
+        AND LOWER(COALESCE(c.source_type, '')) = 'self_profile'
+        AND LOWER(COALESCE(c.visibility, '')) = 'public'
+        AND (
+          c.line_id = ?2
+          OR c.owner_user_id = ?2
+          OR c.profile_user_id = ?2
+        )
+      LIMIT 1
+    `).bind(cardRowId, authorUserId).first();
+    if (!card) return fallback;
+    return {
+      ...row,
+      author_avatar_url: card.image_url || '',
+      card_available: 1,
+      card_name: card.name || '',
+      card_company_name: card.company_name || '',
+      card_title: card.title || '',
+      card_image_url: card.image_url || ''
+    };
+  } catch (error) {
+    console.warn('Exchange zone public card hydration skipped:', String(error?.message || error).slice(0, 240));
+    return fallback;
+  }
 }
 
 function isPublishSchemaError(error) {
@@ -251,7 +283,8 @@ export const ExchangeZoneModule = {
         LIMIT ?1
       `).bind(limit).all();
     }
-    const posts = (result?.results || []).map((row) => publicPost(row, false)).filter((post) => post.postHandle);
+    const hydrated = await Promise.all((result?.results || []).map((row) => withPublicCard(env.ACTMASTER_DB, row)));
+    const posts = hydrated.map((row) => publicPost(row, false)).filter((post) => post.postHandle);
     return { success: true, access, posts, count: posts.length };
   },
 
@@ -278,8 +311,9 @@ export const ExchangeZoneModule = {
         LIMIT 1
       `).bind(postHandle).first();
     }
-    return row
-      ? { success: true, access, post: publicPost(row, true) }
+    const hydrated = row ? await withPublicCard(env.ACTMASTER_DB, row) : null;
+    return hydrated
+      ? { success: true, access, post: publicPost(hydrated, true) }
       : { success: false, error: '找不到這則交流內容' };
   },
 

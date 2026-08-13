@@ -47,7 +47,8 @@ includesAll(worker, [
 ok(!worker.includes("getExchangeZoneAccess: { access: 'public'"), 'exchange access probe is not public');
 ok(!worker.includes("listExchangeZonePosts: { access: 'public'"), 'exchange feed is not public');
 ok(!workerModule.includes('u.picture_url'), 'exchange feed does not query the non-existent users.picture_url column');
-ok(workerModule.includes("COALESCE(c.image_url, '') AS author_avatar_url"), 'exchange feed uses the attached public card image as the author avatar');
+ok(workerModule.includes('async function withPublicCard'), 'exchange feed hydrates optional public-card data separately');
+ok(workerModule.includes("console.warn('Exchange zone public card hydration skipped:'"), 'optional public-card schema differences cannot fail the whole feed');
 
 includesAll(workerModule, [
   "return ['private', 'pilot', 'open'].includes(mode) ? mode : 'private'",
