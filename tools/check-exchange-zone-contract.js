@@ -155,6 +155,15 @@ ok(!frontend.includes("window.goPage?.('exchange-zone')"), 'exchange entry opens
 ok(!frontend.includes('window.open('), 'drawer does not open a new browser window');
 ok(!frontend.includes('window.location'), 'drawer does not navigate away from the current application');
 ok(!frontend.includes('storeAdjustCustomerPoints'), 'Phase 0-2 frontend does not call point cashier');
+includesAll(frontend, [
+  'id="exchange-zone-compose-form" class="space-y-5" autocomplete="off" data-form-type="other"',
+  'name="title"',
+  'name="body"',
+  'inputmode="text"',
+  'data-1p-ignore',
+  'data-lpignore="true"'
+], 'exchange compose fields opt out of mobile payment and credential autofill');
+ok(!/openExchangeZoneCompose[\s\S]{0,500}\.focus\(/.test(frontend), 'opening exchange compose does not force mobile focus or summon an autofill sheet');
 
 includesAll(navigation, ["page === 'exchange-zone'", 'window.loadExchangeZone'], 'navigation initializes exchange feed');
 ok(wrangler.includes('EXCHANGE_ZONE_ACCESS_MODE = "open"'), 'production config formally opens the exchange zone to authenticated members');
