@@ -2567,6 +2567,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.currentUserProfile = await liff.getProfile();
 
+    if (
+      typeof window.ensureActmasterPointFriendship === 'function' &&
+      !(await window.ensureActmasterPointFriendship())
+    ) {
+      return;
+    }
+
     // 🟢 【關鍵修復】在此處攔截 window.fetchAPI，自動為所有 API 請求注入 lineAccessToken 以通過 workerbackup.js 嚴格驗證
     if (typeof window.fetchAPI === 'function' && !window.__fetchApiEnhanced) {
       const originalFetch = window.fetchAPI;

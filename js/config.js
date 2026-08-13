@@ -186,6 +186,81 @@ window.ensureActmasterLiffLogin = function(options = {}) {
   return false;
 };
 
+window.isActmasterMainLiffClient = function() {
+  try {
+    return Boolean(
+      window.liff &&
+      typeof window.liff.isInClient === 'function' &&
+      window.liff.isInClient()
+    );
+  } catch (e) {
+    return false;
+  }
+};
+
+window.readActmasterPointFriendship = async function() {
+  if (!window.isActmasterMainLiffClient()) return { required: false, friendFlag: true };
+  if (!window.liff || typeof window.liff.getFriendship !== 'function') {
+    return { required: true, friendFlag: false, unavailable: true };
+  }
+  try {
+    const result = await window.liff.getFriendship();
+    return { required: true, friendFlag: Boolean(result && result.friendFlag) };
+  } catch (error) {
+    console.warn('[friendship] unable to read friendship', error);
+    return { required: true, friendFlag: false, error };
+  }
+};
+
+window.showActmasterPointFriendshipGate = function(message) {
+  const modal = document.getElementById('point-friendship-modal');
+  const status = document.getElementById('point-friendship-status');
+  const addLink = document.getElementById('point-friendship-add-link');
+  if (status && message) status.textContent = String(message);
+  if (addLink) addLink.href = window.POINT_OA_URL || POINT_OA_URL;
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+};
+
+window.ensureActmasterPointFriendship = async function() {
+  const current = await window.readActmasterPointFriendship();
+  if (!current.required || current.friendFlag) return true;
+
+  if (!current.unavailable && window.liff && typeof window.liff.requestFriendship === 'function') {
+    try {
+      await window.liff.requestFriendship();
+      const latest = await window.readActmasterPointFriendship();
+      if (latest.friendFlag) return true;
+    } catch (error) {
+      console.warn('[friendship] requestFriendship did not complete', error);
+    }
+  }
+
+  window.showActmasterPointFriendshipGate('加入官方帳號後，按「已加入，繼續進入」。');
+  return false;
+};
+
+window.recheckActmasterPointFriendship = async function() {
+  const button = document.getElementById('point-friendship-continue');
+  const status = document.getElementById('point-friendship-status');
+  if (button) button.disabled = true;
+  if (status) status.textContent = '正在確認好友狀態…';
+  try {
+    const latest = await window.readActmasterPointFriendship();
+    if (latest.friendFlag) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('point_friend', '1');
+      window.location.replace(url.toString());
+      return;
+    }
+    if (status) status.textContent = '尚未確認加入，請先加入官方帳號後再按一次。';
+  } finally {
+    if (button) button.disabled = false;
+  }
+};
+
 window.actmasterShareTargetPicker = async function(messages) {
   if (!window.liff || typeof window.liff.isLoggedIn !== 'function' || !window.liff.isLoggedIn()) return { ok: false, reason: 'not_logged_in' };
   if (typeof window.liff.isApiAvailable !== 'function' || !window.liff.isApiAvailable('shareTargetPicker')) return { ok: false, reason: 'share_unavailable' };
