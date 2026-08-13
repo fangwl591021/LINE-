@@ -71,7 +71,93 @@ function avatarUrl(value) {
   }
 }
 
-function publicPost(row, detail = false) {
+function cardConfig(value) {
+  if (value && typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(String(value || '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function color(value, fallback = '#06C755') {
+  const raw = text(value, 16);
+  return /^#[0-9a-f]{6}$/i.test(raw) ? raw : fallback;
+}
+
+function actionUrl(value) {
+  const raw = text(value, 500);
+  if (!raw) return '';
+  if (/^tel:\+?[0-9#*(),. -]{5,40}$/i.test(raw)) return raw;
+  if (/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(raw)) return raw;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'https:' ? parsed.href : '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function telephoneUrl(value) {
+  const normalized = text(value, 50).replace(/[^0-9+#*]/g, '');
+  return normalized.length >= 5 ? `tel:${normalized}` : '';
+}
+
+function emailUrl(value) {
+  const normalized = text(value, 180);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? `mailto:${normalized}` : '';
+}
+
+function firstHttpsIn(value) {
+  const raw = text(value, 1000);
+  const match = raw.match(/https:\/\/[^\s"',}\]]+/i);
+  return actionUrl(match?.[0] || raw);
+}
+
+function publicCard(row) {
+  if (Number(row?.card_available) !== 1) return null;
+  const config = cardConfig(row?.card_custom_config);
+  const configuredButtons = Array.isArray(config.buttons)
+    ? config.buttons
+    : (Array.isArray(config.footerBtns) ? config.footerBtns : []);
+  const customButtons = configuredButtons.map((button) => ({
+    label: text(button?.l || button?.label, 40) || '聯絡',
+    url: actionUrl(button?.u || button?.url),
+    color: color(button?.c || button?.color)
+  })).filter((button) => button.url);
+  const automaticButtons = [
+    { label: '行動電話', url: telephoneUrl(row?.card_mobile || row?.card_office_phone), color: '#3b82f6' },
+    { label: '電子信箱', url: emailUrl(row?.card_email), color: '#0f766e' },
+    { label: '官方網站', url: firstHttpsIn(row?.card_website || row?.card_socials), color: '#7c3aed' },
+    { label: '查看地圖', url: text(row?.card_address, 300) ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text(row.card_address, 300))}` : '', color: '#1e293b' }
+  ].filter((button) => button.url);
+  const buttons = [...customButtons];
+  automaticButtons.forEach((button) => {
+    if (!buttons.some((existing) => existing.url === button.url)) buttons.push(button);
+  });
+  const layout = ['landscape', 'portrait', 'square'].includes(text(config.layoutStyle || config.layout, 20))
+    ? text(config.layoutStyle || config.layout, 20)
+    : 'landscape';
+  const configuredImage = layout === 'portrait'
+    ? config.imgUrlPortrait
+    : (layout === 'square' ? config.imgUrlSquare : (config.imgUrl || config.imgUrlLandscape));
+  return {
+    name: text(row?.card_name, 100),
+    companyName: text(row?.card_company_name, 140),
+    title: text(row?.card_title, 100),
+    department: text(row?.card_department, 100),
+    services: text(row?.card_services, 500),
+    imageUrl: avatarUrl(configuredImage || row?.card_image_url),
+    layout,
+    description: text(config.desc || row?.card_services, 500),
+    descriptionColor: color(config.descColor, '#475569'),
+    descriptionAlign: ['left', 'center', 'right'].includes(text(config.descAlign, 10)) ? text(config.descAlign, 10) : 'center',
+    buttons: buttons.slice(0, 6)
+  };
+}
+
+function publicPost(row, detail = false, actor = null) {
   const body = text(row?.body, 2000);
   const cardAvailable = Number(row?.card_available) === 1;
   const post = {
@@ -84,17 +170,13 @@ function publicPost(row, detail = false) {
       name: text(row?.author_name, 80) || '會員',
       avatarUrl: avatarUrl(row?.author_avatar_url)
     },
-    cardAvailable
+    cardAvailable,
+    canEdit: Boolean(text(actor?.userId, 180) && text(row?.author_user_id, 180) === text(actor?.userId, 180))
   };
 
   if (detail) {
     post.body = body;
-    post.card = cardAvailable ? {
-      name: text(row?.card_name, 100),
-      companyName: text(row?.card_company_name, 140),
-      title: text(row?.card_title, 100),
-      imageUrl: avatarUrl(row?.card_image_url)
-    } : null;
+    post.card = publicCard(row);
   }
   return post;
 }
@@ -135,7 +217,16 @@ function withoutCard(row) {
     card_name: '',
     card_company_name: '',
     card_title: '',
-    card_image_url: ''
+    card_image_url: '',
+    card_department: '',
+    card_services: '',
+    card_mobile: '',
+    card_office_phone: '',
+    card_email: '',
+    card_website: '',
+    card_socials: '',
+    card_address: '',
+    card_custom_config: ''
   };
 }
 
@@ -146,7 +237,9 @@ async function withPublicCard(db, row) {
   if (!cardRowId || !authorUserId) return fallback;
   try {
     const card = await db.prepare(`
-      SELECT c.row_id, c.name, c.company_name, c.title, c.image_url
+      SELECT c.row_id, c.name, c.company_name, c.title, c.department, c.services,
+             c.mobile, c.office_phone, c.email, c.website, c.socials, c.address,
+             c.image_url, c.custom_config
       FROM card_contacts c
       WHERE c.row_id = ?1
         AND LOWER(COALESCE(c.source_type, '')) = 'self_profile'
@@ -166,7 +259,16 @@ async function withPublicCard(db, row) {
       card_name: card.name || '',
       card_company_name: card.company_name || '',
       card_title: card.title || '',
-      card_image_url: card.image_url || ''
+      card_image_url: card.image_url || '',
+      card_department: card.department || '',
+      card_services: card.services || '',
+      card_mobile: card.mobile || '',
+      card_office_phone: card.office_phone || '',
+      card_email: card.email || '',
+      card_website: card.website || '',
+      card_socials: card.socials || '',
+      card_address: card.address || '',
+      card_custom_config: card.custom_config || ''
     };
   } catch (error) {
     console.warn('Exchange zone public card hydration skipped:', String(error?.message || error).slice(0, 240));
@@ -212,7 +314,7 @@ function denied(access) {
   };
 }
 
-function publishInput(payload) {
+function postInput(payload, requireIdempotency = true) {
   const title = text(payload?.title, 80);
   const body = text(payload?.body, 2000);
   const idempotencyKey = text(payload?.idempotencyKey, 120);
@@ -221,7 +323,7 @@ function publishInput(payload) {
     : [];
   if (title.length < 2) return { error: '標題至少需要 2 個字' };
   if (body.length < 10) return { error: '交流內容至少需要 10 個字' };
-  if (!/^[A-Za-z0-9_-]{16,120}$/.test(idempotencyKey)) return { error: '刊登識別碼格式不正確' };
+  if (requireIdempotency && !/^[A-Za-z0-9_-]{16,120}$/.test(idempotencyKey)) return { error: '刊登識別碼格式不正確' };
   return { title, body, idempotencyKey, contactTags: selectedTags, attachMyCard: payload?.attachMyCard === true };
 }
 
@@ -301,7 +403,7 @@ export const ExchangeZoneModule = {
       `).bind(limit).all();
     }
     const hydrated = await Promise.all((result?.results || []).map((row) => hydratedPost(env.ACTMASTER_DB, row)));
-    const posts = hydrated.map((row) => publicPost(row, false)).filter((post) => post.postHandle);
+    const posts = hydrated.map((row) => publicPost(row, false, actor)).filter((post) => post.postHandle);
     return { success: true, access, posts, count: posts.length };
   },
 
@@ -330,8 +432,52 @@ export const ExchangeZoneModule = {
     }
     const hydrated = row ? await hydratedPost(env.ACTMASTER_DB, row) : null;
     return hydrated
-      ? { success: true, access, post: publicPost(hydrated, true) }
+      ? { success: true, access, post: publicPost(hydrated, true, actor) }
       : { success: false, error: '找不到這則交流內容' };
+  },
+
+  async update(payload, env, actor) {
+    const access = accessFor(actor, env);
+    if (!access.allowed) return denied(access);
+    if (!env?.ACTMASTER_DB) return { success: false, error: '交流專區資料庫尚未設定' };
+    const authorUserId = text(actor?.userId, 180);
+    const postHandle = text(payload?.postHandle, 120);
+    if (!authorUserId || !postHandle) return { success: false, error: '缺少交流內容識別資料' };
+    const input = postInput(payload, false);
+    if (input.error) return { success: false, error: input.error, code: 'EXCHANGE_UPDATE_INVALID' };
+
+    const owned = await env.ACTMASTER_DB.prepare(`
+      SELECT post_handle
+      FROM exchange_zone_posts
+      WHERE post_handle = ?1 AND author_user_id = ?2 AND status = 'published'
+        AND (expires_at = '' OR expires_at > CURRENT_TIMESTAMP)
+      LIMIT 1
+    `).bind(postHandle, authorUserId).first();
+    if (!owned) return { success: false, error: '找不到可編輯的交流內容', code: 'EXCHANGE_UPDATE_NOT_ALLOWED' };
+
+    await env.ACTMASTER_DB.prepare(`
+      UPDATE exchange_zone_posts
+      SET title = ?1,
+          body = ?2,
+          contact_tags_json = ?3,
+          card_row_id = CASE WHEN ?4 = 1 THEN COALESCE((
+            SELECT c.row_id FROM card_contacts c
+            WHERE LOWER(COALESCE(c.source_type, '')) = 'self_profile'
+              AND LOWER(COALESCE(c.visibility, '')) = 'public'
+              AND (c.line_id = ?5 OR c.owner_user_id = ?5 OR c.profile_user_id = ?5)
+            ORDER BY c.updated_at DESC, c.row_id DESC LIMIT 1
+          ), '') ELSE '' END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE post_handle = ?6 AND author_user_id = ?5 AND status = 'published'
+    `).bind(
+      input.title,
+      input.body,
+      JSON.stringify(input.contactTags),
+      input.attachMyCard ? 1 : 0,
+      authorUserId,
+      postHandle
+    ).run();
+    return { success: true, updated: true, chargedPoints: 0, postHandle, access };
   },
 
   async publish(payload, env, actor, points) {
@@ -342,7 +488,7 @@ export const ExchangeZoneModule = {
       return { success: false, error: '交流專區點數服務尚未設定' };
     }
 
-    const input = publishInput(payload);
+    const input = postInput(payload, true);
     if (input.error) return { success: false, error: input.error, code: 'EXCHANGE_PUBLISH_INVALID' };
     const authorUserId = text(actor?.userId, 180);
     if (!authorUserId) return { success: false, error: '缺少登入會員識別資料' };

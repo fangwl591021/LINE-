@@ -34,7 +34,16 @@ function fakeEnv(options = {}) {
                 name: source.card_name || source.name,
                 company_name: source.card_company_name || source.company_name,
                 title: source.card_title || source.title,
-                image_url: source.card_image_url || source.image_url
+                department: source.card_department || source.department,
+                services: source.card_services || source.services,
+                mobile: source.card_mobile || source.mobile,
+                office_phone: source.card_office_phone || source.office_phone,
+                email: source.card_email || source.email,
+                website: source.card_website || source.website,
+                socials: source.card_socials || source.socials,
+                address: source.card_address || source.address,
+                image_url: source.card_image_url || source.image_url,
+                custom_config: source.card_custom_config || source.custom_config
               } : null;
             }
             return options.first || null;
@@ -92,7 +101,21 @@ const row = {
   card_name: '測試會員',
   card_company_name: '測試公司',
   card_title: '顧問',
+  card_department: '行銷部',
+  card_services: '提供 LINE 行銷顧問服務',
+  card_email: 'hello@example.com',
+  card_address: '台北市信義區',
   card_image_url: 'https://example.com/card.png',
+  card_custom_config: JSON.stringify({
+    layoutStyle: 'landscape',
+    desc: '一起把商機變成合作',
+    descColor: '#334155',
+    buttons: [
+      { l: '行動電話', u: 'tel:0912345678', c: '#06C755' },
+      { l: '官方網站', u: 'https://example.com/contact', c: '#2563eb' },
+      { l: '不安全', u: 'javascript:alert(1)', c: 'red' }
+    ]
+  }),
   author_user_id: 'U_MUST_NOT_LEAK',
   card_row_id: 'CARD_MUST_NOT_LEAK',
   post_id: 99
@@ -106,6 +129,7 @@ const row = {
   assert.equal(result.posts[0].postHandle, 'post_opaque_demo');
   assert.equal(result.posts[0].contactTags.length, 3);
   assert.equal(result.posts[0].cardAvailable, true);
+  assert.equal(result.posts[0].canEdit, false);
   assert.equal('body' in result.posts[0], false);
   assert.equal('authorUserId' in result.posts[0], false);
   assert.equal('cardRowId' in result.posts[0], false);
@@ -127,13 +151,85 @@ const row = {
     name: '測試會員',
     companyName: '測試公司',
     title: '顧問',
-    imageUrl: 'https://example.com/card.png'
+    department: '行銷部',
+    services: '提供 LINE 行銷顧問服務',
+    imageUrl: 'https://example.com/card.png',
+    layout: 'landscape',
+    description: '一起把商機變成合作',
+    descriptionColor: '#334155',
+    descriptionAlign: 'center',
+    buttons: [
+      { label: '行動電話', url: 'tel:0912345678', color: '#06C755' },
+      { label: '官方網站', url: 'https://example.com/contact', color: '#2563eb' },
+      { label: '電子信箱', url: 'mailto:hello@example.com', color: '#0f766e' },
+      { label: '查看地圖', url: 'https://www.google.com/maps/search/?api=1&query=%E5%8F%B0%E5%8C%97%E5%B8%82%E4%BF%A1%E7%BE%A9%E5%8D%80', color: '#1e293b' }
+    ]
   });
   assert.deepEqual(env.calls[0].bindings, ['post_opaque_demo']);
   assert.deepEqual(env.calls[1].bindings, ['U_MUST_NOT_LEAK']);
   assert.deepEqual(env.calls[2].bindings, ['CARD_MUST_NOT_LEAK', 'U_MUST_NOT_LEAK']);
   assert.match(env.calls[0].sql, /p\.post_handle = \?1 AND p\.status = 'published'/);
   assert.match(env.calls[0].sql, /p\.expires_at/);
+}
+
+function updateEnv(owned = true) {
+  const calls = [];
+  return {
+    calls,
+    EXCHANGE_ZONE_ACCESS_MODE: 'open',
+    ACTMASTER_DB: {
+      prepare(sql) {
+        const call = { sql, bindings: [] };
+        calls.push(call);
+        return {
+          bind(...bindings) {
+            call.bindings = bindings;
+            return this;
+          },
+          async first() {
+            return owned ? { post_handle: 'post_opaque_demo' } : null;
+          },
+          async run() {
+            return { success: true, meta: { changes: owned ? 1 : 0 } };
+          }
+        };
+      }
+    }
+  };
+}
+
+{
+  const env = updateEnv(true);
+  const result = await ExchangeZoneModule.update({
+    postHandle: 'post_opaque_demo',
+    title: '更新後的標題',
+    body: '這是更新後的交流內容，原本期限保持不變。',
+    contactTags: ['人才交流'],
+    attachMyCard: true
+  }, env, member);
+  assert.equal(result.success, true);
+  assert.equal(result.chargedPoints, 0);
+  assert.equal(env.calls.length, 2);
+  assert.match(env.calls[0].sql, /author_user_id = \?2/);
+  assert.match(env.calls[1].sql, /UPDATE exchange_zone_posts/);
+  assert.doesNotMatch(env.calls[1].sql, /expires_at\s*=/);
+  assert.doesNotMatch(env.calls[1].sql, /published_at\s*=/);
+  assert.doesNotMatch(env.calls[1].sql, /point_cost\s*=/);
+  assert.deepEqual(env.calls[1].bindings.slice(-2), ['U_MEMBER', 'post_opaque_demo']);
+}
+
+{
+  const env = updateEnv(false);
+  const result = await ExchangeZoneModule.update({
+    postHandle: 'another_members_post',
+    title: '不可更新',
+    body: '這是其他會員的內容，不應該被修改。',
+    contactTags: [],
+    attachMyCard: false
+  }, env, member);
+  assert.equal(result.success, false);
+  assert.equal(result.code, 'EXCHANGE_UPDATE_NOT_ALLOWED');
+  assert.equal(env.calls.length, 1);
 }
 
 {

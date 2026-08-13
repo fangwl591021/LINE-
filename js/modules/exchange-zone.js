@@ -29,6 +29,18 @@
     }
   }
 
+  function safeActionUrl(value) {
+    const raw = String(value || '').trim();
+    if (/^tel:\+?[0-9#*(),. -]{5,40}$/i.test(raw)) return raw;
+    if (/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(raw)) return raw;
+    return safeHttpsUrl(raw);
+  }
+
+  function safeColor(value, fallback) {
+    const raw = String(value || '').trim();
+    return /^#[0-9a-f]{6}$/i.test(raw) ? raw : (fallback || '#06C755');
+  }
+
   function formatDate(value) {
     const raw = String(value || '').trim();
     if (!raw) return '';
@@ -201,17 +213,23 @@
     if (title) title.textContent = String(post?.title || '交流內容');
     if (!content) return;
     const card = post?.card;
+    const cardButtons = Array.isArray(card?.buttons) ? card.buttons.map((button) => {
+      const url = safeActionUrl(button?.url);
+      if (!url) return '';
+      return `<a href="${escapeHtml(url)}" class="block w-full rounded-xl px-4 py-3 text-center text-[14px] font-black text-white shadow-sm active:scale-[0.98]" style="background:${escapeHtml(safeColor(button?.color, '#06C755'))}">${escapeHtml(button?.label || '聯絡')}</a>`;
+    }).filter(Boolean).join('') : '';
     const cardHtml = card ? `
       <section class="mt-6 rounded-3xl border border-emerald-100 bg-emerald-50/70 overflow-hidden">
         <div class="px-4 py-3 border-b border-emerald-100 flex items-center gap-2 text-emerald-800">
           <span class="material-symbols-outlined text-[20px]">badge</span>
           <h4 class="text-[13px] font-black">電子名片</h4>
         </div>
-        ${safeHttpsUrl(card.imageUrl) ? `<img src="${escapeHtml(safeHttpsUrl(card.imageUrl))}" alt="${escapeHtml(card.name || '電子名片')}" class="w-full max-h-64 object-contain bg-white">` : ''}
-        <div class="p-4">
-          <p class="text-[17px] font-black text-slate-800">${escapeHtml(card.name || author.name || '會員')}</p>
-          ${card.companyName ? `<p class="mt-1 text-[13px] font-bold text-slate-600">${escapeHtml(card.companyName)}</p>` : ''}
-          ${card.title ? `<p class="mt-1 text-[12px] font-bold text-slate-400">${escapeHtml(card.title)}</p>` : ''}
+        ${safeHttpsUrl(card.imageUrl) ? `<img src="${escapeHtml(safeHttpsUrl(card.imageUrl))}" alt="${escapeHtml(card.name || '電子名片')}" class="w-full max-h-[420px] object-contain bg-white">` : ''}
+        <div class="p-5">
+          <p class="text-center text-[20px] font-black text-slate-800">${escapeHtml(card.name || author.name || '會員')}</p>
+          ${(card.companyName || card.title || card.department) ? `<p class="mt-1 text-center text-[13px] font-bold text-slate-600">${escapeHtml([card.companyName, card.department, card.title].filter(Boolean).join(' ・ '))}</p>` : ''}
+          ${card.description ? `<p class="mt-4 whitespace-pre-wrap break-words text-[13px] font-medium leading-6" style="color:${escapeHtml(safeColor(card.descriptionColor, '#475569'))};text-align:${['left', 'center', 'right'].includes(card.descriptionAlign) ? card.descriptionAlign : 'center'}">${escapeHtml(card.description)}</p>` : ''}
+          ${cardButtons ? `<div class="mt-5 space-y-2.5">${cardButtons}</div>` : ''}
         </div>
       </section>` : '';
     content.innerHTML = `
@@ -224,7 +242,9 @@
       </div>
       <div class="mt-5">${tagsHtml(post?.contactTags)}</div>
       <article class="mt-5 whitespace-pre-wrap break-words text-[15px] leading-7 font-medium text-slate-700">${escapeHtml(post?.body || '')}</article>
-      ${cardHtml}`;
+      ${cardHtml}
+      ${post?.canEdit ? `<button id="exchange-zone-edit-button" type="button" class="mt-6 w-full min-h-13 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-[15px] font-black text-blue-700 flex items-center justify-center gap-2 active:scale-[0.98]"><span class="material-symbols-outlined text-[20px]">edit</span>編輯這則內容</button>` : ''}`;
+    document.getElementById('exchange-zone-edit-button')?.addEventListener('click', () => renderCompose(post));
   }
 
   function showDrawer(trigger) {
@@ -253,42 +273,44 @@
     return `exchange_${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`;
   }
 
-  function renderCompose() {
+  function renderCompose(existingPost) {
+    const editing = Boolean(existingPost?.canEdit && existingPost?.postHandle);
     const title = document.getElementById('exchange-zone-drawer-title');
     const content = document.getElementById('exchange-zone-drawer-content');
-    if (title) title.textContent = '新增自我宣傳';
+    if (title) title.textContent = editing ? '編輯自我宣傳' : '新增自我宣傳';
     if (!content) return;
     const availableTags = state.access.contactTags.length
       ? state.access.contactTags
       : ['合作邀約', '商品服務', '活動邀請', '人才交流', '其他'];
     content.innerHTML = `
       <form id="exchange-zone-compose-form" class="space-y-5">
+        <input type="hidden" name="postHandle" value="${escapeHtml(editing ? existingPost.postHandle : '')}">
         <input type="hidden" name="idempotencyKey" value="${escapeHtml(idempotencyKey())}">
         <div class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] font-bold text-amber-800">
-          發布成功才扣 ${state.access.publishCost} 點，內容顯示 ${state.access.publishDays} 天；刪除不退點。
+          ${editing ? '編輯不會再扣點，也不會延長原本 7 天的顯示期限。' : `發布成功才扣 ${state.access.publishCost} 點，內容顯示 ${state.access.publishDays} 天；刪除不退點。`}
         </div>
         <label class="block">
           <span class="text-[13px] font-black text-slate-700">標題</span>
-          <input name="title" required minlength="2" maxlength="80" autocomplete="off" class="mt-2 w-full min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-[15px] font-bold text-slate-800 outline-none focus:border-emerald-400" placeholder="例如：尋找異業合作夥伴">
+          <input name="title" value="${escapeHtml(editing ? existingPost.title : '')}" required minlength="2" maxlength="80" autocomplete="off" class="mt-2 w-full min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-[15px] font-bold text-slate-800 outline-none focus:border-emerald-400" placeholder="例如：尋找異業合作夥伴">
         </label>
         <label class="block">
           <span class="text-[13px] font-black text-slate-700">交流內容</span>
-          <textarea name="body" required minlength="10" maxlength="2000" rows="7" class="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium leading-6 text-slate-800 outline-none focus:border-emerald-400 resize-none" placeholder="請介紹您希望交流、合作或宣傳的內容"></textarea>
+          <textarea name="body" required minlength="10" maxlength="2000" rows="7" class="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium leading-6 text-slate-800 outline-none focus:border-emerald-400 resize-none" placeholder="請介紹您希望交流、合作或宣傳的內容">${escapeHtml(editing ? existingPost.body : '')}</textarea>
         </label>
         <fieldset>
           <legend class="text-[13px] font-black text-slate-700">聯絡標籤（最多 3 個）</legend>
           <div class="mt-2 flex flex-wrap gap-2">
-            ${availableTags.map((tag) => `<label class="cursor-pointer"><input type="checkbox" name="contactTags" value="${escapeHtml(tag)}" class="peer sr-only"><span class="inline-flex rounded-full border border-slate-200 bg-white px-3 py-2 text-[12px] font-black text-slate-600 peer-checked:border-blue-300 peer-checked:bg-blue-50 peer-checked:text-blue-700">${escapeHtml(tag)}</span></label>`).join('')}
+            ${availableTags.map((tag) => `<label class="cursor-pointer"><input type="checkbox" name="contactTags" value="${escapeHtml(tag)}" ${editing && Array.isArray(existingPost.contactTags) && existingPost.contactTags.includes(tag) ? 'checked' : ''} class="peer sr-only"><span class="inline-flex rounded-full border border-slate-200 bg-white px-3 py-2 text-[12px] font-black text-slate-600 peer-checked:border-blue-300 peer-checked:bg-blue-50 peer-checked:text-blue-700">${escapeHtml(tag)}</span></label>`).join('')}
           </div>
         </fieldset>
         <label class="flex items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
           <span><span class="block text-[13px] font-black text-slate-800">附上我的公開電子名片</span><span class="mt-1 block text-[11px] font-bold text-slate-500">只會使用您自己的公開名片</span></span>
-          <input type="checkbox" name="attachMyCard" checked class="h-5 w-5 accent-emerald-500">
+          <input type="checkbox" name="attachMyCard" ${!editing || existingPost.cardAvailable ? 'checked' : ''} class="h-5 w-5 accent-emerald-500">
         </label>
         <div id="exchange-zone-compose-error" role="alert" class="hidden rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-bold text-red-700"></div>
         <button id="exchange-zone-publish-button" type="submit" class="w-full min-h-14 rounded-2xl bg-emerald-500 text-white text-[15px] font-black flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50">
           <span class="material-symbols-outlined text-[21px]">send</span>
-          確認發布並扣 ${state.access.publishCost} 點
+          ${editing ? '儲存修改（不扣點）' : `確認發布並扣 ${state.access.publishCost} 點`}
         </button>
       </form>`;
   }
@@ -323,7 +345,9 @@
     }
     if (errorBox) errorBox.classList.add('hidden');
     try {
-      const result = await window.fetchAPI('publishExchangeZonePost', {
+      const editing = Boolean(String(data.get('postHandle') || ''));
+      const result = await window.fetchAPI(editing ? 'updateExchangeZonePost' : 'publishExchangeZonePost', {
+        postHandle: String(data.get('postHandle') || ''),
         title: String(data.get('title') || ''),
         body: String(data.get('body') || ''),
         contactTags: selectedTags,
@@ -332,7 +356,7 @@
       }, true);
       if (result?.success === false) throw new Error(result.error || '刊登失敗');
       await window.loadExchangeZone?.();
-      renderPublishSuccess(result);
+      renderPublishSuccess(result, editing);
     } catch (error) {
       if (errorBox) {
         errorBox.textContent = error?.message || '刊登失敗，請稍後再試';
@@ -342,15 +366,16 @@
       state.publishing = false;
       if (button) {
         button.disabled = false;
-        button.innerHTML = `<span class="material-symbols-outlined text-[21px]">send</span>確認發布並扣 ${state.access.publishCost} 點`;
+        const editing = Boolean(String(new FormData(form).get('postHandle') || ''));
+        button.innerHTML = `<span class="material-symbols-outlined text-[21px]">${editing ? 'save' : 'send'}</span>${editing ? '儲存修改（不扣點）' : `確認發布並扣 ${state.access.publishCost} 點`}`;
       }
     }
   }
 
-  function renderPublishSuccess(result) {
+  function renderPublishSuccess(result, editing) {
     const title = document.getElementById('exchange-zone-drawer-title');
     const content = document.getElementById('exchange-zone-drawer-content');
-    if (title) title.textContent = '刊登完成';
+    if (title) title.textContent = editing ? '更新完成' : '刊登完成';
     if (!content) return;
     const duplicated = result?.alreadyPublished === true;
     const charged = duplicated ? 0 : Number(result?.chargedPoints || state.access.publishCost);
@@ -358,8 +383,8 @@
       <section class="min-h-full flex items-center justify-center py-8">
         <div class="w-full rounded-3xl border border-emerald-100 bg-emerald-50/70 px-5 py-8 text-center">
           <span class="material-symbols-outlined text-[64px] text-emerald-500" aria-hidden="true">check_circle</span>
-          <h4 class="mt-3 text-2xl font-black text-slate-800">刊登完成</h4>
-          <p class="mt-3 text-[14px] font-bold leading-6 text-slate-600">${duplicated ? '這則內容先前已成功刊登，本次沒有重複扣點。' : `已扣除 ${charged} 點，內容將公開顯示 ${state.access.publishDays} 天。`}</p>
+          <h4 class="mt-3 text-2xl font-black text-slate-800">${editing ? '更新完成' : '刊登完成'}</h4>
+          <p class="mt-3 text-[14px] font-bold leading-6 text-slate-600">${editing ? '內容已更新，本次沒有扣點，原刊登期限保持不變。' : (duplicated ? '這則內容先前已成功刊登，本次沒有重複扣點。' : `已扣除 ${charged} 點，內容將公開顯示 ${state.access.publishDays} 天。`)}</p>
           <button id="exchange-zone-success-close" type="button" class="mt-6 w-full min-h-13 rounded-2xl bg-emerald-500 px-4 text-[15px] font-black text-white active:scale-[0.98]">返回交流專區</button>
         </div>
       </section>`;
