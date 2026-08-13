@@ -104,6 +104,16 @@ includesAll(html, [
   'js/modules/exchange-zone.js?v='
 ], 'frontend includes hidden entry, LINE-style list and right-side drawer controls');
 ok(/開啟折抵店家[\s\S]*id="home-exchange-zone-button"/.test(html), 'exchange entry is placed immediately after the redeem-store shortcut');
+includesAll(html, [
+  'id="page-exchange-zone" class="hidden fixed inset-0 z-[110] w-full',
+  'id="exchange-zone-panel" class="absolute inset-y-0 right-0 h-[100dvh] w-full max-w-none',
+  'id="exchange-zone-panel-close" type="button" class="w-10 h-10 shrink-0 rounded-full bg-red-600 text-white',
+  'id="exchange-zone-drawer" class="hidden fixed inset-0 z-[120] w-full',
+  'id="exchange-zone-drawer-panel" class="absolute inset-y-0 right-0 h-[100dvh] w-full max-w-none',
+  'id="exchange-zone-drawer-close" type="button" class="w-10 h-10 shrink-0 rounded-full bg-red-600 text-white',
+  'section class="min-h-full w-full bg-white overflow-hidden"'
+], 'both exchange drawer layers and their cards fill the viewport with obvious red close controls');
+ok(!/id="exchange-zone-(?:panel|drawer-panel)"[^>]+(?:w-\[(?:90|92)%\]|max-w-\[(?:390|410)px\])/.test(html), 'exchange drawer layers have no legacy narrow width cap');
 
 includesAll(frontend, [
   "window.fetchAPI('getExchangeZoneAccess'",
