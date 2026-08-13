@@ -6,14 +6,14 @@
 | --- | --- |
 | 日期 | 2026-08-13 |
 | 起始 commit | `61507e3` |
-| 問題 | Android LINE WebView 忽略 file input 的 `capture="environment"`，點「拍照掃描」仍出現一般上傳選擇器 |
-| 目標 | 收藏名片與我的名片改用頁內後鏡頭；相簿上傳維持原流程 |
+| 問題 | Android LINE WebView 對 JavaScript 代點隱藏 file input 的支援不穩定，可能把「拍照掃描」降級為一般上傳選擇器 |
+| 目標 | 收藏名片與我的名片由使用者直接點擊原生後鏡頭 input；相簿上傳維持原流程 |
 
 ## 允許範圍
 
-- 只修改兩個「拍照掃描」入口、頁內相機 UI 與相關前端契約。
+- 只修改兩個「拍照掃描」入口與相關前端契約。
 - 拍攝完成後仍交給既有 `recognizeCard`／`recognizeMyCard` 裁切及 OCR 流程。
-- Android 相機權限失敗時提供安全提示，不自動跳到一般檔案上傳。
+- 保留 `capture="environment"`，但不再用 JavaScript `.click()` 代點隱藏 input。
 
 ## 禁止範圍
 
@@ -23,7 +23,7 @@
 
 ## 根因與決策
 
-先前嘗試仍依賴 HTML `capture` 屬性；該屬性只是瀏覽器提示，Android LINE WebView 可忽略，因此無法保證直接開相機。本次使用 `navigator.mediaDevices.getUserMedia` 開啟後鏡頭預覽，拍攝為 JPEG Blob 後傳入既有裁切器，明確分離相機與相簿。
+歷史檢查顯示相機 input 自 2026-05-08 起一直保留 `capture="environment"`，但入口使用按鈕的 JavaScript `.click()` 代點 `display:none` input。Android LINE WebView 對這種合成點擊不穩定，可能降級為一般上傳選擇器。本次讓透明的原生 input 完整覆蓋拍照按鈕，使使用者手勢直接落在 input 上；不使用 `getUserMedia`，因此不新增 LINE 頁內相機權限流程。
 
 ## 驗證
 
