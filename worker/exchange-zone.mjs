@@ -110,12 +110,7 @@ function selectColumns() {
         ORDER BY CASE WHEN u.line_id = p.author_user_id THEN 0 ELSE 1 END
         LIMIT 1
       ), '會員') AS author_name,
-      COALESCE((
-        SELECT u.picture_url FROM users u
-        WHERE u.line_id = p.author_user_id OR u.row_id = p.author_user_id
-        ORDER BY CASE WHEN u.line_id = p.author_user_id THEN 0 ELSE 1 END
-        LIMIT 1
-      ), '') AS author_avatar_url,
+      COALESCE(c.image_url, '') AS author_avatar_url,
       CASE WHEN c.row_id IS NULL THEN 0 ELSE 1 END AS card_available,
       COALESCE(c.name, '') AS card_name,
       COALESCE(c.company_name, '') AS card_company_name,
