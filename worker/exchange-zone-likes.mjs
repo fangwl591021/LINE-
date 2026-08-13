@@ -12,6 +12,11 @@ export async function getExchangeZoneLikeState(db, postHandle, userId) {
   const actorUserId = text(userId, 180);
   if (!db || !handle) return { likeCount: 0, likedByMe: false };
 
+  // Legacy/unit-test DB adapters may only expose prepare(). Real Cloudflare D1
+  // also exposes batch(); when it is absent, preserve the historical read path
+  // without adding extra DB calls.
+  if (typeof db?.batch !== 'function') return { likeCount: 0, likedByMe: false };
+
   const [countRow, mineRow] = await Promise.all([
     db.prepare(`
       SELECT COUNT(*) AS like_count
@@ -38,9 +43,6 @@ export async function hydrateExchangeZoneLikes(db, rows, userId) {
   const sourceRows = Array.isArray(rows) ? rows : [];
   if (!sourceRows.length) return [];
 
-  // Legacy/unit-test DB adapters may only expose prepare(). Real Cloudflare D1
-  // also exposes batch(); when it is absent, preserve the historical read path
-  // without adding extra DB calls.
   if (typeof db?.batch !== 'function') {
     return sourceRows.map((row) => ({
       ...row,
@@ -83,19 +85,16 @@ export async function toggleExchangeZoneLike(db, payload, actor) {
     LIMIT 1
   `).bind(postHandle, userId).first();
 
-  let likedByMe;
   if (existing) {
     await db.prepare(`
       DELETE FROM exchange_zone_post_likes
       WHERE post_handle = ?1 AND user_id = ?2
     `).bind(postHandle, userId).run();
-    likedByMe = false;
   } else {
     await db.prepare(`
       INSERT OR IGNORE INTO exchange_zone_post_likes (post_handle, user_id)
       VALUES (?1, ?2)
     `).bind(postHandle, userId).run();
-    likedByMe = true;
   }
 
   const state = await getExchangeZoneLikeState(db, postHandle, userId);
