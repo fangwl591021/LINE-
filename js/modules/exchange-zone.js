@@ -2,7 +2,8 @@
   const state = {
     initialized: false,
     loading: false,
-    access: { mode: 'private', allowed: false, canManage: false },
+    publishing: false,
+    access: { mode: 'private', allowed: false, canManage: false, canPublish: false, publishCost: 10, publishDays: 7, contactTags: [] },
     panelOpen: false,
     panelTrigger: null,
     panelCloseTimer: null,
@@ -79,10 +80,16 @@
         ? String(normalized.mode).toLowerCase()
         : 'private',
       allowed: normalized.allowed === true,
-      canManage: normalized.canManage === true
+      canManage: normalized.canManage === true,
+      canPublish: normalized.canPublish === true,
+      publishCost: Number(normalized.publishCost) || 10,
+      publishDays: Number(normalized.publishDays) || 7,
+      contactTags: Array.isArray(normalized.contactTags) ? normalized.contactTags.slice(0, 8) : []
     };
     const button = document.getElementById('home-exchange-zone-button');
     if (button) button.classList.toggle('hidden', !state.access.allowed);
+    const compose = document.getElementById('exchange-zone-compose-button');
+    if (compose) compose.classList.toggle('hidden', !state.access.canPublish);
     const badge = document.getElementById('exchange-zone-private-badge');
     if (badge) {
       const labels = { private: '私人測試', pilot: '指定測試', open: '正式開放' };
@@ -239,6 +246,108 @@
     });
   }
 
+  function idempotencyKey() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID().replaceAll('-', '_');
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    return `exchange_${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  function renderCompose() {
+    const title = document.getElementById('exchange-zone-drawer-title');
+    const content = document.getElementById('exchange-zone-drawer-content');
+    if (title) title.textContent = '新增自我宣傳';
+    if (!content) return;
+    const availableTags = state.access.contactTags.length
+      ? state.access.contactTags
+      : ['合作邀約', '商品服務', '活動邀請', '人才交流', '其他'];
+    content.innerHTML = `
+      <form id="exchange-zone-compose-form" class="space-y-5">
+        <input type="hidden" name="idempotencyKey" value="${escapeHtml(idempotencyKey())}">
+        <div class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] font-bold text-amber-800">
+          發布成功才扣 ${state.access.publishCost} 點，內容顯示 ${state.access.publishDays} 天；刪除不退點。
+        </div>
+        <label class="block">
+          <span class="text-[13px] font-black text-slate-700">標題</span>
+          <input name="title" required minlength="2" maxlength="80" autocomplete="off" class="mt-2 w-full min-h-12 rounded-2xl border border-slate-200 bg-white px-4 text-[15px] font-bold text-slate-800 outline-none focus:border-emerald-400" placeholder="例如：尋找異業合作夥伴">
+        </label>
+        <label class="block">
+          <span class="text-[13px] font-black text-slate-700">交流內容</span>
+          <textarea name="body" required minlength="10" maxlength="2000" rows="7" class="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium leading-6 text-slate-800 outline-none focus:border-emerald-400 resize-none" placeholder="請介紹您希望交流、合作或宣傳的內容"></textarea>
+        </label>
+        <fieldset>
+          <legend class="text-[13px] font-black text-slate-700">聯絡標籤（最多 3 個）</legend>
+          <div class="mt-2 flex flex-wrap gap-2">
+            ${availableTags.map((tag) => `<label class="cursor-pointer"><input type="checkbox" name="contactTags" value="${escapeHtml(tag)}" class="peer sr-only"><span class="inline-flex rounded-full border border-slate-200 bg-white px-3 py-2 text-[12px] font-black text-slate-600 peer-checked:border-blue-300 peer-checked:bg-blue-50 peer-checked:text-blue-700">${escapeHtml(tag)}</span></label>`).join('')}
+          </div>
+        </fieldset>
+        <label class="flex items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+          <span><span class="block text-[13px] font-black text-slate-800">附上我的公開電子名片</span><span class="mt-1 block text-[11px] font-bold text-slate-500">只會使用您自己的公開名片</span></span>
+          <input type="checkbox" name="attachMyCard" checked class="h-5 w-5 accent-emerald-500">
+        </label>
+        <div id="exchange-zone-compose-error" role="alert" class="hidden rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-bold text-red-700"></div>
+        <button id="exchange-zone-publish-button" type="submit" class="w-full min-h-14 rounded-2xl bg-emerald-500 text-white text-[15px] font-black flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50">
+          <span class="material-symbols-outlined text-[21px]">send</span>
+          確認發布並扣 ${state.access.publishCost} 點
+        </button>
+      </form>`;
+  }
+
+  window.openExchangeZoneCompose = function(trigger) {
+    if (!state.access.canPublish) {
+      window.showToast?.('目前無法刊登交流內容', true);
+      return;
+    }
+    showDrawer(trigger);
+    renderCompose();
+    setTimeout(() => document.querySelector('#exchange-zone-compose-form [name="title"]')?.focus(), 50);
+  };
+
+  async function publishCompose(form) {
+    if (state.publishing) return;
+    const selectedTags = Array.from(form.querySelectorAll('[name="contactTags"]:checked')).map((input) => input.value);
+    const errorBox = document.getElementById('exchange-zone-compose-error');
+    if (selectedTags.length > 3) {
+      if (errorBox) {
+        errorBox.textContent = '聯絡標籤最多選擇 3 個';
+        errorBox.classList.remove('hidden');
+      }
+      return;
+    }
+    const data = new FormData(form);
+    const button = document.getElementById('exchange-zone-publish-button');
+    state.publishing = true;
+    if (button) {
+      button.disabled = true;
+      button.textContent = '正在發布…';
+    }
+    if (errorBox) errorBox.classList.add('hidden');
+    try {
+      const result = await window.fetchAPI('publishExchangeZonePost', {
+        title: String(data.get('title') || ''),
+        body: String(data.get('body') || ''),
+        contactTags: selectedTags,
+        attachMyCard: data.get('attachMyCard') === 'on',
+        idempotencyKey: String(data.get('idempotencyKey') || '')
+      }, true);
+      if (result?.success === false) throw new Error(result.error || '刊登失敗');
+      window.showToast?.(result?.alreadyPublished ? '內容已刊登，未重複扣點' : `刊登成功，已扣 ${result?.chargedPoints || state.access.publishCost} 點`);
+      window.closeExchangeZoneDrawer?.();
+      await window.loadExchangeZone?.();
+    } catch (error) {
+      if (errorBox) {
+        errorBox.textContent = error?.message || '刊登失敗，請稍後再試';
+        errorBox.classList.remove('hidden');
+      }
+    } finally {
+      state.publishing = false;
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = `<span class="material-symbols-outlined text-[21px]">send</span>確認發布並扣 ${state.access.publishCost} 點`;
+      }
+    }
+  }
+
   window.closeExchangeZoneDrawer = function() {
     const drawer = document.getElementById('exchange-zone-drawer');
     const panel = document.getElementById('exchange-zone-drawer-panel');
@@ -275,6 +384,17 @@
     document.getElementById('exchange-zone-list')?.addEventListener('click', (event) => {
       const trigger = event.target.closest('[data-exchange-post-handle]');
       if (trigger) window.openExchangeZonePost(trigger.dataset.exchangePostHandle, trigger);
+    });
+    document.getElementById('exchange-zone-compose-button')?.addEventListener('click', (event) => window.openExchangeZoneCompose(event.currentTarget));
+    document.getElementById('exchange-zone-drawer-content')?.addEventListener('change', (event) => {
+      if (!event.target.matches('[name="contactTags"]')) return;
+      const checked = document.querySelectorAll('#exchange-zone-compose-form [name="contactTags"]:checked');
+      if (checked.length > 3) event.target.checked = false;
+    });
+    document.getElementById('exchange-zone-drawer-content')?.addEventListener('submit', (event) => {
+      if (event.target.id !== 'exchange-zone-compose-form') return;
+      event.preventDefault();
+      publishCompose(event.target);
     });
     document.getElementById('exchange-zone-drawer-close')?.addEventListener('click', () => window.closeExchangeZoneDrawer());
     document.getElementById('exchange-zone-drawer-backdrop')?.addEventListener('click', () => window.closeExchangeZoneDrawer());

@@ -80,6 +80,7 @@ const ACTION_POLICIES = {
   getExchangeZoneAccess: { access: 'authenticated', note: 'private_exchange_zone_gate' },
   listExchangeZonePosts: { access: 'authenticated', note: 'private_exchange_zone_read' },
   getExchangeZonePost: { access: 'authenticated', note: 'private_exchange_zone_read' },
+  publishExchangeZonePost: { access: 'authenticated', ownership: 'self', note: 'private_exchange_zone_publish' },
 
   updateUserProfile: { access: 'authenticated', ownership: 'self' },
   linkUserIdentity: { access: 'authenticated', ownership: 'self' },
@@ -16410,6 +16411,28 @@ async function dispatchAction(action, payload, request, env) {
     case 'getExchangeZoneAccess': return ExchangeZoneModule.access(payload || {}, env, actor);
     case 'listExchangeZonePosts': return await ExchangeZoneModule.list(payload || {}, env, actor);
     case 'getExchangeZonePost': return await ExchangeZoneModule.get(payload || {}, env, actor);
+    case 'publishExchangeZonePost': return await ExchangeZoneModule.publish(payload || {}, env, actor, {
+      balance: async (userId) => {
+        const wallet = await PointModule.queryUserPoints({
+          authenticatedUserId: userId,
+          pointUserId: userId,
+          point_type: 'gift_money',
+          page: 1
+        }, env);
+        if (!wallet?.success || wallet?.data?.source === 'local') {
+          return { success: false, error: wallet?.error || 'Mother point balance unavailable' };
+        }
+        return { success: true, balance: Number(wallet?.data?.typedBalance ?? wallet?.data?.balance) };
+      },
+      adjust: async (userId, points, context = {}) => PointModule.insertUserPoint({
+        LINE_user_id: userId,
+        points,
+        pointType: 'gift_money',
+        eventName: String(context.eventName || '交流專區刊登'),
+        eventContent: String(context.eventContent || ''),
+        shop_remark: `source=exchange_zone;operation=${String(context.operationId || '').slice(0, 80)}`
+      }, env)
+    });
     case 'listPointRedemptionPartners': return await PartnerDirectoryModule.list(payload || {}, env);
     case 'getPointRedemptionPartner': return await PartnerDirectoryModule.get(payload || {}, env);
     case 'prepareTenantCardPayment': return await PaymentModule.prepareTenantCardPayment(payload, env);
