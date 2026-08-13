@@ -7,6 +7,7 @@ const migration = read('migrations/0023_exchange_zone_likes.sql');
 const likes = read('worker/exchange-zone-likes.mjs');
 const workerModule = read('worker/exchange-zone.mjs');
 const frontend = read('js/modules/exchange-zone.js');
+const overlay = read('js/modules/exchange-zone-delete-overlay.js');
 
 function ok(condition, message) {
   if (!condition) {
@@ -67,8 +68,44 @@ includesAll(frontend, [
   'max-h-[280px]'
 ], 'frontend shows surface likes and a compact expandable public card');
 
+includesAll(overlay, [
+  "row.id = 'exchange-zone-owner-actions'",
+  'grid grid-cols-2 gap-3',
+  "button.id = 'exchange-zone-archive-button'",
+  'min-h-14',
+  'text-[16px]',
+  '刪除貼文'
+], 'owner edit and delete actions render as one large two-column row');
+
+includesAll(likes, [
+  'fetchExchangeZoneLinkPreview',
+  "url.protocol !== 'https:'",
+  "host === 'localhost'",
+  "host.endsWith('.internal')",
+  "host === '169.254.169.254'",
+  "redirect: 'manual'",
+  'readHtmlBounded',
+  '262144',
+  "metaContent(html, 'og:image')",
+  "metaContent(html, 'og:title')",
+  "if (payload?.previewUrl) return fetchExchangeZoneLinkPreview(payload.previewUrl)"
+], 'link preview fetch is HTTPS-only, redirect-checked, bounded and OG-aware');
+
+includesAll(overlay, [
+  'firstHttpsUrl',
+  'linkifyArticle',
+  'exchangeLinksEnhanced',
+  "window.fetchAPI('updateExchangeZonePost', { toggleLike: true, previewUrl: url }",
+  'exchangeLinkPreview',
+  "anchor.target = '_blank'",
+  "anchor.rel = 'noopener noreferrer'",
+  'preview.imageUrl',
+  'preview.description'
+], 'exchange detail linkifies HTTPS URLs and renders first-link preview metadata safely');
+
 ok(!frontend.includes('max-h-[420px]'), 'exchange detail no longer renders the old oversized card image');
 ok(!frontend.includes('window.open('), 'exchange enhancements do not open a new browser window');
 ok(!frontend.includes('window.location'), 'exchange enhancements do not navigate away from the LIFF app');
+ok(!overlay.includes('innerHTML = preview.'), 'link preview metadata is rendered with DOM textContent rather than unsafe HTML');
 
-console.log('\nExchange zone like and compact-card contract passed.');
+console.log('\nExchange zone like, compact-card, owner-action and link-preview contract passed.');
