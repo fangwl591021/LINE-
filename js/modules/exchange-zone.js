@@ -1,7 +1,7 @@
 (function() {
   const current = document.currentScript?.src || location.href;
-  const base = new URL('exchange-zone-core.js?v=20260814-linkpreview', current).href;
-  const overlay = new URL('exchange-zone-delete-overlay.js?v=20260814-linkpreview', current).href;
+  const base = new URL('exchange-zone-core.js?v=20260814-youtube', current).href;
+  const overlay = new URL('exchange-zone-delete-overlay.js?v=20260814-youtube', current).href;
 
   function load(src) {
     return new Promise((resolve, reject) => {
