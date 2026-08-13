@@ -37,6 +37,18 @@ export async function getExchangeZoneLikeState(db, postHandle, userId) {
 export async function hydrateExchangeZoneLikes(db, rows, userId) {
   const sourceRows = Array.isArray(rows) ? rows : [];
   if (!sourceRows.length) return [];
+
+  // Legacy/unit-test DB adapters may only expose prepare(). Real Cloudflare D1
+  // also exposes batch(); when it is absent, preserve the historical read path
+  // without adding extra DB calls.
+  if (typeof db?.batch !== 'function') {
+    return sourceRows.map((row) => ({
+      ...row,
+      likeCount: Number(row?.likeCount) || 0,
+      likedByMe: row?.likedByMe === true
+    }));
+  }
+
   return Promise.all(sourceRows.map(async (row) => ({
     ...row,
     ...(await getExchangeZoneLikeState(db, row?.post_handle, userId))
