@@ -23,6 +23,10 @@ function fakeEnv(options = {}) {
           },
           async first() {
             if (options.failExpires && sql.includes('p.expires_at')) throw new Error('D1_ERROR: no such column: p.expires_at');
+            if (sql.includes('FROM users u')) {
+              const source = options.author || options.first || options.rows?.[0] || null;
+              return source ? { name: source.author_name || source.name } : null;
+            }
             if (sql.includes('FROM card_contacts c')) {
               const source = options.card || options.first || options.rows?.[0] || null;
               return source ? {
@@ -108,8 +112,9 @@ const row = {
   assert.equal('postId' in result.posts[0], false);
   assert.match(env.calls[0].sql, /p\.status = 'published'/);
   assert.match(env.calls[0].sql, /p\.expires_at/);
-  assert.match(env.calls[1].sql, /LOWER\(COALESCE\(c\.source_type/);
-  assert.match(env.calls[1].sql, /LOWER\(COALESCE\(c\.visibility/);
+  assert.match(env.calls[1].sql, /FROM users u/);
+  assert.match(env.calls[2].sql, /LOWER\(COALESCE\(c\.source_type/);
+  assert.match(env.calls[2].sql, /LOWER\(COALESCE\(c\.visibility/);
   assert.deepEqual(env.calls[0].bindings, [50]);
 }
 
@@ -125,7 +130,8 @@ const row = {
     imageUrl: 'https://example.com/card.png'
   });
   assert.deepEqual(env.calls[0].bindings, ['post_opaque_demo']);
-  assert.deepEqual(env.calls[1].bindings, ['CARD_MUST_NOT_LEAK', 'U_MUST_NOT_LEAK']);
+  assert.deepEqual(env.calls[1].bindings, ['U_MUST_NOT_LEAK']);
+  assert.deepEqual(env.calls[2].bindings, ['CARD_MUST_NOT_LEAK', 'U_MUST_NOT_LEAK']);
   assert.match(env.calls[0].sql, /p\.post_handle = \?1 AND p\.status = 'published'/);
   assert.match(env.calls[0].sql, /p\.expires_at/);
 }
@@ -142,7 +148,7 @@ const row = {
   const result = await ExchangeZoneModule.list({ limit: 10 }, env, admin);
   assert.equal(result.success, true);
   assert.equal(result.count, 1);
-  assert.equal(env.calls.length, 3);
+  assert.equal(env.calls.length, 4);
   assert.match(env.calls[0].sql, /p\.expires_at/);
   assert.doesNotMatch(env.calls[1].sql, /p\.expires_at/);
 }
@@ -152,7 +158,7 @@ const row = {
   const result = await ExchangeZoneModule.get({ postHandle: 'post_opaque_demo' }, env, member);
   assert.equal(result.success, true);
   assert.equal(result.post.postHandle, 'post_opaque_demo');
-  assert.equal(env.calls.length, 3);
+  assert.equal(env.calls.length, 4);
   assert.doesNotMatch(env.calls[1].sql, /p\.expires_at/);
 }
 
