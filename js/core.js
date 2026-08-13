@@ -303,6 +303,9 @@ const Core = (function() {
             const el = document.querySelector(selector);
             if (el) el.classList.toggle('hidden', !show);
         }
+        if (typeof window.refreshExchangeZoneAccess === 'function') {
+            window.refreshExchangeZoneAccess().catch(() => {});
+        }
     };
 
     // 名片資料載入 (按需載入)
