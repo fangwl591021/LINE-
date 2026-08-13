@@ -140,6 +140,10 @@ includesAll(frontend, [
   'safeActionUrl'
 ], 'owner can edit without another charge and attached public cards render safe action buttons');
 includesAll(frontend, [
+  '<article class="mt-5 rounded-2xl border border-amber-100 bg-amber-50/80 px-4 py-4',
+  '<section class="mt-6 rounded-3xl border border-emerald-100 bg-emerald-50/70'
+], 'exchange text uses a pale goose-yellow card distinct from the green electronic business card');
+includesAll(frontend, [
   'exchange-zone-inquiry-button',
   '有興趣・寄站內信',
   'window.openInboxExchangeInquiry(post)'
