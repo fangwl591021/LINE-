@@ -3,6 +3,7 @@
     initialized: false,
     loading: false,
     publishing: false,
+    liking: new Set(),
     access: { mode: 'private', allowed: false, canManage: false, canPublish: false, publishCost: 10, publishDays: 7, contactTags: [] },
     panelOpen: false,
     panelTrigger: null,
@@ -70,6 +71,15 @@
     const tags = Array.isArray(items) ? items.slice(0, 3) : [];
     if (!tags.length) return '';
     return `<span class="flex flex-wrap gap-1.5">${tags.map((tag) => `<span class="rounded-full bg-blue-50 border border-blue-100 px-2.5 py-1 text-[11px] font-black text-blue-700">${escapeHtml(tag)}</span>`).join('')}</span>`;
+  }
+
+  function likeButtonHtml(post, detail = false) {
+    const liked = post?.likedByMe === true;
+    const count = Math.max(0, Number(post?.likeCount) || 0);
+    const classes = liked
+      ? 'border-blue-200 bg-blue-50 text-blue-700'
+      : 'border-slate-200 bg-white text-slate-500';
+    return `<button type="button" data-exchange-like="${escapeHtml(post?.postHandle || '')}" data-exchange-like-detail="${detail ? '1' : '0'}" aria-pressed="${liked ? 'true' : 'false'}" class="inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-black active:scale-[0.97] ${classes}"><span class="material-symbols-outlined text-[18px]">thumb_up</span><span>${liked ? '已按讚' : '按讚'}</span><span data-exchange-like-count>${count}</span></button>`;
   }
 
   function setStatus(message, isError) {
@@ -170,21 +180,24 @@
       const title = String(post?.title || '未命名交流內容');
       const excerpt = String(post?.excerpt || '點擊查看內容');
       return `
-        <button type="button" data-exchange-post-handle="${escapeHtml(post?.postHandle || '')}" class="w-full px-5 py-4 text-left flex items-start gap-3 bg-white active:bg-slate-50 transition-colors">
+        <div role="button" tabindex="0" data-exchange-post-handle="${escapeHtml(post?.postHandle || '')}" class="w-full px-5 py-4 text-left flex items-start gap-3 bg-white active:bg-slate-50 transition-colors cursor-pointer">
           ${avatar(author)}
-          <span class="min-w-0 flex-1">
-            <span class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-start justify-between gap-3">
               <span class="truncate text-[15px] font-black text-slate-800">${escapeHtml(title)}</span>
               <span class="shrink-0 text-[11px] font-bold text-slate-400">${escapeHtml(formatDate(post?.publishedAt))}</span>
-            </span>
-            <span class="mt-1 block truncate text-[13px] font-bold text-slate-500">${escapeHtml(author.name || '會員')}・${escapeHtml(excerpt)}</span>
-            <span class="mt-2 flex items-center gap-2">
+            </div>
+            <div class="mt-1 truncate text-[13px] font-bold text-slate-500">${escapeHtml(author.name || '會員')}・${escapeHtml(excerpt)}</div>
+            <div class="mt-2 flex items-center gap-2">
               ${tagsHtml(post?.contactTags)}
               ${post?.cardAvailable ? '<span class="ml-auto shrink-0 material-symbols-outlined text-[17px] text-emerald-600" title="附電子名片">badge</span>' : ''}
-            </span>
-          </span>
-          <span class="material-symbols-outlined text-[20px] text-slate-300 mt-3">chevron_right</span>
-        </button>`;
+            </div>
+            <div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
+              ${likeButtonHtml(post, false)}
+              <span class="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400">查看內容<span class="material-symbols-outlined text-[17px]">chevron_right</span></span>
+            </div>
+          </div>
+        </div>`;
     }).join('');
   }
 
@@ -206,6 +219,41 @@
     }
   };
 
+  function updateLikeButtons(postHandle, result) {
+    document.querySelectorAll(`[data-exchange-like="${CSS.escape(postHandle)}"]`).forEach((button) => {
+      const liked = result?.likedByMe === true;
+      const count = Math.max(0, Number(result?.likeCount) || 0);
+      button.setAttribute('aria-pressed', liked ? 'true' : 'false');
+      button.classList.toggle('border-blue-200', liked);
+      button.classList.toggle('bg-blue-50', liked);
+      button.classList.toggle('text-blue-700', liked);
+      button.classList.toggle('border-slate-200', !liked);
+      button.classList.toggle('bg-white', !liked);
+      button.classList.toggle('text-slate-500', !liked);
+      const labels = button.querySelectorAll('span');
+      if (labels[1]) labels[1].textContent = liked ? '已按讚' : '按讚';
+      const countEl = button.querySelector('[data-exchange-like-count]');
+      if (countEl) countEl.textContent = String(count);
+    });
+  }
+
+  async function toggleLike(postHandle, button) {
+    const handle = String(postHandle || '').trim();
+    if (!handle || state.liking.has(handle)) return;
+    state.liking.add(handle);
+    if (button) button.disabled = true;
+    try {
+      const result = await window.fetchAPI('updateExchangeZonePost', { postHandle: handle, toggleLike: true }, true);
+      if (result?.success === false) throw new Error(result.error || '按讚失敗');
+      updateLikeButtons(handle, result);
+    } catch (error) {
+      window.showToast?.(error?.message || '按讚失敗，請稍後再試', true);
+    } finally {
+      state.liking.delete(handle);
+      if (button) button.disabled = false;
+    }
+  }
+
   function renderDrawer(post) {
     const author = post?.author || {};
     const title = document.getElementById('exchange-zone-drawer-title');
@@ -218,20 +266,36 @@
       if (!url) return '';
       return `<a href="${escapeHtml(url)}" class="block w-full rounded-xl px-4 py-3 text-center text-[14px] font-black text-white shadow-sm active:scale-[0.98]" style="background:${escapeHtml(safeColor(button?.color, '#06C755'))}">${escapeHtml(button?.label || '聯絡')}</a>`;
     }).filter(Boolean).join('') : '';
+
+    const compactImage = safeHttpsUrl(card?.imageUrl);
     const cardHtml = card ? `
       <section class="mt-6 rounded-3xl border border-emerald-100 bg-emerald-50/70 overflow-hidden">
         <div class="px-4 py-3 border-b border-emerald-100 flex items-center gap-2 text-emerald-800">
           <span class="material-symbols-outlined text-[20px]">badge</span>
-          <h4 class="text-[13px] font-black">電子名片</h4>
+          <h4 class="text-[13px] font-black">附上的公開名片</h4>
         </div>
-        ${safeHttpsUrl(card.imageUrl) ? `<img src="${escapeHtml(safeHttpsUrl(card.imageUrl))}" alt="${escapeHtml(card.name || '電子名片')}" class="w-full max-h-[420px] object-contain bg-white">` : ''}
-        <div class="p-5">
-          <p class="text-center text-[20px] font-black text-slate-800">${escapeHtml(card.name || author.name || '會員')}</p>
-          ${(card.companyName || card.title || card.department) ? `<p class="mt-1 text-center text-[13px] font-bold text-slate-600">${escapeHtml([card.companyName, card.department, card.title].filter(Boolean).join(' ・ '))}</p>` : ''}
-          ${card.description ? `<p class="mt-4 whitespace-pre-wrap break-words text-[13px] font-medium leading-6" style="color:${escapeHtml(safeColor(card.descriptionColor, '#475569'))};text-align:${['left', 'center', 'right'].includes(card.descriptionAlign) ? card.descriptionAlign : 'center'}">${escapeHtml(card.description)}</p>` : ''}
-          ${cardButtons ? `<div class="mt-5 space-y-2.5">${cardButtons}</div>` : ''}
+        <div class="p-4 flex items-center gap-4 bg-white/70">
+          ${compactImage ? `<img src="${escapeHtml(compactImage)}" alt="${escapeHtml(card.name || '電子名片')}" class="w-28 h-20 sm:w-32 sm:h-24 rounded-xl object-contain bg-white border border-slate-100 shrink-0">` : `<div class="w-24 h-20 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-emerald-600 text-[30px]">badge</span></div>`}
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-[17px] font-black text-slate-800">${escapeHtml(card.name || author.name || '會員')}</p>
+            ${card.companyName ? `<p class="mt-1 truncate text-[12px] font-bold text-slate-600">${escapeHtml(card.companyName)}</p>` : ''}
+            ${(card.department || card.title) ? `<p class="mt-1 truncate text-[12px] font-bold text-slate-500">${escapeHtml([card.department, card.title].filter(Boolean).join(' ・ '))}</p>` : ''}
+          </div>
+        </div>
+        <div class="px-4 pb-4 bg-white/70">
+          <button id="exchange-zone-card-toggle" type="button" aria-expanded="false" class="w-full min-h-11 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-[13px] font-black text-emerald-700 flex items-center justify-center gap-1.5 active:scale-[0.98]"><span class="material-symbols-outlined text-[19px]">expand_more</span><span>查看完整名片</span></button>
+        </div>
+        <div id="exchange-zone-card-full" class="hidden border-t border-emerald-100 bg-white">
+          ${compactImage ? `<img src="${escapeHtml(compactImage)}" alt="${escapeHtml(card.name || '電子名片')}" class="w-full max-h-[280px] object-contain bg-white">` : ''}
+          <div class="p-5">
+            <p class="text-center text-[20px] font-black text-slate-800">${escapeHtml(card.name || author.name || '會員')}</p>
+            ${(card.companyName || card.title || card.department) ? `<p class="mt-1 text-center text-[13px] font-bold text-slate-600">${escapeHtml([card.companyName, card.department, card.title].filter(Boolean).join(' ・ '))}</p>` : ''}
+            ${card.description ? `<p class="mt-4 whitespace-pre-wrap break-words text-[13px] font-medium leading-6" style="color:${escapeHtml(safeColor(card.descriptionColor, '#475569'))};text-align:${['left', 'center', 'right'].includes(card.descriptionAlign) ? card.descriptionAlign : 'center'}">${escapeHtml(card.description)}</p>` : ''}
+            ${cardButtons ? `<div class="mt-5 space-y-2.5">${cardButtons}</div>` : ''}
+          </div>
         </div>
       </section>` : '';
+
     content.innerHTML = `
       <div class="flex items-center gap-3">
         ${avatar(author, 'w-12 h-12')}
@@ -242,9 +306,13 @@
       </div>
       <div class="mt-5">${tagsHtml(post?.contactTags)}</div>
       <article class="mt-5 rounded-2xl border border-amber-200 bg-amber-100 px-4 py-4 whitespace-pre-wrap break-words text-[15px] leading-7 font-medium text-slate-700">${escapeHtml(post?.body || '')}</article>
-      ${!post?.canEdit ? `<button id="exchange-zone-inquiry-button" type="button" class="mt-6 w-full min-h-14 rounded-2xl bg-[#06C755] px-4 text-[15px] font-black text-white flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98]"><span class="material-symbols-outlined text-[21px]">mail</span>有興趣・寄站內信</button>` : ''}
+      <div class="mt-4 flex items-center gap-2">
+        ${likeButtonHtml(post, true)}
+        ${!post?.canEdit ? `<button id="exchange-zone-inquiry-button" type="button" class="min-h-11 flex-1 rounded-full bg-[#06C755] px-4 text-[13px] font-black text-white flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98]"><span class="material-symbols-outlined text-[19px]">mail</span>有興趣・寄站內信</button>` : ''}
+      </div>
       ${cardHtml}
       ${post?.canEdit ? `<button id="exchange-zone-edit-button" type="button" class="mt-6 w-full min-h-13 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-[15px] font-black text-blue-700 flex items-center justify-center gap-2 active:scale-[0.98]"><span class="material-symbols-outlined text-[20px]">edit</span>編輯這則內容</button>` : ''}`;
+
     document.getElementById('exchange-zone-inquiry-button')?.addEventListener('click', () => {
       if (typeof window.openInboxExchangeInquiry !== 'function') return window.showToast?.('收件夾尚未載入，請稍後重試', true);
       window.closeExchangeZoneDrawer?.();
@@ -252,6 +320,18 @@
       setTimeout(() => window.openInboxExchangeInquiry(post), 230);
     });
     document.getElementById('exchange-zone-edit-button')?.addEventListener('click', () => renderCompose(post));
+    document.getElementById('exchange-zone-card-toggle')?.addEventListener('click', (event) => {
+      const button = event.currentTarget;
+      const full = document.getElementById('exchange-zone-card-full');
+      if (!full) return;
+      const expanded = button.getAttribute('aria-expanded') === 'true';
+      button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+      full.classList.toggle('hidden', expanded);
+      const icon = button.querySelector('.material-symbols-outlined');
+      const label = button.querySelector('span:last-child');
+      if (icon) icon.textContent = expanded ? 'expand_more' : 'expand_less';
+      if (label) label.textContent = expanded ? '查看完整名片' : '收合名片';
+    });
   }
 
   function showDrawer(trigger) {
@@ -431,8 +511,29 @@
     if (state.initialized) return;
     state.initialized = true;
     document.getElementById('exchange-zone-list')?.addEventListener('click', (event) => {
+      const like = event.target.closest('[data-exchange-like]');
+      if (like) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleLike(like.dataset.exchangeLike, like);
+        return;
+      }
       const trigger = event.target.closest('[data-exchange-post-handle]');
       if (trigger) window.openExchangeZonePost(trigger.dataset.exchangePostHandle, trigger);
+    });
+    document.getElementById('exchange-zone-list')?.addEventListener('keydown', (event) => {
+      if (!['Enter', ' '].includes(event.key)) return;
+      if (event.target.closest('[data-exchange-like]')) return;
+      const trigger = event.target.closest('[data-exchange-post-handle]');
+      if (!trigger) return;
+      event.preventDefault();
+      window.openExchangeZonePost(trigger.dataset.exchangePostHandle, trigger);
+    });
+    document.getElementById('exchange-zone-drawer-content')?.addEventListener('click', (event) => {
+      const like = event.target.closest('[data-exchange-like]');
+      if (!like) return;
+      event.preventDefault();
+      toggleLike(like.dataset.exchangeLike, like);
     });
     document.getElementById('exchange-zone-compose-button')?.addEventListener('click', (event) => window.openExchangeZoneCompose(event.currentTarget));
     document.getElementById('exchange-zone-drawer-content')?.addEventListener('change', (event) => {
