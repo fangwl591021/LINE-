@@ -40,9 +40,11 @@ includesAll(worker, [
   "getExchangeZoneAccess: { access: 'authenticated'",
   "listExchangeZonePosts: { access: 'authenticated'",
   "getExchangeZonePost: { access: 'authenticated'",
+  "updateExchangeZonePost: { access: 'authenticated', ownership: 'self'",
   "case 'getExchangeZoneAccess': return ExchangeZoneModule.access(payload || {}, env, actor)",
   "case 'listExchangeZonePosts': return await ExchangeZoneModule.list(payload || {}, env, actor)",
-  "case 'getExchangeZonePost': return await ExchangeZoneModule.get(payload || {}, env, actor)"
+  "case 'getExchangeZonePost': return await ExchangeZoneModule.get(payload || {}, env, actor)",
+  "case 'updateExchangeZonePost': return await ExchangeZoneModule.update(payload || {}, env, actor)"
 ], 'Worker requires authenticated LINE actors and forwards verified actor to every exchange read');
 ok(!worker.includes("getExchangeZoneAccess: { access: 'public'"), 'exchange access probe is not public');
 ok(!worker.includes("listExchangeZonePosts: { access: 'public'"), 'exchange feed is not public');
@@ -71,6 +73,15 @@ includesAll(workerModule, [
   'contactTags:',
   'author: {'
 ], 'Worker returns opaque public view models');
+includesAll(workerModule, [
+  'canEdit:',
+  'async update(payload, env, actor)',
+  "author_user_id = ?2 AND status = 'published'",
+  'chargedPoints: 0',
+  'card_custom_config',
+  'buttons'
+], 'Worker exposes only an ownership capability and supports free owner-only edits with full sanitized cards');
+ok(!/SET[\s\S]{0,700}expires_at\s*=/.test(workerModule.slice(workerModule.indexOf('async update('), workerModule.indexOf('async publish('))), 'editing does not extend the original expiry');
 ['authorUserId:', 'cardRowId:', 'postId:'].forEach((needle) => {
   ok(!workerModule.includes(needle), `Worker does not render internal field ${needle}`);
 });
@@ -97,6 +108,7 @@ includesAll(frontend, [
   "window.fetchAPI('getExchangeZoneAccess'",
   "window.fetchAPI('listExchangeZonePosts'",
   "window.fetchAPI('getExchangeZonePost'",
+  "window.fetchAPI(editing ? 'updateExchangeZonePost' : 'publishExchangeZonePost'",
   "button.classList.toggle('hidden', !state.access.allowed)",
   "root.classList.remove('hidden')",
   "panel.classList.remove('translate-x-full')",
@@ -109,6 +121,13 @@ includesAll(frontend, [
   'cardAvailable',
   'contactTags'
 ], 'frontend fails closed, preserves page context and renders text, tags and public card preview');
+includesAll(frontend, [
+  'exchange-zone-edit-button',
+  '儲存修改（不扣點）',
+  '原刊登期限保持不變',
+  'card?.buttons',
+  'safeActionUrl'
+], 'owner can edit without another charge and attached public cards render safe action buttons');
 ok(!frontend.includes("window.goPage?.('exchange-zone')"), 'exchange entry opens the right-side panel without page navigation');
 ok(!frontend.includes('window.open('), 'drawer does not open a new browser window');
 ok(!frontend.includes('window.location'), 'drawer does not navigate away from the current application');
