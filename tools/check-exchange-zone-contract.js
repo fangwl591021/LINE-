@@ -148,6 +148,7 @@ includesAll(frontend, [
   '有興趣・寄站內信',
   'window.openInboxExchangeInquiry(post)'
 ], 'other members can enter a pre-addressed inbox inquiry from an exchange post');
+ok(/<article class="mt-5 rounded-2xl[\s\S]{0,1200}exchange-zone-inquiry-button[\s\S]{0,500}\$\{cardHtml\}/.test(frontend), 'inbox inquiry action appears below exchange text and above the electronic business card');
 includesAll(inboxFrontend, [
   'window.openInboxExchangeInquiry = function (post)',
   'inbox-exchange-post-handle',
