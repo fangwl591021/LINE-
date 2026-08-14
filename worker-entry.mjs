@@ -71,7 +71,10 @@ async function handleExchangeCouponAction(request, env, payload) {
   if (!actor) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
   try {
     const result = await ExchangeZoneCouponModule.redeem(payload || {}, env, actor);
-    return json(result, result?.success === false ? 400 : 200);
+    // Authenticated business outcomes intentionally use HTTP 200 so the shared
+    // fetchAPI layer can surface the precise coupon error (already redeemed,
+    // expired, self-redeem) instead of replacing it with a generic HTTP error.
+    return json(result, 200);
   } catch (error) {
     console.error('exchange zone coupon redeem failed', text(error?.message) || 'UNKNOWN');
     return json({ success: false, error: '優惠券核銷失敗，請稍後再試' }, 500);
