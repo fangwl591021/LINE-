@@ -1081,3 +1081,107 @@
     }
   });
 })();
+
+(function installInboxHistoryCollapse() {
+  const COLLAPSED_LIMIT = 2;
+  const expandedByMode = { received: false, sent: false };
+
+  function currentMode() {
+    return window.inboxMode === "sent" ? "sent" : "received";
+  }
+
+  function compactMessageRow(row) {
+    if (!(row instanceof HTMLElement)) return;
+    row.classList.remove("p-4");
+    row.classList.add("p-3");
+    const body = row.children[1];
+    if (!(body instanceof HTMLElement)) return;
+    const directParagraphs = Array.from(body.children).filter(child => child.tagName === "P");
+    if (directParagraphs.length < 2) return;
+    const meta = directParagraphs[0];
+    const time = directParagraphs[1];
+    const metaText = String(meta.textContent || "").trim();
+    const timeText = String(time.textContent || "").trim();
+    meta.textContent = [metaText, timeText].filter(Boolean).join(" · ");
+    meta.className = "text-[12px] text-slate-500 font-bold mt-1 truncate";
+    time.remove();
+  }
+
+  function renderInboxHistoryState() {
+    const list = document.getElementById("inbox-list");
+    if (!list) return;
+
+    document.getElementById("inbox-history-heading")?.remove();
+    document.getElementById("inbox-history-toggle-wrap")?.remove();
+
+    const rows = Array.from(list.children).filter(child => child.tagName === "BUTTON");
+    if (!rows.length) return;
+
+    const mode = currentMode();
+    const expanded = expandedByMode[mode] === true;
+    rows.forEach((row, index) => {
+      compactMessageRow(row);
+      row.classList.toggle("hidden", !expanded && index >= COLLAPSED_LIMIT);
+    });
+
+    const heading = document.createElement("div");
+    heading.id = "inbox-history-heading";
+    heading.className = "px-4 py-3 bg-slate-50 flex items-center justify-between gap-3";
+    heading.innerHTML = `
+      <span class="text-[14px] font-black text-slate-700">${mode === "sent" ? "最近寄件" : "最近往來"}</span>
+      <span class="text-[11px] font-black text-slate-400">${rows.length} 則</span>
+    `;
+    list.prepend(heading);
+
+    if (rows.length <= COLLAPSED_LIMIT) return;
+
+    const toggleWrap = document.createElement("div");
+    toggleWrap.id = "inbox-history-toggle-wrap";
+    toggleWrap.className = "border-t border-slate-100 bg-white p-3";
+    toggleWrap.innerHTML = `
+      <button type="button" onclick="window.toggleInboxHistory()" class="w-full min-h-[48px] rounded-2xl border border-slate-200 bg-white px-4 text-[14px] font-black text-slate-600 active:bg-slate-50 flex items-center justify-center gap-2">
+        <span>${expanded ? "收合訊息" : `查看全部訊息（${rows.length}）`}</span>
+        <span class="material-symbols-outlined text-[20px]">${expanded ? "expand_less" : "expand_more"}</span>
+      </button>
+    `;
+    list.append(toggleWrap);
+  }
+
+  function installPatch() {
+    if (typeof window.loadInbox !== "function") {
+      setTimeout(installPatch, 80);
+      return;
+    }
+    if (window.loadInbox.__historyCollapsePatched) return;
+
+    const originalLoadInbox = window.loadInbox;
+    const wrappedLoadInbox = async function (options = {}) {
+      const mode = currentMode();
+      if (!options || options.silent !== true) expandedByMode[mode] = false;
+      const result = await originalLoadInbox.apply(this, arguments);
+      renderInboxHistoryState();
+      return result;
+    };
+    wrappedLoadInbox.__historyCollapsePatched = true;
+    window.loadInbox = wrappedLoadInbox;
+
+    window.toggleInboxHistory = function () {
+      const mode = currentMode();
+      expandedByMode[mode] = !expandedByMode[mode];
+      renderInboxHistoryState();
+      if (!expandedByMode[mode]) {
+        setTimeout(() => {
+          document.getElementById("inbox-history-heading")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 0);
+      }
+    };
+
+    if (window.currentPage === "inbox") renderInboxHistoryState();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => setTimeout(installPatch, 0), { once: true });
+  } else {
+    setTimeout(installPatch, 0);
+  }
+})();
