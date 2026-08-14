@@ -221,3 +221,84 @@ details > summary::-webkit-details-marker { display: none; }
 #page-inbox > div:nth-of-type(3).bg-white.rounded-3xl.shadow-sm.border.border-slate-100.p-4.mb-4.flex.items-center.justify-between.gap-3 {
   display: none !important;
 }
+
+/* 收件匣名片：摘要卡優先，完整內容改由既有名片預覽開啟。 */
+#inbox-sender-card > .space-y-4 > [role="button"] > div {
+  display: grid !important;
+  grid-template-columns: 96px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px !important;
+  border-radius: 18px !important;
+}
+#inbox-sender-card > .space-y-4 > [role="button"] > div > :first-child {
+  width: 96px !important;
+  height: 72px !important;
+  min-height: 72px !important;
+  border-radius: 14px !important;
+}
+#inbox-sender-card > .space-y-4 > [role="button"] > div > :first-child img {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: auto !important;
+  object-fit: cover !important;
+}
+#inbox-sender-card > .space-y-4 > [role="button"] > div > :nth-child(2) {
+  min-width: 0;
+  padding: 0 !important;
+  text-align: left !important;
+}
+#inbox-sender-card > .space-y-4 > [role="button"] > div > :nth-child(2) > :first-child {
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#inbox-sender-card > .space-y-4 > [role="button"] > div > :nth-child(2) > :nth-child(2) {
+  margin-top: 4px !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#inbox-sender-card > .space-y-4 > [role="button"] > div > :nth-child(2) > :nth-child(n+3),
+#inbox-sender-card > .space-y-4 > [role="button"] > div > :nth-child(3) {
+  display: none !important;
+}
+#inbox-sender-card > .space-y-4 > [role="button"] > div::after {
+  content: "›";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: #94a3b8;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+/* 完整名片：按鈕群組上下保留 16px，按鈕彼此固定 12px 間距。 */
+#inbox-card-preview-modal .grid.gap-2 {
+  gap: 12px !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
+}
+#exchange-zone-card-full a + a {
+  margin-top: 12px !important;
+}
+
+@media (max-width: 420px) {
+  #inbox-sender-card > .space-y-4 > [role="button"] > div {
+    grid-template-columns: 88px minmax(0, 1fr) 24px;
+    gap: 10px;
+    padding: 10px !important;
+  }
+  #inbox-sender-card > .space-y-4 > [role="button"] > div > :first-child {
+    width: 88px !important;
+    height: 66px !important;
+    min-height: 66px !important;
+  }
+}
