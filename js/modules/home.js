@@ -2314,6 +2314,10 @@ const HomeModule = (function() {
             if (typeof window.refreshStoreSettingsInBackground === 'function') await window.refreshStoreSettingsInBackground();
         });
 
+        runHomeBackgroundTask_('home-system-ticker', 360, async () => {
+            if (typeof window.loadHomeSystemTicker === 'function') await window.loadHomeSystemTicker();
+        });
+
         runHomeBackgroundTask_('home-recurring-tasks', 520, async () => {
             if (typeof window.loadHomeRecurringTasks === 'function') await window.loadHomeRecurringTasks();
         });
