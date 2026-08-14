@@ -855,7 +855,31 @@ function renderAnnouncementStatus_(status) {
   return '<span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-[12px] font-black">隱藏</span>';
 }
 
+window.loadSystemTicker = async function() {
+    try {
+        const res = await window.fetchAPI('getSystemTicker', {}, true);
+        const data = res?.data || res || {};
+        const enabled = document.getElementById('system-ticker-enabled');
+        const text = document.getElementById('system-ticker-text');
+        if (enabled) enabled.checked = data.enabled === true;
+        if (text) text.value = String(data.text || '');
+    } catch (e) { window.showToast('跑馬燈讀取失敗：' + (e.message || '請稍後再試'), true); }
+};
+window.saveSystemTicker = async function(btn) {
+    const payload = {
+        enabled: document.getElementById('system-ticker-enabled')?.checked === true,
+        text: String(document.getElementById('system-ticker-text')?.value || '').trim()
+    };
+    if (payload.enabled && !payload.text) return window.showToast('啟用時請輸入跑馬燈文字', true);
+    try {
+        btn.disabled = true;
+        await window.fetchAPI('saveSystemTicker', payload, true);
+        window.showToast(payload.enabled ? '跑馬燈已啟用並儲存' : '跑馬燈已關閉');
+    } catch (e) { window.showToast('跑馬燈儲存失敗：' + (e.message || '請稍後再試'), true); }
+    finally { btn.disabled = false; }
+};
 window.loadAdminAnnouncements = async function() {
+    window.loadSystemTicker?.();
   const list = document.getElementById('admin-announcements-list');
   if (!list) return;
   list.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">載入公告中...</div>';

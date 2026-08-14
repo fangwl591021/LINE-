@@ -1082,6 +1082,18 @@ const HomeModule = (function() {
         }
     };
 
+    window.loadHomeSystemTicker = async function() {
+        const box = document.getElementById('home-system-ticker');
+        const text = document.getElementById('home-system-ticker-text');
+        if (!box || !text) return;
+        try {
+            const res = await window.fetchAPI('getSystemTicker', {}, true);
+            const data = res?.data || res || {};
+            const value = String(data.text || '').trim();
+            box.classList.toggle('hidden', data.enabled !== true || !value);
+            text.textContent = value;
+        } catch { box.classList.add('hidden'); }
+    };
     window.renderHomeAnnouncements = function(items) {
         const list = document.getElementById('home-announcements-list');
         if (!list) return;
@@ -1124,6 +1136,7 @@ const HomeModule = (function() {
     };
 
     window.loadHomeAnnouncements = async function() {
+        window.loadHomeSystemTicker?.();
         const list = document.getElementById('home-announcements-list');
         if (list) list.innerHTML = '<div class="py-6 text-center text-slate-400 text-sm font-bold">載入公告中...</div>';
         try {
