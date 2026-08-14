@@ -24,119 +24,122 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-#btn-share-line-ecard {
-  order: 1;
-}
-
-#btn-ecard-save {
-  order: 2;
-}
+#btn-share-line-ecard { order: 1; }
+#btn-ecard-save { order: 2; }
 
 @media (max-width: 420px) {
-  #header-site-name {
-    font-size: 18px;
-  }
-
-  #point-balance-badge {
-    font-size: 11px;
-    padding-left: 0.55rem;
-    padding-right: 0.55rem;
-  }
+  #header-site-name { font-size: 18px; }
+  #point-balance-badge { font-size: 11px; padding-left: 0.55rem; padding-right: 0.55rem; }
 }
 
 @media (max-width: 360px) {
-  #header-site-name {
-    font-size: 16px;
-  }
-
-  #header-admin-badge {
-    font-size: 9px;
-    padding-left: 0.4rem;
-    padding-right: 0.4rem;
-  }
-
-  #point-balance-badge {
-    font-size: 10px;
-    padding-left: 0.45rem;
-    padding-right: 0.45rem;
-  }
+  #header-site-name { font-size: 16px; }
+  #header-admin-badge { font-size: 9px; padding-left: 0.4rem; padding-right: 0.4rem; }
+  #point-balance-badge { font-size: 10px; padding-left: 0.45rem; padding-right: 0.45rem; }
 }
 
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 1.5rem);
-}
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 1.5rem); }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+details > summary::-webkit-details-marker { display: none; }
 
-/* 隱藏捲軸 */
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* details 摺疊區塊 */
-details > summary::-webkit-details-marker {
-  display: none;
-}
-
-/* Toast 動畫 */
 @keyframes slideDown {
-  0% {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  0% { transform: translateY(-100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
 }
-
-.toast-enter {
-  animation: slideDown 0.3s ease-out forwards;
-}
+.toast-enter { animation: slideDown 0.3s ease-out forwards; }
 
 .fee-price-field {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  min-height: 64px;
-  padding: 0 1.25rem;
-  border-radius: 1rem;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  display: flex; align-items: center; gap: 0.75rem; width: 100%; min-height: 64px;
+  padding: 0 1.25rem; border-radius: 1rem; background: #f1f5f9; border: 1px solid #e2e8f0;
 }
-
-.fee-price-prefix {
-  flex: 0 0 auto;
-  font-size: 1rem;
-  line-height: 1;
-  font-weight: 900;
-  color: #64748b;
-  letter-spacing: 0;
-}
-
-.fee-price-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 60px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #0f172a;
-  font-size: 1.25rem;
-  font-weight: 900;
-  letter-spacing: 0;
-}
-
-.fee-price-input::placeholder {
-  color: #94a3b8;
-}
-
+.fee-price-prefix { flex: 0 0 auto; font-size: 1rem; line-height: 1; font-weight: 900; color: #64748b; letter-spacing: 0; }
+.fee-price-input { flex: 1 1 auto; min-width: 0; height: 60px; border: 0; outline: 0; background: transparent; color: #0f172a; font-size: 1.25rem; font-weight: 900; letter-spacing: 0; }
+.fee-price-input::placeholder { color: #94a3b8; }
 .fee-price-input::-webkit-outer-spin-button,
-.fee-price-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+.fee-price-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* 收件區：沿用 LINE / Messenger 的私訊閱讀習慣；只改視覺，不改寄送契約。 */
+:where(div):has(> button + #inbox-composer) {
+  background: #fff !important;
+  border-color: #e2e8f0 !important;
+  border-radius: 24px !important;
+  box-shadow: 0 10px 30px rgba(15,23,42,.06) !important;
+}
+:where(div):has(> button + #inbox-composer) > button {
+  padding: 15px 18px !important;
+  background: #fff !important;
+}
+:where(div):has(> button + #inbox-composer) > button:active { background: #f8fafc !important; }
+:where(div):has(> button + #inbox-composer) > button .text-amber-600,
+:where(div):has(> button + #inbox-composer) > button .text-amber-800 { color: #2563eb !important; }
+:where(div):has(> button + #inbox-composer) > button h3 { font-size: 18px !important; line-height: 1.25 !important; }
+:where(div):has(> button + #inbox-composer) > button p {
+  margin-top: 3px !important; font-size: 12px !important; line-height: 1.5 !important;
+  color: #64748b !important; font-weight: 700 !important;
+}
+
+#inbox-composer {
+  border-top: 1px solid #eef2f7 !important;
+  background: #f8fafc !important;
+  padding: 16px !important;
+  gap: 14px !important;
+}
+#inbox-composer label {
+  margin-bottom: 6px !important; font-size: 12px !important; line-height: 1.2 !important;
+  color: #64748b !important; font-weight: 800 !important;
+}
+#inbox-recipient-mode-buttons { gap: 6px !important; margin-bottom: 8px !important; }
+#inbox-recipient-mode-buttons button {
+  min-height: 38px !important; border-radius: 12px !important; padding: 7px 10px !important; font-size: 12px !important;
+}
+#inbox-recipient-query,
+#inbox-message-type,
+#inbox-message-title {
+  min-height: 48px !important; border: 1px solid #e2e8f0 !important; border-radius: 16px !important;
+  background: #fff !important; padding: 0 15px !important; color: #0f172a !important;
+  font-size: 15px !important; font-weight: 700 !important; box-shadow: none !important;
+}
+#inbox-recipient-query:focus,
+#inbox-message-type:focus,
+#inbox-message-title:focus,
+#inbox-message-body:focus {
+  border-color: #93c5fd !important; box-shadow: 0 0 0 3px rgba(59,130,246,.10) !important;
+}
+#inbox-recipient-results { margin-top: 8px !important; }
+#inbox-recipient-results > div.bg-emerald-50 {
+  border: 0 !important; border-radius: 12px !important; background: transparent !important;
+  padding: 2px 4px !important; color: #64748b !important; font-size: 12px !important; font-weight: 700 !important;
+}
+#inbox-message-type { padding-right: 40px !important; background-color: #fff !important; }
+#inbox-point-cost-hint {
+  margin-top: 6px !important; padding: 0 4px !important; border: 0 !important; background: transparent !important;
+  color: #64748b !important; font-size: 12px !important; line-height: 1.45 !important; font-weight: 700 !important;
+}
+#inbox-message-title { color: #475569 !important; }
+#inbox-message-body {
+  min-height: 132px !important; height: 132px !important; border: 1px solid #dbe4ee !important;
+  border-radius: 20px !important; background: #fff !important; padding: 14px 16px !important;
+  color: #0f172a !important; font-size: 16px !important; line-height: 1.7 !important; font-weight: 500 !important; box-shadow: none !important;
+}
+#inbox-message-body::placeholder { color: #94a3b8 !important; }
+#btn-send-inbox-message {
+  min-height: 54px !important; border-radius: 18px !important; padding: 0 20px !important;
+  background: #06c755 !important; color: #fff !important; font-size: 16px !important;
+  line-height: 1 !important; font-weight: 900 !important; box-shadow: 0 10px 22px rgba(6,199,85,.18) !important;
+}
+#btn-send-inbox-message:active { transform: scale(.985) !important; }
+#inbox-tab-received,
+#inbox-tab-sent {
+  min-height: 46px !important; padding-top: 10px !important; padding-bottom: 10px !important;
+  border-radius: 14px !important; font-size: 14px !important;
+}
+
+@media (max-width: 640px) {
+  #inbox-composer { padding: 14px !important; gap: 12px !important; }
+  #inbox-recipient-query,
+  #inbox-message-type,
+  #inbox-message-title { min-height: 46px !important; border-radius: 14px !important; }
+  #inbox-message-body { min-height: 124px !important; height: 124px !important; border-radius: 18px !important; }
+  #btn-send-inbox-message { min-height: 52px !important; border-radius: 16px !important; }
 }
