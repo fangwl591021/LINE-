@@ -216,3 +216,8 @@ details > summary::-webkit-details-marker { display: none; }
   #inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-message-body { min-height: 138px !important; height: 138px !important; }
   #inbox-composer:has(#inbox-recipient-query[readonly]) #btn-send-inbox-message { min-height: 54px !important; border-radius: 999px !important; }
 }
+
+/* 手機通知與提示音：只隱藏收件匣內的通知卡，禁止使用廣域 :has() 影響登入／App 外層。 */
+#page-inbox > div:nth-of-type(3).bg-white.rounded-3xl.shadow-sm.border.border-slate-100.p-4.mb-4.flex.items-center.justify-between.gap-3 {
+  display: none !important;
+}
