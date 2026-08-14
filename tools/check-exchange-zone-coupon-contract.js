@@ -53,8 +53,9 @@ includesAll(entry, [
   "action === 'getExchangeZonePost'",
   'ExchangeZoneCouponModule.hydratePost',
   "action === 'publishExchangeZonePost' || action === 'updateExchangeZonePost'",
-  'ExchangeZoneCouponModule.sync'
-], 'worker entry adds the coupon layer without changing legacy worker routing');
+  'ExchangeZoneCouponModule.sync',
+  'return json(result, 200);'
+], 'worker entry adds the coupon layer and preserves precise authenticated business errors');
 
 includesAll(loader, [
   "exchange-zone-coupon.js?v=20260814-coupon-phase1",
