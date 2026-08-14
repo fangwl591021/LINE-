@@ -216,3 +216,8 @@ details > summary::-webkit-details-marker { display: none; }
   #inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-message-body { min-height: 138px !important; height: 138px !important; }
   #inbox-composer:has(#inbox-recipient-query[readonly]) #btn-send-inbox-message { min-height: 54px !important; border-radius: 999px !important; }
 }
+
+/* 手機通知與提示音目前未實際運作，暫時隱藏整張功能卡。 */
+:where(div):has(#btn-enable-inbox-push) {
+  display: none !important;
+}
