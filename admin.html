@@ -1960,7 +1960,33 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (!title) return;
       const res = await fetchAPI('renameSystemCheckinContent', { id: id, title: title.trim() });
       if (res) await loadSystemCheckinContents();
-    }    function switchTab(tabId) {
+    }    async function loadSystemTicker() {
+      const enabled = document.getElementById('system-ticker-enabled');
+      const text = document.getElementById('system-ticker-text');
+      if (!enabled || !text) return;
+      const res = await fetchAPI('getSystemTicker', {}, { silent: true });
+      if (!res) return;
+      enabled.checked = res.enabled === true;
+      text.value = String(res.text || '');
+    }
+
+    async function saveSystemTicker(button) {
+      const enabled = document.getElementById('system-ticker-enabled');
+      const text = document.getElementById('system-ticker-text');
+      const payload = {
+        enabled: enabled?.checked === true,
+        text: String(text?.value || '').trim()
+      };
+      if (payload.enabled && !payload.text) return showToast('啟用時請輸入跑馬燈文字', true);
+      if (button) button.disabled = true;
+      try {
+        const res = await fetchAPI('saveSystemTicker', payload);
+        if (res) showToast(payload.enabled ? '跑馬燈已啟用並儲存' : '跑馬燈已關閉');
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+    function switchTab(tabId) {
       if (tabId === 'lineoa-monitor') {
         openLineOAMonitorTool();
         tabId = 'users';
