@@ -449,7 +449,9 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
             全站活動監控
           </a>
-          <a href="#" onclick="switchTab('checkin-content')" id="nav-checkin-content" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold"><span class="material-symbols-outlined mr-3 text-[20px]">redeem</span>簽到內容管理</a><a href="#" onclick="switchTab('cards')" id="nav-cards" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+          <a href="#" onclick="switchTab('checkin-content')" id="nav-checkin-content" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold"><span class="material-symbols-outlined mr-3 text-[20px]">redeem</span>簽到內容管理</a>
+          <a href="#" onclick="switchTab('system-ticker')" id="nav-system-ticker" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold"><span class="material-symbols-outlined mr-3 text-[20px]">campaign</span>系統跑馬燈</a>
+          <a href="#" onclick="switchTab('cards')" id="nav-cards" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">badge</span>
             全站名片庫
           </a>
@@ -707,6 +709,16 @@
         </section>
         <aside class="checkin-preview"><strong>即時預覽</strong><span>2:3 等比預覽｜建議 800 × 1200 px</span><pre id="templatePreview"></pre></aside>
       </div>
+      <!-- Tab: System Ticker -->
+      <div id="tab-system-ticker" class="tab-content hidden max-w-3xl">
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
+          <div><h2 class="text-xl font-black text-slate-900">系統跑馬燈</h2><p class="mt-2 text-sm font-bold text-slate-500">設定首頁「今日／本週待辦」下方的公告文字。此功能僅供平台管理員使用。</p></div>
+          <label class="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm font-black text-slate-700"><input id="system-ticker-enabled" type="checkbox" class="h-5 w-5">啟用首頁動態文字跑馬燈</label>
+          <label class="block text-sm font-black text-slate-700">跑馬燈文字<textarea id="system-ticker-text" rows="4" maxlength="300" placeholder="例如：本週活動與最新公告" class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 font-medium text-slate-800 outline-none focus:border-emerald-400"></textarea></label>
+          <div class="flex justify-end"><button type="button" onclick="saveSystemTicker(this)" class="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-black text-white hover:bg-emerald-600">儲存跑馬燈設定</button></div>
+        </section>
+      </div>
+
       <!-- Tab: Activities -->
       <div id="tab-activities" class="tab-content hidden space-y-6">
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -1979,6 +1991,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (tabId === 'bonus') initBonusSystem();
       if (tabId === 'lineoa-keywords') loadLineOAKeywordRules();
       if (tabId === 'checkin-content') loadSystemCheckinContents();
+      if (tabId === 'system-ticker') loadSystemTicker();
       if (tabId === 'partners') loadPartnerAdmin();
     }
 
