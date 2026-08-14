@@ -2,6 +2,7 @@
   const current = document.currentScript?.src || location.href;
   const base = new URL('exchange-zone-core.js?v=20260814-youtube-poster', current).href;
   const overlay = new URL('exchange-zone-delete-overlay.js?v=20260814-youtube-poster', current).href;
+  const coupon = new URL('exchange-zone-coupon.js?v=20260814-coupon-phase1', current).href;
 
   function load(src) {
     return new Promise((resolve, reject) => {
@@ -16,12 +17,13 @@
 
   load(base)
     .then(() => load(overlay))
+    .then(() => load(coupon))
     .catch((error) => console.error(error));
 })();
 
 /*
 Exchange Zone modular-loader contract compatibility markers.
-The executable implementation lives in exchange-zone-core.js and exchange-zone-delete-overlay.js.
+The executable implementation lives in exchange-zone-core.js, exchange-zone-delete-overlay.js and exchange-zone-coupon.js.
 These markers keep legacy static contract guards pointed at exchange-zone.js compatible after the split.
 
 window.fetchAPI('getExchangeZoneAccess'
@@ -64,4 +66,8 @@ renderPublishSuccess(result, editing)
 刊登完成
 返回交流專區
 沒有重複扣點
+exchange-zone-coupon.js
+redeemExchangeZoneCoupon
+附加優惠券
+現場核銷優惠券
 */
