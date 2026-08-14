@@ -82,24 +82,54 @@
     article.replaceChildren(fragment);
   }
 
-  function renderYouTubeEmbed(article, href, videoId) {
+  function renderYouTubePoster(article, href, videoId) {
     if (!article || !videoId || article.parentElement?.querySelector('[data-exchange-youtube]')) return false;
     const section = document.createElement('section');
     section.dataset.exchangeYoutube = '1';
     section.className = 'mt-3 overflow-hidden rounded-2xl border border-red-100 bg-white shadow-sm';
-    const frameWrap = document.createElement('div');
-    frameWrap.className = 'relative w-full overflow-hidden bg-black';
-    frameWrap.style.aspectRatio = '16 / 9';
-    const iframe = document.createElement('iframe');
-    iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&playsinline=1`;
-    iframe.title = 'YouTube 影片';
-    iframe.loading = 'lazy';
-    iframe.referrerPolicy = 'strict-origin-when-cross-origin';
-    iframe.allow = 'accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
-    iframe.allowFullscreen = true;
-    iframe.className = 'absolute inset-0 h-full w-full border-0';
-    frameWrap.append(iframe);
-    section.append(frameWrap);
+
+    const player = document.createElement('button');
+    player.type = 'button';
+    player.className = 'relative block w-full overflow-hidden bg-black text-left';
+    player.style.aspectRatio = '16 / 9';
+    player.setAttribute('aria-label', '播放 YouTube 影片');
+
+    const poster = document.createElement('img');
+    poster.src = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+    poster.alt = 'YouTube 影片縮圖';
+    poster.loading = 'lazy';
+    poster.referrerPolicy = 'no-referrer';
+    poster.className = 'absolute inset-0 h-full w-full object-cover';
+
+    const shade = document.createElement('span');
+    shade.className = 'absolute inset-0 bg-black/15';
+    shade.setAttribute('aria-hidden', 'true');
+
+    const play = document.createElement('span');
+    play.className = 'absolute left-1/2 top-1/2 flex h-16 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-red-600 text-white shadow-xl';
+    play.setAttribute('aria-hidden', 'true');
+    const playIcon = document.createElement('span');
+    playIcon.className = 'material-symbols-outlined text-[42px]';
+    playIcon.textContent = 'play_arrow';
+    play.append(playIcon);
+
+    player.append(poster, shade, play);
+
+    player.addEventListener('click', () => {
+      if (player.dataset.playing === '1') return;
+      player.dataset.playing = '1';
+      const iframe = document.createElement('iframe');
+      iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&playsinline=1&autoplay=1`;
+      iframe.title = 'YouTube 影片';
+      iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+      iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+      iframe.allowFullscreen = true;
+      iframe.className = 'absolute inset-0 h-full w-full border-0';
+      player.replaceChildren(iframe);
+    });
+
+    section.append(player);
+
     const footer = document.createElement('div');
     footer.className = 'flex items-center justify-between gap-3 px-4 py-3';
     const label = document.createElement('div');
@@ -109,7 +139,7 @@
     title.textContent = 'YouTube 影片';
     const hint = document.createElement('p');
     hint.className = 'mt-0.5 text-[11px] font-bold text-slate-400';
-    hint.textContent = '可直接在貼文內播放';
+    hint.textContent = '點縮圖後在貼文內播放';
     label.append(title, hint);
     const open = document.createElement('a');
     open.href = href;
@@ -178,7 +208,7 @@
     if (!url) return;
     article.dataset.exchangePreviewRequested = '1';
     const videoId = youtubeVideoId(url);
-    if (videoId && renderYouTubeEmbed(article, url, videoId)) return;
+    if (videoId && renderYouTubePoster(article, url, videoId)) return;
     try {
       const result = await window.fetchAPI('updateExchangeZonePost', { toggleLike: true, previewUrl: url }, true);
       if (result?.success !== true || !result?.preview) return;
