@@ -135,6 +135,76 @@ details > summary::-webkit-details-marker { display: none; }
   border-radius: 14px !important; font-size: 14px !important;
 }
 
+/* 交流貼文導入：當收件人被鎖定時，自動切成社群私訊的單一步驟流程。 */
+#inbox-composer:has(#inbox-recipient-query[readonly]) {
+  background: #fff !important;
+  padding: 14px !important;
+  gap: 10px !important;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) > div:has(#inbox-recipient-query) > label,
+#inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-recipient-mode-buttons,
+#inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-recipient-search-button,
+#inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-recipient-audience-hint,
+#inbox-composer:has(#inbox-recipient-query[readonly]) > div:has(#inbox-message-type),
+#inbox-composer:has(#inbox-recipient-query[readonly]) > div:has(#inbox-message-title) {
+  display: none !important;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) > div:has(#inbox-recipient-query) {
+  order: -2;
+  margin: 0 !important;
+  padding: 12px 14px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 18px !important;
+  background: #f8fafc !important;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-recipient-query {
+  min-height: auto !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #0f172a !important;
+  font-size: 17px !important;
+  line-height: 1.35 !important;
+  font-weight: 900 !important;
+  pointer-events: none;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-recipient-results {
+  margin-top: 2px !important;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-recipient-results > div {
+  padding: 0 !important;
+  color: #64748b !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-point-cost-hint {
+  order: 4;
+  margin: -2px 4px 0 !important;
+  text-align: center;
+  color: #94a3b8 !important;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) > div:has(#inbox-message-body) {
+  margin-top: 2px;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) > div:has(#inbox-message-body) > label {
+  display: none !important;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-message-body {
+  min-height: 148px !important;
+  height: 148px !important;
+  border-radius: 22px !important;
+  padding: 16px 17px !important;
+  background: #f8fafc !important;
+  border-color: #dbe4ee !important;
+}
+#inbox-composer:has(#inbox-recipient-query[readonly]) #btn-send-inbox-message {
+  min-height: 56px !important;
+  border-radius: 999px !important;
+  margin-top: 2px !important;
+}
+
 @media (max-width: 640px) {
   #inbox-composer { padding: 14px !important; gap: 12px !important; }
   #inbox-recipient-query,
@@ -142,4 +212,7 @@ details > summary::-webkit-details-marker { display: none; }
   #inbox-message-title { min-height: 46px !important; border-radius: 14px !important; }
   #inbox-message-body { min-height: 124px !important; height: 124px !important; border-radius: 18px !important; }
   #btn-send-inbox-message { min-height: 52px !important; border-radius: 16px !important; }
+  #inbox-composer:has(#inbox-recipient-query[readonly]) { padding: 12px !important; gap: 9px !important; }
+  #inbox-composer:has(#inbox-recipient-query[readonly]) #inbox-message-body { min-height: 138px !important; height: 138px !important; }
+  #inbox-composer:has(#inbox-recipient-query[readonly]) #btn-send-inbox-message { min-height: 54px !important; border-radius: 999px !important; }
 }
