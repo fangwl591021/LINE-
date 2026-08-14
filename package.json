@@ -15,6 +15,6 @@
     "test:liff-share-picker": "node test/liff-share-target-picker.test.mjs",
     "test:home-agenda-counters": "node test/home-task-buckets.test.mjs",
     "test:personal-agenda-time": "node test/personal-agenda-time.test.mjs",
-    "test:exchange-zone": "node tools/check-exchange-zone-contract.js && node tools/check-exchange-zone-publish-contract.js && node test/exchange-zone.test.mjs"
+    "test:exchange-zone": "node tools/check-exchange-zone-contract.js && node tools/check-exchange-zone-publish-contract.js && node tools/check-exchange-zone-coupon-contract.js && node test/exchange-zone.test.mjs"
   }
 }
