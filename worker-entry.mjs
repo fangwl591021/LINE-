@@ -1,6 +1,7 @@
 import legacyWorker from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
+import { ExchangeZoneCouponModule } from './worker/exchange-zone-coupon.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -40,6 +41,12 @@ async function actorScope(userId, env) {
   return { userId, networkId, role };
 }
 
+async function authenticatedActor(request, payload, env) {
+  const userId = await lineUserId(request, payload || {}, env);
+  if (!userId) return null;
+  return actorScope(userId, env);
+}
+
 async function handleTagAction(request, env, action, payload) {
   const userId = await lineUserId(request, payload, env);
   if (!userId) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
@@ -59,6 +66,61 @@ async function handleTagAction(request, env, action, payload) {
   }
 }
 
+async function handleExchangeCouponAction(request, env, payload) {
+  const actor = await authenticatedActor(request, payload, env);
+  if (!actor) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
+  try {
+    const result = await ExchangeZoneCouponModule.redeem(payload || {}, env, actor);
+    return json(result, result?.success === false ? 400 : 200);
+  } catch (error) {
+    console.error('exchange zone coupon redeem failed', text(error?.message) || 'UNKNOWN');
+    return json({ success: false, error: '優惠券核銷失敗，請稍後再試' }, 500);
+  }
+}
+
+async function enrichExchangeZoneResponse(request, env, action, payload, response) {
+  if (!response?.ok || !['listExchangeZonePosts', 'getExchangeZonePost', 'publishExchangeZonePost', 'updateExchangeZonePost'].includes(action)) {
+    return response;
+  }
+  const result = await response.clone().json().catch(() => null);
+  if (!result || typeof result !== 'object' || result.success === false) return response;
+  const actor = await authenticatedActor(request, payload || {}, env);
+  if (!actor) return response;
+
+  try {
+    if (action === 'listExchangeZonePosts' && Array.isArray(result.posts)) {
+      const posts = await ExchangeZoneCouponModule.hydrateList(result.posts, env, actor);
+      return json({ ...result, posts }, response.status);
+    }
+    if (action === 'getExchangeZonePost' && result.post) {
+      const post = await ExchangeZoneCouponModule.hydratePost(result.post, env, actor);
+      return json({ ...result, post }, response.status);
+    }
+    if ((action === 'publishExchangeZonePost' || action === 'updateExchangeZonePost') && payload?.coupon !== undefined) {
+      const postHandle = text(result.postHandle || result?.data?.postHandle || payload?.postHandle);
+      if (!postHandle) return response;
+      const sync = await ExchangeZoneCouponModule.sync(postHandle, payload.coupon, env, actor);
+      if (sync?.success === false) {
+        return json({
+          ...result,
+          couponWarning: sync.error || '優惠券設定未完成',
+          couponSyncCode: sync.code || 'EXCHANGE_COUPON_SYNC_FAILED',
+          coupon: sync.coupon || null
+        }, response.status);
+      }
+      return json({
+        ...result,
+        couponAvailable: sync.couponAvailable === true,
+        coupon: sync.coupon || null
+      }, response.status);
+    }
+  } catch (error) {
+    console.error('exchange zone coupon response enrichment failed', action, text(error?.message) || 'UNKNOWN');
+    return json({ ...result, couponWarning: '優惠券資料暫時無法同步，交流貼文本身已正常處理' }, response.status);
+  }
+  return response;
+}
+
 export default {
   async fetch(request, env, ctx) {
     let postBody = null;
@@ -67,10 +129,12 @@ export default {
       postBody = await copy.json().catch(() => null);
       const action = text(postBody?.action);
       if (TAG_ACTIONS.has(action)) return await handleTagAction(request, env, action, postBody?.payload || {});
+      if (action === 'redeemExchangeZoneCoupon') return await handleExchangeCouponAction(request, env, postBody?.payload || {});
     }
-    const response = await legacyWorker.fetch(request, env, ctx);
+    let response = await legacyWorker.fetch(request, env, ctx);
     if (request.method === 'POST') {
       const action = text(postBody?.action);
+      response = await enrichExchangeZoneResponse(request, env, action, postBody?.payload || {}, response);
       if ((action === 'saveCard' || action === 'updateCard') && response.ok) {
         const result = await response.clone().json().catch(() => null);
         const rowId = text(result?.data?.rowId || result?.rowId || postBody?.payload?.rowId || postBody?.payload?.row_id);
