@@ -191,7 +191,7 @@
   window.approveCustomerTagBatch = async function () {
     const batch = state.estimatedTagBatch;
     if (!isTony() || !batch?.batchId) return window.showToast('請先由 Tony 建立估價', true);
-    if (!window.confirm(`核准最高費用 ${usd(batch.estimatedHighCostMicrousd)}？總開關與離峰限制仍會生效。`)) return;
+    if (!await window.appConfirm(`核准最高費用 ${usd(batch.estimatedHighCostMicrousd)}？總開關與離峰限制仍會生效。`)) return;
     setBusy(true);
     const result = await window.fetchAPI('approveCustomerTagAnalysisBatch', { batchId: batch.batchId, maxCostMicrousd: Number(batch.estimatedHighCostMicrousd) }, true);
     setBusy(false);
@@ -235,7 +235,7 @@
 
   window.archiveCurrentCustomer = async function () {
     const customerId = el('customer-id').value;
-    if (!customerId || !window.confirm('確定封存這位客戶？歷史資料不會直接刪除。')) return;
+    if (!customerId || !await window.appConfirm('確定封存這位客戶？歷史資料不會直接刪除。')) return;
     const result = await window.fetchAPI('archiveCustomer', { customerId }, true);
     if (result?.error) return window.showToast(result.error, true);
     showPanel('customer-form-panel', false);
@@ -430,7 +430,7 @@
   };
 
   window.rollbackCustomerImport = async function () {
-    if (!state.batchId || !window.confirm('確定回復這次匯入？匯入後已人工修改的客戶會被保護，不會強制覆蓋。')) return;
+    if (!state.batchId || !await window.appConfirm('確定回復這次匯入？匯入後已人工修改的客戶會被保護，不會強制覆蓋。')) return;
     const result = await window.fetchAPI('rollbackCustomerImportBatch', { batchId: state.batchId }, true);
     if (result?.error) return window.showToast(result.error, true);
     window.showToast(`已回復 ${result.rolledBack || 0} 筆，保護 ${result.blocked || 0} 筆後續修改`);
