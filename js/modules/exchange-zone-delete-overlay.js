@@ -247,7 +247,13 @@
     button.innerHTML = '<span class="material-symbols-outlined text-[22px]">delete</span>刪除貼文';
     button.addEventListener('click', async () => {
       if (!currentPostHandle || busy) return;
-      if (!window.confirm('確定要刪除這則貼文嗎？刪除後不再顯示，已扣點數不退回。')) return;
+      if (!await window.appConfirm('確定要刪除這則貼文嗎？刪除後不再顯示，已扣點數不退回。', {
+        type: 'warning',
+        title: '刪除貼文',
+        danger: true,
+        okText: '刪除',
+        cancelText: '取消'
+      })) return;
       busy = true;
       button.disabled = true;
       try {

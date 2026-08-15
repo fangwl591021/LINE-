@@ -1,0 +1,11 @@
+const fs = require('fs');
+const assert = require('assert');
+const del = fs.readFileSync('js/modules/exchange-zone-delete-overlay.js', 'utf8');
+const coupon = fs.readFileSync('js/modules/exchange-zone-coupon.js', 'utf8');
+assert.doesNotMatch(del, /\b(?:window\.)?confirm\s*\(/);
+assert.doesNotMatch(coupon, /\b(?:window\.)?confirm\s*\(/);
+assert.match(del, /await window\.appConfirm\(/);
+assert.match(del, /title:\s*['\"]刪除貼文['\"]/);
+assert.match(coupon, /await window\.appConfirm\(/);
+assert.match(coupon, /title:\s*['\"]優惠券核銷確認['\"]/);
+console.log('exchange zone app notification contract passed');
