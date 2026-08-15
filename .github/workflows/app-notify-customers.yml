@@ -1,0 +1,60 @@
+name: App notification customers
+on:
+  push:
+    branches: [agent/app-notification-ui]
+    paths:
+      - '.github/workflows/app-notify-customers.yml'
+permissions:
+  contents: write
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/app-notification-ui
+      - name: Apply customer notification migration
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('js/modules/customers.js')
+          text = path.read_text(encoding='utf-8')
+          replacements = [
+            ("if (!window.confirm(`核准最高費用 ${usd(batch.estimatedHighCostMicrousd)}？總開關與離峰限制仍會生效。`)) return;",
+             "if (!await window.appConfirm(`核准最高費用 ${usd(batch.estimatedHighCostMicrousd)}？總開關與離峰限制仍會生效。`)) return;"),
+            ("if (!customerId || !window.confirm('確定封存這位客戶？歷史資料不會直接刪除。')) return;",
+             "if (!customerId || !await window.appConfirm('確定封存這位客戶？歷史資料不會直接刪除。')) return;"),
+            ("if (!state.batchId || !window.confirm('確定回復這次匯入？匯入後已人工修改的客戶會被保護，不會強制覆蓋。')) return;",
+             "if (!state.batchId || !await window.appConfirm('確定回復這次匯入？匯入後已人工修改的客戶會被保護，不會強制覆蓋。')) return;")
+          ]
+          for old, new in replacements:
+            if old not in text:
+              raise SystemExit('customer confirm target not found: ' + old[:40])
+            text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+      - name: Create customer notification contract
+        shell: bash
+        run: |
+          cat > tools/check-app-notify-customers-contract.js <<'EOF'
+          const fs = require('fs');
+          const assert = require('assert');
+          const source = fs.readFileSync('js/modules/customers.js', 'utf8');
+          assert.doesNotMatch(source, /\b(?:window\.)?confirm\s*\(/);
+          assert.match(source, /await window\.appConfirm\(`核准最高費用/);
+          assert.match(source, /await window\.appConfirm\('確定封存這位客戶/);
+          assert.match(source, /await window\.appConfirm\('確定回復這次匯入/);
+          console.log('customers app notification contract passed');
+          EOF
+      - name: Run customer contracts
+        run: |
+          node tools/check-app-notify-customers-contract.js
+          node tools/check-customer-import-contract.js
+          npm run test:customer-import
+      - name: Commit customer changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/customers.js tools/check-app-notify-customers-contract.js
+          git diff --cached --quiet && exit 0
+          git commit -m "migrate customer confirmations to app UI"
+          git push origin HEAD:agent/app-notification-ui
