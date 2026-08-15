@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const $ = id => document.getElementById(id);
 
   const TYPE_LABELS = {
@@ -904,7 +904,7 @@
     const item = window.currentInboxItem;
     if (!item?.messageId || item.messageType !== "coupon") return;
     if (isCouponRedeemed(item)) return window.showToast?.("這張優惠券已核銷", true);
-    if (!confirm("確認現場核銷這張優惠券？核銷後只能使用一次，不能復原。")) return;
+    if (!await window.appConfirm("確認現場核銷這張優惠券？核銷後只能使用一次，不能復原。")) return;
 
     const oldText = btn ? btn.textContent : "";
     if (btn) {
