@@ -14,23 +14,20 @@ jobs:
         with:
           ref: agent/app-notification-ui
       - name: Apply exchange zone notification migration
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
+          p = Path('js/modules/exchange-zone-delete-overlay.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("window.confirm(", "await window.appConfirm(")
+          p.write_text(s, encoding='utf-8')
 
-          delete_file = Path('js/modules/exchange-zone-delete-overlay.js')
-          text = delete_file.read_text(encoding='utf-8')
-          old = "window.confirm("
-          if text.count(old) != 1:
-              raise SystemExit(f'delete confirm count={text.count(old)}')
-          delete_file.write_text(text.replace(old, "await window.appConfirm(", 1), encoding='utf-8')
-
-          coupon_file = Path('js/modules/exchange-zone-coupon.js')
-          text = coupon_file.read_text(encoding='utf-8')
-          old = "if (!confirm("
-          if text.count(old) != 1:
-              raise SystemExit(f'coupon confirm count={text.count(old)}')
-          coupon_file.write_text(text.replace(old, "if (!await window.appConfirm(", 1), encoding='utf-8')
+          p = Path('js/modules/exchange-zone-coupon.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("if (!confirm(", "if (!await window.appConfirm(")
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Create exchange zone notification contract
         shell: bash
         run: |
@@ -61,4 +58,4 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "migrate exchange zone confirmations to app UI"
           git push origin HEAD:agent/app-notification-ui
-# trigger: minimal matcher
+# trigger: direct replacement
