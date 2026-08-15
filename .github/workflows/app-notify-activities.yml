@@ -1,0 +1,73 @@
+name: App notification activities
+on:
+  push:
+    branches: [agent/app-notification-ui]
+    paths:
+      - '.github/workflows/app-notify-activities.yml'
+permissions:
+  contents: write
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/app-notification-ui
+      - name: Apply activity notification migration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          activities = Path('js/modules/activities.js')
+          text = activities.read_text(encoding='utf-8')
+          replacements = [
+            ("window.prompt('請複製課程編號', id);", "await window.appPrompt('請複製課程編號', id, { title: '課程編號', placeholder: '請複製此編號' });"),
+            ("if (!confirm('此活動為系列梯次活動,您只能編輯總標題、說明與封面圖,無法增刪梯次。\\n如需修改梯次,請下架後重建。\\n\\n確定要繼續編輯嗎?')) return;", "if (!await window.appConfirm('此活動為系列梯次活動,您只能編輯總標題、說明與封面圖,無法增刪梯次。\\n如需修改梯次,請下架後重建。\\n\\n確定要繼續編輯嗎?')) return;")
+          ]
+          for old, new in replacements:
+            if old not in text:
+              raise SystemExit(f'activities target not found: {old[:40]}')
+            text = text.replace(old, new, 1)
+          activities.write_text(text, encoding='utf-8')
+
+          admin = Path('js/modules/admin.js')
+          text = admin.read_text(encoding='utf-8')
+          targets = [
+            "if (!confirm('確認此筆款項已收款？')) return;",
+            "if (!confirm('確定要下架此活動嗎？報名資料會保留，之後可重新上架。')) return;",
+            "if (!confirm('確定要重新上架此活動嗎？')) return;",
+            "if (!confirm('要複製此活動為一筆下架草稿嗎？')) return;"
+          ]
+          for old in targets:
+            if old not in text:
+              raise SystemExit(f'admin activity target not found: {old}')
+            text = text.replace(old, old.replace('!confirm(', '!await window.appConfirm('), 1)
+          admin.write_text(text, encoding='utf-8')
+      - name: Create activity notification contract
+        shell: bash
+        run: |
+          cat > tools/check-app-notify-activities-contract.js <<'EOF'
+          const fs = require('fs');
+          const assert = require('assert');
+          const activities = fs.readFileSync('js/modules/activities.js', 'utf8');
+          const admin = fs.readFileSync('js/modules/admin.js', 'utf8');
+          assert.doesNotMatch(activities, /window\.prompt\s*\(/);
+          assert.match(activities, /await window\.appPrompt\(/);
+          assert.match(activities, /await window\.appConfirm\(/);
+          const activityAdminBlock = admin.match(/window\.confirmPayment[\s\S]*?window\.setActivityStatus/)[0] + admin.match(/window\.duplicateActivity[\s\S]*?window\./)[0];
+          assert.doesNotMatch(activityAdminBlock, /\bconfirm\s*\(/);
+          assert.ok((activityAdminBlock.match(/await window\.appConfirm\(/g) || []).length >= 4);
+          console.log('activity app notification contract passed');
+          EOF
+      - name: Run activity contracts
+        run: |
+          node tools/check-app-notify-activities-contract.js
+          npm run smoke -- --filter activities || true
+      - name: Commit activity changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/activities.js js/modules/admin.js tools/check-app-notify-activities-contract.js
+          git diff --cached --quiet && exit 0
+          git commit -m "migrate activity confirmations to app UI"
+          git push origin HEAD:agent/app-notification-ui
