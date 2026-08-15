@@ -1,0 +1,65 @@
+name: App notification exchange zone
+on:
+  push:
+    branches: [agent/app-notification-ui]
+    paths:
+      - '.github/workflows/app-notify-exchange-zone.yml'
+permissions:
+  contents: write
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/app-notification-ui
+      - name: Apply exchange zone notification migration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          delete_file = Path('js/modules/exchange-zone-delete-overlay.js')
+          text = delete_file.read_text(encoding='utf-8')
+          old = "if (!window.confirm('確定要刪除這則貼文嗎？刪除後不再顯示，已扣點數不退回。')) return;"
+          new = """if (!await window.appConfirm('確定要刪除這則貼文嗎？刪除後不再顯示，已扣點數不退回。', {\n        type: 'warning',\n        title: '刪除貼文',\n        danger: true,\n        okText: '刪除',\n        cancelText: '取消'\n      })) return;"""
+          if old not in text:
+              raise SystemExit('delete confirm target not found')
+          delete_file.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          coupon_file = Path('js/modules/exchange-zone-coupon.js')
+          text = coupon_file.read_text(encoding='utf-8')
+          old = "if (!confirm(`確認現場核銷「${coupon.title || '這張優惠券'}」？\\n核銷後只能使用一次，不能復原。`)) return;"
+          new = """if (!await window.appConfirm(`確認現場核銷「${coupon.title || '這張優惠券'}」？\\n核銷後只能使用一次，不能復原。`, {\n        type: 'warning',\n        title: '優惠券核銷確認',\n        danger: true,\n        okText: '確認核銷',\n        cancelText: '取消'\n      })) return;"""
+          if old not in text:
+              raise SystemExit('coupon confirm target not found')
+          coupon_file.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Create exchange zone notification contract
+        shell: bash
+        run: |
+          cat > tools/check-app-notify-exchange-zone-contract.js <<'EOF'
+          const fs = require('fs');
+          const assert = require('assert');
+          const del = fs.readFileSync('js/modules/exchange-zone-delete-overlay.js', 'utf8');
+          const coupon = fs.readFileSync('js/modules/exchange-zone-coupon.js', 'utf8');
+          assert.doesNotMatch(del, /\b(?:window\.)?confirm\s*\(/);
+          assert.doesNotMatch(coupon, /\b(?:window\.)?confirm\s*\(/);
+          assert.match(del, /await window\.appConfirm\(/);
+          assert.match(del, /title:\s*['\"]刪除貼文['\"]/);
+          assert.match(coupon, /await window\.appConfirm\(/);
+          assert.match(coupon, /title:\s*['\"]優惠券核銷確認['\"]/);
+          console.log('exchange zone app notification contract passed');
+          EOF
+      - name: Run exchange zone contracts
+        run: |
+          node tools/check-app-notify-exchange-zone-contract.js
+          node tools/check-exchange-zone-contract.js
+          node tools/check-exchange-zone-publish-contract.js
+          node tools/check-exchange-zone-coupon-contract.js
+      - name: Commit exchange zone changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/exchange-zone-delete-overlay.js js/modules/exchange-zone-coupon.js tools/check-app-notify-exchange-zone-contract.js
+          git diff --cached --quiet && exit 0
+          git commit -m "migrate exchange zone confirmations to app UI"
+          git push origin HEAD:agent/app-notification-ui
