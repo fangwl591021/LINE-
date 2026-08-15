@@ -71,3 +71,4 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "migrate activity confirmations to app UI"
           git push origin HEAD:agent/app-notification-ui
+# trigger
