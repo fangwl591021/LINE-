@@ -1,0 +1,12 @@
+const fs = require('fs');
+const assert = require('assert');
+const activities = fs.readFileSync('js/modules/activities.js', 'utf8');
+const admin = fs.readFileSync('js/modules/admin.js', 'utf8');
+assert.doesNotMatch(activities, /window\.prompt\s*\(/);
+assert.match(activities, /await window\.appPrompt\('請複製課程編號'/);
+assert.match(activities, /await window\.appConfirm\('此活動為系列梯次活動/);
+assert.match(admin, /window\.confirmPayment[\s\S]*?await window\.appConfirm\('確認此筆款項已收款？'\)/);
+assert.match(admin, /window\.unpublishActivity[\s\S]*?await window\.appConfirm\('確定要下架此活動嗎？報名資料會保留，之後可重新上架。'\)/);
+assert.match(admin, /window\.republishActivity[\s\S]*?await window\.appConfirm\('確定要重新上架此活動嗎？'\)/);
+assert.match(admin, /window\.duplicateActivity[\s\S]*?await window\.appConfirm\('要複製此活動為一筆下架草稿嗎？'\)/);
+console.log('activity app notification contract passed');

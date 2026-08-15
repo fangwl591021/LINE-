@@ -155,7 +155,7 @@ window.copyActivityId = async function(activityId) {
     }
     window.showToast('課程編號已複製');
   } catch (e) {
-    window.prompt('請複製課程編號', id);
+    await window.appPrompt('請複製課程編號', id, { title: '課程編號', placeholder: '請複製此編號' });
   }
 };
 
@@ -273,7 +273,7 @@ window.openEditActivity = async function(actId) {
   // 系列梯次活動不允許編輯結構(只能改頂層資訊),提示用戶
   const isBatch = act['是否系列'] === true || String(act['是否系列']).toUpperCase() === 'TRUE';
   if (isBatch) {
-    if (!confirm('此活動為系列梯次活動,您只能編輯總標題、說明與封面圖,無法增刪梯次。\n如需修改梯次,請下架後重建。\n\n確定要繼續編輯嗎?')) return;
+    if (!await window.appConfirm('此活動為系列梯次活動,您只能編輯總標題、說明與封面圖,無法增刪梯次。\n如需修改梯次,請下架後重建。\n\n確定要繼續編輯嗎?')) return;
   }
 
   // 設定編輯模式
