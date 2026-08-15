@@ -740,7 +740,10 @@
         return;
       }
 
-      window.prompt("請複製認領連結", claimUrl);
+      await window.appPrompt("請複製認領連結", claimUrl, {
+        title: "認領連結",
+        placeholder: "請複製此連結"
+      });
     } catch (e) {
       showToast("發送失敗：" + (e.message || "請稍後再試"), true);
     }
@@ -917,7 +920,13 @@
       return;
     }
 
-    if (!confirm("確定要刪除這張名片嗎？此操作無法還原！")) return;
+    if (!await window.appConfirm("確定要刪除這張名片嗎？此操作無法還原！", {
+      type: "warning",
+      title: "刪除名片",
+      danger: true,
+      okText: "刪除",
+      cancelText: "取消"
+    })) return;
 
     const rowId = window.currentCard.rowId || window.currentCard["rowId"];
 
