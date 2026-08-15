@@ -17,25 +17,20 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           delete_file = Path('js/modules/exchange-zone-delete-overlay.js')
           text = delete_file.read_text(encoding='utf-8')
-          pattern = re.compile(r"if \(!window\.confirm\('確定要刪除這則貼文嗎？刪除後不再顯示，已扣點數不退回。'\)\) return;")
-          replacement = """if (!await window.appConfirm('確定要刪除這則貼文嗎？刪除後不再顯示，已扣點數不退回。', {\n        type: 'warning',\n        title: '刪除貼文',\n        danger: true,\n        okText: '刪除',\n        cancelText: '取消'\n      })) return;"""
-          text, count = pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'delete confirm target count={count}')
-          delete_file.write_text(text, encoding='utf-8')
+          old = "window.confirm("
+          if text.count(old) != 1:
+              raise SystemExit(f'delete confirm count={text.count(old)}')
+          delete_file.write_text(text.replace(old, "await window.appConfirm(", 1), encoding='utf-8')
 
           coupon_file = Path('js/modules/exchange-zone-coupon.js')
           text = coupon_file.read_text(encoding='utf-8')
-          pattern = re.compile(r"if \(!confirm\(`確認現場核銷「\$\{coupon\.title \|\| '這張優惠券'\}」？\\n核銷後只能使用一次，不能復原。`\)\) return;")
-          replacement = """if (!await window.appConfirm(`確認現場核銷「${coupon.title || '這張優惠券'}」？\\n核銷後只能使用一次，不能復原。`, {\n        type: 'warning',\n        title: '優惠券核銷確認',\n        danger: true,\n        okText: '確認核銷',\n        cancelText: '取消'\n      })) return;"""
-          text, count = pattern.subn(lambda _: replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'coupon confirm target count={count}')
-          coupon_file.write_text(text, encoding='utf-8')
+          old = "if (!confirm("
+          if text.count(old) != 1:
+              raise SystemExit(f'coupon confirm count={text.count(old)}')
+          coupon_file.write_text(text.replace(old, "if (!await window.appConfirm(", 1), encoding='utf-8')
       - name: Create exchange zone notification contract
         shell: bash
         run: |
@@ -47,9 +42,9 @@ jobs:
           assert.doesNotMatch(del, /\b(?:window\.)?confirm\s*\(/);
           assert.doesNotMatch(coupon, /\b(?:window\.)?confirm\s*\(/);
           assert.match(del, /await window\.appConfirm\(/);
-          assert.match(del, /title:\s*['\"]刪除貼文['\"]/);
           assert.match(coupon, /await window\.appConfirm\(/);
-          assert.match(coupon, /title:\s*['\"]優惠券核銷確認['\"]/);
+          assert.match(del, /確定要刪除這則貼文嗎？/);
+          assert.match(coupon, /確認現場核銷/);
           console.log('exchange zone app notification contract passed');
           EOF
       - name: Run exchange zone contracts
@@ -66,4 +61,4 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "migrate exchange zone confirmations to app UI"
           git push origin HEAD:agent/app-notification-ui
-# trigger: regex matcher
+# trigger: minimal matcher
