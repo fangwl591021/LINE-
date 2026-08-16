@@ -1220,11 +1220,11 @@
         if (window.showToast) window.showToast((fallbackLabel || '網址') + '已複製');
         return true;
       }).catch(function() {
-        window.prompt('請複製' + (fallbackLabel || '網址'), text);
+        void window.appPrompt('請複製' + (fallbackLabel || '網址'), text, { title: '複製連結', placeholder: '請複製此連結' });
         return true;
       });
     }
-    window.prompt('請複製' + (fallbackLabel || '網址'), text);
+    void window.appPrompt('請複製' + (fallbackLabel || '網址'), text, { title: '複製連結', placeholder: '請複製此連結' });
     return Promise.resolve(true);
   }
 
@@ -1287,7 +1287,7 @@
       console.warn('[sharePlainCardLink] Clipboard failed:', e);
     }
 
-    window.prompt('請複製名片連結', shareUrl);
+    void window.appPrompt('請複製名片連結', shareUrl, { title: '名片連結', placeholder: '請複製此連結' });
     return true;
   }
 

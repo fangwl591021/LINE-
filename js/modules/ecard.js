@@ -1151,6 +1151,6 @@ async function shareECardPlainLink(url, name) {
     window.showToast("✅ 名片連結已複製");
     return true;
   }
-  window.prompt("請複製名片連結", url);
+  await window.appPrompt("請複製名片連結", url, { title: "名片連結", placeholder: "請複製此連結" });
   return true;
 }

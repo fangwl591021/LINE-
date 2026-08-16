@@ -1917,7 +1917,7 @@ const HomeModule = (function() {
 
     window.deletePersonalAgendaTask = async function(index) {
         const task = (window.personalAgendaTasks || [])[index];
-        if (!task || !window.confirm('刪除這筆跟進提醒？')) return;
+        if (!task || !await window.appConfirm('刪除這筆跟進提醒？')) return;
         const res = await window.fetchAPI('deletePersonalTask', { taskId: task.taskId }, true);
         if (res && res.error) return window.showToast(res.error, true);
         await window.loadPersonalAgenda();
@@ -2163,7 +2163,7 @@ const HomeModule = (function() {
         const record = (window.myActivitiesData || [])[index];
         if (!record) return window.showToast('找不到活動紀錄，請重新整理後再試', true);
         const title = record['活動名稱'] || record.activityName || record.title || '此活動';
-        if (!window.confirm('確定取消報名？\n\n' + title)) return;
+        if (!await window.appConfirm('確定取消報名？\n\n' + title)) return;
 
         const oriHtml = btn ? btn.innerHTML : '';
         if (btn) {

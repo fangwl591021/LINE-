@@ -126,7 +126,7 @@
     if (isTenantRole(user.role || window.userRole)) return window.showToast('你已經是租戶資格，不需要重複購買', true);
     const paymentMethod = getTenantPaymentMethod();
     const paymentLabel = paymentMethod === 'newebpay' ? '線上刷卡' : '匯款付款';
-    if (!window.confirm(`確認建立 NT$6,300 租戶年費訂單？\n\n付款方式：${paymentLabel}`)) return;
+    if (!await window.appConfirm(`確認建立 NT$6,300 租戶年費訂單？\n\n付款方式：${paymentLabel}`)) return;
 
     setButtonLoading(btn, true, btnText);
     try {
@@ -218,7 +218,7 @@
       await navigator.clipboard.writeText(lastTenantOrderNotice);
       window.showToast('付款通知已複製');
     } catch (e) {
-      window.prompt('請複製付款通知', lastTenantOrderNotice);
+      await window.appPrompt('請複製付款通知', lastTenantOrderNotice, { title: '付款通知', placeholder: '請複製此內容' });
     }
   };
 

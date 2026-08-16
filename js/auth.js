@@ -1,4 +1,4 @@
-﻿/* ==================== 系統啟動與權限驗證 ==================== */
+/* ==================== 系統啟動與權限驗證 ==================== */
 
 if (typeof window.addUserSocial !== 'function') {
   window.addUserSocial = function(type = 'LINE', url = '') {
@@ -395,7 +395,7 @@ async function sharePlainCardViewUrl(card, referrerId, networkId) {
       return true;
     }
   } catch (e) {}
-  window.prompt('請複製名片連結', url);
+  await window.appPrompt('請複製名片連結', url, { title: '名片連結', placeholder: '請複製此連結' });
   return true;
 }
 
