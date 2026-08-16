@@ -12,6 +12,11 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
 const getLineToken = () => {
   try { return String(window.liff?.getAccessToken?.() || '').trim(); } catch { return ''; }
 };
+const workerApiUrl = (path) => {
+  const base = String(window.Config?.API_URL || window.WORKER_URL || '').replace(/\/$/, '');
+  if (!base) throw new Error('Worker API 尚未設定');
+  return base + path;
+};
 const fileToDataUrl = (file) => new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(new Error('名片圖片讀取失敗'));r.readAsDataURL(file);});
 
 function parseMaybeJson(value){if(typeof value!=='string')return value;try{return JSON.parse(value)}catch{return value}}
@@ -57,13 +62,13 @@ async function compressCardImage(file) {
 async function uploadCardImageOriginal(file, sideLabel='正面', purpose='collection') {
   if (file.size > 15 * 1024 * 1024) throw new Error('名片原圖不可超過 15MB');
   const token=getLineToken(); if(!token) throw new Error('LINE 登入已逾時，請重新開啟頁面');
-  const response=await fetch('/v1/card-images',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':file.type,'x-card-file-size':String(file.size),'x-card-side':sideLabel==='背面'?'back':'front','x-card-purpose':purpose},body:file});
+  const response=await fetch(workerApiUrl('/v1/card-images'),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':file.type,'x-card-file-size':String(file.size),'x-card-side':sideLabel==='背面'?'back':'front','x-card-purpose':purpose},body:file});
   const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'名片原圖上傳失敗');return body.job;
 }
 async function saveCardImageProcessingResult(jobId,file,metadata,status='completed'){
   const token=getLineToken(); if(!token) throw new Error('LINE 登入已逾時，請重新開啟頁面');
   const form=new FormData();form.append('image',file);form.append('metadata',JSON.stringify(metadata));form.append('status',status);
-  const response=await fetch('/v1/card-images/'+encodeURIComponent(jobId)+'/result',{method:'POST',headers:{authorization:'Bearer '+token},body:form});
+  const response=await fetch(workerApiUrl('/v1/card-images/'+encodeURIComponent(jobId)+'/result'),{method:'POST',headers:{authorization:'Bearer '+token},body:form});
   const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'名片影像處理結果儲存失敗');return body.job;
 }
 async function prepareBusinessCardImage(file,sideLabel='正面',purpose='collection'){

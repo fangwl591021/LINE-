@@ -2,6 +2,7 @@ import legacyWorker from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { ExchangeZoneCouponModule } from './worker/exchange-zone-coupon.mjs';
+import { createCardImageJob, saveCardImageResult } from './worker/a-kaffit-card-image-processing.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -279,8 +280,48 @@ async function enrichStoreSettingsResponse(env, action, payload, response) {
   return json({ ...body, ...quota }, response.status);
 }
 
+function akaffitCardImagePreflight() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Card-File-Size, X-Card-Side, X-Card-Purpose',
+      'Access-Control-Max-Age': '86400'
+    }
+  });
+}
+
+async function handleAkaffitCardImageRoute(request, env) {
+  const url = new URL(request.url);
+  if (request.method === 'OPTIONS') return akaffitCardImagePreflight();
+  const actor = await authenticatedActor(request, {}, env);
+  if (!actor) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
+  try {
+    if (request.method === 'POST' && url.pathname === '/v1/card-images') {
+      const job = await createCardImageJob(env.ACTMASTER_DB, env.IMG_BUCKET, actor.userId, request);
+      return json({ success: true, job }, 201);
+    }
+    const resultMatch = url.pathname.match(/^\/v1\/card-images\/([^/]+)\/result$/);
+    if (request.method === 'POST' && resultMatch) {
+      const form = await request.formData();
+      const job = await saveCardImageResult(env.ACTMASTER_DB, env.IMG_BUCKET, actor.userId, decodeURIComponent(resultMatch[1]), form);
+      return json({ success: true, job }, 200);
+    }
+  } catch (error) {
+    console.error('A-kaffit card image route failed', text(error?.message) || 'UNKNOWN');
+    return json({ success: false, error: text(error?.message) || '名片影像處理失敗' }, 400);
+  }
+  return null;
+}
+
 export default {
   async fetch(request, env, ctx) {
+    const pathname = new URL(request.url).pathname;
+    if (pathname === '/v1/card-images' || /^\/v1\/card-images\/[^/]+\/result$/.test(pathname)) {
+      const cardImageResponse = await handleAkaffitCardImageRoute(request, env);
+      if (cardImageResponse) return cardImageResponse;
+    }
     let postBody = null;
     if (request.method === 'POST') {
       const copy = request.clone();
