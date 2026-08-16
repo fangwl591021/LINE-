@@ -1,0 +1,52 @@
+name: Apply A-kaffit Full Card Workflow
+
+on:
+  push:
+    branches:
+      - agent/a-kaffit-full-card-workflow-port
+    paths:
+      - tools/apply-a-kaffit-full-card-workflow.js
+      - tools/check-a-kaffit-full-card-workflow.js
+      - js/modules/a-kaffit-card-scanner-adapter.js
+      - js/modules/a-kaffit-vision-v3-crop.js
+      - worker/a-kaffit-card-image-processing.mjs
+      - migrations/0025_a_kaffit_card_image_processing.sql
+      - .github/workflows/apply-a-kaffit-full-card-workflow.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/a-kaffit-full-card-workflow-port
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply target-only wiring
+        run: node tools/apply-a-kaffit-full-card-workflow.js
+
+      - name: Verify full A-kaffit workflow contract
+        run: node tools/check-a-kaffit-full-card-workflow.js
+
+      - name: Run LINE smoke contracts
+        run: npm run smoke
+
+      - name: Commit generated wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No generated wiring changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker-entry.mjs index.html js/modules/a-kaffit-card-scanner-adapter.js
+          git commit -m "feat: activate full A-kaffit card workflow"
+          git push origin HEAD:agent/a-kaffit-full-card-workflow-port
