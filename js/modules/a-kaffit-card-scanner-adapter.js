@@ -23,7 +23,6 @@ function parseMaybeJson(value){if(typeof value!=='string')return value;try{retur
 function unwrapOcr(ocr){for(const candidate of [ocr?.data?.cardData,ocr?.data?.card,ocr?.data,ocr?.cardData,ocr?.card,ocr?.result,ocr]){const parsed=parseMaybeJson(candidate);if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))return parsed}return {}}
 function pick(source, keys){for(const key of keys){const value=source?.[key];if(value!==undefined&&value!==null&&String(value).trim()!=='')return value}return ''}
 function normalizeCardData(ocr){
-  if(typeof window.normalizeOcrCardData==='function')return window.normalizeOcrCardData(ocr);
   const source=unwrapOcr(ocr),out={};
   const aliases={
     '姓名':['姓名','name','displayName','fullName'],'英文名':['英文名','englishName'],'公司名稱':['公司名稱','companyName','company'],'職稱':['職稱','jobTitle','title'],'部門':['部門','department'],

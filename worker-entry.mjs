@@ -3,6 +3,7 @@ import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { ExchangeZoneCouponModule } from './worker/exchange-zone-coupon.mjs';
 import { createCardImageJob, saveCardImageResult } from './worker/a-kaffit-card-image-processing.mjs';
+import { recognizeAkaffitBusinessCard } from './worker/a-kaffit-card-recognize.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -328,6 +329,17 @@ export default {
       postBody = await copy.json().catch(() => null);
       const action = text(postBody?.action);
       const payload = postBody?.payload || {};
+      if (action === 'recognizeCardWithGPT4o') {
+        const actor = await authenticatedActor(request, payload, env);
+        if (!actor) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
+        try {
+          const result = await recognizeAkaffitBusinessCard(payload, env);
+          return json({ success: true, ...result, data: result }, 200);
+        } catch (error) {
+          console.error('A-kaffit recognize failed', text(error?.message) || 'UNKNOWN');
+          return json({ success: false, error: text(error?.message) || '名片辨識失敗' }, 500);
+        }
+      }
       if (TAG_ACTIONS.has(action)) return await handleTagAction(request, env, action, payload);
       if (action === 'redeemExchangeZoneCoupon') return await handleExchangeCouponAction(request, env, payload);
 
