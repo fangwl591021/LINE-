@@ -81,3 +81,4 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "share frontend banner across home card customers"
           git push origin HEAD:agent/shared-frontend-banner
+# trigger: register workflow
