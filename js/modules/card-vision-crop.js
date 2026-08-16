@@ -138,9 +138,13 @@
     const padX = box.width * padding;
     const padY = box.height * padding;
     const left = Math.max(0, box.x - padX);
-    const top = Math.max(0, box.y - padY);
     const right = Math.min(1, box.x + box.width + padX);
-    const bottom = Math.min(1, box.y + box.height + padY);
+    const rawTop = Math.max(0, box.y - padY);
+    const rawBottom = Math.min(1, box.y + box.height + padY);
+    // 依實機兩張測試照校正：低信心人工預框整體向下 4%，框寬高保持不變。
+    const verticalShift = Math.max(0, Math.min(0.04, 1 - rawBottom));
+    const top = rawTop + verticalShift;
+    const bottom = rawBottom + verticalShift;
     const cropWidth = Math.max(0, (right - left) * width);
     const cropHeight = Math.max(0, (bottom - top) * height);
     if (cropWidth < 80 || cropHeight < 50) return null;
