@@ -1,0 +1,46 @@
+name: Admin Card Quota Patch
+
+on:
+  push:
+    branches:
+      - agent/admin-card-quota-ui
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/admin-card-quota-ui
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Patch real admin quota UI
+        run: python3 tools/patch-admin-card-quota-ui.py
+
+      - name: Run targeted contracts
+        run: |
+          node tools/check-admin-card-quota-contract.js
+          node tools/check-card-quota-contract.js
+
+      - name: Remove one-time patch helpers
+        run: |
+          rm tools/patch-admin-card-quota-ui.py
+          rm .github/workflows/admin-card-quota-patch.yml
+
+      - name: Commit patched admin UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add admin.html tools/check-admin-card-quota-contract.js tools/run-smoke-contracts.js tools/patch-admin-card-quota-ui.py .github/workflows/admin-card-quota-patch.yml
+          git commit -m "Add card quota settings to real admin dashboard"
+          git push origin HEAD:agent/admin-card-quota-ui
