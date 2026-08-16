@@ -22,8 +22,8 @@
   ];
 
   if (document.readyState === 'loading' && document.currentScript) {
-    document.write('<script src="' + urls[0] + '"><\\/script>');
-    document.write('<script src="' + urls[1] + '"><\\/script>');
+    document.write('<script src="' + urls[0] + '"><\/script>');
+    document.write('<script src="' + urls[1] + '"><\/script>');
   } else {
     loadSequentially(urls).catch(function (error) {
       console.error('[settings-loader]', error);
