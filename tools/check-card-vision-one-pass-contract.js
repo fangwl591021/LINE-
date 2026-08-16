@@ -30,6 +30,10 @@ ok(cropper.includes("cachedOcr || await window.fetchAPI('recognizeCardWithGPT4o'
 ok(cropper.includes("userId: ''"), 'collected card remains an unowned private contact');
 ok(cropper.includes('config.isPrivate = true'), 'processed collected-card image stays private');
 ok(vision.includes('const AUTO_CROP_CONFIDENCE = 0.72'), 'automatic crop uses conservative confidence threshold');
+ok(vision.includes('function manualCropData('), 'low-confidence fallback can convert AI bounding box to a manual crop rectangle');
+ok(vision.includes('rememberManualCropHint(localization)'), 'low-confidence localization is retained for the immediate manual fallback');
+ok(vision.includes("element.id === 'cropper-image'"), 'AI crop hint is applied only to the business-card cropper');
+ok(vision.includes('instance.setData(cropData)'), 'manual cropper starts from the AI-estimated card boundary instead of the full photo');
 ok(vision.includes("method = 'perspective'"), 'four-corner agreement enables perspective correction');
 ok(vision.includes("method = 'bounding-box'"), 'safe bounding-box fallback is available');
 ok(worker.includes('同一次完成 OCR 與名片外框定位'), 'worker asks for OCR and localization in one vision call');
