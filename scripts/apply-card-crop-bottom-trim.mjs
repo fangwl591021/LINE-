@@ -6,7 +6,9 @@ let source = fs.readFileSync(path, 'utf8');
 const marker = "  const MANUAL_HINT_TTL_MS = 10000;\n";
 if (!source.includes("const BOUNDING_BOX_BOTTOM_TRIM_RATIO")) {
   if (!source.includes(marker)) throw new Error('marker not found');
-  source = source.replace(marker, marker + "  const BOUNDING_BOX_BOTTOM_TRIM_RATIO = 0.27;\n");
+  source = source.replace(marker, marker + "  const BOUNDING_BOX_BOTTOM_TRIM_RATIO = 0.48;\n");
+} else {
+  source = source.replace(/const BOUNDING_BOX_BOTTOM_TRIM_RATIO = [0-9.]+;/, 'const BOUNDING_BOX_BOTTOM_TRIM_RATIO = 0.48;');
 }
 
 const manualOld = `    const right = Math.min(1, box.x + box.width + padX);\n    const bottom = Math.min(1, box.y + box.height + padY);\n    const cropWidth = Math.max(0, (right - left) * width);\n    const cropHeight = Math.max(0, (bottom - top) * height);`;
@@ -20,4 +22,4 @@ if (source.includes(autoOld)) source = source.replace(autoOld, autoNew);
 else if ((source.match(/rawBottom - rawHeight \* BOUNDING_BOX_BOTTOM_TRIM_RATIO/g) || []).length < 2) throw new Error('auto crop block not found');
 
 fs.writeFileSync(path, source);
-console.log('Applied 27% bottom trim to bounding-box fallback and manual hint.');
+console.log('Applied 48% bottom trim to bounding-box fallback and manual hint.');
