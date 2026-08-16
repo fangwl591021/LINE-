@@ -193,27 +193,18 @@
     if (OriginalCropper.__cardVisionHintAware === true) return;
 
     function HintAwareCropper(element, options) {
-      const instance = new OriginalCropper(element, options);
+      const baseOptions = options && typeof options === 'object' ? options : {};
+      let nextOptions = baseOptions;
       if (element && element.id === 'cropper-image') {
         const hint = consumeManualCropHint();
         if (hint) {
-          const applyHint = (retry) => {
-            const cropData = manualCropData(hint, element.naturalWidth || element.width, element.naturalHeight || element.height, 0.02);
-            if (!cropData) return;
-            try {
-              instance.setData(cropData);
-            } catch (error) {
-              if ((Number(retry) || 0) < 6) {
-                setTimeout(() => applyHint((Number(retry) || 0) + 1), 100);
-              } else {
-                console.warn('[cardVisionCrop] failed to apply AI manual crop hint:', error);
-              }
-            }
-          };
-          setTimeout(() => applyHint(0), 180);
+          const cropData = manualCropData(hint, element.naturalWidth || element.width, element.naturalHeight || element.height, 0.02);
+          if (cropData) {
+            nextOptions = { ...baseOptions, data: cropData };
+          }
         }
       }
-      return instance;
+      return new OriginalCropper(element, nextOptions);
     }
 
     HintAwareCropper.prototype = OriginalCropper.prototype;
