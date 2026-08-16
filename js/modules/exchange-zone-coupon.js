@@ -213,7 +213,13 @@
 
     section.querySelector('[data-coupon-redeem]')?.addEventListener('click', async (event) => {
       if (!coupon.canRedeem) return;
-      if (!confirm(`確認現場核銷「${coupon.title || '這張優惠券'}」？\n核銷後只能使用一次，不能復原。`)) return;
+      if (!await window.appConfirm(`確認現場核銷「${coupon.title || '這張優惠券'}」？\n核銷後只能使用一次，不能復原。`, {
+        type: 'warning',
+        title: '優惠券核銷確認',
+        danger: true,
+        okText: '確認核銷',
+        cancelText: '取消'
+      })) return;
       const button = event.currentTarget;
       button.disabled = true;
       button.textContent = '核銷中…';

@@ -1,0 +1,61 @@
+name: App notification exchange zone
+on:
+  push:
+    branches: [agent/app-notification-ui]
+    paths:
+      - '.github/workflows/app-notify-exchange-zone.yml'
+permissions:
+  contents: write
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/app-notification-ui
+      - name: Apply exchange zone notification migration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('js/modules/exchange-zone-delete-overlay.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("window.confirm(", "await window.appConfirm(")
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('js/modules/exchange-zone-coupon.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("if (!confirm(", "if (!await window.appConfirm(")
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Create exchange zone notification contract
+        shell: bash
+        run: |
+          cat > tools/check-app-notify-exchange-zone-contract.js <<'EOF'
+          const fs = require('fs');
+          const assert = require('assert');
+          const del = fs.readFileSync('js/modules/exchange-zone-delete-overlay.js', 'utf8');
+          const coupon = fs.readFileSync('js/modules/exchange-zone-coupon.js', 'utf8');
+          assert.doesNotMatch(del, /\b(?:window\.)?confirm\s*\(/);
+          assert.doesNotMatch(coupon, /\b(?:window\.)?confirm\s*\(/);
+          assert.match(del, /await window\.appConfirm\(/);
+          assert.match(coupon, /await window\.appConfirm\(/);
+          assert.match(del, /確定要刪除這則貼文嗎？/);
+          assert.match(coupon, /確認現場核銷/);
+          console.log('exchange zone app notification contract passed');
+          EOF
+      - name: Run exchange zone contracts
+        run: |
+          node tools/check-app-notify-exchange-zone-contract.js
+          node tools/check-exchange-zone-contract.js
+          node tools/check-exchange-zone-publish-contract.js
+          node tools/check-exchange-zone-coupon-contract.js
+      - name: Commit exchange zone changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/exchange-zone-delete-overlay.js js/modules/exchange-zone-coupon.js tools/check-app-notify-exchange-zone-contract.js
+          git diff --cached --quiet && exit 0
+          git commit -m "migrate exchange zone confirmations to app UI"
+          git push origin HEAD:agent/app-notification-ui
+# trigger: direct replacement

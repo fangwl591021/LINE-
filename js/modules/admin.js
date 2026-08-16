@@ -285,7 +285,7 @@ window.toggleCheckin = async function(rowId, btnEl) {
 
 // 確認繳費
 window.confirmPayment = async function(rowId, btnEl) {
-  if (!confirm('確認此筆款項已收款？')) return;
+  if (!await window.appConfirm('確認此筆款項已收款？')) return;
   const oriHtml = btnEl.innerHTML;
   btnEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-[14px]">refresh</span>';
   btnEl.disabled = true;
@@ -307,13 +307,13 @@ window.confirmPayment = async function(rowId, btnEl) {
 
 // 下架活動
 window.unpublishActivity = async function(actId, btnEl) {
-  if (!confirm('確定要下架此活動嗎？報名資料會保留，之後可重新上架。')) return;
+  if (!await window.appConfirm('確定要下架此活動嗎？報名資料會保留，之後可重新上架。')) return;
   return window.setActivityStatus(actId, '下架', btnEl);
 };
 
 // 重新上架活動
 window.republishActivity = async function(actId, btnEl) {
-  if (!confirm('確定要重新上架此活動嗎？')) return;
+  if (!await window.appConfirm('確定要重新上架此活動嗎？')) return;
   return window.setActivityStatus(actId, '上架', btnEl);
 };
 
@@ -342,7 +342,7 @@ window.setActivityStatus = async function(actId, status, btnEl) {
 };
 
 window.duplicateActivity = async function(actId, btnEl) {
-  if (!confirm('要複製此活動為一筆下架草稿嗎？')) return;
+  if (!await window.appConfirm('要複製此活動為一筆下架草稿嗎？')) return;
   const oriHtml = btnEl.innerHTML;
   btnEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span>';
   btnEl.disabled = true;

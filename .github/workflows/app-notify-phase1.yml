@@ -1,0 +1,102 @@
+name: App notification phase 1
+
+on:
+  push:
+    branches:
+      - agent/app-notification-ui
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-check:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/app-notification-ui
+          fetch-depth: 0
+
+      - name: Apply phase 1 notification migration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          index = Path('index.html')
+          html = index.read_text(encoding='utf-8')
+          marker = '<!-- ocr-lab route: ocr-lab.html -->\n<script src="js/core.js?v=7.29"></script>'
+          replacement = '<!-- ocr-lab route: ocr-lab.html -->\n<script src="js/app-notify.js?v=1"></script>\n<script src="js/core.js?v=7.29"></script>'
+          if '/js/app-notify.js' not in html and 'js/app-notify.js' not in html:
+              if marker not in html:
+                  raise SystemExit('index script marker not found')
+              html = html.replace(marker, replacement, 1)
+              index.write_text(html, encoding='utf-8')
+
+          cards = Path('js/modules/cards.js')
+          source = cards.read_text(encoding='utf-8')
+          old_confirm = 'if (!confirm("確定要刪除這張名片嗎？此操作無法還原！")) return;'
+          new_confirm = '''if (!await window.appConfirm("確定要刪除這張名片嗎？此操作無法還原！", {\n      type: "warning",\n      title: "刪除名片",\n      danger: true,\n      okText: "刪除",\n      cancelText: "取消"\n    })) return;'''
+          if old_confirm in source:
+              source = source.replace(old_confirm, new_confirm, 1)
+          elif 'await window.appConfirm("確定要刪除這張名片嗎？此操作無法還原！"' not in source:
+              raise SystemExit('card delete confirm marker not found')
+
+          old_prompt = 'window.prompt("請複製認領連結", claimUrl);'
+          new_prompt = '''await window.appPrompt("請複製認領連結", claimUrl, {\n        title: "認領連結",\n        placeholder: "請複製此連結"\n      });'''
+          if old_prompt in source:
+              source = source.replace(old_prompt, new_prompt, 1)
+          elif 'await window.appPrompt("請複製認領連結", claimUrl' not in source:
+              raise SystemExit('card claim prompt marker not found')
+
+          cards.write_text(source, encoding='utf-8')
+
+      - name: Create phase 1 contract
+        shell: python
+        run: |
+          from pathlib import Path
+          Path('tools/check-app-notification-phase1-contract.js').write_text(r'''const fs = require('fs');
+          const assert = require('assert');
+
+          const html = fs.readFileSync('index.html', 'utf8');
+          const notify = fs.readFileSync('js/app-notify.js', 'utf8');
+          const cards = fs.readFileSync('js/modules/cards.js', 'utf8');
+
+          const notifyIndex = html.indexOf('js/app-notify.js');
+          const coreIndex = html.indexOf('js/core.js');
+          const cardsIndex = html.indexOf('js/modules/cards.js');
+          assert.ok(notifyIndex >= 0, 'index must load js/app-notify.js');
+          assert.ok(coreIndex > notifyIndex, 'app-notify must load before core.js');
+          assert.ok(cardsIndex > notifyIndex, 'app-notify must load before cards.js');
+
+          assert.match(notify, /window\.appNotice\s*=/);
+          assert.match(notify, /window\.appConfirm\s*=/);
+          assert.match(notify, /window\.appPrompt\s*=/);
+          assert.match(notify, /window\.alert\s*=/);
+          assert.doesNotMatch(notify, /window\.confirm\s*=\s*async/);
+          assert.doesNotMatch(notify, /window\.prompt\s*=\s*async/);
+          assert.doesNotMatch(notify, /hostname|document\.domain|workers\.dev/i);
+
+          assert.doesNotMatch(cards, /(^|[^.\w])confirm\s*\(/m);
+          assert.doesNotMatch(cards, /window\.prompt\s*\(/);
+          assert.match(cards, /await\s+window\.appConfirm\s*\(/);
+          assert.match(cards, /await\s+window\.appPrompt\s*\(/);
+
+          console.log('app notification phase 1 contract: OK');
+          ''', encoding='utf-8')
+
+      - name: Run phase 1 contract
+        run: node tools/check-app-notification-phase1-contract.js
+
+      - name: Commit phase 1 changes
+        run: |
+          if git diff --quiet; then
+            echo "No phase 1 changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/modules/cards.js tools/check-app-notification-phase1-contract.js
+          git commit -m "migrate card notifications to app UI"
+          git push origin HEAD:agent/app-notification-ui

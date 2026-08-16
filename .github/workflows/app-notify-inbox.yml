@@ -1,0 +1,50 @@
+name: App notification inbox
+on:
+  push:
+    branches: [agent/app-notification-ui]
+    paths:
+      - '.github/workflows/app-notify-inbox.yml'
+permissions:
+  contents: write
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/app-notification-ui
+      - name: Apply inbox notification migration
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('js/modules/inbox.js')
+          text = path.read_text(encoding='utf-8-sig')
+          old = 'if (!confirm("確認現場核銷這張優惠券？核銷後只能使用一次，不能復原。")) return;'
+          new = 'if (!await window.appConfirm("確認現場核銷這張優惠券？核銷後只能使用一次，不能復原。")) return;'
+          if old not in text:
+              raise SystemExit('inbox coupon confirm target not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Create inbox notification contract
+        shell: bash
+        run: |
+          cat > tools/check-app-notify-inbox-contract.js <<'EOF'
+          const fs = require('fs');
+          const assert = require('assert');
+          const source = fs.readFileSync('js/modules/inbox.js', 'utf8');
+          assert.doesNotMatch(source, /\bconfirm\s*\(/);
+          assert.doesNotMatch(source, /\bprompt\s*\(/);
+          assert.match(source, /await window\.appConfirm\(/);
+          assert.match(source, /window\.redeemInboxCoupon\s*=\s*async function/);
+          console.log('inbox app notification contract passed');
+          EOF
+      - name: Run inbox contracts
+        run: |
+          node tools/check-app-notify-inbox-contract.js
+      - name: Commit inbox changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/inbox.js tools/check-app-notify-inbox-contract.js
+          git diff --cached --quiet && exit 0
+          git commit -m "migrate inbox confirmation to app UI"
+          git push origin HEAD:agent/app-notification-ui
