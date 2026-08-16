@@ -31,11 +31,16 @@ window.goPage = function(page, isInitLoad = false) {
   if (page === 'profile') page = 'admin-settings';
   window.previousPage = window.currentPage || '';
   window.currentPage = page;
+  const sharedBannerPages = new Set(['home', 'card', 'customers']);
+  const showSharedBanner = sharedBannerPages.has(page);
   document.body.classList.toggle('home-page', page === 'home');
+  document.body.classList.toggle('shared-front-banner-page', showSharedBanner);
 
   document.querySelectorAll('[id^="page"]').forEach(el => el.classList.add('hidden'));
   const targetPage = document.getElementById('page-' + page);
   if (targetPage) targetPage.classList.remove('hidden');
+  const sharedBanner = document.getElementById('home-profile-card');
+  if (sharedBanner) sharedBanner.classList.toggle('hidden', !showSharedBanner);
 
   if (page === 'card') window.refreshBusinessCardCameraInputs('collected');
   else if (page === 'admin-settings') window.refreshBusinessCardCameraInputs('mycard');
