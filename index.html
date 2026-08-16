@@ -637,6 +637,16 @@
           <span class="material-symbols-outlined text-slate-400 transition-transform">chevron_right</span>
         </summary>
         <div class="p-5 pt-0 border-t border-white/60 space-y-4">
+          <section id="mycard-scan-create-moved" class="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+            <h3 class="font-black text-lg mb-3 text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">document_scanner</span> 掃描建立名片</h3>
+            <div class="text-[13px] leading-relaxed text-blue-800">
+              <div class="font-black">收藏名片請用來掃描客戶或合作夥伴。</div>
+              <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>要建立自己的名片，請走「我的專屬名片」，系統才會綁定到本人資料。</span>
+                <button type="button" onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : (window.openMyCardSettings ? window.openMyCardSettings(event) : window.goPage('admin-settings'))" class="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-white font-black active:scale-95 transition-transform">建立我的名片</button>
+              </div>
+            </div>
+          </section>
           <div id="my-ecard-empty-state" class="hidden space-y-4">
             <p class="text-[13px] text-slate-500 font-medium mt-2 leading-relaxed">您尚未建立專屬名片。<br>請直接拍照掃描實體名片,讓 AI 自動建檔綁定;或一鍵使用 LINE 資料產生。</p>
             <div class="flex gap-3">
@@ -1479,15 +1489,6 @@
         <button type="button" onclick="window.goPage('customers')" class="rounded-xl px-4 py-3 text-[14px] font-black text-slate-500 active:scale-[0.98]">我的客戶</button>
       </nav>
       <div class="bg-white p-5 border-y border-slate-100">
-        <h3 class="font-black text-lg mb-3 text-slate-800 flex items-center gap-2"><span class="material-symbols-outlined text-blue-500 icon-filled">document_scanner</span> 掃描建立名片</h3>
-
-        <div class="mt-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-[13px] leading-relaxed text-blue-800">
-          <div class="font-black">收藏名片請用來掃描客戶或合作夥伴。</div>
-          <div class="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>要建立自己的名片，請走「我的專屬名片」，系統才會綁定到本人資料。</span>
-            <button type="button" onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : (window.openMyCardSettings ? window.openMyCardSettings(event) : window.goPage('admin-settings'))" class="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-white font-black active:scale-95 transition-transform">建立我的名片</button>
-          </div>
-        </div>
 
         <div class="flex gap-3 mt-4">
           <label id="collected-card-camera-label" class="flex-1 bg-blue-50 text-blue-600 py-4 rounded-2xl font-bold flex flex-col justify-center items-center gap-2 cursor-pointer active:scale-95 transition-transform border border-blue-100 shadow-sm">

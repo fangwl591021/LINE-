@@ -1,0 +1,38 @@
+name: Apply My Card Scan Block Move
+
+on:
+  push:
+    branches:
+      - agent/move-scan-create-to-mycard
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/move-scan-create-to-mycard
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply move
+        run: node tools/apply-move-scan-create-to-mycard.js
+      - name: Verify move
+        run: node tools/check-move-scan-create-to-mycard.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated index
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "No generated change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "feat: move scan create card block into my card"
+          git push origin HEAD:agent/move-scan-create-to-mycard
