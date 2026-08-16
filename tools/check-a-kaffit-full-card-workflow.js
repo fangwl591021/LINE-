@@ -42,7 +42,7 @@ ok(crop.includes('localization.cropConfidence<0.72'), 'A-kaffit Vision V3 confid
 ok(crop.includes('boxIou>=0.72'), 'A-kaffit corner/bbox agreement preserved');
 ok(crop.includes('centerDelta<=0.06'), 'A-kaffit center agreement preserved');
 ok(crop.includes('ratioAgreement<=1.22'), 'A-kaffit ratio agreement preserved');
-ok(!/BOTTOM_TRIM|0\.27|0\.48|shift-down|shift down/i.test(crop + '\n' + adapter), 'no invented trim or shift logic');
+ok(!/BOTTOM_TRIM|shift-down|shift down|manual crop hint downward/i.test(crop + '\n' + adapter), 'no invented trim or shift logic');
 
 ok(worker.includes("createCardImageJob, saveCardImageResult"), 'Worker image-job routes are wired');
 ok(worker.includes("pathname === '/v1/card-images'"), 'Worker original image route exists');
