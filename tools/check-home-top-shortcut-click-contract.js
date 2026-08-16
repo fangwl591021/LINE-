@@ -16,17 +16,21 @@ const actions = {
   profile: 'window.handleHomeAvatarClick?.()',
   points: 'window.openPointsWallet()',
   checkin: 'window.claimDailyPointCheckin(this)',
-  invite: 'window.showInviteLink?.()'
+  home: "window.goPage('home')"
 };
 
 for (const [action, handler] of Object.entries(actions)) {
-  const pattern = new RegExp(`<button[^>]+data-home-top-action="${action}"[^>]+onclick="${handler.replace(/[?.()]/g, '\\$&')}"[^>]*>`, 's');
+  const pattern = new RegExp(`<button[^>]+data-home-top-action="${action}"[^>]+onclick="${handler.replace(/[?.()']/g, '\\$&')}"[^>]*>`, 's');
   expect(pattern.test(activeCard), `${action} must be a complete clickable button`);
 }
 
 expect(
   activeCard.includes('id="home-profile-avatar-button" type="button" data-home-top-action="profile"'),
   'profile name and member-area text must share the avatar button'
+);
+expect(
+  activeCard.includes('data-home-top-action="home"') && activeCard.includes('aria-label="返回首頁"'),
+  'fourth active shortcut must remain the explicit return-home action'
 );
 expect(
   html.includes('.home-top-shortcut > * { pointer-events: none; }'),
