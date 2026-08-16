@@ -10,12 +10,21 @@
   };
 
   var STORAGE_KEY = 'line_engine_card_quota_settings_v1';
-  var wrapped = false;
+  var wrappedSettings = false;
+  var wrappedCropper = false;
+  var cloudCache = { networkId: '', data: null, time: 0 };
+  var CLOUD_CACHE_TTL = 30000;
 
   function numberOrBlank(value) {
     if (value === null || value === undefined || value === '') return '';
     var n = Number(value);
     return Number.isFinite(n) && n >= 0 ? String(Math.floor(n)) : '';
+  }
+
+  function limitNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    var n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
   }
 
   function readInputs() {
@@ -120,17 +129,30 @@
     return true;
   }
 
+  function extractSettings(res) {
+    if (res && res.data && typeof res.data === 'object') return res.data;
+    return res && typeof res === 'object' ? res : {};
+  }
+
+  async function getCloudQuota(force) {
+    var networkId = window.currentNetworkId || 'admin';
+    var now = Date.now();
+    if (!force && cloudCache.data && cloudCache.networkId === networkId && now - cloudCache.time < CLOUD_CACHE_TTL) {
+      return cloudCache.data;
+    }
+    if (typeof window.fetchAPI !== 'function') return readLocal();
+    var res = await window.fetchAPI('getStoreSettings', { networkId: networkId }, true);
+    if (res && res.success === false) throw new Error(res.error || '額度設定讀取失敗');
+    var raw = extractSettings(res);
+    var merged = Object.assign({}, readLocal(), raw);
+    cloudCache = { networkId: networkId, data: merged, time: now };
+    return merged;
+  }
+
   async function loadCloudQuota() {
     injectPanel();
-    if (typeof window.fetchAPI !== 'function') {
-      writeInputs(readLocal());
-      return;
-    }
     try {
-      var res = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId || 'admin' });
-      var raw = (res && res.data && typeof res.data === 'object') ? res.data : (res || {});
-      var local = readLocal();
-      var merged = Object.assign({}, local, raw);
+      var merged = await getCloudQuota(true);
       writeInputs(merged);
       saveLocal(readInputs());
       setStatus('額度欄位已載入。留空代表不限制。', false);
@@ -146,19 +168,178 @@
     saveLocal(quota);
     if (typeof window.fetchAPI !== 'function') return quota;
 
-    var res = await window.fetchAPI('getStoreSettings', { networkId: window.currentNetworkId || 'admin' });
-    var raw = (res && res.data && typeof res.data === 'object') ? res.data : (res || {});
-    var payload = Object.assign({}, raw, quota, { networkId: window.currentNetworkId || 'admin' });
-    var saved = await window.fetchAPI('saveStoreSettings', payload);
+    var networkId = window.currentNetworkId || 'admin';
+    var res = await window.fetchAPI('getStoreSettings', { networkId: networkId }, true);
+    var raw = extractSettings(res);
+    var payload = Object.assign({}, raw, quota, { networkId: networkId });
+    var saved = await window.fetchAPI('saveStoreSettings', payload, true);
     if (saved && saved.success === false) throw new Error(saved.error || '額度設定儲存失敗');
+    cloudCache = { networkId: networkId, data: Object.assign({}, payload, extractSettings(saved)), time: Date.now() };
     setStatus('名片收藏額度已同步至雲端。', false);
     return quota;
   }
 
+  function currentUserId() {
+    return String(
+      window.currentUserProfile?.userId ||
+      window.currentUser?.userId ||
+      window.currentUser?.lineId ||
+      ''
+    ).trim();
+  }
+
+  function currentRole() {
+    return String(window.userRole || window.currentUser?.role || window.currentUserProfile?.role || 'user').toLowerCase();
+  }
+
+  function isUnlimitedRole() {
+    var role = currentRole();
+    return role === 'admin' || role === 'tenant' || role === 'store';
+  }
+
+  function cardSource(card) {
+    return String(card?.sourceType || card?.source_type || card?.['名片來源'] || '').trim().toLowerCase();
+  }
+
+  function cardOwnerForQuota(card) {
+    return String(
+      card?.scannerUserId || card?.scanner_user_id || card?.scannerUid || card?.scanned_by ||
+      card?.creatorId || card?.creator_id || card?.created_by || card?.['建檔者ID'] || ''
+    ).trim();
+  }
+
+  function isQuotaCard(card, userId) {
+    if (!card || !userId) return false;
+    var source = cardSource(card);
+    if (source === 'self_profile' || source === 'self_upload' || source === 'line_generated' || source === 'video_profile' || source === 'referral_placeholder') return false;
+    return cardOwnerForQuota(card) === userId;
+  }
+
+  function cardCreatedAt(card) {
+    return card?.createdAt || card?.created_at || card?.['建立時間'] || card?.updatedAt || card?.updated_at || card?.['更新時間'] || '';
+  }
+
+  function taipeiDayKey(value) {
+    var date = value ? new Date(String(value).replace(' ', 'T')) : new Date();
+    if (Number.isNaN(date.getTime())) return '';
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).format(date);
+    } catch (e) {
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    }
+  }
+
+  async function loadQuotaCards() {
+    var userId = currentUserId();
+    if (!userId) return [];
+    if (typeof window.loadCardData === 'function') {
+      try { await window.loadCardData({ force: true, render: false }); } catch (e) {}
+    }
+    var source = Array.isArray(window.allCards) ? window.allCards : [];
+    if (typeof window.getVisibleCardsForCurrentUser === 'function') {
+      try { source = window.getVisibleCardsForCurrentUser(source); } catch (e) {}
+    }
+    return source.filter(function (card) { return isQuotaCard(card, userId); });
+  }
+
+  window.getCardUploadQuotaStatus = async function () {
+    var userId = currentUserId();
+    if (!userId) return { allowed: false, code: 'LOGIN_REQUIRED', message: '請先登入後再上傳名片' };
+    if (isUnlimitedRole()) return { allowed: true, unlimited: true, role: currentRole() };
+
+    var settings;
+    try {
+      settings = await getCloudQuota(false);
+    } catch (e) {
+      settings = readLocal();
+    }
+
+    var dailyLimit = limitNumber(settings.cardQuotaFreeDailyLimit);
+    var totalLimit = limitNumber(settings.cardQuotaFreeTotalLimit);
+    if (dailyLimit === null && totalLimit === null) {
+      return { allowed: true, dailyLimit: null, totalLimit: null, dailyUsed: 0, totalUsed: 0 };
+    }
+
+    var cards = await loadQuotaCards();
+    var today = taipeiDayKey();
+    var dailyUsed = cards.filter(function (card) { return taipeiDayKey(cardCreatedAt(card)) === today; }).length;
+    var totalUsed = cards.length;
+
+    if (totalLimit !== null && totalUsed >= totalLimit) {
+      return {
+        allowed: false,
+        code: 'TOTAL_LIMIT_REACHED',
+        message: '免費名片收藏總額度已使用完畢。',
+        dailyLimit: dailyLimit,
+        totalLimit: totalLimit,
+        dailyUsed: dailyUsed,
+        totalUsed: totalUsed
+      };
+    }
+    if (dailyLimit !== null && dailyUsed >= dailyLimit) {
+      return {
+        allowed: false,
+        code: 'DAILY_LIMIT_REACHED',
+        message: '今日免費名片收藏額度已使用完畢，明日即可繼續使用。',
+        dailyLimit: dailyLimit,
+        totalLimit: totalLimit,
+        dailyUsed: dailyUsed,
+        totalUsed: totalUsed
+      };
+    }
+    return {
+      allowed: true,
+      dailyLimit: dailyLimit,
+      totalLimit: totalLimit,
+      dailyUsed: dailyUsed,
+      totalUsed: totalUsed
+    };
+  };
+
+  window.checkCardUploadQuota = async function () {
+    var result = await window.getCardUploadQuotaStatus();
+    if (!result.allowed && window.showToast) window.showToast(result.message || '名片收藏額度已使用完畢', true);
+    return result;
+  };
+
+  function wrapCardUpload() {
+    if (wrappedCropper || typeof window.confirmCrop !== 'function') return;
+    var originalConfirmCrop = window.confirmCrop;
+    window.confirmCrop = async function () {
+      var btn = document.getElementById('btn-confirm-crop');
+      var oldHtml = btn ? btn.innerHTML : '';
+      var oldDisabled = btn ? btn.disabled : false;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px] align-middle">refresh</span> 檢查額度...';
+      }
+      try {
+        var quota = await window.checkCardUploadQuota();
+        if (!quota.allowed) {
+          if (btn) {
+            btn.innerHTML = oldHtml || '確認裁切';
+            btn.disabled = oldDisabled;
+          }
+          return false;
+        }
+      } catch (error) {
+        console.warn('[card quota] preflight failed; keep existing upload behavior', error);
+      }
+      if (btn) {
+        btn.innerHTML = oldHtml || '確認裁切';
+        btn.disabled = oldDisabled;
+      }
+      return originalConfirmCrop.apply(this, arguments);
+    };
+    wrappedCropper = true;
+  }
+
   function wrapExistingSettings() {
-    if (wrapped) return;
+    if (wrappedSettings) return;
     if (typeof window.saveStoreBanner !== 'function' || typeof window.loadStoreBannerSettings !== 'function') return;
-    wrapped = true;
+    wrappedSettings = true;
 
     var originalSave = window.saveStoreBanner;
     window.saveStoreBanner = async function (e) {
@@ -182,12 +363,14 @@
   function boot() {
     injectPanel();
     wrapExistingSettings();
+    wrapCardUpload();
     var tries = 0;
     var timer = setInterval(function () {
       injectPanel();
       wrapExistingSettings();
+      wrapCardUpload();
       tries += 1;
-      if ((wrapped && document.getElementById('card-quota-settings-panel')) || tries > 40) clearInterval(timer);
+      if ((wrappedSettings && wrappedCropper) || tries > 80) clearInterval(timer);
     }, 250);
   }
 
