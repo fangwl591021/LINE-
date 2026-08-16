@@ -1,0 +1,14 @@
+const fs = require('fs');
+const assert = require('assert');
+const html = fs.readFileSync('admin.html', 'utf8');
+assert(html.includes('id=\"nav-card-quota\"'));
+assert(html.includes("switchTab('card-quota')"));
+assert(html.includes('id=\"tab-card-quota\"'));
+assert(html.includes('id=\"admin-card-quota-free-daily\"'));
+assert(html.includes('id=\"admin-card-quota-free-total\"'));
+assert(html.includes("fetchAPI('getStoreSettings'"));
+assert(html.includes("fetchAPI('saveStoreSettings'"));
+assert(html.includes('cardQuotaFreeDailyLimit'));
+assert(html.includes('cardQuotaFreeTotalLimit'));
+assert(html.includes("if (tabId === 'card-quota') loadAdminCardQuotaSettings();"));
+console.log('admin card quota UI contract passed.');

@@ -25,6 +25,7 @@ const foundationChecks = [
   'tools/check-card-customer-switch-contract.js',
   'tools/check-card-fate-tag-pipeline-contract.js',
   'tools/check-card-quota-contract.js',
+  'tools/check-admin-card-quota-contract.js',
   'tools/check-admin-card-quota-ui-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js'
@@ -51,6 +52,7 @@ const fullChecks = [
   'tools/check-card-customer-switch-contract.js',
   'tools/check-card-fate-tag-pipeline-contract.js',
   'tools/check-card-quota-contract.js',
+  'tools/check-admin-card-quota-contract.js',
   'tools/check-admin-card-quota-ui-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js',
