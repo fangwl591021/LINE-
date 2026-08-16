@@ -53,6 +53,40 @@ function quotaNumber(value) {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
 }
 
+function quotaSettingsKey(networkId) {
+  return `CARD_QUOTA_SETTINGS_V1:${text(networkId) || 'admin'}`;
+}
+
+function normalizeQuotaSettings(input) {
+  const raw = input && typeof input === 'object' ? input : {};
+  const normalize = value => {
+    if (value === undefined || value === null || value === '') return '';
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? String(Math.floor(n)) : '';
+  };
+  return {
+    cardQuotaFreeDailyLimit: normalize(raw.cardQuotaFreeDailyLimit),
+    cardQuotaFreeTotalLimit: normalize(raw.cardQuotaFreeTotalLimit),
+    cardQuotaPaidDailyLimit: normalize(raw.cardQuotaPaidDailyLimit),
+    cardQuotaPaidTotalLimit: normalize(raw.cardQuotaPaidTotalLimit)
+  };
+}
+
+async function readQuotaSettingsKv(env, networkId) {
+  if (!env.ACTMASTER_KV) return {};
+  const raw = await env.ACTMASTER_KV.get(quotaSettingsKey(networkId)).catch(() => '');
+  if (!raw) return {};
+  try { return normalizeQuotaSettings(JSON.parse(raw)); } catch { return {}; }
+}
+
+async function writeQuotaSettingsKv(env, networkId, payload) {
+  const normalized = normalizeQuotaSettings(payload);
+  if (env.ACTMASTER_KV) {
+    await env.ACTMASTER_KV.put(quotaSettingsKey(networkId), JSON.stringify(normalized));
+  }
+  return normalized;
+}
+
 function isContactCardCreate(payload, actor) {
   const source = text(payload?.sourceType || payload?.source_type || payload?.['名片來源']).toLowerCase();
   if (['self_profile', 'self_upload', 'line_generated', 'video_profile'].includes(source)) return false;
@@ -64,8 +98,9 @@ function isContactCardCreate(payload, actor) {
 }
 
 async function readLegacyStoreSettings(request, payload, env, ctx, actor) {
+  const networkId = actor?.networkId || payload?.networkId || 'admin';
   const storePayload = {
-    networkId: actor?.networkId || payload?.networkId || 'admin',
+    networkId,
     userId: actor?.userId || payload?.userId || '',
     lineAccessToken: payload?.lineAccessToken || ''
   };
@@ -75,10 +110,13 @@ async function readLegacyStoreSettings(request, payload, env, ctx, actor) {
     body: JSON.stringify({ action: 'getStoreSettings', payload: storePayload })
   });
   const response = await legacyWorker.fetch(synthetic, env, ctx);
-  if (!response?.ok) return {};
-  const body = await response.json().catch(() => ({}));
-  if (body?.data && typeof body.data === 'object') return body.data;
-  return body && typeof body === 'object' ? body : {};
+  let legacy = {};
+  if (response?.ok) {
+    const body = await response.json().catch(() => ({}));
+    legacy = body?.data && typeof body.data === 'object' ? body.data : (body && typeof body === 'object' ? body : {});
+  }
+  const quota = await readQuotaSettingsKv(env, networkId);
+  return { ...legacy, ...quota };
 }
 
 async function cardContactSchema(env) {
@@ -226,6 +264,21 @@ async function enrichExchangeZoneResponse(request, env, action, payload, respons
   return response;
 }
 
+async function enrichStoreSettingsResponse(env, action, payload, response) {
+  if (!response?.ok || !['getStoreSettings', 'saveStoreSettings'].includes(action)) return response;
+  const networkId = text(payload?.networkId) || 'admin';
+  if (action === 'saveStoreSettings') {
+    await writeQuotaSettingsKv(env, networkId, payload);
+  }
+  const quota = await readQuotaSettingsKv(env, networkId);
+  const body = await response.clone().json().catch(() => null);
+  if (!body || typeof body !== 'object') return response;
+  if (body.data && typeof body.data === 'object') {
+    return json({ ...body, data: { ...body.data, ...quota } }, response.status);
+  }
+  return json({ ...body, ...quota }, response.status);
+}
+
 export default {
   async fetch(request, env, ctx) {
     let postBody = null;
@@ -265,10 +318,12 @@ export default {
     let response = await legacyWorker.fetch(request, env, ctx);
     if (request.method === 'POST') {
       const action = text(postBody?.action);
-      response = await enrichExchangeZoneResponse(request, env, action, postBody?.payload || {}, response);
+      const payload = postBody?.payload || {};
+      response = await enrichStoreSettingsResponse(env, action, payload, response);
+      response = await enrichExchangeZoneResponse(request, env, action, payload, response);
       if ((action === 'saveCard' || action === 'updateCard') && response.ok) {
         const result = await response.clone().json().catch(() => null);
-        const rowId = text(result?.data?.rowId || result?.rowId || postBody?.payload?.rowId || postBody?.payload?.row_id);
+        const rowId = text(result?.data?.rowId || result?.rowId || payload?.rowId || payload?.row_id);
         if (rowId) {
           const enqueue = CardFateTagAnalysisModule.enqueueCard(rowId, env).catch(error => {
             console.error('card fate tag enqueue failed', text(error?.message) || 'UNKNOWN');
