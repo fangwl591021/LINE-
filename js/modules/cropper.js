@@ -169,6 +169,7 @@ window.cancelCrop = function() {
   cropperOutputRatioState.default = 'free';
   const img = document.getElementById('cropper-image');
   if (img) img.src = '';
+  if (typeof window.clearPendingCollectedCardOcr === 'function') window.clearPendingCollectedCardOcr();
 };
 
 function parseMaybeJson(value) {
@@ -570,48 +571,153 @@ function hideCardOcrProgress(doneMessage) {
   }, doneMessage ? 500 : 0);
 }
 
-window.openCropper = function(input) {
-  const file = input.files[0];
-  if (!file) return;
-  cropperOutputRatioState.default = 'free';
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    window.lastCardUploadImage = e.target.result;
-    const modal = document.getElementById('cropper-modal');
-    const img = document.getElementById('cropper-image');
-
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-
-    img.onload = () => {
-      const confirmBtn = document.getElementById('btn-confirm-crop');
-      if (confirmBtn) {
-        confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
-        confirmBtn.innerHTML = '確認裁切';
-        confirmBtn.disabled = false;
-      }
-
-      if (cropperInstance) cropperInstance.destroy();
-      setTimeout(() => {
-        try {
-          cropperInstance = createSafeCropper(img, NaN);
-        } catch (err) {
-          console.error('[openCropper] Cropper init failed:', err);
-          cropperInstance = null;
-          window.showToast('裁切器載入失敗，可直接按確認進行辨識', true);
-        }
-      }, 150);
-    };
-
-    img.src = e.target.result;
-    input.value = '';
-  };
-  reader.readAsDataURL(file);
+let pendingCollectedCardOcr = null;
+window.clearPendingCollectedCardOcr = function() {
+  pendingCollectedCardOcr = null;
 };
 
-window.recognizeCard = function(input) {
-  return window.openCropper(input);
+function extractOcrLocalization(ocrRes) {
+  return ocrRes?.localization || ocrRes?.data?.localization || ocrRes?.cardLocalization || ocrRes?.data?.cardLocalization || null;
+}
+
+function collectedCardClippedEdgesText(edges) {
+  const labels = { left: '左側', right: '右側', top: '上方', bottom: '下方' };
+  return (Array.isArray(edges) ? edges : []).map(edge => labels[edge] || edge).filter(Boolean).join('、');
+}
+
+function applyCollectedCardImage(cardData, imageUrl) {
+  if (!imageUrl) return cardData;
+  cardData['名片圖檔'] = imageUrl;
+  let config = parseMaybeJson(cardData['自訂名片設定']);
+  if (!config || typeof config !== 'object' || Array.isArray(config)) config = {};
+  config.imgUrl = imageUrl;
+  config.imgUrlLandscape = imageUrl;
+  config.isPrivate = true;
+  cardData['自訂名片設定'] = JSON.stringify(config);
+  return cardData;
+}
+
+async function uploadCollectedCardCrop(base64Image) {
+  if (!base64Image) return '';
+  setCardOcrProgressStage(82, '正在儲存 AI 裁切後的名片圖片...');
+  const uploadRes = await window.fetchAPI('uploadImageToR2', { base64Image }, true);
+  const url = uploadRes?.url || uploadRes?.data?.url || '';
+  if (!url) throw new Error(uploadRes?.error || '裁切後名片圖片儲存失敗');
+  return url;
+}
+
+async function saveCollectedCardFromOcr(ocrRes, processedImageDataUrl, mode) {
+  const cardData = normalizeOcrCardData(ocrRes);
+  if (!hasOcrContent(cardData)) {
+    console.warn('[saveCollectedCardFromOcr] OCR returned no usable card fields:', ocrRes);
+    throw new Error('AI 有回應，但沒有辨識到姓名、公司或聯絡資料，請換一張更清楚的名片照片');
+  }
+  if (processedImageDataUrl) {
+    const processedUrl = await uploadCollectedCardCrop(processedImageDataUrl);
+    applyCollectedCardImage(cardData, processedUrl);
+  }
+
+  const cardPayload = {
+    ...cardData,
+    userId: '',
+    creatorId: window.currentUserProfile?.userId || '',
+    '建檔者ID': window.currentUserProfile?.userId || '',
+    '建檔人/備註': '掃描建立 by ' + (window.currentUser?.name || '')
+  };
+  setCardOcrProgressStage(90, '正在產生電子名片並寫入收藏...');
+  const pointBalanceBeforeSave = readCurrentPointBalance();
+  const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
+  if (!saveRes || !saveRes.rowId) throw new Error(saveRes?.error || '儲存失敗');
+
+  const savedCard = putSavedCardOnTop(saveRes, cardPayload);
+  const awardedPoints = getCardAwardedPoints(saveRes);
+  hideCardOcrProgress(mode === 'manual' ? '人工校正與名片建立完成' : 'AI 裁切、辨識與名片建立完成');
+  window.showToast(describeCardSaveResult(saveRes, '客戶名片建立成功'));
+  if (awardedPoints > 0) showPointAwardCelebration(awardedPoints);
+  else showAwardFromBalanceChange(pointBalanceBeforeSave);
+  refreshPointsAfterCardSave();
+  if (typeof window.goPage === 'function') window.goPage('card');
+  refreshCardsAfterSave(savedCard);
+  return savedCard;
+}
+
+function openCollectedCardCropperFromDataUrl(dataUrl, pendingOcr) {
+  cropperOutputRatioState.default = 'free';
+  pendingCollectedCardOcr = pendingOcr || null;
+  window.lastCardUploadImage = dataUrl;
+  const modal = document.getElementById('cropper-modal');
+  const img = document.getElementById('cropper-image');
+  if (!modal || !img) throw new Error('找不到名片裁切器');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  img.onload = () => {
+    const confirmBtn = document.getElementById('btn-confirm-crop');
+    if (confirmBtn) {
+      confirmBtn.setAttribute('onclick', 'window.confirmCrop()');
+      confirmBtn.innerHTML = pendingCollectedCardOcr ? '確認人工裁切並建立名片' : '確認裁切';
+      confirmBtn.disabled = false;
+    }
+    if (cropperInstance) cropperInstance.destroy();
+    setTimeout(() => {
+      try {
+        cropperInstance = createSafeCropper(img, NaN);
+      } catch (err) {
+        console.error('[openCropper] Cropper init failed:', err);
+        cropperInstance = null;
+        window.showToast('裁切器載入失敗，請重新選擇照片', true);
+      }
+    }, 150);
+  };
+  img.src = dataUrl;
+}
+
+window.openCropper = function(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = event => openCollectedCardCropperFromDataUrl(String(event.target?.result || ''), null);
+  reader.onerror = () => window.showToast('名片圖片讀取失敗', true);
+  reader.readAsDataURL(file);
+  input.value = '';
+};
+
+window.recognizeCard = async function(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  input.value = '';
+  pendingCollectedCardOcr = null;
+  showCardOcrProgress('AI 名片智慧建立中');
+  try {
+    if (!window.cardVisionCrop || typeof window.cardVisionCrop.normalizeInput !== 'function') {
+      throw new Error('AI 名片裁切模組尚未載入，請重新整理後再試');
+    }
+    setCardOcrProgressStage(10, '正在正規化照片解析度...');
+    const workingImage = await window.cardVisionCrop.normalizeInput(file, { maxSide: 2200, maxChars: 1800000 });
+    window.lastCardUploadImage = workingImage;
+    setCardOcrProgressStage(25, 'AI 正在同時辨識文字與名片外框...');
+    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image: workingImage, deferImageUpload: true }, true);
+    if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
+    const cardData = normalizeOcrCardData(ocrRes);
+    if (!hasOcrContent(cardData)) throw new Error('AI 沒有辨識到可用的名片資料，請換一張更清楚的照片');
+    const localization = window.cardVisionCrop.normalizeLocalization(extractOcrLocalization(ocrRes));
+    if (localization.incomplete) {
+      const clipped = collectedCardClippedEdgesText(localization.clippedEdges);
+      throw new Error('名片未完整入鏡' + (clipped ? '（缺少：' + clipped + '）' : '') + '，請稍微拉遠重新拍攝');
+    }
+    setCardOcrProgressStage(68, 'OCR 完成，正在自動分離並拉正名片...');
+    const cropResult = await window.cardVisionCrop.cropDataUrl(workingImage, localization, { maxSide: 2200, maxChars: 900000 });
+    if (!cropResult) {
+      hideCardOcrProgress();
+      openCollectedCardCropperFromDataUrl(workingImage, ocrRes);
+      window.showToast('AI 已完成文字辨識；外框定位信心不足，請手動微調一次', true);
+      return;
+    }
+    console.log('[recognizeCard] one-pass OCR and crop:', cropResult.method, localization.cropConfidence);
+    await saveCollectedCardFromOcr(ocrRes, cropResult.dataUrl, 'auto');
+  } catch (err) {
+    hideCardOcrProgress();
+    window.showToast(err.message || '名片建立失敗', true);
+  }
 };
 
 window.confirmCrop = async function() {
@@ -638,47 +744,18 @@ window.confirmCrop = async function() {
     return window.showToast('找不到可辨識的圖片，請重新選擇照片', true);
   }
 
+  const cachedOcr = pendingCollectedCardOcr;
   window.cancelCrop();
-  showCardOcrProgress('客戶名片建立中');
-  window.showToast('AI 正在辨識客戶名片...');
+  showCardOcrProgress(cachedOcr ? '人工裁切結果儲存中' : '客戶名片建立中');
+  window.showToast(cachedOcr ? '正在儲存裁切後的名片...' : 'AI 正在辨識客戶名片...');
 
   try {
-    setCardOcrProgressStage(18, '正在上傳照片並送入 OCR...');
-    const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
+    setCardOcrProgressStage(18, cachedOcr ? '沿用剛才的 OCR，不重複呼叫 AI...' : '正在上傳照片並送入 OCR...');
+    const ocrRes = cachedOcr || await window.fetchAPI('recognizeCardWithGPT4o', { base64Image }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
     console.log('[confirmCrop] OCR result:', ocrRes);
     setCardOcrProgressStage(72, 'OCR 完成，正在整理名片欄位...');
-
-    const cardData = normalizeOcrCardData(ocrRes);
-    if (!hasOcrContent(cardData)) {
-      console.warn('[confirmCrop] OCR returned no usable card fields:', ocrRes);
-      throw new Error('AI 有回應，但沒有辨識到姓名、公司或聯絡資料，請換一張更清楚的名片照片');
-    }
-
-    const cardPayload = {
-      ...cardData,
-      userId: '',
-      creatorId: window.currentUserProfile?.userId || '',
-      '建檔者ID': window.currentUserProfile?.userId || '',
-      '建檔人/備註': '掃描建立 by ' + (currentUser?.name || '')
-    };
-
-    setCardOcrProgressStage(86, '正在產生名片並寫入資料庫...');
-    const pointBalanceBeforeSave = readCurrentPointBalance();
-    const saveRes = await window.fetchAPI('saveCard', cardPayload, true);
-    if (saveRes && saveRes.rowId) {
-      const savedCard = putSavedCardOnTop(saveRes, cardPayload);
-      const awardedPoints = getCardAwardedPoints(saveRes);
-      hideCardOcrProgress('名片建立完成');
-      window.showToast(describeCardSaveResult(saveRes, '客戶名片建立成功'));
-      if (awardedPoints > 0) showPointAwardCelebration(awardedPoints);
-      else showAwardFromBalanceChange(pointBalanceBeforeSave);
-      refreshPointsAfterCardSave();
-      if (typeof window.goPage === 'function') window.goPage('card');
-      refreshCardsAfterSave(savedCard);
-    } else {
-      throw new Error('儲存失敗');
-    }
+    await saveCollectedCardFromOcr(ocrRes, cachedOcr ? base64Image : '', cachedOcr ? 'manual' : 'legacy');
   } catch (err) {
     hideCardOcrProgress();
     window.showToast(err.message, true);
