@@ -1,0 +1,39 @@
+name: Apply A-kaffit Recognize Backend Port
+
+on:
+  push:
+    branches:
+      - agent/a-kaffit-recognize-backend-port
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/a-kaffit-recognize-backend-port
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply target wiring
+        run: node tools/apply-a-kaffit-recognize-backend-port.js
+      - name: Verify A-kaffit recognize parity
+        run: node tools/check-a-kaffit-recognize-backend-port.js
+      - name: Run LINE smoke contracts
+        run: npm run smoke
+      - name: Commit generated wiring
+        run: |
+          if git diff --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker-entry.mjs js/modules/a-kaffit-card-scanner-adapter.js
+          git commit -m "feat: activate A-kaffit recognize backend"
+          git push origin HEAD:agent/a-kaffit-recognize-backend-port
