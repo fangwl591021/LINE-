@@ -28,19 +28,19 @@ const adapter = fs.readFileSync(path.join(root, 'js/modules/a-kaffit-card-scanne
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 
 const checks = [
-  [gate.includes("scanBusinessCardImage(file)"), 'gate uses A-kaffit local scanner before OCR'],
+  [gate.includes("scanBusinessCardImage(file)"), 'A-kaffit local gate remains available as fallback runtime'],
   [gate.includes("CARD_RETAKE_REQUIRED"), 'retake gate preserved'],
   [gate.includes("manualCrop(file,reason)"), 'manual crop fallback preserved'],
-  [gate.includes("沒有使用 AI 裁切"), 'manual crop remains local-only'],
-  [runtime.includes("chooseCandidate(analysisImage)"), 'multi-detector candidate selection preserved'],
-  [runtime.includes("consensus.approved"), 'detector consensus gate preserved'],
+  [runtime.includes("chooseCandidate(analysisImage)"), 'multi-detector local fallback preserved'],
   [runtime.includes("warpPerspective"), 'perspective correction preserved'],
   [resolution.includes("workingLongEdge:2200"), 'A-kaffit working resolution preserved'],
   [resolution.includes("analysisLongEdge:1280"), 'A-kaffit analysis resolution preserved'],
-  [adapter.includes("processBusinessCardImage(file)"), 'LINE entry calls verbatim A-kaffit gate'],
-  [adapter.includes("base64Image: processedDataUrl"), 'OCR receives only A-kaffit processed image'],
-  [!adapter.includes('cardVisionCrop'), 'LINE adapter does not use old custom bounding-box crop logic'],
-  [html.includes('<script type="module" src="js/modules/a-kaffit-card-scanner-adapter.js?v=1.0"></script>'), 'A-kaffit adapter is loaded by LINE page']
+  [adapter.includes("AI 正在同一次完成 OCR 與名片四角定位"), 'LINE entry uses one Vision call for OCR and localization'],
+  [adapter.includes("extractLocalization(ocrRes)"), 'LINE entry consumes localization from the same OCR response'],
+  [adapter.includes("window.cardVisionCrop.cropDataUrl(workingImage, localization"), 'LINE entry crops only after Vision localization'],
+  [adapter.includes("openCollectedCardCropperFromDataUrl')(workingImage, ocrRes)"), 'low-confidence manual fallback reuses completed OCR'],
+  [!adapter.includes("processBusinessCardImage(file)"), 'local V2 gate is not the primary LINE entry'],
+  [html.includes('<script type="module" src="js/modules/a-kaffit-card-scanner-adapter.js?v=1.0"></script>'), 'A-kaffit Vision V3 adapter is loaded by LINE page']
 ];
 
 for (const [ok, label] of checks) {
@@ -51,4 +51,4 @@ for (const [ok, label] of checks) {
   console.log(`OK ${label}`);
 }
 
-console.log('A-kaffit card scanner port contract passed.');
+console.log('A-kaffit Vision V3 primary-flow contract passed.');

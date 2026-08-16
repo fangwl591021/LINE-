@@ -1,5 +1,3 @@
-import { processBusinessCardImage } from './a-kaffit-card-scanner/card-scanner-v2-gate.js';
-
 function installManualCropStyles() {
   if (document.getElementById('a-kaffit-card-scanner-styles')) return;
   const style = document.createElement('style');
@@ -7,29 +5,8 @@ function installManualCropStyles() {
   style.textContent = `
     .card-cropper-modal{display:none;position:fixed;inset:0;z-index:12000;background:rgba(2,6,23,.72);backdrop-filter:blur(5px);padding:16px;align-items:center;justify-content:center}
     .card-cropper-modal.open{display:flex}
-    .card-cropper-sheet{width:min(100%,520px);max-height:92vh;overflow:auto;background:#fff;border-radius:24px;padding:16px;box-shadow:0 24px 80px rgba(0,0,0,.32)}
-    .card-cropper-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;font-size:18px;font-weight:900;color:#0f172a}
-    .card-cropper-head button{border:0;background:#f1f5f9;border-radius:999px;width:38px;height:38px;font-size:24px;line-height:1;color:#334155}
-    .card-cropper-stage{height:min(58vh,560px);background:#0f172a;border-radius:16px;overflow:hidden}
-    .card-cropper-stage img{display:block;max-width:100%;max-height:100%}
-    .card-cropper-tools,.card-cropper-actions{display:grid;gap:8px;margin-top:12px}
-    .card-cropper-tools{grid-template-columns:repeat(4,minmax(0,1fr))}
-    .card-cropper-actions{grid-template-columns:1fr 2fr}
-    .card-cropper-tools button,.card-cropper-actions button{min-height:46px;border:0;border-radius:14px;font-weight:900}
-    .card-cropper-tools button{background:#f1f5f9;color:#0f172a}
-    .card-cropper-actions .btn{background:#06c755;color:#fff}
-    .card-cropper-actions .btn.alt{background:#e2e8f0;color:#0f172a}
   `;
   document.head.appendChild(style);
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('名片圖片讀取失敗'));
-    reader.readAsDataURL(file);
-  });
 }
 
 function globalFn(name) {
@@ -38,11 +15,15 @@ function globalFn(name) {
   return fn;
 }
 
+function extractLocalization(ocrRes) {
+  return ocrRes?.localization || ocrRes?.data?.localization || ocrRes?.cardLocalization || ocrRes?.data?.cardLocalization || null;
+}
+
 installManualCropStyles();
 window.__A_KAFFIT_CARD_SCANNER_PORT__ = true;
-window.__A_KAFFIT_PROCESS_BUSINESS_CARD_IMAGE__ = processBusinessCardImage;
+window.__A_KAFFIT_VISION_V3_PRIMARY__ = true;
 
-window.recognizeCard = async function recognizeCardWithAkaffitScanner(input) {
+window.recognizeCard = async function recognizeCardWithAkaffitVisionV3(input) {
   const file = input?.files?.[0];
   if (!file) return;
   input.value = '';
@@ -50,38 +31,55 @@ window.recognizeCard = async function recognizeCardWithAkaffitScanner(input) {
   const showProgress = globalFn('showCardOcrProgress');
   const stage = globalFn('setCardOcrProgressStage');
   const hideProgress = globalFn('hideCardOcrProgress');
+  const normalizeOcrCardData = globalFn('normalizeOcrCardData');
+  const hasOcrContent = globalFn('hasOcrContent');
+  const saveCollectedCardFromOcr = globalFn('saveCollectedCardFromOcr');
 
-  showProgress('A-kaffit 名片智慧建立中');
+  showProgress('A-kaffit Vision V3 名片智慧建立中');
   try {
-    stage(8, '正在使用 A-kaffit 掃描器檢查名片四邊與畫質...');
+    if (!window.cardVisionCrop || typeof window.cardVisionCrop.normalizeInput !== 'function' || typeof window.cardVisionCrop.cropDataUrl !== 'function') {
+      throw new Error('A-kaffit Vision V3 裁切模組尚未載入');
+    }
 
-    const processed = await processBusinessCardImage(file);
-    if (!processed?.file) throw new Error('A-kaffit 名片掃描未產生可用圖片');
+    stage(10, '正在正規化照片解析度...');
+    const workingImage = await window.cardVisionCrop.normalizeInput(file, { maxSide: 2200, maxChars: 1800000 });
+    window.lastCardUploadImage = workingImage;
 
-    stage(38, processed?.metadata?.processing?.manualCorrection
-      ? '人工裁切完成，準備進行一次 OCR...'
-      : 'A-kaffit 已完成名片分離與透視校正，準備進行一次 OCR...');
-
-    const processedDataUrl = await fileToDataUrl(processed.file);
-    window.lastCardUploadImage = processedDataUrl;
-
+    stage(28, 'AI 正在同一次完成 OCR 與名片四角定位...');
     const ocrRes = await window.fetchAPI('recognizeCardWithGPT4o', {
-      base64Image: processedDataUrl,
+      base64Image: workingImage,
       deferImageUpload: true
     }, true);
     if (!ocrRes || ocrRes.error) throw new Error(ocrRes?.error || 'AI 辨識失敗');
 
-    const cardData = globalFn('normalizeOcrCardData')(ocrRes);
-    if (!globalFn('hasOcrContent')(cardData)) {
+    const cardData = normalizeOcrCardData(ocrRes);
+    if (!hasOcrContent(cardData)) {
       throw new Error('AI 沒有辨識到可用的名片資料，請換一張更清楚的照片');
     }
 
-    stage(76, 'OCR 完成，正在儲存 A-kaffit 裁切後的名片圖片...');
-    await globalFn('saveCollectedCardFromOcr')(
-      ocrRes,
-      processedDataUrl,
-      processed?.metadata?.processing?.manualCorrection ? 'manual' : 'auto'
-    );
+    const localization = window.cardVisionCrop.normalizeLocalization(extractLocalization(ocrRes));
+    if (localization.incomplete) {
+      const labels = { left: '左側', right: '右側', top: '上方', bottom: '下方' };
+      const clipped = (localization.clippedEdges || []).map(edge => labels[edge] || edge).join('、');
+      throw new Error('名片未完整入鏡' + (clipped ? `（缺少：${clipped}）` : '') + '，請稍微拉遠重新拍攝');
+    }
+
+    stage(68, 'OCR 完成，正在依 AI 四角座標分離並拉正名片...');
+    const cropResult = await window.cardVisionCrop.cropDataUrl(workingImage, localization, {
+      maxSide: 2200,
+      maxChars: 900000
+    });
+
+    if (!cropResult) {
+      hideProgress();
+      globalFn('openCollectedCardCropperFromDataUrl')(workingImage, ocrRes);
+      window.showToast?.('AI 已完成文字辨識；外框信心不足，請只微調名片範圍。確認後不會再次 OCR。', true);
+      return;
+    }
+
+    console.log('[A-kaffit Vision V3] one-pass OCR + crop', cropResult.method, localization.cropConfidence);
+    stage(82, '名片已分離，正在儲存裁切後圖片...');
+    await saveCollectedCardFromOcr(ocrRes, cropResult.dataUrl, 'auto');
   } catch (error) {
     hideProgress();
     window.showToast?.(error?.message || '名片建立失敗', true);
