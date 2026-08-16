@@ -48,3 +48,35 @@ test('builds stable perspective coefficients for a rectangular card', () => {
 test('keeps A-kaffit conservative automatic crop threshold', () => {
   assert.equal(vision.AUTO_CROP_CONFIDENCE, 0.72);
 });
+
+test('converts AI bounding box into a preframed manual crop rectangle', () => {
+  const data = vision.manualCropData({
+    detected: true,
+    incomplete: false,
+    cropConfidence: 0.58,
+    boundingBox: { x: 0.08, y: 0.2, width: 0.84, height: 0.42 }
+  }, 1000, 1600, 0.02);
+
+  assert.ok(data);
+  assert.ok(data.x < 80);
+  assert.ok(data.y < 320);
+  assert.ok(data.width > 840);
+  assert.ok(data.height > 672);
+  assert.equal(data.rotate, 0);
+  assert.equal(data.scaleX, 1);
+  assert.equal(data.scaleY, 1);
+});
+
+test('does not preframe incomplete or implausibly small localization', () => {
+  assert.equal(vision.manualCropData({
+    detected: true,
+    incomplete: true,
+    boundingBox: { x: 0.1, y: 0.1, width: 0.8, height: 0.4 }
+  }, 1000, 1000), null);
+
+  assert.equal(vision.manualCropData({
+    detected: true,
+    incomplete: false,
+    boundingBox: { x: 0.1, y: 0.1, width: 0.02, height: 0.02 }
+  }, 1000, 1000), null);
+});
