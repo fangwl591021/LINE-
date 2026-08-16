@@ -6,6 +6,7 @@
   'use strict';
 
   const AUTO_CROP_CONFIDENCE = 0.72;
+  const MANUAL_HINT_TTL_MS = 10000;
 
   function clamp01(value) {
     return Math.max(0, Math.min(1, Number(value) || 0));
@@ -125,6 +126,108 @@
     return output;
   }
 
+  function manualCropData(rawLocalization, imageWidth, imageHeight, paddingRatio) {
+    const localization = normalizeLocalization(rawLocalization);
+    const width = Math.max(0, Number(imageWidth) || 0);
+    const height = Math.max(0, Number(imageHeight) || 0);
+    const box = localization.boundingBox;
+    if (!localization.detected || localization.incomplete || width <= 0 || height <= 0) return null;
+    if (box.width < 0.08 || box.height < 0.05) return null;
+
+    const padding = Math.max(0, Math.min(0.08, Number(paddingRatio ?? 0.015) || 0));
+    const padX = box.width * padding;
+    const padY = box.height * padding;
+    const left = Math.max(0, box.x - padX);
+    const top = Math.max(0, box.y - padY);
+    const right = Math.min(1, box.x + box.width + padX);
+    const bottom = Math.min(1, box.y + box.height + padY);
+    const cropWidth = Math.max(0, (right - left) * width);
+    const cropHeight = Math.max(0, (bottom - top) * height);
+    if (cropWidth < 80 || cropHeight < 50) return null;
+
+    return {
+      x: left * width,
+      y: top * height,
+      width: cropWidth,
+      height: cropHeight,
+      rotate: 0,
+      scaleX: 1,
+      scaleY: 1
+    };
+  }
+
+  function clearManualCropHint() {
+    if (typeof globalThis !== 'undefined') globalThis.__cardVisionManualCropHint = null;
+  }
+
+  function rememberManualCropHint(localization) {
+    if (typeof globalThis === 'undefined') return;
+    const normalized = normalizeLocalization(localization);
+    const box = normalized.boundingBox;
+    if (!normalized.detected || normalized.incomplete || box.width < 0.08 || box.height < 0.05) {
+      clearManualCropHint();
+      return;
+    }
+    globalThis.__cardVisionManualCropHint = {
+      localization: normalized,
+      expiresAt: Date.now() + MANUAL_HINT_TTL_MS
+    };
+  }
+
+  function consumeManualCropHint() {
+    if (typeof globalThis === 'undefined') return null;
+    const hint = globalThis.__cardVisionManualCropHint;
+    globalThis.__cardVisionManualCropHint = null;
+    if (!hint || Number(hint.expiresAt || 0) < Date.now()) return null;
+    return hint.localization || null;
+  }
+
+  function installCropperHintBridge(attempt) {
+    if (typeof window === 'undefined') return;
+    const tries = Number(attempt) || 0;
+    const OriginalCropper = window.Cropper;
+    if (typeof OriginalCropper !== 'function') {
+      if (tries < 20) setTimeout(() => installCropperHintBridge(tries + 1), 100);
+      return;
+    }
+    if (OriginalCropper.__cardVisionHintAware === true) return;
+
+    function HintAwareCropper(element, options) {
+      const instance = new OriginalCropper(element, options);
+      if (element && element.id === 'cropper-image') {
+        const hint = consumeManualCropHint();
+        if (hint) {
+          const applyHint = (retry) => {
+            const cropData = manualCropData(hint, element.naturalWidth || element.width, element.naturalHeight || element.height, 0.02);
+            if (!cropData) return;
+            try {
+              instance.setData(cropData);
+            } catch (error) {
+              if ((Number(retry) || 0) < 6) {
+                setTimeout(() => applyHint((Number(retry) || 0) + 1), 100);
+              } else {
+                console.warn('[cardVisionCrop] failed to apply AI manual crop hint:', error);
+              }
+            }
+          };
+          setTimeout(() => applyHint(0), 180);
+        }
+      }
+      return instance;
+    }
+
+    HintAwareCropper.prototype = OriginalCropper.prototype;
+    Object.getOwnPropertyNames(OriginalCropper).forEach((key) => {
+      if (['prototype', 'name', 'length'].includes(key)) return;
+      try {
+        Object.defineProperty(HintAwareCropper, key, Object.getOwnPropertyDescriptor(OriginalCropper, key));
+      } catch {}
+    });
+    Object.defineProperty(HintAwareCropper, '__cardVisionHintAware', { value: true });
+    Object.defineProperty(HintAwareCropper, '__cardVisionOriginalCropper', { value: OriginalCropper });
+    window.Cropper = HintAwareCropper;
+  }
+
   function imageFromDataUrl(dataUrl) {
     return new Promise((resolve, reject) => {
       const image = new Image();
@@ -166,7 +269,16 @@
 
   async function cropDataUrl(dataUrl, rawLocalization, options) {
     const localization = normalizeLocalization(rawLocalization);
-    if (!localization.detected || localization.incomplete || localization.cropConfidence < AUTO_CROP_CONFIDENCE) return null;
+    if (!localization.detected || localization.incomplete) {
+      clearManualCropHint();
+      return null;
+    }
+    if (localization.cropConfidence < AUTO_CROP_CONFIDENCE) {
+      rememberManualCropHint(localization);
+      return null;
+    }
+    clearManualCropHint();
+
     const settings = options || {};
     const image = await imageFromDataUrl(dataUrl);
     const maxSide = Number(settings.maxSide) || 2200;
@@ -242,9 +354,12 @@
     };
   }
 
+  if (typeof window !== 'undefined') installCropperHintBridge(0);
+
   return {
     AUTO_CROP_CONFIDENCE,
     normalizeLocalization,
+    manualCropData,
     normalizeInput,
     orderQuad,
     perspectiveCoefficients,
