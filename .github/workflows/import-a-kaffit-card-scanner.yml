@@ -1,0 +1,78 @@
+name: Import A-kaffit Card Scanner
+
+on:
+  push:
+    branches:
+      - agent/a-kaffit-card-scanner-port
+    paths:
+      - .github/workflows/import-a-kaffit-card-scanner.yml
+      - tools/check-a-kaffit-card-scanner-port.js
+      - tools/apply-a-kaffit-card-scanner-port.js
+      - js/modules/a-kaffit-card-scanner-adapter.js
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout LINE target
+        uses: actions/checkout@v4
+        with:
+          ref: agent/a-kaffit-card-scanner-port
+          fetch-depth: 0
+
+      - name: Checkout A-kaffit source
+        uses: actions/checkout@v4
+        with:
+          repository: fangwl591021/A-kaffit-team
+          ref: main
+          path: .source-a-kaffit
+          fetch-depth: 1
+
+      - name: Copy scanner runtime 1:1
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p js/modules/a-kaffit-card-scanner
+          for file in \
+            card-scanner-v2.js \
+            card-scanner-v2-runtime.js \
+            card-scanner-v2-resolution.js \
+            card-scanner-v2-border-fallback.js \
+            card-scanner-v2-text-guided.js \
+            card-scanner-v2-gate.js \
+            card-scanner-v2-upload.js
+          do
+            cp ".source-a-kaffit/public/$file" "js/modules/a-kaffit-card-scanner/$file"
+            cmp ".source-a-kaffit/public/$file" "js/modules/a-kaffit-card-scanner/$file"
+          done
+
+      - name: Record source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_SHA=$(git -C .source-a-kaffit rev-parse HEAD)
+          printf '%s\n' "$SOURCE_SHA" > js/modules/a-kaffit-card-scanner/SOURCE_COMMIT.txt
+
+      - name: Wire LINE adapter
+        run: node tools/apply-a-kaffit-card-scanner-port.js
+
+      - name: Validate imported scanner and LINE wiring
+        run: node tools/check-a-kaffit-card-scanner-port.js
+
+      - name: Commit imported runtime and wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .source-a-kaffit
+          if git diff --quiet -- js/modules/a-kaffit-card-scanner index.html; then
+            echo "A-kaffit scanner and wiring already match"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/a-kaffit-card-scanner index.html
+          git commit -m "feat: activate verbatim A-kaffit card scanner"
+          git push origin HEAD:agent/a-kaffit-card-scanner-port
