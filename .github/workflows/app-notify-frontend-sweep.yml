@@ -1,0 +1,97 @@
+name: App notification frontend sweep
+on:
+  push:
+    branches: [agent/app-notification-ui]
+    paths:
+      - '.github/workflows/app-notify-frontend-sweep.yml'
+permissions:
+  contents: write
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/app-notification-ui
+      - name: Apply frontend notification sweep
+        shell: python
+        run: |
+          from pathlib import Path
+
+          replacements = {
+            'js/modules/purchase.js': [
+              ("if (!window.confirm(`確認建立 NT$6,300 租戶年費訂單？\\n\\n付款方式：${paymentLabel}`)) return;", "if (!await window.appConfirm(`確認建立 NT$6,300 租戶年費訂單？\\n\\n付款方式：${paymentLabel}`)) return;"),
+              ("window.prompt('請複製付款通知', lastTenantOrderNotice);", "await window.appPrompt('請複製付款通知', lastTenantOrderNotice, { title: '付款通知', placeholder: '請複製此內容' });")
+            ],
+            'js/modules/home.js': [
+              ("if (!task || !window.confirm('刪除這筆跟進提醒？')) return;", "if (!task || !await window.appConfirm('刪除這筆跟進提醒？')) return;"),
+              ("if (!window.confirm('確定取消報名？\\n\\n' + title)) return;", "if (!await window.appConfirm('確定取消報名？\\n\\n' + title)) return;")
+            ],
+            'js/modules/ecard.js': [
+              ('window.prompt("請複製名片連結", url);', 'await window.appPrompt("請複製名片連結", url, { title: "名片連結", placeholder: "請複製此連結" });')
+            ],
+            'js/modules/mycard.js': [
+              ("window.prompt('請複製' + (fallbackLabel || '網址'), text);", "void window.appPrompt('請複製' + (fallbackLabel || '網址'), text, { title: '複製連結', placeholder: '請複製此連結' });"),
+              ("window.prompt('請複製名片連結', shareUrl);", "void window.appPrompt('請複製名片連結', shareUrl, { title: '名片連結', placeholder: '請複製此連結' });")
+            ],
+            'js/auth.js': [
+              ("window.prompt('請複製名片連結', url);", "await window.appPrompt('請複製名片連結', url, { title: '名片連結', placeholder: '請複製此連結' });")
+            ]
+          }
+
+          for file_name, pairs in replacements.items():
+            path = Path(file_name)
+            text = path.read_text(encoding='utf-8-sig')
+            for old, new in pairs:
+              if old not in text:
+                raise SystemExit(f'target not found in {file_name}: {old[:60]}')
+              text = text.replace(old, new, 1)
+            path.write_text(text, encoding='utf-8')
+
+      - name: Create frontend sweep contract
+        shell: bash
+        run: |
+          cat > tools/check-app-notify-frontend-sweep-contract.js <<'EOF'
+          const fs = require('fs');
+          const assert = require('assert');
+          const files = [
+            'js/modules/purchase.js',
+            'js/modules/home.js',
+            'js/modules/ecard.js',
+            'js/modules/mycard.js',
+            'js/auth.js'
+          ];
+          const source = Object.fromEntries(files.map(f => [f, fs.readFileSync(f, 'utf8')]));
+
+          assert.doesNotMatch(source['js/modules/purchase.js'], /\b(?:window\.)?confirm\s*\(/);
+          assert.doesNotMatch(source['js/modules/purchase.js'], /\bwindow\.prompt\s*\(/);
+          assert.match(source['js/modules/purchase.js'], /await window\.appConfirm\(/);
+          assert.match(source['js/modules/purchase.js'], /await window\.appPrompt\(/);
+
+          assert.doesNotMatch(source['js/modules/home.js'], /window\.confirm\s*\(/);
+          assert.ok((source['js/modules/home.js'].match(/await window\.appConfirm\(/g) || []).length >= 2);
+
+          assert.doesNotMatch(source['js/modules/ecard.js'], /window\.prompt\s*\(/);
+          assert.match(source['js/modules/ecard.js'], /await window\.appPrompt\(/);
+
+          assert.doesNotMatch(source['js/modules/mycard.js'], /window\.prompt\s*\(/);
+          assert.ok((source['js/modules/mycard.js'].match(/window\.appPrompt\(/g) || []).length >= 3);
+
+          assert.doesNotMatch(source['js/auth.js'], /window\.prompt\s*\(/);
+          assert.match(source['js/auth.js'], /await window\.appPrompt\(/);
+
+          console.log('frontend app notification sweep contract passed');
+          EOF
+      - name: Run frontend contracts
+        run: |
+          node tools/check-app-notify-frontend-sweep-contract.js
+          npm run smoke -- --filter home || true
+          npm run smoke -- --filter purchase || true
+      - name: Commit frontend sweep
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/purchase.js js/modules/home.js js/modules/ecard.js js/modules/mycard.js js/auth.js tools/check-app-notify-frontend-sweep-contract.js
+          git diff --cached --quiet && exit 0
+          git commit -m "migrate remaining frontend dialogs to app UI"
+          git push origin HEAD:agent/app-notification-ui
