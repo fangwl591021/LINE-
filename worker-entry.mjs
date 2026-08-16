@@ -47,6 +47,111 @@ async function authenticatedActor(request, payload, env) {
   return actorScope(userId, env);
 }
 
+function quotaNumber(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+}
+
+function isContactCardCreate(payload, actor) {
+  const source = text(payload?.sourceType || payload?.source_type || payload?.['名片來源']).toLowerCase();
+  if (['self_profile', 'self_upload', 'line_generated', 'video_profile'].includes(source)) return false;
+  const ownerId = text(payload?.ownerUserId || payload?.owner_user_id || payload?.lineId || payload?.line_id || payload?.['LINE ID']);
+  const explicitUserId = text(payload?.userId);
+  if (ownerId && ownerId === actor?.userId) return false;
+  if (explicitUserId && explicitUserId === actor?.userId) return false;
+  return true;
+}
+
+async function readLegacyStoreSettings(request, payload, env, ctx, actor) {
+  const storePayload = {
+    networkId: actor?.networkId || payload?.networkId || 'admin',
+    userId: actor?.userId || payload?.userId || '',
+    lineAccessToken: payload?.lineAccessToken || ''
+  };
+  const synthetic = new Request(request.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'getStoreSettings', payload: storePayload })
+  });
+  const response = await legacyWorker.fetch(synthetic, env, ctx);
+  if (!response?.ok) return {};
+  const body = await response.json().catch(() => ({}));
+  if (body?.data && typeof body.data === 'object') return body.data;
+  return body && typeof body === 'object' ? body : {};
+}
+
+async function cardContactSchema(env) {
+  const info = await env.ACTMASTER_DB.prepare('PRAGMA table_info(card_contacts)').all();
+  const rows = Array.isArray(info?.results) ? info.results : [];
+  const names = new Set(rows.map(row => text(row.name)).filter(Boolean));
+  const pick = candidates => candidates.find(name => names.has(name)) || '';
+  return {
+    scanner: pick(['scanner_user_id', 'scanner_uid', 'scanned_by', 'scanner_id']),
+    creator: pick(['creator_id', 'created_by', 'creator_user_id']),
+    created: pick(['created_at', 'createdAt', 'create_time', 'created_time']),
+    source: pick(['source_type', 'sourceType', 'source'])
+  };
+}
+
+function quoteColumn(name) {
+  if (!/^[A-Za-z0-9_]+$/.test(name || '')) throw new Error('INVALID_CARD_COLUMN');
+  return `"${name}"`;
+}
+
+async function getCardQuotaUsage(env, actor) {
+  const schema = await cardContactSchema(env);
+  const ownerColumns = [schema.scanner, schema.creator].filter(Boolean);
+  if (!ownerColumns.length) return { totalUsed: 0, dailyUsed: 0, evaluable: false, reason: 'OWNER_COLUMN_MISSING' };
+
+  const identityWhere = ownerColumns.map(column => `${quoteColumn(column)}=?`).join(' OR ');
+  const binds = ownerColumns.map(() => actor.userId);
+  let extraWhere = '';
+  if (schema.source) {
+    extraWhere = ` AND COALESCE(${quoteColumn(schema.source)}, '') NOT IN ('self_profile','self_upload','line_generated','video_profile','referral_placeholder')`;
+  }
+
+  const totalRow = await env.ACTMASTER_DB.prepare(
+    `SELECT COUNT(*) AS count FROM card_contacts WHERE (${identityWhere})${extraWhere}`
+  ).bind(...binds).first();
+  const totalUsed = Number(totalRow?.count || 0);
+
+  let dailyUsed = null;
+  if (schema.created) {
+    const tzStart = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const day = tzStart.toISOString().slice(0, 10);
+    const startUtc = new Date(`${day}T00:00:00+08:00`).toISOString();
+    const endUtc = new Date(new Date(`${day}T00:00:00+08:00`).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const dailyRow = await env.ACTMASTER_DB.prepare(
+      `SELECT COUNT(*) AS count FROM card_contacts WHERE (${identityWhere})${extraWhere} AND ${quoteColumn(schema.created)}>=? AND ${quoteColumn(schema.created)}<?`
+    ).bind(...binds, startUtc, endUtc).first();
+    dailyUsed = Number(dailyRow?.count || 0);
+  }
+  return { totalUsed, dailyUsed, evaluable: true, schema };
+}
+
+async function evaluateCardQuota(request, payload, env, ctx, actor) {
+  const role = text(actor?.role).toLowerCase();
+  if (['admin', 'tenant', 'store'].includes(role)) return { allowed: true, unlimited: true };
+  const settings = await readLegacyStoreSettings(request, payload, env, ctx, actor);
+  const dailyLimit = quotaNumber(settings.cardQuotaFreeDailyLimit);
+  const totalLimit = quotaNumber(settings.cardQuotaFreeTotalLimit);
+  if (dailyLimit === null && totalLimit === null) return { allowed: true, dailyLimit, totalLimit };
+
+  const usage = await getCardQuotaUsage(env, actor);
+  if (!usage.evaluable) {
+    console.warn('card quota could not be evaluated', usage.reason || 'UNKNOWN');
+    return { allowed: true, dailyLimit, totalLimit, quotaWarning: usage.reason || 'NOT_EVALUABLE' };
+  }
+  if (totalLimit !== null && usage.totalUsed >= totalLimit) {
+    return { allowed: false, code: 'CARD_TOTAL_LIMIT_REACHED', error: '免費名片收藏總額度已使用完畢。', dailyLimit, totalLimit, ...usage };
+  }
+  if (dailyLimit !== null && usage.dailyUsed !== null && usage.dailyUsed >= dailyLimit) {
+    return { allowed: false, code: 'CARD_DAILY_LIMIT_REACHED', error: '今日免費名片收藏額度已使用完畢，明日即可繼續使用。', dailyLimit, totalLimit, ...usage };
+  }
+  return { allowed: true, dailyLimit, totalLimit, ...usage };
+}
+
 async function handleTagAction(request, env, action, payload) {
   const userId = await lineUserId(request, payload, env);
   if (!userId) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
@@ -71,9 +176,6 @@ async function handleExchangeCouponAction(request, env, payload) {
   if (!actor) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
   try {
     const result = await ExchangeZoneCouponModule.redeem(payload || {}, env, actor);
-    // Authenticated business outcomes intentionally use HTTP 200 so the shared
-    // fetchAPI layer can surface the precise coupon error (already redeemed,
-    // expired, self-redeem) instead of replacing it with a generic HTTP error.
     return json(result, 200);
   } catch (error) {
     console.error('exchange zone coupon redeem failed', text(error?.message) || 'UNKNOWN');
@@ -131,9 +233,35 @@ export default {
       const copy = request.clone();
       postBody = await copy.json().catch(() => null);
       const action = text(postBody?.action);
-      if (TAG_ACTIONS.has(action)) return await handleTagAction(request, env, action, postBody?.payload || {});
-      if (action === 'redeemExchangeZoneCoupon') return await handleExchangeCouponAction(request, env, postBody?.payload || {});
+      const payload = postBody?.payload || {};
+      if (TAG_ACTIONS.has(action)) return await handleTagAction(request, env, action, payload);
+      if (action === 'redeemExchangeZoneCoupon') return await handleExchangeCouponAction(request, env, payload);
+
+      if (action === 'getCardUploadQuotaStatus') {
+        const actor = await authenticatedActor(request, payload, env);
+        if (!actor) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
+        try {
+          const status = await evaluateCardQuota(request, payload, env, ctx, actor);
+          return json({ success: true, data: status }, 200);
+        } catch (error) {
+          console.error('card quota status failed', text(error?.message) || 'UNKNOWN');
+          return json({ success: false, error: '名片額度讀取失敗' }, 500);
+        }
+      }
+
+      if (action === 'saveCard') {
+        const actor = await authenticatedActor(request, payload, env);
+        if (actor && isContactCardCreate(payload, actor)) {
+          try {
+            const quota = await evaluateCardQuota(request, payload, env, ctx, actor);
+            if (!quota.allowed) return json({ success: false, error: quota.error, code: quota.code, quota }, 200);
+          } catch (error) {
+            console.error('card quota guard failed open', text(error?.message) || 'UNKNOWN');
+          }
+        }
+      }
     }
+
     let response = await legacyWorker.fetch(request, env, ctx);
     if (request.method === 'POST') {
       const action = text(postBody?.action);
