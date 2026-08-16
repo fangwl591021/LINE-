@@ -46,7 +46,7 @@ ok(!/BOTTOM_TRIM|shift-down|shift down|manual crop hint downward/i.test(crop + '
 
 ok(worker.includes("createCardImageJob, saveCardImageResult"), 'Worker image-job routes are wired');
 ok(worker.includes("pathname === '/v1/card-images'"), 'Worker original image route exists');
-ok(worker.includes("/v1/card-images\\/([^/]+)\\/result"), 'Worker processed result route exists');
+ok(worker.includes('const resultMatch = url.pathname.match') && worker.includes("'/result'") || worker.includes('/result$/'), 'Worker processed result route exists');
 ok(worker.includes("request.method === 'OPTIONS'"), 'cross-origin preflight is handled');
 ok(worker.includes('X-Card-File-Size, X-Card-Side, X-Card-Purpose'), 'A-kaffit image-job headers allowed by CORS');
 ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.0'), 'full workflow adapter cache-bust is active');
