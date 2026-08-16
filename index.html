@@ -123,6 +123,10 @@
     body.home-page { background: #fff; }
     body.home-page #app { max-width: 520px; background: #fff; box-shadow: none; }
     body.home-page #top-nav { display: none !important; }
+    body.shared-front-banner-page #top-nav { display: none !important; }
+    body.shared-front-banner-page:not(.home-page) #main { padding-top: 0; }
+    body.shared-front-banner-page:not(.home-page) #home-profile-card { margin-left: -1rem; margin-right: -1rem; }
+    body.home-page.business-home-v2-active #home-profile-card { display: none !important; }
     body.home-page #main { padding: 0 0 104px; width: 100%; max-width: 520px; }
     body.home-page #page-home { padding-bottom: 0; }
     body.home-page .home-profile-v2 { box-shadow: none; }
@@ -1109,10 +1113,7 @@
     </div>
 
     <!-- ==================== 首頁 ==================== -->
-    <div id="page-home" class="hidden space-y-0 animate-in fade-in pb-10">
-      <div id="business-home-v2" class="hidden"></div>
-
-      <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 shadow-sm">
+          <section id="home-profile-card" class="home-profile-v2 mx-0 -mt-1 shadow-sm">
         <div class="grid grid-cols-4 overflow-hidden bg-gradient-to-r from-[#36b86c] via-[#20a95e] to-[#087d4d] text-white">
           <button id="home-profile-avatar-button" type="button" data-home-top-action="profile" onclick="window.handleHomeAvatarClick?.()" aria-label="開啟會員專區" class="home-top-shortcut flex-col gap-1 border-r border-white/25 px-2 text-center">
             <span class="home-profile-avatar-frame relative mx-auto block overflow-hidden border-2 border-white bg-white shadow-md">
@@ -1153,6 +1154,9 @@
         <input id="home-profile-avatar-url" type="hidden">
         <button id="home-profile-role" type="button" onclick="window.openProfileRegistrationPanel?.()" class="hidden">會員註冊</button>
       </section>
+
+    <div id="page-home" class="hidden space-y-0 animate-in fade-in pb-10">
+      <div id="business-home-v2" class="hidden"></div>
       <section id="home-profile-card-legacy" class="hidden">
         <div class="flex items-center justify-between gap-1.5">
           <button type="button" onclick="document.getElementById('home-profile-avatar-file')?.click()" class="relative shrink-0 w-[58px] h-[58px] rounded-full bg-white border-[3px] border-white shadow-lg overflow-hidden active:scale-95 transition-transform">
