@@ -1,0 +1,83 @@
+name: Shared frontend banner
+on:
+  push:
+    branches: [agent/shared-frontend-banner]
+    paths:
+      - '.github/workflows/shared-frontend-banner.yml'
+permissions:
+  contents: write
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/shared-frontend-banner
+      - name: Apply shared banner layout
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          index = Path('index.html')
+          text = index.read_text(encoding='utf-8')
+
+          marker = '<div id="page-home" class="hidden space-y-0 animate-in fade-in pb-10">'
+          if marker not in text:
+              raise SystemExit('page-home marker not found')
+
+          match = re.search(r'\n\s*<section id="home-profile-card"[\s\S]*?</section>\n', text)
+          if not match:
+              raise SystemExit('home-profile-card section not found')
+          banner = match.group(0).strip('\n')
+          text = text[:match.start()] + '\n' + text[match.end():]
+          text = text.replace(marker, banner + '\n\n    ' + marker, 1)
+
+          css_anchor = 'body.home-page #top-nav { display: none !important; }'
+          css_add = '''body.shared-front-banner-page #top-nav { display: none !important; }\n    body.shared-front-banner-page:not(.home-page) #main { padding-top: 0; }\n    body.shared-front-banner-page:not(.home-page) #home-profile-card { margin-left: -1rem; margin-right: -1rem; }\n    body.home-page.business-home-v2-active #home-profile-card { display: none !important; }'''
+          if css_anchor not in text:
+              raise SystemExit('home top-nav css anchor not found')
+          text = text.replace(css_anchor, css_anchor + '\n    ' + css_add, 1)
+          index.write_text(text, encoding='utf-8')
+
+          nav = Path('js/navigation.js')
+          nav_text = nav.read_text(encoding='utf-8')
+          old = """  window.previousPage = window.currentPage || '';\n  window.currentPage = page;\n  document.body.classList.toggle('home-page', page === 'home');\n\n  document.querySelectorAll('[id^=\"page\"]').forEach(el => el.classList.add('hidden'));\n  const targetPage = document.getElementById('page-' + page);\n  if (targetPage) targetPage.classList.remove('hidden');\n"""
+          new = """  window.previousPage = window.currentPage || '';\n  window.currentPage = page;\n  const sharedBannerPages = new Set(['home', 'card', 'customers']);\n  const showSharedBanner = sharedBannerPages.has(page);\n  document.body.classList.toggle('home-page', page === 'home');\n  document.body.classList.toggle('shared-front-banner-page', showSharedBanner);\n\n  document.querySelectorAll('[id^=\"page\"]').forEach(el => el.classList.add('hidden'));\n  const targetPage = document.getElementById('page-' + page);\n  if (targetPage) targetPage.classList.remove('hidden');\n  const sharedBanner = document.getElementById('home-profile-card');\n  if (sharedBanner) sharedBanner.classList.toggle('hidden', !showSharedBanner);\n"""
+          if old not in nav_text:
+              raise SystemExit('navigation goPage anchor not found')
+          nav.write_text(nav_text.replace(old, new, 1), encoding='utf-8')
+
+      - name: Create shared banner contract
+        shell: bash
+        run: |
+          cat > tools/check-shared-frontend-banner-contract.js <<'EOF'
+          const fs = require('fs');
+          const assert = require('assert');
+          const html = fs.readFileSync('index.html', 'utf8');
+          const nav = fs.readFileSync('js/navigation.js', 'utf8');
+
+          const bannerPos = html.indexOf('id="home-profile-card"');
+          const homePos = html.indexOf('id="page-home"');
+          assert.ok(bannerPos >= 0 && homePos >= 0 && bannerPos < homePos, 'shared banner must live outside page-home');
+          assert.strictEqual((html.match(/id="home-profile-card"/g) || []).length, 1, 'banner must remain a single DOM instance');
+          assert.match(nav, /new Set\(\['home', 'card', 'customers'\]\)/);
+          assert.match(nav, /classList\.toggle\('shared-front-banner-page', showSharedBanner\)/);
+          assert.match(nav, /sharedBanner\.classList\.toggle\('hidden', !showSharedBanner\)/);
+          assert.match(html, /body\.shared-front-banner-page #top-nav \{ display: none !important; \}/);
+          assert.match(html, /body\.shared-front-banner-page:not\(\.home-page\) #main \{ padding-top: 0; \}/);
+          assert.match(html, /body\.home-page\.business-home-v2-active #home-profile-card \{ display: none !important; \}/);
+          console.log('shared frontend banner contract passed');
+          EOF
+      - name: Run checks
+        run: |
+          node tools/check-shared-frontend-banner-contract.js
+          npm run smoke
+      - name: Commit shared banner changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/navigation.js tools/check-shared-frontend-banner-contract.js
+          git diff --cached --quiet && exit 0
+          git commit -m "share frontend banner across home card customers"
+          git push origin HEAD:agent/shared-frontend-banner
