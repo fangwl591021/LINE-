@@ -455,6 +455,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">badge</span>
             全站名片庫
           </a>
+          <a href="#" onclick="switchTab('card-quota')" id="nav-card-quota" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">tune</span>
+            名片額度設定
+          </a>
           <a href="#" onclick="switchTab('partners')" id="nav-partners" class="nav-item hidden flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">storefront</span>
             合作店家管理
@@ -754,6 +758,66 @@
             </table>
           </div>
         </div>
+      </div>
+
+      <!-- Tab: Card Quota -->
+      <div id="tab-card-quota" class="tab-content hidden space-y-6">
+        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-5 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-blue-600 text-[26px]">tune</span>
+              <div>
+                <h3 class="text-xl font-black text-slate-900">名片收藏額度設定</h3>
+                <p class="text-sm font-bold text-slate-500 mt-1">一般免費會員適用。留空＝不限制；0＝禁止使用。</p>
+              </div>
+            </div>
+          </div>
+          <div class="p-6 space-y-6">
+            <div class="rounded-2xl border border-blue-100 bg-blue-50/50 p-5">
+              <div class="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <div class="text-base font-black text-slate-900">免費方案</div>
+                  <div class="text-xs font-bold text-slate-500 mt-1">適用 user；admin / tenant / store 維持無限制。</div>
+                </div>
+                <span class="px-3 py-1 rounded-full bg-blue-600 text-white text-xs font-black">啟用中</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="block">
+                  <span class="block text-sm font-black text-slate-700 mb-2">每日上限</span>
+                  <div class="flex items-center gap-2">
+                    <input id="admin-card-quota-free-daily" type="number" min="0" step="1" inputmode="numeric" placeholder="留空＝不限制" class="w-full border border-slate-200 bg-white rounded-xl px-4 py-3 text-base font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400">
+                    <span class="text-sm font-black text-slate-400 whitespace-nowrap">張／日</span>
+                  </div>
+                </label>
+                <label class="block">
+                  <span class="block text-sm font-black text-slate-700 mb-2">個人總上限</span>
+                  <div class="flex items-center gap-2">
+                    <input id="admin-card-quota-free-total" type="number" min="0" step="1" inputmode="numeric" placeholder="留空＝不限制" class="w-full border border-slate-200 bg-white rounded-xl px-4 py-3 text-base font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400">
+                    <span class="text-sm font-black text-slate-400 whitespace-nowrap">張</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5">
+              <div class="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <div class="text-base font-black text-slate-500">收費方案</div>
+                  <div class="text-xs font-bold text-slate-400 mt-1">欄位預留，暫不啟用。</div>
+                </div>
+                <span class="px-3 py-1 rounded-full bg-slate-200 text-slate-500 text-xs font-black">預留・未啟用</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="block"><span class="block text-sm font-black text-slate-400 mb-2">每日上限</span><input type="number" disabled placeholder="尚未設定" class="w-full border border-slate-200 bg-slate-100 rounded-xl px-4 py-3 text-base font-bold text-slate-400 cursor-not-allowed"></label>
+                <label class="block"><span class="block text-sm font-black text-slate-400 mb-2">個人總上限</span><input type="number" disabled placeholder="尚未設定" class="w-full border border-slate-200 bg-slate-100 rounded-xl px-4 py-3 text-base font-bold text-slate-400 cursor-not-allowed"></label>
+              </div>
+            </div>
+            <div id="admin-card-quota-status" class="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-500">尚未載入設定。</div>
+            <div class="flex justify-end gap-3">
+              <button type="button" onclick="loadAdminCardQuotaSettings()" class="px-5 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-black hover:bg-slate-50">重新載入</button>
+              <button id="btn-save-admin-card-quota" type="button" onclick="saveAdminCardQuotaSettings()" class="px-6 py-3 rounded-xl bg-blue-600 text-white text-sm font-black shadow-sm hover:bg-blue-700 active:scale-95 transition-transform flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">save</span> 儲存額度</button>
+            </div>
+          </div>
+        </section>
       </div>
 
       <!-- Tab: Cards -->
@@ -1986,6 +2050,60 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         if (button) button.disabled = false;
       }
     }
+    function adminQuotaValue(value) {
+      if (value === undefined || value === null || value === '') return '';
+      const n = Number(value);
+      return Number.isFinite(n) && n >= 0 ? String(Math.floor(n)) : '';
+    }
+
+    function setAdminCardQuotaStatus(message, isError = false) {
+      const el = document.getElementById('admin-card-quota-status');
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = 'rounded-xl border px-4 py-3 text-sm font-bold ' + (isError ? 'border-red-100 bg-red-50 text-red-600' : 'border-slate-100 bg-slate-50 text-slate-500');
+    }
+
+    async function loadAdminCardQuotaSettings() {
+      setAdminCardQuotaStatus('讀取額度設定中...');
+      const res = await fetchAPI('getStoreSettings', { networkId: 'admin' }, { timeoutMs: 20000 });
+      if (!res) {
+        setAdminCardQuotaStatus('額度設定讀取失敗，請稍後重試。', true);
+        return;
+      }
+      const daily = document.getElementById('admin-card-quota-free-daily');
+      const total = document.getElementById('admin-card-quota-free-total');
+      if (daily) daily.value = adminQuotaValue(res.cardQuotaFreeDailyLimit);
+      if (total) total.value = adminQuotaValue(res.cardQuotaFreeTotalLimit);
+      setAdminCardQuotaStatus('設定已載入。留空代表不限制。');
+    }
+
+    async function saveAdminCardQuotaSettings() {
+      const button = document.getElementById('btn-save-admin-card-quota');
+      const daily = adminQuotaValue(document.getElementById('admin-card-quota-free-daily')?.value);
+      const total = adminQuotaValue(document.getElementById('admin-card-quota-free-total')?.value);
+      if (button) button.disabled = true;
+      setAdminCardQuotaStatus('儲存中...');
+      try {
+        const existing = await fetchAPI('getStoreSettings', { networkId: 'admin' }, { timeoutMs: 20000, silent: true }) || {};
+        const payload = {
+          ...existing,
+          networkId: 'admin',
+          cardQuotaFreeDailyLimit: daily,
+          cardQuotaFreeTotalLimit: total,
+          cardQuotaPaidDailyLimit: adminQuotaValue(existing.cardQuotaPaidDailyLimit),
+          cardQuotaPaidTotalLimit: adminQuotaValue(existing.cardQuotaPaidTotalLimit)
+        };
+        const saved = await fetchAPI('saveStoreSettings', payload, { timeoutMs: 20000 });
+        if (!saved) throw new Error('額度設定儲存失敗');
+        setAdminCardQuotaStatus('名片收藏額度已儲存。');
+        showToast('名片額度設定已儲存');
+      } catch (error) {
+        setAdminCardQuotaStatus(error.message || '額度設定儲存失敗', true);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+
     function switchTab(tabId) {
       if (tabId === 'lineoa-monitor') {
         openLineOAMonitorTool();
@@ -2002,6 +2120,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       document.getElementById('page-title').innerText = navBtn ? navBtn.innerText.trim() : "管理後台";
       
       if (tabId === 'users') loadUsers();
+      if (tabId === 'card-quota') loadAdminCardQuotaSettings();
       if (tabId === 'cards') {
         ensureDuplicateBindingsPanel();
         if (allCardsData.length === 0) loadCards();
