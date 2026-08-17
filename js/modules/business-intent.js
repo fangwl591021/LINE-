@@ -195,7 +195,13 @@
     const original = window.openCardDetail;
     window.openCardDetail = function(card, ...args) {
       const result = original.call(this, card, ...args);
-      setTimeout(() => window.renderBusinessIntent(card), 0);
+      setTimeout(() => {
+        window.renderBusinessIntent(card);
+        if (window.currentPage === 'card-detail') {
+          window.switchTab?.('personal');
+          window.openPersonalDataPanel?.('info');
+        }
+      }, 0);
       return result;
     };
   }
