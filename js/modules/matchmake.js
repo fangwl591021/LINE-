@@ -232,8 +232,17 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
 // 啟動 AI 配對
 window.startMatchmaking = async function() {
   const queryEl = document.getElementById('match-query');
-  const query = queryEl ? queryEl.value.trim() : '';
-  if (!query) return window.showToast('請輸入您的配對需求', true);
+  let query = queryEl ? queryEl.value.trim() : '';
+  const businessIntent = window.pendingBusinessIntent || window.getCurrentBusinessIntent?.() || {};
+  if (!query) {
+    query = [
+      businessIntent.offer ? '我可以提供：' + businessIntent.offer : '',
+      businessIntent.seek ? '我正在尋找：' + businessIntent.seek : '',
+      businessIntent.collaboration ? '我希望合作：' + businessIntent.collaboration : ''
+    ].filter(Boolean).join('；');
+    if (queryEl && query) queryEl.value = query;
+  }
+  if (!query) return window.showToast('請先輸入配對需求，或到「我的名片 → 業務需求」完成設定', true);
 
   if (!window.allCards || window.allCards.length === 0) {
     if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false });
@@ -267,6 +276,7 @@ window.startMatchmaking = async function() {
     const res = await window.fetchAPI('matchmakeContacts', {
       currentUser: window.currentUser,
       query: query,
+      businessIntent: businessIntent,
       poolScope: poolScope,
       currentCardRowId: window.currentUserCard?.rowId || ''
     }, true);

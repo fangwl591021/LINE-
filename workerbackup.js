@@ -7994,7 +7994,7 @@ const AIModule = {
 
   async matchmaking(payload, env) {
     try {
-      const { currentUser, query } = payload || {};
+      const { currentUser, query, businessIntent = {} } = payload || {};
       const pool = await this.loadMatchmakingPool(payload || {}, env);
       const safeContacts = pool.contacts.filter(c => {
         const visibility = String(c.visibility || '').toLowerCase();
@@ -8009,8 +8009,42 @@ const AIModule = {
         return { success: false, error: pool.scope === 'own' ? '自己的名片池目前沒有可配對名片' : '目前沒有可配對的公開名片' };
       }
 
-      const contactsList = safeContacts.map((c, i) => `${i + 1}. ${c.Name || '未命名'} (${c.Company || '無'})\n標籤: ${c.Tags || '無'}`).join('\n');
-      const prompt = `使用者:${currentUser?.name || '使用者'}，配對池:${pool.scope === 'own' ? '自己的名片池' : '公開交流池'}，需求:${query}\n候選名單:\n${contactsList}\n請回傳最匹配的前5名 JSON 陣列: [{"index":0,"score":95,"reason":"原因，20字內"}]`;
+      const readBusinessIntent = (contact) => {
+        const raw = contact?.card?.customConfig || contact?.card?.custom_config || contact?.card?.['自訂名片設定'] || '{}';
+        let cfg = {};
+        try { cfg = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {}); } catch (e) {}
+        const intent = cfg && typeof cfg === 'object' ? (cfg.businessIntent || {}) : {};
+        return [
+          intent.offer ? '可提供:' + String(intent.offer).trim() : '',
+          intent.seek ? '正在尋找:' + String(intent.seek).trim() : '',
+          intent.collaboration ? '合作方式:' + String(intent.collaboration).trim() : ''
+        ].filter(Boolean).join('；');
+      };
+      safeContacts.forEach(c => {
+        c.BusinessIntent = readBusinessIntent(c);
+        if (c.BusinessIntent) c.Tags = [c.Tags, c.BusinessIntent].filter(Boolean).join('；');
+      });
+      const effectiveQuery = String(query || '').trim() || [
+        businessIntent.offer ? '我可以提供：' + businessIntent.offer : '',
+        businessIntent.seek ? '我正在尋找：' + businessIntent.seek : '',
+        businessIntent.collaboration ? '我希望合作：' + businessIntent.collaboration : ''
+      ].filter(Boolean).join('；');
+      const currentIntentText = [
+        businessIntent.offer ? '我可以提供：' + businessIntent.offer : '',
+        businessIntent.seek ? '我正在尋找：' + businessIntent.seek : '',
+        businessIntent.collaboration ? '我希望合作：' + businessIntent.collaboration : ''
+      ].filter(Boolean).join('；') || '未設定';
+      const contactsList = safeContacts.map((c, i) => `${i + 1}. ${c.Name || '未命名'} (${c.Company || '無'})\
+標籤: ${c.Tags || '無'}\
+業務需求: ${c.BusinessIntent || '未設定'}`).join('\
+');
+      const prompt = `你是商務人脈配對助理。請綜合「需求、我能提供、我正在尋找、合作方式」與候選人的公司、標籤、業務需求，找出最有商業互補價值的人選。\
+使用者:${currentUser?.name || '使用者'}，配對池:${pool.scope === 'own' ? '自己的名片池' : '公開交流池'}\
+目前需求:${effectiveQuery}\
+長期業務意圖:${currentIntentText}\
+候選名單:\
+${contactsList}\
+請回傳最匹配的前5名 JSON 陣列: [{\"index\":0,\"score\":95,\"reason\":\"具體說明互補點與合作價值，30字內\"}]`;
 
       let items = [];
       try {
@@ -8018,7 +8052,7 @@ const AIModule = {
         items = this.parseJsonArray(result.choices?.[0]?.message?.content || '[]');
       } catch (aiError) {
         console.warn('[AI matchmaking] GPT failed, using local fallback:', aiError.message);
-        return { success: true, data: this.localMatchmakingFallback(query, safeContacts), fallback: true, poolScope: pool.scope };
+        return { success: true, data: this.localMatchmakingFallback(effectiveQuery, safeContacts), fallback: true, poolScope: pool.scope };
       }
 
       const used = new Set();
@@ -8039,7 +8073,7 @@ const AIModule = {
       }).filter(Boolean);
       return {
         success: true,
-        data: matches.length ? matches : this.localMatchmakingFallback(query, safeContacts),
+        data: matches.length ? matches : this.localMatchmakingFallback(effectiveQuery, safeContacts),
         fallback: matches.length === 0,
         poolScope: pool.scope
       };
