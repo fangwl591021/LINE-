@@ -31,7 +31,7 @@ window.goPage = function(page, isInitLoad = false) {
   if (page === 'profile') page = 'admin-settings';
   window.previousPage = window.currentPage || '';
   window.currentPage = page;
-  const sharedBannerPages = new Set(['home', 'card', 'customers']);
+  const sharedBannerPages = new Set(['home', 'card', 'customers', 'admin-settings']);
   const showSharedBanner = sharedBannerPages.has(page);
   document.body.classList.toggle('home-page', page === 'home');
   document.body.classList.toggle('shared-front-banner-page', showSharedBanner);
