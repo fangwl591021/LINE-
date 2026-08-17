@@ -1,0 +1,40 @@
+name: Apply System Ticker Live Card Count
+on:
+  push:
+    branches: [agent/system-ticker-live-card-count]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/system-ticker-live-card-count
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fix patcher template escaping
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tools/apply-system-ticker-live-card-count.js')
+          s = p.read_text()
+          s = s.replace("Date.parse(\\`${day}T00:00:00+08:00\\`)", "Date.parse(\\`\\${day}T00:00:00+08:00\\`)")
+          p.write_text(s)
+          PY
+      - name: Apply patch
+        run: node tools/apply-system-ticker-live-card-count.js
+      - name: Verify ticker contract
+        run: node tools/check-system-ticker-live-card-count-contract.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated files
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker-entry.mjs js/modules/home.js index.html tools/apply-system-ticker-live-card-count.js
+          git commit -m "feat: add live card count ticker with center pause"
+          git push origin HEAD:agent/system-ticker-live-card-count
