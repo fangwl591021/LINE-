@@ -1535,13 +1535,19 @@
         </div>
 
         <!-- Tab: 個人資料 -->
-        <div id="tab-content-personal" class="p-4 grid grid-cols-2 gap-3 items-start bg-white">
-          <details id="personal-contact-section" class="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
-            <summary class="list-none cursor-pointer px-4 py-3.5 flex items-center justify-between gap-3 font-black text-slate-800">
-              <span class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-600 text-[20px]">contact_page</span>聯絡資料</span>
-              <span class="material-symbols-outlined text-slate-400 transition-transform group-open:rotate-180">expand_more</span>
-            </summary>
-            <div id="tab-content-info" class="p-4 border-t border-slate-100">
+        <div id="tab-content-personal" class="p-4 bg-white">
+          <div class="grid grid-cols-2 gap-3">
+            <button id="personal-contact-toggle" type="button" onclick="window.togglePersonalDataPanel('info')" class="rounded-2xl border border-slate-200 bg-white px-4 py-3.5 flex items-center justify-center gap-2 font-black text-slate-800 active:scale-[0.98] transition-all">
+              <span class="material-symbols-outlined text-blue-600 text-[20px]">contact_page</span>聯絡資料
+              <span id="personal-contact-chevron" class="material-symbols-outlined text-slate-400 text-[20px] transition-transform">expand_more</span>
+            </button>
+            <button id="personal-edit-toggle" type="button" onclick="window.togglePersonalDataPanel('edit')" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 flex items-center justify-center gap-2 font-black text-slate-800 active:scale-[0.98] transition-all">
+              <span class="material-symbols-outlined text-pink-500 text-[20px]">edit</span>編輯內容
+              <span id="personal-edit-chevron" class="material-symbols-outlined text-slate-400 text-[20px] transition-transform">expand_more</span>
+            </button>
+          </div>
+
+          <div id="tab-content-info" class="hidden mt-3 w-full rounded-2xl border border-slate-200 bg-white p-4">
           <div id="detail-fields" class="space-y-2"></div>
 
           <div class="grid grid-cols-2 gap-3 mt-6">
@@ -1554,16 +1560,8 @@
             <button id="btn-delete-card" onclick="window.deleteCard()" class="col-span-2 w-full bg-red-50 text-red-600 py-3 rounded-xl font-bold border border-red-100 active:scale-95 transition-transform flex justify-center items-center gap-1 mt-2">
               <span class="material-symbols-outlined text-[18px]">delete</span> 刪除此名片
             </button>
-          </div>
-            </div>
-          </details>
-
-          <details id="personal-edit-section" class="group rounded-2xl border border-slate-200 bg-slate-50/50 overflow-hidden">
-            <summary class="list-none cursor-pointer px-4 py-3.5 flex items-center justify-between gap-3 font-black text-slate-800">
-              <span class="flex items-center gap-2"><span class="material-symbols-outlined text-pink-500 text-[20px]">edit</span>編輯內容</span>
-              <span class="material-symbols-outlined text-slate-400 transition-transform group-open:rotate-180">expand_more</span>
-            </summary>
-            <div id="tab-content-edit" class="p-4 space-y-3 border-t border-slate-100">
+          </div></div>
+          <div id="tab-content-edit" class="hidden mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
           <div><label class="text-xs text-slate-500 font-bold ml-1">姓名</label><input id="edit-姓名" class="custom-input !py-3 mt-1" type="text"></div>
           <div><label class="text-xs text-slate-500 font-bold ml-1">英文名</label><input id="edit-英文名" class="custom-input !py-3 mt-1" type="text"></div>
           <div><label class="text-xs text-slate-500 font-bold ml-1">職稱</label><input id="edit-職稱" class="custom-input !py-3 mt-1" type="text"></div>
@@ -1598,9 +1596,7 @@
           </div>
 
           <div><label class="text-xs text-slate-500 font-bold ml-1">備註 (管理員用)</label><textarea id="edit-建檔人/備註" class="custom-input !py-3 mt-1 !h-auto" rows="2"></textarea></div>
-          <button id="btn-save" type="button" onclick="window.saveCardEdit()" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mt-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1"><span class="material-symbols-outlined text-[18px]">save</span> 儲存變更</button>
-            </div>
-          </details>
+          <button id="btn-save" type="button" onclick="window.saveCardEdit()" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mt-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1"><span class="material-symbols-outlined text-[18px]">save</span> 儲存變更</button></div>
         </div>
 
         <!-- Tab: 五大標籤 -->
@@ -2774,7 +2770,7 @@
 <!-- ocr-lab route: ocr-lab.html -->
 <script src="js/app-notify.js?v=1"></script>
 <script src="js/core.js?v=7.30"></script>
-<script src="js/navigation.js?v=7.98"></script>
+<script src="js/navigation.js?v=7.99"></script>
 <script src="js/modules/card-vision-crop.js?v=1.0"></script>
 <script src="js/modules/cropper.js?v=7.18"></script>
 <script type="module" src="js/modules/a-kaffit-card-scanner-adapter.js?v=3.0"></script>

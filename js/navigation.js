@@ -163,10 +163,7 @@ window.switchTab = function(tab) {
     }
   });
   if (activeTab === 'personal') {
-    const contact = document.getElementById('personal-contact-section');
-    const edit = document.getElementById('personal-edit-section');
-    if (contact) contact.open = false;
-    if (edit) edit.open = false;
+    window.closePersonalDataPanels?.();
   }
   if (activeTab === 'ecard') {
     window.renderECardSettings();
@@ -175,6 +172,33 @@ window.switchTab = function(tab) {
   if (activeTab === 'tags' && typeof window.renderCardFateTags === 'function') {
     window.renderCardFateTags();
   }
+};
+
+window.closePersonalDataPanels = function() {
+  ['info','edit'].forEach(function(kind) {
+    const panel = document.getElementById('tab-content-' + kind);
+    const key = kind === 'info' ? 'contact' : 'edit';
+    const chevron = document.getElementById('personal-' + key + '-chevron');
+    const toggle = document.getElementById('personal-' + key + '-toggle');
+    if (panel) panel.classList.add('hidden');
+    if (chevron) chevron.style.transform = '';
+    if (toggle) toggle.classList.remove('ring-2', 'ring-blue-100', 'border-blue-300');
+  });
+};
+
+window.togglePersonalDataPanel = function(kind) {
+  const target = kind === 'edit' ? 'edit' : 'info';
+  const targetPanel = document.getElementById('tab-content-' + target);
+  if (!targetPanel) return;
+  const wasOpen = !targetPanel.classList.contains('hidden');
+  window.closePersonalDataPanels();
+  if (wasOpen) return;
+  targetPanel.classList.remove('hidden');
+  const key = target === 'info' ? 'contact' : 'edit';
+  const chevron = document.getElementById('personal-' + key + '-chevron');
+  const toggle = document.getElementById('personal-' + key + '-toggle');
+  if (chevron) chevron.style.transform = 'rotate(180deg)';
+  if (toggle) toggle.classList.add('ring-2', 'ring-blue-100', 'border-blue-300');
 };
 
 // 建立活動的 Tab 切換
