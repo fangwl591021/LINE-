@@ -1,0 +1,38 @@
+name: Apply Final Contact Open After Card Render
+
+on:
+  push:
+    branches:
+      - agent/final-contact-open-after-card
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/final-contact-open-after-card
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply final post-render contact open fix
+        run: node tools/apply-final-contact-open-after-card.js
+      - name: Verify final contact open contract
+        run: node tools/check-final-contact-open-after-card-contract.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated files
+        run: |
+          if git diff --quiet -- index.html js/modules/business-intent.js; then
+            echo "No generated change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/modules/business-intent.js
+          git commit -m "fix: force open contact details after card render"
+          git push origin HEAD:agent/final-contact-open-after-card
