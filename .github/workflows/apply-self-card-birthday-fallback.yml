@@ -1,0 +1,38 @@
+name: Apply Self Card Birthday Fallback
+
+on:
+  push:
+    branches:
+      - agent/fix-self-card-birthday-fallback
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/fix-self-card-birthday-fallback
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply birthday fallback patch
+        run: node tools/apply-self-card-birthday-fallback.js
+      - name: Verify birthday fallback contract
+        run: node tools/check-self-card-birthday-fallback-contract.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated files
+        run: |
+          if git diff --quiet -- js/modules/cards.js index.html; then
+            echo "No generated change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/modules/cards.js index.html
+          git commit -m "fix: use registered birthday for own card fate"
+          git push origin HEAD:agent/fix-self-card-birthday-fallback

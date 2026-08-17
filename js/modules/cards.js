@@ -803,7 +803,18 @@
       </details>`;
     });
 
-    const birthday = safeText(card.birthday || card["生日"]).trim();
+    const directBirthday = safeText(card.birthday || card["生日"]).trim();
+    const currentUserId = getCurrentUserId();
+    const isSelfProfileCard = !!currentUserId && (
+      getCardLineId(card) === currentUserId ||
+      getCardSourceType(card) === "self_profile"
+    );
+    const sessionBirthday = safeText(
+      (window.currentUser && window.currentUser.birthday) ||
+      (window.currentUserProfile && window.currentUserProfile.birthday) ||
+      ""
+    ).trim();
+    const birthday = directBirthday || (isSelfProfileCard ? sessionBirthday : "");
     const fate = typeof window.getZodiacProfileForBirthday === "function" ? window.getZodiacProfileForBirthday(birthday) : null;
     const fateText = fate ? [
       fate.zodiac ? `${fate.zodiac.symbol} ${fate.zodiac.name}` : "",
