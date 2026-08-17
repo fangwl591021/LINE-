@@ -35,16 +35,21 @@
     if (!banner) return null;
     const points = banner.querySelector('[data-home-top-action="points"]');
     const checkin = banner.querySelector('[data-home-top-action="checkin"]');
-    if (!points || !checkin) return null;
+    const home = banner.querySelector('[data-home-top-action="home"]');
+    if (!points || !checkin || !home) return null;
     return {
       points,
       checkin,
+      home,
       pointsIcon: points.querySelector('.material-symbols-outlined'),
       pointsLabel: points.querySelector('.home-top-shortcut-label'),
       pointsValue: points.querySelector('.home-top-shortcut-value'),
       checkinIcon: checkin.querySelector('.material-symbols-outlined'),
       checkinLabel: checkin.querySelector('.home-top-shortcut-label'),
       checkinValue: checkin.querySelector('.home-top-shortcut-value'),
+      homeIcon: home.querySelector('.material-symbols-outlined'),
+      homeLabel: home.querySelector('.home-top-shortcut-label'),
+      homeValue: home.querySelector('.home-top-shortcut-value'),
     };
   }
 
@@ -99,16 +104,42 @@
     }
   }
 
+  function setHomeShareShortcut(isHomePage) {
+    const p = getBannerParts();
+    if (!p) return;
+
+    if (isHomePage) {
+      p.home.setAttribute('data-home-runtime-mode', 'share');
+      p.home.setAttribute('onclick', 'window.showInviteLink?.()');
+      p.home.setAttribute('aria-label', '開啟專屬 QR 分享');
+      if (p.homeIcon) p.homeIcon.textContent = 'qr_code_2';
+      if (p.homeLabel) p.homeLabel.textContent = '專屬 QR';
+      if (p.homeValue) p.homeValue.textContent = '分享';
+      return;
+    }
+
+    p.home.removeAttribute('data-home-runtime-mode');
+    p.home.setAttribute('onclick', "window.goPage('home')");
+    p.home.setAttribute('aria-label', '返回首頁');
+    if (p.homeIcon) p.homeIcon.textContent = 'home';
+    if (p.homeLabel) p.homeLabel.textContent = '返回';
+    if (p.homeValue) p.homeValue.textContent = '首頁';
+  }
+
   function isCardSectionPage(page) {
     return page === 'card' || page === 'customers';
   }
 
   function syncFromVisiblePage() {
+    const page = String(window.currentPage || '').trim();
     const cardPage = document.getElementById('page-card');
     const customerPage = document.getElementById('page-customers');
-    const active = (!!cardPage && !cardPage.classList.contains('hidden')) ||
+    const homePage = document.getElementById('page-home');
+    const cardActive = (!!cardPage && !cardPage.classList.contains('hidden')) ||
       (!!customerPage && !customerPage.classList.contains('hidden'));
-    setCardSectionBanner(active);
+    const homeActive = page === 'home' || (!!homePage && !homePage.classList.contains('hidden'));
+    setCardSectionBanner(cardActive);
+    setHomeShareShortcut(homeActive);
   }
 
   function install() {
@@ -123,6 +154,7 @@
     window.goPage = function cardSectionAwareGoPage(page, ...args) {
       const result = originalGoPage.call(this, page, ...args);
       setCardSectionBanner(isCardSectionPage(page));
+      setHomeShareShortcut(page === 'home');
       return result;
     };
     syncFromVisiblePage();
