@@ -163,9 +163,8 @@ window.switchTab = function(tab) {
     }
   });
   if (activeTab === 'personal') {
-    window.closePersonalDataPanels?.();
     const defaultPanel = requestedTab === 'edit' ? 'edit' : 'info';
-    window.togglePersonalDataPanel?.(defaultPanel);
+    window.openPersonalDataPanel?.(defaultPanel);
   }
   if (activeTab === 'ecard') {
     window.renderECardSettings();
@@ -186,6 +185,19 @@ window.closePersonalDataPanels = function() {
     if (chevron) chevron.style.transform = '';
     if (toggle) toggle.classList.remove('ring-2', 'ring-blue-100', 'border-blue-300');
   });
+};
+
+window.openPersonalDataPanel = function(kind) {
+  const target = kind === 'edit' ? 'edit' : 'info';
+  window.closePersonalDataPanels();
+  const targetPanel = document.getElementById('tab-content-' + target);
+  if (!targetPanel) return;
+  targetPanel.classList.remove('hidden');
+  const key = target === 'info' ? 'contact' : 'edit';
+  const chevron = document.getElementById('personal-' + key + '-chevron');
+  const toggle = document.getElementById('personal-' + key + '-toggle');
+  if (chevron) chevron.style.transform = 'rotate(180deg)';
+  if (toggle) toggle.classList.add('ring-2', 'ring-blue-100', 'border-blue-300');
 };
 
 window.togglePersonalDataPanel = function(kind) {
