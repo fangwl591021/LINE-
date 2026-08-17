@@ -1,0 +1,35 @@
+name: Apply Compact Home Top Gap
+on:
+  push:
+    branches:
+      - agent/compact-home-top-gap
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/compact-home-top-gap
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply compact home gap
+        run: node tools/apply-compact-home-top-gap.js
+      - name: Verify contract
+        run: node tools/check-compact-home-top-gap-contract.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated files
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "No generated change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "style: tighten home banner to quick actions"
+          git push origin HEAD:agent/compact-home-top-gap
