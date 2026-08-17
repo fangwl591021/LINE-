@@ -14,8 +14,8 @@ expect(activeStart >= 0 && activeEnd > activeStart, 'active profile card markup 
 const activeCard = html.slice(activeStart, activeEnd);
 const actions = {
   profile: 'window.handleHomeAvatarClick?.()',
-  cards: "window.goPage('card')",
-  customers: "window.goPage('customers')",
+  points: 'window.openPointsWallet()',
+  checkin: 'window.claimDailyPointCheckin(this)',
   home: "window.goPage('home')"
 };
 
@@ -28,14 +28,10 @@ expect(
   activeCard.includes('id="home-profile-avatar-button" type="button" data-home-top-action="profile"'),
   'profile name and member-area text must share the avatar button'
 );
-expect(activeCard.includes('data-home-top-action="cards"') && activeCard.includes('收藏名片'), 'second shortcut must be 收藏名片');
-expect(activeCard.includes('data-home-top-action="customers"') && activeCard.includes('我的客戶'), 'third shortcut must be 我的客戶');
 expect(
   activeCard.includes('data-home-top-action="home"') && activeCard.includes('aria-label="返回首頁"'),
   'fourth active shortcut must remain the explicit return-home action'
 );
-expect(!activeCard.includes('data-home-top-action="points"'), 'points shortcut must no longer occupy the shared banner');
-expect(!activeCard.includes('data-home-top-action="checkin"'), 'checkin shortcut must no longer occupy the shared banner');
 expect(
   html.includes('.home-top-shortcut > * { pointer-events: none; }'),
   'shortcut children must delegate hit testing to the parent button'
