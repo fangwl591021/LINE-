@@ -1,0 +1,38 @@
+name: Apply MyCard Shared Banner
+
+on:
+  push:
+    branches:
+      - agent/mycard-keep-banner
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/mycard-keep-banner
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply cache bust
+        run: node tools/apply-mycard-shared-banner.js
+      - name: Verify my-card shared banner
+        run: node tools/check-mycard-shared-banner-contract.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated index
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "No generated change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "feat: keep banner on my-card page"
+          git push origin HEAD:agent/mycard-keep-banner
