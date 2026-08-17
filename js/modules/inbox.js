@@ -791,6 +791,9 @@
     }
     try {
       const res = await window.fetchAPI("sendInboxMessage", { exchangePostHandle, receiverUserId, receiverQuery, recipientMode, selectedUserIds, messageType, title, body }, true);
+      if (!res || res.success === false || res.error) {
+        throw new Error((res && res.error) || '訊息送出失敗');
+      }
       const sentCount = Number((res && res.data && res.data.sentCount) || 1);
       const totalCost = Number((res && res.data && res.data.totalCost) || cost);
       window.showToast?.(`${messageType === "coupon" ? "優惠券" : "訊息"}已免費送出 ${sentCount} 位`);
