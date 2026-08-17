@@ -370,6 +370,21 @@ export default {
       postBody = await copy.json().catch(() => null);
       const action = text(postBody?.action);
       const payload = postBody?.payload || {};
+      if (action === 'getSystemTickerLiveStats') {
+        try {
+          const todayCardCollectionCount = await getTodaySystemCardCollectionCount(env);
+          return json({
+            success: true,
+            data: {
+              todayCardCollectionCount,
+              message: `📇 今日全系統新增收藏名片 ${todayCardCollectionCount} 張`
+            }
+          }, 200);
+        } catch (error) {
+          console.error('ticker live stats failed', text(error?.message) || 'UNKNOWN');
+          return json({ success: false, error: '即時名片統計讀取失敗' }, 500);
+        }
+      }
       if (action === 'recognizeCardWithGPT4o') {
         const actor = await authenticatedActor(request, payload, env);
         if (!actor) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
