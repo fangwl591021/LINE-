@@ -1529,14 +1529,19 @@
       <div class="bg-white rounded-none shadow-none border-y border-white/60 overflow-hidden">
 
         <div class="flex border-b border-slate-100">
-          <button class="flex-1 py-4 font-bold text-sm text-blue-600 border-b-2 border-blue-600 transition-colors" id="tab-info" onclick="window.switchTab('info')">📋 聯絡資料</button>
-          <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-edit" onclick="window.switchTab('edit')">✏️ 編輯內容</button>
+          <button class="flex-1 py-4 font-bold text-sm text-blue-600 border-b-2 border-blue-600 transition-colors" id="tab-personal" onclick="window.switchTab('personal')">👤 個人資料</button>
           <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-tags" onclick="window.switchTab('tags')">✨ 五大標籤</button>
           <button class="flex-1 py-4 font-bold text-sm text-slate-400 border-b-2 border-transparent transition-colors" id="tab-ecard" onclick="window.switchTab('ecard')">🪪 數位名片</button>
         </div>
 
-        <!-- Tab: 資料 -->
-        <div id="tab-content-info" class="p-5">
+        <!-- Tab: 個人資料 -->
+        <div id="tab-content-personal" class="p-4 space-y-3 bg-white">
+          <details id="personal-contact-section" class="group rounded-2xl border border-slate-200 bg-white overflow-hidden" open>
+            <summary class="list-none cursor-pointer px-4 py-3.5 flex items-center justify-between gap-3 font-black text-slate-800">
+              <span class="flex items-center gap-2"><span class="material-symbols-outlined text-blue-600 text-[20px]">contact_page</span>聯絡資料</span>
+              <span class="material-symbols-outlined text-slate-400 transition-transform group-open:rotate-180">expand_more</span>
+            </summary>
+            <div id="tab-content-info" class="p-4 border-t border-slate-100">
           <div id="detail-fields" class="space-y-2"></div>
 
           <div class="grid grid-cols-2 gap-3 mt-6">
@@ -1550,10 +1555,15 @@
               <span class="material-symbols-outlined text-[18px]">delete</span> 刪除此名片
             </button>
           </div>
-        </div>
+            </div>
+          </details>
 
-        <!-- Tab: 編輯 -->
-        <div id="tab-content-edit" class="hidden p-5 space-y-3 bg-slate-50/50">
+          <details id="personal-edit-section" class="group rounded-2xl border border-slate-200 bg-slate-50/50 overflow-hidden">
+            <summary class="list-none cursor-pointer px-4 py-3.5 flex items-center justify-between gap-3 font-black text-slate-800">
+              <span class="flex items-center gap-2"><span class="material-symbols-outlined text-pink-500 text-[20px]">edit</span>編輯內容</span>
+              <span class="material-symbols-outlined text-slate-400 transition-transform group-open:rotate-180">expand_more</span>
+            </summary>
+            <div id="tab-content-edit" class="p-4 space-y-3 border-t border-slate-100">
           <div><label class="text-xs text-slate-500 font-bold ml-1">姓名</label><input id="edit-姓名" class="custom-input !py-3 mt-1" type="text"></div>
           <div><label class="text-xs text-slate-500 font-bold ml-1">英文名</label><input id="edit-英文名" class="custom-input !py-3 mt-1" type="text"></div>
           <div><label class="text-xs text-slate-500 font-bold ml-1">職稱</label><input id="edit-職稱" class="custom-input !py-3 mt-1" type="text"></div>
@@ -1589,6 +1599,8 @@
 
           <div><label class="text-xs text-slate-500 font-bold ml-1">備註 (管理員用)</label><textarea id="edit-建檔人/備註" class="custom-input !py-3 mt-1 !h-auto" rows="2"></textarea></div>
           <button id="btn-save" type="button" onclick="window.saveCardEdit()" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold mt-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-1"><span class="material-symbols-outlined text-[18px]">save</span> 儲存變更</button>
+            </div>
+          </details>
         </div>
 
         <!-- Tab: 五大標籤 -->
@@ -2762,11 +2774,11 @@
 <!-- ocr-lab route: ocr-lab.html -->
 <script src="js/app-notify.js?v=1"></script>
 <script src="js/core.js?v=7.30"></script>
-<script src="js/navigation.js?v=7.96"></script>
+<script src="js/navigation.js?v=7.97"></script>
 <script src="js/modules/card-vision-crop.js?v=1.0"></script>
 <script src="js/modules/cropper.js?v=7.18"></script>
 <script type="module" src="js/modules/a-kaffit-card-scanner-adapter.js?v=3.0"></script>
-<script src="js/modules/cards.js?v=7.97"></script>
+<script src="js/modules/cards.js?v=7.98"></script>
 <script src="js/modules/ecard.js?v=7.52"></script>
 <script src="js/modules/mycard.js?v=8.80"></script>
 <script src="js/modules/matchmake.js?v=7.9"></script>

@@ -544,16 +544,16 @@
     window.cardDetailReturnPage = window.currentPage || "card";
 
     const canEdit = canEditCard(card);
-    const tabEdit = $("tab-edit");
+    const personalEditSection = $("personal-edit-section");
     const tabEcard = $("tab-ecard");
     const btnDelete = $("btn-delete-card");
 
     if (canEdit) {
-      if (tabEdit) tabEdit.classList.remove("hidden");
+      if (personalEditSection) personalEditSection.classList.remove("hidden");
       if (tabEcard) tabEcard.classList.remove("hidden");
       if (btnDelete) btnDelete.classList.remove("hidden");
     } else {
-      if (tabEdit) tabEdit.classList.add("hidden");
+      if (personalEditSection) personalEditSection.classList.add("hidden");
       if (tabEcard) tabEcard.classList.add("hidden");
       if (btnDelete) btnDelete.classList.add("hidden");
       if (typeof window.switchTab === "function") window.switchTab("info");
