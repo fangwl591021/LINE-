@@ -147,10 +147,14 @@ window.toggleAdminMode = function() {
 
 // 名片詳細頁的 Tab 切換
 window.switchTab = function(tab) {
-  ['info','edit','tags','ecard'].forEach(t => {
-    document.getElementById('tab-content-' + t).classList.toggle('hidden', t !== tab);
+  const requestedTab = tab;
+  const activeTab = (tab === 'info' || tab === 'edit') ? 'personal' : tab;
+  ['personal','tags','ecard'].forEach(t => {
+    const content = document.getElementById('tab-content-' + t);
+    if (content) content.classList.toggle('hidden', t !== activeTab);
     const btn = document.getElementById('tab-' + t);
-    if (t === tab) {
+    if (!btn) return;
+    if (t === activeTab) {
       btn.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
       btn.classList.remove('text-slate-400', 'border-transparent');
     } else {
@@ -158,11 +162,17 @@ window.switchTab = function(tab) {
       btn.classList.add('text-slate-400', 'border-transparent');
     }
   });
-  if (tab === 'ecard') {
+  if (activeTab === 'personal') {
+    const contact = document.getElementById('personal-contact-section');
+    const edit = document.getElementById('personal-edit-section');
+    if (requestedTab === 'info' && contact) contact.open = true;
+    if (requestedTab === 'edit' && edit && !edit.classList.contains('hidden')) edit.open = true;
+  }
+  if (activeTab === 'ecard') {
     window.renderECardSettings();
     window.updateECardPreview();
   }
-  if (tab === 'tags' && typeof window.renderCardFateTags === 'function') {
+  if (activeTab === 'tags' && typeof window.renderCardFateTags === 'function') {
     window.renderCardFateTags();
   }
 };

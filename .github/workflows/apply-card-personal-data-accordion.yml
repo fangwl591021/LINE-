@@ -1,0 +1,38 @@
+name: Apply Card Personal Data Accordion
+
+on:
+  push:
+    branches:
+      - agent/card-personal-data-accordion
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/card-personal-data-accordion
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply accordion patch
+        run: node tools/apply-card-personal-data-accordion.js
+      - name: Verify accordion contract
+        run: node tools/check-card-personal-data-accordion-contract.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated files
+        run: |
+          if git diff --quiet -- index.html js/navigation.js js/modules/cards.js; then
+            echo "No generated change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/navigation.js js/modules/cards.js
+          git commit -m "feat: merge contact and edit into personal data accordion"
+          git push origin HEAD:agent/card-personal-data-accordion
