@@ -1,0 +1,31 @@
+name: Apply Direct Ticker Live Stats
+on:
+  push:
+    branches: [agent/ticker-live-stats-direct]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/ticker-live-stats-direct
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply patch
+        run: node tools/apply-ticker-live-stats-direct.js
+      - name: Verify ticker contract
+        run: node tools/check-ticker-live-stats-direct-contract.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated files
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker-entry.mjs js/modules/home.js index.html
+          git commit -m "fix: fetch live ticker stats directly and slow animation"
+          git push origin HEAD:agent/ticker-live-stats-direct
