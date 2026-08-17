@@ -1,6 +1,35 @@
 (() => {
   const state = { installed: false };
 
+  function installCompactStyles() {
+    if (document.getElementById('card-section-compact-style')) return;
+    const style = document.createElement('style');
+    style.id = 'card-section-compact-style';
+    style.textContent = `
+      body.shared-front-banner-page #page-card,
+      body.shared-front-banner-page #page-customers {
+        margin-top: 0 !important;
+      }
+      #page-card > .bg-white {
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
+      }
+      #page-card #collected-card-camera-label,
+      #page-card #collected-card-camera-label + button {
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
+        gap: 0.25rem !important;
+        min-height: 58px !important;
+      }
+      #page-card #collected-card-camera-label > .material-symbols-outlined,
+      #page-card #collected-card-camera-label + button > .material-symbols-outlined {
+        font-size: 22px !important;
+        line-height: 1 !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function getBannerParts() {
     const banner = document.getElementById('home-profile-card');
     if (!banner) return null;
@@ -84,6 +113,7 @@
 
   function install() {
     if (state.installed) return;
+    installCompactStyles();
     if (typeof window.goPage !== 'function') {
       setTimeout(install, 50);
       return;
