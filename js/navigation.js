@@ -165,8 +165,8 @@ window.switchTab = function(tab) {
   if (activeTab === 'personal') {
     const contact = document.getElementById('personal-contact-section');
     const edit = document.getElementById('personal-edit-section');
-    if (requestedTab === 'info' && contact) contact.open = true;
-    if (requestedTab === 'edit' && edit && !edit.classList.contains('hidden')) edit.open = true;
+    if (contact) contact.open = false;
+    if (edit) edit.open = false;
   }
   if (activeTab === 'ecard') {
     window.renderECardSettings();
