@@ -26,7 +26,7 @@ ok(!html.includes('js/modules/business-card-camera.js'), 'failed getUserMedia ca
 ok(!html.includes('navigator.mediaDevices.getUserMedia'), 'main page does not request WebView camera permission');
 ok(navigation.includes("'cameraInput', 'recognizeCard'"), 'collected-card native input keeps existing crop and OCR');
 ok(navigation.includes("'myCameraInput', 'recognizeMyCard'"), 'my-card native input keeps existing crop and OCR');
-ok(/js\/navigation\.js\?v=7\.(?:94|95)/.test(html), 'camera input mount navigation is cache-busted');
+ok(/js\/navigation\.js\?v=7\.(?:94|95|96)/.test(html), 'camera input mount navigation is cache-busted');
 ok(navigation.includes("mountNativeBusinessCardCameraInput(labelId, inputId, handlerName)"), 'navigation mounts camera only after its page is visible');
 ok(navigation.includes("document.createElement('input')"), 'visible page creates a genuinely new file input');
 ok(navigation.includes("fresh.capture = 'environment'"), 'fresh camera input explicitly requests the rear camera');
