@@ -32,17 +32,15 @@ const newBanner = `          <button type="button" data-home-top-action="cards" 
             </span>
           </button>`;
 
-const lowerSwitch = `      <nav class="card-customer-switch mx-1 mb-4 grid grid-cols-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-1" aria-label="名片與客戶切換">
-        <button type="button" aria-current="page" class="rounded-xl bg-white px-4 py-3 text-[14px] font-black text-emerald-700 shadow-sm active:scale-[0.98]">名片收藏</button>
-        <button type="button" onclick="window.goPage('customers')" class="rounded-xl px-4 py-3 text-[14px] font-black text-slate-500 active:scale-[0.98]">我的客戶</button>
-      </nav>
-`;
-
 if (html.includes(oldBanner)) html = html.replace(oldBanner, newBanner);
 else if (!html.includes('data-home-top-action="cards"') || !html.includes('data-home-top-action="customers"')) throw new Error('Top banner source block not found');
 
-if (html.includes(lowerSwitch)) html = html.replace(lowerSwitch, '');
-else if (html.includes('card-customer-switch')) throw new Error('Lower card/customer switch markup changed unexpectedly');
+const switchPattern = /\s*<nav class="card-customer-switch[^>]*aria-label="名片與客戶切換">[\s\S]*?<\/nav>\s*/g;
+const beforeSwitchCount = (html.match(/aria-label="名片與客戶切換"/g) || []).length;
+html = html.replace(switchPattern, '\n');
+const afterSwitchCount = (html.match(/aria-label="名片與客戶切換"/g) || []).length;
+if (afterSwitchCount !== 0) throw new Error('Lower card/customer switch nav still exists');
+if (beforeSwitchCount > 0) console.log(`Removed ${beforeSwitchCount} lower card/customer switch nav(s).`);
 
 fs.writeFileSync(path, html);
 console.log('Moved card collection and customers into the shared top banner.');
