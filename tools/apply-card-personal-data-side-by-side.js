@@ -2,6 +2,7 @@ const fs = require('fs');
 
 let html = fs.readFileSync('index.html', 'utf8');
 let nav = fs.readFileSync('js/navigation.js', 'utf8');
+let cameraContract = fs.readFileSync('tools/check-android-business-card-camera-contract.js', 'utf8');
 
 const oldContainer = '<div id="tab-content-personal" class="p-4 space-y-3 bg-white">';
 const newContainer = '<div id="tab-content-personal" class="p-4 grid grid-cols-2 gap-3 items-start bg-white">';
@@ -21,6 +22,10 @@ else if (!nav.includes(newAutoOpen)) throw new Error('personal accordion compati
 if (html.includes('js/navigation.js?v=7.97')) html = html.replace('js/navigation.js?v=7.97', 'js/navigation.js?v=7.98');
 else if (!html.includes('js/navigation.js?v=7.98')) throw new Error('navigation cache marker not found');
 
+if (cameraContract.includes('(?:94|95|96|97)')) cameraContract = cameraContract.replace('(?:94|95|96|97)', '(?:94|95|96|97|98)');
+else if (!cameraContract.includes('(?:94|95|96|97|98)')) throw new Error('camera cache contract marker not found');
+
 fs.writeFileSync('index.html', html);
 fs.writeFileSync('js/navigation.js', nav);
+fs.writeFileSync('tools/check-android-business-card-camera-contract.js', cameraContract);
 console.log('Applied side-by-side, default-closed personal data accordions.');
