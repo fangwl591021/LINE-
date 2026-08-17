@@ -1103,24 +1103,24 @@ const HomeModule = (function() {
         const enter = textEl.animate([
             { transform: `translateX(${startX}px)` },
             { transform: `translateX(${centerX}px)` }
-        ], { duration: 2600, easing: 'linear', fill: 'forwards' });
+        ], { duration: 4800, easing: 'linear', fill: 'forwards' });
         await enter.finished.catch(() => {});
         if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
 
-        await waitHomeTicker_(450);
+        await waitHomeTicker_(650);
         const flash = textEl.animate([
             { opacity: 1, filter: 'brightness(1)' },
             { opacity: 0.18, filter: 'brightness(1.8)' },
             { opacity: 1, filter: 'brightness(1)' }
-        ], { duration: 460, easing: 'ease-in-out', fill: 'forwards' });
+        ], { duration: 520, easing: 'ease-in-out', fill: 'forwards' });
         await flash.finished.catch(() => {});
-        await waitHomeTicker_(450);
+        await waitHomeTicker_(650);
         if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
 
         const exit = textEl.animate([
             { transform: `translateX(${centerX}px)` },
             { transform: `translateX(${endX}px)` }
-        ], { duration: 2600, easing: 'linear', fill: 'forwards' });
+        ], { duration: 4800, easing: 'linear', fill: 'forwards' });
         await exit.finished.catch(() => {});
         return window.__HOME_TICKER_RUN_TOKEN__ === runToken;
     }
@@ -1150,11 +1150,29 @@ const HomeModule = (function() {
         const box = document.getElementById('home-system-ticker');
         if (!box) return;
         try {
-            const res = await window.fetchAPI('getSystemTicker', {}, true);
-            const data = res?.data || res || {};
+            const [tickerResult, liveResult] = await Promise.allSettled([
+                window.fetchAPI('getSystemTicker', {}, true),
+                window.fetchAPI('getSystemTickerLiveStats', {}, true)
+            ]);
+            const tickerRes = tickerResult.status === 'fulfilled' ? tickerResult.value : null;
+            const liveRes = liveResult.status === 'fulfilled' ? liveResult.value : null;
+            const data = tickerRes?.data || tickerRes || {};
+            const liveData = liveRes?.data || liveRes || {};
+            const messages = [];
+
             const fallback = String(data.text || '').trim();
-            const messages = Array.isArray(data.messages) ? data.messages : (fallback ? [fallback] : []);
-            if (data.enabled !== true || !messages.length) {
+            if (data.enabled === true) {
+                const configured = Array.isArray(data.messages) ? data.messages : (fallback ? [fallback] : []);
+                configured.map(v => String(v || '').trim()).filter(Boolean).forEach(v => messages.push(v));
+            }
+
+            const liveCount = Number(liveData.todayCardCollectionCount);
+            if (liveRes && liveRes.success !== false && Number.isFinite(liveCount)) {
+                const liveMessage = String(liveData.message || `📇 今日全系統新增收藏名片 ${liveCount} 張`).trim();
+                if (liveMessage && !messages.includes(liveMessage)) messages.push(liveMessage);
+            }
+
+            if (!messages.length) {
                 window.__HOME_TICKER_RUN_TOKEN__ = (window.__HOME_TICKER_RUN_TOKEN__ || 0) + 1;
                 box.classList.add('hidden');
                 return;
