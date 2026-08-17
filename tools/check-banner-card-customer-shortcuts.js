@@ -11,7 +11,7 @@ ok(banner.includes('data-home-top-action="customers"') && banner.includes("windo
 ok(banner.includes('data-home-top-action="home"') && banner.includes('返回'), 'home return remains in banner');
 ok(!banner.includes('data-home-top-action="points"') && !banner.includes('>購物金</span>'), 'shopping points removed from shared banner');
 ok(!banner.includes('data-home-top-action="checkin"') && !banner.includes('簽到贈點'), 'daily checkin removed from shared banner');
-ok(!html.includes('card-customer-switch'), 'lower duplicate card/customer switch removed');
+ok(!html.includes('aria-label="名片與客戶切換"'), 'lower duplicate card/customer switch nav removed');
 const profile = banner.indexOf('會員專區');
 const cards = banner.indexOf('收藏名片');
 const customers = banner.indexOf('我的客戶');
