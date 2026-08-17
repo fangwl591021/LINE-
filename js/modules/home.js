@@ -1082,17 +1082,88 @@ const HomeModule = (function() {
         }
     };
 
+    function waitHomeTicker_(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function animateHomeTickerMessage_(box, textEl, value, runToken) {
+        textEl.textContent = value;
+        textEl.style.animation = 'none';
+        textEl.style.opacity = '1';
+        textEl.style.willChange = 'transform, opacity';
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
+
+        const boxWidth = Math.max(1, box.clientWidth);
+        const textWidth = Math.max(1, textEl.scrollWidth);
+        const startX = boxWidth + 16;
+        const centerX = Math.round((boxWidth - textWidth) / 2);
+        const endX = -textWidth - 24;
+
+        const enter = textEl.animate([
+            { transform: `translateX(${startX}px)` },
+            { transform: `translateX(${centerX}px)` }
+        ], { duration: 2600, easing: 'linear', fill: 'forwards' });
+        await enter.finished.catch(() => {});
+        if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
+
+        await waitHomeTicker_(450);
+        const flash = textEl.animate([
+            { opacity: 1, filter: 'brightness(1)' },
+            { opacity: 0.18, filter: 'brightness(1.8)' },
+            { opacity: 1, filter: 'brightness(1)' }
+        ], { duration: 460, easing: 'ease-in-out', fill: 'forwards' });
+        await flash.finished.catch(() => {});
+        await waitHomeTicker_(450);
+        if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
+
+        const exit = textEl.animate([
+            { transform: `translateX(${centerX}px)` },
+            { transform: `translateX(${endX}px)` }
+        ], { duration: 2600, easing: 'linear', fill: 'forwards' });
+        await exit.finished.catch(() => {});
+        return window.__HOME_TICKER_RUN_TOKEN__ === runToken;
+    }
+
+    window.startHomeSystemTicker = async function(messages) {
+        const box = document.getElementById('home-system-ticker');
+        const textEl = document.getElementById('home-system-ticker-text');
+        if (!box || !textEl) return;
+        const queue = (Array.isArray(messages) ? messages : []).map(v => String(v || '').trim()).filter(Boolean);
+        const runToken = (window.__HOME_TICKER_RUN_TOKEN__ || 0) + 1;
+        window.__HOME_TICKER_RUN_TOKEN__ = runToken;
+        if (!queue.length) {
+            box.classList.add('hidden');
+            return;
+        }
+        box.classList.remove('hidden');
+        let index = 0;
+        while (window.__HOME_TICKER_RUN_TOKEN__ === runToken && queue.length) {
+            const keepGoing = await animateHomeTickerMessage_(box, textEl, queue[index % queue.length], runToken);
+            if (!keepGoing) break;
+            index += 1;
+            await waitHomeTicker_(180);
+        }
+    };
+
     window.loadHomeSystemTicker = async function() {
         const box = document.getElementById('home-system-ticker');
-        const text = document.getElementById('home-system-ticker-text');
-        if (!box || !text) return;
+        if (!box) return;
         try {
             const res = await window.fetchAPI('getSystemTicker', {}, true);
             const data = res?.data || res || {};
-            const value = String(data.text || '').trim();
-            box.classList.toggle('hidden', data.enabled !== true || !value);
-            text.textContent = value;
-        } catch { box.classList.add('hidden'); }
+            const fallback = String(data.text || '').trim();
+            const messages = Array.isArray(data.messages) ? data.messages : (fallback ? [fallback] : []);
+            if (data.enabled !== true || !messages.length) {
+                window.__HOME_TICKER_RUN_TOKEN__ = (window.__HOME_TICKER_RUN_TOKEN__ || 0) + 1;
+                box.classList.add('hidden');
+                return;
+            }
+            window.startHomeSystemTicker(messages);
+        } catch {
+            window.__HOME_TICKER_RUN_TOKEN__ = (window.__HOME_TICKER_RUN_TOKEN__ || 0) + 1;
+            box.classList.add('hidden');
+        }
     };
     window.renderHomeAnnouncements = function(items) {
         const list = document.getElementById('home-announcements-list');

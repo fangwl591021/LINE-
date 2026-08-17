@@ -139,6 +139,28 @@ function quoteColumn(name) {
   return `"${name}"`;
 }
 
+function sqliteUtcText(ms) {
+  return new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+async function getTodaySystemCardCollectionCount(env) {
+  const schema = await cardContactSchema(env);
+  if (!schema.created) return 0;
+  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const day = taipeiNow.toISOString().slice(0, 10);
+  const startMs = Date.parse(`${day}T00:00:00+08:00`);
+  const endMs = startMs + 24 * 60 * 60 * 1000;
+  const created = quoteColumn(schema.created);
+  let sourceFilter = '';
+  if (schema.source) {
+    sourceFilter = ` AND COALESCE(${quoteColumn(schema.source)}, '') NOT IN ('self_profile','self_upload','line_generated','video_profile','referral_placeholder')`;
+  }
+  const row = await env.ACTMASTER_DB.prepare(
+    `SELECT COUNT(*) AS count FROM card_contacts WHERE datetime(${created}) >= datetime(?) AND datetime(${created}) < datetime(?)${sourceFilter}`
+  ).bind(sqliteUtcText(startMs), sqliteUtcText(endMs)).first();
+  return Number(row?.count || 0);
+}
+
 async function getCardQuotaUsage(env, actor) {
   const schema = await cardContactSchema(env);
   const ownerColumns = [schema.scanner, schema.creator].filter(Boolean);
@@ -281,6 +303,25 @@ async function enrichStoreSettingsResponse(env, action, payload, response) {
   return json({ ...body, ...quota }, response.status);
 }
 
+async function enrichSystemTickerResponse(env, action, response) {
+  if (!response?.ok || action !== 'getSystemTicker') return response;
+  const body = await response.clone().json().catch(() => null);
+  if (!body || typeof body !== 'object') return response;
+  try {
+    const todayCardCollectionCount = await getTodaySystemCardCollectionCount(env);
+    const base = body.data && typeof body.data === 'object' ? body.data : body;
+    const configuredText = text(base.text);
+    const liveText = `📇 今日全系統新增收藏名片 ${todayCardCollectionCount} 張`;
+    const messages = [configuredText, liveText].filter(Boolean);
+    const enriched = { ...base, enabled: messages.length > 0, todayCardCollectionCount, messages };
+    if (body.data && typeof body.data === 'object') return json({ ...body, data: enriched }, response.status);
+    return json({ ...body, ...enriched }, response.status);
+  } catch (error) {
+    console.error('system ticker live count failed', text(error?.message) || 'UNKNOWN');
+    return response;
+  }
+}
+
 function akaffitCardImagePreflight() {
   return new Response(null, {
     status: 204,
@@ -373,6 +414,7 @@ export default {
       const action = text(postBody?.action);
       const payload = postBody?.payload || {};
       response = await enrichStoreSettingsResponse(env, action, payload, response);
+      response = await enrichSystemTickerResponse(env, action, response);
       response = await enrichExchangeZoneResponse(request, env, action, payload, response);
       if ((action === 'saveCard' || action === 'updateCard') && response.ok) {
         const result = await response.clone().json().catch(() => null);
