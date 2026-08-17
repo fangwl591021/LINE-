@@ -1,0 +1,38 @@
+name: Apply Compact Card Upload Controls
+
+on:
+  push:
+    branches:
+      - agent/card-upload-controls-compact
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/card-upload-controls-compact
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply compact upload controls
+        run: node tools/apply-compact-card-upload-controls.js
+      - name: Verify compact upload controls
+        run: node tools/check-compact-card-upload-controls.js
+      - name: Run smoke
+        run: npm run smoke
+      - name: Commit generated index
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "No generated change needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "style: compact card upload controls"
+          git push origin HEAD:agent/card-upload-controls-compact
