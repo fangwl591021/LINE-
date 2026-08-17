@@ -269,11 +269,21 @@
     return safeText(card && (card.updatedAt || card.updated_at || card["更新時間"] || card.createdAt || card.created_at || card["建立時間"])).trim();
   }
 
+  function parseCardTimestamp(value) {
+    const raw = safeText(value).trim();
+    if (!raw) return null;
+    const hasExplicitZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+    const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const iso = hasExplicitZone ? normalized : normalized + 'Z';
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
   function formatCardListTime(value) {
     const raw = safeText(value).trim();
     if (!raw) return "";
-    const date = new Date(raw.replace(" ", "T"));
-    if (Number.isNaN(date.getTime())) return raw.slice(0, 10);
+    const date = parseCardTimestamp(raw);
+    if (!date) return raw.slice(0, 10);
     const now = new Date();
     const sameDay = date.toDateString() === now.toDateString();
     if (sameDay) {
@@ -316,8 +326,8 @@
     for (const value of candidates) {
       const text = safeText(value).trim();
       if (!text) continue;
-      const time = Date.parse(text.replace(" ", "T"));
-      if (!Number.isNaN(time)) return time;
+      const parsed = parseCardTimestamp(text);
+      if (parsed) return parsed.getTime();
     }
 
     const rowId = safeText(card && (card.rowId || card["rowId"]));
