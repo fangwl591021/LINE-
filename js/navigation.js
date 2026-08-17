@@ -164,6 +164,8 @@ window.switchTab = function(tab) {
   });
   if (activeTab === 'personal') {
     window.closePersonalDataPanels?.();
+    const defaultPanel = requestedTab === 'edit' ? 'edit' : 'info';
+    window.togglePersonalDataPanel?.(defaultPanel);
   }
   if (activeTab === 'ecard') {
     window.renderECardSettings();
