@@ -1103,25 +1103,27 @@ const HomeModule = (function() {
         const enter = textEl.animate([
             { transform: `translateX(${startX}px)` },
             { transform: `translateX(${centerX}px)` }
-        ], { duration: 4800, easing: 'linear', fill: 'forwards' });
+        ], { duration: 8000, easing: 'linear', fill: 'forwards' });
         await enter.finished.catch(() => {});
         if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
 
-        await waitHomeTicker_(650);
+        await waitHomeTicker_(950);
         const flash = textEl.animate([
             { opacity: 1, filter: 'brightness(1)' },
             { opacity: 0.18, filter: 'brightness(1.8)' },
             { opacity: 1, filter: 'brightness(1)' }
         ], { duration: 520, easing: 'ease-in-out', fill: 'forwards' });
         await flash.finished.catch(() => {});
-        await waitHomeTicker_(650);
+        await waitHomeTicker_(1050);
         if (window.__HOME_TICKER_RUN_TOKEN__ !== runToken) return false;
 
         const exit = textEl.animate([
             { transform: `translateX(${centerX}px)` },
             { transform: `translateX(${endX}px)` }
-        ], { duration: 4800, easing: 'linear', fill: 'forwards' });
+        ], { duration: 8000, easing: 'linear', fill: 'forwards' });
         await exit.finished.catch(() => {});
+        textEl.textContent = '';
+        textEl.style.opacity = '0';
         return window.__HOME_TICKER_RUN_TOKEN__ === runToken;
     }
 
@@ -1142,7 +1144,7 @@ const HomeModule = (function() {
             const keepGoing = await animateHomeTickerMessage_(box, textEl, queue[index % queue.length], runToken);
             if (!keepGoing) break;
             index += 1;
-            await waitHomeTicker_(180);
+            await waitHomeTicker_(1500);
         }
     };
 

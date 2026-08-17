@@ -1,0 +1,18 @@
+const fs=require('fs');
+const path=require('path');
+const root=path.resolve(__dirname,'..');
+const homePath=path.join(root,'js/modules/home.js');
+const indexPath=path.join(root,'index.html');
+let home=fs.readFileSync(homePath,'utf8');
+const before=home;
+home=home.replaceAll("duration: 4800, easing: 'linear', fill: 'forwards'", "duration: 8000, easing: 'linear', fill: 'forwards'");
+home=home.replace("await waitHomeTicker_(650);\n        const flash", "await waitHomeTicker_(950);\n        const flash");
+home=home.replace("await flash.finished.catch(() => {});\n        await waitHomeTicker_(650);", "await flash.finished.catch(() => {});\n        await waitHomeTicker_(1050);");
+home=home.replace("await exit.finished.catch(() => {});\n        return window.__HOME_TICKER_RUN_TOKEN__ === runToken;", "await exit.finished.catch(() => {});\n        textEl.textContent = '';\n        textEl.style.opacity = '0';\n        return window.__HOME_TICKER_RUN_TOKEN__ === runToken;");
+home=home.replace("index += 1;\n            await waitHomeTicker_(180);", "index += 1;\n            await waitHomeTicker_(1500);");
+if(home===before) throw new Error('ticker pace anchors not found');
+fs.writeFileSync(homePath,home);
+let index=fs.readFileSync(indexPath,'utf8');
+index=index.replace(/js\/modules\/home\.js\?v=7\.84/g,'js/modules/home.js?v=7.85');
+fs.writeFileSync(indexPath,index);
+console.log('Applied slower ticker pace and clear gap between messages.');
