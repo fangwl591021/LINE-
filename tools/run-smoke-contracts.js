@@ -29,6 +29,7 @@ const foundationChecks = [
   'tools/check-card-quota-contract.js',
   'tools/check-admin-card-quota-contract.js',
   'tools/check-admin-card-quota-ui-contract.js',
+  'tools/check-admin-card-library-overview-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js'
 ];
@@ -59,6 +60,7 @@ const fullChecks = [
   'tools/check-card-quota-contract.js',
   'tools/check-admin-card-quota-contract.js',
   'tools/check-admin-card-quota-ui-contract.js',
+  'tools/check-admin-card-library-overview-contract.js',
   'tools/check-change-work-order-contract.js',
   'tools/check-change-risk-map-contract.js',
   'tools/check-auth-contract.js',

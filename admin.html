@@ -822,18 +822,34 @@
 
       <!-- Tab: Cards -->
       <div id="tab-cards" class="tab-content hidden space-y-6">
+        <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><p class="text-xs font-bold text-slate-500">名片總數</p><strong id="card-library-total" class="block mt-2 text-3xl font-black text-slate-900">-</strong><span class="block mt-2 text-xs font-semibold text-slate-400">依目前篩選條件</span></div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><p class="text-xs font-bold text-slate-500">上傳／建檔人數</p><strong id="card-library-uploaders" class="block mt-2 text-3xl font-black text-blue-700">-</strong><span class="block mt-2 text-xs font-semibold text-slate-400">不重複使用者</span></div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><p class="text-xs font-bold text-slate-500">已綁定名片</p><strong id="card-library-bound" class="block mt-2 text-3xl font-black text-emerald-700">-</strong><span class="block mt-2 text-xs font-semibold text-slate-400">具有 LINE ID</span></div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><p class="text-xs font-bold text-slate-500">今日新增</p><strong id="card-library-today" class="block mt-2 text-3xl font-black text-purple-700">-</strong><span id="card-library-range" class="block mt-2 text-xs font-semibold text-slate-400">-</span></div>
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-6">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><div class="flex items-center justify-between gap-3"><div><h3 class="font-black text-slate-900">近 30 日名片新增趨勢</h3><p class="mt-1 text-xs font-bold text-slate-400">每日實際建檔數</p></div><span id="card-library-trend-total" class="status-pill status-blue">0 張</span></div><div id="card-library-trend" class="mt-5 h-44 flex items-end gap-1" aria-label="近 30 日名片新增趨勢"></div></div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><h3 class="font-black text-slate-900">上傳者排行</h3><p class="mt-1 text-xs font-bold text-slate-400">依累積建檔數排序</p><div id="card-library-uploaders-list" class="mt-4 space-y-3"><div class="text-sm font-bold text-slate-400">載入中...</div></div></div>
+        </section>
+
         <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="flex flex-col md:flex-row items-start md:items-center gap-4 flex-1">
             <div class="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full md:w-80 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
               <span class="material-symbols-outlined text-slate-400 text-[18px] mr-2">search</span>
-              <input type="text" id="card-search-input" oninput="cardPage=1; renderCards()" placeholder="搜尋姓名、電話、公司或標籤..." class="bg-transparent border-none outline-none text-sm w-full text-slate-700">
+              <input type="text" id="card-search-input" oninput="scheduleCardLibraryLoad()" placeholder="搜尋姓名、電話、公司、標籤或上傳者..." class="bg-transparent border-none outline-none text-sm w-full text-slate-700">
             </div>
             <div class="flex items-center gap-2">
               <span class="text-slate-500 font-bold text-sm">歸屬網：</span>
-              <select id="card-tenant-filter" onchange="cardPage=1; renderCards()" class="border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all">
+              <select id="card-tenant-filter" onchange="cardPage=1; loadCards()" class="border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 transition-all">
                 <option value="all">全站名單</option>
               </select>
             </div>
+            <label class="text-xs font-bold text-slate-500">開始日期<input id="card-date-from" type="date" onchange="cardPage=1; loadCards()" class="mt-1 block border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700"></label>
+            <label class="text-xs font-bold text-slate-500">結束日期<input id="card-date-to" type="date" onchange="cardPage=1; loadCards()" class="mt-1 block border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700"></label>
+            <label class="text-xs font-bold text-slate-500">上傳時間<select id="card-time-sort" onchange="cardPage=1; loadCards()" class="mt-1 block border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm text-slate-700"><option value="newest">最近上傳優先</option><option value="oldest">最早上傳優先</option></select></label>
+            <button type="button" onclick="resetCardLibraryFilters()" class="self-end border border-slate-200 bg-white rounded-lg px-3 py-2 text-sm font-bold text-slate-600">清除篩選</button>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <button onclick="syncCardsToRichman()" class="text-sm border border-blue-200 text-blue-700 bg-blue-50 px-4 py-2 rounded-lg hover:bg-blue-100 flex items-center gap-1 shadow-sm font-bold">
@@ -858,12 +874,14 @@
                   <th>聯絡電話</th>
                   <th>歸屬網</th>
                   <th>綁定狀態</th>
+                  <th>上傳者</th>
+                  <th>上傳時間</th>
                   <th>標籤 / 備註</th>
                   <th class="text-center w-28">操作</th>
                 </tr>
               </thead>
               <tbody id="cards-table-body">
-                <tr><td colspan="7" class="text-center py-8 text-slate-400">載入中...</td></tr>
+                <tr><td colspan="9" class="text-center py-8 text-slate-400">載入中...</td></tr>
               </tbody>
             </table>
           </div>
@@ -1830,6 +1848,8 @@
     let selectedBonusTenantId = '';
     let userPage = 1;
     let cardPage = 1;
+    let cardLibraryTotal = 0;
+    let cardLibrarySearchTimer = null;
     let bonusOrderPage = 1;
     let adminCrmFilters = { search: '', status: 'all', role: 'all', fee: 'all', sort: 'recent', quick: 'all' };
     const ADMIN_CRM_FILTERS_KEY = 'LINE_ADMIN_CRM_FILTERS_V1';
@@ -2123,12 +2143,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (tabId === 'card-quota') loadAdminCardQuotaSettings();
       if (tabId === 'cards') {
         ensureDuplicateBindingsPanel();
-        if (allCardsData.length === 0) loadCards();
-        else {
-          populateCardTenantFilter(allCardsData);
-          cardPage = 1;
-          renderCards();
-        }
+        cardPage = 1;
+        loadCards();
       }
       if (tabId === 'activities' && allActivitiesData.length === 0) loadActivities();
       if (tabId === 'customer-imports') loadAdminCustomerImports(false);
@@ -2606,18 +2622,18 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       return [];
     }
 
-    function renderAdminPager(containerId, total, currentPage, onChangeName) {
+    function renderAdminPager(containerId, total, currentPage, onChangeName, pageSize = ADMIN_PAGE_SIZE) {
       const el = document.getElementById(containerId);
       if (!el) return;
       if (!total) {
         el.innerHTML = '<span>0 筆</span>';
         return;
       }
-      const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
-      const start = (currentPage - 1) * ADMIN_PAGE_SIZE + 1;
-      const end = Math.min(total, currentPage * ADMIN_PAGE_SIZE);
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const start = (currentPage - 1) * pageSize + 1;
+      const end = Math.min(total, currentPage * pageSize);
       el.innerHTML = `
-        <span class="mr-auto text-slate-500">每頁 10 筆，目前 ${start}-${end} / 共 ${total} 筆</span>
+        <span class="mr-auto text-slate-500">每頁 ${pageSize} 筆，目前 ${start}-${end} / 共 ${total} 筆</span>
         <button type="button" onclick="${onChangeName}(-1)" class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40" ${currentPage <= 1 ? 'disabled' : ''}>上一頁</button>
         <span class="px-3 text-slate-500">第 ${currentPage} / ${totalPages} 頁</span>
         <button type="button" onclick="${onChangeName}(1)" class="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40" ${currentPage >= totalPages ? 'disabled' : ''}>下一頁</button>`;
@@ -4481,7 +4497,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     }
 
     async function syncCardsToRichman() {
-      const cards = Array.isArray(allCardsData) ? allCardsData : [];
+      const cardsRes = await fetchAPI('getCardContacts', { limit: 500 }, { silent: true, omitDefaultUserId: true });
+      const cards = normalizeApiList(cardsRes, ['contacts']);
       if (!cards.length) {
         showToast('請先載入全站名片庫，再同步 Richman', true);
         return;
@@ -4524,7 +4541,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       }
     }
     async function exportCardsForRichman() {
-      const cards = Array.isArray(allCardsData) ? allCardsData : [];
+      const cardsRes = await fetchAPI('getCardContacts', { limit: 500 }, { silent: true, omitDefaultUserId: true });
+      const cards = normalizeApiList(cardsRes, ['contacts']);
       if (!cards.length) {
         showToast('請先載入全站名片庫，再匯出 Richman 資料', true);
         return;
@@ -4553,30 +4571,89 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       showToast(copied ? `已複製並下載 ${cards.length} 筆 Richman 備份資料` : `已下載 ${cards.length} 筆 Richman 備份資料`);
       window.open('https://fangwl591021.github.io/richman/data_admin.html', '_blank', 'noopener');
     }
+    function scheduleCardLibraryLoad() {
+      clearTimeout(cardLibrarySearchTimer);
+      cardLibrarySearchTimer = setTimeout(() => { cardPage = 1; loadCards(); }, 350);
+    }
+
+    function resetCardLibraryFilters() {
+      ['card-search-input', 'card-date-from', 'card-date-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      const network = document.getElementById('card-tenant-filter');
+      const sort = document.getElementById('card-time-sort');
+      if (network) network.value = 'all';
+      if (sort) sort.value = 'newest';
+      cardPage = 1;
+      loadCards();
+    }
+
+    function formatCardLibraryTime(value) {
+      if (!value) return '-';
+      const normalized = String(value).includes('T') ? String(value) : String(value).replace(' ', 'T') + 'Z';
+      const date = new Date(normalized);
+      return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat('zh-TW', {
+        timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+      }).format(date);
+    }
+
+    function renderCardLibraryOverview(data) {
+      const summary = data.summary || {};
+      const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = Number(value || 0).toLocaleString('zh-TW'); };
+      set('card-library-total', summary.totalCards);
+      set('card-library-uploaders', summary.uploaderCount);
+      set('card-library-bound', summary.boundCards);
+      set('card-library-today', summary.todayCards);
+      const range = document.getElementById('card-library-range');
+      if (range) range.textContent = summary.firstUploadAt ? `${formatCardLibraryTime(summary.firstUploadAt)} ～ ${formatCardLibraryTime(summary.lastUploadAt)}` : '尚無上傳紀錄';
+
+      const trendRows = Array.isArray(data.trend) ? data.trend : [];
+      const byDay = new Map(trendRows.map(row => [row.day, Number(row.count || 0)]));
+      const days = [];
+      const now = new Date();
+      for (let offset = 29; offset >= 0; offset--) {
+        const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+        const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+        days.push({ day: key, count: byDay.get(key) || 0 });
+      }
+      const max = Math.max(1, ...days.map(row => row.count));
+      const trend = document.getElementById('card-library-trend');
+      if (trend) trend.innerHTML = days.map((row, index) => `<div class="group relative flex-1 h-full flex items-end" title="${escapeHTML(row.day)}：${row.count} 張"><div class="w-full min-h-[2px] rounded-t bg-blue-500/80 group-hover:bg-blue-700" style="height:${Math.max(2, Math.round(row.count / max * 100))}%"></div>${index % 7 === 1 ? `<span class="absolute -bottom-5 left-0 text-[9px] text-slate-400">${escapeHTML(row.day.slice(5))}</span>` : ''}</div>`).join('');
+      const trendTotal = document.getElementById('card-library-trend-total');
+      if (trendTotal) trendTotal.textContent = `${days.reduce((sum, row) => sum + row.count, 0).toLocaleString('zh-TW')} 張`;
+
+      const uploaders = document.getElementById('card-library-uploaders-list');
+      const rows = Array.isArray(data.topUploaders) ? data.topUploaders : [];
+      if (uploaders) uploaders.innerHTML = rows.length ? rows.map((row, index) => `<div class="flex items-center justify-between gap-3"><div class="min-w-0"><div class="text-sm font-black text-slate-800 truncate">${index + 1}. ${escapeHTML(row.uploaderName || row.uploaderId || '未知')}</div><div class="text-[11px] font-mono text-slate-400 truncate">${escapeHTML(row.uploaderId || '')}</div></div><strong class="shrink-0 text-sm text-blue-700">${Number(row.cardCount || 0).toLocaleString('zh-TW')} 張</strong></div>`).join('') : '<div class="text-sm font-bold text-slate-400">尚無上傳紀錄</div>';
+    }
+
     async function loadCards() {
       ensureDuplicateBindingsPanel();
       const tbody = document.getElementById('cards-table-body');
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">載入中...</td></tr>';
-      const res = await fetchAPI('getCardContacts', {}, { omitDefaultUserId: true });
-      const cards = normalizeApiList(res, ['contacts']);
-      if (res) {
-        allCardsData = cards;
-        document.getElementById('stat-cards').innerText = cards.length;
-        populateCardTenantFilter(cards);
-        cardPage = 1;
-        renderCards();
-      }
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-slate-400">載入中...</td></tr>';
+      const res = await fetchAPI('getAdminCardLibraryOverview', {
+        page: cardPage, pageSize: 20,
+        search: document.getElementById('card-search-input')?.value || '',
+        network: document.getElementById('card-tenant-filter')?.value || 'all',
+        fromDate: document.getElementById('card-date-from')?.value || '',
+        toDate: document.getElementById('card-date-to')?.value || '',
+        sort: document.getElementById('card-time-sort')?.value || 'newest'
+      }, { omitDefaultUserId: true });
+      const data = res?.data && !Array.isArray(res.data) ? res.data : res;
+      if (!data || !Array.isArray(data.cards)) return;
+      allCardsData = data.cards;
+      cardLibraryTotal = Number(data.summary?.totalCards || 0);
+      document.getElementById('stat-cards').innerText = cardLibraryTotal.toLocaleString('zh-TW');
+      populateCardTenantFilter(data.networks || []);
+      renderCardLibraryOverview(data);
+      renderCards();
     }
 
-    function populateCardTenantFilter(cards) {
+    function populateCardTenantFilter(networkRows) {
       const select = document.getElementById('card-tenant-filter');
       if (!select) return;
       const current = select.value || 'all';
-      const networks = Array.from(new Set((Array.isArray(cards) ? cards : [])
-        .map(c => String(c['歸屬網'] || c.networkId || 'admin').trim())
-        .filter(Boolean))).sort();
-      select.innerHTML = '<option value="all">全站名單</option>' + networks.map(n => `<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join('');
-      select.value = networks.includes(current) ? current : 'all';
+      const networks = (Array.isArray(networkRows) ? networkRows : []).map(row => typeof row === 'string' ? { networkId: row, cardCount: 0 } : row).filter(row => row.networkId);
+      select.innerHTML = '<option value="all">全站名單</option>' + networks.map(row => `<option value="${escapeHTML(row.networkId)}">${escapeHTML(row.networkId)}（${Number(row.cardCount || 0).toLocaleString('zh-TW')}）</option>`).join('');
+      select.value = networks.some(row => row.networkId === current) ? current : 'all';
     }
 
     function getFilteredCards() {
@@ -4605,15 +4682,15 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
 
     function renderCards() {
       const tbody = document.getElementById('cards-table-body');
-      const filtered = getFilteredCards();
+      const filtered = Array.isArray(allCardsData) ? allCardsData : [];
       if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">目前沒有符合條件的名片</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-slate-400">目前沒有符合條件的名片</td></tr>';
         renderAdminPager('cards-pager', 0, 1, 'changeCardPage');
         return;
       }
-      const totalPages = Math.max(1, Math.ceil(filtered.length / ADMIN_PAGE_SIZE));
+      const totalPages = Math.max(1, Math.ceil(cardLibraryTotal / 20));
       cardPage = Math.min(Math.max(1, cardPage), totalPages);
-      const pageCards = filtered.slice((cardPage - 1) * ADMIN_PAGE_SIZE, cardPage * ADMIN_PAGE_SIZE);
+      const pageCards = filtered;
       tbody.innerHTML = pageCards.map(c => {
         const lineId = String(c['LINE ID'] || c.lineId || c.userId || '').trim();
         const bindBadge = lineId
@@ -4632,6 +4709,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           </td>
           <td><span class="status-pill status-slate">${escapeHTML(c['歸屬網'] || 'admin')}</span></td>
           <td>${bindBadge}</td>
+          <td><div class="table-main-text">${escapeHTML(c.scannerName || c.creatorId || c.ownerUserId || c.profileUserId || c.lineId || '-')}</div><div class="table-sub-text font-mono">${escapeHTML(c.scannerName ? (c.scannerUserId || c.creatorId || '') : '')}</div></td>
+          <td class="whitespace-nowrap"><div class="table-main-text">${escapeHTML(formatCardLibraryTime(c.createdAt || c.updatedAt))}</div></td>
           <td><div class="table-sub-text">${escapeHTML(c['標籤'] || c['備註'] || '-')}</div></td>
           <td class="text-center whitespace-nowrap">
              <button onclick="openEditCardModal('${encodeURIComponent(c.rowId || '')}')" class="text-slate-500 hover:text-blue-700 p-2 transition-colors" title="編輯名片"><span class="material-symbols-outlined text-[24px]">edit_note</span></button>
@@ -4640,12 +4719,12 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           </td>
         </tr>`;
       }).join('');
-      renderAdminPager('cards-pager', filtered.length, cardPage, 'changeCardPage');
+      renderAdminPager('cards-pager', cardLibraryTotal, cardPage, 'changeCardPage', 20);
     }
 
     function changeCardPage(delta) {
       cardPage += delta;
-      renderCards();
+      loadCards();
     }
 
     async function unbindAdminCard(encodedRowId) {
