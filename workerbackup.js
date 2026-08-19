@@ -87,6 +87,7 @@ const ACTION_POLICIES = {
   updateUserProfile: { access: 'authenticated', ownership: 'self' },
   linkUserIdentity: { access: 'authenticated', ownership: 'self' },
   getCardContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
+  getAdminCardLibraryOverview: { access: 'admin' },
   getCardHarvestContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
   getCrmContacts: { access: 'authenticated', ownership: 'tenant-resource', tenantScoped: true, allowD1Fallback: true },
   listCustomers: { access: 'authenticated', ownership: 'self', tenantScoped: true },
@@ -9482,6 +9483,101 @@ const D1ReadModule = {
     return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
   },
 
+  async getAdminCardLibraryOverview(payload, env) {
+    if (!this.hasD1(env)) return { success: false, error: 'D1 database unavailable' };
+    await this.ensureCardAccessColumns(env);
+    const page = Math.max(1, Number(payload.page || 1) || 1);
+    const pageSize = Math.min(100, Math.max(10, Number(payload.pageSize || 20) || 20));
+    const offset = (page - 1) * pageSize;
+    const search = this.text(payload.search).slice(0, 120);
+    const network = this.text(payload.network);
+    const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(this.text(payload.fromDate)) ? this.text(payload.fromDate) : '';
+    const toDate = /^\d{4}-\d{2}-\d{2}$/.test(this.text(payload.toDate)) ? this.text(payload.toDate) : '';
+    const sort = this.text(payload.sort).toLowerCase() === 'oldest' ? 'ASC' : 'DESC';
+    const whereParts = ['1=1'];
+    const binds = [];
+    if (network && network !== 'all') {
+      whereParts.push("COALESCE(NULLIF(TRIM(network_id),''),'admin') = ?");
+      binds.push(network);
+    }
+    if (fromDate) {
+      whereParts.push('date(COALESCE(created_at, updated_at)) >= date(?)');
+      binds.push(fromDate);
+    }
+    if (toDate) {
+      whereParts.push('date(COALESCE(created_at, updated_at)) <= date(?)');
+      binds.push(toDate);
+    }
+    if (search) {
+      const q = `%${search.toLowerCase()}%`;
+      whereParts.push(`(
+        LOWER(COALESCE(name,'')) LIKE ? OR LOWER(COALESCE(company_name,'')) LIKE ?
+        OR LOWER(COALESCE(title,'')) LIKE ? OR LOWER(COALESCE(mobile,'')) LIKE ?
+        OR LOWER(COALESCE(office_phone,'')) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ?
+        OR LOWER(COALESCE(notes,'')) LIKE ? OR LOWER(COALESCE(line_id,'')) LIKE ?
+        OR LOWER(COALESCE(creator_id,'')) LIKE ? OR LOWER(COALESCE(scanner_name,'')) LIKE ?
+      )`);
+      binds.push(q, q, q, q, q, q, q, q, q, q);
+    }
+    const where = `WHERE ${whereParts.join(' AND ')}`;
+    const uploaderExpr = "COALESCE(NULLIF(TRIM(scanner_user_id),''),NULLIF(TRIM(creator_id),''),NULLIF(TRIM(owner_user_id),''),NULLIF(TRIM(profile_user_id),''),NULLIF(TRIM(line_id),''))";
+    const summary = await this.first(env, `
+      SELECT COUNT(*) AS total_cards,
+             COUNT(DISTINCT ${uploaderExpr}) AS uploader_count,
+             SUM(CASE WHEN TRIM(COALESCE(line_id,'')) <> '' THEN 1 ELSE 0 END) AS bound_cards,
+             SUM(CASE WHEN date(COALESCE(created_at,updated_at), '+8 hours') = date('now','+8 hours') THEN 1 ELSE 0 END) AS today_cards,
+             MIN(COALESCE(created_at,updated_at)) AS first_upload_at,
+             MAX(COALESCE(created_at,updated_at)) AS last_upload_at
+      FROM card_contacts ${where}
+    `, binds);
+    const rows = await this.all(env, `
+      SELECT * FROM card_contacts ${where}
+      ORDER BY COALESCE(created_at,updated_at) ${sort}, row_id ${sort}
+      LIMIT ? OFFSET ?
+    `, [...binds, pageSize, offset]);
+    const trend = await this.all(env, `
+      SELECT date(COALESCE(created_at,updated_at), '+8 hours') AS day, COUNT(*) AS count
+      FROM card_contacts
+      WHERE datetime(COALESCE(created_at,updated_at)) >= datetime('now','-29 days')
+      GROUP BY day ORDER BY day ASC
+    `);
+    const uploaders = await this.all(env, `
+      SELECT ${uploaderExpr} AS uploader_id,
+             MAX(NULLIF(TRIM(scanner_name),'')) AS uploader_name,
+             COUNT(*) AS card_count,
+             MIN(COALESCE(created_at,updated_at)) AS first_upload_at,
+             MAX(COALESCE(created_at,updated_at)) AS last_upload_at
+      FROM card_contacts
+      WHERE ${uploaderExpr} IS NOT NULL
+      GROUP BY ${uploaderExpr}
+      ORDER BY card_count DESC, last_upload_at DESC
+      LIMIT 8
+    `);
+    const networks = await this.all(env, `
+      SELECT COALESCE(NULLIF(TRIM(network_id),''),'admin') AS network_id, COUNT(*) AS card_count
+      FROM card_contacts GROUP BY COALESCE(NULLIF(TRIM(network_id),''),'admin')
+      ORDER BY card_count DESC, network_id ASC
+    `);
+    return {
+      success: true,
+      data: {
+        cards: rows.map(row => this.cardRow(row)).filter(Boolean),
+        summary: {
+          totalCards: Number(summary?.total_cards || 0), uploaderCount: Number(summary?.uploader_count || 0),
+          boundCards: Number(summary?.bound_cards || 0), todayCards: Number(summary?.today_cards || 0),
+          firstUploadAt: this.text(summary?.first_upload_at), lastUploadAt: this.text(summary?.last_upload_at)
+        },
+        trend: trend.map(row => ({ day: this.text(row.day), count: Number(row.count || 0) })),
+        topUploaders: uploaders.map(row => ({
+          uploaderId: this.text(row.uploader_id), uploaderName: this.text(row.uploader_name), cardCount: Number(row.card_count || 0),
+          firstUploadAt: this.text(row.first_upload_at), lastUploadAt: this.text(row.last_upload_at)
+        })),
+        networks: networks.map(row => ({ networkId: this.text(row.network_id, 'admin'), cardCount: Number(row.card_count || 0) })),
+        page, pageSize
+      }
+    };
+  },
+
   async getCardHarvestContacts(payload, env) {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
@@ -16113,6 +16209,8 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await DBModule.forward(action, payload, env);
     }
+    case 'getAdminCardLibraryOverview':
+      return await D1ReadModule.getAdminCardLibraryOverview(payload || {}, env);
     case 'getCardHarvestContacts': {
       try {
         const d1Result = await D1ReadModule.getCardHarvestContacts(payload || {}, env);
