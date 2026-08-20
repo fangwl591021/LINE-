@@ -1086,9 +1086,7 @@
       var details = document.getElementById('details-my-ecard');
       if (currentCardData) {
         if (details) details.open = false;
-        if (typeof window.openCardDetail === 'function') {
-          window.openCardDetail(currentCardData);
-        }
+        await openMyCardWysiwyg(evt);
         return;
       }
       if (details) {
