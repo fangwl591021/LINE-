@@ -859,10 +859,7 @@ const HomeModule = (function() {
         openSettingsSection_('details-profile-registration');
     };
 
-    window.openMyCardSettings = function(evt) {
-        if (typeof window.openMyCardEntry === 'function') {
-            return window.openMyCardEntry(evt);
-        }
+    window.openMyCardSettings = function() {
         openSettingsSection_('details-my-ecard');
     };
 
