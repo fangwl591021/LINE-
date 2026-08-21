@@ -9665,6 +9665,7 @@ const D1ReadModule = {
     await this.ensureCardAccessColumns(env);
     const role = this.role(payload.authenticatedRole || payload.role);
     const actorId = this.text(payload.authenticatedUserId || payload.userId);
+    const selfScope = this.text(payload.scope).toLowerCase() === 'self';
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
     const baseSelect = `
       SELECT c.*, u.name AS owner_name, u.store_id AS owner_store_id
@@ -9672,7 +9673,16 @@ const D1ReadModule = {
       LEFT JOIN users u ON u.line_id = COALESCE(NULLIF(c.owner_user_id,''), NULLIF(c.creator_id,''), NULLIF(c.line_id,''))
     `;
     let rows = [];
-    if (role === 'admin') {
+    if (actorId && selfScope) {
+      const ids = await this.identityIdsForUser(env, actorId);
+      const placeholders = ids.map(() => '?').join(',');
+      rows = await this.all(env, `
+        ${baseSelect}
+        WHERE c.owner_user_id IN (${placeholders}) OR c.creator_id IN (${placeholders})
+        ORDER BY COALESCE(c.updated_at, c.created_at) DESC, c.row_id DESC
+        LIMIT ${limit}
+      `, [...ids, ...ids]);
+    } else if (role === 'admin') {
       rows = await this.all(env, `${baseSelect} ORDER BY COALESCE(c.updated_at, c.created_at) DESC, c.row_id DESC LIMIT ${limit}`);
     } else if (actorId) {
       const ids = await this.identityIdsForUser(env, actorId);

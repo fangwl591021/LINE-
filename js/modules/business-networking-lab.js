@@ -67,7 +67,7 @@
       </button>`).join('');
   }
 
-  let todayContacts = [];
+  let visibleContacts = [];
   let todayRequestToken = 0;
 
   function safeHTML(value) {
@@ -115,19 +115,19 @@
     const requestToken = ++todayRequestToken;
     list.innerHTML = '<div class="rounded-2xl border border-slate-100 bg-white p-5 text-center text-[12px] font-bold text-slate-400">正在整理私人人脈...</div>';
     try {
-      const response = await window.fetchAPI('getCrmContacts', { limit: 80 }, true);
+      const response = await window.fetchAPI('getCrmContacts', { limit: 80, scope: 'self' }, true);
       if (requestToken !== todayRequestToken) return;
       const contacts = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
-      todayContacts = contacts
+      visibleContacts = contacts
         .filter(needsFollowup)
         .filter(contact => String(contact?.sourceType || '') !== 'self_profile')
         .slice(0, 3);
-      list.innerHTML = todayContacts.length
-        ? todayContacts.map(renderTodayContact).join('')
+      list.innerHTML = visibleContacts.length
+        ? visibleContacts.map(renderTodayContact).join('')
         : '<div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-[12px] font-bold leading-relaxed text-emerald-700">今天沒有待跟進名片。新增或更新名片後，系統會在這裡整理下一步。</div>';
     } catch (error) {
       if (requestToken !== todayRequestToken) return;
-      todayContacts = [];
+      visibleContacts = [];
       list.innerHTML = `<div class="rounded-2xl border border-red-100 bg-red-50 p-4 text-[12px] font-bold leading-relaxed text-red-600">今日建議讀取失敗：${safeHTML(error?.message || error || '請稍後再試')}</div>`;
     }
   }
@@ -155,6 +155,66 @@
           <span class="min-w-0 flex-1"><strong class="block text-[15px] font-black text-slate-600">今天值得合作的企業</strong><small class="mt-1 block text-[12px] font-bold leading-relaxed text-slate-400">尚未接入經驗證企業合作資料，不會混用現有優惠／折抵店家。</small></span>
         </span>
       </div>`;
+  }
+
+  function privatePanelBody() {
+    return `
+      <section class="mt-4">
+        <div class="mb-2 flex items-center justify-between gap-3">
+          <h4 class="text-[15px] font-black text-slate-800">最近應該聯絡</h4>
+          <span class="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-700">本人範圍</span>
+        </div>
+        <div id="business-networking-private-followup" class="space-y-3"></div>
+      </section>
+      <section class="mt-5">
+        <h4 class="mb-1 text-[15px] font-black text-slate-800">可能成為合作夥伴</h4>
+        <p class="mb-3 text-[11px] font-bold leading-relaxed text-slate-500">依既有客戶類型整理候選人，結果只供自己參考，仍需人工判斷。</p>
+        <div id="business-networking-private-collaboration" class="space-y-3"></div>
+      </section>
+      <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-100 p-4 text-left">
+        <span class="flex items-start gap-3">
+          <span class="material-symbols-outlined rounded-xl bg-white p-2 text-slate-400">share</span>
+          <span class="min-w-0 flex-1"><strong class="block text-[15px] font-black text-slate-600">可能幫我引薦</strong><small class="mt-1 block text-[12px] font-bold leading-relaxed text-slate-400">目前沒有可信的關係與引薦證據，因此不自動推測。</small></span>
+        </span>
+      </div>`;
+  }
+
+  async function loadPrivateNetwork() {
+    const followupList = document.getElementById('business-networking-private-followup');
+    const collaborationList = document.getElementById('business-networking-private-collaboration');
+    if (!followupList || !collaborationList) return;
+    const loading = '<div class="rounded-2xl border border-slate-100 bg-white p-5 text-center text-[12px] font-bold text-slate-400">正在整理私人人脈...</div>';
+    followupList.innerHTML = loading;
+    collaborationList.innerHTML = loading;
+    if (typeof window.fetchAPI !== 'function') {
+      const unavailable = '<div class="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[12px] font-bold text-amber-700">目前無法讀取私人人脈，請稍後再試。</div>';
+      followupList.innerHTML = unavailable;
+      collaborationList.innerHTML = unavailable;
+      return;
+    }
+    const requestToken = ++todayRequestToken;
+    try {
+      const response = await window.fetchAPI('getCrmContacts', { limit: 80, scope: 'self' }, true);
+      if (requestToken !== todayRequestToken) return;
+      const contacts = (Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []))
+        .filter(contact => String(contact?.sourceType || '') !== 'self_profile');
+      const followups = contacts.filter(needsFollowup).slice(0, 3);
+      const collaborationTypes = ['合作夥伴', '通路資源', '課程合作', '供應商'];
+      const collaborations = contacts.filter(contact => collaborationTypes.includes(String(contact?.crmType || '').trim())).slice(0, 3);
+      visibleContacts = [...followups, ...collaborations];
+      followupList.innerHTML = followups.length
+        ? followups.map((contact, index) => renderTodayContact(contact, index)).join('')
+        : '<div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-[12px] font-bold text-emerald-700">目前沒有待跟進人脈。</div>';
+      collaborationList.innerHTML = collaborations.length
+        ? collaborations.map((contact, index) => renderTodayContact(contact, followups.length + index)).join('')
+        : '<div class="rounded-2xl border border-slate-200 bg-white p-4 text-[12px] font-bold leading-relaxed text-slate-500">目前沒有已分類的合作候選人；可先在名片詳情確認客戶類型。</div>';
+    } catch (error) {
+      if (requestToken !== todayRequestToken) return;
+      visibleContacts = [];
+      const failed = `<div class="rounded-2xl border border-red-100 bg-red-50 p-4 text-[12px] font-bold text-red-600">私人人脈讀取失敗：${safeHTML(error?.message || error || '請稍後再試')}</div>`;
+      followupList.innerHTML = failed;
+      collaborationList.innerHTML = failed;
+    }
   }
 
   function ensureLab() {
@@ -195,7 +255,7 @@
       if (event.target.closest('[data-networking-lab-legacy]')) return window.openExistingSalesAssistant();
       const contactButton = event.target.closest('[data-networking-contact-index]');
       if (contactButton) {
-        const contact = todayContacts[Number(contactButton.dataset.networkingContactIndex)];
+        const contact = visibleContacts[Number(contactButton.dataset.networkingContactIndex)];
         const rowId = contact?.rowId || contact?.cardRowId || '';
         window.closeBusinessNetworkingLab();
         if (rowId && typeof window.openCardDetailById === 'function') window.openCardDetailById(rowId);
@@ -225,9 +285,10 @@
         <p class="mt-2 text-[13px] font-bold leading-relaxed text-slate-500">${panel.description}</p>
         ${panel.notice ? `<div class="mt-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[12px] font-bold leading-relaxed text-amber-800">${panel.notice}</div>` : ''}
       </section>
-      ${panelKey === 'today' ? todayPanelBody() : `<div class="mt-4 space-y-3">${actionCards(panel.actions)}</div>`}
+      ${panelKey === 'today' ? todayPanelBody() : (panelKey === 'private' ? privatePanelBody() : `<div class="mt-4 space-y-3">${actionCards(panel.actions)}</div>`)}
       <p class="pb-safe mt-6 text-center text-[11px] font-bold text-slate-400">交流合作功能將依資料授權逐步開放。</p>`;
     if (panelKey === 'today') loadTodaySuggestions();
+    if (panelKey === 'private') loadPrivateNetwork();
   }
 
   window.openBusinessNetworkingLab = function() {
