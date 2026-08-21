@@ -8,7 +8,7 @@ const worker = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf
 
 test('business assistant exposes an isolated networking lab shell', () => {
   assert.match(index, /openBusinessNetworkingLab \? window\.openBusinessNetworkingLab\(\) : window\.openHomeLowerPanel\?\.\('assistant'\)/);
-  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.4/);
+  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.5/);
   assert.match(lab, /交流合作實驗區/);
   assert.match(lab, /今日建議/);
   assert.match(lab, /私人人脈/);
@@ -24,7 +24,7 @@ test('today suggestions reuse private CRM read authority without mutation', () =
   assert.match(lab, /filter\(needsFollowup\)/);
   assert.match(lab, /sourceType \|\| ''\) !== 'self_profile'/);
   assert.match(lab, /slice\(0, 3\)/);
-  assert.doesNotMatch(lab, /fetchAPI\('(updateCard|saveBusinessIntent|matchmakeContacts|send|push|broadcast)'/);
+  assert.doesNotMatch(lab, /fetchAPI\('(updateCard|saveBusinessIntent|send|push|broadcast)'/);
 });
 
 test('self CRM scope remains personal even for an admin actor', () => {
@@ -65,6 +65,21 @@ test('public cooperation profile reads only the resolved own card', () => {
   assert.doesNotMatch(lab, /window\.allCards/);
 });
 
+test('public recommendations require explicit action and preserve existing public-pool authority', () => {
+  assert.match(lab, /data-networking-generate-public/);
+  assert.match(lab, /if \(!poolEligible \|\| visibility !== 'public'\)/);
+  assert.match(lab, /請先在「我的名片 → 業務需求」填寫至少一項合作需求/);
+  assert.match(lab, /fetchAPI\('matchmakeContacts'/);
+  assert.match(lab, /poolScope: 'public'/);
+  assert.match(lab, /currentCardRowId: card\.rowId \|\| card\.row_id \|\| card\.id \|\| ''/);
+  assert.match(lab, /matchmake_usage_/);
+  assert.match(lab, /推薦原因/);
+  assert.match(lab, /對方可提供/);
+  assert.match(lab, /對方正在尋找/);
+  assert.match(lab, /對方希望的合作方式/);
+  assert.match(lab, /if \(generatePublic\) return generatePublicRecommendations\(generatePublic\)/);
+});
+
 test('networking lab preserves public and enterprise authority boundaries', () => {
   assert.match(lab, /不會公開資料、寫入資料或傳送訊息/);
   assert.match(lab, /自己的可以公開；別人的不可以/);
@@ -74,5 +89,5 @@ test('networking lab preserves public and enterprise authority boundaries', () =
   assert.match(lab, /不會混用現有優惠／折抵店家/);
   assert.match(lab, /目前不會代替使用者傳送邀請或 LINE 訊息/);
   assert.doesNotMatch(lab, /startMatchmaking\s*\(/);
-  assert.doesNotMatch(lab, /shareTargetPicker|pushMessage|broadcast/);
+  assert.doesNotMatch(lab, /shareTargetPicker|pushMessage|broadcast\s*\(/);
 });
