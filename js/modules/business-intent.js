@@ -5,15 +5,23 @@
     return v === null || v === undefined ? '' : String(v).trim();
   }
 
-  function parseConfig(card) {
-    if (!card) return {};
-    const raw = card['自訂名片設定'] || card.customConfig || card.custom_config || '{}';
+  function parseConfigValue(raw) {
     try {
       const parsed = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw;
       return parsed && typeof parsed === 'object' ? parsed : {};
     } catch (e) {
       return {};
     }
+  }
+
+  function parseConfig(card) {
+    if (!card) return {};
+    const configs = [card['自訂名片設定'], card.customConfig, card.custom_config]
+      .filter(value => value !== null && value !== undefined && value !== '')
+      .map(parseConfigValue);
+    return configs.find(config => config.businessIntent && typeof config.businessIntent === 'object')
+      || configs[0]
+      || {};
   }
 
   function getRowId(card) {
@@ -28,6 +36,24 @@
 
   function getCurrentCard() {
     return resolveOwnCard(window.currentCard || window.currentUserCard || null);
+  }
+
+  function syncSavedConfig(rowId, serialized) {
+    const normalizedRowId = safeText(rowId);
+    const seen = new Set();
+    const sync = card => {
+      if (!card || seen.has(card) || getRowId(card) !== normalizedRowId) return;
+      seen.add(card);
+      card['自訂名片設定'] = serialized;
+      card['電子名片設定'] = serialized;
+      card.customConfig = serialized;
+      card.custom_config = serialized;
+    };
+    sync(window.currentUserCard);
+    sync(window.currentCard);
+    [window.allCards, window.myCards].forEach(cards => {
+      if (Array.isArray(cards)) cards.forEach(sync);
+    });
   }
 
   function canEdit(card) {
@@ -152,9 +178,11 @@
       const serialized = JSON.stringify(cfg);
       const res = await window.fetchAPI('updateCard', { rowId, data: { '自訂名片設定': serialized } }, true);
       if (!res || res.success === false || res.error) throw new Error(res?.error || '儲存失敗');
-      card['自訂名片設定'] = serialized;
-      if (window.currentUserCard && getRowId(window.currentUserCard) === rowId) window.currentUserCard['自訂名片設定'] = serialized;
-      if (window.currentCard && getRowId(window.currentCard) === rowId) window.currentCard['自訂名片設定'] = serialized;
+      const savedCard = res.data && typeof res.data === 'object' ? res.data : {};
+      const confirmedSerialized = savedCard['自訂名片設定'] || savedCard.customConfig || savedCard.custom_config || '';
+      const confirmedIntent = parseConfigValue(confirmedSerialized).businessIntent;
+      if (!confirmedIntent || typeof confirmedIntent !== 'object') throw new Error('伺服器未保留業務需求，請重新再試');
+      syncSavedConfig(rowId, confirmedSerialized);
       if (!options.silent) window.showToast?.('業務需求已儲存，AI 配對會使用這些資料');
       return intent;
     } catch (error) {
