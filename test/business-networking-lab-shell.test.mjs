@@ -8,7 +8,7 @@ const worker = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf
 
 test('business assistant exposes an isolated networking lab shell', () => {
   assert.match(index, /openBusinessNetworkingLab \? window\.openBusinessNetworkingLab\(\) : window\.openHomeLowerPanel\?\.\('assistant'\)/);
-  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.6/);
+  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.7/);
   assert.match(lab, /交流合作實驗區/);
   assert.match(lab, /今日建議/);
   assert.match(lab, /私人人脈/);
@@ -73,11 +73,25 @@ test('public recommendations require explicit action and preserve existing publi
   assert.match(lab, /poolScope: 'public'/);
   assert.match(lab, /currentCardRowId: card\.rowId \|\| card\.row_id \|\| card\.id \|\| ''/);
   assert.match(lab, /matchmake_usage_/);
-  assert.match(lab, /推薦原因/);
-  assert.match(lab, /對方可提供/);
-  assert.match(lab, /對方正在尋找/);
-  assert.match(lab, /對方希望的合作方式/);
+  assert.match(lab, /詳細合作理由/);
+  assert.match(lab, /您的需求/);
+  assert.match(lab, /對方服務／行業/);
+  assert.match(lab, /公開特質/);
+  assert.match(lab, /合作切入點/);
   assert.match(lab, /if \(generatePublic\) return generatePublicRecommendations\(generatePublic\)/);
+});
+
+test('public recommendation decisions stay local to the current screen', () => {
+  assert.match(lab, /const publicRecommendationDecisions = new Map\(\)/);
+  assert.match(lab, /data-networking-public-interest="\$\{index\}"/);
+  assert.match(lab, /data-networking-public-dismiss="\$\{index\}"/);
+  assert.match(lab, /data-networking-public-restore="\$\{index\}"/);
+  assert.match(lab, /已標記想認識/);
+  assert.match(lab, /已標記不適合/);
+  assert.match(lab, /建立交流草稿/);
+  assert.match(lab, /不寫入 CRM/);
+  assert.doesNotMatch(lab, /localStorage\.setItem\([^\n]*(?:interested|dismissed)/);
+  assert.doesNotMatch(lab, /fetchAPI\('(?:save|update).*Recommendation/);
 });
 
 test('public recommendations lead to user-confirmed viewing and inbox introductions', () => {

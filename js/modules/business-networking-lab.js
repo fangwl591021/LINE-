@@ -70,6 +70,7 @@
   let visibleContacts = [];
   let todayRequestToken = 0;
   let publicRecommendationMatches = [];
+  const publicRecommendationDecisions = new Map();
 
   function safeHTML(value) {
     if (typeof window.escapeHTML === 'function') return window.escapeHTML(String(value || ''));
@@ -326,45 +327,131 @@
       </div>`;
   }
 
-  function publicMatchCard(match, index) {
-    const card = match?.card || {};
-    const candidateIntent = (() => {
-      const serialized = card['自訂名片設定'] || card.customConfig || card.custom_config || '{}';
+  function readCardBusinessIntent(card) {
+    const values = [card?.['自訂名片設定'], card?.customConfig, card?.custom_config]
+      .filter(value => value !== null && value !== undefined && value !== '');
+    for (const serialized of values) {
       try {
         const config = typeof serialized === 'string' ? JSON.parse(serialized || '{}') : serialized;
-        return config && typeof config.businessIntent === 'object' ? config.businessIntent : {};
-      } catch (error) {
-        return {};
+        if (config && typeof config.businessIntent === 'object') return config.businessIntent;
+      } catch (error) {}
+    }
+    return {};
+  }
+
+  function publicRecommendationKey(match, index) {
+    const card = match?.card || {};
+    return existingText(card.rowId || card.row_id || card.id || card.profileUserId || `result-${index}`);
+  }
+
+  function publicRecommendationDecision(match, index) {
+    return publicRecommendationDecisions.get(publicRecommendationKey(match, index)) || '';
+  }
+
+  function recommendationReasonDetails(match) {
+    const card = match?.card || {};
+    const ownIntent = readOwnBusinessIntent();
+    const candidateIntent = readCardBusinessIntent(card);
+    const industryAndService = [
+      candidateIntent.offer,
+      card.services || card['服務項目'],
+      card.industry || card['主要業種'],
+      card.companyName || card['公司名稱'],
+      card.title || card['職稱']
+    ].map(existingText).filter(Boolean);
+    const traits = [
+      ['個性', card.personality || card['個性']],
+      ['興趣', card.hobbies || card['興趣']],
+      ['財富', card.wealth || card['財富']],
+      ['健康', card.health || card['健康']],
+      ['事業', card.career || card['事業']]
+    ].map(([label, value]) => existingText(value) ? `${label}：${existingText(value)}` : '').filter(Boolean);
+    return [
+      {
+        label: '您的需求',
+        icon: 'target',
+        value: existingText(ownIntent.seek || ownIntent.collaboration || ownIntent.offer) || '尚未提供可對照的需求內容'
+      },
+      {
+        label: '對方服務／行業',
+        icon: 'business_center',
+        value: [...new Set(industryAndService)].join('／') || '對方尚未公開服務或行業資料'
+      },
+      {
+        label: '公開特質',
+        icon: 'psychology',
+        value: traits.join('；') || '對方尚未公開可供判斷的特質資料'
+      },
+      {
+        label: '合作切入點',
+        icon: 'handshake',
+        value: existingText(match?.reason || candidateIntent.collaboration || candidateIntent.seek) || '建議先查看公開名片，再判斷適合的交流方式'
       }
-    })();
+    ];
+  }
+
+  function publicMatchCard(match, index) {
+    const card = match?.card || {};
     const name = safeHTML(card.name || card['姓名'] || '公開交流夥伴');
     const company = safeHTML(card.companyName || card['公司名稱'] || '');
     const title = safeHTML(card.title || card['職稱'] || '');
     const score = Math.max(0, Math.min(100, Number(match?.score || 0) || 0));
-    const evidence = [
-      existingText(match?.reason),
-      candidateIntent.offer ? `對方可提供：${existingText(candidateIntent.offer)}` : '',
-      candidateIntent.seek ? `對方正在尋找：${existingText(candidateIntent.seek)}` : '',
-      candidateIntent.collaboration ? `對方希望的合作方式：${existingText(candidateIntent.collaboration)}` : ''
-    ].filter(Boolean).slice(0, 4);
+    const details = recommendationReasonDetails(match);
+    const decision = publicRecommendationDecision(match, index);
+    const stateBadge = decision === 'interested'
+      ? '<span class="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700">已標記想認識</span>'
+      : (decision === 'dismissed'
+          ? '<span class="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">已標記不適合</span>'
+          : `<span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">契合度 ${score}%</span>`);
+    const decisionActions = decision === 'interested'
+      ? `<div class="grid grid-cols-2 gap-2">
+          <button type="button" data-networking-public-contact="${index}" class="rounded-xl bg-blue-600 py-2.5 text-[12px] font-black text-white active:scale-[0.98]">建立交流草稿</button>
+          <button type="button" data-networking-public-dismiss="${index}" class="rounded-xl border border-slate-200 bg-white py-2.5 text-[12px] font-black text-slate-600 active:scale-[0.98]">改為不適合</button>
+        </div>`
+      : (decision === 'dismissed'
+          ? `<button type="button" data-networking-public-restore="${index}" class="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-[12px] font-black text-slate-600 active:scale-[0.98]">恢復這項推薦</button>`
+          : `<div class="grid grid-cols-2 gap-2">
+              <button type="button" data-networking-public-interest="${index}" class="rounded-xl bg-blue-600 py-2.5 text-[12px] font-black text-white active:scale-[0.98]">我想認識</button>
+              <button type="button" data-networking-public-dismiss="${index}" class="rounded-xl border border-slate-200 bg-white py-2.5 text-[12px] font-black text-slate-600 active:scale-[0.98]">不適合</button>
+            </div>`);
     return `
-      <article class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+      <article class="rounded-2xl border ${decision === 'dismissed' ? 'border-slate-200 bg-slate-50 opacity-75' : 'border-blue-100 bg-white'} p-4 shadow-sm">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
             <h5 class="truncate text-[15px] font-black text-slate-800">${name}</h5>
             <p class="mt-0.5 truncate text-[11px] font-bold text-slate-400">${[company, title].filter(Boolean).join('／') || '本人授權公開合作檔案'}</p>
           </div>
-          <span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">契合度 ${score}%</span>
+          ${stateBadge}
         </div>
-        <div class="mt-3 text-[11px] font-black text-slate-600">推薦原因</div>
-        <ul class="mt-1.5 space-y-1 text-[11px] font-bold leading-relaxed text-slate-500">
-          ${evidence.map(reason => `<li class="flex items-start gap-1.5"><span class="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-blue-400"></span><span>${safeHTML(reason)}</span></li>`).join('')}
-        </ul>
-        <div class="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
-          <button type="button" data-networking-public-view="${index}" class="rounded-xl border border-blue-100 bg-blue-50 py-2.5 text-[12px] font-black text-blue-700 active:scale-[0.98]">查看公開名片</button>
-          <button type="button" data-networking-public-contact="${index}" class="rounded-xl bg-blue-600 py-2.5 text-[12px] font-black text-white active:scale-[0.98]">我想認識</button>
+        <div class="mt-3 text-[11px] font-black text-slate-600">詳細合作理由</div>
+        <div class="mt-2 space-y-2">
+          ${details.map(detail => `<div class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5"><div class="flex items-center gap-1.5 text-[10px] font-black text-blue-700"><span class="material-symbols-outlined text-[15px]">${detail.icon}</span>${detail.label}</div><p class="mt-1 text-[11px] font-bold leading-relaxed text-slate-600">${safeHTML(detail.value)}</p></div>`).join('')}
+        </div>
+        <div class="mt-4 space-y-2 border-t border-slate-100 pt-3">
+          <button type="button" data-networking-public-view="${index}" class="w-full rounded-xl border border-blue-100 bg-blue-50 py-2.5 text-[12px] font-black text-blue-700 active:scale-[0.98]">查看公開名片</button>
+          ${decisionActions}
         </div>
       </article>`;
+  }
+
+  function renderPublicRecommendationResults() {
+    const results = document.getElementById('business-networking-public-results');
+    if (!results) return;
+    results.innerHTML = publicRecommendationMatches.length
+      ? `<div class="rounded-2xl bg-blue-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-blue-800">推薦只依公開合作資料與本人需求產生；請先查看詳細理由，再自行決定是否交流。想認識／不適合只保留於本次畫面，不寫入 CRM。</div>${publicRecommendationMatches.map(publicMatchCard).join('')}`
+      : '<div class="rounded-2xl border border-slate-200 bg-white p-4 text-[12px] font-bold text-slate-500">目前沒有符合條件的公開合作夥伴。</div>';
+  }
+
+  function setPublicRecommendationDecision(index, decision) {
+    const match = publicRecommendation(index);
+    if (!match) return window.showToast?.('這份公開合作檔案已無法操作，請重新產生推薦', true);
+    const key = publicRecommendationKey(match, index);
+    if (decision) publicRecommendationDecisions.set(key, decision);
+    else publicRecommendationDecisions.delete(key);
+    renderPublicRecommendationResults();
+    if (decision === 'interested') window.showToast?.('已標記想認識，可繼續建立交流草稿');
+    if (decision === 'dismissed') window.showToast?.('已標記不適合，本次畫面將保留此狀態');
+    if (!decision) window.showToast?.('已恢復這項推薦');
   }
 
   function publicRecommendation(index) {
@@ -467,9 +554,7 @@
       if (!matches) throw new Error(response?.error || '無法取得公開推薦');
       publicRecommendationMatches = matches.slice(0, 5);
       localStorage.setItem(usageKey, String(currentUsage + 1));
-      results.innerHTML = publicRecommendationMatches.length
-        ? `<div class="rounded-2xl bg-blue-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-blue-800">推薦只依公開合作資料與本人需求產生；請先查看原因，再自行決定是否交流。</div>${publicRecommendationMatches.map(publicMatchCard).join('')}`
-        : '<div class="rounded-2xl border border-slate-200 bg-white p-4 text-[12px] font-bold text-slate-500">目前沒有符合條件的公開合作夥伴。</div>';
+      renderPublicRecommendationResults();
     } catch (error) {
       publicRecommendationMatches = [];
       results.innerHTML = `<div class="rounded-2xl border border-red-100 bg-red-50 p-4 text-[12px] font-bold leading-relaxed text-red-600">公開推薦失敗：${safeHTML(error?.message || error || '請稍後再試')}</div>`;
@@ -532,6 +617,12 @@
       if (generatePublic) return generatePublicRecommendations(generatePublic);
       const publicView = event.target.closest('[data-networking-public-view]');
       if (publicView) return openPublicRecommendationCard(publicView.dataset.networkingPublicView);
+      const publicInterest = event.target.closest('[data-networking-public-interest]');
+      if (publicInterest) return setPublicRecommendationDecision(publicInterest.dataset.networkingPublicInterest, 'interested');
+      const publicDismiss = event.target.closest('[data-networking-public-dismiss]');
+      if (publicDismiss) return setPublicRecommendationDecision(publicDismiss.dataset.networkingPublicDismiss, 'dismissed');
+      const publicRestore = event.target.closest('[data-networking-public-restore]');
+      if (publicRestore) return setPublicRecommendationDecision(publicRestore.dataset.networkingPublicRestore, '');
       const publicContact = event.target.closest('[data-networking-public-contact]');
       if (publicContact) return openPublicRecommendationInbox(publicContact.dataset.networkingPublicContact);
       const action = event.target.closest('[data-networking-lab-action]');
