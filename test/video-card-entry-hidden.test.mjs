@@ -16,4 +16,7 @@ test('video-card UI entries are hidden without removing video functionality', ()
   assert.match(ecard, /window\.openECardVideoFlow = function/);
   assert.doesNotMatch(mycard, /removeAttribute\(['"]hidden['"]\)/);
   assert.doesNotMatch(ecard, /removeAttribute\(['"]hidden['"]\)/);
+  assert.doesNotMatch(mycard, /\{ value: 'video', label: '影音' \}/);
+  assert.match(mycard, /grid grid-cols-3 gap-1/);
+  assert.match(index, /js\/modules\/mycard\.js\?v=8\.85/);
 });

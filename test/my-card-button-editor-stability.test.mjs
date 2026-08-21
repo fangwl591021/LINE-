@@ -34,5 +34,5 @@ test('save validation never silently compacts button rows', () => {
   assert.match(normalize, /buttons\.slice\(0, 4\)\.map/);
   assert.doesNotMatch(normalize, /normalizeMyCardButtons\(buttons\)/);
   assert.match(normalize, /顆按鈕是空白的，請使用刪除按鈕移除/);
-  assert.match(index, /js\/modules\/mycard\.js\?v=8\.84/);
+  assert.match(index, /js\/modules\/mycard\.js\?v=8\.85/);
 });

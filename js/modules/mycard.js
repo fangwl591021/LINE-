@@ -1673,12 +1673,11 @@
     var options = [
       { value: 'landscape', label: '標準' },
       { value: 'portrait', label: '滿版' },
-      { value: 'square', label: '正方' },
-      { value: 'video', label: '影音' }
+      { value: 'square', label: '正方' }
     ];
     var wrapClass = inModal ? 'space-y-2' : 'max-w-[390px] mx-auto mb-3';
     var labelClass = inModal ? 'text-[13px] font-black text-slate-600' : 'text-[12px] font-black text-slate-300 mb-2';
-    var shellClass = inModal ? 'grid grid-cols-4 gap-1 rounded-2xl bg-slate-100 p-1' : 'grid grid-cols-4 gap-1 rounded-2xl bg-white/10 p-1';
+    var shellClass = inModal ? 'grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1' : 'grid grid-cols-3 gap-1 rounded-2xl bg-white/10 p-1';
     var html = '<div class="' + wrapClass + '">' +
       '<div class="' + labelClass + '">名片版型</div>' +
       '<div class="' + shellClass + '">';
