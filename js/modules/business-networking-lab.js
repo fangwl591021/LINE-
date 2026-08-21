@@ -1,5 +1,5 @@
 // Business Assistant networking lab shell.
-// UI-only experiment: no API calls, persistence, publishing, or messaging.
+// Read-only experiment: reuses private CRM follow-up data without publishing or messaging.
 (() => {
   'use strict';
 
@@ -8,7 +8,7 @@
       label: '今日建議',
       icon: 'today',
       title: '今天值得採取的行動',
-      description: '後續會整合私人跟進、公開交流與企業合作建議。',
+      description: '先從既有私人人脈整理今日跟進；公開交流由使用者自行前往，企業合作尚未接線。',
       actions: [
         ['person_search', '今天值得重新聯絡', '從自己的私人名片與 CRM 找出適合跟進的人。'],
         ['handshake', '今天值得新認識', '只從本人同意公開的合作檔案提供建議。'],
@@ -67,6 +67,96 @@
       </button>`).join('');
   }
 
+  let todayContacts = [];
+  let todayRequestToken = 0;
+
+  function safeHTML(value) {
+    if (typeof window.escapeHTML === 'function') return window.escapeHTML(String(value || ''));
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function needsFollowup(contact) {
+    const status = String(contact?.crmStatus || '').trim();
+    return !status || ['新名片', '已初次聯繫', '已發送資料', '待跟進'].includes(status);
+  }
+
+  function renderTodayContact(contact, index) {
+    const name = safeHTML(contact?.name || contact?.姓名 || '未命名');
+    const company = safeHTML(contact?.company || contact?.companyName || contact?.公司名稱 || '私人收藏名片');
+    const action = safeHTML(contact?.crmNextAction || '初次聯繫');
+    const suggestion = safeHTML(contact?.crmAiSuggestion || '');
+    return `
+      <button type="button" data-networking-contact-index="${index}" class="w-full rounded-2xl border border-violet-100 bg-white p-4 text-left shadow-sm active:scale-[0.99] transition-transform">
+        <span class="flex items-start gap-3">
+          <span class="material-symbols-outlined mt-0.5 rounded-xl bg-violet-50 p-2 text-violet-600">person_search</span>
+          <span class="min-w-0 flex-1">
+            <strong class="block truncate text-[15px] font-black text-slate-800">${name}</strong>
+            <small class="mt-0.5 block truncate text-[11px] font-bold text-slate-400">${company}</small>
+            <span class="mt-2 block text-[12px] font-black text-violet-700">建議：${action}</span>
+            ${suggestion ? `<small class="mt-1 block line-clamp-2 text-[11px] font-bold leading-relaxed text-slate-500">${suggestion}</small>` : ''}
+          </span>
+          <span class="material-symbols-outlined text-slate-300">chevron_right</span>
+        </span>
+      </button>`;
+  }
+
+  async function loadTodaySuggestions() {
+    const list = document.getElementById('business-networking-today-private');
+    if (!list) return;
+    if (typeof window.fetchAPI !== 'function') {
+      list.innerHTML = '<div class="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[12px] font-bold text-amber-700">目前無法讀取私人人脈，請稍後再試。</div>';
+      return;
+    }
+    const requestToken = ++todayRequestToken;
+    list.innerHTML = '<div class="rounded-2xl border border-slate-100 bg-white p-5 text-center text-[12px] font-bold text-slate-400">正在整理私人人脈...</div>';
+    try {
+      const response = await window.fetchAPI('getCrmContacts', { limit: 80 }, true);
+      if (requestToken !== todayRequestToken) return;
+      const contacts = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+      todayContacts = contacts
+        .filter(needsFollowup)
+        .filter(contact => String(contact?.sourceType || '') !== 'self_profile')
+        .slice(0, 3);
+      list.innerHTML = todayContacts.length
+        ? todayContacts.map(renderTodayContact).join('')
+        : '<div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-[12px] font-bold leading-relaxed text-emerald-700">今天沒有待跟進名片。新增或更新名片後，系統會在這裡整理下一步。</div>';
+    } catch (error) {
+      if (requestToken !== todayRequestToken) return;
+      todayContacts = [];
+      list.innerHTML = `<div class="rounded-2xl border border-red-100 bg-red-50 p-4 text-[12px] font-bold leading-relaxed text-red-600">今日建議讀取失敗：${safeHTML(error?.message || error || '請稍後再試')}</div>`;
+    }
+  }
+
+  function todayPanelBody() {
+    return `
+      <section class="mt-4">
+        <div class="mb-2 flex items-center justify-between gap-3">
+          <h4 class="text-[15px] font-black text-slate-800">今天值得重新聯絡</h4>
+          <span class="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-black text-violet-700">私人資料</span>
+        </div>
+        <p class="mb-3 text-[11px] font-bold leading-relaxed text-slate-500">只讀取自己的收藏名片與 CRM 狀態，不會公開或傳送訊息。</p>
+        <div id="business-networking-today-private" class="space-y-3"></div>
+      </section>
+      <button type="button" data-networking-public-match class="mt-4 w-full rounded-2xl border border-blue-100 bg-blue-50 p-4 text-left active:scale-[0.99] transition-transform">
+        <span class="flex items-start gap-3">
+          <span class="material-symbols-outlined rounded-xl bg-white p-2 text-blue-600">handshake</span>
+          <span class="min-w-0 flex-1"><strong class="block text-[15px] font-black text-slate-800">今天值得新認識</strong><small class="mt-1 block text-[12px] font-bold leading-relaxed text-slate-500">前往既有公開交流池，自行輸入需求後才會執行配對。</small></span>
+          <span class="material-symbols-outlined text-blue-300">arrow_forward</span>
+        </span>
+      </button>
+      <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-100 p-4 text-left">
+        <span class="flex items-start gap-3">
+          <span class="material-symbols-outlined rounded-xl bg-white p-2 text-slate-400">apartment</span>
+          <span class="min-w-0 flex-1"><strong class="block text-[15px] font-black text-slate-600">今天值得合作的企業</strong><small class="mt-1 block text-[12px] font-bold leading-relaxed text-slate-400">尚未接入經驗證企業合作資料，不會混用現有優惠／折抵店家。</small></span>
+        </span>
+      </div>`;
+  }
+
   function ensureLab() {
     let root = document.getElementById('business-networking-lab');
     if (root) return root;
@@ -85,7 +175,7 @@
             <span class="rounded-full bg-amber-50 px-3 py-1.5 text-[11px] font-black text-amber-700">測試中</span>
           </div>
           <div class="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-[12px] font-bold leading-relaxed text-blue-800">
-            目前只開放入口與畫面體驗，不會公開資料、寫入資料或傳送訊息。
+            此測試區只讀取既有私人人脈；不會公開資料、寫入資料或傳送訊息。
           </div>
           <button type="button" data-networking-lab-legacy class="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3 text-[13px] font-black text-white">
             <span class="material-symbols-outlined text-[18px]">task_alt</span>查看原有今日跟進建議
@@ -103,6 +193,16 @@
       if (tab) return switchPanel(tab.dataset.networkingLabTab);
       if (event.target.closest('[data-networking-lab-close]')) return window.closeBusinessNetworkingLab();
       if (event.target.closest('[data-networking-lab-legacy]')) return window.openExistingSalesAssistant();
+      const contactButton = event.target.closest('[data-networking-contact-index]');
+      if (contactButton) {
+        const contact = todayContacts[Number(contactButton.dataset.networkingContactIndex)];
+        const rowId = contact?.rowId || contact?.cardRowId || '';
+        window.closeBusinessNetworkingLab();
+        if (rowId && typeof window.openCardDetailById === 'function') window.openCardDetailById(rowId);
+        else window.goPage?.('card');
+        return;
+      }
+      if (event.target.closest('[data-networking-public-match]')) return window.openNetworkingPublicMatch();
       const action = event.target.closest('[data-networking-lab-action]');
       if (action) window.showToast?.(`${action.dataset.networkingLabAction}：下一階段開放`);
     });
@@ -125,8 +225,9 @@
         <p class="mt-2 text-[13px] font-bold leading-relaxed text-slate-500">${panel.description}</p>
         ${panel.notice ? `<div class="mt-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[12px] font-bold leading-relaxed text-amber-800">${panel.notice}</div>` : ''}
       </section>
-      <div class="mt-4 space-y-3">${actionCards(panel.actions)}</div>
-      <p class="pb-safe mt-6 text-center text-[11px] font-bold text-slate-400">此版本僅建立入口、畫面框架與按鈕。</p>`;
+      ${panelKey === 'today' ? todayPanelBody() : `<div class="mt-4 space-y-3">${actionCards(panel.actions)}</div>`}
+      <p class="pb-safe mt-6 text-center text-[11px] font-bold text-slate-400">交流合作功能將依資料授權逐步開放。</p>`;
+    if (panelKey === 'today') loadTodaySuggestions();
   }
 
   window.openBusinessNetworkingLab = function() {
@@ -144,6 +245,14 @@
   window.openExistingSalesAssistant = function() {
     window.closeBusinessNetworkingLab();
     window.openHomeLowerPanel?.('assistant');
+  };
+
+  window.openNetworkingPublicMatch = function() {
+    window.closeBusinessNetworkingLab();
+    if (typeof window.setMatchmakePoolScope === 'function') window.setMatchmakePoolScope('public');
+    else window.matchmakePoolScope = 'public';
+    window.goPage?.('home');
+    setTimeout(() => window.scrollToHomeMatchmake?.(), 160);
   };
 
   document.addEventListener('keydown', event => {
