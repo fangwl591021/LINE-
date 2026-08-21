@@ -8,7 +8,7 @@ const worker = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf
 
 test('business assistant exposes an isolated networking lab shell', () => {
   assert.match(index, /openBusinessNetworkingLab \? window\.openBusinessNetworkingLab\(\) : window\.openHomeLowerPanel\?\.\('assistant'\)/);
-  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.7/);
+  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.8/);
   assert.match(lab, /交流合作實驗區/);
   assert.match(lab, /今日建議/);
   assert.match(lab, /私人人脈/);
@@ -83,6 +83,12 @@ test('public recommendations require explicit action and preserve existing publi
 
 test('public recommendation decisions stay local to the current screen', () => {
   assert.match(lab, /const publicRecommendationDecisions = new Map\(\)/);
+  assert.match(lab, /data-networking-public-filter="\$\{key\}"/);
+  assert.match(lab, /option\('all', '全部'\)/);
+  assert.match(lab, /option\('interested', '想認識'\)/);
+  assert.match(lab, /option\('dismissed', '不適合'\)/);
+  assert.match(lab, /publicRecommendationDecision\(match, index\) === publicRecommendationFilter/);
+  assert.match(lab, /\(panelKey === 'today' \|\| panelKey === 'public'\) && publicRecommendationMatches\.length/);
   assert.match(lab, /data-networking-public-interest="\$\{index\}"/);
   assert.match(lab, /data-networking-public-dismiss="\$\{index\}"/);
   assert.match(lab, /data-networking-public-restore="\$\{index\}"/);

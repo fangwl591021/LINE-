@@ -70,6 +70,7 @@
   let visibleContacts = [];
   let todayRequestToken = 0;
   let publicRecommendationMatches = [];
+  let publicRecommendationFilter = 'all';
   const publicRecommendationDecisions = new Map();
 
   function safeHTML(value) {
@@ -434,12 +435,52 @@
       </article>`;
   }
 
+  function publicRecommendationSummary() {
+    const counts = publicRecommendationMatches.reduce((summary, match, index) => {
+      const decision = publicRecommendationDecision(match, index);
+      if (decision === 'interested') summary.interested += 1;
+      if (decision === 'dismissed') summary.dismissed += 1;
+      return summary;
+    }, { all: publicRecommendationMatches.length, interested: 0, dismissed: 0 });
+    const option = (key, label) => {
+      const active = publicRecommendationFilter === key;
+      return `<button type="button" data-networking-public-filter="${key}" class="flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[11px] font-black ${active ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600'}">
+        <span class="truncate">${label}</span><span class="rounded-full ${active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'} px-1.5 py-0.5 text-[9px]">${counts[key]}</span>
+      </button>`;
+    };
+    return `<div class="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2" aria-label="推薦狀態篩選">
+      ${option('all', '全部')}
+      ${option('interested', '想認識')}
+      ${option('dismissed', '不適合')}
+    </div>`;
+  }
+
   function renderPublicRecommendationResults() {
     const results = document.getElementById('business-networking-public-results');
     if (!results) return;
-    results.innerHTML = publicRecommendationMatches.length
-      ? `<div class="rounded-2xl bg-blue-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-blue-800">推薦只依公開合作資料與本人需求產生；請先查看詳細理由，再自行決定是否交流。想認識／不適合只保留於本次畫面，不寫入 CRM。</div>${publicRecommendationMatches.map(publicMatchCard).join('')}`
-      : '<div class="rounded-2xl border border-slate-200 bg-white p-4 text-[12px] font-bold text-slate-500">目前沒有符合條件的公開合作夥伴。</div>';
+    if (!publicRecommendationMatches.length) {
+      results.innerHTML = '<div class="rounded-2xl border border-slate-200 bg-white p-4 text-[12px] font-bold text-slate-500">目前沒有符合條件的公開合作夥伴。</div>';
+      return;
+    }
+    const visibleMatches = publicRecommendationMatches
+      .map((match, index) => ({ match, index }))
+      .filter(({ match, index }) => publicRecommendationFilter === 'all'
+        || publicRecommendationDecision(match, index) === publicRecommendationFilter);
+    const emptyLabel = publicRecommendationFilter === 'interested'
+      ? '目前尚未標記想認識的夥伴。'
+      : '目前尚未標記不適合的推薦。';
+    results.innerHTML = `
+      <div class="rounded-2xl bg-blue-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-blue-800">推薦只依公開合作資料與本人需求產生；請先查看詳細理由，再自行決定是否交流。想認識／不適合只保留於本次畫面，不寫入 CRM。</div>
+      ${publicRecommendationSummary()}
+      ${visibleMatches.length
+        ? visibleMatches.map(({ match, index }) => publicMatchCard(match, index)).join('')
+        : `<div class="rounded-2xl border border-slate-200 bg-white p-4 text-center text-[12px] font-bold text-slate-500">${emptyLabel}</div>`}`;
+  }
+
+  function setPublicRecommendationFilter(filter) {
+    if (!['all', 'interested', 'dismissed'].includes(filter)) return;
+    publicRecommendationFilter = filter;
+    renderPublicRecommendationResults();
   }
 
   function setPublicRecommendationDecision(index, decision) {
@@ -506,6 +547,7 @@
     const results = document.getElementById('business-networking-public-results');
     if (!results || typeof window.fetchAPI !== 'function') return;
     publicRecommendationMatches = [];
+    publicRecommendationFilter = 'all';
     const card = window.currentUserCard || null;
     const poolEligible = card?.poolEligible === true || String(card?.poolEligible || '').toLowerCase() === 'true';
     const visibility = String(card?.visibility || '').toLowerCase();
@@ -615,6 +657,8 @@
       if (event.target.closest('[data-networking-own-profile]')) return window.openNetworkingOwnProfile();
       const generatePublic = event.target.closest('[data-networking-generate-public]');
       if (generatePublic) return generatePublicRecommendations(generatePublic);
+      const publicFilter = event.target.closest('[data-networking-public-filter]');
+      if (publicFilter) return setPublicRecommendationFilter(publicFilter.dataset.networkingPublicFilter);
       const publicView = event.target.closest('[data-networking-public-view]');
       if (publicView) return openPublicRecommendationCard(publicView.dataset.networkingPublicView);
       const publicInterest = event.target.closest('[data-networking-public-interest]');
@@ -651,6 +695,9 @@
       <p class="pb-safe mt-6 text-center text-[11px] font-bold text-slate-400">交流合作功能將依資料授權逐步開放。</p>`;
     if (panelKey === 'today') loadTodaySuggestions();
     if (panelKey === 'private') loadPrivateNetwork();
+    if ((panelKey === 'today' || panelKey === 'public') && publicRecommendationMatches.length) {
+      renderPublicRecommendationResults();
+    }
   }
 
   window.openBusinessNetworkingLab = function() {
