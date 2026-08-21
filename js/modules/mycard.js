@@ -156,7 +156,17 @@
   }
 
   function normalizeMyCardButtonsForSave(buttons) {
-    return normalizeMyCardButtons(buttons).map(function(button, index) {
+    if (!Array.isArray(buttons)) return [];
+    return buttons.slice(0, 4).map(function(button, index) {
+      button = button && typeof button === 'object' ? button : {};
+      var label = String(button.l || button.label || button.text || button.title || '').trim();
+      var uri = String(button.u || button.url || button.uri || button.link || '').trim();
+      if (!label && !uri) throw new Error('第 ' + (index + 1) + ' 顆按鈕是空白的，請使用刪除按鈕移除。');
+      button = {
+        l: label,
+        u: uri,
+        c: safeCssColor(button.c || button.color || button.backgroundColor || button.bgColor, '#06C755')
+      };
       if (!button.l) throw new Error('第 ' + (index + 1) + ' 顆按鈕缺少文字。');
       var normalized = normalizeMyCardActionUriForSave(button.u);
       if (normalized.error) throw new Error('第 ' + (index + 1) + ' 顆按鈕「' + button.l + '」' + normalized.error);
@@ -1312,17 +1322,17 @@
         '<label class="block">' +
           '<span class="block text-[13px] font-bold text-slate-600 mb-2">按鈕顏色</span>' +
           '<div class="grid grid-cols-[52px_minmax(0,1fr)] gap-3 items-center">' +
-            '<input type="color" value="' + escapeHTML(colorValue) + '" class="w-[52px] h-[52px] p-1 cursor-pointer rounded-xl shrink-0 border border-blue-300 bg-white" onchange="window.updateMyV1Button(' + index + ', \'c\', this.value); var next=this.parentElement.querySelector(\'.button-color-text\'); if(next) next.value=this.value;">' +
-            '<input type="text" value="' + escapeHTML(button.c || colorValue) + '" placeholder="#06C755" class="button-color-text min-w-0 w-full text-base font-mono bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'c\', this.value)">' +
+            '<input type="color" data-my-v1-button-index="' + index + '" data-my-v1-button-field="c" value="' + escapeHTML(colorValue) + '" class="w-[52px] h-[52px] p-1 cursor-pointer rounded-xl shrink-0 border border-blue-300 bg-white" onchange="window.updateMyV1Button(' + index + ', \'c\', this.value); var next=this.parentElement.querySelector(\'.button-color-text\'); if(next) next.value=this.value;">' +
+            '<input type="text" data-my-v1-button-index="' + index + '" data-my-v1-button-field="c" value="' + escapeHTML(button.c || colorValue) + '" placeholder="#06C755" autocomplete="off" spellcheck="false" class="button-color-text min-w-0 w-full text-base font-mono bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'c\', this.value)">' +
           '</div>' +
         '</label>' +
         '<label class="block">' +
           '<span class="block text-[13px] font-bold text-slate-600 mb-2">按鈕文字</span>' +
-          '<input type="text" value="' + escapeHTML(button.l || '') + '" placeholder="例如：加入LINE好友" class="min-w-0 w-full text-base font-bold bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
+          '<input type="text" data-my-v1-button-index="' + index + '" data-my-v1-button-field="l" value="' + escapeHTML(button.l || '') + '" placeholder="例如：加入LINE好友" autocomplete="off" class="min-w-0 w-full text-base font-bold bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'l\', this.value)">' +
         '</label>' +
         '<label class="block">' +
           '<span class="block text-[13px] font-bold text-slate-600 mb-2">網址 / 電話 / LINE 連結</span>' +
-          '<input type="text" value="' + escapeHTML(button.u || '') + '" placeholder="https://... 或 tel:0927136847" class="min-w-0 w-full text-base font-mono bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
+          '<input type="text" data-my-v1-button-index="' + index + '" data-my-v1-button-field="u" value="' + escapeHTML(button.u || '') + '" placeholder="https://... 或 tel:0927136847" autocomplete="off" autocapitalize="none" spellcheck="false" class="min-w-0 w-full text-base font-mono bg-white border border-blue-300 outline-none focus:ring-2 focus:ring-blue-500 rounded-xl px-4 py-3" oninput="window.updateMyV1Button(' + index + ', \'u\', this.value)">' +
         '</label>' +
         '<div class="grid grid-cols-2 gap-2">' +
           '<button type="button" onclick="window.moveMyV1Button(' + index + ', -1)" ' + (index === 0 ? 'disabled' : '') + ' class="h-11 rounded-xl border border-blue-200 bg-white text-slate-600 flex items-center justify-center disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-transform"><span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span></button>' +
@@ -1332,7 +1342,19 @@
     }).join('');
   }
 
+  function syncButtonEditorDrafts() {
+    var list = $('#my-v1-buttons-list');
+    if (!list) return;
+    $all('#my-v1-buttons-list [data-my-v1-button-index][data-my-v1-button-field]').forEach(function(input) {
+      var index = Number(input.getAttribute('data-my-v1-button-index'));
+      var field = input.getAttribute('data-my-v1-button-field');
+      if (!Number.isInteger(index) || index < 0 || !myEcardButtons[index] || !/^[luc]$/.test(field || '')) return;
+      myEcardButtons[index][field] = input.value;
+    });
+  }
+
   function addV1Button() {
+    syncButtonEditorDrafts();
     myEcardButtons.push({ l: '新按鈕', u: '', c: '#06C755' });
     renderButtons();
     updatePreview();
@@ -1345,12 +1367,14 @@
   }
 
   function removeButton(index) {
+    syncButtonEditorDrafts();
     myEcardButtons.splice(index, 1);
     renderButtons();
     updatePreview();
   }
 
   function moveButton(index, direction) {
+    syncButtonEditorDrafts();
     var nextIndex = index + direction;
     if (nextIndex < 0 || nextIndex >= myEcardButtons.length) return;
     var moved = myEcardButtons.splice(index, 1)[0];
@@ -1484,6 +1508,7 @@
   }
 
   async function saveMyECardConfig(evt) {
+    syncButtonEditorDrafts();
     if (evt && evt.preventDefault) evt.preventDefault();
     var btn = $('#btn-save-my-ecard');
     if (btn && btn.dataset.myEcardSaving === '1') return;
