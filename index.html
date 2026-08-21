@@ -699,7 +699,7 @@
                     <input type="radio" name="my-ecard-layout" value="square" class="peer sr-only" onchange="window.changeMyLayout()">
                     <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">正方</div>
                   </label>
-                  <button id="btn-open-my-video-card" type="button" onclick="window.openMyCardVideoFlow(event)" disabled class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight cursor-not-allowed transition-all flex items-center justify-center gap-1">
+                  <button id="btn-open-my-video-card" type="button" onclick="window.openMyCardVideoFlow(event)" hidden aria-hidden="true" tabindex="-1" disabled class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight cursor-not-allowed transition-all flex items-center justify-center gap-1">
                     <span class="material-symbols-outlined text-[16px]">smart_display</span> 影音
                   </button>
                 </div>
@@ -1627,7 +1627,7 @@
                   <input type="radio" name="ecard-layout" value="square" class="peer sr-only" onchange="window.changeOtherLayout()">
                   <div class="py-2 rounded-lg peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm text-slate-500 font-bold text-[12px] tracking-tight transition-all">正方</div>
                 </label>
-                <button id="btn-open-ecard-video-card" type="button" onclick="window.openECardVideoFlow(event)" disabled class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight cursor-not-allowed transition-all flex items-center justify-center gap-1">
+                <button id="btn-open-ecard-video-card" type="button" onclick="window.openECardVideoFlow(event)" hidden aria-hidden="true" tabindex="-1" disabled class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-400 font-bold text-[12px] tracking-tight cursor-not-allowed transition-all flex items-center justify-center gap-1">
                   <span class="material-symbols-outlined text-[16px]">smart_display</span> 影音
                 </button>
               </div>
