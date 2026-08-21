@@ -16,13 +16,28 @@
     }
   }
 
+  function getRowId(card) {
+    return safeText(card?.rowId || card?.row_id || card?.id);
+  }
+
+  function resolveOwnCard(card) {
+    const ownCard = window.currentUserCard || null;
+    if (card && ownCard && getRowId(card) && getRowId(card) === getRowId(ownCard)) return ownCard;
+    return card;
+  }
+
   function getCurrentCard() {
-    return window.currentCard || window.currentUserCard || null;
+    return resolveOwnCard(window.currentCard || window.currentUserCard || null);
   }
 
   function canEdit(card) {
     if (!card) return false;
-    if (typeof window.canEditCardRecord === 'function') return !!window.canEditCardRecord(card);
+    if (typeof window.canEditCardRecord === 'function') {
+      if (window.canEditCardRecord(card)) return true;
+      const ownCard = window.currentUserCard || null;
+      if (ownCard && getRowId(card) && getRowId(card) === getRowId(ownCard)) return true;
+      return false;
+    }
     const currentUserId = safeText(window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId);
     const cardUserId = safeText(card['LINE ID'] || card.lineId || card.userId || card.profileUserId);
     return !!currentUserId && !!cardUserId && currentUserId === cardUserId;
@@ -54,7 +69,7 @@
     if (!document.getElementById('tab-content-business')) {
       const panel = document.createElement('div');
       panel.id = 'tab-content-business';
-      panel.className = 'hidden px-4 py-5 bg-white space-y-4';
+      panel.className = 'hidden px-4 py-5 pb-36 bg-white space-y-4';
       panel.innerHTML = `
         <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
           <div class="flex items-center gap-2 font-black text-slate-800"><span class="material-symbols-outlined text-blue-600">hub</span>建立您的 AI 業務需求</div>
@@ -73,8 +88,8 @@
           <textarea id="business-intent-collaboration" rows="3" class="textarea-block" placeholder="例：客戶轉介 / 異業合作 / 通路合作 / 聯合提案"></textarea>
         </div>
         <div id="business-intent-readonly-note" class="hidden rounded-2xl bg-slate-50 px-4 py-3 text-[12px] font-bold text-slate-500">這是對方的業務需求資料，僅本人可修改。</div>
-        <div id="business-intent-actions" class="grid grid-cols-2 gap-3 pt-1">
-          <button type="button" onclick="window.saveBusinessIntent()" class="rounded-2xl bg-slate-900 py-3.5 text-[13px] font-black text-white active:scale-95 transition-transform">儲存業務需求</button>
+        <div id="business-intent-actions" class="fixed bottom-[84px] left-1/2 z-[70] grid w-[calc(100%-2rem)] max-w-[416px] -translate-x-1/2 grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+          <button id="business-intent-save" type="button" onclick="window.saveBusinessIntent()" class="rounded-2xl bg-slate-900 py-3.5 text-[13px] font-black text-white active:scale-95 transition-transform disabled:opacity-60">儲存業務需求</button>
           <button type="button" onclick="window.startBusinessIntentRecommendation()" class="rounded-2xl bg-blue-600 py-3.5 text-[13px] font-black text-white active:scale-95 transition-transform">AI 智能推薦</button>
         </div>`;
       ecardContent.parentNode.insertBefore(panel, ecardContent);
@@ -83,6 +98,7 @@
   }
 
   window.renderBusinessIntent = function(card = getCurrentCard()) {
+    card = resolveOwnCard(card);
     if (!ensureUi()) return;
     const cfg = parseConfig(card);
     const intent = cfg.businessIntent || {};
@@ -109,32 +125,47 @@
   };
 
   window.saveBusinessIntent = async function(options = {}) {
-    const card = getCurrentCard();
-    if (!card) return window.showToast?.('找不到名片資料', true);
-    if (!canEdit(card)) return window.showToast?.('只有名片本人可以修改業務需求', true);
-    const rowId = safeText(card.rowId || card.row_id || card.id);
-    if (!rowId) return window.showToast?.('找不到名片 ID', true);
+    const button = document.getElementById('business-intent-save');
+    const originalText = button?.textContent || '儲存業務需求';
+    try {
+      const card = getCurrentCard();
+      if (!card) throw new Error('找不到名片資料');
+      if (!canEdit(card)) throw new Error('只有名片本人可以修改業務需求');
+      const rowId = getRowId(card);
+      if (!rowId) throw new Error('找不到名片 ID');
+      if (typeof window.fetchAPI !== 'function') throw new Error('儲存服務尚未就緒');
 
-    const intent = {
-      offer: safeText(document.getElementById('business-intent-offer')?.value),
-      seek: safeText(document.getElementById('business-intent-seek')?.value),
-      collaboration: safeText(document.getElementById('business-intent-collaboration')?.value),
-      updatedAt: new Date().toISOString()
-    };
-    if (!intent.offer && !intent.seek && !intent.collaboration) {
-      return window.showToast?.('請至少填寫一項業務需求', true);
+      const intent = {
+        offer: safeText(document.getElementById('business-intent-offer')?.value),
+        seek: safeText(document.getElementById('business-intent-seek')?.value),
+        collaboration: safeText(document.getElementById('business-intent-collaboration')?.value),
+        updatedAt: new Date().toISOString()
+      };
+      if (!intent.offer && !intent.seek && !intent.collaboration) throw new Error('請至少填寫一項業務需求');
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = '儲存中...';
+      }
+      const cfg = parseConfig(card);
+      cfg.businessIntent = intent;
+      const serialized = JSON.stringify(cfg);
+      const res = await window.fetchAPI('updateCard', { rowId, data: { '自訂名片設定': serialized } }, true);
+      if (!res || res.success === false || res.error) throw new Error(res?.error || '儲存失敗');
+      card['自訂名片設定'] = serialized;
+      if (window.currentUserCard && getRowId(window.currentUserCard) === rowId) window.currentUserCard['自訂名片設定'] = serialized;
+      if (window.currentCard && getRowId(window.currentCard) === rowId) window.currentCard['自訂名片設定'] = serialized;
+      if (!options.silent) window.showToast?.('業務需求已儲存，AI 配對會使用這些資料');
+      return intent;
+    } catch (error) {
+      if (!options.silent) window.showToast?.('業務需求儲存失敗：' + (error?.message || '請稍後再試'), true);
+      return null;
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
-
-    const cfg = parseConfig(card);
-    cfg.businessIntent = intent;
-    const serialized = JSON.stringify(cfg);
-    const res = await window.fetchAPI('updateCard', { rowId, data: { '自訂名片設定': serialized } }, true);
-    if (!res || res.success === false || res.error) throw new Error(res?.error || '儲存失敗');
-    card['自訂名片設定'] = serialized;
-    if (window.currentUserCard && safeText(window.currentUserCard.rowId) === rowId) window.currentUserCard['自訂名片設定'] = serialized;
-    if (window.currentCard && safeText(window.currentCard.rowId) === rowId) window.currentCard['自訂名片設定'] = serialized;
-    if (!options.silent) window.showToast?.('業務需求已儲存，AI 配對會使用這些資料');
-    return intent;
   };
 
   window.startBusinessIntentRecommendation = async function() {
