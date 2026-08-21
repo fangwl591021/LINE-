@@ -8,7 +8,7 @@ const worker = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf
 
 test('business assistant exposes an isolated networking lab shell', () => {
   assert.match(index, /openBusinessNetworkingLab \? window\.openBusinessNetworkingLab\(\) : window\.openHomeLowerPanel\?\.\('assistant'\)/);
-  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.2/);
+  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.4/);
   assert.match(lab, /交流合作實驗區/);
   assert.match(lab, /今日建議/);
   assert.match(lab, /私人人脈/);
@@ -42,6 +42,29 @@ test('private networking uses existing CRM classifications without inventing ref
   assert.match(lab, /目前沒有可信的關係與引薦證據，因此不自動推測/);
 });
 
+test('recommendations explain detailed reasons from existing CRM evidence', () => {
+  assert.match(lab, /為什麼建議/);
+  assert.match(lab, /crmStatus/);
+  assert.match(lab, /crmType/);
+  assert.match(lab, /crmNextFollowupAt/);
+  assert.match(lab, /lastActivityTime/);
+  assert.match(lab, /事業／標籤資料/);
+  assert.match(lab, /renderTodayContact\(contact, followups\.length \+ index, 'collaboration'\)/);
+  assert.doesNotMatch(lab, /fetchAPI\('explain|generateRecommendation|analyzeContact/);
+});
+
+test('public cooperation profile reads only the resolved own card', () => {
+  assert.match(lab, /const card = window\.currentUserCard \|\| null/);
+  assert.match(lab, /readOwnBusinessIntent/);
+  assert.match(lab, /我可以提供/);
+  assert.match(lab, /我正在尋找/);
+  assert.match(lab, /希望合作方式/);
+  assert.match(lab, /收藏的別人名片不會出現在公開合作檔案/);
+  assert.match(lab, /window\.openMyCardSettings\(\)/);
+  assert.doesNotMatch(lab, /getCurrentBusinessIntent\s*\(/);
+  assert.doesNotMatch(lab, /window\.allCards/);
+});
+
 test('networking lab preserves public and enterprise authority boundaries', () => {
   assert.match(lab, /不會公開資料、寫入資料或傳送訊息/);
   assert.match(lab, /自己的可以公開；別人的不可以/);
@@ -49,5 +72,7 @@ test('networking lab preserves public and enterprise authority boundaries', () =
   assert.match(lab, /經驗證企業代表/);
   assert.match(lab, /setMatchmakePoolScope\('public'\)/);
   assert.match(lab, /不會混用現有優惠／折抵店家/);
+  assert.match(lab, /目前不會代替使用者傳送邀請或 LINE 訊息/);
   assert.doesNotMatch(lab, /startMatchmaking\s*\(/);
+  assert.doesNotMatch(lab, /shareTargetPicker|pushMessage|broadcast/);
 });

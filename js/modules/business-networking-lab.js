@@ -85,11 +85,50 @@
     return !status || ['新名片', '已初次聯繫', '已發送資料', '待跟進'].includes(status);
   }
 
-  function renderTodayContact(contact, index) {
+  function existingText(value) {
+    if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean).join('、');
+    return String(value || '').trim();
+  }
+
+  function reasonDate(value) {
+    const text = existingText(value);
+    if (!text) return '';
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text;
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  }
+
+  function contactReasons(contact, mode = 'followup') {
+    const status = existingText(contact?.crmStatus) || '新名片';
+    const type = existingText(contact?.crmType) || '待判斷';
+    const nextAction = existingText(contact?.crmNextAction) || '初次聯繫';
+    const suggestion = existingText(contact?.crmAiSuggestion);
+    const company = existingText(contact?.company || contact?.companyName || contact?.公司名稱);
+    const title = existingText(contact?.title || contact?.職稱);
+    const career = existingText(contact?.career || contact?.事業 || contact?.tags);
+    const nextFollowup = reasonDate(contact?.crmNextFollowupAt);
+    const lastActivity = reasonDate(contact?.lastActivityTime);
+    const reasons = mode === 'collaboration'
+      ? [
+          `既有 CRM 客戶類型為「${type}」，目前建議下一步是「${nextAction}」。`,
+          company || title ? `名片資料顯示：${[company, title].filter(Boolean).join('／')}。` : '',
+          career ? `現有事業／標籤資料：${career}。` : '',
+          suggestion
+        ]
+      : [
+          `目前跟進狀態為「${status}」，尚屬需要持續聯絡的階段。`,
+          nextFollowup ? `預定跟進日期：${nextFollowup}。` : (lastActivity ? `最近資料更新：${lastActivity}。` : ''),
+          `既有下一步：${nextAction}。`,
+          suggestion
+        ];
+    return [...new Set(reasons.filter(Boolean))].slice(0, 4);
+  }
+
+  function renderTodayContact(contact, index, mode = 'followup') {
     const name = safeHTML(contact?.name || contact?.姓名 || '未命名');
     const company = safeHTML(contact?.company || contact?.companyName || contact?.公司名稱 || '私人收藏名片');
     const action = safeHTML(contact?.crmNextAction || '初次聯繫');
-    const suggestion = safeHTML(contact?.crmAiSuggestion || '');
+    const reasons = contactReasons(contact, mode);
     return `
       <button type="button" data-networking-contact-index="${index}" class="w-full rounded-2xl border border-violet-100 bg-white p-4 text-left shadow-sm active:scale-[0.99] transition-transform">
         <span class="flex items-start gap-3">
@@ -98,7 +137,10 @@
             <strong class="block truncate text-[15px] font-black text-slate-800">${name}</strong>
             <small class="mt-0.5 block truncate text-[11px] font-bold text-slate-400">${company}</small>
             <span class="mt-2 block text-[12px] font-black text-violet-700">建議：${action}</span>
-            ${suggestion ? `<small class="mt-1 block line-clamp-2 text-[11px] font-bold leading-relaxed text-slate-500">${suggestion}</small>` : ''}
+            <span class="mt-3 block text-[11px] font-black text-slate-600">為什麼建議</span>
+            <ul class="mt-1.5 space-y-1 text-[11px] font-bold leading-relaxed text-slate-500">
+              ${reasons.map(reason => `<li class="flex items-start gap-1.5"><span class="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-violet-400"></span><span>${safeHTML(reason)}</span></li>`).join('')}
+            </ul>
           </span>
           <span class="material-symbols-outlined text-slate-300">chevron_right</span>
         </span>
@@ -206,7 +248,7 @@
         ? followups.map((contact, index) => renderTodayContact(contact, index)).join('')
         : '<div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-[12px] font-bold text-emerald-700">目前沒有待跟進人脈。</div>';
       collaborationList.innerHTML = collaborations.length
-        ? collaborations.map((contact, index) => renderTodayContact(contact, followups.length + index)).join('')
+        ? collaborations.map((contact, index) => renderTodayContact(contact, followups.length + index, 'collaboration')).join('')
         : '<div class="rounded-2xl border border-slate-200 bg-white p-4 text-[12px] font-bold leading-relaxed text-slate-500">目前沒有已分類的合作候選人；可先在名片詳情確認客戶類型。</div>';
     } catch (error) {
       if (requestToken !== todayRequestToken) return;
@@ -215,6 +257,70 @@
       followupList.innerHTML = failed;
       collaborationList.innerHTML = failed;
     }
+  }
+
+  function readOwnBusinessIntent() {
+    const card = window.currentUserCard;
+    if (!card) return {};
+    const serialized = card['自訂名片設定'] || card.customConfig || card.custom_config || '{}';
+    try {
+      const config = typeof serialized === 'string' ? JSON.parse(serialized || '{}') : serialized;
+      return config && typeof config.businessIntent === 'object' ? config.businessIntent : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function publicIntentRow(label, value, icon) {
+    const display = String(value || '').trim();
+    return `
+      <div class="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+        <div class="flex items-center gap-2 text-[11px] font-black text-slate-500"><span class="material-symbols-outlined text-[17px] text-blue-600">${icon}</span>${label}</div>
+        <p class="mt-1.5 text-[13px] font-bold leading-relaxed ${display ? 'text-slate-800' : 'text-slate-400'}">${safeHTML(display || '尚未填寫')}</p>
+      </div>`;
+  }
+
+  function publicPanelBody() {
+    const card = window.currentUserCard || null;
+    const intent = readOwnBusinessIntent();
+    const poolEligible = card?.poolEligible === true || String(card?.poolEligible || '').toLowerCase() === 'true';
+    const visibility = String(card?.visibility || '').toLowerCase();
+    const statusLabel = !card
+      ? '尚未建立本人名片'
+      : (poolEligible ? '已可進入公開交流池' : (visibility === 'public' ? '公開條件審核中' : '尚未進入公開交流池'));
+    const statusTone = poolEligible ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
+    return `
+      <section class="mt-4 rounded-3xl border border-blue-100 bg-white p-4 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="text-[11px] font-black tracking-[0.12em] text-blue-600">MY COOPERATION PROFILE</p>
+            <h4 class="mt-1 truncate text-lg font-black text-slate-900">${safeHTML(card?.name || '我的合作檔案')}</h4>
+          </div>
+          <span class="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${statusTone}">${statusLabel}</span>
+        </div>
+        <p class="mt-3 text-[11px] font-bold leading-relaxed text-slate-500">只讀取本人的數位名片設定；收藏的別人名片不會出現在公開合作檔案。</p>
+        <div class="mt-4 space-y-2">
+          ${publicIntentRow('我可以提供', intent.offer, 'volunteer_activism')}
+          ${publicIntentRow('我正在尋找', intent.seek, 'search')}
+          ${publicIntentRow('希望合作方式', intent.collaboration, 'handshake')}
+        </div>
+        <button type="button" data-networking-own-profile class="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3 text-[13px] font-black text-white">
+          <span class="material-symbols-outlined text-[18px]">edit</span>${card ? '編輯我的合作檔案' : '建立我的數位名片'}
+        </button>
+      </section>
+      <button type="button" data-networking-public-match class="mt-4 w-full rounded-2xl border border-blue-100 bg-blue-50 p-4 text-left active:scale-[0.99] transition-transform">
+        <span class="flex items-start gap-3">
+          <span class="material-symbols-outlined rounded-xl bg-white p-2 text-blue-600">recommend</span>
+          <span class="min-w-0 flex-1"><strong class="block text-[15px] font-black text-slate-800">AI 推薦夥伴</strong><small class="mt-1 block text-[12px] font-bold leading-relaxed text-slate-500">前往公開交流池；由您輸入需求後才會開始配對。</small></span>
+          <span class="material-symbols-outlined text-blue-300">arrow_forward</span>
+        </span>
+      </button>
+      <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-100 p-4 text-left">
+        <span class="flex items-start gap-3">
+          <span class="material-symbols-outlined rounded-xl bg-white p-2 text-slate-400">mark_email_unread</span>
+          <span class="min-w-0 flex-1"><strong class="block text-[15px] font-black text-slate-600">認識邀請</strong><small class="mt-1 block text-[12px] font-bold leading-relaxed text-slate-400">尚未開放；目前不會代替使用者傳送邀請或 LINE 訊息。</small></span>
+        </span>
+      </div>`;
   }
 
   function ensureLab() {
@@ -263,6 +369,7 @@
         return;
       }
       if (event.target.closest('[data-networking-public-match]')) return window.openNetworkingPublicMatch();
+      if (event.target.closest('[data-networking-own-profile]')) return window.openNetworkingOwnProfile();
       const action = event.target.closest('[data-networking-lab-action]');
       if (action) window.showToast?.(`${action.dataset.networkingLabAction}：下一階段開放`);
     });
@@ -285,7 +392,7 @@
         <p class="mt-2 text-[13px] font-bold leading-relaxed text-slate-500">${panel.description}</p>
         ${panel.notice ? `<div class="mt-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[12px] font-bold leading-relaxed text-amber-800">${panel.notice}</div>` : ''}
       </section>
-      ${panelKey === 'today' ? todayPanelBody() : (panelKey === 'private' ? privatePanelBody() : `<div class="mt-4 space-y-3">${actionCards(panel.actions)}</div>`)}
+      ${panelKey === 'today' ? todayPanelBody() : (panelKey === 'private' ? privatePanelBody() : (panelKey === 'public' ? publicPanelBody() : `<div class="mt-4 space-y-3">${actionCards(panel.actions)}</div>`))}
       <p class="pb-safe mt-6 text-center text-[11px] font-bold text-slate-400">交流合作功能將依資料授權逐步開放。</p>`;
     if (panelKey === 'today') loadTodaySuggestions();
     if (panelKey === 'private') loadPrivateNetwork();
@@ -314,6 +421,12 @@
     else window.matchmakePoolScope = 'public';
     window.goPage?.('home');
     setTimeout(() => window.scrollToHomeMatchmake?.(), 160);
+  };
+
+  window.openNetworkingOwnProfile = function() {
+    window.closeBusinessNetworkingLab();
+    if (typeof window.openMyCardSettings === 'function') window.openMyCardSettings();
+    else window.goPage?.('admin-settings');
   };
 
   document.addEventListener('keydown', event => {
