@@ -178,7 +178,7 @@
       const serialized = JSON.stringify(cfg);
       const res = await window.fetchAPI('updateCard', { rowId, data: { '自訂名片設定': serialized } }, true);
       if (!res || res.success === false || res.error) throw new Error(res?.error || '儲存失敗');
-      const savedCard = res.data && typeof res.data === 'object' ? res.data : {};
+      const savedCard = res.data && typeof res.data === 'object' ? res.data : res;
       const confirmedSerialized = savedCard['自訂名片設定'] || savedCard.customConfig || savedCard.custom_config || '';
       const confirmedIntent = parseConfigValue(confirmedSerialized).businessIntent;
       if (!confirmedIntent || typeof confirmedIntent !== 'object') throw new Error('伺服器未保留業務需求，請重新再試');
