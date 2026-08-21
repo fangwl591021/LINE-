@@ -9,6 +9,8 @@ const ecard = readFileSync(new URL('../js/modules/ecard.js', import.meta.url), '
 test('video-card UI entries are hidden without removing video functionality', () => {
   assert.match(index, /id="btn-open-my-video-card"[^>]*hidden aria-hidden="true" tabindex="-1"/);
   assert.match(index, /id="btn-open-ecard-video-card"[^>]*hidden aria-hidden="true" tabindex="-1"/);
+  assert.match(index, /id="btn-open-my-video-card"[^>]*style="display:none!important"/);
+  assert.match(index, /id="btn-open-ecard-video-card"[^>]*style="display:none!important"/);
   assert.match(index, /id="my-video-card-settings"/);
   assert.match(index, /id="ecard-video-card-settings"/);
   assert.match(mycard, /function openMyCardVideoFlow/);
