@@ -7776,24 +7776,63 @@ const AIModule = {
     return env.OPENAI_TEXT_MODEL || env.OPENAI_MODEL || 'gpt-4o';
   },
 
-  localMatchmakingFallback(query, contacts) {
-    const tokens = String(query || '')
-      .toLowerCase()
+  recommendationEvidenceReason(query, contact, businessIntent = {}) {
+    const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const splitTerms = (value) => clean(value)
+      .replace(/(?:我可以提供|我正在尋找|我希望合作)\s*[:：]?/g, '')
       .split(/[\s,，。;；、/\\|]+/)
-      .map(token => token.trim())
-      .filter(token => token.length >= 2);
+      .map(term => term.trim().toLowerCase())
+      .filter(term => term.length >= 2 && !['合作', '交流', '需要', '需求', '希望', '尋找', '提供', '企業', '客戶'].includes(term));
+    const needTerms = [...new Set([
+      query,
+      businessIntent.offer,
+      businessIntent.seek,
+      businessIntent.collaboration
+    ].flatMap(splitTerms))];
+    const fields = [
+      ['服務項目', contact.Services],
+      ['行業', contact.Industry],
+      ['公開特質', contact.Traits],
+      ['合作需求', contact.BusinessIntent],
+      ['職務', contact.Title]
+    ].filter(([, value]) => clean(value));
+    const hits = [];
+    for (const [label, value] of fields) {
+      const text = clean(value);
+      const normalized = text.toLowerCase();
+      const segments = splitTerms(text);
+      const matched = needTerms.find(term => normalized.includes(term) || segments.some(segment => term.includes(segment) || segment.includes(term)));
+      if (matched) hits.push({ label, matched, text });
+    }
+    const primary = hits[0];
+    if (primary) {
+      const detail = primary.text.length > 34 ? primary.text.slice(0, 34) + '…' : primary.text;
+      return {
+        hitCount: hits.length,
+        reason: `您的需求「${primary.matched}」與對方的${primary.label}「${detail}」直接相關。`
+      };
+    }
+    const descriptive = fields[0];
+    if (descriptive) {
+      const detail = descriptive[1].length > 34 ? descriptive[1].slice(0, 34) + '…' : descriptive[1];
+      return {
+        hitCount: 0,
+        reason: `對方公開的${descriptive[0]}為「${detail}」，可據此判斷是否符合您的合作需求。`
+      };
+    }
+    return { hitCount: 0, reason: '對方尚未提供足夠的公開特質、行業或服務資料，建議先查看名片再決定是否交流。' };
+  },
+
+  localMatchmakingFallback(query, contacts, businessIntent = {}) {
 
     return contacts
       .map(contact => {
-        const text = [contact.Name, contact.Company, contact.Title, contact.Tags].filter(Boolean).join(' ').toLowerCase();
-        const hitCount = tokens.reduce((count, token) => count + (text.includes(token) ? 1 : 0), 0);
-        const score = Math.max(55, Math.min(88, 60 + hitCount * 8));
+        const evidence = this.recommendationEvidenceReason(query, contact, businessIntent);
+        const score = Math.max(55, Math.min(90, 58 + evidence.hitCount * 10));
         return {
           rowId: contact.rowId,
           score,
-          reason: hitCount
-            ? 'AI 暫時無法完成深度配對，先依需求關鍵字與名片標籤排序。'
-            : 'AI 暫時無法完成深度配對，先提供配對池中的可交流名片。',
+          reason: evidence.reason,
           card: contact.card || undefined
         };
       })
@@ -7802,15 +7841,19 @@ const AIModule = {
   },
 
   matchContactFromCard(card) {
-    const tags = [
-      card.tags,
+    const traits = [
       card['個性'],
       card['興趣'],
       card['財富'],
       card['健康'],
-      card['事業'],
-      card.services,
-      card['服務項目'],
+      card['事業']
+    ].filter(Boolean).join(' ');
+    const industry = card.industry || card['業種'] || card['行業'] || card['行業類別'] || '';
+    const services = card.services || card['服務項目'] || '';
+    const tags = [
+      card.tags,
+      traits,
+      services,
       card.notes
     ].filter(Boolean).join(' ');
     return {
@@ -7819,6 +7862,9 @@ const AIModule = {
       Company: card.companyName || card['公司名稱'] || '',
       Title: card.title || card['職稱'] || '',
       Tags: tags,
+      Industry: industry,
+      Services: services,
+      Traits: traits,
       visibility: card.visibility || card['公開狀態'] || '',
       sourceType: card.sourceType || card['名片來源'] || '',
       poolEligible: card.poolEligible,
@@ -8036,10 +8082,13 @@ const AIModule = {
         businessIntent.collaboration ? '我希望合作：' + businessIntent.collaboration : ''
       ].filter(Boolean).join('；') || '未設定';
       const contactsList = safeContacts.map((c, i) => `${i + 1}. ${c.Name || '未命名'} (${c.Company || '無'})\
-標籤: ${c.Tags || '無'}\
+職稱: ${c.Title || '無'}\
+行業: ${c.Industry || '無'}\
+服務項目: ${c.Services || '無'}\
+公開特質: ${c.Traits || '無'}\
 業務需求: ${c.BusinessIntent || '未設定'}`).join('\
 ');
-      const prompt = `你是商務人脈配對助理。請綜合「需求、我能提供、我正在尋找、合作方式」與候選人的公司、標籤、業務需求，找出最有商業互補價值的人選。\
+      const prompt = `你是商務人脈配對助理。請綜合使用者需求，以及候選人的行業、服務項目、公開特質、職稱與合作需求，找出最有商業互補價值的人選。\
 使用者:${currentUser?.name || '使用者'}，配對池:${pool.scope === 'own' ? '自己的名片池' : '公開交流池'}\
 目前需求:${effectiveQuery}\
 長期業務意圖:${currentIntentText}\
@@ -8047,13 +8096,21 @@ const AIModule = {
 ${contactsList}\
 請回傳最匹配的前5名 JSON 陣列: [{\"index\":0,\"score\":95,\"reason\":\"具體說明互補點與合作價值，30字內\"}]`;
 
+      const evidencePrompt = [
+        prompt,
+        '以下規則取代前面的推薦理由長度要求：只能使用上述資料，不得推測候選人沒有公開的能力或關係。',
+        '排序優先判斷候選人的服務或行業是否符合使用者需求，其次判斷公開特質、職稱或合作需求是否互補。',
+        '禁止以新名片、最近新增、最近加入、資料完整度或公開資格作為推薦理由。',
+        'reason 必須指出一項具體行業、服務或公開特質，並說明如何符合需求；建議 40 至 80 字。'
+      ].join('\n');
+
       let items = [];
       try {
-        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: prompt }], temperature: 0.2 }, payload.clientOpenAIKey);
+        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: evidencePrompt }], temperature: 0.2 }, payload.clientOpenAIKey);
         items = this.parseJsonArray(result.choices?.[0]?.message?.content || '[]');
       } catch (aiError) {
         console.warn('[AI matchmaking] GPT failed, using local fallback:', aiError.message);
-        return { success: true, data: this.localMatchmakingFallback(effectiveQuery, safeContacts), fallback: true, poolScope: pool.scope };
+        return { success: true, data: this.localMatchmakingFallback(effectiveQuery, safeContacts, businessIntent), fallback: true, poolScope: pool.scope };
       }
 
       const used = new Set();
@@ -8065,16 +8122,17 @@ ${contactsList}\
         const contact = safeContacts[zeroBased] || safeContacts[index];
         if (!contact || used.has(contact.rowId)) return null;
         used.add(contact.rowId);
+        const evidence = this.recommendationEvidenceReason(effectiveQuery, contact, businessIntent);
         return {
           rowId: contact.rowId,
           score: Math.max(0, Math.min(100, Number(item.score || 0) || 0)),
-          reason: String(item.reason || '符合您的配對需求').slice(0, 80),
+          reason: evidence.reason,
           card: contact.card || undefined
         };
       }).filter(Boolean);
       return {
         success: true,
-        data: matches.length ? matches : this.localMatchmakingFallback(effectiveQuery, safeContacts),
+        data: matches.length ? matches : this.localMatchmakingFallback(effectiveQuery, safeContacts, businessIntent),
         fallback: matches.length === 0,
         poolScope: pool.scope
       };
