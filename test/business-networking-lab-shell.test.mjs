@@ -8,7 +8,7 @@ const worker = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf
 
 test('business assistant exposes an isolated networking lab shell', () => {
   assert.match(index, /openBusinessNetworkingLab \? window\.openBusinessNetworkingLab\(\) : window\.openHomeLowerPanel\?\.\('assistant'\)/);
-  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.5/);
+  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.6/);
   assert.match(lab, /交流合作實驗區/);
   assert.match(lab, /今日建議/);
   assert.match(lab, /私人人脈/);
@@ -80,6 +80,20 @@ test('public recommendations require explicit action and preserve existing publi
   assert.match(lab, /if \(generatePublic\) return generatePublicRecommendations\(generatePublic\)/);
 });
 
+test('public recommendations lead to user-confirmed viewing and inbox introductions', () => {
+  assert.match(lab, /data-networking-public-view="\$\{index\}"/);
+  assert.match(lab, /data-networking-public-contact="\$\{index\}"/);
+  assert.match(lab, /publicRecommendationMatches = matches\.slice\(0, 5\)/);
+  assert.match(lab, /visibility === 'public' && sourceType === 'self_profile' && poolEligible/);
+  assert.match(lab, /window\.openCardDetail\(match\.card\)/);
+  assert.match(lab, /window\.openInboxSendCenter\(\)/);
+  assert.match(lab, /window\.selectInboxRecipient\(receiverId, name\)/);
+  assert.match(lab, /推薦原因是「\$\{reason\}」/);
+  assert.match(lab, /送出前由本人確認，不會自動傳送 LINE/);
+  assert.doesNotMatch(lab, /fetchAPI\('sendInboxMessage'/);
+  assert.doesNotMatch(lab, /data-networking-public-(?:view|contact)="\$\{[^}]*rowId/);
+});
+
 test('networking lab preserves public and enterprise authority boundaries', () => {
   assert.match(lab, /不會公開資料、寫入資料或傳送訊息/);
   assert.match(lab, /自己的可以公開；別人的不可以/);
@@ -87,7 +101,7 @@ test('networking lab preserves public and enterprise authority boundaries', () =
   assert.match(lab, /經驗證企業代表/);
   assert.match(lab, /setMatchmakePoolScope\('public'\)/);
   assert.match(lab, /不會混用現有優惠／折抵店家/);
-  assert.match(lab, /目前不會代替使用者傳送邀請或 LINE 訊息/);
+  assert.match(lab, /不會自動傳送 LINE/);
   assert.doesNotMatch(lab, /startMatchmaking\s*\(/);
   assert.doesNotMatch(lab, /shareTargetPicker|pushMessage|broadcast\s*\(/);
 });

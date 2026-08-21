@@ -36,7 +36,7 @@
       actions: [
         ['badge', '我的合作檔案', '後續填寫我能提供、正在尋找與合作方式。'],
         ['recommend', 'AI 推薦夥伴', '僅使用已授權的公開合作資料。'],
-        ['mark_email_unread', '認識邀請', '下一階段才會實作雙方同意的認識流程。']
+        ['mark_email_unread', '認識邀請', '推薦結果可建立站內交流草稿，由本人確認後送出。']
       ]
     },
     enterprise: {
@@ -69,6 +69,7 @@
 
   let visibleContacts = [];
   let todayRequestToken = 0;
+  let publicRecommendationMatches = [];
 
   function safeHTML(value) {
     if (typeof window.escapeHTML === 'function') return window.escapeHTML(String(value || ''));
@@ -319,13 +320,13 @@
       <div id="business-networking-public-results" class="mt-3 space-y-3"></div>
       <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-100 p-4 text-left">
         <span class="flex items-start gap-3">
-          <span class="material-symbols-outlined rounded-xl bg-white p-2 text-slate-400">mark_email_unread</span>
-          <span class="min-w-0 flex-1"><strong class="block text-[15px] font-black text-slate-600">認識邀請</strong><small class="mt-1 block text-[12px] font-bold leading-relaxed text-slate-400">尚未開放；目前不會代替使用者傳送邀請或 LINE 訊息。</small></span>
+          <span class="material-symbols-outlined rounded-xl bg-white p-2 text-blue-500">mark_email_unread</span>
+          <span class="min-w-0 flex-1"><strong class="block text-[15px] font-black text-slate-700">認識邀請</strong><small class="mt-1 block text-[12px] font-bold leading-relaxed text-slate-500">推薦結果可開啟站內交流草稿；送出前由本人確認，不會自動傳送 LINE。</small></span>
         </span>
       </div>`;
   }
 
-  function publicMatchCard(match) {
+  function publicMatchCard(match, index) {
     const card = match?.card || {};
     const candidateIntent = (() => {
       const serialized = card['自訂名片設定'] || card.customConfig || card.custom_config || '{}';
@@ -359,12 +360,65 @@
         <ul class="mt-1.5 space-y-1 text-[11px] font-bold leading-relaxed text-slate-500">
           ${evidence.map(reason => `<li class="flex items-start gap-1.5"><span class="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-blue-400"></span><span>${safeHTML(reason)}</span></li>`).join('')}
         </ul>
+        <div class="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+          <button type="button" data-networking-public-view="${index}" class="rounded-xl border border-blue-100 bg-blue-50 py-2.5 text-[12px] font-black text-blue-700 active:scale-[0.98]">查看公開名片</button>
+          <button type="button" data-networking-public-contact="${index}" class="rounded-xl bg-blue-600 py-2.5 text-[12px] font-black text-white active:scale-[0.98]">我想認識</button>
+        </div>
       </article>`;
+  }
+
+  function publicRecommendation(index) {
+    const match = publicRecommendationMatches[Number(index)];
+    const card = match?.card || null;
+    const visibility = String(card?.visibility || '').toLowerCase();
+    const sourceType = String(card?.sourceType || card?.['名片來源'] || '').toLowerCase();
+    const poolEligible = card?.poolEligible === true || String(card?.poolEligible || '').toLowerCase() === 'true';
+    return card && visibility === 'public' && sourceType === 'self_profile' && poolEligible ? match : null;
+  }
+
+  function openPublicRecommendationCard(index) {
+    const match = publicRecommendation(index);
+    if (!match) return window.showToast?.('這份公開合作檔案已無法查看，請重新產生推薦', true);
+    window.closeBusinessNetworkingLab();
+    if (typeof window.openCardDetail === 'function') window.openCardDetail(match.card);
+    else window.goPage?.('card');
+  }
+
+  function openPublicRecommendationInbox(index) {
+    const match = publicRecommendation(index);
+    if (!match) return window.showToast?.('這份公開合作檔案已無法交流，請重新產生推薦', true);
+    if (typeof window.openInboxSendCenter !== 'function') return window.showToast?.('站內交流功能尚未就緒', true);
+    const card = match.card || {};
+    const name = existingText(card.name || card['姓名'] || '公開交流夥伴');
+    const company = existingText(card.companyName || card['公司名稱'] || '');
+    const receiverId = existingText(card.lineId || card.userId || card['LINE ID'] || card.profileUserId || '');
+    const reason = existingText(match.reason || '雙方公開合作資料具有互補性');
+    window.closeBusinessNetworkingLab();
+    window.openInboxSendCenter();
+    setTimeout(() => {
+      window.setInboxRecipientMode?.('user');
+      const query = document.getElementById('inbox-recipient-query');
+      const title = document.getElementById('inbox-message-title');
+      const body = document.getElementById('inbox-message-body');
+      const results = document.getElementById('inbox-recipient-results');
+      if (receiverId && typeof window.selectInboxRecipient === 'function') {
+        window.selectInboxRecipient(receiverId, name);
+      } else {
+        if (query) query.value = name;
+        if (results) results.innerHTML = '<div class="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-700">請搜尋並確認正確收件人後再送出。</div>';
+      }
+      if (title) title.value = `想認識 ${name}，交流合作`;
+      if (body) body.value = `您好，我在 AI 商脈的公開合作推薦中看到您${company ? `（${company}）` : ''}的合作檔案。推薦原因是「${reason}」。想先認識您，看看是否有合適的交流或合作機會。`;
+      window.toggleInboxComposer?.(true);
+      document.getElementById('inbox-composer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      body?.focus();
+    }, 240);
   }
 
   async function generatePublicRecommendations(trigger) {
     const results = document.getElementById('business-networking-public-results');
     if (!results || typeof window.fetchAPI !== 'function') return;
+    publicRecommendationMatches = [];
     const card = window.currentUserCard || null;
     const poolEligible = card?.poolEligible === true || String(card?.poolEligible || '').toLowerCase() === 'true';
     const visibility = String(card?.visibility || '').toLowerCase();
@@ -411,11 +465,13 @@
       }, true);
       const matches = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : null);
       if (!matches) throw new Error(response?.error || '無法取得公開推薦');
+      publicRecommendationMatches = matches.slice(0, 5);
       localStorage.setItem(usageKey, String(currentUsage + 1));
-      results.innerHTML = matches.length
-        ? `<div class="rounded-2xl bg-blue-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-blue-800">推薦只依公開合作資料與本人需求產生；請先查看原因，再自行決定是否交流。</div>${matches.slice(0, 5).map(publicMatchCard).join('')}`
+      results.innerHTML = publicRecommendationMatches.length
+        ? `<div class="rounded-2xl bg-blue-50 px-4 py-3 text-[11px] font-bold leading-relaxed text-blue-800">推薦只依公開合作資料與本人需求產生；請先查看原因，再自行決定是否交流。</div>${publicRecommendationMatches.map(publicMatchCard).join('')}`
         : '<div class="rounded-2xl border border-slate-200 bg-white p-4 text-[12px] font-bold text-slate-500">目前沒有符合條件的公開合作夥伴。</div>';
     } catch (error) {
+      publicRecommendationMatches = [];
       results.innerHTML = `<div class="rounded-2xl border border-red-100 bg-red-50 p-4 text-[12px] font-bold leading-relaxed text-red-600">公開推薦失敗：${safeHTML(error?.message || error || '請稍後再試')}</div>`;
     } finally {
       if (trigger) {
@@ -474,6 +530,10 @@
       if (event.target.closest('[data-networking-own-profile]')) return window.openNetworkingOwnProfile();
       const generatePublic = event.target.closest('[data-networking-generate-public]');
       if (generatePublic) return generatePublicRecommendations(generatePublic);
+      const publicView = event.target.closest('[data-networking-public-view]');
+      if (publicView) return openPublicRecommendationCard(publicView.dataset.networkingPublicView);
+      const publicContact = event.target.closest('[data-networking-public-contact]');
+      if (publicContact) return openPublicRecommendationInbox(publicContact.dataset.networkingPublicContact);
       const action = event.target.closest('[data-networking-lab-action]');
       if (action) window.showToast?.(`${action.dataset.networkingLabAction}：下一階段開放`);
     });
