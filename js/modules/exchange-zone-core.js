@@ -394,10 +394,17 @@
           <span><span class="block text-[13px] font-black text-slate-800">附上我的公開電子名片</span><span class="mt-1 block text-[11px] font-bold text-slate-500">只會使用您自己的公開名片</span></span>
           <input type="checkbox" name="attachMyCard" ${!editing || existingPost.cardAvailable ? 'checked' : ''} class="h-5 w-5 accent-emerald-500">
         </label>
+        <div class="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3">
+          <div class="flex items-start gap-2.5">
+            <span class="material-symbols-outlined mt-0.5 text-[20px] text-blue-600" aria-hidden="true">auto_awesome</span>
+            <span><span class="block text-[13px] font-black text-slate-800">AI 審核與建議</span><span class="mt-1 block text-[11px] font-bold leading-5 text-slate-500">送出後由 AI 做最後審核；疑似犯罪內容不會上架，其餘內容通過後發布並提供文案建議。</span></span>
+          </div>
+        </div>
+        <div id="exchange-zone-ai-review-status" role="status" class="hidden rounded-2xl border px-4 py-3 text-[13px] font-bold"></div>
         <div id="exchange-zone-compose-error" role="alert" class="hidden rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] font-bold text-red-700"></div>
         <button id="exchange-zone-publish-button" type="submit" class="w-full min-h-14 rounded-2xl bg-emerald-500 text-white text-[15px] font-black flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50">
           <span class="material-symbols-outlined text-[21px]">send</span>
-          ${editing ? '儲存修改（不扣點）' : `確認發布並扣 ${state.access.publishCost} 點`}
+          ${editing ? 'AI 審核並儲存（不扣點）' : `AI 審核並發布・${state.access.publishCost} 點`}
         </button>
       </form>`;
   }
@@ -415,6 +422,7 @@
     if (state.publishing) return;
     const selectedTags = Array.from(form.querySelectorAll('[name="contactTags"]:checked')).map((input) => input.value);
     const errorBox = document.getElementById('exchange-zone-compose-error');
+    const reviewBox = document.getElementById('exchange-zone-ai-review-status');
     if (selectedTags.length > 3) {
       if (errorBox) {
         errorBox.textContent = '聯絡標籤最多選擇 3 個';
@@ -427,9 +435,10 @@
     state.publishing = true;
     if (button) {
       button.disabled = true;
-      button.textContent = '正在發布…';
+      button.textContent = 'AI 審核中…';
     }
     if (errorBox) errorBox.classList.add('hidden');
+    if (reviewBox) reviewBox.classList.add('hidden');
     try {
       const editing = Boolean(String(data.get('postHandle') || ''));
       const result = await window.fetchAPI(editing ? 'updateExchangeZonePost' : 'publishExchangeZonePost', {
@@ -440,7 +449,14 @@
         attachMyCard: data.get('attachMyCard') === 'on',
         idempotencyKey: String(data.get('idempotencyKey') || '')
       }, true);
-      if (result?.success === false) throw new Error(result.error || '刊登失敗');
+      if (result?.success === false) {
+        if (reviewBox && result?.aiReview) {
+          const suggestions = Array.isArray(result.aiReview.suggestions) ? result.aiReview.suggestions : [];
+          reviewBox.className = 'rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-bold text-amber-800';
+          reviewBox.innerHTML = `<p class="font-black">AI 審核未通過</p><p class="mt-1 leading-5">${escapeHtml(result.aiReview.reason || result.error || '')}</p>${suggestions.length ? `<ul class="mt-2 list-disc space-y-1 pl-5">${suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}`;
+        }
+        throw new Error(result.error || '刊登失敗');
+      }
       await window.loadExchangeZone?.();
       renderPublishSuccess(result, editing);
     } catch (error) {
@@ -453,7 +469,7 @@
       if (button) {
         button.disabled = false;
         const editing = Boolean(String(new FormData(form).get('postHandle') || ''));
-        button.innerHTML = `<span class="material-symbols-outlined text-[21px]">${editing ? 'save' : 'send'}</span>${editing ? '儲存修改（不扣點）' : `確認發布並扣 ${state.access.publishCost} 點`}`;
+        button.innerHTML = `<span class="material-symbols-outlined text-[21px]">${editing ? 'save' : 'send'}</span>${editing ? 'AI 審核並儲存（不扣點）' : `AI 審核並發布・${state.access.publishCost} 點`}`;
       }
     }
   }
@@ -465,12 +481,14 @@
     if (!content) return;
     const duplicated = result?.alreadyPublished === true;
     const charged = duplicated ? 0 : Number(result?.chargedPoints || state.access.publishCost);
+    const suggestions = Array.isArray(result?.aiReview?.suggestions) ? result.aiReview.suggestions : [];
     content.innerHTML = `
       <section class="min-h-full flex items-center justify-center py-8">
         <div class="w-full rounded-3xl border border-emerald-100 bg-emerald-50/70 px-5 py-8 text-center">
           <span class="material-symbols-outlined text-[64px] text-emerald-500" aria-hidden="true">check_circle</span>
           <h4 class="mt-3 text-2xl font-black text-slate-800">${editing ? '更新完成' : '刊登完成'}</h4>
           <p class="mt-3 text-[14px] font-bold leading-6 text-slate-600">${editing ? '內容已更新，本次沒有扣點，原刊登期限保持不變。' : (duplicated ? '這則內容先前已成功刊登，本次沒有重複扣點。' : `已扣除 ${charged} 點，內容將公開顯示 ${state.access.publishDays} 天。`)}</p>
+          ${result?.aiReview?.passed ? `<div class="mt-4 rounded-2xl border border-blue-100 bg-white/80 px-4 py-3 text-left text-[12px] font-bold leading-5 text-slate-600"><p class="font-black text-blue-700">AI 審核已通過</p>${suggestions.length ? `<ul class="mt-1 list-disc space-y-1 pl-5">${suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p class="mt-1">目前沒有其他修改建議。</p>'}</div>` : ''}
           <button id="exchange-zone-success-close" type="button" class="mt-6 w-full min-h-13 rounded-2xl bg-emerald-500 px-4 text-[15px] font-black text-white active:scale-[0.98]">返回交流專區</button>
         </div>
       </section>`;

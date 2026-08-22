@@ -45,7 +45,8 @@ includesAll(worker, [
   "case 'getExchangeZoneAccess': return ExchangeZoneModule.access(payload || {}, env, actor)",
   "case 'listExchangeZonePosts': return await ExchangeZoneModule.list(payload || {}, env, actor)",
   "case 'getExchangeZonePost': return await ExchangeZoneModule.get(payload || {}, env, actor)",
-  "case 'updateExchangeZonePost': return await ExchangeZoneModule.update(payload || {}, env, actor)"
+  "case 'updateExchangeZonePost': return await ExchangeZoneModule.update(payload || {}, env, actor, {",
+  "review: async (input) => AIModule.reviewExchangeZonePost(input, env)"
 ], 'Worker requires authenticated LINE actors and forwards verified actor to every exchange read');
 ok(!worker.includes("getExchangeZoneAccess: { access: 'public'"), 'exchange access probe is not public');
 ok(!worker.includes("listExchangeZonePosts: { access: 'public'"), 'exchange feed is not public');
@@ -76,7 +77,7 @@ includesAll(workerModule, [
 ], 'Worker returns opaque public view models');
 includesAll(workerModule, [
   'canEdit:',
-  'async update(payload, env, actor)',
+  'async update(payload, env, actor, reviewer)',
   "author_user_id = ?2 AND status = 'published'",
   'chargedPoints: 0',
   'card_custom_config',

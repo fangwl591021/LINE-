@@ -206,7 +206,9 @@ function updateEnv(owned = true) {
     body: '這是更新後的交流內容，原本期限保持不變。',
     contactTags: ['人才交流'],
     attachMyCard: true
-  }, env, member);
+  }, env, member, {
+    review: async () => ({ pass: true, reason: '合法交流內容', suggestions: ['補充合作條件'] })
+  });
   assert.equal(result.success, true);
   assert.equal(result.chargedPoints, 0);
   assert.equal(env.calls.length, 2);
@@ -352,6 +354,18 @@ function pointsService(balance = 100, options = {}) {
   };
 }
 
+const allowReviewer = {
+  review: async () => ({
+    pass: true,
+    reason: '合法商務交流內容',
+    riskCodes: [],
+    suggestions: ['可補充預期合作方式']
+  })
+};
+const blockReviewer = {
+  review: async () => ({ pass: false, reason: '內容疑似招募詐騙車手', riskCodes: ['FRAUD'], suggestions: ['移除犯罪安排'] })
+};
+
 const publishPayload = {
   title: '尋找合作夥伴',
   body: '希望認識中小企業顧問，一起交流服務。',
@@ -371,8 +385,19 @@ const publishPayload = {
 
 {
   const env = publishEnv();
+  const points = pointsService(100);
+  const result = await ExchangeZoneModule.publish(publishPayload, env, admin, points, blockReviewer);
+  assert.equal(result.code, 'EXCHANGE_AI_REVIEW_REQUIRED');
+  assert.equal(result.aiReview.passed, false);
+  assert.equal(points.adjustments.length, 0);
+  assert.equal(env.operations.length, 0);
+  assert.equal(env.posts.length, 0);
+}
+
+{
+  const env = publishEnv();
   const points = pointsService(5);
-  const result = await ExchangeZoneModule.publish(publishPayload, env, admin, points);
+  const result = await ExchangeZoneModule.publish(publishPayload, env, admin, points, allowReviewer);
   assert.equal(result.code, 'INSUFFICIENT_POINTS');
   assert.equal(points.adjustments.length, 0);
   assert.equal(env.posts[0].status, 'draft');
@@ -382,7 +407,7 @@ const publishPayload = {
 {
   const env = publishEnv();
   const points = pointsService(100);
-  const result = await ExchangeZoneModule.publish(publishPayload, env, admin, points);
+  const result = await ExchangeZoneModule.publish(publishPayload, env, admin, points, allowReviewer);
   assert.equal(result.success, true);
   assert.equal(result.chargedPoints, 10);
   assert.equal(points.adjustments.length, 1);
@@ -403,7 +428,7 @@ const publishPayload = {
 {
   const env = publishEnv({ failBatch: true });
   const points = pointsService(100);
-  const result = await ExchangeZoneModule.publish({ ...publishPayload, idempotencyKey: 'exchange_test_key_0002' }, env, admin, points);
+  const result = await ExchangeZoneModule.publish({ ...publishPayload, idempotencyKey: 'exchange_test_key_0002' }, env, admin, points, allowReviewer);
   assert.equal(result.code, 'EXCHANGE_PUBLISH_REFUNDED');
   assert.deepEqual(points.adjustments.map((entry) => entry.points), [-10, 10]);
   assert.equal(env.posts[0].status, 'draft');
@@ -421,7 +446,7 @@ const publishPayload = {
 {
   const env = publishEnv();
   const points = pointsService(100, { throwDebit: true });
-  const result = await ExchangeZoneModule.publish({ ...publishPayload, idempotencyKey: 'exchange_test_key_0003' }, env, admin, points);
+  const result = await ExchangeZoneModule.publish({ ...publishPayload, idempotencyKey: 'exchange_test_key_0003' }, env, admin, points, allowReviewer);
   assert.equal(result.code, 'POINT_DEBIT_UNCERTAIN');
   assert.deepEqual(points.adjustments.map((entry) => entry.points), [-10]);
   assert.equal(env.operations[0].state, 'debit_uncertain');
@@ -430,4 +455,14 @@ const publishPayload = {
   assert.equal(points.adjustments.length, 1);
 }
 
+
+{
+  const env = publishEnv();
+  const points = pointsService(100);
+  const result = await ExchangeZoneModule.publish(publishPayload, env, admin, points);
+  assert.equal(result.code, 'EXCHANGE_AI_REVIEW_UNAVAILABLE');
+  assert.equal(points.adjustments.length, 0);
+  assert.equal(env.operations.length, 0);
+  assert.equal(env.posts.length, 0);
+}
 console.log('Exchange zone access, privacy, feed, detail and 10-point publish tests passed.');

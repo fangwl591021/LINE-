@@ -331,6 +331,46 @@ function postInput(payload, requireIdempotency = true) {
   return { title, body, idempotencyKey, contactTags: selectedTags, attachMyCard: payload?.attachMyCard === true };
 }
 
+async function reviewPost(input, reviewer) {
+  if (!reviewer || typeof reviewer.review !== 'function') {
+    return {
+      success: false,
+      error: 'AI 審核暫時無法完成，內容尚未發布，也未扣點',
+      code: 'EXCHANGE_AI_REVIEW_UNAVAILABLE'
+    };
+  }
+  try {
+    const result = await reviewer.review({
+      title: input.title,
+      body: input.body,
+      contactTags: input.contactTags.slice()
+    });
+    if (typeof result?.pass !== 'boolean') throw new Error('AI review returned no decision');
+    const aiReview = {
+      passed: result.pass,
+      reason: text(result.reason, 240),
+      riskCodes: (Array.isArray(result.riskCodes) ? result.riskCodes : []).map((item) => text(item, 48)).filter(Boolean).slice(0, 6),
+      suggestions: (Array.isArray(result.suggestions) ? result.suggestions : []).map((item) => text(item, 160)).filter(Boolean).slice(0, 3)
+    };
+    if (!result.pass) {
+      return {
+        success: false,
+        error: aiReview.reason || 'AI 審核未通過，請修改內容後再試',
+        code: 'EXCHANGE_AI_REVIEW_REQUIRED',
+        aiReview
+      };
+    }
+    return { success: true, aiReview };
+  } catch (error) {
+    console.warn('Exchange zone AI review failed:', text(error?.message, 240));
+    return {
+      success: false,
+      error: 'AI 審核暫時無法完成，內容尚未發布，也未扣點',
+      code: 'EXCHANGE_AI_REVIEW_UNAVAILABLE'
+    };
+  }
+}
+
 function safeJson(value) {
   try {
     return JSON.stringify(value ?? {}).slice(0, 8000);
@@ -453,7 +493,7 @@ export const ExchangeZoneModule = {
       : { success: false, error: '找不到這則交流內容' };
   },
 
-  async update(payload, env, actor) {
+  async update(payload, env, actor, reviewer) {
     const access = accessFor(actor, env);
     if (!access.allowed) return denied(access);
     if (!env?.ACTMASTER_DB) return { success: false, error: '交流專區資料庫尚未設定' };
@@ -477,6 +517,9 @@ export const ExchangeZoneModule = {
     `).bind(postHandle, authorUserId).first();
     if (!owned) return { success: false, error: '找不到可編輯的交流內容', code: 'EXCHANGE_UPDATE_NOT_ALLOWED' };
 
+    const review = await reviewPost(input, reviewer);
+    if (!review.success) return review;
+
     await env.ACTMASTER_DB.prepare(`
       UPDATE exchange_zone_posts
       SET title = ?1,
@@ -499,10 +542,10 @@ export const ExchangeZoneModule = {
       authorUserId,
       postHandle
     ).run();
-    return { success: true, updated: true, chargedPoints: 0, postHandle, access };
+    return { success: true, updated: true, chargedPoints: 0, postHandle, access, aiReview: review.aiReview };
   },
 
-  async publish(payload, env, actor, points) {
+  async publish(payload, env, actor, points, reviewer) {
     const access = accessFor(actor, env);
     if (!access.allowed || !access.canPublish) return denied(access);
     if (!env?.ACTMASTER_DB) return { success: false, error: '交流專區資料庫尚未設定' };
@@ -523,6 +566,9 @@ export const ExchangeZoneModule = {
       throw error;
     }
     if (prior) return duplicateResult(prior, access);
+
+    const review = await reviewPost(input, reviewer);
+    if (!review.success) return review;
 
     const operationId = `exop_${crypto.randomUUID()}`;
     const postHandle = `exp_${crypto.randomUUID()}`;
@@ -622,7 +668,8 @@ export const ExchangeZoneModule = {
         postHandle,
         chargedPoints: PUBLISH_COST,
         expiresAt,
-        access
+        access,
+        aiReview: review.aiReview
       };
     } catch (error) {
       if (completedDebit?.success) {
