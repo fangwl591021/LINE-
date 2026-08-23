@@ -7,7 +7,7 @@ const intent = readFileSync(new URL('../js/modules/business-intent.js', import.m
 const worker = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
 
 test('business intent save controls remain visible above mobile navigation', () => {
-  assert.match(index, /business-intent\.js\?v=1\.5/);
+  assert.match(index, /business-intent\.js\?v=1\.6/);
   assert.match(intent, /id="business-intent-actions" class="fixed bottom-\[84px\]/);
   assert.match(intent, /pb-36 bg-white space-y-4/);
   assert.match(intent, /id="business-intent-save"/);
@@ -15,6 +15,7 @@ test('business intent save controls remain visible above mobile navigation', () 
 
 test('AI first draft uses card context without overwriting or auto-saving', () => {
   assert.match(intent, /id="business-intent-ai-write"/);
+  assert.match(intent, /bg-blue-600[\s\S]*text-white/);
   assert.match(intent, /outputType: 'business_intent'/);
   assert.match(intent, /buildBusinessIntentCardContext\(card\)/);
   assert.match(intent, /const emptyKeys = Object\.keys\(fields\)\.filter/);

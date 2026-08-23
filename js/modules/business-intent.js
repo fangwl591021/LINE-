@@ -117,7 +117,7 @@
         <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
           <div class="flex items-center gap-2 font-black text-slate-800"><span class="material-symbols-outlined text-blue-600">hub</span>建立您的 AI 業務需求</div>
           <p class="mt-2 text-[12px] font-bold leading-relaxed text-slate-500">這三項資料會提供給 AI 搜尋與智能配對使用，讓系統知道您能提供什麼、正在找誰、希望怎麼合作。</p>
-          <button id="business-intent-ai-write" type="button" onclick="window.aiWriteBusinessIntent()" class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-[13px] font-black text-blue-700 active:scale-[0.99] transition-transform disabled:opacity-60"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>AI 幫我寫</span></button>
+          <button id="business-intent-ai-write" type="button" onclick="window.aiWriteBusinessIntent()" class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-[13px] font-black text-white shadow-sm active:scale-[0.99] transition-transform disabled:opacity-60"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>AI 幫我寫</span></button>
           <p class="mt-2 text-[11px] font-bold text-blue-600/80">依本人名片與五大標籤產生首次草稿，不會覆蓋已填內容或自動儲存。</p>
         </div>
         <div>
