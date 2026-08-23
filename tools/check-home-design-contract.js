@@ -127,6 +127,7 @@ if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia
   'window.refreshHomeAiAssistant',
   'window.openHomeAiAssistantAdvice',
   'HOME_AI_ASSISTANT_POSITION_KEY',
+  '#home-ai-assistant{position:fixed;right:8px;bottom:96px;z-index:65',
   'body:not(.home-page) #home-ai-assistant',
   'prefers-reduced-motion:reduce',
   "return { action: 'businessIntent'",

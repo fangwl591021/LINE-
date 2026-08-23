@@ -625,6 +625,8 @@ const HomeModule = (function() {
         style.textContent = `
             @keyframes homeAiAssistantFloat { 0%,100%{transform:translateY(0) rotate(-1.5deg)} 50%{transform:translateY(-9px) rotate(1.5deg)} }
             @keyframes homeAiAssistantBubble { 0%,100%{transform:scale(1)} 50%{transform:scale(1.025)} }
+            #home-ai-assistant{position:fixed;right:8px;bottom:96px;z-index:65;display:flex;width:188px;flex-direction:column;align-items:flex-end;pointer-events:none}
+            #home-ai-assistant button{pointer-events:auto}
             body:not(.home-page) #home-ai-assistant{display:none!important}
             #home-ai-assistant .home-ai-assistant-character{animation:homeAiAssistantFloat 3s ease-in-out infinite;filter:drop-shadow(0 9px 10px rgba(15,23,42,.2));transform-origin:50% 100%}
             #home-ai-assistant .home-ai-assistant-bubble{animation:homeAiAssistantBubble 2.4s ease-in-out infinite}
