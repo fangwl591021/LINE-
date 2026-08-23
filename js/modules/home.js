@@ -1025,7 +1025,7 @@ const HomeModule = (function() {
     window.openHomeActivityCategory = function(type) {
         if (typeof window.goPage === 'function') window.goPage('active');
         setTimeout(function() {
-            const map = { activity: '例會', course: '課程', social: '聯誼', other: '其他' };
+            const map = { activity: '例會', course: '課程', social: '\u806F\u8ABC', other: '其他' };
             const value = map[type] || '例會';
             ['q-type', 'f-type', 's-type'].forEach(function(id) {
                 const select = document.getElementById(id);
