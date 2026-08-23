@@ -69,6 +69,23 @@
     return !!currentUserId && !!cardUserId && currentUserId === cardUserId;
   }
 
+  function buildBusinessIntentCardContext(card) {
+    return {
+      name: safeText(card?.['姓名'] || card?.name),
+      company: safeText(card?.['公司名稱'] || card?.companyName || card?.company_name),
+      title: safeText(card?.['職稱'] || card?.title),
+      department: safeText(card?.['部門'] || card?.department),
+      industry: safeText(card?.['產業'] || card?.['產業類別'] || card?.industry),
+      services: safeText(card?.['服務項目'] || card?.services),
+      tags: safeText(card?.['標籤'] || card?.tags),
+      personality: safeText(card?.['個性'] || card?.personality),
+      hobbies: safeText(card?.['興趣'] || card?.hobbies),
+      wealth: safeText(card?.['財富'] || card?.wealth),
+      health: safeText(card?.['健康'] || card?.health),
+      career: safeText(card?.['事業'] || card?.career)
+    };
+  }
+
   function buildIntentQuery(intent) {
     const parts = [];
     if (safeText(intent?.offer)) parts.push('我可以提供：' + safeText(intent.offer));
@@ -100,6 +117,8 @@
         <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
           <div class="flex items-center gap-2 font-black text-slate-800"><span class="material-symbols-outlined text-blue-600">hub</span>建立您的 AI 業務需求</div>
           <p class="mt-2 text-[12px] font-bold leading-relaxed text-slate-500">這三項資料會提供給 AI 搜尋與智能配對使用，讓系統知道您能提供什麼、正在找誰、希望怎麼合作。</p>
+          <button id="business-intent-ai-write" type="button" onclick="window.aiWriteBusinessIntent()" class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-3 text-[13px] font-black text-blue-700 active:scale-[0.99] transition-transform disabled:opacity-60"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>AI 幫我寫</span></button>
+          <p class="mt-2 text-[11px] font-bold text-blue-600/80">依本人名片與五大標籤產生首次草稿，不會覆蓋已填內容或自動儲存。</p>
         </div>
         <div>
           <label class="block text-[13px] font-black text-slate-700 mb-2">1. 我可以提供？</label>
@@ -140,8 +159,59 @@
       el.readOnly = !editable;
       el.classList.toggle('opacity-70', !editable);
     });
+    document.getElementById('business-intent-ai-write')?.classList.toggle('hidden', !editable);
     document.getElementById('business-intent-actions')?.classList.toggle('hidden', !editable);
     document.getElementById('business-intent-readonly-note')?.classList.toggle('hidden', editable);
+  };
+
+  window.aiWriteBusinessIntent = async function() {
+    const button = document.getElementById('business-intent-ai-write');
+    const label = button?.querySelector('span:last-child');
+    const originalText = label?.textContent || 'AI 幫我寫';
+    try {
+      const card = getCurrentCard();
+      if (!card) throw new Error('找不到本人名片資料');
+      if (!canEdit(card)) throw new Error('只有名片本人可以使用 AI 幫寫');
+      if (typeof window.fetchAPI !== 'function') throw new Error('AI 服務尚未就緒');
+      const fields = {
+        offer: document.getElementById('business-intent-offer'),
+        seek: document.getElementById('business-intent-seek'),
+        collaboration: document.getElementById('business-intent-collaboration')
+      };
+      const existingIntent = Object.fromEntries(Object.entries(fields).map(([key, el]) => [key, safeText(el?.value)]));
+      const emptyKeys = Object.keys(fields).filter(key => !existingIntent[key]);
+      if (!emptyKeys.length) {
+        window.showToast?.('三項已有內容；若要重寫，請先清除想讓 AI 補寫的欄位');
+        return null;
+      }
+      if (button) button.disabled = true;
+      if (label) label.textContent = 'AI 撰寫中...';
+      const res = await window.fetchAPI('generateCardCopy', {
+        outputType: 'business_intent',
+        card: buildBusinessIntentCardContext(card),
+        existingIntent
+      }, true);
+      if (!res || res.success === false || res.error) throw new Error(res?.error || 'AI 沒有產生草稿');
+      const draft = res.data && typeof res.data === 'object' ? res.data : res;
+      let filled = 0;
+      emptyKeys.forEach(key => {
+        const el = fields[key];
+        const value = safeText(draft[key]);
+        if (!el || !value) return;
+        el.value = value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        filled += 1;
+      });
+      if (!filled) throw new Error('名片資料不足，請先補充服務項目或五大標籤');
+      window.showToast?.('AI 已依名片產生草稿，請確認修改後再儲存');
+      return draft;
+    } catch (error) {
+      window.showToast?.('AI 幫寫失敗：' + (error?.message || '請稍後再試'), true);
+      return null;
+    } finally {
+      if (button) button.disabled = false;
+      if (label) label.textContent = originalText;
+    }
   };
 
   window.getCurrentBusinessIntent = function() {
