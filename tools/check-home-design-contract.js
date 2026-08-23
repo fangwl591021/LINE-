@@ -89,6 +89,12 @@ if (!index.includes('hidden space-y-0 animate-in') || !index.includes('text-[26p
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
+const defaultSearchEntry = index.indexOf('id="home-network-search-entry"');
+const quickActionsEnd = index.indexOf('id="home-exchange-zone-button"');
+const systemTicker = index.indexOf('id="home-system-ticker"');
+if (defaultSearchEntry < 0 || defaultSearchEntry < quickActionsEnd || defaultSearchEntry > systemTicker) {
+  fail('network search entry must be visible on the default home below quick actions');
+}
 [
   '你現在想找誰？',
   'name="businessHomeSearchQuery"',
