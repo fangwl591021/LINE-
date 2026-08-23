@@ -2,6 +2,8 @@ import { CustomerImportModule } from './worker/customer-import.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
 import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
 import { ExchangeZoneModule } from './worker/exchange-zone.mjs';
+import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
+import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
 
 /**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
@@ -8278,6 +8280,7 @@ ${contactsList}\
         cached: false,
         aiUsed,
         quotaDeferred,
+        aiFailed,
         reusedCount: reused.length,
         processedCount: pending.length
       };
@@ -8410,6 +8413,47 @@ JSON格式：{"Personality":"","Hobbies":"","Wealth":"","Health":"","Career":""}
     } catch (e) { return { success: false, error: e.message }; }
   }
 };
+
+export async function runAutomatedUploaderMatch(job, env) {
+  const ownerUserId = String(job?.ownerUserId || '').trim();
+  if (!ownerUserId || !env?.ACTMASTER_DB) return { success: false, error: 'CARD_OWNER_MISSING' };
+  const identityIds = await D1ReadModule.identityIdsForUser(env, ownerUserId).catch(() => [ownerUserId]);
+  const ids = [...new Set([ownerUserId, ...(identityIds || [])].map(value => String(value || '').trim()).filter(Boolean))];
+  const placeholders = ids.map(() => '?').join(',');
+  const selfCard = await D1ReadModule.first(env, `
+    SELECT * FROM card_contacts
+    WHERE LOWER(COALESCE(source_type,''))='self_profile'
+      AND (owner_user_id IN (${placeholders}) OR creator_id IN (${placeholders}) OR line_id IN (${placeholders}) OR profile_user_id IN (${placeholders}))
+      AND COALESCE(archived_at,'')=''
+    ORDER BY COALESCE(updated_at,created_at) DESC,row_id DESC
+    LIMIT 1
+  `, [...ids, ...ids, ...ids, ...ids]).catch(() => null);
+  let config = {};
+  try {
+    config = typeof selfCard?.custom_config === 'string' ? JSON.parse(selfCard.custom_config || '{}') : (selfCard?.custom_config || {});
+  } catch (error) {}
+  const rawIntent = config && typeof config === 'object' ? (config.businessIntent || {}) : {};
+  const businessIntent = {
+    offer: String(rawIntent.offer || '').trim(),
+    seek: String(rawIntent.seek || '').trim(),
+    collaboration: String(rawIntent.collaboration || '').trim()
+  };
+  if (!businessIntent.offer && !businessIntent.seek && !businessIntent.collaboration) {
+    return { success: true, waitingForIntent: true };
+  }
+  const result = await AIModule.matchmaking({
+    authenticatedUserId: ownerUserId,
+    authenticatedRole: 'user',
+    currentUser: { userId: ownerUserId, name: String(selfCard?.name || '').trim() },
+    businessIntent,
+    poolScope: 'own'
+  }, env);
+  if (!result?.success) return result;
+  if (result.quotaDeferred || result.aiFailed) {
+    return { success: false, retry: true, error: result.quotaDeferred ? 'AI_MATCH_QUOTA_DEFERRED' : 'AI_MATCH_TEMPORARY_FAILURE' };
+  }
+  return { success: true, aiUsed: result.aiUsed === true, cached: result.cached === true };
+}
 
 // ==================== 模組 4: 訊息構建 (Messaging Module) ====================
 const MessagingModule = {
@@ -10909,6 +10953,13 @@ const D1WriteModule = {
     if (card.line_id) await this.upsertUser({ userId: card.line_id, name: card.name, phone: card.mobile || card.office_phone, industry: card.title || card.company_name, networkId: card.network_id, role: 'user' }, env);
     const pointAward = await this.awardCardScanPoints(env, awardUserId, card.row_id, card, !existing && !duplicateForAward && !isOwnCard);
     const awardedPoints = pointAward && pointAward.awarded ? pointAward.points : 0;
+    const pipelineEnqueue = await Promise.allSettled([
+      CardFateTagAnalysisModule.enqueueCard(card.row_id, env),
+      CardUploaderMatchModule.enqueueCard(card.row_id, env)
+    ]);
+    pipelineEnqueue.forEach((result, index) => {
+      if (result.status === 'rejected') console.error(index === 0 ? 'card fate tag enqueue failed' : 'card uploader match enqueue failed', result.reason?.message || 'UNKNOWN');
+    });
     const responseCard = D1ReadModule.cardRow(card);
     responseCard.awardedPoints = awardedPoints;
     responseCard.pointAward = pointAward;

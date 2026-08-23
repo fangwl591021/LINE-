@@ -1,6 +1,7 @@
-import legacyWorker from './workerbackup.js';
+import legacyWorker, { runAutomatedUploaderMatch } from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
+import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
 import { ExchangeZoneCouponModule } from './worker/exchange-zone-coupon.mjs';
 import { createCardImageJob, saveCardImageResult } from './worker/a-kaffit-card-image-processing.mjs';
 import { recognizeAkaffitBusinessCard } from './worker/a-kaffit-card-recognize.mjs';
@@ -454,17 +455,7 @@ export default {
       response = await enrichStoreSettingsResponse(env, action, payload, response);
       response = await enrichSystemTickerResponse(env, action, response);
       response = await enrichExchangeZoneResponse(request, env, action, payload, response);
-      if ((action === 'saveCard' || action === 'updateCard') && response.ok) {
-        const result = await response.clone().json().catch(() => null);
-        const rowId = text(result?.data?.rowId || result?.rowId || payload?.rowId || payload?.row_id);
-        if (rowId) {
-          const enqueue = CardFateTagAnalysisModule.enqueueCard(rowId, env).catch(error => {
-            console.error('card fate tag enqueue failed', text(error?.message) || 'UNKNOWN');
-          });
-          if (ctx?.waitUntil) ctx.waitUntil(enqueue);
-          else await enqueue;
-        }
-      }
+
     }
     return response;
   },
@@ -472,11 +463,13 @@ export default {
   async scheduled(controller, env, ctx) {
     if (controller?.cron === '*/15 18-20 * * *') {
       const now = new Date();
+      const cardPipeline = CardFateTagAnalysisModule.processOffPeak(env, now)
+        .then(() => CardUploaderMatchModule.process(env, runAutomatedUploaderMatch));
       const run = Promise.allSettled([
         CustomerTagAnalysisModule.processOffPeak(env, now),
-        CardFateTagAnalysisModule.processOffPeak(env, now)
+        cardPipeline
       ]).then(results => results.forEach((result, index) => {
-        if (result.status === 'rejected') console.error(index === 0 ? 'customer tag analysis cron failed' : 'card fate tag analysis cron failed', text(result.reason?.message) || 'UNKNOWN');
+        if (result.status === 'rejected') console.error(index === 0 ? 'customer tag analysis cron failed' : 'card analysis pipeline cron failed', text(result.reason?.message) || 'UNKNOWN');
       }));
       if (ctx?.waitUntil) ctx.waitUntil(run);
       else await run;
