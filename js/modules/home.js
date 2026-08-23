@@ -504,7 +504,7 @@ const HomeModule = (function() {
                 box.dataset.target = 'business';
                 if (icon) icon.textContent = 'public';
                 title.textContent = '你想讓誰找到你？';
-                note.textContent = '公開本人名片並通過 AI 審核後即可收到關注';
+                note.textContent = '建立您的 AI 業務需求';
             }
             box.classList.remove('hidden');
             return data;
