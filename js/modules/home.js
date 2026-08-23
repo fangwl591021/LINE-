@@ -450,10 +450,10 @@ const HomeModule = (function() {
     };
 
     function getHomeAiInterestPreviewCount_() {
-        const role = String(window.userRole || window.currentUser?.role || '').trim().toLowerCase();
-        if (window.hasAdminRights !== true && role !== 'admin') return 0;
         try {
-            const params = new URLSearchParams(window.location.search || '');
+            const params = typeof window.readActmasterInitialParams === 'function'
+                ? window.readActmasterInitialParams()
+                : new URLSearchParams(window.location.search || '');
             const raw = Number(params.get('simulateAiInterest') || 0);
             if (!Number.isFinite(raw) || raw < 1) return 0;
             return Math.min(99, Math.floor(raw));
