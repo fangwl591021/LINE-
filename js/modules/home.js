@@ -443,7 +443,18 @@ const HomeModule = (function() {
 
     window.refreshHomeSocialLikeWidget = function() {};
 
+    window.openHomeBusinessIntent = async function() {
+        if (typeof window.openMyCardDetail === 'function') {
+            await window.openMyCardDetail();
+            setTimeout(() => window.switchTab?.('business'), 50);
+            return;
+        }
+        window.openMyCardSettings?.();
+    };
+
     window.openHomeAiMatchInterest = function() {
+        const box = document.getElementById('home-ai-match-interest-summary');
+        if (box?.dataset.target === 'business') return window.openHomeBusinessIntent?.();
         window.matchmakePoolScope = 'public';
         window.goPage?.('matchmake');
         window.setMatchmakePoolScope?.('public');
@@ -478,18 +489,21 @@ const HomeModule = (function() {
             const count = Math.max(0, Number(data?.interestCount || 0) || 0);
             const eligible = data?.eligibleForAiInterest === true;
             if (count > 0) {
+                box.dataset.target = 'interest';
                 if (icon) icon.textContent = 'favorite';
                 title.textContent = (simulated ? '模擬顯示｜' : '') + '有 ' + count + ' 人對你感興趣';
                 note.textContent = simulated ? 'TONYFANG 模擬預覽，不影響真實關注數' : '來自全網商脈 AI 配對的真人關注';
                 box.classList.add('border-pink-100', 'bg-pink-50');
                 box.classList.remove('border-emerald-100', 'bg-emerald-50');
             } else if (eligible) {
+                box.dataset.target = 'business';
                 if (icon) icon.textContent = 'auto_awesome';
                 title.textContent = '讓 AI 為你增加曝光';
                 note.textContent = '尚無新關注，完善合作需求可提高媒合機會';
             } else {
+                box.dataset.target = 'business';
                 if (icon) icon.textContent = 'public';
-                title.textContent = '開啟全網商脈，讓夥伴發現你';
+                title.textContent = '你想讓誰找到你？';
                 note.textContent = '公開本人名片並通過 AI 審核後即可收到關注';
             }
             box.classList.remove('hidden');

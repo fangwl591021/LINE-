@@ -68,13 +68,16 @@ includesAll(index, [
   'id="home-ai-match-interest-summary"',
   'id="home-ai-match-interest-title"',
   'js/modules/matchmake.js?v=7.12',
-  'js/modules/home.js?v=7.93'
+  'js/modules/home.js?v=7.94'
 ], 'homepage includes a cache-busted AI interest summary');
 includesAll(home, [
   "window.fetchAPI('getAiMatchInterestSummary'",
   '有 ' + "' + count + '" + ' 人對你感興趣',
   'eligibleForAiInterest',
   "window.matchmakePoolScope = 'public'",
+  "title.textContent = '你想讓誰找到你？'",
+  "box.dataset.target = 'business'",
+  "window.switchTab?.('business')",
   "params.get('simulateAiInterest')",
   'window.readActmasterInitialParams',
   'Math.min(99, Math.floor(raw))',
