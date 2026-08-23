@@ -452,6 +452,15 @@ const HomeModule = (function() {
         window.openMyCardSettings?.();
     };
 
+    window.openHomeFateTags = async function() {
+        if (typeof window.openMyCardDetail === 'function') {
+            await window.openMyCardDetail();
+            setTimeout(() => window.switchTab?.('tags'), 50);
+            return;
+        }
+        window.openMyCardSettings?.();
+    };
+
     window.openHomeAiMatchInterest = function() {
         const box = document.getElementById('home-ai-match-interest-summary');
         if (box?.dataset.target === 'business') return window.openHomeBusinessIntent?.();
@@ -523,7 +532,9 @@ const HomeModule = (function() {
         loading: 'AI 商脈小助手',
         myCard: '我的名片',
         businessIntent: 'AI 業務需求',
+        fateTags: '五大標籤',
         interest: 'AI 人脈交流圈',
+        publicNetwork: 'AI 人脈交流圈',
         cardFolder: '收藏名片',
         matchmake: 'AI 人脈交流圈'
     });
@@ -544,11 +555,19 @@ const HomeModule = (function() {
             '建立 AI 業務需求，讓媒合條件更明確。',
             '你想讓誰找到你？先補上你的業務需求。'
         ],
+        fateTags: [
+            '五大標籤尚未完整，點我查看並補齊。',
+            '補齊五大標籤，能讓後續媒合更了解你的特質。'
+        ],
         interest: [
             '已收到關注，點我進入全網商脈查看媒合機會。',
             '你的公開名片已收到關注，可繼續查看全網媒合。',
             '系統偵測到真人關注，前往全網商脈尋找可能對象。',
             '有人透過 AI 配對關注你，點我繼續媒合。'
+        ],
+        publicNetwork: [
+            '本人名片尚未完成全網公開資格，點我前往檢查。',
+            '前往 AI 人脈交流圈完成公開與 AI 體檢。'
         ],
         cardFolder: [
             '目前可分析的收藏名片較少，先到收藏名片新增人脈。',
@@ -618,23 +637,32 @@ const HomeModule = (function() {
         widget.dataset.motion = HOME_AI_ASSISTANT_MOTIONS[index];
     }
 
-    function resolveHomeAiAssistantOwnCard_() {
+    function resolveHomeAiAssistantOwnCards_() {
+        const authoritativeCard = window.subsiteHomeFastData?.cards?.ownCard || null;
+        const authoritativeRowId = String(authoritativeCard?.rowId || authoritativeCard?.id || authoritativeCard?.['rowId'] || '');
         const candidates = [
+            authoritativeCard,
             window.currentUserCard,
             ...(Array.isArray(window.myCards) ? window.myCards : []),
             ...(Array.isArray(window.allCards) ? window.allCards : [])
         ].filter(Boolean);
-        return candidates.find(isOwnStaticProfileCard_) || null;
+        const seen = new Set();
+        return candidates.filter(card => {
+            const key = String(card.rowId || card.id || card['rowId'] || '');
+            const isAuthoritative = !!authoritativeRowId && key === authoritativeRowId;
+            if (!isAuthoritative && !isOwnStaticProfileCard_(card)) return false;
+            if (key && seen.has(key)) return false;
+            if (key) seen.add(key);
+            return true;
+        });
     }
 
-    function getHomeAiAssistantActions_() {
-        const card = resolveHomeAiAssistantOwnCard_();
-        const hasLoadedCardData = !!window.subsiteHomeFastData
-            || !!window.currentUserCard
-            || (Array.isArray(window.allCards) && window.allCards.length > 0);
-        if (!card && !hasLoadedCardData) return ['loading'];
-        if (!card) return ['myCard'];
-        const configs = [card['自訂名片設定'], card.customConfig, card.custom_config]
+    function resolveHomeAiAssistantOwnCard_() {
+        return resolveHomeAiAssistantOwnCards_()[0] || null;
+    }
+
+    function readHomeAiAssistantConfigs_(cards) {
+        return cards.flatMap(card => [card['自訂名片設定'], card.customConfig, card.custom_config])
             .filter(value => value !== null && value !== undefined && value !== '')
             .map(value => {
                 try {
@@ -644,12 +672,48 @@ const HomeModule = (function() {
                     return {};
                 }
             });
-        const config = configs.find(item => item.businessIntent && typeof item.businessIntent === 'object')
-            || configs[0]
-            || {};
-        const intent = config.businessIntent || {};
-        const hasBusinessIntent = [intent.offer, intent.seek, intent.collaboration]
-            .some(value => String(value || '').trim());
+    }
+
+    function buildHomeAiAssistantHealth_() {
+        const cards = resolveHomeAiAssistantOwnCards_();
+        const card = cards[0] || null;
+        const hasLoadedCardData = !!window.subsiteHomeFastData
+            || !!window.currentUserCard
+            || (Array.isArray(window.allCards) && window.allCards.length > 0);
+        if (!card) {
+            return {
+                loading: !hasLoadedCardData,
+                hasMyCard: false,
+                fateTagCount: 0,
+                missingFateTags: ['個性', '興趣', '財富', '健康', '事業'],
+                businessIntentCount: 0,
+                missingBusinessIntent: ['我能提供', '我正在尋找', '我希望合作'],
+                collectedCardCount: 0,
+                hasInterest: false
+            };
+        }
+        const fateTagDefs = [
+            ['個性', ['personality', '個性']],
+            ['興趣', ['hobbies', '興趣']],
+            ['財富', ['wealth', '財富']],
+            ['健康', ['health', '健康']],
+            ['事業', ['career', '事業']]
+        ];
+        const missingFateTags = fateTagDefs.filter(([, keys]) => !cards.some(item =>
+            keys.some(key => String(item?.[key] || '').trim())
+        )).map(([label]) => label);
+        const configs = readHomeAiAssistantConfigs_(cards);
+        const intents = configs
+            .map(config => config.businessIntent)
+            .filter(intent => intent && typeof intent === 'object');
+        const businessFields = [
+            ['我能提供', 'offer'],
+            ['我正在尋找', 'seek'],
+            ['我希望合作', 'collaboration']
+        ];
+        const missingBusinessIntent = businessFields.filter(([, key]) =>
+            !intents.some(intent => String(intent?.[key] || '').trim())
+        ).map(([label]) => label);
         const sourceCards = Array.isArray(window.harvestCards) && window.harvestCards.length
             ? window.harvestCards
             : (Array.isArray(window.allCards) ? window.allCards : []);
@@ -662,19 +726,46 @@ const HomeModule = (function() {
                 && sourceType !== 'referral_placeholder'
                 && crmStatus !== '個人名片';
         });
-        const actions = hasBusinessIntent
-            ? ['matchmake', 'businessIntent', 'myCard']
-            : ['businessIntent', 'myCard'];
-        if (collectedCards.length < 5) actions.push('cardFolder');
         const interestTitle = String(document.getElementById('home-ai-match-interest-title')?.textContent || '');
-        if (/有\s*\d+\s*人對你感興趣/.test(interestTitle)) actions.unshift('interest');
-        return actions;
+        const visibility = String(card.visibility || '').toLowerCase();
+        const aiReviewStatus = String(card.aiReviewStatus || card.ai_review_status || '').toLowerCase();
+        return {
+            loading: false,
+            hasMyCard: true,
+            fateTagCount: 5 - missingFateTags.length,
+            missingFateTags,
+            businessIntentCount: 3 - missingBusinessIntent.length,
+            missingBusinessIntent,
+            collectedCardCount: collectedCards.length,
+            hasInterest: /有\s*\d+\s*人對你感興趣/.test(interestTitle),
+            visibility,
+            poolEligible: card.poolEligible === true || card.pool_eligible === true,
+            aiReviewStatus,
+            publicReady: visibility === 'public'
+                && (card.poolEligible === true || card.pool_eligible === true)
+                && aiReviewStatus === 'passed'
+        };
+    }
+
+    function getHomeAiAssistantActions_(health) {
+        if (health.loading) return ['loading'];
+        if (!health.hasMyCard) return ['myCard'];
+        const actions = [];
+        if (health.fateTagCount < 5) actions.push('fateTags');
+        if (health.businessIntentCount < 3) actions.push('businessIntent');
+        if (health.collectedCardCount < 5) actions.push('cardFolder');
+        if (health.hasInterest) actions.push('interest');
+        if (health.fateTagCount === 5 && health.businessIntentCount === 3) {
+            actions.push(health.publicReady ? 'matchmake' : 'publicNetwork');
+        }
+        return actions.length ? actions : ['matchmake'];
     }
 
     function runHomeAiAssistantAction_(action) {
         if (action === 'loading') return null;
         if (action === 'myCard') return window.openMyCardEntry?.();
         if (action === 'businessIntent') return window.openHomeBusinessIntent?.();
+        if (action === 'fateTags') return window.openHomeFateTags?.();
         if (action === 'interest') return window.openHomeAiMatchInterest?.();
         if (action === 'cardFolder') return window.goPage?.('card');
         return window.goPage?.('matchmake');
@@ -802,13 +893,29 @@ const HomeModule = (function() {
 
     window.refreshHomeAiAssistant = function(options = {}) {
         const widget = ensureHomeAiAssistant_();
-        const actions = getHomeAiAssistantActions_();
+        const health = buildHomeAiAssistantHealth_();
+        window.homeAiAssistantHealth = health;
+        const actions = getHomeAiAssistantActions_(health);
         const rotate = options === true || options.rotate === true;
         const action = chooseHomeAiAssistantAction_(actions, widget, rotate);
+        let adviceText = chooseHomeAiAssistantCopy_(action, widget, rotate);
+        if (action === 'fateTags') {
+            adviceText = '五大標籤完成 ' + health.fateTagCount + '/5，尚缺：' + health.missingFateTags.join('、') + '。';
+        } else if (action === 'businessIntent') {
+            adviceText = 'AI 業務需求完成 ' + health.businessIntentCount + '/3，尚缺：' + health.missingBusinessIntent.join('、') + '。';
+        } else if (action === 'publicNetwork') {
+            if (health.visibility !== 'public') {
+                adviceText = '五大標籤與業務需求已完成；本人名片尚未公開到全網商脈。';
+            } else if (health.aiReviewStatus !== 'passed') {
+                adviceText = '本人名片已公開，但 AI 體檢尚未通過。';
+            } else {
+                adviceText = '公開資料已完成，正在確認全網商脈資格。';
+            }
+        }
         const advice = {
             action,
             title: HOME_AI_ASSISTANT_TITLES[action] || 'AI 商脈小助手',
-            text: chooseHomeAiAssistantCopy_(action, widget, rotate)
+            text: adviceText
         };
         widget.dataset.action = advice.action;
         const title = document.getElementById('home-ai-assistant-title');
