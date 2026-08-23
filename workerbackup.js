@@ -7947,6 +7947,54 @@ const AIModule = {
     };
   },
 
+  async matchmakingDigest(value) {
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  },
+
+  matchmakingCandidateSnapshot(contact) {
+    return {
+      rowId: String(contact.rowId || ''),
+      name: String(contact.Name || ''),
+      company: String(contact.Company || ''),
+      title: String(contact.Title || ''),
+      industry: String(contact.Industry || ''),
+      services: String(contact.Services || ''),
+      traits: String(contact.Traits || ''),
+      businessIntent: String(contact.BusinessIntent || ''),
+      visibility: String(contact.visibility || ''),
+      sourceType: String(contact.sourceType || ''),
+      poolEligible: contact.poolEligible === true || contact.poolEligible === 1 || contact.poolEligible === '1'
+    };
+  },
+
+  async loadIncrementalMatchCache(env, requesterUserId, poolScope, intentHash) {
+    const result = await env.ACTMASTER_DB.prepare(`
+      SELECT candidate_card_row_id,candidate_version,score,reason,result_source
+      FROM ai_match_pair_cache
+      WHERE requester_user_id=? AND pool_scope=? AND intent_hash=?
+    `).bind(requesterUserId, poolScope, intentHash).all();
+    return Array.isArray(result?.results) ? result.results : [];
+  },
+
+  async saveIncrementalMatchCache(env, requesterUserId, poolScope, intentHash, rows) {
+    if (!rows.length) return;
+    const statements = rows.map(row => env.ACTMASTER_DB.prepare(`
+      INSERT INTO ai_match_pair_cache (
+        requester_user_id,pool_scope,intent_hash,candidate_card_row_id,candidate_version,
+        score,reason,result_source,created_at,updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+      ON CONFLICT(requester_user_id,pool_scope,intent_hash,candidate_card_row_id) DO UPDATE SET
+        candidate_version=excluded.candidate_version,
+        score=excluded.score,
+        reason=excluded.reason,
+        result_source=excluded.result_source,
+        updated_at=CURRENT_TIMESTAMP
+    `).bind(requesterUserId, poolScope, intentHash, row.rowId, row.candidateVersion, row.score, row.reason, row.resultSource));
+    await env.ACTMASTER_DB.batch(statements);
+  },
+
   async recognize(payload, env) {
     try {
       const uploadedImgUrl = payload.deferImageUpload === true
@@ -8042,6 +8090,7 @@ const AIModule = {
   async matchmaking(payload, env) {
     try {
       const { currentUser, query, businessIntent = {} } = payload || {};
+      const requesterUserId = String(payload?.authenticatedUserId || '').trim();
       const pool = await this.loadMatchmakingPool(payload || {}, env);
       const safeContacts = pool.contacts.filter(c => {
         const visibility = String(c.visibility || '').toLowerCase();
@@ -8081,7 +8130,59 @@ const AIModule = {
         businessIntent.seek ? '我正在尋找：' + businessIntent.seek : '',
         businessIntent.collaboration ? '我希望合作：' + businessIntent.collaboration : ''
       ].filter(Boolean).join('；') || '未設定';
-      const contactsList = safeContacts.map((c, i) => `${i + 1}. ${c.Name || '未命名'} (${c.Company || '無'})\
+      const normalizeIntent = value => String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+      const intentHash = requesterUserId ? await this.matchmakingDigest({
+        version: 'incremental-v1',
+        query: normalizeIntent(effectiveQuery),
+        offer: normalizeIntent(businessIntent.offer),
+        seek: normalizeIntent(businessIntent.seek),
+        collaboration: normalizeIntent(businessIntent.collaboration)
+      }) : '';
+      const candidates = await Promise.all(safeContacts.map(async contact => ({
+        contact,
+        candidateVersion: await this.matchmakingDigest(this.matchmakingCandidateSnapshot(contact))
+      })));
+      let cachedRows = [];
+      let cacheAvailable = !!(requesterUserId && intentHash && env.ACTMASTER_DB);
+      if (cacheAvailable) {
+        try {
+          cachedRows = await this.loadIncrementalMatchCache(env, requesterUserId, pool.scope, intentHash);
+        } catch (cacheError) {
+          cacheAvailable = false;
+          console.warn('[AI matchmaking] incremental cache unavailable:', cacheError.message);
+        }
+      }
+      const cachedByCard = new Map(cachedRows.map(row => [String(row.candidate_card_row_id || ''), row]));
+      const reused = [];
+      const pending = [];
+      candidates.forEach(item => {
+        const cached = cachedByCard.get(String(item.contact.rowId || ''));
+        if (cached && String(cached.candidate_version || '') === item.candidateVersion) {
+          reused.push({
+            rowId: item.contact.rowId,
+            score: Math.max(0, Math.min(100, Number(cached.score || 0) || 0)),
+            reason: String(cached.reason || ''),
+            card: item.contact.card || undefined
+          });
+        } else {
+          pending.push(item);
+        }
+      });
+      if (!pending.length) {
+        return {
+          success: true,
+          data: reused.sort((a, b) => b.score - a.score).slice(0, 5),
+          fallback: false,
+          poolScope: pool.scope,
+          cached: true,
+          aiUsed: false,
+          reusedCount: reused.length,
+          processedCount: 0
+        };
+      }
+
+      const pendingContacts = pending.map(item => item.contact);
+      const contactsList = pendingContacts.map((c, i) => `${i + 1}. ${c.Name || '未命名'} (${c.Company || '無'})\
 職稱: ${c.Title || '無'}\
 行業: ${c.Industry || '無'}\
 服務項目: ${c.Services || '無'}\
@@ -8104,37 +8205,81 @@ ${contactsList}\
         'reason 必須指出一項具體行業、服務或公開特質，並說明如何符合需求；建議 40 至 80 字。'
       ].join('\n');
 
+      const localRows = pending.map(item => {
+        const evidence = this.recommendationEvidenceReason(effectiveQuery, item.contact, businessIntent);
+        return {
+          rowId: item.contact.rowId,
+          candidateVersion: item.candidateVersion,
+          score: Math.max(35, Math.min(64, 40 + evidence.hitCount * 8)),
+          reason: evidence.reason,
+          resultSource: 'rules',
+          card: item.contact.card || undefined
+        };
+      });
+      const freshByCard = new Map(localRows.map(row => [String(row.rowId), row]));
       let items = [];
+      let aiUsed = false;
+      let aiFailed = false;
+      let quotaDeferred = false;
       try {
-        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: evidencePrompt }], temperature: 0.2 }, payload.clientOpenAIKey);
-        items = this.parseJsonArray(result.choices?.[0]?.message?.content || '[]');
+        if (!requesterUserId) throw new Error('AUTHENTICATED_USER_REQUIRED');
+        const allowed = await SecurityModule.checkRateLimit(requesterUserId, 'matchmakeContacts', env, payload.authenticatedRole || 'user');
+        if (!allowed) {
+          quotaDeferred = true;
+        } else {
+          aiUsed = true;
+          const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: evidencePrompt }], temperature: 0.2 }, payload.clientOpenAIKey);
+          items = this.parseJsonArray(result.choices?.[0]?.message?.content || '[]');
+        }
       } catch (aiError) {
+        aiFailed = true;
         console.warn('[AI matchmaking] GPT failed, using local fallback:', aiError.message);
-        return { success: true, data: this.localMatchmakingFallback(effectiveQuery, safeContacts, businessIntent), fallback: true, poolScope: pool.scope };
       }
 
       const used = new Set();
-      const matches = items.map(item => {
+      items.forEach(item => {
         let index = Number(item.index);
         if (!Number.isFinite(index)) index = Number(item.no || item.number || item.id);
-        if (!Number.isFinite(index)) return null;
+        if (!Number.isFinite(index)) return;
         const zeroBased = index > 0 ? index - 1 : index;
-        const contact = safeContacts[zeroBased] || safeContacts[index];
-        if (!contact || used.has(contact.rowId)) return null;
+        const contact = pendingContacts[zeroBased] || pendingContacts[index];
+        if (!contact || used.has(contact.rowId)) return;
         used.add(contact.rowId);
         const evidence = this.recommendationEvidenceReason(effectiveQuery, contact, businessIntent);
-        return {
-          rowId: contact.rowId,
+        const existing = freshByCard.get(String(contact.rowId));
+        if (!existing) return;
+        freshByCard.set(String(contact.rowId), {
+          ...existing,
           score: Math.max(0, Math.min(100, Number(item.score || 0) || 0)),
           reason: evidence.reason,
-          card: contact.card || undefined
-        };
-      }).filter(Boolean);
+          resultSource: 'ai'
+        });
+      });
+      const freshRows = Array.from(freshByCard.values());
+      if (cacheAvailable && !quotaDeferred && !aiFailed) {
+        try {
+          await this.saveIncrementalMatchCache(env, requesterUserId, pool.scope, intentHash, freshRows);
+        } catch (cacheError) {
+          cacheAvailable = false;
+          console.warn('[AI matchmaking] incremental cache save failed:', cacheError.message);
+        }
+      }
+      const matches = reused.concat(freshRows.map(row => ({
+        rowId: row.rowId,
+        score: row.score,
+        reason: row.reason,
+        card: row.card
+      }))).sort((a, b) => b.score - a.score).slice(0, 5);
       return {
         success: true,
         data: matches.length ? matches : this.localMatchmakingFallback(effectiveQuery, safeContacts, businessIntent),
-        fallback: matches.length === 0,
-        poolScope: pool.scope
+        fallback: aiFailed || quotaDeferred || items.length === 0,
+        poolScope: pool.scope,
+        cached: false,
+        aiUsed,
+        quotaDeferred,
+        reusedCount: reused.length,
+        processedCount: pending.length
       };
     } catch (e) {
       return { success: false, error: e.message };
@@ -16277,7 +16422,7 @@ async function dispatchAction(action, payload, request, env) {
   }
 
   // 2. 資安防護：OpenAI 限流機制
-  const aiActions = ['recognizeCardWithGPT4o', 'matchmakeContacts', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy', 'suggestCustomerImportMapping'];
+  const aiActions = ['recognizeCardWithGPT4o', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy', 'suggestCustomerImportMapping'];
   if (aiActions.includes(action) && (actor?.userId || payload.userId)) {
     const allowed = await SecurityModule.checkRateLimit(actor?.userId || payload.userId, action, env, actor?.role || payload.role);
     if (!allowed) {

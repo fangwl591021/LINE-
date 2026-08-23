@@ -57,6 +57,7 @@ const fullChecks = [
   'tools/check-exchange-zone-publish-contract.js',
   'tools/check-exchange-zone-coupon-contract.js',
   'tools/check-ai-match-interest-contract.js',
+  'tools/check-incremental-matchmaking-contract.js',
   'tools/check-card-customer-switch-contract.js',
   'tools/check-card-fate-tag-pipeline-contract.js',
   'tools/check-card-quota-contract.js',

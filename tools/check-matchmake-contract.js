@@ -21,7 +21,7 @@ if (!index.includes('match-public-toggle-wrap')) {
 if (!matchmake.includes('window.matchmakePoolScope') || !matchmake.includes('window.setMatchmakePoolScope')) {
   fail('front-end must track and switch matchmaking pool scope');
 }
-if (!index.includes('js/modules/matchmake.js?v=7.10')) {
+if (!index.includes('js/modules/matchmake.js?v=7.11')) {
   fail('matchmake.js cache-bust version must be bumped');
 }
 if (!index.includes('js/modules/cardmaster.js?v=1.4')) {

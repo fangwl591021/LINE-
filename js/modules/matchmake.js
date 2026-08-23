@@ -302,15 +302,11 @@ window.startMatchmaking = async function() {
   const usageKey = `matchmake_usage_${today}`;
   let currentUsage = parseInt(localStorage.getItem(usageKey) || '0');
 
-  if (currentUsage >= limit) {
-    return window.showToast(`⚠️ 用量限制：您的方案 (${role.toUpperCase()}) 每日最多配對 ${limit} 次，請明日再試。`, true);
-  }
-
   const btn = document.getElementById('btn-match');
   if (!btn) return window.showToast('配對按鈕尚未載入，請重新進入智能配對頁', true);
 
   const oriHtml = btn.innerHTML;
-  btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> AI 正在尋找...';
+  btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 正在比對...';
   btn.disabled = true;
 
   try {
@@ -330,7 +326,9 @@ window.startMatchmaking = async function() {
     const matches = Array.isArray(res) ? res : (res && Array.isArray(res.data) ? res.data : null);
 
     if (matches) {
-      localStorage.setItem(usageKey, currentUsage + 1);
+      const usedAi = res?.aiUsed !== false;
+      if (usedAi) localStorage.setItem(usageKey, currentUsage + 1);
+      const nextUsage = currentUsage + (usedAi ? 1 : 0);
 
       const resultsList = document.getElementById('results-list');
       const resultsContainer = document.getElementById('match-results');
@@ -361,13 +359,16 @@ window.startMatchmaking = async function() {
         if (poolScope === 'public') window.loadAiMatchInterestStates(matches.map(match => match.rowId));
       }
 
-      const remaining = limit - (currentUsage + 1);
+      const remaining = Math.max(0, limit - nextUsage);
       const limitNotice = limit === Infinity ? '無限制' : `剩餘 ${remaining} 次`;
+      const resultNotice = res?.quotaDeferred
+        ? 'AI 額度已滿，先顯示既有與規則配對結果'
+        : usedAi ? `今日配對額度: ${limitNotice}` : '已沿用完成的配對結果，本次未啟動 AI';
 
       if (!document.getElementById('match-limit-notice')) {
-        resultsContainer.insertAdjacentHTML('afterbegin', `<div id="match-limit-notice" class="text-[11px] text-slate-400 font-bold mb-2 text-right px-1">今日配對額度: ${limitNotice}</div>`);
+        resultsContainer.insertAdjacentHTML('afterbegin', `<div id="match-limit-notice" class="text-[11px] text-slate-400 font-bold mb-2 text-right px-1">${resultNotice}</div>`);
       } else {
-        document.getElementById('match-limit-notice').textContent = `今日配對額度: ${limitNotice}`;
+        document.getElementById('match-limit-notice').textContent = resultNotice;
       }
 
       resultsContainer.classList.remove('hidden');
