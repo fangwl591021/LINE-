@@ -229,6 +229,52 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
   }
 };
 
+function renderAiMatchInterestButton_(button, interested) {
+  if (!button) return;
+  button.dataset.interested = interested ? '1' : '0';
+  button.classList.toggle('bg-pink-50', interested);
+  button.classList.toggle('border-pink-200', interested);
+  button.classList.toggle('text-pink-600', interested);
+  button.classList.toggle('bg-white', !interested);
+  button.classList.toggle('border-slate-200', !interested);
+  button.classList.toggle('text-slate-600', !interested);
+  button.innerHTML = '<span class="material-symbols-outlined text-[18px]">' + (interested ? 'favorite' : 'favorite_border') + '</span>' + (interested ? '已感興趣' : '感興趣');
+}
+
+window.loadAiMatchInterestStates = async function(cardRowIds) {
+  const ids = [...new Set((Array.isArray(cardRowIds) ? cardRowIds : []).map(value => String(value || '').trim()).filter(Boolean))].slice(0, 20);
+  if (!ids.length || typeof window.fetchAPI !== 'function') return;
+  try {
+    const res = await window.fetchAPI('getAiMatchInterestStates', { targetCardRowIds: ids }, true);
+    const rows = Array.isArray(res?.states) ? res.states : (Array.isArray(res?.data?.states) ? res.data.states : []);
+    rows.forEach(state => {
+      const rowId = String(state?.targetCardRowId || '');
+      const button = [...document.querySelectorAll('[data-ai-match-interest-card]')]
+        .find(item => item.dataset.aiMatchInterestCard === rowId);
+      renderAiMatchInterestButton_(button, state?.interestedByMe === true);
+    });
+  } catch (error) {
+    console.warn('[matchmake] interest states skipped:', error?.message || error);
+  }
+};
+
+window.toggleAiMatchInterest = async function(button, targetCardRowId) {
+  const rowId = String(targetCardRowId || '').trim();
+  if (!button || !rowId || typeof window.fetchAPI !== 'function') return;
+  button.disabled = true;
+  try {
+    const res = await window.fetchAPI('toggleAiMatchInterest', { targetCardRowId: rowId }, true);
+    const data = res?.data && res.data.interestedByMe !== undefined ? res.data : res;
+    if (!data || data.success === false || data.interestedByMe === undefined) throw new Error(data?.error || '關注狀態更新失敗');
+    renderAiMatchInterestButton_(button, data.interestedByMe === true);
+    window.showToast?.(data.interestedByMe ? '已送出感興趣；對方只會看到人數' : '已取消感興趣');
+  } catch (error) {
+    window.showToast?.(error?.message || '關注狀態更新失敗', true);
+  } finally {
+    button.disabled = false;
+  }
+};
+
 // 啟動 AI 配對
 window.startMatchmaking = async function() {
   const queryEl = document.getElementById('match-query');
@@ -299,15 +345,20 @@ window.startMatchmaking = async function() {
           if (match.card && !window.allCards.some(card => String(card.rowId) === String(match.rowId))) {
             window.allCards.push(match.card);
           }
+          const safeRowId = window.escapeJS(match.rowId);
+          const interestButton = poolScope === 'public'
+            ? '<button type="button" data-ai-match-interest-card="' + safeRowId + '" onclick="window.toggleAiMatchInterest(this, \'' + safeRowId + '\')" class="flex min-h-10 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-bold text-slate-600 active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">favorite_border</span>感興趣</button>'
+            : '';
           return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2">' +
             '<div class="flex justify-between items-center">' +
               '<div class="font-black text-slate-800">' + window.escapeJS(c['姓名'] || '未知') + ' <span class="text-[12px] font-medium text-slate-500 ml-1">' + window.escapeJS(c['公司名稱'] || '') + '</span></div>' +
               '<div class="bg-[#06C755] text-white px-2 py-0.5 rounded text-[11px] font-bold">契合度 ' + match.score + '%</div>' +
             '</div>' +
             '<div class="text-[13px] text-slate-600">' + window.escapeJS(match.reason) + '</div>' +
-            '<button type="button" onclick="window.openCardDetailById(\'' + window.escapeJS(match.rowId) + '\')" class="mt-2 w-full py-2 bg-white text-blue-600 rounded-lg font-bold text-[13px] border border-blue-100 active:scale-95 transition-transform">查看名片</button>' +
+            '<div class="mt-2 grid ' + (poolScope === 'public' ? 'grid-cols-2' : 'grid-cols-1') + ' gap-2"><button type="button" onclick="window.openCardDetailById(\'' + safeRowId + '\')" class="min-h-10 rounded-lg border border-blue-100 bg-white px-3 text-[13px] font-bold text-blue-600 active:scale-95 transition-transform">查看名片</button>' + interestButton + '</div>' +
           '</div>';
         }).join('');
+        if (poolScope === 'public') window.loadAiMatchInterestStates(matches.map(match => match.rowId));
       }
 
       const remaining = limit - (currentUsage + 1);

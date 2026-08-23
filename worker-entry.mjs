@@ -4,6 +4,7 @@ import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { ExchangeZoneCouponModule } from './worker/exchange-zone-coupon.mjs';
 import { createCardImageJob, saveCardImageResult } from './worker/a-kaffit-card-image-processing.mjs';
 import { recognizeAkaffitBusinessCard } from './worker/a-kaffit-card-recognize.mjs';
+import { MatchInterestModule } from './worker/match-interest.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -13,6 +14,11 @@ const TAG_ACTIONS = new Map([
   ['estimateCustomerTagAnalysisBatch', 'estimateBatch'],
   ['approveCustomerTagAnalysisBatch', 'approveBatch'],
   ['pauseCustomerTagAnalysisBatch', 'pauseBatch']
+]);
+const MATCH_INTEREST_ACTIONS = new Set([
+  'toggleAiMatchInterest',
+  'getAiMatchInterestStates',
+  'getAiMatchInterestSummary'
 ]);
 
 const text = value => String(value ?? '').trim();
@@ -245,6 +251,22 @@ async function handleExchangeCouponAction(request, env, payload) {
   }
 }
 
+async function handleMatchInterestAction(request, env, action, payload) {
+  const actor = await authenticatedActor(request, payload || {}, env);
+  if (!actor) return json({ success: false, error: 'Access Denied: Missing or invalid LINE Token' }, 403);
+  try {
+    let result = null;
+    if (action === 'toggleAiMatchInterest') result = await MatchInterestModule.toggle(payload || {}, env, actor);
+    if (action === 'getAiMatchInterestStates') result = await MatchInterestModule.states(payload || {}, env, actor);
+    if (action === 'getAiMatchInterestSummary') result = await MatchInterestModule.summary(payload || {}, env, actor);
+    if (!result) return json({ success: false, error: 'Unsupported AI match interest action' }, 400);
+    return json(result, result.success === false ? 400 : 200);
+  } catch (error) {
+    console.error('AI match interest action failed', action, text(error?.message) || 'UNKNOWN');
+    return json({ success: false, error: 'AI 關注服務暫時無法使用' }, 500);
+  }
+}
+
 async function enrichExchangeZoneResponse(request, env, action, payload, response) {
   if (!response?.ok || !['listExchangeZonePosts', 'getExchangeZonePost', 'publishExchangeZonePost', 'updateExchangeZonePost'].includes(action)) {
     return response;
@@ -398,6 +420,7 @@ export default {
       }
       if (TAG_ACTIONS.has(action)) return await handleTagAction(request, env, action, payload);
       if (action === 'redeemExchangeZoneCoupon') return await handleExchangeCouponAction(request, env, payload);
+      if (MATCH_INTEREST_ACTIONS.has(action)) return await handleMatchInterestAction(request, env, action, payload);
 
       if (action === 'getCardUploadQuotaStatus') {
         const actor = await authenticatedActor(request, payload, env);

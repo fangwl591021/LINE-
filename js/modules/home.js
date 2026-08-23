@@ -443,6 +443,47 @@ const HomeModule = (function() {
 
     window.refreshHomeSocialLikeWidget = function() {};
 
+    window.openHomeAiMatchInterest = function() {
+        window.matchmakePoolScope = 'public';
+        window.goPage?.('matchmake');
+        window.setMatchmakePoolScope?.('public');
+    };
+
+    window.loadHomeAiMatchInterestSummary = async function() {
+        const box = document.getElementById('home-ai-match-interest-summary');
+        const icon = document.getElementById('home-ai-match-interest-icon');
+        const title = document.getElementById('home-ai-match-interest-title');
+        const note = document.getElementById('home-ai-match-interest-note');
+        if (!box || !title || !note || typeof window.fetchAPI !== 'function') return null;
+        try {
+            const res = await window.fetchAPI('getAiMatchInterestSummary', {}, true);
+            const data = res?.data || res;
+            const count = Math.max(0, Number(data?.interestCount || 0) || 0);
+            const eligible = data?.eligibleForAiInterest === true;
+            if (count > 0) {
+                if (icon) icon.textContent = 'favorite';
+                title.textContent = '有 ' + count + ' 人對你感興趣';
+                note.textContent = '來自全網商脈 AI 配對的真人關注';
+                box.classList.add('border-pink-100', 'bg-pink-50');
+                box.classList.remove('border-emerald-100', 'bg-emerald-50');
+            } else if (eligible) {
+                if (icon) icon.textContent = 'auto_awesome';
+                title.textContent = '讓 AI 為你增加曝光';
+                note.textContent = '尚無新關注，完善合作需求可提高媒合機會';
+            } else {
+                if (icon) icon.textContent = 'public';
+                title.textContent = '開啟全網商脈，讓夥伴發現你';
+                note.textContent = '公開本人名片並通過 AI 審核後即可收到關注';
+            }
+            box.classList.remove('hidden');
+            return data;
+        } catch (error) {
+            console.warn('[home] AI match interest summary skipped:', error?.message || error);
+            box.classList.add('hidden');
+            return null;
+        }
+    };
+
     const PUBLIC_PARTNER_STORE_URL = 'https://aiwe.cc/index.php/search_linecard/?shop_id=78&submitted=1';
 
     window.openPartnerStores = function() {
@@ -549,7 +590,7 @@ const HomeModule = (function() {
             queryInput?.focus?.();
             return false;
         }
-        window.matchmakePoolScope = scope === 'public' ? 'public' : 'own';
+        window.matchmakePoolScope = scope === 'public' || scope === 'ai' ? 'public' : 'own';
         window.goPage?.('matchmake');
         const matchQuery = document.getElementById('match-query');
         if (matchQuery) matchQuery.value = query;
@@ -2442,6 +2483,10 @@ const HomeModule = (function() {
         runHomeBackgroundTask_('store-settings', 180, async () => {
             if (typeof window.syncStoreSettingsToHome === 'function') window.syncStoreSettingsToHome();
             if (typeof window.refreshStoreSettingsInBackground === 'function') await window.refreshStoreSettingsInBackground();
+        });
+
+        runHomeBackgroundTask_('home-ai-match-interest', 300, async () => {
+            await window.loadHomeAiMatchInterestSummary?.();
         });
 
         runHomeBackgroundTask_('home-system-ticker', 360, async () => {

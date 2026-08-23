@@ -1279,6 +1279,15 @@
             <button type="submit" class="min-h-12 shrink-0 rounded-xl bg-[#00634e] px-4 text-[13px] font-black text-white shadow-sm active:scale-95"><span class="material-symbols-outlined align-middle text-[19px]">arrow_forward</span><span class="sr-only">帶入 AI 媒合</span></button>
           </div>
         </form>
+        <button id="home-ai-match-interest-summary" type="button" onclick="window.openHomeAiMatchInterest?.()" class="hidden mt-3 w-full rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-left active:scale-[0.99] transition-transform">
+          <span class="flex items-center gap-3">
+            <span id="home-ai-match-interest-icon" class="material-symbols-outlined text-[24px] text-pink-500">favorite</span>
+            <span class="min-w-0">
+              <strong id="home-ai-match-interest-title" class="block text-[14px] font-black text-slate-800">AI 配對關注</strong>
+              <span id="home-ai-match-interest-note" class="mt-0.5 block text-[11px] font-bold text-slate-500">讀取中</span>
+            </span>
+          </span>
+        </button>
       </section>
 
       <div id="home-system-ticker" class="hidden mx-0 mt-4 overflow-hidden bg-amber-50 border-y border-amber-100"><div class="flex items-center gap-3 px-5 py-3 text-[13px] font-bold text-amber-800"><span class="material-symbols-outlined shrink-0 text-[20px]">campaign</span><div class="min-w-0 flex-1 overflow-hidden"><div id="home-system-ticker-text" class="inline-block whitespace-nowrap pr-8"></div></div></div></div><section id="home-recurring-task-panel" class="mx-0 mt-4 bg-white shadow-sm border-y border-slate-100">
@@ -2796,13 +2805,13 @@
 <script src="js/modules/cards.js?v=8.00"></script>
 <script src="js/modules/ecard.js?v=7.52"></script>
 <script src="js/modules/mycard.js?v=8.85"></script>
-<script src="js/modules/matchmake.js?v=7.9"></script>
+<script src="js/modules/matchmake.js?v=7.10"></script>
 <script src="js/modules/business-intent.js?v=1.4"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.8"></script>
 <script src="js/modules/home-task-buckets.mjs?v=1.0"></script>
-<script src="js/modules/home.js?v=7.89"></script>
+<script src="js/modules/home.js?v=7.90"></script>
 <script src="js/modules/business-networking-lab.js?v=1.8"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="js/modules/customers.js?v=1.1"></script>
