@@ -520,35 +520,39 @@ const HomeModule = (function() {
     const HOME_AI_ASSISTANT_VARIETY_KEY = 'ACTMASTER_HOME_AI_ASSISTANT_VARIETY_V1';
     const HOME_AI_ASSISTANT_MOTIONS = ['float', 'bounce', 'sway', 'peek'];
     const HOME_AI_ASSISTANT_COPY = Object.freeze({
+        loading: [
+            '正在讀取你的商脈資料，完成後我會提供正確建議。',
+            '我正在整理你的名片與業務需求，請稍候一下。'
+        ],
         myCard: [
-            '先建立你的名片，我帶你開始累積商脈。',
-            '把本人名片交給我，我才能替你整理商脈。',
-            '建立第一張名片後，我就能開始提供建議。',
-            '先讓大家認識你：建立你的數位名片吧！'
+            '尚未建立本人名片，先完成名片才能啟用個人化建議。',
+            '先建立本人名片，AI 才能理解你的專業與需求。',
+            '你的帳號目前沒有本人名片，點我前往建立。',
+            '建立數位名片，是啟用 AI 商脈的第一步。'
         ],
         businessIntent: [
-            '先建立 AI 業務需求，讓對的人更容易找到你。',
-            '你想讓誰找到你？把合作目標告訴我吧！',
-            '寫下能提供什麼、正在找誰，我來協助媒合。',
-            '把業務方向說清楚，我就能給你更準的建議。'
+            '本人名片已建立，下一步請填寫 AI 業務需求。',
+            '尚未填寫「我能提供、我正在尋找、我希望合作」。',
+            '建立 AI 業務需求，讓媒合條件更明確。',
+            '你想讓誰找到你？先補上你的業務需求。'
         ],
         interest: [
-            '有人對你感興趣，現在就去看看合作機會。',
-            '你被夥伴注意到了，去看看目前的關注吧！',
-            '合作訊號出現了，點我查看誰可能適合你。',
-            '你的公開名片正在發揮效果，看看關注進度吧！'
+            '已收到關注，點我進入全網商脈查看媒合機會。',
+            '你的公開名片已收到關注，可繼續查看全網媒合。',
+            '系統偵測到真人關注，前往全網商脈尋找可能對象。',
+            '有人透過 AI 配對關注你，點我繼續媒合。'
         ],
         cardFolder: [
-            '多收藏幾張名片，我就能幫你找到更多合作線索。',
-            '每多一張名片，你的私有人脈資產就更完整。',
-            '把新認識的夥伴收藏進來，我來幫你整理。',
-            '先累積幾張名片，再讓我從人脈中找機會。'
+            '目前可分析的收藏名片較少，先到收藏名片新增人脈。',
+            '收藏名片還不足 5 張，增加名片可建立更多人脈線索。',
+            '先累積收藏名片，再從你的私有人脈中尋找合作對象。',
+            '到收藏名片加入新夥伴，讓人脈搜尋資料更完整。'
         ],
         matchmake: [
-            '告訴我你想找誰，我帶你開始 AI 媒合。',
-            '今天想找哪一類夥伴？我可以從人脈開始找。',
-            '從你的人脈到全網商脈，現在就設定搜尋目標。',
-            '換個合作目標試試看，也許會發現新的商機。'
+            '名片和業務需求已就緒，現在可以開始 AI 媒合。',
+            '基礎資料已完成，告訴我你現在想找誰。',
+            '你可以先從我的人脈找，再擴大到全網商脈。',
+            '媒合資料已準備好，設定這次的合作搜尋目標。'
         ]
     });
     let homeAiAssistantDrag_ = null;
@@ -593,26 +597,59 @@ const HomeModule = (function() {
         widget.dataset.motion = HOME_AI_ASSISTANT_MOTIONS[index];
     }
 
+    function resolveHomeAiAssistantOwnCard_() {
+        const candidates = [
+            window.currentUserCard,
+            ...(Array.isArray(window.myCards) ? window.myCards : []),
+            ...(Array.isArray(window.allCards) ? window.allCards : [])
+        ].filter(Boolean);
+        return candidates.find(isOwnStaticProfileCard_) || null;
+    }
+
     function getHomeAiAssistantIntent_() {
-        const card = window.currentUserCard || null;
+        const card = resolveHomeAiAssistantOwnCard_();
+        const hasLoadedCardData = !!window.subsiteHomeFastData
+            || !!window.currentUserCard
+            || (Array.isArray(window.allCards) && window.allCards.length > 0);
+        if (!card && !hasLoadedCardData) return { action: 'loading' };
         if (!card) return { action: 'myCard' };
-        let config = {};
-        try {
-            const raw = card['自訂名片設定'] || card.customConfig || card.custom_config || '{}';
-            config = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
-        } catch (e) {}
+        const configs = [card['自訂名片設定'], card.customConfig, card.custom_config]
+            .filter(value => value !== null && value !== undefined && value !== '')
+            .map(value => {
+                try {
+                    const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : value;
+                    return parsed && typeof parsed === 'object' ? parsed : {};
+                } catch (e) {
+                    return {};
+                }
+            });
+        const config = configs.find(item => item.businessIntent && typeof item.businessIntent === 'object')
+            || configs[0]
+            || {};
         const intent = config.businessIntent || {};
         if (![intent.offer, intent.seek, intent.collaboration].some(value => String(value || '').trim())) {
             return { action: 'businessIntent' };
         }
         const interestTitle = String(document.getElementById('home-ai-match-interest-title')?.textContent || '');
         if (/有\s*\d+\s*人對你感興趣/.test(interestTitle)) return { action: 'interest' };
-        const cards = Array.isArray(window.allCards) ? window.allCards : [];
-        if (cards.length < 5) return { action: 'cardFolder' };
+        const sourceCards = Array.isArray(window.harvestCards) && window.harvestCards.length
+            ? window.harvestCards
+            : (Array.isArray(window.allCards) ? window.allCards : []);
+        const collectedCards = sourceCards.filter(item => {
+            const sourceType = String(item?.sourceType || item?.source_type || item?.['名片來源'] || '').trim();
+            const crmStatus = String(item?.crmStatus || item?.crm_status || '').trim();
+            return !isOwnStaticProfileCard_(item)
+                && sourceType !== 'self_profile'
+                && sourceType !== 'video_profile'
+                && sourceType !== 'referral_placeholder'
+                && crmStatus !== '個人名片';
+        });
+        if (collectedCards.length < 5) return { action: 'cardFolder' };
         return { action: 'matchmake' };
     }
 
     function runHomeAiAssistantAction_(action) {
+        if (action === 'loading') return null;
         if (action === 'myCard') return window.openMyCardEntry?.();
         if (action === 'businessIntent') return window.openHomeBusinessIntent?.();
         if (action === 'interest') return window.openHomeAiMatchInterest?.();
@@ -720,7 +757,7 @@ const HomeModule = (function() {
         widget.innerHTML = `
             <button id="home-ai-assistant-bubble" type="button" onclick="window.openHomeAiAssistantAdvice()" class="home-ai-assistant-bubble pointer-events-auto relative mb-1 w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 pr-7 text-left text-[12px] font-black leading-5 text-slate-700 shadow-xl">
                 <span id="home-ai-assistant-text">我可以幫你整理今天的下一步。</span>
-                <span class="mt-1 block text-[10px] font-black text-blue-600">點我前往處理 →</span>
+                <span id="home-ai-assistant-cta" class="mt-1 block text-[10px] font-black text-blue-600">點我前往處理 →</span>
                 <span role="button" aria-label="收起提示" onclick="event.stopPropagation();window.toggleHomeAiAssistant(false)" class="absolute right-2 top-1 text-[16px] text-slate-400">×</span>
             </button>
             <button id="home-ai-assistant-character" type="button" aria-label="拖曳或開啟 AI 商脈小助手" class="pointer-events-auto mr-1 h-[88px] w-[88px] border-0 bg-transparent p-0 outline-none">
@@ -735,7 +772,7 @@ const HomeModule = (function() {
                 if (document.body.classList.contains('home-page') && !document.hidden) {
                     window.refreshHomeAiAssistant?.({ rotate: true });
                 }
-            }, 9000);
+            }, 30000);
         }
         return widget;
     }
@@ -748,6 +785,8 @@ const HomeModule = (function() {
         widget.dataset.action = advice.action;
         const text = document.getElementById('home-ai-assistant-text');
         if (text) text.textContent = advice.text;
+        const cta = document.getElementById('home-ai-assistant-cta');
+        if (cta) cta.textContent = advice.action === 'loading' ? '資料完成後會自動更新' : '點我前往處理 →';
         if (rotate || !widget.dataset.motion) rotateHomeAiAssistantMotion_(widget);
         return advice;
     };

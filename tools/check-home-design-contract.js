@@ -137,7 +137,13 @@ if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia
   'homeAiAssistantSway',
   'homeAiAssistantPeek',
   'window.setInterval',
-  '9000',
+  '30000',
+  'resolveHomeAiAssistantOwnCard_',
+  "return { action: 'loading'",
+  "sourceType !== 'self_profile'",
+  'home-ai-assistant-cta',
+  'configs.find(item => item.businessIntent',
+  'card.customConfig',
   "return { action: 'businessIntent'",
   "return { action: 'interest'"
 ].forEach((needle) => {
