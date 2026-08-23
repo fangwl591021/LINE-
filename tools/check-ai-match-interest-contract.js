@@ -68,13 +68,19 @@ includesAll(index, [
   'id="home-ai-match-interest-summary"',
   'id="home-ai-match-interest-title"',
   'js/modules/matchmake.js?v=7.10',
-  'js/modules/home.js?v=7.90'
+  'js/modules/home.js?v=7.91'
 ], 'homepage includes a cache-busted AI interest summary');
 includesAll(home, [
   "window.fetchAPI('getAiMatchInterestSummary'",
   '有 ' + "' + count + '" + ' 人對你感興趣',
   'eligibleForAiInterest',
-  "window.matchmakePoolScope = 'public'"
+  "window.matchmakePoolScope = 'public'",
+  "params.get('simulateAiInterest')",
+  'window.hasAdminRights !== true',
+  "role !== 'admin'",
+  'Math.min(99, Math.floor(raw))',
+  'TONYFANG 模擬預覽，不影響真實關注數'
 ], 'homepage shows aggregate count or a safe eligibility prompt');
+ok(!home.includes("window.fetchAPI('toggleAiMatchInterest', { targetCardRowId: 'TONYFANG'"), 'TONYFANG preview never creates an interest event');
 
 console.log('\nAI match interest contract passed.');

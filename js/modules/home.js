@@ -449,6 +449,19 @@ const HomeModule = (function() {
         window.setMatchmakePoolScope?.('public');
     };
 
+    function getHomeAiInterestPreviewCount_() {
+        const role = String(window.userRole || window.currentUser?.role || '').trim().toLowerCase();
+        if (window.hasAdminRights !== true && role !== 'admin') return 0;
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const raw = Number(params.get('simulateAiInterest') || 0);
+            if (!Number.isFinite(raw) || raw < 1) return 0;
+            return Math.min(99, Math.floor(raw));
+        } catch (error) {
+            return 0;
+        }
+    }
+
     window.loadHomeAiMatchInterestSummary = async function() {
         const box = document.getElementById('home-ai-match-interest-summary');
         const icon = document.getElementById('home-ai-match-interest-icon');
@@ -456,14 +469,18 @@ const HomeModule = (function() {
         const note = document.getElementById('home-ai-match-interest-note');
         if (!box || !title || !note || typeof window.fetchAPI !== 'function') return null;
         try {
-            const res = await window.fetchAPI('getAiMatchInterestSummary', {}, true);
+            const previewCount = getHomeAiInterestPreviewCount_();
+            const simulated = previewCount > 0;
+            const res = simulated
+                ? { data: { interestCount: previewCount, eligibleForAiInterest: true } }
+                : await window.fetchAPI('getAiMatchInterestSummary', {}, true);
             const data = res?.data || res;
             const count = Math.max(0, Number(data?.interestCount || 0) || 0);
             const eligible = data?.eligibleForAiInterest === true;
             if (count > 0) {
                 if (icon) icon.textContent = 'favorite';
-                title.textContent = '有 ' + count + ' 人對你感興趣';
-                note.textContent = '來自全網商脈 AI 配對的真人關注';
+                title.textContent = (simulated ? '模擬顯示｜' : '') + '有 ' + count + ' 人對你感興趣';
+                note.textContent = simulated ? 'TONYFANG 模擬預覽，不影響真實關注數' : '來自全網商脈 AI 配對的真人關注';
                 box.classList.add('border-pink-100', 'bg-pink-50');
                 box.classList.remove('border-emerald-100', 'bg-emerald-50');
             } else if (eligible) {
