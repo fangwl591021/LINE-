@@ -94,7 +94,43 @@
     return parts.join('；');
   }
 
+  function ensureBusinessIntentAiStyles() {
+    if (document.getElementById('business-intent-ai-writer-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'business-intent-ai-writer-styles';
+    style.textContent = `
+      @keyframes businessIntentAiFloat {
+        0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+        50% { transform: translateY(-8px) rotate(1.5deg); }
+      }
+      @keyframes businessIntentAiBubble {
+        0%, 100% { transform: translateX(-50%) scale(1); }
+        50% { transform: translateX(-50%) scale(1.045); }
+      }
+      #business-intent-ai-write { touch-action: manipulation; }
+      #business-intent-ai-write .business-intent-ai-character {
+        animation: businessIntentAiFloat 2.8s ease-in-out infinite;
+        filter: drop-shadow(0 10px 10px rgba(37, 99, 235, 0.2));
+        transform-origin: 50% 100%;
+      }
+      #business-intent-ai-write .business-intent-ai-label {
+        animation: businessIntentAiBubble 2.2s ease-in-out infinite;
+      }
+      #business-intent-ai-write:active .business-intent-ai-character {
+        animation: none;
+        transform: translateY(2px) scale(0.92) rotate(-2deg);
+      }
+      #business-intent-ai-write:disabled .business-intent-ai-character { opacity: 0.62; }
+      @media (prefers-reduced-motion: reduce) {
+        #business-intent-ai-write .business-intent-ai-character,
+        #business-intent-ai-write .business-intent-ai-label { animation: none; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function ensureUi() {
+    ensureBusinessIntentAiStyles();
     const ecardTab = document.getElementById('tab-ecard');
     const ecardContent = document.getElementById('tab-content-ecard');
     if (!ecardTab || !ecardContent) return false;
@@ -114,11 +150,14 @@
       panel.id = 'tab-content-business';
       panel.className = 'hidden px-4 py-5 pb-36 bg-white space-y-4';
       panel.innerHTML = `
-        <div class="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+        <div class="relative min-h-[156px] overflow-visible rounded-2xl border border-blue-100 bg-blue-50/60 p-4 pr-[122px]">
           <div class="flex items-center gap-2 font-black text-slate-800"><span class="material-symbols-outlined text-blue-600">hub</span>建立您的 AI 業務需求</div>
           <p class="mt-2 text-[12px] font-bold leading-relaxed text-slate-500">這三項資料會提供給 AI 搜尋與智能配對使用，讓系統知道您能提供什麼、正在找誰、希望怎麼合作。</p>
-          <button id="business-intent-ai-write" type="button" onclick="window.aiWriteBusinessIntent()" class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-[13px] font-black text-white shadow-sm active:scale-[0.99] transition-transform disabled:opacity-60"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>AI 幫我寫</span></button>
-          <p class="mt-2 text-[11px] font-bold text-blue-600/80">依本人名片與五大標籤產生首次草稿，不會覆蓋已填內容或自動儲存。</p>
+          <p class="mt-3 text-[11px] font-bold leading-relaxed text-blue-600/80">依本人名片與五大標籤產生首次草稿，不會覆蓋已填內容或自動儲存。</p>
+          <button id="business-intent-ai-write" type="button" aria-label="點我幫你寫業務需求" onclick="window.aiWriteBusinessIntent()" class="absolute -right-1 bottom-0 z-10 w-[120px] border-0 bg-transparent p-0 text-center outline-none disabled:cursor-wait">
+            <span id="business-intent-ai-write-label" class="business-intent-ai-label absolute left-1/2 top-0 z-20 -translate-x-1/2 whitespace-nowrap rounded-full border border-blue-200 bg-white px-3 py-1.5 text-[12px] font-black text-blue-700 shadow-md">點我幫你寫</span>
+            <img src="assets/ai-business-writer.png?v=1" alt="" class="business-intent-ai-character mx-auto mt-6 block h-[106px] w-[106px] object-contain" draggable="false">
+          </button>
         </div>
         <div>
           <label class="block text-[13px] font-black text-slate-700 mb-2">1. 我可以提供？</label>
@@ -166,8 +205,8 @@
 
   window.aiWriteBusinessIntent = async function() {
     const button = document.getElementById('business-intent-ai-write');
-    const label = button?.querySelector('span:last-child');
-    const originalText = label?.textContent || 'AI 幫我寫';
+    const label = document.getElementById('business-intent-ai-write-label');
+    const originalText = label?.textContent || '點我幫你寫';
     try {
       const card = getCurrentCard();
       if (!card) throw new Error('找不到本人名片資料');
