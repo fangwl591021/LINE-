@@ -89,6 +89,9 @@ if (!index.includes('hidden space-y-0 animate-in') || !index.includes('text-[26p
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
+if (!index.includes('&#32879;&#35516;') || index.includes('&#32879;&#35522;')) {
+  fail('social activity shortcut must display the exact Traditional Chinese label 聯誼');
+}
 const defaultSearchEntry = index.indexOf('id="home-network-search-entry"');
 const quickActionsEnd = index.indexOf('id="home-exchange-zone-button"');
 const systemTicker = index.indexOf('id="home-system-ticker"');
