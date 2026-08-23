@@ -130,6 +130,14 @@ if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia
   '#home-ai-assistant{position:fixed;right:8px;bottom:96px;z-index:65',
   'body:not(.home-page) #home-ai-assistant',
   'prefers-reduced-motion:reduce',
+  'HOME_AI_ASSISTANT_COPY',
+  'HOME_AI_ASSISTANT_MOTIONS',
+  'homeAiAssistantCycleTimer_',
+  'homeAiAssistantBounce',
+  'homeAiAssistantSway',
+  'homeAiAssistantPeek',
+  'window.setInterval',
+  '9000',
   "return { action: 'businessIntent'",
   "return { action: 'interest'"
 ].forEach((needle) => {

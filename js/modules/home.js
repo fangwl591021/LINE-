@@ -517,14 +517,85 @@ const HomeModule = (function() {
     };
 
     const HOME_AI_ASSISTANT_POSITION_KEY = 'ACTMASTER_HOME_AI_ASSISTANT_POSITION_V1';
+    const HOME_AI_ASSISTANT_VARIETY_KEY = 'ACTMASTER_HOME_AI_ASSISTANT_VARIETY_V1';
+    const HOME_AI_ASSISTANT_MOTIONS = ['float', 'bounce', 'sway', 'peek'];
+    const HOME_AI_ASSISTANT_COPY = Object.freeze({
+        myCard: [
+            '先建立你的名片，我帶你開始累積商脈。',
+            '把本人名片交給我，我才能替你整理商脈。',
+            '建立第一張名片後，我就能開始提供建議。',
+            '先讓大家認識你：建立你的數位名片吧！'
+        ],
+        businessIntent: [
+            '先建立 AI 業務需求，讓對的人更容易找到你。',
+            '你想讓誰找到你？把合作目標告訴我吧！',
+            '寫下能提供什麼、正在找誰，我來協助媒合。',
+            '把業務方向說清楚，我就能給你更準的建議。'
+        ],
+        interest: [
+            '有人對你感興趣，現在就去看看合作機會。',
+            '你被夥伴注意到了，去看看目前的關注吧！',
+            '合作訊號出現了，點我查看誰可能適合你。',
+            '你的公開名片正在發揮效果，看看關注進度吧！'
+        ],
+        cardFolder: [
+            '多收藏幾張名片，我就能幫你找到更多合作線索。',
+            '每多一張名片，你的私有人脈資產就更完整。',
+            '把新認識的夥伴收藏進來，我來幫你整理。',
+            '先累積幾張名片，再讓我從人脈中找機會。'
+        ],
+        matchmake: [
+            '告訴我你想找誰，我帶你開始 AI 媒合。',
+            '今天想找哪一類夥伴？我可以從人脈開始找。',
+            '從你的人脈到全網商脈，現在就設定搜尋目標。',
+            '換個合作目標試試看，也許會發現新的商機。'
+        ]
+    });
     let homeAiAssistantDrag_ = null;
     let suppressHomeAiAssistantClick_ = false;
+    let homeAiAssistantCycleTimer_ = null;
+
+    function readHomeAiAssistantVariety_() {
+        try {
+            return JSON.parse(localStorage.getItem(HOME_AI_ASSISTANT_VARIETY_KEY) || '{}') || {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function saveHomeAiAssistantVariety_(state) {
+        try {
+            localStorage.setItem(HOME_AI_ASSISTANT_VARIETY_KEY, JSON.stringify(state));
+        } catch (e) {}
+    }
+
+    function chooseHomeAiAssistantCopy_(action, widget, rotate) {
+        const choices = HOME_AI_ASSISTANT_COPY[action] || HOME_AI_ASSISTANT_COPY.matchmake;
+        if (!rotate && widget.dataset.copyAction === action && widget.dataset.copyText) return widget.dataset.copyText;
+        const state = readHomeAiAssistantVariety_();
+        const previous = Number(state.copy?.[action] ?? -1);
+        let index = Math.floor(Math.random() * choices.length);
+        if (choices.length > 1 && index === previous) index = (index + 1) % choices.length;
+        state.copy = { ...(state.copy || {}), [action]: index };
+        saveHomeAiAssistantVariety_(state);
+        widget.dataset.copyAction = action;
+        widget.dataset.copyText = choices[index];
+        return choices[index];
+    }
+
+    function rotateHomeAiAssistantMotion_(widget) {
+        const state = readHomeAiAssistantVariety_();
+        const previous = Number(state.motion ?? -1);
+        let index = Math.floor(Math.random() * HOME_AI_ASSISTANT_MOTIONS.length);
+        if (HOME_AI_ASSISTANT_MOTIONS.length > 1 && index === previous) index = (index + 1) % HOME_AI_ASSISTANT_MOTIONS.length;
+        state.motion = index;
+        saveHomeAiAssistantVariety_(state);
+        widget.dataset.motion = HOME_AI_ASSISTANT_MOTIONS[index];
+    }
 
     function getHomeAiAssistantIntent_() {
         const card = window.currentUserCard || null;
-        if (!card) {
-            return { action: 'myCard', text: '先建立你的名片，我帶你開始累積商脈。' };
-        }
+        if (!card) return { action: 'myCard' };
         let config = {};
         try {
             const raw = card['自訂名片設定'] || card.customConfig || card.custom_config || '{}';
@@ -532,17 +603,13 @@ const HomeModule = (function() {
         } catch (e) {}
         const intent = config.businessIntent || {};
         if (![intent.offer, intent.seek, intent.collaboration].some(value => String(value || '').trim())) {
-            return { action: 'businessIntent', text: '先建立 AI 業務需求，讓對的人更容易找到你。' };
+            return { action: 'businessIntent' };
         }
         const interestTitle = String(document.getElementById('home-ai-match-interest-title')?.textContent || '');
-        if (/有\s*\d+\s*人對你感興趣/.test(interestTitle)) {
-            return { action: 'interest', text: '有人對你感興趣，現在就去看看合作機會。' };
-        }
+        if (/有\s*\d+\s*人對你感興趣/.test(interestTitle)) return { action: 'interest' };
         const cards = Array.isArray(window.allCards) ? window.allCards : [];
-        if (cards.length < 5) {
-            return { action: 'cardFolder', text: '多收藏幾張名片，我就能幫你找到更多合作線索。' };
-        }
-        return { action: 'matchmake', text: '告訴我你想找誰，我帶你開始 AI 媒合。' };
+        if (cards.length < 5) return { action: 'cardFolder' };
+        return { action: 'matchmake' };
     }
 
     function runHomeAiAssistantAction_(action) {
@@ -577,6 +644,7 @@ const HomeModule = (function() {
                 startY: event.clientY,
                 moved: false
             };
+            widget.classList.add('is-dragging');
             characterButton.setPointerCapture?.(event.pointerId);
         });
         characterButton.addEventListener('pointermove', event => {
@@ -604,6 +672,7 @@ const HomeModule = (function() {
                     }));
                 } catch (e) {}
             }
+            widget.classList.remove('is-dragging');
             homeAiAssistantDrag_ = null;
         };
         characterButton.addEventListener('pointerup', finish);
@@ -624,11 +693,19 @@ const HomeModule = (function() {
         style.id = 'home-ai-assistant-styles';
         style.textContent = `
             @keyframes homeAiAssistantFloat { 0%,100%{transform:translateY(0) rotate(-1.5deg)} 50%{transform:translateY(-9px) rotate(1.5deg)} }
+            @keyframes homeAiAssistantBounce { 0%,100%{transform:translateY(0) scale(1)} 45%{transform:translateY(-12px) scale(1.03)} 60%{transform:translateY(-2px) scale(.98)} }
+            @keyframes homeAiAssistantSway { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(4deg)} }
+            @keyframes homeAiAssistantPeek { 0%,100%{transform:translateX(0) rotate(0)} 35%{transform:translateX(-10px) rotate(-4deg)} 70%{transform:translateX(4px) rotate(2deg)} }
             @keyframes homeAiAssistantBubble { 0%,100%{transform:scale(1)} 50%{transform:scale(1.025)} }
             #home-ai-assistant{position:fixed;right:8px;bottom:96px;z-index:65;display:flex;width:188px;flex-direction:column;align-items:flex-end;pointer-events:none}
             #home-ai-assistant button{pointer-events:auto}
             body:not(.home-page) #home-ai-assistant{display:none!important}
-            #home-ai-assistant .home-ai-assistant-character{animation:homeAiAssistantFloat 3s ease-in-out infinite;filter:drop-shadow(0 9px 10px rgba(15,23,42,.2));transform-origin:50% 100%}
+            #home-ai-assistant .home-ai-assistant-character{filter:drop-shadow(0 9px 10px rgba(15,23,42,.2));transform-origin:50% 100%}
+            #home-ai-assistant[data-motion="float"] .home-ai-assistant-character{animation:homeAiAssistantFloat 3s ease-in-out infinite}
+            #home-ai-assistant[data-motion="bounce"] .home-ai-assistant-character{animation:homeAiAssistantBounce 2.5s ease-in-out infinite}
+            #home-ai-assistant[data-motion="sway"] .home-ai-assistant-character{animation:homeAiAssistantSway 2.8s ease-in-out infinite}
+            #home-ai-assistant[data-motion="peek"] .home-ai-assistant-character{animation:homeAiAssistantPeek 3.2s ease-in-out infinite}
+            #home-ai-assistant.is-dragging .home-ai-assistant-character{animation:none!important}
             #home-ai-assistant .home-ai-assistant-bubble{animation:homeAiAssistantBubble 2.4s ease-in-out infinite}
             #home-ai-assistant.is-collapsed .home-ai-assistant-bubble{display:none}
             #home-ai-assistant-character{touch-action:none}
@@ -653,15 +730,25 @@ const HomeModule = (function() {
         const characterButton = document.getElementById('home-ai-assistant-character');
         if (characterButton) bindHomeAiAssistantDrag_(widget, characterButton);
         setTimeout(() => restoreHomeAiAssistantPosition_(widget), 0);
+        if (!homeAiAssistantCycleTimer_) {
+            homeAiAssistantCycleTimer_ = window.setInterval(() => {
+                if (document.body.classList.contains('home-page') && !document.hidden) {
+                    window.refreshHomeAiAssistant?.({ rotate: true });
+                }
+            }, 9000);
+        }
         return widget;
     }
 
-    window.refreshHomeAiAssistant = function() {
+    window.refreshHomeAiAssistant = function(options = {}) {
         const widget = ensureHomeAiAssistant_();
-        const advice = getHomeAiAssistantIntent_();
+        const intent = getHomeAiAssistantIntent_();
+        const rotate = options === true || options.rotate === true;
+        const advice = { ...intent, text: chooseHomeAiAssistantCopy_(intent.action, widget, rotate) };
         widget.dataset.action = advice.action;
         const text = document.getElementById('home-ai-assistant-text');
         if (text) text.textContent = advice.text;
+        if (rotate || !widget.dataset.motion) rotateHomeAiAssistantMotion_(widget);
         return advice;
     };
 
