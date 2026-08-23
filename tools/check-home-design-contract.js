@@ -121,6 +121,22 @@ try {
 if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia')) {
   fail('optional home media container must stay hidden unless media is enabled');
 }
+[
+  "widget.id = 'home-ai-assistant'",
+  'assets/ai-home-assistant.png?v=1',
+  'window.refreshHomeAiAssistant',
+  'window.openHomeAiAssistantAdvice',
+  'HOME_AI_ASSISTANT_POSITION_KEY',
+  'body:not(.home-page) #home-ai-assistant',
+  'prefers-reduced-motion:reduce',
+  "return { action: 'businessIntent'",
+  "return { action: 'interest'"
+].forEach((needle) => {
+  if (!home.includes(needle)) fail(`home AI assistant contract missing: ${needle}`);
+});
+if (!fs.existsSync(path.join(root, 'assets', 'ai-home-assistant.png'))) {
+  fail('home AI assistant image must exist');
+}
 if (!home.includes('border border-pink-100') || !home.includes('text-pink-500')) {
   fail('dynamic home suggestion cards should match the refreshed pink design');
 }

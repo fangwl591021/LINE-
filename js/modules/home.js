@@ -507,12 +507,172 @@ const HomeModule = (function() {
                 note.textContent = '建立您的 AI 業務需求';
             }
             box.classList.remove('hidden');
+            window.refreshHomeAiAssistant?.();
             return data;
         } catch (error) {
             console.warn('[home] AI match interest summary skipped:', error?.message || error);
             box.classList.add('hidden');
             return null;
         }
+    };
+
+    const HOME_AI_ASSISTANT_POSITION_KEY = 'ACTMASTER_HOME_AI_ASSISTANT_POSITION_V1';
+    let homeAiAssistantDrag_ = null;
+    let suppressHomeAiAssistantClick_ = false;
+
+    function getHomeAiAssistantIntent_() {
+        const card = window.currentUserCard || null;
+        if (!card) {
+            return { action: 'myCard', text: '先建立你的名片，我帶你開始累積商脈。' };
+        }
+        let config = {};
+        try {
+            const raw = card['自訂名片設定'] || card.customConfig || card.custom_config || '{}';
+            config = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {});
+        } catch (e) {}
+        const intent = config.businessIntent || {};
+        if (![intent.offer, intent.seek, intent.collaboration].some(value => String(value || '').trim())) {
+            return { action: 'businessIntent', text: '先建立 AI 業務需求，讓對的人更容易找到你。' };
+        }
+        const interestTitle = String(document.getElementById('home-ai-match-interest-title')?.textContent || '');
+        if (/有\s*\d+\s*人對你感興趣/.test(interestTitle)) {
+            return { action: 'interest', text: '有人對你感興趣，現在就去看看合作機會。' };
+        }
+        const cards = Array.isArray(window.allCards) ? window.allCards : [];
+        if (cards.length < 5) {
+            return { action: 'cardFolder', text: '多收藏幾張名片，我就能幫你找到更多合作線索。' };
+        }
+        return { action: 'matchmake', text: '告訴我你想找誰，我帶你開始 AI 媒合。' };
+    }
+
+    function runHomeAiAssistantAction_(action) {
+        if (action === 'myCard') return window.openMyCardEntry?.();
+        if (action === 'businessIntent') return window.openHomeBusinessIntent?.();
+        if (action === 'interest') return window.openHomeAiMatchInterest?.();
+        if (action === 'cardFolder') return window.goPage?.('card');
+        return window.goPage?.('matchmake');
+    }
+
+    function restoreHomeAiAssistantPosition_(widget) {
+        try {
+            const saved = JSON.parse(localStorage.getItem(HOME_AI_ASSISTANT_POSITION_KEY) || 'null');
+            if (!saved || !Number.isFinite(saved.left) || !Number.isFinite(saved.top)) return;
+            const maxLeft = Math.max(8, window.innerWidth - widget.offsetWidth - 8);
+            const maxTop = Math.max(8, window.innerHeight - widget.offsetHeight - 92);
+            widget.style.left = Math.min(maxLeft, Math.max(8, saved.left)) + 'px';
+            widget.style.top = Math.min(maxTop, Math.max(8, saved.top)) + 'px';
+            widget.style.right = 'auto';
+            widget.style.bottom = 'auto';
+        } catch (e) {}
+    }
+
+    function bindHomeAiAssistantDrag_(widget, characterButton) {
+        characterButton.addEventListener('pointerdown', event => {
+            const rect = widget.getBoundingClientRect();
+            homeAiAssistantDrag_ = {
+                pointerId: event.pointerId,
+                offsetX: event.clientX - rect.left,
+                offsetY: event.clientY - rect.top,
+                startX: event.clientX,
+                startY: event.clientY,
+                moved: false
+            };
+            characterButton.setPointerCapture?.(event.pointerId);
+        });
+        characterButton.addEventListener('pointermove', event => {
+            const drag = homeAiAssistantDrag_;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 6) drag.moved = true;
+            if (!drag.moved) return;
+            event.preventDefault();
+            const maxLeft = Math.max(8, window.innerWidth - widget.offsetWidth - 8);
+            const maxTop = Math.max(8, window.innerHeight - widget.offsetHeight - 92);
+            widget.style.left = Math.min(maxLeft, Math.max(8, event.clientX - drag.offsetX)) + 'px';
+            widget.style.top = Math.min(maxTop, Math.max(8, event.clientY - drag.offsetY)) + 'px';
+            widget.style.right = 'auto';
+            widget.style.bottom = 'auto';
+        });
+        const finish = event => {
+            const drag = homeAiAssistantDrag_;
+            if (!drag || drag.pointerId !== event.pointerId) return;
+            suppressHomeAiAssistantClick_ = drag.moved;
+            if (drag.moved) {
+                try {
+                    localStorage.setItem(HOME_AI_ASSISTANT_POSITION_KEY, JSON.stringify({
+                        left: parseFloat(widget.style.left) || widget.getBoundingClientRect().left,
+                        top: parseFloat(widget.style.top) || widget.getBoundingClientRect().top
+                    }));
+                } catch (e) {}
+            }
+            homeAiAssistantDrag_ = null;
+        };
+        characterButton.addEventListener('pointerup', finish);
+        characterButton.addEventListener('pointercancel', finish);
+        characterButton.addEventListener('click', () => {
+            if (suppressHomeAiAssistantClick_) {
+                suppressHomeAiAssistantClick_ = false;
+                return;
+            }
+            window.toggleHomeAiAssistant?.();
+        });
+    }
+
+    function ensureHomeAiAssistant_() {
+        let widget = document.getElementById('home-ai-assistant');
+        if (widget) return widget;
+        const style = document.createElement('style');
+        style.id = 'home-ai-assistant-styles';
+        style.textContent = `
+            @keyframes homeAiAssistantFloat { 0%,100%{transform:translateY(0) rotate(-1.5deg)} 50%{transform:translateY(-9px) rotate(1.5deg)} }
+            @keyframes homeAiAssistantBubble { 0%,100%{transform:scale(1)} 50%{transform:scale(1.025)} }
+            body:not(.home-page) #home-ai-assistant{display:none!important}
+            #home-ai-assistant .home-ai-assistant-character{animation:homeAiAssistantFloat 3s ease-in-out infinite;filter:drop-shadow(0 9px 10px rgba(15,23,42,.2));transform-origin:50% 100%}
+            #home-ai-assistant .home-ai-assistant-bubble{animation:homeAiAssistantBubble 2.4s ease-in-out infinite}
+            #home-ai-assistant.is-collapsed .home-ai-assistant-bubble{display:none}
+            #home-ai-assistant-character{touch-action:none}
+            #home-ai-assistant-character:active .home-ai-assistant-character{animation:none;transform:scale(.92)}
+            @media(prefers-reduced-motion:reduce){#home-ai-assistant .home-ai-assistant-character,#home-ai-assistant .home-ai-assistant-bubble{animation:none}}
+        `;
+        document.head.appendChild(style);
+        widget = document.createElement('aside');
+        widget.id = 'home-ai-assistant';
+        widget.className = 'fixed bottom-[96px] right-2 z-[65] flex w-[188px] flex-col items-end pointer-events-none';
+        widget.setAttribute('aria-label', 'AI 商脈小助手');
+        widget.innerHTML = `
+            <button id="home-ai-assistant-bubble" type="button" onclick="window.openHomeAiAssistantAdvice()" class="home-ai-assistant-bubble pointer-events-auto relative mb-1 w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 pr-7 text-left text-[12px] font-black leading-5 text-slate-700 shadow-xl">
+                <span id="home-ai-assistant-text">我可以幫你整理今天的下一步。</span>
+                <span class="mt-1 block text-[10px] font-black text-blue-600">點我前往處理 →</span>
+                <span role="button" aria-label="收起提示" onclick="event.stopPropagation();window.toggleHomeAiAssistant(false)" class="absolute right-2 top-1 text-[16px] text-slate-400">×</span>
+            </button>
+            <button id="home-ai-assistant-character" type="button" aria-label="拖曳或開啟 AI 商脈小助手" class="pointer-events-auto mr-1 h-[88px] w-[88px] border-0 bg-transparent p-0 outline-none">
+                <img src="assets/ai-home-assistant.png?v=1" alt="" draggable="false" class="home-ai-assistant-character h-full w-full object-contain">
+            </button>`;
+        document.body.appendChild(widget);
+        const characterButton = document.getElementById('home-ai-assistant-character');
+        if (characterButton) bindHomeAiAssistantDrag_(widget, characterButton);
+        setTimeout(() => restoreHomeAiAssistantPosition_(widget), 0);
+        return widget;
+    }
+
+    window.refreshHomeAiAssistant = function() {
+        const widget = ensureHomeAiAssistant_();
+        const advice = getHomeAiAssistantIntent_();
+        widget.dataset.action = advice.action;
+        const text = document.getElementById('home-ai-assistant-text');
+        if (text) text.textContent = advice.text;
+        return advice;
+    };
+
+    window.toggleHomeAiAssistant = function(force) {
+        const widget = ensureHomeAiAssistant_();
+        const shouldOpen = force === undefined ? widget.classList.contains('is-collapsed') : force !== false;
+        widget.classList.toggle('is-collapsed', !shouldOpen);
+        if (shouldOpen) window.refreshHomeAiAssistant?.();
+    };
+
+    window.openHomeAiAssistantAdvice = function() {
+        const widget = ensureHomeAiAssistant_();
+        runHomeAiAssistantAction_(widget.dataset.action || window.refreshHomeAiAssistant?.().action || 'matchmake');
     };
 
     const PUBLIC_PARTNER_STORE_URL = 'https://aiwe.cc/index.php/search_linecard/?shop_id=78&submitted=1';
@@ -2473,6 +2633,7 @@ const HomeModule = (function() {
         }
 
         if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
+        window.refreshHomeAiAssistant?.();
         return true;
     };
 
@@ -2719,11 +2880,13 @@ const HomeModule = (function() {
     // === 模組初始化入口 ===
     function init() {
         renderBusinessHomeV2_();
+        window.refreshHomeAiAssistant?.();
         window.syncStoreSettingsToHome();
         window.renderHomeActivities();
     }
 
     setTimeout(renderBusinessHomeV2_, 0);
+    setTimeout(() => window.refreshHomeAiAssistant?.(), 120);
 
     return { init };
 })();
