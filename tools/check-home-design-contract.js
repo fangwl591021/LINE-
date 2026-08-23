@@ -101,8 +101,10 @@ if (defaultSearchEntry < 0 || defaultSearchEntry < quickActionsEnd || defaultSea
   'name="businessHomeSearchScope"',
   'value="own" checked',
   'value="public"',
+  'value="ai"',
+  "if (!query && scope === 'ai')",
   'window.openBusinessHomeSearch',
-  "window.matchmakePoolScope = scopeInput?.value === 'public' ? 'public' : 'own'",
+  "window.matchmakePoolScope = scope === 'public' ? 'public' : 'own'",
   "window.goPage?.('matchmake')",
   "if (matchQuery) matchQuery.value = query"
 ].forEach((needle) => {

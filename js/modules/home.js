@@ -538,14 +538,18 @@ const HomeModule = (function() {
         event?.preventDefault?.();
         const form = event?.currentTarget;
         const queryInput = form?.querySelector('[name="businessHomeSearchQuery"]');
-        const query = String(queryInput?.value || '').trim();
+        const scopeInput = form?.querySelector('[name="businessHomeSearchScope"]:checked');
+        const scope = scopeInput?.value || 'own';
+        let query = String(queryInput?.value || '').trim();
+        if (!query && scope === 'ai') {
+            query = '請根據我的名片、人脈與現有資料，推薦目前最值得優先認識或合作的對象，並說明原因。';
+        }
         if (!query) {
             window.showToast?.('請輸入您想找的產業、專業或合作對象', true);
             queryInput?.focus?.();
             return false;
         }
-        const scopeInput = form.querySelector('[name="businessHomeSearchScope"]:checked');
-        window.matchmakePoolScope = scopeInput?.value === 'public' ? 'public' : 'own';
+        window.matchmakePoolScope = scope === 'public' ? 'public' : 'own';
         window.goPage?.('matchmake');
         const matchQuery = document.getElementById('match-query');
         if (matchQuery) matchQuery.value = query;
@@ -598,10 +602,11 @@ const HomeModule = (function() {
                     <form onsubmit="return window.openBusinessHomeSearch(event)" class="rounded-[18px] border border-emerald-100 bg-white p-4 shadow-sm">
                         <h2 class="text-[21px] font-black text-[#064338]">你現在想找誰？</h2>
                         <p class="mt-1 text-[12px] font-bold leading-5 text-slate-500">輸入產業、專業或合作需求，帶入現有 AI 媒合。</p>
-                        <fieldset class="mt-3 grid grid-cols-2 gap-2">
+                        <fieldset class="mt-3 grid grid-cols-3 gap-2">
                             <legend class="sr-only">選擇搜尋範圍</legend>
-                            <label class="cursor-pointer"><input type="radio" name="businessHomeSearchScope" value="own" checked class="peer sr-only"><span class="flex min-h-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 px-2 text-[12px] font-black text-emerald-800 peer-checked:border-emerald-600 peer-checked:bg-emerald-700 peer-checked:text-white"><span class="material-symbols-outlined mr-1 text-[17px]">groups</span>從我的人脈找</span></label>
-                            <label class="cursor-pointer"><input type="radio" name="businessHomeSearchScope" value="public" class="peer sr-only"><span class="flex min-h-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 px-2 text-[12px] font-black text-emerald-800 peer-checked:border-emerald-600 peer-checked:bg-emerald-700 peer-checked:text-white"><span class="material-symbols-outlined mr-1 text-[17px]">public</span>從全網商脈找</span></label>
+                            <label class="cursor-pointer"><input type="radio" name="businessHomeSearchScope" value="own" checked class="peer sr-only"><span class="flex min-h-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 px-1 text-[11px] font-black text-emerald-800 peer-checked:border-emerald-600 peer-checked:bg-emerald-700 peer-checked:text-white"><span class="material-symbols-outlined mr-1 text-[16px]">groups</span>從我的人脈找</span></label>
+                            <label class="cursor-pointer"><input type="radio" name="businessHomeSearchScope" value="public" class="peer sr-only"><span class="flex min-h-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 px-1 text-[11px] font-black text-emerald-800 peer-checked:border-emerald-600 peer-checked:bg-emerald-700 peer-checked:text-white"><span class="material-symbols-outlined mr-1 text-[16px]">public</span>從全網商脈找</span></label>
+                            <label class="cursor-pointer"><input type="radio" name="businessHomeSearchScope" value="ai" class="peer sr-only"><span class="flex min-h-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 px-1 text-[11px] font-black text-emerald-800 peer-checked:border-emerald-600 peer-checked:bg-emerald-700 peer-checked:text-white"><span class="material-symbols-outlined mr-1 text-[16px]">auto_awesome</span>AI 建議</span></label>
                         </fieldset>
                         <div class="mt-3 flex gap-2">
                             <label class="relative min-w-0 flex-1"><span class="sr-only">輸入想找的對象</span><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-emerald-700">search</span><input name="businessHomeSearchQuery" type="search" maxlength="300" enterkeyhint="search" autocomplete="off" class="min-h-12 w-full rounded-xl border border-emerald-100 bg-[#f7faf8] pl-10 pr-3 text-[14px] font-bold text-slate-800 outline-none focus:border-emerald-500" placeholder="例如：食品通路、日本經銷商"></label>
