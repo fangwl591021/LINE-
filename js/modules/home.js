@@ -534,6 +534,25 @@ const HomeModule = (function() {
         }
     };
 
+    window.openBusinessHomeSearch = function(event) {
+        event?.preventDefault?.();
+        const form = event?.currentTarget;
+        const queryInput = form?.querySelector('[name="businessHomeSearchQuery"]');
+        const query = String(queryInput?.value || '').trim();
+        if (!query) {
+            window.showToast?.('請輸入您想找的產業、專業或合作對象', true);
+            queryInput?.focus?.();
+            return false;
+        }
+        const scopeInput = form.querySelector('[name="businessHomeSearchScope"]:checked');
+        window.matchmakePoolScope = scopeInput?.value === 'public' ? 'public' : 'own';
+        window.goPage?.('matchmake');
+        const matchQuery = document.getElementById('match-query');
+        if (matchQuery) matchQuery.value = query;
+        document.getElementById('page-matchmake')?.scrollTo?.({ top: 0, behavior: 'instant' });
+        return false;
+    };
+
     function renderBusinessHomeV2_() {
         if (!isBusinessHomeV2Enabled_()) return;
         const host = document.getElementById('business-home-v2');
@@ -575,6 +594,21 @@ const HomeModule = (function() {
                         <button type="button" onclick="window.openBusinessHomeV2Action('shop')" class="business-home-v2-stat"><span class="material-symbols-outlined">storefront</span><div>附近合作夥伴</div><strong>--</strong></button>
                     </div>
                 </section>\n
+                <section class="business-home-v2-section">
+                    <form onsubmit="return window.openBusinessHomeSearch(event)" class="rounded-[18px] border border-emerald-100 bg-white p-4 shadow-sm">
+                        <h2 class="text-[21px] font-black text-[#064338]">你現在想找誰？</h2>
+                        <p class="mt-1 text-[12px] font-bold leading-5 text-slate-500">輸入產業、專業或合作需求，帶入現有 AI 媒合。</p>
+                        <fieldset class="mt-3 grid grid-cols-2 gap-2">
+                            <legend class="sr-only">選擇搜尋範圍</legend>
+                            <label class="cursor-pointer"><input type="radio" name="businessHomeSearchScope" value="own" checked class="peer sr-only"><span class="flex min-h-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 px-2 text-[12px] font-black text-emerald-800 peer-checked:border-emerald-600 peer-checked:bg-emerald-700 peer-checked:text-white"><span class="material-symbols-outlined mr-1 text-[17px]">groups</span>從我的人脈找</span></label>
+                            <label class="cursor-pointer"><input type="radio" name="businessHomeSearchScope" value="public" class="peer sr-only"><span class="flex min-h-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 px-2 text-[12px] font-black text-emerald-800 peer-checked:border-emerald-600 peer-checked:bg-emerald-700 peer-checked:text-white"><span class="material-symbols-outlined mr-1 text-[17px]">public</span>從全網商脈找</span></label>
+                        </fieldset>
+                        <div class="mt-3 flex gap-2">
+                            <label class="relative min-w-0 flex-1"><span class="sr-only">輸入想找的對象</span><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-emerald-700">search</span><input name="businessHomeSearchQuery" type="search" maxlength="300" enterkeyhint="search" autocomplete="off" class="min-h-12 w-full rounded-xl border border-emerald-100 bg-[#f7faf8] pl-10 pr-3 text-[14px] font-bold text-slate-800 outline-none focus:border-emerald-500" placeholder="例如：食品通路、日本經銷商"></label>
+                            <button type="submit" class="min-h-12 shrink-0 rounded-xl bg-[#00634e] px-4 text-[13px] font-black text-white shadow-sm active:scale-95"><span class="material-symbols-outlined align-middle text-[19px]">arrow_forward</span><span class="sr-only">帶入 AI 媒合</span></button>
+                        </div>
+                    </form>
+                </section>
                 <section class="business-home-v2-section"><h3 class="business-home-v2-title">常用工具</h3><div class="business-home-v2-grid">
                     <button type="button" onclick="window.openBusinessHomeV2Action('myCard', event)" class="business-home-v2-tool"><span class="material-symbols-outlined">badge</span>名片收藏</button>
                     <button type="button" onclick="window.openBusinessHomeV2Action('matchmake')" class="business-home-v2-tool"><span class="material-symbols-outlined">bar_chart</span>商脈分析</button>

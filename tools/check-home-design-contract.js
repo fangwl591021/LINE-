@@ -89,6 +89,19 @@ if (!index.includes('hidden space-y-0 animate-in') || !index.includes('text-[26p
 if (!index.includes('id="home-feature-section"')) {
   fail('featured function section should be present');
 }
+[
+  '你現在想找誰？',
+  'name="businessHomeSearchQuery"',
+  'name="businessHomeSearchScope"',
+  'value="own" checked',
+  'value="public"',
+  'window.openBusinessHomeSearch',
+  "window.matchmakePoolScope = scopeInput?.value === 'public' ? 'public' : 'own'",
+  "window.goPage?.('matchmake')",
+  "if (matchQuery) matchQuery.value = query"
+].forEach((needle) => {
+  if (!home.includes(needle)) fail(`business home search must reuse existing matchmake flow: ${needle}`);
+});
 try {
   assertCacheBust('js/modules/home.js');
 } catch (e) {
