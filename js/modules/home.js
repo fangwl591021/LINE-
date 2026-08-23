@@ -519,6 +519,14 @@ const HomeModule = (function() {
     const HOME_AI_ASSISTANT_POSITION_KEY = 'ACTMASTER_HOME_AI_ASSISTANT_POSITION_V1';
     const HOME_AI_ASSISTANT_VARIETY_KEY = 'ACTMASTER_HOME_AI_ASSISTANT_VARIETY_V1';
     const HOME_AI_ASSISTANT_MOTIONS = ['float', 'bounce', 'sway', 'peek'];
+    const HOME_AI_ASSISTANT_TITLES = Object.freeze({
+        loading: 'AI 商脈小助手',
+        myCard: '我的名片',
+        businessIntent: 'AI 業務需求',
+        interest: 'AI 人脈交流圈',
+        cardFolder: '收藏名片',
+        matchmake: 'AI 人脈交流圈'
+    });
     const HOME_AI_ASSISTANT_COPY = Object.freeze({
         loading: [
             '正在讀取你的商脈資料，完成後我會提供正確建議。',
@@ -573,6 +581,19 @@ const HomeModule = (function() {
         } catch (e) {}
     }
 
+    function chooseHomeAiAssistantAction_(actions, widget, rotate) {
+        const available = Array.from(new Set(actions)).filter(action => HOME_AI_ASSISTANT_COPY[action]);
+        if (!available.length) return 'loading';
+        if (!rotate && available.includes(widget.dataset.action)) return widget.dataset.action;
+        const state = readHomeAiAssistantVariety_();
+        const previous = String(state.action || '');
+        let index = Math.floor(Math.random() * available.length);
+        if (available.length > 1 && available[index] === previous) index = (index + 1) % available.length;
+        state.action = available[index];
+        saveHomeAiAssistantVariety_(state);
+        return available[index];
+    }
+
     function chooseHomeAiAssistantCopy_(action, widget, rotate) {
         const choices = HOME_AI_ASSISTANT_COPY[action] || HOME_AI_ASSISTANT_COPY.matchmake;
         if (!rotate && widget.dataset.copyAction === action && widget.dataset.copyText) return widget.dataset.copyText;
@@ -606,13 +627,13 @@ const HomeModule = (function() {
         return candidates.find(isOwnStaticProfileCard_) || null;
     }
 
-    function getHomeAiAssistantIntent_() {
+    function getHomeAiAssistantActions_() {
         const card = resolveHomeAiAssistantOwnCard_();
         const hasLoadedCardData = !!window.subsiteHomeFastData
             || !!window.currentUserCard
             || (Array.isArray(window.allCards) && window.allCards.length > 0);
-        if (!card && !hasLoadedCardData) return { action: 'loading' };
-        if (!card) return { action: 'myCard' };
+        if (!card && !hasLoadedCardData) return ['loading'];
+        if (!card) return ['myCard'];
         const configs = [card['自訂名片設定'], card.customConfig, card.custom_config]
             .filter(value => value !== null && value !== undefined && value !== '')
             .map(value => {
@@ -627,11 +648,8 @@ const HomeModule = (function() {
             || configs[0]
             || {};
         const intent = config.businessIntent || {};
-        if (![intent.offer, intent.seek, intent.collaboration].some(value => String(value || '').trim())) {
-            return { action: 'businessIntent' };
-        }
-        const interestTitle = String(document.getElementById('home-ai-match-interest-title')?.textContent || '');
-        if (/有\s*\d+\s*人對你感興趣/.test(interestTitle)) return { action: 'interest' };
+        const hasBusinessIntent = [intent.offer, intent.seek, intent.collaboration]
+            .some(value => String(value || '').trim());
         const sourceCards = Array.isArray(window.harvestCards) && window.harvestCards.length
             ? window.harvestCards
             : (Array.isArray(window.allCards) ? window.allCards : []);
@@ -644,8 +662,13 @@ const HomeModule = (function() {
                 && sourceType !== 'referral_placeholder'
                 && crmStatus !== '個人名片';
         });
-        if (collectedCards.length < 5) return { action: 'cardFolder' };
-        return { action: 'matchmake' };
+        const actions = hasBusinessIntent
+            ? ['matchmake', 'businessIntent', 'myCard']
+            : ['businessIntent', 'myCard'];
+        if (collectedCards.length < 5) actions.push('cardFolder');
+        const interestTitle = String(document.getElementById('home-ai-match-interest-title')?.textContent || '');
+        if (/有\s*\d+\s*人對你感興趣/.test(interestTitle)) actions.unshift('interest');
+        return actions;
     }
 
     function runHomeAiAssistantAction_(action) {
@@ -756,7 +779,7 @@ const HomeModule = (function() {
         widget.setAttribute('aria-label', 'AI 商脈小助手');
         widget.innerHTML = `
             <button id="home-ai-assistant-bubble" type="button" onclick="window.openHomeAiAssistantAdvice()" class="home-ai-assistant-bubble pointer-events-auto relative mb-1 w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 pr-7 text-left text-[12px] font-black leading-5 text-slate-700 shadow-xl">
-                <span id="home-ai-assistant-text">我可以幫你整理今天的下一步。</span>
+                <span id="home-ai-assistant-title" class="mb-1 block text-[13px] font-black text-slate-900">AI 商脈小助手</span>\n                <span id="home-ai-assistant-text" class="block">我可以幫你整理今天的下一步。</span>
                 <span id="home-ai-assistant-cta" class="mt-1 block text-[10px] font-black text-blue-600">點我前往處理 →</span>
                 <span role="button" aria-label="收起提示" onclick="event.stopPropagation();window.toggleHomeAiAssistant(false)" class="absolute right-2 top-1 text-[16px] text-slate-400">×</span>
             </button>
@@ -779,14 +802,23 @@ const HomeModule = (function() {
 
     window.refreshHomeAiAssistant = function(options = {}) {
         const widget = ensureHomeAiAssistant_();
-        const intent = getHomeAiAssistantIntent_();
+        const actions = getHomeAiAssistantActions_();
         const rotate = options === true || options.rotate === true;
-        const advice = { ...intent, text: chooseHomeAiAssistantCopy_(intent.action, widget, rotate) };
+        const action = chooseHomeAiAssistantAction_(actions, widget, rotate);
+        const advice = {
+            action,
+            title: HOME_AI_ASSISTANT_TITLES[action] || 'AI 商脈小助手',
+            text: chooseHomeAiAssistantCopy_(action, widget, rotate)
+        };
         widget.dataset.action = advice.action;
+        const title = document.getElementById('home-ai-assistant-title');
+        if (title) title.textContent = advice.title;
         const text = document.getElementById('home-ai-assistant-text');
         if (text) text.textContent = advice.text;
         const cta = document.getElementById('home-ai-assistant-cta');
-        if (cta) cta.textContent = advice.action === 'loading' ? '資料完成後會自動更新' : '點我前往處理 →';
+        if (cta) cta.textContent = advice.action === 'loading'
+            ? '資料完成後會自動更新'
+            : '前往「' + advice.title + '」 →';
         if (rotate || !widget.dataset.motion) rotateHomeAiAssistantMotion_(widget);
         return advice;
     };

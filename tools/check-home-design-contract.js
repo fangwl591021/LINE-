@@ -139,13 +139,20 @@ if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia
   'window.setInterval',
   '30000',
   'resolveHomeAiAssistantOwnCard_',
-  "return { action: 'loading'",
+  "return ['loading']",
+  "return ['myCard']",
   "sourceType !== 'self_profile'",
+  'home-ai-assistant-title',
   'home-ai-assistant-cta',
+  'HOME_AI_ASSISTANT_TITLES',
+  'chooseHomeAiAssistantAction_',
+  "myCard: '我的名片'",
+  "businessIntent: 'AI 業務需求'",
+  "cardFolder: '收藏名片'",
+  "matchmake: 'AI 人脈交流圈'",
+  "'前往「' + advice.title + '」 →'",
   'configs.find(item => item.businessIntent',
-  'card.customConfig',
-  "return { action: 'businessIntent'",
-  "return { action: 'interest'"
+  'card.customConfig'
 ].forEach((needle) => {
   if (!home.includes(needle)) fail(`home AI assistant contract missing: ${needle}`);
 });
