@@ -21,7 +21,7 @@ function hideMatchStatus_() {
   if (status) status.classList.add('hidden');
 }
 
-window.matchmakePoolScope = window.matchmakePoolScope || 'own';
+window.matchmakePoolScope = window.matchmakePoolScope || 'public';
 
 function renderMatchmakePoolMode_() {
   const scope = window.matchmakePoolScope === 'public' ? 'public' : 'own';

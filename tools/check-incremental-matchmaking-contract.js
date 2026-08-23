@@ -46,6 +46,6 @@ ok(worker.includes('LOWER(COALESCE(ai_review_status, \'passed\')) = \'passed\'')
 ok(!frontend.includes('if (currentUsage >= limit)'), 'frontend allows the Worker to return a free cache hit');
 ok(frontend.includes('res?.aiUsed !== false'), 'frontend only counts a real AI run');
 ok(frontend.includes('本次未啟動 AI'), 'frontend explains reused results');
-ok(index.includes('js/modules/matchmake.js?v=7.11'), 'incremental frontend is cache-busted');
+ok(index.includes('js/modules/matchmake.js?v=7.12'), 'incremental frontend is cache-busted');
 
 console.log('\nIncremental matchmaking contract passed.');

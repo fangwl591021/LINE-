@@ -18,10 +18,10 @@ if (!index.includes('match-public-toggle-wrap')) {
   fail('public visibility toggle must be wrapped so own pool can hide it');
 }
 
-if (!matchmake.includes('window.matchmakePoolScope') || !matchmake.includes('window.setMatchmakePoolScope')) {
+if (!matchmake.includes("window.matchmakePoolScope = window.matchmakePoolScope || 'public'") || !matchmake.includes('window.setMatchmakePoolScope')) {
   fail('front-end must track and switch matchmaking pool scope');
 }
-if (!index.includes('js/modules/matchmake.js?v=7.11')) {
+if (!index.includes('js/modules/matchmake.js?v=7.12')) {
   fail('matchmake.js cache-bust version must be bumped');
 }
 if (!index.includes('js/modules/cardmaster.js?v=1.4')) {

@@ -2190,7 +2190,7 @@
         descAlign: 'start',
         descColor: '#666666',
         buttons: getTemplateButtons(phone),
-        isPrivate: true,
+        isPrivate: false,
         templateDraft: true,
         templateVersion: 'rental-intro-1'
       };
@@ -2207,7 +2207,11 @@
         '建檔人/備註': '使用 LINE 資料生成',
         '自訂名片設定': JSON.stringify(cfg),
         userId: userId,
-        creatorId: userId
+        creatorId: userId,
+        sourceType: 'self_profile',
+        visibility: 'private',
+        poolEligible: 0,
+        aiReviewStatus: 'pending'
       };
 
       var saveRes = await window.fetchAPI('saveCard', cardPayload, true);
