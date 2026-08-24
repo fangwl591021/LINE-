@@ -538,7 +538,8 @@ const HomeModule = (function() {
         cardFolder: '收藏名片',
         ownSearch: '從我的人脈找',
         publicSearch: '從全網商脈找',
-        aiSuggest: 'AI 建議'
+        aiSuggest: 'AI 建議',
+        fortuneMatches: '今日運勢人脈推薦'
     });
     const HOME_AI_ASSISTANT_COPY = Object.freeze({
         loading: [
@@ -588,11 +589,16 @@ const HomeModule = (function() {
         aiSuggest: [
             '資料已完成，讓 AI 建議目前最值得認識的合作對象。',
             '不知道先找誰？點我使用 AI 建議。'
+        ],
+        fortuneMatches: [
+            '正在整理今天最值得接觸的三位對象。'
         ]
     });
     let homeAiAssistantDrag_ = null;
     let suppressHomeAiAssistantClick_ = false;
     let homeAiAssistantCycleTimer_ = null;
+    let homeAiFortuneMatchState_ = null;
+    let homeAiFortuneMatchPromise_ = null;
 
     function readHomeAiAssistantVariety_() {
         try {
@@ -760,10 +766,113 @@ const HomeModule = (function() {
         };
     }
 
+    function getHomeAiFortuneBusinessIntent_() {
+        const configs = readHomeAiAssistantConfigs_(resolveHomeAiAssistantOwnCards_());
+        return configs.map(config => config.businessIntent)
+            .find(intent => intent && typeof intent === 'object') || {};
+    }
+
+    function getHomeAiFortuneMatchCard_(match) {
+        if (match?.card) return match.card;
+        const rowId = String(match?.rowId || '');
+        return (Array.isArray(window.allCards) ? window.allCards : [])
+            .find(card => String(card?.rowId || card?.id || '') === rowId) || null;
+    }
+
+    function getHomeAiFortuneMatchName_(match) {
+        const card = getHomeAiFortuneMatchCard_(match);
+        return String(card?.['姓名'] || card?.name || card?.title || '一位合適夥伴').trim();
+    }
+
+    async function requestHomeAiFortuneMatches_(scope, query, businessIntent) {
+        const response = await window.fetchAPI('matchmakeContacts', {
+            currentUser: window.currentUser,
+            query,
+            businessIntent,
+            poolScope: scope,
+            currentCardRowId: resolveHomeAiAssistantOwnCard_()?.rowId || ''
+        }, true);
+        const rows = Array.isArray(response)
+            ? response
+            : (Array.isArray(response?.data) ? response.data : []);
+        return rows;
+    }
+
+    async function ensureHomeAiFortuneMatches_(health) {
+        const birthday = parseHomeBirthday_();
+        const zodiac = getHomeZodiac_(birthday);
+        if (!zodiac || health.loading || !health.hasMyCard) return null;
+        if (health.collectedCardCount < 1 && !health.publicReady) return null;
+        const forecast = buildTodayFortune_(birthday, zodiac);
+        if (homeAiFortuneMatchState_?.date === forecast.date) return homeAiFortuneMatchState_;
+        if (homeAiFortuneMatchPromise_) return homeAiFortuneMatchPromise_;
+        const businessIntent = getHomeAiFortuneBusinessIntent_();
+        const query = [
+            '今日運勢人脈推薦 ' + forecast.date,
+            '今日主題：' + forecast.title,
+            '運勢摘要：' + forecast.summary,
+            '請結合我的業務需求，推薦今天最值得主動接觸的三位對象，理由必須具體且可立即行動。'
+        ].join('；');
+        homeAiFortuneMatchPromise_ = (async () => {
+            const combined = [];
+            const seen = new Set();
+            const addRows = rows => rows.forEach(match => {
+                const rowId = String(match?.rowId || '');
+                if (!rowId || seen.has(rowId) || combined.length >= 3) return;
+                seen.add(rowId);
+                combined.push(match);
+            });
+            let primaryScope = health.collectedCardCount > 0 ? 'own' : 'public';
+            try {
+                addRows(await requestHomeAiFortuneMatches_(primaryScope, query, businessIntent));
+            } catch (error) {
+                console.warn('[home] own fortune matchmaking skipped:', error?.message || error);
+            }
+            if (combined.length < 3 && primaryScope === 'own' && health.publicReady) {
+                try {
+                    addRows(await requestHomeAiFortuneMatches_('public', query, businessIntent));
+                } catch (error) {
+                    console.warn('[home] public fortune matchmaking skipped:', error?.message || error);
+                }
+            }
+            homeAiFortuneMatchState_ = {
+                date: forecast.date,
+                forecast,
+                query,
+                businessIntent,
+                matches: combined.slice(0, 3)
+            };
+            window.homeAiFortuneMatches = homeAiFortuneMatchState_;
+            return homeAiFortuneMatchState_;
+        })().finally(() => {
+            homeAiFortuneMatchPromise_ = null;
+        });
+        return homeAiFortuneMatchPromise_;
+    }
+
+    function openHomeAiFortuneMatches_() {
+        const state = homeAiFortuneMatchState_;
+        if (!state?.matches?.length) return window.openTodayFortune?.();
+        window.openTodayFortune?.();
+        const title = document.getElementById('weekly-zodiac-title');
+        const actionLabel = document.getElementById('weekly-zodiac-action-label');
+        const action = document.getElementById('weekly-zodiac-action');
+        if (title) title.textContent = '今日運勢人脈推薦';
+        if (actionLabel) actionLabel.textContent = '今天值得接觸的 ' + state.matches.length + ' 位對象';
+        if (action) action.textContent = state.matches.map((match, index) => {
+            const card = getHomeAiFortuneMatchCard_(match);
+            const name = getHomeAiFortuneMatchName_(match);
+            const company = String(card?.['公司名稱'] || card?.companyName || '').trim();
+            const reason = String(match?.reason || '適合今天主動建立聯繫').trim();
+            return (index + 1) + '. ' + name + (company ? '｜' + company : '') + '\n' + reason;
+        }).join('\n\n');
+    }
+
     function getHomeAiAssistantActions_(health) {
         if (health.loading) return ['loading'];
         if (!health.hasMyCard) return ['myCard'];
         const actions = [];
+        if (homeAiFortuneMatchState_?.matches?.length) actions.push('fortuneMatches');
         if (health.fateTagCount < 5) actions.push('fateTags');
         if (health.businessIntentCount < 3) actions.push('businessIntent');
         if (health.collectedCardCount < 5) actions.push('cardFolder');
@@ -814,6 +923,7 @@ const HomeModule = (function() {
             case 'ownSearch': return focusHomeNetworkSearch_('own');
             case 'publicSearch': return focusHomeNetworkSearch_('public');
             case 'aiSuggest': return focusHomeNetworkSearch_('ai');
+            case 'fortuneMatches': return openHomeAiFortuneMatches_();
             default:
                 window.showToast?.('這項建議沒有可用入口，請重新整理首頁', true);
                 return null;
@@ -946,12 +1056,19 @@ const HomeModule = (function() {
         window.homeAiAssistantHealth = health;
         const actions = getHomeAiAssistantActions_(health);
         const rotate = options === true || options.rotate === true;
-        const action = chooseHomeAiAssistantAction_(actions, widget, rotate);
+        const preferredAction = String(options?.preferredAction || '');
+        const action = preferredAction && actions.includes(preferredAction)
+            ? preferredAction
+            : chooseHomeAiAssistantAction_(actions, widget, rotate);
         let adviceText = chooseHomeAiAssistantCopy_(action, widget, rotate);
         if (action === 'fateTags') {
             adviceText = '五大標籤完成 ' + health.fateTagCount + '/5，尚缺：' + health.missingFateTags.join('、') + '。';
         } else if (action === 'businessIntent') {
             adviceText = 'AI 業務需求完成 ' + health.businessIntentCount + '/3，尚缺：' + health.missingBusinessIntent.join('、') + '。';
+        } else if (action === 'fortuneMatches') {
+            const state = homeAiFortuneMatchState_;
+            const names = state.matches.map(getHomeAiFortuneMatchName_).join('、');
+            adviceText = '今日運勢「' + state.forecast.title + '」：建議接觸 ' + names + '。';
         }
         const advice = {
             action,
@@ -966,8 +1083,17 @@ const HomeModule = (function() {
         const cta = document.getElementById('home-ai-assistant-cta');
         if (cta) cta.textContent = advice.action === 'loading'
             ? '資料完成後會自動更新'
-            : '前往「' + advice.title + '」 →';
+            : (advice.action === 'fortuneMatches'
+                ? '查看今日 3 位推薦 →'
+                : '前往「' + advice.title + '」 →');
         if (rotate || !widget.dataset.motion) rotateHomeAiAssistantMotion_(widget);
+        if (!health.loading && !homeAiFortuneMatchState_ && !homeAiFortuneMatchPromise_) {
+            ensureHomeAiFortuneMatches_(health).then(state => {
+                if (state?.matches?.length) {
+                    window.refreshHomeAiAssistant?.({ rotate: true, preferredAction: 'fortuneMatches' });
+                }
+            });
+        }
         return advice;
     };
 
