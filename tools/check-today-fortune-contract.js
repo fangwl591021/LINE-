@@ -49,5 +49,9 @@ if (!home.includes('forecast.meta') || !home.includes('forecast.summary') || !ho
 if (!index.includes('max-w-[420px]') || !index.includes('p-2 sm:p-4')) {
   fail('daily fortune modal must provide a wider mobile-safe recommendation layout');
 }
+if (!index.includes('max-h-[calc(100dvh-1rem)]') ||
+    !index.includes('min-h-0 overflow-y-auto overscroll-contain touch-pan-y p-5 space-y-4')) {
+  fail('daily fortune modal must keep its content vertically scrollable on short mobile viewports');
+}
 
 console.log('Today fortune contract passed.');

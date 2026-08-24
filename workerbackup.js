@@ -91,6 +91,7 @@ const ACTION_POLICIES = {
   getCardContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
   getAdminCardLibraryOverview: { access: 'admin' },
   getCardHarvestContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
+  listPublicBusinessCards: { access: 'authenticated', note: 'reviewed_public_card_pool_read' },
   getCrmContacts: { access: 'authenticated', ownership: 'tenant-resource', tenantScoped: true, allowD1Fallback: true },
   listCustomers: { access: 'authenticated', ownership: 'self', tenantScoped: true },
   saveCustomer: { access: 'authenticated', ownership: 'self', tenantScoped: true },
@@ -9954,6 +9955,59 @@ const D1ReadModule = {
     return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
   },
 
+  publicBusinessCardView(card) {
+    return {
+      rowId: this.text(card.rowId),
+      id: this.text(card.rowId),
+      sourceType: this.text(card.sourceType),
+      visibility: this.text(card.visibility),
+      poolEligible: card.poolEligible === true,
+      aiReviewStatus: this.text(card.aiReviewStatus),
+      isPrivate: card.isPrivate === true,
+      isSelfProfile: card.isSelfProfile === true,
+      name: this.text(card.name),
+      companyName: this.text(card.companyName),
+      title: this.text(card.title),
+      services: this.text(card.services),
+      imageUrl: this.text(card.imageUrl),
+      tags: this.text(card.tags),
+      ['\u59d3\u540d']: this.text(card.name),
+      ['\u516c\u53f8\u540d\u7a31']: this.text(card.companyName),
+      ['\u8077\u7a31']: this.text(card.title),
+      ['\u670d\u52d9\u9805\u76ee']: this.text(card.services),
+      ['\u540d\u7247\u5716\u6a94']: this.text(card.imageUrl),
+      ['\u6a19\u7c64']: this.text(card.tags),
+      ['\u540d\u7247\u4f86\u6e90']: this.text(card.sourceType),
+      ['\u516c\u958b\u72c0\u614b']: this.text(card.visibility)
+    };
+  },
+
+  async listPublicBusinessCards(payload, env) {
+    if (!this.hasD1(env)) return null;
+    await this.ensureCardAccessColumns(env);
+    const limit = Math.min(Math.max(Number(payload.limit || 60) || 60, 1), 120);
+    const excludeRowId = this.text(payload.excludeRowId || payload.currentCardRowId);
+    const params = [];
+    let sql = `
+      SELECT * FROM card_contacts
+      WHERE LOWER(TRIM(COALESCE(visibility,''))) = 'public'
+        AND LOWER(TRIM(COALESCE(source_type,''))) = 'self_profile'
+        AND CAST(COALESCE(pool_eligible, 0) AS INTEGER) = 1
+        AND LOWER(TRIM(COALESCE(ai_review_status,''))) = 'passed'
+    `;
+    if (excludeRowId) {
+      sql += ' AND row_id <> ?';
+      params.push(excludeRowId);
+    }
+    sql += ` ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`;
+    const rows = await this.all(env, sql, params);
+    const cards = rows.map(row => this.cardRow(row)).filter(card => (
+      card && card.visibility === 'public' && card.sourceType === 'self_profile' &&
+      card.poolEligible === true && card.aiReviewStatus === 'passed'
+    ));
+    return { success: true, data: cards.map(card => this.publicBusinessCardView(card)) };
+  },
+
   async getPublicCardById(payload, env) {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
@@ -16581,6 +16635,15 @@ async function dispatchAction(action, payload, request, env) {
         if (d1Result && d1Result.success && Array.isArray(d1Result.data)) return d1Result;
       } catch (e) {
         console.error("D1 getCardHarvestContacts failed", e);
+      }
+      return { success: true, data: [] };
+    }
+    case 'listPublicBusinessCards': {
+      try {
+        const d1Result = await D1ReadModule.listPublicBusinessCards(payload || {}, env);
+        if (d1Result && d1Result.success && Array.isArray(d1Result.data)) return d1Result;
+      } catch (e) {
+        console.error("D1 listPublicBusinessCards failed", e);
       }
       return { success: true, data: [] };
     }

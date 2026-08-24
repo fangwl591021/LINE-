@@ -4,7 +4,10 @@
   var PAGE_ID = 'page-business-richman';
   var ROWS = 7;
   var COLUMNS = 6;
-  var STORAGE_VERSION = 'v1';
+  var STORAGE_VERSION = 'v2';
+  var DICE_SPINS = 12;
+  var STEP_DELAY_MS = 650;
+  var ARRIVAL_DELAY_MS = 350;
   var providers = Object.create(null);
   var state = null;
   var loadingPromise = null;
@@ -15,9 +18,9 @@
     peopleMode: '\u4eba\u8108\u63a2\u7d22',
     offerMode: '\u5e97\u5bb6\u512a\u60e0\u30fb\u5373\u5c07\u63a8\u51fa',
     loading: '\u6b63\u5728\u6392\u5217\u4eca\u5929\u7684\u4eba\u8108\u2026',
-    privateNote: '\u53ea\u8b80\u53d6\u4f60\u81ea\u5df1\u6536\u85cf\u7684\u540d\u7247\uff0c\u4e0d\u6703\u555f\u52d5 AI \u914d\u5c0d\u3002',
+    privateNote: '\u540c\u6642\u8b80\u53d6\u4f60\u7684\u6536\u85cf\u540d\u7247\u8207\u5df2\u5be9\u6838\u7684\u516c\u958b\u540d\u7247\uff0c\u4e0d\u6703\u555f\u52d5 AI \u914d\u5c0d\u3002',
     boardCount: '\u672c\u5c40\u5df2\u6392\u5217',
-    peopleUnit: '\u4f4d\u6536\u85cf\u4eba\u8108',
+    peopleUnit: '\u4f4d\u4eba\u8108',
     reset: '\u91cd\u65b0\u6392\u5217',
     board: '\u4eba\u8108\u5927\u5bcc\u7fc1\u68cb\u76e4',
     today: '\u4eca\u65e5\u4eba\u8108\u63a2\u7d22',
@@ -37,6 +40,9 @@
     retry: '\u91cd\u65b0\u8f09\u5165',
     unnamed: '\u672a\u547d\u540d\u4eba\u8108',
     collectedCard: '\u6536\u85cf\u540d\u7247',
+    publicCard: '\u5168\u7db2\u516c\u958b\u540d\u7247',
+    collectedShort: '\u6536\u85cf',
+    publicShort: '\u516c\u958b',
     explore: '\u63a2\u7d22',
     openPerson: '\u67e5\u770b\u4eba\u8108\uff1a',
     cardLoading: '\u540d\u7247\u529f\u80fd\u4ecd\u5728\u8f09\u5165\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66',
@@ -80,15 +86,19 @@
       clean(card && (card['\u516c\u53f8\u540d\u7a31'] || card.companyName || card.company)),
       clean(card && (card['\u8077\u7a31'] || card.title))
     ].filter(Boolean);
-    return parts.join('\uff5c') || labels.collectedCard;
+    return parts.join('\uff5c');
   }
 
   function tagsOf(card) {
-    return clean(card && (card['\u6a19\u7c64'] || card.tags || card.tag))
+    var direct = clean(card && (card['\u6a19\u7c64'] || card.tags || card.tag))
       .split(/[,|\n/]+/)
       .map(clean)
-      .filter(Boolean)
-      .slice(0, 3);
+      .filter(Boolean);
+    var publicDetails = [
+      card && (card.industry || card['\u884c\u696d'] || card['\u696d\u7a2e']),
+      card && (card.services || card['\u670d\u52d9\u9805\u76ee'])
+    ].map(clean).filter(Boolean);
+    return Array.from(new Set(direct.concat(publicDetails))).slice(0, 4);
   }
 
   function isCollected(card) {
@@ -96,14 +106,25 @@
     return !!rowId(card) && source !== 'self_profile' && source !== 'referral_placeholder';
   }
 
-  function toTile(card) {
+  function isPublicEligible(card) {
+    var source = clean(card && (card.sourceType || card.source_type || card['\u540d\u7247\u4f86\u6e90'])).toLowerCase();
+    var visibility = clean(card && (card.visibility || card['\u516c\u958b\u72c0\u614b'])).toLowerCase();
+    var review = clean(card && (card.aiReviewStatus || card.ai_review_status)).toLowerCase();
+    var eligible = card && (card.poolEligible === true || Number(card.poolEligible || card.pool_eligible) === 1);
+    return !!rowId(card) && source === 'self_profile' && visibility === 'public' && review === 'passed' && eligible;
+  }
+
+  function toTile(card, origin) {
     return {
       type: 'card',
       id: rowId(card),
       image: imageOf(card),
       title: nameOf(card),
-      subtitle: subtitleOf(card),
-      tags: tagsOf(card)
+      subtitle: subtitleOf(card) || (origin === 'public' ? labels.publicCard : labels.collectedCard),
+      tags: tagsOf(card),
+      origin: origin === 'public' ? 'public' : 'collected',
+      sourceLabel: origin === 'public' ? labels.publicShort : labels.collectedShort,
+      card: card
     };
   }
 
@@ -248,15 +269,15 @@
       '.br-header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:14px 16px;background:rgba(255,255,255,.94);border-bottom:1px solid #d1fae5;backdrop-filter:blur(12px)}',
       '.br-back{width:40px;height:40px;border-radius:999px;border:1px solid #dbe5e1;background:#fff;color:#0f5c4c;display:flex;align-items:center;justify-content:center}.br-title{font-size:20px;line-height:1.1;font-weight:900;color:#064338}.br-subtitle{margin-top:3px;font-size:11px;font-weight:800;color:#64748b}',
       '.br-modes{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 14px 0}.br-mode{min-height:44px;border-radius:14px;border:1px solid #a7f3d0;background:#fff;color:#047857;font-size:13px;font-weight:900}.br-mode.active{background:#047857;color:#fff}.br-mode:disabled{border-color:#e2e8f0;background:#f8fafc;color:#94a3b8}',
-      '.br-status{margin:12px 14px 0;padding:10px 12px;border:1px solid #d1fae5;border-radius:14px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;color:#475569}.br-status strong{color:#047857}.br-reset{border:0;background:transparent;color:#047857;font-size:11px;font-weight:900}',
+      '.br-status{margin:12px 14px 0;padding:10px 12px;border:1px solid #d1fae5;border-radius:14px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;color:#475569}.br-status strong{color:#047857}.br-status small{display:block;margin-top:2px;font-size:10px;color:#64748b}.br-reset{border:0;background:transparent;color:#047857;font-size:11px;font-weight:900}',
       '.br-wrap{padding:12px}.br-board{display:grid;grid-template-columns:repeat(' + COLUMNS + ',minmax(0,1fr));grid-template-rows:repeat(' + ROWS + ',minmax(0,1fr));gap:4px;aspect-ratio:' + COLUMNS + '/' + ROWS + ';width:100%;max-width:500px;margin:auto;padding:5px;border:3px solid #0f766e;border-radius:24px;background:linear-gradient(135deg,#fef3c7,#d1fae5 58%,#bfdbfe);box-shadow:0 18px 44px rgba(15,118,110,.18)}',
       '.br-tile{position:relative;min-width:0;overflow:visible;border:1px solid rgba(4,120,87,.2);border-radius:11px;background:rgba(255,255,255,.95);padding:3px 2px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;box-shadow:0 3px 8px rgba(15,23,42,.08);transition:.16s}.br-tile:disabled{opacity:1;color:inherit}.br-tile.current{z-index:3;border:2px solid #f97316;transform:scale(1.08);box-shadow:0 0 0 3px rgba(249,115,22,.2),0 7px 14px rgba(15,23,42,.16)}',
-      '.br-avatar{width:36px;height:36px;flex:0 0 36px;border-radius:999px;border:2px solid #fff;background:#059669;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;overflow:hidden;box-shadow:0 2px 5px rgba(15,23,42,.15)}.br-avatar img,.br-dialog-avatar img{width:100%;height:100%;object-fit:cover}.is-initials{background:linear-gradient(135deg,#059669,#2563eb)!important}.br-name{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;font-size:9px;font-weight:900;color:#334155}',
-      '.br-empty-tile{width:34px;height:34px;border-radius:999px;background:#e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center}.br-empty-tile .material-symbols-outlined{font-size:18px}.br-player{position:absolute;right:-3px;bottom:-3px;width:22px;height:22px;border:2px solid #fff;border-radius:999px;background:#f97316;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 7px rgba(15,23,42,.28)}.br-player .material-symbols-outlined{font-size:15px}',
+      '.br-avatar{width:36px;height:36px;flex:0 0 36px;border-radius:999px;border:2px solid #fff;background:#059669;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;overflow:hidden;box-shadow:0 2px 5px rgba(15,23,42,.15)}.br-avatar img,.br-dialog-avatar img{width:100%;height:100%;object-fit:cover}.is-initials{background:linear-gradient(135deg,#059669,#2563eb)!important}.br-name{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;font-size:9px;font-weight:900;color:#334155}.br-origin{position:absolute;left:2px;top:2px;border-radius:999px;padding:1px 4px;background:#dbeafe;color:#1d4ed8;font-size:7px;font-weight:900}.br-origin.public{background:#d1fae5;color:#047857}',
+      '.br-empty-tile{width:34px;height:34px;border-radius:999px;background:#e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center}.br-empty-tile .material-symbols-outlined{font-size:18px}.br-player{position:absolute;right:-3px;bottom:-3px;width:22px;height:22px;border:2px solid #fff;border-radius:999px;background:#f97316;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 7px rgba(15,23,42,.28);animation:brHop .6s ease-out}.br-player .material-symbols-outlined{font-size:15px}',
       '.br-center{grid-column:2/' + COLUMNS + ';grid-row:2/' + ROWS + ';margin:6px;border:1px solid rgba(255,255,255,.85);border-radius:20px;background:rgba(255,255,255,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;text-align:center}.br-kicker{font-size:10px;font-weight:900;color:#059669}.br-center-title{font-size:16px;line-height:1.1;font-weight:900;color:#064e3b}.br-die{width:58px;height:58px;margin:5px 0;border:4px solid #0f766e;border-radius:14px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900;color:#0f766e;box-shadow:0 6px 12px rgba(15,23,42,.14)}.br-die.rolling{animation:brShake .16s linear infinite}.br-roll{min-width:138px;min-height:42px;border:0;border-radius:14px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;font-size:14px;font-weight:900;box-shadow:0 8px 18px rgba(234,88,12,.24)}.br-roll:disabled{background:#cbd5e1;box-shadow:none}.br-round{margin-top:6px;font-size:10px;font-weight:800;color:#64748b}',
       '.br-empty{margin:16px;border:1px solid #fde68a;border-radius:20px;background:#fffbeb;padding:24px;text-align:center}.br-empty h3{font-size:18px;font-weight:900;color:#92400e}.br-empty p{margin-top:6px;font-size:12px;font-weight:700;line-height:1.6;color:#a16207}.br-empty button{margin-top:14px;border:0;border-radius:14px;background:#047857;padding:12px 18px;color:#fff;font-size:13px;font-weight:900}',
       '.br-modal{position:fixed;inset:0;z-index:130;display:flex;align-items:flex-end;justify-content:center;background:rgba(15,23,42,.5);padding:18px;backdrop-filter:blur(4px)}.br-modal.hidden{display:none}.br-dialog{width:100%;max-width:480px;border-radius:28px;background:#fff;padding:22px;box-shadow:0 24px 70px rgba(15,23,42,.3);animation:brUp .22s ease-out}.br-dialog-head{display:flex;align-items:center;gap:14px}.br-dialog-avatar{width:76px;height:76px;flex:0 0 76px;border-radius:999px;border:4px solid #d1fae5;background:#059669;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;overflow:hidden}.br-dialog h3{font-size:21px;font-weight:900;color:#0f172a}.br-dialog p{margin-top:5px;font-size:13px;font-weight:700;color:#64748b}.br-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.br-tag{border-radius:999px;background:#ecfdf5;padding:5px 9px;font-size:10px;font-weight:900;color:#047857}.br-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:9px;margin-top:18px}.br-actions button{min-height:48px;border-radius:15px;font-size:13px;font-weight:900}.br-close{border:1px solid #e2e8f0;background:#fff;color:#64748b}.br-open{border:0;background:#047857;color:#fff}',
-      '@keyframes brShake{0%{transform:rotate(-12deg) scale(.92)}50%{transform:rotate(12deg) scale(1.08)}100%{transform:rotate(-12deg) scale(.92)}}@keyframes brUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}',
+      '@keyframes brShake{0%{transform:rotate(-12deg) scale(.92)}50%{transform:rotate(12deg) scale(1.08)}100%{transform:rotate(-12deg) scale(.92)}}@keyframes brHop{0%{transform:translateY(8px) scale(.75)}55%{transform:translateY(-7px) scale(1.12)}100%{transform:none}}@keyframes brUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}',
       '@media(max-width:380px){.br-avatar{width:30px;height:30px;flex-basis:30px}.br-name{font-size:8px}.br-die{width:48px;height:48px;font-size:28px}.br-center-title{font-size:14px}.br-roll{min-width:112px;min-height:38px}}',
       '@media(prefers-reduced-motion:reduce){.br-die.rolling,.br-dialog{animation:none}.br-tile{transition:none}}'
     ].join('');
@@ -292,7 +313,10 @@
     content.innerHTML = '';
     var status = document.createElement('div');
     status.className = 'br-status';
-    status.innerHTML = '<span>' + labels.boardCount + ' <strong>' + state.tiles.length + '</strong> ' + labels.peopleUnit + '</span><button type="button" class="br-reset" onclick="window.resetBusinessRichman()">' + labels.reset + '</button>';
+    var publicCount = state.tiles.filter(function (tile) { return tile.origin === 'public'; }).length;
+    var collectedCount = state.tiles.length - publicCount;
+    status.innerHTML = '<span>' + labels.boardCount + ' <strong>' + state.tiles.length + '</strong> ' + labels.peopleUnit +
+      '<small>' + labels.collectedShort + ' ' + collectedCount + ' \u30fb ' + labels.publicShort + ' ' + publicCount + '</small></span><button type="button" class="br-reset" onclick="window.resetBusinessRichman()">' + labels.reset + '</button>';
     content.appendChild(status);
 
     var wrap = document.createElement('div');
@@ -310,6 +334,10 @@
       button.disabled = tile.type !== 'card' || index !== state.position;
       button.style.gridColumn = String(point.column);
       if (tile.type === 'card') {
+        var source = document.createElement('span');
+        source.className = 'br-origin' + (tile.origin === 'public' ? ' public' : '');
+        source.textContent = tile.sourceLabel;
+        button.appendChild(source);
         button.setAttribute('aria-label', labels.openPerson + tile.title);
         button.appendChild(avatar(tile, 'br-avatar'));
         var name = document.createElement('span');
@@ -356,22 +384,23 @@
     state.rolling = true;
     rollingUi(true);
     var dice = randomIndex(6) + 1;
-    for (var spin = 0; spin < 8; spin += 1) {
+    for (var spin = 0; spin < DICE_SPINS; spin += 1) {
       var die = document.getElementById('business-richman-die');
       if (die) die.textContent = String(randomIndex(6) + 1);
-      await wait(65);
+      await wait(70 + spin * 8);
     }
     for (var step = 0; step < dice; step += 1) {
       state.position = (state.position + 1) % path.length;
       state.dice = dice;
       render();
       rollingUi(true);
-      await wait(230);
+      await wait(STEP_DELAY_MS);
     }
     state.round += 1;
     state.rolling = false;
     save();
     render();
+    await wait(ARRIVAL_DELAY_MS);
     var arrived = state.tiles[state.position % state.tiles.length];
     if (arrived) showArrival(arrived);
   }
@@ -390,6 +419,10 @@
     title.textContent = tile.title;
     subtitle.textContent = tile.subtitle;
     tags.innerHTML = '';
+    var sourceChip = document.createElement('span');
+    sourceChip.className = 'br-tag';
+    sourceChip.textContent = tile.origin === 'public' ? labels.publicCard : labels.collectedCard;
+    tags.appendChild(sourceChip);
     (tile.tags || []).forEach(function (tag) {
       var chip = document.createElement('span');
       chip.className = 'br-tag';
@@ -404,18 +437,40 @@
     if (modal) modal.classList.add('hidden');
   }
 
+  async function loadPublicCards() {
+    if (typeof window.fetchAPI !== 'function') return [];
+    var ownRowId = rowId(window.currentUserCard);
+    var result = await window.fetchAPI('listPublicBusinessCards', {
+      limit: path.length * 3,
+      excludeRowId: ownRowId
+    }, true);
+    var cards = Array.isArray(result)
+      ? result
+      : (result && Array.isArray(result.data) ? result.data : []);
+    return cards.filter(isPublicEligible).map(function (card) { return toTile(card, 'public'); });
+  }
+
   async function loadCards() {
     if (typeof window.loadCardData !== 'function') return [];
     await window.loadCardData({ render: false, harvest: true, initPanels: false });
-    return (Array.isArray(window.harvestCards) ? window.harvestCards : [])
+    var collected = (Array.isArray(window.harvestCards) ? window.harvestCards : [])
       .filter(isCollected)
-      .map(toTile);
+      .map(function (card) { return toTile(card, 'collected'); });
+    var publicCards = [];
+    try {
+      publicCards = await loadPublicCards();
+    } catch (error) {
+      console.warn('[business-richman] public pool unavailable:', error);
+    }
+    return collected.concat(publicCards);
   }
 
   providers.card = {
     load: loadCards,
     open: async function (tile) {
-      if (typeof window.openCardDetailById === 'function') {
+      if (tile.origin === 'public' && tile.card && typeof window.openCardDetail === 'function') {
+        window.openCardDetail(tile.card);
+      } else if (typeof window.openCardDetailById === 'function') {
         await window.openCardDetailById(tile.id);
       } else if (typeof window.showToast === 'function') {
         window.showToast(labels.cardLoading, true);
