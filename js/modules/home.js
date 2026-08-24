@@ -566,8 +566,8 @@ const HomeModule = (function() {
             '有人透過 AI 配對關注你，點我繼續媒合。'
         ],
         publicNetwork: [
-            '本人名片尚未完成全網公開資格，點我前往檢查。',
-            '前往 AI 人脈交流圈完成公開與 AI 體檢。'
+            '前往 AI 人脈交流圈，查看公開資格與參與設定。',
+            '查看本人名片是否已加入全網商脈。'
         ],
         cardFolder: [
             '目前可分析的收藏名片較少，先到收藏名片新增人脈。',
@@ -903,14 +903,6 @@ const HomeModule = (function() {
             adviceText = '五大標籤完成 ' + health.fateTagCount + '/5，尚缺：' + health.missingFateTags.join('、') + '。';
         } else if (action === 'businessIntent') {
             adviceText = 'AI 業務需求完成 ' + health.businessIntentCount + '/3，尚缺：' + health.missingBusinessIntent.join('、') + '。';
-        } else if (action === 'publicNetwork') {
-            if (health.visibility !== 'public') {
-                adviceText = '五大標籤與業務需求已完成；本人名片尚未公開到全網商脈。';
-            } else if (health.aiReviewStatus !== 'passed') {
-                adviceText = '本人名片已公開，但 AI 體檢尚未通過。';
-            } else {
-                adviceText = '公開資料已完成，正在確認全網商脈資格。';
-            }
         }
         const advice = {
             action,

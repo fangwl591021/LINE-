@@ -161,12 +161,20 @@ if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia
   "businessIntent: 'AI 業務需求'",
   "cardFolder: '收藏名片'",
   "matchmake: 'AI 人脈交流圈'",
+  '前往 AI 人脈交流圈，查看公開資格與參與設定。',
+  '查看本人名片是否已加入全網商脈。',
   "'前往「' + advice.title + '」 →'",
   'readHomeAiAssistantConfigs_',
   '.map(config => config.businessIntent)',
   'card.customConfig'
 ].forEach((needle) => {
   if (!home.includes(needle)) fail(`home AI assistant contract missing: ${needle}`);
+});
+[
+  'AI 體檢尚未通過',
+  '完成公開與 AI 體檢'
+].forEach((forbidden) => {
+  if (home.includes(forbidden)) fail(`home AI assistant must not claim an unsupported status: ${forbidden}`);
 });
 if (!fs.existsSync(path.join(root, 'assets', 'ai-home-assistant.png'))) {
   fail('home AI assistant image must exist');
