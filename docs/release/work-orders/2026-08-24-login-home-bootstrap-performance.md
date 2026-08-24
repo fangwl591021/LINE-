@@ -19,6 +19,7 @@
 - 將獨立點數查詢改成聚合首頁資料失敗後的延遲備援。
 - 更新必要的前端 cache-bust 版本與對應 contract。
 - 第二輪將非關鍵首頁 API 分階段載入、取消首頁預抓完整名片庫，並讓收銀紀錄保持折疊 lazy load。
+- 第三輪依 LCP trace 將首頁 AI 助理圖改為 HTML head 高優先預載，不更換圖片內容。
 
 ## 3. 本次禁止碰什麼
 
@@ -92,6 +93,7 @@ Result: NOT RUN AS A TRUE PRE-EDIT BASELINE.
 6. 第二輪正式 trace 顯示登入後同時啟動約 22 個 POST，多個動作達 18 秒逾時；因此 getSubsiteHome 保持第一優先，其餘首頁區塊依 3/5/7/9/11/14 秒分階段載入。
 7. 首頁不再預抓完整名片庫；使用者進入名片頁時仍由既有 navigation loader 載入。
 8. 收件匣 badge 在登入期間 15 秒內只送一次；收銀紀錄僅在面板實際展開時載入。
+9. 第二輪 LCP 8.93 秒的主元素是 74.6 KB AI 助理圖，其中 4.57 秒為資源發現延遲；第三輪以 preload + fetchpriority=high 提前載入。
 
 ## 9. 修改後必跑
 
