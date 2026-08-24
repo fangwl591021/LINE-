@@ -46,5 +46,8 @@ if (!home.includes("btn.classList.add('flex')") || !home.includes("btn.classList
 if (!home.includes('forecast.meta') || !home.includes('forecast.summary') || !home.includes('forecast.action')) {
   fail('daily fortune modal must render meta, summary, and action text');
 }
+if (!index.includes('max-w-[420px]') || !index.includes('p-2 sm:p-4')) {
+  fail('daily fortune modal must provide a wider mobile-safe recommendation layout');
+}
 
 console.log('Today fortune contract passed.');
