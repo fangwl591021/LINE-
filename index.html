@@ -1275,8 +1275,13 @@
           </span>
         </button>
         <form onsubmit="return window.openBusinessHomeSearch(event)">
-          <h2 class="text-[21px] font-black text-[#064338]">你現在想找誰？</h2>
-          <p class="mt-1 text-[12px] font-bold leading-5 text-slate-500">輸入產業、專業或合作需求，帶入現有 AI 媒合。</p>
+          <div class="flex items-start gap-3 px-4">
+            <span id="home-network-search-icon" class="material-symbols-outlined text-[24px] text-emerald-700" aria-hidden="true">search</span>
+            <span class="min-w-0">
+              <h2 class="text-[21px] font-black leading-tight text-[#064338]">你現在想找誰？</h2>
+              <span class="mt-1 block text-[12px] font-bold leading-5 text-slate-500">輸入產業、專業或合作需求，帶入現有 AI 媒合。</span>
+            </span>
+          </div>
           <fieldset class="mt-3 grid grid-cols-3 gap-2">
             <legend class="sr-only">選擇搜尋範圍</legend>
             <label class="cursor-pointer"><input type="radio" name="businessHomeSearchScope" value="own" checked class="peer sr-only"><span class="flex min-h-10 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 px-1 text-[11px] font-black text-emerald-800 peer-checked:border-emerald-600 peer-checked:bg-emerald-700 peer-checked:text-white"><span class="material-symbols-outlined mr-1 text-[16px]">groups</span>從我的人脈找</span></label>

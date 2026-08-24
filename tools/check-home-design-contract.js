@@ -107,6 +107,10 @@ if (!index.includes('id="home-ai-match-interest-title" class="block text-[21px] 
     !index.includes('id="home-ai-match-interest-note" class="mt-1 block text-[12px] font-bold leading-5 text-slate-500"')) {
   fail('network prompt title and subtitle must match the search heading scale');
 }
+if (!index.includes('id="home-network-search-icon" class="material-symbols-outlined text-[24px] text-emerald-700"') ||
+    !index.includes('<div class="flex items-start gap-3 px-4">')) {
+  fail('network search heading must include an aligned 24px icon');
+}
 [
   '你現在想找誰？',
   'name="businessHomeSearchQuery"',
