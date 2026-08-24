@@ -203,8 +203,10 @@ async function saveCardImageProcessingResult(jobId,file,metadata,status='complet
   const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'名片影像處理結果儲存失敗');return body.job;
 }
 async function prepareBusinessCardImage(file,sideLabel='正面',purpose='collection'){
-  const job=await uploadCardImageOriginal(file,sideLabel,purpose);
-  const processed=await compressCardImage(file);
+  const [job,processed]=await Promise.all([
+    uploadCardImageOriginal(file,sideLabel,purpose),
+    compressCardImage(file)
+  ]);
   const metadata={processingVersion:'vision-localization-v3',detection:{detected:false,confidence:0,strategy:'vision-pending'},quality:{overall:100,blur:100,brightness:100,glare:100,coverage:100},processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},corners:[],warning:'等待單次 AI Vision 同時完成 OCR 與名片定位'};
   await saveCardImageProcessingResult(job.id,processed,metadata,'completed');
   return {file:processed,jobId:job.id,metadata};
@@ -269,11 +271,16 @@ window.__A_KAFFIT_FULL_CARD_WORKFLOW__=true;
 window.prepareBusinessCardImage=prepareBusinessCardImage;
 window.recognizeCard=async function(input){
   const file=input?.files?.[0];if(!file)return;input.value='';
+  window.showCardOcrProgress?.('名片辨識準備中');
+  window.setCardOcrProgressStage?.(5,'照片已收到，正在準備辨識...');
   try{
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    window.setCardOcrProgressStage?.(8,'正在上傳並壓縮名片照片...');
     const prepared=await prepareBusinessCardImage(file,'正面','collection');
     scanState={file,processedFile:prepared.file,jobId:prepared.jobId,ocr:null,localization:null,cropFile:null};
+    window.hideCardOcrProgress?.();
     showPreparedDraft();
-  }catch(error){window.showToast?.(error.message||'名片圖片處理失敗',true)}
+  }catch(error){window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片圖片處理失敗',true)}
 };
 
 if(!installIndustryFilterBridge())setTimeout(installIndustryFilterBridge,0);

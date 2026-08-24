@@ -27,6 +27,11 @@ ok(adapter.includes('async function compressCardImage(file)'), 'A-kaffit compres
 ok(adapter.includes('[1600, 1280, 1024, 800, 640, 512]'), 'A-kaffit compression resolutions preserved');
 ok(adapter.includes('[0.84, 0.72, 0.60, 0.48, 0.36]'), 'A-kaffit WebP quality ladder preserved');
 ok(adapter.includes('async function prepareBusinessCardImage'), 'prepareBusinessCardImage preserved');
+ok(adapter.includes('const [job,processed]=await Promise.all(['), 'original upload and local compression start together');
+ok(adapter.indexOf("showCardOcrProgress?.('名片辨識準備中')") < adapter.indexOf("prepareBusinessCardImage(file,'正面','collection')"), 'scan selection shows progress before image preparation');
+ok(adapter.includes('requestAnimationFrame(()=>requestAnimationFrame(resolve))'), 'scan progress receives a paint frame before image preparation');
+ok(adapter.includes("setCardOcrProgressStage?.(8,'正在上傳並壓縮名片照片...')"), 'scan progress explains the initial upload and compression stage');
+ok(adapter.includes("catch(error){window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片圖片處理失敗',true)"), 'scan preparation failure closes progress feedback');
 ok(adapter.indexOf('prepareBusinessCardImage(file') < adapter.indexOf("fetchAPI('recognizeCardWithGPT4o'"), 'image job happens before OCR');
 ok((adapter.match(/fetchAPI\('recognizeCardWithGPT4o'/g) || []).length === 1, 'primary flow has exactly one OCR Vision call');
 ok(adapter.includes("import { cropByVisionLocalization, normalizedVisionLocalization } from './a-kaffit-vision-v3-crop.js'"), 'A-kaffit Vision V3 crop is primary crop runtime');
@@ -49,7 +54,7 @@ ok(worker.includes("pathname === '/v1/card-images'"), 'Worker original image rou
 ok(worker.includes('const resultMatch = url.pathname.match') && (worker.includes("'/result'") || worker.includes('/result$/')), 'Worker processed result route exists');
 ok(worker.includes("request.method === 'OPTIONS'"), 'cross-origin preflight is handled');
 ok(worker.includes('X-Card-File-Size, X-Card-Side, X-Card-Purpose'), 'A-kaffit image-job headers allowed by CORS');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.0'), 'full workflow adapter cache-bust is active');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.2'), 'full workflow adapter cache-bust is active');
 
 ok(legacy.includes('boundingBox 必須只包住真實名片，不可包入桌面、手掌、鍵盤或其他背景'), 'OCR prompt matches A-kaffit background exclusion rule');
 ok(legacy.includes('incomplete=true') && legacy.includes('clippedEdges'), 'OCR prompt preserves incomplete-card contract');

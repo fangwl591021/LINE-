@@ -10001,10 +10001,25 @@ const D1ReadModule = {
     }
     sql += ` ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC LIMIT ${limit}`;
     const rows = await this.all(env, sql, params);
-    const cards = rows.map(row => this.cardRow(row)).filter(card => (
-      card && card.visibility === 'public' && card.sourceType === 'self_profile' &&
-      card.poolEligible === true && card.aiReviewStatus === 'passed'
-    ));
+    const cards = rows.map(row => {
+      const storedVisibility = this.text(row.visibility).toLowerCase();
+      const storedSourceType = this.text(row.source_type).toLowerCase();
+      const storedPoolEligible = Number(row.pool_eligible) === 1;
+      const storedReviewStatus = this.text(row.ai_review_status).toLowerCase();
+      if (storedVisibility !== 'public' || storedSourceType !== 'self_profile' ||
+          !storedPoolEligible || storedReviewStatus !== 'passed') return null;
+      const card = this.cardRow(row);
+      if (!card) return null;
+      return {
+        ...card,
+        visibility: storedVisibility,
+        sourceType: storedSourceType,
+        poolEligible: true,
+        aiReviewStatus: storedReviewStatus,
+        isPrivate: false,
+        isSelfProfile: true
+      };
+    }).filter(Boolean);
     return { success: true, data: cards.map(card => this.publicBusinessCardView(card)) };
   },
 
