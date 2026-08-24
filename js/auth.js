@@ -242,7 +242,7 @@ window.checkPendingMotherRegistrationOnReturn = async function(options = {}) {
     return null;
   });
   if (result && result.completed) {
-    window.goPage?.('home');
+    window.goPage?.('home', true);
     if (typeof window.loadHomeData === 'function') window.loadHomeData();
   } else if (result && result.pending) {
     window.renderPendingMotherRegistration?.(userId);
@@ -2500,7 +2500,7 @@ window.applyUnregisteredHomeSession = function(options = {}) {
   try {
     window.currentUser.needsMyCardSetup = true;
   } catch (e) {}
-  window.goPage('home');
+  window.goPage('home', true);
   setTimeout(() => {
     if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
     if (typeof window.loadHomeData === 'function') window.loadHomeData();
@@ -2602,7 +2602,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       avatarImg.classList.remove('hidden');
     }
     if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-    setTimeout(() => window.refreshPointBalanceBadge?.(), 300);
+    setTimeout(() => {
+      const aggregateWalletReady = window.subsiteHomeFastData?.wallet?.status === 'ready';
+      if (window.pointWalletStatus !== 'ready' && !aggregateWalletReady) {
+        window.refreshPointBalanceBadge?.();
+      }
+    }, 8000);
 
     const urlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
@@ -2708,7 +2713,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (isFresh) {
           cachedUserInfo = cached.info;
           window.applyRegisteredUserSession(cachedUserInfo);
-          window.goPage(wantsCardCoolList ? 'card' : 'home');
+          window.goPage(wantsCardCoolList ? 'card' : 'home', true);
           setTimeout(() => {
             if (wantsCardCoolList && typeof window.loadCardData === 'function') {
               window.loadCardData({ render: true, harvest: true, force: true });
@@ -2740,7 +2745,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return null;
       });
       if (resumedMotherRegistration && resumedMotherRegistration.completed) {
-        window.goPage('home');
+        window.goPage('home', true);
         if (typeof window.loadHomeData === 'function') window.loadHomeData();
         return;
       }
@@ -2757,7 +2762,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error("Auth check failed:", checkRes.error);
         const recovered = await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
         if (recovered) {
-          window.goPage('home');
+          window.goPage('home', true);
           if (typeof window.loadHomeData === 'function') window.loadHomeData();
           return;
         }
@@ -2769,7 +2774,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const recovered = await window.recoverRegisteredUserFromLegacyCache(window.currentUserProfile.userId)
           || await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
         if (recovered) {
-          window.goPage('home');
+          window.goPage('home', true);
           if (typeof window.loadHomeData === 'function') window.loadHomeData();
           return;
         }
@@ -2828,7 +2833,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ✅ 先顯示首頁，不等資料載入
     if (!shareCardId && !claimCardId && !usedCachedUser) {
-      window.goPage(wantsCardCoolList ? 'card' : 'home');
+      window.goPage(wantsCardCoolList ? 'card' : 'home', true);
     }
 
     // ✅ 背景非同步載入，不阻塞首頁第一幀；一般首頁只載活動，不碰名片庫圖片。

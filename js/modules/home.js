@@ -3045,15 +3045,23 @@ const HomeModule = (function() {
 
     function runHomeBackgroundTask_(key, delayMs, task) {
         window.__homeLoadTimers = window.__homeLoadTimers || {};
+        window.__homeLoadPromises = window.__homeLoadPromises || {};
         if (window.__homeLoadTimers[key]) clearTimeout(window.__homeLoadTimers[key]);
-        window.__homeLoadTimers[key] = setTimeout(async () => {
-            try {
-                await task();
-            } catch (e) {
-                console.warn('[home-load]', key, e && e.message ? e.message : e);
-            } finally {
-                delete window.__homeLoadTimers[key];
-            }
+        window.__homeLoadTimers[key] = setTimeout(() => {
+            delete window.__homeLoadTimers[key];
+            if (window.__homeLoadPromises[key]) return;
+
+            const promise = Promise.resolve()
+                .then(task)
+                .catch(e => {
+                    console.warn('[home-load]', key, e && e.message ? e.message : e);
+                })
+                .finally(() => {
+                    if (window.__homeLoadPromises[key] === promise) {
+                        delete window.__homeLoadPromises[key];
+                    }
+                });
+            window.__homeLoadPromises[key] = promise;
         }, delayMs);
     }
 
@@ -3110,25 +3118,36 @@ const HomeModule = (function() {
     window.loadSubsiteHomeFastData = async function(options = {}) {
         const userId = window.currentUserProfile?.userId || window.currentUser?.userId || '';
         if (!userId || typeof window.fetchAPI !== 'function') return null;
+        if (window.__subsiteHomeFastDataPromise) return window.__subsiteHomeFastDataPromise;
         if (!options.force && window.subsiteHomeFastData && Date.now() - (window.subsiteHomeFastData.loadedAtMs || 0) < 30000) {
             window.applySubsiteHomeFastData(window.subsiteHomeFastData);
             return window.subsiteHomeFastData;
         }
 
         const pointUserId = window.resolvePointUserIdForCurrentProfile?.(userId) || userId;
-        const res = await window.fetchAPI('getSubsiteHome', {
-            userId,
-            pointUserId,
-            pt_uid: pointUserId,
-            point_type: 'gift_money',
-            cashierLogLimit: 10
-        }, true);
-        const data = res && res.data ? res.data : res;
-        if (data && !data.error) {
-            window.subsiteHomeFastData = { ...data, loadedAtMs: Date.now() };
-            window.applySubsiteHomeFastData(window.subsiteHomeFastData);
+        const request = (async () => {
+            const res = await window.fetchAPI('getSubsiteHome', {
+                userId,
+                pointUserId,
+                pt_uid: pointUserId,
+                point_type: 'gift_money',
+                cashierLogLimit: 10
+            }, true);
+            const data = res && res.data ? res.data : res;
+            if (data && !data.error) {
+                window.subsiteHomeFastData = { ...data, loadedAtMs: Date.now() };
+                window.applySubsiteHomeFastData(window.subsiteHomeFastData);
+            }
+            return data;
+        })();
+        window.__subsiteHomeFastDataPromise = request;
+        try {
+            return await request;
+        } finally {
+            if (window.__subsiteHomeFastDataPromise === request) {
+                window.__subsiteHomeFastDataPromise = null;
+            }
         }
-        return data;
     };
 
     window.scheduleHomeDataLoadsByRole = function(options = {}) {

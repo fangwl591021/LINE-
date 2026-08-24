@@ -5,6 +5,7 @@ const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const config = fs.readFileSync(path.join(root, 'js/config.js'), 'utf8');
 const auth = fs.readFileSync(path.join(root, 'js/auth.js'), 'utf8');
+const home = fs.readFileSync(path.join(root, 'js/modules/home.js'), 'utf8');
 const bridge = fs.readFileSync(path.join(root, 'point-bridge.html'), 'utf8');
 
 function ok(condition, message) {
@@ -27,7 +28,11 @@ ok(config.includes('window.ensureActmasterPointFriendship'), 'main app exposes t
 ok(auth.includes('await window.ensureActmasterPointFriendship()'), 'authenticated main startup waits for friendship verification');
 ok(config.includes("url.searchParams.set('point_friend', '1')"), 'successful recheck preserves the existing point_friend contract');
 ok(/js\/config\.js\?v=9\.13/.test(html), 'main endpoint configuration is cache-busted');
-ok(/js\/auth\.js\?v=10\.89/.test(html), 'main endpoint authentication is cache-busted');
+ok(/js\/auth\.js\?v=10\.90/.test(html), 'main endpoint authentication is cache-busted');
+ok(auth.includes("window.goPage(wantsCardCoolList ? 'card' : 'home', true)"), 'login landing renders without triggering a duplicate navigation load');
+ok(auth.includes('aggregateWalletReady') && !auth.includes('setTimeout(() => window.refreshPointBalanceBadge?.(), 300)'), 'point balance uses aggregate home data before its delayed fallback');
+ok(home.includes('window.__homeLoadPromises'), 'home background tasks coalesce matching in-flight work');
+ok(home.includes('window.__subsiteHomeFastDataPromise'), 'subsite home bootstrap coalesces concurrent aggregate requests');
 ok(config.includes('for (let attempt = 0; attempt < 2; attempt += 1)'), 'Android LIFF startup retries one transient initialization failure');
 ok(config.includes('window.getActmasterLiffProfile'), 'LINE profile lookup has a bounded retry');
 ok(config.includes('window.recoverActmasterStartupOnce'), 'startup performs one bounded clean-URL recovery');
