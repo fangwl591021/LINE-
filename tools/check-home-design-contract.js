@@ -74,7 +74,7 @@ if (!index.includes('id="bottom-nav"') || index.includes('body.home-page nav { d
     fail(`bottom navigation must keep current action: ${id}`);
   }
 });
-if (!/js\/navigation\.js\?v=(?:7\.(?:9\d*)|8\.0[01])/.test(index) ||
+if (!/js\/navigation\.js\?v=(?:7\.(?:9\d*)|8\.0[0-2])/.test(index) ||
     !navigation.includes("} else if (page === 'home')") ||
     !navigation.includes("if (bottomNav) bottomNav.classList.remove('hidden');") ||
     !navigation.includes("if (bottomNavAdmin) bottomNavAdmin.classList.add('hidden');")) {
