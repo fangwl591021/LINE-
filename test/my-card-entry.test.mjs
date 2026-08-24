@@ -18,6 +18,6 @@ test('home My Card opens the shared full card-detail page', () => {
   assert.match(index, /id="home-my-card-button" onclick="window\.openMyCardEntry \? window\.openMyCardEntry\(event\)/);
   assert.match(index, /<details id="details-my-ecard"[\s\S]*?<summary onclick="window\.openMyCardEntry\(event\)"/);
   assert.match(index, /js\/modules\/mycard\.js\?v=8\.86/);
-  assert.match(index, /js\/modules\/home\.js\?v=8\.02/);
+  assert.match(index, /js\/modules\/home\.js\?v=8\.03/);
   assert.match(mycard, /await load\(\);\s*await openMyCardDetail\(\);/);
 });

@@ -534,9 +534,11 @@ const HomeModule = (function() {
         businessIntent: 'AI 業務需求',
         fateTags: '五大標籤',
         interest: 'AI 人脈交流圈',
-        publicNetwork: 'AI 人脈交流圈',
+        publicNetwork: '全網商脈公開設定',
         cardFolder: '收藏名片',
-        matchmake: 'AI 人脈交流圈'
+        ownSearch: '從我的人脈找',
+        publicSearch: '從全網商脈找',
+        aiSuggest: 'AI 建議'
     });
     const HOME_AI_ASSISTANT_COPY = Object.freeze({
         loading: [
@@ -566,8 +568,8 @@ const HomeModule = (function() {
             '有人透過 AI 配對關注你，點我繼續媒合。'
         ],
         publicNetwork: [
-            '前往 AI 人脈交流圈，查看公開資格與參與設定。',
-            '查看本人名片是否已加入全網商脈。'
+            '查看本人名片的公開資格與參與設定。',
+            '點我前往全網商脈公開設定。'
         ],
         cardFolder: [
             '目前可分析的收藏名片較少，先到收藏名片新增人脈。',
@@ -575,11 +577,17 @@ const HomeModule = (function() {
             '先累積收藏名片，再從你的私有人脈中尋找合作對象。',
             '到收藏名片加入新夥伴，讓人脈搜尋資料更完整。'
         ],
-        matchmake: [
-            '名片和業務需求已就緒，現在可以開始 AI 媒合。',
-            '基礎資料已完成，告訴我你現在想找誰。',
-            '你可以先從我的人脈找，再擴大到全網商脈。',
-            '媒合資料已準備好，設定這次的合作搜尋目標。'
+        ownSearch: [
+            '先從你已收藏的人脈中尋找合適的合作對象。',
+            '點我回到「你現在想找誰」，從我的人脈開始搜尋。'
+        ],
+        publicSearch: [
+            '你的公開資料已就緒，可以從全網商脈尋找合作對象。',
+            '點我回到「你現在想找誰」，搜尋全網商脈。'
+        ],
+        aiSuggest: [
+            '資料已完成，讓 AI 建議目前最值得認識的合作對象。',
+            '不知道先找誰？點我使用 AI 建議。'
         ]
     });
     let homeAiAssistantDrag_ = null;
@@ -614,7 +622,7 @@ const HomeModule = (function() {
     }
 
     function chooseHomeAiAssistantCopy_(action, widget, rotate) {
-        const choices = HOME_AI_ASSISTANT_COPY[action] || HOME_AI_ASSISTANT_COPY.matchmake;
+        const choices = HOME_AI_ASSISTANT_COPY[action] || HOME_AI_ASSISTANT_COPY.loading;
         if (!rotate && widget.dataset.copyAction === action && widget.dataset.copyText) return widget.dataset.copyText;
         const state = readHomeAiAssistantVariety_();
         const previous = Number(state.copy?.[action] ?? -1);
@@ -729,6 +737,13 @@ const HomeModule = (function() {
         const interestTitle = String(document.getElementById('home-ai-match-interest-title')?.textContent || '');
         const visibility = String(card.visibility || '').toLowerCase();
         const aiReviewStatus = String(card.aiReviewStatus || card.ai_review_status || '').toLowerCase();
+        const primaryConfig = readHomeAiAssistantConfigs_([card])[0] || configs[0] || {};
+        const poolEligible = card.poolEligible === true || card.pool_eligible === true;
+        const configPublicReady = primaryConfig.isPrivate === false
+            && primaryConfig.safetyReview?.pass === true;
+        const serverPublicReady = visibility === 'public'
+            && poolEligible
+            && aiReviewStatus === 'passed';
         return {
             loading: false,
             hasMyCard: true,
@@ -739,11 +754,9 @@ const HomeModule = (function() {
             collectedCardCount: collectedCards.length,
             hasInterest: /有\s*\d+\s*人對你感興趣/.test(interestTitle),
             visibility,
-            poolEligible: card.poolEligible === true || card.pool_eligible === true,
+            poolEligible,
             aiReviewStatus,
-            publicReady: visibility === 'public'
-                && (card.poolEligible === true || card.pool_eligible === true)
-                && aiReviewStatus === 'passed'
+            publicReady: configPublicReady || serverPublicReady
         };
     }
 
@@ -756,19 +769,55 @@ const HomeModule = (function() {
         if (health.collectedCardCount < 5) actions.push('cardFolder');
         if (health.hasInterest) actions.push('interest');
         if (health.fateTagCount === 5 && health.businessIntentCount === 3) {
-            actions.push(health.publicReady ? 'matchmake' : 'publicNetwork');
+            if (health.collectedCardCount > 0) actions.push('ownSearch');
+            if (health.publicReady) actions.push('publicSearch', 'aiSuggest');
+            else actions.push('publicNetwork');
         }
-        return actions.length ? actions : ['matchmake'];
+        return actions.length ? actions : ['ownSearch'];
+    }
+
+    function focusHomeNetworkSearch_(scope) {
+        const section = document.getElementById('home-network-search-entry');
+        const selectedScope = scope === 'public' || scope === 'ai' ? scope : 'own';
+        const radio = section?.querySelector('[name="businessHomeSearchScope"][value="' + selectedScope + '"]');
+        if (!section || !radio) {
+            window.showToast?.('找不到首頁搜尋入口，請重新整理後再試', true);
+            return null;
+        }
+        radio.checked = true;
+        section.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => section.querySelector('[name="businessHomeSearchQuery"]')?.focus?.(), 350);
+        return true;
+    }
+
+    function openHomePublicNetworkSettings_() {
+        window.matchmakePoolScope = 'public';
+        window.goPage?.('matchmake');
+        window.setMatchmakePoolScope?.('public');
+        setTimeout(() => {
+            const target = document.getElementById('match-public-toggle-wrap')
+                || document.getElementById('match-status-card')
+                || document.getElementById('match-pool-public');
+            target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        }, 180);
     }
 
     function runHomeAiAssistantAction_(action) {
-        if (action === 'loading') return null;
-        if (action === 'myCard') return window.openMyCardEntry?.();
-        if (action === 'businessIntent') return window.openHomeBusinessIntent?.();
-        if (action === 'fateTags') return window.openHomeFateTags?.();
-        if (action === 'interest') return window.openHomeAiMatchInterest?.();
-        if (action === 'cardFolder') return window.goPage?.('card');
-        return window.goPage?.('matchmake');
+        switch (action) {
+            case 'loading': return null;
+            case 'myCard': return window.openMyCardEntry?.();
+            case 'businessIntent': return window.openHomeBusinessIntent?.();
+            case 'fateTags': return window.openHomeFateTags?.();
+            case 'interest': return window.openHomeAiMatchInterest?.();
+            case 'cardFolder': return window.goPage?.('card');
+            case 'publicNetwork': return openHomePublicNetworkSettings_();
+            case 'ownSearch': return focusHomeNetworkSearch_('own');
+            case 'publicSearch': return focusHomeNetworkSearch_('public');
+            case 'aiSuggest': return focusHomeNetworkSearch_('ai');
+            default:
+                window.showToast?.('這項建議沒有可用入口，請重新整理首頁', true);
+                return null;
+        }
     }
 
     function restoreHomeAiAssistantPosition_(widget) {
@@ -931,7 +980,8 @@ const HomeModule = (function() {
 
     window.openHomeAiAssistantAdvice = function() {
         const widget = ensureHomeAiAssistant_();
-        runHomeAiAssistantAction_(widget.dataset.action || window.refreshHomeAiAssistant?.().action || 'matchmake');
+        const action = widget.dataset.action || window.refreshHomeAiAssistant?.().action || '';
+        runHomeAiAssistantAction_(action);
     };
 
     const PUBLIC_PARTNER_STORE_URL = 'https://aiwe.cc/index.php/search_linecard/?shop_id=78&submitted=1';

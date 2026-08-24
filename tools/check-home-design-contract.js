@@ -160,9 +160,18 @@ if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia
   "myCard: '我的名片'",
   "businessIntent: 'AI 業務需求'",
   "cardFolder: '收藏名片'",
-  "matchmake: 'AI 人脈交流圈'",
-  '前往 AI 人脈交流圈，查看公開資格與參與設定。',
-  '查看本人名片是否已加入全網商脈。',
+  "interest: 'AI 人脈交流圈'",
+  "publicNetwork: '全網商脈公開設定'",
+  "ownSearch: '從我的人脈找'",
+  "publicSearch: '從全網商脈找'",
+  "aiSuggest: 'AI 建議'",
+  "case 'publicNetwork': return openHomePublicNetworkSettings_()",
+  "case 'ownSearch': return focusHomeNetworkSearch_('own')",
+  "case 'publicSearch': return focusHomeNetworkSearch_('public')",
+  "case 'aiSuggest': return focusHomeNetworkSearch_('ai')",
+  "window.showToast?.('這項建議沒有可用入口，請重新整理首頁', true)",
+  "primaryConfig.safetyReview?.pass === true",
+  "primaryConfig.isPrivate === false",
   "'前往「' + advice.title + '」 →'",
   'readHomeAiAssistantConfigs_',
   '.map(config => config.businessIntent)',
@@ -172,7 +181,8 @@ if (!index.includes('id="home-media-container"') || !home.includes('hasHomeMedia
 });
 [
   'AI 體檢尚未通過',
-  '完成公開與 AI 體檢'
+  '完成公開與 AI 體檢',
+  "|| 'matchmake'"
 ].forEach((forbidden) => {
   if (home.includes(forbidden)) fail(`home AI assistant must not claim an unsupported status: ${forbidden}`);
 });
