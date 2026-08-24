@@ -98,6 +98,15 @@ const systemTicker = index.indexOf('id="home-system-ticker"');
 if (defaultSearchEntry < 0 || defaultSearchEntry < quickActionsEnd || defaultSearchEntry > systemTicker) {
   fail('network search entry must be visible on the default home below quick actions');
 }
+const matchInterestPrompt = index.indexOf('id="home-ai-match-interest-summary"', defaultSearchEntry);
+const networkSearchForm = index.indexOf('<form onsubmit="return window.openBusinessHomeSearch(event)">', defaultSearchEntry);
+if (matchInterestPrompt < defaultSearchEntry || networkSearchForm < 0 || matchInterestPrompt > networkSearchForm) {
+  fail('who should find you prompt must appear before who are you looking for search');
+}
+if (!index.includes('id="home-ai-match-interest-title" class="block text-[21px] font-black leading-tight text-[#064338]"') ||
+    !index.includes('id="home-ai-match-interest-note" class="mt-1 block text-[12px] font-bold leading-5 text-slate-500"')) {
+  fail('network prompt title and subtitle must match the search heading scale');
+}
 [
   '你現在想找誰？',
   'name="businessHomeSearchQuery"',
