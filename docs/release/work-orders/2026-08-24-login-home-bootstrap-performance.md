@@ -112,7 +112,8 @@ Result: NOT RUN AS A TRUE PRE-EDIT BASELINE.
 | 修改前正式頁 Chrome DevTools trace | PASS | 正式頁 LCP 0.63-1.07s；callback 後首頁請求 fan-out 到約 11.5s |
 | 正式靜態檔與 origin/main SHA-256 對照 | PASS | index、auth、core、home 完全一致 |
 | 第一輪上線後正式頁 Network/trace | PASS | FCP 1.54s、LCP 6.92s、load 22.46s；確認主要剩餘問題為約 22 個首頁 POST 競爭及多個 18 秒 timeout |
-| 第二輪正式頁 Network/trace | PENDING | 第二輪 GitHub Pages 發佈後重測 API 數、逾時與完整登入時間 |
+| 第二輪正式頁 Network/trace | PASS | load 10.51s；首頁 POST 約 22 降至 12；原本多個 18s timeout 全部消失；getSubsiteHome 15.52s 成功 |
+| 第三輪 LCP preload 正式 trace | PASS | 回訪 FCP 0.59s、LCP 2.11s、DOMContentLoaded 1.51s、load 1.54s；LCP 資源發現延遲由 4.57s 降至 22ms |
 
 ## 11. 上線判斷
 
