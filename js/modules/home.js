@@ -859,13 +859,48 @@ const HomeModule = (function() {
         const action = document.getElementById('weekly-zodiac-action');
         if (title) title.textContent = '今日運勢人脈推薦';
         if (actionLabel) actionLabel.textContent = '今天值得接觸的 ' + state.matches.length + ' 位對象';
-        if (action) action.textContent = state.matches.map((match, index) => {
-            const card = getHomeAiFortuneMatchCard_(match);
-            const name = getHomeAiFortuneMatchName_(match);
-            const company = String(card?.['公司名稱'] || card?.companyName || '').trim();
-            const reason = String(match?.reason || '適合今天主動建立聯繫').trim();
-            return (index + 1) + '. ' + name + (company ? '｜' + company : '') + '\n' + reason;
-        }).join('\n\n');
+        if (action) {
+            action.replaceChildren();
+            action.classList.add('space-y-2');
+            state.matches.forEach((match, index) => {
+                const card = getHomeAiFortuneMatchCard_(match);
+                const rowId = String(match?.rowId || card?.rowId || card?.id || '').trim();
+                const name = getHomeAiFortuneMatchName_(match);
+                const company = String(card?.['公司名稱'] || card?.companyName || '').trim();
+                const reason = String(match?.reason || '適合今天主動建立聯繫').trim();
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'block w-full rounded-xl border border-amber-200 bg-white px-3 py-3 text-left shadow-sm active:scale-[0.99] transition-transform';
+                button.setAttribute('aria-label', '查看名片：' + name);
+                const heading = document.createElement('span');
+                heading.className = 'flex items-center justify-between gap-2';
+                const identity = document.createElement('span');
+                identity.className = 'min-w-0 font-black text-slate-900';
+                identity.textContent = (index + 1) + '. ' + name + (company ? '｜' + company : '');
+                const linkLabel = document.createElement('span');
+                linkLabel.className = 'shrink-0 text-[12px] font-black text-blue-600';
+                linkLabel.textContent = '查看名片 →';
+                const reasonText = document.createElement('span');
+                reasonText.className = 'mt-1 block text-[12px] font-bold leading-relaxed text-slate-600';
+                reasonText.textContent = reason;
+                heading.append(identity, linkLabel);
+                button.append(heading, reasonText);
+                button.addEventListener('click', () => {
+                    if (card && Array.isArray(window.allCards) && !window.allCards.some(item => String(item?.rowId || item?.id || '') === rowId)) {
+                        window.allCards.push(card);
+                    }
+                    window.closeWeeklyZodiacModal?.();
+                    if (rowId && typeof window.openCardDetailById === 'function') {
+                        window.openCardDetailById(rowId);
+                    } else if (card && typeof window.openCardDetail === 'function') {
+                        window.openCardDetail(card);
+                    } else {
+                        window.showToast?.('暫時找不到這張名片，請重新整理後再試', true);
+                    }
+                });
+                action.appendChild(button);
+            });
+        }
     }
 
     function getHomeAiAssistantActions_(health) {
