@@ -11,7 +11,7 @@ const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
 
 assert.match(indexHtml, /openBusinessRichman/);
 assert.match(indexHtml, /id="page-business-richman"/);
-assert.match(indexHtml, /js\/modules\/business-richman\.js\?v=1\.1/);
+assert.match(indexHtml, /js\/modules\/business-richman\.js\?v=1\.2/);
 assert.match(indexHtml, /js\/navigation\.js\?v=8\.02/);
 assert.match(navigation, /page === 'business-richman'.*initBusinessRichman/);
 
@@ -29,6 +29,13 @@ assert.match(source, /state\.tiles\[index % state\.tiles\.length\]/);
 assert.match(source, /providers\.card/);
 assert.match(source, /STEP_DELAY_MS = 650/);
 assert.match(source, /ARRIVAL_DELAY_MS = 350/);
+assert.match(source, /class="br-dice-scene"/);
+assert.match(source, /business-richman-dice-1/);
+assert.match(source, /business-richman-dice-2/);
+assert.match(source, /@keyframes brDiceRoll/);
+assert.match(source, /DICE_ROLL_MS = 1100/);
+assert.match(source, /var total = dice1 \+ dice2/);
+assert.match(source, /for \(var step = 0; step < total; step \+= 1\)/);
 
 assert.match(worker, /listPublicBusinessCards: \{ access: 'authenticated'/);
 assert.match(worker, /async listPublicBusinessCards\(payload, env\)/);
