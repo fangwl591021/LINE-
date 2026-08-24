@@ -68,7 +68,7 @@ includesAll(index, [
   'id="home-ai-match-interest-summary"',
   'id="home-ai-match-interest-title"',
   'js/modules/matchmake.js?v=7.12',
-  'js/modules/home.js?v=8.06'
+  'js/modules/home.js?v=8.07'
 ], 'homepage includes a cache-busted AI interest summary');
 includesAll(home, [
   "window.fetchAPI('getAiMatchInterestSummary'",

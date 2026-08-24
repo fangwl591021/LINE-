@@ -1622,7 +1622,8 @@ window.updateStorePointCashierVisibility = function() {
   if (!panel) return;
   const canUse = window.canUseStorePointCashier();
   panel.classList.toggle('hidden', !canUse);
-  if (canUse) window.loadStorePointCashierLogs?.();
+  const body = document.getElementById('store-point-cashier-body');
+  if (canUse && body && !body.classList.contains('hidden')) window.loadStorePointCashierLogs?.();
   window.updateStorePointPreview?.();
 };
 

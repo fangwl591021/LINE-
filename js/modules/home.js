@@ -1547,7 +1547,7 @@ const HomeModule = (function() {
         const networkId = window.currentNetworkId || 'admin';
         const cachedSettings = window.readCachedStoreSettings(networkId);
         if (cachedSettings) window.applyStoreSettingsToHome(cachedSettings);
-        window.refreshStoreSettingsInBackground();
+        return window.refreshStoreSettingsInBackground();
     };
 
     window.initHomeMatchmakeEmbed = function() {
@@ -2217,11 +2217,6 @@ const HomeModule = (function() {
 
     window.loadUserActivities = async function() {
         if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-        if (typeof window.loadHomeSalesAssistant === 'function') window.loadHomeSalesAssistant();
-
-        if (typeof window.syncStoreSettingsToHome === 'function') {
-            window.syncStoreSettingsToHome();
-        }
 
         try {
             window.allActivities = await fetchActivitiesByFallback_(
@@ -3161,55 +3156,43 @@ const HomeModule = (function() {
             await window.loadSubsiteHomeFastData?.({ force });
         });
 
-        runHomeBackgroundTask_('store-settings', 180, async () => {
-            if (typeof window.syncStoreSettingsToHome === 'function') window.syncStoreSettingsToHome();
-            if (typeof window.refreshStoreSettingsInBackground === 'function') await window.refreshStoreSettingsInBackground();
+        runHomeBackgroundTask_('store-settings', 3000, async () => {
+            if (typeof window.syncStoreSettingsToHome === 'function') await window.syncStoreSettingsToHome();
         });
 
-        runHomeBackgroundTask_('home-ai-match-interest', 300, async () => {
+        runHomeBackgroundTask_('home-ai-match-interest', 5000, async () => {
             await window.loadHomeAiMatchInterestSummary?.();
         });
 
-        runHomeBackgroundTask_('home-system-ticker', 360, async () => {
+        runHomeBackgroundTask_('home-system-ticker', 7000, async () => {
             if (typeof window.loadHomeSystemTicker === 'function') await window.loadHomeSystemTicker();
         });
 
-        runHomeBackgroundTask_('home-recurring-tasks', 520, async () => {
+        runHomeBackgroundTask_('home-recurring-tasks', 9000, async () => {
             if (typeof window.loadHomeRecurringTasks === 'function') await window.loadHomeRecurringTasks();
         });
 
         if (role === 'tenant') {
-            runHomeBackgroundTask_('store-point-panel', 260, async () => {
+            runHomeBackgroundTask_('store-point-panel', 2500, async () => {
                 window.updateStorePointCashierVisibility?.();
             });
-            runHomeBackgroundTask_('cards-for-tenant', 1100, async () => {
-                if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
-                if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
-            });
-            runHomeBackgroundTask_('activities-for-tenant', 1600, async () => {
+            runHomeBackgroundTask_('activities-for-tenant', 14000, async () => {
                 if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
             });
             return true;
         }
 
         if (role === 'admin') {
-            runHomeBackgroundTask_('admin-sales-assistant', 420, async () => {
+            runHomeBackgroundTask_('admin-sales-assistant', 11000, async () => {
                 if (typeof window.loadHomeSalesAssistant === 'function') await window.loadHomeSalesAssistant();
             });
-            runHomeBackgroundTask_('activities-for-admin', 1400, async () => {
+            runHomeBackgroundTask_('activities-for-admin', 14000, async () => {
                 if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
-            });
-            runHomeBackgroundTask_('cards-for-admin', 2000, async () => {
-                if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
             });
             return true;
         }
 
-        runHomeBackgroundTask_('cards-for-user', 360, async () => {
-            if (typeof window.loadCardData === 'function') await window.loadCardData({ render: false, force, initPanels: false });
-            if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
-        });
-        runHomeBackgroundTask_('activities-for-user', 1500, async () => {
+        runHomeBackgroundTask_('activities-for-user', 14000, async () => {
             if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
         });
         return true;

@@ -404,6 +404,9 @@
     }
 
     button.classList.remove("hidden");
+    const now = Date.now();
+    if (window.__inboxBadgeRequestedAt && now - window.__inboxBadgeRequestedAt < 15000) return;
+    window.__inboxBadgeRequestedAt = now;
     try {
       const data = await window.fetchAPI("getInboxCount", {}, true);
       const unread = Number(data?.unread || 0);
