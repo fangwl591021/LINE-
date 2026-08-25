@@ -13,6 +13,22 @@
   --system-background-image: none;
 }
 
+/* iOS only: raise interface text by roughly one visual step without resizing layout or icons. */
+html.is-ios {
+  -webkit-text-size-adjust: 108%;
+  text-size-adjust: 108%;
+}
+
+html.is-ios .home-top-shortcut {
+  -webkit-text-size-adjust: 108%;
+  text-size-adjust: 108%;
+}
+
+html.is-ios .material-symbols-outlined {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;

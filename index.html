@@ -8,6 +8,15 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preload" as="image" href="assets/ai-home-assistant.png?v=1" fetchpriority="high">
 
+  <script>
+    (function markIosDevice() {
+      var userAgent = navigator.userAgent || '';
+      var isIos = /iPad|iPhone|iPod/.test(userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIos) document.documentElement.classList.add('is-ios');
+    })();
+  </script>
+
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 
   <script>
@@ -33,7 +42,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
 
-  <link rel="stylesheet" href="css/styles.css?v=7.4">
+  <link rel="stylesheet" href="css/styles.css?v=7.5">
   <script src="js/config.js?v=9.13"></script>
 
   <style type="text/tailwindcss">
