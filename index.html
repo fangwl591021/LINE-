@@ -42,7 +42,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
 
-  <link rel="stylesheet" href="css/styles.css?v=7.5">
+  <link rel="stylesheet" href="css/styles.css?v=7.6">
   <script src="js/config.js?v=9.13"></script>
 
   <style type="text/tailwindcss">
@@ -1240,20 +1240,20 @@
         <div class="grid grid-cols-4 gap-y-4 gap-x-1">
           <button onclick="window.goPage('card')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-orange-500">wallet</span>
-            <span class="home-quick-label">收藏名片</span>
+            <span class="home-quick-label ios-home-primary-label">收藏名片</span>
           </button>
           <button id="home-my-card-button" onclick="window.openMyCardEntry ? window.openMyCardEntry(event) : window.goPage('admin-settings')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-pink-500">badge</span>
-            <span class="home-quick-label">&#25105;&#30340;&#21517;&#29255;</span>
+            <span class="home-quick-label ios-home-primary-label">&#25105;&#30340;&#21517;&#29255;</span>
           </button>
           <button type="button" onclick="window.openHomeZodiacFortune?.()" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-purple-500">water_drop</span>
-            <span class="home-quick-label">星座運勢</span>
+            <span class="home-quick-label ios-home-primary-label">星座運勢</span>
           </button>
-          <button type="button" onclick="window.openProfileRegistrationPanel?.()" class="home-quick-circle group">
+          <a href="https://lin.ee/SGdgLJk" target="_blank" rel="noopener noreferrer" class="home-quick-circle group" aria-label="加LINE好友">
             <span class="home-quick-icon material-symbols-outlined text-violet-600">edit_note</span>
-            <span class="home-quick-label">會員註冊</span>
-          </button>
+            <span class="home-quick-label ios-home-primary-label">加LINE好友</span>
+          </a>
           <button type="button" onclick="window.goPage('my-activities')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-slate-900">event_note</span>
             <span class="home-quick-label">個人行事曆</span>

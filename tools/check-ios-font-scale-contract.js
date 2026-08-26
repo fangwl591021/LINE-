@@ -24,19 +24,24 @@ expect(
   'only detected iOS devices receive the is-ios marker'
 );
 expect(
-  /html\.is-ios\s*\{[^}]*-webkit-text-size-adjust:\s*108%;[^}]*text-size-adjust:\s*108%;/s.test(css),
-  'iOS interface text is enlarged by roughly one visual step'
+  !/html\.is-ios\s*\{[^}]*text-size-adjust:/s.test(css),
+  'iOS no longer receives a broad page-wide text scale'
 );
 expect(
-  /html\.is-ios\s+\.home-top-shortcut\s*\{[^}]*-webkit-text-size-adjust:\s*108%;[^}]*text-size-adjust:\s*108%;/s.test(css),
-  'the existing home shortcut text lock follows the iOS scale'
+  /html\.is-ios\s+\.ios-home-primary-label\s*\{[^}]*font-size:\s*13px;/s.test(css),
+  'only the requested primary home shortcut labels are enlarged on iOS'
 );
 expect(
-  /html\.is-ios\s+\.material-symbols-outlined\s*\{[^}]*-webkit-text-size-adjust:\s*100%;[^}]*text-size-adjust:\s*100%;/s.test(css),
-  'Material Symbols keep their existing icon size'
+  (html.match(/class="home-quick-label ios-home-primary-label"/g) || []).length === 4,
+  'exactly four labels from the referenced first shortcut row opt in'
 );
 expect(
-  html.includes('css/styles.css?v=7.5'),
+  !html.includes('home-quick-icon ios-home-primary-label') &&
+    !css.includes('html.is-ios .material-symbols-outlined'),
+  'shortcut icons keep their existing size'
+);
+expect(
+  html.includes('css/styles.css?v=7.6'),
   'the iOS font update is cache-busted'
 );
 

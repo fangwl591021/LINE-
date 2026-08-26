@@ -15,15 +15,20 @@ const quickMenu = html.slice(quickStart, quickEnd);
 if (quickStart < 0 || quickEnd < 0) fail('home quick menu boundaries are missing');
 
 const savedCards = quickMenu.indexOf('收藏名片');
-const registration = quickMenu.indexOf('會員註冊');
-if (savedCards < 0 || registration < 0) fail('收藏名片 and 會員註冊 must both be present');
-if (savedCards > registration) fail('收藏名片 must be before 會員註冊');
+const addLineFriend = quickMenu.indexOf('加LINE好友');
+if (savedCards < 0 || addLineFriend < 0) fail('收藏名片 and 加LINE好友 must both be present');
+if (savedCards > addLineFriend) fail('收藏名片 must be before 加LINE好友');
 
 const firstFourLabels = Array.from(quickMenu.matchAll(/home-quick-label[^>]*>([^<]+)</g))
   .slice(0, 4)
   .map((match) => match[1].trim());
-if (firstFourLabels[0] !== '收藏名片' || firstFourLabels[3] !== '會員註冊') {
-  fail('收藏名片 must be far left and 會員註冊 must be far right in the first row');
+if (firstFourLabels[0] !== '收藏名片' || firstFourLabels[3] !== '加LINE好友') {
+  fail('收藏名片 must be far left and 加LINE好友 must be far right in the first row');
+}
+
+if (!quickMenu.includes('href="https://lin.ee/SGdgLJk"') ||
+    !quickMenu.includes('target="_blank" rel="noopener noreferrer"')) {
+  fail('加LINE好友 must open the requested safe LINE friend link');
 }
 
 const aiStart = html.indexOf('<h3 class="home-section-kicker">&#65;&#73;&#26381;&#21209;</h3>');

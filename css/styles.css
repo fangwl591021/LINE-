@@ -13,20 +13,9 @@
   --system-background-image: none;
 }
 
-/* iOS only: raise interface text by roughly one visual step without resizing layout or icons. */
-html.is-ios {
-  -webkit-text-size-adjust: 108%;
-  text-size-adjust: 108%;
-}
-
-html.is-ios .home-top-shortcut {
-  -webkit-text-size-adjust: 108%;
-  text-size-adjust: 108%;
-}
-
-html.is-ios .material-symbols-outlined {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
+/* iOS only: enlarge the four primary home shortcut labels requested by the UI reference. */
+html.is-ios .ios-home-primary-label {
+  font-size: 13px;
 }
 
 body {
