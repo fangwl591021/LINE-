@@ -1,0 +1,1 @@
+{"actorId":"U_ACTOR","networkId":"tenant-a","requestedVersion":"standard","candidates":[{"row_id":"CARD_CONTACT_1","scanner_user_id":"U_ACTOR","network_id":"tenant-a","source_type":"private_import","is_active":1}],"expected":{"status":"CONTACT_ONLY"}}
