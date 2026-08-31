@@ -35,7 +35,8 @@ ok(ecard.includes('function buildECardDescription(card, config)')&&(ecard.match(
 ok(html.includes('js/modules/ecard.js?v=7.54'),'electronic-card description fallback cache-bust is active');
 ok(adapter.includes('id="ak-scan-error" role="alert" aria-live="assertive"'),'OCR failure is visible inside the scan modal');
 ok(adapter.includes("showScanError(message)")&&adapter.includes("button.textContent='重新送出'"),'OCR failure keeps an actionable retry in the modal');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.5'),'AI profile review cache-bust is active');
+ok(adapter.includes('已保留完整原圖，請核對下方資料'),'uncertain localization falls back to review instead of rejecting OCR');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.6'),'AI profile review cache-bust is active');
 ok(core.includes('export function lineUrlFromId(value)'),'LINE ID conversion is deterministic on the Worker');
 ok(core.includes("!['line.me','lin.ee'].includes(host)"),'LINE URL normalization rejects untrusted hosts');
 console.log('A-kaffit recognize backend parity contract passed.');

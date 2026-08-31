@@ -55,7 +55,10 @@ ok(worker.includes('const resultMatch = url.pathname.match') && (worker.includes
 ok(worker.includes("request.method === 'OPTIONS'"), 'cross-origin preflight is handled');
 ok(worker.includes('X-Card-File-Size, X-Card-Side, X-Card-Purpose'), 'A-kaffit image-job headers allowed by CORS');
 ok(adapter.includes('id="ak-scan-error" role="alert" aria-live="assertive"'), 'OCR errors remain visible above the scan actions');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.5'), 'full workflow adapter cache-bust is active');
+ok(adapter.includes('const useOriginalImage=localization.incomplete'), 'incomplete localization does not discard successful OCR');
+ok(adapter.includes('const cropFile=useOriginalImage?scanState.processedFile'), 'already-cropped cards retain the complete image when edges are uncertain');
+ok(!adapter.includes("throw new Error('名片未完整入鏡'"), 'uncertain card edges are no longer a fatal OCR error');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.6'), 'full workflow adapter cache-bust is active');
 
 ok(legacy.includes('boundingBox 必須只包住真實名片，不可包入桌面、手掌、鍵盤或其他背景'), 'OCR prompt matches A-kaffit background exclusion rule');
 ok(legacy.includes('incomplete=true') && legacy.includes('clippedEdges'), 'OCR prompt preserves incomplete-card contract');
