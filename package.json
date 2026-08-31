@@ -12,6 +12,7 @@
     "test:admin-customer-import-monitor": "node tools/check-admin-customer-import-monitor-contract.js",
     "test:customer-tags": "node test/customer-tag-analysis.test.mjs",
     "test:card-fate-tags": "node test/card-fate-tag-analysis.test.mjs && node test/card-detail-fate-tag-identity.test.mjs && node tools/check-card-fate-tag-pipeline-contract.js",
+    "test:card-recognize": "node --test test/a-kaffit-card-recognize.test.mjs",
     "test:card-quota": "node tools/check-card-quota-contract.js",
     "test:liff-share-picker": "node test/liff-share-target-picker.test.mjs",
     "test:home-agenda-counters": "node test/home-task-buckets.test.mjs",

@@ -11,6 +11,17 @@ const CARD_BOX_SCHEMA={type:'object',additionalProperties:false,required:['x','y
 const CARD_LOCALIZATION_SCHEMA={type:'object',additionalProperties:false,required:['detected','incomplete','cropConfidence','boundingBox','corners','clippedEdges'],properties:{detected:{type:'boolean'},incomplete:{type:'boolean'},cropConfidence:{type:'number',minimum:0,maximum:1},boundingBox:CARD_BOX_SCHEMA,corners:{type:'array',minItems:4,maxItems:4,items:CARD_POINT_SCHEMA},clippedEdges:{type:'array',maxItems:4,items:{type:'string',enum:['left','right','top','bottom']}}}};
 const OCR_SCHEMA = { type:'object', additionalProperties:false, required:['isBusinessCard','confidence','language','cardLocalization','primaryIndustry','secondaryIndustries','industryConfidence',...Object.keys(FIELD_LIMITS)], properties:{ isBusinessCard:{type:'boolean'}, confidence:{type:'number'}, language:{type:'string'}, cardLocalization:CARD_LOCALIZATION_SCHEMA, primaryIndustry:{type:'string',enum:[INDUSTRY_PENDING,...INDUSTRY_OPTIONS]}, secondaryIndustries:{type:'array',maxItems:2,items:{type:'string',enum:INDUSTRY_OPTIONS}}, industryConfidence:{type:'number'}, ...Object.fromEntries(Object.keys(FIELD_LIMITS).map((key)=>[key,{type:'string'}])) } };
 
+const RECOGNITION_PROMPT = `辨識這張商務名片，並在同一次視覺辨識中完成名片定位。只擷取畫面中可確認的文字，不猜測；無法確認的欄位填空字串。若不是名片，isBusinessCard=false。繁體中文保留原文。note 僅放無法歸類但有價值的名片文字。
+
+cardLocalization 規則：
+1. detected 表示是否可找到名片本體。
+2. boundingBox 使用整張輸入圖片的 0~1 正規化座標 x,y,width,height，必須包住實際可見名片，不得包入明顯桌面、手掌、鍵盤等背景。
+3. corners 固定回傳左上、右上、右下、左下四點，均為 0~1 正規化座標。
+4. 如果名片任一實際邊緣已超出照片、碰到影像邊界而無法確認，incomplete=true，並在 clippedEdges 列出 left/right/top/bottom；不得憑空補出不存在的邊。
+5. cropConfidence 表示只根據原圖定位名片邊界的信心；不確定時降低分數，不可硬猜。
+
+並依公司、職稱、部門與服務說明做一次行業分類：主行業只能選 1 個，次行業最多 2 個且不可與主行業相同。可選行業為：${INDUSTRY_OPTIONS.join('、')}。無法可靠判斷時 primaryIndustry 填「待分類」、secondaryIndustries 填空陣列；industryConfidence 填 0 到 1。只回傳符合 JSON Schema 的結果。`;
+
 function normalizeClientOpenAIKey(key) {
   const value = String(key || '').trim();
   if (!value || !/^sk-[A-Za-z0-9_\-]+/.test(value)) return '';
@@ -25,6 +36,25 @@ function imageInput(base64Image) {
   const imageUrl = String(base64Image || '').trim();
   if (!/^data:image\/(jpeg|png|webp);base64,/i.test(imageUrl)) throw new Error('名片圖片格式不正確');
   return {type:'input_image',image_url:imageUrl,detail:'high'};
+}
+
+function imageData(base64Image) {
+  const imageUrl = String(base64Image || '').trim();
+  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=\s]+)$/i.exec(imageUrl);
+  if (!match) throw new Error('名片圖片格式不正確');
+  return { mimeType:`image/${match[1].toLowerCase()}`, data:match[2].replace(/\s/g, '') };
+}
+
+function geminiSchema(value) {
+  if (Array.isArray(value)) return value.map(geminiSchema);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key])=>key !== 'additionalProperties')
+    .map(([key, child])=>[key, geminiSchema(child)]));
+}
+
+function geminiOutputText(result = {}) {
+  return result.candidates?.[0]?.content?.parts?.map((part)=>part?.text || '').join('').trim() || '';
 }
 
 async function callAiResponses(apiKey, body) {
@@ -46,24 +76,54 @@ async function callAiResponses(apiKey, body) {
   }
 }
 
+async function callGeminiVision(apiKey, model, base64Image) {
+  if (!apiKey) throw new Error('名片 AI 辨識服務尚未連線');
+  const image = imageData(base64Image);
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(),70000);
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method:'POST',
+      headers:{'x-goog-api-key':apiKey,'content-type':'application/json'},
+      body:JSON.stringify({
+        contents:[{role:'user',parts:[{text:RECOGNITION_PROMPT},{inline_data:{mime_type:image.mimeType,data:image.data}}]}],
+        generationConfig:{temperature:0,responseMimeType:'application/json',responseSchema:geminiSchema(OCR_SCHEMA)},
+      }),
+      signal:controller.signal,
+    });
+    const result = await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(result?.error?.message || 'Gemini 服務暫時無法使用');
+    const parsedText = geminiOutputText(result);
+    if (!parsedText) throw new Error('Gemini 未回傳名片辨識結果');
+    return JSON.parse(parsedText);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function validateRecognition(parsed) {
+  if (!parsed || typeof parsed !== 'object') throw new Error('AI 未回傳名片辨識結果');
+  if (!parsed.cardLocalization) throw new Error('AI 未回傳名片定位結果');
+  return parsed;
+}
+
 export async function recognizeAkaffitBusinessCard(payload, env) {
   const apiKey = normalizeClientOpenAIKey(payload?.clientOpenAIKey) || String(env.OPENAI_API_KEY || '').trim();
-  if (!apiKey) throw new Error('名片 AI 辨識服務尚未連線');
+  const geminiApiKey = String(env.GEMINI_API_KEY || '').trim();
+  if (!apiKey && !geminiApiKey) throw new Error('名片 AI 辨識服務尚未連線');
   const model = String(payload?.model || env.OPENAI_VISION_MODEL || env.OPENAI_MODEL || 'gpt-5.6-terra').trim();
-  const content=[{type:'input_text',text:`辨識這張商務名片，並在同一次視覺辨識中完成名片定位。只擷取畫面中可確認的文字，不猜測；無法確認的欄位填空字串。若不是名片，isBusinessCard=false。繁體中文保留原文。note 僅放無法歸類但有價值的名片文字。
-
-cardLocalization 規則：
-1. detected 表示是否可找到名片本體。
-2. boundingBox 使用整張輸入圖片的 0~1 正規化座標 x,y,width,height，必須包住實際可見名片，不得包入明顯桌面、手掌、鍵盤等背景。
-3. corners 固定回傳左上、右上、右下、左下四點，均為 0~1 正規化座標。
-4. 如果名片任一實際邊緣已超出照片、碰到影像邊界而無法確認，incomplete=true，並在 clippedEdges 列出 left/right/top/bottom；不得憑空補出不存在的邊。
-5. cropConfidence 表示只根據原圖定位名片邊界的信心；不確定時降低分數，不可硬猜。
-
-並依公司、職稱、部門與服務說明做一次行業分類：主行業只能選 1 個，次行業最多 2 個且不可與主行業相同。可選行業為：${INDUSTRY_OPTIONS.join('、')}。無法可靠判斷時 primaryIndustry 填「待分類」、secondaryIndustries 填空陣列；industryConfidence 填 0 到 1。只回傳符合 JSON Schema 的結果。`},imageInput(payload?.base64Image)];
-  const result=await callAiResponses(apiKey,{model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:2100,input:[{role:'user',content}],text:{format:{type:'json_schema',name:'business_card',strict:true,schema:OCR_SCHEMA}}});
-  const parsedText=outputText(result);
-  if(!parsedText)throw new Error('AI 未回傳名片辨識結果');
-  const parsed=JSON.parse(parsedText);
-  if(!parsed.cardLocalization)throw new Error('AI 未回傳名片定位結果');
-  return parsed;
+  if (apiKey) {
+    try {
+      const content=[{type:'input_text',text:RECOGNITION_PROMPT},imageInput(payload?.base64Image)];
+      const result=await callAiResponses(apiKey,{model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:2100,input:[{role:'user',content}],text:{format:{type:'json_schema',name:'business_card',strict:true,schema:OCR_SCHEMA}}});
+      const parsedText=outputText(result);
+      if(!parsedText)throw new Error('AI 未回傳名片辨識結果');
+      return validateRecognition(JSON.parse(parsedText));
+    } catch (error) {
+      if (!geminiApiKey) throw error;
+      console.warn('A-kaffit OpenAI unavailable; switching to Gemini');
+    }
+  }
+  const geminiModel = String(env.GEMINI_VISION_MODEL || env.GEMINI_MODEL || 'gemini-3.7-flash').trim();
+  return validateRecognition(await callGeminiVision(geminiApiKey, geminiModel, payload?.base64Image));
 }
