@@ -28,7 +28,7 @@
   var myEcardStateLoaded = false;
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
-  var wysiwygState = { cfg: null, field: '', buttonIndex: -1 };
+  var wysiwygState = { cfg: null, field: '', buttonIndex: -1, recordMode: false };
   var myVideoDraftApplied = false;
   var myVideoDraftCache = null;
   var myVideoModeRequested = false;
@@ -1096,10 +1096,8 @@
       var details = document.getElementById('details-my-ecard');
       if (currentCardData) {
         if (details) details.open = false;
-        if (typeof window.openCardDetail === 'function') {
-          window.openCardDetail(currentCardData);
-        }
-        return;
+        moduleCore.showLoading(false);
+        return openMyCardWysiwyg(evt, currentCardData);
       }
       if (details) {
         if (typeof window.goPage === 'function') window.goPage('admin-settings');
@@ -1615,7 +1613,7 @@
     currentCardData.customConfig = raw;
     currentCardData.custom_config = raw;
     currentCardData['自訂名片設定'] = raw;
-    window.currentUserCard = currentCardData;
+    if (!wysiwygState.recordMode) window.currentUserCard = currentCardData;
   }
 
   function getWysiwygConfig() {
@@ -1724,13 +1722,15 @@
     myVideoModeSuppressed = true;
     layout = normalizeWysiwygLayout(layout);
     var version = layoutToCardVersion(layout);
-    var card = await resolveMyCardVersion(version, false);
-    if (!isEditableOwnCard(card, version)) card = findLoadedMyCardByVersion(version);
-    if (isEditableOwnCard(card, version) && cardVersionFromCard(card) !== 'video') {
-      setActiveMyCard(card);
-      hydrateMyECardStateFromCurrentCard();
-      cfg = parseCardConfig(card);
-      wysiwygState.cfg = cfg;
+    if (!wysiwygState.recordMode) {
+      var card = await resolveMyCardVersion(version, false);
+      if (!isEditableOwnCard(card, version)) card = findLoadedMyCardByVersion(version);
+      if (isEditableOwnCard(card, version) && cardVersionFromCard(card) !== 'video') {
+        setActiveMyCard(card);
+        hydrateMyECardStateFromCurrentCard();
+        cfg = parseCardConfig(card);
+        wysiwygState.cfg = cfg;
+      }
     }
     cfg.layoutStyle = layout;
     cfg.cardVersion = version;
@@ -1786,13 +1786,14 @@
     return openMyCardWysiwyg(evt);
   }
 
-  async function openMyCardWysiwyg(evt) {
+  async function openMyCardWysiwyg(evt, resolvedCard) {
     if (evt && evt.preventDefault) evt.preventDefault();
+    wysiwygState.recordMode = false;
     var directWysiwyg = isWysiwygMyCardRequest();
     if (directWysiwyg) ensureWysiwygModal().classList.remove('hidden');
     else moduleCore.showLoading(true);
     try {
-      currentCardData = await resolveCurrentUserCard(true);
+      currentCardData = resolvedCard || await resolveCurrentUserCard(true);
       if (!currentCardData) {
         var preview = document.getElementById('my-card-wysiwyg-preview');
         if (directWysiwyg && preview) {
@@ -1801,7 +1802,8 @@
         if (window.showToast) window.showToast('找不到可編輯的專屬名片，請先建立名片', true);
         return;
       }
-      if (!myEcardStateLoaded) hydrateMyECardStateFromCurrentCard();
+      myEcardStateLoaded = false;
+      hydrateMyECardStateFromCurrentCard();
       wysiwygState.cfg = await applyMyVideoDraftToWysiwyg(getWysiwygConfig());
       writeCurrentCardConfig(wysiwygState.cfg);
       ensureWysiwygModal().classList.remove('hidden');
@@ -1817,6 +1819,32 @@
     } finally {
       if (!directWysiwyg) moduleCore.showLoading(false);
     }
+  }
+
+  function canEditCardRecord(card) {
+    return !!(card && typeof window.canEditCardRecord === 'function' && window.canEditCardRecord(card));
+  }
+
+  function openCardRecordWysiwyg(card, evt) {
+    if (evt && evt.preventDefault) evt.preventDefault();
+    if (!canEditCardRecord(card)) {
+      if (window.showToast) window.showToast('此名片已認領，您目前沒有編輯權限', true);
+      return;
+    }
+    if (!getCardRowId(card)) {
+      if (window.showToast) window.showToast('找不到名片編號，請重新整理後再試', true);
+      return;
+    }
+
+    currentCardData = card;
+    window.currentCard = card;
+    wysiwygState.recordMode = true;
+    myEcardStateLoaded = false;
+    hydrateMyECardStateFromCurrentCard();
+    wysiwygState.cfg = getWysiwygConfig();
+    writeCurrentCardConfig(wysiwygState.cfg);
+    ensureWysiwygModal().classList.remove('hidden');
+    renderMyCardWysiwyg();
   }
 
   function setMyCardWysiwygAlign(align) {
@@ -2011,6 +2039,7 @@
     var modal = document.getElementById('my-card-wysiwyg-modal');
     if (modal) modal.classList.add('hidden');
     closeMyCardWysiwygEditor();
+    wysiwygState.recordMode = false;
     if (isWysiwygMyCardRequest() && typeof liff !== 'undefined' && liff && typeof liff.closeWindow === 'function') {
       try { liff.closeWindow(); } catch (e) {}
     }
@@ -2123,6 +2152,55 @@
     input.click();
   }
 
+  async function saveCardRecordWysiwyg() {
+    if (!canEditCardRecord(currentCardData)) {
+      if (window.showToast) window.showToast('此名片已認領，編輯權限已轉交給認領者', true);
+      return false;
+    }
+    var rowId = getCardRowId(currentCardData);
+    if (!rowId) {
+      if (window.showToast) window.showToast('找不到名片編號，請重新整理後再試', true);
+      return false;
+    }
+
+    try {
+      var cfg = wysiwygState.cfg || getWysiwygConfig();
+      cfg.layoutStyle = normalizeWysiwygLayout(cfg.layoutStyle || 'landscape');
+      cfg.cardVersion = layoutToCardVersion(cfg.layoutStyle);
+      cfg.buttons = normalizeMyCardButtonsForSave(cfg.buttons || myEcardButtons);
+      myEcardButtons = cfg.buttons.slice();
+      var rawCfg = JSON.stringify(cfg);
+      var activeImageUrl = activeImageForCardVersion(cfg, cfg.cardVersion);
+      var payloadData = {
+        '名片圖檔': activeImageUrl,
+        '自訂名片設定': rawCfg
+      };
+      var res = await window.fetchAPI('updateCard', { rowId: rowId, data: payloadData }, true);
+      if (!res || res.error || res.success === false) {
+        throw new Error((res && res.error) || '儲存失敗');
+      }
+
+      Object.keys(payloadData).forEach(function(key) { currentCardData[key] = payloadData[key]; });
+      currentCardData.customConfig = rawCfg;
+      currentCardData.custom_config = rawCfg;
+      window.currentCard = currentCardData;
+      ['allCards', 'harvestCards', 'cardListRenderSource'].forEach(function(poolName) {
+        var pool = window[poolName];
+        if (!Array.isArray(pool)) return;
+        var match = pool.find(function(item) { return String(getCardRowId(item)) === String(rowId); });
+        if (!match) return;
+        Object.keys(payloadData).forEach(function(key) { match[key] = payloadData[key]; });
+        match.customConfig = rawCfg;
+        match.custom_config = rawCfg;
+      });
+      if (window.showToast) window.showToast('✅ 名片版面已儲存');
+      return true;
+    } catch (e) {
+      if (window.showToast) window.showToast('⚠️ 儲存失敗: ' + (e.message || '未知錯誤'), true);
+      return false;
+    }
+  }
+
   async function saveMyCardWysiwyg(btn) {
     if (wysiwygState.cfg) {
       writeCurrentCardConfig(wysiwygState.cfg);
@@ -2136,8 +2214,10 @@
       btn.innerHTML = '儲存中...';
     }
     try {
-      await saveMyECardConfig();
-      closeMyCardWysiwyg();
+      var saved = wysiwygState.recordMode
+        ? await saveCardRecordWysiwyg()
+        : await saveMyECardConfig();
+      if (saved !== false) closeMyCardWysiwyg();
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -2390,6 +2470,7 @@
     openMyCardDetail: openMyCardDetail,
     openQuicklyMyCard: openQuicklyMyCard,
     openMyCardWysiwyg: openMyCardWysiwyg,
+    openCardRecordWysiwyg: openCardRecordWysiwyg,
     openMyCardVideoFlow: openMyCardVideoFlow,
     shareMyCard: shareMyCard,
     showMyQRCode: showMyQRCode,
@@ -2404,6 +2485,7 @@
   window.openMyCardDetail = openMyCardDetail;
   window.openQuicklyMyCard = openQuicklyMyCard;
   window.openMyCardWysiwyg = openMyCardWysiwyg;
+  window.openCardRecordWysiwyg = openCardRecordWysiwyg;
   window.openMyCardVideoFlow = openMyCardVideoFlow;
   window.updateMyCardVideoButtonState = updateMyCardVideoButtonState;
   window.closeMyCardWysiwyg = closeMyCardWysiwyg;

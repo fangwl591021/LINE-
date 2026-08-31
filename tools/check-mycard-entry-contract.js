@@ -38,8 +38,20 @@ if (!/async function handleLayoutChange[\s\S]*var card = await resolveMyCardVers
 if (!/async function setMyCardWysiwygLayout[\s\S]*var card = await resolveMyCardVersion\(version, false\);[\s\S]*if \(!isEditableOwnCard\(card, version\)\) card = findLoadedMyCardByVersion\(version\);[\s\S]*if \(isEditableOwnCard\(card, version\)/.test(mycard)) {
   fail('WYSIWYG layout switching must resolve a user-owned version before applying card data');
 }
-if (!/currentCardData[\s\S]*window\.openCardDetail\(currentCardData\)/.test(mycard)) {
-  fail('existing personal card must route directly to detail editor');
+if (!/async function openMyCardEntry[\s\S]*return openMyCardWysiwyg\(evt, currentCardData\)/.test(mycard)) {
+  fail('existing personal card must route directly to the WYSIWYG editor');
+}
+if (!index.includes('id="btn-open-card-wysiwyg"') || !index.includes('window.openCardRecordWysiwyg(window.currentCard, event)')) {
+  fail('editable card detail must expose record-scoped WYSIWYG editing');
+}
+if (!/function openCardRecordWysiwyg\(card, evt\)[\s\S]*canEditCardRecord\(card\)/.test(mycard)) {
+  fail('record-scoped WYSIWYG must re-check current card edit authority');
+}
+if (!/if \(!wysiwygState\.recordMode\) window\.currentUserCard = currentCardData/.test(mycard)) {
+  fail('record-scoped WYSIWYG must not replace the current personal card');
+}
+if (!/wysiwygState\.recordMode\s*\?\s*await saveCardRecordWysiwyg\(\)/.test(mycard)) {
+  fail('record-scoped WYSIWYG must use the current-record save path');
 }
 if (!/await load\(\);\s*await openMyCardDetail\(\);/.test(mycard)) {
   fail('newly generated personal card must continue directly into detail editor');
