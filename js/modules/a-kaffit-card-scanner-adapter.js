@@ -3,7 +3,8 @@ import { cropByVisionLocalization, normalizedVisionLocalization } from './a-kaff
 const FIELD_MAP = [
   ['姓名','姓名'],['英文名','英文姓名'],['公司名稱','公司名稱'],['職稱','職稱'],['部門','部門'],
   ['手機號碼','手機號碼'],['公司電話','公司電話'],['電子郵件','Email'],['公司網址','公司網址'],
-  ['社群帳號','社群帳號（LINE／IG／FB）'],['公司地址','公司地址'],['服務項目','名片說明（AI 自動撰寫，可修改）']
+  ['社群LINE','LINE 網址'],['社群Instagram','Instagram 網址'],['社群Facebook','Facebook 網址'],['社群其他','其他社群（每行一個）'],
+  ['公司地址','公司地址'],['服務項目','名片說明（AI 自動撰寫，可修改）']
 ];
 const INDUSTRY_OPTIONS = [
   '健康醫療','美容美業','餐飲食品','零售電商','直銷／社群電商',
@@ -49,18 +50,47 @@ function safeLineContactUrl(value){
   const raw=String(value||'').trim();if(!raw)return '';
   try{const url=new URL(/^https?:\/\//i.test(raw)?raw:`https://${raw}`),host=url.hostname.toLowerCase().replace(/^www\./,'');if(!['line.me','lin.ee'].includes(host))return '';url.protocol='https:';url.username='';url.password='';return url.toString()}catch{return ''}
 }
-function mergeSocialAccounts(source,qrLineUrl=''){
-  const exactQr=safeLineContactUrl(qrLineUrl),aiLine=safeLineContactUrl(pick(source,['lineUrl','line_url']));
-  const selectedLine=exactQr||aiLine;
-  const existing=String(pick(source,['socialAccounts','社群帳號','socials','social','socialMedia'])||'').split(/\s*[｜|;；\n]\s*/).map(item=>item.trim()).filter(Boolean);
-  const kept=selectedLine?existing.filter(item=>!/^(?:line\s*(?:id)?|賴)\s*[:：]/i.test(item)):existing;
-  return [selectedLine?`LINE: ${selectedLine}`:'',...kept].filter(Boolean).filter((item,index,all)=>all.findIndex(candidate=>candidate.toLowerCase()===item.toLowerCase())===index).join('｜');
+function lineUrlForReview(value){
+  const raw=String(value||'').trim(),url=safeLineContactUrl(raw);if(url)return url;
+  const id=raw.replace(/^(?:line\s*(?:id)?|賴)\s*[:：]?\s*/i,'').trim();
+  if(!/^@?[A-Za-z0-9._-]{4,80}$/.test(id))return raw;
+  return id.startsWith('@')?`https://line.me/R/ti/p/${encodeURIComponent(id)}`:`https://line.me/ti/p/~${encodeURIComponent(id)}`;
 }
-function serializeSocialAccounts(value){
-  const entries=String(value||'').split(/\s*[｜|;；\n]\s*/).map(item=>item.trim()).filter(Boolean).map(item=>{
-    const labeled=item.match(/^([^:：]{1,30})[:：]\s*(.+)$/);if(labeled)return {t:labeled[1].trim(),u:labeled[2].trim()};
-    return {t:safeLineContactUrl(item)?'LINE':'其他',u:item};
-  }).filter(item=>item.u);
+function instagramUrlForReview(value){
+  const raw=String(value||'').trim().replace(/^(?:instagram|insta|ig)\s*[:：]?\s*/i,'');if(!raw)return '';
+  try{const url=new URL(/^https?:\/\//i.test(raw)?raw:`https://${raw}`);if(url.hostname.toLowerCase().replace(/^www\./,'')==='instagram.com'){url.protocol='https:';return url.toString()}}catch{}
+  const id=raw.replace(/^@/,'');return /^[A-Za-z0-9._]{1,80}$/.test(id)?`https://www.instagram.com/${encodeURIComponent(id)}`:raw;
+}
+function facebookUrlForReview(value){
+  const raw=String(value||'').trim().replace(/^(?:facebook|fb)\s*[:：]?\s*/i,'');if(!raw)return '';
+  try{const url=new URL(/^https?:\/\//i.test(raw)?raw:`https://${raw}`),host=url.hostname.toLowerCase().replace(/^www\./,'');if(host==='facebook.com'||host==='fb.com'){url.protocol='https:';return url.toString()}}catch{}
+  const id=raw.replace(/^@/,'');return /^[A-Za-z0-9._-]{1,100}$/.test(id)?`https://www.facebook.com/${encodeURIComponent(id)}`:raw;
+}
+function socialEntries(value){
+  const parsed=parseMaybeJson(value);
+  if(Array.isArray(parsed))return parsed.map(item=>({t:String(item?.t||item?.type||item?.platform||item?.name||'').trim(),u:String(item?.u||item?.url||item?.uri||item?.value||item?.link||'').trim()})).filter(item=>item.u);
+  if(parsed&&typeof parsed==='object')return Object.entries(parsed).map(([t,item])=>({t,u:String(item&&typeof item==='object'?(item.u||item.url||item.value||''):item||'').trim()})).filter(item=>item.u);
+  return String(value||'').split(/\s*(?:｜|\||;|；|\n)\s*/).map(item=>item.trim()).filter(Boolean).map(item=>{const labeled=item.match(/^([^:：]{1,30})[:：]\s*(.+)$/);return labeled?{t:labeled[1].trim(),u:labeled[2].trim()}:{t:'',u:item}});
+}
+function socialReviewFields(source,qrLineUrl=''){
+  const entries=socialEntries(pick(source,['socialAccounts','社群帳號','socials','social','socialMedia']));
+  let line=lineUrlForReview(safeLineContactUrl(qrLineUrl)||pick(source,['lineUrl','line_url','lineId','line_id']));
+  let instagram=instagramUrlForReview(pick(source,['instagramUrl','instagram_url','instagramId','instagram_id']));
+  let facebook=facebookUrlForReview(pick(source,['facebookUrl','facebook_url','facebookId','facebook_id']));
+  const other=[];
+  for(const entry of entries){
+    const type=entry.t.toLowerCase(),url=entry.u;
+    if(type.includes('line')||type==='賴'||safeLineContactUrl(url)){if(!line)line=lineUrlForReview(url);continue}
+    if(type.includes('instagram')||type==='ig'||/instagram\.com/i.test(url)){if(!instagram)instagram=instagramUrlForReview(url);continue}
+    if(type.includes('facebook')||type==='fb'||/(?:facebook|fb)\.com/i.test(url)){if(!facebook)facebook=facebookUrlForReview(url);continue}
+    other.push(entry.t?`${entry.t}: ${entry.u}`:entry.u);
+  }
+  return {社群LINE:line,社群Instagram:instagram,社群Facebook:facebook,社群其他:other.join('\n')};
+}
+function serializeSocialReviewFields(root){
+  const value=key=>String(root.querySelector(`[data-ak-field="${key}"]`)?.value||'').trim();
+  const entries=[['LINE',value('社群LINE')],['Instagram',value('社群Instagram')],['Facebook',value('社群Facebook')]].filter(([,url])=>url).map(([t,u])=>({t,u}));
+  for(const item of socialEntries(value('社群其他')))entries.push({t:item.t||'其他',u:item.u});
   return entries.length?JSON.stringify(entries):'';
 }
 async function detectLineQrUrl(file){
@@ -79,7 +109,7 @@ function normalizeCardData(ocr,qrLineUrl=''){
     '手機號碼':['手機號碼','mobile','phone'],'公司電話':['公司電話','companyPhone','officePhone','tel'],'電子郵件':['電子郵件','email'],'公司網址':['公司網址','websiteUrl','website'],'公司地址':['公司地址','address'],'服務項目':['profileDescription','服務項目','serviceDescription','services','description']
   };
   for(const [target,keys] of Object.entries(aliases)){const value=pick(source,keys);if(value!=='')out[target]=value}
-  const socials=mergeSocialAccounts(source,qrLineUrl);if(socials)out['社群帳號']=socials;
+  Object.assign(out,socialReviewFields(source,qrLineUrl));
   return out;
 }
 function normalizeIndustryArray(value){
@@ -256,8 +286,8 @@ function showPreparedDraft(){
   modal.querySelector('#ak-start-ocr').onclick=runOcrAndReview;
 }
 
-function reviewFields(card){return FIELD_MAP.map(([key,label])=>{const control=key==='服務項目'?`<textarea data-ak-field="${escapeHtml(key)}" rows="3" style="box-sizing:border-box;width:100%;margin-top:5px;padding:11px 12px;border:1px solid #dbe3ee;border-radius:12px;font:inherit;line-height:1.55;resize:vertical">${escapeHtml(card[key]||'')}</textarea>`:`<input data-ak-field="${escapeHtml(key)}" value="${escapeHtml(card[key]||'')}" style="box-sizing:border-box;width:100%;margin-top:5px;padding:11px 12px;border:1px solid #dbe3ee;border-radius:12px;font:inherit">`;return `<label style="display:block;margin:9px 0;font-weight:800;color:#334155">${label}${control}</label>`}).join('')}
-function readReviewFields(root){const card={};root.querySelectorAll('[data-ak-field]').forEach(input=>{const key=input.dataset.akField,value=input.value.trim();card[key]=key==='社群帳號'?serializeSocialAccounts(value):value});return card}
+function reviewFields(card){return FIELD_MAP.map(([key,label])=>{const control=key==='服務項目'||key==='社群其他'?`<textarea data-ak-field="${escapeHtml(key)}" rows="${key==='服務項目'?3:2}" style="box-sizing:border-box;width:100%;margin-top:5px;padding:11px 12px;border:1px solid #dbe3ee;border-radius:12px;font:inherit;line-height:1.55;resize:vertical">${escapeHtml(card[key]||'')}</textarea>`:`<input data-ak-field="${escapeHtml(key)}" value="${escapeHtml(card[key]||'')}" style="box-sizing:border-box;width:100%;margin-top:5px;padding:11px 12px;border:1px solid #dbe3ee;border-radius:12px;font:inherit">`;return `<label style="display:block;margin:9px 0;font-weight:800;color:#334155">${label}${control}</label>`}).join('')}
+function readReviewFields(root){const card={};root.querySelectorAll('[data-ak-field]').forEach(input=>{const key=input.dataset.akField;if(!key.startsWith('社群'))card[key]=input.value.trim()});const social=serializeSocialReviewFields(root);if(social)card['社群帳號']=social;return card}
 
 async function runOcrAndReview(){
   clearScanError();
