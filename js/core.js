@@ -199,11 +199,11 @@ const Core = (function() {
             });
             clearTimeout(timeoutId);
 
+            const data = await res.json().catch(() => null);
             if (!res.ok) {
-                throw new Error('伺服器暫時無法連線 (' + res.status + ')，請稍後重試');
+                throw new Error(data?.error || data?.message || ('伺服器暫時無法連線 (' + res.status + ')，請稍後重試'));
             }
-
-            const data = await res.json();
+            if (!data) throw new Error('伺服器回應格式異常，請稍後重試');
             if (!data.success) {
                 const errorMessage = data.error || 'API request failed';
                 if (window.handleActmasterAuthTokenError && window.handleActmasterAuthTokenError(errorMessage)) {

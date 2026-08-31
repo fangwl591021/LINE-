@@ -20,7 +20,8 @@ function ok(condition, message) {
 const visionIndex = html.indexOf('js/modules/card-vision-crop.js?v=1.0');
 const cropperIndex = html.indexOf('js/modules/cropper.js?v=7.18');
 ok(visionIndex >= 0 && cropperIndex > visionIndex, 'vision crop module loads before collected-card workflow');
-ok(html.includes('js/core.js?v=7.30'), 'AI OCR timeout change is cache-busted');
+ok(core.includes("data?.error || data?.message || ('伺服器暫時無法連線 (' + res.status + ')，請稍後重試')"), 'HTTP errors preserve the Worker failure reason');
+ok(html.includes('js/core.js?v=7.31'), 'AI OCR error visibility change is cache-busted');
 ok(core.includes("action === 'recognizeCardWithGPT4o' ? 70000"), 'one-pass vision request has a mobile-safe timeout');
 ok(cropper.includes("window.cardVisionCrop.normalizeInput(file, { maxSide: 2200"), 'mobile image is normalized before the AI request');
 ok(cropper.includes("window.fetchAPI('recognizeCardWithGPT4o', { base64Image: workingImage, deferImageUpload: true }, true)"), 'collected card uses one OCR and localization request without storing the uncropped original as the card image');

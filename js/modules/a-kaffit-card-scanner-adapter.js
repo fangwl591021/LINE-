@@ -242,10 +242,16 @@ async function prepareBusinessCardImage(file,sideLabel='正面',purpose='collect
 
 function ensureModal(id){let modal=document.getElementById(id);if(modal)return modal;modal=document.createElement('div');modal.id=id;modal.style.cssText='position:fixed;inset:0;z-index:13000;background:rgba(15,23,42,.68);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:14px';document.body.appendChild(modal);return modal}
 function closeModal(id){document.getElementById(id)?.remove()}
+function clearScanError(){const box=document.getElementById('ak-scan-error');if(box){box.textContent='';box.style.display='none'}}
+function showScanError(message){
+  const box=document.getElementById('ak-scan-error');if(!box)return;
+  box.textContent='辨識失敗：'+String(message||'目前無法完成名片辨識，請稍後重試');
+  box.style.display='block';box.scrollIntoView?.({block:'nearest'});
+}
 
 function showPreparedDraft(){
   const modal=ensureModal('akaffit-scan-draft');
-  modal.innerHTML=`<section style="width:min(94vw,430px);background:white;border-radius:24px;padding:20px;box-shadow:0 24px 80px rgba(0,0,0,.3)"><h2 style="margin:0;font-size:21px">掃描建立名片</h2><p style="color:#64748b;line-height:1.6">已智慧校正 1 張（正面）。確認後送出名片，由 AI 在同一次辨識完成 OCR、名片定位與業種建議。</p><div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button id="ak-cancel-scan" style="min-height:48px;border:0;border-radius:14px;background:#e2e8f0;font-weight:800">取消</button><button id="ak-start-ocr" style="min-height:48px;border:0;border-radius:14px;background:#06c755;color:white;font-weight:900">送出名片</button></div></section>`;
+  modal.innerHTML=`<section style="width:min(94vw,430px);background:white;border-radius:24px;padding:20px;box-shadow:0 24px 80px rgba(0,0,0,.3)"><h2 style="margin:0;font-size:21px">掃描建立名片</h2><p style="color:#64748b;line-height:1.6">已智慧校正 1 張（正面）。確認後送出名片，由 AI 在同一次辨識完成 OCR、名片定位與業種建議。</p><div id="ak-scan-error" role="alert" aria-live="assertive" style="display:none;margin:0 0 14px;padding:12px 14px;border:1px solid #fecaca;border-radius:12px;background:#fef2f2;color:#b91c1c;font-size:14px;font-weight:700;line-height:1.55;white-space:pre-wrap"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button id="ak-cancel-scan" style="min-height:48px;border:0;border-radius:14px;background:#e2e8f0;font-weight:800">取消</button><button id="ak-start-ocr" style="min-height:48px;border:0;border-radius:14px;background:#06c755;color:white;font-weight:900">送出名片</button></div></section>`;
   modal.querySelector('#ak-cancel-scan').onclick=()=>{scanState={file:null,processedFile:null,jobId:'',ocr:null,localization:null,cropFile:null,qrLineUrl:''};closeModal('akaffit-scan-draft')};
   modal.querySelector('#ak-start-ocr').onclick=runOcrAndReview;
 }
@@ -254,6 +260,7 @@ function reviewFields(card){return FIELD_MAP.map(([key,label])=>{const control=k
 function readReviewFields(root){const card={};root.querySelectorAll('[data-ak-field]').forEach(input=>{const key=input.dataset.akField,value=input.value.trim();card[key]=key==='社群帳號'?serializeSocialAccounts(value):value});return card}
 
 async function runOcrAndReview(){
+  clearScanError();
   const button=document.querySelector('#ak-start-ocr');if(button){button.disabled=true;button.textContent='AI 辨識中…'}
   try{
     window.showCardOcrProgress?.('A-kaffit 名片智慧建立中');
@@ -269,7 +276,7 @@ async function runOcrAndReview(){
     const cropFile=await cropByVisionLocalization(scanState.processedFile,localization);
     scanState={...scanState,ocr,localization,cropFile,qrLineUrl};
     window.hideCardOcrProgress?.();closeModal('akaffit-scan-draft');showReview();
-  }catch(error){window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片辨識失敗',true);if(button){button.disabled=false;button.textContent='送出名片'}}
+  }catch(error){const message=error?.message||'名片辨識失敗';window.hideCardOcrProgress?.();showScanError(message);window.showToast?.(message,true);if(button){button.disabled=false;button.textContent='重新送出'}}
 }
 
 function showReview(){

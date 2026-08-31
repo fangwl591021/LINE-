@@ -33,7 +33,9 @@ ok(adapter.includes("key==='社群帳號'?serializeSocialAccounts(value):value")
 ok(ecard.includes('function lineUrlFromSocialValue(value)')&&ecard.includes('const lineUrl = lineUrlFromSocialValue(social)'),'electronic-card LINE button reads structured social accounts');
 ok(ecard.includes('function buildECardDescription(card, config)')&&(ecard.match(/buildECardDescription\(card, config\)/g)||[]).length>=3,'existing cards receive a non-empty factual description fallback');
 ok(html.includes('js/modules/ecard.js?v=7.54'),'electronic-card description fallback cache-bust is active');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.4'),'AI profile review cache-bust is active');
+ok(adapter.includes('id="ak-scan-error" role="alert" aria-live="assertive"'),'OCR failure is visible inside the scan modal');
+ok(adapter.includes("showScanError(message)")&&adapter.includes("button.textContent='重新送出'"),'OCR failure keeps an actionable retry in the modal');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.5'),'AI profile review cache-bust is active');
 ok(core.includes('export function lineUrlFromId(value)'),'LINE ID conversion is deterministic on the Worker');
 ok(core.includes("!['line.me','lin.ee'].includes(host)"),'LINE URL normalization rejects untrusted hosts');
 console.log('A-kaffit recognize backend parity contract passed.');
