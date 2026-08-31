@@ -80,6 +80,40 @@ function normalizeUrlValue(value) {
   return '';
 }
 
+function buildECardDescription(card, config) {
+  const explicit = String(config?.desc || readECardCardValue(card, ['profileDescription', 'services', 'description', 'desc', '\u670d\u52d9\u9805\u76ee']) || '').replace(/\s+/g, ' ').trim();
+  if (explicit) return explicit;
+  const company = readECardCardValue(card, ['companyName', 'company', '\u516c\u53f8\u540d\u7a31']);
+  const department = readECardCardValue(card, ['department', '\u90e8\u9580']);
+  const jobTitle = readECardCardValue(card, ['jobTitle', 'position', '\u8077\u7a31']);
+  const position = [department, jobTitle].filter(Boolean).join(' ');
+  if (company && position) return `任職於${company}，職務為${position}。歡迎透過名片上的聯絡方式洽詢。`;
+  if (company) return `任職於${company}。歡迎透過名片上的聯絡方式洽詢。`;
+  if (position) return `職務為${position}。歡迎透過名片上的聯絡方式洽詢。`;
+  return '歡迎透過名片上的聯絡方式洽詢。';
+}
+
+function lineUrlFromSocialValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    const entries = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === 'object'
+        ? Object.entries(parsed).map(([type, item]) => item && typeof item === 'object' ? { t:type, ...item } : { t:type, u:item })
+        : [];
+    for (const item of entries) {
+      const type = String(item?.t || item?.type || item?.platform || item?.name || '').toLowerCase();
+      const url = String(item?.u || item?.url || item?.uri || item?.value || item?.link || '').trim();
+      if ((type.includes('line') || /^https?:\/\/(?:line\.me|lin\.ee)\//i.test(url)) && /^https?:\/\/(?:line\.me|lin\.ee)\//i.test(url)) return url;
+    }
+  } catch (e) {}
+  const match = raw.match(/https?:\/\/(?:line\.me|lin\.ee)\/[^\s,，;；|｜"'<>}\]]+/i);
+  if (match) return match[0];
+  return /^(?:line\.me|lin\.ee)\//i.test(raw) ? 'https://' + raw : '';
+}
+
 function buildGoogleMapsUrl(address) {
   const cleanAddress = String(address || '').trim();
   return cleanAddress
@@ -163,7 +197,7 @@ function buildAutoECardButtons(card, existingButtons) {
     readECardCardValue(card, ['socials', 'social', 'lineUrl', 'line_url', '\u793e\u7fa4\u5e33\u865f']);
   const address = readECardField('\u516c\u53f8\u5730\u5740', card) ||
     readECardCardValue(card, ['address', 'companyAddress', 'company_address', '\u516c\u53f8\u5730\u5740']);
-  const lineUrl = normalizeUrlValue(social) || ECardAutoDefaults.lineUrl;
+  const lineUrl = lineUrlFromSocialValue(social) || ECardAutoDefaults.lineUrl;
   const addressUrl = buildGoogleMapsUrl(address);
 
   const auto = {
@@ -552,7 +586,7 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
       paddingAll: '15px',
       contents: [
         { type: 'text', text: String(config.title || card['姓名'] || ' ').trim() || ' ', weight: 'bold', size: 'xl', align: 'center', wrap: true },
-        { type: 'text', text: String(config.desc || card['服務項目'] || ' ').trim() || ' ', size: 'sm', margin: 'md', color: config.descColor || '#666666', wrap: true, align: config.descAlign || 'center' }
+        { type: 'text', text: buildECardDescription(card, config), size: 'sm', margin: 'md', color: config.descColor || '#666666', wrap: true, align: config.descAlign || 'center' }
       ]
     },
     footer: buttons.length ? { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '10px', contents: buttons } : undefined
@@ -581,7 +615,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   const imageAspectMode = 'cover';
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
   const titleText = String(config.title || readECardCardValue(card, ['name', 'title', '\u59d3\u540d']) || '\u6578\u4f4d\u540d\u7247').trim() || '\u6578\u4f4d\u540d\u7247';
-  const bodyText = String(config.desc || readECardCardValue(card, ['services', 'description', 'desc', '\u670d\u52d9\u9805\u76ee']) || ' ').trim() || ' ';
+  const bodyText = buildECardDescription(card, config);
   const buttonSource = Array.isArray(config.buttons) && config.buttons.length ? config.buttons : buildAutoECardButtons(card, []);
   let buttons = buttonSource
     .map(btn => ({

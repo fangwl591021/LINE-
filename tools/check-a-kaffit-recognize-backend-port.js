@@ -3,6 +3,8 @@ const read = p => fs.readFileSync(p,'utf8');
 const core = read('worker/a-kaffit-card-recognize.mjs');
 const entry = read('worker-entry.mjs');
 const adapter = read('js/modules/a-kaffit-card-scanner-adapter.js');
+const ecard = read('js/modules/ecard.js');
+const html = read('index.html');
 function ok(v,label){if(!v){console.error('FAIL',label);process.exit(1)}console.log('OK',label)}
 
 ok(core.includes("const FIELD_LIMITS = { displayName:120, englishName:120, companyName:180"),'A-kaffit field limits preserved');
@@ -21,4 +23,17 @@ ok(entry.includes("if (action === 'recognizeCardWithGPT4o')"),'recognize action 
 ok(entry.includes('const result = await recognizeAkaffitBusinessCard(payload, env);'),'recognize action uses A-kaffit core');
 ok(!adapter.includes("if(typeof window.normalizeOcrCardData==='function')return window.normalizeOcrCardData(ocr);"),'A-kaffit field names are not remapped through legacy OCR first');
 ok((adapter.match(/fetchAPI\('recognizeCardWithGPT4o'/g)||[]).length===1,'frontend still performs exactly one OCR call');
+ok(adapter.includes("['社群帳號','社群帳號（LINE／IG／FB）']"),'social contacts are reviewable before save');
+ok(core.includes('profileDescription:600')&&core.includes('export function buildProfileDescription(parsed = {})'),'AI profile description has a deterministic non-empty fallback');
+ok(core.includes('不得編造專長、服務項目、成就、客戶、優惠'),'AI profile expansion is constrained to confirmed card facts');
+ok(adapter.includes("['服務項目','名片說明（AI 自動撰寫，可修改）']")&&adapter.includes("['profileDescription','服務項目','serviceDescription'"),'AI profile description is editable and saved to the existing card field');
+ok(adapter.includes("window.BarcodeDetector.getSupportedFormats()")&&adapter.includes("formats.includes('qr_code')"),'Android QR detection is capability-gated');
+ok(adapter.includes('const selectedLine=exactQr||aiLine'),'decoded LINE QR URL takes priority over OCR');
+ok(adapter.includes("key==='社群帳號'?serializeSocialAccounts(value):value"),'reviewed social contacts are saved as structured account data');
+ok(ecard.includes('function lineUrlFromSocialValue(value)')&&ecard.includes('const lineUrl = lineUrlFromSocialValue(social)'),'electronic-card LINE button reads structured social accounts');
+ok(ecard.includes('function buildECardDescription(card, config)')&&(ecard.match(/buildECardDescription\(card, config\)/g)||[]).length>=3,'existing cards receive a non-empty factual description fallback');
+ok(html.includes('js/modules/ecard.js?v=7.54'),'electronic-card description fallback cache-bust is active');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.4'),'AI profile review cache-bust is active');
+ok(core.includes('export function lineUrlFromId(value)'),'LINE ID conversion is deterministic on the Worker');
+ok(core.includes("!['line.me','lin.ee'].includes(host)"),'LINE URL normalization rejects untrusted hosts');
 console.log('A-kaffit recognize backend parity contract passed.');

@@ -3,7 +3,7 @@ import { cropByVisionLocalization, normalizedVisionLocalization } from './a-kaff
 const FIELD_MAP = [
   ['姓名','姓名'],['英文名','英文姓名'],['公司名稱','公司名稱'],['職稱','職稱'],['部門','部門'],
   ['手機號碼','手機號碼'],['公司電話','公司電話'],['電子郵件','Email'],['公司網址','公司網址'],
-  ['公司地址','公司地址'],['服務項目','服務項目']
+  ['社群帳號','社群帳號（LINE／IG／FB）'],['公司地址','公司地址'],['服務項目','名片說明（AI 自動撰寫，可修改）']
 ];
 const INDUSTRY_OPTIONS = [
   '健康醫療','美容美業','餐飲食品','零售電商','直銷／社群電商',
@@ -28,7 +28,7 @@ const INDUSTRY_RULES = [
   ['社團協會公益',/協會|社團|公益|基金會|商會|公會|非營利/i]
 ];
 
-let scanState = { file:null, processedFile:null, jobId:'', ocr:null, localization:null, cropFile:null };
+let scanState = { file:null, processedFile:null, jobId:'', ocr:null, localization:null, cropFile:null, qrLineUrl:'' };
 let industryFilterBridgeInstalled = false;
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -45,13 +45,41 @@ const fileToDataUrl = (file) => new Promise((resolve,reject)=>{const r=new FileR
 function parseMaybeJson(value){if(typeof value!=='string')return value;try{return JSON.parse(value)}catch{return value}}
 function unwrapOcr(ocr){for(const candidate of [ocr?.data?.cardData,ocr?.data?.card,ocr?.data,ocr?.cardData,ocr?.card,ocr?.result,ocr]){const parsed=parseMaybeJson(candidate);if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))return parsed}return {}}
 function pick(source, keys){for(const key of keys){const value=source?.[key];if(value!==undefined&&value!==null&&String(value).trim()!=='')return value}return ''}
-function normalizeCardData(ocr){
+function safeLineContactUrl(value){
+  const raw=String(value||'').trim();if(!raw)return '';
+  try{const url=new URL(/^https?:\/\//i.test(raw)?raw:`https://${raw}`),host=url.hostname.toLowerCase().replace(/^www\./,'');if(!['line.me','lin.ee'].includes(host))return '';url.protocol='https:';url.username='';url.password='';return url.toString()}catch{return ''}
+}
+function mergeSocialAccounts(source,qrLineUrl=''){
+  const exactQr=safeLineContactUrl(qrLineUrl),aiLine=safeLineContactUrl(pick(source,['lineUrl','line_url']));
+  const selectedLine=exactQr||aiLine;
+  const existing=String(pick(source,['socialAccounts','社群帳號','socials','social','socialMedia'])||'').split(/\s*[｜|;；\n]\s*/).map(item=>item.trim()).filter(Boolean);
+  const kept=selectedLine?existing.filter(item=>!/^(?:line\s*(?:id)?|賴)\s*[:：]/i.test(item)):existing;
+  return [selectedLine?`LINE: ${selectedLine}`:'',...kept].filter(Boolean).filter((item,index,all)=>all.findIndex(candidate=>candidate.toLowerCase()===item.toLowerCase())===index).join('｜');
+}
+function serializeSocialAccounts(value){
+  const entries=String(value||'').split(/\s*[｜|;；\n]\s*/).map(item=>item.trim()).filter(Boolean).map(item=>{
+    const labeled=item.match(/^([^:：]{1,30})[:：]\s*(.+)$/);if(labeled)return {t:labeled[1].trim(),u:labeled[2].trim()};
+    return {t:safeLineContactUrl(item)?'LINE':'其他',u:item};
+  }).filter(item=>item.u);
+  return entries.length?JSON.stringify(entries):'';
+}
+async function detectLineQrUrl(file){
+  if(!file||!('BarcodeDetector' in window)||typeof window.BarcodeDetector.getSupportedFormats!=='function')return '';
+  try{
+    const formats=await window.BarcodeDetector.getSupportedFormats();if(!formats.includes('qr_code'))return '';
+    const bitmap=await createImageBitmap(file);
+    try{const codes=await new window.BarcodeDetector({formats:['qr_code']}).detect(bitmap);for(const code of codes){const url=safeLineContactUrl(code?.rawValue);if(url)return url}}finally{bitmap.close?.()}
+  }catch(error){console.info('LINE QR progressive detection unavailable',error?.name||'unknown')}
+  return '';
+}
+function normalizeCardData(ocr,qrLineUrl=''){
   const source=unwrapOcr(ocr),out={};
   const aliases={
     '姓名':['姓名','name','displayName','fullName'],'英文名':['英文名','englishName'],'公司名稱':['公司名稱','companyName','company'],'職稱':['職稱','jobTitle','title'],'部門':['部門','department'],
-    '手機號碼':['手機號碼','mobile','phone'],'公司電話':['公司電話','companyPhone','officePhone','tel'],'電子郵件':['電子郵件','email'],'公司網址':['公司網址','websiteUrl','website'],'公司地址':['公司地址','address'],'服務項目':['服務項目','serviceDescription','services','description']
+    '手機號碼':['手機號碼','mobile','phone'],'公司電話':['公司電話','companyPhone','officePhone','tel'],'電子郵件':['電子郵件','email'],'公司網址':['公司網址','websiteUrl','website'],'公司地址':['公司地址','address'],'服務項目':['profileDescription','服務項目','serviceDescription','services','description']
   };
   for(const [target,keys] of Object.entries(aliases)){const value=pick(source,keys);if(value!=='')out[target]=value}
+  const socials=mergeSocialAccounts(source,qrLineUrl);if(socials)out['社群帳號']=socials;
   return out;
 }
 function normalizeIndustryArray(value){
@@ -218,12 +246,12 @@ function closeModal(id){document.getElementById(id)?.remove()}
 function showPreparedDraft(){
   const modal=ensureModal('akaffit-scan-draft');
   modal.innerHTML=`<section style="width:min(94vw,430px);background:white;border-radius:24px;padding:20px;box-shadow:0 24px 80px rgba(0,0,0,.3)"><h2 style="margin:0;font-size:21px">掃描建立名片</h2><p style="color:#64748b;line-height:1.6">已智慧校正 1 張（正面）。確認後送出名片，由 AI 在同一次辨識完成 OCR、名片定位與業種建議。</p><div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button id="ak-cancel-scan" style="min-height:48px;border:0;border-radius:14px;background:#e2e8f0;font-weight:800">取消</button><button id="ak-start-ocr" style="min-height:48px;border:0;border-radius:14px;background:#06c755;color:white;font-weight:900">送出名片</button></div></section>`;
-  modal.querySelector('#ak-cancel-scan').onclick=()=>{scanState={file:null,processedFile:null,jobId:'',ocr:null,localization:null,cropFile:null};closeModal('akaffit-scan-draft')};
+  modal.querySelector('#ak-cancel-scan').onclick=()=>{scanState={file:null,processedFile:null,jobId:'',ocr:null,localization:null,cropFile:null,qrLineUrl:''};closeModal('akaffit-scan-draft')};
   modal.querySelector('#ak-start-ocr').onclick=runOcrAndReview;
 }
 
-function reviewFields(card){return FIELD_MAP.map(([key,label])=>`<label style="display:block;margin:9px 0;font-weight:800;color:#334155">${label}<input data-ak-field="${escapeHtml(key)}" value="${escapeHtml(card[key]||'')}" style="box-sizing:border-box;width:100%;margin-top:5px;padding:11px 12px;border:1px solid #dbe3ee;border-radius:12px;font:inherit"></label>`).join('')}
-function readReviewFields(root){const card={};root.querySelectorAll('[data-ak-field]').forEach(input=>card[input.dataset.akField]=input.value.trim());return card}
+function reviewFields(card){return FIELD_MAP.map(([key,label])=>{const control=key==='服務項目'?`<textarea data-ak-field="${escapeHtml(key)}" rows="3" style="box-sizing:border-box;width:100%;margin-top:5px;padding:11px 12px;border:1px solid #dbe3ee;border-radius:12px;font:inherit;line-height:1.55;resize:vertical">${escapeHtml(card[key]||'')}</textarea>`:`<input data-ak-field="${escapeHtml(key)}" value="${escapeHtml(card[key]||'')}" style="box-sizing:border-box;width:100%;margin-top:5px;padding:11px 12px;border:1px solid #dbe3ee;border-radius:12px;font:inherit">`;return `<label style="display:block;margin:9px 0;font-weight:800;color:#334155">${label}${control}</label>`}).join('')}
+function readReviewFields(root){const card={};root.querySelectorAll('[data-ak-field]').forEach(input=>{const key=input.dataset.akField,value=input.value.trim();card[key]=key==='社群帳號'?serializeSocialAccounts(value):value});return card}
 
 async function runOcrAndReview(){
   const button=document.querySelector('#ak-start-ocr');if(button){button.disabled=true;button.textContent='AI 辨識中…'}
@@ -231,18 +259,21 @@ async function runOcrAndReview(){
     window.showCardOcrProgress?.('A-kaffit 名片智慧建立中');
     window.setCardOcrProgressStage?.(25,'AI 正在同時辨識文字、名片外框與業種...');
     const dataUrl=await fileToDataUrl(scanState.processedFile);
-    const ocr=await window.fetchAPI('recognizeCardWithGPT4o',{base64Image:dataUrl,deferImageUpload:true},true);
+    const [ocr,qrLineUrl]=await Promise.all([
+      window.fetchAPI('recognizeCardWithGPT4o',{base64Image:dataUrl,deferImageUpload:true},true),
+      detectLineQrUrl(scanState.processedFile)
+    ]);
     if(!ocr||ocr.error)throw new Error(ocr?.error||'AI 辨識失敗');
     const localization=normalizedVisionLocalization(extractLocalization(ocr)||{});
     if(localization.incomplete){const edges=(localization.clippedEdges||[]).join('、');throw new Error('名片未完整入鏡'+(edges?'（缺少：'+edges+'）':'')+'，請稍微拉遠重新拍攝。')}
     const cropFile=await cropByVisionLocalization(scanState.processedFile,localization);
-    scanState={...scanState,ocr,localization,cropFile};
+    scanState={...scanState,ocr,localization,cropFile,qrLineUrl};
     window.hideCardOcrProgress?.();closeModal('akaffit-scan-draft');showReview();
   }catch(error){window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片辨識失敗',true);if(button){button.disabled=false;button.textContent='送出名片'}}
 }
 
 function showReview(){
-  const card=normalizeCardData(scanState.ocr),industry=readAiIndustrySuggestion(scanState.ocr),localization=normalizedVisionLocalization(scanState.localization||{}),preview=scanState.cropFile?URL.createObjectURL(scanState.cropFile):'';
+  const card=normalizeCardData(scanState.ocr,scanState.qrLineUrl),industry=readAiIndustrySuggestion(scanState.ocr),localization=normalizedVisionLocalization(scanState.localization||{}),preview=scanState.cropFile?URL.createObjectURL(scanState.cropFile):'';
   const modal=ensureModal('akaffit-card-review');
   modal.innerHTML=`<section style="width:min(96vw,520px);max-height:92vh;overflow:auto;background:#fff;border-radius:24px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.32)"><h2 style="margin:0">確認名片資料</h2><p style="color:#64748b;line-height:1.5">AI 名片定位 ${Math.round(localization.cropConfidence*100)}%${scanState.cropFile?'，已先分離名片本體':'，定位信心不足；文字仍可先校正'}。</p>${preview?`<img src="${preview}" alt="AI 分離後名片" style="display:block;width:100%;max-height:340px;object-fit:contain;border-radius:16px;background:#f4f4f4;margin:12px 0">`:''}<div id="ak-review-fields">${reviewFields(card)}</div>${industryReviewHtml(industry)}<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:14px"><button id="ak-review-cancel" style="min-height:48px;border:0;border-radius:14px;background:#e2e8f0;font-weight:800">取消</button><button id="ak-review-save" style="min-height:48px;border:0;border-radius:14px;background:#06c755;color:white;font-weight:900">儲存至名片收藏</button></div></section>`;
   wireIndustryControls(modal);
@@ -262,7 +293,7 @@ async function saveReviewedCard(modal,previewUrl){
     const payload={...card,userId:'',creatorId:window.currentUserProfile?.userId||'','建檔者ID':window.currentUserProfile?.userId||'','建檔人/備註':'掃描建立 by '+(window.currentUser?.name||'')};
     const result=await window.fetchAPI('saveCard',payload,true);if(!result||!result.rowId)throw new Error(result?.error||'儲存失敗');
     if(previewUrl)URL.revokeObjectURL(previewUrl);closeModal('akaffit-card-review');
-    scanState={file:null,processedFile:null,jobId:'',ocr:null,localization:null,cropFile:null};
+    scanState={file:null,processedFile:null,jobId:'',ocr:null,localization:null,cropFile:null,qrLineUrl:''};
     window.showToast?.('客戶名片建立成功，業種對應已儲存');window.refreshPointBalanceBadge?.();window.goPage?.('card');window.loadCardData?.({force:true});
   }catch(error){button.disabled=false;button.textContent='儲存至名片收藏';window.showToast?.(error.message||'名片儲存失敗',true)}
 }
@@ -277,7 +308,7 @@ window.recognizeCard=async function(input){
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
     window.setCardOcrProgressStage?.(8,'正在上傳並壓縮名片照片...');
     const prepared=await prepareBusinessCardImage(file,'正面','collection');
-    scanState={file,processedFile:prepared.file,jobId:prepared.jobId,ocr:null,localization:null,cropFile:null};
+    scanState={file,processedFile:prepared.file,jobId:prepared.jobId,ocr:null,localization:null,cropFile:null,qrLineUrl:''};
     window.hideCardOcrProgress?.();
     showPreparedDraft();
   }catch(error){window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片圖片處理失敗',true)}

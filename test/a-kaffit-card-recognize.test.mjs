@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { recognizeAkaffitBusinessCard } from '../worker/a-kaffit-card-recognize.mjs';
+import {
+  buildProfileDescription,
+  enrichSocialContacts,
+  lineUrlFromId,
+  normalizeLineContactUrl,
+  recognizeAkaffitBusinessCard,
+} from '../worker/a-kaffit-card-recognize.mjs';
 
 const image = 'data:image/jpeg;base64,ZmFrZS1jYXJk';
 const recognized = {
@@ -28,9 +34,13 @@ const recognized = {
   companyPhone:'',
   email:'',
   websiteUrl:'',
+  lineId:'',
   lineUrl:'',
+  instagramId:'',
+  socialAccounts:'',
   address:'',
   serviceDescription:'',
+  profileDescription:'測試公司的工程師王小明，歡迎透過名片上的聯絡方式洽詢。',
   note:'',
 };
 
@@ -82,5 +92,42 @@ test('rejects the request when neither provider is configured', async () => {
   await assert.rejects(
     recognizeAkaffitBusinessCard({base64Image:image}, {}),
     /名片 AI 辨識服務尚未連線/,
+  );
+});
+
+test('converts personal and official LINE IDs to friend URLs', () => {
+  assert.equal(lineUrlFromId('jhan1201'), 'https://line.me/ti/p/~jhan1201');
+  assert.equal(lineUrlFromId('LINE ID: @demo123'), 'https://line.me/R/ti/p/%40demo123');
+  assert.equal(lineUrlFromId('not a valid id'), '');
+});
+
+test('accepts only trusted LINE contact hosts', () => {
+  assert.equal(normalizeLineContactUrl('http://line.me/ti/p/~jhan1201'), 'https://line.me/ti/p/~jhan1201');
+  assert.equal(normalizeLineContactUrl('https://lin.ee/abc123'), 'https://lin.ee/abc123');
+  assert.equal(normalizeLineContactUrl('https://example.com/line.me/ti/p/~jhan1201'), '');
+});
+
+test('builds canonical social accounts without losing other platforms', () => {
+  const result = enrichSocialContacts({
+    lineId:'jhan1201',
+    lineUrl:'',
+    instagramId:'q_q_1201',
+    socialAccounts:'LINE ID: jhan1201｜Instagram: q_q_1201｜Facebook: example.page',
+  });
+  assert.equal(result.lineUrl, 'https://line.me/ti/p/~jhan1201');
+  assert.equal(result.socialAccounts, 'LINE: https://line.me/ti/p/~jhan1201｜Instagram: https://www.instagram.com/q_q_1201｜Facebook: example.page');
+});
+
+test('keeps the AI profile description when it is present', () => {
+  assert.equal(
+    buildProfileDescription({profileDescription:'任職於中原大學產學營運處，職稱為專案經理。'}),
+    '任職於中原大學產學營運處，職稱為專案經理。',
+  );
+});
+
+test('builds a factual non-empty profile fallback without inventing services', () => {
+  assert.equal(
+    buildProfileDescription({displayName:'高靖航',companyName:'中原大學',department:'產學營運處',jobTitle:'專案經理'}),
+    '高靖航任職於中原大學，職務為產學營運處 專案經理。歡迎透過名片所列聯絡方式洽詢。',
   );
 });
