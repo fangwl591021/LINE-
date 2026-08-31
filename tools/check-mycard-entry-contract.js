@@ -38,8 +38,11 @@ if (!/async function handleLayoutChange[\s\S]*var card = await resolveMyCardVers
 if (!/async function setMyCardWysiwygLayout[\s\S]*var card = await resolveMyCardVersion\(version, false\);[\s\S]*if \(!isEditableOwnCard\(card, version\)\) card = findLoadedMyCardByVersion\(version\);[\s\S]*if \(isEditableOwnCard\(card, version\)/.test(mycard)) {
   fail('WYSIWYG layout switching must resolve a user-owned version before applying card data');
 }
-if (!/async function openMyCardEntry[\s\S]*return openMyCardWysiwyg\(evt, currentCardData\)/.test(mycard)) {
-  fail('existing personal card must route directly to the WYSIWYG editor');
+if (!/async function openMyCardEntry[\s\S]*window\.openCardDetail\(currentCardData\)/.test(mycard)) {
+  fail('existing personal card must open the tabbed card-detail page');
+}
+if (!index.includes('id="tab-ecard" onclick="window.openCardRecordWysiwyg(window.currentCard, event)"')) {
+  fail('digital-card tab must be the action that opens WYSIWYG editing');
 }
 if (!index.includes('id="btn-open-card-wysiwyg"') || !index.includes('window.openCardRecordWysiwyg(window.currentCard, event)')) {
   fail('editable card detail must expose record-scoped WYSIWYG editing');

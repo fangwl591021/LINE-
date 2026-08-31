@@ -8,23 +8,24 @@ const cards = readFileSync(new URL('../js/modules/cards.js', import.meta.url), '
 const index = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
 
-test('home My Card opens the WYSIWYG editor directly', () => {
+test('home My Card opens the tabbed card-detail page', () => {
   const start = mycard.indexOf('async function openMyCardEntry');
   const end = mycard.indexOf('function getCardRowId', start);
   const entry = mycard.slice(start, end);
 
   assert.match(entry, /currentCardData = await resolveCurrentUserCard\(true\)/);
-  assert.match(entry, /return openMyCardWysiwyg\(evt, currentCardData\)/);
-  assert.doesNotMatch(entry, /window\.openCardDetail\(currentCardData\)/);
+  assert.match(entry, /window\.openCardDetail\(currentCardData\)/);
+  assert.doesNotMatch(entry, /openMyCardWysiwyg\(evt, currentCardData\)/);
   assert.match(home, /window\.openMyCardSettings = function\(evt\)[\s\S]*return window\.openMyCardEntry\(evt\)/);
   assert.match(index, /id="home-my-card-button" onclick="window\.openMyCardEntry \? window\.openMyCardEntry\(event\)/);
   assert.match(index, /<details id="details-my-ecard"[\s\S]*?<summary onclick="window\.openMyCardEntry\(event\)"/);
-  assert.match(index, /js\/modules\/mycard\.js\?v=8\.87/);
+  assert.match(index, /js\/modules\/mycard\.js\?v=8\.88/);
   assert.match(index, /js\/modules\/home\.js\?v=8\.07/);
   assert.match(mycard, /await load\(\);\s*await openMyCardDetail\(\);/);
 });
 
 test('editable current card can open record-scoped WYSIWYG without becoming the personal card', () => {
+  assert.match(index, /id="tab-ecard" onclick="window\.openCardRecordWysiwyg\(window\.currentCard, event\)"/);
   assert.match(index, /id="btn-open-card-wysiwyg"[\s\S]*?window\.openCardRecordWysiwyg\(window\.currentCard, event\)/);
   assert.match(mycard, /function openCardRecordWysiwyg\(card, evt\)[\s\S]*?canEditCardRecord\(card\)/);
   assert.match(mycard, /if \(!wysiwygState\.recordMode\) window\.currentUserCard = currentCardData/);

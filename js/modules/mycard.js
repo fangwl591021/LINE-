@@ -1096,8 +1096,10 @@
       var details = document.getElementById('details-my-ecard');
       if (currentCardData) {
         if (details) details.open = false;
-        moduleCore.showLoading(false);
-        return openMyCardWysiwyg(evt, currentCardData);
+        if (typeof window.openCardDetail === 'function') {
+          window.openCardDetail(currentCardData);
+        }
+        return;
       }
       if (details) {
         if (typeof window.goPage === 'function') window.goPage('admin-settings');
