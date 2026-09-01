@@ -80,8 +80,17 @@ function normalizeUrlValue(value) {
   return '';
 }
 
+function normalizeECardDescriptionText(value) {
+  return String(value || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function buildECardDescription(card, config) {
-  const explicit = String(config?.desc || readECardCardValue(card, ['profileDescription', 'services', 'description', 'desc', '\u670d\u52d9\u9805\u76ee']) || '').replace(/\s+/g, ' ').trim();
+  const explicit = normalizeECardDescriptionText(config?.desc || readECardCardValue(card, ['profileDescription', 'services', 'description', 'desc', '\u670d\u52d9\u9805\u76ee']));
   if (explicit) return explicit;
   const company = readECardCardValue(card, ['companyName', 'company', '\u516c\u53f8\u540d\u7a31']);
   const department = readECardCardValue(card, ['department', '\u90e8\u9580']);

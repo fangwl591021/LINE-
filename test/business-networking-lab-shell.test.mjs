@@ -8,7 +8,7 @@ const worker = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf
 
 test('business assistant exposes an isolated networking lab shell', () => {
   assert.match(index, /openBusinessNetworkingLab \? window\.openBusinessNetworkingLab\(\) : window\.openHomeLowerPanel\?\.\('assistant'\)/);
-  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.8/);
+  assert.match(index, /js\/modules\/business-networking-lab\.js\?v=1\.9/);
   assert.match(lab, /交流合作實驗區/);
   assert.match(lab, /今日建議/);
   assert.match(lab, /私人人脈/);
@@ -106,9 +106,9 @@ test('public recommendations lead to user-confirmed viewing and inbox introducti
   assert.match(lab, /publicRecommendationMatches = matches\.slice\(0, 5\)/);
   assert.match(lab, /visibility === 'public' && sourceType === 'self_profile' && poolEligible/);
   assert.match(lab, /window\.openCardDetail\(match\.card\)/);
-  assert.match(lab, /window\.openInboxSendCenter\(\)/);
-  assert.match(lab, /window\.selectInboxRecipient\(receiverId, name\)/);
-  assert.match(lab, /推薦原因是「\$\{reason\}」/);
+  assert.match(lab, /window\.openInboxPublicCardInquiry\(\{ publicCardRowId, card, reason: match\.reason \|\| '' \}\)/);
+  assert.match(lab, /const publicCardRowId = existingText\(match\.rowId \|\| card\.rowId/);
+  assert.doesNotMatch(lab, /card\.lineId \|\| card\.userId/);
   assert.match(lab, /送出前由本人確認，不會自動傳送 LINE/);
   assert.doesNotMatch(lab, /fetchAPI\('sendInboxMessage'/);
   assert.doesNotMatch(lab, /data-networking-public-(?:view|contact)="\$\{[^}]*rowId/);

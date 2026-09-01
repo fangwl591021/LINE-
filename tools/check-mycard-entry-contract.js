@@ -74,6 +74,12 @@ if (!mycard.includes('三按鈕操作') || !mycard.includes('傳送操作') || !
 if (!mycard.includes('webCardId=') || !mycard.includes('appendSendMode(baseUrl)') || !mycard.includes('appendShareMode(baseUrl)')) {
   fail('copy URL variants must separate WEB display, current chat send, and LINE picker share');
 }
+if (!mycard.includes('data-my-card-wysiwyg-share') || !mycard.includes('window.shareMyCard(this, { currentEditor: true })')) {
+  fail('WYSIWYG card share button must open the LINE share target picker for the edited card');
+}
+if (!mycard.includes('var useCurrentEditorCard = !!(options && options.currentEditor && currentCardData && wysiwygState.cfg)')) {
+  fail('WYSIWYG share must keep the currently edited card instead of resolving a different personal card');
+}
 if (!auth.includes('renderStandaloneWebCardPage') || !auth.includes("initialUrlParams.get('webCardId')") || !auth.includes('handleAutoSendCardEntry') || !auth.includes('liff.sendMessages')) {
   fail('WEB card URL must render without LIFF login');
 }

@@ -515,32 +515,12 @@
   function openPublicRecommendationInbox(index) {
     const match = publicRecommendation(index);
     if (!match) return window.showToast?.('這份公開合作檔案已無法交流，請重新產生推薦', true);
-    if (typeof window.openInboxSendCenter !== 'function') return window.showToast?.('站內交流功能尚未就緒', true);
+    if (typeof window.openInboxPublicCardInquiry !== 'function') return window.showToast?.('站內交流功能尚未就緒', true);
     const card = match.card || {};
-    const name = existingText(card.name || card['姓名'] || '公開交流夥伴');
-    const company = existingText(card.companyName || card['公司名稱'] || '');
-    const receiverId = existingText(card.lineId || card.userId || card['LINE ID'] || card.profileUserId || '');
-    const reason = existingText(match.reason || '雙方公開合作資料具有互補性');
+    const publicCardRowId = existingText(match.rowId || card.rowId || card.row_id || '');
+    if (!publicCardRowId) return window.showToast?.('找不到公開名片，無法交流', true);
     window.closeBusinessNetworkingLab();
-    window.openInboxSendCenter();
-    setTimeout(() => {
-      window.setInboxRecipientMode?.('user');
-      const query = document.getElementById('inbox-recipient-query');
-      const title = document.getElementById('inbox-message-title');
-      const body = document.getElementById('inbox-message-body');
-      const results = document.getElementById('inbox-recipient-results');
-      if (receiverId && typeof window.selectInboxRecipient === 'function') {
-        window.selectInboxRecipient(receiverId, name);
-      } else {
-        if (query) query.value = name;
-        if (results) results.innerHTML = '<div class="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-700">請搜尋並確認正確收件人後再送出。</div>';
-      }
-      if (title) title.value = `想認識 ${name}，交流合作`;
-      if (body) body.value = `您好，我在 AI 商脈的公開合作推薦中看到您${company ? `（${company}）` : ''}的合作檔案。推薦原因是「${reason}」。想先認識您，看看是否有合適的交流或合作機會。`;
-      window.toggleInboxComposer?.(true);
-      document.getElementById('inbox-composer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      body?.focus();
-    }, 240);
+    window.openInboxPublicCardInquiry({ publicCardRowId, card, reason: match.reason || '' });
   }
 
   async function generatePublicRecommendations(trigger) {

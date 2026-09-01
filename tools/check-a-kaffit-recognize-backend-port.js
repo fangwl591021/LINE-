@@ -32,7 +32,8 @@ ok(adapter.includes("lineUrlForReview(safeLineContactUrl(qrLineUrl)||pick(source
 ok(adapter.includes('function serializeSocialReviewFields(root)')&&adapter.includes("if(social)card['社群帳號']=social"),'reviewed social contacts are saved as structured account data');
 ok(ecard.includes('function lineUrlFromSocialValue(value)')&&ecard.includes('const lineUrl = lineUrlFromSocialValue(social)'),'electronic-card LINE button reads structured social accounts');
 ok(ecard.includes('function buildECardDescription(card, config)')&&(ecard.match(/buildECardDescription\(card, config\)/g)||[]).length>=3,'existing cards receive a non-empty factual description fallback');
-ok(html.includes('js/modules/ecard.js?v=7.54'),'electronic-card description fallback cache-bust is active');
+ok(ecard.includes('function normalizeECardDescriptionText(value)')&&ecard.includes(".replace(/\\r\\n?/g, '\\n')")&&ecard.includes(".replace(/[^\\S\\n]+/g, ' ')"),'electronic-card description preserves authored line breaks');
+ok(html.includes('js/modules/ecard.js?v=7.55'),'electronic-card description fallback cache-bust is active');
 ok(adapter.includes('id="ak-scan-error" role="alert" aria-live="assertive"'),'OCR failure is visible inside the scan modal');
 ok(adapter.includes("showScanError(message)")&&adapter.includes("button.textContent='重新送出'"),'OCR failure keeps an actionable retry in the modal');
 ok(adapter.includes('已保留完整原圖，請核對下方資料'),'uncertain localization falls back to review instead of rejecting OCR');

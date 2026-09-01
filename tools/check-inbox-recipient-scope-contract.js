@@ -42,10 +42,26 @@ if (!worker.includes('await this.canReachRecipient(payload, userRow, env)')) {
   "WHERE post_handle = ? AND status = 'published'",
   "expires_at > CURRENT_TIMESTAMP",
   'exchangeRecipientAuthorized = true',
-  '!exchangeRecipientAuthorized && !await this.canReachRecipient',
+  '!exchangeRecipientAuthorized && !publicCardRecipientAuthorized && !await this.canReachRecipient',
   "pointPayload.exchangeInquiry = { postHandle: exchangePostHandle }"
 ].forEach(needle => {
   if (!worker.includes(needle)) fail(`missing verified exchange inquiry contract: ${needle}`);
+});
+
+[
+  'const publicCardRowId = this.text(payload.publicCardRowId',
+  'async publicInboxCardByRowId(env, rowId)',
+  'async ownPublicInboxCard(payload, env)',
+  "LOWER(TRIM(COALESCE(visibility,''))) = 'public'",
+  "LOWER(TRIM(COALESCE(source_type,''))) = 'self_profile'",
+  'CAST(COALESCE(pool_eligible, 0) AS INTEGER) = 1',
+  "LOWER(TRIM(COALESCE(ai_review_status,''))) = 'passed'",
+  'publicCardRecipientAuthorized = true',
+  "requestedMessageType !== 'message'",
+  '!exchangeRecipientAuthorized && !publicCardRecipientAuthorized && !await this.canReachRecipient',
+  'pointPayload.publicMatchInquiry = { targetCardRowId: publicCardRowId }'
+].forEach(needle => {
+  if (!worker.includes(needle)) fail(`missing verified public-card inbox contract: ${needle}`);
 });
 
 if (!worker.includes('this.intersects(senderIdentityIds, receiverIdentityIds)')) {
@@ -54,10 +70,21 @@ if (!worker.includes('this.intersects(senderIdentityIds, receiverIdentityIds)'))
 
 [
   'id="inbox-exchange-post-handle"',
+  'id="inbox-public-card-row-id"',
   'id="inbox-recipient-mode-buttons"',
   'id="inbox-recipient-search-button"'
 ].forEach(needle => {
   if (!html.includes(needle)) fail(`missing exchange inbox composer field: ${needle}`);
+});
+
+[
+  'window.openInboxPublicCardInquiry = function (match)',
+  'inbox-public-card-row-id',
+  '由公開配對名片帶入',
+  'messageType.disabled = true',
+  'publicCardRowId, receiverUserId'
+].forEach(needle => {
+  if (!frontend.includes(needle)) fail(`missing public-card inbox composer flow: ${needle}`);
 });
 
 [

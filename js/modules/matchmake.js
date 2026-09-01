@@ -275,6 +275,16 @@ window.toggleAiMatchInterest = async function(button, targetCardRowId) {
   }
 };
 
+window.openAiMatchInbox = function(targetCardRowId) {
+  const rowId = String(targetCardRowId || '').trim();
+  const matches = Array.isArray(window.currentAiPublicMatches) ? window.currentAiPublicMatches : [];
+  const match = matches.find(item => String(item?.rowId || '') === rowId);
+  const card = match?.card || window.allCards?.find(item => String(item?.rowId || '') === rowId);
+  if (!rowId || !card) return window.showToast?.('這份公開配對結果已失效，請重新配對', true);
+  if (typeof window.openInboxPublicCardInquiry !== 'function') return window.showToast?.('站內信功能尚未就緒', true);
+  window.openInboxPublicCardInquiry({ publicCardRowId: rowId, card, reason: match?.reason || '' });
+};
+
 // 啟動 AI 配對
 window.startMatchmaking = async function() {
   const queryEl = document.getElementById('match-query');
@@ -333,6 +343,7 @@ window.startMatchmaking = async function() {
       const resultsList = document.getElementById('results-list');
       const resultsContainer = document.getElementById('match-results');
       if (!resultsList || !resultsContainer) throw new Error('配對結果區塊尚未載入');
+      window.currentAiPublicMatches = poolScope === 'public' ? matches.slice() : [];
 
       if (matches.length === 0) {
         resultsList.innerHTML = '<div class="text-center py-6 text-slate-500">目前沒有合適的人選</div>';
@@ -347,13 +358,16 @@ window.startMatchmaking = async function() {
           const interestButton = poolScope === 'public'
             ? '<button type="button" data-ai-match-interest-card="' + safeRowId + '" onclick="window.toggleAiMatchInterest(this, \'' + safeRowId + '\')" class="flex min-h-10 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-bold text-slate-600 active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">favorite_border</span>感興趣</button>'
             : '';
+          const inboxButton = poolScope === 'public'
+            ? '<button type="button" onclick="window.openAiMatchInbox(\'' + safeRowId + '\')" class="col-span-2 flex min-h-10 items-center justify-center gap-1 rounded-lg bg-blue-600 px-3 text-[13px] font-black text-white active:scale-95 transition-transform"><span class="material-symbols-outlined text-[18px]">mail</span>寫站內信</button>'
+            : '';
           return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2">' +
             '<div class="flex justify-between items-center">' +
               '<div class="font-black text-slate-800">' + window.escapeJS(c['姓名'] || '未知') + ' <span class="text-[12px] font-medium text-slate-500 ml-1">' + window.escapeJS(c['公司名稱'] || '') + '</span></div>' +
               '<div class="bg-[#06C755] text-white px-2 py-0.5 rounded text-[11px] font-bold">契合度 ' + match.score + '%</div>' +
             '</div>' +
             '<div class="text-[13px] text-slate-600">' + window.escapeJS(match.reason) + '</div>' +
-            '<div class="mt-2 grid ' + (poolScope === 'public' ? 'grid-cols-2' : 'grid-cols-1') + ' gap-2"><button type="button" onclick="window.openCardDetailById(\'' + safeRowId + '\')" class="min-h-10 rounded-lg border border-blue-100 bg-white px-3 text-[13px] font-bold text-blue-600 active:scale-95 transition-transform">查看名片</button>' + interestButton + '</div>' +
+            '<div class="mt-2 grid ' + (poolScope === 'public' ? 'grid-cols-2' : 'grid-cols-1') + ' gap-2"><button type="button" onclick="window.openCardDetailById(\'' + safeRowId + '\')" class="min-h-10 rounded-lg border border-blue-100 bg-white px-3 text-[13px] font-bold text-blue-600 active:scale-95 transition-transform">查看名片</button>' + interestButton + inboxButton + '</div>' +
           '</div>';
         }).join('');
         if (poolScope === 'public') window.loadAiMatchInterestStates(matches.map(match => match.rowId));

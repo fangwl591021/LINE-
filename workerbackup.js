@@ -13973,6 +13973,43 @@ const D1InboxModule = {
       || this.intersects(receiverIds, context.actorReferrerIds);
   },
 
+  async publicInboxCardByRowId(env, rowId) {
+    const cardRowId = this.text(rowId);
+    if (!cardRowId) return null;
+    await D1ReadModule.ensureCardAccessColumns(env);
+    return await D1ReadModule.first(env, `
+      SELECT * FROM card_contacts
+      WHERE row_id = ?
+        AND LOWER(TRIM(COALESCE(visibility,''))) = 'public'
+        AND LOWER(TRIM(COALESCE(source_type,''))) = 'self_profile'
+        AND CAST(COALESCE(pool_eligible, 0) AS INTEGER) = 1
+        AND LOWER(TRIM(COALESCE(ai_review_status,''))) = 'passed'
+      LIMIT 1
+    `, [cardRowId]).catch(() => null);
+  },
+
+  async ownPublicInboxCard(payload, env) {
+    const context = await this.actorReachContext(payload, env);
+    const actorIds = this.uniqueTextList(context.actorIds);
+    if (!actorIds.length) return null;
+    await D1ReadModule.ensureCardAccessColumns(env);
+    const placeholders = this.placeholders(actorIds);
+    return await D1ReadModule.first(env, `
+      SELECT * FROM card_contacts
+      WHERE LOWER(TRIM(COALESCE(visibility,''))) = 'public'
+        AND LOWER(TRIM(COALESCE(source_type,''))) = 'self_profile'
+        AND CAST(COALESCE(pool_eligible, 0) AS INTEGER) = 1
+        AND LOWER(TRIM(COALESCE(ai_review_status,''))) = 'passed'
+        AND (
+          line_id IN (${placeholders})
+          OR profile_user_id IN (${placeholders})
+          OR owner_user_id IN (${placeholders})
+        )
+      ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
+      LIMIT 1
+    `, [...actorIds, ...actorIds, ...actorIds]).catch(() => null);
+  },
+
   async sendCourseGroup(payload, env) {
     const senderUserId = this.ownUserId(payload);
     const rawCourseId = this.text(payload.receiverUserId || payload.receiverQuery || payload.courseId || payload.activityId).replace(/^course:/, '');
@@ -14033,7 +14070,14 @@ const D1InboxModule = {
     const senderUserId = this.ownUserId(payload);
     let receiverUserId = this.text(payload.receiverUserId || payload.receiver_user_id || payload.toUserId);
     const exchangePostHandle = this.text(payload.exchangePostHandle || payload.exchange_post_handle);
+    const publicCardRowId = this.text(payload.publicCardRowId || payload.public_card_row_id);
+    const requestedMessageType = this.text(payload.messageType || payload.type, 'message');
     let exchangeRecipientAuthorized = false;
+    let publicCardRecipientAuthorized = false;
+    let senderPublicCard = null;
+    if (exchangePostHandle && publicCardRowId) {
+      return { success: false, error: '收件來源不明確，請重新開啟站內信' };
+    }
     if (exchangePostHandle) {
       const exchangePost = await D1ReadModule.first(env, `
         SELECT author_user_id
@@ -14045,6 +14089,19 @@ const D1InboxModule = {
       receiverUserId = this.text(exchangePost && exchangePost.author_user_id);
       if (!receiverUserId) return { success: false, error: '這則交流內容已失效，無法寄送站內信' };
       exchangeRecipientAuthorized = true;
+    }
+    if (publicCardRowId) {
+      if (requestedMessageType !== 'message') {
+        return { success: false, error: '公開配對只能傳送一般訊息' };
+      }
+      const targetPublicCard = await this.publicInboxCardByRowId(env, publicCardRowId);
+      receiverUserId = this.text(targetPublicCard && (
+        targetPublicCard.line_id || targetPublicCard.profile_user_id || targetPublicCard.owner_user_id
+      ));
+      if (!receiverUserId) return { success: false, error: '這張名片目前已不在公開配對池，無法寄送站內信' };
+      senderPublicCard = await this.ownPublicInboxCard(payload, env);
+      if (!senderPublicCard) return { success: false, error: '請先公開並通過自己的名片審核，再聯絡公開配對對象' };
+      publicCardRecipientAuthorized = true;
     }
     if (!receiverUserId && this.text(payload.receiverQuery || payload.keyword)) {
       const found = await this.searchRecipients({ ...payload, keyword: payload.receiverQuery || payload.keyword }, env);
@@ -14072,12 +14129,14 @@ const D1InboxModule = {
     ]);
     if (this.intersects(senderIdentityIds, receiverIdentityIds)) return { success: false, error: '不能寄給自己' };
     if (!this.isActiveRecipient(receiver.user)) return { success: false, error: '對方尚未完成會員註冊，無法接收站內訊息' };
-    if (!exchangeRecipientAuthorized && !await this.canReachRecipient(payload, receiver.user, env)) return { success: false, error: '收件人不在可傳送範圍內' };
+    if (!exchangeRecipientAuthorized && !publicCardRecipientAuthorized && !await this.canReachRecipient(payload, receiver.user, env)) return { success: false, error: '收件人不在可傳送範圍內' };
 
     const title = this.text(payload.title, '新訊息');
     const body = this.text(payload.body || payload.content);
-    const messageType = this.text(payload.messageType || payload.type, 'message');
-    const senderCardId = this.text(payload.senderCardId || payload.sender_card_id);
+    const messageType = requestedMessageType;
+    const senderCardId = publicCardRecipientAuthorized
+      ? this.text(senderPublicCard && senderPublicCard.row_id)
+      : this.text(payload.senderCardId || payload.sender_card_id);
     const context = await this.senderContext(env, senderUserId, senderCardId);
     const messageId = this.text(payload.messageId || payload.message_id) || `MSG_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const networkId = this.text(payload.networkId || payload.authenticatedNetworkId || receiver.user.network_id || 'admin', 'admin');
@@ -14086,6 +14145,7 @@ const D1InboxModule = {
 
     const pointPayload = { ...(payload.payload && typeof payload.payload === 'object' ? payload.payload : {}) };
     if (exchangeRecipientAuthorized) pointPayload.exchangeInquiry = { postHandle: exchangePostHandle };
+    if (publicCardRecipientAuthorized) pointPayload.publicMatchInquiry = { targetCardRowId: publicCardRowId };
     pointPayload.pointCharge = { pointType: 'gift_money', points: 0, status: 'free', messageType };
     if (messageType === 'coupon') {
       pointPayload.coupon = { status: 'issued', issuedAt: new Date().toISOString(), singleUse: true };

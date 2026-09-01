@@ -1944,7 +1944,7 @@
             '<span class="material-symbols-outlined text-[16px] text-amber-500">thumb_up</span>' +
             '<span data-social-like-count>0</span>' +
           '</button>' +
-          '<div class="bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm">分享</div>' +
+          '<button type="button" data-my-card-wysiwyg-share onclick="window.shareMyCard(this, { currentEditor: true })" class="bg-red-500 text-white text-[12px] font-black px-4 py-1.5 rounded-full shadow-sm active:scale-95 transition-transform">分享</button>' +
         '</div>' +
         '<div class="relative bg-slate-100">' +
           '<button type="button" onclick="window.editMyCardWysiwygField(\'image\')" class="my-wysiwyg-target block w-full text-left active:opacity-90 rounded-none border-0">' +
@@ -2392,8 +2392,9 @@
     }
     return cfg;
   }
-  async function shareMyCard(btn) {
-    currentCardData = await resolveCurrentUserCard(true) || currentCardData;
+  async function shareMyCard(btn, options) {
+    var useCurrentEditorCard = !!(options && options.currentEditor && currentCardData && wysiwygState.cfg);
+    if (!useCurrentEditorCard) currentCardData = await resolveCurrentUserCard(true) || currentCardData;
     if (!currentCardData) {
       if (window.showToast) window.showToast('尚未建立專屬名片', true);
       return;
@@ -2406,7 +2407,8 @@
       if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
       currentCardData.rowId = currentCardData.rowId || rowId;
       var shareUrl = buildMyCardShareUrl(rowId);
-      var shareConfig = await attachUnifiedLikeCountToConfig(buildCurrentShareConfig(), rowId);
+      var editorConfig = useCurrentEditorCard ? Object.assign({}, wysiwygState.cfg) : buildCurrentShareConfig();
+      var shareConfig = await attachUnifiedLikeCountToConfig(editorConfig, rowId);
       var flexMsg = typeof window.buildLocalECardFlexMessage === 'function'
         ? window.buildLocalECardFlexMessage(currentCardData, shareConfig, shareUrl)
         : await window.fetchAPI('buildFlexMessage', {

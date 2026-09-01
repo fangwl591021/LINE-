@@ -535,11 +535,15 @@
 
   function resetExchangeInquiryRecipient() {
     const exchangeHandle = $("inbox-exchange-post-handle");
+    const publicCardRowId = $("inbox-public-card-row-id");
     const query = $("inbox-recipient-query");
     const modeButtons = $("inbox-recipient-mode-buttons");
     const searchButton = $("inbox-recipient-search-button");
+    const messageType = $("inbox-message-type");
     if (exchangeHandle) exchangeHandle.value = "";
+    if (publicCardRowId) publicCardRowId.value = "";
     if (query) query.readOnly = false;
+    if (messageType) messageType.disabled = false;
     modeButtons?.classList.remove("hidden");
     searchButton?.classList.remove("hidden");
   }
@@ -562,6 +566,7 @@
     window.inboxMode = "received";
     window.goPage("inbox");
     setTimeout(() => {
+      resetExchangeInquiryRecipient();
       window.setInboxRecipientMode?.("user");
       const exchangeHandle = $("inbox-exchange-post-handle");
       const receiverId = $("inbox-recipient-id");
@@ -582,6 +587,47 @@
       if (messageType) messageType.value = "message";
       if (title) title.value = `對「${postTitle}」有興趣`;
       if (body) body.value = `您好，我對您刊登的「${postTitle}」有興趣，想進一步了解與交流。`;
+      window.toggleInboxComposer?.(true);
+      window.updateInboxPointCostHint?.();
+      $("inbox-composer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      body?.focus();
+    }, 240);
+  };
+
+  window.openInboxPublicCardInquiry = function (match) {
+    const publicCardRowId = String(match?.publicCardRowId || match?.rowId || match?.card?.rowId || "").trim();
+    if (!publicCardRowId) return window.showToast?.("找不到公開名片，無法寄信", true);
+    const card = match?.card || match || {};
+    const recipientName = String(match?.name || card?.name || card?.["姓名"] || "公開交流夥伴").trim();
+    const company = String(match?.company || card?.companyName || card?.["公司名稱"] || "").trim();
+    const reason = String(match?.reason || "雙方公開合作資料具有互補性").trim();
+    window.inboxMode = "received";
+    window.goPage("inbox");
+    setTimeout(() => {
+      resetExchangeInquiryRecipient();
+      window.setInboxRecipientMode?.("user");
+      const publicCardInput = $("inbox-public-card-row-id");
+      const receiverId = $("inbox-recipient-id");
+      const query = $("inbox-recipient-query");
+      const results = $("inbox-recipient-results");
+      const title = $("inbox-message-title");
+      const body = $("inbox-message-body");
+      const messageType = $("inbox-message-type");
+      if (publicCardInput) publicCardInput.value = publicCardRowId;
+      if (receiverId) receiverId.value = "";
+      if (query) {
+        query.value = recipientName;
+        query.readOnly = true;
+      }
+      $("inbox-recipient-mode-buttons")?.classList.add("hidden");
+      $("inbox-recipient-search-button")?.classList.add("hidden");
+      if (results) results.innerHTML = `<div class="rounded-2xl bg-blue-50 border border-blue-100 text-blue-700 px-3 py-2 text-[13px] font-black">寄給：${escapeHTML(recipientName)}（由公開配對名片帶入）</div>`;
+      if (messageType) {
+        messageType.value = "message";
+        messageType.disabled = true;
+      }
+      if (title) title.value = `想認識 ${recipientName}，交流合作`;
+      if (body) body.value = `您好，我在 AI 商脈的公開配對中看到您${company ? `（${company}）` : ""}的名片。推薦原因是「${reason}」。想先認識您，看看是否有合適的交流或合作機會。`;
       window.toggleInboxComposer?.(true);
       window.updateInboxPointCostHint?.();
       $("inbox-composer")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -777,12 +823,13 @@
     const receiverQuery = $("inbox-recipient-query")?.value?.trim() || "";
     const recipientMode = $("inbox-recipient-mode")?.value || "user";
     const exchangePostHandle = $("inbox-exchange-post-handle")?.value?.trim() || "";
+    const publicCardRowId = $("inbox-public-card-row-id")?.value?.trim() || "";
     const messageType = $("inbox-message-type")?.value || "message";
     const title = $("inbox-message-title")?.value?.trim() || "";
     const body = $("inbox-message-body")?.value?.trim() || "";
     const cost = inboxMessageCost(messageType);
     const selectedUserIds = isGroupRecipientMode(recipientMode) ? selectedInboxRecipientIds() : [];
-    if (!exchangePostHandle && !receiverUserId && !receiverQuery) return window.showToast?.("請先選擇收件人", true);
+    if (!exchangePostHandle && !publicCardRowId && !receiverUserId && !receiverQuery) return window.showToast?.("請先選擇收件人", true);
     if (!title) return window.showToast?.("請輸入標題", true);
     if (!body) return window.showToast?.("請輸入內容", true);
 
@@ -793,7 +840,7 @@
       btn.classList.add("opacity-70");
     }
     try {
-      const res = await window.fetchAPI("sendInboxMessage", { exchangePostHandle, receiverUserId, receiverQuery, recipientMode, selectedUserIds, messageType, title, body }, true);
+      const res = await window.fetchAPI("sendInboxMessage", { exchangePostHandle, publicCardRowId, receiverUserId, receiverQuery, recipientMode, selectedUserIds, messageType, title, body }, true);
       if (!res || res.success === false || res.error) {
         throw new Error((res && res.error) || '訊息送出失敗');
       }
