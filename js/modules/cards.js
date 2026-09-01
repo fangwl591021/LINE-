@@ -676,7 +676,7 @@
       if (colorInput) colorInput.value = cfg.descColor || "#666666";
 
       if (typeof window.setDescAlign === "function") {
-        window.setDescAlign(cfg.descAlign || "center");
+        window.setDescAlign(cfg.descAlign || "start");
       }
 
       window.currentLoadedCardId = null;
@@ -760,7 +760,7 @@
   };
 
   window.setDescAlign = function (align) {
-    window.currentDescAlign = align || "center";
+    window.currentDescAlign = align || "start";
 
     ["start", "center", "end"].forEach(a => {
       const btn = $("align-" + a);

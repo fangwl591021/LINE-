@@ -394,7 +394,8 @@ window.LIMITS = {
 window.urlRef = '';
 window.urlNet = '';
 window.cropTarget = 'general';
-window.currentDescAlign = 'center';
+// 長篇名片說明以靠左為預設；已儲存的置中或靠右設定會照原值保留。
+window.currentDescAlign = 'start';
 window.currentUploadTargetId = null;
 
 // 共用狀態(原本散落在 script 區的全域變數)

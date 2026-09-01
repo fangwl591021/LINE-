@@ -68,8 +68,14 @@ if (!/dataset\.myEcardSaving/.test(mycard)) {
 if (!mycard.includes('copyMyCardUrlVariant') || !mycard.includes('網址取用資訊')) {
   fail('WYSIWYG editor must expose copy labels for card URLs');
 }
-if (!mycard.includes('三按鈕操作') || !mycard.includes('傳送操作') || !mycard.includes('分享操作') || !mycard.includes('WEB版網址')) {
-  fail('WYSIWYG editor must include all four URL copy labels');
+if (!mycard.includes('三按鈕操作') || !mycard.includes('傳送操作') || !mycard.includes('WEB版網址')) {
+  fail('WYSIWYG editor must include the card URL copy labels');
+}
+if (!mycard.includes('分享名片') || !mycard.includes('window.shareMyCard(this, { currentEditor: true })')) {
+  fail('WYSIWYG editor share action must open the LINE share target picker instead of copying a URL');
+}
+if (!mycard.includes("cfg.descAlign || 'start'")) {
+  fail('unconfigured card descriptions must default to left alignment');
 }
 if (!mycard.includes('webCardId=') || !mycard.includes('appendSendMode(baseUrl)') || !mycard.includes('appendShareMode(baseUrl)')) {
   fail('copy URL variants must separate WEB display, current chat send, and LINE picker share');

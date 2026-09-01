@@ -1396,7 +1396,7 @@
     var name = cfg.title || (currentCardData && currentCardData['姓名']) || profile.displayName || '姓名';
     var desc = cfg.desc || fallbackMyCardDescription(currentCardData);
     var color = cfg.descColor || '#666666';
-    var align = cfg.descAlign || 'center';
+    var align = cfg.descAlign || 'start';
     var ratio = layout === 'portrait' ? (myEcardRatios.portrait || '400:600').replace(':', '/') : (layout === 'square' ? '1/1' : (myEcardRatios.landscape || '20:13').replace(':', '/'));
     var videoUrl = getVideoUrlInput() || cfg.videoUrl || '';
     var videoEnabled = isMyCardVideoEditingMode() && isVideoModeEnabled() && !!videoUrl;
@@ -1632,7 +1632,7 @@
     cfg.imgRatioLandscape = cfg.imgRatioLandscape || '20:13';
     cfg.imgRatioPortrait = cfg.imgRatioPortrait || '400:600';
     cfg.imgRatioSquare = cfg.imgRatioSquare || '1:1';
-    cfg.descAlign = cfg.descAlign || 'center';
+    cfg.descAlign = cfg.descAlign || 'start';
     cfg.descColor = cfg.descColor || '#666666';
     cfg.buttons = Array.isArray(myEcardButtons) && myEcardButtons.length
       ? normalizeMyCardButtons(myEcardButtons)
@@ -1761,7 +1761,7 @@
       '<div class="grid grid-cols-2 gap-2">' +
         '<button type="button" onclick="window.copyMyCardUrlVariant(\'buttons\')" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">三按鈕操作</button>' +
         '<button type="button" onclick="window.copyMyCardUrlVariant(\'send\')" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">傳送操作</button>' +
-        '<button type="button" onclick="window.copyMyCardUrlVariant(\'share\')" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">分享操作</button>' +
+        '<button type="button" onclick="window.shareMyCard(this, { currentEditor: true })" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">分享名片</button>' +
         '<button type="button" onclick="window.copyMyCardUrlVariant(\'web\')" class="rounded-xl bg-white/10 px-3 py-2.5 text-[12px] font-black text-white active:scale-95">WEB版網址</button>' +
       '</div>' +
     '</div>';
@@ -1957,7 +1957,7 @@
             '<span class="my-wysiwyg-edit-icon"><span class="material-symbols-outlined">edit</span></span>' +
             escapeHTML(cfg.title || '姓名') +
           '</button>' +
-          '<button type="button" onclick="window.editMyCardWysiwygField(\'desc\')" class="my-wysiwyg-target block w-full mt-3 text-[15px] leading-relaxed whitespace-pre-wrap rounded-xl px-3 py-3" style="color:' + escapeAttr(safeCssColor(cfg.descColor, '#666666')) + ';text-align:' + escapeAttr(cfg.descAlign || 'center') + ';">' +
+            '<button type="button" onclick="window.editMyCardWysiwygField(\'desc\')" class="my-wysiwyg-target block w-full mt-3 text-[15px] leading-relaxed whitespace-pre-wrap rounded-xl px-3 py-3" style="color:' + escapeAttr(safeCssColor(cfg.descColor, '#666666')) + ';text-align:' + escapeAttr(cfg.descAlign || 'start') + ';">' +
             '<span class="my-wysiwyg-edit-icon"><span class="material-symbols-outlined">notes</span></span>' +
             escapeHTML(displayDesc || '點這裡編輯名片說明').replace(/\n/g, '<br>') +
           '</button>' +
@@ -2003,7 +2003,7 @@
         '</div>';
     } else if (type === 'desc') {
       if (title) title.textContent = '修改名片說明';
-      var descAlign = cfg.descAlign || 'center';
+      var descAlign = cfg.descAlign || 'start';
       panel.innerHTML =
         '<div class="space-y-3">' +
           '<label class="block text-[13px] font-black text-slate-600">說明文字</label>' +

@@ -393,7 +393,7 @@ window.buildECardConfigFromFields = function() {
     imgRatioPortrait: window.currentEcardRatios.portrait.replace('/', ':'),
     imgRatioSquare: '1:1',
     desc: document.getElementById('edit-服務項目')?.value || '',
-    descAlign: window.currentDescAlign || 'center',
+    descAlign: window.currentDescAlign || 'start',
     descColor: document.getElementById('edit-desc-color')?.value || '#666666',
     cardType: (window.currentEcardVideoEnabled && (document.getElementById('v1-video-url')?.value || window.currentEcardVideoUrl)) ? 'video' : 'v1',
     videoUrl: (window.currentEcardVideoEnabled && canUseECardVideoFlow()) ? String(document.getElementById('v1-video-url')?.value || window.currentEcardVideoUrl || '').trim() : '',
@@ -595,7 +595,7 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
       paddingAll: '15px',
       contents: [
         { type: 'text', text: String(config.title || card['姓名'] || ' ').trim() || ' ', weight: 'bold', size: 'xl', align: 'center', wrap: true },
-        { type: 'text', text: buildECardDescription(card, config), size: 'sm', margin: 'md', color: config.descColor || '#666666', wrap: true, align: config.descAlign || 'center' }
+        { type: 'text', text: buildECardDescription(card, config), size: 'sm', margin: 'md', color: config.descColor || '#666666', wrap: true, align: config.descAlign || 'start' }
       ]
     },
     footer: buttons.length ? { type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '10px', contents: buttons } : undefined
@@ -688,7 +688,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
           margin: 'md',
           color: /^#[0-9a-f]{6}$/i.test(String(config.descColor || '')) ? config.descColor : '#666666',
           wrap: true,
-          align: ['start', 'end', 'center'].includes(config.descAlign) ? config.descAlign : 'center'
+          align: ['start', 'end', 'center'].includes(config.descAlign) ? config.descAlign : 'start'
         }
       ]
     }
@@ -899,7 +899,7 @@ window.updateECardPreview = function() {
   const desc = descRaw.replace(/\n/g, '<br>');
   const color = document.getElementById('edit-desc-color')?.value || '#666666';
   
-  let align = 'center';
+  let align = 'left';
   
   if (document.getElementById('align-start')?.classList.contains('bg-white')) align = 'left';
   if (document.getElementById('align-end')?.classList.contains('bg-white')) align = 'right';
