@@ -183,12 +183,20 @@
     return (Array.isArray(cards) ? cards : []).filter(isVisibleCard);
   }
 
+  function isClaimedCollectedCard(card, userId = getCurrentUserId()) {
+    if (!card || getCardSourceType(card) !== "self_profile") return false;
+    const scannerId = getScannerId(card);
+    const claimantId = getCardLineId(card) || getOwnerId(card);
+    return !!(userId && scannerId && claimantId && scannerId === userId && claimantId !== userId);
+  }
+
   function isHarvestCard(card) {
     if (!card) return false;
     const sourceType = getCardSourceType(card);
-    if (sourceType === "self_profile" || sourceType === "referral_placeholder") return false;
+    if (sourceType === "referral_placeholder") return false;
     const userId = getCurrentUserId();
     if (!userId) return false;
+    if (sourceType === "self_profile") return isClaimedCollectedCard(card, userId);
     const scannerId = getScannerId(card);
     if (scannerId) return scannerId === userId;
     return getCreatorId(card) === userId || getOwnerId(card) === userId;
@@ -205,6 +213,7 @@
     const creatorId = getCreatorId(card);
     const userId = getCurrentUserId();
 
+    if (isClaimedCollectedCard(card, userId)) return false;
     if (isCurrentAdmin() && !cardLineId) return true;
 
     // Once the invitee claims a card, the scanner keeps read access only.
@@ -652,6 +661,15 @@
               發送聊天室
             </button>
           </div>
+        </div>
+      ` + infoHtml;
+    }
+
+    if (!canEdit && isClaimedCollectedCard(card)) {
+      infoHtml = `
+        <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-slate-700">
+          <div class="text-[13px] font-black">對方已認領此名片</div>
+          <p class="mt-1 text-[12px] font-medium leading-relaxed text-slate-500">名片會保留在你的收藏清單供查看；認領後僅本人可以編輯，收藏者無法修改或刪除。</p>
         </div>
       ` + infoHtml;
     }

@@ -44,7 +44,9 @@
 查詢規則：
 
 - `scannerUid = currentUid` 或 `collectorUid = currentUid`
-- `sourceType = private_import`
+- `sourceType = private_import`；若原收藏名片已被對方認領，允許保留其
+  `sourceType = self_profile` 的同一筆資料，但必須同時滿足
+  `scannerUid = currentUid` 且 `recognizedPersonUid != currentUid`
 - 可指定 `cardId`
 
 輸出必須包含：
@@ -56,6 +58,12 @@
 - `sourceEventId`
 - `canEdit`
 - `canSend`
+
+認領後權限：
+
+- 收藏者仍可在「我的收錄名單」查看同一筆名片。
+- `recognizedPersonUid` 只能編輯自己的認領名片。
+- 收藏者的 `canEdit = false`，不得更新、刪除或解除綁定；此規則必須由前端與伺服器共同執行，管理者身分不可繞過。
 
 禁止：
 

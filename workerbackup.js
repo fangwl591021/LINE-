@@ -9947,11 +9947,23 @@ const D1ReadModule = {
           )
         )
       )
-      AND LOWER(COALESCE(source_type,'')) <> 'self_profile'
       AND LOWER(COALESCE(source_type,'')) <> 'referral_placeholder'
+      AND (
+        LOWER(COALESCE(source_type,'')) <> 'self_profile'
+        OR (
+          TRIM(COALESCE(scanner_user_id,'')) <> ''
+          AND scanner_user_id IN (${placeholders})
+          AND COALESCE(
+            NULLIF(TRIM(COALESCE(line_id,'')),''),
+            NULLIF(TRIM(COALESCE(profile_user_id,'')),''),
+            NULLIF(TRIM(COALESCE(owner_user_id,'')),''),
+            ''
+          ) NOT IN (${placeholders})
+        )
+      )
       ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
       LIMIT ${limit}
-    `, [...ids, ...ids, ...ids]);
+    `, [...ids, ...ids, ...ids, ...ids, ...ids]);
     return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
   },
 
@@ -10302,6 +10314,17 @@ const D1WriteModule = {
     if (next === 'admin' || next === '總管') return 'admin';
     if (next === 'store' || next === 'tenant' || next === '店長' || next === '租戶') return 'store';
     return 'user';
+  },
+
+  async isClaimedCollectionReadOnlyForActor(env, card, actorId) {
+    const sourceType = this.text(card && card.source_type).toLowerCase();
+    const scannerId = this.text(card && card.scanner_user_id);
+    const claimantId = this.text(card && (card.line_id || card.profile_user_id || card.owner_user_id));
+    if (sourceType !== 'self_profile' || !scannerId || !claimantId || scannerId === claimantId) return false;
+
+    const actorIds = await D1ReadModule.identityIdsForUser(env, actorId)
+      .catch(() => [this.text(actorId)].filter(Boolean));
+    return actorIds.includes(scannerId) && !actorIds.includes(claimantId);
   },
 
   jsonObject(value) {
@@ -10977,6 +11000,9 @@ const D1WriteModule = {
         && existingSourceType !== 'video_profile'
         && existingSourceType !== 'referral_placeholder';
 
+      if (await this.isClaimedCollectionReadOnlyForActor(env, existing, actorId)) {
+        return { success: false, error: 'Access Denied: claimed collection is read-only for the original scanner' };
+      }
       if (!isBoundToActor && !isAdminSupportEdit && !isUnboundOwner && !isUnboundStoreManager) {
         return { success: false, error: 'Access Denied: cannot update this card' };
       }
@@ -11115,6 +11141,9 @@ const D1WriteModule = {
     const actorId = this.text(payload.authenticatedUserId || payload.userId);
     const role = this.role(payload.authenticatedRole || payload.role);
     const networkId = this.text(payload.authenticatedNetworkId || payload.networkId);
+    if (await this.isClaimedCollectionReadOnlyForActor(env, card, actorId)) {
+      return { success: false, error: 'Access Denied: claimed collection is read-only for the original scanner' };
+    }
     const isOwner = actorId && (actorId === this.text(card.creator_id) || actorId === this.text(card.line_id));
     const isStoreManager = role === 'store' && networkId && networkId === this.text(card.network_id);
     if (role !== 'admin' && !isStoreManager && !isOwner) {
@@ -11132,6 +11161,9 @@ const D1WriteModule = {
     if (!card) return { success: false, error: 'Card not found' };
     const actorId = this.text(payload.authenticatedUserId || payload.userId);
     const role = this.role(payload.authenticatedRole || payload.role);
+    if (await this.isClaimedCollectionReadOnlyForActor(env, card, actorId)) {
+      return { success: false, error: 'Access Denied: claimed collection is read-only for the original scanner' };
+    }
     const isOwner = actorId && (actorId === this.text(card.creator_id) || actorId === this.text(card.line_id));
     if (role !== 'admin' && !isOwner) {
       return { success: false, error: 'Access Denied: cannot unlink this card' };
