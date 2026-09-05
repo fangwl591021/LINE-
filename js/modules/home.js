@@ -3047,6 +3047,17 @@ const HomeModule = (function() {
             if (window.__homeLoadPromises[key]) return;
 
             const promise = Promise.resolve()
+                .then(() => {
+                    // Keep the aggregate first; let delayed secondary work yield to input/paint.
+                    if (key === 'subsite-home-fast') return;
+                    return new Promise(resolve => {
+                        if (typeof window.requestIdleCallback === 'function') {
+                            window.requestIdleCallback(() => resolve(), { timeout: 1000 });
+                        } else {
+                            setTimeout(resolve, 0);
+                        }
+                    });
+                })
                 .then(task)
                 .catch(e => {
                     console.warn('[home-load]', key, e && e.message ? e.message : e);

@@ -272,16 +272,42 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  let spreadsheetParserPromise = null;
+  function loadSpreadsheetParser() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (spreadsheetParserPromise) return spreadsheetParserPromise;
+    spreadsheetParserPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.referrerPolicy = 'no-referrer';
+      const timeout = setTimeout(() => finish(new Error('Excel 解析元件載入逾時，請重新選擇檔案重試')), 15000);
+      function finish(error) {
+        clearTimeout(timeout);
+        script.onload = script.onerror = null;
+        if (error) { script.remove(); reject(error); }
+        else resolve(window.XLSX);
+      }
+      script.onload = () => finish(window.XLSX ? null : new Error('Excel 解析元件未就緒，請重試'));
+      script.onerror = () => finish(new Error('Excel 解析元件載入失敗，請確認網路後重試'));
+      document.head.appendChild(script);
+    }).catch(error => {
+      spreadsheetParserPromise = null;
+      throw error;
+    });
+    return spreadsheetParserPromise;
+  }
+
   window.handleCustomerFile = async function (input) {
     const file = input?.files?.[0];
     if (!file) return;
     const extension = String(file.name.split('.').pop() || '').toLowerCase();
     if (!['xlsx','xls','csv'].includes(extension)) return window.showToast('只支援 .xlsx、.xls、.csv', true);
     if (file.size > LIMITS.fileBytes) return window.showToast('檔案不可超過 5 MB', true);
-    if (typeof window.XLSX === 'undefined') return window.showToast('Excel 解析元件載入失敗，請確認網路後重試', true);
     setBusy(true, '正在讀取檔案...');
     try {
-      const bytes = await file.arrayBuffer();
+      const [bytes] = await Promise.all([file.arrayBuffer(), loadSpreadsheetParser()]);
       state.workbook = window.XLSX.read(bytes, { type: 'array', cellFormula: false, cellHTML: false, cellNF: false, dense: true });
       state.sourceName = file.name;
       state.sourceType = extension;
