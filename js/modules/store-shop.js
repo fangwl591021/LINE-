@@ -10,6 +10,29 @@
     if(p.redeem_type==='percent') return `預設最高折抵 ${p.redeem_value}%`;
     return p.redeem_type==='full'?'預設可全額折抵':'不提供點數折抵';
   }
+  async function prepareImage(file) {
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error('請選擇 JPG、PNG 或 WebP 圖片；HEIC 請先轉成 JPG');
+    if(!file.size || file.size>10*1024*1024) throw new Error('圖片須小於 10MB，且不可為空檔案');
+    const url=URL.createObjectURL(file), image=new Image();
+    try {
+      await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>{image.onload=image.onerror=null;reject(new Error('圖片讀取逾時，請重新選擇'));},15000);
+        image.onload=()=>{clearTimeout(timer);resolve();};
+        image.onerror=()=>{clearTimeout(timer);reject(new Error('無法讀取圖片，請選擇有效的 JPG、PNG 或 WebP'));};
+        image.src=url;
+      });
+      const width=image.naturalWidth,height=image.naturalHeight;
+      if(!width||!height||width*height>40000000) throw new Error('圖片尺寸過大，請縮小後再上傳');
+      const scale=Math.min(1,1600/Math.max(width,height));
+      const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(width*scale)); canvas.height=Math.max(1,Math.round(height*scale));
+      const context=canvas.getContext('2d'); if(!context) throw new Error('裝置無法處理圖片，請改用圖片網址');
+      context.fillStyle='#fff'; context.fillRect(0,0,canvas.width,canvas.height);
+      context.drawImage(image,0,0,canvas.width,canvas.height);
+      const data=canvas.toDataURL('image/jpeg',0.9);
+      if(!data.startsWith('data:image/jpeg;base64,')||data.length>Math.ceil(4*1024*1024*4/3)+32) throw new Error('圖片處理後仍過大，請縮小後再上傳');
+      return data;
+    } finally { URL.revokeObjectURL(url); }
+  }
   function mount(root, standalone) {
     let shop=null, items=[], epoch=0, busy=false;
     root.classList.add('store-shop');
@@ -53,9 +76,12 @@
     function select(key,label,options,value) {
       return `<label>${label}<select name="${key}">${options.map(([v,t])=>`<option value="${v}" ${v===value?'selected':''}>${t}</option>`).join('')}</select></label>`;
     }
+    function imageInput(label,value) {
+      return `<div class="shop-image-field"><p>${label}</p><button type="button" data-do="upload-image" class="primary">上傳圖片</button><input type="file" class="shop-image-file" accept="image/jpeg,image/png,image/webp" hidden><p class="shop-meta">支援 JPG／PNG／WebP，最大 10MB。圖片會等比縮小，不裁切；上傳素材可公開存取，儲存後才更新店面或商品。</p><p class="shop-image-status" role="status"></p><div class="shop-upload-preview">${value?photo(value):''}</div><details><summary>進階：使用圖片網址</summary>${input('image_url','圖片 HTTPS 網址',value,2048,false,'url')}</details></div>`;
+    }
     function renderManage() {
       const s=shop||{};
-      content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${input('category','分類',s.category,40)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${input('image_url','封面圖片 HTTPS 網址',s.image_url,2048,false,'url')}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary">新增商品</button></div><h2>商品管理（${items.length}/100）</h2><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
+      content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${input('category','分類',s.category,40)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary">新增商品</button></div><h2>商品管理（${items.length}/100）</h2><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
     }
     async function manage() {
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
@@ -64,7 +90,7 @@
     }
     function edit(p={}) {
       const editor=content.querySelector('.shop-editor'); if(!editor) return;
-      editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${input('image_url','商品圖片 HTTPS 網址',p.image_url,2048,false,'url')}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${select('redeem_type','點數折抵政策（尚未啟用）',[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',p.redeem_value||0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'draft')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
+      editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${select('redeem_type','點數折抵政策（尚未啟用）',[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',p.redeem_value||0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'draft')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
       editor.scrollIntoView({block:'start',behavior:'smooth'});
       editor.querySelector('form').dataset.requestKey=crypto.randomUUID();
     }
@@ -83,7 +109,39 @@
           case 'new': edit(); break;
           case 'edit': edit(items.find(p=>p.id===button.dataset.id)); break;
           case 'cancel': content.querySelector('.shop-editor').innerHTML=''; break;
+          case 'upload-image': button.closest('.shop-image-field').querySelector('input[type=file]').click(); break;
           case 'copy': await navigator.clipboard.writeText(shopLink(button.dataset.id)); alert.textContent='已複製商城網址'; break;
+        }
+      });
+    };
+    root.onchange=event=>{
+      const picker=event.target;
+      if(!picker.matches('.shop-image-file')||busy) return;
+      const file=picker.files?.[0]; if(!file) return;
+      const field=picker.closest('.shop-image-field'),form=picker.closest('form');
+      const status=field.querySelector('.shop-image-status');
+      const controls=[...root.querySelectorAll('button,input,select,textarea')];
+      const disabled=controls.map(control=>control.disabled);
+      busy=true; controls.forEach(control=>control.disabled=true); alert.textContent=''; status.textContent='處理圖片中…';
+      void run(async()=>{
+        try {
+          const data=await prepareImage(file);
+          await api('/manage',null,true);
+          if(typeof window.fetchAPI!=='function') throw new Error('上傳服務尚未就緒，請重新開啟商城');
+          status.textContent='上傳圖片中…';
+          const result=await window.fetchAPI('uploadImageToR2',{base64Image:data},true);
+          if(!result?.success||!result.url) throw new Error(result?.error||'圖片上傳失敗，原圖保持不變，請重試');
+          const uploaded=new URL(result.url);
+          if(uploaded.protocol!=='https:'||uploaded.username||uploaded.password) throw new Error('上傳服務回傳的圖片網址無效');
+          if(!root.contains(form)) return;
+          form.elements.image_url.value=uploaded.href;
+          field.querySelector('.shop-upload-preview').innerHTML=photo(uploaded.href);
+          status.textContent='圖片已上傳，請按儲存以更新店面或商品。';
+        } catch(error) {
+          status.textContent='未更新圖片：'+error.message;
+          throw error;
+        } finally {
+          busy=false; picker.value=''; controls.forEach((control,i)=>control.disabled=disabled[i]);
         }
       });
     };
