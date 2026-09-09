@@ -1,0 +1,38 @@
+async () => {
+  const assert = (ok, message) => { if (!ok) throw Error(message); };
+  const owner = 'U' + 'a'.repeat(32), uid = 'U' + 'b'.repeat(32);
+  const data = { queriedLineUserId: uid, walletDisplayOwner: owner };
+  const button = document.getElementById('points-wallet-qr-button');
+  assert(!performance.getEntriesByType('resource').some(r => r.name.includes('qrcode-generator')), 'generator must be lazy');
+  window.currentUserProfile = { userId: owner };
+  await window.renderPointsWalletQr(data, owner);
+  assert(!button.disabled && button.querySelector('svg'), 'QR rendered');
+  const svg = button.querySelector('svg').outerHTML;
+  const picture = new Image();
+  picture.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  await picture.decode();
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 320;
+  const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,320,320); ctx.drawImage(picture,0,0,320,320);
+  const decoded = window.jsQR(ctx.getImageData(0,0,320,320).data,320,320);
+  assert(decoded?.data === uid, 'QR decodes canonical points UID, not login UID');
+  assert(window.extractPointCustomerId(decoded.data) === uid, 'existing cashier parser accepts generated QR');
+  button.click(); assert(document.getElementById('points-wallet-qr-dialog').open, 'tap opens modal');
+  document.querySelector('#points-wallet-qr-dialog button').click();
+  assert(!document.getElementById('points-wallet-qr-dialog').open, 'close works');
+  const stale = window.renderPointsWalletQr(data, owner);
+  await window.renderPointsWalletQr(null); await stale;
+  assert(button.disabled && !button.querySelector('svg'), 'loading clears pending old QR');
+  await window.renderPointsWalletQr({ ...data, walletDisplayOwner: uid }, owner);
+  assert(button.disabled, 'reject another account cache');
+  await window.renderPointsWalletQr({ ...data, queriedLineUserId: 'invalid' }, owner);
+  assert(button.disabled, 'reject invalid identity');
+  await window.renderPointsWalletQr(data, owner);
+  window.currentUserProfile.userId = uid; button.click();
+  assert(button.disabled && !button.querySelector('svg'), 'account switch invalidates click');
+  window.currentUserProfile.userId = owner; await window.renderPointsWalletQr(data,owner);
+  document.getElementById('points-wallet-balance').textContent = '-123,456,789';
+  assert(document.documentElement.scrollWidth <= innerWidth, 'mobile no horizontal overflow');
+  const amount = document.querySelector('.points-wallet-amount').getBoundingClientRect();
+  assert(amount.right <= button.getBoundingClientRect().left, 'amount never overlaps QR');
+  return { result: 'PASS', width: innerWidth, decoded: true, accountIsolation: true, amountHeight: amount.height };
+}

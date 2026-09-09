@@ -43,6 +43,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
 
   <link rel="stylesheet" href="css/styles.css?v=7.6">
+  <link rel="stylesheet" href="css/points-wallet-qr.css?v=1">
   <script src="js/config.js?v=9.14"></script>
 
   <style type="text/tailwindcss">
@@ -983,16 +984,20 @@
       </div>
 
       <div class="px-5 pt-7 space-y-7">
-        <section class="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-red-600 to-red-800 text-white shadow-xl shadow-red-900/20 min-h-[170px] flex flex-col items-center justify-center">
-          <div class="absolute -right-4 bottom-0 text-red-900/25">
-            <span class="material-symbols-outlined text-[104px]" style="font-variation-settings:'FILL' 1;">redeem</span>
+        <section class="points-wallet-summary" aria-label="點數餘額與會員 QR 碼">
+          <div class="points-wallet-amount">
+            <p>目前紅包餘額</p>
+            <span id="points-wallet-balance">讀取中</span>
+            <small>點</small>
           </div>
-          <p class="text-[15px] font-black opacity-95 relative z-10">目前紅包餘額</p>
-          <div class="relative z-10 mt-6 flex items-end justify-center gap-3">
-            <span id="points-wallet-balance" class="text-[64px] leading-none font-black tracking-tight">讀取中</span>
-            <span class="text-[22px] font-black mb-2">點</span>
-          </div>
+          <button id="points-wallet-qr-button" class="points-wallet-qr-button" type="button" aria-label="放大會員點數 QR 碼" disabled>點數載入後顯示 QR 碼</button>
         </section>
+        <dialog id="points-wallet-qr-dialog">
+          <h3 class="font-bold text-lg">我的點數 QR 碼</h3>
+          <div id="points-wallet-qr-large"></div>
+          <p>供本系統會員收銀機辨識。<br>出示 QR 碼不會自動扣點。</p>
+          <form method="dialog"><button type="submit">關閉</button></form>
+        </dialog>
 
         <section class="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
           <div class="flex items-center justify-between gap-4">
@@ -2852,7 +2857,8 @@
 <script src="js/modules/admin-partners.js?v=1.1"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.7"></script>
-<script src="js/auth.js?v=10.91"></script>
+  <script src="js/modules/points-wallet-qr.js?v=1"></script>
+  <script src="js/auth.js?v=10.92"></script>
 
     <script src="js/modules/card-page-banner-shortcuts.js?v=1.3"></script>
 </body>

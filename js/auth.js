@@ -1509,6 +1509,7 @@ window.fetchPointWalletData_ = async function(force = false) {
   if (!Number.isFinite(balance)) return null;
   window.pointWalletData = {
     ...data,
+    walletDisplayOwner: userId,
     status: 'ready',
     source: data.source || 'mother',
     balance,
@@ -1527,6 +1528,8 @@ window.openPointsWallet = function() {
 };
 
 window.loadPointsWallet = async function(force = false) {
+  const qrOwner = window.currentUserProfile?.userId;
+  window.renderPointsWalletQr?.(null);
   const balanceEl = document.getElementById('points-wallet-balance');
   const listEl = document.getElementById('points-wallet-list');
   if (!balanceEl || !listEl) return;
@@ -1539,6 +1542,7 @@ window.loadPointsWallet = async function(force = false) {
   listEl.innerHTML = '<div class="py-10 text-center text-slate-400 text-sm font-bold">載入點數紀錄中...</div>';
 
   const data = await window.fetchPointWalletData_(force);
+  if (qrOwner === window.currentUserProfile?.userId) window.renderPointsWalletQr?.(data, qrOwner);
   if (!data) {
     window.setPointWalletStatus('error', { error: 'Point wallet unavailable' });
     window.renderPointBalanceState('error');

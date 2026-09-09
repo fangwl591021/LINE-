@@ -1,0 +1,14 @@
+.points-wallet-summary{display:grid;grid-template-columns:minmax(0,1fr) 140px;gap:12px;align-items:stretch}
+.points-wallet-amount{min-width:0;padding:22px 16px;border-radius:24px;background:linear-gradient(135deg,#dc2626,#991b1b);color:white;display:flex;flex-direction:column;justify-content:center;box-shadow:0 8px 18px #991b1b20}
+.points-wallet-amount p{font-size:14px;font-weight:800;margin:0}
+.points-wallet-amount #points-wallet-balance{font-size:clamp(26px,7vw,42px);line-height:1.2;font-weight:900;overflow-wrap:anywhere;margin-top:10px}
+.points-wallet-amount small{font-size:14px;margin-top:4px}
+.points-wallet-qr-button{background:white;border:1px solid #e2e8f0;border-radius:20px;padding:8px;display:flex;align-items:center;justify-content:center;flex-direction:column;min-height:154px;color:#0f172a;font-size:12px;gap:2px}
+.points-wallet-qr-button:disabled{color:#64748b;cursor:default}
+.points-wallet-qr-button svg{display:block;width:120px;height:120px;max-width:100%}
+#points-wallet-qr-dialog{border:0;border-radius:24px;padding:22px;width:min(360px,calc(100vw - 32px));color:#0f172a;text-align:center}
+#points-wallet-qr-dialog::backdrop{background:#0f172ab3}
+#points-wallet-qr-large svg{width:100%;height:auto;display:block}
+#points-wallet-qr-dialog button{background:#06c755;color:white;border-radius:12px;padding:12px 24px;margin-top:12px;font-weight:700}
+#points-wallet-qr-dialog p{font-size:13px;color:#64748b}
+@media(max-width:360px){.points-wallet-summary{grid-template-columns:minmax(0,1fr) 128px;gap:8px}.points-wallet-amount{padding:16px 12px}.points-wallet-qr-button{padding:4px}}
