@@ -1383,9 +1383,9 @@
             <span class="home-quick-icon material-symbols-outlined text-slate-900">task</span>
             <span class="home-quick-label !text-[13px]">&#20219;&#21209;&#31649;&#29702;</span>
           </button>
-          <button type="button" onclick="window.openPointsWallet()" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-yellow-500 icon-filled">monetization_on</span>
-            <span class="home-quick-label !text-[13px]">&#40670;&#25976;&#26597;&#35426;</span>
+          <button type="button" onclick="window.openStoreShop()" class="home-quick-circle group" aria-label="開啟店家商城">
+            <span class="home-quick-icon material-symbols-outlined text-yellow-500 icon-filled">storefront</span>
+            <span class="home-quick-label !text-[13px]">店家商城</span>
           </button>
           <button type="button" onclick="window.openBusinessRichman?.()" class="home-quick-circle group" aria-label="&#38283;&#21855;&#20154;&#33032;&#22823;&#23500;&#32705;">
             <span class="home-quick-icon material-symbols-outlined text-emerald-600">casino</span>
@@ -1528,6 +1528,7 @@
 
     <!-- ==================== 名片列表頁 ==================== -->
     <!-- Business Richman -->
+    <div id="page-store-shop" class="hidden animate-in fade-in -mx-4"></div>
     <div id="page-business-richman" class="hidden animate-in fade-in -mx-4"></div>
 
     <div id="page-card" class="hidden space-y-0 animate-in fade-in">
@@ -2831,6 +2832,7 @@
 <script type="module" src="js/modules/a-kaffit-card-scanner-adapter.js?v=3.7"></script>
 <script src="js/modules/cards.js?v=8.02"></script>
 <script src="js/modules/business-richman.js?v=1.2"></script>
+<script src="js/modules/store-shop-entry.js?v=1"></script>
 <script src="js/modules/ecard.js?v=7.56"></script>
 <script src="js/modules/mycard.js?v=8.90"></script>
 <script src="js/modules/matchmake.js?v=7.13"></script>

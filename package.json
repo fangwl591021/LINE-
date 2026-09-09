@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "test:store-shop": "node --test test/store-shop.test.mjs",
     "guard:before": "node tools/run-change-guard.js before",
     "guard:after": "node tools/run-change-guard.js after",
     "workorder:new": "node tools/create-change-work-order.js",

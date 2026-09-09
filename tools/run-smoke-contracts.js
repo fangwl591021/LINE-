@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'tools/check-store-shop-contract.js',
   'tools/check-stability-foundation-contract.js',
   'tools/check-route-contract.js',
   'tools/check-identity-diagnostic-contract.js',

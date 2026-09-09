@@ -6,6 +6,7 @@ import { ExchangeZoneCouponModule } from './worker/exchange-zone-coupon.mjs';
 import { createCardImageJob, saveCardImageResult } from './worker/a-kaffit-card-image-processing.mjs';
 import { recognizeAkaffitBusinessCard } from './worker/a-kaffit-card-recognize.mjs';
 import { MatchInterestModule } from './worker/match-interest.mjs';
+import { handleStoreShop } from './worker/store-shop.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -382,6 +383,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const shopResponse = await handleStoreShop(request, env);
+    if (shopResponse) return shopResponse;
     const pathname = new URL(request.url).pathname;
     if (pathname === '/v1/card-images' || /^\/v1\/card-images\/[^/]+\/result$/.test(pathname)) {
       const cardImageResponse = await handleAkaffitCardImageRoute(request, env);
