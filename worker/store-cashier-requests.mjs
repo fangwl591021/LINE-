@@ -1,4 +1,5 @@
 // At-most-once shared cashier boundary. Unknown external writes are never retried.
+import {readMemberProductQr,claimMemberProductQr,qrTokenHash,qrTokenValid} from './store-member-product-qr.mjs';
 const validId = v => typeof v==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 const fail = error => ({success:false,error});
 const actor = p => String(p.authenticatedUserId||'').trim();
@@ -23,15 +24,34 @@ export async function getRedemptionProduct(p,env) {
  const maxPoints=row.redeem_type==='fixed'?Math.min(amount,row.redeem_value):row.redeem_type==='percent'?Math.floor(amount*row.redeem_value/100):row.redeem_type==='full'?amount:0;
  return {success:true,data:{productId:p.productId,title:row.title,shopName:row.shop_name,amount,maxPoints,productVersion:row.version,shopVersion:row.shop_version}};
 }
+export async function resolveMemberProductQr(p,env,resolveCustomer) {
+ try {
+  if(!actor(p))return fail('請先登入店家帳號');
+  const row=await readMemberProductQr(p.qrToken,env);
+  const product=await getRedemptionProduct({...p,productId:row.product_id},env);
+  if(!product.success)return product;
+  const current=await resolveCustomer(row.issuer_id);
+  if(current?.customerPointUserId!==row.customer_id||current?.needsBinding||current?.error)return fail('會員點數身分已改變，請重新產生 QR');
+  return {success:true,data:{...product.data,customerUserId:row.customer_id,expiresAt:row.expires_at}};
+ }catch(e){return fail(e.message);}
+}
 async function run(p,env,resolveCustomer,execute) {
  const a=actor(p),id=p.requestId,db=env.ACTMASTER_DB;
+ if(p.qrToken&&!qrTokenValid(p.qrToken))return fail('商品會員 QR 格式不正確');
  if(!a||!validId(id)) return fail('請更新頁面後再操作（缺少有效交易編號）');
  const mode=p.mode,amount=Number(p.amount),deductPoints=Number(p.deductPoints||0),raw=String(p.customerUserId||'').trim();
  if(!['reward','redeem'].includes(mode)||!Number.isSafeInteger(amount)||amount<=0||amount>1000000||!Number.isSafeInteger(deductPoints)||deductPoints<0||
  (mode==='redeem'&&(deductPoints<=0||deductPoints>amount))||!raw||raw.length>100) return fail('顧客、金額或折抵點數不正確');
- const fingerprint=JSON.stringify({raw,amount,deductPoints,mode,autoBind:p.autoBindPointAccount===true,productId:p.productId||'',productVersion:p.productVersion??null,shopVersion:p.shopVersion??null});
+ const fingerprint=JSON.stringify({raw,amount,deductPoints,mode,autoBind:p.autoBindPointAccount===true,productId:p.productId||'',productVersion:p.productVersion??null,shopVersion:p.shopVersion??null,...(p.qrToken?{qrHash:await qrTokenHash(p.qrToken)}:{})});
  const previous=await find(db,a,id);
  if(previous) return previous.fingerprint===fingerprint?resultOf(previous):fail('同一交易編號不可變更內容');
+ let credential=null;
+ if(p.qrToken) {
+  try {credential=await readMemberProductQr(p.qrToken,env);}catch{return fail('商品會員 QR 已失效或無法驗證，請重新產生');}
+  if(credential.product_id!==p.productId||credential.customer_id!==raw||mode!=='redeem')return fail('QR 與商品或會員不符');
+  const current=await resolveCustomer(credential.issuer_id);
+  if(current?.customerPointUserId!==credential.customer_id||current?.needsBinding||current?.error)return fail('會員點數身分已改變，請重新產生 QR');
+ }
  let product=null;
  if(p.productId) {
   const check=await getRedemptionProduct(p,env); if(!check.success) return check; product=check.data;
@@ -40,6 +60,7 @@ async function run(p,env,resolveCustomer,execute) {
  }
  const resolved=await resolveCustomer(raw),customer=resolved?.customerPointUserId;
  if(resolved?.error||!/^U[0-9a-fA-F]{20,64}$/.test(customer||'')) return fail(resolved?.error||'無法辨識顧客點數帳戶');
+ if(credential&&customer!==credential.customer_id)return fail('會員點數身分已改變，請重新產生 QR');
  try {await db.prepare("INSERT INTO store_cashier_requests(actor_id,request_id,customer_id,fingerprint,status) VALUES(?,?,?,?,'pending')").bind(a,id,customer,fingerprint).run();}
  catch(error) {
   const same=await find(db,a,id);
@@ -53,6 +74,11 @@ async function run(p,env,resolveCustomer,execute) {
   const beforeWrite=async(actualCustomer=customer)=>{
    if(actualCustomer!==customer) throw Error('點數身分已改變，請重新確認顧客');
    if(product) {const check=await getRedemptionProduct(p,env);if(!check.success||JSON.stringify(check.data)!==JSON.stringify(product)) throw Error('商品已更新，尚未扣點，請重新確認');}
+   if(credential) {
+    const current=await resolveCustomer(credential.issuer_id);
+    if(current?.customerPointUserId!==customer||current?.needsBinding||current?.error)throw Error('會員點數身分已改變');
+    await claimMemberProductQr(credential,id,env);
+   }
    const change=await db.prepare("UPDATE store_cashier_requests SET status='sending',updated_at=CURRENT_TIMESTAMP WHERE actor_id=? AND request_id=? AND status='pending'").bind(a,id).run();
    if(change.meta.changes!==1) throw Error('交易狀態已改變');
    attempted=true;

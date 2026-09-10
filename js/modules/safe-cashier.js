@@ -2,7 +2,7 @@
 (() => {
  let running=false;
  window.callSafeCashier=async(action,payload)=>{
-  if(!['storeAdjustCustomerPoints','getStoreCashierRequest','getStoreShopRedemptionProduct','getStorePointCustomer'].includes(action))throw Error('不支援的收銀操作');
+  if(!['storeAdjustCustomerPoints','getStoreCashierRequest','getStoreShopRedemptionProduct','getStorePointCustomer','issueStoreMemberProductQr','resolveStoreMemberProductQr'].includes(action))throw Error('不支援的收銀操作');
   const token=window.liff?.isLoggedIn?.()?window.liff.getAccessToken():'';
   if(!token)throw Error('請先透過 LINE 登入');
   const base=window.Config?.WORKER_URL||(typeof Config!=='undefined'?Config.WORKER_URL:'');

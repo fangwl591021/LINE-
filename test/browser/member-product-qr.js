@@ -1,0 +1,31 @@
+async()=>{
+ const assert=(v,m)=>{if(!v)throw Error(m);};
+ const until=async(fn)=>{for(let i=0;i<150;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('wait: '+document.body.innerText);};
+ await until(()=>document.querySelector('[data-do=view]'));
+ document.querySelector('[data-do=view]').click();await until(()=>document.querySelector('[data-do=member-qr]'));
+ assert(!document.querySelector('.member-product-code'),'no credential before explicit click');
+ document.querySelector('[data-do=member-qr]').click();await until(()=>document.querySelector('.member-product-code svg'));
+ const image=new Image();image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(document.querySelector('.member-product-code svg').outerHTML);await image.decode();
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=600;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,600,600);
+ const decoded=window.jsQR(ctx.getImageData(0,0,600,600).data,600,600)?.data;
+ assert(decoded,'real QR decodes');const token=new URL(decoded).searchParams.get('shopQr');
+ assert(token?.length===64&&!decoded.includes(window.currentUserProfile.userId),'opaque credential');
+ assert(document.documentElement.scrollWidth<=innerWidth,'member no overflow');
+ window.currentUserProfile={userId:'U'+'a'.repeat(32)};window.liff.getAccessToken=()=> 'merchant';
+ window.StoreShop.mount(document.getElementById('app'),false,'',token);
+ await until(()=>document.querySelector('.customer-info')?.textContent.includes('測試顧客'));
+ assert(getComputedStyle(document.querySelector('.customer').closest('label')).display==='none','no manual UID field');
+ assert(document.querySelector('h2').textContent==='負離子眼鏡','correct product');
+ assert((await(await fetch('/test-state')).json()).writes===0,'scan does not debit');
+ const form=document.querySelector('.shop-checkout form');form.elements.points.value='800';
+ window.confirm=()=>false;form.requestSubmit();assert((await(await fetch('/test-state')).json()).writes===0,'cancel does not debit');
+ await fetch('/test-drop');window.confirm=()=>true;form.requestSubmit();
+ await until(()=>document.querySelector('.checkout-result').textContent.includes('模擬回應遺失'));
+ assert((await(await fetch('/test-state')).json()).writes===1,'one simulated debit');
+ document.querySelector('.shop-checkout .check').click();
+ await until(()=>document.querySelector('.checkout-result').textContent.includes('交易已完成'));
+ assert((await(await fetch('/test-state')).json()).writes===1,'lookup never re-debits');
+ assert(document.documentElement.scrollWidth<=innerWidth,'merchant no overflow');
+ const again=await window.callSafeCashier('resolveStoreMemberProductQr',{qrToken:token});assert(!again.success,'used token rejected');
+ return {width:innerWidth,qrDecoded:true,customerAutoFilled:true,noManualUid:true,scanNoDebit:true,singleUse:true,timeoutRecovered:true};
+}

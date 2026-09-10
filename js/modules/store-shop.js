@@ -37,7 +37,7 @@
       return data;
     } finally { URL.revokeObjectURL(url); }
   }
-  function mount(root, standalone, productId='') {
+  function mount(root, standalone, productId='', qrToken='', memberProduct='') {
     let shop=null, items=[], epoch=0, busy=false;
     let listCategory='', listQuery='';
     root.classList.add('store-shop');
@@ -59,23 +59,8 @@
       return result;
     }
     function shopLink(id) { const url=new URL('store-shop.html',location.href); url.searchParams.set('shop',id); return url.href; }
-    function productLink(id) {
-      const url=new URL('https://liff.line.me/'+(window.DEFAULT_LIFF_ID||'1660923784-vViMTZ1y'));
-      url.searchParams.set('shopProduct',id);return url.href;
-    }
-    async function renderProductQrs() {
-      const links=[...content.querySelectorAll('[data-product-qr]')];if(!links.length)return;
-      try {
-        const {default:qrcode}=await import('../vendor/qrcode-generator-2.0.4.mjs');
-        for(const link of links) {
-          if(!root.contains(link))continue;
-          const qr=qrcode(0,'M');qr.addData(link.href);qr.make();
-          link.innerHTML=qr.createSvgTag({cellSize:3,margin:12,scalable:true})+'<span>商品扣抵入口</span>';
-        }
-      }catch {for(const link of links)link.textContent='開啟商品扣抵入口';}
-    }
     function product(p,edit=false) {
-      return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}<a class="shop-product-qr" data-product-qr href="${esc(productLink(p.id))}" aria-label="${esc(p.title)}：商品扣抵入口">載入商品 QR…</a></div></article>`;
+      return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div></div></article>`;
     }
     async function list(after='',q='',category='') {
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">載入店家中…</p>';
@@ -103,7 +88,6 @@
       const s=result.shop;
       const details=[s.category,s.address,s.phone,s.hours].filter(Boolean).join('\n');
       content.innerHTML=`<article>${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
-      void renderProductQrs();
       addProductTags(); if(category) filterProducts(category);
     }
     function input(key,label,value='',max=200,multiline=false,type='text') {
@@ -123,7 +107,6 @@
     function renderManage() {
       const s=shop||{};
       content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary">新增商品</button></div><h2>商品管理（${items.length}/100）</h2><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
-      void renderProductQrs();
       addProductTags();
     }
     async function manage() {
@@ -154,6 +137,17 @@
             break;
           case 'view': await view(button.dataset.id,button.closest('.shop-grid')&&!content.querySelector('.shop-editor')?listCategory:''); break;
           case 'manage': await manage(); break;
+          case 'member-qr': {
+            const id=button.dataset.id;
+            if(standalone||!window.liff?.isLoggedIn?.()) {
+              const url=new URL('https://liff.line.me/'+(window.DEFAULT_LIFF_ID||'1660923784-vViMTZ1y'));
+              url.searchParams.set('memberProduct',id);location.assign(url.href);break;
+            }
+            const target=button.parentElement;
+            const module=await import('./member-product-qr.js?v=1');
+            if(root.contains(target))await module.showMemberProductQr(target,id,()=>root.isConnected);
+            break;
+          }
           case 'new': edit(); break;
           case 'edit': edit(items.find(p=>p.id===button.dataset.id)); break;
           case 'cancel': content.querySelector('.shop-editor').innerHTML=''; break;
@@ -215,10 +209,14 @@
     };
     const id=standalone?new URL(location.href).searchParams.get('shop'):'';
     void run(async()=>{
-      if(productId&&!standalone) {
+      if(memberProduct&&!standalone) {
         const version=++epoch;
-        const module=await import('./shop-product-checkout.js?v=1');
-        if(version===epoch)await module.mountProductCheckout(content,productId,()=>version===epoch);
+        const module=await import('./member-product-qr.js?v=1');
+        if(version===epoch)await module.showMemberProductQr(content,memberProduct,()=>version===epoch);
+      }else if((productId||qrToken)&&!standalone) {
+        const version=++epoch;
+        const module=await import('./shop-product-checkout.js?v=2');
+        if(version===epoch)await module.mountProductCheckout(content,productId,()=>version===epoch,qrToken);
       }else await (id?view(id):list());
     });
   }

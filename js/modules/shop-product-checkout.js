@@ -1,7 +1,7 @@
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export async function mountProductCheckout(root,productId,isActive=()=>true) {
+export async function mountProductCheckout(root,productId,isActive=()=>true,qrToken='') {
  root.innerHTML='<p role="status">確認商品與店家權限…</p>';
- const response=await window.callSafeCashier('getStoreShopRedemptionProduct',{productId});
+ const response=qrToken?await window.callSafeCashier('resolveStoreMemberProductQr',{qrToken}):await window.callSafeCashier('getStoreShopRedemptionProduct',{productId});
  if(!isActive())return;
  if(!response?.success){root.textContent=response?.error||'無法取得商品';return;}
  const p=response.data;
@@ -32,9 +32,15 @@ export async function mountProductCheckout(root,productId,isActive=()=>true) {
   if(!window.confirm(`確認 ${customer.name||'此顧客'} 購買「${p.title}」\n扣除 ${points} 點，應收 NT$ ${(p.amount-points).toLocaleString('zh-TW')}？`))return;
   busy=true;const buttons=[...root.querySelectorAll('button,input')],disabled=buttons.map(b=>b.disabled);buttons.forEach(b=>b.disabled=true);result.textContent='處理中，請勿關閉或重複送出…';
   try{
-   const r=await window.submitSafeCashier({customerUserId:customer.customerPointUserId,amount:p.amount,deductPoints:points,mode:'redeem',productId:p.productId,productVersion:p.productVersion,shopVersion:p.shopVersion});
+   const r=await window.submitSafeCashier({customerUserId:customer.customerPointUserId,amount:p.amount,deductPoints:points,mode:'redeem',productId:p.productId,productVersion:p.productVersion,shopVersion:p.shopVersion,...(qrToken?{qrToken}:{})});
    result.textContent=`已完成折抵 ${r.data.changedPoints} 點，應收 NT$ ${r.data.payableAmount}。\n交易編號：${r.transactionId}`;
    customer=null;info.textContent='本筆已完成；下一筆請重新掃描顧客。';input.value='';event.target.reset();
   }catch(e){show(e);}finally{busy=false;buttons.forEach((b,i)=>b.disabled=disabled[i]);}
  };
+ if(qrToken) {
+  input.closest('label').hidden=true;
+  root.querySelector('.scan').hidden=true;root.querySelector('.lookup').hidden=true;
+  input.value=p.customerUserId;
+  try{await lookup();}catch(e){show(e);}
+ }
 }

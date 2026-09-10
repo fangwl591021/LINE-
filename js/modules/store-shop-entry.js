@@ -6,11 +6,11 @@
     pending = new Promise((resolve, reject) => {
       if (!document.getElementById('store-shop-css')) {
         const css = document.createElement('link');
-        css.id = 'store-shop-css'; css.rel = 'stylesheet'; css.href = 'css/store-shop.css?v=4';
+        css.id = 'store-shop-css'; css.rel = 'stylesheet'; css.href = 'css/store-shop.css?v=5';
         document.head.appendChild(css);
       }
       const script = document.createElement('script');
-      script.src = 'js/modules/store-shop.js?v=5';
+      script.src = 'js/modules/store-shop.js?v=6';
       const timer = setTimeout(() => finish(new Error('商城載入逾時，請重試')), 15000);
       function finish(error) {
         clearTimeout(timer); script.onload = script.onerror = null;
@@ -22,19 +22,19 @@
     });
     return pending;
   }
-  window.openStoreShop = async function(productId = '') {
+  window.openStoreShop = async function(productId = '', qrToken = '', memberProduct = '') {
     if (typeof productId !== 'string') productId = '';
     window.goPage('store-shop');
     const root = document.getElementById('page-store-shop');
     root.innerHTML = '<p role="status">商城載入中…</p><button type="button" onclick="window.goPage(\'home\')">返回首頁</button>';
     try {
       await load();
-      if (window.currentPage === 'store-shop') window.StoreShop.mount(root, false, productId);
+      if (window.currentPage === 'store-shop') window.StoreShop.mount(root, false, productId, qrToken, memberProduct);
     } catch(error) {
       if (window.currentPage !== 'store-shop') return;
       root.querySelector('p').textContent = error.message;
       const retry = document.createElement('button');
-      retry.textContent = '重新載入'; retry.onclick = () => window.openStoreShop(productId); root.appendChild(retry);
+      retry.textContent = '重新載入'; retry.onclick = () => window.openStoreShop(productId, qrToken, memberProduct); root.appendChild(retry);
     }
   };
 })();

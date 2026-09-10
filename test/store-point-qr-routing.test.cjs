@@ -9,7 +9,7 @@ const uid='U'+'a'.repeat(32);
 function setup(fetcher=async()=>({customerPointUserId:uid,name:'test'})) {
  const input={value:'',dispatchEvent(){}}; const calls=[],opened=[],rendered=[],toasts=[];
  const window={location:{origin:'https://fangwl591021.github.io'},canUseStorePointCashier:()=>true,
-   renderStorePointCustomer:c=>rendered.push(c),closeStorePointScanner(){},openStoreShop:async id=>opened.push(id),
+   renderStorePointCustomer:c=>rendered.push(c),closeStorePointScanner(){},openStoreShop:async(id,token)=>opened.push(token?{id,token}:id),
    showToast:m=>toasts.push(m),fetchAPI:async(...args)=>{calls.push(args);return fetcher(...args);}};
  const context=vm.createContext({window,document:{getElementById:()=>input},URL,Event});
  for(const [start,end] of [['window.classifyStorePointInput =','window.loadQrDecoder ='],['window.fillStorePointCustomerFromQr =','window.closeStorePointScanner ='],['window.lookupStorePointCustomer =','window.resetStorePointCashier =']]) {
@@ -50,4 +50,10 @@ test('both camera and image paths use shared routing and never label a product a
  assert(source.includes('window.fillStorePointCustomerFromQr(code.data)'));
  assert(source.includes('window.fillStorePointCustomerFromQr(raw)'));
  assert(!source.includes("'已讀取客戶帳號：' + customerId.slice"));
+});
+test('member product credential routes without treating query UID as identity',async()=>{
+ const f=setup(),token='b'.repeat(64);
+ f.input.value='https://liff.line.me/1660923784-vViMTZ1y?shopQr='+token+'&uid='+uid;
+ await f.window.lookupStorePointCustomer();assert.deepEqual(f.opened,[{id:'',token}]);assert.equal(f.calls.length,0);
+ assert.equal(f.window.extractPointCustomerId(f.input.value),'');
 });

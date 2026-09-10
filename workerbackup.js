@@ -1,5 +1,6 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
-import { runCashierRequest, getCashierRequest, getRedemptionProduct } from './worker/store-cashier-requests.mjs';
+import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
+import { issueMemberProductQr } from './worker/store-member-product-qr.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
 import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
 import { ExchangeZoneModule } from './worker/exchange-zone.mjs';
@@ -183,6 +184,8 @@ const ACTION_POLICIES = {
   storeAdjustCustomerPoints: { access: 'manager', tenantScoped: true },
   getStoreCashierRequest: { access: 'manager', tenantScoped: true },
   getStoreShopRedemptionProduct: { access: 'manager', tenantScoped: true },
+  issueStoreMemberProductQr: { access: 'authenticated' },
+  resolveStoreMemberProductQr: { access: 'manager', tenantScoped: true },
   getStorePointCustomer: { access: 'manager', tenantScoped: true },
   prepareStorePointCashierSession: { access: 'manager', tenantScoped: true },
   listStorePointCashierLogs: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
@@ -17205,6 +17208,8 @@ async function dispatchAction(action, payload, request, env) {
       (safe, beforeWrite, product) => PointModule.storeAdjustCustomerPoints(safe, env, beforeWrite, product));
     case 'getStoreCashierRequest': return await getCashierRequest(payload || {}, env);
     case 'getStoreShopRedemptionProduct': return await getRedemptionProduct(payload || {}, env);
+    case 'issueStoreMemberProductQr': return await issueMemberProductQr(payload || {}, env, raw => PointModule.resolveStorePointCustomer(env, raw));
+    case 'resolveStoreMemberProductQr': return await resolveMemberProductQr(payload || {}, env, raw => PointModule.resolveStorePointCustomer(env, raw));
     case 'listStorePointCashierLogs': return await PointModule.listStorePointCashierLogs(payload || {}, env);
     case 'repairPointWalletSearchIndex': return await PointModule.repairPointWalletSearchIndex(payload || {}, env);
     case 'diagnosePointSync':    return await PointSyncModule.diagnose(payload || {}, env);

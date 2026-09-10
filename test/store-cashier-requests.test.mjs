@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import {runCashierRequest,getCashierRequest,getRedemptionProduct} from '../worker/store-cashier-requests.mjs';
+import {runCashierRequest,getCashierRequest,getRedemptionProduct,resolveMemberProductQr} from '../worker/store-cashier-requests.mjs';
+import {issueMemberProductQr,readMemberProductQr} from '../worker/store-member-product-qr.mjs';
 const A='U'+'a'.repeat(32),B='U'+'b'.repeat(32),C='U'+'c'.repeat(32),P=crypto.randomUUID(),S=crypto.randomUUID();
 function fixture(){
  const sql=new DatabaseSync(':memory:');
  sql.exec('CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);');
- for(const f of ['0029_store_shop_catalog.sql','0030_store_cashier_requests.sql'])sql.exec(readFileSync(new URL('../migrations/'+f,import.meta.url),'utf8'));
+ for(const f of ['0029_store_shop_catalog.sql','0030_store_cashier_requests.sql','0031_store_product_category.sql','0032_store_member_product_qr.sql'])sql.exec(readFileSync(new URL('../migrations/'+f,import.meta.url),'utf8'));
  sql.prepare('INSERT INTO users VALUES(?,?)').run(A,'store');
  sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','now')").run(S,A,'Shop');
  sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,redeem_type,redeem_value,status,updated_at,request_key) VALUES(?,?,?,880000,'fixed',800,'active','now',?)").run(P,S,'Glasses',crypto.randomUUID());
@@ -17,6 +18,45 @@ function fixture(){
 }
 const payload=(extra={})=>({authenticatedUserId:A,requestId:crypto.randomUUID(),customerUserId:C,mode:'redeem',amount:8800,deductPoints:800,...extra});
 const resolve=async()=>({customerPointUserId:C});
+test('member QR is opaque, uses authenticated issuer only, rotates and is store scoped',async()=>{
+ const {env,sql}=fixture();let identity;
+ const issue=()=>issueMemberProductQr({authenticatedUserId:C,productId:P,customerUserId:B,userId:B},env,async raw=>{identity=raw;return resolve();});
+ const first=await issue();assert.equal(first.success,true);assert.equal(identity,C);
+ assert.match(first.data.qrToken,/^[0-9a-f]{64}$/);assert(!JSON.stringify(first.data).includes(C));
+ assert(!JSON.stringify(sql.prepare('SELECT * FROM store_member_product_qr').get()).includes(first.data.qrToken));
+ assert.equal((await resolveMemberProductQr({authenticatedUserId:B,qrToken:first.data.qrToken},env,resolve)).success,false);
+ const found=await resolveMemberProductQr({authenticatedUserId:A,qrToken:first.data.qrToken},env,resolve);
+ assert.equal(found.data.customerUserId,C);assert.equal(found.data.productId,P);
+ const second=await issue();assert.notEqual(first.data.qrToken,second.data.qrToken);
+ await assert.rejects(readMemberProductQr(first.data.qrToken,env));
+ assert.equal((await issueMemberProductQr({productId:P},env,resolve)).success,false);
+ sql.prepare('UPDATE store_member_product_qr SET expires_at=0').run();
+ assert.equal((await resolveMemberProductQr({authenticatedUserId:A,qrToken:second.data.qrToken},env,resolve)).success,false);
+});
+test('member QR binds customer and product and can debit only once, same request replays receipt',async()=>{
+ const {env}=fixture();const qr=(await issueMemberProductQr({authenticatedUserId:C,productId:P},env,resolve)).data;
+ const product=(await getRedemptionProduct({authenticatedUserId:A,productId:P},env)).data;
+ const p=payload({...product,qrToken:qr.qrToken});let writes=0;
+ const exec=async(...args)=>{const r=await success(...args);writes++;return r;};
+ assert.equal((await runCashierRequest({...p,customerUserId:B},env,resolve,exec)).success,false);
+ assert.equal((await runCashierRequest({...p,productId:crypto.randomUUID()},env,resolve,exec)).success,false);
+ const r=await runCashierRequest(p,env,resolve,exec);assert.equal(r.success,true);assert.equal(writes,1);
+ assert.deepEqual(await runCashierRequest(p,env,resolve,exec),r);
+ assert.equal((await runCashierRequest({...p,requestId:crypto.randomUUID()},env,resolve,exec)).success,false);assert.equal(writes,1);
+});
+test('QR expiry at write boundary, changed identity and unknown writes fail closed',async()=>{
+ for(const mode of ['expiry','identity','unknown']) {
+  const {env,sql}=fixture();const qr=(await issueMemberProductQr({authenticatedUserId:C,productId:P},env,resolve)).data;
+  const product=(await getRedemptionProduct({authenticatedUserId:A,productId:P},env)).data;
+  const p=payload({...product,qrToken:qr.qrToken});let writes=0;
+  const result=await runCashierRequest(p,env,mode==='identity'?async()=>({customerPointUserId:B}):resolve,async(safe,before)=>{
+   if(mode==='expiry')sql.prepare('UPDATE store_member_product_qr SET expires_at=0').run();
+   await before();writes++;throw Error('timeout');
+  });
+  assert.equal(result.success,false);assert.equal(writes,mode==='unknown'?1:0);
+  if(mode==='unknown'){assert.equal(result.transactionStatus,'unknown');await assert.rejects(readMemberProductQr(qr.qrToken,env));}
+ }
+});
 const success=async(p,before)=>{await before(p.customerUserId);return {success:true,data:{ledgerId:'SPC_'+p.transactionId,changedPoints:p.deductPoints,payableAmount:p.amount-p.deductPoints}};};
 test('same request is executed once, changed payload rejected, status only owner',async()=>{
  const {env}=fixture(),p=payload();let calls=0;

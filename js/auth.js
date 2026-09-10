@@ -1855,6 +1855,11 @@ window.classifyStorePointInput = function(value) {
   try {
     const url=new URL(raw);
     if(url.protocol!=='https:'||url.username||url.password) return {kind:'invalid'};
+    if(url.searchParams.has('shopQr')) {
+      const token=url.searchParams.get('shopQr');
+      const trusted=url.hostname==='liff.line.me'&&url.pathname==='/'+(window.DEFAULT_LIFF_ID||'1660923784-vViMTZ1y');
+      return trusted&&/^[0-9a-f]{64}$/.test(token)?{kind:'memberProduct',value:token}:{kind:'invalid'};
+    }
     const productId=url.searchParams.get('shopProduct');
     if(productId!==null) {
       const trusted=(url.hostname==='liff.line.me'&&url.pathname==='/'+(window.DEFAULT_LIFF_ID||'1660923784-vViMTZ1y'))
@@ -2200,10 +2205,10 @@ window.lookupStorePointCustomer = async function() {
   const classified=window.classifyStorePointInput(raw);
   window.storePointCustomer=null;
   window.renderStorePointCustomer(null);
-  if(classified.kind==='product') {
+  if(classified.kind==='product'||classified.kind==='memberProduct') {
     if(input) input.value='';
     window.closeStorePointScanner?.();
-    try { await window.openStoreShop(classified.value); }
+    try { if(classified.kind==='memberProduct') await window.openStoreShop('',classified.value); else await window.openStoreShop(classified.value); }
     catch(e) { window.showToast?.('商品入口開啟失敗，請重新掃碼：'+(e.message||e),true); }
     return null;
   }
@@ -2873,6 +2878,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔓 已註冊用戶邏輯
     window.applyRegisteredUserSession(checkRes.info);
+    if (!shareCardId && !claimCardId && !likeCardId && (urlParams.get('shopQr')||urlParams.get('memberProduct'))) {
+      const qrToken=urlParams.get('shopQr')||'',memberProduct=urlParams.get('memberProduct')||'';
+      const clean=new URL(location.href);clean.searchParams.delete('shopQr');clean.searchParams.delete('memberProduct');
+      history.replaceState(null,'',clean.href);
+      await window.openStoreShop('',qrToken,memberProduct);return;
+    }
     if (urlParams.get('shopProduct') && !shareCardId && !claimCardId && !likeCardId) {
       await window.openStoreShop(urlParams.get('shopProduct'));
       return;

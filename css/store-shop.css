@@ -19,3 +19,7 @@
 .store-shop .shop-category-tags button[aria-pressed="true"]{background:#067a51;border-color:#067a51;color:#fff}
 .store-shop .shop-category-badge{display:inline-block;background:#e4f3ec;color:#086443;border-radius:999px;padding:3px 12px;font-size:13px;margin-top:4px}
 .store-shop [data-product-category][hidden],.store-shop .shop-category-empty[hidden]{display:none}
+.store-shop .member-product-code svg{display:block;width:100%;max-width:260px;height:auto;margin:auto;background:#fff}
+.store-shop .member-qr-status{font-size:12px;line-height:1.5}
+.store-shop .shop-product-qr{overflow-wrap:anywhere}
+.store-shop .shop-checkout [hidden]{display:none!important}
