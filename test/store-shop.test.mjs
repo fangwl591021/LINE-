@@ -12,6 +12,7 @@ function fixture() {
   sql.prepare('INSERT INTO users VALUES (?,?)').run(B,'tenant');
   sql.prepare('INSERT INTO users VALUES (?,?)').run(USER,'user');
   sql.exec(readFileSync(new URL('../migrations/0029_store_shop_catalog.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0031_store_product_category.sql',import.meta.url),'utf8'));
   const db={prepare(query){return {bind(...args){return {async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){const result=sql.prepare(query).run(...args);return {meta:{changes:Number(result.changes)}};}};}};}};
   const fetcher=async(url,options)=>{
     assert.equal(url,'https://api.line.me/v2/profile');
@@ -27,6 +28,57 @@ function fixture() {
 }
 const store=(extra={})=>({name:'測試店面',description:'第一行\n第二行',status:'active',version:0,...extra});
 const product=(extra={})=>({title:'商品',price_cents:19900,redeem_type:'fixed',redeem_value:30,status:'active',request_key:crypto.randomUUID(),...extra});
+
+test('product categories persist, validate and preserve older clients without category',async()=>{
+  const {call,sql}=fixture(); await call('/store',store(),'a');
+  for(const category of ['食','宿','遊','購','行','服務','製造']) {
+    const data=product({category,title:category});
+    assert.equal((await call('/product',data,'a')).status,200);
+    assert.equal((await call('/product',data,'a')).status,200);
+  }
+  for(const category of ['其他','<script>',12,{},['食']]) assert.equal((await call('/product',product({category}),'a')).status,400);
+  const p=(await call('/manage',null,'a')).products.find(p=>p.category==='食');
+  const old={...p,title:'舊版修改'}; delete old.category;
+  assert.equal((await call('/product',old,'a')).status,200);
+  const updated=(await call('/manage',null,'a')).products.find(x=>x.id===p.id);
+  assert.equal(updated.category,'食'); assert.equal(updated.version,p.version+1);
+  await call('/store',store(),'b');
+  assert.equal((await call('/product',{...updated,category:'購'},'b')).status,409);
+  assert.equal((await call('/product',{...p,category:'購'},'a')).status,409);
+  await call('/product',product({title:'舊商品'}),'a');
+  assert.equal((await call('/manage',null,'a')).products.find(p=>p.title==='舊商品').category,'');
+  sql.close();
+});
+
+test('category filter uses active products, combines search and paginates without duplicates',async()=>{
+  const {call,sql}=fixture();
+  for(let i=0;i<43;i++) {
+    const id=String(i).padStart(3,'0');
+    sql.prepare('INSERT INTO users VALUES (?,?)').run('uid'+id,'store');
+    sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES (?,?,?,'active','now')").run(id,'uid'+id,'shop'+id);
+    for(let j=0;j<2;j++)sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key,category) VALUES (?,?,?,100,?,'now',?,'食')").run(id+'p'+j,id,'商品',i===42?'draft':'active',crypto.randomUUID());
+  }
+  const first=await call('?category='+encodeURIComponent('食')); assert.equal(first.shops.length,40);
+  const next=await call('?category='+encodeURIComponent('食')+'&after='+first.next); assert.equal(next.shops.length,2);
+  assert.equal(new Set([...first.shops,...next.shops].map(s=>s.id)).size,42);
+  assert.equal((await call('?category='+encodeURIComponent('食')+'&q=shop005')).shops.length,1);
+  assert.equal((await call('?category='+encodeURIComponent('宿'))).shops.length,0);
+  assert.equal((await call('?category=invalid')).status,400);
+  sql.prepare("UPDATE store_shop_products SET status='archived' WHERE shop_id='005'").run();
+  assert.equal((await call('?category='+encodeURIComponent('食')+'&q=shop005')).shops.length,0);
+  sql.close();
+});
+
+test('category migration preserves existing product data and restricts new values',()=>{
+  const sql=new DatabaseSync(':memory:');
+  sql.exec(readFileSync(new URL('../migrations/0029_store_shop_catalog.sql',import.meta.url),'utf8'));
+  sql.exec("INSERT INTO store_shop_stores(id,owner_uid,name,updated_at) VALUES ('s','u','店家','now'); INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key) VALUES ('p','s','舊商品',880000,'now','key');");
+  const before={...sql.prepare('SELECT * FROM store_shop_products').get()};
+  sql.exec(readFileSync(new URL('../migrations/0031_store_product_category.sql',import.meta.url),'utf8'));
+  const {category,...after}=sql.prepare('SELECT * FROM store_shop_products').get();
+  assert.equal(category,''); assert.deepEqual(after,before);
+  assert.throws(()=>sql.exec("UPDATE store_shop_products SET category='invalid'"));sql.close();
+});
 
 test('store management requires verified token and database role, never payload claims',async()=>{
   const {call,sql}=fixture();

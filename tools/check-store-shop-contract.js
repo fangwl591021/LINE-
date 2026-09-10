@@ -18,6 +18,14 @@ assert(front.includes('esc(p.description)'));
 assert(front.includes('data-do="exit"'));
 assert(front.includes('data.request_key=form.dataset.requestKey'));
 assert(front.includes('data-do="upload-image"'));
+for(const category of ['食','宿','遊','購','行','服務','製造']) {
+  assert(front.includes(`'${category}'`)); assert(worker.includes(`'${category}'`));
+}
+assert(front.includes("select('category','商品分類'"));
+assert(front.includes("categoryTags('shops',category)"));
+assert(front.includes("categoryTags('products')"));
+assert(worker.includes("data.category===undefined"));
+assert(read('migrations/0031_store_product_category.sql').includes("DEFAULT ''"));
 assert(front.includes("window.fetchAPI('uploadImageToR2'"));
 assert(front.includes('controls.forEach((control,i)=>control.disabled=disabled[i])'));
 assert(read('css/store-shop.css').includes('article>img{display:block;width:100%;height:auto;object-fit:contain'));

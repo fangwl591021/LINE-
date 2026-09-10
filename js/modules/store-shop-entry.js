@@ -6,11 +6,11 @@
     pending = new Promise((resolve, reject) => {
       if (!document.getElementById('store-shop-css')) {
         const css = document.createElement('link');
-        css.id = 'store-shop-css'; css.rel = 'stylesheet'; css.href = 'css/store-shop.css?v=3';
+        css.id = 'store-shop-css'; css.rel = 'stylesheet'; css.href = 'css/store-shop.css?v=4';
         document.head.appendChild(css);
       }
       const script = document.createElement('script');
-      script.src = 'js/modules/store-shop.js?v=3';
+      script.src = 'js/modules/store-shop.js?v=4';
       const timer = setTimeout(() => finish(new Error('商城載入逾時，請重試')), 15000);
       function finish(error) {
         clearTimeout(timer); script.onload = script.onerror = null;

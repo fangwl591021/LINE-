@@ -1,0 +1,40 @@
+// Run only in isolated local store-shop harness with a seeded shop and product.
+async()=>{
+ const assert=(v,m)=>{if(!v)throw Error(m);};
+ const until=async(fn)=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('wait failed: '+document.body.innerText);};
+ const tag=(scope,c)=>document.querySelector(`[data-scope="${scope}"][data-category="${c}"]`);
+ document.querySelector('[data-do=manage]').click();
+ await until(()=>document.querySelector('[data-do=edit]'));
+ document.querySelector('[data-do=edit]').click();
+ let form=document.querySelector('[data-form=product]');
+ assert([...form.elements.category.options].map(o=>o.value).join('|')==='|食|宿|遊|購|行|服務|製造','dropdown options');
+ form.elements.category.value='食'; form.elements.title.value='食分類測試';
+ tag('products','宿').click();
+ assert(document.querySelector('[data-form=product]')===form&&form.elements.title.value==='食分類測試','filter preserves draft');
+ assert(!document.querySelector('.shop-category-empty').hidden,'empty category message');
+ form.requestSubmit();
+ await until(()=>!document.querySelector('[data-form=product]'));
+ assert(document.querySelector('[data-product-category="食"] .shop-category-badge').textContent==='食','saved category badge');
+ document.querySelector('[data-do=manage]').click();
+ await until(()=>document.querySelector('[data-do=edit]'));
+ document.querySelector('[data-do=edit]').click();
+ assert(document.querySelector('[data-form=product]').elements.category.value==='食','reload persists category');
+ document.querySelector('[data-do=cancel]').click();
+ document.querySelector('[data-do=list]').click();
+ await until(()=>tag('shops','食'));
+ tag('shops','食').click();
+ await until(()=>tag('shops','食')?.getAttribute('aria-pressed')==='true');
+ assert(document.querySelector('[data-do=view]'),'matching shop');
+ const search=document.querySelector('[data-form=search]');search.elements.q.value='not-found-xyz';search.requestSubmit();
+ await until(()=>tag('shops','食')&&document.querySelector('[data-form=search]')!==search);
+ assert(tag('shops','食').getAttribute('aria-pressed')==='true'&&!document.querySelector('[data-do=view]'),'search keeps category');
+ document.querySelector('[name=q]').value='';tag('shops','食').click();
+ await until(()=>document.querySelector('[data-do=view]'));
+ document.querySelector('[data-do=view]').click();
+ await until(()=>tag('products','食'));
+ assert(tag('products','食').getAttribute('aria-pressed')==='true','store inherits filter');
+ tag('products','宿').click();assert([...document.querySelectorAll('[data-product-category]')].every(p=>p.hidden),'nonmatching products hidden');
+ tag('products','').click();assert([...document.querySelectorAll('[data-product-category]')].every(p=>!p.hidden),'all restores items');
+ assert(document.documentElement.scrollWidth<=innerWidth,'no mobile overflow');
+ return {categories:true,savedAndReloaded:true,draftPreserved:true,searchAndFiltering:true,width:innerWidth};
+}

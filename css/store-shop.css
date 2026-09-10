@@ -14,3 +14,8 @@
 .store-shop .shop-product-qr{margin-left:auto;flex:0 0 124px;color:#163c30;text-decoration:none;font-size:12px;text-align:center;max-width:100%}
 .store-shop .shop-product-qr svg{display:block;width:124px;height:124px;max-width:100%;background:white}
 .store-shop .shop-product-qr span{display:block}.store-shop .shop-checkout input[hidden]{display:none}
+.store-shop .shop-category-tags{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.store-shop .shop-category-tags button{border-radius:999px;min-width:44px;padding:8px 14px}
+.store-shop .shop-category-tags button[aria-pressed="true"]{background:#067a51;border-color:#067a51;color:#fff}
+.store-shop .shop-category-badge{display:inline-block;background:#e4f3ec;color:#086443;border-radius:999px;padding:3px 12px;font-size:13px;margin-top:4px}
+.store-shop [data-product-category][hidden],.store-shop .shop-category-empty[hidden]{display:none}
