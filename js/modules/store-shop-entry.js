@@ -6,7 +6,7 @@
     pending = new Promise((resolve, reject) => {
       if (!document.getElementById('store-shop-css')) {
         const css = document.createElement('link');
-        css.id = 'store-shop-css'; css.rel = 'stylesheet'; css.href = 'css/store-shop.css?v=11';
+        css.id = 'store-shop-css'; css.rel = 'stylesheet'; css.href = 'css/store-shop.css?v=12';
         document.head.appendChild(css);
       }
       const script = document.createElement('script');

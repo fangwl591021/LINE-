@@ -147,3 +147,12 @@ body:has(.store-wallet-popup[open]){overflow:hidden}
 .shop-lifestyle .shop-discovery-promos{margin:18px 0}
 .shop-lifestyle .shop-discovery-promos button{gap:7px;padding:14px 12px;border-radius:18px}
 @media(min-width:700px){.shop-lifestyle .shop-life-hero{padding:26px}.shop-lifestyle .shop-hero-copy{min-height:180px}.shop-lifestyle .shop-lifestyle-scene{object-position:center 35%}.shop-lifestyle .shop-hero-copy h2{font-size:38px}.shop-lifestyle .shop-category-tags button{flex:1}.shop-lifestyle .shop-browse-products{grid-template-columns:repeat(3,minmax(0,1fr))}.shop-lifestyle .shop-store-intro>img{height:210px}}
+
+/* Remove the nested app frame only while the storefront is visible. */
+#app:has(#page-store-shop:not(.hidden)),#app:has(#page-store-shop:not(.hidden)) #top-nav{max-width:none}
+#main:has(#page-store-shop:not(.hidden)){padding-left:0;padding-right:0;padding-bottom:0}
+.store-shop.shop-lifestyle{width:100%;max-width:none;margin:0;border:0;border-radius:0;box-shadow:none;padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right))}
+.shop-lifestyle .shop-life-hero{margin-left:0;margin-right:0}
+.shop-lifestyle .shop-discovery-grid,.shop-lifestyle .shop-browse-products{gap:8px}
+.shop-lifestyle .shop-bottom-nav,#public-store-shop .shop-bottom-nav{max-width:none;border-radius:16px 16px 0 0;padding-left:max(7px,env(safe-area-inset-left));padding-right:max(7px,env(safe-area-inset-right))}
+@media(min-width:700px){.shop-lifestyle .shop-discovery-grid,.shop-lifestyle .shop-browse-products{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
