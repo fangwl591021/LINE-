@@ -3,7 +3,8 @@ async()=>{
  if(location.origin!=='http://127.0.0.1:8794')throw Error('Local test only');
  const check=(v,m)=>{if(!v)throw Error(m);};
  const until=async(fn)=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('Popup test timed out');};
- const {openStoreWalletPopup:open}=await import('/js/modules/store-wallet-popup.js?v=1');
+ const {openStoreWalletPopup:open}=await import('/js/modules/store-wallet-popup.js?v=2');
+ window.pointWalletData=null;
  const owner='U'+'b'.repeat(32),uid='U'+'a'.repeat(32);
  window.currentUserProfile={userId:owner};window.currentPage='store-shop';
  const options={isCurrent:()=>window.currentPage==='store-shop'};

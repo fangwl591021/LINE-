@@ -5,11 +5,12 @@ for(const value of ['shop-life-hero','shop-bottom-nav','shop-discovery-grid','sh
 assert(front.includes('data?.walletDisplayOwner===uid'));
 assert(front.includes("window.pointWalletStatus==='ready'"));
 assert(!front.includes('window.openPointsWallet()'));
-assert(front.includes("import('./store-wallet-popup.js?v=1')"));
+assert(front.includes("import('./store-wallet-popup.js?v=2')"));
 const popup=fs.readFileSync('js/modules/store-wallet-popup.js','utf8');
 assert(popup.includes('window.fetchPointWalletData_(true)'));
-assert(popup.includes('data?.walletDisplayOwner!==owner'));
-assert(popup.includes('data?.queriedLineUserId'));
+assert(popup.includes('data?.walletDisplayOwner===owner'));
+assert(popup.includes('data.queriedLineUserId'));
+assert(popup.includes('age>=0&&age<CACHE_MAX_AGE&&verifiedWallet(cached,owner)'));
 assert(popup.includes('modal.showModal()'));
 assert(!popup.includes('goPage('));assert(!popup.includes('getAccessToken'));
 assert(front.includes("window.pointWalletData"));

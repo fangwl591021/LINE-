@@ -183,7 +183,7 @@
           case 'detail':detail(button.dataset.id);break;
           case 'wallet': {
             const version=epoch;
-            const module=await import('./store-wallet-popup.js?v=1');
+            const module=await import('./store-wallet-popup.js?v=2');
             const isCurrent=()=>version===epoch&&root.isConnected&&(standalone||window.currentPage==='store-shop');
             if(isCurrent())module.openStoreWalletPopup({standalone,isCurrent});
             break;
