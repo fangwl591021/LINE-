@@ -41,6 +41,7 @@ const foundationChecks = [
 const fullChecks = [
   'tools/check-safe-cashier-contract.js',
   'test/safe-cashier-client.test.cjs',
+  'test/store-point-qr-routing.test.cjs',
   'tools/check-store-shop-contract.js',
   'tools/check-stability-foundation-contract.js',
   'tools/check-route-contract.js',

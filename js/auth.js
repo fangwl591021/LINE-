@@ -1848,9 +1848,34 @@ window.resolvePointUserIdForCurrentProfile = function(userId, params) {
   return cached || localUserId;
 };
 
+window.classifyStorePointInput = function(value) {
+  const raw=String(value||'').trim();
+  if(!raw) return {kind:'empty'};
+  if(!/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(raw)) return {kind:'customer',value:raw};
+  try {
+    const url=new URL(raw);
+    if(url.protocol!=='https:'||url.username||url.password) return {kind:'invalid'};
+    const productId=url.searchParams.get('shopProduct');
+    if(productId!==null) {
+      const trusted=(url.hostname==='liff.line.me'&&url.pathname==='/'+(window.DEFAULT_LIFF_ID||'1660923784-vViMTZ1y'))
+        ||(url.hostname==='fangwl591021.github.io'&&['/LINE-/','/LINE-/index.html'].includes(url.pathname));
+      return trusted&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId)
+        ? {kind:'product',value:productId} : {kind:'invalid'};
+    }
+    for(const key of ['pt_uid','wallet_uid','pointUserId','LINE_user_id','lineUserId','userId','uid','ref']) {
+      const id=String(url.searchParams.get(key)||'').trim();
+      if(/^[a-z0-9_+@.-]{1,100}$/i.test(id)) return {kind:'customer',value:id};
+    }
+  } catch {}
+  return {kind:'invalid'};
+};
+
 window.extractPointCustomerId = function(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
+  const classified=window.classifyStorePointInput(raw);
+  if(classified.kind!=='customer') return '';
+  if(classified.value!==raw) return classified.value;
 
   try {
     const url = new URL(raw, window.location.origin);
@@ -1909,7 +1934,7 @@ window.decodeStorePointQrFile = async function(file) {
 };
 
 window.fillStorePointCustomerFromQr = function(raw) {
-  const customerId = window.extractPointCustomerId(raw);
+  const customerId = String(raw||'').trim();
   const target = document.getElementById('store-point-customer');
   if (target) {
     target.value = customerId;
@@ -1954,7 +1979,7 @@ window.openStorePointScanner = async function() {
     window.__storePointScannerActive = true;
     video.srcObject = stream;
     await video.play();
-    if (status) status.textContent = '請將客戶 QR 放入框內。';
+    if (status) status.textContent = '請將商品或客戶點數 QR 放入框內。';
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const scanFrame = () => {
@@ -1969,9 +1994,8 @@ window.openStorePointScanner = async function() {
         const imageData = ctx.getImageData(0, 0, size, size);
         const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
         if (code?.data) {
-          const customerId = window.fillStorePointCustomerFromQr(code.data);
+          window.fillStorePointCustomerFromQr(code.data);
           window.closeStorePointScanner();
-          window.showToast?.('已讀取客戶帳號：' + customerId.slice(0, 10) + '...', false);
           return;
         }
       }
@@ -2171,6 +2195,22 @@ window.prepareStorePointCashierSession = async function(customer) {
 window.lookupStorePointCustomer = async function() {
   if (!window.canUseStorePointCashier()) return null;
   const input = document.getElementById('store-point-customer');
+  const ticket=window.__storePointLookupRevision=(window.__storePointLookupRevision||0)+1;
+  const raw=String(input?.value||'').trim();
+  const classified=window.classifyStorePointInput(raw);
+  window.storePointCustomer=null;
+  window.renderStorePointCustomer(null);
+  if(classified.kind==='product') {
+    if(input) input.value='';
+    window.closeStorePointScanner?.();
+    try { await window.openStoreShop(classified.value); }
+    catch(e) { window.showToast?.('商品入口開啟失敗，請重新掃碼：'+(e.message||e),true); }
+    return null;
+  }
+  if(classified.kind==='invalid') {
+    window.showToast?.('這不是可辨識的商品或客戶點數 QR，請確認後重新掃描。',true);
+    return null;
+  }
   const customerUserId = window.extractPointCustomerId(input?.value || '');
   if (!customerUserId) {
     window.renderStorePointCustomer(null);
@@ -2179,6 +2219,7 @@ window.lookupStorePointCustomer = async function() {
   if (input && input.value !== customerUserId) input.value = customerUserId;
   try {
     const res = await window.fetchAPI('getStorePointCustomer', { customerUserId }, true);
+    if(ticket!==window.__storePointLookupRevision||window.extractPointCustomerId(input?.value||'')!==customerUserId) return null;
     if (!res || res.error) throw new Error(res?.error || '查無客戶資料');
     const data = res.data || res;
     if (data.needsSelection && Array.isArray(data.candidates)) {
@@ -2194,6 +2235,7 @@ window.lookupStorePointCustomer = async function() {
     if (data.needsBinding) window.showToast?.(data.message || '找到名片，但尚未綁定點數會員', true);
     return data;
   } catch (e) {
+    if(ticket!==window.__storePointLookupRevision) return null;
     window.renderStorePointCustomer(null);
     window.showToast?.('客戶資料查詢失敗：' + (e.message || e), true);
     return null;
@@ -2225,9 +2267,8 @@ window.scanStorePointQr = async function(input) {
   try {
     const raw = await window.decodeStorePointQrFile(file);
     if (!raw) throw new Error('沒有讀到 QR 內容');
-    const customerId = window.fillStorePointCustomerFromQr(raw);
+    window.fillStorePointCustomerFromQr(raw);
     window.closeStorePointScanner?.();
-    window.showToast?.('已讀取客戶帳號：' + customerId.slice(0, 10) + '...', false);
   } catch (e) {
     window.showToast?.((e.message || 'QR 讀取失敗') + '，可改用貼上客戶 UID。', true);
   } finally {
