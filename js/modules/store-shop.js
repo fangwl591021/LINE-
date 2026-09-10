@@ -181,9 +181,13 @@
           case 'shopping': if(viewedShop)await view(viewedShop.id);else {await list();content.querySelector('.shop-section-title')?.scrollIntoView({block:'center'});}break;
           case 'mine':memberHome();break;
           case 'detail':detail(button.dataset.id);break;
-          case 'wallet':
-            if(standalone||typeof window.openPointsWallet!=='function'){alert.textContent='請從 LINE 登入原系統，開啟共用點數錢包與本人 QR。';break;}
-            ++epoch;window.openPointsWallet();break;
+          case 'wallet': {
+            const version=epoch;
+            const module=await import('./store-wallet-popup.js?v=1');
+            const isCurrent=()=>version===epoch&&root.isConnected&&(standalone||window.currentPage==='store-shop');
+            if(isCurrent())module.openStoreWalletPopup({standalone,isCurrent});
+            break;
+          }
           case 'next': await list(button.dataset.id,button.dataset.query,listCategory); break;
           case 'category':
             if(button.dataset.scope==='shops') await list('',content.querySelector('[name="q"]')?.value??listQuery,button.dataset.category);

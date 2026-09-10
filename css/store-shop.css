@@ -91,6 +91,20 @@ body:has(#page-store-shop:not(.hidden)) #bottom-nav,body:has(#page-store-shop:no
 @media(prefers-reduced-motion:reduce){.shop-lifestyle *{scroll-behavior:auto!important}}
 
 /* Compact discovery cards. Full original product photos remain in detail/edit views. */
+/* Top-layer dialog stays independent of the underlying storefront's layout. */
+.store-wallet-popup{box-sizing:border-box;width:min(340px,calc(100vw - 32px));max-height:calc(100dvh - 32px);margin:auto;overflow:auto;border:0;border-radius:24px;padding:30px 22px 22px;background:#fffaf2;color:#16345a;text-align:center;font-family:system-ui,sans-serif;box-shadow:0 20px 60px #0f172a33}
+body:has(.store-wallet-popup[open]){overflow:hidden}
+.store-wallet-popup::backdrop{background:#15263bb3}
+.store-wallet-popup [hidden]{display:none!important}
+.store-wallet-popup h2{font-size:16px;margin:4px 28px 12px}
+.store-wallet-popup [data-balance]{font-size:30px;font-weight:800;line-height:1.3;overflow-wrap:anywhere;margin:10px 0}
+.store-wallet-popup [data-qr]{background:#fff;border-radius:16px;max-width:260px;margin:12px auto}
+.store-wallet-popup [data-qr] svg{display:block;width:100%;height:auto}
+.store-wallet-popup [data-status]{font-size:12px;color:#56697e;line-height:1.6;margin:12px 0 0}
+.store-wallet-popup button{min-width:44px;min-height:44px;border:0;border-radius:12px;color:#16345a;background:#ffe16b;font:inherit;cursor:pointer}
+.store-wallet-popup [data-close]{position:absolute;right:8px;top:8px;background:transparent;font-size:28px}
+.store-wallet-popup [data-retry]{margin-top:14px;padding:8px 18px}
+.store-wallet-popup :focus-visible{outline:3px solid #197cb6;outline-offset:2px}
 .store-shop.shop-lifestyle{background:#fffaf2;padding-top:12px}
 .shop-lifestyle .shop-life-hero{padding:16px 12px 12px;margin:0 -6px 14px;border-radius:22px;background:#f4ecd9}
 .shop-lifestyle .shop-lifestyle-scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:64% 25%;border-radius:0}

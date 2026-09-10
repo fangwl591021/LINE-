@@ -16,7 +16,7 @@ const db={prepare(query){return {bind(...args){return {
 };}};},async batch(items){sql.exec('BEGIN');try{const results=items.map(s=>s.sync());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e;}}};
 const fetcher=async(url,opts)=>{if(url!=='https://api.line.me/v2/profile')throw Error('External call forbidden');const token=opts.headers.Authorization.slice(7);return ['a','b','c'].includes(token)?Response.json({userId:'U'+token.repeat(32)}):new Response('',{status:401});};
 const env={ACTMASTER_DB:db,STORE_COMMERCE_ENABLED:'true'};
-const files=['css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','assets/storefront/lifestyle-cafe-v1.jpg'];
+const files=['css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','js/modules/store-wallet-popup.js','js/vendor/qrcode-generator-2.0.4.mjs','assets/storefront/lifestyle-cafe-v1.jpg'];
 const server=createServer(async(req,res)=>{
   const origin='http://127.0.0.1:8794',path=new URL(req.url,origin).pathname;
   try {

@@ -12,7 +12,13 @@ async()=>{
  window.pointWalletData={balance:1117,walletDisplayOwner:window.currentUserProfile.userId};
  document.querySelector('[data-do=list]').click();await until(()=>document.querySelector('.shop-wallet-card')?.textContent.includes('1,117'));
  window.pointWalletStatus='error';document.querySelector('[data-do=list]').click();await until(()=>document.querySelector('.shop-wallet-card')&&!document.querySelector('.shop-wallet-card').textContent.includes('1,117'));
- let opened=0;window.openPointsWallet=()=>opened++;document.querySelector('.shop-wallet-cta').click();check(opened===1,'wallet entry not reused');
+ let opened=0;window.openPointsWallet=()=>opened++;
+ window.fetchPointWalletData_=async()=>({balance:1117,walletDisplayOwner:window.currentUserProfile.userId,queriedLineUserId:'U'+'a'.repeat(32)});
+ document.querySelector('.shop-wallet-cta').click();await until(()=>document.querySelector('.store-wallet-popup svg'));
+ check(opened===0&&window.currentPage==='store-shop','popup must not navigate');
+ check(document.querySelector('.store-wallet-popup [data-balance]').textContent==='1,117 點','popup balance missing');
+ document.querySelector('.store-wallet-popup [data-close]').click();
+ check(!document.querySelector('.store-wallet-popup'),'popup close');
  document.querySelector('[data-do=region]').click();await until(()=>document.activeElement?.name==='q');
  const search=document.querySelector('[data-form=search]');search.elements.q.value='不存在的地區';search.requestSubmit();await until(()=>document.body.textContent.includes('目前沒有符合條件'));
  check(!document.querySelector('.shop-life-hero'),'search should not repeat hero');
