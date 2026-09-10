@@ -110,14 +110,19 @@
       return `<label>${label}${multiline?`<textarea name="${key}" maxlength="${max}">${esc(value)}</textarea>`:`<input name="${key}" type="${type}" maxlength="${max}" value="${esc(value)}" ${['name','title','price'].includes(key)?'required':''} ${type==='number'?'min="0" step="0.01"':''}>`}</label>`;
     }
     function select(key,label,options,value) {
-      return `<label>${label}<select name="${key}">${options.map(([v,t])=>`<option value="${v}" ${v===value?'selected':''}>${t}</option>`).join('')}</select></label>`;
+      return `<label>${label}<select name="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
+    }
+    function storeCategorySelect(value='') {
+      const options=[['','未分類'],...categories.map(c=>[c,c])];
+      if(value&&!categories.includes(value)) options.push([value,`${value}（原分類）`]);
+      return select('category','店面分類',options,value||'');
     }
     function imageInput(label,value) {
       return `<div class="shop-image-field"><p>${label}</p><button type="button" data-do="upload-image" class="primary">上傳圖片</button><input type="file" class="shop-image-file" accept="image/jpeg,image/png,image/webp" hidden><p class="shop-meta">支援 JPG／PNG／WebP，最大 10MB。圖片會等比縮小，不裁切；上傳素材可公開存取，儲存後才更新店面或商品。</p><p class="shop-image-status" role="status"></p><div class="shop-upload-preview">${value?photo(value):''}</div><details><summary>進階：使用圖片網址</summary>${input('image_url','圖片 HTTPS 網址',value,2048,false,'url')}</details></div>`;
     }
     function renderManage() {
       const s=shop||{};
-      content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${input('category','分類',s.category,40)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary">新增商品</button></div><h2>商品管理（${items.length}/100）</h2><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
+      content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary">新增商品</button></div><h2>商品管理（${items.length}/100）</h2><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
       void renderProductQrs();
       addProductTags();
     }

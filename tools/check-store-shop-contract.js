@@ -22,6 +22,9 @@ for(const category of ['食','宿','遊','購','行','服務','製造']) {
   assert(front.includes(`'${category}'`)); assert(worker.includes(`'${category}'`));
 }
 assert(front.includes("select('category','商品分類'"));
+assert(front.includes("select('category','店面分類'"));
+assert(front.includes('storeCategorySelect(s.category)'));
+assert(!front.includes("input('category','分類'"));
 assert(front.includes("categoryTags('shops',category)"));
 assert(front.includes("categoryTags('products')"));
 assert(worker.includes("data.category===undefined"));

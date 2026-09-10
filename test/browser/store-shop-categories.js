@@ -5,6 +5,14 @@ async()=>{
  const tag=(scope,c)=>document.querySelector(`[data-scope="${scope}"][data-category="${c}"]`);
  document.querySelector('[data-do=manage]').click();
  await until(()=>document.querySelector('[data-do=edit]'));
+ let storeForm=document.querySelector('[data-form=store]');
+ assert(storeForm.elements.category.tagName==='SELECT','store category must be dropdown');
+ assert([...storeForm.elements.category.options].some(o=>o.value==='服務'),'service option exists');
+ storeForm.elements.category.value='服務';storeForm.requestSubmit();
+ await until(()=>document.querySelector('[data-form=store]')!==storeForm);
+ document.querySelector('[data-do=manage]').click();
+ await until(()=>document.querySelector('[data-form=store]'));
+ assert(document.querySelector('[data-form=store]').elements.category.value==='服務','store category reload persists');
  document.querySelector('[data-do=edit]').click();
  let form=document.querySelector('[data-form=product]');
  assert([...form.elements.category.options].map(o=>o.value).join('|')==='|食|宿|遊|購|行|服務|製造','dropdown options');
