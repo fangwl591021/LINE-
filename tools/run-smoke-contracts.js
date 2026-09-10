@@ -39,6 +39,8 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'tools/check-store-shop-lifestyle-contract.js',
+  'test/store-commerce.test.mjs',
   'tools/check-safe-cashier-contract.js',
   'test/safe-cashier-client.test.cjs',
   'test/store-point-qr-routing.test.cjs',

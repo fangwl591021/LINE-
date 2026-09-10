@@ -7,6 +7,7 @@ import { createCardImageJob, saveCardImageResult } from './worker/a-kaffit-card-
 import { recognizeAkaffitBusinessCard } from './worker/a-kaffit-card-recognize.mjs';
 import { MatchInterestModule } from './worker/match-interest.mjs';
 import { handleStoreShop } from './worker/store-shop.mjs';
+import { handleStoreCommerce } from './worker/store-commerce.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -383,6 +384,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const commerceResponse = await handleStoreCommerce(request, env);
+    if (commerceResponse) return commerceResponse;
     const shopResponse = await handleStoreShop(request, env);
     if (shopResponse) return shopResponse;
     const pathname = new URL(request.url).pathname;

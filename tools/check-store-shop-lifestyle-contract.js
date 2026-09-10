@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const front=fs.readFileSync('js/modules/store-shop.js','utf8'),css=fs.readFileSync('css/store-shop.css','utf8');
+for(const value of ['shop-life-hero','shop-bottom-nav','shop-discovery-grid','shop-product-detail','shop-member-home'])assert(front.includes(value));
+assert(front.includes('data?.walletDisplayOwner===uid'));
+assert(front.includes("window.pointWalletStatus==='ready'"));
+assert(front.includes('window.openPointsWallet()'));
+assert(front.includes("window.pointWalletData"));
+assert(!front.includes('1 點＝1 元'));assert(!front.includes('300～600'));
+assert(css.includes('repeat(2,minmax(0,1fr))'));assert(css.includes('env(safe-area-inset-bottom)'));
+assert(front.includes('loading="lazy"'));assert(!css.includes('object-fit:cover'));
+assert(front.includes('pageKind(\'commerce\')'));
+console.log('Lifestyle storefront identity, scope, navigation and no-fake-promotion contracts passed.');
