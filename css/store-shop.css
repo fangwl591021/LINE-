@@ -23,9 +23,21 @@
 .store-shop .member-qr-status{font-size:12px;line-height:1.5}
 .store-shop .shop-product-qr{overflow-wrap:anywhere}
 .store-shop .shop-checkout [hidden]{display:none!important}
-.store-shop .shop-sales-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.store-shop .shop-sales-summary .shop-box{margin:0;padding:12px;overflow-wrap:anywhere}
-.store-shop .shop-sales-summary strong{display:block;font-size:20px;color:#006b48;margin-top:6px}
+.store-shop .shop-sales-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border:1px solid #dce5e0;border-radius:12px;background:#fff;overflow:hidden}
+.store-shop .shop-sales-summary .shop-box{margin:0;padding:6px 10px;overflow-wrap:anywhere;border:0;border-radius:0;font-size:12px}
+.store-shop .shop-sales-summary .shop-box>span{display:block;white-space:nowrap}
+.store-shop .shop-sales-summary strong{display:block;font-size:16px;line-height:1.25;color:#006b48}
+.store-shop .shop-sales-list{background:#fff;border:1px solid #dce5e0;border-radius:12px;overflow:hidden;margin-bottom:12px}
+.store-shop .shop-sale-row{padding:10px 12px;border-bottom:1px solid #dce5e0;font-size:14px;overflow-wrap:anywhere}
+.store-shop .shop-sale-row:last-child{border-bottom:0}
+.store-shop .shop-sale-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.store-shop .shop-sale-heading time{font-size:12px;color:#506960;white-space:nowrap}
+.store-shop .shop-sale-row p{margin:4px 0;line-height:1.45;white-space:normal}
+.store-shop .shop-sale-buyer{font-weight:600}
+.store-shop .shop-sale-amounts{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:13px}
+.store-shop .shop-sale-amounts strong{color:#006b48}
+.store-shop .shop-sale-row details{font-size:12px;color:#506960}
+.store-shop .shop-sale-row details summary{min-height:44px;padding:10px 0}
 .store-shop [data-sales-form] label{flex:1;min-width:0}
 .store-shop [data-sales-form] input{width:100%;min-width:0}
 .store-shop [data-sales-form]{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px}

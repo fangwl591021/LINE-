@@ -141,7 +141,7 @@
           case 'sales': {
             const version=++epoch;alert.textContent='';
             content.innerHTML='<button type="button" data-do="manage">返回商城管理</button><p role="status">載入業績查詢…</p>';
-            const module=await import('./store-shop-sales.js?v=1');
+            const module=await import('./store-shop-sales.js?v=2');
             if(version===epoch)await module.mountShopSales(content,api,()=>version===epoch);
             break;
           }

@@ -16,10 +16,10 @@ export async function readShopSales(db,uid,params) {
   // Ownership is constrained by BOTH the authenticated actor and current store owner.
   // No active-status filter: archiving a product must not erase its sales history.
   const query=`WITH journal AS (
-    SELECT request_id,updated_at,CASE WHEN json_valid(fingerprint) THEN fingerprint ELSE '{}' END AS f
+    SELECT request_id,customer_id,updated_at,CASE WHEN json_valid(fingerprint) THEN fingerprint ELSE '{}' END AS f
     FROM store_cashier_requests WHERE actor_id=? AND status='succeeded' AND updated_at>=? AND updated_at<?
   ), sales AS (
-    SELECT j.request_id AS transactionId,j.updated_at AS confirmedAt,p.id AS productId,p.title AS productTitle,
+    SELECT j.request_id AS transactionId,j.customer_id AS customerId,j.updated_at AS confirmedAt,p.id AS productId,p.title AS productTitle,
       json_extract(f,'$.amount') AS amount,json_extract(f,'$.deductPoints') AS points
     FROM journal j JOIN store_shop_products p ON p.id=json_extract(f,'$.productId')
     JOIN store_shop_stores s ON s.id=p.shop_id AND s.owner_uid=?
@@ -29,15 +29,23 @@ export async function readShopSales(db,uid,params) {
   ), totals AS (
     SELECT COUNT(*) AS totalCount,COALESCE(SUM(amount),0) AS totalAmount,
       COALESCE(SUM(points),0) AS totalPoints,COALESCE(SUM(amount-points),0) AS totalPayable FROM sales
-  ) SELECT t.*,d.* FROM totals t LEFT JOIN (
+  ) SELECT t.*,d.*,(SELECT json_object('matches',COUNT(*),'name',CASE WHEN COUNT(*)=1 THEN MAX(substr(u.name,1,100)) END)
+    FROM users u WHERE d.customerId<>'' AND (u.line_id=d.customerId OR u.point_line_id=d.customerId OR u.legacy_line_id=d.customerId OR u.row_id=d.customerId)) AS buyer
+  FROM totals t LEFT JOIN (
     SELECT *,amount-points AS payable FROM sales ORDER BY confirmedAt DESC,transactionId DESC LIMIT 21 OFFSET ?
   ) d ON 1=1 ORDER BY d.confirmedAt DESC,d.transactionId DESC`;
   const rows=(await db.prepare(query).bind(uid,sqlTime(from-8*3600000),sqlTime(to+DAY-8*3600000),uid,page*20).all()).results;
   const total=rows[0];
   if(!total) throw Error('Missing sales aggregate');
-  const records=rows.filter(row=>row.transactionId).slice(0,20).map(row=>({
-    transactionId:row.transactionId,confirmedAt:row.confirmedAt.replace(' ','T')+'Z',
-    productId:row.productId,productTitle:row.productTitle,amount:row.amount,points:row.points,payable:row.payable
+  // Only resolve names for this page. Multiple matches fail closed; never use collected cards.
+  const records=await Promise.all(rows.filter(row=>row.transactionId).slice(0,20).map(async row=>{
+    const buyer=JSON.parse(row.buyer);
+    const buyerName=buyer.matches===1?String(buyer.name||'').trim():'';
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(uid+':'+row.customerId));
+    const buyerRef=Array.from(new Uint8Array(digest).slice(0,6),b=>b.toString(16).padStart(2,'0')).join('').toUpperCase();
+    return {transactionId:row.transactionId,confirmedAt:row.confirmedAt.replace(' ','T')+'Z',
+      productId:row.productId,productTitle:row.productTitle,amount:row.amount,points:row.points,payable:row.payable,
+      buyerName,buyerRef,buyerStatus:buyer.matches>1?'ambiguous':buyerName?'matched':'missing'};
   }));
   return {success:true,start,end,page,hasNext:rows.filter(row=>row.transactionId).length>20,
     summary:{count:total.totalCount,amount:total.totalAmount,points:total.totalPoints,payable:total.totalPayable},records};

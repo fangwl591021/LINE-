@@ -12,6 +12,10 @@ async()=>{
  const summary=()=>document.querySelector('.shop-sales-summary')?.innerText;
  check(summary().includes('25 筆')&&summary().includes('220,000')&&summary().includes('20,000')&&summary().includes('200,000'),'wrong totals');
  check(document.querySelectorAll('.shop-sales-result details').length===20,'page size');
+ check(document.querySelector('.shop-sale-buyer')?.textContent.includes('林測試'),'buyer not shown');
+ check(document.querySelector('.shop-sales-summary').getBoundingClientRect().height<130,'summary too tall');
+ check(document.querySelector('.shop-sale-row').getBoundingClientRect().height<190,'transaction too tall');
+ check(!document.querySelector('.shop-sale-row details').open,'transaction details should collapse');
  check(!document.querySelector('img[src=x]'),'unescaped title');
  document.querySelector('[data-sales-page="1"]').click();
  await until(()=>document.querySelectorAll('.shop-sales-result details').length===5);
@@ -31,5 +35,8 @@ async()=>{
  check(!document.querySelector('.shop-sales-summary'),'failure rendered as zero');
  window.fetch=original;document.querySelector('[data-period=month]').click();await until(()=>document.querySelector('.shop-sales-summary'));
  check(document.documentElement.scrollWidth<=innerWidth,'mobile overflow');
- return {width:innerWidth,totals:summary(),pagination:true,empty:true,errorNotZero:true,staleResponseIgnored:true};
+ const summaryHeight=document.querySelector('.shop-sales-summary').getBoundingClientRect().height;
+ const rowHeight=document.querySelector('.shop-sale-row').getBoundingClientRect().height;
+ window.scrollTo({top:window.scrollY+document.querySelector('.shop-sales-summary').getBoundingClientRect().top-100,behavior:'instant'});
+ return {width:innerWidth,summaryHeight,rowHeight,totals:summary(),pagination:true,empty:true,errorNotZero:true,staleResponseIgnored:true};
 }

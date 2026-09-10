@@ -41,6 +41,6 @@ const sales=read('worker/store-shop-sales.mjs');
 for(const prohibited of ['storeAdjustCustomerPoints','insertUserPoint','UPDATE ','INSERT INTO','DELETE FROM','fetch(']) assert(!sales.includes(prohibited));
 assert(sales.includes("actor_id=? AND status='succeeded'"));
 assert(sales.includes('s.owner_uid=?'));
-assert(front.includes("import('./store-shop-sales.js?v=1')"));
+assert(front.includes("import('./store-shop-sales.js?v=2')"));
 assert(front.includes('data-do="sales"'));
 assert(read('js/modules/store-shop-sales.js').includes('返回商城管理'));

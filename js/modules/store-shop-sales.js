@@ -2,6 +2,14 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 const number=value=>Number(value).toLocaleString('zh-TW');
 const DAY=86400000;
 const date=time=>new Date(time).toISOString().slice(0,10);
+function transaction(row) {
+  const time=new Date(row.confirmedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+  const buyer=row.buyerName||(row.buyerStatus==='ambiguous'?'購買者待核對':'姓名未提供');
+  return `<div class="shop-sale-row"><div class="shop-sale-heading"><strong>${esc(row.productTitle)}</strong><time datetime="${esc(row.confirmedAt)}">${esc(time)}</time></div>
+    <p class="shop-sale-buyer">購買者：${esc(buyer)}${!row.buyerName&&row.buyerRef?` · ${esc(row.buyerRef)}`:''}</p>
+    <p class="shop-sale-amounts"><span>金額 $${number(row.amount)}</span><span>折抵 ${number(row.points)} 點</span><strong>應收 $${number(row.payable)}</strong></p>
+    <details><summary>交易詳情</summary><p>交易編號：${esc(row.transactionId)}<br>店內顧客辨識碼：${esc(row.buyerRef||'未提供')}<br>${esc(new Date(row.confirmedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}))}<br>購買者顯示目前會員名稱，非交易當時姓名快照。</p></details></div>`;
+}
 export async function mountShopSales(root,api,isCurrent) {
   let sequence=0,shown=null;
   const today=date(Date.now()+8*3600000);
@@ -20,7 +28,7 @@ export async function mountShopSales(root,api,isCurrent) {
       shown=report;status.textContent=`${report.start} ～ ${report.end}（台灣時間）`;
       const s=report.summary;
       result.innerHTML=`<div class="shop-sales-summary">${[['成功筆數',number(s.count)+' 筆'],['商品金額','NT$ '+number(s.amount)],['折抵點數',number(s.points)+' 點'],['折抵後應收','NT$ '+number(s.payable)]].map(([label,value])=>`<div class="shop-box"><span>${label}</span><strong>${value}</strong></div>`).join('')}</div>
-        <h3>交易明細</h3>${report.records.length?report.records.map(row=>`<div class="shop-box"><h3>${esc(row.productTitle)}</h3><p class="shop-meta">${esc(new Date(row.confirmedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}))}</p><p>商品金額 NT$ ${number(row.amount)}　折抵 ${number(row.points)} 點<br>折抵後應收 NT$ ${number(row.payable)}</p><details><summary>交易編號</summary><p class="shop-meta">${esc(row.transactionId)}</p></details></div>`).join(''):'<p>此頁沒有成功商品折抵交易。</p>'}
+        <h3>交易明細</h3><div class="shop-sales-list">${report.records.length?report.records.map(transaction).join(''):'<p>此頁沒有成功商品折抵交易。</p>'}</div>
         <div class="shop-row"><button type="button" data-sales-page="${page-1}" ${page===0?'disabled':''}>上一頁</button><span>第 ${page+1} 頁</span><button type="button" data-sales-page="${page+1}" ${report.hasNext?'':'disabled'}>下一頁</button></div>`;
     }catch(error){if(active()&&version===sequence)status.textContent='無法載入業績：'+(error.name==='TimeoutError'?'連線逾時，請重新查詢':error.message);}
   }

@@ -7,10 +7,10 @@ import {handleStoreShop,normalizeProduct,normalizeStore} from '../worker/store-s
 const A='U'+'a'.repeat(32), B='U'+'b'.repeat(32), USER='U'+'c'.repeat(32);
 function fixture() {
   const sql=new DatabaseSync(':memory:');
-  sql.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);');
-  sql.prepare('INSERT INTO users VALUES (?,?)').run(A,'store');
-  sql.prepare('INSERT INTO users VALUES (?,?)').run(B,'tenant');
-  sql.prepare('INSERT INTO users VALUES (?,?)').run(USER,'user');
+  sql.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT DEFAULT '',point_line_id TEXT DEFAULT '',legacy_line_id TEXT DEFAULT '',row_id TEXT DEFAULT '');");
+  sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run(A,'store');
+  sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run(B,'tenant');
+  sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run(USER,'user');
   sql.exec(readFileSync(new URL('../migrations/0029_store_shop_catalog.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0031_store_product_category.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0030_store_cashier_requests.sql',import.meta.url),'utf8'));
@@ -30,6 +30,34 @@ function fixture() {
 }
 const store=(extra={})=>({name:'測試店面',description:'第一行\n第二行',status:'active',version:0,...extra});
 const product=(extra={})=>({title:'商品',price_cents:19900,redeem_type:'fixed',redeem_value:30,status:'active',request_key:crypto.randomUUID(),...extra});
+
+test('sales buyers: canonical aliases, ambiguous and missing names, no raw identity and no duplicate totals',async()=>{
+  const {call,sql}=fixture();await call('/store',store(),'a');await call('/store',store(),'b');
+  const p=(await call('/product',product(),'a')).products[0];
+  const q=(await call('/product',product(),'b')).products[0];
+  const canonical='U'+'d'.repeat(32);
+  sql.prepare('UPDATE users SET name=?,point_line_id=?,legacy_line_id=?,row_id=? WHERE line_id=?').run('<img src=x onerror=alert(1)> 林測試',canonical,'legacy-buyer','row-buyer',USER);
+  const insert=(actor,productId,customer)=>sql.prepare('INSERT INTO store_cashier_requests(actor_id,request_id,customer_id,fingerprint,status,updated_at) VALUES(?,?,?,?,?,?)')
+    .run(actor,crypto.randomUUID(),customer,JSON.stringify({productId,mode:'redeem',amount:100,deductPoints:10}),'succeeded','2026-09-10 08:00:00');
+  for(const alias of [USER,canonical,'legacy-buyer','row-buyer'])insert(A,p.id,alias);
+  insert(A,p.id,'missing-buyer');insert(B,q.id,canonical);
+  const path='/sales?start=2026-09-10&end=2026-09-10';
+  const report=await call(path,null,'a');
+  assert.equal(report.summary.count,5);
+  assert.equal(report.records.filter(r=>r.buyerStatus==='matched').length,4);
+  const known=report.records.find(r=>r.buyerStatus==='matched');
+  assert.equal(known.buyerName,'<img src=x onerror=alert(1)> 林測試');
+  assert.match(known.buyerRef,/^[A-F0-9]{12}$/);
+  const missing=report.records.find(r=>r.buyerStatus==='missing');assert.equal(missing.buyerName,'');assert.match(missing.buyerRef,/^[A-F0-9]{12}$/);
+  for(const secret of [USER,canonical,'legacy-buyer','row-buyer','missing-buyer'])assert(!JSON.stringify(report).includes(secret));
+  const again=await call(path,null,'a');assert.deepEqual(again.records,report.records);
+  const other=await call(path,null,'b');assert(!report.records.some(r=>r.buyerRef===other.records[0].buyerRef));
+  sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id=?').run(canonical,USER); // same row matching two columns remains unique
+  assert.equal((await call(path,null,'b')).records[0].buyerStatus,'matched');
+  sql.prepare('INSERT INTO users(line_id,role,name,point_line_id) VALUES(?,?,?,?)').run('U'+'e'.repeat(32),'user','錯誤的人',canonical);
+  const conflict=await call(path,null,'b');assert.equal(conflict.records[0].buyerStatus,'ambiguous');assert.equal(conflict.records[0].buyerName,'');assert.equal(conflict.summary.count,1);
+  sql.close();
+});
 
 test('sales: owner-only, successful product transactions, Taiwan dates, safe history and no writes',async()=>{
   const {call,sql}=fixture();
@@ -116,7 +144,7 @@ test('category filter uses active products, combines search and paginates withou
   const {call,sql}=fixture();
   for(let i=0;i<43;i++) {
     const id=String(i).padStart(3,'0');
-    sql.prepare('INSERT INTO users VALUES (?,?)').run('uid'+id,'store');
+    sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run('uid'+id,'store');
     sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES (?,?,?,'active','now')").run(id,'uid'+id,'shop'+id);
     for(let j=0;j<2;j++)sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key,category) VALUES (?,?,?,100,?,'now',?,'食')").run(id+'p'+j,id,'商品',i===42?'draft':'active',crypto.randomUUID());
   }
@@ -208,7 +236,7 @@ test('malformed or oversized data and unknown methods fail safely',async()=>{
 });
 test('public catalog pagination never loses a store and filters search',async()=>{
   const {call,sql}=fixture();
-  const insertUser=sql.prepare('INSERT INTO users VALUES (?,?)');
+  const insertUser=sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)');
   const insertShop=sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,category,status,updated_at) VALUES (?,?,?,'food','active','now')");
   for(let i=0;i<42;i++){const id=String(i).padStart(3,'0');insertUser.run('uid'+id,'store');insertShop.run(id,'uid'+id,'name'+id);}
   const first=await call(); assert.equal(first.shops.length,40);
