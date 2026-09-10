@@ -8,6 +8,11 @@ assert(front.includes('window.openPointsWallet()'));
 assert(front.includes("window.pointWalletData"));
 assert(!front.includes('1 點＝1 元'));assert(!front.includes('300～600'));
 assert(css.includes('repeat(2,minmax(0,1fr))'));assert(css.includes('env(safe-area-inset-bottom)'));
-assert(front.includes('loading="lazy"'));assert(!css.includes('object-fit:cover'));
+assert(front.includes('loading="lazy"'));
+// Only decorative hero art may crop; merchant/product thumbnails preserve the entire photo.
+assert(css.includes('.shop-lifestyle .shop-product-image img{display:block;width:100%;height:100%;object-fit:contain'));
+assert(css.includes('.shop-lifestyle .shop-discovery-grid article>img{height:auto;aspect-ratio:4/3;object-fit:contain'));
+assert(front.includes('shop-product-summary'));assert(front.includes('shop-product-image'));
+assert(front.includes('assets/storefront/lifestyle-cafe-v1.jpg'));
 assert(front.includes('pageKind(\'commerce\')'));
 console.log('Lifestyle storefront identity, scope, navigation and no-fake-promotion contracts passed.');

@@ -89,3 +89,47 @@ body:has(#page-store-shop:not(.hidden)) #bottom-nav,body:has(#page-store-shop:no
 @media(min-width:700px){.shop-lifestyle .shop-category-tags{grid-template-columns:repeat(8,minmax(0,1fr))}.shop-lifestyle .shop-life-hero{padding:35px}.shop-lifestyle .shop-hero-copy{min-height:230px}.shop-lifestyle .shop-hero-copy h2{font-size:42px}.shop-lifestyle .shop-wallet-card{max-width:420px}.shop-lifestyle .shop-hero-photo{max-width:340px}.shop-lifestyle .shop-discovery-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:350px){.store-shop.shop-lifestyle{padding-left:12px;padding-right:12px}.shop-lifestyle .shop-brand strong{font-size:19px}.shop-lifestyle .shop-brand small{font-size:8px}.shop-lifestyle .shop-brand button{font-size:11px;padding:8px}.shop-lifestyle .shop-hero-copy h2{font-size:22px}.shop-lifestyle .shop-wallet-cta{font-size:13px}.shop-lifestyle .shop-discovery-grid{gap:8px}.shop-lifestyle .shop-discovery-grid article>h2{font-size:14px}}
 @media(prefers-reduced-motion:reduce){.shop-lifestyle *{scroll-behavior:auto!important}}
+
+/* Compact discovery cards. Full original product photos remain in detail/edit views. */
+.store-shop.shop-lifestyle{background:#fffaf2;padding-top:12px}
+.shop-lifestyle .shop-life-hero{padding:16px 12px 12px;margin:0 -6px 14px;border-radius:22px;background:#f4ecd9}
+.shop-lifestyle .shop-lifestyle-scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:64% 25%;border-radius:0}
+.shop-lifestyle .shop-life-hero:after{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(90deg,#fffaf269,transparent 65%),linear-gradient(0deg,#fffaf2 0,transparent 48%);pointer-events:none}
+.shop-lifestyle .shop-hero-copy{width:64%;min-height:156px}
+.shop-lifestyle .shop-hero-copy h2{font-size:clamp(23px,6.2vw,30px);line-height:1.45;letter-spacing:0;margin:6px 0;font-weight:850;text-shadow:0 1px 12px #fff}
+.shop-lifestyle .shop-hero-copy h2 span{color:#ef3d75}
+.shop-lifestyle .shop-hero-copy p{font-size:12px;color:#243e52;text-shadow:0 1px 8px #fff}
+.shop-lifestyle .shop-wallet-card{background:#ffffffe0;padding:12px;border-radius:21px;backdrop-filter:none}
+.shop-lifestyle .shop-wallet-balance{display:flex;align-items:center;gap:10px}
+.shop-lifestyle .shop-wallet-coins{font-size:37px}
+.shop-lifestyle .shop-wallet-card strong{font-size:30px;line-height:1.3;margin:4px 0}
+.shop-lifestyle button.shop-wallet-cta{min-height:62px;border-radius:32px;margin-top:10px;padding:10px 14px;background:linear-gradient(120deg,#ffe96d,#ffd01d)}
+.shop-lifestyle .shop-category-tags{display:flex;overflow-x:auto;flex-wrap:nowrap;gap:8px;margin:12px 0;padding:2px 1px 8px;scrollbar-width:thin}
+.shop-lifestyle .shop-category-tags button{flex:0 0 calc((100% - 32px)/5);min-height:70px;min-width:52px;border-radius:17px;font-size:12px;padding:8px 3px}
+.shop-lifestyle .shop-discovery-grid article>img{height:auto;aspect-ratio:4/3;object-fit:contain;background:#fff}
+.shop-lifestyle .shop-discovery-grid article>h2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.shop-lifestyle .shop-discovery-grid article>.shop-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shop-lifestyle .shop-discovery-grid .shop-card-description{display:none}
+.shop-lifestyle .shop-discovery-grid .shop-no-photo{margin:0;width:100%}
+.shop-lifestyle .shop-discovery-grid button.shop-store-link{margin-top:auto;min-height:44px;background:#fff8df}
+.shop-lifestyle .shop-store-intro>img{height:150px;object-fit:contain;background:#fff}
+.shop-lifestyle .shop-store-intro>h2{font-size:19px;margin-top:10px;margin-bottom:2px}
+.shop-lifestyle .shop-store-intro>details{font-size:12px}
+.shop-lifestyle .shop-store-intro>details:last-child{margin-bottom:4px}
+.shop-lifestyle .shop-browse-products{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start}
+.shop-lifestyle .shop-product-card{border:1px solid #eee8dc;border-radius:17px;margin:0;min-width:0;box-shadow:0 4px 12px #203a510b}
+.shop-lifestyle .shop-product-card>button.shop-product-image{width:100%;aspect-ratio:4/3;min-height:0;height:auto;border:0;border-radius:0;background:#fff;padding:0;margin:0;display:flex;overflow:hidden}
+.shop-lifestyle .shop-product-image img{display:block;width:100%;height:100%;object-fit:contain;background:#fff;border-radius:0}
+.shop-lifestyle .shop-product-placeholder{font-size:38px;color:#7b8993}
+.shop-lifestyle .shop-product-card>.shop-product-summary{padding:9px 10px 8px;margin:0}
+.shop-lifestyle .shop-product-summary .shop-category-badge{font-size:10px;padding:2px 7px;margin:0}
+.shop-lifestyle .shop-product-summary h3{margin:2px 0 4px;line-height:1.45}
+.shop-lifestyle button.shop-product-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;text-align:left;border:0;padding:0;min-height:44px;width:100%;font-size:15px;font-weight:750;line-height:22px;color:#16345a;border-radius:0}
+.shop-lifestyle .shop-product-summary .shop-price{font-size:17px;margin:3px 0;font-weight:800;line-height:1.4;overflow-wrap:anywhere}
+.shop-lifestyle .shop-product-policy{font-size:11px;line-height:1.45;margin:4px 0;min-height:32px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:#ad4963}
+.shop-lifestyle .shop-product-actions{display:flex;align-items:center;justify-content:space-between;gap:4px;border-top:1px solid #f0ece3;padding-top:4px;margin-top:6px}
+.shop-lifestyle .shop-product-actions button{font-size:11px;min-height:44px;border:0;padding:5px 7px;margin:0;border-radius:10px;background:#fff8df;color:#16345a}
+.shop-lifestyle .shop-product-actions button[data-product-qr]{background:#eef6fb}
+.shop-lifestyle .shop-discovery-promos{margin:18px 0}
+.shop-lifestyle .shop-discovery-promos button{gap:7px;padding:14px 12px;border-radius:18px}
+@media(min-width:700px){.shop-lifestyle .shop-life-hero{padding:26px}.shop-lifestyle .shop-hero-copy{min-height:180px}.shop-lifestyle .shop-lifestyle-scene{object-position:center 35%}.shop-lifestyle .shop-hero-copy h2{font-size:38px}.shop-lifestyle .shop-category-tags button{flex:1}.shop-lifestyle .shop-browse-products{grid-template-columns:repeat(3,minmax(0,1fr))}.shop-lifestyle .shop-store-intro>img{height:210px}}

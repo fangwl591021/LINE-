@@ -16,14 +16,14 @@ const db={prepare(query){return {bind(...args){return {
 };}};},async batch(items){sql.exec('BEGIN');try{const results=items.map(s=>s.sync());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e;}}};
 const fetcher=async(url,opts)=>{if(url!=='https://api.line.me/v2/profile')throw Error('External call forbidden');const token=opts.headers.Authorization.slice(7);return ['a','b','c'].includes(token)?Response.json({userId:'U'+token.repeat(32)}):new Response('',{status:401});};
 const env={ACTMASTER_DB:db,STORE_COMMERCE_ENABLED:'true'};
-const files=['css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js'];
+const files=['css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','assets/storefront/lifestyle-cafe-v1.jpg'];
 const server=createServer(async(req,res)=>{
   const origin='http://127.0.0.1:8794',path=new URL(req.url,origin).pathname;
   try {
     if(path==='/'){
       res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>本機商城測試</title><body style="margin:0"><main id="page-store-shop"></main><script>window.testToken='b';window.currentPage='store-shop';window.Config={WORKER_URL:location.origin};window.goPage=p=>window.currentPage=p;window.liff={isLoggedIn:()=>true,getAccessToken:()=>window.testToken,getProfile:async()=>({userId:'U'+window.testToken.repeat(32)})};</script><script src="/js/modules/store-shop-entry.js"></script><script>openStoreShop();</script></body></html>`);return;
     }
-    if(files.includes(path.slice(1))){res.setHeader('Content-Type',path.endsWith('.css')?'text/css':'text/javascript');res.end(readFileSync(new URL('../../'+path.slice(1),import.meta.url)));return;}
+    if(files.includes(path.slice(1))){res.setHeader('Content-Type',path.endsWith('.jpg')?'image/jpeg':path.endsWith('.css')?'text/css':'text/javascript');res.end(readFileSync(new URL('../../'+path.slice(1),import.meta.url)));return;}
     if(path.startsWith('/v1/')){
       const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>30000){res.writeHead(413);res.end();return;}chunks.push(chunk);}
       const body=chunks.length?Buffer.concat(chunks):undefined;

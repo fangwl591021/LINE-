@@ -59,9 +59,8 @@
       if(!standalone&&uid&&data?.walletDisplayOwner===uid&&window.pointWalletStatus==='ready'&&data.balance!==null&&data.balance!==undefined&&Number.isFinite(Number(data.balance)))return `${Number(data.balance).toLocaleString('zh-TW')}<small>點</small>`;
       return '<small>點擊查詢本人點數</small>';
     }
-    function hero(stores) {
-      const image=stores.find(s=>s.image_url)?.image_url;
-      return `<section class="shop-life-hero"><div class="shop-hero-copy"><span class="shop-eyebrow">EXPLORE YOUR EVERYDAY</span><h2>把日子，<br>過成喜歡的樣子<span>。</span></h2><p>從一間好店，<br>發現更多生活的美好。</p></div>${image?`<div class="shop-hero-photo">${photo(image)}</div>`:'<div class="shop-hero-art" aria-hidden="true"><span>☕</span><span>🛍</span><span>🌿</span></div>'}<div class="shop-wallet-card"><div><span class="shop-eyebrow">我的共用點數</span><strong>${walletLabel()}</strong><small>依店家／商品規則折抵，不代表現金。</small></div><button data-do="wallet" class="shop-wallet-cta"><span aria-hidden="true">▦</span><span>出示我的點數 QR<small>開啟本人錢包，由店家核對後折抵</small></span><span aria-hidden="true">›</span></button></div></section>`;
+    function hero() {
+      return `<section class="shop-life-hero"><img class="shop-lifestyle-scene" src="assets/storefront/lifestyle-cafe-v1.jpg" alt="" width="1536" height="1024" fetchpriority="high"><div class="shop-hero-copy"><h2>發現更多<br>生活的美好<span> ♥</span></h2><p>吃喝玩樂，就在身邊。</p></div><div class="shop-wallet-card"><div class="shop-wallet-balance"><span class="shop-wallet-coins" aria-hidden="true">🪙</span><div><span class="shop-eyebrow">我的共用點數</span><strong>${walletLabel()}</strong><small>依店家規則折抵，不代表現金。</small></div></div><button data-do="wallet" class="shop-wallet-cta"><span aria-hidden="true">▦</span><span>出示我的點數 QR<small>店家核對後折抵</small></span><span aria-hidden="true">›</span></button></div></section>`;
     }
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
@@ -89,6 +88,7 @@
     }
     function shopLink(id) { const url=new URL('store-shop.html',location.href); url.searchParams.set('shop',id); return url.href; }
     function product(p,edit=false) {
+      if(!edit)return `<article class="shop-product-card" data-product-category="${esc(p.category||'')}"><button class="shop-product-image" data-do="detail" data-id="${esc(p.id)}" aria-label="查看 ${esc(p.title)} 詳情">${photo(p.image_url)||'<span class="shop-product-placeholder" aria-hidden="true">🛍</span>'}</button><div class="shop-product-summary"><span class="shop-category-badge">${esc(p.category||'未分類')}</span><h3><button class="shop-product-title" data-do="detail" data-id="${esc(p.id)}">${esc(p.title)}</button></h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p class="shop-meta shop-product-policy">${esc(policy(p))}</p><div class="shop-product-actions"><button class="shop-detail-link" data-do="detail" data-id="${esc(p.id)}">詳情 ›</button><button data-do="member-qr" data-product-qr data-id="${esc(p.id)}" aria-label="出示 ${esc(p.title)} 本人 QR">▦ QR</button></div></div></article>`;
       return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div></div></article>`;
     }
     async function list(after='',q='',category='') {
@@ -128,11 +128,10 @@
       const s=result.shop;
       viewedShop=s;viewedProducts=result.products;
       const details=[s.category,s.address,s.phone,s.hours].filter(Boolean).join('\n');
-      content.innerHTML=`<article>${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
+      content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><details><summary>店家介紹與聯絡資訊</summary><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></details></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
       if(!standalone)content.insertAdjacentHTML('afterbegin',`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
       addProductTags(); if(category) filterProducts(category);
       content.querySelector('.shop-grid')?.classList.add('shop-browse-products');
-      content.querySelectorAll('.shop-browse-products article').forEach((card,i)=>card.querySelector('h3').insertAdjacentHTML('afterend',`<button class="shop-detail-link" data-do="detail" data-id="${esc(result.products[i].id)}">查看商品詳情 ›</button>`));
     }
     function input(key,label,value='',max=200,multiline=false,type='text') {
       return `<label>${label}${multiline?`<textarea name="${key}" maxlength="${max}">${esc(value)}</textarea>`:`<input name="${key}" type="${type}" maxlength="${max}" value="${esc(value)}" ${['name','title','price'].includes(key)?'required':''} ${type==='number'?'min="0" step="0.01"':''}>`}</label>`;

@@ -18,6 +18,16 @@ async()=>{
  check(!document.querySelector('.shop-life-hero'),'search should not repeat hero');
  document.querySelector('[data-do=list]').click();await until(()=>document.querySelector('[data-do=view]'));
  document.querySelector('[data-do=view]').click();await until(()=>document.querySelector('[data-do=detail]'));
+ check(getComputedStyle(document.querySelector('.shop-browse-products')).gridTemplateColumns.split(' ').length===2,'products must use two mobile columns');
+ const card=document.querySelector('.shop-product-card');
+ const imageButton=card.querySelector('.shop-product-image');
+ imageButton.innerHTML='<img alt="synthetic portrait fixture" width="120" height="900">';
+ check(imageButton.getBoundingClientRect().height<=imageButton.getBoundingClientRect().width*.76,'portrait image stretched the product card');
+ check(card.getBoundingClientRect().height<365,'product card too tall');
+ check(card.querySelectorAll('[data-product-qr]').length===1,'QR entry missing');
+ check(document.documentElement.scrollWidth<=innerWidth,'product list overflow');
+ const tags=document.querySelector('[data-scope=products]').parentElement;
+ check(tags.scrollWidth>=tags.clientWidth,'category rail unavailable');
  document.querySelector('[data-do=detail]').click();await until(()=>document.querySelector('.shop-product-detail'));
  check(document.querySelector('.shop-product-detail').textContent.includes('8800')||document.querySelector('.shop-product-detail').textContent.includes('8,800'),'price changed');
  check(!document.querySelector('img[src=x]'),'product XSS');
@@ -26,5 +36,5 @@ async()=>{
  check(document.documentElement.scrollWidth<=innerWidth,'mobile overflow');
  const footer=document.querySelector('.shop-bottom-nav').getBoundingClientRect();check(footer.bottom<=innerHeight+1,'footer outside viewport');
  document.querySelector('[data-do=list]').click();await until(()=>document.querySelector('.shop-life-hero'));
- return {width:innerWidth,ownerCheckedBalance:true,errorNotZero:true,categories:8,twoColumnCards:true,regionSearch:true,productDetail:true,walletEntry:true,noXss:true,noOverflow:true};
+ return {width:innerWidth,ownerCheckedBalance:true,errorNotZero:true,categories:8,twoColumnCards:true,compactProducts:true,portraitContained:true,regionSearch:true,productDetail:true,walletEntry:true,noXss:true,noOverflow:true};
 }
