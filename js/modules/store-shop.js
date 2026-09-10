@@ -33,10 +33,10 @@
       return data;
     } finally { URL.revokeObjectURL(url); }
   }
-  function mount(root, standalone) {
+  function mount(root, standalone, productId='') {
     let shop=null, items=[], epoch=0, busy=false;
     root.classList.add('store-shop');
-    root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="list">店家列表</button>${standalone?'':'<button data-do="manage" class="primary">我的商城管理</button>'}</nav><h1>店家商城</h1><p class="shop-notice">目前開放店家展示與商品管理；點數折抵與核銷尚未開放，不會扣除點數。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
+    root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="list">店家列表</button>${standalone?'':'<button data-do="manage" class="primary">我的商城管理</button>'}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
     const base=String(root.dataset.worker||window.Config?.WORKER_URL||'').replace(/\/+$/,'');
     async function api(path='',data,privateRead=false) {
@@ -54,8 +54,23 @@
       return result;
     }
     function shopLink(id) { const url=new URL('store-shop.html',location.href); url.searchParams.set('shop',id); return url.href; }
+    function productLink(id) {
+      const url=new URL('https://liff.line.me/'+(window.DEFAULT_LIFF_ID||'1660923784-vViMTZ1y'));
+      url.searchParams.set('shopProduct',id);return url.href;
+    }
+    async function renderProductQrs() {
+      const links=[...content.querySelectorAll('[data-product-qr]')];if(!links.length)return;
+      try {
+        const {default:qrcode}=await import('../vendor/qrcode-generator-2.0.4.mjs');
+        for(const link of links) {
+          if(!root.contains(link))continue;
+          const qr=qrcode(0,'M');qr.addData(link.href);qr.make();
+          link.innerHTML=qr.createSvgTag({cellSize:3,margin:12,scalable:true})+'<span>商品扣抵入口</span>';
+        }
+      }catch {for(const link of links)link.textContent='開啟商品扣抵入口';}
+    }
     function product(p,edit=false) {
-      return `<article>${photo(p.image_url)}<h3>${esc(p.title)}</h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}（規則設定，尚未啟用）</p>${edit?`<p>${esc(statusText(p.status))}</p><button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}</article>`;
+      return `<article>${photo(p.image_url)}<h3>${esc(p.title)}</h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}<a class="shop-product-qr" data-product-qr href="${esc(productLink(p.id))}" aria-label="${esc(p.title)}：商品扣抵入口">載入商品 QR…</a></div></article>`;
     }
     async function list(after='',q='') {
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">載入店家中…</p>';
@@ -69,6 +84,7 @@
       const s=result.shop;
       const details=[s.category,s.address,s.phone,s.hours].filter(Boolean).join('\n');
       content.innerHTML=`<article>${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
+      void renderProductQrs();
     }
     function input(key,label,value='',max=200,multiline=false,type='text') {
       return `<label>${label}${multiline?`<textarea name="${key}" maxlength="${max}">${esc(value)}</textarea>`:`<input name="${key}" type="${type}" maxlength="${max}" value="${esc(value)}" ${['name','title','price'].includes(key)?'required':''} ${type==='number'?'min="0" step="0.01"':''}>`}</label>`;
@@ -82,6 +98,7 @@
     function renderManage() {
       const s=shop||{};
       content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${input('category','分類',s.category,40)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary">新增商品</button></div><h2>商品管理（${items.length}/100）</h2><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
+      void renderProductQrs();
     }
     async function manage() {
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
@@ -90,7 +107,7 @@
     }
     function edit(p={}) {
       const editor=content.querySelector('.shop-editor'); if(!editor) return;
-      editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${select('redeem_type','點數折抵政策（尚未啟用）',[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',p.redeem_value||0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'draft')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
+      editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${select('redeem_type','點數折抵政策',[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',p.redeem_value||0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'draft')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
       editor.scrollIntoView({block:'start',behavior:'smooth'});
       editor.querySelector('form').dataset.requestKey=crypto.randomUUID();
     }
@@ -166,7 +183,13 @@
       });
     };
     const id=standalone?new URL(location.href).searchParams.get('shop'):'';
-    void run(()=>id?view(id):list());
+    void run(async()=>{
+      if(productId&&!standalone) {
+        const version=++epoch;
+        const module=await import('./shop-product-checkout.js?v=1');
+        if(version===epoch)await module.mountProductCheckout(content,productId,()=>version===epoch);
+      }else await (id?view(id):list());
+    });
   }
   window.StoreShop={mount};
   const root=document.getElementById('public-store-shop'); if(root) mount(root,true);

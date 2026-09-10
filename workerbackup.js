@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { runCashierRequest, getCashierRequest, getRedemptionProduct } from './worker/store-cashier-requests.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
 import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
 import { ExchangeZoneModule } from './worker/exchange-zone.mjs';
@@ -180,6 +181,8 @@ const ACTION_POLICIES = {
   searchStoreKnowledgeBase: { access: 'manager', tenantScoped: true },
   extractLineVoomMedia: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
   storeAdjustCustomerPoints: { access: 'manager', tenantScoped: true },
+  getStoreCashierRequest: { access: 'manager', tenantScoped: true },
+  getStoreShopRedemptionProduct: { access: 'manager', tenantScoped: true },
   getStorePointCustomer: { access: 'manager', tenantScoped: true },
   prepareStorePointCashierSession: { access: 'manager', tenantScoped: true },
   listStorePointCashierLogs: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
@@ -4785,6 +4788,7 @@ const PointModule = {
     if (!apiKey) return { success: false, error: 'Missing POINT_API_KEY' };
     const rawLineUserId = String(payload.LINE_user_id || payload.lineUserId || payload.userId || '').trim();
     const lineUserId = await this.resolvePointUserId(env, rawLineUserId).catch(() => rawLineUserId);
+    if (payload.requireConfirmedResult === true && lineUserId !== rawLineUserId) return {success:false,error:'點數身分已改變，請查單核對'};
     if (!lineUserId) return { success: false, error: 'Missing LINE user id' };
 
     let motherMember = { success: true, skipped: true, reason: 'skip_mother_member_setup', lineUserId };
@@ -4817,9 +4821,11 @@ const PointModule = {
     const res = await fetch(this.insertApiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      ...(payload.requireConfirmedResult === true ? {signal:AbortSignal.timeout(15000)} : {}),
       body: JSON.stringify(body)
     });
     const data = await res.json().catch(() => ({}));
+    if (payload.requireConfirmedResult === true && data?.success !== true) return {success:false,error:'母站扣點回應未明確確認，請查單核對',data};
     if (!res.ok || data.success === false) {
       return { success: false, error: data.message || data.code || ('Point insert API HTTP ' + res.status), data, motherMember };
     }
@@ -6213,7 +6219,7 @@ const PointModule = {
     return true;
   },
 
-  async storeAdjustCustomerPoints(payload, env) {
+  async storeAdjustCustomerPoints(payload, env, beforeWrite, product) {
     const operatorFee = 0;
     const actorId = String(payload.authenticatedUserId || payload.userId || '').trim();
     const rawCustomerId = String(
@@ -6361,6 +6367,10 @@ const PointModule = {
 
     const operatorFeeResult = { status: 'free', skipped: true, pointType: 'gift_money', points: 0 };
 
+    if (typeof beforeWrite !== 'function') return {success:false,error:'缺少收銀交易保護'};
+    await beforeWrite(customerPointUserId);
+    if (product) eventContent += `；商品：${product.title}`;
+    eventContent += `；交易：${payload.transactionId}`;
     const result = await this.insertUserPoint({
       userId: customerPointUserId,
       points,
@@ -6370,7 +6380,8 @@ const PointModule = {
       shop_user_lineid: actorId,
       child_shop_name: sourceLabel,
       shop_remark: `source=${sourceLabel}; store_cashier operator=${actorId}; customer=${customerPointUserId}; amount=${amount}; mode=${isReward ? 'reward' : 'redeem'}`,
-      skipMotherMemberSetup: true
+      skipMotherMemberSetup: true,
+      requireConfirmedResult: true
     }, env);
 
     if (!result || !result.success) {
@@ -6386,7 +6397,7 @@ const PointModule = {
     }
 
     const changedPoints = Math.abs(points);
-    const ledgerId = `SPC_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const ledgerId = `SPC_${actorId}_${payload.transactionId}`;
     const syncJob = null;
     if (await this.ensureCashierLedgerTable(env)) {
       await env.ACTMASTER_DB.prepare(`
@@ -17189,7 +17200,11 @@ async function dispatchAction(action, payload, request, env) {
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
     case 'getStorePointCustomer':  return await PointModule.getStorePointCustomer(payload || {}, env);
     case 'prepareStorePointCashierSession': return await PointModule.prepareStorePointCashierSession(payload || {}, env);
-    case 'storeAdjustCustomerPoints': return await PointModule.storeAdjustCustomerPoints(payload || {}, env);
+    case 'storeAdjustCustomerPoints': return await runCashierRequest(payload || {}, env,
+      raw => PointModule.resolveStorePointCustomer(env, raw),
+      (safe, beforeWrite, product) => PointModule.storeAdjustCustomerPoints(safe, env, beforeWrite, product));
+    case 'getStoreCashierRequest': return await getCashierRequest(payload || {}, env);
+    case 'getStoreShopRedemptionProduct': return await getRedemptionProduct(payload || {}, env);
     case 'listStorePointCashierLogs': return await PointModule.listStorePointCashierLogs(payload || {}, env);
     case 'repairPointWalletSearchIndex': return await PointModule.repairPointWalletSearchIndex(payload || {}, env);
     case 'diagnosePointSync':    return await PointSyncModule.diagnose(payload || {}, env);

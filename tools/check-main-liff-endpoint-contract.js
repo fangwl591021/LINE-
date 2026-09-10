@@ -30,7 +30,7 @@ ok(auth.includes('await window.ensureActmasterPointFriendship()'), 'authenticate
 ok(config.includes("url.searchParams.set('point_friend', '1')"), 'successful recheck preserves the existing point_friend contract');
 ok(/js\/config\.js\?v=9\.14/.test(html), 'main endpoint configuration is cache-busted');
 ok(html.includes('<link rel=\"preload\" as=\"image\" href=\"assets/ai-home-assistant.png?v=1\" fetchpriority=\"high\">'), 'home assistant LCP image is discovered from the document head');
-ok(/js\/auth\.js\?v=10\.92/.test(html), 'main endpoint authentication is cache-busted');
+ok(/js\/auth\.js\?v=10\.93/.test(html), 'main endpoint authentication is cache-busted');
 ok(auth.includes("window.goPage(wantsCardCoolList ? 'card' : 'home', true)"), 'login landing renders without triggering a duplicate navigation load');
 ok(auth.includes('aggregateWalletReady') && !auth.includes('setTimeout(() => window.refreshPointBalanceBadge?.(), 300)'), 'point balance uses aggregate home data before its delayed fallback');
 ok(home.includes('window.__homeLoadPromises'), 'home background tasks coalesce matching in-flight work');

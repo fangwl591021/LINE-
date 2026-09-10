@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
+const worker=read('workerbackup.js'),front=read('js/modules/safe-cashier.js'),shop=read('js/modules/store-shop.js');
+for(const action of ['getStoreCashierRequest','getStoreShopRedemptionProduct'])assert(worker.includes(action+": { access: 'manager', tenantScoped: true }"));
+assert(worker.includes('case \'storeAdjustCustomerPoints\': return await runCashierRequest'));
+assert(worker.includes('await beforeWrite(customerPointUserId)'));
+assert(worker.includes('requireConfirmedResult: true'));
+assert(front.indexOf('localStorage.setItem(ownerKey')<front.indexOf("result=await window.callSafeCashier('storeAdjustCustomerPoints'"));
+assert(!front.includes("localStorage.setItem('token"));
+assert(shop.includes('data-product-qr'));
+assert(shop.includes("url.searchParams.set('shopProduct',id)"));
+assert(read('js/auth.js').includes("window.openStoreShop(urlParams.get('shopProduct'))"));
+assert(read('migrations/0030_store_cashier_requests.sql').includes("WHERE status IN ('pending','sending','unknown')"));
+console.log('Safe cashier and product QR wiring contracts passed.');

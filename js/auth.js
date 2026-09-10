@@ -2268,14 +2268,14 @@ window.submitStorePointCashier = async function(btn) {
   }
 
   try {
-    const res = await window.fetchAPI('storeAdjustCustomerPoints', {
+    const res = await window.submitSafeCashier({
       customerUserId,
       amount,
       deductPoints,
       mode,
       cashierSessionId: window.storePointCustomer?.cashierSessionId || '',
       autoBindPointAccount: canAutoBindReward
-    }, true);
+    });
     if (!res || res.error) throw new Error(res?.error || '點數處理失敗');
     const data = res.data || res;
     if (data.localPointOnly || (data.customerPointSource && data.customerPointSource !== 'mother')) {
@@ -2832,6 +2832,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔓 已註冊用戶邏輯
     window.applyRegisteredUserSession(checkRes.info);
+    if (urlParams.get('shopProduct') && !shareCardId && !claimCardId && !likeCardId) {
+      await window.openStoreShop(urlParams.get('shopProduct'));
+      return;
+    }
     try {
       localStorage.setItem(authCacheKey, JSON.stringify({ info: checkRes.info, savedAt: Date.now() }));
     } catch (e) {}
