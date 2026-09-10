@@ -13,6 +13,8 @@ function fixture() {
   sql.prepare('INSERT INTO users VALUES (?,?)').run(USER,'user');
   sql.exec(readFileSync(new URL('../migrations/0029_store_shop_catalog.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0031_store_product_category.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0030_store_cashier_requests.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0033_store_shop_sales_index.sql',import.meta.url),'utf8'));
   const db={prepare(query){return {bind(...args){return {async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){const result=sql.prepare(query).run(...args);return {meta:{changes:Number(result.changes)}};}};}};}};
   const fetcher=async(url,options)=>{
     assert.equal(url,'https://api.line.me/v2/profile');
@@ -28,6 +30,66 @@ function fixture() {
 }
 const store=(extra={})=>({name:'測試店面',description:'第一行\n第二行',status:'active',version:0,...extra});
 const product=(extra={})=>({title:'商品',price_cents:19900,redeem_type:'fixed',redeem_value:30,status:'active',request_key:crypto.randomUUID(),...extra});
+
+test('sales: owner-only, successful product transactions, Taiwan dates, safe history and no writes',async()=>{
+  const {call,sql}=fixture();
+  await call('/store',store(),'a');await call('/store',store(),'b');
+  const p=(await call('/product',product(),'a')).products[0];
+  const other=(await call('/product',product(),'b')).products[0];
+  const insert=(actor,id,time,status='succeeded',extra={})=>sql.prepare('INSERT INTO store_cashier_requests(actor_id,request_id,customer_id,fingerprint,status,updated_at) VALUES(?,?,?,?,?,?)')
+    .run(actor,crypto.randomUUID(),crypto.randomUUID(),JSON.stringify({productId:id,mode:'redeem',amount:8800,deductPoints:800,raw:'PRIVATE-CUSTOMER',qrHash:'PRIVATE-HASH',...extra}),status,time);
+  insert(A,p.id,'2026-09-09 16:00:00'); // Taiwan September 10, exactly midnight
+  insert(A,p.id,'2026-09-10 15:59:59');
+  insert(A,p.id,'2026-09-09 15:59:59');
+  insert(A,p.id,'2026-09-10 16:00:00');
+  for(const state of ['pending','sending','unknown','failed'])insert(A,p.id,'2026-09-10 08:00:00',state);
+  insert(A,p.id,'2026-09-10 08:00:00','succeeded',{mode:'reward'});
+  insert(A,'','2026-09-10 08:00:00');
+  insert(B,other.id,'2026-09-10 08:00:00');
+  insert(A,other.id,'2026-09-10 08:00:00'); // even incorrect ownership metadata cannot leak another shop
+  insert(A,p.id,'2026-09-10 08:00:00','succeeded',{amount:'8800'});
+  sql.prepare("INSERT INTO store_cashier_requests VALUES(?,?,?,'broken JSON','succeeded',NULL,CURRENT_TIMESTAMP,?)").run(A,crypto.randomUUID(),'private','2026-09-10 08:00:00');
+  sql.prepare("UPDATE store_shop_products SET status='archived',title='Renamed',price_cents=1 WHERE id=?").run(p.id);
+  sql.prepare("UPDATE store_shop_stores SET status='draft' WHERE owner_uid=?").run(A);
+  const before=sql.prepare('SELECT total_changes() AS n').get().n;
+  const path='/sales?start=2026-09-10&end=2026-09-10&userId='+B+'&shop='+other.shop_id;
+  assert.equal((await call(path)).status,401);
+  assert.equal((await call(path,null,'invalid')).status,401);
+  assert.equal((await call(path,null,'c')).status,403);
+  const report=await call(path,null,'a');
+  assert.equal(report.status,200);
+  assert.deepEqual(report.summary,{count:2,amount:17600,points:1600,payable:16000});
+  assert.equal(report.records[0].confirmedAt,'2026-09-10T15:59:59Z');
+  assert.equal(report.records[0].productTitle,'Renamed'); // amount comes from transaction, never current price
+  assert.equal(report.records[0].amount,8800);
+  assert.equal(report.hasNext,false);
+  assert.doesNotMatch(JSON.stringify(report),/PRIVATE|customer_id|owner_uid|fingerprint|result_json/);
+  assert.equal((await call(path,null,'b')).summary.count,1);
+  assert.equal(sql.prepare('SELECT total_changes() AS n').get().n,before);
+  sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A);
+  assert.equal((await call(path,null,'a')).status,403);
+  sql.close();
+});
+
+test('sales: bounded dates, inclusive leap day, deterministic pages, whole-range totals and empty results',async()=>{
+  const {call,sql}=fixture();await call('/store',store(),'a');
+  const p=(await call('/product',product(),'a')).products[0];
+  for(let i=0;i<45;i++)sql.prepare('INSERT INTO store_cashier_requests(actor_id,request_id,customer_id,fingerprint,status,updated_at) VALUES(?,?,?,?,?,?)')
+    .run(A,crypto.randomUUID(),'private',JSON.stringify({productId:p.id,mode:'redeem',amount:100,deductPoints:100}),'succeeded','2028-02-28 16:00:00');
+  const query='/sales?start=2028-02-29&end=2028-02-29';
+  const pages=await Promise.all([0,1,2,3].map(page=>call(query+'&page='+page,null,'a')));
+  assert.deepEqual(pages.map(p=>p.records.length),[20,20,5,0]);
+  assert.deepEqual(pages.map(p=>p.hasNext),[true,true,false,false]);
+  assert.equal(new Set(pages.flatMap(p=>p.records.map(r=>r.transactionId))).size,45);
+  for(const page of pages)assert.deepEqual(page.summary,{count:45,amount:4500,points:4500,payable:0});
+  for(const params of ['','start=2026-02-29&end=2026-03-01','start=2026-09-11&end=2026-09-10','start=2026-01-01&end=2027-01-02','start=2026-01-01&end=2026-01-01&page=-1','start=2026-01-01&end=2026-01-01&page=1.5']) {
+    assert.equal((await call('/sales?'+params,null,'a')).status,400,params);
+  }
+  const empty=await call('/sales?start=2026-09-10&end=2026-09-10',null,'a');
+  assert.deepEqual(empty.summary,{count:0,amount:0,points:0,payable:0});assert.deepEqual(empty.records,[]);
+  assert.equal((await call(query,null,'b')).status,404); // no shop
+  sql.close();
+});
 
 test('product categories persist, validate and preserve older clients without category',async()=>{
   const {call,sql}=fixture(); await call('/store',store(),'a');

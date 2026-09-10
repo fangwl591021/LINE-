@@ -23,3 +23,10 @@
 .store-shop .member-qr-status{font-size:12px;line-height:1.5}
 .store-shop .shop-product-qr{overflow-wrap:anywhere}
 .store-shop .shop-checkout [hidden]{display:none!important}
+.store-shop .shop-sales-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.store-shop .shop-sales-summary .shop-box{margin:0;padding:12px;overflow-wrap:anywhere}
+.store-shop .shop-sales-summary strong{display:block;font-size:20px;color:#006b48;margin-top:6px}
+.store-shop [data-sales-form] label{flex:1;min-width:0}
+.store-shop [data-sales-form] input{width:100%;min-width:0}
+.store-shop [data-sales-form]{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px}
+.store-shop [data-sales-form]>button{grid-column:1/-1}

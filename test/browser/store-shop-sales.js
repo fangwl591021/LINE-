@@ -1,0 +1,35 @@
+// Isolated local SQLite/Chrome harness only, with 25 synthetic successful sales.
+async()=>{
+ const until=async(fn)=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,50));}throw Error('Timeout: '+document.body.innerText);};
+ const check=(value,message)=>{if(!value)throw Error(message);};
+ await window.openStoreShop();
+ await until(()=>document.querySelector('[data-do=manage]'));
+ document.querySelector('[data-do=manage]').click();await until(()=>document.querySelector('[data-do=sales]'));
+ if(!window.salesPreviouslyOpened)check(!performance.getEntriesByType('resource').some(r=>r.name.includes('store-shop-sales.js')),'sales eagerly loaded');
+ document.querySelector('[data-do=sales]').click();
+ await until(()=>document.querySelector('.shop-sales-summary'));
+ window.salesPreviouslyOpened=true;
+ const summary=()=>document.querySelector('.shop-sales-summary')?.innerText;
+ check(summary().includes('25 筆')&&summary().includes('220,000')&&summary().includes('20,000')&&summary().includes('200,000'),'wrong totals');
+ check(document.querySelectorAll('.shop-sales-result details').length===20,'page size');
+ check(!document.querySelector('img[src=x]'),'unescaped title');
+ document.querySelector('[data-sales-page="1"]').click();
+ await until(()=>document.querySelectorAll('.shop-sales-result details').length===5);
+ check(summary().includes('25 筆'),'totals narrowed to page');
+ check(document.querySelector('[data-sales-page="2"]').disabled,'extra page');
+ document.querySelector('[data-period=today]').click();await until(()=>document.querySelectorAll('.shop-sales-result details').length===20);
+ const form=document.querySelector('[data-sales-form]');form.elements.start.value='2020-01-01';form.elements.end.value='2020-01-01';form.requestSubmit();
+ await until(()=>summary()?.includes('0 筆'));
+ const original=window.fetch;let pending=[];
+ window.fetch=(url,options)=>String(url).includes('/sales?')?new Promise(resolve=>pending.push(()=>resolve(new Response(JSON.stringify({success:true,start:'2020-01-01',end:'2020-01-01',page:0,hasNext:false,summary:{count:999,amount:999,points:999,payable:0},records:[]}))))):original(url,options);
+ document.querySelector('[data-period=today]').click();
+ document.querySelector('[data-do=manage]').click();await until(()=>document.querySelector('[data-form=store]'));
+ pending.forEach(done=>done());await new Promise(r=>setTimeout(r,100));
+ check(document.querySelector('[data-form=store]')&&!document.querySelector('.shop-sales-summary'),'stale response replaced management');
+ window.fetch=async(url,options)=>String(url).includes('/sales?')?new Response(JSON.stringify({success:false,error:'測試服務不可用'}),{status:503}):original(url,options);
+ document.querySelector('[data-do=sales]').click();await until(()=>document.querySelector('.shop-sales-status')?.textContent.includes('無法載入'));
+ check(!document.querySelector('.shop-sales-summary'),'failure rendered as zero');
+ window.fetch=original;document.querySelector('[data-period=month]').click();await until(()=>document.querySelector('.shop-sales-summary'));
+ check(document.documentElement.scrollWidth<=innerWidth,'mobile overflow');
+ return {width:innerWidth,totals:summary(),pagination:true,empty:true,errorNotZero:true,staleResponseIgnored:true};
+}

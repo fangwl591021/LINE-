@@ -1,4 +1,5 @@
-// Catalog only. No point, ledger, order or cashier calls.
+// Catalog and read-only sales. No point writes or cashier execution calls.
+import {readShopSales} from './store-shop-sales.mjs';
 const roles = ['store','tenant','店長','租戶','admin','總管'];
 const categories = ['','食','宿','遊','購','行','服務','製造'];
 const publicColumns = 's.id,s.name,s.description,s.category,s.address,s.phone,s.hours,s.image_url,s.status,s.version,s.updated_at';
@@ -82,11 +83,17 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       return reply({success:true,shops:rows.slice(0,40),next:rows.length>40?rows[39].id:''});
     }
     const manage=request.method==='GET'&&url.pathname==='/v1/store-shop/manage';
+    const sales=request.method==='GET'&&url.pathname==='/v1/store-shop/sales';
     const writeStore=request.method==='POST'&&url.pathname==='/v1/store-shop/store';
     const writeProduct=request.method==='POST'&&url.pathname==='/v1/store-shop/product';
-    if(!manage&&!writeStore&&!writeProduct) fail('不支援此商城操作',404);
+    if(!manage&&!sales&&!writeStore&&!writeProduct) fail('不支援此商城操作',404);
     const uid=await actor(request,db,fetcher);
     const shop=await own(db,uid);
+    if(sales) {
+      if(!shop) fail('請先建立店面',404);
+      const result=await readShopSales(db,uid,url.searchParams);
+      return reply(result,result.success?200:400);
+    }
     if(manage) return reply({success:true,shop:publicStore(shop),products:shop?await products(db,shop.id,true):[]});
     const data=await readJson(request); const now=new Date().toISOString();
     if(writeStore) {
