@@ -9,9 +9,10 @@ function fixture(t) {
   const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
   sql.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT);');
   for(const [uid,role,name] of [[A,'store','甲店長'],[B,'admin','乙店長'],[C,'user','買家小陳'],[D,'user','另一買家']])sql.prepare('INSERT INTO users VALUES(?,?,?)').run(uid,role,name);
-  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0034_store_commerce.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
   for(const [id,uid] of [['shop-a',A],['shop-b',B]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','2026-09-10')").run(id,uid,id);
   for(const [id,shop] of [['p-a','shop-a'],['p-b','shop-b']])sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES(?,?,?,880000,'active','2026-09-10',?)").run(id,shop,'眼鏡 '+id,id);
+  sql.exec("UPDATE store_shop_products SET purchase_mode='online'");
   const hooks={};
   const db={prepare(query){return {bind(...args){return {
     sync(){if(hooks.beforeRun)hooks.beforeRun(query);const out=sql.prepare(query).run(...args);return {meta:{changes:Number(out.changes)}};},
@@ -29,7 +30,7 @@ function fixture(t) {
   return {sql,db,env,hooks,call,setup,order,act};
 }
 const config=(extra={})=>({version:0,enabled:true,bank_name:'測試銀行',bank_code:'004',bank_holder:'測試店',bank_account:'123456789012',shipping_fee_cents:6000,free_shipping_cents:1000000,...extra});
-const cart=(extra={})=>({shop_id:'shop-a',items:[{id:'p-a',quantity:1}],payment_method:'REMITTANCE',points_used:0,customer:{name:'收件小林',phone:'0912345678',carrier:'POST',address:'100 台北市測試路1號',store_info:'',note:''},...extra});
+const cart=(extra={})=>({shop_id:'shop-a',items:[{id:'p-a',quantity:1}],payment_method:'REMITTANCE',points_used:0,buyer:{name:'購買小陳',phone:'0912345678',email:''},customer:{postal_code:'100',city:'台北市',district:'中正區',name:'收件小林',phone:'0912345678',carrier:'POST',address:'100 台北市測試路1號',store_info:'',note:''},...extra});
 
 test('default release gate blocks transactions, settings prep and old receipts remain available',async t=>{
   const f=fixture(t);delete f.env.STORE_COMMERCE_ENABLED;
@@ -124,6 +125,48 @@ test('unpaid cancellation does not refund or permit future payment/shipping',asy
   assert.equal(order.payment_status,'cancelled');assert.equal(order.received_cents,0);
   assert.equal((await f.act(order,'report_remittance',{last5:'12345'})).status,409);
 });
+test('in-store products reject quote and order, including a channel switch during insert',async t=>{
+  const f=fixture(t);await f.setup();const priced=await f.call('/quote',cart());
+  const data={...cart(),quote_hash:priced.quote_hash,request_key:crypto.randomUUID()};
+  f.sql.exec("UPDATE store_shop_products SET purchase_mode='in_store' WHERE id='p-a'");
+  assert.equal((await f.call('/quote',cart({purchase_mode:'online'}))).status,409);
+  assert.equal((await f.call('/orders',data)).status,409);
+  f.sql.exec("UPDATE store_shop_products SET purchase_mode='online' WHERE id='p-a'");
+  f.hooks.beforeRun=query=>{if(query.startsWith('INSERT INTO store_commerce_orders')){delete f.hooks.beforeRun;f.sql.exec("UPDATE store_shop_products SET purchase_mode='in_store' WHERE id='p-a'");}};
+  assert.equal((await f.call('/orders',data)).status,409);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM store_commerce_orders').get().n,0);
+});
+
+test('buyer and recipient are required, separately snapshotted, validated and scoped',async t=>{
+  const f=fixture(t);await f.setup();const valid=cart();
+  for(const buyer of [undefined,null,[],{...valid.buyer,name:''},{...valid.buyer,phone:'1234'},{...valid.buyer,email:'bad@'}]){
+    assert.equal((await f.call('/quote',cart({buyer}))).status,400);
+    assert.equal((await f.call('/orders',{...cart({buyer}),request_key:crypto.randomUUID()})).status,400);
+  }
+  for(const customer of [{...valid.customer,name:''},{...valid.customer,phone:'0212345678'},{...valid.customer,city:''},{...valid.customer,district:''},{...valid.customer,address:''},{...valid.customer,postal_code:'ab'}])assert.equal((await f.call('/quote',cart({customer}))).status,400);
+  const {order}=await f.order({buyer:{name:'買家不同人',phone:'+886 912-345-678',email:'buyer@example.test'}});
+  assert.deepEqual(order.snapshot.buyer,{name:'買家不同人',phone:'0912345678',email:'buyer@example.test'});
+  assert.equal(order.snapshot.buyer_name,'買家不同人');assert.equal(order.snapshot.customer.name,'收件小林');
+  const merchant=await f.call('/orders?scope=merchant',null,'a');assert.deepEqual(merchant.orders[0].snapshot.buyer,order.snapshot.buyer);
+  assert.equal((await f.call('/orders',null,'d')).orders.length,0);
+});
+
+test('store pickup requires its own delivery info; contact changes invalidate quoted order',async t=>{
+  const f=fixture(t);await f.setup();
+  for(const carrier of ['FAMILY','SEVEN']){
+    const customer={...cart().customer,carrier,city:'',district:'',address:'',store_info:'測試門市 123 台北市中正區測試路1號'};
+    assert.equal((await f.call('/quote',cart({customer}))).status,200);
+    assert.equal((await f.call('/quote',cart({customer:{...customer,store_info:''}}))).status,400);
+  }
+  const quoted=await f.call('/quote',cart());
+  assert.equal((await f.call('/orders',{...cart(),buyer:{...cart().buyer,name:'改名'},quote_hash:quoted.quote_hash,request_key:crypto.randomUUID()})).status,409);
+  const {order,data}=await f.order();
+  assert.equal((await f.call('/orders',{...data,buyer:{...data.buyer,phone:'0999999999'}})).status,409);
+  const old={...order.snapshot};delete old.buyer;delete old.customer.city;delete old.customer.district;
+  f.sql.prepare('UPDATE store_commerce_orders SET snapshot_json=? WHERE id=?').run(JSON.stringify(old),order.id);
+  assert.equal((await f.call('/orders')).orders[0].snapshot.buyer_name,old.buyer_name);
+});
+
 test('bounded request, pagination and retired merchant fail closed',async t=>{
   const f=fixture(t);await f.setup();assert.equal((await f.call('/quote',{...cart(),junk:'x'.repeat(21000)})).status,413);
   for(let i=0;i<21;i++)await f.order();const first=await f.call('/orders');assert.equal(first.orders.length,20);assert.equal(first.has_more,true);

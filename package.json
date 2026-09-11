@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "test:store-product-ocr": "node --test test/store-product-ocr.test.mjs",
     "test:store-commerce": "node --test test/store-commerce.test.mjs",
     "test:store-shop": "node --test test/store-shop.test.mjs test/store-cashier-requests.test.mjs",
     "guard:before": "node tools/run-change-guard.js before",

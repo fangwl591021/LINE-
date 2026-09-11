@@ -15,6 +15,7 @@ function fixture() {
   sql.exec(readFileSync(new URL('../migrations/0031_store_product_category.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0030_store_cashier_requests.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0033_store_shop_sales_index.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0035_store_product_purchase_mode.sql',import.meta.url),'utf8'));
   const db={prepare(query){return {bind(...args){return {async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){const result=sql.prepare(query).run(...args);return {meta:{changes:Number(result.changes)}};}};}};}};
   const fetcher=async(url,options)=>{
     assert.equal(url,'https://api.line.me/v2/profile');
@@ -243,6 +244,30 @@ test('public catalog pagination never loses a store and filters search',async()=
   const next=await call('?after='+first.next); assert.equal(next.shops.length,2);
   assert.equal((await call('?q=name005')).shops.length,1);sql.close();
 });
+test('purchase mode migration preserves legacy fields and defaults to in-store',()=>{
+  const sql=new DatabaseSync(':memory:');
+  sql.exec(readFileSync(new URL('../migrations/0029_store_shop_catalog.sql',import.meta.url),'utf8'));
+  sql.exec("INSERT INTO store_shop_stores(id,owner_uid,name,updated_at) VALUES('s','u','店','now'); INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key) VALUES('p','s','舊商品',880000,'now','key');");
+  const before={...sql.prepare('SELECT * FROM store_shop_products').get()};
+  sql.exec(readFileSync(new URL('../migrations/0035_store_product_purchase_mode.sql',import.meta.url),'utf8'));
+  const {purchase_mode,...after}=sql.prepare('SELECT * FROM store_shop_products').get();
+  assert.equal(purchase_mode,'in_store');assert.deepEqual(after,before);
+  assert.throws(()=>sql.exec("UPDATE store_shop_products SET purchase_mode='both'"));sql.close();
+});
+
+test('sales channel persists, rejects invalid values, and legacy clients preserve selection',async()=>{
+  const {call,sql}=fixture();const s=(await call('/store',store(),'a')).shop;
+  const p=(await call('/product',product(),'a')).products[0];assert.equal(p.purchase_mode,'in_store');
+  const online=(await call('/product',{...p,purchase_mode:'online'},'a')).products[0];assert.equal(online.purchase_mode,'online');
+  assert.equal((await call('?shop='+s.id)).products[0].purchase_mode,'online');
+  const {purchase_mode,...legacy}=online;
+  const saved=(await call('/product',{...legacy,title:'舊版改名'},'a')).products[0];assert.equal(saved.purchase_mode,'online');
+  assert.equal((await call('/product',{...online,purchase_mode:'in_store'},'a')).status,409);
+  assert.equal((await call('/product',{...saved,purchase_mode:'in_store'},'b')).status,400);
+  for(const value of ['both','',null,1])assert.equal((await call('/product',product({purchase_mode:value}),'a')).status,400);
+  assert.equal((await call('/product',{...saved,purchase_mode:'in_store'},'a')).products[0].purchase_mode,'in_store');sql.close();
+});
+
 test('store version conflicts preserve newer data',async()=>{
   const {call,sql}=fixture(); const s=(await call('/store',store(),'a')).shop;
   assert.equal((await call('/store',{...s,name:'new'},'a')).status,200);

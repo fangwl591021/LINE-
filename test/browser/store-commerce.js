@@ -8,8 +8,10 @@ async()=>{
  document.querySelector('[data-do=view]').click();await until(()=>document.querySelector('[data-do=online-buy]'));
  document.querySelector('[data-do=online-buy]').click();await until(()=>document.querySelector('[data-commerce-form=quote]'));
  let form=document.querySelector('form');form.elements['qty-p-a'].value='1';
- for(const [k,v]of Object.entries({name:'自動測試收件人',phone:'0912345678',address:'100 台北市測試路1號',note:crypto.randomUUID()}))form.elements[k].value=v;
+ form.elements.same_recipient.checked=false;form.dispatchEvent(new Event('change',{bubbles:true}));
+ for(const [k,v]of Object.entries({buyer_name:'自動測試購買人',buyer_phone:'0912345678',buyer_email:'buyer@example.test',city:'台北市',district:'中正區',name:'自動測試收件人',phone:'0912345678',address:'100 台北市測試路1號',note:crypto.randomUUID()}))form.elements[k].value=v;
  form.requestSubmit();await until(()=>document.querySelector('[data-commerce=place]'));
+ check(document.body.innerText.includes('自動測試購買人'),'buyer missing');check(!document.querySelector('[name=qty-p-local]'),'in-store item offered online');
  check(document.body.innerText.includes('8,860'),'server price');check(!document.querySelector('img[src=x]'),'XSS');
  document.querySelector('[data-commerce=edit]').click();await until(()=>document.querySelector('[data-commerce-form=quote]'));
  check(document.querySelector('[name=name]').value==='自動測試收件人','lost recipient');

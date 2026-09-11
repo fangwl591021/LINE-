@@ -75,7 +75,7 @@
     function detail(id) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
       ++epoch;pageKind('product');alert.textContent='';
-      content.innerHTML=`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button><article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><h2>${esc(p.title)}</h2><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${standalone?'<a class="shop-link" href="index.html">登入後線上選購</a>':`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`}<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button></div></article>`;
+      content.innerHTML=`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button><article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?'<a class="shop-link" href="index.html">登入後線上選購</a>':`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button></div></article>`;
     }
     const base=String(root.dataset.worker||window.Config?.WORKER_URL||'').replace(/\/+$/,'');
     async function api(path='',data,privateRead=false) {
@@ -94,8 +94,8 @@
     }
     function shopLink(id) { const url=new URL('store-shop.html',location.href); url.searchParams.set('shop',id); return url.href; }
     function product(p,edit=false) {
-      if(!edit)return `<article class="shop-product-card" data-product-category="${esc(p.category||'')}"><button class="shop-product-image" data-do="detail" data-id="${esc(p.id)}" aria-label="查看 ${esc(p.title)} 詳情">${photo(p.image_url)||'<span class="shop-product-placeholder" aria-hidden="true">🛍</span>'}</button><div class="shop-product-summary"><span class="shop-category-badge">${esc(p.category||'未分類')}</span><h3><button class="shop-product-title" data-do="detail" data-id="${esc(p.id)}">${esc(p.title)}</button></h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p class="shop-meta shop-product-policy">${esc(policy(p))}</p><div class="shop-product-actions"><button class="shop-detail-link" data-do="detail" data-id="${esc(p.id)}">詳情 ›</button><button data-do="member-qr" data-product-qr data-id="${esc(p.id)}" aria-label="出示 ${esc(p.title)} 本人 QR">▦ QR</button></div></div></article>`;
-      return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div></div></article>`;
+      if(!edit)return `<article class="shop-product-card" data-product-category="${esc(p.category||'')}"><button class="shop-product-image" data-do="detail" data-id="${esc(p.id)}" aria-label="查看 ${esc(p.title)} 詳情">${photo(p.image_url)||'<span class="shop-product-placeholder" aria-hidden="true">🛍</span>'}</button><div class="shop-product-summary"><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h3><button class="shop-product-title" data-do="detail" data-id="${esc(p.id)}">${esc(p.title)}</button></h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p class="shop-meta shop-product-policy">${esc(policy(p))}</p><div class="shop-product-actions"><button class="shop-detail-link" data-do="detail" data-id="${esc(p.id)}">詳情 ›</button><button data-do="member-qr" data-product-qr data-id="${esc(p.id)}" aria-label="出示 ${esc(p.title)} 本人 QR">▦ QR</button></div></div></article>`;
+      return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div></div></article>`;
     }
     async function list(after='',q='',category='') {
       pageKind('home');
@@ -135,7 +135,7 @@
       viewedShop=s;viewedProducts=result.products;
       const details=[s.category,s.address,s.phone,s.hours].filter(Boolean).join('\n');
       content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><details><summary>店家介紹與聯絡資訊</summary><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></details></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
-      if(!standalone)content.insertAdjacentHTML('afterbegin',`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
+      if(!standalone&&result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
       addProductTags(); if(category) filterProducts(category);
       content.querySelector('.shop-grid')?.classList.add('shop-browse-products');
     }
@@ -171,6 +171,8 @@
       editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${select('redeem_type','點數折抵政策',[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',p.redeem_value||0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'draft')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
       editor.scrollIntoView({block:'start',behavior:'smooth'});
       editor.querySelector('[name="description"]').closest('label').insertAdjacentHTML('beforebegin',select('category','商品分類',[['','未分類'],...categories.map(c=>[c,c])],p.category||''));
+      editor.querySelector('[name="category"]').closest('label').insertAdjacentHTML('afterend',select('purchase_mode','銷售方式',[['in_store','限店內'],['online','網購']],p.purchase_mode||'in_store'));
+      if(!p.id)editor.querySelector('h2').insertAdjacentHTML('afterend','<button type="button" data-do="dm-import" class="primary">上傳 DM・AI 辨識建商品</button><p class="shop-meta">DM 送至 AI 擷取商品資料，先帶入表單、核對後再儲存。不自動上架。</p>');
       editor.querySelector('form').dataset.requestKey=crypto.randomUUID();
     }
     async function run(job) {
@@ -215,7 +217,7 @@
             const version=++epoch;alert.textContent='';
             const mode=button.dataset.do==='online-manage'?'merchant':button.dataset.do==='online-orders'?'orders':'checkout';
             const selected=mode==='checkout'?await api(`?shop=${encodeURIComponent(button.dataset.id)}`):{};
-            const module=await import('./store-commerce.js?v=1');
+            const module=await import('./store-commerce.js?v=2');
             if(version===epoch)await module.mountCommerce(content,{base,mode,shop:selected.shop,products:selected.products,isCurrent:()=>version===epoch&&window.currentPage==='store-shop'});
             break;
           }
@@ -252,6 +254,12 @@
             const version=epoch;
             const module=await import('./member-product-qr.js?v=2');
             if(root.contains(target))await module.showMemberProductQr(target,id,()=>root.isConnected&&version===epoch);
+            break;
+          }
+          case 'dm-import': {
+            const form=button.closest('form'),version=epoch,token=window.liff?.getAccessToken?.();
+            const module=await import('./store-product-ocr.js?v=1');
+            if(form.isConnected&&version===epoch&&token===window.liff?.getAccessToken?.())module.openProductDm(form,{base,prepareImage,isCurrent:()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'});
             break;
           }
           case 'new': edit(); break;

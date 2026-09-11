@@ -42,6 +42,8 @@
 .store-shop [data-sales-form] input{width:100%;min-width:0}
 .store-shop [data-sales-form]{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px}
 .store-shop [data-sales-form]>button{grid-column:1/-1}
+.store-shop .commerce-panel [hidden],.store-shop .shop-dm-panel [hidden]{display:none!important}
+.store-shop .shop-dm-panel input[type=checkbox]{display:inline-block;width:22px;min-height:22px;vertical-align:middle}.store-shop .shop-dm-panel{margin-top:12px}
 .store-shop .commerce-panel input[type=checkbox]{display:inline-block;width:22px;min-height:22px;vertical-align:middle;margin-right:8px}
 .store-shop .commerce-panel form{margin:12px 0}.store-shop .commerce-panel .shop-sale-row{padding:10px 12px}
 

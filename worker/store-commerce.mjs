@@ -41,27 +41,35 @@ function settingsInput(data) {
   if(result.bank_code&&!/^\d{3}$/.test(result.bank_code))fail('銀行代碼須為三碼');
   if(result.bank_account&&!/^\d{5,24}$/.test(result.bank_account))fail('銀行帳號須為 5 至 24 碼數字');return result;
 }
+function contact(data,label) {
+  if(!data||typeof data!=='object'||Array.isArray(data))fail(`缺少${label}資料`);
+  const name=str(data,'name',80),phone=str(data,'phone',30).replace(/[ ()-]/g,'').replace(/^\+8860?/,'0');
+  if(!/^09\d{8}$/.test(phone))fail(`${label}手機須為 09 開頭的 10 碼手機號碼`);
+  return {name,phone};
+}
 function checkoutInput(data) {
   if(data.payment_method!=='REMITTANCE')fail('目前只開放銀行匯款；LINE Pay 尚未啟用');
   if(data.points_used!==undefined&&data.points_used!==0)fail('線上點數折抵尚未啟用，本次不會扣點');
   if(!Array.isArray(data.items)||!data.items.length||data.items.length>20)fail('每筆訂單限 1 至 20 種商品');
   const items=data.items.map(item=>({id:str(item,'id',80),quantity:integer(item?.quantity,99,'數量',1)})).sort((a,b)=>a.id.localeCompare(b.id));
   if(new Set(items.map(i=>i.id)).size!==items.length)fail('請合併重複商品數量');
+  const buyer={...contact(data.buyer,'購買人'),email:str(data.buyer,'email',254,false)};
+  if(buyer.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyer.email))fail('購買人 Email 格式錯誤');
   const customer=data.customer;if(!customer||typeof customer!=='object'||Array.isArray(customer))fail('缺少收件資料');
   const carrier=str(customer,'carrier',10);if(!['POST','FAMILY','SEVEN'].includes(carrier))fail('寄送方式無效');
-  const recipient={name:str(customer,'name',80),phone:str(customer,'phone',30),carrier,address:str(customer,'address',200,carrier==='POST'),store_info:str(customer,'store_info',120,carrier!=='POST'),note:str(customer,'note',300,false)};
-  if(!/^\+?[0-9 ()-]{7,30}$/.test(recipient.phone))fail('聯絡電話格式錯誤');
-  return {shop_id:str(data,'shop_id',80),items,customer:recipient,payment_method:'REMITTANCE',points_used:0};
+  const recipient={...contact(customer,'收件人'),carrier,postal_code:str(customer,'postal_code',6,false),city:str(customer,'city',20,carrier==='POST'),district:str(customer,'district',20,carrier==='POST'),address:str(customer,'address',200,carrier==='POST'),store_info:str(customer,'store_info',120,carrier!=='POST'),note:str(customer,'note',300,false)};
+  if(recipient.postal_code&&!/^\d{3,6}$/.test(recipient.postal_code))fail('郵遞區號須為 3 至 6 碼數字');
+  return {shop_id:str(data,'shop_id',80),items,buyer,customer:recipient,payment_method:'REMITTANCE',points_used:0};
 }
 async function quote(db,user,input) {
   const shop=await q(db,`SELECT s.* FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','tenant','店長','租戶','admin','總管'))`,input.shop_id).first();
   if(!shop)fail('店家尚未開放',404);const config=await settings(db,shop.id);if(!config?.enabled)fail('店家尚未開放線上匯款下單',409);
-  const products=(await q(db,`SELECT id,title,price_cents,version FROM store_shop_products WHERE shop_id=? AND status='active' AND id IN (${input.items.map(()=>'?').join(',')})`,shop.id,...input.items.map(i=>i.id)).all()).results;
-  if(products.length!==input.items.length)fail('商品已下架或不屬於此店，請重新選購',409);
+  const products=(await q(db,`SELECT id,title,price_cents,version FROM store_shop_products WHERE shop_id=? AND status='active' AND purchase_mode='online' AND id IN (${input.items.map(()=>'?').join(',')})`,shop.id,...input.items.map(i=>i.id)).all()).results;
+  if(products.length!==input.items.length)fail('商品限店內、已下架或不屬於此店，請重新選購',409);
   const items=input.items.map(item=>{const product=products.find(p=>p.id===item.id);return {...product,quantity:item.quantity,line_total_cents:product.price_cents*item.quantity};});
   const subtotal=items.reduce((sum,i)=>sum+i.line_total_cents,0),fee=config.free_shipping_cents>0&&subtotal>=config.free_shipping_cents?0:config.shipping_fee_cents;
   integer(subtotal+fee,100000000,'訂單金額',1);
-  const snapshot={shop_id:shop.id,shop_name:shop.name,shop_version:shop.version,settings_version:config.version,buyer_name:String(user.name||'').slice(0,80),items,customer:input.customer,payment_method:'REMITTANCE',points_used:0,subtotal_cents:subtotal,shipping_fee_cents:fee,total_cents:subtotal+fee,bank:{name:config.bank_name,code:config.bank_code,account:config.bank_account,holder:config.bank_holder}};
+  const snapshot={shop_id:shop.id,shop_name:shop.name,shop_version:shop.version,settings_version:config.version,buyer_name:input.buyer.name,buyer:input.buyer,items,customer:input.customer,payment_method:'REMITTANCE',points_used:0,subtotal_cents:subtotal,shipping_fee_cents:fee,total_cents:subtotal+fee,bank:{name:config.bank_name,code:config.bank_code,account:config.bank_account,holder:config.bank_holder}};
   return {snapshot,quote_hash:await hash({buyer:user.line_id,snapshot})};
 }
 function publicOrder(row) {const {buyer_uid,request_hash,request_key,...order}=row;const snapshot=JSON.parse(order.snapshot_json);delete order.snapshot_json;return {...order,snapshot};}
@@ -76,7 +84,7 @@ async function createOrder(db,user,data,now) {
   const priced=await quote(db,user,input);if(data.quote_hash!==priced.quote_hash)fail('價格、運費或收款資料已變更，請重新確認訂單',409);
   const s=priced.snapshot,id=crypto.randomUUID();
   // One conditional insert closes the race with product/settings updates.
-  const guards=s.items.map(()=>"EXISTS(SELECT 1 FROM store_shop_products WHERE id=? AND shop_id=? AND version=? AND status='active')").join(' AND ');
+  const guards=s.items.map(()=>"EXISTS(SELECT 1 FROM store_shop_products WHERE id=? AND shop_id=? AND version=? AND status='active' AND purchase_mode='online')").join(' AND ');
   await q(db,`INSERT INTO store_commerce_orders(id,shop_id,buyer_uid,request_key,request_hash,snapshot_json,total_cents,created_at,updated_at)
     SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? AND s.version=? AND s.status='active' AND lower(u.role) IN ('store','tenant','店長','租戶','admin','總管'))
     AND EXISTS(SELECT 1 FROM store_commerce_settings WHERE shop_id=? AND version=? AND enabled=1) AND ${guards}
