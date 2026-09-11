@@ -3,7 +3,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const money=c=>'NT$ '+(Number(c)/100).toLocaleString('zh-TW');
 const paymentText={pending:'待匯款',reported:'已回報／待核帳',paid:'已收款',cancelled:'已取消'};
 const shippingText={unfulfilled:'未出貨',shipped:'已出貨',completed:'已完成'};
-const carrierText={POST:'中華郵政',FAMILY:'全家',SEVEN:'7-11'};
+const carrierText={POST:'中華郵政',FAMILY:'全家店到店',SEVEN:'7-11 店到店'};
 const field=(name,label,value='',type='text',max=200,attrs='')=>`<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" maxlength="${max}" ${attrs} ${type==='number'?'min="0" step="0.01"':''}></label>`;
 function receipt(s) {
   return `<h3>${esc(s.shop_name)}</h3>${s.items.map(i=>`<p>${esc(i.title)} × ${i.quantity}　${money(i.line_total_cents)}</p>`).join('')}<p>商品 ${money(s.subtotal_cents)}／運費 ${money(s.shipping_fee_cents)}<br><strong>應匯款 ${money(s.total_cents)}</strong>（本筆不折抵點數）</p>`;
@@ -29,7 +29,7 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
   }
   async function run(job) {
     if(busy)return;busy=true;const controls=[...panel.querySelectorAll('button,input,select')],disabled=controls.map(c=>c.disabled);controls.forEach(c=>c.disabled=true);
-    try{await job();}catch(e){error(e);}finally{busy=false;controls.forEach((c,i)=>c.disabled=disabled[i]);}
+    try{await job();}catch(e){error(e);}finally{busy=false;controls.forEach((c,i)=>c.disabled=disabled[i]);panel.querySelector('[data-commerce-form="quote"]')?.dispatchEvent(new Event('input'));}
   }
   function settingsForm(result) {
     config=result.settings;
@@ -57,7 +57,7 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
   }
   function checkoutForm() {
     if(!products.length){paint('<h2>本店目前沒有網購商品</h2><p>限店內商品請至店內購買。</p>');return;}
-    paint(`<h2>${esc(shop.name)}・線上選購</h2><form data-commerce-form="quote" class="shop-box">${products.map(p=>`<label>${esc(p.title)}　${money(p.price_cents)}<input type="number" name="qty-${esc(p.id)}" min="0" max="99" step="1" value="0" aria-label="${esc(p.title)}數量"></label>`).join('')}<h3>購買人資訊</h3><button type="button" data-commerce="load-buyer">帶入已儲存網購人資料</button><p class="shop-meta">先至「我的 → 會員註冊 → 網購人資料」填寫。帶入後請核對；勾選同購買人時也會帶入郵寄地址。</p>${field('buyer_name','購買人姓名 *','','text',80,'required autocomplete="name"')}${field('buyer_phone','購買人手機 *','','tel',30,'required autocomplete="tel"')}${field('buyer_email','Email（選填）','','email',254,'autocomplete="email"')}<h3>收件人資料</h3><label><input type="checkbox" name="same_recipient" checked>收件人同購買人</label>${field('name','收件人姓名 *','','text',80,'required')}${field('phone','收件人手機 *','','tel',30,'required')}<label>寄送方式<select name="carrier"><option value="POST">中華郵政</option><option value="FAMILY">全家（手填門市）</option><option value="SEVEN">7-11（手填門市）</option></select></label>${field('postal_code','郵遞區號（選填）','','text',6,'inputmode="numeric" autocomplete="postal-code"')}${field('city','縣市 *','','text',20,'required autocomplete="address-level1"')}${field('district','區域／鄉鎮市 *','','text',20,'required autocomplete="address-level2"')}${field('address','路名、巷弄、門牌、樓層 *','','text',200,'required autocomplete="street-address"')}${field('store_info','超商店號、店名與地址（超商寄送必填）','','text',120)}${field('note','訂單備註','','text',300)}<button class="primary">確認金額與收款店家</button></form>`);
+    paint(`<h2>${esc(shop.name)}・線上選購</h2><form data-commerce-form="quote" class="shop-box">${products.map(p=>`<label>${esc(p.title)}　${money(p.price_cents)}<input type="number" name="qty-${esc(p.id)}" min="0" max="99" step="1" value="0" aria-label="${esc(p.title)}數量"></label>`).join('')}<h3>購買人資訊</h3><button type="button" data-commerce="load-buyer">帶入已儲存網購人資料</button><p class="shop-meta">先至「我的 → 會員註冊 → 網購人資料」填寫。帶入後請核對；勾選同購買人時也會帶入寄送方式、郵寄地址或超商門市。</p>${field('buyer_name','購買人姓名 *','','text',80,'required autocomplete="name"')}${field('buyer_phone','購買人手機 *','','tel',30,'required autocomplete="tel"')}${field('buyer_email','Email（選填）','','email',254,'autocomplete="email"')}<h3>收件人資料</h3><label><input type="checkbox" name="same_recipient" checked>收件人同購買人</label>${field('name','收件人姓名 *','','text',80,'required')}${field('phone','收件人手機 *','','tel',30,'required')}<label>寄送方式<select name="carrier"><option value="POST">中華郵政</option><option value="FAMILY">全家店到店（手填門市）</option><option value="SEVEN">7-11 店到店（手填門市）</option></select></label>${field('postal_code','郵遞區號（選填）','','text',6,'inputmode="numeric" autocomplete="postal-code"')}${field('city','縣市 *','','text',20,'required autocomplete="address-level1"')}${field('district','區域／鄉鎮市 *','','text',20,'required autocomplete="address-level2"')}${field('address','路名、巷弄、門牌、樓層 *','','text',200,'required autocomplete="street-address"')}${field('store_info','超商店號、店名與地址（超商寄送必填）','','text',120)}${field('note','訂單備註','','text',300)}<button class="primary">確認金額與收款店家</button></form>`);
     const form=panel.querySelector('form');
     if(input){for(const [key,value] of Object.entries(input.customer))if(form.elements[key])form.elements[key].value=value;for(const [key,value] of Object.entries(input.buyer))form.elements['buyer_'+key].value=value;for(const item of input.items)if(form.elements['qty-'+item.id])form.elements['qty-'+item.id].value=item.quantity;}
     form.elements.same_recipient.checked=sameRecipient;
@@ -68,13 +68,18 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
       f.store_info.closest('label').hidden=post;f.store_info.disabled=post;f.store_info.required=!post;
     };
     form.oninput=sync;form.onchange=event=>{
+      if(event.target.name==='carrier')form.elements.store_info.value='';
+      if(event.target.name==='same_recipient'&&form.elements.same_recipient.checked)copyBuyerAddress(form,true);
+      if(event.target.name==='carrier'&&form.elements.same_recipient.checked)copyBuyerAddress(form);
       sync();
-      if((event.target.name==='same_recipient'||event.target.name==='carrier')&&form.elements.same_recipient.checked)copyBuyerAddress(form);
     };sync();
   }
-  function copyBuyerAddress(form){
-    if(!savedBuyerProfile||!form.elements.same_recipient.checked||form.elements.carrier.value!=='POST')return;
-    for(const key of ['postal_code','city','district','address'])form.elements[key].value=savedBuyerProfile[key]||'';
+  function copyBuyerAddress(form,applyCarrier=false){
+    if(!savedBuyerProfile||!form.elements.same_recipient.checked)return;
+    const f=form.elements,carrier=savedBuyerProfile.carrier||'POST';
+    if(applyCarrier)f.carrier.value=carrier;
+    if(f.carrier.value==='POST')for(const key of ['postal_code','city','district','address'])f[key].value=savedBuyerProfile[key]||'';
+    else if(f.carrier.value===carrier)f.store_info.value=savedBuyerProfile.store_info||'';
   }
   // Persist only an unresolved request ID + payload hash, never contact/bank data.
   async function pendingKey(payload) {
@@ -97,8 +102,8 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
         if(!result.profile)throw Error('尚未儲存網購人資料，請先至「我的 → 會員註冊」填寫。');
         savedBuyerProfile=result.profile;
         for(const key of ['name','phone','email'])form.elements['buyer_'+key].value=savedBuyerProfile[key]||'';
-        copyBuyerAddress(form);form.dispatchEvent(new Event('input'));
-        panel.querySelector('.commerce-error').textContent='已帶入本人網購資料，請核對收件人與地址；本次沒有建立訂單。';
+        copyBuyerAddress(form,true);form.dispatchEvent(new Event('input'));
+        panel.querySelector('.commerce-error').textContent='已帶入本人網購資料，請核對收件人、寄送方式與門市／地址；本次沒有建立訂單。';
       }
       if(command==='settings')settingsForm(await api('/settings'));
       if(command==='orders')await listOrders(0);

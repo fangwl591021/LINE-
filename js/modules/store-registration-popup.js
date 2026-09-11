@@ -65,7 +65,7 @@ export function openStoreRegistrationPopup({isCurrent=()=>true,standalone=false}
   buyerBar.addEventListener('toggle',()=>{
     if(!buyerBar.open||buyerStarted||!current())return;
     buyerStarted=true;const host=buyerBar.querySelector('[data-buyer-profile]');host.textContent='載入網購表單…';
-    void import('./store-buyer-profile.js?v=1').then(module=>{if(current())module.mountBuyerProfile(host,{base:window.Config?.WORKER_URL||'',isCurrent:current});}).catch(()=>{if(current()){buyerStarted=false;host.textContent='表單載入失敗，請收合後重新展開。';}});
+    void import('./store-buyer-profile.js?v=2').then(module=>{if(current())module.mountBuyerProfile(host,{base:window.Config?.WORKER_URL||'',isCurrent:current});}).catch(()=>{if(current()){buyerStarted=false;host.textContent='表單載入失敗，請收合後重新展開。';}});
   });
   try{modal.showModal();}catch(error){cleanup();throw error;}
   timer=setInterval(()=>{if(!current())close(true);},200);

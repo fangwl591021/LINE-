@@ -7,7 +7,7 @@ import {handleStoreShop} from '../../worker/store-shop.mjs';
 const sql=new DatabaseSync(':memory:');
 sql.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT);');
 for(const [token,role,name] of [['a','store','測試店家'],['b','user','測試購買者'],['c','admin','其他店家']])sql.prepare('INSERT INTO users VALUES(?,?,?)').run('U'+token.repeat(32),role,name);
-for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0036_store_product_ocr_usage.sql','0037_store_buyer_profiles.sql'])sql.exec(readFileSync(new URL('../../migrations/'+file,import.meta.url),'utf8'));
+for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0036_store_product_ocr_usage.sql','0037_store_buyer_profiles.sql','0038_store_buyer_delivery.sql'])sql.exec(readFileSync(new URL('../../migrations/'+file,import.meta.url),'utf8'));
 sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES('shop-a',?,'測試商城','active','2026-09-10')").run('U'+'a'.repeat(32));
 sql.exec("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES('p-a','shop-a','<img src=x onerror=alert(1)> 測試眼鏡',880000,'active','2026-09-10','product-a');");
 sql.exec("INSERT INTO store_commerce_settings(shop_id,enabled,bank_name,bank_code,bank_account,bank_holder,shipping_fee_cents,free_shipping_cents,updated_at) VALUES('shop-a',1,'測試銀行','004','1234567890','測試戶名',6000,1000000,'2026-09-10');");

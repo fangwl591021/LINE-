@@ -32,8 +32,8 @@ test('popup reuses registration, consent and toast nodes with cleanup instead of
 test('mall registration is explicit and lazy and versions match both entrypoints',()=>{
  const mall=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
  assert.match(mall,/data-do="registration">♙ 會員註冊／資料維護/);
- assert.match(mall,/case 'registration':[\s\S]*?import\('\.\/store-registration-popup\.js\?v=2'\)/);
+ assert.match(mall,/case 'registration':[\s\S]*?import\('\.\/store-registration-popup\.js\?v=3'\)/);
  const loader=readFileSync(new URL('../js/modules/store-shop-entry.js',import.meta.url),'utf8');
  const standalone=readFileSync(new URL('../store-shop.html',import.meta.url),'utf8');
- for(const file of [loader,standalone]){assert.match(file,/store-shop\.js\?v=23/);assert.match(file,/store-shop\.css\?v=19/);}
+ for(const file of [loader,standalone]){assert.match(file,/store-shop\.js\?v=24/);assert.match(file,/store-shop\.css\?v=20/);}
 });

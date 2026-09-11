@@ -1,4 +1,38 @@
 import {test} from 'node:test';
+test('CVS profiles save without a residential address and remain self-only',async t=>{
+ const f=fixture(t);
+ for(const [index,carrier] of ['FAMILY','SEVEN'].entries()){
+  const data=buyerProfile({version:index,carrier,store_info:carrier+' 123456 測試門市 測試路2號',city:'',district:'',address:''});
+  const saved=await f.call('/buyer-profile',data);assert.equal(saved.status,200);
+  assert.equal(saved.profile.carrier,carrier);assert.equal(saved.profile.store_info,data.store_info);
+  assert.equal(saved.profile.address,'');
+  assert.equal((await f.call('/buyer-profile',null,'d')).profile,null);
+ }
+ assert.equal((await f.call('/buyer-profile')).profile.carrier,'SEVEN');
+ for(const extra of [{carrier:'UNKNOWN'},{carrier:'FAMILY',store_info:''},{carrier:'SEVEN',store_info:'x'.repeat(121)},{carrier:'SEVEN',store_info:'x\nY'}]){
+  assert.equal((await f.call('/buyer-profile',buyerProfile({version:2,...extra}))).status,400);
+ }
+ assert.equal((await f.call('/buyer-profile')).profile.version,2);
+});
+test('CVS preference supplies an order snapshot but later profile edits do not change it',async t=>{
+ const f=fixture(t);await f.setup();
+ const {profile}=await f.call('/buyer-profile',buyerProfile({carrier:'FAMILY',store_info:'123456 全家測試店 測試路2號',city:'',district:'',address:''}));
+ const payload=cart({customer:{...profile,note:''}});
+ const quote=await f.call('/quote',payload);assert.equal(quote.status,200);
+ const created=await f.call('/orders',{...payload,quote_hash:quote.quote_hash,request_key:crypto.randomUUID()});
+ assert.equal(created.status,200);assert.equal(created.order.snapshot.customer.carrier,'FAMILY');
+ await f.call('/buyer-profile',{...profile,consent:true,carrier:'SEVEN',store_info:'654321 7-11 測試店'});
+ const history=await f.call('/orders');assert.equal(history.orders[0].snapshot.customer.store_info,profile.store_info);
+ assert.equal(history.orders[0].snapshot.customer.carrier,'FAMILY');
+});
+test('delivery migration preserves existing postal profiles',t=>{
+ const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
+ sql.exec(readFileSync(new URL('../migrations/0037_store_buyer_profiles.sql',import.meta.url),'utf8'));
+ sql.prepare('INSERT INTO store_buyer_profiles(owner_uid,name,phone,city,district,address,updated_at,consented_at) VALUES(?,?,?,?,?,?,?,?)').run('test','舊資料','0912345678','新北市','板橋區','原地址','now','now');
+ sql.exec(readFileSync(new URL('../migrations/0038_store_buyer_delivery.sql',import.meta.url),'utf8'));
+ const row=sql.prepare('SELECT * FROM store_buyer_profiles').get();
+ assert.equal(row.address,'原地址');assert.equal(row.carrier,'POST');assert.equal(row.store_info,'');assert.equal(row.version,1);
+});
 const buyerProfile=(extra={})=>({version:0,consent:true,name:'網購小林',phone:'0912345678',email:'buyer@example.test',postal_code:'220',city:'新北市',district:'板橋區',address:'測試路1號2樓',...extra});
 test('private buyer profile is self-only, opt-in and usable without enabling checkout',async t=>{
  const f=fixture(t);delete f.env.STORE_COMMERCE_ENABLED;
@@ -70,7 +104,7 @@ function fixture(t) {
   const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
   sql.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT);');
   for(const [uid,role,name] of [[A,'store','甲店長'],[B,'admin','乙店長'],[C,'user','買家小陳'],[D,'user','另一買家']])sql.prepare('INSERT INTO users VALUES(?,?,?)').run(uid,role,name);
-  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0037_store_buyer_profiles.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0037_store_buyer_profiles.sql','0038_store_buyer_delivery.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
   for(const [id,uid] of [['shop-a',A],['shop-b',B]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','2026-09-10')").run(id,uid,id);
   for(const [id,shop] of [['p-a','shop-a'],['p-b','shop-b']])sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES(?,?,?,880000,'active','2026-09-10',?)").run(id,shop,'眼鏡 '+id,id);
   sql.exec("UPDATE store_shop_products SET purchase_mode='online'");

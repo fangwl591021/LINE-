@@ -216,7 +216,7 @@
           case 'mine':memberHome();break;
           case 'registration': {
             const version=epoch;
-            const module=await import('./store-registration-popup.js?v=2');
+            const module=await import('./store-registration-popup.js?v=3');
             const isCurrent=()=>version===epoch&&root.isConnected&&!standalone&&window.currentPage==='store-shop';
             if(isCurrent())module.openStoreRegistrationPopup({standalone,isCurrent});
             break;
@@ -252,7 +252,7 @@
             const version=++epoch;alert.textContent='';
             const mode=button.dataset.do==='online-manage'?'merchant':button.dataset.do==='online-orders'?'orders':'checkout';
             const selected=mode==='checkout'?(viewedShop?.id===button.dataset.id?{shop:viewedShop,products:viewedProducts}:await api(`?shop=${encodeURIComponent(button.dataset.id)}`)):{};
-            const module=await import('./store-commerce.js?v=3');
+            const module=await import('./store-commerce.js?v=4');
             if(version===epoch)await module.mountCommerce(content,{base,mode,shop:selected.shop,products:selected.products,isCurrent:()=>version===epoch&&window.currentPage==='store-shop'});
             break;
           }

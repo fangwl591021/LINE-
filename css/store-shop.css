@@ -220,3 +220,5 @@ body:has(.store-history-popup[open]){overflow:hidden}
 .store-buyer-bar button{min-height:44px;border:1px solid #ddd8ca;border-radius:12px;padding:8px 14px;background:#fff;color:#16345a}
 .store-buyer-bar button[type=submit]{width:100%;background:#163b5a;color:white;border:0}
 .store-buyer-bar [data-buyer-status]{font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.store-buyer-bar select{box-sizing:border-box;width:100%;min-height:46px;margin-top:6px;padding:10px;border:1px solid #ddd8ca;border-radius:12px;font-size:16px;color:#16345a;background:#f7f9fb}
+.store-buyer-bar [hidden]{display:none}
