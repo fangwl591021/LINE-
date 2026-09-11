@@ -192,3 +192,19 @@ body:has(.store-history-popup[open]){overflow:hidden}
 .shop-lifestyle .shop-discovery-grid,.shop-lifestyle .shop-browse-products{gap:8px}
 .shop-lifestyle .shop-bottom-nav,#public-store-shop .shop-bottom-nav{max-width:none;border-radius:16px 16px 0 0;padding-left:max(7px,env(safe-area-inset-left));padding-right:max(7px,env(safe-area-inset-right))}
 @media(min-width:700px){.shop-lifestyle .shop-discovery-grid,.shop-lifestyle .shop-browse-products{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}}
+/* Scoped registration popup: the existing form is moved here, then restored on close. */
+.store-registration-popup{width:min(560px,calc(100vw - 20px));max-width:none;max-height:calc(100dvh - 24px);margin:auto;padding:0;border:1px solid #eee8dc;border-radius:22px;color:#16345a;background:#fffaf1;box-shadow:0 20px 60px #172e4940;overflow:hidden}
+.store-registration-popup::backdrop{background:#172e49a3}
+.store-registration-popup>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;background:#fffaf1;border-bottom:1px solid #eee8dc}
+.store-registration-popup>header h2{margin:0;font-size:20px;font-weight:700}
+.store-registration-popup>header button{min-width:44px;min-height:44px;border:1px solid #ded7c8;border-radius:14px;font-size:27px;background:white;color:#16345a}
+.store-registration-scroll{max-height:calc(100dvh - 106px);overflow-y:auto;overscroll-behavior:contain;padding:12px 16px 20px}
+.store-registration-note{font-size:13px;line-height:1.7;color:#617189;margin:0 0 14px}
+.store-registration-popup #details-profile-registration{margin:0;border:0;border-radius:14px;background:white;padding:12px;box-shadow:none}
+.store-registration-popup #details-profile-registration>summary{display:none}
+.store-registration-popup #details-profile-registration>div{padding:0;border:0}
+.store-registration-popup #details-profile-registration input:not([type=checkbox]){box-sizing:border-box;width:100%;min-width:0;min-height:44px;font-size:16px}
+.store-registration-popup #btn-save-profile-registration{width:100%;min-height:48px}
+.store-registration-popup #privacy-terms-modal{z-index:2}
+.store-registration-popup #toast-container{z-index:3}
+.store-registration-popup [data-registration-status]{font-size:13px;color:#617189}

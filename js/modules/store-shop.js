@@ -92,7 +92,7 @@
     }
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
-      content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?'<a class="shop-link" href="index.html">登入原系統以查看消費紀錄、訂單與管理商城</a>':'<button data-do="spending-history">▤ 我的消費折抵紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
+      content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?'<a class="shop-link" href="index.html">登入原系統以查看消費紀錄、訂單與管理商城</a>':'<button data-do="registration">♙ 會員註冊／資料維護 <span>›</span></button><button data-do="spending-history">▤ 我的消費折抵紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
     }
     function detail(id) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
@@ -214,6 +214,13 @@
           case 'region': await list();content.querySelector('[name=q]').placeholder='輸入地區，例如：板橋';content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
           case 'shopping': if(viewedShop)await view(viewedShop.id);else {await list();content.querySelector('.shop-section-title')?.scrollIntoView({block:'center'});}break;
           case 'mine':memberHome();break;
+          case 'registration': {
+            const version=epoch;
+            const module=await import('./store-registration-popup.js?v=1');
+            const isCurrent=()=>version===epoch&&root.isConnected&&!standalone&&window.currentPage==='store-shop';
+            if(isCurrent())module.openStoreRegistrationPopup({standalone,isCurrent});
+            break;
+          }
           case 'spending-history': {
             const version=epoch;
             const module=await import('./store-history-popup.js?v=1');

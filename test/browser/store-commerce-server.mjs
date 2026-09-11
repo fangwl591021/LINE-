@@ -17,10 +17,17 @@ const db={prepare(query){return {bind(...args){return {
 };}};},async batch(items){sql.exec('BEGIN');try{const results=items.map(s=>s.sync());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e;}}};
 const fetcher=async(url,opts)=>{if(url==='https://api.openai.com/v1/responses')return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({products:[{title:'合成測試茶葉',description:'100g\\n測試 DM',price_cents:35000,category:'食',price_note:'單包售價'},{title:'<img src=x onerror=alert(1)> 多規格組合',description:'價格不明',price_cents:null,category:'購',price_note:'請確認規格及價格'}]})}]}]});if(url!=='https://api.line.me/v2/profile')throw Error('External call forbidden');const token=opts.headers.Authorization.slice(7);return ['a','b','c'].includes(token)?Response.json({userId:'U'+token.repeat(32)}):new Response('',{status:401});};
 const env={ACTMASTER_DB:db,STORE_COMMERCE_ENABLED:'true',OPENAI_API_KEY:'local-fake-key'};
-const files=['js/modules/store-product-ocr.js','css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','js/modules/store-wallet-popup.js','js/modules/store-history-popup.js','js/modules/member-product-qr.js','js/vendor/qrcode-generator-2.0.4.mjs','assets/storefront/lifestyle-cafe-v1.jpg'];
+const files=['js/modules/store-registration-popup.js','js/modules/store-product-ocr.js','css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','js/modules/store-wallet-popup.js','js/modules/store-history-popup.js','js/modules/member-product-qr.js','js/vendor/qrcode-generator-2.0.4.mjs','assets/storefront/lifestyle-cafe-v1.jpg'];
 const server=createServer(async(req,res)=>{
   const origin='http://127.0.0.1:8794',path=new URL(req.url,origin).pathname;
   try {
+    if(path==='/test-registration-fixture'){
+      const source=readFileSync(new URL('../../index.html',import.meta.url),'utf8');
+      const panel=source.slice(source.indexOf('<details id="details-profile-registration"'),source.indexOf('<details id="details-local-gpt-key"'));
+      const auth=readFileSync(new URL('../../js/auth.js',import.meta.url),'utf8');
+      const save=auth.slice(auth.indexOf('window.saveProfileRegistration ='),auth.indexOf('window.submitClaimRegistration ='));
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({panel,save}));return;
+    }
     if(path==='/'){
       res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>本機商城測試</title><body style="margin:0"><main id="page-store-shop"></main><script>window.testToken='b';Object.defineProperty(window,'userRole',{get:()=>({a:'store',b:'user',c:'admin'}[window.testToken]||'user')});window.currentPage='store-shop';window.Config={WORKER_URL:location.origin};window.goPage=p=>window.currentPage=p;window.liff={isLoggedIn:()=>true,getAccessToken:()=>window.testToken,getProfile:async()=>({userId:'U'+window.testToken.repeat(32)})};</script><script src="/js/modules/store-shop-entry.js"></script><script>openStoreShop();</script></body></html>`);return;
     }
