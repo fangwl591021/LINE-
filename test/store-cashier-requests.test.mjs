@@ -1,4 +1,20 @@
 import {test} from 'node:test';
+test('product QR and redemption reject owners outside admin or store roles before point execution',async()=>{
+ const {sql,env}=fixture();
+ try{
+  const qr=(await issueMemberProductQr({authenticatedUserId:C,productId:P},env,resolve)).data;
+  for(const role of ['tenant','租戶','user','staff','manager','',null]){
+   sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+   assert.equal((await getRedemptionProduct({authenticatedUserId:A,productId:P},env)).success,false);
+   assert.equal((await issueMemberProductQr({authenticatedUserId:C,productId:P},env,resolve)).success,false);
+   assert.equal((await resolveMemberProductQr({authenticatedUserId:A,qrToken:qr.qrToken},env,resolve)).success,false);
+   let calls=0;
+   assert.equal((await runCashierRequest(payload({productId:P}),env,resolve,async()=>{calls++;return {success:true};})).success,false);
+   assert.equal(calls,0,role);
+  }
+  assert.equal(sql.prepare('SELECT count(*) n FROM store_cashier_requests').get().n,0);
+ }finally{sql.close();}
+});
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';

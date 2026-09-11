@@ -40,6 +40,8 @@
   }
   function mount(root, standalone, productId='', qrToken='', memberProduct='') {
     let shop=null, items=[], epoch=0, busy=false;
+    // UI hint only. Every merchant API rechecks the stored role and owner.
+    const canManage=()=>!standalone&&['admin','store','總管','店長'].includes(String(window.userRole||'').toLowerCase());
     let listCategory='', listQuery='';
     let viewedShop=null, viewedProducts=[];
     let walletModule,walletImport;
@@ -49,7 +51,7 @@
       return walletImport;
     }
     root.classList.add('store-shop');
-    root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="list">店家列表</button>${standalone?'':'<button data-do="manage" class="primary">我的商城管理</button>'}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
+    root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="list">店家列表</button>${canManage()?'<button data-do="manage" class="primary">我的商城管理</button>':''}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
     root.classList.add('shop-lifestyle');
     root.querySelector('h1').textContent='生活好店';
@@ -70,7 +72,7 @@
     }
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
-      content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?'<a class="shop-link" href="index.html">登入原系統以查看消費紀錄、訂單與管理商城</a>':'<button data-do="spending-history">▤ 我的消費折抵紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button><button data-do="manage">⌂ 我的商城管理 <span>›</span></button>'}<button data-do="exit">← 返回原系統</button></div></section>`;
+      content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?'<a class="shop-link" href="index.html">登入原系統以查看消費紀錄、訂單與管理商城</a>':'<button data-do="spending-history">▤ 我的消費折抵紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
     }
     function detail(id) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
@@ -113,7 +115,7 @@
       });
       content.querySelector('.shop-grid')?.insertAdjacentHTML('beforebegin',`<div class="shop-section-title"><h2>${q||category?'符合條件的好店':'探索好店'}</h2><span>各店自行收款</span></div>`);
       if(!after&&!q&&!category)content.insertAdjacentHTML('afterbegin',hero(result.shops));
-      content.insertAdjacentHTML('beforeend',`<div class="shop-discovery-promos"><button data-do="wallet"><span aria-hidden="true">🎁</span><strong>點數用在喜歡的生活<small>查看本人共用點數與折抵入口</small></strong></button><button data-do="${standalone?'mine':'manage'}"><span aria-hidden="true">🏪</span><strong>我是店家<small>管理商品、收款與網路訂單</small></strong></button></div>`);
+      content.insertAdjacentHTML('beforeend',`<div class="shop-discovery-promos"><button data-do="wallet"><span aria-hidden="true">🎁</span><strong>點數用在喜歡的生活<small>查看本人共用點數與折抵入口</small></strong></button>${canManage()?'<button data-do="manage"><span aria-hidden="true">🏪</span><strong>我是店家<small>管理商品、收款與網路訂單</small></strong></button>':''}</div>`);
     }
     function filterProducts(category) {
       const cards=[...content.querySelectorAll('[data-product-category]')];
@@ -161,6 +163,7 @@
       if(shop) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
     }
     async function manage() {
+      if(!canManage())throw new Error('商店管理僅開放管理員、店長');
       pageKind('manage');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
       const result=await api('/manage',null,true); if(version!==epoch) return;
@@ -258,7 +261,7 @@
           }
           case 'dm-import': {
             const form=button.closest('form'),version=epoch,token=window.liff?.getAccessToken?.();
-            const module=await import('./store-product-ocr.js?v=1');
+            const module=await import('./store-product-ocr.js?v=2');
             if(form.isConnected&&version===epoch&&token===window.liff?.getAccessToken?.())module.openProductDm(form,{base,prepareImage,isCurrent:()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'});
             break;
           }

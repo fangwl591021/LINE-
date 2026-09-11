@@ -17,7 +17,7 @@ export async function getRedemptionProduct(p,env) {
  const row=await env.ACTMASTER_DB.prepare(`SELECT p.*,s.version AS shop_version,s.name AS shop_name
  FROM store_shop_products p JOIN store_shop_stores s ON s.id=p.shop_id JOIN users u ON u.line_id=s.owner_uid
  WHERE p.id=? AND s.owner_uid=? AND p.status='active' AND s.status='active'
- AND lower(u.role) IN ('store','tenant','admin','店長','租戶','總管')`).bind(p.productId,actor(p)).first();
+ AND lower(u.role) IN ('store','admin','店長','總管')`).bind(p.productId,actor(p)).first();
  if(!row) return fail('商品已下架、店面未公開，或不是您管理的商品');
  if(!Number.isSafeInteger(row.price_cents)||row.price_cents<=0||row.price_cents%100!==0) return fail('目前商品收銀僅支援正整數元價格，請先調整商品價格');
  const amount=row.price_cents/100;

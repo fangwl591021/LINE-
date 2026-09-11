@@ -27,9 +27,9 @@ async()=>{
   check(form.elements.price.value===''&&!form.checkValidity(),'unknown price became zero');
   select.value='0';select.dispatchEvent(new Event('change'));image.checked=true;
   window.fetchAPI=async()=>{uploads++;return {success:false};};apply.click();
-  await until(()=>panel.querySelector('[role=status]').textContent.includes('上傳失敗'));check(form.elements.price.value==='','failed image upload partially applied');
+  await until(()=>panel.querySelector('[role=status]').textContent.includes('上傳失敗'));check(form.elements.price.value==='350'&&form.elements.title.value==='合成測試茶葉','failed image upload lost text draft');
   window.fetchAPI=async(action,payload)=>{uploads++;check(action==='uploadImageToR2'&&payload.base64Image.startsWith('data:image/jpeg;base64,'),'wrong DM upload');return {success:true,url:'https://127.0.0.1:8794/test-public-dm.jpg'};};
-  apply.click();await until(()=>form.elements.price.value==='350');
+  apply.click();await until(()=>form.elements.image_url.value==='https://127.0.0.1:8794/test-public-dm.jpg');
   check(form.elements.image_url.value==='https://127.0.0.1:8794/test-public-dm.jpg','DM image not applied');
   const beforeSave=await originalFetch('/v1/store-shop/manage',{headers:{Authorization:'Bearer a'}}).then(r=>r.json());
   check(beforeSave.products.length===before.products.length&&saves===0,'product saved before confirmation');

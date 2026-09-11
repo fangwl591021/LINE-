@@ -10,7 +10,7 @@ export async function issueMemberProductQr(p,env,resolveCustomer) {
  const issuer=p.authenticatedUserId;
  if(!uid(issuer)||!uuid(p.productId))return fail('請先登入並選擇有效商品');
  const product=await env.ACTMASTER_DB.prepare(`SELECT p.id FROM store_shop_products p JOIN store_shop_stores s ON s.id=p.shop_id JOIN users u ON u.line_id=s.owner_uid
- WHERE p.id=? AND p.status='active' AND s.status='active' AND lower(u.role) IN ('store','tenant','admin','店長','租戶','總管')`).bind(p.productId).first();
+ WHERE p.id=? AND p.status='active' AND s.status='active' AND lower(u.role) IN ('store','admin','店長','總管')`).bind(p.productId).first();
  if(!product)return fail('商品或店面尚未開放');
  const customer=await resolveCustomer(issuer);
  if(customer?.error||customer?.needsBinding||!uid(customer?.customerPointUserId))return fail('無法確認本人點數帳戶，請先完成會員綁定');

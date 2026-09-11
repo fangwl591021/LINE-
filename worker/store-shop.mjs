@@ -1,10 +1,10 @@
 // Catalog and read-only sales. No point writes or cashier execution calls.
 import {readShopSales} from './store-shop-sales.mjs';
 import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
-const roles = ['store','tenant','店長','租戶','admin','總管'];
+const roles = ['store','店長','admin','總管'];
 const categories = ['','食','宿','遊','購','行','服務','製造'];
 const publicColumns = 's.id,s.name,s.description,s.category,s.address,s.phone,s.hours,s.image_url,s.status,s.version,s.updated_at';
-const eligible = "EXISTS (SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','tenant','店長','租戶','admin','總管'))";
+const eligible = "EXISTS (SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管'))";
 const headers = { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'Content-Type, Authorization', 'Access-Control-Allow-Methods':'GET, POST, OPTIONS' };
 class ShopError extends Error { constructor(message,status=400) { super(message); this.status=status; } }
 const fail = (message,status) => { throw new ShopError(message,status); };

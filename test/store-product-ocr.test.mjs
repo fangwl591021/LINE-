@@ -24,6 +24,18 @@ function fixture(t){
  }
  return {sql,env,state,call};
 }
+test('explicit bundle proposal keeps whole-set price and both providers receive bundle instructions',async t=>{
+ for(const provider of ['openai','gemini']){
+  const f=fixture(t),bundle=product({title:'漂浮檸檬茶 3盒組（買2送1）',description:'每盒5入，共3盒\\n原價900元，特價600元',price_cents:60000,price_note:'每組3盒，整組售價600元'});
+  if(provider==='gemini'){delete f.env.OPENAI_API_KEY;f.env.GEMINI_API_KEY='server-gemini-key';}
+  f.state.response=()=>Response.json(provider==='openai'?{status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({products:[bundle]})}]}]}:{candidates:[{content:{parts:[{text:JSON.stringify({products:[bundle]})}]}}]});
+  const result=await f.call();assert.equal(result.status,200);assert.deepEqual(result.products,[bundle]);
+  const body=JSON.parse(f.state.calls[0].options.body),instructions=body.instructions||body.system_instruction.parts[0].text;
+  assert.match(instructions,/price_cents=60000/);assert.match(instructions,/不得除以3/);assert.match(instructions,/沒有標價也填 null/);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM store_shop_products').get().n,0);
+ }
+});
+
 test('DM OCR authenticates stored role and own shop before image or AI calls',async t=>{
  const f=fixture(t);
  for(const [token,status] of [[null,401],['bad',401],['b',403],['d',400]])assert.equal((await f.call({base64Image:IMAGE,role:'admin',shop_id:'shop-a'},token)).status,status);

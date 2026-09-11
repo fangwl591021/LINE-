@@ -1,4 +1,22 @@
 import {test} from 'node:test';
+test('merchant role matrix denies tenant and unknown roles for settings, order management and fulfillment',async t=>{
+ const f=fixture(t);await f.setup();const {order}=await f.order();
+ for(const role of ['store','admin','店長','總管']){
+  f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+  assert.equal((await f.call('/settings',null,'a')).status,200,role);
+ }
+ for(const role of ['tenant','租戶','user','staff','manager','',null]){
+  f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+  assert.equal((await f.call('/settings',null,'a')).status,403,role);
+  assert.equal((await f.call('/settings',{role:'admin'},'a')).status,403,role);
+  assert.equal((await f.call('/orders?scope=merchant',null,'a')).status,403,role);
+  for(const action of ['verify_remittance','ship','complete'])assert.equal((await f.act(order,action,{},'a')).status,403,role+action);
+  assert.equal((await f.call('/quote',cart())).status,404,role);
+  assert.equal((await f.call('/orders',null,'a')).status,200,'customer history remains available');
+ }
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM store_commerce_events').get().n,0);
+ assert.equal(f.sql.prepare('SELECT payment_status FROM store_commerce_orders').get().payment_status,'pending');
+});
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';

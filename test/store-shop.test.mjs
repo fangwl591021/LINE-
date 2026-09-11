@@ -1,4 +1,24 @@
 import {test} from 'node:test';
+test('merchant role matrix protects management, writes, sales and DM, not public browsing',async()=>{
+ const {sql,call}=fixture();
+ try{
+  const created=await call('/store',store(),'a'),id=created.shop.id;
+  for(const role of ['store','admin','店長','總管','ADMIN']){
+   sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+   assert.equal((await call('/manage',null,'a')).status,200,role);
+   assert.equal((await call('?shop='+id)).status,200,role);
+  }
+  for(const role of ['tenant','租戶','user','staff','manager','administrator','',null]){
+   sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+   for(const path of ['/manage','/sales'])assert.equal((await call(path,null,'a')).status,403,role+path);
+   for(const path of ['/store','/product','/product-ocr'])assert.equal((await call(path,{role:'admin',owner_uid:A},'a')).status,403,role+path);
+   assert.equal((await call('?shop='+id)).status,404,role);
+  }
+  assert.equal(sql.prepare('SELECT count(*) n FROM store_shop_products').get().n,0);
+  assert.equal(sql.prepare('SELECT count(*) n FROM store_shop_stores').get().n,1);
+  assert.equal((await call()).status,200);
+ }finally{sql.close();}
+});
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
@@ -9,7 +29,7 @@ function fixture() {
   const sql=new DatabaseSync(':memory:');
   sql.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT DEFAULT '',point_line_id TEXT DEFAULT '',legacy_line_id TEXT DEFAULT '',row_id TEXT DEFAULT '');");
   sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run(A,'store');
-  sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run(B,'tenant');
+  sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run(B,'admin');
   sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run(USER,'user');
   sql.exec(readFileSync(new URL('../migrations/0029_store_shop_catalog.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0031_store_product_category.sql',import.meta.url),'utf8'));

@@ -1,6 +1,6 @@
 // Isolated online remittance orders. No cashier, point or payment-provider calls.
 const root='/v1/store-commerce';
-const roles=['store','tenant','店長','租戶','admin','總管'];
+const roles=['store','店長','admin','總管'];
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
 class CommerceError extends Error {constructor(message,status=400){super(message);this.status=status;}}
 const fail=(message,status)=>{throw new CommerceError(message,status);};
@@ -62,7 +62,7 @@ function checkoutInput(data) {
   return {shop_id:str(data,'shop_id',80),items,buyer,customer:recipient,payment_method:'REMITTANCE',points_used:0};
 }
 async function quote(db,user,input) {
-  const shop=await q(db,`SELECT s.* FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','tenant','店長','租戶','admin','總管'))`,input.shop_id).first();
+  const shop=await q(db,`SELECT s.* FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管'))`,input.shop_id).first();
   if(!shop)fail('店家尚未開放',404);const config=await settings(db,shop.id);if(!config?.enabled)fail('店家尚未開放線上匯款下單',409);
   const products=(await q(db,`SELECT id,title,price_cents,version FROM store_shop_products WHERE shop_id=? AND status='active' AND purchase_mode='online' AND id IN (${input.items.map(()=>'?').join(',')})`,shop.id,...input.items.map(i=>i.id)).all()).results;
   if(products.length!==input.items.length)fail('商品限店內、已下架或不屬於此店，請重新選購',409);
@@ -86,7 +86,7 @@ async function createOrder(db,user,data,now) {
   // One conditional insert closes the race with product/settings updates.
   const guards=s.items.map(()=>"EXISTS(SELECT 1 FROM store_shop_products WHERE id=? AND shop_id=? AND version=? AND status='active' AND purchase_mode='online')").join(' AND ');
   await q(db,`INSERT INTO store_commerce_orders(id,shop_id,buyer_uid,request_key,request_hash,snapshot_json,total_cents,created_at,updated_at)
-    SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? AND s.version=? AND s.status='active' AND lower(u.role) IN ('store','tenant','店長','租戶','admin','總管'))
+    SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? AND s.version=? AND s.status='active' AND lower(u.role) IN ('store','店長','admin','總管'))
     AND EXISTS(SELECT 1 FROM store_commerce_settings WHERE shop_id=? AND version=? AND enabled=1) AND ${guards}
     ON CONFLICT(buyer_uid,request_key) DO NOTHING`,id,s.shop_id,user.line_id,key,requestHash,JSON.stringify(s),s.total_cents,now,now,s.shop_id,s.shop_version,s.shop_id,s.settings_version,...s.items.flatMap(i=>[i.id,s.shop_id,i.version])).run();
   const stored=await q(db,'SELECT * FROM store_commerce_orders WHERE buyer_uid=? AND request_key=?',user.line_id,key).first();
