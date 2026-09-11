@@ -42,6 +42,12 @@
     let shop=null, items=[], epoch=0, busy=false;
     let listCategory='', listQuery='';
     let viewedShop=null, viewedProducts=[];
+    let walletModule,walletImport;
+    function loadWalletModule(){
+      if(walletModule)return Promise.resolve(walletModule);
+      if(!walletImport)walletImport=import('./store-wallet-popup.js?v=3').then(module=>walletModule=module).catch(error=>{walletImport=null;throw error;});
+      return walletImport;
+    }
     root.classList.add('store-shop');
     root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="list">店家列表</button>${standalone?'':'<button data-do="manage" class="primary">我的商城管理</button>'}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
@@ -183,7 +189,7 @@
           case 'detail':detail(button.dataset.id);break;
           case 'wallet': {
             const version=epoch;
-            const module=await import('./store-wallet-popup.js?v=2');
+            const module=walletModule||await loadWalletModule();
             const isCurrent=()=>version===epoch&&root.isConnected&&(standalone||window.currentPage==='store-shop');
             if(isCurrent())module.openStoreWalletPopup({standalone,isCurrent});
             break;
@@ -296,6 +302,10 @@
         const module=await import('./shop-product-checkout.js?v=2');
         if(version===epoch)await module.mountProductCheckout(content,productId,()=>version===epoch,qrToken);
       }else await (id?view(id):list());
+      if(!standalone){
+        const warm=()=>{if(root.isConnected&&window.currentPage==='store-shop')void loadWalletModule().then(module=>module.prepareStoreWalletQr()).catch(()=>{});};
+        if(window.requestIdleCallback)window.requestIdleCallback(warm,{timeout:1000});else setTimeout(warm,50);
+      }
     });
   }
   window.StoreShop={mount};

@@ -3,7 +3,7 @@ async()=>{
  if(location.origin!=='http://127.0.0.1:8794')throw Error('Local test only');
  const check=(v,m)=>{if(!v)throw Error(m);};
  const until=async(fn)=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('Popup test timed out');};
- const {openStoreWalletPopup:open}=await import('/js/modules/store-wallet-popup.js?v=2');
+ const {openStoreWalletPopup:open}=await import('/js/modules/store-wallet-popup.js?v=3');
  window.pointWalletData=null;
  const owner='U'+'b'.repeat(32),uid='U'+'a'.repeat(32);
  window.currentUserProfile={userId:owner};window.currentPage='store-shop';
@@ -15,6 +15,7 @@ async()=>{
  window.fetchPointWalletData_=async force=>{check(force===true,'must refresh');reads++;return data;};
  open(options);open(options);
  await until(()=>modal()?.querySelector('svg'));
+ await until(()=>modal()?.querySelector('[data-balance]').textContent==='13,217 點');
  check(reads===1&&document.querySelectorAll('.store-wallet-popup').length===1,'double tap duplicates request/dialog');
  check(modal().querySelector('[data-balance]').textContent==='13,217 點','balance');
  const {default:qrcode}=await import('/js/vendor/qrcode-generator-2.0.4.mjs');
@@ -35,7 +36,7 @@ async()=>{
   close();
  }
  window.fetchPointWalletData_=async()=>({...data,balance:0});open(options);
- await until(()=>modal()?.querySelector('svg'));check(modal().querySelector('[data-balance]').textContent==='0 點','confirmed zero should work');
+ await until(()=>modal()?.querySelector('[data-balance]').textContent==='0 點');check(!!modal().querySelector('svg'),'confirmed zero should work');
  window.currentUserProfile={userId:uid};await until(()=>!modal());
  window.currentUserProfile={userId:owner};open(options);await until(()=>modal()?.querySelector('svg'));
  window.currentPage='home';await until(()=>!modal());window.currentPage='store-shop';
