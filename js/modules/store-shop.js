@@ -38,6 +38,14 @@
       return data;
     } finally { URL.revokeObjectURL(url); }
   }
+  function checkoutWarning(result) {
+    const s=result?.settings;
+    const complete=s&&String(s.bank_name||'').trim()&&String(s.bank_holder||'').trim()&&/^\d{3}$/.test(s.bank_code||'')&&/^\d{5,24}$/.test(s.bank_account||'')&&Number.isInteger(s.shipping_fee_cents)&&s.shipping_fee_cents>=0&&Number.isInteger(s.free_shipping_cents)&&s.free_shipping_cents>=0;
+    if(!complete)return '尚未完成網路訂單／收款設定。網購商品即使上架，顧客仍無法下單；請先填妥銀行、戶名、帳號與運費設定。';
+    if(s.enabled!==1&&s.enabled!==true)return '本店尚未開啟「匯款下單」。網購商品即使上架，顧客仍無法下單；請至網路訂單／收款設定啟用。';
+    if(result.release_enabled!==true)return '全站網購交易尚未開放，顧客目前無法下單。店家收款設定已完成，請聯絡管理員確認。';
+    return '';
+  }
   function mount(root, standalone, productId='', qrToken='', memberProduct='', section='') {
     let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
     // UI hint only. Every merchant API rechecks the stored role and owner.
@@ -60,6 +68,7 @@
         content.querySelector('.shop-grid').insertAdjacentHTML('beforeend',added.map(p=>product(p,privateView)).join(''));
         const category=content.querySelector('[data-scope="products"][aria-pressed="true"]')?.dataset.category||'';filterProducts(category);
         button.outerHTML=moreButton(result.product_next,privateView);
+        if(privateView)void checkOnlineWarnings();
       } finally {button.disabled=false;}
     }
     let listCategory='', listQuery='';
@@ -183,6 +192,10 @@
       addProductTags();
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
+      if(shop&&canTransact()) {
+        content.querySelector('.shop-grid').insertAdjacentHTML('beforebegin',onlineWarningBox('catalog'));
+        void checkOnlineWarnings();
+      }
     }
     async function manage() {
       if(!canManage())throw new Error('請登入已登記的會員帳號以管理本人商品');
@@ -200,6 +213,44 @@
       editor.querySelector('[name="category"]').closest('label').insertAdjacentHTML('afterend',select('purchase_mode','銷售方式',productLimit===null?[['in_store','限店內'],['online','網購']]:[['in_store','限店內']],p.purchase_mode||'in_store'));
       if(!p.id)editor.querySelector('h2').insertAdjacentHTML('afterend','<button type="button" data-do="dm-import" class="primary">上傳 DM・AI 辨識建商品</button><p class="shop-meta">DM 送至 AI 擷取商品資料，先帶入表單、核對後再儲存。不自動上架。</p>');
       editor.querySelector('form').dataset.requestKey=crypto.randomUUID();
+      if(canTransact()) {
+        editor.querySelector('[name="status"]').closest('label').insertAdjacentHTML('afterend',onlineWarningBox('product'));
+        void checkOnlineWarnings();
+      }
+    }
+    function onlineWarningBox(scope) {
+      return `<div data-online-warning="${scope}" hidden><p role="alert" style="color:#b91c1c;font-weight:600"></p><button type="button" data-do="online-manage">前往網路訂單／收款設定</button>${scope==='product'?'<small>前往設定前請先儲存商品，以免遺失尚未儲存的編輯。</small>':''}</div>`;
+    }
+    let readinessPending;
+    async function checkOnlineWarnings() {
+      const boxes=[...content.querySelectorAll('[data-online-warning]')];
+      const needed=box=>{
+        const form=box.closest('[data-form="product"]');
+        return box.dataset.onlineWarning==='catalog'?items.some(p=>p.purchase_mode==='online'&&p.status==='active'):form?.elements.purchase_mode?.value==='online'&&form?.elements.status?.value==='active';
+      };
+      const targets=boxes.filter(box=>{box.hidden=!needed(box);return !box.hidden;});
+      if(!targets.length||!canTransact())return;
+      const version=epoch,token=window.liff?.isLoggedIn?.()?window.liff.getAccessToken():'';
+      const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&token===window.liff?.getAccessToken?.();
+      targets.forEach(box=>box.querySelector('p').textContent='正在確認網路訂單／收款設定…');
+      try {
+        if(!token)throw new Error('Missing identity');
+        if(!readinessPending||readinessPending.token!==token||readinessPending.version!==version) {
+          const pending={token,version};readinessPending=pending;
+          pending.promise=(async()=>{
+            const response=await fetch(`${base}/v1/store-commerce/settings`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(10000)});
+            const result=await response.json();
+            if(!response.ok||!result.success||!result.settings)throw new Error('Settings unavailable');
+            return checkoutWarning(result);
+          })().finally(()=>{if(readinessPending===pending)readinessPending=null;});
+        }
+        const warning=await readinessPending.promise;
+        if(!current())return;
+        targets.forEach(box=>{if(content.contains(box)){box.hidden=!needed(box)||!warning;box.querySelector('p').textContent=warning;}});
+      }catch{
+        if(!current())return;
+        targets.forEach(box=>{if(content.contains(box)){box.hidden=!needed(box);box.querySelector('p').textContent='無法確認網路訂單／收款設定，尚不能確認顧客可下單。請檢查連線並至收款設定確認，或重新開啟商品編輯。';}});
+      }
     }
     async function run(job) {
       try { await job(); } catch(error) { alert.textContent=error.name==='TimeoutError'?'連線逾時；若剛儲存，請重新載入確認結果，勿連續重送。':error.message; }
@@ -308,6 +359,7 @@
     };
     root.onchange=event=>{
       const picker=event.target;
+      if(picker.closest('[data-form="product"]')&&['purchase_mode','status'].includes(picker.name)){void checkOnlineWarnings();return;}
       if(!picker.matches('.shop-image-file')||busy) return;
       const file=picker.files?.[0]; if(!file) return;
       const field=picker.closest('.shop-image-field'),form=picker.closest('form');
