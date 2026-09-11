@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '24'
       - run: npm run test:store-shop
-      - run: node --test test/store-wallet-summary.test.mjs
+      - run: node --test test/store-wallet-summary.test.mjs test/store-history-popup.test.mjs
   guard:
     name: Run contract guard
     runs-on: ubuntu-latest

@@ -187,17 +187,10 @@
           case 'shopping': if(viewedShop)await view(viewedShop.id);else {await list();content.querySelector('.shop-section-title')?.scrollIntoView({block:'center'});}break;
           case 'mine':memberHome();break;
           case 'spending-history': {
-            if(standalone||typeof window.goPage!=='function'||typeof window.loadPointsWallet!=='function')throw new Error('請登入原系統查看本人消費紀錄');
-            ++epoch;
-            // Only the explicit history entry loads full records, once (not a summary cache).
-            window.goPage('points-wallet',true);
-            void window.loadPointsWallet(true);
-            requestAnimationFrame(()=>{
-              if(window.currentPage!=='points-wallet')return;
-              const heading=document.getElementById('points-wallet-history-heading');
-              heading?.scrollIntoView({block:'center'});
-              heading?.focus({preventScroll:true});
-            });
+            const version=epoch;
+            const module=await import('./store-history-popup.js?v=1');
+            const isCurrent=()=>version===epoch&&root.isConnected&&(standalone||window.currentPage==='store-shop');
+            if(isCurrent())module.openStoreHistoryPopup({standalone,isCurrent});
             break;
           }
           case 'detail':detail(button.dataset.id);break;

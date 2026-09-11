@@ -105,6 +105,27 @@ body:has(.store-wallet-popup[open]){overflow:hidden}
 .store-wallet-popup [data-close]{position:absolute;right:8px;top:8px;background:transparent;font-size:28px}
 .store-wallet-popup [data-retry]{margin-top:14px;padding:8px 18px}
 .store-wallet-popup :focus-visible{outline:3px solid #197cb6;outline-offset:2px}
+.store-history-popup{box-sizing:border-box;width:min(540px,calc(100vw - 24px));max-height:calc(100dvh - 32px);margin:auto;padding:0;border:0;border-radius:20px;background:#fff;color:#16345a;font-family:system-ui,sans-serif;overflow:hidden;box-shadow:0 20px 60px #0f172a33}
+.store-history-popup[open]{display:flex;flex-direction:column}
+.store-history-popup::backdrop{background:#15263bb3}
+body:has(.store-history-popup[open]){overflow:hidden}
+.store-history-popup header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;border-bottom:1px solid #edf0f4;flex-shrink:0}
+.store-history-popup h2{font-size:18px;margin:0}
+.store-history-popup button{min-width:44px;min-height:44px;border:1px solid #edf0f4;border-radius:12px;background:#fff;color:#16345a;font:inherit;cursor:pointer;padding:6px 12px}
+.store-history-popup [data-close]{font-size:26px;padding:0;border:0}
+.store-history-popup button:disabled{opacity:.55;cursor:wait}
+.store-history-popup :focus-visible{outline:3px solid #197cb6;outline-offset:2px}
+.store-history-scroll{overflow:auto;min-height:0;overscroll-behavior:contain;padding:0 14px 14px}
+.store-history-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.store-history-toolbar p,.store-history-popup [data-status]{font-size:12px;color:#64748b;line-height:1.5}
+.store-history-toolbar button{font-size:12px;flex-shrink:0}
+.store-history-popup article{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:16px 0;border-bottom:1px solid #edf0f4}
+.store-history-popup article:last-child{border-bottom:0}
+.store-history-popup h3{font-size:16px;line-height:1.4;margin:0;overflow-wrap:anywhere}
+.store-history-popup article p{font-size:12px;line-height:1.6;margin:5px 0;color:#64748b;white-space:pre-wrap;overflow-wrap:anywhere}
+.store-history-popup time{font-size:12px;color:#94a3b8}
+.store-history-popup article strong{font-size:22px;align-self:center;white-space:nowrap}
+.store-history-popup .positive{color:#06a94d}.store-history-popup .negative{color:#64748b}
 .store-shop.shop-lifestyle{background:#fffaf2;padding-top:12px}
 .shop-lifestyle .shop-life-hero{padding:16px 12px 12px;margin:0 -6px 14px;border-radius:22px;background:#f4ecd9}
 .shop-lifestyle .shop-lifestyle-scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:64% 25%;border-radius:0}
