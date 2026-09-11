@@ -1,4 +1,5 @@
 // Isolated online remittance orders. No cashier, point or payment-provider calls.
+import {BuyerProfileError,readBuyerProfile,saveBuyerProfile} from './store-buyer-profile.mjs';
 const root='/v1/store-commerce';
 const roles=['store','店長','admin','總管'];
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
@@ -136,6 +137,12 @@ export async function handleStoreCommerce(request,env,fetcher=fetch) {
   try {
     if(path==='/capabilities'&&request.method==='GET')return reply({success:true,enabled,payments:enabled?['REMITTANCE']:[],points_enabled:false,linepay_enabled:false});
     const db=env.ACTMASTER_DB,user=await actor(request,db,fetcher);
+    // Private account data is independent of whether order creation is enabled.
+    if(path==='/buyer-profile'){
+      if(request.method==='GET')return reply({success:true,profile:await readBuyerProfile(db,user.line_id)});
+      if(request.method!=='POST')fail('不支援的操作',405);
+      return reply({success:true,profile:await saveBuyerProfile(db,user.line_id,await json(request))});
+    }
     if(path==='/settings') {
       const shop=await ownShop(db,user);if(request.method==='GET')return reply({success:true,release_enabled:enabled,settings:(await settings(db,shop.id))||defaults});
       if(request.method!=='POST')fail('不支援的操作',405);
@@ -165,7 +172,7 @@ export async function handleStoreCommerce(request,env,fetcher=fetch) {
     if(path==='/orders/action')return reply({success:true,order:await transition(db,user,data,now)});
     fail('不支援的操作',404);
   } catch(error) {
-    if(error instanceof CommerceError)return reply({success:false,error:error.message},error.status);
+    if(error instanceof CommerceError||error instanceof BuyerProfileError)return reply({success:false,error:error.message},error.status);
     const missing=/no such table/.test(String(error?.message));console.error(JSON.stringify({event:'store_commerce_failed',code:missing?'SCHEMA_NOT_READY':'UNAVAILABLE'}));
     return reply({success:false,error:missing?'線上商城尚未完成資料庫更新':'操作結果未確認，請重新查詢原訂單，勿重複付款'},503);
   }

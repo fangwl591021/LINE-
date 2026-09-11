@@ -1,4 +1,47 @@
 import {test} from 'node:test';
+const buyerProfile=(extra={})=>({version:0,consent:true,name:'網購小林',phone:'0912345678',email:'buyer@example.test',postal_code:'220',city:'新北市',district:'板橋區',address:'測試路1號2樓',...extra});
+test('private buyer profile is self-only, opt-in and usable without enabling checkout',async t=>{
+ const f=fixture(t);delete f.env.STORE_COMMERCE_ENABLED;
+ assert.equal((await f.call('/buyer-profile',null,null)).status,401);
+ assert.equal((await f.call('/buyer-profile',null,'bad')).status,401);
+ assert.equal((await f.call('/buyer-profile')).profile,null);
+ assert.equal((await f.call('/buyer-profile',buyerProfile({consent:false}))).status,400);
+ const result=await f.call('/buyer-profile',buyerProfile({owner_uid:D,userId:D,role:'admin'}));assert.equal(result.status,200);
+ assert.equal(result.profile.name,'網購小林');assert.equal(result.profile.version,1);
+ assert(!('owner_uid' in result.profile));assert(!('consented_at' in result.profile));
+ assert.equal((await f.call('/buyer-profile?owner_uid='+C,null,'d')).profile,null);
+ assert.equal((await f.call('/buyer-profile?owner_uid='+C,null,'a')).profile,null);
+ assert.equal(f.sql.prepare('SELECT owner_uid FROM store_buyer_profiles').get().owner_uid,C);
+ assert.equal(f.sql.prepare('SELECT name FROM users WHERE line_id=?').get(C).name,'買家小陳');
+ assert.equal((await f.call('/quote',cart())).status,503);
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM store_commerce_orders').get().n,0);
+});
+test('buyer profile versions reject stale and simultaneous saves without overwriting',async t=>{
+ const f=fixture(t);
+ const results=await Promise.all(['甲','乙'].map(name=>f.call('/buyer-profile',buyerProfile({name}))));
+ assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+ const p=(await f.call('/buyer-profile')).profile;
+ const updated=await f.call('/buyer-profile',{...p,consent:true,name:'新資料'});assert.equal(updated.profile.version,2);
+ assert.equal((await f.call('/buyer-profile',{...p,consent:true,name:'舊視窗'})).status,409);
+ assert.equal((await f.call('/buyer-profile')).profile.name,'新資料');
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM store_buyer_profiles').get().n,1);
+});
+test('buyer profile validates contact, address, consent, version and bounded input',async t=>{
+ const f=fixture(t);
+ for(const extra of [{name:''},{phone:'123'},{email:'bad'},{postal_code:'1'},{city:''},{district:''},{address:''},{address:'a'.repeat(201)},{name:'x\nY'},{consent:'true'},{version:-1},{version:1.2}]){
+  assert.equal((await f.call('/buyer-profile',buyerProfile(extra))).status,400,JSON.stringify(extra));
+ }
+ assert.equal((await f.call('/buyer-profile',buyerProfile({junk:'x'.repeat(21000)}))).status,413);
+ const saved=await f.call('/buyer-profile',buyerProfile({phone:'+886 912-345-678'}));assert.equal(saved.profile.phone,'0912345678');
+});
+test('changing saved buyer profile never rewrites an existing order snapshot',async t=>{
+ const f=fixture(t);await f.setup();
+ await f.call('/buyer-profile',buyerProfile());
+ const order=await f.order();const original=JSON.stringify(order.order.snapshot);
+ await f.call('/buyer-profile',buyerProfile({version:1,name:'後來改名',address:'另個地址'}));
+ const history=await f.call('/orders');assert.equal(JSON.stringify(history.orders[0].snapshot),original);
+ assert.equal(history.orders[0].snapshot.buyer.name,'購買小陳');
+});
 test('merchant role matrix denies tenant and unknown roles for settings, order management and fulfillment',async t=>{
  const f=fixture(t);await f.setup();const {order}=await f.order();
  for(const role of ['store','admin','店長','總管']){
@@ -27,7 +70,7 @@ function fixture(t) {
   const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
   sql.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT);');
   for(const [uid,role,name] of [[A,'store','甲店長'],[B,'admin','乙店長'],[C,'user','買家小陳'],[D,'user','另一買家']])sql.prepare('INSERT INTO users VALUES(?,?,?)').run(uid,role,name);
-  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0037_store_buyer_profiles.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
   for(const [id,uid] of [['shop-a',A],['shop-b',B]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','2026-09-10')").run(id,uid,id);
   for(const [id,shop] of [['p-a','shop-a'],['p-b','shop-b']])sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES(?,?,?,880000,'active','2026-09-10',?)").run(id,shop,'眼鏡 '+id,id);
   sql.exec("UPDATE store_shop_products SET purchase_mode='online'");

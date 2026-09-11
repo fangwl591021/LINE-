@@ -12,7 +12,7 @@ export function openStoreRegistrationPopup({isCurrent=()=>true,standalone=false}
   if(infoOwner&&infoOwner!==owner)throw Error('會員身分正在更新，請稍後重新開啟');
   const opener=document.activeElement,wasOpen=panel.open,slots=[];
   const modal=document.createElement('dialog');modal.className='store-registration-popup';modal.setAttribute('aria-labelledby','store-registration-title');
-  modal.innerHTML='<header><h2 id="store-registration-title">會員註冊／資料維護</h2><button type="button" data-close aria-label="關閉會員註冊">×</button></header><div class="store-registration-scroll"><p class="store-registration-note">請確認會員聯絡資料。網購時仍需核對購買人、收件地址及寄送方式，資料不會因開啟此頁而自動儲存。</p><div data-registration-slot></div><p data-registration-status role="status" aria-live="polite"></p></div>';
+  modal.innerHTML='<header><h2 id="store-registration-title">會員註冊／資料維護</h2><button type="button" data-close aria-label="關閉會員註冊">×</button></header><div class="store-registration-scroll"><p class="store-registration-note">請確認會員聯絡資料。網購時仍需核對購買人、收件地址及寄送方式，資料不會因開啟此頁而自動儲存。</p><div data-registration-slot></div><details class="store-buyer-bar" data-buyer-bar><summary>網購人資料 <span>填寫／修改 ▾</span></summary><section data-buyer-profile></section></details><p data-registration-status role="status" aria-live="polite"></p></div>';
   document.body.append(modal);activeDialog=modal;
   function move(node,target) {
     if(!node)return;
@@ -47,7 +47,7 @@ export function openStoreRegistrationPopup({isCurrent=()=>true,standalone=false}
     if(isCurrent()&&owner===window.currentUserProfile?.userId&&opener?.isConnected)opener.focus();
   }
   function close(force=false){
-    if(!force&&document.getElementById('btn-save-profile-registration')?.disabled){modal.querySelector('[data-registration-status]').textContent='資料儲存中，請稍候再關閉。';return;}
+    if(!force&&(document.getElementById('btn-save-profile-registration')?.disabled||modal.querySelector('[data-buyer-saving="1"]'))){modal.querySelector('[data-registration-status]').textContent='資料儲存中，請稍候再關閉。';return;}
     modal.close();cleanup();
   }
   modal.querySelector('[data-close]').onclick=()=>close();
@@ -61,6 +61,12 @@ export function openStoreRegistrationPopup({isCurrent=()=>true,standalone=false}
     if(!current()){event.preventDefault();event.stopImmediatePropagation();close(true);return;}
     if(event.target===modal){const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)close();}
   },true);
+  const buyerBar=modal.querySelector('[data-buyer-bar]');let buyerStarted=false;
+  buyerBar.addEventListener('toggle',()=>{
+    if(!buyerBar.open||buyerStarted||!current())return;
+    buyerStarted=true;const host=buyerBar.querySelector('[data-buyer-profile]');host.textContent='載入網購表單…';
+    void import('./store-buyer-profile.js?v=1').then(module=>{if(current())module.mountBuyerProfile(host,{base:window.Config?.WORKER_URL||'',isCurrent:current});}).catch(()=>{if(current()){buyerStarted=false;host.textContent='表單載入失敗，請收合後重新展開。';}});
+  });
   try{modal.showModal();}catch(error){cleanup();throw error;}
   timer=setInterval(()=>{if(!current())close(true);},200);
 }

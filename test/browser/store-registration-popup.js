@@ -45,7 +45,7 @@ async()=>{
  opener.click();await until(()=>document.querySelector('.store-registration-popup[open]'));
  check(document.getElementById('profile-name').value==='手動修改','Do not overwrite edits on reopen');
  const second=document.querySelector('.store-registration-popup');second.querySelector('[data-close]').click();
- const module=await import('/js/modules/store-registration-popup.js?v=1');
+ const module=await import('/js/modules/store-registration-popup.js?v=2');
  module.openStoreRegistrationPopup({isCurrent:()=>true});
  window.currentUserProfile={userId:'U'+'c'.repeat(32)};await until(()=>!document.querySelector('.store-registration-popup'));
  check(!name.value&&!document.getElementById('profile-privacy-agree').checked,'Clear previous member on identity change');
