@@ -13,7 +13,7 @@ async()=>{
  document.querySelector('[data-do=list]').click();await until(()=>document.querySelector('.shop-wallet-card')?.textContent.includes('1,117'));
  window.pointWalletStatus='error';document.querySelector('[data-do=list]').click();await until(()=>document.querySelector('.shop-wallet-card')&&!document.querySelector('.shop-wallet-card').textContent.includes('1,117'));
  let opened=0;window.openPointsWallet=()=>opened++;
- window.fetchPointWalletData_=async()=>({balance:1117,walletDisplayOwner:window.currentUserProfile.userId,queriedLineUserId:'U'+'a'.repeat(32)});
+ window.fetchAPI=async()=>({source:'mother',balance:1117,queriedLineUserId:'U'+'a'.repeat(32)});
  document.querySelector('.shop-wallet-cta').click();await until(()=>document.querySelector('.store-wallet-popup [data-balance]')?.textContent==='1,117 點');
  check(opened===0&&window.currentPage==='store-shop','popup must not navigate');
  check(document.querySelector('.store-wallet-popup [data-balance]').textContent==='1,117 點','popup balance missing');

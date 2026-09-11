@@ -1,6 +1,7 @@
 // Read-only storefront popup. The canonical points UID comes from the wallet query.
 let activeDialog;
 let qrLibrary,preparedQr;
+let summaryCache,summaryPending;
 const CACHE_MAX_AGE=60000;
 function verifiedWallet(data,owner){
   return !!owner&&data?.walletDisplayOwner===owner&&data.balance!==null&&data.balance!==undefined&&
@@ -11,8 +12,39 @@ function loadQrLibrary(){
   return qrLibrary;
 }
 function recentWallet(owner){
-  const data=window.pointWalletData,age=Date.now()-Number(data?.loadedAt||0);
-  return window.pointWalletStatus==='ready'&&age>=0&&age<CACHE_MAX_AGE&&verifiedWallet(data,owner)?data:null;
+  const candidates=[summaryCache,window.pointWalletStatus==='ready'?window.pointWalletData:null];
+  return candidates.filter(data=>{
+    const age=Date.now()-Number(data?.loadedAt||0);
+    return age>=0&&age<CACHE_MAX_AGE&&verifiedWallet(data,owner)&&(!data.source||data.source==='mother');
+  }).sort((a,b)=>b.loadedAt-a.loadedAt)[0]||null;
+}
+// Display-only summary: never fetch ledger pages or fall back to a full history query.
+export function readStoreWalletSummary(){
+  const owner=window.currentUserProfile?.userId;
+  if(!owner||!window.liff?.isLoggedIn?.()||typeof window.fetchAPI!=='function')return Promise.resolve(null);
+  const pointUserId=window.resolvePointUserIdForCurrentProfile?.(owner)||owner;
+  if(summaryPending?.owner===owner&&summaryPending.pointUserId===pointUserId)return summaryPending.promise;
+  const pending={owner,pointUserId};
+  pending.promise=Promise.resolve().then(async()=>{
+    try{
+      const res=await window.fetchAPI('queryPointBalanceFast',{userId:owner,pointUserId,pt_uid:pointUserId,point_type:'gift_money'},true);
+      if(owner!==window.currentUserProfile?.userId||!window.liff?.isLoggedIn?.()||(window.resolvePointUserIdForCurrentProfile?.(owner)||owner)!==pointUserId)return null;
+      const data=res?.data||res,raw=data?.balance??data?.latestBalance??data?.typedBalance;
+      if(!res||res.error||res.success===false||data.source!=='mother'||raw===null||raw===undefined||typeof raw==='boolean'||String(raw).trim()===''||!Number.isFinite(Number(raw)))throw Error('Unconfirmed balance');
+      if(data.requestedLineUserId&&data.requestedLineUserId!==pointUserId)throw Error('Mismatched wallet');
+      const summary={balance:Number(raw),queriedLineUserId:data.queriedLineUserId,walletDisplayOwner:owner,source:'mother',loadedAt:Date.now()};
+      if(!verifiedWallet(summary,owner))throw Error('Unconfirmed identity');
+      summaryCache=summary;
+      return summary;
+    }catch{
+      if(summaryCache?.walletDisplayOwner===owner)summaryCache=null;
+      return null;
+    }finally{
+      if(summaryPending===pending)summaryPending=null;
+    }
+  });
+  summaryPending=pending;
+  return pending.promise;
 }
 function makeQr(module,data,owner){
   const uid=String(data.queriedLineUserId).trim();
@@ -70,7 +102,7 @@ export function openStoreWalletPopup({isCurrent=()=>true,standalone=false}={}) {
     let showedCache=false,freshReceived=false;
     let cachedPaint=Promise.resolve();
     try{
-      if(standalone||!owner||!window.liff?.isLoggedIn?.()||typeof window.fetchPointWalletData_!=='function'){
+      if(standalone||!owner||!window.liff?.isLoggedIn?.()||typeof window.fetchAPI!=='function'){
         balance.textContent='請先登入';
         status.textContent='請從 LINE 登入原系統後，開啟商城查看本人點數與 QR 碼。';
         return;
@@ -91,21 +123,21 @@ export function openStoreWalletPopup({isCurrent=()=>true,standalone=false}={}) {
         qrBox.dataset.uid=uid;
         qrBox.hidden=false;
         status.textContent='QR 已就緒，可供店家掃描；點數更新中…';
-        if(preview){showedCache=true;return;}
+        if(preview)showedCache=true;
         // Give the QR a painted frame before displaying even an immediately resolved balance.
         await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-        if(!current()||ticket!==revision)return;
+        if(!current()||ticket!==revision||(preview&&freshReceived))return;
         balance.textContent=Number(data.balance).toLocaleString('zh-TW')+' 點';
-        status.textContent='請店家掃描此 QR 碼';
+        status.textContent=preview?'上次確認點數；正在更新最新總點數…':'請店家掃描此 QR 碼';
       };
       const cached=recentWallet(owner);
       if(cached){
         // Copy the fields: an in-flight refresh must not mutate the preview.
         cachedPaint=paint({...cached},true).catch(()=>{});
       }
-      // Preserve the authoritative query; the preview never authorizes a debit.
+      // One authenticated balance-only query; the preview never authorizes a debit.
       const data=await Promise.race([
-        window.fetchPointWalletData_(true),
+        readStoreWalletSummary(),
         new Promise((_,reject)=>{timeout=setTimeout(()=>reject(new Error('timeout')),15000);})
       ]);
       clearTimeout(timeout);
