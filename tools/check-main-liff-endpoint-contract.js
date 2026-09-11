@@ -41,7 +41,7 @@ for (const name of ['refreshHomeAiAssistant', 'toggleHomeAiAssistant', 'openHome
   assistantSandbox.window[name](); // ensureHomeAiAssistant_ is deliberately absent: disabled paths must not create it.
 }
 
-ok(/js\/auth\.js\?v=10\.95/.test(html), 'main endpoint authentication is cache-busted');
+ok(/js\/auth\.js\?v=10\.96/.test(html), 'main endpoint authentication is cache-busted');
 ok(auth.includes("window.goPage(wantsCardCoolList ? 'card' : 'home', true)"), 'login landing renders without triggering a duplicate navigation load');
 ok(auth.includes('aggregateWalletReady') && !auth.includes('setTimeout(() => window.refreshPointBalanceBadge?.(), 300)'), 'point balance uses aggregate home data before its delayed fallback');
 ok(home.includes('window.__homeLoadPromises'), 'home background tasks coalesce matching in-flight work');

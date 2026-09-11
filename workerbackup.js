@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
 import { issueMemberProductQr } from './worker/store-member-product-qr.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
@@ -2405,16 +2406,27 @@ const LineOAChatModule = {
   },
 
   async handleWebhook(request, env, ctx) {
-    const rawBody = await request.text();
-    const signature = request.headers.get('x-line-signature') || '';
+    let rawBody = await request.text();
+    let signature = request.headers.get('x-line-signature') || '';
     const body = JSON.parse(rawBody || '{}');
-    const events = Array.isArray(body.events) ? body.events : [];
+    let events = Array.isArray(body.events) ? body.events : [];
     const ok = await this.verifySignature(rawBody, signature, env);
     if (!ok && events.length > 0) return new Response('Invalid LINE signature', { status: 401 });
     if (!ok && events.length === 0) return new Response('OK', { status: 200 });
     await this.ensure(env);
     const saveJob = Promise.all(events.map(event => this.saveEvent(env, event).catch(e => console.error('LINE OA event save failed', e))));
     const followPointJob = this.followPointOnboardingJob(env, events).catch(e => console.error('LINE OA follow point onboarding failed', e));
+    const remaining = await consumeShopKeywords(events, env, (payload, config) => this.replyLine(payload, config));
+    if (remaining.length !== events.length) {
+      events = remaining;
+      if (!events.length) {
+        if (ctx && typeof ctx.waitUntil === 'function') { ctx.waitUntil(saveJob); ctx.waitUntil(followPointJob); }
+        else { await saveJob; await followPointJob; }
+        return new Response('OK', { status: 200 });
+      }
+      rawBody = JSON.stringify({ ...body, events });
+      signature = await signRemainingShopEvents(rawBody, this.text(env.LINE_CHANNEL_SECRET));
+    }
     const forwardJob = this.forwardToSecondSystem(rawBody, signature, env);
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(saveJob);

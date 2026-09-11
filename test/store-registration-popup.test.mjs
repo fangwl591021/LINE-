@@ -35,5 +35,5 @@ test('mall registration is explicit and lazy and versions match both entrypoints
  assert.match(mall,/case 'registration':[\s\S]*?import\('\.\/store-registration-popup\.js\?v=3'\)/);
  const loader=readFileSync(new URL('../js/modules/store-shop-entry.js',import.meta.url),'utf8');
  const standalone=readFileSync(new URL('../store-shop.html',import.meta.url),'utf8');
- for(const file of [loader,standalone]){assert.match(file,/store-shop\.js\?v=24/);assert.match(file,/store-shop\.css\?v=20/);}
+ for(const file of [loader,standalone]){assert.match(file,/store-shop\.js\?v=25/);assert.match(file,/store-shop\.css\?v=20/);}
 });

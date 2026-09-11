@@ -2878,6 +2878,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔓 已註冊用戶邏輯
     window.applyRegisteredUserSession(checkRes.info);
+    const shopSection = urlParams.get('shopSection');
+    if (['list','mine','manage','sales','online-manage'].includes(shopSection) && !shareCardId && !claimCardId && !likeCardId && !urlParams.get('shopQr') && !urlParams.get('memberProduct') && !urlParams.get('shopProduct')) {
+      await window.openStoreShop('', '', '', shopSection);
+      return;
+    }
     if (!shareCardId && !claimCardId && !likeCardId && (urlParams.get('shopQr')||urlParams.get('memberProduct'))) {
       const qrToken=urlParams.get('shopQr')||'',memberProduct=urlParams.get('memberProduct')||'';
       const clean=new URL(location.href);clean.searchParams.delete('shopQr');clean.searchParams.delete('memberProduct');

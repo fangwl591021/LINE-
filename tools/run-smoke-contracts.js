@@ -41,6 +41,7 @@ const foundationChecks = [
 const fullChecks = [
   'tools/check-store-shop-lifestyle-contract.js',
   'test/store-commerce.test.mjs',
+  'test/store-line-keywords.test.mjs',
   'test/store-product-ocr.test.mjs',
   'tools/check-safe-cashier-contract.js',
   'test/safe-cashier-client.test.cjs',

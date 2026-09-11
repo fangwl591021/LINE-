@@ -38,7 +38,7 @@
       return data;
     } finally { URL.revokeObjectURL(url); }
   }
-  function mount(root, standalone, productId='', qrToken='', memberProduct='') {
+  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='') {
     let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
     // UI hint only. Every merchant API rechecks the stored role and owner.
     const canManage=()=>!standalone&&['admin','store','總管','店長','user','用戶'].includes(String(window.userRole||'').toLowerCase());
@@ -368,7 +368,16 @@
         const version=++epoch;
         const module=await import('./shop-product-checkout.js?v=2');
         if(version===epoch)await module.mountProductCheckout(content,productId,()=>version===epoch,qrToken);
-      }else await (id?view(id):list());
+      }else if(!standalone&&['manage','sales','online-manage'].includes(section)){
+        await manage();
+        if(window.currentPage!=='store-shop'||!root.isConnected)return;
+        if(section!=='manage'){
+          if(!canTransact())throw new Error('業績與收款操作僅開放管理員、店長');
+          const button=content.querySelector('[data-do="'+section+'"]');
+          if(button)button.click();else alert.textContent='請先建立自己的店家資料。';
+        }
+      }else if(!standalone&&section==='mine')memberHome();
+      else await (id?view(id):list());
       if(!standalone){
         const warm=()=>{if(root.isConnected&&window.currentPage==='store-shop')void loadWalletModule().then(module=>module.prepareStoreWalletQr()).catch(()=>{});};
         if(window.requestIdleCallback)window.requestIdleCallback(warm,{timeout:1000});else setTimeout(warm,50);
