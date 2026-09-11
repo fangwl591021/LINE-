@@ -148,6 +148,18 @@ body:has(.store-wallet-popup[open]){overflow:hidden}
 .shop-lifestyle .shop-discovery-promos button{gap:7px;padding:14px 12px;border-radius:18px}
 @media(min-width:700px){.shop-lifestyle .shop-life-hero{padding:26px}.shop-lifestyle .shop-hero-copy{min-height:180px}.shop-lifestyle .shop-lifestyle-scene{object-position:center 35%}.shop-lifestyle .shop-hero-copy h2{font-size:38px}.shop-lifestyle .shop-category-tags button{flex:1}.shop-lifestyle .shop-browse-products{grid-template-columns:repeat(3,minmax(0,1fr))}.shop-lifestyle .shop-store-intro>img{height:210px}}
 
+/* Keep the active member QR next to the product price. */
+.store-shop .shop-price-qr-row{display:grid;grid-template-columns:minmax(0,1fr) 112px;align-items:start;gap:12px;margin-top:8px;margin-bottom:8px}
+.store-shop .shop-price-copy{min-width:0}
+.store-shop .shop-price-copy .shop-price{margin:0 0 6px}
+.store-shop .shop-price-copy .shop-product-policy{min-height:0}
+.store-shop .shop-inline-qr{min-width:0;text-align:center;color:#16345a}
+.store-shop .shop-inline-qr .member-product-code svg{display:block;width:112px;height:112px;max-width:100%;margin:0;background:#fff}
+.store-shop .shop-inline-qr .member-qr-status{font-size:11px;line-height:1.4;margin:4px 0;white-space:normal}
+.store-shop .shop-inline-qr button{width:100%;min-height:44px;padding:6px 4px;font-size:12px;white-space:nowrap;background:#fff8df}
+.store-shop .shop-inline-qr-note{font-size:11px;line-height:1.5;margin:8px 0 0;color:#617189;white-space:normal}
+.store-shop .shop-product-card:has(.shop-price-qr-row){grid-column:span 2}
+.store-shop .shop-product-card:has(.shop-price-qr-row) .shop-product-image{height:160px;aspect-ratio:auto}
 /* Remove the nested app frame only while the storefront is visible. */
 #app:has(#page-store-shop:not(.hidden)),#app:has(#page-store-shop:not(.hidden)) #top-nav{max-width:none}
 #main:has(#page-store-shop:not(.hidden)){padding-left:0;padding-right:0;padding-bottom:0}

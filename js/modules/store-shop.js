@@ -226,9 +226,25 @@
               const url=new URL('https://liff.line.me/'+(window.DEFAULT_LIFF_ID||'1660923784-vViMTZ1y'));
               url.searchParams.set('memberProduct',id);location.assign(url.href);break;
             }
-            const target=button.parentElement;
-            const module=await import('./member-product-qr.js?v=1');
-            if(root.contains(target))await module.showMemberProductQr(target,id,()=>root.isConnected);
+            const card=button.closest('article'),price=card?.querySelector('.shop-price');
+            let target;
+            if(price){
+              let row=card.querySelector('.shop-price-qr-row');
+              if(!row){
+                row=document.createElement('div');row.className='shop-price-qr-row';
+                price.before(row);
+                const copy=document.createElement('div');copy.className='shop-price-copy';row.append(copy);copy.append(price);
+                const policy=card.querySelector('.shop-product-policy')||card.querySelector('p.shop-meta');
+                if(policy)copy.append(policy);
+                const note=document.createElement('p');note.className='shop-inline-qr-note';
+                note.textContent='限本人出示，勿轉傳；店家確認後才扣點。';copy.append(note);
+                target=document.createElement('div');target.className='shop-inline-qr';row.append(target);
+              }else target=row.querySelector('.shop-inline-qr');
+              button.remove();
+            }else target=button.parentElement;
+            const version=epoch;
+            const module=await import('./member-product-qr.js?v=2');
+            if(root.contains(target))await module.showMemberProductQr(target,id,()=>root.isConnected&&version===epoch);
             break;
           }
           case 'new': edit(); break;
@@ -295,7 +311,7 @@
     void run(async()=>{
       if(memberProduct&&!standalone) {
         const version=++epoch;
-        const module=await import('./member-product-qr.js?v=1');
+        const module=await import('./member-product-qr.js?v=2');
         if(version===epoch)await module.showMemberProductQr(content,memberProduct,()=>version===epoch);
       }else if((productId||qrToken)&&!standalone) {
         const version=++epoch;

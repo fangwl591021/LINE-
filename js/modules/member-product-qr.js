@@ -23,7 +23,7 @@ export async function showMemberProductQr(root,productId,isActive=()=>true) {
    if(!root.contains(status))return;
    const seconds=Math.ceil((expiresAt-Date.now())/1000);
    if(seconds<=0){code.replaceChildren();status.textContent='QR 已過期，請重新產生';return;}
-   status.textContent=`本人商品 QR｜${seconds} 秒內有效，請出示給此店家掃描。勿轉傳；店家確認後才扣點。`;
+   status.textContent=root.classList.contains('shop-inline-qr')?`有效 ${seconds} 秒`:`本人商品 QR｜${seconds} 秒內有效，請出示給此店家掃描。勿轉傳；店家確認後才扣點。`;
    setTimeout(tick,1000);
   };tick();
  }catch(e){if(active()){root.textContent=e.message;const retry=document.createElement('button');retry.type='button';retry.textContent='重試';retry.onclick=()=>void showMemberProductQr(root,productId,isActive);root.appendChild(retry);}}

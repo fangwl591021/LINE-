@@ -26,6 +26,9 @@ assert(css.includes('.shop-lifestyle .shop-discovery-grid article>img{height:aut
 assert(front.includes('shop-product-summary'));assert(front.includes('shop-product-image'));
 assert(front.includes('assets/storefront/lifestyle-cafe-v1.jpg'));
 assert(front.includes('pageKind(\'commerce\')'));
+assert(front.includes("target.className='shop-inline-qr'"));
+assert(front.includes("copy.append(price)"));
+assert(css.includes('grid-template-columns:minmax(0,1fr) 112px'));
 assert(css.includes('#main:has(#page-store-shop:not(.hidden)){padding-left:0;padding-right:0;padding-bottom:0}'));
 assert(css.includes('#app:has(#page-store-shop:not(.hidden)) #top-nav{max-width:none}'));
 assert(css.includes('padding-left:max(8px,env(safe-area-inset-left))'));
