@@ -5,7 +5,12 @@ const admins=['admin','總管'];
 export function shopKeyword(event){
  if(event?.type!=='message'||event.message?.type!=='text')return '';
  const text=String(event.message.text||'').normalize('NFKC').trim();
- return text==='店家專區'?'portal':['儀錶板','儀表板'].includes(text)?'dashboard':'';
+ if(text==='店家專區')return 'portal';
+ if(['儀錶板','儀表板'].includes(text))return 'dashboard';
+ if(text==='商城業績')return 'sales';
+ if(/^商城商品(?:\s|$)/.test(text))return 'products';
+ if(/^商城訂單(?:\s|$)/.test(text))return 'orders';
+ return '';
 }
 const text=value=>({type:'text',text:String(value),wrap:true,size:'sm',color:'#16345a'});
 const action=(label,uri)=>({type:'button',style:'secondary',action:{type:'uri',label,uri}});
@@ -48,21 +53,73 @@ export async function buildShopKeywordMessage(event,env,now){
  if(rows?.length!==1)return card('商城登入／註冊',['請先使用此 LINE 帳號完成會員註冊，再回聊天室操作。'],[action('開啟商城',link(env,'mine'))]);
  const role=String(rows[0].role||'').toLowerCase(),merchant=merchantRoles.includes(role);
  if(!memberRoles.includes(role))return {type:'text',text:'目前此帳號未開放商城管理，請聯絡管理員確認。'};
- if(shopKeyword(event)==='portal'){
-  const buttons=[action('我的商城／商品管理',link(env,'manage'))];
-  if(merchant)buttons.push(action('我的業績查詢',link(env,'sales')),action('我的訂單／收款寄送',link(env,'online-manage')),command('商城儀錶板','儀錶板'));
-  buttons.push(action('查看商城',link(env,'list')));
-  return card('店家專區',[merchant?'管理本人店家；實際操作仍須 LINE 登入與權限驗證。':'一般會員可管理 1 個商品；店長不限。業績、收款與折抵操作仍限店長／管理員。'],buttons);
+ const kind=shopKeyword(event);
+ if(['portal','products','orders'].includes(kind)){
+  if(kind==='orders'&&!merchant)return {type:'text',text:'商城訂單僅開放管理員、店長查詢本人店家。'};
+  const match=String(event.message.text).normalize('NFKC').trim().match(/^商城(?:商品|訂單)(?: ([1-9]\d{0,3}))?$/);
+  const page=kind==='portal'?1:Number(match?.[1]||1);
+  if(kind!=='portal'&&(!match||page>1000))return {type:'text',text:'請使用卡片的翻頁按鈕，或輸入「商城商品」「商城訂單」（頁碼 1–1000）。'};
+  const result=await readChatPage(db,uid,kind==='orders'?'orders':'products',page);
+  const buttons=[];
+  const keyword=kind==='orders'?'商城訂單':'商城商品';
+  if(page>1)buttons.push(command('上一頁',`${keyword} ${page-1}`));
+  if(result.more&&page<1000)buttons.push(command('下一頁',`${keyword} ${page+1}`));
+  if(kind==='portal'){
+   buttons.push(command('我的商品','商城商品'));
+   if(merchant)buttons.push(command('我的業績','商城業績'),command('我的網購訂單','商城訂單'),command('商城儀錶板','儀錶板'));
+   buttons.push(action('新增／編輯商品（網頁）',link(env,'manage')));
+  }else{
+   buttons.push(command('返回店家專區','店家專區'));
+   buttons.push(action(kind==='orders'?'核帳／出貨操作（網頁）':'新增／編輯商品（網頁）',link(env,kind==='orders'?'online-manage':'manage')));
+  }
+  const lines=[...result.lines];
+  if(kind==='portal')lines.unshift(merchant?'商品、業績、訂單直接在聊天室查詢；變更資料才開啟登入操作頁。':'一般會員可管理 1 個商品；店長不限。業績、收款與折抵操作仍限店長／管理員。');
+  if(result.more&&page===1000)lines.push('已達聊天室查詢範圍，較早資料請至商城管理查詢。');
+  return card(kind==='portal'?'店家專區':`${kind==='orders'?'我的網購訂單':'我的商品'}・第 ${page} 頁`,lines,buttons);
  }
  if(!merchant)return {type:'text',text:'商城儀錶板僅開放管理員、店長。您仍可輸入「店家專區」管理自己的商品。'};
- const admin=admins.includes(role),s=await readMallSummary(db,uid,admin,now);
+ const admin=kind==='dashboard'&&admins.includes(role),s=await readMallSummary(db,uid,admin,now);
  const n=v=>Number(v).toLocaleString('zh-TW');
- return card(admin?'全商城營運儀錶板':'我的店家儀錶板',[
+ return card(kind==='sales'?'我的店家業績':admin?'全商城營運儀錶板':'我的店家儀錶板',[
   `店家：${n(s.shops.active)} 家上架／共 ${n(s.shops.total)} 家\n商品：${n(s.products.active)} 項上架／${n(s.products.draft)} 項草稿`,
   `網購訂單：共 ${n(s.orders.total)} 筆\n待匯款 ${n(s.orders.pending)}／待核帳 ${n(s.orders.reported)}\n已付款待出貨 ${n(s.orders.unfulfilled)}／已出貨待完成 ${n(s.orders.shipped)}\n網購累計已核帳 NT$ ${n(s.orders.received/100)}`,
   `${s.today}（台灣時間）商品 QR 折抵：${n(s.redemptions.total)} 筆\n商品金額 NT$ ${n(s.redemptions.amount)}／折抵 ${n(s.redemptions.points)} 點\n折抵後應收 NT$ ${n(s.redemptions.amount-s.redemptions.points)}（非銀行實收）`,
   '網購與現場 QR 分開統計；不包含未經本商城商品 QR 確認的交易。'+(String(env.STORE_COMMERCE_ENABLED)==='true'?'':'線上交易仍未開放。')
- ],[command('更新摘要','儀錶板'),command('店家操作','店家專區')]);
+ ],[command('更新摘要',kind==='sales'?'商城業績':'儀錶板'),command('店家操作','店家專區')]);
+}
+const short=(value,max=80)=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,max);
+const money=cents=>Number(cents).toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2});
+function orderTime(value){
+ const raw=String(value||'');
+ const date=new Date(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(raw)?raw.replace(' ','T')+'Z':raw);
+ return Number.isFinite(date.getTime())?date.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}):'時間未提供';
+}
+// Explicit field projection: no buyer identity, address, phone, bank or full snapshot.
+async function readChatPage(db,uid,kind,page){
+ const shop=await db.prepare('SELECT id,name,status FROM store_shop_stores WHERE owner_uid=?').bind(uid).first();
+ if(!shop)return {lines:['尚未建立自己的店家。可使用「新增／編輯商品」入口建置。'],more:false};
+ const query=kind==='orders'
+  ?`SELECT id,total_cents,payment_status,fulfillment_status,created_at,
+    substr(json_extract(snapshot_json,'$.items[0].title'),1,80) first_title,
+    json_array_length(snapshot_json,'$.items') item_count
+    FROM store_commerce_orders WHERE shop_id=? ORDER BY created_at DESC,id DESC LIMIT 6 OFFSET ?`
+  :`SELECT title,price_cents,status,purchase_mode,redeem_type,redeem_value FROM store_shop_products
+    WHERE shop_id=? AND status!='archived' ORDER BY updated_at DESC,id DESC LIMIT 6 OFFSET ?`;
+ const result=await db.prepare(query).bind(shop.id,(page-1)*5).all();
+ if(!Array.isArray(result.results))throw Error('Missing chat rows');
+ const lines=[`${short(shop.name)}｜店面${shop.status==='active'?'已上架':'草稿未公開'}`];
+ for(const row of result.results.slice(0,5)){
+  if(kind==='orders'){
+   const paid={pending:'待匯款',reported:'已回報匯款・待核帳',paid:'已核帳',cancelled:'已取消'}[row.payment_status]||'狀態待確認';
+   const shipped={unfulfilled:'未出貨',shipped:'已出貨',completed:'已完成'}[row.fulfillment_status]||'狀態待確認';
+   lines.push(`訂單 ${short(row.id,64)}\n${orderTime(row.created_at)}（台灣時間）\n${short(row.first_title)||'商品名稱未提供'}${row.item_count>1?` 等 ${row.item_count} 項商品`:''}\nNT$ ${money(row.total_cents/100)}｜${paid}／${shipped}`);
+  }else{
+   const redeem=row.redeem_type==='fixed'?`最多折抵 ${row.redeem_value} 點`:row.redeem_type==='percent'?`最多折抵 ${row.redeem_value}%`:row.redeem_type==='full'?'可全額折抵':'不折抵';
+   lines.push(`${short(row.title)}\nNT$ ${money(row.price_cents/100)}｜${row.status==='active'?'已上架':'草稿'}｜${row.purchase_mode==='online'?'網購':'限店內'}\n${redeem}（依實際結帳規則）`);
+  }
+ }
+ if(!result.results.length)lines.push(page===1?(kind==='orders'?'目前沒有網購訂單。':'目前沒有商品。'):'此頁沒有資料，請返回上一頁或重新查詢。');
+ return {lines,more:result.results.length>5};
 }
 export async function consumeShopKeywords(events,env,reply){
  const remaining=[],seen=new Set();
