@@ -1031,6 +1031,8 @@ const HomeModule = (function() {
         });
     }
 
+    // Temporarily hidden by product request; preserve the assistant for later re-enabling.
+    const HOME_AI_ASSISTANT_VISIBLE = false;
     function ensureHomeAiAssistant_() {
         let widget = document.getElementById('home-ai-assistant');
         if (widget) return widget;
@@ -1086,6 +1088,7 @@ const HomeModule = (function() {
     }
 
     window.refreshHomeAiAssistant = function(options = {}) {
+        if (!HOME_AI_ASSISTANT_VISIBLE) return null;
         const widget = ensureHomeAiAssistant_();
         const health = buildHomeAiAssistantHealth_();
         window.homeAiAssistantHealth = health;
@@ -1133,6 +1136,7 @@ const HomeModule = (function() {
     };
 
     window.toggleHomeAiAssistant = function(force) {
+        if (!HOME_AI_ASSISTANT_VISIBLE) return;
         const widget = ensureHomeAiAssistant_();
         const shouldOpen = force === undefined ? widget.classList.contains('is-collapsed') : force !== false;
         widget.classList.toggle('is-collapsed', !shouldOpen);
@@ -1140,6 +1144,7 @@ const HomeModule = (function() {
     };
 
     window.openHomeAiAssistantAdvice = function() {
+        if (!HOME_AI_ASSISTANT_VISIBLE) return;
         const widget = ensureHomeAiAssistant_();
         const action = widget.dataset.action || window.refreshHomeAiAssistant?.().action || '';
         runHomeAiAssistantAction_(action);

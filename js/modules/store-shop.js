@@ -39,9 +39,29 @@
     } finally { URL.revokeObjectURL(url); }
   }
   function mount(root, standalone, productId='', qrToken='', memberProduct='') {
-    let shop=null, items=[], epoch=0, busy=false;
+    let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
     // UI hint only. Every merchant API rechecks the stored role and owner.
-    const canManage=()=>!standalone&&['admin','store','總管','店長'].includes(String(window.userRole||'').toLowerCase());
+    const canManage=()=>!standalone&&['admin','store','總管','店長','user','用戶'].includes(String(window.userRole||'').toLowerCase());
+    const canTransact=()=>!standalone&&['admin','store','總管','店長'].includes(String(window.userRole||'').toLowerCase());
+    const atCapacity=()=>productLimit!==null&&productCount>=productLimit;
+    function setManagement(result) {
+      shop=result.shop;items=result.products;productLimit=result.product_limit;productCount=result.product_count;productNext=result.product_next||'';
+    }
+    function moreButton(next,privateView) {
+      return next?`<button type="button" data-do="more-products" data-private="${privateView}" data-cursor="${esc(next)}">載入更多商品</button>`:'';
+    }
+    async function moreProducts(button) {
+      const version=epoch,privateView=button.dataset.private==='true',cursor=button.dataset.cursor;
+      button.disabled=true;
+      try {
+        const result=await api(privateView?'/manage?product_after='+encodeURIComponent(cursor):'?shop='+encodeURIComponent(viewedShop.id)+'&product_after='+encodeURIComponent(cursor),undefined,privateView);
+        if(version!==epoch||!button.isConnected)return;
+        const target=privateView?items:viewedProducts,added=result.products.filter(p=>!target.some(x=>x.id===p.id));target.push(...added);
+        content.querySelector('.shop-grid').insertAdjacentHTML('beforeend',added.map(p=>product(p,privateView)).join(''));
+        const category=content.querySelector('[data-scope="products"][aria-pressed="true"]')?.dataset.category||'';filterProducts(category);
+        button.outerHTML=moreButton(result.product_next,privateView);
+      } finally {button.disabled=false;}
+    }
     let listCategory='', listQuery='';
     let viewedShop=null, viewedProducts=[];
     let walletModule,walletImport;
@@ -77,7 +97,7 @@
     function detail(id) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
       ++epoch;pageKind('product');alert.textContent='';
-      content.innerHTML=`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button><article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?'<a class="shop-link" href="index.html">登入後線上選購</a>':`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button></div></article>`;
+      content.innerHTML=`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button><article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?'<a class="shop-link" href="index.html">登入後線上選購</a>':`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}${viewedShop.merchant_enabled===0?'':`<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button>`}</div></article>`;
     }
     const base=String(root.dataset.worker||window.Config?.WORKER_URL||'').replace(/\/+$/,'');
     async function api(path='',data,privateRead=false) {
@@ -96,8 +116,8 @@
     }
     function shopLink(id) { const url=new URL('store-shop.html',location.href); url.searchParams.set('shop',id); return url.href; }
     function product(p,edit=false) {
-      if(!edit)return `<article class="shop-product-card" data-product-category="${esc(p.category||'')}"><button class="shop-product-image" data-do="detail" data-id="${esc(p.id)}" aria-label="查看 ${esc(p.title)} 詳情">${photo(p.image_url)||'<span class="shop-product-placeholder" aria-hidden="true">🛍</span>'}</button><div class="shop-product-summary"><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h3><button class="shop-product-title" data-do="detail" data-id="${esc(p.id)}">${esc(p.title)}</button></h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p class="shop-meta shop-product-policy">${esc(policy(p))}</p><div class="shop-product-actions"><button class="shop-detail-link" data-do="detail" data-id="${esc(p.id)}">詳情 ›</button><button data-do="member-qr" data-product-qr data-id="${esc(p.id)}" aria-label="出示 ${esc(p.title)} 本人 QR">▦ QR</button></div></div></article>`;
-      return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div></div></article>`;
+      if(!edit)return `<article class="shop-product-card" data-product-category="${esc(p.category||'')}"><button class="shop-product-image" data-do="detail" data-id="${esc(p.id)}" aria-label="查看 ${esc(p.title)} 詳情">${photo(p.image_url)||'<span class="shop-product-placeholder" aria-hidden="true">🛍</span>'}</button><div class="shop-product-summary"><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h3><button class="shop-product-title" data-do="detail" data-id="${esc(p.id)}">${esc(p.title)}</button></h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p class="shop-meta shop-product-policy">${esc(policy(p))}</p><div class="shop-product-actions"><button class="shop-detail-link" data-do="detail" data-id="${esc(p.id)}">詳情 ›</button>${viewedShop?.merchant_enabled===0?'':`<button data-do="member-qr" data-product-qr data-id="${esc(p.id)}" aria-label="出示 ${esc(p.title)} 本人 QR">▦ QR</button>`}</div></div></article>`;
+      return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}${canTransact()?`<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div>`:''}</div></article>`;
     }
     async function list(after='',q='',category='') {
       pageKind('home');
@@ -115,7 +135,7 @@
       });
       content.querySelector('.shop-grid')?.insertAdjacentHTML('beforebegin',`<div class="shop-section-title"><h2>${q||category?'符合條件的好店':'探索好店'}</h2><span>各店自行收款</span></div>`);
       if(!after&&!q&&!category)content.insertAdjacentHTML('afterbegin',hero(result.shops));
-      content.insertAdjacentHTML('beforeend',`<div class="shop-discovery-promos"><button data-do="wallet"><span aria-hidden="true">🎁</span><strong>點數用在喜歡的生活<small>查看本人共用點數與折抵入口</small></strong></button>${canManage()?'<button data-do="manage"><span aria-hidden="true">🏪</span><strong>我是店家<small>管理商品、收款與網路訂單</small></strong></button>':''}</div>`);
+      content.insertAdjacentHTML('beforeend',`<div class="shop-discovery-promos"><button data-do="wallet"><span aria-hidden="true">🎁</span><strong>點數用在喜歡的生活<small>查看本人共用點數與折抵入口</small></strong></button>${canManage()?'<button data-do="manage"><span aria-hidden="true">🏪</span><strong>我是店家<small>管理本人店面與商品</small></strong></button>':''}</div>`);
     }
     function filterProducts(category) {
       const cards=[...content.querySelectorAll('[data-product-category]')];
@@ -138,6 +158,7 @@
       const details=[s.category,s.address,s.phone,s.hours].filter(Boolean).join('\n');
       content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><details><summary>店家介紹與聯絡資訊</summary><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></details></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
       if(!standalone&&result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
+      content.insertAdjacentHTML('beforeend',moreButton(result.product_next,false));
       addProductTags(); if(category) filterProducts(category);
       content.querySelector('.shop-grid')?.classList.add('shop-browse-products');
     }
@@ -157,24 +178,26 @@
     }
     function renderManage() {
       const s=shop||{};
-      content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary">新增商品</button></div><h2>商品管理（${items.length}/100）</h2><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
+      content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary" ${atCapacity()?'disabled':''}>新增商品</button></div><h2>商品管理（${productCount} 件${productLimit===null?'・不限件數':`／上限 ${productLimit} 件`}）</h2><p class="shop-meta">${productLimit===null?'商品分頁載入，每頁 100 件。':'一般會員最多一件（草稿也計入），封存後可更換；店長與管理員不限。一般會員限店內展示，不開放收款與扣點。'}</p><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
+      content.insertAdjacentHTML('beforeend',moreButton(productNext,true));
       addProductTags();
-      if(shop) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
-      if(shop) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
+      if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
+      if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
     }
     async function manage() {
-      if(!canManage())throw new Error('商店管理僅開放管理員、店長');
+      if(!canManage())throw new Error('請登入已登記的會員帳號以管理本人商品');
       pageKind('manage');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
       const result=await api('/manage',null,true); if(version!==epoch) return;
-      shop=result.shop; items=result.products; renderManage();
+      setManagement(result); renderManage();
     }
     function edit(p={}) {
+      if(!p.id&&atCapacity())throw new Error('一般會員最多一件商品，請先封存原商品再新增。');
       const editor=content.querySelector('.shop-editor'); if(!editor) return;
-      editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${select('redeem_type','點數折抵政策',[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',p.redeem_value||0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'draft')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
+      editor.innerHTML=`<form data-form="product" class="shop-box" data-id="${esc(p.id||'')}" data-version="${p.version||0}"><h2>${p.id?'編輯':'新增'}商品</h2>${input('title','商品名稱 *',p.title,100)}${input('description','商品／服務說明',p.description,3000,true)}${imageInput('商品圖片',p.image_url)}${input('price','價格（NT$）*',p.price_cents===undefined?'':(p.price_cents/100),20,false,'number')}${select('redeem_type','點數折抵政策',productLimit===null?[['none','不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']]:[['none','不折抵']],p.redeem_type||'none')}${input('redeem_value','折抵上限（點數或百分比；不折抵／全額請填 0）',productLimit===null?(p.redeem_value||0):0,10,false,'number')}${select('status','商品狀態',[['draft','草稿'],['active','上架'],...(p.id?[['archived','封存（不刪除紀錄）']]:[])],p.status||'draft')}<div class="shop-row"><button class="primary">儲存商品</button><button type="button" data-do="cancel">取消</button></div></form>`;
       editor.scrollIntoView({block:'start',behavior:'smooth'});
       editor.querySelector('[name="description"]').closest('label').insertAdjacentHTML('beforebegin',select('category','商品分類',[['','未分類'],...categories.map(c=>[c,c])],p.category||''));
-      editor.querySelector('[name="category"]').closest('label').insertAdjacentHTML('afterend',select('purchase_mode','銷售方式',[['in_store','限店內'],['online','網購']],p.purchase_mode||'in_store'));
+      editor.querySelector('[name="category"]').closest('label').insertAdjacentHTML('afterend',select('purchase_mode','銷售方式',productLimit===null?[['in_store','限店內'],['online','網購']]:[['in_store','限店內']],p.purchase_mode||'in_store'));
       if(!p.id)editor.querySelector('h2').insertAdjacentHTML('afterend','<button type="button" data-do="dm-import" class="primary">上傳 DM・AI 辨識建商品</button><p class="shop-meta">DM 送至 AI 擷取商品資料，先帶入表單、核對後再儲存。不自動上架。</p>');
       editor.querySelector('form').dataset.requestKey=crypto.randomUUID();
     }
@@ -206,6 +229,7 @@
             if(isCurrent())module.openStoreWalletPopup({standalone,isCurrent});
             break;
           }
+          case 'more-products': await moreProducts(button);break;
           case 'next': await list(button.dataset.id,button.dataset.query,listCategory); break;
           case 'category':
             if(button.dataset.scope==='shops') await list('',content.querySelector('[name="q"]')?.value??listQuery,button.dataset.category);
@@ -216,15 +240,17 @@
           case 'online-buy':
           case 'online-orders':
           case 'online-manage': {
+            if(button.dataset.do==='online-manage'&&!canTransact())throw new Error('收款與訂單管理僅開放管理員、店長');
             pageKind('commerce');
             const version=++epoch;alert.textContent='';
             const mode=button.dataset.do==='online-manage'?'merchant':button.dataset.do==='online-orders'?'orders':'checkout';
-            const selected=mode==='checkout'?await api(`?shop=${encodeURIComponent(button.dataset.id)}`):{};
+            const selected=mode==='checkout'?(viewedShop?.id===button.dataset.id?{shop:viewedShop,products:viewedProducts}:await api(`?shop=${encodeURIComponent(button.dataset.id)}`)):{};
             const module=await import('./store-commerce.js?v=2');
             if(version===epoch)await module.mountCommerce(content,{base,mode,shop:selected.shop,products:selected.products,isCurrent:()=>version===epoch&&window.currentPage==='store-shop'});
             break;
           }
           case 'sales': {
+            if(!canTransact())throw new Error('業績查詢僅開放管理員、店長');
             pageKind('manage');
             const version=++epoch;alert.textContent='';
             content.innerHTML='<button type="button" data-do="manage">返回商城管理</button><p role="status">載入業績查詢…</p>';
@@ -312,13 +338,13 @@
       void run(async()=>{
         try {
           if(form.dataset.form==='store') {
-            data.version=Number(form.dataset.version); const result=await api('/store',data); shop=result.shop; renderManage();
+            data.version=Number(form.dataset.version); const result=await api('/store',data); setManagement(result); renderManage();
           } else {
             data.id=form.dataset.id; data.version=Number(form.dataset.version);
             data.request_key=form.dataset.requestKey;
             data.price_cents=Math.round(Number(data.price)*100); delete data.price;
             data.redeem_value=Number(data.redeem_value);
-            const result=await api('/product',data); items=result.products; renderManage();
+            const result=await api('/product',data); setManagement(result); renderManage();
           }
           alert.textContent='已儲存；本次沒有扣除點數。';
         } finally { busy=false; buttons.forEach((b,i)=>b.disabled=disabled[i]); }

@@ -29,7 +29,18 @@ ok(config.includes('window.ensureActmasterPointFriendship'), 'main app exposes t
 ok(auth.includes('await window.ensureActmasterPointFriendship()'), 'authenticated main startup waits for friendship verification');
 ok(config.includes("url.searchParams.set('point_friend', '1')"), 'successful recheck preserves the existing point_friend contract');
 ok(/js\/config\.js\?v=9\.14/.test(html), 'main endpoint configuration is cache-busted');
-ok(html.includes('<link rel=\"preload\" as=\"image\" href=\"assets/ai-home-assistant.png?v=1\" fetchpriority=\"high\">'), 'home assistant LCP image is discovered from the document head');
+ok(html.includes('#home-ai-assistant{display:none!important}'), 'floating assistant is hidden, including cached module versions');
+ok(!html.includes('<link rel="preload" as="image" href="assets/ai-home-assistant.png'), 'hidden assistant does not preload its image');
+ok(home.includes('const HOME_AI_ASSISTANT_VISIBLE = false;'), 'assistant starts disabled');
+const assistantSandbox = { HOME_AI_ASSISTANT_VISIBLE: false, window: {} };
+for (const name of ['refreshHomeAiAssistant', 'toggleHomeAiAssistant', 'openHomeAiAssistantAdvice']) {
+  const start = home.indexOf('    window.' + name + ' = function');
+  const end = home.indexOf('\n    };', start) + '\n    };'.length;
+  ok(start >= 0 && end > start, name + ' exists');
+  require('vm').runInNewContext(home.slice(start, end), assistantSandbox);
+  assistantSandbox.window[name](); // ensureHomeAiAssistant_ is deliberately absent: disabled paths must not create it.
+}
+
 ok(/js\/auth\.js\?v=10\.95/.test(html), 'main endpoint authentication is cache-busted');
 ok(auth.includes("window.goPage(wantsCardCoolList ? 'card' : 'home', true)"), 'login landing renders without triggering a duplicate navigation load');
 ok(auth.includes('aggregateWalletReady') && !auth.includes('setTimeout(() => window.refreshPointBalanceBadge?.(), 300)'), 'point balance uses aggregate home data before its delayed fallback');

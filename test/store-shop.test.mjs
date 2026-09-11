@@ -1,4 +1,63 @@
 import {test} from 'node:test';
+test('normal member owns one catalog product, retries are safe, archive frees quota, transactions stay restricted',async()=>{
+ const {call,sql}=fixture();try{
+  const s=await call('/store',store({owner_uid:A,role:'admin'}),'c');assert.equal(s.status,200);assert.equal(s.product_limit,1);assert.equal(s.product_count,0);
+  assert.equal(sql.prepare('SELECT owner_uid FROM store_shop_stores WHERE id=?').get(s.shop.id).owner_uid,USER);
+  assert.equal((await call('?shop='+s.shop.id)).shop.merchant_enabled,0);
+  assert.equal((await call('/sales',null,'c')).status,403);
+  for(const extra of [{purchase_mode:'online'},{redeem_type:'fixed',redeem_value:1}]){
+   assert.equal((await call('/product',product({redeem_type:'none',redeem_value:0,...extra}),'c')).status,400);
+  }
+  const data=product({redeem_type:'none',redeem_value:0,status:'draft',role:'admin'});
+  const saved=await call('/product',data,'c');assert.equal(saved.status,200);assert.equal(saved.product_count,1);
+  assert.equal((await call('/product',data,'c')).status,200);
+  assert.equal((await call('/product',{...data,request_key:crypto.randomUUID()},'c')).status,400);
+  const edited=await call('/product',{...saved.products[0],title:'本人上架',status:'active'},'c');assert.equal(edited.status,200);
+  assert.equal((await call('?shop='+s.shop.id)).products.length,1);
+  const archived=await call('/product',{...edited.products[0],status:'archived'},'c');assert.equal(archived.product_count,0);
+  assert.equal((await call('/product',{...data,request_key:crypto.randomUUID()},'c')).status,200);
+  assert.equal(sql.prepare('SELECT count(*) n FROM store_shop_products').get().n,2);
+ }finally{sql.close();}
+});
+
+test('two concurrent normal-member inserts cannot exceed one product',async()=>{
+ const {call,sql}=fixture();try{
+  await call('/store',store(),'c');
+  const results=await Promise.all([1,2].map(i=>call('/product',product({title:'商品'+i,redeem_type:'none',redeem_value:0}),'c')));
+  assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);
+  assert.equal(sql.prepare("SELECT count(*) n FROM store_shop_products WHERE status!='archived'").get().n,1);
+ }finally{sql.close();}
+});
+
+test('store and admin have unlimited products with complete private/public pagination',async()=>{
+ const {call,sql}=fixture();try{
+  for(const token of ['a','b']){
+   const s=(await call('/store',store(),'a'===token?'a':'b')).shop;
+   for(let i=0;i<102;i++)assert.equal((await call('/product',product({title:'商品'+i} ),token)).status,200);
+   const first=await call('/manage',null,token);assert.equal(first.product_limit,null);assert.equal(first.product_count,102);assert.equal(first.products.length,100);assert.ok(first.product_next);
+   const next=await call('/manage?product_after='+first.product_next,null,token);
+   assert.equal(next.products.length,2);assert.equal(next.product_next,'');assert.equal(new Set([...first.products,...next.products].map(p=>p.id)).size,102);
+   const pub=await call('?shop='+s.id),pubNext=await call('?shop='+s.id+'&product_after='+pub.product_next);
+   assert.equal(pub.shop.merchant_enabled,1);assert.equal(pub.products.length,100);assert.equal(pubNext.products.length,2);assert.equal(pubNext.product_next,'');
+  }
+ }finally{sql.close();}
+});
+
+test('demotion preserves products and allows archiving until the single-product allowance is restored',async()=>{
+ const {call,sql}=fixture();try{
+  await call('/store',store(),'a');await call('/product',product(),'a');
+  const saved=await call('/product',product(),'a');
+  sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A);
+  assert.equal((await call('/manage',null,'a')).product_count,2);
+  assert.equal((await call('/sales',null,'a')).status,403);
+  assert.equal((await call('/product',product({redeem_type:'none',redeem_value:0}),'a')).status,400);
+  const edit={...saved.products[0],redeem_type:'none',redeem_value:0};
+  assert.equal((await call('/product',edit,'a')).status,409);
+  assert.equal((await call('/product',{...saved.products[1],status:'archived'},'a')).status,200);
+  assert.equal((await call('/product',edit,'a')).status,200);
+  assert.equal(sql.prepare('SELECT count(*) n FROM store_shop_products').get().n,2);
+ }finally{sql.close();}
+});
 test('merchant role matrix protects management, writes, sales and DM, not public browsing',async()=>{
  const {sql,call}=fixture();
  try{
@@ -8,7 +67,7 @@ test('merchant role matrix protects management, writes, sales and DM, not public
    assert.equal((await call('/manage',null,'a')).status,200,role);
    assert.equal((await call('?shop='+id)).status,200,role);
   }
-  for(const role of ['tenant','租戶','user','staff','manager','administrator','',null]){
+  for(const role of ['tenant','租戶','staff','manager','administrator','',null]){
    sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
    for(const path of ['/manage','/sales'])assert.equal((await call(path,null,'a')).status,403,role+path);
    for(const path of ['/store','/product','/product-ocr'])assert.equal((await call(path,{role:'admin',owner_uid:A},'a')).status,403,role+path);
@@ -115,7 +174,7 @@ test('sales: owner-only, successful product transactions, Taiwan dates, safe his
   assert.doesNotMatch(JSON.stringify(report),/PRIVATE|customer_id|owner_uid|fingerprint|result_json/);
   assert.equal((await call(path,null,'b')).summary.count,1);
   assert.equal(sql.prepare('SELECT total_changes() AS n').get().n,before);
-  sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A);
+  sql.prepare("UPDATE users SET role='staff' WHERE line_id=?").run(A);
   assert.equal((await call(path,null,'a')).status,403);
   sql.close();
 });
@@ -194,10 +253,11 @@ test('category migration preserves existing product data and restricts new value
 test('store management requires verified token and database role, never payload claims',async()=>{
   const {call,sql}=fixture();
   assert.equal((await call('/store',store())).status,401);
+  sql.prepare("UPDATE users SET role='staff' WHERE line_id=?").run(USER);
   assert.equal((await call('/store',store({role:'admin',userId:A}),'c')).status,403);
   assert.equal((await call('/manage',null,'invalid')).status,401);
   assert.equal((await call('/store',store(),'a')).status,200);
-  sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A);
+  sql.prepare("UPDATE users SET role='staff' WHERE line_id=?").run(A);
   assert.equal((await call('/manage',null,'a')).status,403);
   assert.equal((await call()).shops.length,0);
   sql.close();

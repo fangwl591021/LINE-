@@ -1,10 +1,11 @@
 // Catalog and read-only sales. No point writes or cashier execution calls.
 import {readShopSales} from './store-shop-sales.mjs';
 import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
-const roles = ['store','店長','admin','總管'];
+const roles = ['store','店長','admin','總管','user','用戶'];
+const unlimitedRoles = ['store','店長','admin','總管'];
 const categories = ['','食','宿','遊','購','行','服務','製造'];
-const publicColumns = 's.id,s.name,s.description,s.category,s.address,s.phone,s.hours,s.image_url,s.status,s.version,s.updated_at';
-const eligible = "EXISTS (SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管'))";
+const publicColumns = 's.id,s.name,s.description,s.category,s.address,s.phone,s.hours,s.image_url,s.status,s.version,s.updated_at,(EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN (\'store\',\'店長\',\'admin\',\'總管\'))) AS merchant_enabled';
+const eligible = "EXISTS (SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶'))";
 const headers = { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'Content-Type, Authorization', 'Access-Control-Allow-Methods':'GET, POST, OPTIONS' };
 class ShopError extends Error { constructor(message,status=400) { super(message); this.status=status; } }
 const fail = (message,status) => { throw new ShopError(message,status); };
@@ -58,10 +59,20 @@ async function actor(request,db,fetcher) {
   if(!/^U[0-9a-f]{32}$/i.test(profile.userId||'')) fail('登入身分無效',401);
   const row=await db.prepare('SELECT line_id,role FROM users WHERE line_id=? LIMIT 1').bind(profile.userId).first();
   if(!row||!roles.includes(String(row.role).toLowerCase())) fail('僅已登記的店家可管理自己的商城',403);
-  return profile.userId;
+  return {uid:profile.userId,limit:unlimitedRoles.includes(String(row.role).toLowerCase())?null:1};
 }
 const own=(db,uid)=>db.prepare('SELECT * FROM store_shop_stores WHERE owner_uid=?').bind(uid).first();
-const products=async(db,id,privateView)=>(await db.prepare(`SELECT id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,version,updated_at FROM store_shop_products WHERE shop_id=? AND status ${privateView?"!= 'archived'":"= 'active'"} ORDER BY id LIMIT 100`).bind(id).all()).results;
+async function productPage(db,id,privateView,after='') {
+  if(after.length>80)fail('商品分頁格式不正確');
+  const rows=(await db.prepare(`SELECT id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,version,updated_at FROM store_shop_products WHERE shop_id=? AND status ${privateView?"!= 'archived'":"= 'active'"} AND id>? ORDER BY id LIMIT 101`).bind(id,after).all()).results;
+  return {products:rows.slice(0,100),product_next:rows.length>100?rows[99].id:''};
+}
+async function management(db,shop,limit,after='') {
+  const count=shop?await db.prepare("SELECT count(*) AS total FROM store_shop_products WHERE shop_id=? AND status!='archived'").bind(shop.id).first():{total:0};
+  return {success:true,shop:publicStore(shop),...(shop?await productPage(db,shop.id,true,after):{products:[],product_next:''}),product_count:count.total,product_limit:limit};
+}
+// Catalog-only quota; this does not grant cashier, payment or order-management access.
+const capacity = `EXISTS(SELECT 1 FROM users u WHERE u.line_id=? AND lower(u.role) IN ('store','店長','admin','總管','user','用戶') AND (lower(u.role) IN ('store','店長','admin','總管') OR NOT EXISTS(SELECT 1 FROM store_shop_products p WHERE p.shop_id=? AND p.status!='archived' AND p.id!=?)))`;
 function publicStore(shop) { if(!shop) return null; const {owner_uid,...visible}=shop; return visible; }
 export async function handleStoreShop(request,env,fetcher=fetch) {
   const url=new URL(request.url);
@@ -75,7 +86,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
         if(id.length>80) fail('店面編號不正確');
         const shop=await db.prepare(`SELECT ${publicColumns} FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND ${eligible}`).bind(id).first();
         if(!shop) fail('店面尚未開放或已下架',404);
-        return reply({success:true,shop,products:await products(db,id,false)});
+        return reply({success:true,shop,...await productPage(db,id,false,url.searchParams.get('product_after')||'')});
       }
       const query=(url.searchParams.get('q')||'').trim().slice(0,80);
       const cursor=(url.searchParams.get('after')||'').slice(0,80);
@@ -89,7 +100,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     const writeProduct=request.method==='POST'&&url.pathname==='/v1/store-shop/product';
     const recognizeDm=request.method==='POST'&&url.pathname==='/v1/store-shop/product-ocr';
     if(!manage&&!sales&&!writeStore&&!writeProduct&&!recognizeDm) fail('不支援此商城操作',404);
-    const uid=await actor(request,db,fetcher);
+    const {uid,limit}=await actor(request,db,fetcher);
     const shop=await own(db,uid);
     if(recognizeDm){
       if(!shop)fail('請先儲存店面，再辨識 DM',400);
@@ -97,11 +108,12 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       return reply(await recognizeProductDm(data,env,shop.id,fetcher));
     }
     if(sales) {
+      if(limit!==null)fail('業績查詢僅開放管理員、店長',403);
       if(!shop) fail('請先建立店面',404);
       const result=await readShopSales(db,uid,url.searchParams);
       return reply(result,result.success?200:400);
     }
-    if(manage) return reply({success:true,shop:publicStore(shop),products:shop?await products(db,shop.id,true):[]});
+    if(manage) return reply(await management(db,shop,limit,url.searchParams.get('product_after')||''));
     const data=await readJson(request); const now=new Date().toISOString();
     if(writeStore) {
       const vals=Object.values(normalizeStore(data));
@@ -114,7 +126,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
         const result=await db.prepare('UPDATE store_shop_stores SET name=?,description=?,category=?,address=?,phone=?,hours=?,image_url=?,status=?,updated_at=?,version=version+1 WHERE id=? AND owner_uid=? AND version=?').bind(...vals,now,shop.id,uid,version).run();
         if(!result.meta.changes) fail('資料已被更新，請重新載入後再編輯',409);
       }
-      return reply({success:true,shop:publicStore(await own(db,uid))});
+      return reply(await management(db,await own(db,uid),limit));
     }
     if(!shop) fail('請先建立店面');
     const id=field(data,'id',80);
@@ -125,21 +137,22 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       if(data.purchase_mode===undefined)data.purchase_mode=previous?.purchase_mode ?? 'in_store';
     }
     const value=normalizeProduct(data);
+    if(limit!==null&&value.status!=='archived'&&(value.purchase_mode!=='in_store'||value.redeem_type!=='none'))fail('一般會員商品目前限店內展示，不開放網購收款或點數折抵');
     if(id) {
       const version=integer(data.version,1000000000,'版本');
-      const result=await db.prepare("UPDATE store_shop_products SET title=?,description=?,image_url=?,price_cents=?,redeem_type=?,redeem_value=?,status=?,category=?,purchase_mode=?,updated_at=?,version=version+1 WHERE id=? AND shop_id=? AND version=? AND status!='archived'").bind(...Object.values(value),now,id,shop.id,version).run();
-      if(!result.meta.changes) fail('商品不存在、已更新或無權修改，請重新載入',409);
+      const result=await db.prepare(`UPDATE store_shop_products SET title=?,description=?,image_url=?,price_cents=?,redeem_type=?,redeem_value=?,status=?,category=?,purchase_mode=?,updated_at=?,version=version+1 WHERE id=? AND shop_id=? AND version=? AND status!='archived' AND (?='archived' OR ${capacity})`).bind(...Object.values(value),now,id,shop.id,version,value.status,uid,shop.id,id).run();
+      if(!result.meta.changes) fail('商品不存在、已更新、無權修改或超過一件名額；請先封存多餘商品後重試',409);
     } else {
       const key=field(data,'request_key',80,true);
       if(!/^[0-9a-f-]{36}$/i.test(key)) fail('請重新開啟新增商品表單');
-      const result=await db.prepare("INSERT INTO store_shop_products (id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,updated_at,request_key) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM store_shop_products WHERE shop_id=? AND status!='archived')<100 ON CONFLICT(shop_id,request_key) DO NOTHING").bind(crypto.randomUUID(),shop.id,...Object.values(value),now,key,shop.id).run();
+      const result=await db.prepare(`INSERT INTO store_shop_products (id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,updated_at,request_key) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${capacity} ON CONFLICT(shop_id,request_key) DO NOTHING`).bind(crypto.randomUUID(),shop.id,...Object.values(value),now,key,uid,shop.id,'').run();
       if(!result.meta.changes) {
         const previous=await db.prepare('SELECT * FROM store_shop_products WHERE shop_id=? AND request_key=?').bind(shop.id,key).first();
-        if(!previous) fail('每店最多 100 件商品，請先封存不用的商品');
+        if(!previous) fail('非店長最多一件商品（含草稿）；請先封存原商品再新增，店長與管理員不限');
         if(!Object.entries(value).every(([key,value])=>previous[key]===value)) fail('這次新增已儲存，請重新載入後使用編輯商品修改',409);
       }
     }
-    return reply({success:true,products:await products(db,shop.id,true)});
+    return reply(await management(db,shop,limit));
   } catch(error) {
     if(error instanceof ShopError||error instanceof ProductDmError) return reply({success:false,error:error.message},error.status);
     const missing=/no such table/.test(String(error?.message));

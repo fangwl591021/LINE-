@@ -25,7 +25,9 @@
 - 以下第一階段描述保留為歷史；交易新增規則以上述及 store-point-cashier-protected-flow 最新條款為準。
 
 - 依福委會店家/商品/公開店面/核銷分離架構；取代舊平台限定上架方向，不搬正式資料或福委帳密。
-- 僅店長 store/店長及管理員 admin/總管可管理本人店面；tenant/租戶、一般會員及未知角色不可管理，admin 不可跨店。每次操作即時驗證 LINE token，再查 users，前端角色/UID 不可信。公開店面、商品 QR 與報價也確認店主仍具資格；顧客瀏覽、購買與本人訂單查詢保留。
+- 2026-09-11 條件更新：一般會員 user/用戶可建立本人店面、使用 DM 辨識並管理一件未封存商品（草稿計入，封存後可替換）；店長 store/店長及管理員 admin/總管不限件數。tenant/租戶及未知角色仍不開放管理，admin 不可跨店。每次操作即時驗證 LINE token，再查 users，前端角色/UID 不可信。
+- 名額在 INSERT/UPDATE 的同一 SQL 內核對角色及未封存商品，不能以連續或並行請求繞過。角色降級不刪除歷史商品，允許封存以恢復名額。管理及公開商品以 product_after 游標每頁 100 件，回傳 product_next；管理另回 product_count、product_limit（null 表示不限），100 不是商品總量上限。
+- 本次只開放一般會員的目錄展示與 DM：其商品限 in_store、redeem_type=none；收款設定、業績、商家訂單、商品 QR 與扣點仍限原店長/管理員權限。公開 merchant_enabled 控制是否呈現可用的交易入口，伺服器仍獨立驗權。顧客瀏覽、購買與本人訂單查詢保留。
 - 店面與商品獨立 store_shop_* 表；owner 唯一、不公開，版本不符回 409，封存不硬刪。
 - GET /v1/store-shop 公開目錄及 ?shop=ID 店面；GET /manage 本人資料；POST /store、/product 本人儲存。有界 JSON、有界列表、安全圖片網址、公開只看 active。
 - 第一階段僅設定商品折抵政策 none/fixed/percent/full，不扣點、不下單、不核銷、不收費、不轉點、不結算。

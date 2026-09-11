@@ -1,4 +1,12 @@
 import {test} from 'node:test';
+test('normal member may recognize DM only for own saved shop, without creating a product',async t=>{
+ const f=fixture(t);
+ assert.equal((await f.call(undefined,'b')).status,400);
+ f.sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,updated_at) VALUES(?,?,?,'now')").run('shop-b','U'+'b'.repeat(32),'本人店面');
+ assert.equal((await f.call(undefined,'b')).status,200);
+ assert.equal(f.sql.prepare('SELECT shop_id FROM store_product_ocr_usage').get().shop_id,'shop-b');
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM store_shop_products').get().n,0);
+});
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
@@ -38,9 +46,9 @@ test('explicit bundle proposal keeps whole-set price and both providers receive 
 
 test('DM OCR authenticates stored role and own shop before image or AI calls',async t=>{
  const f=fixture(t);
- for(const [token,status] of [[null,401],['bad',401],['b',403],['d',400]])assert.equal((await f.call({base64Image:IMAGE,role:'admin',shop_id:'shop-a'},token)).status,status);
+ for(const [token,status] of [[null,401],['bad',401],['b',400],['d',400]])assert.equal((await f.call({base64Image:IMAGE,role:'admin',shop_id:'shop-a'},token)).status,status);
  assert.equal(f.state.calls.length,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM store_product_ocr_usage').get().n,0);
- f.sql.exec("UPDATE users SET role='user' WHERE line_id='Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'");assert.equal((await f.call()).status,403);
+ f.sql.exec("UPDATE users SET role='staff' WHERE line_id='Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'");assert.equal((await f.call()).status,403);
 });
 test('DM image validation rejects arbitrary URLs, PDF, invalid base64, mismatch and large bodies',async t=>{
  const f=fixture(t);
