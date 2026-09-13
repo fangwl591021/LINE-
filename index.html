@@ -7,6 +7,11 @@
   <meta name="theme-color" content="#06C755">
   <link rel="manifest" href="manifest.webmanifest">
   <style id="home-ai-assistant-hidden">#home-ai-assistant{display:none!important}</style>
+  <style id="store-shop-shell-layout">
+    body:has(#page-store-shop:not(.hidden)) #top-nav { display: none !important; }
+    body:has(#page-store-shop:not(.hidden)) #main { padding-top: 0 !important; }
+    body:has(#page-store-shop:not(.hidden)) #page-store-shop { margin-top: 0 !important; }
+  </style>
 
   <script>
     (function markIosDevice() {

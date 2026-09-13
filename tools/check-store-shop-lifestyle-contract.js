@@ -1,6 +1,13 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const front=fs.readFileSync('js/modules/store-shop.js','utf8'),css=fs.readFileSync('css/store-shop.css','utf8');
+const html=fs.readFileSync('index.html','utf8');
+const shellStyle=html.match(/<style id="store-shop-shell-layout">([\s\S]*?)<\/style>/)?.[1];
+assert(shellStyle,'Mall shell layout must load before the lazy storefront assets');
+assert(shellStyle.includes('body:has(#page-store-shop:not(.hidden)) #top-nav { display: none !important; }'));
+assert(shellStyle.includes('body:has(#page-store-shop:not(.hidden)) #main { padding-top: 0 !important; }'));
+assert(shellStyle.includes('body:has(#page-store-shop:not(.hidden)) #page-store-shop { margin-top: 0 !important; }'));
+assert(html.includes('id="top-nav"'),'Keep the shared header DOM for other pages');
 for(const value of ['shop-life-hero','shop-bottom-nav','shop-discovery-grid','shop-product-detail','shop-member-home'])assert(front.includes(value));
 assert(front.includes('data?.walletDisplayOwner===uid'));
 assert(front.includes("window.pointWalletStatus==='ready'"));
