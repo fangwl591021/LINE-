@@ -1351,7 +1351,8 @@ window.applyRegisteredUserSession = function(info) {
   if (!info) return;
 
   window.currentUser = { ...info };
-  if (typeof window.isHardAdminUser === 'function' && window.isHardAdminUser(window.currentUserProfile?.userId || window.currentUser.userId, window.currentUser)) {
+  const rewardOnlyRole = ['reward', '贈點用戶'].includes(String(window.currentUser.role || '').trim().toLowerCase());
+  if (!rewardOnlyRole && typeof window.isHardAdminUser === 'function' && window.isHardAdminUser(window.currentUserProfile?.userId || window.currentUser.userId, window.currentUser)) {
     window.currentUser.role = 'admin';
     window.currentUser.networkId = window.currentUser.networkId || 'admin';
   }
@@ -1596,10 +1597,69 @@ window.loadPointsWallet = async function(force = false) {
   window.renderPointBalanceState('ready', data);
 };
 
+let storePointRewardScan = null;
+
+window.isRewardOnlyPointCashier = function() {
+  const role = String(window.userRole || window.currentUser?.role || '').trim().toLowerCase();
+  return role === 'reward' || role === '贈點用戶';
+};
+
+window.invalidateStorePointRewardScan = function() {
+  storePointRewardScan = null;
+  window.__storePointLookupRevision = (window.__storePointLookupRevision || 0) + 1;
+};
+
+window.updateStorePointCashierPermissions = function() {
+  const rewardOnly = window.isRewardOnlyPointCashier();
+  if (storePointRewardScan && (!rewardOnly || storePointRewardScan.owner !== window.currentUserProfile?.userId)) {
+    window.invalidateStorePointRewardScan();
+    window.renderStorePointCustomer?.(null);
+  }
+  const input = document.getElementById('store-point-customer');
+  if (input) {
+    if (!input.__rewardScanInputBound) {
+      input.addEventListener('input', () => {
+        if (storePointRewardScan || window.isRewardOnlyPointCashier()) {
+          window.invalidateStorePointRewardScan();
+          window.renderStorePointCustomer?.(null);
+        }
+      });
+      input.__rewardScanInputBound = true;
+    }
+    input.disabled = rewardOnly;
+    input.readOnly = rewardOnly;
+    input.classList.toggle('hidden', rewardOnly);
+  }
+  for (const id of ['store-point-customer-lookup', 'store-point-redeem-option']) {
+    document.getElementById(id)?.classList.toggle('hidden', rewardOnly);
+  }
+  const lookup = document.getElementById('store-point-customer-lookup');
+  if (lookup) lookup.disabled = rewardOnly;
+  document.getElementById('store-point-customer-scan')?.classList.toggle('col-span-2', rewardOnly);
+  const modes = document.getElementById('store-point-modes');
+  modes?.classList.toggle('grid-cols-1', rewardOnly);
+  modes?.classList.toggle('grid-cols-2', !rewardOnly);
+  document.querySelectorAll('input[name="store-point-mode"]').forEach(radio => {
+    radio.disabled = rewardOnly && radio.value !== 'reward';
+    if (rewardOnly) radio.checked = radio.value === 'reward';
+  });
+  const deduct = document.getElementById('store-point-deduct');
+  if (deduct) {
+    deduct.disabled = rewardOnly;
+    if (rewardOnly) deduct.value = '0';
+  }
+  if (rewardOnly) document.getElementById('store-point-deduct-wrap')?.classList.add('hidden');
+  const text = (id, value) => { const node = document.getElementById(id); if (node) node.textContent = value; };
+  text('store-point-cashier-help', rewardOnly ? '僅可掃描會員錢包 QR 後消費贈點，不能扣點。' : '掃描客戶 QR 碼或輸入電話可折抵扣點或消費贈點。');
+  text('store-point-customer-label', rewardOnly ? '掃描會員錢包 QR 確認顧客' : '客戶帳號 / 手機 / QR 內容');
+  text('store-point-cashier-free-help', rewardOnly ? '僅限掃碼消費贈點，不扣操作點數。' : '店家送出折抵扣點或消費贈點不扣操作點數。');
+};
+
 window.canUseStorePointCashier = function() {
   const rawRole = String(window.userRole || window.currentUser?.role || '').trim();
   const role = rawRole.toLowerCase();
-  return window.hasAdminRights === true
+  return window.isRewardOnlyPointCashier()
+    || window.hasAdminRights === true
     || role === 'admin'
     || role === 'store'
     || role === 'tenant'
@@ -1622,6 +1682,7 @@ window.updatePointSyncDiagnosticVisibility = function() {
 
 window.updateStorePointCashierVisibility = function() {
   window.updatePointSyncDiagnosticVisibility?.();
+  window.updateStorePointCashierPermissions?.();
   const panel = document.getElementById('store-point-cashier');
   if (!panel) return;
   const canUse = window.canUseStorePointCashier();
@@ -1632,6 +1693,7 @@ window.updateStorePointCashierVisibility = function() {
 };
 
 window.toggleStorePointCashier = function() {
+  window.updateStorePointCashierPermissions?.();
   const body = document.getElementById('store-point-cashier-body');
   const icon = document.getElementById('store-point-cashier-icon');
   if (!body) return;
@@ -1811,6 +1873,7 @@ function renderStorePointCashierLogs(rows) {
 }
 
 window.getStorePointMode = function() {
+  if (window.isRewardOnlyPointCashier?.()) return 'reward';
   return document.querySelector('input[name="store-point-mode"]:checked')?.value || 'redeem';
 };
 
@@ -1941,10 +2004,22 @@ window.decodeStorePointQrFile = async function(file) {
 window.fillStorePointCustomerFromQr = function(raw) {
   const customerId = String(raw||'').trim();
   const target = document.getElementById('store-point-customer');
+  const rewardOnly = window.isRewardOnlyPointCashier?.();
+  if (rewardOnly) {
+    window.updateStorePointCashierPermissions?.();
+    window.invalidateStorePointRewardScan();
+    window.renderStorePointCustomer?.(null);
+    if (!window.currentUserProfile?.userId || !/^U[0-9a-fA-F]{20,64}$/.test(customerId)) {
+      if (target) target.value = '';
+      window.showToast?.('贈點用戶僅能掃描會員錢包 QR，不能使用商品碼、電話或手動帳號。', true);
+      return '';
+    }
+  }
   if (target) {
     target.value = customerId;
     target.dispatchEvent(new Event('input', { bubbles: true }));
   }
+  if (rewardOnly) storePointRewardScan = { owner: window.currentUserProfile.userId, walletQr: customerId, inputValue: customerId, customerUserId: '', rewardScanToken: '' };
   window.lookupStorePointCustomer?.();
   return customerId;
 };
@@ -1970,12 +2045,14 @@ window.openStorePointScanner = async function() {
 
   window.closeStorePointScanner();
   const revision=window.__storePointScannerRevision;
+  const rewardOnly = window.isRewardOnlyPointCashier?.(), owner = window.currentUserProfile?.userId;
+  const current = () => revision === window.__storePointScannerRevision && (!rewardOnly || (owner === window.currentUserProfile?.userId && window.isRewardOnlyPointCashier?.()));
   modal.classList.remove('hidden');
   if (status) status.textContent = '正在開啟相機...';
 
   try {
     const jsQR = await window.loadQrDecoder();
-    if(revision!==window.__storePointScannerRevision)return;
+    if(!current())return;
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: 'environment' },
@@ -1984,17 +2061,17 @@ window.openStorePointScanner = async function() {
       },
       audio: false
     });
-    if(revision!==window.__storePointScannerRevision){stream.getTracks().forEach(track=>track.stop());return;}
+    if(!current()){stream.getTracks().forEach(track=>track.stop());return;}
     window.__storePointScannerStream = stream;
     window.__storePointScannerActive = true;
     video.srcObject = stream;
     await video.play();
-    if(revision!==window.__storePointScannerRevision)return;
-    if (status) status.textContent = '請將商品或客戶點數 QR 放入框內。';
+    if(!current()){window.closeStorePointScanner();return;}
+    if (status) status.textContent = rewardOnly ? '請將會員錢包 QR 放入框內，僅可消費贈點。' : '請將商品或客戶點數 QR 放入框內。';
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const scanFrame = () => {
-      if (!window.__storePointScannerActive||revision!==window.__storePointScannerRevision) return;
+      if (!window.__storePointScannerActive||!current()) { if (rewardOnly && !current()) window.closeStorePointScanner(); return; }
       if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth && video.videoHeight) {
         const size = Math.min(video.videoWidth, video.videoHeight);
         const sx = Math.max(0, Math.floor((video.videoWidth - size) / 2));
@@ -2016,8 +2093,8 @@ window.openStorePointScanner = async function() {
   } catch (e) {
     const msg = e?.name === 'NotAllowedError'
       ? '相機權限被拒絕，請允許相機或改用相簿辨識。'
-      : (e.message || '無法開啟掃描器，請改用相簿辨識或貼上 UID。');
-    if(revision!==window.__storePointScannerRevision)return;
+      : (e.message || (rewardOnly ? '無法開啟掃描器，請改用相簿辨識會員錢包 QR。' : '無法開啟掃描器，請改用相簿辨識或貼上 UID。'));
+    if(!current())return;
     window.__storePointScannerStream?.getTracks().forEach(track=>track.stop());
     window.__storePointScannerStream=null;
     window.__storePointScannerActive=false;
@@ -2027,6 +2104,7 @@ window.openStorePointScanner = async function() {
 };
 
 window.updateStorePointPreview = function() {
+  window.updateStorePointCashierPermissions?.();
   const preview = document.getElementById('store-point-preview');
   const amountInput = document.getElementById('store-point-amount');
   const deductWrap = document.getElementById('store-point-deduct-wrap');
@@ -2098,6 +2176,7 @@ window.renderStorePointCustomerCandidates = function(candidates) {
 };
 
 window.selectStorePointCustomerCandidate = async function(index) {
+  if (window.isRewardOnlyPointCashier?.()) return window.showToast?.('贈點用戶請掃描會員錢包 QR。', true);
   const item = Array.isArray(window.storePointCustomerCandidates) ? window.storePointCustomerCandidates[index] : null;
   if (!item) return;
   if (item.needsBinding || !item.customerPointUserId) {
@@ -2178,6 +2257,7 @@ window.renderStorePointCustomer = function(customer) {
 };
 
 window.prepareStorePointCashierSession = async function(customer) {
+  if (window.isRewardOnlyPointCashier?.()) return null;
   if (!customer || customer.needsBinding || !customer.customerPointUserId) return null;
   const activeCustomerId = customer.customerPointUserId;
   try {
@@ -2212,9 +2292,19 @@ window.lookupStorePointCustomer = async function() {
   const input = document.getElementById('store-point-customer');
   const ticket=window.__storePointLookupRevision=(window.__storePointLookupRevision||0)+1;
   const raw=String(input?.value||'').trim();
+  const rewardOnly = window.isRewardOnlyPointCashier?.();
+  const rewardScan = rewardOnly ? storePointRewardScan : null;
+  const validRewardScan = () => !!rewardScan && storePointRewardScan === rewardScan
+    && rewardScan.owner === window.currentUserProfile?.userId
+    && window.isRewardOnlyPointCashier?.() && rewardScan.inputValue === String(input?.value || '').trim();
   const classified=window.classifyStorePointInput(raw);
   window.storePointCustomer=null;
   window.renderStorePointCustomer(null);
+  if (rewardOnly && (!validRewardScan() || !/^U[0-9a-fA-F]{20,64}$/.test(rewardScan.walletQr))) {
+    window.invalidateStorePointRewardScan();
+    window.showToast?.('贈點用戶請先掃描會員錢包 QR，不支援電話、商品碼或手動查詢。', true);
+    return null;
+  }
   if(classified.kind==='product'||classified.kind==='memberProduct') {
     if(input) input.value='';
     window.closeStorePointScanner?.();
@@ -2233,10 +2323,14 @@ window.lookupStorePointCustomer = async function() {
   }
   if (input && input.value !== customerUserId) input.value = customerUserId;
   try {
-    const res = await window.fetchAPI('getStorePointCustomer', { customerUserId }, true);
+    const res = await window.fetchAPI('getStorePointCustomer', { customerUserId, ...(rewardOnly ? { walletQr: rewardScan.walletQr } : {}) }, true);
     if(ticket!==window.__storePointLookupRevision||window.extractPointCustomerId(input?.value||'')!==customerUserId) return null;
+    if (rewardOnly && !validRewardScan()) return null;
     if (!res || res.error) throw new Error(res?.error || '查無客戶資料');
     const data = res.data || res;
+    if (rewardOnly && (!data.rewardScanToken || !data.customerPointUserId || data.needsSelection || data.needsBinding)) {
+      throw new Error('掃碼身分尚未確認，請重新掃描會員錢包 QR。');
+    }
     if (data.needsSelection && Array.isArray(data.candidates)) {
       window.renderStorePointCustomer(null);
       window.renderStorePointCustomerCandidates(data.candidates);
@@ -2245,6 +2339,11 @@ window.lookupStorePointCustomer = async function() {
     }
     if (input && data.customerPointUserId && !data.needsBinding && input.value !== data.customerPointUserId) {
       input.value = data.customerPointUserId;
+    }
+    if (rewardOnly) {
+      rewardScan.inputValue = String(input?.value || '').trim();
+      rewardScan.customerUserId = data.customerPointUserId;
+      rewardScan.rewardScanToken = data.rewardScanToken;
     }
     window.renderStorePointCustomer(data);
     if (data.needsBinding) window.showToast?.(data.message || '找到名片，但尚未綁定點數會員', true);
@@ -2258,6 +2357,7 @@ window.lookupStorePointCustomer = async function() {
 };
 
 window.resetStorePointCashier = function() {
+  window.invalidateStorePointRewardScan?.();
   const body = document.getElementById('store-point-cashier-body');
   const icon = document.getElementById('store-point-cashier-icon');
   const customerInput = document.getElementById('store-point-customer');
@@ -2269,6 +2369,7 @@ window.resetStorePointCashier = function() {
   if (customerInput) customerInput.value = '';
   if (amountInput) amountInput.value = '';
   if (deductInput) deductInput.value = '';
+  window.updateStorePointCashierPermissions?.();
   window.renderStorePointCustomer(null);
   if (preview) {
     preview.className = 'rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed';
@@ -2280,7 +2381,8 @@ window.scanStorePointQr = async function(input) {
   const file = input?.files?.[0];
   if (!file) return;
   const revision=window.__storePointScannerRevision||0,owner=window.currentUserProfile?.userId;
-  const current=()=>revision===(window.__storePointScannerRevision||0)&&owner===window.currentUserProfile?.userId;
+  const rewardOnly = window.isRewardOnlyPointCashier?.();
+  const current=()=>revision===(window.__storePointScannerRevision||0)&&owner===window.currentUserProfile?.userId&&(!rewardOnly||window.isRewardOnlyPointCashier?.());
   try {
     const raw = await window.decodeStorePointQrFile(file);
     if(!current())return;
@@ -2289,7 +2391,7 @@ window.scanStorePointQr = async function(input) {
     window.closeStorePointScanner?.();
   } catch (e) {
     if(!current())return;
-    window.showToast?.((e.message || 'QR 讀取失敗') + '，可改用貼上客戶 UID。', true);
+    window.showToast?.((e.message || 'QR 讀取失敗') + (rewardOnly ? '，請重新掃描會員錢包 QR。' : '，可改用貼上客戶 UID。'), true);
   } finally {
     if (input?.files?.[0]===file) input.value = '';
   }
@@ -2297,7 +2399,7 @@ window.scanStorePointQr = async function(input) {
 
 window.submitStorePointCashier = async function(btn) {
   if (!window.canUseStorePointCashier()) {
-    return window.showToast?.('只有店長或總管可以使用會員收銀機', true);
+    return window.showToast?.('目前帳號沒有會員收銀機操作權限', true);
   }
   const customerInput = document.getElementById('store-point-customer');
   const amountInput = document.getElementById('store-point-amount');
@@ -2307,9 +2409,21 @@ window.submitStorePointCashier = async function(btn) {
     || window.storePointCustomer?.bindCustomerUserId
     || window.extractPointCustomerId(customerInput?.value || '');
   const amount = Math.floor(Number(amountInput?.value || 0));
-  const deductPoints = Math.floor(Number(deductInput?.value || 0));
+  const rewardOnly = window.isRewardOnlyPointCashier?.();
+  const deductPoints = rewardOnly ? 0 : Math.floor(Number(deductInput?.value || 0));
   const mode = window.getStorePointMode();
   const canAutoBindReward = !!(window.storePointCustomer && window.storePointCustomer.canAutoBindPointAccount && mode === 'reward');
+
+  if (rewardOnly && (mode !== 'reward' || !storePointRewardScan
+    || storePointRewardScan.owner !== window.currentUserProfile?.userId
+    || storePointRewardScan.inputValue !== String(customerInput?.value || '').trim()
+    || storePointRewardScan.customerUserId !== customerUserId
+    || !storePointRewardScan.rewardScanToken
+    || storePointRewardScan.rewardScanToken !== window.storePointCustomer?.rewardScanToken)) {
+    window.invalidateStorePointRewardScan();
+    window.renderStorePointCustomer?.(null);
+    return window.showToast?.('請重新掃描會員錢包 QR 確認顧客，贈點用戶不能扣點。', true);
+  }
 
   if (!customerUserId) return window.showToast?.('請先掃描或輸入客戶帳號', true);
   if (!amount || amount <= 0) return window.showToast?.('請輸入正確消費金額', true);
@@ -2334,6 +2448,7 @@ window.submitStorePointCashier = async function(btn) {
       deductPoints,
       mode,
       cashierSessionId: window.storePointCustomer?.cashierSessionId || '',
+      ...(rewardOnly ? { rewardScanToken: storePointRewardScan.rewardScanToken } : {}),
       autoBindPointAccount: canAutoBindReward
     });
     if (!res || res.error) throw new Error(res?.error || '點數處理失敗');

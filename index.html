@@ -1025,7 +1025,7 @@
                   <span class="material-symbols-outlined text-[#06C755] icon-filled">point_of_sale</span>
                   會員收銀機
                 </h3>
-                <p class="text-[13px] text-slate-500 font-bold mt-1">掃描客戶 QR 碼或輸入電話可折抵扣點或消費贈點。</p>
+                <p id="store-point-cashier-help" class="text-[13px] text-slate-500 font-bold mt-1">掃描客戶 QR 碼或輸入電話可折抵扣點或消費贈點。</p>
               </div>
               <button type="button" tabindex="-1" class="pointer-events-none w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center transition-transform">
                 <span id="store-point-cashier-icon" class="material-symbols-outlined text-slate-500">expand_more</span>
@@ -1033,8 +1033,8 @@
             </div>
           </div>
           <div id="store-point-cashier-body" class="hidden p-5 space-y-4">
-            <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl">
-              <label class="cursor-pointer">
+            <div id="store-point-modes" class="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl">
+              <label id="store-point-redeem-option" class="cursor-pointer">
                 <input type="radio" name="store-point-mode" value="redeem" class="peer sr-only" checked onchange="window.updateStorePointPreview()">
                 <div class="py-3 text-center rounded-xl text-[14px] font-black text-slate-500 peer-checked:bg-white peer-checked:text-blue-600 peer-checked:shadow-sm transition-all">折抵扣點</div>
               </label>
@@ -1045,13 +1045,13 @@
             </div>
 
             <div class="space-y-2">
-              <label class="text-[13px] font-black text-slate-600">客戶帳號 / 手機 / QR 內容</label>
+              <label id="store-point-customer-label" class="text-[13px] font-black text-slate-600">客戶帳號 / 手機 / QR 內容</label>
               <div id="store-point-customer-row" class="grid grid-cols-2 gap-2">
                 <input id="store-point-customer" class="custom-input !py-3 font-mono text-[13px] col-span-2 min-w-0" placeholder="輸入手機號碼，或按右下掃碼" onblur="window.lookupStorePointCustomer()" onkeydown="if(event.key==='Enter'){event.preventDefault();window.lookupStorePointCustomer()}">
-                <button type="button" onclick="window.lookupStorePointCustomer()" class="min-h-[48px] rounded-2xl bg-blue-50 text-blue-600 font-black active:scale-95 transition-transform">
+                <button id="store-point-customer-lookup" type="button" onclick="window.lookupStorePointCustomer()" class="min-h-[48px] rounded-2xl bg-blue-50 text-blue-600 font-black active:scale-95 transition-transform">
                   查詢
                 </button>
-                <button type="button" onclick="window.openStorePointScanner()" class="min-h-[48px] rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center justify-center gap-1 cursor-pointer">
+                <button id="store-point-customer-scan" type="button" onclick="window.openStorePointScanner()" class="min-h-[48px] rounded-2xl bg-slate-900 text-white font-black active:scale-95 transition-transform flex items-center justify-center gap-1 cursor-pointer">
                   <span class="material-symbols-outlined text-[18px]">qr_code_scanner</span>
                   掃碼
                 </button>
@@ -1084,7 +1084,7 @@
             <div id="store-point-preview" class="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-[14px] text-slate-700 font-bold leading-relaxed">
               請先輸入消費金額。
             </div>
-            <div class="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-[13px] text-amber-800 font-black leading-relaxed">
+            <div id="store-point-cashier-free-help" class="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-[13px] text-amber-800 font-black leading-relaxed">
               店家送出折抵扣點或消費贈點不扣操作點數。
             </div>
 
@@ -2836,21 +2836,21 @@
 
 <!-- ocr-lab route: ocr-lab.html -->
 <script src="js/app-notify.js?v=1"></script>
-<script src="js/core.js?v=7.31"></script>
+  <script src="js/core.js?v=7.32"></script>
 <script src="js/navigation.js?v=8.03"></script>
 <script src="js/modules/card-vision-crop.js?v=1.0"></script>
 <script src="js/modules/cropper.js?v=7.18"></script>
 <script type="module" src="js/modules/a-kaffit-card-scanner-adapter.js?v=3.7"></script>
 <script src="js/modules/cards.js?v=8.02"></script>
 <script src="js/modules/business-richman.js?v=1.2"></script>
-<script src="js/modules/store-shop-entry.js?v=30"></script>
+<script src="js/modules/store-shop-entry.js?v=31"></script>
 <script src="js/modules/ecard.js?v=7.56"></script>
 <script src="js/modules/mycard.js?v=8.90"></script>
 <script src="js/modules/matchmake.js?v=7.13"></script>
 <script src="js/modules/business-intent.js?v=1.7"></script>
 <script src="js/modules/cardmaster.js?v=1.4"></script>
 <script src="js/modules/activities.js?v=7.9"></script>
-<script src="js/modules/admin.js?v=8.8"></script>
+<script src="js/modules/admin.js?v=8.9"></script>
 <script src="js/modules/home-task-buckets.mjs?v=1.0"></script>
 <script src="js/modules/home.js?v=8.09"></script>
 <script src="js/modules/business-networking-lab.js?v=1.9"></script>
@@ -2865,7 +2865,7 @@
 <script src="js/modules/crm.js?v=7.7"></script>
   <script src="js/modules/points-wallet-qr.js?v=1"></script>
   <script src="js/modules/safe-cashier.js?v=2"></script>
-  <script src="js/auth.js?v=10.97"></script>
+  <script src="js/auth.js?v=10.98"></script>
 
     <script src="js/modules/card-page-banner-shortcuts.js?v=1.3"></script>
 </body>

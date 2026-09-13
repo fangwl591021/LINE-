@@ -39,6 +39,10 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/reward-role-admin.test.mjs',
+  'test/reward-only-cashier.test.mjs',
+  'test/reward-only-integration.test.mjs',
+  'test/reward-cashier-ui.test.cjs',
   'tools/check-store-shop-lifestyle-contract.js',
   'test/store-shop-shell-navigation.test.mjs',
   'test/store-shop-public-categories.test.mjs',

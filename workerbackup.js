@@ -1,6 +1,7 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
+import { isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken } from './worker/reward-only-cashier.mjs';
 import { issueMemberProductQr } from './worker/store-member-product-qr.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
 import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
@@ -280,6 +281,7 @@ const SecurityModule = {
     const role = this.text(value).toLowerCase();
     if (role === 'admin' || role === '總管') return 'admin';
     if (role === 'store' || role === 'tenant' || role === '店長' || role === '租戶') return 'store';
+    if (role === 'reward' || role === '贈點用戶') return 'reward';
     return 'user';
   },
 
@@ -303,6 +305,7 @@ const SecurityModule = {
   },
 
   isHardAdmin(userId, user = {}) {
+    if (isRewardOnlyRole(this.normalizeRole(user.role))) return false;
     const ids = [
       userId,
       user.line_id,
@@ -326,8 +329,9 @@ const SecurityModule = {
   },
 
   sanitizeRole(userId, role, user = {}) {
-    if (this.isHardAdmin(userId, user)) return 'admin';
     const normalized = this.normalizeRole(role);
+    if (isRewardOnlyRole(normalized)) return 'reward';
+    if (this.isHardAdmin(userId, user)) return 'admin';
     return normalized === 'admin' ? 'user' : normalized;
   },
 
@@ -559,7 +563,10 @@ const SecurityModule = {
     }
 
     if (policy.access === 'manager' && !this.canManage(actor.role)) {
-      return { allowed: false, error: 'Access Denied: Manager role required' };
+      if (!isRewardOnlyRole(actor.role)) return { allowed: false, error: 'Access Denied: Manager role required' };
+      if (!actor.token || actor.source === 'd1_identity_fallback') return { allowed: false, error: '請透過 LINE 重新登入後使用掃碼贈點' };
+      const rewardError = checkRewardOnlyAction(action, payload);
+      if (rewardError) return { allowed: false, error: rewardError };
     }
 
     if (action === 'mlmCreateOrder' || action === 'createTenantBonusOrder') {
@@ -9040,6 +9047,7 @@ const D1ReadModule = {
     const next = this.text(value, 'user').toLowerCase();
     if (next === 'admin' || next === '總管') return 'admin';
     if (next === 'store' || next === 'tenant' || next === '店長' || next === '租戶') return 'store';
+    if (next === 'reward' || next === '贈點用戶') return 'reward';
     return 'user';
   },
 
@@ -9267,7 +9275,7 @@ const D1ReadModule = {
       health: this.text(row.health),
       career: this.text(row.career),
       role,
-      roleLabel: role === 'admin' ? '總管' : (role === 'store' ? '店長' : '一般'),
+      roleLabel: role === 'admin' ? '總管' : (role === 'store' ? '店長' : (role === 'reward' ? '贈點用戶' : '一般')),
       storeid: this.text(row.store_id),
       storeId: this.text(row.store_id),
       referrerId: this.text(row.referrer_id),
@@ -9699,6 +9707,8 @@ const D1ReadModule = {
 
     const oldUser = await this.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [oldUserId, oldUserId]);
     if (!oldUser) return { success: false, error: '找不到舊會員資料' };
+    // Name/phone recovery is not authority to transfer a separately granted cashier role.
+    if (isRewardOnlyRole(this.role(oldUser.role))) return { success: false, error: '贈點帳號請由管理員確認及合併身份' };
 
     const cachedName = this.text(payload.name || payload.cachedName);
     const cachedPhone = this.text(payload.phone || payload.cachedPhone);
@@ -10339,6 +10349,7 @@ const D1WriteModule = {
     const next = this.text(value, 'user').toLowerCase();
     if (next === 'admin' || next === '總管') return 'admin';
     if (next === 'store' || next === 'tenant' || next === '店長' || next === '租戶') return 'store';
+    if (next === 'reward' || next === '贈點用戶') return 'reward';
     return 'user';
   },
 
@@ -10567,6 +10578,11 @@ const D1WriteModule = {
       if (existing.role === 'store' && user.role === 'user') user.role = existing.role;
       if (!hasRoleInput) user.role = existing.role || user.role;
     }
+    // Only the admin role editor grants/revokes reward permission. Profile saves cannot
+    // grant it, remove it, or upgrade a reward-only account to a store account.
+    if (isRewardOnlyRole(this.role(existing && existing.role)) || isRewardOnlyRole(user.role)) {
+      user.role = existing ? this.role(existing.role) : 'user';
+    }
     user.role = SecurityModule.sanitizeRole(user.line_id, user.role, user);
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
@@ -10576,6 +10592,7 @@ const D1WriteModule = {
         region=excluded.region,address=excluded.address,socials=excluded.socials,
         role=CASE
           WHEN users.role = 'admin' OR excluded.role = 'admin' THEN 'admin'
+          WHEN users.role = 'reward' THEN 'reward'
           WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store'
           ELSE excluded.role
         END,
@@ -10664,6 +10681,7 @@ const D1WriteModule = {
     const normalized = roles.map(role => this.role(role));
     if (normalized.includes('admin')) return 'admin';
     if (normalized.includes('store')) return 'store';
+    if (normalized.includes('reward')) return 'reward';
     return 'user';
   },
 
@@ -16854,6 +16872,10 @@ async function dispatchAction(action, payload, request, env) {
       } catch (e) {
         console.error("D1 upsertUser fallback", e);
       }
+      if (isRewardOnlyRole(payload.authenticatedRole) ||
+          isRewardOnlyRole(D1WriteModule.role(D1WriteModule.pick(payload.data || payload.profile || payload, ['role', '權限級別'])))) {
+        return { success: false, error: '會員資料暫時無法儲存，請稍後再試' };
+      }
       return await AuthModule.updateAndClearCache(action, payload, env);
     }
     case 'linkUserIdentity': {
@@ -16871,6 +16893,9 @@ async function dispatchAction(action, payload, request, env) {
         if (d1Result) return d1Result;
       } catch (e) {
         console.error("D1 updateUserRole fallback", e);
+      }
+      if (isRewardOnlyRole(D1WriteModule.role(D1WriteModule.pick(payload, ['newRole', 'targetRole', 'permission', 'role'])))) {
+        return { success: false, error: '贈點權限暫時無法儲存，請稍後再試' };
       }
       return await AuthModule.updateAndClearCache(action, payload, env);
     }
@@ -17213,11 +17238,31 @@ async function dispatchAction(action, payload, request, env) {
     case 'queryPointBalanceFast':  return await PointModule.queryPointBalanceFast(payload || {}, env);
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
-    case 'getStorePointCustomer':  return await PointModule.getStorePointCustomer(payload || {}, env);
+    case 'getStorePointCustomer': {
+      const result = await PointModule.getStorePointCustomer(payload || {}, env);
+      if (isRewardOnlyRole(payload.authenticatedRole) && result?.success && result.data?.canAdjust !== false &&
+          result.data?.customerPointUserId && !result.data.needsSelection && !result.data.needsBinding) {
+        try {
+          Object.assign(result.data, await issueRewardScanToken(env, payload.authenticatedUserId, result.data.customerPointUserId));
+        } catch (e) {
+          return { success: false, error: e.message || '請重新掃描會員錢包 QR' };
+        }
+      }
+      return result;
+    }
     case 'prepareStorePointCashierSession': return await PointModule.prepareStorePointCashierSession(payload || {}, env);
     case 'storeAdjustCustomerPoints': return await runCashierRequest(payload || {}, env,
       raw => PointModule.resolveStorePointCustomer(env, raw),
-      (safe, beforeWrite, product) => PointModule.storeAdjustCustomerPoints(safe, env, beforeWrite, product));
+      async (safe, beforeWrite, product) => {
+        if (!isRewardOnlyRole(payload.authenticatedRole)) return PointModule.storeAdjustCustomerPoints(safe, env, beforeWrite, product);
+        // The existing requestId boundary still owns at-most-once execution. Check this
+        // separate scan receipt before wallet preparation, then again at the write boundary.
+        await validateRewardScanToken(env, { ...payload, customerUserId: safe.customerUserId });
+        return PointModule.storeAdjustCustomerPoints(safe, env, async actualCustomer => {
+          await validateRewardScanToken(env, { ...payload, customerUserId: actualCustomer });
+          return beforeWrite(actualCustomer);
+        }, product);
+      });
     case 'getStoreCashierRequest': return await getCashierRequest(payload || {}, env);
     case 'getStoreShopRedemptionProduct': return await getRedemptionProduct(payload || {}, env);
     case 'issueStoreMemberProductQr': return await issueMemberProductQr(payload || {}, env, raw => PointModule.resolveStorePointCustomer(env, raw));

@@ -719,13 +719,13 @@ window.renderStoreManagement = function() {
 
   const getSafeStoreRole = (u) => {
     const role = String((u && u.role) || 'user').trim().toLowerCase();
-    if (role === 'admin') return 'user';
-    return role === 'store' ? 'store' : 'user';
+    return ['admin', 'store', 'reward'].includes(role) ? role : 'user';
   };
 
   container.innerHTML = allSystemUsers.map(u => {
     const isMe = u.userId === currentUserProfile?.userId;
     const role = getSafeStoreRole(u);
+    const roleLocked = window.userRole !== 'admin' || isMe || role === 'admin' || window.isHardAdminUser?.(u.userId, u);
     return '<div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col gap-3 shadow-sm">' +
       '<div class="flex justify-between items-center">' +
         '<div>' +
@@ -735,9 +735,11 @@ window.renderStoreManagement = function() {
           '</div>' +
           '<div class="text-[12px] text-slate-500 font-mono mt-0.5">' + window.escapeJS(u.phone || '無設定電話') + '</div>' +
         '</div>' +
-        '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value)" ' + (isMe ? 'disabled' : '') + ' class="bg-white border border-slate-200 rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(role) + '">' +
+        '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value, event)" ' + (roleLocked ? 'disabled' : '') + ' class="bg-white border border-slate-200 rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(role) + '">' +
+          (role === 'admin' ? '<option value="admin" selected>總管</option>' : '') +
           '<option value="user" ' + (role === 'user' ? 'selected' : '') + '>一般 User</option>' +
           '<option value="store" ' + (role === 'store' ? 'selected' : '') + '>商家 Store</option>' +
+          '<option value="reward" ' + (role === 'reward' ? 'selected' : '') + '>贈點用戶</option>' +
         '</select>' +
       '</div>' +
       '<div class="text-[11px] text-slate-500 flex items-center gap-1.5 bg-white border border-slate-100 px-2 py-1.5 rounded-lg w-fit">' +
@@ -748,57 +750,22 @@ window.renderStoreManagement = function() {
   }).join('');
 };
 
-// 變更用戶角色
-window.changeUserRole = async function(userId, newRole) {
-  // 找到下拉選單元素並暫時 disable,給視覺反饋
-  const selectEl = event && event.target;
-  const oldRole = (allSystemUsers.find(u => u.userId === userId) || {}).role === 'store' ? 'store' : 'user';
-  const allowedRoles = new Set(['user', 'store']);
-  if (!allowedRoles.has(String(newRole || ''))) {
-    if (selectEl) selectEl.value = oldRole === 'store' ? 'store' : 'user';
-    return window.showToast('此區只能調整一般或店長，總管權限不可在手機端變更。', true);
-  }
-
-  if (selectEl) selectEl.disabled = true;
-  window.showToast('更新權限中...');
-
-  try {
-    const data = await window.fetchAPI('updateUserRole', {
-      userId: userId,
-      targetUserId: userId,
-      newRole: newRole,
-      operatorId: window.currentUserProfile?.userId,
-      actorRole: window.userRole,
-      networkId: window.currentNetworkId
-    }, true);
-
-    if (data && data.success) {
-      window.showToast('✅ ' + (allSystemUsers.find(u=>u.userId===userId)?.name || '用戶') + ' 權限已更新為:' + newRole);
-      const user = allSystemUsers.find(u => u.userId === userId);
-      if (user) user.role = newRole;
-    } else {
-      throw new Error((data && data.error) || '更新失敗');
-    }
-  } catch(e) {
-    window.showToast('⚠️ ' + e.message, true);
-    // 失敗時還原下拉選單為原本的角色
-    if (selectEl) selectEl.value = oldRole;
-  } finally {
-    if (selectEl) selectEl.disabled = false;
-  }
-};
-
-// Clean override: fetchAPI unwraps successful Worker replies to { userId, role },
-// so role updates must not require data.success here.
+// fetchAPI unwraps successful Worker replies to { userId, role }.
 window.changeUserRole = async function(userId, newRole, evt) {
   const selectEl = (evt && evt.target) || (typeof event !== 'undefined' && event.target) || document.activeElement;
   const user = allSystemUsers.find(u => u.userId === userId);
-  const oldRole = (user || {}).role === 'store' ? 'store' : 'user';
-  const allowedRoles = new Set(['user', 'store']);
-  if (!allowedRoles.has(String(newRole || ''))) {
-    if (selectEl) selectEl.value = oldRole === 'store' ? 'store' : 'user';
-    return window.showToast('此區只能調整一般或店長，總管權限不可在手機端變更。', true);
+  const savedRole = String(user?.role || 'user').trim().toLowerCase();
+  const oldRole = ['admin', 'store', 'reward'].includes(savedRole) ? savedRole : 'user';
+  const restore = () => { if (selectEl) selectEl.value = oldRole; };
+  if (!user || window.userRole !== 'admin' || userId === window.currentUserProfile?.userId || oldRole === 'admin' || window.isHardAdminUser?.(userId, user)) {
+    restore(); return window.showToast('僅總管可調整角色，總管或本人帳號不可在此變更。', true);
   }
+  const allowedRoles = new Set(['user', 'store', 'reward']);
+  if (!allowedRoles.has(String(newRole || ''))) {
+    restore(); return window.showToast('此區只能調整一般、店長或贈點用戶，總管權限不可在手機端變更。', true);
+  }
+  if (newRole === oldRole) return;
+  if (newRole === 'reward' && !window.confirm('設為贈點用戶後，僅能掃描會員 QR 贈點，不能扣點或輸入電話查找。確定更新？')) { restore(); return; }
 
   if (selectEl) selectEl.disabled = true;
   window.showToast('更新權限中...');
@@ -813,15 +780,16 @@ window.changeUserRole = async function(userId, newRole, evt) {
       networkId: window.currentNetworkId
     }, true);
 
-    if (data && (data.success || data.userId || data.role)) {
+    if (data && !data.error && data.success !== false && (data.success || data.userId || data.role)) {
       if (user) user.role = newRole;
-      window.showToast('已更新 ' + ((user && user.name) || '用戶') + ' 身分：' + (newRole === 'store' ? '店長' : '一般'));
+      if (selectEl?.dataset) selectEl.dataset.originalRole = newRole;
+      window.showToast('已更新 ' + ((user && user.name) || '用戶') + ' 身分：' + ({ user: '一般', store: '店長', reward: '贈點用戶' }[newRole]));
     } else {
       throw new Error((data && data.error) || '更新失敗');
     }
   } catch(e) {
     window.showToast('更新失敗：' + (e.message || '請稍後再試'), true);
-    if (selectEl) selectEl.value = oldRole;
+    restore();
   } finally {
     if (selectEl) selectEl.disabled = false;
   }

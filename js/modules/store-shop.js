@@ -85,7 +85,7 @@
         url.searchParams.set('shopSection','cashier');location.assign(url.href);return;
       }
       const version=epoch,owner=window.currentUserProfile?.userId,entry=root.querySelector('[data-do="point-operation"]');
-      const module=await import('./store-point-operation.js?v=1');
+      const module=await import('./store-point-operation.js?v=2');
       const isCurrent=()=>version===epoch&&root.isConnected&&entry?.isConnected&&root.contains(entry)&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId;
       if(isCurrent())module.openStorePointOperationPopup({standalone,isCurrent});
     }

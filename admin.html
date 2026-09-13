@@ -568,6 +568,7 @@
                 <option value="all">全部角色</option>
                 <option value="user">一般</option>
                 <option value="store">店長</option>
+                <option value="reward">贈點用戶</option>
                 <option value="tenant">租戶</option>
                 <option value="admin">總管</option>
               </select>
@@ -1908,7 +1909,7 @@
     function getSafeUserRole(user = {}) {
       const role = String(user.role || 'user').trim().toLowerCase();
       if (role === 'admin' && !isHardAdminAccount(getUserId(user), user)) return 'user';
-      if (role === 'admin' || role === 'store' || role === 'tenant') return role;
+      if (role === 'admin' || role === 'store' || role === 'tenant' || role === 'reward') return role;
       return 'user';
     }
     
@@ -3445,6 +3446,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       role = String(role || 'user').toLowerCase();
       if (role === 'admin') return '總管';
       if (role === 'store') return '店長';
+      if (role === 'reward') return '贈點用戶';
       if (role === 'tenant') return '租戶';
       return '一般';
     }
@@ -4159,9 +4161,11 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           <td class="text-right whitespace-nowrap">
             <div class="crm-action-stack">
               <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="crm-action-btn">CRM</button>
-              <select onchange="updateRole('${escapeHTML(id)}', this.value)" class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
+              <select onchange="updateRole('${escapeHTML(id)}', this.value, this)" ${adminRole !== 'admin' || isHardAdminAccount(id, u) ? 'disabled' : ''} class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
+                ${role === 'admin' || role === 'tenant' ? `<option value="${role}" selected>${escapeHTML(getRoleLabel(role))}</option>` : ''}
                 <option value="user" ${role==='user'?'selected':''}>一般</option>
                 <option value="store" ${role==='store'?'selected':''}>店長</option>
+                <option value="reward" ${role==='reward'?'selected':''}>贈點用戶</option>
               </select>
             </div>
           </td>
@@ -4270,28 +4274,41 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       return { created, failed };
     }
 
-    async function updateRole(userId, role) {
-      if (role === 'admin') return showToast('Admin 權限不可在此調整', true);
-      if (!userId) return showToast('找不到用戶 ID', true);
+    async function updateRole(userId, role, selectEl) {
       const user = allUsersData.find(u => normalizeLineId(u.userId) === normalizeLineId(userId));
-      if (user && (user.source === 'bound_card' || user.profileStatus === 'bound_card')) {
-        const registered = await fetchAPI('registerUser', user, { silent: true, omitAuthToken: true });
-        if (!registered || registered.error) return showToast('此已綁名片用戶尚未完成補註冊，請重新整理後再試', true);
+      const oldRole = getSafeUserRole(user || {});
+      const restore = () => { if (selectEl) selectEl.value = oldRole; };
+      if (!userId || !user) { restore(); return showToast('找不到用戶資料，請重新整理', true); }
+      if (adminRole !== 'admin' || isHardAdminAccount(userId, user)) {
+        restore(); return showToast('僅總管可調整角色，總管帳號不可在此變更。', true);
       }
-      const authUserId = adminProfile?.userId || '';
-      const res = await fetchAPI('updateUserRole', {
-        userId,
-        targetUserId: userId,
-        authUserId,
-        operatorId: authUserId,
-        operatorRole: adminRole || 'store',
-        role,
-        targetRole: role,
-        newRole: role
-      });
-      if (res) {
-        showToast('權限已更新');
+      if (!['user', 'store', 'reward'].includes(role)) {
+        restore(); return showToast('此區僅可選一般、店長或贈點用戶。', true);
+      }
+      if (role === oldRole) return;
+      if (role === 'reward' && !window.confirm('設為贈點用戶後，僅能掃描會員 QR 贈點，不能扣點或輸入電話查找。確定更新？')) { restore(); return; }
+      if (selectEl) selectEl.disabled = true;
+      let updated = false;
+      try {
+        if (user.source === 'bound_card' || user.profileStatus === 'bound_card') {
+          const registered = await fetchAPI('registerUser', user, { silent: true, omitAuthToken: true });
+          if (!registered || registered.error) throw new Error('此已綁名片用戶尚未完成補註冊，請重新整理後再試');
+        }
+        const authUserId = adminProfile?.userId || '';
+        const res = await fetchAPI('updateUserRole', {
+          userId, targetUserId: userId, authUserId, operatorId: authUserId,
+          operatorRole: adminRole, role, targetRole: role, newRole: role
+        });
+        if (!res || res.error || res.success === false) throw new Error(res?.error || '權限更新失敗');
+        updated = true;
+        user.role = role;
+        showToast('權限已更新：' + getRoleLabel(role));
         await loadUsers();
+      } catch (error) {
+        if (!updated) restore();
+        showToast((updated ? '權限已更新，列表重整失敗：' : '') + (error.message || '請稍後再試'), true);
+      } finally {
+        if (selectEl) selectEl.disabled = false;
       }
     }
 
