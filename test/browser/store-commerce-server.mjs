@@ -18,10 +18,18 @@ const db={prepare(query){return {bind(...args){return {
 const fetcher=async(url,opts)=>{if(url==='https://api.openai.com/v1/responses')return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({products:[{title:'合成測試茶葉',description:'100g\\n測試 DM',price_cents:35000,category:'食',price_note:'單包售價'},{title:'<img src=x onerror=alert(1)> 多規格組合',description:'價格不明',price_cents:null,category:'購',price_note:'請確認規格及價格'}]})}]}]});if(url!=='https://api.line.me/v2/profile')throw Error('External call forbidden');const token=opts.headers.Authorization.slice(7);return ['a','b','c'].includes(token)?Response.json({userId:'U'+token.repeat(32)}):new Response('',{status:401});};
 const env={ACTMASTER_DB:db,STORE_COMMERCE_ENABLED:'true',OPENAI_API_KEY:'local-fake-key'};
 sql.exec('ALTER TABLE users ADD COLUMN point_line_id TEXT; ALTER TABLE users ADD COLUMN legacy_line_id TEXT; ALTER TABLE users ADD COLUMN row_id TEXT;');
-const files=['js/modules/store-shop-sales.js','js/modules/store-buyer-profile.js','js/modules/store-registration-popup.js','js/modules/store-product-ocr.js','css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','js/modules/store-wallet-popup.js','js/modules/store-history-popup.js','js/modules/member-product-qr.js','js/vendor/qrcode-generator-2.0.4.mjs','assets/storefront/lifestyle-cafe-v1.jpg'];
+const files=['js/modules/store-point-operation.js','js/modules/store-shop-sales.js','js/modules/store-buyer-profile.js','js/modules/store-registration-popup.js','js/modules/store-product-ocr.js','css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','js/modules/store-wallet-popup.js','js/modules/store-history-popup.js','js/modules/member-product-qr.js','js/vendor/qrcode-generator-2.0.4.mjs','assets/storefront/lifestyle-cafe-v1.jpg'];
 const server=createServer(async(req,res)=>{
   const origin='http://127.0.0.1:8794',path=new URL(req.url,origin).pathname;
   try {
+    if(path==='/test-cashier-fixture'){
+      const source=readFileSync(new URL('../../index.html',import.meta.url),'utf8');
+      const panel=source.slice(source.indexOf('<section id="store-point-cashier"'),source.indexOf('<section id="point-sync-diagnostics"'));
+      const scanner=source.slice(source.indexOf('<div id="store-point-scanner-modal"'),source.indexOf('<div id="activity-share-modal"'));
+      const authSource=readFileSync(new URL('../../js/auth.js',import.meta.url),'utf8');
+      const auth=authSource.slice(authSource.indexOf('window.canUseStorePointCashier ='),authSource.indexOf('window.claimDailyPointCheckin ='));
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({panel,scanner,auth}));return;
+    }
     if(path==='/test-registration-fixture'){
       const source=readFileSync(new URL('../../index.html',import.meta.url),'utf8');
       const panel=source.slice(source.indexOf('<details id="details-profile-registration"'),source.indexOf('<details id="details-local-gpt-key"'));

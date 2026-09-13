@@ -1950,6 +1950,7 @@ window.fillStorePointCustomerFromQr = function(raw) {
 };
 
 window.closeStorePointScanner = function() {
+  window.__storePointScannerRevision=(window.__storePointScannerRevision||0)+1;
   window.__storePointScannerActive = false;
   if (window.__storePointScannerStream) {
     window.__storePointScannerStream.getTracks().forEach(track => track.stop());
@@ -1967,11 +1968,14 @@ window.openStorePointScanner = async function() {
   const canvas = document.getElementById('store-point-scanner-canvas');
   if (!modal || !video || !canvas) return window.showToast?.('掃描器尚未載入', true);
 
+  window.closeStorePointScanner();
+  const revision=window.__storePointScannerRevision;
   modal.classList.remove('hidden');
   if (status) status.textContent = '正在開啟相機...';
 
   try {
     const jsQR = await window.loadQrDecoder();
+    if(revision!==window.__storePointScannerRevision)return;
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: 'environment' },
@@ -1980,15 +1984,17 @@ window.openStorePointScanner = async function() {
       },
       audio: false
     });
+    if(revision!==window.__storePointScannerRevision){stream.getTracks().forEach(track=>track.stop());return;}
     window.__storePointScannerStream = stream;
     window.__storePointScannerActive = true;
     video.srcObject = stream;
     await video.play();
+    if(revision!==window.__storePointScannerRevision)return;
     if (status) status.textContent = '請將商品或客戶點數 QR 放入框內。';
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const scanFrame = () => {
-      if (!window.__storePointScannerActive) return;
+      if (!window.__storePointScannerActive||revision!==window.__storePointScannerRevision) return;
       if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth && video.videoHeight) {
         const size = Math.min(video.videoWidth, video.videoHeight);
         const sx = Math.max(0, Math.floor((video.videoWidth - size) / 2));
@@ -2011,6 +2017,10 @@ window.openStorePointScanner = async function() {
     const msg = e?.name === 'NotAllowedError'
       ? '相機權限被拒絕，請允許相機或改用相簿辨識。'
       : (e.message || '無法開啟掃描器，請改用相簿辨識或貼上 UID。');
+    if(revision!==window.__storePointScannerRevision)return;
+    window.__storePointScannerStream?.getTracks().forEach(track=>track.stop());
+    window.__storePointScannerStream=null;
+    window.__storePointScannerActive=false;
     if (status) status.textContent = msg;
     window.showToast?.(msg, true);
   }
@@ -2269,15 +2279,19 @@ window.resetStorePointCashier = function() {
 window.scanStorePointQr = async function(input) {
   const file = input?.files?.[0];
   if (!file) return;
+  const revision=window.__storePointScannerRevision||0,owner=window.currentUserProfile?.userId;
+  const current=()=>revision===(window.__storePointScannerRevision||0)&&owner===window.currentUserProfile?.userId;
   try {
     const raw = await window.decodeStorePointQrFile(file);
+    if(!current())return;
     if (!raw) throw new Error('沒有讀到 QR 內容');
     window.fillStorePointCustomerFromQr(raw);
     window.closeStorePointScanner?.();
   } catch (e) {
+    if(!current())return;
     window.showToast?.((e.message || 'QR 讀取失敗') + '，可改用貼上客戶 UID。', true);
   } finally {
-    if (input) input.value = '';
+    if (input?.files?.[0]===file) input.value = '';
   }
 };
 
@@ -2879,7 +2893,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 🔓 已註冊用戶邏輯
     window.applyRegisteredUserSession(checkRes.info);
     const shopSection = urlParams.get('shopSection');
-    if (['list','mine','manage','sales','online-manage'].includes(shopSection) && !shareCardId && !claimCardId && !likeCardId && !urlParams.get('shopQr') && !urlParams.get('memberProduct') && !urlParams.get('shopProduct')) {
+    const cashierEntryConflict = shopSection === 'cashier' && ['checkin','nfcAct','nfcCheckin','verifyCheckin','checkinRowId','registrationId'].some(key => urlParams.get(key));
+    if (['list','mine','manage','sales','online-manage','cashier'].includes(shopSection) && !cashierEntryConflict && !shareCardId && !claimCardId && !likeCardId && !urlParams.get('shopQr') && !urlParams.get('memberProduct') && !urlParams.get('shopProduct')) {
       await window.openStoreShop('', '', '', shopSection);
       return;
     }

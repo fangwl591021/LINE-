@@ -197,6 +197,6 @@ test('unclaimed webhook preserves original bytes, signature and mother reply pat
 test('entry links are allowlisted after registered identity; legacy routes retain priority',()=>{
  const auth=readFileSync(new URL('../js/auth.js',import.meta.url),'utf8'),ui=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
  assert(auth.indexOf("const shopSection = urlParams.get('shopSection')")>auth.indexOf('window.applyRegisteredUserSession(checkRes.info)'));
- assert.match(auth,/\['list','mine','manage','sales','online-manage'\]\.includes\(shopSection\)/);
+ assert.match(auth,/\['list','mine','manage','sales','online-manage','cashier'\]\.includes\(shopSection\)/);
  assert.match(ui,/if\(!canTransact\(\)\)throw new Error\('業績與收款操作/);
 });

@@ -222,3 +222,23 @@ body:has(.store-history-popup[open]){overflow:hidden}
 .store-buyer-bar [data-buyer-status]{font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 .store-buyer-bar select{box-sizing:border-box;width:100%;min-height:46px;margin-top:6px;padding:10px;border:1px solid #ddd8ca;border-radius:12px;font-size:16px;color:#16345a;background:#f7f9fb}
 .store-buyer-bar [hidden]{display:none}
+/* The brand opens the existing member cashier; keep the original compact logo. */
+.shop-lifestyle .shop-brand button.shop-brand-entry{display:flex;align-items:center;gap:9px;text-align:left;padding:0;background:transparent;box-shadow:none;border-radius:8px;white-space:normal}
+.shop-brand-entry:focus-visible{outline:3px solid #157cb5;outline-offset:5px}
+.store-point-operation{box-sizing:border-box;width:min(550px,calc(100vw - 20px));max-width:none;max-height:calc(100dvh - 24px);margin:auto;padding:0;border:1px solid #eee8dc;border-radius:22px;color:#16345a;background:#fffaf1;box-shadow:0 20px 60px #172e4940;overflow:hidden}
+.store-point-operation::backdrop{background:#172e49a3}
+.store-point-operation>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid #eee8dc}
+.store-point-operation h2{margin:0;font-size:22px;font-weight:700}
+.store-point-operation [data-close]{flex-shrink:0;min-width:44px;min-height:44px;border:1px solid #ded7c8;border-radius:14px;font-size:27px;background:white;color:#16345a}
+.store-point-operation-scroll{max-height:calc(100dvh - 112px);overflow-y:auto;overscroll-behavior:contain;padding:18px}
+.store-point-operation [data-choices]>p{margin:12px 0 18px;line-height:1.6}
+.store-point-operation [data-method]{display:block;width:100%;min-height:52px;margin:12px 0;border:0;border-radius:14px;background:#163b5a;color:white;font-size:17px;font-weight:700}
+.store-point-operation [data-choices]>small{display:block;font-size:12px;color:#617189;line-height:1.6}
+.store-point-operation [data-back]{min-height:44px;padding:8px 12px;border:1px solid #ded7c8;border-radius:12px;background:white;color:#16345a}
+.store-point-operation [data-status]{font-size:13px;line-height:1.6;color:#9a3412}
+.store-point-operation [data-status]:empty{display:none}
+.store-point-operation [hidden]{display:none!important}
+.store-point-operation #store-point-cashier{margin-top:12px;border-radius:16px}
+.store-point-operation #store-point-customer{font-size:16px;min-width:0}
+.store-point-operation #store-point-scanner-modal{z-index:2}
+.store-point-operation #toast-container{z-index:3}

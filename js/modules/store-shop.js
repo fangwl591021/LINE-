@@ -79,12 +79,22 @@
       if(!walletImport)walletImport=import('./store-wallet-popup.js?v=4').then(module=>walletModule=module).catch(error=>{walletImport=null;throw error;});
       return walletImport;
     }
+    async function openPointOperations(){
+      if(standalone||!window.liff?.isLoggedIn?.()){
+        const url=new URL('https://liff.line.me/'+encodeURIComponent(window.POINT_LIFF_ID||'1660923784-vViMTZ1y'));
+        url.searchParams.set('shopSection','cashier');location.assign(url.href);return;
+      }
+      const version=epoch,owner=window.currentUserProfile?.userId,entry=root.querySelector('[data-do="point-operation"]');
+      const module=await import('./store-point-operation.js?v=1');
+      const isCurrent=()=>version===epoch&&root.isConnected&&entry?.isConnected&&root.contains(entry)&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId;
+      if(isCurrent())module.openStorePointOperationPopup({standalone,isCurrent});
+    }
     root.classList.add('store-shop');
     root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="list">店家列表</button>${canManage()?'<button data-do="manage" class="primary">我的商城管理</button>':''}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
     root.classList.add('shop-lifestyle');
     root.querySelector('h1').textContent='生活好店';
-    root.insertAdjacentHTML('afterbegin','<header class="shop-brand"><div><span aria-hidden="true" class="shop-brand-mark">🛍</span><strong>生活好店<small>共用點數・發現日常美好</small></strong></div><button data-do="region" aria-label="依地區找店">⌖ 找地區</button></header>');
+    root.insertAdjacentHTML('afterbegin','<header class="shop-brand"><button type="button" class="shop-brand-entry" data-do="point-operation" aria-label="生活好店：開啟會員點數操作" aria-haspopup="dialog"><span aria-hidden="true" class="shop-brand-mark">🛍</span><strong>生活好店<small>共用點數・發現日常美好</small></strong></button><button data-do="region" aria-label="依地區找店">⌖ 找地區</button></header>');
     root.querySelector('.shop-notice').classList.add('shop-safety-note');
     root.insertAdjacentHTML('beforeend',`<nav class="shop-bottom-nav" aria-label="商城主要導覽"><button data-do="list"><span aria-hidden="true">⌂</span>首頁</button><button data-do="find"><span aria-hidden="true">⌕</span>找好店</button><button data-do="wallet" class="shop-bottom-qr"><span aria-hidden="true">▦</span>點數 QR</button><button data-do="shopping"><span aria-hidden="true">🛍</span>選購</button><button data-do="mine"><span aria-hidden="true">♙</span>我的</button></nav>`);
     function pageKind(kind) {
@@ -259,6 +269,7 @@
       const button=event.target.closest('[data-do]'); if(!button||!root.contains(button)||busy) return;
       void run(async()=>{
         switch(button.dataset.do) {
+          case 'point-operation': await openPointOperations();break;
           case 'exit': ++epoch; standalone?location.assign(new URL('index.html',location.href).href):window.goPage('home'); break;
           case 'list': await list(); break;
           case 'find': await list();content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
@@ -428,9 +439,10 @@
           const button=content.querySelector('[data-do="'+section+'"]');
           if(button)button.click();else alert.textContent='請先建立自己的店家資料。';
         }
-      }else if(!standalone&&section==='mine')memberHome();
+      }else if(!standalone&&section==='cashier'){memberHome();await openPointOperations();}
+      else if(!standalone&&section==='mine')memberHome();
       else await (id?view(id):list());
-      if(!standalone){
+      if(!standalone&&section!=='cashier'){
         const warm=()=>{if(root.isConnected&&window.currentPage==='store-shop')void loadWalletModule().then(module=>module.prepareStoreWalletQr()).catch(()=>{});};
         if(window.requestIdleCallback)window.requestIdleCallback(warm,{timeout:1000});else setTimeout(warm,50);
       }
