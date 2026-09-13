@@ -1,5 +1,6 @@
 // Run only in isolated local store-shop harness with a seeded shop and product.
 async()=>{
+ if(location.origin!=='http://127.0.0.1:8794'||window.Config?.WORKER_URL!==location.origin)throw Error('Local synthetic test only');
  const assert=(v,m)=>{if(!v)throw Error(m);};
  const until=async(fn)=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('wait failed: '+document.body.innerText);};
  const tag=(scope,c)=>document.querySelector(`[data-scope="${scope}"][data-category="${c}"]`);
@@ -39,10 +40,11 @@ async()=>{
  document.querySelector('[name=q]').value='';tag('shops','食').click();
  await until(()=>document.querySelector('[data-do=view]'));
  document.querySelector('[data-do=view]').click();
- await until(()=>tag('products','食'));
- assert(tag('products','食').getAttribute('aria-pressed')==='true','store inherits filter');
- tag('products','宿').click();assert([...document.querySelectorAll('[data-product-category]')].every(p=>p.hidden),'nonmatching products hidden');
- tag('products','').click();assert([...document.querySelectorAll('[data-product-category]')].every(p=>!p.hidden),'all restores items');
+ await until(()=>document.querySelector('.shop-store-intro'));
+ assert(!document.querySelector('[data-scope="products"]'),'single store must not repeat directory category controls');
+ const products=[...document.querySelectorAll('[data-product-category]')];
+ assert(products.length>0&&products.every(p=>!p.hidden),'directory category must not hide single-store products');
+ assert(products.every(p=>p.querySelector('.shop-category-badge')),'product category badges remain');
  assert(document.documentElement.scrollWidth<=innerWidth,'no mobile overflow');
  return {categories:true,savedAndReloaded:true,draftPreserved:true,searchAndFiltering:true,width:innerWidth};
 }

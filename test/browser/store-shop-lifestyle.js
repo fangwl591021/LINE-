@@ -32,8 +32,8 @@ async()=>{
  check(card.getBoundingClientRect().height<365,'product card too tall');
  check(card.querySelectorAll('[data-product-qr]').length===1,'QR entry missing');
  check(document.documentElement.scrollWidth<=innerWidth,'product list overflow');
- const tags=document.querySelector('[data-scope=products]').parentElement;
- check(tags.scrollWidth>=tags.clientWidth,'category rail unavailable');
+ check(!document.querySelector('[data-scope=products]'),'single store must not repeat category controls');
+ check([...document.querySelectorAll('.shop-product-card')].every(p=>!p.hidden),'single-store products must all remain visible');
  document.querySelector('[data-do=detail]').click();await until(()=>document.querySelector('.shop-product-detail'));
  check(document.querySelector('.shop-product-detail').textContent.includes('8800')||document.querySelector('.shop-product-detail').textContent.includes('8,800'),'price changed');
  check(!document.querySelector('img[src=x]'),'product XSS');

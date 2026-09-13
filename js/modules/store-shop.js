@@ -168,7 +168,7 @@
       grid.insertAdjacentHTML('beforebegin',categoryTags('products'));
       grid.insertAdjacentHTML('afterend','<p class="shop-category-empty" role="status" hidden>此分類目前沒有商品。</p>');
     }
-    async function view(id,category='') {
+    async function view(id) {
       pageKind('store');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">載入店面中…</p>';
       const result=await api(`?shop=${encodeURIComponent(id)}`); if(version!==epoch) return;
@@ -178,7 +178,6 @@
       content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><details><summary>店家介紹與聯絡資訊</summary><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></details></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
       if(!standalone&&result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
       content.insertAdjacentHTML('beforeend',moreButton(result.product_next,false));
-      addProductTags(); if(category) filterProducts(category);
       content.querySelector('.shop-grid')?.classList.add('shop-browse-products');
     }
     function input(key,label,value='',max=200,multiline=false,type='text') {
@@ -304,7 +303,7 @@
             if(button.dataset.scope==='shops') await list('',content.querySelector('[name="q"]')?.value??listQuery,button.dataset.category);
             else filterProducts(button.dataset.category);
             break;
-          case 'view': await view(button.dataset.id,button.closest('.shop-grid')&&!content.querySelector('.shop-editor')?listCategory:''); break;
+          case 'view': await view(button.dataset.id); break;
           case 'manage': await manage(); break;
           case 'online-buy':
           case 'online-orders':

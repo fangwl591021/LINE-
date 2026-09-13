@@ -41,6 +41,7 @@ const foundationChecks = [
 const fullChecks = [
   'tools/check-store-shop-lifestyle-contract.js',
   'test/store-shop-shell-navigation.test.mjs',
+  'test/store-shop-public-categories.test.mjs',
   'test/store-commerce.test.mjs',
   'test/store-line-keywords.test.mjs',
   'test/store-checkout-warning.test.mjs',
