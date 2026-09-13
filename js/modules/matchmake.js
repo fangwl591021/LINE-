@@ -21,6 +21,65 @@ function hideMatchStatus_() {
   if (status) status.classList.add('hidden');
 }
 
+function readMatchmakeSafetyConfig_(card) {
+  if (typeof window.getCardSafetyConfig === 'function') return window.getCardSafetyConfig(card);
+  try { return JSON.parse(card?.['自訂名片設定'] || card?.['電子名片設定'] || '{}'); } catch (e) { return {}; }
+}
+
+function getMatchmakeSafetyFeedback_(card) {
+  if (typeof window.getCardSafetyFeedback === 'function') return window.getCardSafetyFeedback(card);
+  const readiness = typeof window.validateCardPublicReadiness === 'function'
+    ? window.validateCardPublicReadiness(card) : { pass: true, missing: [] };
+  const review = readMatchmakeSafetyConfig_(card).safetyReview || {};
+  return {
+    status: !readiness.pass ? 'readiness' : review.pass === true ? 'passed' : review.pass === false ? 'failed' : 'pending',
+    pass: readiness.pass && review.pass === true,
+    reasons: !readiness.pass ? (readiness.missing || []).map(field => '尚未完成有效的' + field) : Array.isArray(review.reasons) && review.reasons.length ? review.reasons : ['尚未取得通過的 AI 體檢報告。'],
+    suggestions: Array.isArray(review.suggestions) && review.suggestions.length ? review.suggestions : ['請先編輯並儲存名片的圖片、標題、說明與按鈕，再執行 AI 體檢。'],
+    issues: Array.isArray(review.issues) ? review.issues : []
+  };
+}
+
+function escapeMatchmakeSafetyText_(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+}
+
+window.renderMatchmakeSafetyFeedback = function(feedback, card = window.currentUserCard) {
+  if (card && window.currentUserCard && String(card.rowId || '') !== String(window.currentUserCard.rowId || '')) return;
+  const report = feedback || getMatchmakeSafetyFeedback_(card);
+  if (report.pass === true || report.status === 'passed') { hideMatchStatus_(); return; }
+  if (window.matchmakePoolScope !== 'public') return;
+  const titles = {
+    readiness: '公開交流池需要先通過 AI 體檢：請先補齊名片',
+    pending: '公開交流池需要先通過 AI 體檢',
+    failed: 'AI 體檢未通過：原因與修改建議',
+    error: 'AI 體檢未完成：請依說明處理後重試'
+  };
+  const body = typeof window.renderCardSafetyFeedbackHtml === 'function'
+    ? window.renderCardSafetyFeedbackHtml(report, { heading: false })
+    : '<div class="font-bold mt-3">原因</div><ul class="list-disc pl-5 space-y-1">' + (report.reasons || []).map(reason => '<li>' + escapeMatchmakeSafetyText_(reason) + '</li>').join('') + '</ul>' +
+      '<div class="font-bold mt-3">修改建議</div><ul class="list-disc pl-5 space-y-1">' + (report.suggestions || []).map(tip => '<li>' + escapeMatchmakeSafetyText_(tip) + '</li>').join('') + '</ul>';
+  showMatchStatus_(
+    '<div class="text-[13px] text-slate-600 leading-relaxed" role="status" aria-live="polite">' +
+      '<h3 class="font-black text-slate-800 mb-2 flex items-center gap-2"><span class="material-symbols-outlined text-amber-500">health_and_safety</span>' + escapeMatchmakeSafetyText_(titles[report.status] || titles.pending) + '</h3>' +
+      '<p class="mb-3">' + (report.errorCode === 'PUBLIC_SETTING_SAVE_FAILED' ? '此次公開／私人切換尚未確認，畫面保留最後已確認設定，請重新整理確認。' : report.status === 'error' ? '本次未完成檢查，不代表名片內容不合格；原公開／私人設定不變。' : '請確認圖片、標題、說明、按鈕都有效；未通過前不會加入公開交流池。') + '</p>' + body +
+      '<div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">' +
+        '<button type="button" onclick="window.goPage?.(\'admin-settings\');window.focusMyECardSection?.()" class="min-h-11 py-3 px-3 border border-slate-200 bg-white text-slate-700 rounded-xl font-bold">編輯名片</button>' +
+        '<button type="button" onclick="window.toggleFatePrivacy(true)" class="min-h-11 py-3 px-3 bg-[#06C755] text-white rounded-xl font-bold">重新執行 AI 體檢並公開</button>' +
+      '</div>' +
+    '</div>'
+  );
+  if (!(window.hasAdminRights || window.userRole === 'admin')) {
+    if (report.status !== 'error') {
+      document.getElementById('matchmaker-ui')?.classList.add('hidden');
+      document.getElementById('match-results')?.classList.add('hidden');
+      document.getElementById('privacy-lock-container')?.classList.add('hidden');
+    }
+    const toggle = document.getElementById('fate-privacy-toggle');
+    if (toggle) toggle.checked = report.status === 'error' ? !readMatchmakeSafetyConfig_(card).isPrivate : false;
+  }
+};
+
 window.matchmakePoolScope = window.matchmakePoolScope || 'public';
 
 function renderMatchmakePoolMode_() {
@@ -127,56 +186,55 @@ window.initMatchmakePage = async function() {
     return;
   }
 
-  let config = {};
-  try {
-    config = JSON.parse(window.currentUserCard?.['自訂名片設定'] || '{}');
-  } catch (e) {}
+  const config = readMatchmakeSafetyConfig_(window.currentUserCard);
 
   const isPrivate = !!config.isPrivate;
   const toggleEl = document.getElementById('fate-privacy-toggle');
   if (toggleEl) toggleEl.checked = !isPrivate;
-
-  if (scope === 'public' && isPrivate && !isAdmin) {
-    hideMatchStatus_();
-    if (lock) lock.classList.remove('hidden');
-    return;
-  }
+  let keepSafetyFeedback = false;
 
   if (scope === 'public' && !isAdmin) {
     const readiness = typeof window.validateCardPublicReadiness === 'function'
       ? window.validateCardPublicReadiness(window.currentUserCard)
       : { pass: true, missing: [] };
     const review = config.safetyReview || {};
+    const feedback = getMatchmakeSafetyFeedback_(window.currentUserCard);
     if (!readiness.pass || review.pass !== true) {
       if (ui) ui.classList.add('hidden');
       if (toggleEl) toggleEl.checked = false;
-      showMatchStatus_(
-        '<div class="text-center">' +
-          '<span class="material-symbols-outlined text-4xl text-amber-400 mb-3">health_and_safety</span>' +
-          '<h3 class="font-black text-slate-800 mb-2">公開交流池需要先通過 AI 體檢</h3>' +
-          '<p class="text-[13px] text-slate-500 leading-relaxed mb-4">請確認圖片、標題、說明、按鈕都有效，並完成 AI 健檢後才可跨店公開配對。' +
-          (readiness.missing && readiness.missing.length ? '<br><span class="text-red-500 font-black">未通過：' + window.escapeHTML(readiness.missing.join('、')) + '</span>' : '') +
-          '</p>' +
-          '<button type="button" onclick="window.toggleFatePrivacy(true)" class="w-full py-3.5 bg-[#06C755] text-white rounded-xl font-bold text-[15px] active:scale-95 transition-transform shadow-sm flex justify-center items-center gap-2">' +
-            '<span class="material-symbols-outlined text-[18px]">verified</span> 執行 AI 體檢並公開' +
-          '</button>' +
-        '</div>'
-      );
+      window.renderMatchmakeSafetyFeedback(feedback, window.currentUserCard);
       return;
     }
   }
+  if (scope === 'public' && window.currentUserCard) {
+    const feedback = getMatchmakeSafetyFeedback_(window.currentUserCard);
+    if (feedback.pass !== true) {
+      window.renderMatchmakeSafetyFeedback(feedback, window.currentUserCard);
+      keepSafetyFeedback = true;
+    }
+  }
+
+  if (scope === 'public' && isPrivate && !isAdmin) {
+    if (!keepSafetyFeedback) hideMatchStatus_();
+    if (lock) lock.classList.toggle('hidden', keepSafetyFeedback);
+    return;
+  }
 
   if (ui) {
-    hideMatchStatus_();
+    if (!keepSafetyFeedback) hideMatchStatus_();
     ui.classList.remove('hidden');
   }
 };
 
 // 切換配對隱私
+let matchmakePrivacyUpdating_ = false;
 window.toggleFatePrivacy = async function(forceOpen = false) {
+  if (matchmakePrivacyUpdating_) return window.showToast?.('名片體檢或公開設定處理中，請稍候。');
   if (!window.currentUserCard) return window.showToast('找不到您的名片資料', true);
-  let config = {};
-  try { config = JSON.parse(window.currentUserCard['自訂名片設定']); } catch(e){}
+  const card = window.currentUserCard;
+  matchmakePrivacyUpdating_ = true;
+  try {
+  let config = readMatchmakeSafetyConfig_(card);
 
   const toggleEl = document.getElementById('fate-privacy-toggle');
   const templateDesc = '請填寫公司/店家介紹\n請填寫公司/店家服務項目\n請填寫公司/店家特色\n請填寫優惠資訊\n建議 4-5 行，每行 16 字內';
@@ -186,16 +244,27 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
     if (toggleEl) toggleEl.checked = false;
     config.isPrivate = true;
     window.showToast('請先編輯名片介紹內容，再公開上架到配對池', true);
+    window.renderMatchmakeSafetyFeedback({ status: 'readiness', pass: false, reasons: ['名片介紹仍是尚未填寫的預設模板。'], suggestions: ['請到「編輯名片」填入實際服務內容並儲存，再重新執行 AI 體檢。'], issues: [] }, card);
     return;
   }
 
   if (wantsPublic && typeof window.ensureCardCanGoPublic === 'function') {
     if (toggleEl) toggleEl.checked = false;
     window.showToast('AI 正在健檢名片，通過後才會公開搜尋...');
-    const canGoPublic = await window.ensureCardCanGoPublic(window.currentUserCard);
+    let canGoPublic;
+    try {
+      canGoPublic = await window.ensureCardCanGoPublic(window.currentUserCard);
+    } catch (error) {
+      if (window.currentUserCard !== card) return;
+      window.renderMatchmakeSafetyFeedback({ status: 'error', pass: false, reasons: ['AI 服務或網路暫時無法完成檢查，這不代表名片內容不合格。'], suggestions: ['請保留目前名片內容，確認網路正常後重新執行 AI 體檢。'], issues: [] }, card);
+      return;
+    }
+    if (window.currentUserCard !== card) return;
+    // The review saves its latest report before returning; do not overwrite it with the pre-review config.
+    config = readMatchmakeSafetyConfig_(window.currentUserCard);
     if (!canGoPublic) {
-      config.isPrivate = true;
-      if (toggleEl) toggleEl.checked = false;
+      if (toggleEl) toggleEl.checked = !config.isPrivate;
+      window.renderMatchmakeSafetyFeedback(getMatchmakeSafetyFeedback_(window.currentUserCard), window.currentUserCard);
       return;
     }
     if (toggleEl) toggleEl.checked = true;
@@ -207,16 +276,22 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
   } else {
     config.isPrivate = !toggleEl.checked;
   }
+  // Keep existing legacy privacy aliases consistent with this explicit user choice.
+  if (Object.prototype.hasOwnProperty.call(config, 'private')) config.private = config.isPrivate;
+  if (Object.prototype.hasOwnProperty.call(config, 'visibility')) config.visibility = config.isPrivate ? 'private' : 'public';
 
   try {
-    await window.fetchAPI('updateCard', {
-      rowId: window.currentUserCard.rowId,
+    const saved = await window.fetchAPI('updateCard', {
+      rowId: card.rowId,
       data: { '自訂名片設定': JSON.stringify(config) }
     }, true);
-    window.currentUserCard['自訂名片設定'] = JSON.stringify(config);
+    if (saved?.success !== true) throw new Error('PUBLIC_SETTING_SAVE_FAILED');
+    if (window.currentUserCard !== card) return;
+    card['自訂名片設定'] = JSON.stringify(config);
     window.showToast(config.isPrivate ? '已切換為私人模式' : '✅ 已公開名片,解鎖配對功能');
 
     if (!config.isPrivate) {
+      hideMatchStatus_();
       document.getElementById('privacy-lock-container').classList.add('hidden');
       document.getElementById('matchmaker-ui').classList.remove('hidden');
     } else if (!window.hasAdminRights) {
@@ -224,8 +299,13 @@ window.toggleFatePrivacy = async function(forceOpen = false) {
       document.getElementById('matchmaker-ui').classList.add('hidden');
     }
   } catch(e) {
-    window.showToast('狀態更新失敗:' + e.message, true);
-    if (toggleEl) toggleEl.checked = !config.isPrivate;
+    if (window.currentUserCard !== card) return;
+    window.showToast('公開／私人設定未能儲存，請確認目前設定後重試。', true);
+    if (toggleEl) toggleEl.checked = !readMatchmakeSafetyConfig_(card).isPrivate;
+    window.renderMatchmakeSafetyFeedback({ status: 'error', errorCode: 'PUBLIC_SETTING_SAVE_FAILED', pass: false, reasons: ['公開／私人設定尚未確認儲存成功，不能將這次切換視為完成。'], suggestions: ['請確認網路連線，重新整理核對目前公開狀態後再操作。'], issues: [] }, card);
+  }
+  } finally {
+    matchmakePrivacyUpdating_ = false;
   }
 };
 
@@ -323,7 +403,10 @@ window.startMatchmaking = async function() {
     const poolScope = window.matchmakePoolScope === 'public' ? 'public' : 'own';
     if (poolScope === 'public' && !(window.hasAdminRights || window.userRole === 'admin') && typeof window.ensureCardCanGoPublic === 'function') {
       const canUsePublicPool = await window.ensureCardCanGoPublic(window.currentUserCard);
-      if (!canUsePublicPool) return;
+      if (!canUsePublicPool) {
+        window.renderMatchmakeSafetyFeedback(getMatchmakeSafetyFeedback_(window.currentUserCard), window.currentUserCard);
+        return;
+      }
     }
     const res = await window.fetchAPI('matchmakeContacts', {
       currentUser: window.currentUser,

@@ -39,6 +39,9 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/card-safety-review.test.mjs',
+  'test/cardmaster-safety-feedback.test.mjs',
+  'test/matchmake-safety-feedback.test.mjs',
   'test/reward-role-admin.test.mjs',
   'test/reward-only-cashier.test.mjs',
   'test/reward-only-integration.test.mjs',

@@ -8,6 +8,7 @@ import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
 import { ExchangeZoneModule } from './worker/exchange-zone.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
+import { prepareCardSafetyReview, cardSafetyReviewPrompt, normalizeCardSafetyReview, cardSafetyReviewError } from './worker/card-safety-review.mjs';
 
 /**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
@@ -8325,31 +8326,31 @@ ${contactsList}\
 
   async reviewCardSafety(payload, env) {
     try {
-      const card = payload.card || {};
-      const prompt = `你是名片公開搜尋前的安全審核員。請檢查文字與圖片是否包含色情、性交易、裸露暗示、犯罪、詐騙、毒品、武器、賭博、暴力或其他高風險內容。
-只回傳純 JSON，不要解釋在 JSON 外。
-格式：{"pass":true,"riskLevel":"low","reasons":[],"suggestions":[]}
-若有疑慮 pass=false，reasons 用繁體中文列出原因，suggestions 提供可修改方向。
-名片資料：${JSON.stringify(card).slice(0, 6000)}`;
+      const card = prepareCardSafetyReview(payload?.card);
+      if (!card) return cardSafetyReviewError('AI_REVIEW_INVALID_INPUT');
+      const prompt = cardSafetyReviewPrompt(card);
       const content = [{ type: 'text', text: prompt }];
-      if (card.imageUrl && /^https?:\/\//i.test(card.imageUrl)) {
+      if (card.imageUrl) {
         content.push({ type: 'image_url', image_url: { url: card.imageUrl, detail: 'low' } });
       }
 
       let text = '';
+      let imageReviewed = !!card.imageUrl;
       try {
-        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content }], temperature: 0 }, payload.clientOpenAIKey);
-        text = result.choices?.[0]?.message?.content || '{}';
+        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content }], temperature: 0, response_format: { type: 'json_object' } }, payload.clientOpenAIKey);
+        const choice = result.choices?.[0];
+        if (choice?.message?.refusal || (choice?.finish_reason && choice.finish_reason !== 'stop')) return cardSafetyReviewError('AI_REVIEW_INVALID_RESPONSE');
+        text = choice?.message?.content || '';
       } catch (openaiError) {
         if (String(env.AI_FALLBACK_PROVIDER || '').toLowerCase() !== 'gemini') throw openaiError;
-        console.warn('[AI fallback] reviewCardSafety GPT failed, trying Gemini:', openaiError.message);
+        console.warn('[AI fallback] reviewCardSafety GPT unavailable, trying configured Gemini fallback');
         text = await this.callGemini(env, prompt, 0);
+        imageReviewed = false;
+        if (card.imageUrl) return cardSafetyReviewError('AI_REVIEW_IMAGE_INCOMPLETE');
       }
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      const data = jsonMatch ? JSON.parse(jsonMatch[0]) : { pass: false, reasons: ['AI 健檢沒有回傳有效結果'], suggestions: ['請稍後再試'] };
-      return { success: true, data };
+      return normalizeCardSafetyReview(text, {card, imageReviewed});
     } catch (e) {
-      return { success: false, error: 'AI 名片健檢失敗: ' + e.message };
+      return cardSafetyReviewError('AI_REVIEW_SERVICE_UNAVAILABLE');
     }
   },
 

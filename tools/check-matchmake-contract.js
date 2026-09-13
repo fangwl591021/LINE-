@@ -21,7 +21,7 @@ if (!index.includes('match-public-toggle-wrap')) {
 if (!matchmake.includes("window.matchmakePoolScope = window.matchmakePoolScope || 'public'") || !matchmake.includes('window.setMatchmakePoolScope')) {
   fail('front-end must track and switch matchmaking pool scope');
 }
-if (!index.includes('js/modules/matchmake.js?v=7.13')) {
+if (!index.includes('js/modules/matchmake.js?v=7.14')) {
   fail('matchmake.js cache-bust version must be bumped');
 }
 if (!matchmake.includes('window.openAiMatchInbox') ||
@@ -32,7 +32,7 @@ if (!matchmake.includes('window.openAiMatchInbox') ||
 if (matchmake.includes('receiverUserId') || matchmake.includes('receiverId')) {
   fail('matchmaking frontend must not receive or forward the recipient user id');
 }
-if (!index.includes('js/modules/cardmaster.js?v=1.4')) {
+if (!index.includes('js/modules/cardmaster.js?v=1.5')) {
   fail('cardmaster.js cache-bust version must be bumped');
 }
 if (!matchmake.includes("toggleWrap.classList.toggle('hidden', scope !== 'public')")) {
