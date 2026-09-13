@@ -4,9 +4,12 @@ const front=fs.readFileSync('js/modules/store-shop.js','utf8'),css=fs.readFileSy
 const html=fs.readFileSync('index.html','utf8');
 const shellStyle=html.match(/<style id="store-shop-shell-layout">([\s\S]*?)<\/style>/)?.[1];
 assert(shellStyle,'Mall shell layout must load before the lazy storefront assets');
-assert(shellStyle.includes('body:has(#page-store-shop:not(.hidden)) #top-nav { display: none !important; }'));
-assert(shellStyle.includes('body:has(#page-store-shop:not(.hidden)) #main { padding-top: 0 !important; }'));
-assert(shellStyle.includes('body:has(#page-store-shop:not(.hidden)) #page-store-shop { margin-top: 0 !important; }'));
+assert(shellStyle.includes('body.store-shop-page #top-nav { display: none !important; }'));
+assert(shellStyle.includes('body.store-shop-page #main { padding-top: 0 !important; }'));
+assert(shellStyle.includes('body.store-shop-page #page-store-shop { margin-top: 0 !important; }'));
+assert(!shellStyle.includes(':has('),'Header visibility must not depend on mobile WebView :has support');
+const navigation=fs.readFileSync('js/navigation.js','utf8');
+assert(navigation.includes("document.body.classList.toggle('store-shop-page', page === 'store-shop');"),'The shared router must restore shell state when leaving the mall');
 assert(html.includes('id="top-nav"'),'Keep the shared header DOM for other pages');
 for(const value of ['shop-life-hero','shop-bottom-nav','shop-discovery-grid','shop-product-detail','shop-member-home'])assert(front.includes(value));
 assert(front.includes('data?.walletDisplayOwner===uid'));

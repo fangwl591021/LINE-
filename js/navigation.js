@@ -34,6 +34,7 @@ window.goPage = function(page, isInitLoad = false) {
   const sharedBannerPages = new Set(['home', 'card', 'customers', 'admin-settings', 'card-detail']);
   const showSharedBanner = sharedBannerPages.has(page);
   document.body.classList.toggle('home-page', page === 'home');
+  document.body.classList.toggle('store-shop-page', page === 'store-shop');
   document.body.classList.toggle('shared-front-banner-page', showSharedBanner);
 
   document.querySelectorAll('[id^="page"]').forEach(el => el.classList.add('hidden'));
