@@ -26,6 +26,7 @@ for(const standalone of [false,true])test(`single-store browsing omits category 
   assert.equal(selector,'.shop-grid');return {classList:{add:value=>gridClasses.push(value)}};
  }};
  const context={content,standalone,esc,photo:()=>'',policy:()=>'',statusText:()=>'',canTransact:()=>false,
+  loginLink:id=>'https://example.test/index.html?shopSection=store&shopId='+id,
   alert:{textContent:''},pageKind:kind=>assert.equal(kind,'store'),
   api:async(...args)=>{apiCalls.push(args);return {shop,products,product_next:'next-page'};},
   addProductTags:()=>filterCalls.push('tags'),filterProducts:category=>filterCalls.push(category)};

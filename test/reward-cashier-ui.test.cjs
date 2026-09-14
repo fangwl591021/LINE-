@@ -117,7 +117,8 @@ test('verified reward role cannot be promoted by editable name/phone hard-admin 
   s.document.querySelector=selector=>s.get(selector.slice(1));s.context.setInputValueUnlessTouched=()=>{};
   const coreStart=core.indexOf('window.applyUserPermissions = function()'),coreEnd=core.indexOf('// 名片資料載入',coreStart);
   vm.runInNewContext(core.slice(coreStart,coreEnd),s.context);
-  const authStart=auth.indexOf('window.applyRegisteredUserSession = function(info)'),authEnd=auth.indexOf('window.setPointWalletStatus =',authStart);
+  const authStart=auth.indexOf('window.applyRegisteredUserSession = function('),authEnd=auth.indexOf('window.setPointWalletStatus =',authStart);
+  assert.ok(authStart>=0&&authEnd>authStart,'extract the actual session function including optional arguments');
   vm.runInNewContext(auth.slice(authStart,authEnd),s.context);
   s.window.applyRegisteredUserSession({userId:actor,role,name:'hard-admin-matching-name',phone:'hard-admin-matching-phone',socials:'[]'});
   assert.equal(hardAdminCalls,0);assert.equal(s.window.currentUser.role,role);assert.equal(s.window.userRole,role);

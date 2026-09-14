@@ -53,7 +53,7 @@ for (const field of ['ref:', 'net:', 'via:', "point_friend: '1'", "point_from: '
   assert.ok(homeBuilder.includes(field), `home invite missing ${field}`);
 }
 
-const crmBuilder = block(crm, 'window.showInviteLink = function()', 'window.closeInviteModal');
+const crmBuilder = block(crm, 'window.showInviteLink = function(', 'window.closeInviteModal');
 assert.ok(crmBuilder.includes('buildMemberInviteUrl(inviteParams)'), 'CRM invite must pass attribution parameters');
 for (const field of ['ref:', 'net:', 'via:']) {
   assert.ok(crmBuilder.includes(field), `CRM invite missing ${field}`);

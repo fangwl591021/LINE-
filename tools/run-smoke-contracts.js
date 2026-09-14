@@ -39,6 +39,10 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/store-invite-route.test.mjs',
+  'test/store-invite-share.test.mjs',
+  'test/store-invite-auth.test.mjs',
+  'test/store-invite-storefront.test.mjs',
   'test/card-safety-review.test.mjs',
   'test/cardmaster-safety-feedback.test.mjs',
   'test/matchmake-safety-feedback.test.mjs',

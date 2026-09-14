@@ -2726,18 +2726,23 @@
   </div>
 </div>
 
-<div id="invite-link-modal" class="hidden fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-center items-center z-[2000] p-4">
-  <div class="bg-white rounded-3xl p-6 flex flex-col items-center w-full max-w-[340px] shadow-2xl animate-in zoom-in-95">
-    <div class="w-full flex justify-between items-center mb-4">
+<div id="invite-link-modal" class="hidden fixed inset-0 bg-slate-800/60 backdrop-blur-sm flex flex-col justify-center items-center z-[2000] p-4" role="dialog" aria-modal="true" aria-label="我的邀約連結">
+  <div class="bg-white rounded-3xl p-5 flex flex-col items-center w-full max-w-[360px] max-h-[92dvh] overflow-y-auto shadow-2xl animate-in zoom-in-95">
+    <div class="w-full flex justify-between items-center mb-3 sticky top-0 bg-white z-10 shrink-0">
       <h3 class="font-black text-slate-800 text-lg flex items-center gap-2">
         <span class="material-symbols-outlined text-blue-500 icon-filled">share</span> 我的邀約連結
       </h3>
-      <button onclick="window.closeInviteModal()" class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 active:scale-95"><span class="material-symbols-outlined">close</span></button>
+      <button onclick="window.closeInviteModal()" aria-label="關閉邀約連結" class="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 active:scale-95"><span class="material-symbols-outlined">close</span></button>
     </div>
 
-    <p class="text-[12px] text-slate-500 font-medium text-center mb-3 leading-relaxed">分享此連結邀請朋友加入<br>對方註冊後將自動列入您的歸屬</p>
+    <div class="grid grid-cols-2 gap-2 w-full mb-3 shrink-0" role="group" aria-label="邀請目的地">
+      <button id="invite-destination-function" type="button" onclick="window.selectInviteDestination('function')" aria-pressed="true" class="rounded-xl border border-slate-200 p-2.5 text-sm aria-pressed:bg-blue-600 aria-pressed:text-white">原功能頁</button>
+      <button id="invite-destination-store" type="button" onclick="window.selectInviteDestination('store')" aria-pressed="false" class="rounded-xl border border-slate-200 p-2.5 text-sm aria-pressed:bg-blue-600 aria-pressed:text-white">店家商城</button>
+    </div>
+    <p id="invite-description" class="text-[12px] text-slate-500 font-medium text-center mb-2 leading-relaxed shrink-0"></p>
+    <p id="invite-destination-status" role="status" aria-live="polite" class="text-xs text-slate-600 mb-2 text-center break-words w-full shrink-0"></p>
 
-    <div class="bg-slate-50 p-2 rounded-2xl border border-slate-100 mb-3 w-full aspect-square max-w-[220px] flex items-center justify-center">
+    <div class="bg-slate-50 p-2 rounded-2xl border border-slate-100 mb-3 w-full aspect-square max-w-[200px] flex items-center justify-center shrink-0">
       <img id="invite-qr-img" src="" class="w-full h-full object-contain" alt="QR Code">
     </div>
 
@@ -2748,10 +2753,10 @@
     </div>
 
     <div class="flex gap-2 w-full">
-      <button onclick="window.copyInviteLink()" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1">
+      <button id="invite-copy-button" onclick="window.copyInviteLink()" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1 disabled:opacity-40">
         <span class="material-symbols-outlined text-[16px]">content_copy</span> 複製
       </button>
-      <button onclick="window.shareInviteLink()" class="flex-[2] bg-[#06C755] text-white py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1 shadow-sm">
+      <button id="invite-share-button" onclick="window.shareInviteLink()" class="flex-[2] bg-[#06C755] text-white py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1 shadow-sm disabled:opacity-40">
         <span class="material-symbols-outlined text-[16px]">send</span> 分享至 LINE
       </button>
     </div>
@@ -2843,7 +2848,8 @@
 <script type="module" src="js/modules/a-kaffit-card-scanner-adapter.js?v=3.7"></script>
 <script src="js/modules/cards.js?v=8.02"></script>
 <script src="js/modules/business-richman.js?v=1.2"></script>
-<script src="js/modules/store-shop-entry.js?v=31"></script>
+<script src="js/modules/store-invite-route.js?v=1"></script>
+<script src="js/modules/store-shop-entry.js?v=32"></script>
 <script src="js/modules/ecard.js?v=7.56"></script>
 <script src="js/modules/mycard.js?v=8.90"></script>
 <script src="js/modules/matchmake.js?v=7.14"></script>
@@ -2862,10 +2868,10 @@
 <script src="js/modules/exchange-zone.js?v=1.10"></script>
 <script src="js/modules/admin-partners.js?v=1.1"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
-<script src="js/modules/crm.js?v=7.7"></script>
+<script src="js/modules/crm.js?v=7.8"></script>
   <script src="js/modules/points-wallet-qr.js?v=1"></script>
   <script src="js/modules/safe-cashier.js?v=2"></script>
-  <script src="js/auth.js?v=10.98"></script>
+  <script src="js/auth.js?v=10.99"></script>
 
     <script src="js/modules/card-page-banner-shortcuts.js?v=1.3"></script>
 </body>

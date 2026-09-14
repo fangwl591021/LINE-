@@ -46,8 +46,11 @@
     if(result.release_enabled!==true)return '全站網購交易尚未開放，顧客目前無法下單。店家收款設定已完成，請聯絡管理員確認。';
     return '';
   }
-  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='') {
+  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='') {
     let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
+    const sourceParams = () => new URLSearchParams(location.search);
+    const initialShopId = standalone ? new URL(location.href).searchParams.get('shop') || '' : section === 'store' ? shopId : '';
+    const isShopId = value => window.StoreInviteRoute?.isShopId?.(value) ?? (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
     // UI hint only. Every merchant API rechecks the stored role and owner.
     const canManage=()=>!standalone&&['admin','store','總管','店長','user','用戶'].includes(String(window.userRole||'').toLowerCase());
     const canTransact=()=>!standalone&&['admin','store','總管','店長'].includes(String(window.userRole||'').toLowerCase());
@@ -82,7 +85,7 @@
     async function openPointOperations(){
       if(standalone||!window.liff?.isLoggedIn?.()){
         const url=new URL('https://liff.line.me/'+encodeURIComponent(window.POINT_LIFF_ID||'1660923784-vViMTZ1y'));
-        url.searchParams.set('shopSection','cashier');location.assign(url.href);return;
+        url.searchParams.set('shopSection','cashier');location.assign(window.StoreInviteRoute?.withAttribution?.(url,new URLSearchParams(location.search))||url.href);return;
       }
       const version=epoch,owner=window.currentUserProfile?.userId,entry=root.querySelector('[data-do="point-operation"]');
       const module=await import('./store-point-operation.js?v=2');
@@ -111,12 +114,12 @@
     }
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
-      content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?'<a class="shop-link" href="index.html">登入原系統以查看消費紀錄、訂單與管理商城</a>':'<button data-do="registration">♙ 會員註冊／資料維護 <span>›</span></button><button data-do="spending-history">▤ 我的消費折抵紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
+      content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?`<a class="shop-link" href="${esc(loginLink())}">登入／註冊後查看消費紀錄與網路訂單，並返回本店商城</a>`:'<button data-do="registration">♙ 會員註冊／資料維護 <span>›</span></button><button data-do="spending-history">▤ 我的消費折抵紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
     }
     function detail(id) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
       ++epoch;pageKind('product');alert.textContent='';
-      content.innerHTML=`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button><article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?'<a class="shop-link" href="index.html">登入後線上選購</a>':`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}${viewedShop.merchant_enabled===0?'':`<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button>`}</div></article>`;
+      content.innerHTML=`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button><article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?`<a class="shop-link" href="${esc(loginLink(viewedShop.id))}">登入後線上選購</a>`:`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}${viewedShop.merchant_enabled===0?'':`<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button>`}</div></article>`;
     }
     const base=String(root.dataset.worker||window.Config?.WORKER_URL||'').replace(/\/+$/,'');
     async function api(path='',data,privateRead=false) {
@@ -133,7 +136,15 @@
       if(!response.ok||!result.success) throw new Error(result.error||'商城操作失敗');
       return result;
     }
-    function shopLink(id) { const url=new URL('store-shop.html',location.href); url.searchParams.set('shop',id); return url.href; }
+    function shopLink(id) {
+      if (window.StoreInviteRoute?.buildPublicUrl) return window.StoreInviteRoute.buildPublicUrl(id, sourceParams());
+      const url=new URL('store-shop.html',location.href); url.searchParams.set('shop',id); return url.href;
+    }
+    function loginLink(id=viewedShop?.id||initialShopId) {
+      if (isShopId(id) && window.StoreInviteRoute?.buildLoginUrl) return window.StoreInviteRoute.buildLoginUrl(id, sourceParams());
+      const url=new URL('index.html',location.href);
+      return window.StoreInviteRoute?.withAttribution?.(url,sourceParams())||url.href;
+    }
     function product(p,edit=false) {
       if(!edit)return `<article class="shop-product-card" data-product-category="${esc(p.category||'')}"><button class="shop-product-image" data-do="detail" data-id="${esc(p.id)}" aria-label="查看 ${esc(p.title)} 詳情">${photo(p.image_url)||'<span class="shop-product-placeholder" aria-hidden="true">🛍</span>'}</button><div class="shop-product-summary"><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h3><button class="shop-product-title" data-do="detail" data-id="${esc(p.id)}">${esc(p.title)}</button></h3><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p class="shop-meta shop-product-policy">${esc(policy(p))}</p><div class="shop-product-actions"><button class="shop-detail-link" data-do="detail" data-id="${esc(p.id)}">詳情 ›</button>${viewedShop?.merchant_enabled===0?'':`<button data-do="member-qr" data-product-qr data-id="${esc(p.id)}" aria-label="出示 ${esc(p.title)} 本人 QR">▦ QR</button>`}</div></div></article>`;
       return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}${canTransact()?`<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div>`:''}</div></article>`;
@@ -176,7 +187,7 @@
       viewedShop=s;viewedProducts=result.products;
       const details=[s.category,s.address,s.phone,s.hours].filter(Boolean).join('\n');
       content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><details><summary>店家介紹與聯絡資訊</summary><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></details></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
-      if(!standalone&&result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
+      if(result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',standalone?`<a class="shop-link" href="${esc(loginLink(s.id))}">登入後線上選購</a>`:`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
       content.insertAdjacentHTML('beforeend',moreButton(result.product_next,false));
       content.querySelector('.shop-grid')?.classList.add('shop-browse-products');
     }
@@ -198,6 +209,7 @@
       const s=shop||{};
       content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary" ${atCapacity()?'disabled':''}>新增商品</button></div><h2>商品管理（${productCount} 件${productLimit===null?'・不限件數':`／上限 ${productLimit} 件`}）</h2><p class="shop-meta">${productLimit===null?'商品分頁載入，每頁 100 件。':'一般會員最多一件（草稿也計入），封存後可更換；店長與管理員不限。一般會員限店內展示，不開放收款與扣點。'}</p><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
       content.insertAdjacentHTML('beforeend',moreButton(productNext,true));
+      if(shop&&!standalone) content.insertAdjacentHTML('afterbegin',`<button type="button" data-do="share-store" ${shop.status!=='active'?'disabled':''}>商城邀請 QR／網址</button>`);
       addProductTags();
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
@@ -276,6 +288,7 @@
           case 'shopping': if(viewedShop)await view(viewedShop.id);else {await list();content.querySelector('.shop-section-title')?.scrollIntoView({block:'center'});}break;
           case 'mine':memberHome();break;
           case 'registration': {
+            if(standalone){location.assign(loginLink());break;}
             const version=epoch;
             const module=await import('./store-registration-popup.js?v=3');
             const isCurrent=()=>version===epoch&&root.isConnected&&!standalone&&window.currentPage==='store-shop';
@@ -291,6 +304,7 @@
           }
           case 'detail':detail(button.dataset.id);break;
           case 'wallet': {
+            if(standalone){location.assign(loginLink());break;}
             const version=epoch;
             const module=walletModule||await loadWalletModule();
             const isCurrent=()=>version===epoch&&root.isConnected&&(standalone||window.currentPage==='store-shop');
@@ -308,6 +322,7 @@
           case 'online-buy':
           case 'online-orders':
           case 'online-manage': {
+            if(standalone||!window.liff?.isLoggedIn?.()){location.assign(loginLink());break;}
             if(button.dataset.do==='online-manage'&&!canTransact())throw new Error('收款與訂單管理僅開放管理員、店長');
             pageKind('commerce');
             const version=++epoch;alert.textContent='';
@@ -330,7 +345,7 @@
             const id=button.dataset.id;
             if(standalone||!window.liff?.isLoggedIn?.()) {
               const url=new URL('https://liff.line.me/'+(window.DEFAULT_LIFF_ID||'1660923784-vViMTZ1y'));
-              url.searchParams.set('memberProduct',id);location.assign(url.href);break;
+              url.searchParams.set('memberProduct',id);location.assign(window.StoreInviteRoute?.withAttribution?.(url,sourceParams())||url.href);break;
             }
             const card=button.closest('article'),price=card?.querySelector('.shop-price');
             let target;
@@ -364,6 +379,10 @@
           case 'cancel': content.querySelector('.shop-editor').innerHTML=''; break;
           case 'upload-image': button.closest('.shop-image-field').querySelector('input[type=file]').click(); break;
           case 'copy': await navigator.clipboard.writeText(shopLink(button.dataset.id)); alert.textContent='已複製商城網址'; break;
+          case 'share-store':
+            if(standalone||!canManage()||!shop||shop.status!=='active')throw new Error('請先公開本人店面，再分享商城邀請');
+            if(typeof window.showInviteLink!=='function')throw new Error('邀請功能尚未載入，請重新開啟商城');
+            await window.showInviteLink('store');break;
         }
       });
     };
@@ -419,10 +438,15 @@
         } finally { busy=false; buttons.forEach((b,i)=>b.disabled=disabled[i]); }
       });
     };
-    const id=standalone?new URL(location.href).searchParams.get('shop'):'';
+    const id=initialShopId;
     if(!standalone)root.querySelector('.shop-bar').insertAdjacentHTML('beforeend','<button data-do="online-orders">我的網路訂單</button>');
     void run(async()=>{
-      if(memberProduct&&!standalone) {
+      if((standalone&&new URL(location.href).searchParams.has('shop'))||(!standalone&&section==='store')) {
+        if(!isShopId(id))throw new Error('商城連結格式不正確，請向店家取得新的邀請網址');
+      }
+      if(!standalone&&section==='store') {
+        await view(id);
+      }else if(memberProduct&&!standalone) {
         const version=++epoch;
         const module=await import('./member-product-qr.js?v=2');
         if(version===epoch)await module.showMemberProductQr(content,memberProduct,()=>version===epoch);

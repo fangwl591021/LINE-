@@ -1347,7 +1347,7 @@ window.handleInstantSocialLikeEntry = async function(cardId, networkId) {
   return true;
 };
 
-window.applyRegisteredUserSession = function(info) {
+window.applyRegisteredUserSession = function(info, options = {}) {
   if (!info) return;
 
   window.currentUser = { ...info };
@@ -1376,7 +1376,7 @@ window.applyRegisteredUserSession = function(info) {
   const bottomNav = document.getElementById('bottom-nav');
   if (bottomNav) bottomNav.classList.remove('hidden');
   window.applyUserPermissions();
-  if (typeof window.refreshInboxBadge === 'function') window.refreshInboxBadge();
+  if (!options.skipHome && typeof window.refreshInboxBadge === 'function') window.refreshInboxBadge();
 
   const profileName = document.getElementById('profile-name');
   const profilePhone = document.getElementById('profile-phone');
@@ -1406,7 +1406,7 @@ window.applyRegisteredUserSession = function(info) {
   const tgChatId = document.getElementById('setting-tg-chatid');
   if (tgToken && window.currentUser.tgToken) tgToken.value = window.currentUser.tgToken;
   if (tgChatId && window.currentUser.tgChatId) tgChatId.value = window.currentUser.tgChatId;
-  if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
+  if (!options.skipHome && typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
   window.updateStorePointCashierVisibility?.();
 };
 
@@ -2676,10 +2676,12 @@ window.applyUnregisteredHomeSession = function(options = {}) {
     needsMyCardSetup: true
   };
 
-  window.applyRegisteredUserSession(info);
+  window.applyRegisteredUserSession(info, { skipHome: !!options.skipHome });
   try {
     window.currentUser.needsMyCardSetup = true;
   } catch (e) {}
+  // Store invitations may browse without registration or loading networking/card data.
+  if (options.skipHome) return true;
   window.goPage('home', true);
   setTimeout(() => {
     if (typeof window.updateMyCardReminder === 'function') window.updateMyCardReminder();
@@ -2712,6 +2714,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const initialUrlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
+    const initialStoreInviteTarget = window.StoreInviteRoute?.readTarget(initialUrlParams) || '';
     const instantLikeCardId = initialUrlParams.get('likeCardId');
     const webCardId = initialUrlParams.get('webCardId') || (
       initialUrlParams.get('web') === '1' ? initialUrlParams.get('shareCardId') : ''
@@ -2774,15 +2777,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
       window.__fetchApiEnhanced = true;
     }
-    window.installPendingMotherRegistrationReturnWatcher?.();
+    if (!initialStoreInviteTarget) window.installPendingMotherRegistrationReturnWatcher?.();
 
     const avatarImg = document.getElementById('avatar');
     if (avatarImg && window.currentUserProfile.pictureUrl) {
       avatarImg.src = window.currentUserProfile.pictureUrl;
       avatarImg.classList.remove('hidden');
     }
-    if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-    setTimeout(() => {
+    if (!initialStoreInviteTarget && typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
+    if (!initialStoreInviteTarget) setTimeout(() => {
       const aggregateWalletReady = window.subsiteHomeFastData?.wallet?.status === 'ready';
       if (window.pointWalletStatus !== 'ready' && !aggregateWalletReady) {
         window.refreshPointBalanceBadge?.();
@@ -2792,6 +2795,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search);
+    const storeInviteTarget = window.StoreInviteRoute?.readTarget(urlParams) || '';
     if (instantLikeCardId) {
       await window.handleInstantSocialLikeEntry?.(instantLikeCardId, initialUrlParams.get('net') || 'admin');
       return;
@@ -2870,7 +2874,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
+    if (loadingScreen && !storeInviteTarget) {
       window.goPage('home', true);
       loadingScreen.classList.add('hidden');
     }
@@ -2886,7 +2890,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let usedCachedUser = false;
     let cachedUserInfo = null;
 
-    if (!shareCardId && !claimCardId) {
+    if (!storeInviteTarget && !shareCardId && !claimCardId) {
       try {
         const cached = JSON.parse(localStorage.getItem(authCacheKey) || 'null');
         const isFresh = cached && cached.info && cached.savedAt && (Date.now() - cached.savedAt < 6 * 60 * 60 * 1000);
@@ -2907,6 +2911,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
+
+    // A store invite is a public-view destination, not a request to recover/create a card or member.
+    // Confirm membership before applying roles; a stale cache or an unavailable check is not authority.
+    if (storeInviteTarget) {
+      const confirmed = checkRes && !checkRes.error && checkRes.success !== false &&
+        (checkRes.isRegistered === false || (checkRes.isRegistered === true && checkRes.info &&
+          typeof checkRes.info === 'object' && !Array.isArray(checkRes.info)));
+      if (!confirmed) {
+        if (loadingScreen) loadingScreen.classList.remove('hidden');
+        window.showActmasterStartupFailure?.();
+        window.showToast?.('暫時無法確認會員狀態，請重新連線；不需要重新註冊。', true);
+        return;
+      }
+      if (checkRes.isRegistered) window.applyRegisteredUserSession(checkRes.info, { skipHome: true });
+      else {
+        const referral = resolveReferralForRegistration(refId, netId);
+        window.applyUnregisteredHomeSession?.({
+          referrerId: referral.referrerId === window.currentUserProfile.userId ? '' : referral.referrerId,
+          networkId: referral.networkId,
+          skipHome: true
+        });
+      }
+      await window.openStoreShop('', '', '', 'store', storeInviteTarget);
+      if (loadingScreen) loadingScreen.classList.add('hidden');
+      return;
+    }
 
     if (shareCardId && typeof window.recordShareCardVisitOnce === 'function') {
       window.recordShareCardVisitOnce({

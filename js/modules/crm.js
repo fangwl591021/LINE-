@@ -386,7 +386,39 @@ window.addCrmCustomTag = function() {
 };
 
 // ============ 個人邀約連結 (放在設定頁上方) ============
-window.showInviteLink = function() {
+let storeInviteDialog = null;
+const inviteElement = id => document.getElementById(id);
+function inviteDialogIsCurrent(state) {
+  return state === storeInviteDialog && currentUserProfile?.userId === state.userId && !inviteElement('invite-link-modal')?.classList.contains('hidden');
+}
+function renderInviteDestination(state, url, status, error = false) {
+  if (!inviteDialogIsCurrent(state)) return;
+  state.url = url;
+  const input = inviteElement('invite-link-input');
+  if (input) input.value = url;
+  const image = inviteElement('invite-qr-img');
+  if (image) {
+    image.hidden = !url;
+    if (url) image.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=' + encodeURIComponent(url);
+    else image.removeAttribute('src');
+  }
+  for (const id of ['invite-copy-button','invite-share-button']) {
+    const button = inviteElement(id);
+    if (button) button.disabled = !url;
+  }
+  for (const mode of ['function','store']) inviteElement('invite-destination-' + mode)?.setAttribute('aria-pressed', String(state.mode === mode));
+  const statusEl = inviteElement('invite-destination-status');
+  if (statusEl) {
+    statusEl.textContent = status;
+    statusEl.classList.toggle('text-red-600', error);
+  }
+  const description = inviteElement('invite-description');
+  if (description) description.textContent = state.mode === 'store'
+    ? '直接瀏覽我的店家商品，不必先進入人脈或名片功能。購物登入時保留原邀請歸屬。'
+    : '分享此連結邀請朋友進入原功能頁，沿用既有邀請歸屬規則。';
+}
+
+window.showInviteLink = function(destination = 'function') {
   if (!currentUserProfile) return window.showToast('請先登入', true);
 
   const myUserId = currentUserProfile.userId;
@@ -406,43 +438,87 @@ window.showInviteLink = function() {
   let inviteUrl = window.buildMemberInviteUrl ? window.buildMemberInviteUrl(inviteParams) : '';
   if (!inviteUrl) inviteUrl = window.buildPointLiffUrl ? window.buildPointLiffUrl(inviteParams) : ('https://liff.line.me/' + LIFF_ID + '?ref=' + encodeURIComponent(myUserId) + '&net=' + encodeURIComponent(currentNetworkId) + '&via=' + encodeURIComponent(tracking));
 
-  // 顯示 modal
+  // Original invite remains the default; store lookup starts only after an explicit choice.
   const modal = document.getElementById('invite-link-modal');
-  const linkInput = document.getElementById('invite-link-input');
   const trackingEl = document.getElementById('invite-tracking-info');
 
-  if (linkInput) linkInput.value = inviteUrl;
   if (trackingEl) trackingEl.textContent = '追蹤碼:' + tracking;
-
-  // QR Code
-  const qrImg = document.getElementById('invite-qr-img');
-  if (qrImg) {
-    qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=' + encodeURIComponent(inviteUrl);
-  }
-
+  storeInviteDialog?.controller?.abort();
+  storeInviteDialog = {userId:myUserId, inviteParams, originalUrl:inviteUrl, mode:'function', url:'', request:0};
   if (modal) modal.classList.remove('hidden');
+  renderInviteDestination(storeInviteDialog, inviteUrl, '原功能頁邀請');
+  if (destination === 'store') return window.selectInviteDestination('store');
+};
+
+window.selectInviteDestination = async function(destination) {
+  const state = storeInviteDialog;
+  if (!state || !inviteDialogIsCurrent(state)) return;
+  state.controller?.abort();
+  const request = ++state.request;
+  state.mode = destination === 'store' ? 'store' : 'function';
+  if (state.mode === 'function') return renderInviteDestination(state, state.originalUrl, '原功能頁邀請');
+  renderInviteDestination(state, '', '正在確認已公開的店面…');
+  const controller = new AbortController();
+  state.controller = controller;
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const token = window.liff?.isLoggedIn?.() && window.liff.getAccessToken();
+    if (!token) throw new Error('請先登入，再產生商城邀請連結。');
+    const base = String(window.Config?.WORKER_URL || '').replace(/\/+$/, '');
+    if (!base || !window.StoreInviteRoute) throw new Error('商城入口尚未載入，請重新整理後再試。');
+    const response = await fetch(base + '/v1/store-shop/manage', {
+      method:'GET', headers:{Authorization:'Bearer ' + token}, cache:'no-store', signal:controller.signal
+    });
+    if (!response.ok) throw new Error('無法讀取店面，請稍後重試；若已登出請重新登入。');
+    const result = await response.json();
+    if (!inviteDialogIsCurrent(state) || state.request !== request || window.liff?.getAccessToken?.() !== token) return;
+    if (!result.success) throw new Error('無法讀取店面，請稍後重試。');
+    const shop = result.shop;
+    if (!shop || shop.status !== 'active' || !window.StoreInviteRoute.isShopId(shop.id)) {
+      throw new Error('請先到「我的商城管理」建立並公開店面，再產生商城邀請 QR／網址。');
+    }
+    state.shopName = String(shop.name || '我的店家商城');
+    const url = window.StoreInviteRoute.buildPublicUrl(shop.id, state.inviteParams);
+    if (!url) throw new Error('商城連結無法產生，請重新整理後再試。');
+    renderInviteDestination(state, url, state.shopName + '｜店家商城');
+  } catch (error) {
+    if (inviteDialogIsCurrent(state) && state.request === request) renderInviteDestination(state, '', error.name === 'AbortError' ? '讀取逾時，請再點一次「店家商城」重試。' : error.message, true);
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 window.closeInviteModal = function() {
+  storeInviteDialog?.controller?.abort();
+  storeInviteDialog = null;
   document.getElementById('invite-link-modal')?.classList.add('hidden');
 };
 
-window.copyInviteLink = function() {
+window.copyInviteLink = async function() {
+  const state = storeInviteDialog;
   const input = document.getElementById('invite-link-input');
-  if (!input) return;
-  input.select();
-  document.execCommand('copy');
-  window.showToast('✅ 邀約連結已複製');
+  if (!state?.url || !inviteDialogIsCurrent(state) || input?.value !== state.url) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(state.url);
+    else {
+      input.select();
+      if (!document.execCommand('copy')) throw new Error('copy failed');
+    }
+    window.showToast('✅ 邀約連結已複製');
+  } catch { window.showToast('無法自動複製，請長按上方網址複製。', true); }
 };
 
 window.shareInviteLink = async function() {
+  const state = storeInviteDialog;
   const input = document.getElementById('invite-link-input');
-  if (!input || !liff.isLoggedIn()) return;
-  const url = input.value;
-  const text = '✨ 邀請您加入我們的商務社群\n' + (currentUser?.name || '我') + ' 為您準備了專屬名片庫與商機配對\n\n' + url;
+  if (!state?.url || !inviteDialogIsCurrent(state) || input?.value !== state.url || !liff.isLoggedIn()) return;
+  const url = state.url;
+  const text = state.mode === 'store'
+    ? '🛍 邀請您逛逛「' + state.shopName + '」\n直接查看店家商品；網購商品可登入後選購。\n\n' + url
+    : '✨ 邀請您加入我們的商務社群\n' + (currentUser?.name || '我') + ' 為您準備了專屬名片庫與商機配對\n\n' + url;
   try {
-    await liff.shareTargetPicker([{ type: "text", text: text }]);
-    window.showToast('✅ 邀約連結已發送');
+    const result = await liff.shareTargetPicker([{ type: "text", text: text }]);
+    if (result) window.showToast('✅ 邀約連結已發送');
   } catch (e) {
     window.showToast('發送失敗', true);
   }
