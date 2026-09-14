@@ -8513,6 +8513,12 @@ JSON格式：{"Personality":"","Hobbies":"","Wealth":"","Health":"","Career":""}
   }
 };
 
+// Reuse the canonical member view after the isolated store-invite write.
+// This only maps a verified database row; it never registers users or grants rewards.
+export function storeInviteProfileView(row) {
+  return D1ReadModule.userRow(row, 'store_invite');
+}
+
 export async function runAutomatedUploaderMatch(job, env) {
   const ownerUserId = String(job?.ownerUserId || '').trim();
   if (!ownerUserId || !env?.ACTMASTER_DB) return { success: false, error: 'CARD_OWNER_MISSING' };

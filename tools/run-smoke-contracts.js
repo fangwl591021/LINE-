@@ -39,6 +39,8 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/store-invite-binding.test.mjs',
+  'test/store-invite-binding-entry.test.mjs',
   'test/store-invite-route.test.mjs',
   'test/store-invite-share.test.mjs',
   'test/store-invite-auth.test.mjs',

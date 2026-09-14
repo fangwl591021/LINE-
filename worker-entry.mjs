@@ -1,4 +1,4 @@
-import legacyWorker, { runAutomatedUploaderMatch } from './workerbackup.js';
+import legacyWorker, { runAutomatedUploaderMatch, storeInviteProfileView } from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
@@ -8,6 +8,7 @@ import { recognizeAkaffitBusinessCard } from './worker/a-kaffit-card-recognize.m
 import { MatchInterestModule } from './worker/match-interest.mjs';
 import { handleStoreShop } from './worker/store-shop.mjs';
 import { handleStoreCommerce } from './worker/store-commerce.mjs';
+import { handleStoreInviteBinding } from './worker/store-invite-binding.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -384,6 +385,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const inviteResponse = await handleStoreInviteBinding(request, env, storeInviteProfileView);
+    if (inviteResponse) return inviteResponse;
     const commerceResponse = await handleStoreCommerce(request, env);
     if (commerceResponse) return commerceResponse;
     const shopResponse = await handleStoreShop(request, env);

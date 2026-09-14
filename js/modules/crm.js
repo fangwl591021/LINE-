@@ -414,7 +414,7 @@ function renderInviteDestination(state, url, status, error = false) {
   }
   const description = inviteElement('invite-description');
   if (description) description.textContent = state.mode === 'store'
-    ? '直接瀏覽我的店家商品，不必先進入人脈或名片功能。購物登入時保留原邀請歸屬。'
+    ? '直接瀏覽我的店家商品。LINE 登入後自動記錄邀請歸屬，不必另填註冊；已有歸屬不變。'
     : '分享此連結邀請朋友進入原功能頁，沿用既有邀請歸屬規則。';
 }
 

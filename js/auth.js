@@ -140,7 +140,7 @@ function readFirstReferral(userId) {
 function writeFirstReferral(userId, referrerId, networkId) {
   if (!userId || !referrerId || referrerId === userId) return readFirstReferral(userId);
   const existing = readFirstReferral(userId);
-  if (existing && existing.referrerId) return existing;
+  if (existing && (existing.referrerId || (existing.confirmed === true && existing.source === 'store-invite'))) return existing;
   const data = { referrerId, networkId: networkId || 'admin', savedAt: Date.now() };
   try {
     localStorage.setItem(getReferralStorageKey(userId), JSON.stringify(data));
@@ -263,7 +263,14 @@ window.installPendingMotherRegistrationReturnWatcher = function() {
 
 function resolveReferralForRegistration(urlRef, urlNet) {
   const userId = window.currentUserProfile?.userId || '';
+  const confirmed = window.storeInviteConfirmedAttribution;
+  if (confirmed?.actorUserId === userId) {
+    return { referrerId: confirmed.referrerId || '', networkId: confirmed.networkId || 'admin' };
+  }
   const first = readFirstReferral(userId) || writeFirstReferral(userId, urlRef || '', urlNet || 'admin') || {};
+  if (first.confirmed === true && first.source === 'store-invite') {
+    return { referrerId: first.referrerId || '', networkId: first.networkId || 'admin' };
+  }
   return {
     referrerId: first.referrerId || urlRef || '',
     networkId: first.networkId || urlNet || 'admin'
@@ -2658,6 +2665,41 @@ window.renderCardCoolReviewPage = async function(jobId, cardId = '') {
   }
 };
 
+window.acceptStoreInviteLogin = async function({ shopId, referrerId, actorUserId, accessToken }) {
+  const sameActor = () => window.currentUserProfile?.userId === actorUserId &&
+    typeof liff !== 'undefined' && liff.isLoggedIn?.() && liff.getAccessToken?.() === accessToken;
+  if (!accessToken || !sameActor()) throw new Error('LINE 登入狀態已變更');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(String(Config.WORKER_URL || '').replace(/\/+$/, '') + '/v1/store-shop/invite/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+      credentials: 'omit', cache: 'no-store', signal: controller.signal,
+      body: JSON.stringify({ shopId, referrerId })
+    });
+    const result = await response.json().catch(() => null);
+    if (!sameActor()) throw new Error('LINE 登入狀態已變更');
+    const binding = result?.binding;
+    const isObject = value => !!value && typeof value === 'object' && !Array.isArray(value);
+    const validInfo = result?.isRegistered === true && isObject(result.info) &&
+      typeof (result.info.userId || result.info.lineId) === 'string' && !!(result.info.userId || result.info.lineId);
+    const validMembership = validInfo || (result?.isRegistered === false && result.info === null && binding?.status === 'self');
+    const validBinding = isObject(binding) && ['bound', 'existing', 'self'].includes(binding.status) &&
+      typeof binding.referrerId === 'string' && typeof binding.networkId === 'string' &&
+      (binding.status !== 'bound' || (!!binding.referrerId && !!binding.networkId)) &&
+      (binding.status !== 'existing' || (validInfo && !!binding.networkId));
+    const consistentInfo = !validInfo || (result.info.referrerId === binding?.referrerId && result.info.networkId === binding?.networkId);
+    if (!response.ok || result?.success !== true || result.error || result.shopId !== shopId ||
+        result.actorUserId !== actorUserId || !validBinding || !validMembership || !consistentInfo) {
+      throw new Error('店家邀請歸屬尚未確認');
+    }
+    return result;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 window.applyUnregisteredHomeSession = function(options = {}) {
   const profile = window.currentUserProfile || {};
   const userId = String(profile.userId || options.userId || '').trim();
@@ -2885,7 +2927,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (e) {}
       setTimeout(() => window.refreshPointBalanceBadge?.(), 200);
     }
-    if (refId) writeFirstReferral(window.currentUserProfile.userId, refId, netId);
+    if (refId && !storeInviteTarget) writeFirstReferral(window.currentUserProfile.userId, refId, netId);
     const authCacheKey = 'ACTMASTER_USER_' + window.currentUserProfile.userId;
     let usedCachedUser = false;
     let cachedUserInfo = null;
@@ -2910,9 +2952,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (e) {}
     }
 
+    const storeInviteActorId = storeInviteTarget ? window.currentUserProfile.userId : '';
+    let storeInviteAccessToken = '';
+    if (storeInviteTarget) {
+      try { storeInviteAccessToken = liff.isLoggedIn?.() ? liff.getAccessToken?.() || '' : ''; } catch (e) {}
+    }
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
 
-    // A store invite is a public-view destination, not a request to recover/create a card or member.
+    // A store invite binds only its verified attribution; it does not complete a personal profile or create a card.
     // Confirm membership before applying roles; a stale cache or an unavailable check is not authority.
     if (storeInviteTarget) {
       const confirmed = checkRes && !checkRes.error && checkRes.success !== false &&
@@ -2924,9 +2971,43 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.showToast?.('暫時無法確認會員狀態，請重新連線；不需要重新註冊。', true);
         return;
       }
-      if (checkRes.isRegistered) window.applyRegisteredUserSession(checkRes.info, { skipHome: true });
+      let storeSession = checkRes;
+      let acceptedInvite = null;
+      try {
+        if (window.currentUserProfile?.userId !== storeInviteActorId || !storeInviteAccessToken ||
+            !liff.isLoggedIn?.() || liff.getAccessToken?.() !== storeInviteAccessToken) {
+          throw new Error('LINE 登入狀態已變更');
+        }
+        if (refId && !/^U[0-9a-f]{32}$/i.test(refId)) throw new Error('店家邀請資料格式有誤');
+        if (refId && refId !== storeInviteActorId) {
+          acceptedInvite = await window.acceptStoreInviteLogin({
+            shopId: storeInviteTarget, referrerId: refId,
+            actorUserId: storeInviteActorId, accessToken: storeInviteAccessToken
+          });
+          storeSession = acceptedInvite;
+          if (acceptedInvite.isRegistered) {
+            window.storeInviteConfirmedAttribution = {
+              actorUserId: storeInviteActorId,
+              referrerId: acceptedInvite.binding.referrerId, networkId: acceptedInvite.binding.networkId
+            };
+            try {
+              localStorage.setItem(getReferralStorageKey(storeInviteActorId), JSON.stringify({
+                referrerId: acceptedInvite.binding.referrerId, networkId: acceptedInvite.binding.networkId,
+                confirmed: true, source: 'store-invite', savedAt: Date.now()
+              }));
+              localStorage.setItem(authCacheKey, JSON.stringify({ info: acceptedInvite.info, savedAt: Date.now() }));
+            } catch (e) {}
+          }
+        }
+      } catch (error) {
+        if (loadingScreen) loadingScreen.classList.remove('hidden');
+        window.showActmasterStartupFailure?.();
+        window.showToast?.('店家邀請歸屬尚未確認，請重新連線；不需要重新註冊。', true);
+        return;
+      }
+      if (storeSession.isRegistered) window.applyRegisteredUserSession(storeSession.info, { skipHome: true });
       else {
-        const referral = resolveReferralForRegistration(refId, netId);
+        const referral = acceptedInvite ? acceptedInvite.binding : resolveReferralForRegistration(refId, netId);
         window.applyUnregisteredHomeSession?.({
           referrerId: referral.referrerId === window.currentUserProfile.userId ? '' : referral.referrerId,
           networkId: referral.networkId,

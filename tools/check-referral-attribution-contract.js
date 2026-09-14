@@ -60,7 +60,9 @@ for (const field of ['ref:', 'net:', 'via:']) {
 }
 
 assert.ok(auth.includes("const refId = urlParams.get('ref') || '';"), 'auth must read referral id');
-assert.ok(auth.includes('if (refId) writeFirstReferral(window.currentUserProfile.userId, refId, netId);'), 'auth must lock first referral');
+assert.ok(auth.includes('if (refId && !storeInviteTarget) writeFirstReferral(window.currentUserProfile.userId, refId, netId);'), 'non-store auth must retain first referral lock; store invites wait for verified attribution');
+assert.ok(auth.includes('await window.acceptStoreInviteLogin({'), 'store invite auth must await server attribution');
+assert.ok(auth.includes("confirmed: true, source: 'store-invite'"), 'store invite attribution must be marked server-confirmed');
 assert.ok(auth.includes('referrerId: referral.referrerId'), 'registration must submit the resolved referrer');
 assert.ok(worker.includes("existing.referrer_id && String(existing.referrer_id).trim() && !canOverrideReferrer"), 'server must preserve existing referral attribution');
 assert.ok(worker.includes('FIRST_SHARE_TOUCH_'), 'share visit first-touch tracking must remain enabled');
