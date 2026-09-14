@@ -39,6 +39,10 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/store-admin.test.mjs',
+  'test/store-admin-ui.test.mjs',
+  'test/store-admin-entry.test.mjs',
+  'test/store-shop-cover.test.mjs',
   'test/store-invite-binding.test.mjs',
   'test/store-invite-binding-entry.test.mjs',
   'test/store-invite-route.test.mjs',

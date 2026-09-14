@@ -32,9 +32,9 @@ assert(read('migrations/0031_store_product_category.sql').includes("DEFAULT ''")
 assert(front.includes("window.fetchAPI('uploadImageToR2'"));
 assert(front.includes('controls.forEach((control,i)=>control.disabled=disabled[i])'));
 assert(read('css/store-shop.css').includes('article>img{display:block;width:100%;height:auto;object-fit:contain'));
-// Catalog images remain uncropped; only generated, decorative hero art may fill its frame.
+// Only decorative hero art and shop covers may crop; product and DM images remain complete.
 const coverRules=[...read('css/store-shop.css').matchAll(/([^{}]+)\{([^{}]*object-fit:\s*cover[^{}]*)\}/g)];
-assert(coverRules.every(rule=>rule[1].trim()==='.shop-lifestyle .shop-lifestyle-scene'));
+assert(coverRules.every(rule=>['.shop-lifestyle .shop-lifestyle-scene','.shop-lifestyle .shop-discovery-grid article>img','.shop-lifestyle .shop-store-intro>img'].includes(rule[1].trim())));
 assert(!read('store-shop.html').includes('liff.init'));
 assert(read('migrations/0029_store_shop_catalog.sql').includes('UNIQUE(shop_id,request_key)'));
 assert(read('docs/contracts/store-shop.md').includes('不轉點'));

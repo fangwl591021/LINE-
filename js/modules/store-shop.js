@@ -54,6 +54,7 @@
     // UI hint only. Every merchant API rechecks the stored role and owner.
     const canManage=()=>!standalone&&['admin','store','總管','店長','user','用戶'].includes(String(window.userRole||'').toLowerCase());
     const canTransact=()=>!standalone&&['admin','store','總管','店長'].includes(String(window.userRole||'').toLowerCase());
+    const canAdmin=()=>!standalone&&['admin','總管'].includes(String(window.userRole||'').toLowerCase());
     const atCapacity=()=>productLimit!==null&&productCount>=productLimit;
     function setManagement(result) {
       shop=result.shop;items=result.products;productLimit=result.product_limit;productCount=result.product_count;productNext=result.product_next||'';
@@ -122,6 +123,26 @@
       content.innerHTML=`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button><article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?`<a class="shop-link" href="${esc(loginLink(viewedShop.id))}">登入後線上選購</a>`:`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}${viewedShop.merchant_enabled===0?'':`<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button>`}</div></article>`;
     }
     const base=String(root.dataset.worker||window.Config?.WORKER_URL||'').replace(/\/+$/,'');
+    async function adminStores() {
+      if(!canAdmin())throw new Error('店家總列表僅開放管理員');
+      const owner=window.currentUserProfile?.userId,token=window.liff?.isLoggedIn?.()?window.liff.getAccessToken():'';
+      if(!owner||!token)throw new Error('請先使用管理員帳號登入');
+      pageKind('admin-stores');
+      const version=++epoch;alert.textContent='';
+      content.innerHTML='<button type="button" data-do="manage">返回商城管理</button><p role="status">載入管理員店家列表…</p>';
+      const sameSession=()=>canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
+      const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&sameSession();
+      const module=await import('./store-admin.js?v=1');
+      if(!current())return;
+      await module.mountStoreAdmin(content,{api,isCurrent:current,onBack:()=>run(()=>manage()),onView:async id=>{
+        if(!current())return;
+        await run(async()=>{
+          await view(id);
+          if(sameSession()&&root.isConnected&&window.currentPage==='store-shop'&&root.dataset.shopView==='store'&&viewedShop?.id===id)
+            content.insertAdjacentHTML('afterbegin','<button type="button" data-do="admin-stores">← 返回店家列表</button>');
+        });
+      }});
+    }
     async function api(path='',data,privateRead=false) {
       if(!base) throw new Error('商城服務網址尚未設定');
       const headers={};
@@ -210,6 +231,8 @@
       content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary" ${atCapacity()?'disabled':''}>新增商品</button></div><h2>商品管理（${productCount} 件${productLimit===null?'・不限件數':`／上限 ${productLimit} 件`}）</h2><p class="shop-meta">${productLimit===null?'商品分頁載入，每頁 100 件。':'一般會員最多一件（草稿也計入），封存後可更換；店長與管理員不限。一般會員限店內展示，不開放收款與扣點。'}</p><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
       content.insertAdjacentHTML('beforeend',moreButton(productNext,true));
       if(shop&&!standalone) content.insertAdjacentHTML('afterbegin',`<button type="button" data-do="share-store" ${shop.status!=='active'?'disabled':''}>商城邀請 QR／網址</button>`);
+      if(canAdmin())content.insertAdjacentHTML('afterbegin','<button type="button" data-do="admin-stores">管理員・店家列表</button>');
+      content.querySelector('[data-form="store"] .shop-image-field')?.insertAdjacentHTML('beforeend','<p class="shop-meta">店家封面建議使用橫式 16:9 圖片；前台滿版置中裁切，原圖仍完整保留。</p>');
       addProductTags();
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
@@ -319,6 +342,7 @@
             break;
           case 'view': await view(button.dataset.id); break;
           case 'manage': await manage(); break;
+          case 'admin-stores': await adminStores(); break;
           case 'online-buy':
           case 'online-orders':
           case 'online-manage': {
@@ -440,11 +464,14 @@
     };
     const id=initialShopId;
     if(!standalone)root.querySelector('.shop-bar').insertAdjacentHTML('beforeend','<button data-do="online-orders">我的網路訂單</button>');
+    if(canAdmin())root.querySelector('.shop-bar').insertAdjacentHTML('beforeend','<button type="button" data-do="admin-stores">管理員・店家列表</button>');
     void run(async()=>{
       if((standalone&&new URL(location.href).searchParams.has('shop'))||(!standalone&&section==='store')) {
         if(!isShopId(id))throw new Error('商城連結格式不正確，請向店家取得新的邀請網址');
       }
-      if(!standalone&&section==='store') {
+      if(!standalone&&section==='admin-stores') {
+        await adminStores();
+      }else if(!standalone&&section==='store') {
         await view(id);
       }else if(memberProduct&&!standalone) {
         const version=++epoch;

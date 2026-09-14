@@ -54,7 +54,8 @@ async function testStoreShopImages() {
   const image=document.querySelector('article>img');image.src=encoded;await image.decode();
   const rect=image.getBoundingClientRect(),card=image.parentElement.getBoundingClientRect();
   check(Math.abs(rect.width-(card.width-2))<2,'image is not full card width');
-  check(Math.abs(rect.width/rect.height-2)<0.02,'display image cropped');
+  check(getComputedStyle(image).objectFit==='cover','store introduction must crop to fill its frame');
+  check(Math.abs(rect.height-Math.min(rect.width*9/16,360))<2,'store cover ratio or desktop height cap changed');
   check(document.documentElement.scrollWidth<=innerWidth,'horizontal overflow');
   return {viewport:innerWidth,uploadAndPreview:true,failedUploadPreservesDraft:true,cancelNoUpload:true,productButton:true,width:rect.width,height:rect.height,encodedSize:encoded.length};
 }

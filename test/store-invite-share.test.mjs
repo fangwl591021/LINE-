@@ -105,10 +105,10 @@ test('logged out and tampered input cannot share or perform an owner lookup',asy
 });
 test('main and public pages load the same helper before their consumers; lazy store version is synchronized',()=>{
   const html=read('index.html'),publicHtml=read('store-shop.html'),entry=read('js/modules/store-shop-entry.js');
-  for(const consumer of ['js/modules/store-shop-entry.js?v=32','js/modules/crm.js?v=7.9','js/auth.js?v=11.00'])
+  for(const consumer of ['js/modules/store-shop-entry.js?v=33','js/modules/crm.js?v=7.9','js/auth.js?v=11.00'])
     assert.ok(html.indexOf('js/modules/store-invite-route.js?v=1')<html.indexOf(consumer) && html.includes(consumer));
-  assert.ok(publicHtml.indexOf('js/modules/store-invite-route.js?v=1')<publicHtml.indexOf('js/modules/store-shop.js?v=30'));
-  assert.match(entry,/store-shop\.js\?v=30/);
+  assert.ok(publicHtml.indexOf('js/modules/store-invite-route.js?v=1')<publicHtml.indexOf('js/modules/store-shop.js?v=31'));
+  assert.match(entry,/store-shop\.js\?v=31/);
   assert.doesNotMatch(publicHtml,/js\/auth|sdk\.line|liff\.init|modules\/home|modules\/cardmaster/);
   for(const id of ['invite-destination-function','invite-destination-store','invite-copy-button','invite-share-button','invite-destination-status'])assert.ok(html.includes('id="'+id+'"'));
   assert.match(html,/aria-label="關閉邀約連結"/);

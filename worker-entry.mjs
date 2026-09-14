@@ -9,6 +9,7 @@ import { MatchInterestModule } from './worker/match-interest.mjs';
 import { handleStoreShop } from './worker/store-shop.mjs';
 import { handleStoreCommerce } from './worker/store-commerce.mjs';
 import { handleStoreInviteBinding } from './worker/store-invite-binding.mjs';
+import { handleStoreAdmin } from './worker/store-admin.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -385,6 +386,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const adminStoreResponse = await handleStoreAdmin(request, env, storeInviteProfileView);
+    if (adminStoreResponse) return adminStoreResponse;
     const inviteResponse = await handleStoreInviteBinding(request, env, storeInviteProfileView);
     if (inviteResponse) return inviteResponse;
     const commerceResponse = await handleStoreCommerce(request, env);

@@ -1,0 +1,26 @@
+.store-admin{color:#173e59;max-width:1200px;margin:0 auto;padding:0 2px 22px;overflow-wrap:anywhere}
+.store-admin .store-admin-toolbar{position:sticky;top:0;z-index:3;display:flex;justify-content:space-between;gap:8px;padding:8px 0;background:#fffaf1}
+.store-admin h2.store-admin-heading{font-size:1.4rem;margin:14px 0 5px}
+.store-admin .store-admin-intro{font-size:.9rem;color:#687c8b;margin:0 0 14px}
+.store-admin .store-admin-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:16px}
+.store-admin .store-admin-total{background:#fff;border:1px solid #e6e4dc;border-radius:12px;padding:10px 12px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 8px}
+.store-admin .store-admin-total span{font-size:.8rem;color:#637989}.store-admin .store-admin-total strong{font-size:1.35rem}
+.store-admin form.store-admin-search{display:grid;grid-template-columns:minmax(0,1fr) 135px auto;align-items:end;gap:10px;margin:0}
+.store-admin .store-admin-search label{display:flex;flex-direction:column;gap:5px;font-size:.85rem;margin:0;min-width:0}
+.store-admin .store-admin-search input,.store-admin .store-admin-search select{box-sizing:border-box;min-width:0;width:100%;height:44px;padding:8px 10px;border:1px solid #c6d2d7;border-radius:10px;background:#fff;color:#173e59;font:inherit}
+.store-admin button{min-height:42px;padding:8px 13px;border:1px solid #c6d2d7;border-radius:10px;color:#173e59;background:#fff;font:inherit;cursor:pointer;white-space:nowrap}
+.store-admin button:disabled{opacity:.45;cursor:default}.store-admin button:focus-visible,.store-admin input:focus-visible,.store-admin select:focus-visible{outline:3px solid #eaa72f;outline-offset:2px}
+.store-admin [data-admin-action=search]{background:#173e59;color:#fff;min-height:44px}
+.store-admin .store-admin-status{font-size:.85rem;color:#637989;margin:12px 0;min-height:1.2em}
+.store-admin .store-admin-list{display:flex;flex-direction:column;gap:8px}
+.store-admin article.store-admin-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid #e5e4dd;border-radius:12px;background:#fff;min-width:0;margin:0}
+.store-admin article.store-admin-card>*{margin:0}.store-admin [hidden]{display:none!important}
+.store-admin .store-admin-main{min-width:0;flex:1}.store-admin .store-admin-title{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.store-admin .store-admin-title h3{font-size:1rem;line-height:1.4;margin:0 4px 0 0}.store-admin .store-admin-badge{font-size:.72rem;line-height:1.4;background:#f0eee8;color:#7b725f;border-radius:5px;padding:2px 6px;white-space:nowrap}
+.store-admin .store-admin-badge.is-active{color:#087854;background:#e8f6ec}.store-admin .store-admin-badge.is-hidden{color:#a75d1f;background:#fff2df}
+.store-admin .store-admin-owner{font-size:.88rem;margin:5px 0 0}.store-admin .store-admin-contact{font-size:.78rem;color:#687c8b;margin:4px 0 0;line-height:1.5}
+.store-admin .store-admin-products{display:flex;flex-wrap:wrap;gap:5px 14px;font-size:.8rem;color:#61798b;margin:6px 0 0}
+.store-admin .store-admin-unavailable{font-size:.75rem;color:#8594a0;max-width:70px;text-align:center;flex-shrink:0}
+.store-admin .store-admin-empty{padding:24px 10px;text-align:center;color:#718291;background:#fff;border-radius:12px}
+.store-admin .store-admin-pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:16px}.store-admin .store-admin-pager span{font-size:.85rem}
+@media(max-width:520px){.store-admin form.store-admin-search{grid-template-columns:minmax(0,1fr) auto;gap:8px}.store-admin .store-admin-query{grid-column:1/-1}.store-admin .store-admin-total{padding:9px;flex-direction:column;align-items:flex-start;gap:3px}.store-admin article.store-admin-card{padding:11px 10px;gap:8px}.store-admin [data-admin-action=view]{font-size:.78rem;padding:8px}.store-admin .store-admin-toolbar button{font-size:.88rem}.store-admin .store-admin-contact{font-size:.77rem}}

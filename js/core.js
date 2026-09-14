@@ -300,7 +300,8 @@ const Core = (function() {
             '#details-voom-capture': window.hasAdminRights,
             '#details-store-banner': window.hasAdminRights,
             '#details-store-management': window.userRole === 'admin',
-            '#admin-partner-management-entry': window.userRole === 'admin'
+            '#admin-partner-management-entry': window.userRole === 'admin',
+            '#admin-store-list-entry': window.userRole === 'admin'
         };
 
         for (const [selector, show] of Object.entries(selectors)) {
