@@ -62,6 +62,36 @@ export async function prepareStoreWalletQr(){
   if(data)makeQr(module,data,owner);else preparedQr=null;
 }
 
+// Homepage uses the same owner-verified QR and balance-only query as the popup.
+// Never load the ledger on the homepage or infer that a failed query means zero.
+export function mountStoreWalletCard(root,{isCurrent=()=>true,onInvalid=()=>{}}={}) {
+  const owner=window.currentUserProfile?.userId;
+  const balance=root.querySelector('[data-home-balance]'),qr=root.querySelector('[data-home-qr]'),status=root.querySelector('[data-home-wallet-status]');
+  let closed=false,timer,timeout;
+  const current=()=>!closed&&root.isConnected&&isCurrent()&&owner===window.currentUserProfile?.userId&&!!window.liff?.isLoggedIn?.();
+  function clear(){closed=true;clearInterval(timer);clearTimeout(timeout);qr.replaceChildren();balance.textContent='請登入查看';status.textContent='登入後出示';}
+  if(!owner||!window.liff?.isLoggedIn?.()){clear();return clear;}
+  const library=loadQrLibrary();
+  const cached=recentWallet(owner);
+  let fresh=false;
+  async function paint(data,preview=false){
+    const module=await library;
+    if(!current()||(preview&&fresh))return;
+    qr.innerHTML=makeQr(module,data,owner);status.textContent='點按放大 QR';
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    if(!current()||(preview&&fresh))return;
+    balance.textContent=Number(data.balance).toLocaleString('zh-TW')+' 點';
+  }
+  if(cached)void paint(cached,true).catch(()=>{});
+  void Promise.race([readStoreWalletSummary(),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),15000);})])
+    .then(async data=>{clearTimeout(timeout);if(!current())return;if(!verifiedWallet(data,owner))throw Error('unverified');fresh=true;await paint(data);})
+    .catch(()=>{clearTimeout(timeout);if(current()){fresh=true;balance.textContent='暫時無法讀取';status.textContent='點按重試';}});
+  // Attach a rejection handler even if the balance request fails before QR rendering.
+  void library.catch(()=>{});
+  timer=setInterval(()=>{if(!current()){clear();onInvalid();}},200);
+  return clear;
+}
+
 export function openStoreWalletPopup({isCurrent=()=>true,standalone=false}={}) {
   if(activeDialog?.open){activeDialog.querySelector('[data-close]').focus();return;}
   const owner=window.currentUserProfile?.userId;

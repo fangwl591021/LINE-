@@ -55,6 +55,9 @@
     const canManage=()=>!standalone&&['admin','store','總管','店長','user','用戶'].includes(String(window.userRole||'').toLowerCase());
     const canTransact=()=>!standalone&&['admin','store','總管','店長'].includes(String(window.userRole||'').toLowerCase());
     const canAdmin=()=>!standalone&&['admin','總管'].includes(String(window.userRole||'').toLowerCase());
+    const canMerchantHome=()=>!standalone&&!!window.currentUserProfile?.userId&&!!window.liff?.isLoggedIn?.()&&['admin','store','tenant','reward','總管','店長','租戶','贈點用戶'].includes(String(window.userRole||'').toLowerCase());
+    const rewardOnly=()=>['reward','贈點用戶'].includes(String(window.userRole||'').toLowerCase())||!!window.isRewardOnlyPointCashier?.();
+    let merchantView,clearHomeWallet;
     const atCapacity=()=>productLimit!==null&&productCount>=productLimit;
     function setManagement(result) {
       shop=result.shop;items=result.products;productLimit=result.product_limit;productCount=result.product_count;productNext=result.product_next||'';
@@ -80,38 +83,55 @@
     let walletModule,walletImport;
     function loadWalletModule(){
       if(walletModule)return Promise.resolve(walletModule);
-      if(!walletImport)walletImport=import('./store-wallet-popup.js?v=4').then(module=>walletModule=module).catch(error=>{walletImport=null;throw error;});
+      if(!walletImport)walletImport=import('./store-wallet-popup.js?v=5').then(module=>walletModule=module).catch(error=>{walletImport=null;throw error;});
       return walletImport;
     }
-    async function openPointOperations(){
+    async function openPointOperations(mode){
       if(standalone||!window.liff?.isLoggedIn?.()){
         const url=new URL('https://liff.line.me/'+encodeURIComponent(window.POINT_LIFF_ID||'1660923784-vViMTZ1y'));
         url.searchParams.set('shopSection','cashier');location.assign(window.StoreInviteRoute?.withAttribution?.(url,new URLSearchParams(location.search))||url.href);return;
       }
-      const version=epoch,owner=window.currentUserProfile?.userId,entry=root.querySelector('[data-do="point-operation"]');
-      const module=await import('./store-point-operation.js?v=2');
-      const isCurrent=()=>version===epoch&&root.isConnected&&entry?.isConnected&&root.contains(entry)&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId;
-      if(isCurrent())module.openStorePointOperationPopup({standalone,isCurrent});
+      const version=epoch,owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.(),entry=root.querySelector('[data-do="point-operation"]');
+      if(!canMerchantHome())throw new Error('此帳號未開放商家版點數操作');
+      if(mode==='redeem'&&rewardOnly())throw new Error('贈點單位只能贈點，不能扣點');
+      const module=await import('./store-point-operation.js?v=3');
+      const isCurrent=()=>version===epoch&&root.isConnected&&entry?.isConnected&&root.contains(entry)&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.()&&canMerchantHome();
+      if(isCurrent())module.openStorePointOperationPopup({standalone,isCurrent,mode});
     }
     root.classList.add('store-shop');
     root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="list">店家列表</button>${canManage()?'<button data-do="manage" class="primary">我的商城管理</button>':''}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
-    root.classList.add('shop-lifestyle');
+    root.classList.add('shop-lifestyle','shop-points-theme');
     root.querySelector('h1').textContent='生活好店';
-    root.insertAdjacentHTML('afterbegin','<header class="shop-brand"><button type="button" class="shop-brand-entry" data-do="point-operation" aria-label="生活好店：開啟會員點數操作" aria-haspopup="dialog"><span aria-hidden="true" class="shop-brand-mark">🛍</span><strong>生活好店<small>共用點數・發現日常美好</small></strong></button><button data-do="region" aria-label="依地區找店">⌖ 找地區</button></header>');
+    root.insertAdjacentHTML('afterbegin','<header class="shop-brand"><button type="button" class="shop-brand-entry" data-do="point-operation" aria-label="點數通：開啟會員點數操作" aria-haspopup="dialog"><span aria-hidden="true" class="shop-brand-mark">◎</span><strong>點數通<small>讓點數流動，讓美好持續發生</small></strong></button><button data-do="points-view" class="points-view-switch" hidden></button></header>');
     root.querySelector('.shop-notice').classList.add('shop-safety-note');
-    root.insertAdjacentHTML('beforeend',`<nav class="shop-bottom-nav" aria-label="商城主要導覽"><button data-do="list"><span aria-hidden="true">⌂</span>首頁</button><button data-do="find"><span aria-hidden="true">⌕</span>找好店</button><button data-do="wallet" class="shop-bottom-qr"><span aria-hidden="true">▦</span>點數 QR</button><button data-do="shopping"><span aria-hidden="true">🛍</span>選購</button><button data-do="mine"><span aria-hidden="true">♙</span>我的</button></nav>`);
+    root.insertAdjacentHTML('beforeend',`<nav class="shop-bottom-nav" aria-label="商城主要導覽"><button data-do="points-home"><span aria-hidden="true">⌂</span>首頁</button><button data-do="find"><span aria-hidden="true">⌕</span>可用店家</button><button data-do="wallet" class="shop-bottom-qr"><span aria-hidden="true">▦</span>點數 QR</button><button data-do="spending-history"><span aria-hidden="true">▤</span>點數紀錄</button><button data-do="mine"><span aria-hidden="true">♙</span>我的</button></nav>`);
     function pageKind(kind) {
+      clearHomeWallet?.();clearHomeWallet=null;
       root.dataset.shopView=kind;
-      root.querySelectorAll('.shop-bottom-nav button').forEach(b=>{const active=kind==='home'?b.dataset.do==='list':kind==='store'||kind==='product'?b.dataset.do==='shopping':kind==='mine'?b.dataset.do==='mine':false;b.setAttribute('aria-current',active?'page':'false');});
+      root.querySelectorAll('.shop-bottom-nav button').forEach(b=>{const active=kind==='home'?b.dataset.do==='points-home':kind==='directory'||kind==='store'||kind==='product'?b.dataset.do==='find':kind==='mine'?b.dataset.do==='mine':false;b.setAttribute('aria-current',active?'page':'false');});
     }
-    function walletLabel() {
-      const data=window.pointWalletData,uid=window.currentUserProfile?.userId;
-      if(!standalone&&uid&&data?.walletDisplayOwner===uid&&window.pointWalletStatus==='ready'&&data.balance!==null&&data.balance!==undefined&&Number.isFinite(Number(data.balance)))return `${Number(data.balance).toLocaleString('zh-TW')}<small>點</small>`;
-      return '<small>點擊查詢本人點數</small>';
-    }
-    function hero() {
-      return `<section class="shop-life-hero"><img class="shop-lifestyle-scene" src="assets/storefront/lifestyle-cafe-v1.jpg" alt="" width="1536" height="1024" fetchpriority="high"><div class="shop-hero-copy"><h2>發現更多<br>生活的美好<span> ♥</span></h2><p>吃喝玩樂，就在身邊。</p></div><div class="shop-wallet-card"><div class="shop-wallet-balance"><span class="shop-wallet-coins" aria-hidden="true">🪙</span><div><span class="shop-eyebrow">我的共用點數</span><strong>${walletLabel()}</strong><small>依店家規則折抵，不代表現金。</small></div></div><button data-do="wallet" class="shop-wallet-cta"><span aria-hidden="true">▦</span><span>出示我的點數 QR<small>店家核對後折抵</small></span><span aria-hidden="true">›</span></button></div></section>`;
+    async function pointsHome(toggle=false) {
+      pageKind('home');const version=++epoch;alert.textContent='';
+      const owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.();
+      const current=()=>version===epoch&&root.isConnected&&content.isConnected&&root.contains(content)&&(standalone||window.currentPage==='store-shop')&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.();
+      const home=await import('./store-points-home.js?v=1');if(!current())return;
+      const allowed=canMerchantHome()&&!!home.merchantRole(role);
+      merchantView=allowed&&(toggle?!merchantView:merchantView??true);
+      root.dataset.pointsRole=merchantView?'merchant':'consumer';
+      const switcher=root.querySelector('.points-view-switch');switcher.hidden=!allowed;switcher.textContent=merchantView?'消費者版':'商家版';
+      const brand=root.querySelector('.shop-brand-entry');brand.dataset.do=allowed?'point-operation':'wallet';brand.setAttribute('aria-label',allowed?'點數通：開啟會員點數操作':'點數通：我的點數 QR');
+      root.querySelector('.shop-brand-mark').innerHTML=home.pointIcon('coins');
+      content.innerHTML=home.renderPointsHome({merchant:merchantView,rewardOnly:rewardOnly(),standalone,canManage:canManage()});
+      const nav=root.querySelector('.shop-bottom-nav');
+      const scan=nav.querySelector('.shop-bottom-qr');scan.dataset.do=merchantView?'point-operation':'wallet';scan.innerHTML=`<span aria-hidden="true">${home.pointIcon('scan')}</span>${merchantView?'掃碼':'點數 QR'}`;
+      const icons={'points-home':'home',find:'pin','spending-history':'history',mine:'user'};
+      nav.querySelectorAll('button').forEach(button=>{if(icons[button.dataset.do])button.querySelector('span').innerHTML=home.pointIcon(icons[button.dataset.do]);});
+      // Points start immediately; the public directory is independent and cannot block QR.
+      if(!standalone)void loadWalletModule().then(module=>{if(current())clearHomeWallet=module.mountStoreWalletCard(content,{isCurrent:current,onInvalid:()=>{
+        if(version===epoch&&content.isConnected&&root.contains(content)&&window.currentPage==='store-shop'){merchantView=undefined;void run(()=>pointsHome());}
+      }});}).catch(()=>{if(current())content.querySelector('[data-home-balance]').textContent='點按 QR 重試';});
+      void api().then(result=>{if(current())content.querySelector('[data-home-shops]').innerHTML=home.renderRecommendedShops(result.shops,photo);}).catch(()=>{if(current())content.querySelector('[data-home-shops]').innerHTML='<p>店家暫時無法載入。<button type="button" data-do="points-home">重新載入</button></p>';});
     }
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
@@ -171,7 +191,7 @@
       return `<article data-product-category="${esc(p.category||'')}">${photo(p.image_url)}<h3>${esc(p.title)}</h3><span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}</p>${edit?`<p>${esc(statusText(p.status))}</p>`:''}<div class="shop-product-footer">${edit?`<button data-do="edit" data-id="${esc(p.id)}">編輯商品</button>`:''}${canTransact()?`<div class="shop-product-qr"><button type="button" data-do="member-qr" data-product-qr data-id="${esc(p.id)}">出示本人 QR</button></div>`:''}</div></article>`;
     }
     async function list(after='',q='',category='') {
-      pageKind('home');
+      pageKind('directory');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">載入店家中…</p>';
       const result=await api(`?after=${encodeURIComponent(after)}&q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}`);
       if(version!==epoch) return;
@@ -185,7 +205,6 @@
         const paragraphs=card.querySelectorAll('p');paragraphs[1]?.classList.add('shop-card-description');
       });
       content.querySelector('.shop-grid')?.insertAdjacentHTML('beforebegin',`<div class="shop-section-title"><h2>${q||category?'符合條件的好店':'探索好店'}</h2><span>各店自行收款</span></div>`);
-      if(!after&&!q&&!category)content.insertAdjacentHTML('afterbegin',hero(result.shops));
       content.insertAdjacentHTML('beforeend',`<div class="shop-discovery-promos"><button data-do="wallet"><span aria-hidden="true">🎁</span><strong>點數用在喜歡的生活<small>查看本人共用點數與折抵入口</small></strong></button>${canManage()?'<button data-do="manage"><span aria-hidden="true">🏪</span><strong>我是店家<small>管理本人店面與商品</small></strong></button>':''}</div>`);
     }
     function filterProducts(category) {
@@ -303,6 +322,10 @@
       const button=event.target.closest('[data-do]'); if(!button||!root.contains(button)||busy) return;
       void run(async()=>{
         switch(button.dataset.do) {
+          case 'points-home':await pointsHome();break;
+          case 'points-view':await pointsHome(true);break;
+          case 'point-reward':await openPointOperations('reward');break;
+          case 'point-redeem':await openPointOperations('redeem');break;
           case 'point-operation': await openPointOperations();break;
           case 'exit': ++epoch; standalone?location.assign(new URL('index.html',location.href).href):window.goPage('home'); break;
           case 'list': await list(); break;
@@ -491,7 +514,7 @@
         }
       }else if(!standalone&&section==='cashier'){memberHome();await openPointOperations();}
       else if(!standalone&&section==='mine')memberHome();
-      else await (id?view(id):list());
+      else await (id?view(id):pointsHome());
       if(!standalone&&section!=='cashier'){
         const warm=()=>{if(root.isConnected&&window.currentPage==='store-shop')void loadWalletModule().then(module=>module.prepareStoreWalletQr()).catch(()=>{});};
         if(window.requestIdleCallback)window.requestIdleCallback(warm,{timeout:1000});else setTimeout(warm,50);

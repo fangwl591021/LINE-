@@ -10,7 +10,7 @@ const owner='U'+'a'.repeat(32);
 
 test('standalone brand entry uses the point LIFF and navigation-only query',async()=>{
  const mall=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
- const start=mall.indexOf('async function openPointOperations()');
+ const start=mall.indexOf('async function openPointOperations(mode)');
  const end=mall.indexOf("    root.classList.add('store-shop');",start);
  for(const standalone of [true,false]){
   let target;
@@ -37,6 +37,12 @@ test('point operation rejects standalone, anonymous and missing-owner sessions b
 
 test('stale mall entry does not read or move cashier nodes',()=>{
  signedIn();assert.equal(open({isCurrent:()=>false}),undefined);
+});
+
+test('explicit redeem for reward-only is rejected before any cashier DOM access',()=>{
+ signedIn();window.isRewardOnlyPointCashier=()=>true;
+ assert.throws(()=>open({mode:'redeem'}),/不能扣點/);
+ assert.throws(()=>open({mode:'invalid'}),/無效/);
 });
 
 test('point operation fails closed for ordinary members or unavailable role authority',()=>{

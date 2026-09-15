@@ -1,11 +1,13 @@
 // Entry UI only: reuse the canonical cashier, identity checks and safe submission.
 let activeDialog,activeCurrent,activeClose;
-export function openStorePointOperationPopup({standalone=false,isCurrent=()=>true}={}) {
+export function openStorePointOperationPopup({standalone=false,isCurrent=()=>true,mode}={}) {
   const owner=window.currentUserProfile?.userId;
   if(standalone||!owner||!window.liff?.isLoggedIn?.())throw Error('請先透過 LINE 登入，再開啟會員點數操作');
   if(!isCurrent())return;
   if(!window.canUseStorePointCashier?.())throw Error('目前帳號沒有會員贈扣點操作權限');
   const rewardOnly=!!window.isRewardOnlyPointCashier?.();
+  if(mode!==undefined&&!['reward','redeem'].includes(mode))throw Error('無效的點數操作');
+  if(rewardOnly&&mode==='redeem')throw Error('贈點用戶不能扣點');
   window.updateStorePointCashierPermissions?.();
   if(activeDialog?.open){
     if(activeCurrent?.()){activeDialog.querySelector('[data-close]').focus();return;}
@@ -73,6 +75,11 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
       observer.observe(body,{attributes:true,attributeFilter:['class']});
     }
     clearCustomer();panel.classList.remove('hidden');body.classList.remove('hidden');
+    if(mode){
+      const radio=panel.querySelector('input[name="store-point-mode"][value="'+mode+'"]');
+      if(!radio||radio.disabled){status.textContent='此點數操作未開放';return;}
+      radio.checked=true;window.updateStorePointPreview?.();
+    }
     const icon=document.getElementById('store-point-cashier-icon');if(icon)icon.textContent='expand_less';
     choices.hidden=true;back.hidden=false;slot.hidden=false;status.textContent='';
     if(method==='scan')void window.openStorePointScanner();
