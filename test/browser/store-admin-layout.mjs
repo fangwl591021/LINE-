@@ -8,7 +8,7 @@ const require=createRequire(import.meta.url);
 const runtime=process.env.CODEX_BROWSER_MODULES||'C:/Users/User/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules';
 let playwright;try{playwright=require('playwright');}catch{playwright=require(join(runtime,'playwright'));}
 const origin='http://store-admin.test',out=process.env.STORE_ADMIN_SCREENSHOTS||join(tmpdir(),'store-admin-ui-20260914');mkdirSync(out,{recursive:true});
-const files=['js/modules/store-shop.js','js/modules/store-admin.js','css/store-shop.css','css/store-admin.css'];
+const files=['js/modules/store-shop.js','js/modules/store-points-home.js','js/modules/store-wallet-popup.js','js/modules/store-admin.js','css/store-shop.css','css/store-admin.css'];
 const sources=new Map(files.map(file=>['/'+file,readFileSync(new URL('../../'+file,import.meta.url),'utf8')]));
 const id=i=>`${String(i).padStart(8,'0')}-1111-4111-8111-111111111111`;
 const shops=Array.from({length:23},(_,i)=>({id:id(i+1),name:i===0?'米樂生活・測試店家':`合成測試店家 ${i+1}`,status:i%2===0?'active':'draft',category:'食',address:'新北市板橋區文化路一段 123 號',phone:'02-12345678',owner_uid:'U_SYNTHETIC_'+i,owner_name:i===1?'':`合成負責人 ${i+1}`,owner_role:'store',product_count:3,active_product_count:2,online_product_count:1,public_visible:i%2===0&&i!==2,image_url:'https://store-admin.test/photo.svg',merchant_enabled:1}));
@@ -71,7 +71,7 @@ try{
   await page.evaluate(()=>{window.testToken='changed-account-token';window.currentUserProfile={userId:'U_OTHER_ADMIN'};});delayDirectory=false;delayed.shift()();await page.waitForTimeout(100);
   assert.equal(await page.locator('.store-admin-card').count(),0);assert.equal((await page.locator('.shop-content').textContent()).includes('合成負責人'),false);
   for(const role of ['user','store','reward']){
-    const before=requests.filter(r=>r.path.endsWith('/admin/stores')).length;await mount(role,'');await page.waitForSelector('.shop-life-hero');
+    const before=requests.filter(r=>r.path.endsWith('/admin/stores')).length;await mount(role,'');await page.waitForSelector('.points-home');
     assert.equal(await page.locator('[data-do=admin-stores]').count(),0,role);
     await mount(role,'admin-stores');await page.waitForFunction(()=>document.querySelector('[role=alert]')?.textContent.includes('僅開放管理員'));
     assert.equal(requests.filter(r=>r.path.endsWith('/admin/stores')).length,before,role);
