@@ -103,7 +103,7 @@
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
     root.classList.add('shop-lifestyle','shop-points-theme');
     root.querySelector('h1').textContent='生活好店';
-    root.insertAdjacentHTML('afterbegin','<header class="shop-brand"><button type="button" class="shop-brand-entry" data-do="point-operation" aria-label="點數通：開啟會員點數操作" aria-haspopup="dialog"><span aria-hidden="true" class="shop-brand-mark">◎</span><strong>點數通<small>讓點數流動，讓美好持續發生</small></strong></button><button data-do="points-view" class="points-view-switch" hidden></button></header>');
+    root.insertAdjacentHTML('afterbegin','<header class="shop-brand"><button type="button" class="shop-brand-entry" data-do="point-operation" aria-label="點數通：開啟會員點數操作" aria-haspopup="dialog"><span aria-hidden="true" class="shop-brand-mark"><img src="assets/points-logo-20260916.png" width="1254" height="1254" alt="" decoding="async"></span><strong>點數通<small>讓點數流動，讓美好持續發生</small></strong></button><button data-do="points-view" class="points-view-switch" hidden></button></header>');
     root.querySelector('.shop-notice').classList.add('shop-safety-note');
     root.insertAdjacentHTML('beforeend',`<nav class="shop-bottom-nav" aria-label="商城主要導覽"><button data-do="points-home"><span aria-hidden="true">⌂</span>首頁</button><button data-do="find"><span aria-hidden="true">⌕</span>可用店家</button><button data-do="wallet" class="shop-bottom-qr"><span aria-hidden="true">▦</span>點數 QR</button><button data-do="spending-history"><span aria-hidden="true">▤</span>點數紀錄</button><button data-do="mine"><span aria-hidden="true">♙</span>我的</button></nav>`);
     function pageKind(kind) {
@@ -121,7 +121,6 @@
       root.dataset.pointsRole=merchantView?'merchant':'consumer';
       const switcher=root.querySelector('.points-view-switch');switcher.hidden=!allowed;switcher.textContent=merchantView?'消費者版':'商家版';
       const brand=root.querySelector('.shop-brand-entry');brand.dataset.do=allowed?'point-operation':'wallet';brand.setAttribute('aria-label',allowed?'點數通：開啟會員點數操作':'點數通：我的點數 QR');
-      root.querySelector('.shop-brand-mark').innerHTML=home.pointIcon('coins');
       content.innerHTML=home.renderPointsHome({merchant:merchantView,rewardOnly:rewardOnly(),standalone,canManage:canManage()});
       const nav=root.querySelector('.shop-bottom-nav');
       const scan=nav.querySelector('.shop-bottom-qr');scan.dataset.do=merchantView?'point-operation':'wallet';scan.innerHTML=`<span aria-hidden="true">${home.pointIcon('scan')}</span>${merchantView?'掃碼':'點數 QR'}`;

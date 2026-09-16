@@ -4,6 +4,20 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {merchantRole,renderPointsHome,renderRecommendedShops} from '../js/modules/store-points-home.js';
 const mall=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
+
+test('shared brand uses supplied logo without replacing it on role changes; image stays contained',()=>{
+ const css=readFileSync(new URL('../css/store-shop.css',import.meta.url),'utf8');
+ const logo=readFileSync(new URL('../assets/points-logo-20260916.png',import.meta.url));
+ assert.equal(logo.subarray(1,4).toString(),'PNG');
+ assert.match(mall,/class="shop-brand-mark"><img src="assets\/points-logo-20260916\.png" width="1254" height="1254" alt=""/);
+ assert.doesNotMatch(mall,/querySelector\('\.shop-brand-mark'\)\.innerHTML=/);
+ assert.match(mall,/brand\.dataset\.do=allowed\?'point-operation':'wallet'/);
+ assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
+ for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
+  const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
+  assert.match(source,/store-shop\.css\?v=24/);assert.match(source,/store-shop\.js\?v=33/);
+ }
+});
 test('merchant home requires a signed-in, explicitly assigned role, never product ownership or admin hint',()=>{
  const gate=mall.match(/const canMerchantHome=\(\)=>(.*);/)[1];
  for(const role of ['admin','store','reward','tenant','總管','店長','租戶','贈點用戶','user','用戶','unknown',''])for(const logged of [true,false])for(const standalone of [true,false]){
