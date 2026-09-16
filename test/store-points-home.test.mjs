@@ -1,22 +1,42 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {inflateSync} from 'node:zlib';
 import vm from 'node:vm';
 import {merchantRole,renderPointsHome,renderRecommendedShops} from '../js/modules/store-points-home.js';
 const mall=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
 
 test('shared brand uses supplied logo without replacing it on role changes; image stays contained',()=>{
  const css=readFileSync(new URL('../css/store-shop.css',import.meta.url),'utf8');
- const logo=readFileSync(new URL('../assets/points-logo-20260916.png',import.meta.url));
+ const logo=readFileSync(new URL('../assets/points-logo-transparent-20260916.png',import.meta.url));
  assert.equal(logo.subarray(1,4).toString(),'PNG');
- assert.match(mall,/class="shop-brand-mark"><img src="assets\/points-logo-20260916\.png" width="1254" height="1254" alt=""/);
+ assert.match(mall,/class="shop-brand-mark"><img src="assets\/points-logo-transparent-20260916\.png" width="1254" height="1254" alt=""/);
  assert.doesNotMatch(mall,/querySelector\('\.shop-brand-mark'\)\.innerHTML=/);
  assert.match(mall,/brand\.dataset\.do=allowed\?'point-operation':'wallet'/);
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=24/);assert.match(source,/store-shop\.js\?v=33/);
+  assert.match(source,/store-shop\.css\?v=24/);assert.match(source,/store-shop\.js\?v=34/);
  }
+});
+test('shared brand logo has a transparent first pixel in a noninterlaced RGBA8 PNG',()=>{
+ const logo=readFileSync(new URL('../assets/points-logo-transparent-20260916.png',import.meta.url));
+ assert.deepEqual([...logo.subarray(0,8)],[137,80,78,71,13,10,26,10]);
+ assert.equal(logo.readUInt32BE(8),13);
+ assert.equal(logo.toString('ascii',12,16),'IHDR');
+ assert.deepEqual([...logo.subarray(24,29)],[8,6,0,0,0],'logo must retain an RGBA alpha channel');
+ const idat=[];
+ for(let offset=8;offset<logo.length;){
+  const length=logo.readUInt32BE(offset);
+  assert.ok(offset+length+12<=logo.length,'PNG chunk stays within the file');
+  if(logo.toString('ascii',offset+4,offset+8)==='IDAT')idat.push(logo.subarray(offset+8,offset+8+length));
+  offset+=length+12;
+ }
+ const pixels=inflateSync(Buffer.concat(idat));
+ assert.equal(pixels.length,logo.readUInt32BE(20)*(1+logo.readUInt32BE(16)*4));
+ assert.ok(pixels[0]<=4,'first scanline uses a valid PNG filter');
+ // Every filter has zero left/above predictors at the first pixel of the first row.
+ assert.equal(pixels[4],0,'first pixel must be fully transparent');
 });
 test('merchant home requires a signed-in, explicitly assigned role, never product ownership or admin hint',()=>{
  const gate=mall.match(/const canMerchantHome=\(\)=>(.*);/)[1];
