@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/point-history-cashier-dedupe.test.mjs',
   'test/store-points-home.test.mjs',
   'test/store-wallet-card.test.mjs',
   'test/store-admin.test.mjs',

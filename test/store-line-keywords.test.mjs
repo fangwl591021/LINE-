@@ -33,6 +33,7 @@ test('admin global summary and store-owned summary do not mix stores or receipts
  assert.equal(global.shops.total,2);assert.equal(global.orders.unfulfilled,2);assert.equal(global.orders.received,20000);assert.equal(global.redemptions.total,2);
  assert.equal(own.today,'2026-09-11');
  const card=await buildShopKeywordMessage(event('儀表板',B),f.env,now);
+ assert.equal(card.contents.size,'mega');
  assert.equal(card.altText,'全商城營運儀錶板');assert(!JSON.stringify(card).includes(C));assert(JSON.stringify(card).includes('非銀行實收'));
 });
 test('ledger summary excludes malformed, unconfirmed, other-actor and outside-Taipei-day rows',async t=>{
@@ -47,6 +48,7 @@ test('ledger summary excludes malformed, unconfirmed, other-actor and outside-Ta
 });
 test('ordinary member menu preserves one-product rights but denies dashboard and transaction buttons',async t=>{
  const f=fixture(t),p=await buildShopKeywordMessage(event('店家專區',C),f.env);
+ assert.equal(p.contents.size,'giga');
  assert(JSON.stringify(p).includes('1 個商品'));assert(!JSON.stringify(p).includes('shopSection=sales'));assert(!JSON.stringify(p).includes('shopSection=online-manage'));
  const d=await buildShopKeywordMessage(event('儀錶板',C),f.env);assert.match(d.text,/僅開放/);
  assert(!f.queries.some(q=>q.includes('FROM store_commerce_orders')||q.includes('FROM store_cashier_requests')));
@@ -55,6 +57,7 @@ test('groups, unknown and ambiguous identity never expose dashboard; links carry
  const f=fixture(t);
  const g=await buildShopKeywordMessage(event('儀錶板',A,{source:{type:'group',userId:A,groupId:'group'}}),f.env);assert.match(g.text,/一對一/);assert.equal(f.queries.length,0);
  const missing=await buildShopKeywordMessage(event('儀錶板',D),f.env);assert.match(missing.altText,/註冊/);
+ assert.equal(missing.contents.size,'mega');
  f.sql.prepare('INSERT INTO users VALUES(?,?)').run(A,'admin');
  const ambiguous=await buildShopKeywordMessage(event(),f.env);assert.match(ambiguous.altText,/註冊/);
  const portal=await buildShopKeywordMessage(event('店家專區',B),f.env);
@@ -75,6 +78,7 @@ test('role changes, unknown roles and database failures fail closed',async t=>{
 const legacy=readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8');
 test('portal shows own product data and routes all data queries back to chat',async t=>{
  const f=fixture(t),p=await buildShopKeywordMessage(event('店家專區'),f.env),body=JSON.stringify(p);
+ assert.equal(p.contents.size,'giga');
  assert(body.includes('s-a'));assert(body.includes('商品'));assert(!body.includes('s-b'));
  const actions=p.contents.footer.contents.map(b=>b.action);
  for(const keyword of ['商城商品','商城業績','商城訂單','儀錶板'])assert(actions.some(a=>a.type==='message'&&a.text===keyword));
@@ -89,6 +93,7 @@ test('product pagination stays owner scoped and has stable bounded pages',async 
  const pages=[];
  for(let page=1;page<=3;page++){
   const p=await buildShopKeywordMessage(event('商城商品 '+page),f.env);pages.push(p);
+  assert.equal(p.contents.size,'mega');
   assert(!JSON.stringify(p).includes('其他店家秘密'));assert(JSON.stringify(p).includes('123.45'));
  }
  const titles=pages.flatMap(p=>p.contents.body.contents.map(c=>c.text).filter(s=>s.startsWith('商品序號')).map(s=>s.split('\n')[0]));
@@ -103,6 +108,7 @@ test('orders show status and product snapshots without customer or bank data',as
  const f=fixture(t),snapshot={items:[{title:'快照茶',quantity:2},{title:'第二商品'}],buyer:{name:'私人姓名',phone:'0912345678'},customer:{address:'私人地址'},bank:{account:'PRIVATEBANK'}};
  f.sql.prepare("UPDATE store_commerce_orders SET snapshot_json=?,created_at='2026-09-10T16:01:00.000Z',payment_status='reported' WHERE shop_id='s-a'").run(JSON.stringify(snapshot));
  const p=await buildShopKeywordMessage(event('商城訂單'),f.env),body=JSON.stringify(p);
+ assert.equal(p.contents.size,'mega');
  assert(body.includes('o-s-a'));assert(!body.includes('o-s-b'));assert(body.includes('快照茶 等 2 項商品'));assert(body.includes('待核帳'));assert(body.includes('2026/9/11'));
  for(const secret of ['PRIVATEBANK','私人姓名','0912345678','私人地址',C])assert(!body.includes(secret));
  const projections=f.queries.filter(q=>q.includes('FROM store_commerce_orders'));
@@ -116,6 +122,7 @@ test('merchant detail queries stay own scope even for admins, global dashboard i
   assert(body.includes('s-b'));assert(!body.includes('s-a'));
  }
  const own=await buildShopKeywordMessage(event('商城業績',B),f.env,new Date('2026-09-11T01:00:00Z'));
+ assert.equal(own.contents.size,'mega');
  assert.equal(own.altText,'我的店家業績');assert(JSON.stringify(own).includes('共 1 筆'));
  const all=await buildShopKeywordMessage(event('儀錶板',B),f.env,new Date('2026-09-11T01:00:00Z'));
  assert(JSON.stringify(all).includes('共 2 筆'));

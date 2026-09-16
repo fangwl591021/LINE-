@@ -4881,8 +4881,27 @@ const PointModule = {
 
     const usedLogIds = new Set();
     const rowAmount = row => Number(row.get_point ?? row.point ?? row.amount ?? row.points ?? 0) || 0;
-    const rowTime = row => Date.parse(String(row.created_at || row.createdAt || row.time || row.date || '').replace(' ', 'T'));
-    const logTime = log => Date.parse(String(log.created_at || '').replace(' ', 'T'));
+    const parseTime = (value, zone) => {
+      const raw = D1ReadModule.text(value).replace(' ', 'T');
+      return Date.parse(/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?$/.test(raw) ? raw + zone : raw);
+    };
+    const rowTime = row => parseTime(row.created_at || row.createdAt || row.time || row.date, '+08:00');
+    // Mother rows are Taiwan wall time; D1 CURRENT_TIMESTAMP is UTC. Keep the
+    // existing history display contract without changing the shared formatter.
+    const localDisplayTime = value => {
+      const ms = parseTime(value, 'Z');
+      return Number.isFinite(ms) ? new Date(ms + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ') : D1ReadModule.text(value);
+    };
+    const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+    const logLinks = logs.map(log => {
+      let receipt;
+      try { receipt = JSON.parse(log.point_response_json || '{}').pointResult?.data; } catch { /* Legacy malformed receipts cannot prove a match. */ }
+      return {
+        log,
+        transactionId: (D1ReadModule.text(log.log_id).match(new RegExp('_(' + uuid + ')$', 'i'))?.[1] || '').toLowerCase(),
+        receiptIds: [receipt?.insert_id, receipt?.insert_row?.id].map(value => D1ReadModule.text(value)).filter(Boolean)
+      };
+    });
     const hasSource = row => Boolean(
       D1ReadModule.text(row.event_content || row.eventContent || row.child_shop_name || row.childShopName || row.shop_remark || row.shopRemark)
     );
@@ -4897,26 +4916,24 @@ const PointModule = {
     };
 
     const enrichedRows = rows.map(row => {
-      if (hasSource(row)) return row;
       const amount = rowAmount(row);
-      const timeMs = rowTime(row);
-      const matched = logs.find(log => {
+      const receiptId = D1ReadModule.text(row.id);
+      const transactionId = (String(row.event_content || row.eventContent || '').match(new RegExp('交易[：:]\\s*(' + uuid + ')(?![0-9a-f-])', 'i'))?.[1] || '').toLowerCase();
+      const matchedLinks = logLinks.filter(link => {
+        const { log, receiptIds } = link;
         const logId = D1ReadModule.text(log.log_id);
-        if (!logId || usedLogIds.has(logId)) return false;
-        const points = Number(log.points || 0) || 0;
-        if (points !== amount) return false;
-        const lTime = logTime(log);
-        if (!Number.isNaN(timeMs) && !Number.isNaN(lTime)) {
-          // D1 stores CURRENT_TIMESTAMP in UTC while the point service may return Taiwan-local time.
-          // Keep this wide enough for timezone differences and delayed external ledger writes.
-          return Math.abs(timeMs - lTime) <= 36 * 60 * 60 * 1000;
-        }
-        return true;
+        if (!logId || Number(log.points) !== amount) return false;
+        if (receiptId && receiptIds.length && !receiptIds.includes(receiptId)) return false;
+        if (transactionId && link.transactionId && transactionId !== link.transactionId) return false;
+        return (receiptId && receiptIds.includes(receiptId)) || (transactionId && transactionId === link.transactionId);
       });
-      if (!matched) return row;
-
+      if (!matchedLinks.length) return row;
+      // Mark corroborating logs even when the mother row already has complete
+      // source text. Never collapse unrelated rows by amount/time proximity.
+      matchedLinks.forEach(({ log }) => usedLogIds.add(D1ReadModule.text(log.log_id)));
+      if (hasSource(row)) return row;
+      const matched = matchedLinks[0].log;
       const logId = D1ReadModule.text(matched.log_id);
-      usedLogIds.add(logId);
       const sourceName = actorNames[D1ReadModule.text(matched.actor_user_id)] || '店家';
       const eventContent = makeDetail(matched, sourceName);
       const originalTitle = D1ReadModule.text(row.event_name || row.eventName || row.title || row.name);
@@ -4953,8 +4970,8 @@ const PointModule = {
         shop_remark: `source=${sourceName}; store_cashier_log=${logId}`,
         get_point: Number(log.points || 0) || 0,
         point: Number(log.points || 0) || 0,
-        created_at: D1ReadModule.text(log.created_at),
-        createdAt: D1ReadModule.text(log.created_at),
+        created_at: localDisplayTime(log.created_at),
+        createdAt: localDisplayTime(log.created_at),
         storeCashierLogId: logId
       };
     };
@@ -4965,8 +4982,8 @@ const PointModule = {
         .map(sourceRowForLog)
     );
     return combined.sort((a, b) => {
-      const at = Date.parse(String(a.created_at || a.createdAt || '').replace(' ', 'T')) || 0;
-      const bt = Date.parse(String(b.created_at || b.createdAt || '').replace(' ', 'T')) || 0;
+      const at = rowTime(a) || 0;
+      const bt = rowTime(b) || 0;
       return bt - at;
     });
   },
