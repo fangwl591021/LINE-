@@ -9,6 +9,23 @@ const server=createServer(async(req,res)=>{
   const url=new URL(req.url,'http://127.0.0.1:8769');
   if(req.method!=='GET'){res.writeHead(405);res.end();return;}
   if(url.pathname==='/v1/store-shop'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(publicStores));return;}
+  if(url.pathname==='/home-preview'){
+    const source=await readFile(resolve(root,'index.html'),'utf8');
+    const head=source.match(/<head>([\s\S]*?)<\/head>/)[1].replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,script=>/cdn\.tailwindcss\.com|tailwind\.config/.test(script)?script:'');
+    const home=source.slice(source.indexOf('<section id="home-profile-card"'),source.indexOf('<!-- ==================== 我的客戶'));
+    const nav=source.match(/<nav\b[^>]*id="bottom-nav"[\s\S]*?<\/nav>/)?.[0]||'';
+    res.setHeader('Content-Type','text/html;charset=utf-8');
+    res.end(`<!doctype html><html lang="zh-Hant"><head>${head}</head><body class="home-page"><div style="background:#ecfdf5;text-align:center;font:12px system-ui;padding:6px">本機版面預覽・示範資料，不連正式交易</div><div id="app" style="margin:auto"><main id="main">${home}<div id="page-store-shop" class="hidden"></div></main>${nav}</div><script>
+      window.currentPage='home';window.userRole='user';window.Config={WORKER_URL:location.origin};window.liff={isLoggedIn:()=>false};
+      window.fetchAPI=async()=>({success:false,message:'預覽不讀取會員資料'});window.requestIdleCallback=()=>0;
+      window.goPage=page=>{window.currentPage=page;document.body.classList.toggle('home-page',page==='home');document.body.classList.toggle('store-shop-page',page==='store-shop');['home','store-shop'].forEach(p=>document.getElementById('page-'+p).classList.toggle('hidden',p!==page));document.getElementById('home-profile-card').classList.toggle('hidden',page!=='home');document.getElementById('bottom-nav')?.classList.toggle('hidden',page!=='home');};
+      document.getElementById('page-home').classList.remove('hidden');document.getElementById('bottom-nav')?.classList.remove('hidden');document.getElementById('home-profile-points').textContent='13,260';
+      const interest=document.getElementById('home-ai-match-interest-summary');interest.classList.remove('hidden');document.getElementById('home-ai-match-interest-title').textContent='你想讓誰找到你？';document.getElementById('home-ai-match-interest-note').textContent='建立您的 AI 業務需求';
+      document.getElementById('home-exchange-zone-button').classList.remove('hidden');
+      const share=document.querySelector('[data-home-top-action="home"]');share.querySelector('.material-symbols-outlined').textContent='qr_code_2';share.querySelector('.home-top-shortcut-label').textContent='專屬 QR';share.querySelector('.home-top-shortcut-value').textContent='分享';share.setAttribute('aria-label','開啟專屬 QR 分享');
+      document.querySelectorAll('button:not(#home-mall-banner)').forEach(button=>button.disabled=true);document.querySelectorAll('a').forEach(link=>link.removeAttribute('href'));
+    </script><script src="/js/modules/store-shop-entry.js"></script></body></html>`);return;
+  }
   if(url.pathname==='/demo'){
     const role=['user','store','reward','admin'].includes(url.searchParams.get('role'))?url.searchParams.get('role'):'user';
     res.setHeader('Content-Type','text/html;charset=utf-8');

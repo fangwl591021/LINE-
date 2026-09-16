@@ -147,6 +147,19 @@
     body.home-page #page-home { padding-bottom: 0; margin-top: 0 !important; }
     body.home-page .home-profile-v2 { box-shadow: none; }
     body.home-page .home-lower-panel { border: 0; box-shadow: none; }
+    /* Reference home: compact member strip, clear shortcuts, then the mall entry. */
+    body.home-page #home-profile-card > .grid { border-radius: 0 0 10px 10px; }
+    body.home-page #home-profile-card .home-top-shortcut-label,
+    body.home-page #home-profile-avatar-button > span:last-child { font-size: 14px; }
+    body.home-page #home-profile-points { font-size: 19px; }
+    body.home-page #home-primary-shortcuts { padding: 12px 8px; box-shadow: none; }
+    body.home-page #home-primary-shortcuts .home-quick-circle { min-height: 72px; gap: 8px; }
+    body.home-page #home-primary-shortcuts .home-quick-label { font-size: 14px; line-height: 1.4; white-space: normal; }
+    #home-mall-banner { display: block; width: calc(100% - 20px); margin: 4px 10px 0; padding: 0; border: 0; border-radius: 14px; overflow: hidden; background: #e8f8fc; box-shadow: 0 2px 8px rgba(7, 62, 95, .12); cursor: pointer; touch-action: manipulation; }
+    #home-mall-banner img { display: block; width: 100%; height: auto; aspect-ratio: 2170 / 725; }
+    #home-mall-banner:focus-visible { outline: 3px solid #047857; outline-offset: 3px; }
+    #home-mall-banner:active { opacity: .88; }
+    body.home-page #home-network-search-entry { border: 0; box-shadow: none; margin-top: 0; padding-top: 14px; }
     body.business-home-v2-active #page-home > :not(#business-home-v2) { display: none !important; }
     body.business-home-v2-active #bottom-nav { display: none !important; }
     .business-home-v2-shell { background: #f4f6f1; color: #073b31; min-height: calc(100vh - 88px); padding-bottom: 96px; }
@@ -1252,7 +1265,7 @@
         </div>
       </div>
 
-      <div class="mx-0 -mt-px bg-white px-2 pt-0 pb-4 shadow-sm">
+      <div id="home-primary-shortcuts" class="mx-0 -mt-px bg-white px-2 pt-0 pb-4 shadow-sm">
         <div class="grid grid-cols-4 gap-y-4 gap-x-1">
           <button onclick="window.goPage('card')" class="home-quick-circle group">
             <span class="home-quick-icon material-symbols-outlined text-orange-500">wallet</span>
@@ -1289,6 +1302,10 @@
           </button>
         </div>
       </div>
+
+      <button id="home-mall-banner" type="button" onclick="window.openStoreShop()" aria-label="點數通：立即進入商城">
+        <img src="assets/points-mall-banner-20260916.png" width="2170" height="725" alt="點數通，把消費串起來。購物金、跨店折抵、更多優惠，立即進入商城。" decoding="async">
+      </button>
 
       <section id="home-network-search-entry" class="mx-0 mt-4 border-y border-emerald-100 bg-white px-4 py-4 shadow-sm">
         <button id="home-ai-match-interest-summary" type="button" onclick="window.openHomeAiMatchInterest?.()" class="hidden mb-3 w-full rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4 text-left active:scale-[0.99] transition-transform">

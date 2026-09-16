@@ -95,6 +95,17 @@ if (!index.includes('&#32879;&#35516;') || index.includes('&#32879;&#35522;')) {
 const defaultSearchEntry = index.indexOf('id="home-network-search-entry"');
 const quickActionsEnd = index.indexOf('id="home-exchange-zone-button"');
 const systemTicker = index.indexOf('id="home-system-ticker"');
+const mallBanner = index.indexOf('id="home-mall-banner"');
+if (!(mallBanner > quickActionsEnd && mallBanner < defaultSearchEntry)) {
+  fail('mall banner must appear between the eight shortcuts and network search');
+}
+if (!/id="home-mall-banner"[^>]*type="button"[^>]*onclick="window\.openStoreShop\(\)"/.test(index)) {
+  fail('the entire mall banner must use the existing authenticated storefront entry');
+}
+if (!index.includes('src="assets/points-mall-banner-20260916.png" width="2170" height="725"') ||
+    !fs.existsSync(path.join(root, 'assets', 'points-mall-banner-20260916.png'))) {
+  fail('mall banner must use the supplied image with reserved dimensions');
+}
 if (defaultSearchEntry < 0 || defaultSearchEntry < quickActionsEnd || defaultSearchEntry > systemTicker) {
   fail('network search entry must be visible on the default home below quick actions');
 }
