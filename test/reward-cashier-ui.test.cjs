@@ -171,18 +171,25 @@ test('reward and store popups both retain phone and scan choices without transac
   assert.equal(s.calls.length,0);assert.equal(s.submitted.length,0);
  }
 });
-test('reward phone choice opens the original cashier and focuses mobile input without auto lookup or debit',()=>{
+test('reward phone choice mounts the independent gift popup without moving cashier or auto lookup',async()=>{
  const s=setup(),parts={},part=selector=>parts[selector]||=(node());let modal;
- s.document.activeElement=node();s.document.body={append(){}};s.document.createComment=()=>({replaceWith(){}});
+ s.document.activeElement=node();s.document.body={append(){}};s.document.createComment=()=>{throw Error('phone gifting must not move the cashier');};
  s.document.createElement=()=>modal={...node(),querySelector:part,setAttribute(){},showModal(){this.open=true;},close(){this.open=false;},append(){}};
- s.context.MutationObserver=class{observe(){} disconnect(){}};
- s.get('store-point-cashier').before=()=>{};s.get('store-point-scanner-modal').before=()=>{};s.get('toast-container').before=()=>{};
- part('[data-cashier-slot]').append=()=>{};
+ part('[data-phone-slot]').querySelector=part;part('[data-phone-slot]').replaceChildren=()=>{};
  const phone=Object.assign(node(),{dataset:{method:'phone'}}),scan=Object.assign(node(),{dataset:{method:'scan'}});
  part('[data-choices]').querySelectorAll=()=>[scan,phone];
- vm.runInNewContext(point.replace('export function','function')+';openStorePointOperationPopup();',s.context);
- phone.onclick();assert.equal(s.get('store-point-customer').focused,true);assert.equal(s.get('store-point-customer').disabled,false);
- assert.equal(part('[data-choices]').hidden,true);assert.equal(part('[data-cashier-slot]').hidden,false);assert.equal(s.get('store-point-cashier-body').classList.contains('hidden'),false);
+ const helper=fs.readFileSync(path.join(__dirname,'../js/modules/store-phone-reward.js'),'utf8');
+ vm.runInNewContext(helper.replace('export function','function'),s.context);
+ s.context.resolvePhoneRewardForTest=()=>({mountStorePhoneReward:s.context.mountStorePhoneReward});
+ // Resolve the real helper inside this VM without requiring experimental VM modules.
+ const helperImport=/import\('\.\/store-phone-reward\.js\?v=\d+'\)/;
+ assert.match(point,helperImport);
+ vm.runInNewContext(point.replace('export function','function').replace(helperImport,'Promise.resolve(resolvePhoneRewardForTest())')+';openStorePointOperationPopup();',s.context);
+ await phone.onclick();assert.equal(part('[data-status]').textContent,'');assert.equal(part('#store-phone-reward-phone').focused,true);assert.notEqual(s.get('store-point-customer').focused,true);
+ assert.equal(part('[data-choices]').hidden,true);assert.equal(part('[data-cashier-slot]').hidden,true);assert.equal(part('[data-phone-slot]').hidden,false);
+ assert.equal(part('h2').textContent,'電話贈點');assert.match(part('[data-phone-slot]').innerHTML,/會員手機號碼[\s\S]*贈送點數/);
+ assert.doesNotMatch(part('[data-phone-slot]').innerHTML,/消費金額|會員收銀機|折抵扣點|data-method="scan"/);
+ assert.equal(part('#store-phone-reward-points').disabled,true);assert.equal(part('[data-send]').disabled,true);
  assert.equal(s.radios[0].disabled,true);assert.equal(s.window.getStorePointMode(),'reward');assert.equal(s.calls.length,0);assert.equal(s.submitted.length,0);
 });
 test('verified reward role cannot be promoted by editable name/phone hard-admin match',()=>{

@@ -40,9 +40,12 @@ async function run(p,env,resolveCustomer,execute) {
  if(p.qrToken&&!qrTokenValid(p.qrToken))return fail('商品會員 QR 格式不正確');
  if(!a||!validId(id)) return fail('請更新頁面後再操作（缺少有效交易編號）');
  const mode=p.mode,amount=Number(p.amount),deductPoints=Number(p.deductPoints||0),raw=String(p.customerUserId||'').trim();
+ const directReward=p.rewardPoints!==undefined;
+ if(directReward&&(!Number.isSafeInteger(p.rewardPoints)||p.rewardPoints<=0||p.rewardPoints>1000000||
+ mode!=='reward'||p.deductPoints!==0||p.rewardPoints!==amount||p.productId||p.qrToken))return fail('贈送點數必須是 1 至 1,000,000 的整數，且不可包含扣點或商品交易');
  if(!['reward','redeem'].includes(mode)||!Number.isSafeInteger(amount)||amount<=0||amount>1000000||!Number.isSafeInteger(deductPoints)||deductPoints<0||
  (mode==='redeem'&&(deductPoints<=0||deductPoints>amount))||!raw||raw.length>100) return fail('顧客、金額或折抵點數不正確');
- const fingerprint=JSON.stringify({raw,amount,deductPoints,mode,autoBind:p.autoBindPointAccount===true,productId:p.productId||'',productVersion:p.productVersion??null,shopVersion:p.shopVersion??null,...(p.qrToken?{qrHash:await qrTokenHash(p.qrToken)}:{})});
+ const fingerprint=JSON.stringify({raw,amount,deductPoints,mode,autoBind:p.autoBindPointAccount===true,productId:p.productId||'',productVersion:p.productVersion??null,shopVersion:p.shopVersion??null,...(p.qrToken?{qrHash:await qrTokenHash(p.qrToken)}:{}),...(directReward?{rewardPoints:p.rewardPoints}:{})});
  const previous=await find(db,a,id);
  if(previous) return previous.fingerprint===fingerprint?resultOf(previous):fail('同一交易編號不可變更內容');
  let credential=null;
@@ -85,7 +88,7 @@ async function run(p,env,resolveCustomer,execute) {
   };
   const result=await execute({authenticatedUserId:a,authenticatedNetworkId:p.authenticatedNetworkId,
     customerUserId:customer,amount,deductPoints,mode,autoBindPointAccount:p.autoBindPointAccount===true,
-    cashierSessionId:'',transactionId:id},beforeWrite,product);
+    cashierSessionId:'',transactionId:id,...(directReward?{rewardPoints:p.rewardPoints}:{})},beforeWrite,product);
   const state=result?.success===true?'succeeded':attempted?'unknown':'failed';
   const output={...(state==='unknown'?pending(id):result),transactionId:id,transactionStatus:state};
   await save(state,output);return output;

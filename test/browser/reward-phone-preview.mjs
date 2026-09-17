@@ -5,7 +5,8 @@ import {readFileSync} from 'node:fs';
 const read = path => readFileSync(new URL('../../'+path, import.meta.url), 'utf8');
 const files = new Map([
   ['/css/store-shop.css','css/store-shop.css'],
-  ['/js/modules/store-point-operation.js','js/modules/store-point-operation.js']
+  ['/js/modules/store-point-operation.js','js/modules/store-point-operation.js'],
+  ['/js/modules/store-phone-reward.js','js/modules/store-phone-reward.js']
 ]);
 createServer((req,res) => {
   const url = new URL(req.url,'http://127.0.0.1:8771');
@@ -39,7 +40,7 @@ createServer((req,res) => {
     return {success:true,data:{customerPointUserId:customer,name:'合成測試會員',phone:'0912345678',balance:900,canAdjust:true,balanceSource:'mother',rewardScanToken:'rwd_'+'b'.repeat(64),rewardScanExpiresAt:Date.now()+180000}};
   };
   window.submitSafeCashier=async payload=>{
-    if(payload.customerUserId!==customer||payload.mode!=='reward'||payload.deductPoints!==0||!payload.rewardScanToken)throw Error('合成贈點驗證失敗');
+    if(payload.customerUserId!==customer||payload.mode!=='reward'||payload.deductPoints!==0||(window.userRole==='reward'&&!payload.rewardScanToken)||payload.rewardPoints!==payload.amount)throw Error('合成贈點驗證失敗');
     writes++;status();return {success:true,data:{mode:'reward',changedPoints:payload.amount,customerPointSource:'mother'}};
   };
   window.loadStorePointCashierLogs=async()=>{};window.refreshPointBalanceBadge=async()=>{};

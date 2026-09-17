@@ -149,3 +149,47 @@ test('real shared point insertion requires explicit success for cashier only and
   assert.equal(r.success,body.success===true);assert.equal(calls,1);
  }
 });
+
+test('direct gift marker survives sanitization and identical requests execute only once',async t=>{
+ const {env,sql}=fixture();t.after(()=>sql.close());
+ const p=payload({mode:'reward',amount:25,rewardPoints:25,deductPoints:0,customerPhone:'0912345678',rewardScanToken:'private-receipt'});
+ let calls=0,safe;
+ const exec=async(x,before)=>{safe=x;await before(x.customerUserId);calls++;return {success:true,data:{rewardPoints:x.rewardPoints,amount:0,payableAmount:0}};};
+ const result=await runCashierRequest(p,env,resolve,exec);
+ assert.equal(result.success,true,result.error);assert.equal(calls,1);
+ assert.equal(safe.rewardPoints,25);assert.equal(safe.amount,25);assert.equal(safe.deductPoints,0);assert.equal(safe.mode,'reward');
+ assert.equal(safe.customerUserId,C);assert.equal(safe.customerPhone,undefined);assert.equal(safe.rewardScanToken,undefined);
+ assert.equal(safe.transactionId,p.requestId);
+ assert.deepEqual(await runCashierRequest(p,env,resolve,exec),result);assert.equal(calls,1);
+ assert.equal(JSON.parse(sql.prepare('SELECT fingerprint FROM store_cashier_requests').get().fingerprint).rewardPoints,25);
+});
+
+test('direct gift and consumption reward fingerprints cannot reuse each other or change gift values',async t=>{
+ const {env,sql}=fixture();t.after(()=>sql.close());let calls=0;
+ const exec=async(x,before)=>{await before();calls++;return {success:true};};
+ for(const startDirect of [false,true]){
+  const p=payload({mode:'reward',amount:25,deductPoints:0,...(startDirect?{rewardPoints:25}:{})});
+  assert.equal((await runCashierRequest(p,env,resolve,exec)).success,true);
+  const changed={...p};if(startDirect)delete changed.rewardPoints;else changed.rewardPoints=25;
+  const result=await runCashierRequest(changed,env,resolve,exec);
+  assert.equal(result.success,false);assert.match(result.error,/同一交易編號不可變更/);
+  assert.equal((await runCashierRequest({...p,amount:26,rewardPoints:26},env,resolve,exec)).success,false);
+ }
+ assert.equal(calls,2);
+});
+
+test('invalid direct gift fields reject before identity resolution, request persistence or point execution',async t=>{
+ const {env,sql}=fixture();t.after(()=>sql.close());let resolutions=0,calls=0;
+ for(const extra of [
+  {rewardPoints:0},{rewardPoints:-1},{rewardPoints:1.5},{rewardPoints:'25'},{rewardPoints:null},
+  {rewardPoints:NaN},{rewardPoints:Infinity},{rewardPoints:true},{rewardPoints:1000001,amount:1000001},
+  {amount:26},{amount:25.5},{mode:'redeem'},{mode:'earn'},{mode:'add'},
+  {deductPoints:1},{deductPoints:'0'},{deductPoints:undefined},{productId:P},{qrToken:'f'.repeat(64)}
+ ]){
+  const p=payload({mode:'reward',amount:25,rewardPoints:25,deductPoints:0,...extra});
+  const result=await runCashierRequest(p,env,async()=>{resolutions++;return resolve();},async()=>{calls++;return {success:true};});
+  assert.equal(result.success,false,JSON.stringify(extra));assert.equal(result.transactionStatus,'rejected');
+ }
+ assert.equal(resolutions,0);assert.equal(calls,0);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM store_cashier_requests').get().n,0);
+});

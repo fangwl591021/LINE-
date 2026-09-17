@@ -75,6 +75,33 @@ test('empty lists and unavailable D1 retain existing behavior', async () => {
   assert.equal(await read(rows), rows);assert.equal((await read([])).length, 0);
   assert.equal(await self.enrichPointRowsWithCashierLogs({}, owner, rows), rows);
 });
+
+test('direct gift fallback and enrichment describe points, never an invented purchase', async () => {
+  const gift = log({mode:'reward', amount:0, points:37, payable_amount:0});
+  const local = (await fixture([gift]).read([mother({id:'unrelated'})])).find(row => row.localLedger);
+  assert.match(local.event_name, /贈送點數/);
+  assert.match(local.event_content, /贈送 37 點/);
+  assert.doesNotMatch(local.event_content, /消費|NT\$/);
+  const receipt = mother({event_name:'', event_content:'', get_point:37});
+  const enriched = await fixture([gift]).read([receipt]);
+  assert.equal(enriched.length, 1);
+  assert.match(enriched[0].event_name, /贈送點數/);
+  assert.doesNotMatch(enriched[0].event_content, /消費|NT\$/);
+});
+
+test('cashier history labels direct gifts without changing consumption rewards', () => {
+  const auth = readFileSync(new URL('../js/auth.js', import.meta.url), 'utf8');
+  const start = auth.indexOf('function renderStorePointCashierLogs(');
+  const end = auth.indexOf('window.getStorePointMode', start);
+  const output = {innerHTML:''};
+  const context = {document:{getElementById:()=>output}, window:{escapeHTML:value=>String(value)}};
+  vm.runInNewContext(auth.slice(start,end), context);
+  context.renderStorePointCashierLogs([{mode:'reward', amount:0, points:37, customerName:'測試會員'}]);
+  assert.match(output.innerHTML, /贈送點數/);
+  assert.doesNotMatch(output.innerHTML, /消費|NT\$/);
+  context.renderStorePointCashierLogs([{mode:'reward', amount:100, points:100}]);
+  assert.match(output.innerHTML, /消費贈點｜消費 NT\$100/);
+});
 test('real queryUserPoints still uses the mother balance, never the display list total', async () => {
   const {self} = fixture([log()]);
   Object.assign(self, {

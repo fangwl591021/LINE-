@@ -242,6 +242,25 @@ body:has(.store-history-popup[open]){overflow:hidden}
 .store-point-operation #store-point-customer{font-size:16px;min-width:0}
 .store-point-operation #store-point-scanner-modal{z-index:2}
 .store-point-operation #toast-container{z-index:3}
+.store-phone-reward{padding-top:18px;color:#16345a}
+.store-phone-reward label{display:block;margin:0 0 8px;font-size:16px;font-weight:700}
+.store-phone-reward input{box-sizing:border-box;display:block;width:100%;min-width:0;min-height:48px;padding:12px;border:1px solid #cbd8d1;border-radius:12px;background:white;color:#16345a;font:16px system-ui}
+.store-phone-reward input:focus{outline:2px solid #008968;outline-offset:2px}
+.store-phone-reward-search{display:flex;gap:8px;align-items:stretch}
+.store-phone-reward-search input{flex:1;width:0}
+.store-phone-reward button{min-height:48px;border:0;border-radius:12px;padding:10px 16px;font:700 16px system-ui;cursor:pointer;background:#008968;color:white}
+.store-phone-reward [data-search]{flex-shrink:0}
+.store-phone-reward-member{margin:18px 0;padding:14px;background:#e8f7f0;border-radius:12px;overflow-wrap:anywhere}
+.store-phone-reward-member strong,.store-phone-reward-member span{display:block;line-height:1.6}
+.store-phone-reward-member span{font-size:14px;color:#52675f}
+.store-phone-reward [data-phone-gift]{margin-top:20px}
+.store-phone-reward small{display:block;margin:10px 0 16px;color:#617189;font-size:13px;line-height:1.6}
+.store-phone-reward [data-send]{display:block;width:100%}
+.store-phone-reward [data-phone-status]{margin:14px 0 0;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+.store-phone-reward [data-phone-status]:empty{display:none}
+.store-phone-reward [data-pending]{display:grid;gap:8px;margin-top:14px}
+.store-phone-reward [data-check]{background:white;color:#006d52;border:1px solid #008968}
+.store-phone-reward :disabled{cursor:default;opacity:.55}
 
 /* Points-first consumer / merchant cover. Existing transaction screens keep their DOM. */
 .store-shop.shop-points-theme{--shop-navy:#143d32;--shop-cream:#f8fbfa;--points-green:#008260;max-width:none;color:#173f35;background:linear-gradient(#008260 0 268px,#f8fbfa 268px);padding:20px max(12px,env(safe-area-inset-left)) calc(105px + env(safe-area-inset-bottom));font-size:16px}
