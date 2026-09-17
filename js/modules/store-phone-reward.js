@@ -60,8 +60,10 @@ export function mountStorePhoneReward(root,{isCurrent=()=>true,rewardOnly=false}
     try{
       const result=await window.fetchAPI('getStorePointCustomer',{customerUserId:normalized,customerPhone:normalized},true);
       if(!current()||revision!==lookupRevision||phone.value!==raw)return;
-      const data=result?.data;
-      if(result?.success!==true||!data)throw Error(result?.error||'查無會員，請確認手機號碼。');
+      // core.fetchAPI unwraps successful responses; reject explicit errors before unwrapping.
+      if(!result||typeof result!=='object'||Array.isArray(result)||result.success===false||result.error)throw Error(result?.error||'查無會員，請確認手機號碼。');
+      const data=result.data||result;
+      if(typeof data!=='object'||Array.isArray(data))throw Error('會員資料回應格式不正確，請稍後再試。');
       if(data.canAdjust===false||data.needsBinding||data.needsSelection)throw Error(data.message||'此手機尚未確認唯一會員，請確認會員綁定後再試。');
       const id=data.customerPointUserId||data.canonicalUserId||data.customerUserId;
       if(!/^U[0-9a-fA-F]{20,64}$/.test(id||''))throw Error('此手機尚未綁定可贈點的會員。');

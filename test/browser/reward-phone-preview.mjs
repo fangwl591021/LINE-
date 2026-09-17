@@ -37,7 +37,8 @@ createServer((req,res) => {
     reads++;status();
     if(payload.customerUserId!=='0912345678')return {success:false,error:'查無會員，請確認完整手機號碼或改掃會員 QR'};
     if(window.userRole==='reward'&&(payload.customerPhone!=='0912345678'||payload.walletQr))throw Error('手機查詢格式錯誤');
-    return {success:true,data:{customerPointUserId:customer,name:'合成測試會員',phone:'0912345678',balance:900,canAdjust:true,balanceSource:'mother',rewardScanToken:'rwd_'+'b'.repeat(64),rewardScanExpiresAt:Date.now()+180000}};
+    // Match core.js: fetchAPI returns the unwrapped successful response data.
+    return {customerPointUserId:customer,name:'合成測試會員',phone:'0912345678',balance:900,canAdjust:true,balanceSource:'mother',rewardScanToken:'rwd_'+'b'.repeat(64),rewardScanExpiresAt:Date.now()+180000};
   };
   window.submitSafeCashier=async payload=>{
     if(payload.customerUserId!==customer||payload.mode!=='reward'||payload.deductPoints!==0||(window.userRole==='reward'&&!payload.rewardScanToken)||payload.rewardPoints!==payload.amount)throw Error('合成贈點驗證失敗');

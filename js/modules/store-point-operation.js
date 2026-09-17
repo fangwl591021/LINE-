@@ -69,7 +69,7 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
     const selected=++choiceRevision;
     if(method==='phone'&&mode!=='redeem'){
       try{
-        const {mountStorePhoneReward}=await import('./store-phone-reward.js?v=1');
+        const {mountStorePhoneReward}=await import('./store-phone-reward.js?v=2');
         if(!current()||selected!==choiceRevision)return;
         clearCustomer();phoneForm?.dispose();slot.hidden=true;phoneSlot.hidden=false;
         choices.hidden=true;back.hidden=false;status.textContent='';title.textContent='電話贈點';

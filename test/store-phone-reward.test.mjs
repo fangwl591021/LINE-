@@ -4,6 +4,8 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 const source=readFileSync(new URL('../js/modules/store-phone-reward.js',import.meta.url),'utf8');
+const coreSource=readFileSync(new URL('../js/core.js',import.meta.url),'utf8');
+const coreTransport=coreSource.slice(coreSource.indexOf('    window.fetchAPI = async function('),coreSource.indexOf('    // 強效配對機制'));
 const owner='U'+'a'.repeat(32),customerId='U'+'b'.repeat(32),token='rwd_'+'b'.repeat(64);
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 function setup({rewardOnly=true,pending=null}={}){
@@ -18,7 +20,8 @@ function setup({rewardOnly=true,pending=null}={}){
   const data={customerPointUserId:customerId,name:'合成測試會員',phone:'0912345678',canAdjust:true,rewardScanToken:token,rewardScanExpiresAt:Date.now()+180000};
   const window={currentUserProfile:{userId:owner},userRole:rewardOnly?'reward':'store',liff:{isLoggedIn:()=>true},canUseStorePointCashier:()=>true,isRewardOnlyPointCashier:()=>rewardOnly,
     normalizeStorePointRewardPhone(value){const phone=String(value||'').replace(/[\s()-]/g,'').replace(/^\+886(?=9)/,'0');return /^09\d{8}$/.test(phone)?phone:'';},
-    async fetchAPI(action,payload){reads.push({action,payload});return {success:true,data};},
+    // Production core.js unwraps successful API responses before callers see them.
+    async fetchAPI(action,payload){reads.push({action,payload});return data;},
     async submitSafeCashier(payload){writes.push(payload);return {success:true,transactionStatus:'succeeded'};},
     async checkPendingCashier(){return {success:false,transactionStatus:'not_found'};}};
   const localStorage={getItem:key=>storage.get(key)||null};
@@ -28,7 +31,7 @@ function setup({rewardOnly=true,pending=null}={}){
   const fire=(selector,event='submit')=>get(selector).events[event]({preventDefault(){}});
   const search=async(phone='0912345678')=>{get('#store-phone-reward-phone').value=phone;await fire('[data-phone-search]');};
   const send=async(points='25')=>{get('#store-phone-reward-points').value=points;await fire('[data-phone-gift]');};
-  return {root,get,window,reads,writes,data,storage,key,mounted,fire,search,send};
+  return {root,get,window,reads,writes,data,storage,key,mounted,fire,search,send,context};
 }
 
 test('direct phone popup contains only phone lookup and direct point entry, not cashier/consumption/scanner/debit',()=>{
@@ -47,6 +50,41 @@ test('phone reward normalizes lookup then sends exact direct points with no debi
     assert.deepEqual(JSON.parse(JSON.stringify(s.writes[0])),{customerUserId:customerId,mode:'reward',amount:25,rewardPoints:25,deductPoints:0,...(rewardOnly?{rewardScanToken:token}:{})});
     assert.match(s.get('[data-phone-status]').textContent,/成功贈送 25 點/);
     assert.equal(s.get('[data-send]').disabled,true);
+  }
+});
+
+test('actual core transport unwraps the successful HTTP envelope for phone lookup',async()=>{
+  for(const rewardOnly of [true,false]){
+    const s=setup({rewardOnly}),requests=[];
+    s.window.currentNetworkId='admin';
+    Object.assign(s.context,{Config:{WORKER_URL:'https://synthetic.invalid'},navigator:{onLine:true},AbortController,setTimeout,clearTimeout,
+      liff:{isLoggedIn:()=>true,getAccessToken:()=> 'synthetic-local-token'},
+      fetch:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>({success:true,data:s.data})};}});
+    assert.match(coreTransport,/return data\.data \|\| data;/);
+    vm.runInNewContext(coreTransport,s.context);
+    await s.search('+886 912-345-678');
+    assert.equal(requests.length,1);assert.equal(requests[0].url,'https://synthetic.invalid');
+    assert.deepEqual(requests[0].body,{action:'getStorePointCustomer',payload:{customerUserId:'0912345678',customerPhone:'0912345678',networkId:'admin',role:rewardOnly?'reward':'store',userId:owner,lineAccessToken:'synthetic-local-token'}});
+    assert.equal(s.get('[data-member-name]').textContent,'合成測試會員');
+    assert.equal(s.get('[data-member]').hidden,false);assert.equal(s.get('[data-send]').disabled,false);
+    await s.send('25');assert.equal(s.writes.length,1);assert.equal(s.writes[0].rewardPoints,25);assert.equal(s.writes[0].deductPoints,0);
+  }
+});
+
+test('lookup still accepts explicit successful envelopes without weakening error checks',async()=>{
+  const s=setup();s.window.fetchAPI=async()=>({success:true,data:s.data});
+  await s.search();assert.equal(s.get('[data-member]').hidden,false);await s.send();assert.equal(s.writes.length,1);
+});
+
+test('failed or malformed lookup results never enable gifting even when they carry member data',async()=>{
+  for(const response of [null,undefined,false,42,'member',[],{}, {data:null}, {data:[]},
+    s=>({success:false,error:'查詢拒絕',data:s.data}),
+    s=>({success:false,...s.data}),
+    s=>({error:'查詢拒絕',data:s.data}),
+    s=>({success:true,error:'查詢拒絕',data:s.data})]){
+    const s=setup();s.window.fetchAPI=async()=>typeof response==='function'?response(s):response;
+    await s.search();assert.equal(s.get('[data-member]').hidden,true);assert.equal(s.get('[data-send]').disabled,true);
+    await s.send();assert.equal(s.writes.length,0);
   }
 });
 
@@ -70,7 +108,7 @@ test('phone gift uses the receipt-bound point account when profile canonical ID 
 test('edited phone or late identity response cannot reuse a verified member',async()=>{
   const s=setup();await s.search();s.get('#store-phone-reward-phone').value='0999999999';await s.fire('#store-phone-reward-phone','input');await s.send();assert.equal(s.writes.length,0);
   const late=setup(),wait=deferred();late.window.fetchAPI=()=>wait.promise;
-  const lookup=late.search();late.get('#store-phone-reward-phone').value='0999999999';late.fire('#store-phone-reward-phone','input');wait.resolve({success:true,data:late.data});await lookup;
+  const lookup=late.search();late.get('#store-phone-reward-phone').value='0999999999';late.fire('#store-phone-reward-phone','input');wait.resolve(late.data);await lookup;
   assert.equal(late.get('[data-member]').hidden,true);await late.send();assert.equal(late.writes.length,0);
 });
 
