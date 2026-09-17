@@ -24,8 +24,7 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
   modal.setAttribute('aria-labelledby','store-point-operation-title');
   modal.innerHTML='<header><h2 id="store-point-operation-title">會員點數操作</h2><button type="button" data-close aria-label="關閉會員點數操作">×</button></header><div class="store-point-operation-scroll"><div data-choices><p>請選擇確認會員身分的方式。</p><button type="button" data-method="scan">掃描會員錢包 QR</button><button type="button" data-method="phone">輸入行動電話查找</button><small>核對會員、金額及點數後，按確認送出才會贈扣點。</small></div><button type="button" data-back hidden>← 重新選擇會員辨識方式</button><p data-status role="status" aria-live="polite"></p><div data-cashier-slot hidden></div></div>';
   if(rewardOnly){
-    modal.querySelector('[data-method="phone"]').remove();
-    modal.querySelector('[data-choices] p').textContent='贈點用戶僅能掃描會員錢包 QR，不能扣點。';
+    modal.querySelector('[data-choices] p').textContent='可掃描會員錢包 QR 或輸入手機號碼確認會員；贈點用戶不能扣點。';
     modal.querySelector('[data-choices] small').textContent='核對會員、消費金額與贈點後，按確認送出才會贈點。';
   }
   document.body.append(modal);activeDialog=modal;
@@ -62,7 +61,7 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
     choices.querySelector('button').focus();
   }
   function choose(method){
-    if(!current()||(window.isRewardOnlyPointCashier?.()&&method!=='scan'))return;
+    if(!current()||!['scan','phone'].includes(method))return;
     if(blocked())return;
     if(!slots.length){
       move(panel,slot);move(scanner,modal);move(document.getElementById('toast-container'),modal);

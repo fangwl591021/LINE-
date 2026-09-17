@@ -16,7 +16,7 @@ test('shared brand uses supplied logo without replacing it on role changes; imag
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=25/);assert.match(source,/store-shop\.js\?v=35/);
+  assert.match(source,/store-shop\.css\?v=25/);assert.match(source,/store-shop\.js\?v=36/);
  }
 });
 test('shared storefront places an accessible main-home return before the brand for every role',()=>{

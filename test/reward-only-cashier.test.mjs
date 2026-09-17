@@ -32,13 +32,38 @@ test('reward role is distinct and cannot be inferred from payload objects or oth
   for (const role of ['admin', 'store', 'user', 'tenant', 'staff', 'manager', '贈點用戶', '', null, undefined, {role: 'reward'}]) assert.equal(isRewardOnlyRole(role), false);
 });
 
-test('customer lookup accepts only an exact member wallet UID QR matching the requested customer', () => {
+test('QR lookup accepts only an exact member wallet UID matching the requested customer', () => {
   assert.equal(checkRewardOnlyAction('getStorePointCustomer', {walletQr: C, customerUserId: C}), '');
   for (const raw of ['', '0912345678', 'https://liff.line.me/app?uid=' + C, JSON.stringify({userId: C}), ' ' + C, C + '\n', 'u' + 'c'.repeat(32), 'U' + 'c'.repeat(19), 'U' + 'c'.repeat(65), {}, null]) {
     assert.notEqual(checkRewardOnlyAction('getStorePointCustomer', {walletQr: raw, customerUserId: raw}), '');
   }
   assert.notEqual(checkRewardOnlyAction('getStorePointCustomer', {walletQr: C, customerUserId: B}), '');
   assert.notEqual(checkRewardOnlyAction('getStorePointCustomer', {customerUserId: C, scanned: true}), '');
+});
+
+test('mobile lookup accepts an explicitly marked exact 10-digit Taiwan mobile only', () => {
+  for (const phone of ['0900000000', '0912345678', '0999999999']) {
+    assert.equal(checkRewardOnlyAction('getStorePointCustomer', {customerUserId: phone, customerPhone: phone}), '');
+    assert.notEqual(checkRewardOnlyAction('getStorePointCustomer', {customerUserId: phone}), '', 'unmarked phone rejected');
+  }
+  for (const phone of ['', '091234567', '09123456789', '0812345678', '+886912345678', '0912-345-678', ' 0912345678', '0912345678\n', 912345678, null, {}, C, '王小明', '12345678']) {
+    assert.notEqual(checkRewardOnlyAction('getStorePointCustomer', {customerUserId: phone, customerPhone: phone}), '', String(phone));
+  }
+  for (const fields of [
+    {customerUserId: C, customerPhone: '0912345678'},
+    {customerUserId: '0912345678', customerPhone: '0999999999'},
+    {customerUserId: '0912345678', customerPhone: '0912345678', walletQr: C},
+    {customerUserId: C, walletQr: C, customerPhone: '0912345678'},
+    {customerUserId: '0912345678', customerPhone: '0912345678', walletQr: false}
+  ]) assert.notEqual(checkRewardOnlyAction('getStorePointCustomer', fields), '', JSON.stringify(fields));
+});
+
+test('QR and mobile lookups cannot carry product-redemption data', () => {
+  for (const identity of [{customerUserId: C, walletQr: C}, {customerUserId: '0912345678', customerPhone: '0912345678'}]) {
+    for (const extra of [{productId: crypto.randomUUID()}, {productId: false}, {qrToken: 'product-token'}, {qrToken: false}]) {
+      assert.notEqual(checkRewardOnlyAction('getStorePointCustomer', {...identity, ...extra}), '');
+    }
+  }
 });
 
 test('reward-only action allowlist blocks debit, product redemption and unrelated administrative operations', () => {
@@ -96,11 +121,11 @@ test('revocation, promotion and caller-supplied role flags never preserve reward
   const result = await issueRewardScanToken(env, A, C);
   for (const role of ['user', 'admin', 'store', 'tenant', '', null]) {
     sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role, A);
-    await assert.rejects(validateRewardScanToken(env, payload({...result, role: 'reward', authenticatedRole: 'reward'})), /未開放掃碼贈點/);
-    await assert.rejects(issueRewardScanToken(env, A, C), /未開放掃碼贈點/);
+    await assert.rejects(validateRewardScanToken(env, payload({...result, role: 'reward', authenticatedRole: 'reward'})), /未開放贈點/);
+    await assert.rejects(issueRewardScanToken(env, A, C), /未開放贈點/);
   }
   sql.prepare('DELETE FROM users WHERE line_id=?').run(A);
-  await assert.rejects(validateRewardScanToken(env, payload(result)), /未開放掃碼贈點/);
+  await assert.rejects(validateRewardScanToken(env, payload(result)), /未開放贈點/);
 });
 
 test('expired and malformed receipts fail even if KV has not removed them', async t => {
@@ -142,7 +167,7 @@ test('invalid identities and forged scan tokens fail without creating receipts',
   }
   assert.equal(writes.length, 0);
   await assert.rejects(validateRewardScanToken(env, payload()), /驗證無效/);
-  await assert.rejects(validateRewardScanToken(env, payload({rewardScanToken: 'rwd_' + 'x'.repeat(64)})), /重新掃描/);
+  await assert.rejects(validateRewardScanToken(env, payload({rewardScanToken: 'rwd_' + 'x'.repeat(64)})), /重新確認會員身分/);
 });
 
 test('binding read/write failures do not become permission or session fallbacks', async t => {

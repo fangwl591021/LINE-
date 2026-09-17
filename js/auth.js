@@ -1606,6 +1606,13 @@ window.loadPointsWallet = async function(force = false) {
 
 let storePointRewardScan = null;
 
+window.normalizeStorePointRewardPhone = function(value) {
+  const raw = String(value || '').trim();
+  if (!/^[+\d\s()-]+$/.test(raw)) return '';
+  const phone = raw.replace(/[\s()-]/g, '').replace(/^\+886(?=9)/, '0');
+  return /^09\d{8}$/.test(phone) ? phone : '';
+};
+
 window.isRewardOnlyPointCashier = function() {
   const role = String(window.userRole || window.currentUser?.role || '').trim().toLowerCase();
   return role === 'reward' || role === '贈點用戶';
@@ -1633,16 +1640,16 @@ window.updateStorePointCashierPermissions = function() {
       });
       input.__rewardScanInputBound = true;
     }
-    input.disabled = rewardOnly;
-    input.readOnly = rewardOnly;
-    input.classList.toggle('hidden', rewardOnly);
+    input.disabled = false;
+    input.readOnly = false;
+    input.classList.remove('hidden');
+    input.inputMode = rewardOnly ? 'tel' : 'text';
+    input.placeholder = rewardOnly ? '輸入手機號碼，例如 0912345678' : '輸入手機號碼，或按右下掃碼';
   }
-  for (const id of ['store-point-customer-lookup', 'store-point-redeem-option']) {
-    document.getElementById(id)?.classList.toggle('hidden', rewardOnly);
-  }
+  document.getElementById('store-point-redeem-option')?.classList.toggle('hidden', rewardOnly);
   const lookup = document.getElementById('store-point-customer-lookup');
-  if (lookup) lookup.disabled = rewardOnly;
-  document.getElementById('store-point-customer-scan')?.classList.toggle('col-span-2', rewardOnly);
+  if (lookup) { lookup.disabled = false; lookup.classList.remove('hidden'); }
+  document.getElementById('store-point-customer-scan')?.classList.remove('col-span-2');
   const modes = document.getElementById('store-point-modes');
   modes?.classList.toggle('grid-cols-1', rewardOnly);
   modes?.classList.toggle('grid-cols-2', !rewardOnly);
@@ -1657,9 +1664,9 @@ window.updateStorePointCashierPermissions = function() {
   }
   if (rewardOnly) document.getElementById('store-point-deduct-wrap')?.classList.add('hidden');
   const text = (id, value) => { const node = document.getElementById(id); if (node) node.textContent = value; };
-  text('store-point-cashier-help', rewardOnly ? '僅可掃描會員錢包 QR 後消費贈點，不能扣點。' : '掃描客戶 QR 碼或輸入電話可折抵扣點或消費贈點。');
-  text('store-point-customer-label', rewardOnly ? '掃描會員錢包 QR 確認顧客' : '客戶帳號 / 手機 / QR 內容');
-  text('store-point-cashier-free-help', rewardOnly ? '僅限掃碼消費贈點，不扣操作點數。' : '店家送出折抵扣點或消費贈點不扣操作點數。');
+  text('store-point-cashier-help', rewardOnly ? '可掃描會員錢包 QR 或輸入手機號碼，確認會員後消費贈點，不能扣點。' : '掃描客戶 QR 碼或輸入電話可折抵扣點或消費贈點。');
+  text('store-point-customer-label', rewardOnly ? '會員手機號碼 / 掃描會員錢包 QR' : '客戶帳號 / 手機 / QR 內容');
+  text('store-point-cashier-free-help', rewardOnly ? '僅限消費贈點，不扣操作點數；不能扣除會員點數。' : '店家送出折抵扣點或消費贈點不扣操作點數。');
 };
 
 window.canUseStorePointCashier = function() {
@@ -2018,7 +2025,7 @@ window.fillStorePointCustomerFromQr = function(raw) {
     window.renderStorePointCustomer?.(null);
     if (!window.currentUserProfile?.userId || !/^U[0-9a-fA-F]{20,64}$/.test(customerId)) {
       if (target) target.value = '';
-      window.showToast?.('贈點用戶僅能掃描會員錢包 QR，不能使用商品碼、電話或手動帳號。', true);
+      window.showToast?.('請掃描會員錢包 QR；手機號碼請改用輸入查找，不能使用商品碼或手動帳號。', true);
       return '';
     }
   }
@@ -2300,6 +2307,11 @@ window.lookupStorePointCustomer = async function() {
   const ticket=window.__storePointLookupRevision=(window.__storePointLookupRevision||0)+1;
   const raw=String(input?.value||'').trim();
   const rewardOnly = window.isRewardOnlyPointCashier?.();
+  const rewardPhone = rewardOnly ? window.normalizeStorePointRewardPhone(raw) : '';
+  if (rewardOnly && rewardPhone && window.currentUserProfile?.userId) {
+    input.value = rewardPhone;
+    storePointRewardScan = { owner: window.currentUserProfile.userId, customerPhone: rewardPhone, inputValue: rewardPhone, customerUserId: '', rewardScanToken: '' };
+  }
   const rewardScan = rewardOnly ? storePointRewardScan : null;
   const validRewardScan = () => !!rewardScan && storePointRewardScan === rewardScan
     && rewardScan.owner === window.currentUserProfile?.userId
@@ -2307,9 +2319,9 @@ window.lookupStorePointCustomer = async function() {
   const classified=window.classifyStorePointInput(raw);
   window.storePointCustomer=null;
   window.renderStorePointCustomer(null);
-  if (rewardOnly && (!validRewardScan() || !/^U[0-9a-fA-F]{20,64}$/.test(rewardScan.walletQr))) {
+  if (rewardOnly && (!validRewardScan() || !(rewardScan.customerPhone === rewardPhone && /^09\d{8}$/.test(rewardPhone) || /^U[0-9a-fA-F]{20,64}$/.test(rewardScan.walletQr)))) {
     window.invalidateStorePointRewardScan();
-    window.showToast?.('贈點用戶請先掃描會員錢包 QR，不支援電話、商品碼或手動查詢。', true);
+    window.showToast?.('請掃描會員錢包 QR 或輸入有效手機號碼，不支援商品碼或手動帳號。', true);
     return null;
   }
   if(classified.kind==='product'||classified.kind==='memberProduct') {
@@ -2330,13 +2342,13 @@ window.lookupStorePointCustomer = async function() {
   }
   if (input && input.value !== customerUserId) input.value = customerUserId;
   try {
-    const res = await window.fetchAPI('getStorePointCustomer', { customerUserId, ...(rewardOnly ? { walletQr: rewardScan.walletQr } : {}) }, true);
+    const res = await window.fetchAPI('getStorePointCustomer', { customerUserId, ...(rewardOnly ? (rewardPhone ? { customerPhone: rewardPhone } : { walletQr: rewardScan.walletQr }) : {}) }, true);
     if(ticket!==window.__storePointLookupRevision||window.extractPointCustomerId(input?.value||'')!==customerUserId) return null;
     if (rewardOnly && !validRewardScan()) return null;
     if (!res || res.error) throw new Error(res?.error || '查無客戶資料');
     const data = res.data || res;
-    if (rewardOnly && (!data.rewardScanToken || !data.customerPointUserId || data.needsSelection || data.needsBinding)) {
-      throw new Error('掃碼身分尚未確認，請重新掃描會員錢包 QR。');
+    if (rewardOnly && (!data.rewardScanToken || !data.customerPointUserId || data.needsSelection || data.needsBinding || !Number.isFinite(data.rewardScanExpiresAt) || data.rewardScanExpiresAt <= Date.now())) {
+      throw new Error(data.needsSelection ? '此手機號碼對應多位會員，請改掃會員錢包 QR。' : data.needsBinding ? '此會員尚未綁定點數帳戶，請先完成綁定。' : '會員身分尚未確認或確認已逾時，請重新掃描 QR 或查找手機號碼。');
     }
     if (data.needsSelection && Array.isArray(data.candidates)) {
       window.renderStorePointCustomer(null);
@@ -2344,13 +2356,14 @@ window.lookupStorePointCustomer = async function() {
       window.showToast?.('找到多筆客戶，請先選擇正確對象', false);
       return data;
     }
-    if (input && data.customerPointUserId && !data.needsBinding && input.value !== data.customerPointUserId) {
+    if (input && !rewardPhone && data.customerPointUserId && !data.needsBinding && input.value !== data.customerPointUserId) {
       input.value = data.customerPointUserId;
     }
     if (rewardOnly) {
       rewardScan.inputValue = String(input?.value || '').trim();
       rewardScan.customerUserId = data.customerPointUserId;
       rewardScan.rewardScanToken = data.rewardScanToken;
+      rewardScan.rewardScanExpiresAt = data.rewardScanExpiresAt;
     }
     window.renderStorePointCustomer(data);
     if (data.needsBinding) window.showToast?.(data.message || '找到名片，但尚未綁定點數會員', true);
@@ -2426,10 +2439,12 @@ window.submitStorePointCashier = async function(btn) {
     || storePointRewardScan.inputValue !== String(customerInput?.value || '').trim()
     || storePointRewardScan.customerUserId !== customerUserId
     || !storePointRewardScan.rewardScanToken
+    || !Number.isFinite(storePointRewardScan.rewardScanExpiresAt)
+    || storePointRewardScan.rewardScanExpiresAt <= Date.now()
     || storePointRewardScan.rewardScanToken !== window.storePointCustomer?.rewardScanToken)) {
     window.invalidateStorePointRewardScan();
     window.renderStorePointCustomer?.(null);
-    return window.showToast?.('請重新掃描會員錢包 QR 確認顧客，贈點用戶不能扣點。', true);
+    return window.showToast?.('請重新掃描會員錢包 QR 或查找手機號碼確認顧客，贈點用戶不能扣點。', true);
   }
 
   if (!customerUserId) return window.showToast?.('請先掃描或輸入客戶帳號', true);

@@ -6004,6 +6004,11 @@ const PointModule = {
     ).trim();
     const resolved = await this.resolveStorePointCustomer(env, rawCustomerId);
     if (resolved.error) return { success: false, error: resolved.error };
+    // Reward phone lookup must resolve a real member before any wallet lookup/index repair.
+    if (isRewardOnlyRole(payload.authenticatedRole) && !resolved.needsSelection && !resolved.needsBinding &&
+        !/^U[0-9a-fA-F]{20,64}$/.test(resolved.customerPointUserId || '')) {
+      return { success: false, error: '查無已綁定的會員，請確認手機號碼或改掃會員錢包 QR' };
+    }
     if (resolved.needsSelection) {
       return {
         success: true,
@@ -17263,13 +17268,24 @@ async function dispatchAction(action, payload, request, env) {
     case 'queryUserPoints':        return await PointModule.queryUserPoints(payload || {}, env);
     case 'dailyPointCheckin':      return await PointModule.dailyCheckin(payload || {}, env);
     case 'getStorePointCustomer': {
+      if (isRewardOnlyRole(payload.authenticatedRole)) {
+        const lookupError = checkRewardOnlyAction('getStorePointCustomer', payload);
+        if (lookupError) return { success: false, error: lookupError };
+      }
       const result = await PointModule.getStorePointCustomer(payload || {}, env);
+      if (isRewardOnlyRole(payload.authenticatedRole) && result?.success && result.data) {
+        // Gift operators need confirmation details, never full profiles, tokens or internal links.
+        const fields = ['customerUserId','customerPointUserId','canonicalUserId','name','phone','industry','avatarUrl',
+          'balance','totalBalance','motherBalance','localBalance','balanceSource','pointType','needsBinding','needsSelection',
+          'canAdjust','canAutoBindPointAccount','localPointOnly','message','cashierSessionId'];
+        result.data = Object.fromEntries(fields.filter(key => Object.hasOwn(result.data, key)).map(key => [key,result.data[key]]));
+      }
       if (isRewardOnlyRole(payload.authenticatedRole) && result?.success && result.data?.canAdjust !== false &&
           result.data?.customerPointUserId && !result.data.needsSelection && !result.data.needsBinding) {
         try {
           Object.assign(result.data, await issueRewardScanToken(env, payload.authenticatedUserId, result.data.customerPointUserId));
         } catch (e) {
-          return { success: false, error: e.message || '請重新掃描會員錢包 QR' };
+          return { success: false, error: e.message || '請重新查詢或掃描會員錢包 QR' };
         }
       }
       return result;
@@ -17280,7 +17296,7 @@ async function dispatchAction(action, payload, request, env) {
       async (safe, beforeWrite, product) => {
         if (!isRewardOnlyRole(payload.authenticatedRole)) return PointModule.storeAdjustCustomerPoints(safe, env, beforeWrite, product);
         // The existing requestId boundary still owns at-most-once execution. Check this
-        // separate scan receipt before wallet preparation, then again at the write boundary.
+        // separate QR/mobile identity receipt before wallet preparation, then again at the write boundary.
         await validateRewardScanToken(env, { ...payload, customerUserId: safe.customerUserId });
         return PointModule.storeAdjustCustomerPoints(safe, env, async actualCustomer => {
           await validateRewardScanToken(env, { ...payload, customerUserId: actualCustomer });
