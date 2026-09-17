@@ -16,9 +16,31 @@ test('shared brand uses supplied logo without replacing it on role changes; imag
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=24/);assert.match(source,/store-shop\.js\?v=34/);
+  assert.match(source,/store-shop\.css\?v=25/);assert.match(source,/store-shop\.js\?v=35/);
  }
 });
+test('shared storefront places an accessible main-home return before the brand for every role',()=>{
+ const css=readFileSync(new URL('../css/store-shop.css',import.meta.url),'utf8');
+ assert.match(mall,/<nav class="shop-home-return" aria-label="返回主首頁"><button type="button" data-do="exit"><span aria-hidden="true">‹<\/span>回主首頁<\/button><\/nav><header class="shop-brand">/);
+ assert.match(css,/\.shop-points-theme \.shop-home-return\s*\{/);
+});
+
+test('main-home return uses the existing exit route and invalidates pending views without browser history',()=>{
+ const exit=mall.match(/case 'exit':[^\r\n]*?break;/)?.[0];
+ assert.ok(exit,'shared click handler retains its exit action');
+ assert.doesNotMatch(exit,/history\s*\.\s*back/);
+ for(const userRole of ['user','store'])for(const standalone of [false,true]){
+  const calls=[];
+  const location={href:'https://store.test/LINE-/store-shop.html?code=oauth-code&state=oauth-state&shop=shop-fixture&ref=owner#store',assign:url=>calls.push(['assign',url])};
+  const history={back:()=>calls.push(['history.back'])};
+  const window={userRole,location,history,goPage:page=>calls.push(['goPage',page])};
+  const context={standalone,epoch:7,location,history,window,URL};
+  vm.runInNewContext(`switch ('exit') { ${exit} }`,context);
+  assert.equal(context.epoch,8,`${userRole} ${standalone}: pending view is invalidated`);
+  assert.deepEqual(calls,standalone?[['assign','https://store.test/LINE-/index.html']]:[['goPage','home']],`${userRole} ${standalone}: returns to the main home`);
+ }
+});
+
 test('shared brand logo has a transparent first pixel in a noninterlaced RGBA8 PNG',()=>{
  const logo=readFileSync(new URL('../assets/points-logo-transparent-20260916.png',import.meta.url));
  assert.deepEqual([...logo.subarray(0,8)],[137,80,78,71,13,10,26,10]);
