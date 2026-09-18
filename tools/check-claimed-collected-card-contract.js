@@ -14,7 +14,7 @@ function ok(condition, message) {
   console.log(`OK ${message}`);
 }
 
-ok(worker.includes('async getCardHarvestContacts(payload, env)'), 'collection resolver exists');
+ok(worker.includes('async getCardHarvestContacts(payload, env, verifiedActor = null)'), 'collection resolver accepts verified actor out of band');
 ok(worker.includes("AND LOWER(COALESCE(source_type,'')) <> 'referral_placeholder'"), 'collection resolver still excludes referral placeholders');
 ok(worker.includes("AND scanner_user_id IN (${placeholders})"), 'claimed self profile stays scoped to the original scanner');
 ok(worker.includes('async isClaimedCollectionReadOnlyForActor(env, card, actorId)'), 'server has a claimed-collection read-only guard');

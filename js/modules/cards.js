@@ -354,6 +354,112 @@
       .map(item => item.card);
   }
 
+  function currentCollectionIntentKey() {
+    // getCurrentBusinessIntent() follows the open detail card, which may belong
+    // to someone else. Only the signed-in user's own card may invalidate scores.
+    const own = window.currentUserCard;
+    if (!own) return null;
+    for (const raw of [own["自訂名片設定"], own.customConfig, own.custom_config]) {
+      try {
+        const config = typeof raw === "string" ? JSON.parse(raw) : raw;
+        const intent = config && config.businessIntent;
+        if (!intent || typeof intent !== "object") continue;
+        const normalized = {};
+        for (const key of ["offer", "seek", "collaboration"]) {
+          normalized[key] = safeText(intent[key]).normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+        }
+        return JSON.stringify(normalized);
+      } catch (_) { /* Another legacy config alias may still be valid. */ }
+    }
+    return null;
+  }
+
+  function collectionMatch(card) {
+    const match = card && card.aiMatch || {};
+    const intentKey = currentCollectionIntentKey();
+    if (intentKey !== null && match.intentKey && match.intentKey !== intentKey) {
+      return { status: "stale", score: null, label: "待更新", reason: "您的業務需求已變更，舊分數不再適用。請重新整理讀取目前需求的配對結果。" };
+    }
+    if (match.status === "completed" && typeof match.score === "number" && Number.isFinite(match.score)
+      && match.score >= 0 && match.score <= 100 && ["ai", "rules"].includes(match.source)) {
+      return { ...match, score: Math.round(match.score), label: match.source === "ai" ? "AI 配對" : "規則評估" };
+    }
+    const labels = { needs_intent: "先填需求", stale: "待更新", unavailable: "暫無結果", needs_login: "請重新登入" };
+    const reasons = {
+      needs_intent: "請先在本人名片填寫業務需求，系統才能依您提供、尋找的資源進行配對。",
+      stale: "名片資料或需求已更新，舊分數不再適用，等待新的配對結果。",
+      unavailable: "目前無法讀取配對結果，請稍後重新整理；收藏名片仍可正常查看。",
+      needs_login: "請重新登入以驗證身份，再查看您的配對結果。"
+    };
+    const status = match.status === "completed" ? "unavailable" : (match.status || "pending");
+    return { status, score: null, label: labels[status] || "待配對", reason: reasons[status] || "目前業務需求尚無這張名片的有效配對結果；背景配對完成後，可重新整理查看。" };
+  }
+
+  function ensureCollectionMatchStyles() {
+    if ($("collection-match-styles")) return;
+    const style = document.createElement("style");
+    style.id = "collection-match-styles";
+    style.textContent = `
+      .collection-sort{display:inline-flex;gap:2px;padding:3px;border:1px solid #cfe5dc;border-radius:12px;background:#edf7f2}
+      .collection-sort button{padding:9px 10px;border:0;border-radius:9px;font-size:12px;font-weight:700;color:#306554;white-space:nowrap}
+      .collection-sort button[aria-pressed="true"]{color:white;background:#16845d}
+      .collection-sort button:focus-visible,.collection-score:focus-visible{outline:2px solid #047857;outline-offset:3px}
+      .collection-score{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-height:44px;justify-content:center;background:transparent;border:0;color:#128052;font-size:15px;font-weight:800;cursor:pointer}
+      .collection-score small{font-size:10px;color:#688479;font-weight:500}
+      .collection-score[data-pending="true"]{color:#64748b;font-size:11px}
+      #collected-card-match-dialog{width:min(420px,calc(100vw - 32px));max-height:80dvh;overflow:auto;border:0;border-radius:20px;padding:24px;color:#16372b;background:#fff}
+      #collected-card-match-dialog::backdrop{background:rgba(15,23,42,.4)}
+      #collected-card-match-dialog p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;margin:12px 0;font-size:14px}
+      #collected-card-match-dialog button{padding:10px 18px;border-radius:10px;border:1px solid #cfe5dc;font-weight:700;color:#166349;background:#eef8f3}
+    `;
+    document.head.appendChild(style);
+  }
+
+  window.setCardListSortMode = function (mode) {
+    window.cardListSortMode = mode === "match" ? "match" : "latest";
+    window.filterCards();
+  };
+
+  window.isCollectedCardMatchCacheCurrent = function (cards) {
+    const intentKey = currentCollectionIntentKey();
+    return Array.isArray(cards) && cards.every(card => card && card.aiMatch
+      && (intentKey === null || !card.aiMatch.intentKey || card.aiMatch.intentKey === intentKey));
+  };
+
+  window.refreshCollectedCardMatches = async function () {
+    if (window.cardMatchRefreshing || typeof window.loadCardData !== "function") return;
+    window.cardMatchRefreshing = true;
+    window.filterCards();
+    try {
+      await window.loadCardData({ harvest: true, force: true, render: false, initPanels: false, throwOnError: true });
+    } catch (_) {
+      showToast("配對結果讀取失敗，已保留原名單，請稍後再試。", true);
+    } finally {
+      window.cardMatchRefreshing = false;
+      window.filterCards();
+    }
+  };
+
+  window.showCollectedCardMatch = function (rowId) {
+    const card = getCardListSource().find(item => getCardRowId(item) === safeText(rowId));
+    if (!card) return;
+    ensureCollectionMatchStyles();
+    $("collected-card-match-dialog")?.remove();
+    const match = collectionMatch(card);
+    const dialog = document.createElement("dialog");
+    dialog.id = "collected-card-match-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-labelledby", "collected-card-match-title");
+    dialog.innerHTML = `<h2 id="collected-card-match-title" style="font-size:18px;font-weight:800">${escapeHTML(getCardTitle(card))}・${match.score === null ? escapeHTML(match.label) : match.score + "%"}</h2>
+      <p>${match.score === null ? "目前業務需求配對" : escapeHTML(match.label) + "・依目前業務需求評估，非成交機率。"}</p>
+      <p>${escapeHTML(match.reason || "此筆結果未提供配對理由。")}</p>
+      ${match.source === "rules" ? "<p>這是既有資料的規則評估，並非 AI 分析結果。</p>" : ""}
+      <form method="dialog" style="text-align:right"><button type="submit">關閉</button></form>`;
+    dialog.addEventListener("close", () => dialog.remove(), { once: true });
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  };
+
   function updateLocalCard(rowId, payloadData) {
     if (!rowId || !payloadData) return;
 
@@ -382,6 +488,7 @@
   window.renderCardList = function (cards, options = {}) {
     const list = $("card-list");
     if (!list) return;
+    ensureCollectionMatchStyles();
     const visibleSource = getHarvestCards(cards);
 
     if (!options.keepPage) {
@@ -402,6 +509,10 @@
 
     const page = Math.max(1, Number(window.cardListPage || 1));
     const displayCards = sortCardsNewestFirst(visibleSource);
+    const matchMode = window.cardListSortMode === "match";
+    if (matchMode) {
+      displayCards.sort((a, b) => (collectionMatch(b).score ?? -1) - (collectionMatch(a).score ?? -1));
+    }
     const visibleCards = displayCards.slice(0, page * CARD_PAGE_SIZE);
 
     const html = visibleCards.map(card => {
@@ -409,6 +520,7 @@
       const imgUrl = getCardImageUrl(card);
       const subtitle = getCardSubtitle(card);
       const timeText = formatCardListTime(getCardUpdatedAt(card));
+      const match = collectionMatch(card);
 
       let imgHtml = "";
       if (imgUrl) {
@@ -432,7 +544,11 @@
           </div>
           <div class="shrink-0 self-start pt-0.5 text-right">
             <div class="text-[12px] text-slate-400 font-medium whitespace-nowrap">${escapeHTML(timeText)}</div>
-            <span class="material-symbols-outlined text-blue-500 bg-blue-50 rounded-full text-[16px] p-0.5 mt-2 shadow-sm">north_east</span>
+            <button type="button" class="collection-score" data-pending="${match.score === null}" aria-label="${escapeHTML(getCardTitle(card))}：${match.score === null ? escapeHTML(match.label) : match.score + "%"}，查看配對說明"
+              onclick="event.stopPropagation(); window.showCollectedCardMatch('${escapeJS(rowId)}')">
+              <span>${match.score === null ? escapeHTML(match.label) : match.score + "%"}</span>
+              ${match.score !== null ? `<small>${escapeHTML(match.label)}</small>` : ""}
+            </button>
           </div>
         </div>
       `;
@@ -454,12 +570,16 @@
 
     list.innerHTML = `
       <div class="bg-white overflow-hidden border-y border-slate-100">
-        <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <div class="font-black text-slate-900 text-[16px]">我的收錄名單</div>
-            <div class="text-[12px] text-slate-400 font-bold mt-0.5">只列出自己用收藏名片掃進來的資料</div>
+        <div class="px-4 py-3 border-b border-slate-100 flex flex-wrap gap-2 items-center justify-between">
+          <div class="font-black text-slate-900 text-[16px]">我的收錄名單 <span class="text-[12px] font-medium text-slate-400">${displayCards.length} 位</span></div>
+          <div class="collection-sort" role="group" aria-label="收藏名片排序">
+            <button type="button" aria-pressed="${!matchMode}" onclick="window.setCardListSortMode('latest')">最新收藏</button>
+            <button type="button" aria-pressed="${matchMode}" onclick="window.setCardListSortMode('match')">配對排名</button>
           </div>
-          <span class="text-[12px] font-black text-slate-400">${displayCards.length} 位</span>
+        </div>
+        <div class="px-4 py-2 flex gap-2 items-center justify-between text-[11px] text-slate-500">
+          <span>依目前業務需求配對；點百分比可看理由。</span>
+          <button type="button" onclick="window.refreshCollectedCardMatches()" ${window.cardMatchRefreshing ? "disabled" : ""} class="shrink-0 text-emerald-700 font-bold py-2">${window.cardMatchRefreshing ? "讀取中…" : "重新整理"}</button>
         </div>
         ${html}
       </div>

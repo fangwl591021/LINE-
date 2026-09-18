@@ -39,6 +39,8 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/card-harvest-match.test.mjs',
+  'test/card-harvest-match-ui.test.mjs',
   'test/login-bootstrap.test.mjs',
   'test/direct-phone-reward.test.mjs',
   'test/store-phone-reward.test.mjs',

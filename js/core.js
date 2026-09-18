@@ -318,7 +318,11 @@ const Core = (function() {
     window.loadCardData = async function(options = {}) {
         const harvestMode = options.harvest === true;
         const cache = harvestMode ? window.harvestCards : window.allCards;
-        if (Array.isArray(cache) && cache.length > 0 && !options.force) {
+        // Public detail refreshes omit viewer-specific scores. Re-read the
+        // collection on return, also when the saved own business intent changed.
+        const matchCacheCurrent = !harvestMode || typeof window.isCollectedCardMatchCacheCurrent !== 'function'
+            || window.isCollectedCardMatchCacheCurrent(cache);
+        if (Array.isArray(cache) && cache.length > 0 && !options.force && matchCacheCurrent) {
             if (options.render !== false && typeof window.renderCardList === 'function') {
                 window.renderCardList(cache);
             }
@@ -328,6 +332,10 @@ const Core = (function() {
 
         try {
             const cards = await window.fetchAPI(harvestMode ? 'getCardHarvestContacts' : 'getCardContacts', {}, true);
+            if (harvestMode && (!cards || cards.success === false || cards.error
+                || (!Array.isArray(cards) && !Array.isArray(cards.data)))) {
+                throw new Error(cards?.error || '收藏名單讀取失敗，請稍後重試');
+            }
             let normalizedCards = [];
             if (Array.isArray(cards)) {
                 normalizedCards = cards;
@@ -361,6 +369,7 @@ const Core = (function() {
             return harvestMode ? window.harvestCards : window.allCards;
         } catch (err) {
             console.error('[loadCardData] Error:', err);
+            if (options.throwOnError) throw err;
             return [];
         }
     };

@@ -8,6 +8,7 @@ import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
 import { ExchangeZoneModule } from './worker/exchange-zone.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
+import { enrichCardHarvestMatches } from './worker/card-harvest-match.mjs';
 import { prepareCardSafetyReview, cardSafetyReviewPrompt, normalizeCardSafetyReview, cardSafetyReviewError } from './worker/card-safety-review.mjs';
 
 /**
@@ -10006,7 +10007,7 @@ const D1ReadModule = {
     };
   },
 
-  async getCardHarvestContacts(payload, env) {
+  async getCardHarvestContacts(payload, env, verifiedActor = null) {
     if (!this.hasD1(env)) return null;
     await this.ensureCardAccessColumns(env);
     const limit = Math.min(Math.max(Number(payload.limit || 200) || 200, 1), 500);
@@ -10044,7 +10045,11 @@ const D1ReadModule = {
       ORDER BY COALESCE(updated_at, created_at) DESC, row_id DESC
       LIMIT ${limit}
     `, [...ids, ...ids, ...ids, ...ids, ...ids]);
-    return { success: true, data: rows.map(row => this.cardRow(row)).filter(Boolean) };
+    const cards = rows.map(row => this.cardRow(row)).filter(Boolean);
+    const data = await enrichCardHarvestMatches(cards, {
+      env, actor: verifiedActor, actorId, identityIds: ids, match: AIModule
+    });
+    return { success: true, data };
   },
 
   publicBusinessCardView(card) {
@@ -16826,7 +16831,7 @@ async function dispatchAction(action, payload, request, env) {
       return await D1ReadModule.getAdminCardLibraryOverview(payload || {}, env);
     case 'getCardHarvestContacts': {
       try {
-        const d1Result = await D1ReadModule.getCardHarvestContacts(payload || {}, env);
+        const d1Result = await D1ReadModule.getCardHarvestContacts(payload || {}, env, actor);
         if (d1Result && d1Result.success && Array.isArray(d1Result.data)) return d1Result;
       } catch (e) {
         console.error("D1 getCardHarvestContacts failed", e);
