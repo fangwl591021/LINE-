@@ -290,8 +290,9 @@ window.showActmasterPointFriendshipGate = function(message) {
   }
 };
 
-window.ensureActmasterPointFriendship = async function() {
-  const current = await window.readActmasterPointFriendship();
+window.ensureActmasterPointFriendship = async function(options = {}) {
+  const initial = options.initialCheck ? await options.initialCheck : null;
+  const current = initial || await window.readActmasterPointFriendship();
   if (!current.required || current.friendFlag) return true;
 
   if (!current.unavailable && window.liff && typeof window.liff.requestFriendship === 'function') {

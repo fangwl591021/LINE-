@@ -26,9 +26,9 @@ ok(!config.includes('/\\bLine\\/'), 'strict LIFF detection does not infer LIFF f
 ok(config.includes('window.liff.getFriendship()'), 'main app reads friendship from the active LIFF');
 ok(config.includes('window.liff.requestFriendship()'), 'main app preserves the bridge friendship request');
 ok(config.includes('window.ensureActmasterPointFriendship'), 'main app exposes the friendship startup guard');
-ok(auth.includes('await window.ensureActmasterPointFriendship()'), 'authenticated main startup waits for friendship verification');
+ok(auth.includes('await window.ensureActmasterPointFriendship({ initialCheck: friendshipRead })'), 'authenticated main startup still awaits friendship verification after the overlapped read');
 ok(config.includes("url.searchParams.set('point_friend', '1')"), 'successful recheck preserves the existing point_friend contract');
-ok(/js\/config\.js\?v=9\.14/.test(html), 'main endpoint configuration is cache-busted');
+ok(/js\/config\.js\?v=9\.15/.test(html), 'main endpoint configuration is cache-busted');
 ok(html.includes('#home-ai-assistant{display:none!important}'), 'floating assistant is hidden, including cached module versions');
 ok(!html.includes('<link rel="preload" as="image" href="assets/ai-home-assistant.png'), 'hidden assistant does not preload its image');
 ok(home.includes('const HOME_AI_ASSISTANT_VISIBLE = false;'), 'assistant starts disabled');
@@ -41,7 +41,7 @@ for (const name of ['refreshHomeAiAssistant', 'toggleHomeAiAssistant', 'openHome
   assistantSandbox.window[name](); // ensureHomeAiAssistant_ is deliberately absent: disabled paths must not create it.
 }
 
-ok(/js\/auth\.js\?v=11\.02/.test(html), 'main endpoint authentication is cache-busted');
+ok(/js\/auth\.js\?v=11\.03/.test(html), 'main endpoint authentication is cache-busted');
 ok(auth.includes("window.goPage(wantsCardCoolList ? 'card' : 'home', true)"), 'login landing renders without triggering a duplicate navigation load');
 ok(auth.includes('aggregateWalletReady') && !auth.includes('setTimeout(() => window.refreshPointBalanceBadge?.(), 300)'), 'point balance uses aggregate home data before its delayed fallback');
 ok(home.includes('window.__homeLoadPromises'), 'home background tasks coalesce matching in-flight work');

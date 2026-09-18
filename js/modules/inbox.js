@@ -403,6 +403,7 @@
       return;
     }
 
+    if (window.LoginBootstrap?.defer('inbox-badge', () => window.refreshInboxBadge(options))) return;
     button.classList.remove("hidden");
     const now = Date.now();
     if (window.__inboxBadgeRequestedAt && now - window.__inboxBadgeRequestedAt < 15000) return;

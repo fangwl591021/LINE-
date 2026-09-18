@@ -309,7 +309,8 @@ const Core = (function() {
             if (el) el.classList.toggle('hidden', !show);
         }
         if (typeof window.refreshExchangeZoneAccess === 'function') {
-            window.refreshExchangeZoneAccess().catch(() => {});
+            const refreshAccess = () => window.refreshExchangeZoneAccess().catch(() => {});
+            if (!window.LoginBootstrap?.defer('exchange-access', refreshAccess)) refreshAccess();
         }
     };
 

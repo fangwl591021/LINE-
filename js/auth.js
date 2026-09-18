@@ -2765,13 +2765,14 @@ window.reorderSettingsSections = function() {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
+  let allowLoginBackground = false;
   try {
     if (window.__ACTMASTER_INSTANT_LIKE_HANDLED) return;
     if (typeof window.prepareRegistrationInputs === 'function') window.prepareRegistrationInputs();
     window.reorderSettingsSections();
-    const initialUrlParams = typeof window.readActmasterInitialParams === 'function'
+    const initialUrlParams = window.LoginBootstrap?.initialParams || (typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
-      : new URLSearchParams(window.location.search);
+      : new URLSearchParams(window.location.search));
     const initialStoreInviteTarget = window.StoreInviteRoute?.readTarget(initialUrlParams) || '';
     const instantLikeCardId = initialUrlParams.get('likeCardId');
     const webCardId = initialUrlParams.get('webCardId') || (
@@ -2785,7 +2786,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       );
       return;
     }
-    if (typeof window.initActmasterLiff === 'function') {
+    window.LoginBootstrap?.stage('connecting');
+    if (window.LoginBootstrap?.initPromise) {
+      const initialized = await window.LoginBootstrap.initPromise;
+      if (!initialized.ok) throw initialized.error;
+    } else if (typeof window.initActmasterLiff === 'function') {
       await window.initActmasterLiff(LIFF_ID, { withLoginOnExternalBrowser: true });
     } else {
       await liff.init({ liffId: LIFF_ID });
@@ -2806,13 +2811,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
+    // Only overlap the read. Friendship prompts/gates still run after profile.
+    const friendshipRead = typeof window.readActmasterPointFriendship === 'function'
+      ? Promise.resolve().then(() => window.readActmasterPointFriendship()).catch(() => null)
+      : null;
+    window.LoginBootstrap?.stage('profile');
     window.currentUserProfile = typeof window.getActmasterLiffProfile === 'function'
       ? await window.getActmasterLiffProfile()
       : await liff.getProfile();
 
+    window.LoginBootstrap?.stage('friendship');
     if (
       typeof window.ensureActmasterPointFriendship === 'function' &&
-      !(await window.ensureActmasterPointFriendship())
+      !(await window.ensureActmasterPointFriendship({ initialCheck: friendshipRead }))
     ) {
       return;
     }
@@ -2850,9 +2861,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }, 8000);
 
-    const urlParams = typeof window.readActmasterInitialParams === 'function'
+    const urlParams = window.LoginBootstrap?.initialParams || (typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
-      : new URLSearchParams(window.location.search);
+      : new URLSearchParams(window.location.search));
     const storeInviteTarget = window.StoreInviteRoute?.readTarget(urlParams) || '';
     if (instantLikeCardId) {
       await window.handleInstantSocialLikeEntry?.(instantLikeCardId, initialUrlParams.get('net') || 'admin');
@@ -2973,7 +2984,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (storeInviteTarget) {
       try { storeInviteAccessToken = liff.isLoggedIn?.() ? liff.getAccessToken?.() || '' : ''; } catch (e) {}
     }
+    window.LoginBootstrap?.stage('member');
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
+    allowLoginBackground = !storeInviteTarget && !!checkRes && !checkRes.error && checkRes.success !== false
+      && typeof checkRes.isRegistered === 'boolean'
+      && (!checkRes.isRegistered || (checkRes.info && typeof checkRes.info === 'object' && !Array.isArray(checkRes.info)));
 
     // A store invite binds only its verified attribution; it does not complete a personal profile or create a card.
     // Confirm membership before applying roles; a stale cache or an unavailable check is not authority.
@@ -3052,6 +3067,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return null;
       });
       if (resumedMotherRegistration && resumedMotherRegistration.completed) {
+        allowLoginBackground = true;
         window.goPage('home', true);
         if (typeof window.loadHomeData === 'function') window.loadHomeData();
         return;
@@ -3062,6 +3078,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.renderPendingMotherRegistration?.(window.currentUserProfile.userId);
       }
       if (usedCachedUser && cachedUserInfo && !shareCardId && !claimCardId) {
+        // Preserve the existing cached-session fallback; queued reads still
+        // require the same live LINE token and server-side access checks.
+        allowLoginBackground = true;
         console.warn('Auth check did not confirm membership; keeping cached session:', checkRes && (checkRes.error || checkRes.source || 'not_registered'));
         return;
       }
@@ -3069,6 +3088,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error("Auth check failed:", checkRes.error);
         const recovered = await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
         if (recovered) {
+          allowLoginBackground = true;
           window.goPage('home', true);
           if (typeof window.loadHomeData === 'function') window.loadHomeData();
           return;
@@ -3081,6 +3101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const recovered = await window.recoverRegisteredUserFromLegacyCache(window.currentUserProfile.userId)
           || await window.recoverRegisteredUserFromBoundCard(window.currentUserProfile.userId);
         if (recovered) {
+          allowLoginBackground = true;
           window.goPage('home', true);
           if (typeof window.loadHomeData === 'function') window.loadHomeData();
           return;
@@ -3224,6 +3245,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
   } catch (err) {
+    allowLoginBackground = false;
     if (window.recoverActmasterInvalidLiffAuthorization?.(err)) return;
     if (window.recoverActmasterStartupOnce?.(err)) return;
     if (typeof window.showActmasterStartupFailure === 'function') {
@@ -3232,5 +3254,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('loading-text').innerText = "系統暫時無法連線";
     }
     console.error(err);
+  } finally {
+    window.LoginBootstrap?.finish(allowLoginBackground);
   }
 });
