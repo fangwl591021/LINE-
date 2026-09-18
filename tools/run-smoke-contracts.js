@@ -43,6 +43,7 @@ const fullChecks = [
   'test/store-phone-reward.test.mjs',
   'test/point-history-cashier-dedupe.test.mjs',
   'test/store-points-home.test.mjs',
+  'test/home-reference-theme.test.mjs',
   'test/store-wallet-card.test.mjs',
   'test/store-admin.test.mjs',
   'test/store-admin-ui.test.mjs',

@@ -22,6 +22,8 @@ const server=createServer(async(req,res)=>{
       document.getElementById('page-home').classList.remove('hidden');document.getElementById('bottom-nav')?.classList.remove('hidden');document.getElementById('home-profile-points').textContent='13,260';
       const interest=document.getElementById('home-ai-match-interest-summary');interest.classList.remove('hidden');document.getElementById('home-ai-match-interest-title').textContent='你想讓誰找到你？';document.getElementById('home-ai-match-interest-note').textContent='建立您的 AI 業務需求';
       document.getElementById('home-exchange-zone-button').classList.remove('hidden');
+      document.getElementById('home-ai-match-interest-icon').textContent='person_add';
+      document.getElementById('home-system-ticker').classList.remove('hidden');document.getElementById('home-system-ticker-text').textContent='今日全系統新增收藏名片（本機示範）';
       const share=document.querySelector('[data-home-top-action="home"]');share.querySelector('.material-symbols-outlined').textContent='qr_code_2';share.querySelector('.home-top-shortcut-label').textContent='專屬 QR';share.querySelector('.home-top-shortcut-value').textContent='分享';share.setAttribute('aria-label','開啟專屬 QR 分享');
       document.querySelectorAll('button:not(#home-mall-banner)').forEach(button=>button.disabled=true);document.querySelectorAll('a').forEach(link=>link.removeAttribute('href'));
     </script><script src="/js/modules/store-shop-entry.js"></script></body></html>`);return;
@@ -46,6 +48,6 @@ const server=createServer(async(req,res)=>{
   }
   const path=resolve(root,'.'+decodeURIComponent(url.pathname));
   if(!path.startsWith(root.endsWith(sep)?root:root+sep)||!/^\/(?:js\/modules\/|js\/vendor\/|css\/|assets\/|store-shop\.html$)/.test(url.pathname)){res.writeHead(404);res.end();return;}
-  try{const data=await readFile(path);res.setHeader('Content-Type',path.endsWith('.js')||path.endsWith('.mjs')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.html')?'text/html;charset=utf-8':path.endsWith('.png')?'image/png':'image/jpeg');res.end(data);}catch{res.writeHead(404);res.end();}
+  try{const data=await readFile(path);res.setHeader('Content-Type',path.endsWith('.js')||path.endsWith('.mjs')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.html')?'text/html;charset=utf-8':path.endsWith('.svg')?'image/svg+xml':path.endsWith('.png')?'image/png':'image/jpeg');res.end(data);}catch{res.writeHead(404);res.end();}
 });
 server.listen(8769,'127.0.0.1',()=>console.log('Preview: http://127.0.0.1:8769/demo?role=user'));

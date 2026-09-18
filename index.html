@@ -48,6 +48,7 @@
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
 
   <link rel="stylesheet" href="css/styles.css?v=7.6">
+  <link rel="stylesheet" href="css/home-reference-theme.css?v=1">
   <link rel="stylesheet" href="css/points-wallet-qr.css?v=1">
   <script src="js/config.js?v=9.14"></script>
 
@@ -1280,7 +1281,7 @@
             <span class="home-quick-label ios-home-primary-label">星座運勢</span>
           </button>
           <a href="https://lin.ee/SGdgLJk" target="_blank" rel="noopener noreferrer" class="home-quick-circle group" aria-label="加LINE好友">
-            <span class="home-quick-icon material-symbols-outlined text-violet-600">edit_note</span>
+            <img class="home-quick-icon home-line-icon" src="assets/line-friend-icon.svg" width="32" height="32" alt="" aria-hidden="true">
             <span class="home-quick-label ios-home-primary-label">加LINE好友</span>
           </a>
           <button type="button" onclick="window.goPage('my-activities')" class="home-quick-circle group">
@@ -1288,7 +1289,7 @@
             <span class="home-quick-label">個人行事曆</span>
           </button>
           <button id="inbox-nav-button" onclick="window.goPage('inbox')" class="home-quick-circle group relative">
-            <span class="home-quick-icon home-quick-mail-icon material-symbols-outlined text-slate-900">mail</span>
+            <span class="home-quick-icon home-quick-mail-icon material-symbols-outlined text-sky-500">mail</span>
             <span class="home-quick-label">收件夾</span>
             <span id="inbox-unread-badge" class="hidden absolute top-0 right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black leading-5 text-center shadow-sm">0</span>
           </button>
@@ -1310,7 +1311,7 @@
       <section id="home-network-search-entry" class="mx-0 mt-4 border-y border-emerald-100 bg-white px-4 py-4 shadow-sm">
         <button id="home-ai-match-interest-summary" type="button" onclick="window.openHomeAiMatchInterest?.()" class="hidden mb-3 w-full rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4 text-left active:scale-[0.99] transition-transform">
           <span class="flex items-start gap-3">
-            <span id="home-ai-match-interest-icon" class="material-symbols-outlined text-[24px] text-pink-500">favorite</span>
+            <span id="home-ai-match-interest-icon" class="material-symbols-outlined text-[24px] text-emerald-700">person_add</span>
             <span class="min-w-0">
               <strong id="home-ai-match-interest-title" class="block text-[21px] font-black leading-tight text-[#064338]">AI 配對關注</strong>
               <span id="home-ai-match-interest-note" class="mt-1 block text-[12px] font-bold leading-5 text-slate-500">讀取中</span>
@@ -1384,7 +1385,7 @@
         <h3 class="home-section-kicker">&#65;&#73;&#26381;&#21209;</h3>
         <div class="grid grid-cols-4 gap-y-8 gap-x-1 mt-6">
           <button type="button" onclick="window.openHomeLowerPanel?.('onboarding')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-violet-600">fact_check</span>
+            <span class="home-quick-icon material-symbols-outlined text-emerald-600">fact_check</span>
             <span class="home-quick-label !text-[13px]">&#19978;&#25163;&#24314;&#35696;</span>
           </button>
           <button type="button" onclick="window.openBusinessNetworkingLab ? window.openBusinessNetworkingLab() : window.openHomeLowerPanel?.('assistant')" class="home-quick-circle group">
@@ -1396,7 +1397,7 @@
             <span class="home-quick-label !text-[13px]">&#37197;&#23565;</span>
           </button>
           <button type="button" onclick="window.openInboxSendCenter ? window.openInboxSendCenter() : window.goPage('inbox')" class="home-quick-circle group relative">
-            <span class="home-quick-icon material-symbols-outlined text-indigo-600">mail</span>
+            <span class="home-quick-icon material-symbols-outlined text-sky-500 icon-filled">mail</span>
             <span class="home-quick-label !text-[13px]">&#25910;&#20449;&#22846;</span>
           </button>
         </div>
@@ -1413,7 +1414,7 @@
             <span class="home-quick-label !text-[13px]">&#25976;&#25818;&#20998;&#26512;</span>
           </button>
           <button type="button" onclick="window.goPage('my-activities')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-slate-900">task</span>
+            <span class="home-quick-icon material-symbols-outlined text-sky-500 icon-filled">task</span>
             <span class="home-quick-label !text-[13px]">&#20219;&#21209;&#31649;&#29702;</span>
           </button>
           <button type="button" onclick="window.openStoreShop()" class="home-quick-circle group" aria-label="開啟店家商城">
@@ -1439,11 +1440,11 @@
             <span class="home-quick-label !text-[13px]">&#35506;&#31243;</span>
           </button>
           <button type="button" onclick="window.openHomeActivityCategory?.('social')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-slate-900">celebration</span>
+            <span class="home-quick-icon material-symbols-outlined text-sky-500 icon-filled">celebration</span>
             <span class="home-quick-label !text-[13px]">&#32879;&#35516;</span>
           </button>
           <button type="button" onclick="window.openHomeActivityCategory?.('other')" class="home-quick-circle group">
-            <span class="home-quick-icon material-symbols-outlined text-slate-900">festival</span>
+            <span class="home-quick-icon material-symbols-outlined text-violet-600">account_balance</span>
             <span class="home-quick-label !text-[13px]">&#20854;&#23427;</span>
           </button>
         </div>
@@ -2608,8 +2609,8 @@
     <button onclick="window.goPage('card')"        id="nav-btn-card"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">recent_patient</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">收藏名片</span></button>
     <button onclick="window.goPage('matchmake')"  id="nav-btn-matchmake" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">psychology</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">配對</span></button>
     <button onclick="window.openInboxSendCenter ? window.openInboxSendCenter() : window.goPage('inbox')" id="nav-btn-inbox" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">send</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">發訊</span></button>
-    <button onclick="window.goPage('admin-settings')" id="nav-btn-admin-settings" class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">person</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">設定</span></button>
-    <button onclick="window.goPage('home')"        id="nav-btn-home"      class="nav-btn"><div class="icon-box"><span class="material-symbols-outlined text-[24px]">keyboard_return</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">返回</span></button>
+    <button onclick="window.goPage('admin-settings')" id="nav-btn-admin-settings" class="nav-btn"><div class="icon-box" aria-hidden="true"><span class="material-symbols-outlined text-[24px]">person</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">設定</span></button>
+    <button onclick="window.goPage('home')"        id="nav-btn-home"      class="nav-btn"><div class="icon-box" aria-hidden="true"><span class="material-symbols-outlined text-[24px]">keyboard_return</span></div><span class="text-[10px] font-bold tracking-wide mt-0.5">返回</span></button>
   </nav>
 
   <nav id="bottom-nav-admin" class="fixed bottom-0 w-full max-w-md bg-white border-t border-slate-100 flex justify-evenly items-center px-2 py-2 z-[80] pb-safe shadow-[0_-4px_15px_rgba(0,0,0,0.03)] left-1/2 -translate-x-1/2 h-[76px] rounded-t-3xl hidden">
@@ -2880,7 +2881,7 @@
 <script src="js/modules/activities.js?v=7.9"></script>
 <script src="js/modules/admin.js?v=8.9"></script>
 <script src="js/modules/home-task-buckets.mjs?v=1.0"></script>
-<script src="js/modules/home.js?v=8.09"></script>
+<script src="js/modules/home.js?v=8.10"></script>
 <script src="js/modules/business-networking-lab.js?v=1.9"></script>
 <script src="js/modules/customers.js?v=1.2"></script>
 <script src="js/modules/inbox.js?v=1.20"></script>

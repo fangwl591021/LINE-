@@ -511,7 +511,7 @@ const HomeModule = (function() {
                 note.textContent = '尚無新關注，完善合作需求可提高媒合機會';
             } else {
                 box.dataset.target = 'business';
-                if (icon) icon.textContent = 'public';
+                if (icon) icon.textContent = 'person_add';
                 title.textContent = '你想讓誰找到你？';
                 note.textContent = '建立您的 AI 業務需求';
             }

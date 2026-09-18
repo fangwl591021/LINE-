@@ -1,0 +1,209 @@
+/* Reference palette: presentation only; shared pages and the opt-in V2 stay unchanged. */
+body.home-page:not(.business-home-v2-active) {
+  --home-ink: #102f3b;
+  --home-green: #00866a;
+  --home-mint: #eefbf7;
+  --home-muted: #607986;
+  --home-orange: #f87818;
+  --home-pink: #ed3a9e;
+  --home-purple: #9039e9;
+  --home-blue: #009deb;
+  background: var(--home-mint);
+  color: var(--home-ink);
+}
+body.home-page:not(.business-home-v2-active) #app {
+  background: linear-gradient(165deg, #ebfaf5, #f7fcfb 45%, #edfaf5);
+}
+body.home-page:not(.business-home-v2-active) #main {
+  padding: 12px 12px 100px;
+}
+body.home-page:not(.business-home-v2-active) #home-profile-card > .grid {
+  border-radius: 18px;
+  background: radial-gradient(ellipse at 10% 0, #36c68b88, transparent 55%),
+    linear-gradient(110deg, #079b72, #00846a 60%, #006b54);
+  box-shadow: 0 4px 12px #087c5710;
+}
+body.home-page:not(.business-home-v2-active) #home-profile-card .home-top-shortcut {
+  height: 108px;
+  border-color: #ffffff29;
+}
+body.home-page:not(.business-home-v2-active) #home-profile-card .material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 550, 'GRAD' 0, 'opsz' 32;
+}
+body.home-page:not(.business-home-v2-active) #home-primary-shortcuts {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 18px;
+  background: #ffffffd9;
+  border: 1px solid #ffffff;
+}
+body.home-page:not(.business-home-v2-active) #home-primary-shortcuts > .grid {
+  gap: 8px;
+}
+body.home-page:not(.business-home-v2-active) .home-quick-circle {
+  border-radius: 12px;
+  border: 1px solid #edf3f166;
+  background: #ffffff;
+  box-shadow: none;
+}
+body.home-page:not(.business-home-v2-active) #home-primary-shortcuts .home-quick-circle {
+  min-height: 76px;
+  gap: 8px;
+  padding: 10px 2px;
+}
+body.home-page:not(.business-home-v2-active) .home-quick-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 550, 'GRAD' 0, 'opsz' 32;
+}
+body.home-page:not(.business-home-v2-active) .home-quick-icon.icon-filled {
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 32;
+}
+body.home-page:not(.business-home-v2-active) .home-line-icon { object-fit: contain; }
+body.home-page:not(.business-home-v2-active) #home-primary-shortcuts a[aria-label="加LINE好友"] .home-quick-label {
+  font-size: 13px;
+  letter-spacing: -.025em;
+  white-space: nowrap;
+}
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-orange-500 { color: var(--home-orange); }
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-pink-500 { color: var(--home-pink); }
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-purple-500,
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-purple-600,
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-violet-600 { color: var(--home-purple); }
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-sky-500 { color: var(--home-blue); }
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-emerald-600 { color: var(--home-green); }
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-slate-900 { color: var(--home-ink); }
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-yellow-500 { color: #edaf00; }
+body.home-page:not(.business-home-v2-active) .home-quick-icon.text-red-500 { color: #ed3e33; }
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-orange-500),
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-red-500) { background: #fff9f4; }
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-pink-500) { background: #fff6fb; }
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-purple-500),
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-purple-600),
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-violet-600) { background: #f8f5fe; }
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-sky-500) { background: #f3fbff; }
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-emerald-600),
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.home-line-icon) { background: #f0fbf6; }
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-slate-900) { background: #f4f7fc; }
+body.home-page:not(.business-home-v2-active) .home-quick-circle:has(.text-yellow-500) { background: #fffdf1; }
+body.home-page:not(.business-home-v2-active) #page-home .home-quick-label {
+  color: var(--home-ink);
+  line-height: 1.45;
+}
+body.home-page:not(.business-home-v2-active) #home-mall-banner {
+  width: 100%;
+  margin: 10px 0 0;
+  border-radius: 16px;
+  box-shadow: 0 2px 6px #007d5d0a;
+}
+body.home-page:not(.business-home-v2-active) #home-network-search-entry {
+  margin-top: 10px;
+  padding: 0;
+  background: transparent;
+}
+body.home-page:not(.business-home-v2-active) #home-ai-match-interest-summary {
+  padding: 16px;
+  border-radius: 16px;
+  background: linear-gradient(110deg, #e8faf2, #dff8ed);
+  border: 1px solid #ccefe1;
+}
+body.home-page:not(.business-home-v2-active) #home-ai-match-interest-icon {
+  color: var(--home-green);
+  font-size: 32px;
+  font-variation-settings: 'FILL' 1, 'wght' 500;
+}
+/* Retain the distinct new-interest status rather than painting every state green. */
+body.home-page:not(.business-home-v2-active) #home-ai-match-interest-summary[data-target="interest"] {
+  background: #fff2f8;
+  border-color: #f8d5e7;
+}
+body.home-page:not(.business-home-v2-active) #home-ai-match-interest-summary[data-target="interest"] #home-ai-match-interest-icon {
+  color: var(--home-pink);
+}
+body.home-page:not(.business-home-v2-active) #home-network-search-entry form {
+  border: 1px solid #e8f4ef;
+  border-radius: 16px;
+  background: #ffffffed;
+  padding: 14px 10px;
+}
+body.home-page:not(.business-home-v2-active) #home-network-search-entry form > div:first-child { padding: 0 4px; }
+body.home-page:not(.business-home-v2-active) #home-network-search-icon { color: var(--home-green); font-size: 28px; }
+body.home-page:not(.business-home-v2-active) #home-network-search-entry input[type="radio"] + span {
+  background: #edfbf5;
+  border-color: #d2f0e4;
+  color: #006f57;
+  min-height: 42px;
+}
+body.home-page:not(.business-home-v2-active) #home-network-search-entry input[type="radio"]:checked + span {
+  background: linear-gradient(120deg, #009571, #006e56);
+  border-color: #007f63;
+  color: #fff;
+}
+body.home-page:not(.business-home-v2-active) #home-network-search-entry input[type="search"] {
+  background: #f7f9fa;
+  border-color: #e2e9ec;
+}
+body.home-page:not(.business-home-v2-active) #home-network-search-entry button[type="submit"] {
+  background: linear-gradient(125deg, #009571, #006951);
+}
+body.home-page:not(.business-home-v2-active) #home-system-ticker {
+  margin-top: 10px;
+  background: #fff9e9;
+  border: 1px solid #f4ebce;
+  border-radius: 12px;
+}
+body.home-page:not(.business-home-v2-active) #home-system-ticker > div { padding: 10px 14px; color: #9d4d0c; }
+body.home-page:not(.business-home-v2-active) #home-recurring-task-panel {
+  margin-top: 10px;
+  border: 1px solid #e4f2ec;
+  border-radius: 16px;
+  background: #ffffffed;
+  box-shadow: none;
+  overflow: hidden;
+}
+body.home-page:not(.business-home-v2-active) #home-recurring-task-toggle { padding: 12px; }
+body.home-page:not(.business-home-v2-active) .home-lower-panel {
+  margin-top: 10px;
+  padding: 12px 6px 8px;
+  background: #e6f8f17a;
+  border: 1px solid #e6f5ee;
+  border-radius: 16px;
+}
+body.home-page:not(.business-home-v2-active) .home-section-kicker { padding: 0 6px; color: var(--home-ink); font-size: 18px; line-height: 1.35; }
+body.home-page:not(.business-home-v2-active) .home-lower-panel > .grid { margin-top: 10px; gap: 6px; }
+body.home-page:not(.business-home-v2-active) .home-lower-panel .home-quick-circle { min-height: 80px; gap: 7px; padding: 8px 2px; }
+body.home-page:not(.business-home-v2-active) #bottom-nav {
+  max-width: 520px;
+  background: #ffffffed;
+  border-color: #e3f0e9;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -3px 16px #17695008;
+}
+body.home-page:not(.business-home-v2-active) #bottom-nav .nav-btn { color: #778d98; }
+body.home-page:not(.business-home-v2-active) #bottom-nav .nav-active,
+body.home-page:not(.business-home-v2-active) #bottom-nav #nav-btn-home { color: var(--home-green); }
+body.home-page:not(.business-home-v2-active) #bottom-nav .nav-active .icon-box { background: #e7f8f0; color: var(--home-green); }
+/* Only the homepage icon artwork changes; shared navigation labels and routes remain intact. */
+body.home-page:not(.business-home-v2-active) #nav-btn-admin-settings .material-symbols-outlined,
+body.home-page:not(.business-home-v2-active) #nav-btn-home .material-symbols-outlined { font-size: 0; }
+body.home-page:not(.business-home-v2-active) #nav-btn-admin-settings .material-symbols-outlined::before { content: 'settings'; font-size: 24px; }
+body.home-page:not(.business-home-v2-active) #nav-btn-home .material-symbols-outlined::before { content: 'home'; font-size: 24px; font-variation-settings: 'FILL' 1; }
+body.home-page:not(.business-home-v2-active) :is(.home-quick-circle, .home-top-shortcut, #home-ai-match-interest-summary, #home-mall-banner, #home-network-search-entry button):focus-visible {
+  outline: 3px solid #007b61;
+  outline-offset: 2px;
+}
+body.home-page:not(.business-home-v2-active) #home-network-search-entry input[type="radio"]:focus-visible + span {
+  outline: 3px solid #007b61;
+  outline-offset: 2px;
+}
+@media (max-width: 360px) {
+  body.home-page:not(.business-home-v2-active) #main { padding-left: 8px; padding-right: 8px; }
+  body.home-page:not(.business-home-v2-active) #home-primary-shortcuts > .grid { gap: 5px; }
+  body.home-page:not(.business-home-v2-active) #home-primary-shortcuts .home-quick-label { font-size: 13px; }
+  body.home-page:not(.business-home-v2-active) .home-lower-panel > .grid { gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.home-page:not(.business-home-v2-active) .home-quick-icon { animation: none; }
+}
