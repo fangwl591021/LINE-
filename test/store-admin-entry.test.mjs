@@ -22,13 +22,13 @@ test('settings entry follows admin-only permissions and hides after switching to
 
 test('cache versions and private entry are wired without eager directory loading',()=>{
   const entry=read('js/modules/store-shop-entry.js'),publicPage=read('store-shop.html');
-  assert.match(html,/core\.js\?v=7\.34/);assert.match(html,/store-shop-entry\.js\?v=40/);
-  for(const source of [entry,publicPage]){assert.match(source,/store-shop\.css\?v=26/);assert.match(source,/store-shop\.js\?v=38/);}
+  assert.match(html,/core\.js\?v=7\.34/);assert.match(html,/store-shop-entry\.js\?v=41/);
+  for(const source of [entry,publicPage]){assert.match(source,/store-shop\.css\?v=26/);assert.match(source,/store-shop\.js\?v=39/);}
   assert.match(front,/const canAdmin=\(\)=>!standalone/);
   assert.match(front,/case 'admin-stores': await adminStores\(\); break;/);
   assert.match(front,/!standalone&&section==='admin-stores'/);
   assert.doesNotMatch(html+publicPage,/<script[^>]+src="[^"]*store-admin\.js/);
-  assert.match(front,/封面建議使用橫式 16:9/);
+  assert.match(front,/建議尺寸：800 × 533 px（約 3:2 橫式）/);
 });
 
 test('actual Worker rejects unauthenticated directory reads and every write before DB access',async()=>{

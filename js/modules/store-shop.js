@@ -250,7 +250,7 @@
       content.insertAdjacentHTML('beforeend',moreButton(productNext,true));
       if(shop&&!standalone) content.insertAdjacentHTML('afterbegin',`<button type="button" data-do="share-store" ${shop.status!=='active'?'disabled':''}>商城邀請 QR／網址</button>`);
       if(canAdmin())content.insertAdjacentHTML('afterbegin','<button type="button" data-do="admin-stores">管理員・店家列表</button>');
-      content.querySelector('[data-form="store"] .shop-image-field')?.insertAdjacentHTML('beforeend','<p class="shop-meta">店家封面建議使用橫式 16:9 圖片；前台滿版置中裁切，原圖仍完整保留。</p>');
+      content.querySelector('[data-form="store"] .shop-image-field>p')?.insertAdjacentHTML('afterend','<p class="shop-meta" data-shop-cover-guide>建議尺寸：800 × 533 px（約 3:2 橫式）。前台依版位滿版置中裁切，重要文字與主體請置中並預留四周邊界；上傳原圖仍完整保留。</p>');
       addProductTags();
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
