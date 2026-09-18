@@ -122,6 +122,7 @@
       const switcher=root.querySelector('.points-view-switch');switcher.hidden=!allowed;switcher.textContent=merchantView?'消費者版':'商家版';
       const brand=root.querySelector('.shop-brand-entry');brand.dataset.do=allowed?'point-operation':'wallet';brand.setAttribute('aria-label',allowed?'點數通：開啟會員點數操作':'點數通：我的點數 QR');
       content.innerHTML=home.renderPointsHome({merchant:merchantView,rewardOnly:rewardOnly(),standalone,canManage:canManage()});
+      if(!standalone)content.querySelector('.points-actions')?.insertAdjacentHTML('afterend','<button type="button" data-do="consumption-journal" class="shop-journal-entry">▤ 我的消費日誌 <span>店內消費・網購明細 ›</span></button>');
       const nav=root.querySelector('.shop-bottom-nav');
       const scan=nav.querySelector('.shop-bottom-qr');scan.dataset.do=merchantView?'point-operation':'wallet';scan.innerHTML=`<span aria-hidden="true">${home.pointIcon('scan')}</span>${merchantView?'掃碼':'點數 QR'}`;
       const icons={'points-home':'home',find:'pin','spending-history':'history',mine:'user'};
@@ -135,6 +136,7 @@
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
       content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?`<a class="shop-link" href="${esc(loginLink())}">登入／註冊後查看消費紀錄與網路訂單，並返回本店商城</a>`:'<button data-do="registration">♙ 會員註冊／資料維護 <span>›</span></button><button data-do="spending-history">▤ 我的消費折抵紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
+      if(!standalone)content.querySelector('[data-do="spending-history"]').insertAdjacentHTML('beforebegin','<button type="button" data-do="consumption-journal">▤ 我的消費日誌 <span>›</span></button>');
     }
     function detail(id) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
@@ -338,6 +340,14 @@
             const module=await import('./store-registration-popup.js?v=3');
             const isCurrent=()=>version===epoch&&root.isConnected&&!standalone&&window.currentPage==='store-shop';
             if(isCurrent())module.openStoreRegistrationPopup({standalone,isCurrent});
+            break;
+          }
+          case 'consumption-journal': {
+            if(standalone){location.assign(loginLink());break;}
+            const version=epoch,owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
+            const isCurrent=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId&&token===window.liff?.getAccessToken?.()&&!!window.liff?.isLoggedIn?.();
+            const module=await import('./store-consumption-journal.js?v=1');
+            if(isCurrent())module.openStoreConsumptionJournal({base,isCurrent,onPoints:()=>{void import('./store-history-popup.js?v=1').then(history=>{if(isCurrent())history.openStoreHistoryPopup({isCurrent});}).catch(()=>{if(isCurrent())alert.textContent='點數紀錄暫時無法開啟，請重試';});}});
             break;
           }
           case 'spending-history': {

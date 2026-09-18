@@ -21,8 +21,8 @@ test('only the store cover gets the 800 by 533 recommendation beside its upload 
   assert.equal(front.match(/data-shop-cover-guide/g).length, 1);
   const entry = readFileSync(new URL('../js/modules/store-shop-entry.js', import.meta.url), 'utf8');
   const publicHtml = readFileSync(new URL('../store-shop.html', import.meta.url), 'utf8');
-  assert.ok(entry.includes('js/modules/store-shop.js?v=39'));
-  assert.ok(publicHtml.includes('js/modules/store-shop.js?v=39'));
+  assert.ok(entry.includes('js/modules/store-shop.js?v=40'));
+  assert.ok(publicHtml.includes('js/modules/store-shop.js?v=40'));
 });
 
 test('shop introduction fills the card at 16:9 with a bounded desktop height and centered cropping', () => {
