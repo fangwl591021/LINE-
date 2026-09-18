@@ -53,23 +53,27 @@
   <script src="js/config.js?v=9.15"></script>
   <script src="js/login-bootstrap.js?v=1"></script>
   <style id="login-bootstrap-style">
-    #loading-screen.login-shell { display:flex; position:fixed; inset:0; z-index:1000; overflow:auto; align-items:center; justify-content:flex-start; padding:clamp(24px,7vh,64px) 20px; background:#f2fbf8; color:#153e36; }
+    #loading-screen.login-shell { display:flex; flex-direction:column; position:fixed; inset:0; z-index:1000; overflow:auto; align-items:center; justify-content:flex-start; box-sizing:border-box; padding:32px 24px; background:radial-gradient(ellipse at 50% 38%,#fff 0%,#f2fbf8 70%); color:#153e36; }
     #loading-screen.hidden { display:none; }
-    .login-shell-inner { width:100%; max-width:430px; margin:auto; font-family:system-ui,sans-serif; }
-    .login-shell-brand { padding:24px; border-radius:24px; background:linear-gradient(120deg,#06a676,#007d61); color:white; }
-    .login-shell-brand strong { display:block; font-size:28px; letter-spacing:.08em; }
-    .login-shell-brand p { margin:8px 0 0; font-size:14px; line-height:1.6; }
-    .login-shell-placeholder { margin-top:18px; border-radius:20px; background:#fff; padding:22px; }
-    .login-shell-line { height:14px; background:#e1f1eb; border-radius:8px; margin:12px 0; width:65%; }
-    .login-shell-line.short { width:40%; height:30px; }
-    .login-shell-tiles { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:18px 0 26px; }
-    .login-shell-tiles span { height:58px; border-radius:16px; background:#e1f1eb; }
-    #loading-text { font-size:18px; text-align:center; line-height:1.6; }
-    .login-shell-note { margin-top:8px; font-size:14px; text-align:center; color:#52756b; line-height:1.7; }
+    .login-shell-inner { flex:none; width:100%; max-width:340px; margin:auto; text-align:center; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+    .login-shell-logo { display:block; width:96px; height:96px; margin:0 auto 18px; object-fit:contain; }
+    .login-shell-brand strong { display:block; font-size:30px; font-weight:800; line-height:1.3; letter-spacing:.08em; color:#007d61; }
+    .login-shell-brand p { margin:10px 0 0; font-size:14px; line-height:1.7; color:#52756b; }
+    .login-shell-spinner { display:block; box-sizing:border-box; width:30px; height:30px; margin:36px auto 16px; border:3px solid #dceee7; border-top-color:#008365; border-radius:50%; animation:login-shell-spin .85s linear infinite; }
+    @keyframes login-shell-spin { to { transform:rotate(360deg); } }
+    @media (prefers-reduced-motion:reduce) { .login-shell-spinner { animation:none; } }
+    #loading-text { margin:0; font-size:16px; font-weight:600; text-align:center; line-height:1.7; }
+    .login-shell-note { margin:6px 0 0; font-size:13px; text-align:center; color:#52756b; line-height:1.7; }
     #login-slow-hint { margin-top:18px; text-align:center; font-size:14px; }
     #login-slow-hint[hidden] { display:none; }
     #login-slow-hint button { margin-top:12px; padding:12px 20px; border:1px solid #007d61; border-radius:14px; background:white; color:#006b53; cursor:pointer; }
     #login-slow-hint button:focus-visible { outline:3px solid #007d61; outline-offset:3px; }
+    #loading-screen:has(>#actmaster-startup-retry) .login-shell-inner { margin-bottom:0; }
+    #loading-screen:has(>#actmaster-startup-retry) .login-shell-spinner { visibility:hidden; animation:none; }
+    #loading-screen:has(>#actmaster-startup-retry) .login-shell-note { display:none; }
+    #loading-screen>p { flex:none; max-width:340px; margin:12px auto 0; padding:0; font:13px/1.7 system-ui,sans-serif; text-align:center; color:#52756b; }
+    #loading-screen>#actmaster-startup-retry { flex:none; margin:18px auto auto; padding:12px 24px; border:0; border-radius:14px; background:#007d61; color:white; font:600 15px/1.5 system-ui,sans-serif; cursor:pointer; }
+    #loading-screen>#actmaster-startup-retry:focus-visible { outline:3px solid #007d61; outline-offset:3px; }
   </style>
 
   <style type="text/tailwindcss">
@@ -353,13 +357,10 @@
 
 <div id="loading-screen" class="login-shell fixed inset-0 bg-white z-[1000] flex flex-col items-center justify-center transition-opacity duration-300">
   <div class="login-shell-inner">
-    <div class="login-shell-brand"><strong>點數通</strong><p>讓點數流通，讓美好持續發生</p></div>
-    <div aria-hidden="true">
-      <div class="login-shell-placeholder"><div class="login-shell-line"></div><div class="login-shell-line short"></div></div>
-      <div class="login-shell-tiles"><span></span><span></span><span></span><span></span></div>
-    </div>
+    <div class="login-shell-brand"><img class="login-shell-logo" src="assets/points-logo-transparent-20260916.png" width="96" height="96" alt="" decoding="async" fetchpriority="low"><strong>點數通</strong><p>讓點數流通，讓美好持續發生</p></div>
+    <span class="login-shell-spinner" aria-hidden="true"></span>
     <h2 id="loading-text" role="status" aria-live="polite">正在連線到 LINE…</h2>
-    <p class="login-shell-note">身分確認後即可使用，點數與其他資料會分區載入。</p>
+    <p class="login-shell-note">請稍候，即將為您開啟</p>
     <div id="login-slow-hint" hidden><p>這個步驟比平常久，您可以稍候或重新連線。</p><button type="button" onclick="window.location.replace(window.buildActmasterCleanLiffUrl())">重新連線</button></div>
   </div>
 </div>

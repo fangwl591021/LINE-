@@ -384,6 +384,26 @@ test('loading shell is synchronous, accessible and contains no member authority 
   assert.doesNotMatch(shell, /id="(?:avatar|header-admin-badge|header-role-label|point-balance-badge)"|\bcurrentUser\b|\buserRole\b/);
 });
 
+test('initial loading shows a lightweight CSS spinner instead of skeleton cards without delaying auth', () => {
+  const shell = block(indexSource, '<div id="loading-screen"', '<div id="toast-container"');
+  const style = block(indexSource, '<style id="login-bootstrap-style">', '</style>');
+  assert.match(shell, /class="login-shell-spinner" aria-hidden="true"/);
+  assert.match(shell, /class="login-shell-logo"[^>]*src="assets\/points-logo-transparent-20260916\.png"[^>]*width="96" height="96"[^>]*decoding="async" fetchpriority="low"/);
+  assert.doesNotMatch(shell + style, /login-shell-(?:placeholder|line|tiles)/);
+  assert.match(style, /animation:login-shell-spin \.85s linear infinite/);
+  assert.match(style, /@keyframes login-shell-spin\s*\{\s*to\s*\{\s*transform:rotate\(360deg\)/);
+  assert.match(style, /@media \(prefers-reduced-motion:reduce\)\s*\{\s*\.login-shell-spinner\s*\{\s*animation:none/);
+  assert.match(style, /#loading-screen\.hidden\s*\{\s*display:none/);
+  assert.match(style, /#loading-screen\.login-shell\s*\{[^}]*overflow:auto[^}]*box-sizing:border-box/);
+  assert.match(style, /#loading-screen\.login-shell\s*\{[^}]*flex-direction:column/);
+  assert.match(style, /\.login-shell-inner\s*\{[^}]*flex:none[^}]*width:100%[^}]*max-width:340px/);
+  assert.match(style, /#loading-screen:has\(>#actmaster-startup-retry\) \.login-shell-spinner\s*\{[^}]*animation:none/);
+  assert.match(style, /#loading-screen>#actmaster-startup-retry\s*\{[^}]*flex:none/);
+  assert.doesNotMatch(shell, /<script|\bon(?:load|error)\s*=|setTimeout|progressbar|aria-valuenow/);
+  assert.doesNotMatch(style, /@import|url\(/);
+  assert.doesNotMatch(bootstrapSource, /login-shell-spinner|animationend|transitionend|document\.fonts|\.decode\(/);
+});
+
 test('inbox badge requests merge while pending and retain existing throttling after release', async () => {
   const f = fixture({ profile: { userId: actor } });
   Object.assign(f.context, {
