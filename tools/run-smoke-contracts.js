@@ -126,6 +126,7 @@ const fullChecks = [
   'tools/check-home-profile-restyle-contract.js',
   'tools/check-home-design-contract.js',
   'tools/check-checkin-display-contract.js',
+  'test/checkin-award-copy.test.mjs',
   'tools/check-inbox-unread-icon-contract.js',
   'tools/check-local-gpt-key-hidden-contract.js',
   'tools/check-today-fortune-contract.js',

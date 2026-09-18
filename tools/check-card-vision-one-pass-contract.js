@@ -18,7 +18,7 @@ function ok(condition, message) {
 }
 
 const visionIndex = html.indexOf('js/modules/card-vision-crop.js?v=1.0');
-const cropperIndex = html.indexOf('js/modules/cropper.js?v=7.18');
+const cropperIndex = html.indexOf('js/modules/cropper.js?v=7.19');
 ok(visionIndex >= 0 && cropperIndex > visionIndex, 'vision crop module loads before collected-card workflow');
 ok(core.includes("data?.error || data?.message || ('伺服器暫時無法連線 (' + res.status + ')，請稍後重試')"), 'HTTP errors preserve the Worker failure reason');
 ok(html.includes('js/core.js?v=7.35'), 'core error visibility and collection cache change is cache-busted');

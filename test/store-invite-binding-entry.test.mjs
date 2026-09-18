@@ -44,6 +44,6 @@ test('new binding endpoint is isolated from generic registration, rewards and ca
   for(const call of ['registerUser(',"fetchAPI('registerUser'",'ensureReferralPlaceholderCard(',
     'storeAdjustCustomerPoints(', 'insertUserPoint(', 'syncMotherMemberRegistration(', 'upsertBoundUserFromCard('])assert.ok(!binding.includes(call),call);
   assert.ok(entry.indexOf('await handleStoreInviteBinding(')<entry.indexOf('await handleStoreShop('));
-  assert.match(read('index.html'),/js\/auth\.js\?v=11\.03/);
+  assert.match(read('index.html'),/js\/auth\.js\?v=11\.04/);
   assert.match(read('js/modules/crm.js'),/LINE 登入後自動記錄邀請歸屬/);
 });

@@ -2543,10 +2543,10 @@ window.claimDailyPointCheckin = async function(btn) {
     const awardedPoints = Number(data?.points || data?.awardedPoints || data?.changedPoints || 10);
     const message = data?.alreadyChecked
       ? '\u4eca\u5929\u5df2\u9818\u53d6\u904e\u8d08\u9ede'
-      : `\u5df2\u8d08\u9001 ${Number.isFinite(awardedPoints) ? awardedPoints : 10} \u9ede`;
+      : `簽到成功，\u5df2\u8d08\u9001 ${Number.isFinite(awardedPoints) ? awardedPoints : 10} \u9ede`;
     keepDisabled = false;
     if (statusEl) statusEl.textContent = data?.alreadyChecked ? '\u4eca\u5929\u5df2\u9818\u53d6\u904e\u8d08\u9ede\u3002' : message;
-    if (typeof window.showPointAwardCelebration === 'function' && data?.awarded) window.showPointAwardCelebration(Number.isFinite(awardedPoints) ? awardedPoints : 10);
+    if (typeof window.showPointAwardCelebration === 'function' && data?.awarded) window.showPointAwardCelebration(Number.isFinite(awardedPoints) ? awardedPoints : 10, 'daily-checkin');
     else window.showToast?.(message, false);
     window.pointWalletData = null;
     if (data?.balance !== undefined) {
