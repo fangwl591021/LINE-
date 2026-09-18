@@ -15,7 +15,14 @@ body.home-page:not(.business-home-v2-active) #app {
   background: linear-gradient(165deg, #ebfaf5, #f7fcfb 45%, #edfaf5);
 }
 body.home-page:not(.business-home-v2-active) #main {
-  padding: 12px 12px 100px;
+  padding: 0 12px 100px;
+}
+/* Hidden sibling pages must not add space above the first visible home section.
+   Column layout also avoids an anonymous line box around the empty role switch. */
+body.home-page:not(.business-home-v2-active) #home-profile-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
 }
 body.home-page:not(.business-home-v2-active) #home-profile-card > .grid {
   border-radius: 18px;
@@ -31,14 +38,14 @@ body.home-page:not(.business-home-v2-active) #home-profile-card .material-symbol
   font-variation-settings: 'FILL' 0, 'wght' 550, 'GRAD' 0, 'opsz' 32;
 }
 body.home-page:not(.business-home-v2-active) #home-primary-shortcuts {
-  margin-top: 10px;
-  padding: 8px;
+  margin-top: 6px;
+  padding: 6px;
   border-radius: 18px;
   background: #ffffffd9;
   border: 1px solid #ffffff;
 }
 body.home-page:not(.business-home-v2-active) #home-primary-shortcuts > .grid {
-  gap: 8px;
+  gap: 6px;
 }
 body.home-page:not(.business-home-v2-active) .home-quick-circle {
   border-radius: 12px;
@@ -94,12 +101,12 @@ body.home-page:not(.business-home-v2-active) #page-home .home-quick-label {
 }
 body.home-page:not(.business-home-v2-active) #home-mall-banner {
   width: 100%;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   border-radius: 16px;
   box-shadow: 0 2px 6px #007d5d0a;
 }
 body.home-page:not(.business-home-v2-active) #home-network-search-entry {
-  margin-top: 10px;
+  margin-top: 8px;
   padding: 0;
   background: transparent;
 }
@@ -149,14 +156,14 @@ body.home-page:not(.business-home-v2-active) #home-network-search-entry button[t
   background: linear-gradient(125deg, #009571, #006951);
 }
 body.home-page:not(.business-home-v2-active) #home-system-ticker {
-  margin-top: 10px;
+  margin-top: 8px;
   background: #fff9e9;
   border: 1px solid #f4ebce;
   border-radius: 12px;
 }
 body.home-page:not(.business-home-v2-active) #home-system-ticker > div { padding: 10px 14px; color: #9d4d0c; }
 body.home-page:not(.business-home-v2-active) #home-recurring-task-panel {
-  margin-top: 10px;
+  margin-top: 8px;
   border: 1px solid #e4f2ec;
   border-radius: 16px;
   background: #ffffffed;
@@ -165,7 +172,7 @@ body.home-page:not(.business-home-v2-active) #home-recurring-task-panel {
 }
 body.home-page:not(.business-home-v2-active) #home-recurring-task-toggle { padding: 12px; }
 body.home-page:not(.business-home-v2-active) .home-lower-panel {
-  margin-top: 10px;
+  margin-top: 8px;
   padding: 12px 6px 8px;
   background: #e6f8f17a;
   border: 1px solid #e6f5ee;

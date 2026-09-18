@@ -12,6 +12,26 @@ const shortcutEnd = html.indexOf('id="home-mall-banner"', shortcutStart);
 const shortcuts = html.slice(shortcutStart, shortcutEnd);
 const shortcutElements = [...shortcuts.matchAll(/<(button|a)\b[\s\S]*?<\/\1>/g)].map(match => match[0]);
 
+test('compact home removes top sibling space and the empty-switch line box without hiding controls', () => {
+  const rule = selector => {
+    const start = css.indexOf(`${scope} ${selector} {`);
+    assert.ok(start >= 0, `missing scoped rule for ${selector}`);
+    return css.slice(start, css.indexOf('}', start) + 1);
+  };
+  assert.match(rule('#main'), /padding:\s*0 12px 100px;/);
+  assert.match(rule('#home-profile-card'), /margin:\s*0;/);
+  assert.match(rule('#home-profile-card'), /display:\s*flex;/);
+  assert.match(rule('#home-profile-card'), /flex-direction:\s*column;/);
+  assert.match(rule('#home-primary-shortcuts'), /margin-top:\s*6px;/);
+  assert.match(rule('#home-primary-shortcuts'), /padding:\s*6px;/);
+  assert.match(rule('#home-primary-shortcuts > .grid'), /gap:\s*6px;/);
+  assert.match(rule('#home-mall-banner'), /margin:\s*8px 0 0;/);
+  assert.match(rule('#home-profile-card .home-top-shortcut'), /height:\s*108px;/);
+  assert.match(rule('#home-primary-shortcuts .home-quick-circle'), /min-height:\s*76px;/);
+  assert.doesNotMatch(css, /#home-top-nav-switch[^{}]*\{[^}]*display:\s*none/);
+  assert.match(html, /home-reference-theme\.css\?v=2/);
+});
+
 test('reference palette loads a local cache-versioned stylesheet only for the real home', () => {
   assert.match(html, /<link\b[^>]*href="css\/home-reference-theme\.css\?v=\d+"[^>]*>/);
   assert.ok(existsSync(themeUrl));
