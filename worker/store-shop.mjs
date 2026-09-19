@@ -1,6 +1,7 @@
 // Catalog and read-only sales. No point writes or cashier execution calls.
 import {readShopSales} from './store-shop-sales.mjs';
 import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
+import {publicPartnerShops,mergeShopPages} from './store-partner-catalog.mjs';
 const roles = ['store','店長','admin','總管','user','用戶'];
 const unlimitedRoles = ['store','店長','admin','總管'];
 const categories = ['','食','宿','遊','購','行','服務','製造'];
@@ -85,14 +86,19 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       if(id) {
         if(id.length>80) fail('店面編號不正確');
         const shop=await db.prepare(`SELECT ${publicColumns} FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND ${eligible}`).bind(id).first();
-        if(!shop) fail('店面尚未開放或已下架',404);
+        if(!shop) {
+          const partner=(await publicPartnerShops(db,{id}))[0];
+          if(partner)return reply({success:true,shop:partner,products:[],product_next:''});
+          fail('店面尚未開放或已下架',404);
+        }
         return reply({success:true,shop,...await productPage(db,id,false,url.searchParams.get('product_after')||'')});
       }
       const query=(url.searchParams.get('q')||'').trim().slice(0,80);
       const cursor=(url.searchParams.get('after')||'').slice(0,80);
       const category=choice(url.searchParams.get('category')||'',categories,'商品分類');
       const rows=(await db.prepare(`SELECT ${publicColumns} FROM store_shop_stores s WHERE s.status='active' AND ${eligible} AND s.id>? AND (instr(s.name,?)>0 OR instr(s.category,?)>0 OR instr(s.address,?)>0) AND (?='' OR EXISTS (SELECT 1 FROM store_shop_products p WHERE p.shop_id=s.id AND p.status='active' AND p.category=?)) ORDER BY s.id LIMIT 41`).bind(cursor,query,query,query,category,category).all()).results;
-      return reply({success:true,shops:rows.slice(0,40),next:rows.length>40?rows[39].id:''});
+      const combined=mergeShopPages(rows,await publicPartnerShops(db,{q:query,after:cursor,category}));
+      return reply({success:true,shops:combined.slice(0,40),next:combined.length>40?combined[39].id:''});
     }
     const manage=request.method==='GET'&&url.pathname==='/v1/store-shop/manage';
     const sales=request.method==='GET'&&url.pathname==='/v1/store-shop/sales';

@@ -32,6 +32,14 @@ function fixture(){
 const shop=(extra={})=>({id:A,name:'測試店家',status:'active',category:'食',address:'台北市',phone:'02-12345678',owner_uid:'U_PRIVATE',owner_name:'店主',owner_role:'store',product_count:3,active_product_count:2,online_product_count:1,public_visible:true,...extra});
 const report=(extra={})=>({success:true,shops:[shop()],summary:{total:5,active:3,draft:2},filtered_total:5,next:'',...extra});
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('admin can open existing partner management and ownerless listings are identified clearly',async()=>{
+  const s=fixture();let opened=0;s.options.onManagePartners=()=>{opened++;};
+  const pending=s.mount();s.requests[0].resolve(report({shops:[shop({listing_only:1,owner_name:'管理員代建（未綁定帳號）'})]}));await pending;
+  assert.match(s.root.textContent,/認領需由管理員核實/);assert.doesNotMatch(s.root.textContent,/商品 2 \/ 3/);
+  s.action('partners').dispatch('click');await flush();assert.equal(opened,1);
+  s.setValid(false);s.action('partners').dispatch('click');await flush();assert.equal(opened,1);
+});
 async function loaded(data=report()){const s=fixture();const pending=s.mount();s.requests[0].resolve(data);await pending;return s;}
 
 test('does not mount, load CSS, or request private data without the current admin scope',async()=>{

@@ -109,6 +109,7 @@
     function pageKind(kind) {
       clearHomeWallet?.();clearHomeWallet=null;
       root.dataset.shopView=kind;
+      const notice=root.querySelector?.('.shop-notice');if(notice)notice.hidden=false;
       root.querySelectorAll('.shop-bottom-nav button').forEach(b=>{const active=kind==='home'?b.dataset.do==='points-home':kind==='directory'||kind==='store'||kind==='product'?b.dataset.do==='find':kind==='mine'?b.dataset.do==='mine':false;b.setAttribute('aria-current',active?'page':'false');});
     }
     async function pointsHome(toggle=false) {
@@ -153,9 +154,9 @@
       content.innerHTML='<button type="button" data-do="manage">返回商城管理</button><p role="status">載入管理員店家列表…</p>';
       const sameSession=()=>canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&sameSession();
-      const module=await import('./store-admin.js?v=1');
+      const module=await import('./store-admin.js?v=2');
       if(!current())return;
-      await module.mountStoreAdmin(content,{api,isCurrent:current,onBack:()=>run(()=>manage()),onView:async id=>{
+      await module.mountStoreAdmin(content,{api,isCurrent:current,onManagePartners:()=>window.goPage('admin-partners'),onBack:()=>run(()=>manage()),onView:async id=>{
         if(!current())return;
         await run(async()=>{
           await view(id);
@@ -227,6 +228,14 @@
       const s=result.shop;
       viewedShop=s;viewedProducts=result.products;
       const details=[s.category,s.address,s.phone,s.hours].filter(Boolean).join('\n');
+      if(s.listing_only===1){
+        const notice=root.querySelector('.shop-notice');if(notice)notice.hidden=true;
+        const links=[['聯絡 LINE',s.line_url],['店家網站',s.website_url],['查看地圖',s.maps_url]].filter(([,url])=>{try{const u=new URL(url);return u.protocol==='https:'&&!u.username&&!u.password;}catch{return false;}}).map(([label,url])=>`<a class="shop-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+        const phone=String(s.phone||'').replace(/[^+\d]/g,'');
+        if(/^\+?\d{8,15}$/.test(phone))links.unshift(`<a class="shop-link" href="tel:${phone}">電話洽詢</a>`);
+        content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><h3>店家介紹與服務</h3><p style="white-space:pre-line">${esc(s.description)}</p>${details?`<p class="shop-meta" style="white-space:pre-line">${esc(details)}</p>`:''}<div class="shop-row">${links.join('')}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></div><p class="shop-meta">優惠內容請洽店家確認；此頁提供店家資訊與聯絡方式。</p></article>`;
+        return;
+      }
       content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><details><summary>店家介紹與聯絡資訊</summary><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></details></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
       if(result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',standalone?`<a class="shop-link" href="${esc(loginLink(s.id))}">登入後線上選購</a>`:`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
       content.insertAdjacentHTML('beforeend',moreButton(result.product_next,false));

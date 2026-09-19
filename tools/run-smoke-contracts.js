@@ -51,6 +51,7 @@ const fullChecks = [
   'test/home-reference-theme.test.mjs',
   'test/store-wallet-card.test.mjs',
   'test/store-admin.test.mjs',
+  'test/store-partner-catalog.test.mjs',
   'test/store-admin-ui.test.mjs',
   'test/store-admin-entry.test.mjs',
   'test/store-shop-cover.test.mjs',

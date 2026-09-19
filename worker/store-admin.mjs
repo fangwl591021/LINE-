@@ -1,4 +1,5 @@
 // Administrator directory: bounded reads only, with no catalog/points/order mutations.
+import {adminPartnerShops,mergeShopPages} from './store-partner-catalog.mjs';
 const PATH = '/v1/store-shop/admin/stores';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -106,9 +107,11 @@ async function directory(db, filter) {
     db.prepare(`SELECT ${fields} FROM store_shop_stores s ${OWNER_JOIN} WHERE ${FILTER} AND s.id>? ORDER BY s.id LIMIT 21`).bind(...filterArgs(filter), filter.after)
   ]);
   if (results.length !== 3 || results.some(result => result.success === false || !Array.isArray(result.results))) throw new Error('Directory read unavailable');
-  const summary = results[0].results[0], total = results[1].results[0]?.total, page = results[2].results;
+  const partners=await adminPartnerShops(db,filter);
+  const summary = results[0].results[0], total = results[1].results[0]?.total, page = mergeShopPages(results[2].results,partners.shops);
   if (!summary || !Number.isSafeInteger(total)) throw new Error('Directory totals unavailable');
-  return { success: true, shops: page.slice(0, PAGE_SIZE).map(shop => ({ ...shop, public_visible: !!shop.public_visible })), next: page.length > PAGE_SIZE ? page[PAGE_SIZE - 1].id : '', summary, filtered_total: total };
+  for(const key of ['total','active','draft'])summary[key]+=partners.summary[key];
+  return { success: true, shops: page.slice(0, PAGE_SIZE).map(shop => ({ ...shop, public_visible: !!shop.public_visible })), next: page.length > PAGE_SIZE ? page[PAGE_SIZE - 1].id : '', summary, filtered_total: total+partners.total };
 }
 
 export async function handleStoreAdmin(request, env, profileMapper, fetcher = fetch) {

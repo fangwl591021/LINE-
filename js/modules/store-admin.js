@@ -4,7 +4,7 @@ const count=value=>Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(
 const number=value=>count(value).toLocaleString('zh-TW');
 
 // Private directory data stays in this mount only, never in a shared/global cache.
-export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack}) {
+export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onManagePartners}) {
   if(!isCurrent())return;
   const doc=container.ownerDocument;
   if(!doc.getElementById(stylesheetId)){
@@ -22,6 +22,10 @@ export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack}) {
   const active=()=>isCurrent()&&container.contains(panel);
   const toolbar=make('div','store-admin-toolbar'),back=button('返回商城管理','back'),refresh=button('重新整理','refresh');
   toolbar.append(back,refresh);
+  if(onManagePartners){
+    const manage=button('代建／管理合作店家','partners');
+    manage.addEventListener('click',()=>{if(active())void navigate(onManagePartners);});toolbar.append(manage);
+  }
   const heading=make('h2','store-admin-heading','管理員・店家列表');
   const intro=make('p','store-admin-intro','查看全站店家與負責人，包含草稿及未公開店家。');
   const summary=make('div','store-admin-summary');summary.setAttribute('aria-label','全站店家統計');
@@ -62,7 +66,8 @@ export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack}) {
     const details=[shop.category,shop.phone,shop.address].filter(Boolean);
     if(details.length)main.append(make('p','store-admin-contact',details.join(' · ')));
     const stats=make('p','store-admin-products');
-    stats.append(make('span','','商品 '+number(shop.active_product_count)+' / '+number(shop.product_count)),make('span','','網購 '+number(shop.online_product_count)));
+    if(shop.listing_only===1)stats.append(make('span','','店家資訊上架・未綁定帳號；認領需由管理員核實'));
+    else stats.append(make('span','','商品 '+number(shop.active_product_count)+' / '+number(shop.product_count)),make('span','','網購 '+number(shop.online_product_count)));
     stats.title='已上架商品 / 未封存商品總數；網購為已上架網購商品';
     main.append(stats);card.append(main);
     if(shop.public_visible===true&&uuid.test(String(shop.id))){

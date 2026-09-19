@@ -1,5 +1,16 @@
 # 店家商城第一階段
 
+## 2026-09-19 管理員代建店家公開目錄
+
+- 沿用 point_redemption_partners 與其 locations，完整且 active 的合作店家合併至商城列表及直接店面連結。不虛構 users / owner_uid，不放寬既有帳號型店面角色篩選。
+- partner_handle 的 32 位十六進位識別碼投影成穩定 UUID；僅目錄使用，沒有 store_shop_stores / products 記錄，因此不授予交易／帳號權限。listing_only=1、merchant_enabled=0、products=[]。
+- 完整度：名稱至少 2 字、非填寫範本介紹至少 15 字、HTTPS 封面、電話／LINE／網站至少其一。匯入前額外驗證圖片可讀與聯絡資料、排除範本及重複資料。沒有的地址不補造；保留來源區域。
+- 公開搜尋與分類、40 筆游標分頁合併兩來源，不重複或漏頁。hide/suspend/archive/draft 均不公開。資料庫錯誤不假裝空資料；僅舊環境缺 partner 表可降級至原商城目錄。
+- 店面顯示介紹、電話、LINE、網站、地圖與複製網址；不顯示商品 QR、網購結帳或假商品。不執行來源優惠、不改點數規則；提醒優惠請洽店家。
+- 管理員總表合併代建記錄，標示未綁帳號，導向既有合作店家管理維護、隱藏或停權。原本即時驗證管理員政策不變。後續認領須另核實身分後處理，不依電話或店名自動綁定；本次未新增自助認領 API。
+- 匯入工具只新增經審核的 partners/locations，固定來源衍生識別碼可重跑；不覆寫既有編輯、狀態、政策或帳號。來源與審核清單留本機 .wrangler，不提交聯絡名冊。
+- 測試：test/store-partner-catalog.test.mjs，並納入 full guard；發布 Worker 與前端，無新 migration。
+
 ## 業績購買者與緊湊版面（待發布）
 
 - 明細依交易 customer_id 對應 users 的 line_id／point_line_id／legacy_line_id／row_id；唯一一筆才顯示目前會員姓名。不用收藏名片、creator 或電話猜人，避免收藏者被誤當購買者。

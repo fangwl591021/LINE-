@@ -11,6 +11,17 @@ const PATH = 'https://worker.test/v1/store-shop/admin/stores';
 const shopId = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const mapper = row => ({ role: row.line_id === A && row.name === '已驗證管理員' ? 'admin' : 'user' });
 
+test('authenticated admin merges ownerless partner pages and totals without identity or point changes',async()=>{
+  const f=fixture();try{
+    f.sql.exec(readFileSync(new URL('../migrations/0019_point_redemption_partner_directory.sql',import.meta.url),'utf8'));
+    for(let n=1;n<=25;n++)f.sql.prepare("INSERT INTO point_redemption_partners(partner_handle,name,description,cover_image_url,phone,status) VALUES (?,?,?,?,?,'active')").run('partner_'+String(n).padStart(32,'a'),'代建店家'+n,'提供專業服務與商品，歡迎來電預約洽詢。','https://img.test/a.jpg','0911222333');
+    const before=f.snapshot();let next='',shops=[];
+    do{const result=await f.call(next?'after='+next:'');assert.equal(result.status,200);assert.deepEqual(result.summary,{total:29,active:28,draft:1});assert.equal(result.filtered_total,29);shops.push(...result.shops);next=result.next;}while(next);
+    assert.equal(shops.length,29);assert.equal(new Set(shops.map(row=>row.id)).size,29);assert.equal(shops.filter(row=>row.listing_only===1&&row.public_visible).length,25);assert.deepEqual(f.snapshot(),before);
+    assert.equal((await f.call('','reward')).status,403);
+  }finally{f.sql.close();}
+});
+
 function fixture(options = {}) {
   const sql = new DatabaseSync(':memory:');
   sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT NOT NULL UNIQUE,legacy_line_id TEXT NOT NULL DEFAULT '',point_line_id TEXT NOT NULL DEFAULT '',role TEXT DEFAULT 'user',name TEXT DEFAULT '',phone TEXT DEFAULT '',points INTEGER DEFAULT 0,socials TEXT DEFAULT '',tg_token TEXT DEFAULT 'SECRET');
