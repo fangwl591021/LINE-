@@ -7,7 +7,7 @@ const ID_FIELDS = ['line_id', 'row_id', 'legacy_line_id', 'point_line_id'];
 const AUTH_COLUMNS = 'u.row_id,u.line_id,u.legacy_line_id,u.point_line_id,u.role,u.name,u.phone';
 const PAGE_SIZE = 20;
 const HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
-class DirectoryError extends Error {
+export class DirectoryError extends Error {
   constructor(code, message, status) { super(message); this.code = code; this.status = status; }
 }
 const fail = (code, message, status = 400) => { throw new DirectoryError(code, message, status); };
@@ -77,10 +77,19 @@ async function adminActor(db, uid, profileMapper) {
     if (ids.size > 8) identityConflict();
     if (ids.size === before) {
       if (!found[0] || profileMapper(found[0])?.role !== 'admin') fail('ADMIN_REQUIRED', '店家列表僅限管理員查詢', 403);
-      return;
+      return found[0];
     }
   }
   identityConflict();
+}
+
+// Shared verified authority; directory remains read-only. Callers must scope writes separately.
+export async function authorizeStoreAdmin(request, env, profileMapper, fetcher = fetch) {
+  const uid = await authenticatedUid(request, fetcher);
+  if (!env.ACTMASTER_DB || typeof profileMapper !== 'function') throw new Error('Directory unavailable');
+  const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
+  const actor = await adminActor(db, uid, profileMapper);
+  return { uid, db, actor };
 }
 
 function filters(params) {

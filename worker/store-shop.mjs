@@ -9,7 +9,7 @@ const categories = ['','食','宿','遊','購','行','服務','製造'];
 const publicColumns = 's.id,s.name,s.description,s.category,s.address,s.phone,s.hours,s.image_url,s.status,s.version,s.updated_at,(EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN (\'store\',\'店長\',\'admin\',\'總管\'))) AS merchant_enabled';
 const eligible = "EXISTS (SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶'))";
 const headers = { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'Content-Type, Authorization', 'Access-Control-Allow-Methods':'GET, POST, OPTIONS' };
-class ShopError extends Error { constructor(message,status=400) { super(message); this.status=status; } }
+export class ShopError extends Error { constructor(message,status=400) { super(message); this.status=status; } }
 const fail = (message,status) => { throw new ShopError(message,status); };
 const reply = (data,status=200) => new Response(JSON.stringify(data),{status,headers});
 function field(data,key,max,required=false) {
@@ -36,7 +36,7 @@ export function normalizeProduct(data) {
   if(['fixed','percent'].includes(type)&&value===0) fail('折抵上限必須大於 0');
   return {title:field(data,'title',100,true),description:field(data,'description',3000),image_url:imageUrl(data),price_cents:integer(data.price_cents,100000000,'價格'),redeem_type:type,redeem_value:value,status:choice(data.status,['draft','active','archived'],'商品狀態'),category:choice(data.category ?? '',categories,'商品分類'),purchase_mode:choice(data.purchase_mode===undefined?'in_store':data.purchase_mode,['in_store','online'],'銷售方式')};
 }
-async function readJson(request,maxBytes=16000) {
+export async function readJson(request,maxBytes=16000) {
   const reader=request.body?.getReader(); if(!reader) fail('缺少資料');
   const chunks=[]; let size=0;
   while(true) {

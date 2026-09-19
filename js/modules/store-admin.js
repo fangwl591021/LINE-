@@ -4,12 +4,12 @@ const count=value=>Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(
 const number=value=>count(value).toLocaleString('zh-TW');
 
 // Private directory data stays in this mount only, never in a shared/global cache.
-export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onManagePartners}) {
+export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onManagePartners,onUploadProducts}) {
   if(!isCurrent())return;
   const doc=container.ownerDocument;
   if(!doc.getElementById(stylesheetId)){
     const link=doc.createElement('link');link.id=stylesheetId;link.rel='stylesheet';
-    link.href=new URL('../../css/store-admin.css?v=1',import.meta.url).href;doc.head.append(link);
+    link.href=new URL('../../css/store-admin.css?v=2',import.meta.url).href;doc.head.append(link);
   }
   const make=(tag,className,text)=>{
     const node=doc.createElement(tag);if(className)node.className=className;
@@ -74,6 +74,10 @@ export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onM
       const view=button('查看店面','view');view.setAttribute('data-admin-shop',String(shop.id));
       view.addEventListener('click',()=>{void navigate(onView,shop.id);});card.append(view);
     }else card.append(make('span','store-admin-unavailable','無公開店面'));
+    if(onUploadProducts&&shop.listing_only!==1&&shop.owner_uid&&uuid.test(String(shop.id))&&['store','店長','admin','總管','user','用戶'].includes(String(shop.owner_role).toLowerCase())){
+      const upload=button('代上傳商品','upload-products');upload.setAttribute('data-admin-shop',String(shop.id));
+      upload.addEventListener('click',()=>{void navigate(onUploadProducts,shop.id);});card.append(upload);
+    }
     return card;
   };
   async function load(targetPage=0,targetCursor='') {

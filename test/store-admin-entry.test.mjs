@@ -22,8 +22,8 @@ test('settings entry follows admin-only permissions and hides after switching to
 
 test('cache versions and private entry are wired without eager directory loading',()=>{
   const entry=read('js/modules/store-shop-entry.js'),publicPage=read('store-shop.html');
-  assert.match(html,/core\.js\?v=7\.35/);assert.match(html,/store-shop-entry\.js\?v=44/);
-  for(const source of [entry,publicPage]){assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=42/);}
+  assert.match(html,/core\.js\?v=7\.35/);assert.match(html,/store-shop-entry\.js\?v=45/);
+  for(const source of [entry,publicPage]){assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=43/);}
   assert.match(front,/const canAdmin=\(\)=>!standalone/);
   assert.match(front,/case 'admin-stores': await adminStores\(\); break;/);
   assert.match(front,/!standalone&&section==='admin-stores'/);
@@ -46,6 +46,15 @@ test('directory is given the existing canonical admin policy, not raw database a
   assert.match(read('worker-entry.mjs'),/handleStoreAdmin\(request, env, storeInviteProfileView\)/);
 });
 
+test('actual Worker routes delegated creation through verified admin before database access',async()=>{
+  const env={ACTMASTER_DB:{prepare(){throw Error('must not touch DB without verified token');}}};
+  for(const [method,status]of [['GET',401],['POST',401],['PUT',405],['DELETE',405],['OPTIONS',204]]){
+    const response=await worker.fetch(new Request('https://worker.test/v1/store-shop/admin/products',{method}),env,{});
+    assert.equal(response.status,status);assert.equal(response.headers.get('Cache-Control'),'no-store');
+  }
+  assert.match(read('worker-entry.mjs'),/handleStoreAdminProducts\(request, env, storeInviteProfileView\)/);
+});
+
 function setup(){
   const state={allowed:true,loads:0,mounts:[],inserted:[]};
   const root={isConnected:true,dataset:{shopView:''}},content={innerHTML:'',insertAdjacentHTML(_position,text){state.inserted.push(text);}};
@@ -54,7 +63,7 @@ function setup(){
     pageKind:kind=>root.dataset.shopView=kind,run:fn=>fn(),manage:async()=>{state.back=true;},
     loadModule:async()=>{state.loads++;return {mountStoreAdmin:async(_node,options)=>state.mounts.push(options)};}};
   context.view=async id=>{context.epoch++;context.viewedShop={id};root.dataset.shopView='store';};
-  const code=block(front,'    async function adminStores()', '    async function api(').replace("await import('./store-admin.js?v=2')",'await loadModule()');
+  const code=block(front,'    async function adminStores()', '    async function api(').replace("await import('./store-admin.js?v=3')",'await loadModule()');
   context.open=vm.runInNewContext(code+';adminStores',context);
   return {state,context,window,root,content};
 }

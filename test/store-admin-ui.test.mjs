@@ -33,6 +33,14 @@ const shop=(extra={})=>({id:A,name:'測試店家',status:'active',category:'食'
 const report=(extra={})=>({success:true,shops:[shop()],summary:{total:5,active:3,draft:2},filtered_total:5,next:'',...extra});
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 
+test('delegated upload is only offered for registered eligible owners and stops after role change',async()=>{
+  const s=fixture(),opened=[];s.options.onUploadProducts=id=>opened.push(id);
+  const pending=s.mount();s.requests[0].resolve(report({shops:[shop(),shop({listing_only:1}),shop({owner_uid:''}),shop({owner_role:'reward'}),shop({id:'bad'})]}));await pending;
+  assert.equal(s.root.querySelectorAll('[data-admin-action=upload-products]').length,1);
+  s.action('upload-products').dispatch('click');await flush();assert.deepEqual(opened,[A]);
+  s.setValid(false);s.action('upload-products').dispatch('click');await flush();assert.deepEqual(opened,[A]);
+});
+
 test('admin can open existing partner management and ownerless listings are identified clearly',async()=>{
   const s=fixture();let opened=0;s.options.onManagePartners=()=>{opened++;};
   const pending=s.mount();s.requests[0].resolve(report({shops:[shop({listing_only:1,owner_name:'管理員代建（未綁定帳號）'})]}));await pending;
@@ -52,7 +60,7 @@ test('awaits first authenticated read, renders compact totals and useful owner d
   assert.equal(s.root.querySelector('[data-admin-count=total]').textContent,'5');assert.match(s.root.textContent,/負責人：店主/);assert.match(s.root.textContent,/商品 2 \/ 3網購 1/);
   assert.doesNotMatch(s.root.textContent,/U_PRIVATE/);assert.equal(s.root.querySelector('.store-admin-list').getAttribute('aria-busy'),'false');
   assert.equal(s.action('previous').disabled,true);assert.equal(s.action('next').disabled,true);
-  assert.equal(s.doc.head.children[0].href,'https://example.test/LINE-/css/store-admin.css?v=1');
+  assert.equal(s.doc.head.children[0].href,'https://example.test/LINE-/css/store-admin.css?v=2');
 });
 test('all server text is textContent, only explicitly public valid shops get view actions',async()=>{
   const s=await loaded(report({shops:[shop({name:'<img src=x onerror=alert(1)>',owner_name:'<script>bad()</script>'}),shop({id:B,status:'draft',public_visible:false,owner_name:''}),shop({id:'javascript:alert(1)',public_visible:true}),shop({id:B,public_visible:false})]}));
