@@ -12,6 +12,13 @@
 
   function setValue(id, value) {
     const element = document.getElementById(id);
+    // Preserve legacy/custom categories during edits instead of silently clearing them.
+    if(element&&id==='admin-partner-category'&&element.tagName==='SELECT'){
+      element.querySelectorAll('[data-legacy-category]').forEach(option=>option.remove());
+      if(value&&![...element.options].some(option=>option.value===value)){
+        const option=document.createElement('option');option.value=value;option.textContent=value+'（原分類）';option.dataset.legacyCategory='true';element.appendChild(option);
+      }
+    }
     if (element) element.value = value ?? '';
   }
 

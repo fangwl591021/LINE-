@@ -16,7 +16,7 @@ test('shared brand uses supplied logo without replacing it on role changes; imag
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=41/);
+  assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=42/);
  }
 });
 test('shared storefront places an accessible main-home return before the brand for every role',()=>{
@@ -92,7 +92,7 @@ test('untrusted shop text is escaped, list limited to three without invented dis
 });
 test('point home starts narrow wallet and public shop reads independently; history remains on demand',()=>{
  const source=mall.slice(mall.indexOf('async function pointsHome('),mall.indexOf('function memberHome()'));
- assert.match(source,/void loadWalletModule/);assert.match(source,/void api\(\)/);
+ assert.match(source,/void loadWalletModule/);assert.match(source,/void api\('\?seed='\+discoverySeed\)/);
  assert.doesNotMatch(source,/queryUserPoints|loadStorePointCashierLogs|\/manage|Promise\.all/);
  assert.match(source,/owner===window.currentUserProfile\?\.userId&&role===window.userRole/);
 });

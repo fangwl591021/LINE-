@@ -1,4 +1,5 @@
 // Display-only bridge. A partner listing never becomes a user, shop owner or cashier.
+import {catalogOrder} from './store-catalog-order.mjs';
 const idSql="substr(p.partner_handle,9,8)||'-'||substr(p.partner_handle,17,4)||'-'||substr(p.partner_handle,21,4)||'-'||substr(p.partner_handle,25,4)||'-'||substr(p.partner_handle,29,12)";
 const validHandle="length(p.partner_handle)=40 AND substr(p.partner_handle,1,8)='partner_' AND substr(p.partner_handle,9) NOT GLOB '*[^0-9a-f]*'";
 const complete="length(trim(name))>=2 AND length(trim(description))>=15 AND image_url LIKE 'https://%/%' AND instr(description,'請填寫')=0 AND instr(description,'公司/店家介紹…')=0 AND instr(description,'公司/店家服務…')=0 AND (length(trim(phone))>0 OR line_url LIKE 'https://%/%' OR website_url LIKE 'https://%/%')";
@@ -11,9 +12,9 @@ async function read(db,sql,args=[]){
   if(result.success===false||!Array.isArray(result.results))throw Error('Partner catalog unavailable');
   return result.results;
 }
-export async function publicPartnerShops(db,{id='',q='',after='',category=''}={}){
+export async function publicPartnerShops(db,{id='',q='',after='',category='',order=catalogOrder('',after)}={}){
   try{
-    return await read(db,`SELECT * FROM (${catalog}) WHERE status='active' AND ${complete} AND (?='' OR id=?) AND id>? AND (instr(name,?)>0 OR instr(category,?)>0 OR instr(address,?)>0) AND (?='' OR category=?) ORDER BY id LIMIT 41`,[id,id,after,q,q,q,category,category]);
+    return await read(db,`SELECT *${order.select('id')} FROM (${catalog}) WHERE status='active' AND ${complete} AND (?='' OR id=?) AND ${order.where('id')} AND (instr(name,?)>0 OR instr(category,?)>0 OR instr(address,?)>0) AND (?='' OR category=?) ORDER BY ${order.by('id')} LIMIT 41`,[id,id,...order.args,q,q,q,category,category]);
   }catch(error){if(missing(error))return [];throw error;}
 }
 export async function adminPartnerShops(db,{q='',status='',after=''}){

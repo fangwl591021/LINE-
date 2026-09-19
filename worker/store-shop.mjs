@@ -1,7 +1,8 @@
 // Catalog and read-only sales. No point writes or cashier execution calls.
 import {readShopSales} from './store-shop-sales.mjs';
 import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
-import {publicPartnerShops,mergeShopPages} from './store-partner-catalog.mjs';
+import {publicPartnerShops} from './store-partner-catalog.mjs';
+import {catalogOrder,CatalogOrderError} from './store-catalog-order.mjs';
 const roles = ['store','店長','admin','總管','user','用戶'];
 const unlimitedRoles = ['store','店長','admin','總管'];
 const categories = ['','食','宿','遊','購','行','服務','製造'];
@@ -94,11 +95,12 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
         return reply({success:true,shop,...await productPage(db,id,false,url.searchParams.get('product_after')||'')});
       }
       const query=(url.searchParams.get('q')||'').trim().slice(0,80);
-      const cursor=(url.searchParams.get('after')||'').slice(0,80);
-      const category=choice(url.searchParams.get('category')||'',categories,'商品分類');
-      const rows=(await db.prepare(`SELECT ${publicColumns} FROM store_shop_stores s WHERE s.status='active' AND ${eligible} AND s.id>? AND (instr(s.name,?)>0 OR instr(s.category,?)>0 OR instr(s.address,?)>0) AND (?='' OR EXISTS (SELECT 1 FROM store_shop_products p WHERE p.shop_id=s.id AND p.status='active' AND p.category=?)) ORDER BY s.id LIMIT 41`).bind(cursor,query,query,query,category,category).all()).results;
-      const combined=mergeShopPages(rows,await publicPartnerShops(db,{q:query,after:cursor,category}));
-      return reply({success:true,shops:combined.slice(0,40),next:combined.length>40?combined[39].id:''});
+      const cursor=url.searchParams.get('after')||'';
+      const order=catalogOrder(url.searchParams.get('seed')||'',cursor);
+      const category=choice(url.searchParams.get('category')||'',categories,'店家業種');
+      const rows=(await db.prepare(`SELECT ${publicColumns}${order.select('s.id')} FROM store_shop_stores s WHERE s.status='active' AND ${eligible} AND ${order.where('s.id')} AND (instr(s.name,?)>0 OR instr(s.category,?)>0 OR instr(s.address,?)>0) AND (?='' OR s.category=?) ORDER BY ${order.by('s.id')} LIMIT 41`).bind(...order.args,query,query,query,category,category).all()).results;
+      const combined=[...rows,...await publicPartnerShops(db,{q:query,category,order})].sort(order.compare);
+      return reply({success:true,shops:combined.slice(0,40).map(({catalog_rank,...shop})=>shop),next:combined.length>40?order.cursor(combined[39]):''});
     }
     const manage=request.method==='GET'&&url.pathname==='/v1/store-shop/manage';
     const sales=request.method==='GET'&&url.pathname==='/v1/store-shop/sales';
@@ -160,7 +162,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     }
     return reply(await management(db,shop,limit));
   } catch(error) {
-    if(error instanceof ShopError||error instanceof ProductDmError) return reply({success:false,error:error.message},error.status);
+    if(error instanceof ShopError||error instanceof ProductDmError||error instanceof CatalogOrderError) return reply({success:false,error:error.message},error.status);
     const missing=/no such table/.test(String(error?.message));
     console.error(JSON.stringify({event:'store_shop_failed',path:url.pathname,code:missing?'SCHEMA_NOT_READY':'UNAVAILABLE'}));
     return reply({success:false,error:missing?'商城尚未啟用，請管理員完成資料庫更新':'商城服務暫時無法使用，請稍後重試'},503);

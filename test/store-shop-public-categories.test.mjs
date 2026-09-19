@@ -64,7 +64,7 @@ test('directory filters, management filters, category dropdowns and badges remai
  assert.ok(directory.includes('listCategory=category'));
  assert.ok(manage.includes('addProductTags();'),'Management keeps its existing filter controls');
  assert.ok(source.includes("select('category','商品分類'"));
- assert.ok(source.includes("select('category','店面分類'"));
+ assert.ok(source.includes("select('category','店家業種'"));
  assert.ok(productCode.includes('shop-category-badge'));
  assert.ok(source.includes("const categories = ['食','宿','遊','購','行','服務','製造'];"));
 });

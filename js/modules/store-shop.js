@@ -2,9 +2,10 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const statusText = status => ({draft:'草稿',active:'已上架',archived:'已封存'}[status] || status);
   const categories = ['食','宿','遊','購','行','服務','製造'];
+  const industryLabels={'食':'餐飲食品','宿':'住宿','遊':'旅遊休閒','購':'購物零售','行':'交通接送','服務':'專業服務','製造':'製造手作'};
   const categoryIcons={'':'✦','食':'☕','宿':'⌂','遊':'☀','購':'🛍','行':'🚆','服務':'♡','製造':'⚙'};
   function categoryTags(scope, selected='') {
-    return `<div class="shop-category-tags" role="group" aria-label="商品分類篩選">${['',...categories].map(c=>`<button type="button" data-do="category" data-scope="${scope}" data-category="${c}" aria-pressed="${c===selected}"><span aria-hidden="true">${categoryIcons[c]}</span>${c||'全部'}</button>`).join('')}</div>`;
+    return `<div class="shop-category-tags" role="group" aria-label="${scope==='shops'?'店家業種':'商品分類'}篩選">${['',...categories].map(c=>`<button type="button" data-do="category" data-scope="${scope}" data-category="${c}" aria-pressed="${c===selected}"><span aria-hidden="true">${categoryIcons[c]}</span>${(scope==='shops'?industryLabels[c]:c)||'全部'}</button>`).join('')}</div>`;
   }
   function photo(url, cover=false) {
     try { if (new URL(url).protocol !== 'https:') return ''; } catch { return ''; }
@@ -48,6 +49,8 @@
   }
   function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='') {
     let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
+    // New visit, new shuffle. Keep it for category/search/pagination in this mount.
+    const discoverySeed=Array.from(crypto.getRandomValues(new Uint32Array(2)),n=>n.toString(16).padStart(8,'0')).join('');
     const sourceParams = () => new URLSearchParams(location.search);
     const initialShopId = standalone ? new URL(location.href).searchParams.get('shop') || '' : section === 'store' ? shopId : '';
     const isShopId = value => window.StoreInviteRoute?.isShopId?.(value) ?? (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
@@ -132,7 +135,7 @@
       if(!standalone)void loadWalletModule().then(module=>{if(current())clearHomeWallet=module.mountStoreWalletCard(content,{isCurrent:current,onInvalid:()=>{
         if(version===epoch&&content.isConnected&&root.contains(content)&&window.currentPage==='store-shop'){merchantView=undefined;void run(()=>pointsHome());}
       }});}).catch(()=>{if(current())content.querySelector('[data-home-balance]').textContent='點按 QR 重試';});
-      void api().then(result=>{if(current())content.querySelector('[data-home-shops]').innerHTML=home.renderRecommendedShops(result.shops,photo);}).catch(()=>{if(current())content.querySelector('[data-home-shops]').innerHTML='<p>店家暫時無法載入。<button type="button" data-do="points-home">重新載入</button></p>';});
+      void api('?seed='+discoverySeed).then(result=>{if(current())content.querySelector('[data-home-shops]').innerHTML=home.renderRecommendedShops(result.shops,photo);}).catch(()=>{if(current())content.querySelector('[data-home-shops]').innerHTML='<p>店家暫時無法載入。<button type="button" data-do="points-home">重新載入</button></p>';});
     }
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
@@ -195,7 +198,7 @@
     async function list(after='',q='',category='') {
       pageKind('directory');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">載入店家中…</p>';
-      const result=await api(`?after=${encodeURIComponent(after)}&q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}`);
+      const result=await api(`?seed=${discoverySeed}&after=${encodeURIComponent(after)}&q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}`);
       if(version!==epoch) return;
       listCategory=category; listQuery=q;
       content.innerHTML=`<form data-form="search" class="shop-row"><input name="q" aria-label="搜尋店名、類別或地址" placeholder="搜尋店名、類別或地址" value="${esc(q)}" maxlength="80"><button class="primary">搜尋</button></form><p class="shop-meta">${result.shops.length} 家店家</p><div class="shop-grid">${result.shops.map(s=>`<article>${photo(s.image_url)}<h2>${esc(s.name)}</h2><p class="shop-meta">${esc(s.category)} · ${esc(s.address)}</p><p>${esc(s.description)}</p><button class="primary" data-do="view" data-id="${esc(s.id)}">進入商城</button></article>`).join('')}</div>${result.shops.length?'':'<p>目前沒有符合條件的已上架店家。</p>'}${result.next?`<button data-do="next" data-id="${esc(result.next)}" data-query="${esc(q)}">下一頁</button>`:''}`;
@@ -248,9 +251,9 @@
       return `<label>${label}<select name="${key}">${options.map(([v,t])=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
     }
     function storeCategorySelect(value='') {
-      const options=[['','未分類'],...categories.map(c=>[c,c])];
+      const options=[['','未分類'],...categories.map(c=>[c,industryLabels[c]])];
       if(value&&!categories.includes(value)) options.push([value,`${value}（原分類）`]);
-      return select('category','店面分類',options,value||'');
+      return select('category','店家業種',options,value||'');
     }
     function imageInput(label,value) {
       return `<div class="shop-image-field"><p>${label}</p><button type="button" data-do="upload-image" class="primary">上傳圖片</button><input type="file" class="shop-image-file" accept="image/jpeg,image/png,image/webp" hidden><p class="shop-meta">支援 JPG／PNG／WebP，最大 10MB。圖片會等比縮小，不裁切；上傳素材可公開存取，儲存後才更新店面或商品。</p><p class="shop-image-status" role="status"></p><div class="shop-upload-preview">${value?photo(value):''}</div><details><summary>進階：使用圖片網址</summary>${input('image_url','圖片 HTTPS 網址',value,2048,false,'url')}</details></div>`;

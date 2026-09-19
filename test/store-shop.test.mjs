@@ -220,12 +220,12 @@ test('product categories persist, validate and preserve older clients without ca
   sql.close();
 });
 
-test('category filter uses active products, combines search and paginates without duplicates',async()=>{
+test('industry filter uses store category independently of products, combines search and pagination',async()=>{
   const {call,sql}=fixture();
   for(let i=0;i<43;i++) {
     const id=String(i).padStart(3,'0');
     sql.prepare('INSERT INTO users(line_id,role) VALUES (?,?)').run('uid'+id,'store');
-    sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES (?,?,?,'active','now')").run(id,'uid'+id,'shop'+id);
+    sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,category,status,updated_at) VALUES (?,?,?,?,'active','now')").run(id,'uid'+id,'shop'+id,i===42?'購':'食');
     for(let j=0;j<2;j++)sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key,category) VALUES (?,?,?,100,?,'now',?,'食')").run(id+'p'+j,id,'商品',i===42?'draft':'active',crypto.randomUUID());
   }
   const first=await call('?category='+encodeURIComponent('食')); assert.equal(first.shops.length,40);
@@ -235,7 +235,9 @@ test('category filter uses active products, combines search and paginates withou
   assert.equal((await call('?category='+encodeURIComponent('宿'))).shops.length,0);
   assert.equal((await call('?category=invalid')).status,400);
   sql.prepare("UPDATE store_shop_products SET status='archived' WHERE shop_id='005'").run();
-  assert.equal((await call('?category='+encodeURIComponent('食')+'&q=shop005')).shops.length,0);
+  assert.equal((await call('?category='+encodeURIComponent('食')+'&q=shop005')).shops.length,1);
+  sql.prepare("DELETE FROM store_shop_products WHERE shop_id='005'").run();
+  assert.equal((await call('?category='+encodeURIComponent('食')+'&q=shop005')).shops.length,1);
   sql.close();
 });
 

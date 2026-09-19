@@ -7,6 +7,8 @@ import {handleStoreShop} from '../worker/store-shop.mjs';
 import {adminPartnerShops,publicPartnerShops} from '../worker/store-partner-catalog.mjs';
 import {parseCard} from '../tools/collect-aiwe-partners.mjs';
 import {partnerHandle,prepareImport} from '../tools/prepare-aiwe-import.mjs';
+import {reviewedIndustries} from '../tools/aiwe-partner-industries.mjs';
+import {industryCorrection} from '../tools/prepare-aiwe-industry-correction.mjs';
 const read=file=>readFileSync(new URL('../'+file,import.meta.url),'utf8');
 const id=handle=>handle.slice(8).replace(/^(........)(....)(....)(....)(............)$/,'$1-$2-$3-$4-$5');
 function fixture(){
@@ -20,6 +22,64 @@ function setup(){const f=fixture();f.sql.exec(read('migrations/0019_point_redemp
 const candidate=(n=1,extra={})=>({source_id:String(n),source_url:`https://aiwe.cc/index.php/linecard_13/${n}/?share=1`,name:'店家'+n,description:'提供日常生活用品與專業服務，歡迎來電預約洽詢。',image_url:'https://images.test/shop.jpg',phone:'0911'+String(n).padStart(6,'0'),line_url:'',website_url:'',maps_url:'',address:'',hours:'',region:'北部地區',reasons:[],...extra});
 const add=(sql,n,extra={})=>{const plan=prepareImport([candidate(n,extra)],[]);sql.exec(plan.sql);return id(partnerHandle(n));};
 const call=(db,path='')=>handleStoreShop(new Request('https://test/v1/store-shop'+path),{ACTMASTER_DB:db});
+
+test('seeded mixed-source pagination is stable, changes by visit, and never repeats or leaks rank',async()=>{
+ const {sql,db}=setup();try{
+  for(let n=1;n<=125;n++)add(sql,n);
+  sql.exec("INSERT INTO users VALUES ('owner','store'); INSERT INTO store_shop_stores(id,owner_uid,name,category,status,updated_at) VALUES ('77777777-7777-4777-8777-777777777777','owner','原店面','食','active','2026-09-19');");
+  const walk=async seed=>{let after='',all=[];do{
+    const response=await call(db,'?seed='+seed+'&after='+encodeURIComponent(after));assert.equal(response.status,200);
+    const data=await response.json();assert.ok(data.shops.length<=40);assert.ok(data.shops.every(s=>!('catalog_rank'in s)&&!('owner_uid'in s)));
+    all.push(...data.shops.map(s=>s.id));after=data.next;assert.ok(all.length<=126);
+  }while(after);return all;};
+  const a=await walk('0123456789abcdef'),b=await walk('fedcba9876543210');
+  assert.equal(a.length,126);assert.equal(new Set(a).size,126);assert.deepEqual(new Set(a),new Set(b));assert.notDeepEqual(a,b);assert.deepEqual(await walk('0123456789abcdef'),a);
+  const filtered=await (await call(db,'?seed=0123456789abcdef&category='+encodeURIComponent('食')+'&q='+encodeURIComponent('原店'))).json();
+  assert.equal(filtered.shops.length,1);assert.equal(filtered.shops[0].name,'原店面');
+  const page=await (await call(db,'?seed=0123456789abcdef')).json();
+  for(const query of ['seed=bad','seed=0123456789abcdef&after=bad','seed=fedcba9876543210&after='+page.next,'after='+page.next,'seed=0123456789abcdef&after='+page.next.replace(/\.[a-z0-9]+\./,'.0.')])assert.equal((await call(db,'?'+query)).status,400);
+  const admin=await adminPartnerShops(db,{});assert.deepEqual(admin.shops.map(s=>s.id),admin.shops.map(s=>s.id).sort());
+ }finally{sql.close();}
+});
+
+test('reviewed industry correction targets only 42 blank, unchanged source rows and is idempotent',()=>{
+ const {sql}=setup();try{
+  const rows=Object.keys(reviewedIndustries).map(n=>({...candidate(n),partner_handle:partnerHandle(n)}));
+  assert.equal(rows.length,42);
+  sql.exec(prepareImport(rows,[]).sql);sql.exec("UPDATE point_redemption_partners SET category=''");
+  sql.prepare("UPDATE point_redemption_partners SET category='宿' WHERE partner_handle=?").run(rows[0].partner_handle);
+  sql.prepare("UPDATE point_redemption_partners SET name='管理員已編輯' WHERE partner_handle=?").run(rows[1].partner_handle);
+  const plan=industryCorrection(rows);sql.exec(plan.sql);sql.exec(plan.sql);
+  assert.equal(sql.prepare("SELECT category FROM point_redemption_partners WHERE partner_handle=?").get(rows[0].partner_handle).category,'宿');
+  assert.equal(sql.prepare("SELECT category FROM point_redemption_partners WHERE partner_handle=?").get(rows[1].partner_handle).category,'');
+  for(const row of rows.slice(2))assert.equal(sql.prepare('SELECT category FROM point_redemption_partners WHERE partner_handle=?').get(row.partner_handle).category,reviewedIndustries[row.source_id][0]);
+  assert.equal(sql.prepare('SELECT count(*) n FROM users').get().n,0);
+  assert.doesNotMatch(plan.sql,/INSERT|DELETE|users|policy|points|ledger/);
+  assert.throws(()=>industryCorrection(rows.slice(1)),/42/);
+ }finally{sql.close();}
+});
+
+test('directory UI carries one random visit seed through recommendation/search and uses industry labels',()=>{
+ const source=read('js/modules/store-shop.js');
+ assert.match(source,/const discoverySeed=Array.from\(crypto.getRandomValues/);
+ assert.match(source,/void api\('\?seed='\+discoverySeed\)/);
+ assert.match(source,/\?seed=\$\{discoverySeed\}&after=/);
+ const code=source.slice(source.indexOf('  const categories'),source.indexOf('  function photo'));
+ const html=vm.runInNewContext(code+';categoryTags("shops","食")');
+ assert.match(html,/店家業種篩選/);assert.match(html,/餐飲食品/);assert.match(html,/data-category="食" aria-pressed="true"/);
+ assert.equal((html.match(/data-do="category"/g)||[]).length,8);
+});
+
+test('partner industry select preserves custom values and does not accumulate legacy options',()=>{
+ const source=read('js/modules/admin-partners.js');
+ const element={tagName:'SELECT',options:[{value:''},{value:'食'}],value:'',querySelectorAll(){return this.options.filter(o=>o.dataset?.legacyCategory);},appendChild(option){this.options.push(option);option.remove=()=>{this.options=this.options.filter(o=>o!==option);};}};
+ const document={getElementById:()=>element,createElement:()=>({dataset:{}})};
+ const set=vm.runInNewContext(source.slice(source.indexOf('  function setValue'),source.indexOf('  function setIfEmpty'))+';setValue',{document});
+ set('admin-partner-category','餐飲舊分類');assert.equal(element.value,'餐飲舊分類');assert.equal(element.options.length,3);assert.equal(element.options[2].textContent,'餐飲舊分類（原分類）');
+ set('admin-partner-category','食');assert.equal(element.value,'食');assert.equal(element.options.length,2);
+ set('admin-partner-category','');assert.equal(element.value,'');
+ assert.match(read('index.html'),/店家業種<select id="admin-partner-category"/);
+});
 
 test('active complete partners are public without accounts and expose no financial authority',async()=>{
  const {sql,db}=setup();try{
