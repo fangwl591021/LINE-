@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { handleCrmCardPhoneLink } from './worker/crm-card-phone-link.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
 import { isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken } from './worker/reward-only-cashier.mjs';
@@ -200,6 +201,8 @@ const ACTION_POLICIES = {
 
   updateUserRole: { access: 'admin' },
   adminSyncBoundCardUser: { access: 'admin', allowD1Fallback: true },
+  adminSearchCrmCards: { access: 'admin' },
+  adminLinkCrmCard: { access: 'admin' },
   mlmMarkOrderPaid: { access: 'admin' },
   mlmCancelOrder: { access: 'admin' },
   mlmRefundOrder: { access: 'admin' },
@@ -17029,6 +17032,12 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await DBModule.forward(action, payload, env);
     }
+    case 'adminSearchCrmCards':
+    case 'adminLinkCrmCard':
+      return await handleCrmCardPhoneLink(action, payload, env, actor, {
+        cardAccess: card => D1ReadModule.inferCardAccess(card),
+        reservedPhones: SecurityModule.hardAdminAccounts.flatMap(account => account.phones || [])
+      });
     case 'adminSyncBoundCardUser': {
       try {
         const profile = {

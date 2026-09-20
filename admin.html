@@ -1450,6 +1450,19 @@
               <label class="text-sm font-bold text-slate-500">公司 / 職稱<input id="crm-company-title" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
               <label class="md:col-span-2 text-sm font-bold text-slate-500">地址<input id="crm-address" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
             </div>
+            <div id="crm-card-link" class="hidden px-5 pb-5 text-sm">
+              <button type="button" id="crm-card-link-open" class="text-blue-700 font-bold underline">關聯名片／補電話</button>
+              <div id="crm-card-link-panel" class="hidden mt-3 space-y-3">
+                <p class="text-slate-500">核對後只補入空白電話，不更改名片認領、收藏歸屬或既有電話。</p>
+                <div class="flex flex-wrap gap-2">
+                  <input id="crm-card-link-query" aria-label="搜尋關聯名片" placeholder="姓名、公司或電話" maxlength="80" class="min-w-0 flex-1 border border-slate-200 rounded-lg px-3 py-2">
+                  <button id="crm-card-link-search" type="button" class="rounded-lg bg-blue-50 text-blue-700 px-4 py-2 font-bold">搜尋名片</button>
+                </div>
+                <p id="crm-card-link-status" class="text-slate-500 break-words" role="status" aria-live="polite"></p>
+                <div id="crm-card-link-results" class="space-y-2 max-h-72 overflow-y-auto"></div>
+                <button id="crm-card-link-confirm" type="button" disabled class="rounded-lg bg-blue-600 text-white px-4 py-2 font-bold disabled:opacity-40">核對並補入電話</button>
+              </div>
+            </div>
           </section>
 
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1592,7 +1605,7 @@
         </button>
         <div class="flex gap-3">
           <button type="button" onclick="closeDistributorCrm()" class="px-5 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">取消</button>
-          <button type="button" onclick="saveDistributorCrm()" class="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 flex items-center gap-2">
+          <button id="crm-save-profile" type="button" onclick="saveDistributorCrm()" class="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl shadow-md hover:bg-blue-700 flex items-center gap-2">
             <span class="material-symbols-outlined text-[18px]">save</span> 儲存 CRM
           </button>
         </div>
@@ -3834,6 +3847,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (!user) return showToast('找不到 CRM 用戶', true);
       currentDistributorCrmUserId = getUserId(user);
       fillDistributorCrm(user);
+      window.resetCrmCardLink?.(user);
       const modal = document.getElementById('modal-distributor-crm');
       modal.classList.remove('hidden');
       modal.classList.add('flex');
@@ -3844,6 +3858,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       modal.classList.add('hidden');
       modal.classList.remove('flex');
       currentDistributorCrmUserId = '';
+      window.resetCrmCardLink?.(null);
     }
 
     async function saveDistributorCrm() {
@@ -5709,5 +5724,6 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   </script>
   <script src="js/modules/partner-onboarding.js?v=1"></script>
   <script src="js/modules/admin-partners-dashboard.js?v=1.2"></script>
+  <script src="js/modules/admin-crm-card-link.js?v=1"></script>
 </body>
 </html>

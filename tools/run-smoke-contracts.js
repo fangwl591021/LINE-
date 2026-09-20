@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/crm-card-phone-link.test.mjs',
   'test/partner-onboarding-ai.test.mjs',
   'test/partner-onboarding-ui.test.mjs',
   'test/store-consumption-journal.test.mjs',
