@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import {createGame,stepGame,verifyReplay,WIDTH,HEIGHT,MAX_TICKS} from '../js/modules/tank-engine.mjs';
 import {winningReplay} from './helpers/tank-player.mjs';
 
+test('v2 has 80 destructible bricks, open spawn lanes, and can be won without altering old maps',()=>{
+ const s=createGame(1,2);assert.equal(s.walls.length,80);assert.equal(createGame(1).walls.length,20);
+ assert.equal(new Set(s.walls.map(w=>`${w.x}:${w.y}`)).size,80);
+ for(const p of [s.player,...[72,346,620].map(x=>({x,y:24,w:26,h:26}))])
+  assert.ok(s.walls.every(w=>p.x+p.w<=w.x||p.x>=w.x+w.w||p.y+p.h<=w.y||p.y>=w.y+w.h));
+ for(const seed of [1,2,3]){const {game,replay}=winningReplay(seed,2);assert.equal(game.state,'won');assert.equal(verifyReplay(seed,replay,game.ticks/30*1000,2),true);}
+});
+
 test('base is surrounded by an intact eight-brick ring, fully on board',()=>{
  const s=createGame(42),walls=s.walls.filter(w=>w.baseWall);assert.equal(walls.length,8);
  for(let dy=-24;dy<=24;dy+=24)for(let dx=-24;dx<=24;dx+=24)if(dx||dy)

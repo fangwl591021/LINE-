@@ -66,16 +66,17 @@ async function run(action,payload,env,actor,{findIdentity,points,now=Date.now}) 
     const recent=await db.prepare('SELECT created_at FROM daily_tank_sessions WHERE tenant_id=? AND member_id=? ORDER BY created_at DESC LIMIT 1')
       .bind(tenant,member).first();
     if(recent && time-recent.created_at<1500)return fail('請稍候一下再開始挑戰');
-    const id=crypto.randomUUID(),seed=crypto.getRandomValues(new Uint32Array(1))[0];
+    const mapVersion=payload.mapVersion===2?2:1;
+    const id=(mapVersion===2?'v2:':'')+crypto.randomUUID(),seed=crypto.getRandomValues(new Uint32Array(1))[0];
     await db.prepare('INSERT INTO daily_tank_sessions (id,tenant_id,member_id,actor_id,challenge_date,seed,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?)')
       .bind(id,tenant,member,actor.userId,today,seed,time,time+20*60000).run();
-    return ok({sessionId:id,seed,date:today,rewardPoints:REWARD_POINTS,alreadyCompleted:row?.status==='sent'});
+    return ok({sessionId:id,seed,mapVersion,date:today,rewardPoints:REWARD_POINTS,alreadyCompleted:row?.status==='sent'});
   }
   if(action!=='completeDailyTank')return fail('未知挑戰操作');
   // Read an existing receipt before checking expiration: even yesterday's ambiguous request can be confirmed.
   if(row)return reconcile(row);
   if(!session||session.expires_at<time||date!==today)return fail('挑戰已逾時或已跨日，請重新開始；尚未發點');
-  if(!verifyReplay(session.seed,payload.replay,time-session.created_at))return fail('尚未通過挑戰驗證，請重新挑戰');
+  if(!verifyReplay(session.seed,payload.replay,time-session.created_at,String(session.id).startsWith('v2:')?2:1))return fail('尚未通過挑戰驗證，請重新挑戰');
   // Existing unique index (user_id,card_id,award_type) + award_id: only one request owns the send.
   const reserved=await db.prepare(`INSERT OR IGNORE INTO point_awards
     (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)

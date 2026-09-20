@@ -1,16 +1,18 @@
-import {createGame,stepGame,recordInput,FPS} from './tank-engine.mjs';
-import {createTankAudio} from './tank-audio.mjs?v=20260920';
+import {createGame,stepGame,recordInput,FPS} from './tank-engine.mjs?v=2';
+import {createTankAudio} from './tank-audio.mjs?v=20260920b';
 import {createTankRenderer} from './tank-renderer.mjs?v=20260920';
 
 const task=document.getElementById('daily-tank-task');
 const $=id=>document.getElementById(id);
 let dialog,game,replay=[],session,owner='',frame=0,last=0,acc=0,run=0,playing=false,submitting=false;
 let keys=new Set(),stick=0,fire=false,paused=false,statusGeneration=0,rolloverTimer,renderer;
-const audio=createTankAudio(state=>{
+const audio=createTankAudio((state,mode)=>{
   const button=dialog?.querySelector('[data-tank="sound"]');
   if(button){button.textContent=state==='muted'?'音效：關':state==='ready'?'音效：開':'點此開啟音效';button.setAttribute('aria-pressed',String(state==='ready'));}
   const hint=$('tank-audio-hint');
-  if(hint)hint.textContent=state==='blocked'?'聲音未啟用，請點「試聽音效」；也請確認媒體音量與靜音設定。':state==='muted'?'音效已關閉':'聽不到？點試聽，並確認媒體音量與靜音設定。';
+  if(hint)hint.textContent=state==='blocked'?'播放未成功，請點試聽或切換播放模式。':state==='muted'?'音效已關閉':'若試聽仍無聲，請切換播放模式並確認手機輸出裝置。';
+  const modeButton=dialog?.querySelector('[data-tank="audio-mode"]');
+  if(modeButton)modeButton.textContent=mode==='media'?'播放：相容模式':'播放：合成模式';
 });
 const uid=()=>window.currentUserProfile?.userId||'';
 const storeKey=()=>`daily-tank-pending:${uid()}`;
@@ -50,7 +52,7 @@ function ensureDialog() {
   if(dialog)return;
   dialog=document.createElement('dialog');dialog.className='tank-dialog';dialog.id='daily-tank-dialog';
   dialog.setAttribute('aria-label','坦克守衛挑戰');
-  dialog.innerHTML=`<header class="tank-toolbar"><strong><small>DAILY DEFENSE</small>坦克守衛挑戰</strong><nav><button type="button" data-tank="sound" aria-pressed="false">點此開啟音效</button><button type="button" data-tank="test-sound">試聽音效</button><button type="button" data-tank="close">返回每日任務</button></nav></header>
+  dialog.innerHTML=`<header class="tank-toolbar"><strong><small>DAILY DEFENSE · V3</small>坦克守衛挑戰</strong><nav><button type="button" data-tank="sound" aria-pressed="false">點此開啟音效</button><button type="button" data-tank="test-sound">試聽音效</button><button type="button" data-tank="audio-mode">播放：相容模式</button><button type="button" data-tank="close">返回每日任務</button></nav></header>
     <div class="tank-hud" aria-live="off"><span id="tank-life">生命 ♥♥♥</span><span id="tank-kills">擊敗 0 / 5</span><span>守住基地</span></div>
     <div class="tank-stage"><canvas id="tank-canvas" width="720" height="432" aria-label="坦克遊戲：方向鍵或 WASD 移動，空白鍵射擊"></canvas>
       <div class="tank-result" id="tank-result"><div><h2 id="tank-result-title">準備挑戰</h2><p id="tank-result-message" role="status" aria-live="polite">正在準備遊戲…</p><nav><button type="button" data-tank="retry" hidden>重新確認獎勵</button><button type="button" data-tank="again" hidden>再玩一次</button><button type="button" data-tank="resume" hidden>繼續挑戰</button><button type="button" data-tank="close">返回每日任務</button></nav></div></div>
@@ -66,6 +68,7 @@ function ensureDialog() {
     if(action==='resume'){paused=false;last=0;$('tank-result').hidden=true;initSound();}
     if(action==='sound'){if(e.target.textContent==='點此開啟音效')initSound(true);else audio.toggle();}
     if(action==='test-sound'){if(!audio.enabled)audio.toggle();else initSound(true);}
+    if(action==='audio-mode')audio.switchMode();
   });
   const pad=$('tank-stick');let pointer=null;
   const update=e=>{
@@ -105,9 +108,9 @@ async function start() {
   const generation=++run;++statusGeneration;owner=uid();playing=false;paused=false;keys.clear();stick=0;fire=false;
   cancelAnimationFrame(frame);result('準備挑戰','正在取得挑戰憑證…');
   try{
-    const data=await api('startDailyTank');
+    const data=await api('startDailyTank',{mapVersion:2});
     if(generation!==run||owner!==uid())return;
-    session=data;game=createGame(data.seed);renderer.reset();replay=[];playing=true;acc=0;last=0;
+    session=data;game=createGame(data.seed,data.mapVersion||1);renderer.reset();replay=[];playing=true;acc=0;last=0;
     taskState({});$('tank-result').hidden=true;frame=requestAnimationFrame(loop);
   }catch(e){if(generation===run)result('暫時無法開始',e.message,{again:true});}
 }

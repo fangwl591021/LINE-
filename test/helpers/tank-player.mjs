@@ -1,7 +1,7 @@
 import {createGame,stepGame,recordInput} from '../../js/modules/tank-engine.mjs';
 // Test-only player: choose a heading toward the closest enemy, try another axis if blocked.
-export function winningReplay(seed=1) {
-  const s=createGame(seed),replay=[];let stuck=0,lastX=s.player.x,lastY=s.player.y,escape=0;
+export function winningReplay(seed=1,mapVersion=1) {
+  const s=createGame(seed,mapVersion),replay=[];let stuck=0,lastX=s.player.x,lastY=s.player.y,escape=0;
   while(s.state==='playing') {
     const p=s.player,e=[...s.enemies].sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];
     let mask=16;

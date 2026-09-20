@@ -39,6 +39,17 @@ function fixture() {
  f.count=()=>sql.prepare('SELECT count(*) AS n FROM point_awards').get().n;
  return f;
 }
+test('new map is bound to server session; old clients/sessions still replay on old map',async()=>{
+ const f=fixture();try{
+  const start=await f.call('startDailyTank',{mapVersion:2});assert.equal(start.data.mapVersion,2);assert.ok(start.data.sessionId.startsWith('v2:'));
+  f.sql.prepare('UPDATE daily_tank_sessions SET seed=1 WHERE id=?').run(start.data.sessionId);
+  const p=winningReplay(1,2);f.time+=p.game.ticks/30*1000+2000;
+  // Client cannot force old replay on a v2 session, nor override it using complete payload.
+  assert.equal((await f.call('completeDailyTank',{sessionId:start.data.sessionId,mapVersion:1,replay:proof.replay})).success,false);
+  assert.equal((await f.call('completeDailyTank',{sessionId:start.data.sessionId,mapVersion:1,replay:p.replay})).data.state,'completed');
+  assert.equal(f.sends,1);
+ }finally{f.sql.close();}
+});
 test('reuses canonical member, existing gift_money service and point_awards; amount/tenant/identity are server-owned',async()=>{
  const f=fixture();try{
   assert.equal((await f.call('dailyTankStatus')).data.state,'available');await f.begin();

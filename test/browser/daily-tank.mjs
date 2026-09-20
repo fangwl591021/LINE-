@@ -17,8 +17,9 @@ try {
  // Instrument state/clock without changing simulation or application source on disk.
  const engine=readFileSync(new URL('../../js/modules/tank-engine.mjs',import.meta.url),'utf8')
   .replace("  if(s.state!=='playing')return s;","  window.__testGame=s; if(s.state!=='playing')return s;");
- await page.route('**/tank-engine.mjs',r=>r.fulfill({contentType:'text/javascript',body:engine}));
+ await page.route('**/tank-engine.mjs*',r=>r.fulfill({contentType:'text/javascript',body:engine}));
  await page.addInitScript(()=>{
+  const Audio=window.Audio;window.__media=[];window.Audio=class extends Audio{constructor(...args){super(...args);window.__media.push(this);}};
   let next=0;window.__raf=new Map();window.__time=0;
   window.requestAnimationFrame=fn=>{const id=++next;__raf.set(id,fn);return id;};
   window.cancelAnimationFrame=id=>__raf.delete(id);
@@ -44,6 +45,8 @@ try {
  assert.match(await page.locator('#daily-tank-task').textContent(),/坦克守衛挑戰/);
  await page.locator('#daily-tank-start').click();await until(()=>__raf.size>0);
  await until(()=>document.querySelector('[data-tank="sound"]').textContent==='音效：開');
+ await until(()=>__media.some(a=>a.currentTime>.05));
+ assert.equal(await page.evaluate(()=>__media[0].muted),false);
  await page.keyboard.down('a');await page.evaluate(()=>__ticks(8));await page.keyboard.up('a');
  assert.ok(await page.evaluate(()=>__testGame.player.x<276));
  await page.keyboard.down(' ');await page.evaluate(()=>__ticks(3));await page.keyboard.up(' ');
@@ -67,7 +70,7 @@ try {
  await page.waitForTimeout(1600);await page.locator('#daily-tank-start').click();await until(()=>__raf.size>0);
  await page.evaluate(()=>__ticks(1));
  const keyMap=[[1,'ArrowUp'],[2,'ArrowRight'],[4,'ArrowDown'],[8,'ArrowLeft'],[16,' ']];
- for(const [count,mask] of winningReplay(1).replay) {
+ for(const [count,mask] of winningReplay(1,2).replay) {
   for(const [bit,key] of keyMap)if(mask&bit)await page.keyboard.down(key);
   await page.evaluate(n=>__ticks(n),count);
   for(const [bit,key] of keyMap)if(mask&bit)await page.keyboard.up(key);
@@ -87,7 +90,7 @@ try {
  assert.equal(preview.sql.prepare("SELECT count(*) n FROM point_awards WHERE status='sent'").get().n,1);
  // Mobile pointer controls including hold fire, release and no scrolling. Blocked audio is harmless.
  await page.setViewportSize({width:844,height:390});
- await page.evaluate(()=>{window.AudioContext=class{constructor(){throw Error('audio unavailable');}};});
+ await page.evaluate(()=>{window.AudioContext=class{constructor(){throw Error('audio unavailable');}};HTMLMediaElement.prototype.play=()=>Promise.reject(Error('media blocked'));});
  await page.locator('#daily-tank-practice').click();await until(()=>__raf.size>0);
  assert.equal(await page.locator('[data-tank="sound"]').textContent(),'點此開啟音效');
  await page.evaluate(()=>__ticks(1));

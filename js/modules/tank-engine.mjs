@@ -5,12 +5,17 @@ const DIR = [[0,-1],[1,0],[0,1],[-1,0]];
 const overlap = (a,b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
 function random(s) { s.seed = (Math.imul(s.seed,1664525)+1013904223)>>>0; return s.seed/4294967296; }
 const tank = (x,y,enemy=false) => ({x,y,w:26,h:26,dir:enemy?2:0,enemy,cooldown:enemy?70:0,turn:90,shield:enemy?0:60});
-export function createGame(seed) {
+export function createGame(seed,mapVersion=1) {
   const walls=[];
   // A closed eight-brick ring, including the entire bottom edge.
   for(let y=360;y<=408;y+=24) for(let x=324;x<=372;x+=24)
     if(x!==348 || y!==384) walls.push({x,y,w:24,h:24,hp:2,baseWall:true});
-  for(const x of [156,228,468,540]) for(const y of [144,168,240]) walls.push({x,y,w:24,h:24,hp:1});
+  if(mapVersion===2){
+    // 48px corridors fit 26px tanks. All cover is destructible; spawn/base exits stay open.
+    for(const x of [132,204,276,420,492,564])for(const y of [96,120,144,168,240,264,288])walls.push({x,y,w:24,h:24,hp:1});
+    for(const x of [36,60,84,612,636,660])for(const y of [192,216,312,336])walls.push({x,y,w:24,h:24,hp:1});
+    for(const x of [324,348,372])for(const y of [216,240])walls.push({x,y,w:24,h:24,hp:1});
+  }else for(const x of [156,228,468,540]) for(const y of [144,168,240]) walls.push({x,y,w:24,h:24,hp:1});
   return {seed:seed>>>0,ticks:0,player:tank(276,384),base:{x:348,y:384,w:24,h:24,alive:true},
     walls,enemies:[],bullets:[],kills:0,spawned:0,spawnAt:1,lives:3,state:'playing',events:[]};
 }
@@ -88,7 +93,7 @@ export function recordInput(replay,mask) {
   const last=replay[replay.length-1];
   if(last && last[1]===mask)last[0]++;else replay.push([1,mask]);
 }
-export function verifyReplay(seed,replay,elapsedMs) {
+export function verifyReplay(seed,replay,elapsedMs,mapVersion=1) {
   if(!Array.isArray(replay)||!replay.length||replay.length>MAX_TICKS)return false;
   let total=0;
   for(const pair of replay) {
@@ -97,7 +102,7 @@ export function verifyReplay(seed,replay,elapsedMs) {
     total+=pair[0];if(total>MAX_TICKS)return false;
   }
   if(total/FPS*1000>elapsedMs+1500)return false;
-  const s=createGame(seed);
+  const s=createGame(seed,mapVersion);
   for(const [count,mask] of replay)for(let i=0;i<count;i++){
     if(s.state!=='playing')return false;
     stepGame(s,mask);
