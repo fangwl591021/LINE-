@@ -121,7 +121,7 @@
       pageKind('home');const version=++epoch;alert.textContent='';
       const owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.();
       const current=()=>version===epoch&&root.isConnected&&content.isConnected&&root.contains(content)&&(standalone||window.currentPage==='store-shop')&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.();
-      const home=await import('./store-points-home.js?v=2');if(!current())return;
+      const home=await import('./store-points-home.js?v=3');if(!current())return;
       const allowed=canMerchantHome()&&!!home.merchantRole(role);
       merchantView=allowed&&(toggle?!merchantView:merchantView??true);
       root.dataset.pointsRole=merchantView?'merchant':'consumer';
@@ -390,6 +390,12 @@
             break;
           }
           case 'detail':detail(button.dataset.id);break;
+          case 'tank-game': {
+            if(standalone){location.assign(loginLink());break;}
+            if(typeof window.startDailyTankChallenge!=='function')throw new Error('遊戲尚未載入，請重新整理後再試');
+            await window.startDailyTankChallenge();
+            break;
+          }
           case 'wallet': {
             if(standalone){location.assign(loginLink());break;}
             const version=epoch;

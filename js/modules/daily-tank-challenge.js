@@ -1,10 +1,15 @@
 import {createGame,stepGame,recordInput,FPS} from './tank-engine.mjs?v=2';
 import {createTankAudio} from './tank-audio.mjs?v=20260920b';
 import {createTankRenderer} from './tank-renderer.mjs?v=20260920';
+import {createTankMusic} from './tank-music.mjs?v=1';
 
 const task=document.getElementById('daily-tank-task');
 const $=id=>document.getElementById(id);
-let dialog,game,replay=[],session,owner='',frame=0,last=0,acc=0,run=0,playing=false,submitting=false;
+let dialog,game,replay=[],session,owner='',frame=0,last=0,acc=0,run=0,playing=false,submitting=false,returnFocus;
+const music=createTankMusic(state=>{
+  const button=dialog?.querySelector('[data-tank="music"]');
+  if(button){button.textContent=state==='muted'?'音樂：關':state==='blocked'?'點此開啟音樂':'音樂：開';button.setAttribute('aria-pressed',String(state!=='muted'&&state!=='blocked'));}
+});
 let keys=new Set(),stick=0,fire=false,paused=false,statusGeneration=0,rolloverTimer,renderer;
 const audio=createTankAudio((state,mode)=>{
   const button=dialog?.querySelector('[data-tank="sound"]');
@@ -52,7 +57,7 @@ function ensureDialog() {
   if(dialog)return;
   dialog=document.createElement('dialog');dialog.className='tank-dialog';dialog.id='daily-tank-dialog';
   dialog.setAttribute('aria-label','坦克守衛挑戰');
-  dialog.innerHTML=`<header class="tank-toolbar"><strong><small>DAILY DEFENSE · V3</small>坦克守衛挑戰</strong><nav><button type="button" data-tank="sound" aria-pressed="false">點此開啟音效</button><button type="button" data-tank="test-sound">試聽音效</button><button type="button" data-tank="audio-mode">播放：相容模式</button><button type="button" data-tank="close">返回每日任務</button></nav></header>
+  dialog.innerHTML=`<header class="tank-toolbar"><strong><small>DAILY DEFENSE · V4</small>坦克守衛挑戰</strong><nav><button type="button" data-tank="music" aria-pressed="true">音樂：開</button><button type="button" data-tank="sound" aria-pressed="false">點此開啟音效</button><button type="button" data-tank="test-sound">試聽音效</button><button type="button" data-tank="audio-mode">播放：相容模式</button><button type="button" data-tank="close">返回每日任務</button></nav></header>
     <div class="tank-hud" aria-live="off"><span id="tank-life">生命 ♥♥♥</span><span id="tank-kills">擊敗 0 / 5</span><span>守住基地</span></div>
     <div class="tank-stage"><canvas id="tank-canvas" width="720" height="432" aria-label="坦克遊戲：方向鍵或 WASD 移動，空白鍵射擊"></canvas>
       <div class="tank-result" id="tank-result"><div><h2 id="tank-result-title">準備挑戰</h2><p id="tank-result-message" role="status" aria-live="polite">正在準備遊戲…</p><nav><button type="button" data-tank="retry" hidden>重新確認獎勵</button><button type="button" data-tank="again" hidden>再玩一次</button><button type="button" data-tank="resume" hidden>繼續挑戰</button><button type="button" data-tank="close">返回每日任務</button></nav></div></div>
@@ -65,7 +70,8 @@ function ensureDialog() {
     if(action==='close')close();
     if(action==='again')void start();
     if(action==='retry')void confirmReward();
-    if(action==='resume'){paused=false;last=0;$('tank-result').hidden=true;initSound();}
+    if(action==='resume'){paused=false;last=0;$('tank-result').hidden=true;initSound();music.start();}
+    if(action==='music'){if(e.target.textContent==='點此開啟音樂'&&playing&&!paused)music.start();else music.toggle(playing&&!paused);}
     if(action==='sound'){if(e.target.textContent==='點此開啟音效')initSound(true);else audio.toggle();}
     if(action==='test-sound'){if(!audio.enabled)audio.toggle();else initSound(true);}
     if(action==='audio-mode')audio.switchMode();
@@ -98,12 +104,14 @@ function close() {
   run++;playing=false;paused=false;keys.clear();stick=0;fire=false;cancelAnimationFrame(frame);
   dialog?.close();document.documentElement.style.overflow=dialog?.dataset.previousOverflow||'';
   audio.close();
-  void refreshDailyTankStatus();$('daily-tank-start')?.focus();
+  music.close();
+  void refreshDailyTankStatus();if(returnFocus?.isConnected)returnFocus.focus();
 }
 async function start() {
   if(submitting)return;
   if(!uid())return window.showToast?.('請重新進入 LINE LIFF 登入後挑戰',true);
-  ensureDialog();initSound(true);
+  if(!dialog?.open)returnFocus=document.activeElement;
+  ensureDialog();initSound(true);music.start();
   if(!dialog.open){dialog.dataset.previousOverflow=document.documentElement.style.overflow;dialog.showModal();document.documentElement.style.overflow='hidden';}
   const generation=++run;++statusGeneration;owner=uid();playing=false;paused=false;keys.clear();stick=0;fire=false;
   cancelAnimationFrame(frame);result('準備挑戰','正在取得挑戰憑證…');
@@ -112,7 +120,7 @@ async function start() {
     if(generation!==run||owner!==uid())return;
     session=data;game=createGame(data.seed,data.mapVersion||1);renderer.reset();replay=[];playing=true;acc=0;last=0;
     taskState({});$('tank-result').hidden=true;frame=requestAnimationFrame(loop);
-  }catch(e){if(generation===run)result('暫時無法開始',e.message,{again:true});}
+  }catch(e){if(generation===run){music.pause();result('暫時無法開始',e.message,{again:true});}}
 }
 function inputMask() {
   return stick|(keys.has('ArrowUp')||keys.has('w')?1:0)|(keys.has('ArrowRight')||keys.has('d')?2:0)|
@@ -127,7 +135,7 @@ function loop(time) {
     const mask=inputMask();recordInput(replay,mask);stepGame(game,mask);acc-=1000/FPS;
     game.events.forEach(tone);
     if(game.state!=='playing'){
-      playing=false;keys.clear();stick=0;fire=false;
+      playing=false;keys.clear();stick=0;fire=false;music.pause();
       if(game.state==='won'){
         save({sessionId:session.sessionId,date:session.date,replay});
         result('挑戰成功','正在確認今日獎勵，尚未確認入帳…');void confirmReward();
@@ -165,7 +173,7 @@ async function confirmReward() {
 const recognized=['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d',' '];
 document.addEventListener('keydown',e=>{const key=e.key.length===1?e.key.toLowerCase():e.key;if(dialog?.open&&recognized.includes(key)){e.preventDefault();if(!e.repeat)initSound();keys.add(key);}});
 document.addEventListener('keyup',e=>keys.delete(e.key.length===1?e.key.toLowerCase():e.key));
-function pause(){keys.clear();stick=0;fire=false;if(playing){paused=true;result('挑戰暫停','按繼續後恢復遊戲。',{resume:true});}}
+function pause(){music.pause();keys.clear();stick=0;fire=false;if(playing){paused=true;result('挑戰暫停','按繼續後恢復遊戲。',{resume:true});}}
 window.addEventListener('blur',pause);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)pause();else if(!playing)void refreshDailyTankStatus();});
 window.startDailyTankChallenge=start;window.refreshDailyTankStatus=refreshDailyTankStatus;

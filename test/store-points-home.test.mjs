@@ -5,6 +5,21 @@ import {inflateSync} from 'node:zlib';
 import vm from 'node:vm';
 import {merchantRole,renderPointsHome,renderRecommendedShops} from '../js/modules/store-points-home.js';
 const mall=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
+test('wallet replaces refresh link with game while retaining personal QR for every role',()=>{
+ for(const options of [{},{merchant:true},{merchant:true,rewardOnly:true},{merchant:true,redeemOnly:true}]){
+  const html=renderPointsHome(options);assert.match(html,/data-do="tank-game"[^>]*>玩遊戲拿點數/);
+  assert.match(html,/data-do="wallet"/);assert.match(html,/我的專屬 QR/);assert.doesNotMatch(html,/查看\s*／\s*更新點數/);
+ }
+});
+test('storefront game action reuses challenge; standalone requires login',async()=>{
+ const branch=mall.slice(mall.indexOf("case 'tank-game':"),mall.indexOf("case 'wallet':",mall.indexOf("case 'tank-game':")));
+ assert.ok(branch);
+ for(const standalone of [false,true]){
+  const calls=[];await vm.runInNewContext(`(async()=>{switch('tank-game'){${branch}}})()`,{standalone,location:{assign:url=>calls.push(url)},loginLink:()=>'/login',window:{startDailyTankChallenge:()=>calls.push('game')}});
+  assert.deepEqual(calls,[standalone?'/login':'game']);
+ }
+ await assert.rejects(vm.runInNewContext(`(async()=>{switch('tank-game'){${branch}}})()`,{standalone:false,window:{}}),/遊戲尚未載入/);
+});
 
 test('redeem operator home shows redemption only and no management or gift controls',()=>{
  assert.equal(merchantRole('redeem'),'redeem');

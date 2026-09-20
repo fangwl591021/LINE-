@@ -47,6 +47,16 @@ try {
  await until(()=>document.querySelector('[data-tank="sound"]').textContent==='音效：開');
  await until(()=>__media.some(a=>a.currentTime>.05));
  assert.equal(await page.evaluate(()=>__media[0].muted),false);
+ await until(()=>__media.some(a=>a.loop&&!a.paused&&a.currentTime>.05));
+ await page.getByRole('button',{name:'音樂：開',exact:true}).click();
+ assert.equal(await page.evaluate(()=>__media.find(a=>a.loop).paused),true);
+ assert.equal(await page.locator('[data-tank="sound"]').textContent(),'音效：開');
+ await page.getByRole('button',{name:'音樂：關',exact:true}).click();
+ await until(()=>__media.some(a=>a.loop&&!a.paused));
+ await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+ assert.equal(await page.evaluate(()=>__media.find(a=>a.loop).paused),true);
+ await page.getByRole('button',{name:'繼續挑戰'}).click();
+ await until(()=>__media.some(a=>a.loop&&!a.paused));
  await page.keyboard.down('a');await page.evaluate(()=>__ticks(8));await page.keyboard.up('a');
  assert.ok(await page.evaluate(()=>__testGame.player.x<276));
  await page.keyboard.down(' ');await page.evaluate(()=>__ticks(3));await page.keyboard.up(' ');
@@ -55,6 +65,7 @@ try {
  await page.screenshot({path:join(tmpdir(),'daily-tank-desktop.png')});
  await page.getByRole('button',{name:'音效：開'}).click();assert.equal(await page.getByRole('button',{name:'音效：關'}).getAttribute('aria-pressed'),'false');
  await page.getByRole('button',{name:'返回每日任務'}).first().click();
+ assert.equal(await page.evaluate(()=>__media.filter(a=>a.loop).every(a=>a.paused&&!a.getAttribute('src'))),true);
  // Fully integrated win with real browser module + handler + SQLite + synthetic mother.
  // Game seed is forced through start response route for exact test replay.
  let dropCompletion=true;
@@ -76,6 +87,7 @@ try {
   for(const [bit,key] of keyMap)if(mask&bit)await page.keyboard.up(key);
  }
  await until(()=>!document.querySelector('[data-tank="retry"]').hidden);
+ assert.equal(await page.evaluate(()=>__media.filter(a=>a.loop).every(a=>a.paused)),true);
  assert.equal(await page.locator('#preview-balance').textContent(),'300','network failure must not display a speculative award');
  // Unsent proof survives a page refresh; manual retry goes through the same backend reservation.
  await page.reload();await until(()=>!document.getElementById('daily-tank-confirm').hidden);
@@ -93,6 +105,7 @@ try {
  await page.evaluate(()=>{window.AudioContext=class{constructor(){throw Error('audio unavailable');}};HTMLMediaElement.prototype.play=()=>Promise.reject(Error('media blocked'));});
  await page.locator('#daily-tank-practice').click();await until(()=>__raf.size>0);
  assert.equal(await page.locator('[data-tank="sound"]').textContent(),'點此開啟音效');
+ assert.equal(await page.locator('[data-tank="music"]').textContent(),'點此開啟音樂');
  await page.evaluate(()=>__ticks(1));
  const box=await page.locator('#tank-stick').boundingBox();
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
@@ -114,7 +127,7 @@ try {
  assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.tank-dialog')).touchAction),'none');
  for(const size of [{width:390,height:844},{width:844,height:390}]){
   await page.setViewportSize(size);
-  for(const sel of ['#tank-stick','#tank-fire','#tank-canvas']){
+  for(const sel of ['#tank-stick','#tank-fire','#tank-canvas','[data-tank="music"]']){
    const r=await page.locator(sel).boundingBox();assert.ok(r.x>=0&&r.y>=0&&r.x+r.width<=size.width+1&&r.y+r.height<=size.height+1,sel);
   }
  }
