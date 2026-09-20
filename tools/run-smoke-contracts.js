@@ -40,6 +40,7 @@ const foundationChecks = [
 
 const fullChecks = [
   'test/tank-engine.test.mjs',
+  'test/tank-audio.test.mjs',
   'test/daily-tank-challenge.test.mjs',
   'test/crm-card-phone-link.test.mjs',
   'test/partner-onboarding-ai.test.mjs',

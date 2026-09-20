@@ -25,8 +25,25 @@ try {
   window.__ticks=n=>{for(let i=0;i<n;i++){__time+=1000/30+.001;const callbacks=[...__raf.values()];__raf.clear();callbacks.forEach(fn=>fn(__time));}};
  });
  await page.goto(origin);await until(()=>typeof startDailyTankChallenge==='function');
+ // Render the actual synthesizer to PCM: every effect must contain a non-silent signal.
+ const audioLevels=await page.evaluate(async()=>{
+  const {synthEffect}=await import('/js/modules/tank-audio.mjs');const levels={};
+  for(const kind of ['fire','enemyFire','hit','win','lose','ready']){
+   const ctx=new OfflineAudioContext(1,48000,48000);synthEffect(ctx,kind);
+   const data=(await ctx.startRendering()).getChannelData(0);
+   levels[kind]=Math.sqrt(data.reduce((sum,n)=>sum+n*n,0)/data.length);
+  }return levels;
+ });
+ for(const [kind,rms] of Object.entries(audioLevels))assert.ok(rms>.005,`${kind} audible PCM energy: ${rms}`);
+ // Presentation must not change anything used by the backend replay verifier.
+ assert.equal(await page.evaluate(async()=>{
+  const {createTankRenderer}=await import('/js/modules/tank-renderer.mjs');
+  const {createGame}=await import('/js/modules/tank-engine.mjs');const s=createGame(3),before=JSON.stringify(s);
+  createTankRenderer(document.createElement('canvas')).draw(s);return JSON.stringify(s)===before;
+ }),true);
  assert.match(await page.locator('#daily-tank-task').textContent(),/坦克守衛挑戰/);
  await page.locator('#daily-tank-start').click();await until(()=>__raf.size>0);
+ await until(()=>document.querySelector('[data-tank="sound"]').textContent==='音效：開');
  await page.keyboard.down('a');await page.evaluate(()=>__ticks(8));await page.keyboard.up('a');
  assert.ok(await page.evaluate(()=>__testGame.player.x<276));
  await page.keyboard.down(' ');await page.evaluate(()=>__ticks(3));await page.keyboard.up(' ');
@@ -72,6 +89,7 @@ try {
  await page.setViewportSize({width:844,height:390});
  await page.evaluate(()=>{window.AudioContext=class{constructor(){throw Error('audio unavailable');}};});
  await page.locator('#daily-tank-practice').click();await until(()=>__raf.size>0);
+ assert.equal(await page.locator('[data-tank="sound"]').textContent(),'點此開啟音效');
  await page.evaluate(()=>__ticks(1));
  const box=await page.locator('#tank-stick').boundingBox();
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
@@ -101,5 +119,5 @@ try {
  await page.getByRole('button',{name:'返回每日任務'}).first().click();
  assert.equal(await page.evaluate(()=>document.documentElement.style.overflow),'');
  assert.deepEqual(errors,[]);
- console.log('Tank browser PASS: keyboard, pointer controls, landscape/portrait, blocked audio, real replay/API reward, history, refresh, daily duplicate guard.');
+ console.log('Tank browser PASS: non-silent PCM for 6 sounds, gesture audio, truthful blocked state, renderer preserves simulation, keyboard, multitouch, landscape/portrait, real replay/API reward, refresh and duplicate guard.');
 }finally{await browser.close();await preview.close();}

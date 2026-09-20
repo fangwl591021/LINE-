@@ -3,6 +3,7 @@
 - 入口在 points-wallet 既有每日簽到旁；原簽到 action / 10 點規則完全不變。
 - 原創 Canvas：3 生命、基地完整磚牆、最多 3 敵人、擊敗 5 敵人勝利。失敗無限重試；單局最多 6 分鐘。
 - 鍵盤方向/WASD、空白鍵；手機搖桿/射擊。音效僅手勢後建立 Web Audio；音效失敗不影響遊戲。
+- 呈現模組不得修改模擬狀態或消耗遊戲亂數；音效狀態依 AudioContext 回報，未成功啟用不可假顯示「開」。開始、射擊、搖桿及鍵盤手勢可恢復暫停音訊，提供試聽與裝置音量提示。
 - 三個新 action 嚴格驗證 LINE token，不允許 D1 UID-only fallback。會員與 point_line_id 僅由持久化身分橋接取得。
 - 後端 seed、session、台北日、遊戲操作重播全部核對，金額固定 100；前端不能指定會員、租戶、金額或完成狀態。
 - 租戶隔離使用既有服務端 POINT_SHOP_ID / MOTHER_CUS_ACCOUNT_SHOP_ID；不是可由使用者更改的推薦 network_id。

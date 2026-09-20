@@ -7,10 +7,10 @@
 .tank-dialog{box-sizing:border-box;position:fixed;inset:0;width:100%;height:100%;height:100dvh;max-width:none;max-height:none;margin:0;padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));border:0;background:#0e262b;color:#f0fff7;overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden}
 .tank-dialog::backdrop{background:#0e262b}.tank-dialog[open]{display:flex;flex-direction:column;gap:8px}
 .tank-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0}
-.tank-toolbar strong{font-size:17px}.tank-toolbar nav{display:flex;gap:8px}.tank-toolbar button{padding:8px 12px;background:#25454a;font-size:13px}
+.tank-toolbar strong{font-size:17px}.tank-toolbar strong small{display:block;font-size:9px;letter-spacing:3px;color:#73d8c2;margin-bottom:3px}.tank-toolbar nav{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.tank-toolbar button{padding:8px 12px;background:#25454a;font-size:13px}
 .tank-hud{display:flex;justify-content:center;gap:24px;font-size:15px;font-weight:700;color:#b8ebd2;min-height:23px}
 .tank-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
-.tank-stage canvas{display:block;border:1px solid #41625f;border-radius:12px;background:#142f32;width:min(100%,calc((100dvh - 240px)*1.6667));max-height:100%;aspect-ratio:5/3;object-fit:contain;touch-action:none}
+.tank-stage canvas{display:block;border:1px solid #638f85;border-radius:12px;background:#142f32;width:min(100%,calc((100dvh - 270px)*1.6667));max-height:100%;aspect-ratio:5/3;object-fit:contain;touch-action:none;box-shadow:0 0 0 5px #8dc9b90c,0 12px 45px #0006}
 .tank-controls{display:flex;align-items:center;justify-content:space-between;padding:6px 18px;flex-shrink:0;gap:20px}
 .tank-stick{width:104px;height:104px;background:#23484a;border:2px solid #528675;border-radius:50%;position:relative;touch-action:none;flex-shrink:0}
 .tank-stick::before{content:'↑';position:absolute;top:2px;left:44px;color:#a0d5bf}.tank-stick::after{content:'←  ↓  →';position:absolute;bottom:8px;left:8px;right:8px;text-align:center;white-space:pre;color:#a0d5bf;font-size:18px}
@@ -22,8 +22,15 @@
 .tank-result h2{font-size:26px;margin:0 0 12px;color:#c6f4d3}.tank-result p{font-size:15px;line-height:1.6;margin:0 0 16px}
 .tank-result nav{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}.tank-result button{background:#2c705d;font-size:14px}
 .tank-dialog button:focus-visible,.tank-task button:focus-visible,.tank-stick:focus-visible{outline:3px solid #f6c578;outline-offset:3px}
+.tank-dialog{background:radial-gradient(ellipse at 50% 25%,#244749,#0a1924 85%)}
+.tank-hud span{padding:5px 12px;border-bottom:2px solid #3f8278;background:#ffffff07;border-radius:5px}
+.tank-audio-hint{margin:0;text-align:center;color:#b0c7c5;font-size:11px;min-height:15px;flex-shrink:0}
+.tank-stick{background:radial-gradient(circle,#284e53 35%,#142e37 70%);box-shadow:inset 0 3px 12px #0008,0 0 0 5px #9be5c710}
+.tank-stick span{background:radial-gradient(circle at 35% 25%,#e5fff1,#7dcdb9 50%,#286c6b);border:1px solid #c1f3d5}
+.tank-dialog .tank-fire{background:radial-gradient(circle at 35% 25%,#ffe4a1,#efa549 50%,#b86c2d);box-shadow:0 4px 0 #704b2e,0 0 22px #eaa24526}
+@media(max-width:480px){.tank-toolbar{align-items:flex-start}.tank-toolbar strong{font-size:14px;min-width:105px}.tank-toolbar nav{gap:4px}.tank-toolbar button{font-size:11px;padding:5px 8px;min-height:36px}.tank-hud{gap:8px;font-size:13px}.tank-hud span{padding:4px 8px}.tank-controls{padding:4px 6px;gap:10px}}
 @media(orientation:landscape) and (max-height:600px){
- .tank-stage canvas{width:min(calc(100% - 200px),calc((100dvh - 95px)*1.6667))}
+ .tank-stage canvas{width:min(calc(100% - 200px),calc((100dvh - 130px)*1.6667))}
  .tank-controls{position:absolute;bottom:max(15px,env(safe-area-inset-bottom));left:10px;right:10px;padding:0;pointer-events:none}
  .tank-controls>*{pointer-events:auto}.tank-control-help{display:none}.tank-stick{width:92px;height:92px}.tank-stick span{left:24px;top:24px}.tank-stick::before{left:38px}.tank-stick::after{left:4px}.tank-dialog .tank-fire{width:82px;height:82px}
  .tank-result>div{padding:14px}.tank-result h2{font-size:21px;margin-bottom:4px}.tank-result p{margin-bottom:10px}

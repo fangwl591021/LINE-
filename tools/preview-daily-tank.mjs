@@ -26,7 +26,7 @@ export function createTankPreview() {
  window.renderPointBalanceState=(state,data)=>{if(Number.isFinite(data.balance))document.getElementById('preview-balance').textContent=data.balance;};
  window.loadPointsWallet=async()=>{const r=await fetch('/ledger').then(r=>r.json());document.getElementById('preview-balance').textContent=r.balance;document.getElementById('preview-history').replaceChildren(...r.rows.map(row=>{const el=document.createElement('p');el.textContent=row.event_name+' +'+row.get_point+' 點';return el;}));};
  </script><script type="module" src="/js/modules/daily-tank-challenge.js"></script></body></html>`;
- const assets=new Map([['/css/daily-tank.css','text/css'],['/js/modules/daily-tank-challenge.js','text/javascript'],['/js/modules/tank-engine.mjs','text/javascript']]);
+ const assets=new Map([['/css/daily-tank.css','text/css'],['/js/modules/daily-tank-challenge.js','text/javascript'],['/js/modules/tank-engine.mjs','text/javascript'],['/js/modules/tank-renderer.mjs','text/javascript'],['/js/modules/tank-audio.mjs','text/javascript']]);
  const server=createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const path=new URL(req.url,'http://localhost').pathname;
