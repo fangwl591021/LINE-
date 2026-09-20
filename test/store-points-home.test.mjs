@@ -6,6 +6,15 @@ import vm from 'node:vm';
 import {merchantRole,renderPointsHome,renderRecommendedShops} from '../js/modules/store-points-home.js';
 const mall=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
 
+test('redeem operator home shows redemption only and no management or gift controls',()=>{
+ assert.equal(merchantRole('redeem'),'redeem');
+ assert.equal(merchantRole('扣點用戶'),'redeem');
+ const html=renderPointsHome({merchant:true,redeemOnly:true});
+ assert.match(html,/data-do="point-redeem"/);
+ assert.doesNotMatch(html,/data-do="(?:point-reward|sales|online-manage|manage)"/);
+ assert.match(html,/不能贈點/);
+});
+
 test('shared brand uses supplied logo without replacing it on role changes; image stays contained',()=>{
  const css=readFileSync(new URL('../css/store-shop.css',import.meta.url),'utf8');
  const logo=readFileSync(new URL('../assets/points-logo-transparent-20260916.png',import.meta.url));
@@ -16,7 +25,7 @@ test('shared brand uses supplied logo without replacing it on role changes; imag
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=43/);
+  assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=44/);
  }
 });
 test('shared storefront places an accessible main-home return before the brand for every role',()=>{

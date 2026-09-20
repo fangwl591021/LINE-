@@ -6,9 +6,12 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
   if(!isCurrent())return;
   if(!window.canUseStorePointCashier?.())throw Error('目前帳號沒有會員贈扣點操作權限');
   const rewardOnly=!!window.isRewardOnlyPointCashier?.();
+  const redeemOnly=!!window.isRedeemOnlyPointCashier?.();
   const authorityRole=String(window.userRole||window.currentUser?.role||'');
   if(mode!==undefined&&!['reward','redeem'].includes(mode))throw Error('無效的點數操作');
   if(rewardOnly&&mode==='redeem')throw Error('贈點用戶不能扣點');
+  if(redeemOnly&&mode==='reward')throw Error('扣點用戶不能贈點');
+  if(redeemOnly)mode='redeem';
   window.updateStorePointCashierPermissions?.();
   if(activeDialog?.open){
     if(activeCurrent?.()){activeDialog.querySelector('[data-close]').focus();return;}
@@ -27,6 +30,10 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
   if(rewardOnly){
     modal.querySelector('[data-choices] p').textContent='可掃描會員錢包 QR 或輸入手機號碼確認會員；贈點用戶不能扣點。';
     modal.querySelector('[data-choices] small').textContent='電話贈點可直接填寫贈送點數；核對會員後，按確認贈點才會送出。';
+  }
+  if(redeemOnly){
+    modal.querySelector('[data-choices] p').textContent='請掃描會員 QR 或輸入手機確認會員；此帳號只能扣點。';
+    modal.querySelector('[data-choices] small').textContent='核對會員、消費金額與折抵點數，按確認送出才會扣點；不能贈點。';
   }
   document.body.append(modal);activeDialog=modal;
   const choices=modal.querySelector('[data-choices]'),slot=modal.querySelector('[data-cashier-slot]');
@@ -69,7 +76,7 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
     const selected=++choiceRevision;
     if(method==='phone'&&mode!=='redeem'){
       try{
-        const {mountStorePhoneReward}=await import('./store-phone-reward.js?v=2');
+        const {mountStorePhoneReward}=await import('./store-phone-reward.js?v=3');
         if(!current()||selected!==choiceRevision)return;
         clearCustomer();phoneForm?.dispose();slot.hidden=true;phoneSlot.hidden=false;
         choices.hidden=true;back.hidden=false;status.textContent='';title.textContent='電話贈點';

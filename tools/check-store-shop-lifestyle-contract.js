@@ -49,7 +49,7 @@ assert(front.includes('loading="lazy"'));
 assert(css.includes('.shop-lifestyle .shop-product-image img{display:block;width:100%;height:100%;object-fit:contain'));
 assert(css.includes('.shop-lifestyle .shop-discovery-grid article>img{height:auto;aspect-ratio:4/3;object-fit:cover'));
 assert(front.includes('shop-product-summary'));assert(front.includes('shop-product-image'));
-assert(front.includes("import('./store-points-home.js?v=1')"));
+assert(front.includes("import('./store-points-home.js?v=2')"));
 assert(front.includes('pageKind(\'commerce\')'));
 assert(front.includes("target.className='shop-inline-qr'"));
 assert(front.includes("copy.append(price)"));

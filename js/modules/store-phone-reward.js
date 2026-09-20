@@ -1,5 +1,6 @@
 // Direct phone gifts share the existing server authority and durable cashier request IDs.
 export function mountStorePhoneReward(root,{isCurrent=()=>true,rewardOnly=false}={}) {
+  if(window.isRedeemOnlyPointCashier?.())throw Error('扣點用戶不能贈點');
   const owner=window.currentUserProfile?.userId;
   const role=String(window.userRole||window.currentUser?.role||'');
   let disposed=false,revision=0,customer=null,receipt=null,busy=false,searching=false;

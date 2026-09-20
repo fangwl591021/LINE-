@@ -12,6 +12,21 @@ function node(){
   classList:{add:(...items)=>items.forEach(x=>classes.add(x)),remove:(...items)=>items.forEach(x=>classes.delete(x)),contains:x=>classes.has(x),toggle(x,on){if(on===undefined)on=!classes.has(x);if(on)classes.add(x);else classes.delete(x);return on;}},
   addEventListener(type,fn){(listeners[type]||=[]).push(fn);},dispatchEvent(event){for(const fn of listeners[event.type]||[])fn(event);},focus(){this.focused=true;},remove(){this.removed=true;}};
 }
+test('redeem UI hides gifts, forces redemption and never creates a gift payload',async()=>{
+ const s=setup('redeem');
+ assert.equal(s.window.canUseStorePointCashier(),true);
+ assert.equal(s.window.getStorePointMode(),'redeem');
+ assert.equal(s.get('store-point-reward-option').classList.contains('hidden'),true);
+ assert.equal(s.radios[1].disabled,true);assert.equal(s.radios[0].checked,true);
+ s.get('store-point-customer').value='0912345678';await s.window.lookupStorePointCustomer();
+ s.get('store-point-amount').value='100';s.get('store-point-deduct').value='10';
+ await s.window.submitStorePointCashier(null);
+ assert.equal(s.submitted.length,1);assert.equal(s.submitted[0].mode,'redeem');
+ assert.equal(s.submitted[0].deductPoints,10);assert.equal(s.submitted[0].rewardPoints,undefined);
+ s.window.userRole='store';s.window.updateStorePointCashierPermissions();
+ assert.equal(s.get('store-point-reward-option').classList.contains('hidden'),false);
+ assert.equal(s.radios[1].disabled,false);
+});
 function setup(role='reward'){
  const elements={},get=id=>elements[id]||=(node()),calls=[],toasts=[],submitted=[];
  const radios=[Object.assign(node(),{value:'redeem',checked:true}),Object.assign(node(),{value:'reward'})];

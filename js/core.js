@@ -273,8 +273,9 @@ const Core = (function() {
     window.applyUserPermissions = function() {
         const rewardRole = String(window.currentUser?.role || window.userRole || '').trim().toLowerCase();
         const rewardOnly = rewardRole === 'reward' || rewardRole === '贈點用戶';
-        if (rewardOnly) window.userRole = window.currentUser?.role || window.userRole;
-        if (!rewardOnly && typeof window.isHardAdminUser === 'function') {
+        const redeemOnly = rewardRole === 'redeem' || rewardRole === '扣點用戶';
+        if (rewardOnly || redeemOnly) window.userRole = window.currentUser?.role || window.userRole;
+        if (!rewardOnly && !redeemOnly && typeof window.isHardAdminUser === 'function') {
             const currentId = window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '';
             if (window.isHardAdminUser(currentId, window.currentUser || {})) {
                 window.userRole = 'admin';
@@ -284,10 +285,10 @@ const Core = (function() {
                 }
             }
         }
-        window.hasAdminRights = !rewardOnly && (window.userRole === 'admin' || window.userRole === 'store');
+        window.hasAdminRights = !rewardOnly && !redeemOnly && (window.userRole === 'admin' || window.userRole === 'store');
         const roleLabel = document.querySelector('#header-role-label');
         if (roleLabel) {
-            const roleText = rewardOnly ? '贈點用戶' : (window.userRole === 'admin' ? '總管' : (window.userRole === 'store' ? '店長' : '用戶'));
+            const roleText = redeemOnly ? '扣點用戶' : rewardOnly ? '贈點用戶' : (window.userRole === 'admin' ? '總管' : (window.userRole === 'store' ? '店長' : '用戶'));
             roleLabel.textContent = '目前：' + roleText;
         }
         

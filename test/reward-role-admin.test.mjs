@@ -57,6 +57,16 @@ for (const file of ['admin.html', 'admin-v2.html']) {
     assert.match(s.messages.at(-1)[0],/贈點用戶/);
   });
 
+  test(file + ': redeem CRM option requires confirmation and persists without store privileges',async()=>{
+    const s=setup();s.select.value='redeem';await s.context.updateRole(memberId,'redeem',s.select);
+    assert.equal(s.calls.length,1);assert.equal(s.calls[0].payload.newRole,'redeem');
+    assert.equal(s.context.getSafeUserRole({role:'redeem'}),'redeem');
+    assert.equal(s.context.getRoleLabel('redeem'),'扣點用戶');assert.equal(s.user.role,'redeem');
+    assert.match(s.confirmations[0],/不能贈點/);assert.match(source,/<option value="redeem"/);
+    const canceled=setup({confirm:false});await canceled.context.updateRole(memberId,'redeem',canceled.select);
+    assert.equal(canceled.calls.length,0);
+  });
+
   test(file + ': cancel and invalid roles do not send writes and restore the selection', async () => {
     const canceled=setup({oldRole:'store',confirm:false});
     await canceled.context.updateRole(memberId,'reward',canceled.select);
@@ -115,6 +125,12 @@ test('mobile CRM renders the saved reward role and keeps hard-admin choices disa
   for (const options of [{oldRole:'admin'},{protected:true},{operatorRole:'store'}]) {
     const s=mobile(options);s.window.renderStoreManagement();assert.match(s.container.innerHTML,/<select[^>]+disabled/);
   }
+});
+test('mobile CRM renders and confirms redeem-only without silently upgrading it',async()=>{
+ const s=mobile({oldRole:'redeem'});s.window.renderStoreManagement();
+ assert.match(s.container.innerHTML,/<option value="redeem" selected>扣點用戶<\/option>/);
+ const next=mobile();await next.window.changeUserRole(memberId,'redeem',{target:next.select});
+ assert.equal(next.calls.length,1);assert.equal(next.user.role,'redeem');assert.match(next.confirmations[0],/不能贈點/);
 });
 test('mobile CRM has one role handler and sends reward after explicit confirmation',async()=>{
   assert.equal((mobileSource.match(/window.changeUserRole =/g)||[]).length,1);

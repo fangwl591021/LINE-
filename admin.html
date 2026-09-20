@@ -569,6 +569,7 @@
                 <option value="user">一般</option>
                 <option value="store">店長</option>
                 <option value="reward">贈點用戶</option>
+                <option value="redeem">扣點用戶</option>
                 <option value="tenant">租戶</option>
                 <option value="admin">總管</option>
               </select>
@@ -1909,7 +1910,7 @@
     function getSafeUserRole(user = {}) {
       const role = String(user.role || 'user').trim().toLowerCase();
       if (role === 'admin' && !isHardAdminAccount(getUserId(user), user)) return 'user';
-      if (role === 'admin' || role === 'store' || role === 'tenant' || role === 'reward') return role;
+      if (role === 'admin' || role === 'store' || role === 'tenant' || role === 'reward' || role === 'redeem') return role;
       return 'user';
     }
     
@@ -3447,6 +3448,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (role === 'admin') return '總管';
       if (role === 'store') return '店長';
       if (role === 'reward') return '贈點用戶';
+      if (role === 'redeem') return '扣點用戶';
       if (role === 'tenant') return '租戶';
       return '一般';
     }
@@ -4166,6 +4168,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
                 <option value="user" ${role==='user'?'selected':''}>一般</option>
                 <option value="store" ${role==='store'?'selected':''}>店長</option>
                 <option value="reward" ${role==='reward'?'selected':''}>贈點用戶</option>
+                <option value="redeem" ${role==='redeem'?'selected':''}>扣點用戶</option>
               </select>
             </div>
           </td>
@@ -4282,11 +4285,12 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (adminRole !== 'admin' || isHardAdminAccount(userId, user)) {
         restore(); return showToast('僅總管可調整角色，總管帳號不可在此變更。', true);
       }
-      if (!['user', 'store', 'reward'].includes(role)) {
-        restore(); return showToast('此區僅可選一般、店長或贈點用戶。', true);
+      if (!['user', 'store', 'reward', 'redeem'].includes(role)) {
+        restore(); return showToast('此區僅可選一般、店長、贈點用戶或扣點用戶。', true);
       }
       if (role === oldRole) return;
-      if (role === 'reward' && !window.confirm('設為贈點用戶後，僅能掃描會員 QR 贈點，不能扣點或輸入電話查找。確定更新？')) { restore(); return; }
+      if (role === 'reward' && !window.confirm('設為贈點用戶後，僅能掃描會員 QR 或輸入手機贈點，不能扣點。確定更新？')) { restore(); return; }
+      if (role === 'redeem' && !window.confirm('設為扣點用戶後，僅能消費折抵，不能贈點或管理店家。確定更新？')) { restore(); return; }
       if (selectEl) selectEl.disabled = true;
       let updated = false;
       try {

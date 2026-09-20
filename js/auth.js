@@ -1358,7 +1358,7 @@ window.applyRegisteredUserSession = function(info, options = {}) {
   if (!info) return;
 
   window.currentUser = { ...info };
-  const rewardOnlyRole = ['reward', '贈點用戶'].includes(String(window.currentUser.role || '').trim().toLowerCase());
+  const rewardOnlyRole = ['reward', '贈點用戶', 'redeem', '扣點用戶'].includes(String(window.currentUser.role || '').trim().toLowerCase());
   if (!rewardOnlyRole && typeof window.isHardAdminUser === 'function' && window.isHardAdminUser(window.currentUserProfile?.userId || window.currentUser.userId, window.currentUser)) {
     window.currentUser.role = 'admin';
     window.currentUser.networkId = window.currentUser.networkId || 'admin';
@@ -1618,6 +1618,10 @@ window.isRewardOnlyPointCashier = function() {
   return role === 'reward' || role === '贈點用戶';
 };
 
+window.isRedeemOnlyPointCashier = function() {
+  return ['redeem', '扣點用戶'].includes(String(window.userRole || window.currentUser?.role || '').trim().toLowerCase());
+};
+
 window.invalidateStorePointRewardScan = function() {
   storePointRewardScan = null;
   window.__storePointLookupRevision = (window.__storePointLookupRevision || 0) + 1;
@@ -1625,6 +1629,7 @@ window.invalidateStorePointRewardScan = function() {
 
 window.updateStorePointCashierPermissions = function() {
   const rewardOnly = window.isRewardOnlyPointCashier();
+  const redeemOnly = !!window.isRedeemOnlyPointCashier?.();
   if (storePointRewardScan && (!rewardOnly || storePointRewardScan.owner !== window.currentUserProfile?.userId)) {
     window.invalidateStorePointRewardScan();
     window.renderStorePointCustomer?.(null);
@@ -1647,15 +1652,17 @@ window.updateStorePointCashierPermissions = function() {
     input.placeholder = rewardOnly ? '輸入手機號碼，例如 0912345678' : '輸入手機號碼，或按右下掃碼';
   }
   document.getElementById('store-point-redeem-option')?.classList.toggle('hidden', rewardOnly);
+  document.getElementById('store-point-reward-option')?.classList.toggle('hidden', redeemOnly);
   const lookup = document.getElementById('store-point-customer-lookup');
   if (lookup) { lookup.disabled = false; lookup.classList.remove('hidden'); }
   document.getElementById('store-point-customer-scan')?.classList.remove('col-span-2');
   const modes = document.getElementById('store-point-modes');
-  modes?.classList.toggle('grid-cols-1', rewardOnly);
-  modes?.classList.toggle('grid-cols-2', !rewardOnly);
+  modes?.classList.toggle('grid-cols-1', rewardOnly || redeemOnly);
+  modes?.classList.toggle('grid-cols-2', !rewardOnly && !redeemOnly);
   document.querySelectorAll('input[name="store-point-mode"]').forEach(radio => {
-    radio.disabled = rewardOnly && radio.value !== 'reward';
+    radio.disabled = (rewardOnly && radio.value !== 'reward') || (redeemOnly && radio.value !== 'redeem');
     if (rewardOnly) radio.checked = radio.value === 'reward';
+    if (redeemOnly) radio.checked = radio.value === 'redeem';
   });
   const deduct = document.getElementById('store-point-deduct');
   if (deduct) {
@@ -1667,12 +1674,17 @@ window.updateStorePointCashierPermissions = function() {
   text('store-point-cashier-help', rewardOnly ? '可掃描會員錢包 QR 或輸入手機號碼，確認會員後消費贈點，不能扣點。' : '掃描客戶 QR 碼或輸入電話可折抵扣點或消費贈點。');
   text('store-point-customer-label', rewardOnly ? '會員手機號碼 / 掃描會員錢包 QR' : '客戶帳號 / 手機 / QR 內容');
   text('store-point-cashier-free-help', rewardOnly ? '僅限消費贈點，不扣操作點數；不能扣除會員點數。' : '店家送出折抵扣點或消費贈點不扣操作點數。');
+  if (redeemOnly) {
+    text('store-point-cashier-help', '掃描會員 QR 或輸入手機，核對會員與折抵點數後送出；不能贈點。');
+    text('store-point-cashier-free-help', '僅開放消費折抵，不扣操作點數；不能贈點。');
+  }
 };
 
 window.canUseStorePointCashier = function() {
   const rawRole = String(window.userRole || window.currentUser?.role || '').trim();
   const role = rawRole.toLowerCase();
   return window.isRewardOnlyPointCashier()
+    || window.isRedeemOnlyPointCashier?.()
     || window.hasAdminRights === true
     || role === 'admin'
     || role === 'store'
@@ -1889,6 +1901,7 @@ function renderStorePointCashierLogs(rows) {
 
 window.getStorePointMode = function() {
   if (window.isRewardOnlyPointCashier?.()) return 'reward';
+  if (window.isRedeemOnlyPointCashier?.()) return 'redeem';
   return document.querySelector('input[name="store-point-mode"]:checked')?.value || 'redeem';
 };
 

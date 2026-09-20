@@ -2,6 +2,7 @@ import { CustomerImportModule } from './worker/customer-import.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
 import { isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken } from './worker/reward-only-cashier.mjs';
+import { checkRedeemOnlyAction, validateRedeemOperator } from './worker/redeem-only-cashier.mjs';
 import { issueMemberProductQr } from './worker/store-member-product-qr.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
 import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
@@ -284,6 +285,7 @@ const SecurityModule = {
     if (role === 'admin' || role === '總管') return 'admin';
     if (role === 'store' || role === 'tenant' || role === '店長' || role === '租戶') return 'store';
     if (role === 'reward' || role === '贈點用戶') return 'reward';
+    if (role === 'redeem' || role === '扣點用戶') return 'redeem';
     return 'user';
   },
 
@@ -307,7 +309,7 @@ const SecurityModule = {
   },
 
   isHardAdmin(userId, user = {}) {
-    if (isRewardOnlyRole(this.normalizeRole(user.role))) return false;
+    if (isRewardOnlyRole(this.normalizeRole(user.role)) || this.normalizeRole(user.role) === 'redeem') return false;
     const ids = [
       userId,
       user.line_id,
@@ -333,6 +335,7 @@ const SecurityModule = {
   sanitizeRole(userId, role, user = {}) {
     const normalized = this.normalizeRole(role);
     if (isRewardOnlyRole(normalized)) return 'reward';
+    if (normalized === 'redeem') return 'redeem';
     if (this.isHardAdmin(userId, user)) return 'admin';
     return normalized === 'admin' ? 'user' : normalized;
   },
@@ -565,10 +568,16 @@ const SecurityModule = {
     }
 
     if (policy.access === 'manager' && !this.canManage(actor.role)) {
+      if (actor.role === 'redeem') {
+        if (!actor.token || actor.source === 'd1_identity_fallback') return { allowed: false, error: '請透過 LINE 重新登入後使用扣點' };
+        const error = checkRedeemOnlyAction(action, payload);
+        if (error) return { allowed: false, error };
+      } else {
       if (!isRewardOnlyRole(actor.role)) return { allowed: false, error: 'Access Denied: Manager role required' };
       if (!actor.token || actor.source === 'd1_identity_fallback') return { allowed: false, error: '請透過 LINE 重新登入後使用掃碼贈點' };
       const rewardError = checkRewardOnlyAction(action, payload);
       if (rewardError) return { allowed: false, error: rewardError };
+      }
     }
 
     if (action === 'mlmCreateOrder' || action === 'createTenantBonusOrder') {
@@ -9093,6 +9102,7 @@ const D1ReadModule = {
     if (next === 'admin' || next === '總管') return 'admin';
     if (next === 'store' || next === 'tenant' || next === '店長' || next === '租戶') return 'store';
     if (next === 'reward' || next === '贈點用戶') return 'reward';
+    if (next === 'redeem' || next === '扣點用戶') return 'redeem';
     return 'user';
   },
 
@@ -9320,7 +9330,7 @@ const D1ReadModule = {
       health: this.text(row.health),
       career: this.text(row.career),
       role,
-      roleLabel: role === 'admin' ? '總管' : (role === 'store' ? '店長' : (role === 'reward' ? '贈點用戶' : '一般')),
+      roleLabel: role === 'admin' ? '總管' : (role === 'store' ? '店長' : (role === 'reward' ? '贈點用戶' : (role === 'redeem' ? '扣點用戶' : '一般'))),
       storeid: this.text(row.store_id),
       storeId: this.text(row.store_id),
       referrerId: this.text(row.referrer_id),
@@ -9753,7 +9763,7 @@ const D1ReadModule = {
     const oldUser = await this.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [oldUserId, oldUserId]);
     if (!oldUser) return { success: false, error: '找不到舊會員資料' };
     // Name/phone recovery is not authority to transfer a separately granted cashier role.
-    if (isRewardOnlyRole(this.role(oldUser.role))) return { success: false, error: '贈點帳號請由管理員確認及合併身份' };
+    if (isRewardOnlyRole(this.role(oldUser.role)) || this.role(oldUser.role) === 'redeem') return { success: false, error: '受限收銀帳號請由管理員確認及合併身份' };
 
     const cachedName = this.text(payload.name || payload.cachedName);
     const cachedPhone = this.text(payload.phone || payload.cachedPhone);
@@ -10399,6 +10409,7 @@ const D1WriteModule = {
     if (next === 'admin' || next === '總管') return 'admin';
     if (next === 'store' || next === 'tenant' || next === '店長' || next === '租戶') return 'store';
     if (next === 'reward' || next === '贈點用戶') return 'reward';
+    if (next === 'redeem' || next === '扣點用戶') return 'redeem';
     return 'user';
   },
 
@@ -10629,7 +10640,7 @@ const D1WriteModule = {
     }
     // Only the admin role editor grants/revokes reward permission. Profile saves cannot
     // grant it, remove it, or upgrade a reward-only account to a store account.
-    if (isRewardOnlyRole(this.role(existing && existing.role)) || isRewardOnlyRole(user.role)) {
+    if (isRewardOnlyRole(this.role(existing && existing.role)) || isRewardOnlyRole(user.role) || this.role(existing && existing.role) === 'redeem' || user.role === 'redeem') {
       user.role = existing ? this.role(existing.role) : 'user';
     }
     user.role = SecurityModule.sanitizeRole(user.line_id, user.role, user);
@@ -10642,6 +10653,7 @@ const D1WriteModule = {
         role=CASE
           WHEN users.role = 'admin' OR excluded.role = 'admin' THEN 'admin'
           WHEN users.role = 'reward' THEN 'reward'
+          WHEN users.role = 'redeem' THEN 'redeem'
           WHEN users.role = 'store' OR excluded.role = 'store' THEN 'store'
           ELSE excluded.role
         END,
@@ -10731,6 +10743,7 @@ const D1WriteModule = {
     if (normalized.includes('admin')) return 'admin';
     if (normalized.includes('store')) return 'store';
     if (normalized.includes('reward')) return 'reward';
+    if (normalized.includes('redeem')) return 'redeem';
     return 'user';
   },
 
@@ -16921,8 +16934,8 @@ async function dispatchAction(action, payload, request, env) {
       } catch (e) {
         console.error("D1 upsertUser fallback", e);
       }
-      if (isRewardOnlyRole(payload.authenticatedRole) ||
-          isRewardOnlyRole(D1WriteModule.role(D1WriteModule.pick(payload.data || payload.profile || payload, ['role', '權限級別'])))) {
+      if (isRewardOnlyRole(payload.authenticatedRole) || payload.authenticatedRole === 'redeem' ||
+          isRewardOnlyRole(D1WriteModule.role(D1WriteModule.pick(payload.data || payload.profile || payload, ['role', '權限級別']))) || D1WriteModule.role(D1WriteModule.pick(payload.data || payload.profile || payload, ['role', '權限級別'])) === 'redeem') {
         return { success: false, error: '會員資料暫時無法儲存，請稍後再試' };
       }
       return await AuthModule.updateAndClearCache(action, payload, env);
@@ -16943,8 +16956,8 @@ async function dispatchAction(action, payload, request, env) {
       } catch (e) {
         console.error("D1 updateUserRole fallback", e);
       }
-      if (isRewardOnlyRole(D1WriteModule.role(D1WriteModule.pick(payload, ['newRole', 'targetRole', 'permission', 'role'])))) {
-        return { success: false, error: '贈點權限暫時無法儲存，請稍後再試' };
+      if (isRewardOnlyRole(D1WriteModule.role(D1WriteModule.pick(payload, ['newRole', 'targetRole', 'permission', 'role']))) || D1WriteModule.role(D1WriteModule.pick(payload, ['newRole', 'targetRole', 'permission', 'role'])) === 'redeem') {
+        return { success: false, error: '收銀權限暫時無法儲存，請稍後再試' };
       }
       return await AuthModule.updateAndClearCache(action, payload, env);
     }
@@ -17314,6 +17327,13 @@ async function dispatchAction(action, payload, request, env) {
     case 'storeAdjustCustomerPoints': return await runCashierRequest(payload || {}, env,
       raw => PointModule.resolveStorePointCustomer(env, raw),
       async (safe, beforeWrite, product) => {
+        if (payload.authenticatedRole === 'redeem') {
+          await validateRedeemOperator(env, payload);
+          return PointModule.storeAdjustCustomerPoints(safe, env, async actualCustomer => {
+            await validateRedeemOperator(env, payload);
+            return beforeWrite(actualCustomer);
+          }, product);
+        }
         if (!isRewardOnlyRole(payload.authenticatedRole)) return PointModule.storeAdjustCustomerPoints(safe, env, beforeWrite, product);
         // The existing requestId boundary still owns at-most-once execution. Check this
         // separate QR/mobile identity receipt before wallet preparation, then again at the write boundary.

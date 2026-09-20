@@ -58,8 +58,9 @@
     const canManage=()=>!standalone&&['admin','store','總管','店長','user','用戶'].includes(String(window.userRole||'').toLowerCase());
     const canTransact=()=>!standalone&&['admin','store','總管','店長'].includes(String(window.userRole||'').toLowerCase());
     const canAdmin=()=>!standalone&&['admin','總管'].includes(String(window.userRole||'').toLowerCase());
-    const canMerchantHome=()=>!standalone&&!!window.currentUserProfile?.userId&&!!window.liff?.isLoggedIn?.()&&['admin','store','tenant','reward','總管','店長','租戶','贈點用戶'].includes(String(window.userRole||'').toLowerCase());
+    const canMerchantHome=()=>!standalone&&!!window.currentUserProfile?.userId&&!!window.liff?.isLoggedIn?.()&&['admin','store','tenant','reward','redeem','扣點用戶','總管','店長','租戶','贈點用戶'].includes(String(window.userRole||'').toLowerCase());
     const rewardOnly=()=>['reward','贈點用戶'].includes(String(window.userRole||'').toLowerCase())||!!window.isRewardOnlyPointCashier?.();
+    const redeemOnly=()=>['redeem','扣點用戶'].includes(String(window.userRole||'').toLowerCase())||!!window.isRedeemOnlyPointCashier?.();
     let merchantView,clearHomeWallet;
     const atCapacity=()=>productLimit!==null&&productCount>=productLimit;
     function setManagement(result) {
@@ -97,7 +98,8 @@
       const version=epoch,owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.(),entry=root.querySelector('[data-do="point-operation"]');
       if(!canMerchantHome())throw new Error('此帳號未開放商家版點數操作');
       if(mode==='redeem'&&rewardOnly())throw new Error('贈點單位只能贈點，不能扣點');
-      const module=await import('./store-point-operation.js?v=6');
+      if(mode==='reward'&&redeemOnly())throw new Error('扣點用戶不能贈點');
+      const module=await import('./store-point-operation.js?v=7');
       const isCurrent=()=>version===epoch&&root.isConnected&&entry?.isConnected&&root.contains(entry)&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.()&&canMerchantHome();
       if(isCurrent())module.openStorePointOperationPopup({standalone,isCurrent,mode});
     }
@@ -119,13 +121,13 @@
       pageKind('home');const version=++epoch;alert.textContent='';
       const owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.();
       const current=()=>version===epoch&&root.isConnected&&content.isConnected&&root.contains(content)&&(standalone||window.currentPage==='store-shop')&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.();
-      const home=await import('./store-points-home.js?v=1');if(!current())return;
+      const home=await import('./store-points-home.js?v=2');if(!current())return;
       const allowed=canMerchantHome()&&!!home.merchantRole(role);
       merchantView=allowed&&(toggle?!merchantView:merchantView??true);
       root.dataset.pointsRole=merchantView?'merchant':'consumer';
       const switcher=root.querySelector('.points-view-switch');switcher.hidden=!allowed;switcher.textContent=merchantView?'消費者版':'商家版';
       const brand=root.querySelector('.shop-brand-entry');brand.dataset.do=allowed?'point-operation':'wallet';brand.setAttribute('aria-label',allowed?'點數通：開啟會員點數操作':'點數通：我的點數 QR');
-      content.innerHTML=home.renderPointsHome({merchant:merchantView,rewardOnly:rewardOnly(),standalone,canManage:canManage()});
+      content.innerHTML=home.renderPointsHome({merchant:merchantView,rewardOnly:rewardOnly(),redeemOnly:redeemOnly(),standalone,canManage:canManage()});
       if(!standalone)content.querySelector('.points-actions')?.insertAdjacentHTML('afterend','<button type="button" data-do="consumption-journal" class="shop-journal-entry">▤ 我的消費日誌 <span>店內消費・網購明細 ›</span></button>');
       const nav=root.querySelector('.shop-bottom-nav');
       const scan=nav.querySelector('.shop-bottom-qr');scan.dataset.do=merchantView?'point-operation':'wallet';scan.innerHTML=`<span aria-hidden="true">${home.pointIcon('scan')}</span>${merchantView?'掃碼':'點數 QR'}`;

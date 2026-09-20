@@ -29,6 +29,13 @@ function signedIn(canUse=true){
  globalThis.document={getElementById(){throw Error('must not read cashier DOM');}};
 }
 
+test('redeem role cannot open the gift popup or mount direct phone gifts',async()=>{
+ signedIn();window.isRedeemOnlyPointCashier=()=>true;
+ assert.throws(()=>open({mode:'reward'}),/不能贈點/);
+ const {mountStorePhoneReward}=await import('../js/modules/store-phone-reward.js');
+ assert.throws(()=>mountStorePhoneReward({}),/不能贈點/);
+});
+
 test('point operation rejects standalone, anonymous and missing-owner sessions before cashier access',()=>{
  signedIn();assert.throws(()=>open({standalone:true}),/登入/);
  window.liff.isLoggedIn=()=>false;assert.throws(()=>open(),/登入/);

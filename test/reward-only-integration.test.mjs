@@ -5,6 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 import vm from 'node:vm';
 import {isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken} from '../worker/reward-only-cashier.mjs';
 import {runCashierRequest, getCashierRequest} from '../worker/store-cashier-requests.mjs';
+import {checkRedeemOnlyAction,validateRedeemOperator} from '../worker/redeem-only-cashier.mjs';
 
 const source = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), D = 'U' + 'd'.repeat(32);
@@ -50,6 +51,7 @@ function setup(t, role = 'reward') {
   };
   const context = {console: {log() {}, warn() {}, error() {}}, crypto, TextEncoder, URL, Date,
     isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken,
+    checkRedeemOnlyAction,validateRedeemOperator,
     runCashierRequest, getCashierRequest,
     fetch: async () => { throw Error('Unexpected external API'); }
   };
@@ -77,6 +79,67 @@ function setup(t, role = 'reward') {
   };
   return {sql, env, security, read, write, context, events, cacheDeletes, records};
 }
+
+test('redeem role normalizers, CRM save and profile preservation do not grant manager authority', async t => {
+  const s=setup(t,'redeem');
+  for(const role of ['redeem','REDEEM','扣點用戶']) {
+    assert.equal(s.security.normalizeRole(role),'redeem');assert.equal(s.read.role(role),'redeem');assert.equal(s.write.role(role),'redeem');
+  }
+  assert.equal(s.security.canManage('redeem'),false);
+  assert.equal(s.read.userRow({line_id:A,role:'redeem'}).roleLabel,'扣點用戶');
+  for(const role of ['store','admin','user','reward']) {
+    await s.write.upsertUser({userId:A,role},s.env);
+    assert.equal(s.sql.prepare('SELECT role FROM users WHERE line_id=?').get(A).role,'redeem');
+  }
+  await s.write.upsertUser({userId:B,role:'redeem'},s.env);
+  assert.equal(s.sql.prepare('SELECT role FROM users WHERE line_id=?').get(B).role,'user');
+  for(const role of ['redeem','store','user']) {
+    const result=await s.write.updateUserRole({targetUserId:B,newRole:role},s.env);
+    assert.equal(result.success,true);assert.equal(s.sql.prepare('SELECT role FROM users WHERE line_id=?').get(B).role,role);
+  }
+});
+
+test('redeem authority allows only authenticated customer redemption and own logs, denies gifts and management', async t => {
+  const s=setup(t,'redeem'),p=()=>reward({mode:'redeem',deductPoints:10,authenticatedRole:'admin'});
+  for(const action of ['getStorePointCustomer','prepareStorePointCashierSession','storeAdjustCustomerPoints','getStoreCashierRequest','listStorePointCashierLogs']) {
+    const body=p();assert.equal((await s.security.authorizeAction(action,body,request,s.env)).allowed,true,action);
+    assert.equal(body.authenticatedRole,'redeem');
+    assert.equal((await s.security.authorizeAction(action,{...p(),lineAccessToken:''},new Request('https://local.invalid/'),s.env)).allowed,false,action);
+  }
+  for(const action of ['updateUserRole','adminAdjustCustomerPoints','saveStoreSettings','getStoreKnowledgeBase','getActivities','getStoreShopRedemptionProduct','resolveStoreMemberProductQr']) {
+    assert.equal((await s.security.authorizeAction(action,p(),request,s.env)).allowed,false,action);
+  }
+  for(const extra of [{mode:'reward'},{mode:'add'},{mode:'earn'},{rewardPoints:10},{rewardPoints:0},{autoBindPointAccount:true},{productId:crypto.randomUUID()}]) {
+    assert.equal((await s.security.authorizeAction('storeAdjustCustomerPoints',{...p(),...extra},request,s.env)).allowed,false,JSON.stringify(extra));
+  }
+});
+
+test('redeem dispatch executes once through existing cashier guard and blocks revoked role', async t => {
+  const s=setup(t,'redeem'),p=reward({authenticatedRole:'redeem',mode:'redeem',deductPoints:10});
+  assert.equal((await s.context.dispatchCashier('storeAdjustCustomerPoints',p,s.env)).success,true);
+  assert.equal((await s.context.dispatchCashier('storeAdjustCustomerPoints',p,s.env)).success,true);
+  assert.equal(s.events.length,1);
+  s.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run('user',A);
+  const result=await s.context.dispatchCashier('storeAdjustCustomerPoints',{...p,requestId:crypto.randomUUID()},s.env);
+  assert.equal(result.success,false);assert.equal(s.events.length,1);
+});
+
+test('redeem dispatch rechecks role at the final write boundary', async t => {
+  const s=setup(t,'redeem'),p=reward({authenticatedRole:'redeem',mode:'redeem',deductPoints:10});
+  s.context.PointModule.storeAdjustCustomerPoints=async(safe,env,beforeWrite)=>{
+    s.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run('reward',A);
+    await beforeWrite(safe.customerUserId);s.events.push('unexpected');return {success:true};
+  };
+  assert.equal((await s.context.dispatchCashier('storeAdjustCustomerPoints',p,s.env)).success,false);
+  assert.equal(s.events.length,0);
+});
+
+test('redeem forged role, malformed payload and unavailable DB fail closed', async t => {
+  const s=setup(t,'user');
+  assert.equal((await s.security.authorizeAction('storeAdjustCustomerPoints',reward({authenticatedRole:'redeem',mode:'redeem',deductPoints:10}),request,s.env)).allowed,false);
+  for(const input of [null,[],{mode:'reward'},{mode:'redeem',rewardPoints:null}])assert.ok(checkRedeemOnlyAction('storeAdjustCustomerPoints',input));
+  await assert.rejects(validateRedeemOperator({},reward({mode:'redeem'})));
+});
 
 test('worker role normalization preserves reward without granting manager or independent store scope', t => {
   const {security, read, write} = setup(t);
