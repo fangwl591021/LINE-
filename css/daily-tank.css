@@ -1,0 +1,30 @@
+.tank-task{padding:20px;background:#effcf6;border:1px solid #cfeadd;border-radius:24px;color:#123e37}
+.tank-task-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.tank-task h3{margin:0;font-size:17px;font-weight:800}.tank-task p{font-size:13px;margin:8px 0}
+.tank-task button,.tank-dialog button{cursor:pointer;border:0;border-radius:14px;padding:12px 18px;font:inherit;font-weight:700;background:#007e63;color:white;min-height:46px}
+.tank-task button:disabled,.tank-dialog button:disabled{opacity:.5;cursor:default}.tank-task small{display:block;margin-top:8px}
+.tank-task [hidden],.tank-dialog [hidden]{display:none!important}
+.tank-dialog{box-sizing:border-box;position:fixed;inset:0;width:100%;height:100%;height:100dvh;max-width:none;max-height:none;margin:0;padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));border:0;background:#0e262b;color:#f0fff7;overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden}
+.tank-dialog::backdrop{background:#0e262b}.tank-dialog[open]{display:flex;flex-direction:column;gap:8px}
+.tank-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0}
+.tank-toolbar strong{font-size:17px}.tank-toolbar nav{display:flex;gap:8px}.tank-toolbar button{padding:8px 12px;background:#25454a;font-size:13px}
+.tank-hud{display:flex;justify-content:center;gap:24px;font-size:15px;font-weight:700;color:#b8ebd2;min-height:23px}
+.tank-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+.tank-stage canvas{display:block;border:1px solid #41625f;border-radius:12px;background:#142f32;width:min(100%,calc((100dvh - 240px)*1.6667));max-height:100%;aspect-ratio:5/3;object-fit:contain;touch-action:none}
+.tank-controls{display:flex;align-items:center;justify-content:space-between;padding:6px 18px;flex-shrink:0;gap:20px}
+.tank-stick{width:104px;height:104px;background:#23484a;border:2px solid #528675;border-radius:50%;position:relative;touch-action:none;flex-shrink:0}
+.tank-stick::before{content:'↑';position:absolute;top:2px;left:44px;color:#a0d5bf}.tank-stick::after{content:'←  ↓  →';position:absolute;bottom:8px;left:8px;right:8px;text-align:center;white-space:pre;color:#a0d5bf;font-size:18px}
+.tank-stick span{position:absolute;left:30px;top:30px;width:40px;height:40px;border-radius:50%;background:#ade8c3;box-shadow:0 2px 10px #0005;pointer-events:none;z-index:1}
+.tank-dialog .tank-fire{border:3px solid #facb79;background:#df9440;color:#132f32;border-radius:50%;width:92px;height:92px;flex-shrink:0;white-space:nowrap;touch-action:none;box-shadow:0 4px 0 #9a6330}
+.tank-fire:active{transform:translateY(3px)}.tank-control-help{text-align:center;font-size:12px;color:#a8c3bf;max-width:280px}
+.tank-result{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px;background:#0e262bbd;z-index:2}
+.tank-result>div{width:min(420px,100%);border:1px solid #5a8879;border-radius:22px;padding:22px;background:#183c3e;text-align:center;box-shadow:0 16px 45px #0004}
+.tank-result h2{font-size:26px;margin:0 0 12px;color:#c6f4d3}.tank-result p{font-size:15px;line-height:1.6;margin:0 0 16px}
+.tank-result nav{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}.tank-result button{background:#2c705d;font-size:14px}
+.tank-dialog button:focus-visible,.tank-task button:focus-visible,.tank-stick:focus-visible{outline:3px solid #f6c578;outline-offset:3px}
+@media(orientation:landscape) and (max-height:600px){
+ .tank-stage canvas{width:min(calc(100% - 200px),calc((100dvh - 95px)*1.6667))}
+ .tank-controls{position:absolute;bottom:max(15px,env(safe-area-inset-bottom));left:10px;right:10px;padding:0;pointer-events:none}
+ .tank-controls>*{pointer-events:auto}.tank-control-help{display:none}.tank-stick{width:92px;height:92px}.tank-stick span{left:24px;top:24px}.tank-stick::before{left:38px}.tank-stick::after{left:4px}.tank-dialog .tank-fire{width:82px;height:82px}
+ .tank-result>div{padding:14px}.tank-result h2{font-size:21px;margin-bottom:4px}.tank-result p{margin-bottom:10px}
+}
