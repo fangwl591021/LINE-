@@ -22,6 +22,24 @@
     });
     return pending;
   }
+  // Static preparation only: the existing auth flow remains the sole route owner.
+  window.prepareStoreManageEntry = function(params) {
+    const allowed = new Set(['shopSection', 'liff.state', 'code', 'state', 'liffClientId', 'liffRedirectUri', 'friendship_status_changed']);
+    if (!params || params.get('shopSection') !== 'manage' || params.getAll('shopSection').length !== 1 ||
+        [...params.keys()].some(key => !allowed.has(key)) || window.location.hash) return false;
+    void load().catch(() => {}); // The normal open action retries a failed preload.
+    return true;
+  };
+  window.showStoreManagePending = function(failed = false) {
+    window.goPage('store-shop', true);
+    const root = document.getElementById('page-store-shop');
+    root.innerHTML = '<h2>我的商城管理</h2><p role="status" aria-live="polite"></p><button type="button" onclick="window.goPage(\'home\')">返回首頁</button>';
+    root.querySelector('p').textContent = failed ? '暫時無法確認會員資料，請重新連線後重試。' : '正在確認會員資料，商城管理準備中…';
+    if (failed) {
+      const retry = document.createElement('button');
+      retry.type = 'button'; retry.textContent = '重新載入'; retry.onclick = () => window.location.reload(); root.appendChild(retry);
+    }
+  };
   window.openStoreShop = async function(productId = '', qrToken = '', memberProduct = '', section = '', shopId = '') {
     if (typeof productId !== 'string') productId = '';
     window.goPage('store-shop');

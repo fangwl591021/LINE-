@@ -2788,6 +2788,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search));
     const initialStoreInviteTarget = window.StoreInviteRoute?.readTarget(initialUrlParams) || '';
+    const directStoreManage = window.prepareStoreManageEntry?.(initialUrlParams) === true;
     const instantLikeCardId = initialUrlParams.get('likeCardId');
     const webCardId = initialUrlParams.get('webCardId') || (
       initialUrlParams.get('web') === '1' ? initialUrlParams.get('shareCardId') : ''
@@ -2867,8 +2868,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       avatarImg.src = window.currentUserProfile.pictureUrl;
       avatarImg.classList.remove('hidden');
     }
-    if (!initialStoreInviteTarget && typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-    if (!initialStoreInviteTarget) setTimeout(() => {
+    if (!initialStoreInviteTarget && !directStoreManage && typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
+    if (!initialStoreInviteTarget && !directStoreManage) setTimeout(() => {
       const aggregateWalletReady = window.subsiteHomeFastData?.wallet?.status === 'ready';
       if (window.pointWalletStatus !== 'ready' && !aggregateWalletReady) {
         window.refreshPointBalanceBadge?.();
@@ -2958,7 +2959,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen && !storeInviteTarget) {
-      window.goPage('home', true);
+      if (directStoreManage) window.showStoreManagePending();
+      else window.goPage('home', true);
       loadingScreen.classList.add('hidden');
     }
     const pointUid = window.readPointUidFromParams?.(urlParams) || '';
@@ -2973,7 +2975,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let usedCachedUser = false;
     let cachedUserInfo = null;
 
-    if (!storeInviteTarget && !shareCardId && !claimCardId) {
+    if (!storeInviteTarget && !directStoreManage && !shareCardId && !claimCardId) {
       try {
         const cached = JSON.parse(localStorage.getItem(authCacheKey) || 'null');
         const isFresh = cached && cached.info && cached.savedAt && (Date.now() - cached.savedAt < 6 * 60 * 60 * 1000);
@@ -3000,6 +3002,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     window.LoginBootstrap?.stage('member');
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
+    if (directStoreManage && (!checkRes || checkRes.error || checkRes.success === false || typeof checkRes.isRegistered !== 'boolean' || (checkRes.isRegistered && (!checkRes.info || typeof checkRes.info !== 'object' || Array.isArray(checkRes.info))))) {
+      window.showStoreManagePending(true);
+      return;
+    }
     allowLoginBackground = !storeInviteTarget && !!checkRes && !checkRes.error && checkRes.success !== false
       && typeof checkRes.isRegistered === 'boolean'
       && (!checkRes.isRegistered || (checkRes.info && typeof checkRes.info === 'object' && !Array.isArray(checkRes.info)));
@@ -3168,7 +3174,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 🔓 已註冊用戶邏輯
-    window.applyRegisteredUserSession(checkRes.info);
+    window.applyRegisteredUserSession(checkRes.info, { skipHome: directStoreManage });
     const shopSection = urlParams.get('shopSection');
     const cashierEntryConflict = shopSection === 'cashier' && ['checkin','nfcAct','nfcCheckin','verifyCheckin','checkinRowId','registrationId'].some(key => urlParams.get(key));
     if (['list','mine','manage','sales','online-manage','cashier'].includes(shopSection) && !cashierEntryConflict && !shareCardId && !claimCardId && !likeCardId && !urlParams.get('shopQr') && !urlParams.get('memberProduct') && !urlParams.get('shopProduct')) {

@@ -15,14 +15,14 @@ function block(text, start, end) {
   return text.slice(first, last);
 }
 
-function fixture({search=invite, result={isRegistered:true, info:{userId:actor, role:'store'}}, loggedIn=true, friendship=true, cached, firstRef, acceptance, fetchError, fetchHook, jsonHook, token='mock-access-token'}={}) {
+function fixture({search=invite, result={isRegistered:true, info:{userId:actor, role:'store'}}, loggedIn=true, friendship=true, cached, firstRef, acceptance, fetchError, fetchHook, jsonHook, token='mock-access-token', manageEntry=false}={}) {
   const calls=[], timers=[], cancelledTimers=new Set(), nodes=new Map(), storage=new Map();
   if(cached) storage.set('ACTMASTER_USER_' + actor, JSON.stringify({info:cached, savedAt:Date.now()}));
   if(firstRef) storage.set('ACTMASTER_FIRST_REF_' + actor, JSON.stringify(firstRef));
   const node = id => {
     if(!nodes.has(id)) {
       const classes = new Set();
-      nodes.set(id, {id, textContent:'', classList:{add:name=>classes.add(name), remove:name=>classes.delete(name), contains:name=>classes.has(name)}, classes});
+      nodes.set(id, {id, textContent:'', innerHTML:'', children:[], appendChild(n){this.children.push(n);}, querySelector:()=>node(id+':status'), classList:{add:name=>classes.add(name), remove:name=>classes.delete(name), contains:name=>classes.has(name)}, classes});
     }
     return nodes.get(id);
   };
@@ -31,7 +31,7 @@ function fixture({search=invite, result={isRegistered:true, info:{userId:actor, 
   const context = {
     URL,URLSearchParams,Date,AbortController,console:{warn(){},error(){}},LIFF_ID:'mock-liff',location,
     Config:{WORKER_URL:'https://worker.invalid/'},currentToken:token,loggedIn,
-    document:{getElementById:node,addEventListener(name,fn){if(name==='DOMContentLoaded')context.ready=fn;}},
+    document:{getElementById:node,createElement:tag=>({tag,remove(){}}),head:{appendChild:n=>calls.push(['asset',n])},addEventListener(name,fn){if(name==='DOMContentLoaded')context.ready=fn;}},
     localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,String(value)),removeItem:key=>storage.delete(key)},
     setTimeout:fn=>{timers.push(fn);return timers.length;},
     clearTimeout:id=>cancelledTimers.add(id),
@@ -46,7 +46,7 @@ function fixture({search=invite, result={isRegistered:true, info:{userId:actor, 
     setInputValueUnlessTouched:(id,value)=>{node(id).value=value;},
     addUserSocial(){},
     openStoreShop:async(...args)=>{calls.push(['store',...args]);context.currentPage='store-shop';},
-    goPage:page=>calls.push(['page',page]),
+    goPage:page=>{context.currentPage=page;calls.push(['page',page]);},
     fetchAPI:async(action,payload)=>{calls.push(['api',action,payload]);if(action!=='checkUser')throw Error('Unexpected API '+action);return typeof result==='function'?result():result;},
     fetch:async(url,options)=>{
       calls.push(['accept',url,options]);
@@ -77,6 +77,10 @@ function fixture({search=invite, result={isRegistered:true, info:{userId:actor, 
   };
   context.window=context;
   vm.createContext(context);
+  if(manageEntry){
+    context.StoreShop={mount:()=>calls.push(['mount'])};
+    vm.runInContext(readFileSync(new URL('../js/modules/store-shop-entry.js',import.meta.url),'utf8'),context);
+  }
   vm.runInContext(block(configSource,'function readActmasterInitialParams()', 'function hasNfcCheckinParams'),context);
   // Exercise the real shared parser, not a second implementation of its route-conflict policy.
   vm.runInContext(readFileSync(new URL('../js/modules/store-invite-route.js',import.meta.url),'utf8'),context);
@@ -92,6 +96,46 @@ function fixture({search=invite, result={isRegistered:true, info:{userId:actor, 
 }
 
 const events = f => f.calls.map(call=>call[0]);
+test('direct manage overlaps static preparation but waits for verified member; no home loads even with cache',async()=>{
+ for(const search of ['?shopSection=manage','?liff.state=%3FshopSection%3Dmanage']){
+  let resolve;const pending=new Promise(r=>resolve=r);
+  const f=fixture({search,manageEntry:true,cached:{userId:actor,role:'admin'},result:()=>pending});
+  const running=f.run();for(let i=0;i<20;i++)await Promise.resolve();
+  assert.match(f.node('page-store-shop:status').textContent,/確認會員資料/);
+  assert(!events(f).includes('session'));assert(!events(f).includes('mount'));
+  resolve({isRegistered:true,info:{userId:actor,role:'store'}});await running;
+  assert.equal(events(f).filter(x=>x==='mount').length,1);assert.equal(f.context.userRole,'store');
+  for(const kind of ['home-data','profile-home','wallet-home','inbox-home','card-data','all-data'])assert(!events(f).includes(kind),kind);
+  assert(!f.calls.some(c=>c[0]==='page'&&c[1]==='home'));
+  assert(events(f).indexOf('friendship')<events(f).indexOf('api'));
+ }
+});
+test('manage authentication failure offers retry without trusting cached role or mounting private UI',async()=>{
+ for(const result of [null,{error:'timeout'},{success:false},{isRegistered:true,info:[]}]){
+  const f=fixture({search:'?shopSection=manage',manageEntry:true,cached:{role:'admin'},result});await f.run();
+  assert.match(f.node('page-store-shop:status').textContent,/暫時無法確認/);
+  assert.equal(f.node('page-store-shop').children.at(-1).textContent,'重新載入');
+  assert(!events(f).includes('mount'));assert(!events(f).includes('session'));
+ }
+ for(const options of [{loggedIn:false},{friendship:false}]){
+  const f=fixture({search:'?shopSection=manage',manageEntry:true,...options});await f.run();
+  assert(!events(f).includes('mount'));assert(!events(f).includes('api'));
+ }
+});
+test('manage static preload is deduplicated, retryable and excludes all mixed routes',async()=>{
+ const f=fixture({manageEntry:true});delete f.context.StoreShop;
+ for(const search of ['?shopSection=manage&shareCardId=x','?shopSection=manage&checkin=1','?shopSection=manage&ref=x','?shopSection=manage&shopId=x','?shopSection=sales','?shopSection=manage&shopSection=store']){
+  assert.equal(f.context.prepareStoreManageEntry(new URLSearchParams(search)),false);
+ }
+ assert.equal(events(f).includes('asset'),false);
+ const p=new URLSearchParams('shopSection=manage');
+ assert.equal(f.context.prepareStoreManageEntry(p),true);assert.equal(f.context.prepareStoreManageEntry(p),true);
+ let scripts=f.calls.filter(c=>c[0]==='asset'&&c[1].tag==='script');assert.equal(scripts.length,1);
+ assert(!events(f).includes('api'));assert(!events(f).includes('mount'));
+ scripts[0][1].onerror();await Promise.resolve();f.context.prepareStoreManageEntry(p);
+ scripts=f.calls.filter(c=>c[0]==='asset'&&c[1].tag==='script');assert.equal(scripts.length,2);
+ f.context.StoreShop={};scripts[1][1].onload();await Promise.resolve();
+});
 function noBusinessLoads(f) {
   for(const event of ['home-data','card-data','all-data','profile-home','card-reminder','wallet-home','inbox-home','recover-mother','recover-cache','recover-card','watcher']) assert(!events(f).includes(event),event);
   assert(!f.calls.some(call=>call[0]==='page'&&call[1]==='home'));

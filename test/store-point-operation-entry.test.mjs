@@ -13,7 +13,7 @@ function between(source,start,end){
 const paramsSource=between(config,'function readActmasterInitialParams()','function hasNfcCheckinParams');
 const cleanSource=between(config,'window.buildActmasterCleanLiffUrl = function()','window.recoverActmasterInvalidLiffAuthorization = function(error)');
 const routeStart=auth.indexOf("    const shopSection = urlParams.get('shopSection');");
-const identityStart=auth.lastIndexOf('window.applyRegisteredUserSession(checkRes.info);',routeStart);
+const identityStart=auth.lastIndexOf('window.applyRegisteredUserSession(checkRes.info, { skipHome: directStoreManage });',routeStart);
 const routeEnd=auth.indexOf("    if (!shareCardId && !claimCardId && !likeCardId && (urlParams.get('shopQr')",routeStart);
 assert.ok(identityStart>=0&&identityStart<routeStart&&routeEnd>routeStart,'Cashier route must follow confirmed registration');
 const routeSource=auth.slice(identityStart,routeEnd);
@@ -28,11 +28,13 @@ async function route(search){
  const {params,context}=readParams(search),events=[];
  const info={userId:'U'+'a'.repeat(32),role:'store'};
  context.checkRes={isRegistered:true,info};
+ context.directStoreManage=false;
  context.urlParams=params;
  context.shareCardId=params.get('shareCardId');
  context.claimCardId=params.get('claim');
  context.likeCardId=params.get('likeCardId');
- context.window.applyRegisteredUserSession=value=>{
+ context.window.applyRegisteredUserSession=(value,options)=>{
+  assert.equal(options.skipHome,false,'cashier retains the normal session path');
   assert.equal(value,info);
   context.window.currentUser=value;
   events.push({type:'identity',role:value.role});
