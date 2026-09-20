@@ -141,7 +141,7 @@
     }
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
-      content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?`<a class="shop-link" href="${esc(loginLink())}">登入／註冊後查看消費紀錄與網路訂單，並返回本店商城</a>`:'<button data-do="registration">♙ 會員註冊／資料維護 <span>›</span></button><button data-do="spending-history">▤ 我的消費折抵紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
+      content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?`<a class="shop-link" href="${esc(loginLink())}">登入／註冊後查看消費紀錄與網路訂單，並返回本店商城</a>`:'<button data-do="registration">♙ 會員註冊／資料維護 <span>›</span></button><button data-do="spending-history">▤ 我的點數紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
       if(!standalone)content.querySelector('[data-do="spending-history"]').insertAdjacentHTML('beforebegin','<button type="button" data-do="consumption-journal">▤ 我的消費日誌 <span>›</span></button>');
     }
     function detail(id) {
@@ -379,12 +379,12 @@
             const version=epoch,owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
             const isCurrent=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId&&token===window.liff?.getAccessToken?.()&&!!window.liff?.isLoggedIn?.();
             const module=await import('./store-consumption-journal.js?v=1');
-            if(isCurrent())module.openStoreConsumptionJournal({base,isCurrent,onPoints:()=>{void import('./store-history-popup.js?v=1').then(history=>{if(isCurrent())history.openStoreHistoryPopup({isCurrent});}).catch(()=>{if(isCurrent())alert.textContent='點數紀錄暫時無法開啟，請重試';});}});
+            if(isCurrent())module.openStoreConsumptionJournal({base,isCurrent,onPoints:()=>{void import('./store-history-popup.js?v=2').then(history=>{if(isCurrent())history.openStoreHistoryPopup({isCurrent});}).catch(()=>{if(isCurrent())alert.textContent='點數紀錄暫時無法開啟，請重試';});}});
             break;
           }
           case 'spending-history': {
             const version=epoch;
-            const module=await import('./store-history-popup.js?v=1');
+            const module=await import('./store-history-popup.js?v=2');
             const isCurrent=()=>version===epoch&&root.isConnected&&(standalone||window.currentPage==='store-shop');
             if(isCurrent())module.openStoreHistoryPopup({standalone,isCurrent});
             break;

@@ -29,7 +29,7 @@ export function openStoreHistoryPopup({isCurrent=()=>true,standalone=false}={}){
   if(activeDialog?.open){activeDialog.querySelector('[data-close]').focus();return;}
   const owner=window.currentUserProfile?.userId,opener=document.activeElement;
   const modal=document.createElement('dialog');modal.className='store-history-popup';modal.setAttribute('aria-labelledby','store-history-title');
-  modal.innerHTML='<header><h2 id="store-history-title">消費折抵紀錄</h2><button type="button" data-close aria-label="關閉消費紀錄">×</button></header><div class="store-history-scroll"><div class="store-history-toolbar"><p>點數異動紀錄（含消費折抵、贈點等）</p><button type="button" data-refresh>重新整理</button></div><p data-status role="status" aria-live="polite"></p><div data-list role="list" aria-label="個人點數異動紀錄"></div></div>';
+  modal.innerHTML='<header><h2 id="store-history-title">點數紀錄</h2><button type="button" data-close aria-label="關閉點數紀錄">×</button></header><div class="store-history-scroll"><div class="store-history-toolbar"><p>本人點數異動（贈點、扣點、消費折抵）</p><button type="button" data-refresh>重新整理</button></div><p data-status role="status" aria-live="polite"></p><div data-list role="list" aria-label="個人點數異動紀錄"></div></div>';
   document.body.append(modal);activeDialog=modal;
   const status=modal.querySelector('[data-status]'),list=modal.querySelector('[data-list]'),refresh=modal.querySelector('[data-refresh]');
   let closed=false,pending=false,revision=0,timer;

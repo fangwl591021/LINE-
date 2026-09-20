@@ -16,7 +16,7 @@ assert(front.includes('module.mountStoreWalletCard'));
 assert(!front.includes('window.openPointsWallet()'));
 assert(front.includes('data-do="spending-history"'));
 const historyAction=front.split("case 'spending-history': {")[1].split("case 'detail':")[0];
-assert(historyAction.includes("import('./store-history-popup.js?v=1')"));
+assert(historyAction.includes("import('./store-history-popup.js?v=2')"));
 assert(historyAction.includes('module.openStoreHistoryPopup'));
 assert(!historyAction.includes('goPage(')&&!historyAction.includes('loadPointsWallet'));
 const historyPopup=fs.readFileSync('js/modules/store-history-popup.js','utf8');

@@ -293,6 +293,15 @@ const SecurityModule = {
     return this.text(value).replace(/\D/g, '');
   },
 
+  cleanPhone(value) {
+    return this.text(value).replace(/[-‐‑‒–—−﹣－\s()（）]/g, '');
+  },
+
+  phoneSearchExpression(column) {
+    if (!['phone', 'mobile', 'office_phone'].includes(column)) throw Error('Invalid phone column');
+    return Array.from('-‐‑‒–—−﹣－ ()（）\t\r\n\u00a0\u3000').reduce((sql, separator) => `REPLACE(${sql}, '${separator}', '')`, `COALESCE(${column}, '')`);
+  },
+
   hasHardAdminId(userId, user = {}) {
     const ids = [
       userId,
@@ -4865,16 +4874,18 @@ const PointModule = {
     return { success: true, data, motherMember };
   },
   async enrichPointRowsWithCashierLogs(env, lineUserId, rows) {
-    if (!env.ACTMASTER_DB || !lineUserId || !Array.isArray(rows) || !rows.length) return rows;
+    if (!env.ACTMASTER_DB || !lineUserId || !Array.isArray(rows)) return rows;
     await this.ensureCashierLedgerTable(env);
+
+    const historyIds = JSON.stringify(await this.resolvePointUserIds(env, lineUserId));
 
     const logs = await D1ReadModule.all(env, `
       SELECT *
       FROM store_point_cashier_logs
-      WHERE customer_point_user_id = ? OR customer_user_id = ?
+      WHERE customer_point_user_id IN (SELECT value FROM json_each(?)) OR customer_user_id IN (SELECT value FROM json_each(?))
       ORDER BY created_at DESC
       LIMIT 100
-    `, [lineUserId, lineUserId]).catch(() => []);
+    `, [historyIds, historyIds]).catch(() => []);
     if (!logs.length) return rows;
 
     const actorNames = {};
@@ -4905,7 +4916,7 @@ const PointModule = {
     const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
     const logLinks = logs.map(log => {
       let receipt;
-      try { receipt = JSON.parse(log.point_response_json || '{}').pointResult?.data; } catch { /* Legacy malformed receipts cannot prove a match. */ }
+      try { const result = JSON.parse(log.point_response_json || '{}').pointResult; receipt = result?.data || result; } catch { /* Legacy malformed receipts cannot prove a match. */ }
       return {
         log,
         transactionId: (D1ReadModule.text(log.log_id).match(new RegExp('_(' + uuid + ')$', 'i'))?.[1] || '').toLowerCase(),
@@ -4991,7 +5002,6 @@ const PointModule = {
     const combined = enrichedRows.concat(
       logs
         .filter(log => !usedLogIds.has(D1ReadModule.text(log.log_id)))
-        .slice(0, 20)
         .map(sourceRowForLog)
     );
     return combined.sort((a, b) => {
@@ -5112,7 +5122,7 @@ const PointModule = {
             requestedPointType: requestedType || 'gift_money',
             queriedLineUserId: lineUserId,
             requestedLineUserId,
-            list: localList,
+            list: await this.enrichPointRowsWithCashierLogs(env, lineUserId, localList),
             total: localList.length,
             pagination: { total: localList.length, total_pages: 1, current_page: 1 },
             updatedAt: new Date().toISOString()
@@ -5719,15 +5729,18 @@ const PointModule = {
     const phone = SecurityModule.normalizePhone(phoneRaw);
     if (phone.length < 7) return { match: null, error: '' };
     const tail = phone.slice(-9);
+    const phoneSql = SecurityModule.phoneSearchExpression('phone');
+    const mobileSql = SecurityModule.phoneSearchExpression('mobile');
+    const officeSql = SecurityModule.phoneSearchExpression('office_phone');
     const userRows = await D1ReadModule.all(env, `
       SELECT * FROM users
-      WHERE phone LIKE ? OR phone LIKE ?
+      WHERE ${phoneSql} LIKE ? OR ${phoneSql} LIKE ?
       ORDER BY row_id DESC
       LIMIT 20
     `, [`%${phone}%`, `%${tail}%`]).catch(() => []);
     const cardRows = await D1ReadModule.all(env, `
       SELECT * FROM card_contacts
-      WHERE mobile LIKE ? OR mobile LIKE ? OR office_phone LIKE ? OR office_phone LIKE ?
+      WHERE ${mobileSql} LIKE ? OR ${mobileSql} LIKE ? OR ${officeSql} LIKE ? OR ${officeSql} LIKE ?
       ORDER BY COALESCE(updated_at, created_at) DESC
       LIMIT 20
     `, [`%${phone}%`, `%${tail}%`, `%${phone}%`, `%${tail}%`]).catch(() => []);
@@ -5743,7 +5756,7 @@ const PointModule = {
       candidates.push({ kind: id ? kind : 'card_unbound', id, row });
     };
     userRows.forEach(row => pushMatch('user', row, row.phone));
-    cardRows.forEach(row => pushMatch('card', row, row.mobile || row.office_phone));
+    cardRows.forEach(row => { pushMatch('card', row, row.mobile); pushMatch('card', row, row.office_phone); });
 
     const canonicalMatches = [];
     for (const item of candidates) {
@@ -5783,11 +5796,14 @@ const PointModule = {
     const isUid = /^U[0-9a-fA-F]{20,64}$/.test(query);
     const like = `%${query}%`;
     const phoneTail = normalizedPhone.slice(-9);
+    const phoneSql = SecurityModule.phoneSearchExpression('phone');
+    const mobileSql = SecurityModule.phoneSearchExpression('mobile');
+    const officeSql = SecurityModule.phoneSearchExpression('office_phone');
 
     const userWhere = isUid
       ? `line_id = ? OR row_id = ? OR point_line_id = ? OR legacy_line_id = ?`
       : isPhone
-        ? `phone LIKE ? OR phone LIKE ?`
+        ? `${phoneSql} LIKE ? OR ${phoneSql} LIKE ?`
         : `name LIKE ? OR phone LIKE ? OR line_id LIKE ? OR row_id LIKE ?`;
     const userBinds = isUid
       ? [query, query, query, query]
@@ -5797,7 +5813,7 @@ const PointModule = {
     const cardWhere = isUid
       ? `line_id = ? OR owner_user_id = ? OR profile_user_id = ? OR creator_id = ?`
       : isPhone
-        ? `mobile LIKE ? OR mobile LIKE ? OR office_phone LIKE ? OR office_phone LIKE ?`
+        ? `${mobileSql} LIKE ? OR ${mobileSql} LIKE ? OR ${officeSql} LIKE ? OR ${officeSql} LIKE ?`
         : `name LIKE ? OR mobile LIKE ? OR office_phone LIKE ? OR line_id LIKE ?`;
     const cardBinds = isUid
       ? [query, query, query, query]
@@ -10464,7 +10480,7 @@ const D1WriteModule = {
       name: this.pick(data, ['name', 'displayName', '姓名', '真實姓名']),
       industry: this.pick(data, ['industry', 'title', '職稱', '主要業種', '公司名稱']),
       gender: this.pick(data, ['gender', '性別']),
-      phone: this.pick(data, ['phone', 'mobile', '手機', '手機號碼']),
+      phone: SecurityModule.cleanPhone(this.pick(data, ['phone', 'mobile', '手機', '手機號碼'])),
       picture_url: this.pick(data, ['pictureUrl', 'picture_url', 'avatarUrl', 'avatar_url', 'photoUrl', 'photo_url']),
       birthday: this.pick(data, ['birthday', 'birthdate', '出生年月日']),
       region: this.pick(data, ['region', '地區']),

@@ -14,12 +14,12 @@ const log = (extra = {}) => ({log_id: `SPC_${owner}_${tx}`, actor_user_id: owner
 function fixture(logs) {
   const D1ReadModule = {
     text: (value, fallback = '') => value === undefined || value === null ? fallback : (String(value).trim() || fallback),
-    all: async (_env, sql, args) => {assert.match(sql, /SELECT \*/);assert.match(sql, /WHERE customer_point_user_id = \? OR customer_user_id = \?/);assert.equal(args.join(','), `${owner},${owner}`);return logs;},
+    all: async (_env, sql, args) => {assert.match(sql, /SELECT \*/);assert.match(sql, /customer_point_user_id IN \(SELECT value FROM json_each\(\?\)\)/);assert.deepEqual(JSON.parse(args[0]), [owner]);assert.equal(args[0],args[1]);return logs;},
     findUserByIdentity: async () => ({user: {name: '測試店'}}),
     userRow: user => user
   };
   const methods = vm.runInNewContext('({' + source.slice(start, end) + '})', {D1ReadModule, fetch: () => {throw Error('No network or point writes allowed');}});
-  const self = {...methods, ensureCashierLedgerTable: async () => true};
+  const self = {...methods, ensureCashierLedgerTable: async () => true, resolvePointUserIds: async () => [owner]};
   return {self, read: rows => self.enrichPointRowsWithCashierLogs({ACTMASTER_DB: {}}, owner, rows)};
 }
 test('complete mother receipt and its local log display once; keep authoritative row unchanged', async () => {
@@ -74,6 +74,20 @@ test('empty lists and unavailable D1 retain existing behavior', async () => {
   const {read, self} = fixture([]), rows = [mother()];
   assert.equal(await read(rows), rows);assert.equal((await read([])).length, 0);
   assert.equal(await self.enrichPointRowsWithCashierLogs({}, owner, rows), rows);
+});
+
+test('an empty mother list still includes gifts and redemptions without changing balances', async () => {
+  const result = await fixture([log(),log({log_id:'gift',mode:'reward',amount:0,points:50})]).read([]);
+  assert.equal(result.length,2);
+  assert.equal(result.find(row=>row.id==='gift').get_point,50);
+  assert.equal(result.find(row=>row.id!=='gift').get_point,-10);
+  assert.ok(result.every(row=>row.localLedger && row.point_balance===undefined));
+});
+
+test('flat saved mother receipt deduplicates and the latest 30 cashier rows are not truncated to 20', async () => {
+  assert.equal((await fixture([log({point_response_json:JSON.stringify({pointResult:{insert_id:123}})})]).read([mother({event_content:''})])).length,1);
+  const logs=Array.from({length:35},(_,i)=>log({log_id:'log-'+i,point_response_json:'{}'}));
+  assert.equal((await fixture(logs).read([])).length,35);
 });
 
 test('direct gift fallback and enrichment describe points, never an invented purchase', async () => {

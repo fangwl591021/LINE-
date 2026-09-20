@@ -14,6 +14,32 @@ const request = new Request('https://local.invalid/', {headers: {Authorization: 
 const reward = extra => ({userId: A, lineAccessToken: 'local-test', authenticatedUserId: A, authenticatedRole: 'reward', customerUserId: C, mode: 'reward', amount: 100, deductPoints: 0, requestId: crypto.randomUUID(), ...extra});
 const phoneLookup = extra => reward({customerUserId: PHONE, customerPhone: PHONE, ...extra});
 
+test('phone separators are removed on save and old formatted numbers remain searchable in SQL', async t => {
+  const {sql,env,context,security,write,read}=setup(t,'store');
+  sql.exec('CREATE TABLE card_contacts(row_id TEXT,line_id TEXT,mobile TEXT,office_phone TEXT,updated_at TEXT,created_at TEXT,source_type TEXT)');
+  const start=source.indexOf('  async findCustomerByPhone(env, phoneRaw) {');
+  const end=source.indexOf('  async resolveStorePointCustomer(env, rawCustomerId) {',start);
+  const methods=vm.runInContext('({'+source.slice(start,end)+'})',context);
+  for(const value of ['0927-136-847','0927 136 847','(0927)136-847','0927－136－847']) {
+    assert.equal(write.normalizeUser({userId:B,phone:value}).phone,'0927136847');
+    sql.prepare('UPDATE users SET phone=? WHERE line_id=?').run(value,B);
+    for(const query of ['0927136847','0927-136-847']) {
+      const result=await methods.findCustomerByPhone(env,query);
+      assert.equal(result.match.id,B);assert.equal(result.error,'');
+    }
+  }
+  assert.equal(security.cleanPhone('+886 927-136-847'),'+886927136847');
+  assert.throws(()=>security.phoneSearchExpression('injected SQL'));
+  sql.prepare('UPDATE users SET phone=? WHERE line_id=?').run('0927136847',A);
+  assert.match((await methods.findCustomerByPhone(env,'0927136847')).error,/多筆/);
+  sql.prepare('UPDATE users SET phone=? WHERE line_id=?').run('',A);
+  sql.prepare('UPDATE users SET phone=? WHERE line_id=?').run('',B);
+  sql.prepare('INSERT INTO card_contacts VALUES(?,?,?,?,?,?,?)').run('card',B,'0911111111','0927-136-847','','','self_profile');
+  assert.equal((await methods.findCustomerByPhone(env,'0927136847')).match.id,B);
+  read.cardRow=row=>row;
+  assert.equal((await methods.findStorePointCustomerCandidates(env,'0927-136-847')).matches[0].id,B);
+});
+
 function object(name) {
   const match = source.match(new RegExp(`^const ${name} = \\{[\\s\\S]*?^\\};`, 'm'));
   assert.ok(match, 'Actual worker object exists: ' + name);
