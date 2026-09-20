@@ -130,7 +130,7 @@ includesAll(adminFrontend, [
 ], 'admin UI enforces role guard and soft archive messaging');
 
 includesAll(adminFrontend, [
-  "window.fetchAPI('getCardHarvestContacts'",
+  'window.PartnerOnboarding.mount',
   'window.applyAdminPointRedemptionSourceCard',
   "sourceCardRowId: text('admin-partner-source-card')",
   "setIfEmpty('admin-partner-name'"
@@ -162,7 +162,7 @@ includesAll(adminDashboardModule, [
 ], 'standalone admin dashboard wires list, save, edit and archive flows');
 
 includesAll(adminDashboardModule, [
-  "fetchAPI('getCardHarvestContacts'",
+  'window.PartnerOnboarding.mount',
   'applyPartnerAdminSourceCard',
   "sourceCardRowId: partnerAdminValue('partner-admin-source-card')",
   "partnerAdminSetIfEmpty('partner-admin-name'"

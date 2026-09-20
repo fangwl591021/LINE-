@@ -1,5 +1,6 @@
 (function() {
   let partnerSourceCards = [];
+  let onboarding;
   const text = (id) => String(document.getElementById(id)?.value || '').trim();
   const number = (id) => Number.parseInt(text(id), 10) || 0;
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -41,18 +42,11 @@
   async function loadSourceCards() {
     const select = document.getElementById('admin-partner-card-select');
     if (!select) return;
-    select.innerHTML = '<option value="">載入收藏名片中…</option>';
-    try {
-      const response = await window.fetchAPI('getCardHarvestContacts', { limit: 200 }, true);
-      const cards = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : (Array.isArray(response?.contacts) ? response.contacts : []));
-      partnerSourceCards = cards.filter((card) => cardValue(card, 'rowId', 'id'));
-      select.innerHTML = '<option value="">請選擇收藏名片</option>' + partnerSourceCards.map((card) => `<option value="${escapeHtml(cardValue(card, 'rowId', 'id'))}">${escapeHtml(cardLabel(card))}</option>`).join('');
-      const status = document.getElementById('admin-partner-card-status');
-      if (status && !partnerSourceCards.length) status.textContent = '目前沒有可用的收藏名片，請先到「收藏名片」掃描或上傳。';
-    } catch (error) {
-      partnerSourceCards = [];
-      select.innerHTML = '<option value="">收藏名片載入失敗</option>';
-    }
+    onboarding ||= window.PartnerOnboarding.mount({select,
+      sourceField:document.getElementById('admin-partner-source-card'),handleField:document.getElementById('admin-partner-handle'),
+      onCards:cards=>{partnerSourceCards=cards;},
+      fields:Object.fromEntries(Object.entries({name:'name',category:'category',summary:'summary',description:'description',phone:'phone',contactName:'contact-name',contactEmail:'contact-email',taxId:'tax-id',websiteUrl:'website-url',lineUrl:'line-url',branchName:'branch-name',city:'city',district:'district',address:'address',businessHours:'hours',mapsUrl:'maps-url'}).map(([key,suffix])=>[key,'admin-partner-'+suffix]))});
+    await onboarding.load();
   }
 
   window.applyAdminPointRedemptionSourceCard = function() {
@@ -129,6 +123,7 @@
   }
 
   window.clearAdminPointRedemptionPartnerForm = function() {
+    onboarding?.reset();
     ['admin-partner-handle', 'admin-partner-location-handle', 'admin-partner-source-card', 'admin-partner-name', 'admin-partner-category',
       'admin-partner-summary', 'admin-partner-description', 'admin-partner-phone', 'admin-partner-logo-url',
       'admin-partner-cover-url', 'admin-partner-line-url', 'admin-partner-website-url', 'admin-partner-policy-note',
@@ -153,6 +148,7 @@
   window.editAdminPointRedemptionPartner = function(partnerHandle) {
     const partner = (window._adminPointRedemptionPartners || []).find((item) => item.partnerHandle === partnerHandle);
     if (!partner) return message('找不到店家資料', true);
+    onboarding?.reset();
     const location = partner.locations?.[0] || {};
     const policy = partner.redeemPolicy || {};
     setValue('admin-partner-handle', partner.partnerHandle);
