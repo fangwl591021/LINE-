@@ -4927,6 +4927,7 @@ const PointModule = {
       D1ReadModule.text(row.event_content || row.eventContent || row.child_shop_name || row.childShopName || row.shop_remark || row.shopRemark)
     );
     const isDirectGift = log => D1ReadModule.text(log.mode) === 'reward' && Number(log.amount) === 0 && Number(log.points) > 0;
+    const debitTitle = log => Number(log.amount) === 0 && Number(log.points) < 0 ? '扣除點數' : '消費折抵';
     const rewardTitle = log => isDirectGift(log) ? '贈送點數' : '消費贈點';
     const makeDetail = (log, sourceName) => {
       const amount = Number(log.amount || 0) || 0;
@@ -4936,6 +4937,7 @@ const PointModule = {
         if (isDirectGift(log)) return `來源：${sourceName}；贈送 ${points.toLocaleString('zh-TW')} 點`;
         return `來源：${sourceName}；消費 NT$${amount.toLocaleString('zh-TW')}，1:1 贈送 ${points.toLocaleString('zh-TW')} 點`;
       }
+      if (amount === 0 && Number(log.points) < 0) return `來源：${sourceName}；扣除 ${points.toLocaleString('zh-TW')} 點`;
       return `來源：${sourceName}；消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${points.toLocaleString('zh-TW')} 點，應收 NT$${payable.toLocaleString('zh-TW')}`;
     };
 
@@ -4963,7 +4965,7 @@ const PointModule = {
       const originalTitle = D1ReadModule.text(row.event_name || row.eventName || row.title || row.name);
       const sourceTitle = originalTitle.includes(sourceName)
         ? originalTitle
-        : `${sourceName}｜${originalTitle || (D1ReadModule.text(matched.mode) === 'reward' ? rewardTitle(matched) : '消費折抵')}`;
+        : `${sourceName}｜${originalTitle || (D1ReadModule.text(matched.mode) === 'reward' ? rewardTitle(matched) : debitTitle(matched))}`;
       return {
         ...row,
         event_name: sourceTitle,
@@ -4985,8 +4987,8 @@ const PointModule = {
       return {
         id: logId,
         localLedger: true,
-        event_name: `${sourceName}｜${mode === 'reward' ? rewardTitle(log) : '消費折抵'}`,
-        eventName: `${sourceName}｜${mode === 'reward' ? rewardTitle(log) : '消費折抵'}`,
+        event_name: `${sourceName}｜${mode === 'reward' ? rewardTitle(log) : debitTitle(log)}`,
+        eventName: `${sourceName}｜${mode === 'reward' ? rewardTitle(log) : debitTitle(log)}`,
         event_content: eventContent,
         eventContent,
         child_shop_name: sourceName,
@@ -6310,6 +6312,12 @@ const PointModule = {
     const mode = String(payload.mode || payload.operation || 'redeem').trim().toLowerCase();
     const isReward = mode === 'reward' || mode === 'earn' || mode === 'add';
     const directReward = payload.rewardPoints !== undefined;
+    const directDebit = payload.debitPoints !== undefined;
+    if (directDebit && (mode !== 'redeem' || !Number.isSafeInteger(payload.debitPoints) ||
+      payload.debitPoints < 1 || payload.debitPoints > 1000000 || payload.amount !== 0 ||
+      payload.deductPoints !== payload.debitPoints || directReward || product || payload.productId || payload.qrToken || payload.autoBindPointAccount)) {
+      return { success: false, error: '純扣點資料不正確' };
+    }
     if (directReward && (mode !== 'reward' || !Number.isSafeInteger(payload.rewardPoints) ||
       payload.rewardPoints <= 0 || payload.rewardPoints > 1000000 || payload.rewardPoints !== Number(payload.amount) ||
       payload.deductPoints !== 0 || product || payload.productId || payload.qrToken)) {
@@ -6336,7 +6344,7 @@ const PointModule = {
 
     if (!actorId) return { success: false, error: 'Missing operator user id' };
     if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
-    if (!amount || amount <= 0) return { success: false, error: '消費金額必須大於 0' };
+    if (!directDebit && (!amount || amount <= 0)) return { success: false, error: '消費金額必須大於 0' };
 
     const customerLocalWalletIndex = await this.ensureLocalPointWallet(env, customerPointUserId, {
       name: D1ReadModule.text(resolvedCustomer.user && resolvedCustomer.user.name) ||
@@ -6421,7 +6429,7 @@ const PointModule = {
           data: { amount, balanceBefore, requestedDeduction: 0, payableAmount: amount }
         };
       }
-      if (requestedDeduction > amount) {
+      if (!directDebit && requestedDeduction > amount) {
         return {
           success: false,
           error: '折抵點數不可大於消費金額',
@@ -6445,8 +6453,10 @@ const PointModule = {
       }
       points = -deductPoints;
       payableAmount = Math.max(0, amount - deductPoints);
-      eventName = '店家消費折抵';
-      eventContent = `來源：${sourceLabel}；消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${deductPoints.toLocaleString('zh-TW')} 點，應收 NT$${payableAmount.toLocaleString('zh-TW')}`;
+      eventName = directDebit ? '店家扣點' : '店家消費折抵';
+      eventContent = directDebit
+        ? `來源：${sourceLabel}；扣除 ${deductPoints.toLocaleString('zh-TW')} 點`
+        : `來源：${sourceLabel}；消費 NT$${amount.toLocaleString('zh-TW')}，折抵 ${deductPoints.toLocaleString('zh-TW')} 點，應收 NT$${payableAmount.toLocaleString('zh-TW')}`;
     }
 
     const operatorFeeResult = { status: 'free', skipped: true, pointType: 'gift_money', points: 0 };
@@ -6506,7 +6516,8 @@ const PointModule = {
           customerPointSource: 'mother',
           syncStatus: 'synced',
           localPointOnly: false,
-          ...(directReward ? { rewardPoints: points } : {})
+          ...(directReward ? { rewardPoints: points } : {}),
+          ...(directDebit ? { debitPoints: -points } : {})
         })
       ).run();
     }
@@ -6519,6 +6530,7 @@ const PointModule = {
         customerPointUserId,
         amount: consumptionAmount,
         ...(directReward ? { rewardPoints: points } : {}),
+        ...(directDebit ? { debitPoints: -points } : {}),
         points,
         changedPoints,
         payableAmount,

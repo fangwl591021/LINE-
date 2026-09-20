@@ -24,7 +24,7 @@ export function checkRewardOnlyAction(action, payload = {}) {
     return wallet || phone ? '' : '請掃描會員錢包 QR 或輸入完整 10 碼手機號碼，不提供姓名或手動帳號查詢';
   }
   if (action === 'storeAdjustCustomerPoints') {
-    if (payload.mode !== 'reward' || payload.deductPoints !== 0 ||
+    if (payload.mode !== 'reward' || payload.deductPoints !== 0 || payload.debitPoints !== undefined ||
         hasValue(payload.productId) || hasValue(payload.qrToken)) return denied;
     if (!validUid(payload.customerUserId) || !validToken(payload.rewardScanToken)) {
       return '請重新確認會員身分後再贈點';

@@ -8,7 +8,7 @@ const coreSource=readFileSync(new URL('../js/core.js',import.meta.url),'utf8');
 const coreTransport=coreSource.slice(coreSource.indexOf('    window.fetchAPI = async function('),coreSource.indexOf('    // 強效配對機制'));
 const owner='U'+'a'.repeat(32),customerId='U'+'b'.repeat(32),token='rwd_'+'b'.repeat(64);
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
-function setup({rewardOnly=true,pending=null}={}){
+function setup({rewardOnly=true,pending=null,mode='reward',role}={}){
   const nodes=new Map(),writes=[],reads=[],storage=new Map();
   const get=selector=>{
     if(!nodes.has(selector))nodes.set(selector,{value:'',hidden:false,disabled:false,textContent:'',events:{},focus(){this.focused=true;},addEventListener(name,handler){this.events[name]=handler;}});
@@ -27,7 +27,9 @@ function setup({rewardOnly=true,pending=null}={}){
   const localStorage={getItem:key=>storage.get(key)||null};
   const context={window,localStorage,Date,Number,JSON};
   vm.runInNewContext(source.replace('export function mountStorePhoneReward','function mountStorePhoneReward')+';this.mount=mountStorePhoneReward;',context);
-  const mounted=context.mount(root,{rewardOnly});
+  if(role)window.userRole=role;
+  window.isRedeemOnlyPointCashier=()=>window.userRole==='redeem';
+  const mounted=context.mount(root,{rewardOnly,mode});
   const fire=(selector,event='submit')=>get(selector).events[event]({preventDefault(){}});
   const search=async(phone='0912345678')=>{get('#store-phone-reward-phone').value=phone;await fire('[data-phone-search]');};
   const send=async(points='25')=>{get('#store-phone-reward-points').value=points;await fire('[data-phone-gift]');};
@@ -150,6 +152,28 @@ test('unrelated or malformed stored requests cannot become phone gifts',async()=
   for(const override of [{mode:'redeem'},{productId:'product'}, {qrToken:'x'},{amount:100},{rewardPoints:-5},{rewardScanToken:'bad'},{customerUserId:'0912345678'},{canAutoBindPointAccount:true}]){
     const payload={...valid,...override};const s=setup({pending:{requestId:'12345678-1234-4234-8234-123456789abc',signature:JSON.stringify(payload),payload}});
     await s.fire('[data-check]','click');assert.equal(s.get('[data-retry]').hidden,true);await s.fire('[data-retry]','click');assert.equal(s.writes.length,0,JSON.stringify(override));
+  }
+});
+
+test('phone deduction popup searches normalized phone and sends points only for store and redeem',async()=>{
+  for(const role of ['store','redeem']){
+    const s=setup({rewardOnly:false,mode:'redeem',role});
+    assert.match(s.root.innerHTML,/扣除點數/);assert.match(s.root.innerHTML,/確認扣點/);
+    assert.doesNotMatch(s.root.innerHTML,/贈點|贈送|消費|折抵/);
+    await s.search('0912-345-678');await s.send('25');
+    assert.deepEqual(JSON.parse(JSON.stringify(s.writes)),[{customerUserId:customerId,mode:'redeem',amount:0,debitPoints:25,deductPoints:25}]);
+    assert.match(s.get('[data-phone-status]').textContent,/成功扣除 25 點/);
+  }
+  assert.throws(()=>setup({mode:'redeem'}),/不能扣點/);
+});
+
+test('phone deduction restores only exact direct-debit requests, never gifts or consumption',async()=>{
+  const valid={customerUserId:customerId,mode:'redeem',amount:0,debitPoints:25,deductPoints:25};
+  for(const extra of [{},{amount:100},{rewardPoints:25},{debitPoints:undefined},{deductPoints:10},{productId:'product'}]){
+    const payload={...valid,...extra},s=setup({rewardOnly:false,mode:'redeem',pending:{requestId:'12345678-1234-4234-8234-123456789abc',signature:JSON.stringify(payload),payload}});
+    await s.fire('[data-check]','click');await s.fire('[data-retry]','click');
+    assert.equal(s.writes.length,Object.keys(extra).length?0:1);
+    if(s.writes.length)assert.equal(JSON.stringify(s.writes[0]),JSON.stringify(valid));
   }
 });
 

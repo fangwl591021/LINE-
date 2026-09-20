@@ -42,7 +42,7 @@ createServer((req,res) => {
   };
   window.submitSafeCashier=async payload=>{
     if(window.userRole==='redeem'){
-      if(payload.mode!=='redeem'||payload.deductPoints!==10||payload.amount!==100||payload.rewardPoints!==undefined)throw Error('合成扣點驗證失敗');
+      if(payload.mode!=='redeem'||payload.deductPoints!==10||payload.amount!==0||payload.debitPoints!==10||payload.rewardPoints!==undefined)throw Error('合成扣點驗證失敗');
       writes++;status();return {success:true,data:{mode:'redeem',changedPoints:-10,customerPointSource:'mother'}};
     }
     if(payload.customerUserId!==customer||payload.mode!=='reward'||payload.deductPoints!==0||(window.userRole==='reward'&&!payload.rewardScanToken)||payload.rewardPoints!==payload.amount)throw Error('合成贈點驗證失敗');

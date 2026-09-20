@@ -33,7 +33,7 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
   }
   if(redeemOnly){
     modal.querySelector('[data-choices] p').textContent='請掃描會員 QR 或輸入手機確認會員；此帳號只能扣點。';
-    modal.querySelector('[data-choices] small').textContent='核對會員、消費金額與折抵點數，按確認送出才會扣點；不能贈點。';
+    modal.querySelector('[data-choices] small').textContent='電話扣點只需核對會員及扣除點數，不涉及消費；不能贈點。';
   }
   document.body.append(modal);activeDialog=modal;
   const choices=modal.querySelector('[data-choices]'),slot=modal.querySelector('[data-cashier-slot]');
@@ -74,13 +74,13 @@ export function openStorePointOperationPopup({standalone=false,isCurrent=()=>tru
     if(!current()||!['scan','phone'].includes(method))return;
     if(blocked())return;
     const selected=++choiceRevision;
-    if(method==='phone'&&mode!=='redeem'){
+    if(method==='phone'){
       try{
-        const {mountStorePhoneReward}=await import('./store-phone-reward.js?v=3');
+        const {mountStorePhoneReward}=await import('./store-phone-reward.js?v=4');
         if(!current()||selected!==choiceRevision)return;
         clearCustomer();phoneForm?.dispose();slot.hidden=true;phoneSlot.hidden=false;
-        choices.hidden=true;back.hidden=false;status.textContent='';title.textContent='電話贈點';
-        phoneForm=mountStorePhoneReward(phoneSlot,{isCurrent:current,rewardOnly});
+        choices.hidden=true;back.hidden=false;status.textContent='';title.textContent=mode==='redeem'?'電話扣點':'電話贈點';
+        phoneForm=mountStorePhoneReward(phoneSlot,{isCurrent:current,rewardOnly,mode});
       }catch(error){if(current())status.textContent=error.message||'電話贈點尚未就緒，請稍後再試。';}
       return;
     }

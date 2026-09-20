@@ -12,9 +12,63 @@ assert(start > 0 && end > start, 'extract the actual ledger and point mutation m
 const A = 'U' + 'a'.repeat(32), C = 'U' + 'c'.repeat(32);
 const payload = extra => ({authenticatedUserId: A, customerUserId: C, mode: 'reward', amount: 25,
   rewardPoints: 25, deductPoints: 0, requestId: crypto.randomUUID(), transactionId: crypto.randomUUID(), ...extra});
+const debitPayload = extra => ({authenticatedUserId:A,customerUserId:C,mode:'redeem',amount:0,
+  debitPoints:25,deductPoints:25,requestId:crypto.randomUUID(),...extra});
+
+test('pure deduction uses actual wallet handler, no consumption, and one durable write',async t=>{
+  const f=fixture(t),p=debitPayload();
+  const result=await runCashierRequest(p,f.env,f.resolve,f.execute);
+  assert.equal(result.success,true,result.error);assert.equal(result.data.debitPoints,25);
+  assert.equal(result.data.amount,0);assert.equal(result.data.payableAmount,0);
+  assert.equal(result.data.balanceAfterEstimate,475);
+  assert.equal(f.writes[0].points,-25);assert.equal(f.writes[0].eventName,'店家扣點');
+  assert.match(f.writes[0].eventContent,/扣除 25 點/);assert.doesNotMatch(f.writes[0].eventContent,/消費|應收|NT\$/);
+  const row=f.sql.prepare('SELECT * FROM store_point_cashier_logs').get();
+  assert.equal(row.amount,0);assert.equal(row.payable_amount,0);assert.equal(row.points,-25);
+  assert.equal(JSON.parse(row.point_response_json).debitPoints,25);
+  assert.equal((await runCashierRequest(p,f.env,f.resolve,f.execute)).success,true);
+  assert.equal((await runCashierRequest({...p,debitPoints:26,deductPoints:26},f.env,f.resolve,f.execute)).success,false);
+  assert.equal(f.writes.length,1);
+});
+
+test('pure deduction rejects insufficient balance and malformed or mixed requests without points writes',async t=>{
+  const f=fixture(t);
+  for(const extra of [{debitPoints:501,deductPoints:501},{amount:100},{amount:'0'},{debitPoints:0},
+    {debitPoints:-1},{debitPoints:1.5},{debitPoints:'25'},{debitPoints:1000001},{deductPoints:24},
+    {mode:'reward'},{rewardPoints:25},{productId:'product'},{qrToken:'token'},{autoBindPointAccount:true}]){
+    const result=await runCashierRequest(debitPayload(extra),f.env,f.resolve,f.execute);
+    assert.equal(result.success,false,JSON.stringify(extra));
+  }
+  assert.equal(f.writes.length,0);
+});
+
+test('pure deduction allows store/admin/redeem only and checks revocation immediately before write',async t=>{
+  const f=fixture(t);
+  for(const role of ['user','reward','store','admin','redeem']){
+    f.sql.prepare('UPDATE users SET role=?').run(role);
+    const result=await runCashierRequest(debitPayload(),f.env,f.resolve,f.execute);
+    assert.equal(result.success,['store','admin','redeem'].includes(role),role);
+  }
+  f.sql.prepare("UPDATE users SET role='store'").run();
+  const result=await runCashierRequest(debitPayload(),f.env,f.resolve,async(safe,before,product)=>{
+    f.sql.prepare("UPDATE users SET role='user'").run();return f.execute(safe,before,product);
+  });
+  assert.equal(result.transactionStatus,'failed');assert.match(result.error,/扣點權限/);
+  assert.equal(f.writes.length,3);
+});
+
+test('pure deduction unknown response cannot cause a second deduction',async t=>{
+  const f=fixture(t),p=debitPayload();
+  f.point.insertUserPoint=async data=>{f.writes.push(data);throw Error('lost response');};
+  assert.equal((await runCashierRequest(p,f.env,f.resolve,f.execute)).transactionStatus,'unknown');
+  assert.equal((await runCashierRequest(p,f.env,f.resolve,f.execute)).transactionStatus,'unknown');
+  assert.equal((await runCashierRequest(debitPayload(),f.env,f.resolve,f.execute)).success,false);
+  assert.equal(f.writes.length,1);
+});
 
 function fixture(t) {
   const sql = new DatabaseSync(':memory:');
+  sql.exec(`CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT); INSERT INTO users VALUES('${A}','store');`);
   sql.exec(readFileSync(new URL('../migrations/0030_store_cashier_requests.sql', import.meta.url), 'utf8'));
   t.after(() => sql.close());
   const env = {ACTMASTER_DB: {prepare(query) {

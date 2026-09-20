@@ -70,6 +70,13 @@ test('sorting compares explicit instants with Taiwan wall time consistently', as
   const result = await fixture([log()]).read([mother({id: 'unrelated', event_content: '', get_point: 10, created_at: '2026-09-16T14:00:00Z'})]);
   assert.equal(result[0].id, 'unrelated');assert.equal(result[1].created_at, '2026-09-16 21:57:35');
 });
+test('pure deduction history labels do not invent a purchase',async()=>{
+  const result=await fixture([log({amount:0,points:-25,payable_amount:0})]).read([]);
+  assert.equal(result.length,1);assert.equal(result[0].get_point,-25);
+  assert.match(result[0].event_name,/扣除點數/);assert.match(result[0].event_content,/扣除 25 點/);
+  assert.doesNotMatch(result[0].event_content,/消費|應收|NT\$/);
+});
+
 test('empty lists and unavailable D1 retain existing behavior', async () => {
   const {read, self} = fixture([]), rows = [mother()];
   assert.equal(await read(rows), rows);assert.equal((await read([])).length, 0);

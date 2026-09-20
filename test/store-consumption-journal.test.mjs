@@ -70,6 +70,7 @@ function fixture(t){
 test('merge one entry per source ID, exclude pure gifts and preserve accurate cents/status',async t=>{
   const f=fixture(t);f.cash('one');f.journal('one');f.cash('two');f.journal('two');
   f.cash('gift',{amount:0,points:50,payable:0,mode:'reward',response:{rewardPoints:50}});
+  f.cash('pure-debit',{amount:0,points:-25,payable:0,mode:'redeem',response:{debitPoints:25}});
   f.cash('flagged',{amount:50,points:50,payable:50,mode:'reward',response:{rewardPoints:50}});
   f.cash('consume-reward',{amount:500,points:5,payable:500,mode:'reward'});
   f.order('pending');f.order('cancelled',{status:'cancelled'});f.order('paid',{status:'paid'});

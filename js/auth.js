@@ -1878,7 +1878,8 @@ function renderStorePointCashierLogs(rows) {
   };
   listEl.innerHTML = rows.map(row => {
     const directGift = row.mode === 'reward' && Number(row.amount) === 0 && Number(row.points) > 0;
-    const mode = row.mode === 'reward' ? (directGift ? '贈送點數' : '消費贈點') : '消費折抵';
+    const directDebit = row.mode === 'redeem' && Number(row.amount) === 0 && Number(row.points) < 0;
+    const mode = row.mode === 'reward' ? (directGift ? '贈送點數' : '消費贈點') : (directDebit ? '扣除點數' : '消費折抵');
     const positive = row.mode === 'reward';
     const pointText = (positive ? '+' : '-') + Number(Math.abs(row.points || row.changedPoints || 0)).toLocaleString('zh-TW') + ' 點';
     const customer = row.customerName || row.customerPhone || row.customerPointUserId || '客戶';
@@ -1889,7 +1890,7 @@ function renderStorePointCashierLogs(rows) {
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="text-[14px] font-black text-slate-900 truncate">${window.escapeHTML(customer)}</div>
-            <div class="text-[12px] font-bold text-slate-500 mt-1">${window.escapeHTML(mode)}${directGift ? '' : `｜消費 NT$${window.escapeHTML(amount)}${positive ? '' : `｜應收 NT$${window.escapeHTML(payable)}`}`}</div>
+            <div class="text-[12px] font-bold text-slate-500 mt-1">${window.escapeHTML(mode)}${directGift || directDebit ? '' : `｜消費 NT$${window.escapeHTML(amount)}${positive ? '' : `｜應收 NT$${window.escapeHTML(payable)}`}`}</div>
             <div class="text-[11px] font-bold text-slate-400 mt-1">${window.escapeHTML(formatTime(row.createdAt || row.created_at))}</div>
           </div>
           <div class="shrink-0 text-[15px] font-black ${positive ? 'text-[#06C755]' : 'text-blue-600'}">${window.escapeHTML(pointText)}</div>

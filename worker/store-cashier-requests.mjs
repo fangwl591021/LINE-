@@ -41,11 +41,19 @@ async function run(p,env,resolveCustomer,execute) {
  if(!a||!validId(id)) return fail('請更新頁面後再操作（缺少有效交易編號）');
  const mode=p.mode,amount=Number(p.amount),deductPoints=Number(p.deductPoints||0),raw=String(p.customerUserId||'').trim();
  const directReward=p.rewardPoints!==undefined;
+ const directDebit=p.debitPoints!==undefined;
+ if(directDebit&&(!Number.isSafeInteger(p.debitPoints)||p.debitPoints<1||p.debitPoints>1000000||
+ mode!=='redeem'||p.amount!==0||p.deductPoints!==p.debitPoints||directReward||p.productId||p.qrToken||p.autoBindPointAccount))return fail('純扣點資料不正確，不可包含消費、贈點或商品交易');
+ const checkDebitRole=async()=>{
+  const user=await db.prepare('SELECT role FROM users WHERE line_id=? LIMIT 1').bind(a).first();
+  if(!['store','admin','redeem','店長','總管'].includes(String(user?.role||'').trim().toLowerCase()))throw Error('目前帳號沒有扣點權限');
+ };
+ if(directDebit){try{await checkDebitRole();}catch(error){return fail(error.message);}}
  if(directReward&&(!Number.isSafeInteger(p.rewardPoints)||p.rewardPoints<=0||p.rewardPoints>1000000||
  mode!=='reward'||p.deductPoints!==0||p.rewardPoints!==amount||p.productId||p.qrToken))return fail('贈送點數必須是 1 至 1,000,000 的整數，且不可包含扣點或商品交易');
- if(!['reward','redeem'].includes(mode)||!Number.isSafeInteger(amount)||amount<=0||amount>1000000||!Number.isSafeInteger(deductPoints)||deductPoints<0||
- (mode==='redeem'&&(deductPoints<=0||deductPoints>amount))||!raw||raw.length>100) return fail('顧客、金額或折抵點數不正確');
- const fingerprint=JSON.stringify({raw,amount,deductPoints,mode,autoBind:p.autoBindPointAccount===true,productId:p.productId||'',productVersion:p.productVersion??null,shopVersion:p.shopVersion??null,...(p.qrToken?{qrHash:await qrTokenHash(p.qrToken)}:{}),...(directReward?{rewardPoints:p.rewardPoints}:{})});
+ if(!['reward','redeem'].includes(mode)||!Number.isSafeInteger(amount)||(!directDebit&&amount<=0)||amount>1000000||!Number.isSafeInteger(deductPoints)||deductPoints<0||
+ (mode==='redeem'&&(deductPoints<=0||(!directDebit&&deductPoints>amount)))||!raw||raw.length>100) return fail('顧客、金額或折抵點數不正確');
+ const fingerprint=JSON.stringify({raw,amount,deductPoints,mode,autoBind:p.autoBindPointAccount===true,productId:p.productId||'',productVersion:p.productVersion??null,shopVersion:p.shopVersion??null,...(p.qrToken?{qrHash:await qrTokenHash(p.qrToken)}:{}),...(directReward?{rewardPoints:p.rewardPoints}:{}),...(directDebit?{debitPoints:p.debitPoints}:{})});
  const previous=await find(db,a,id);
  if(previous) return previous.fingerprint===fingerprint?resultOf(previous):fail('同一交易編號不可變更內容');
  let credential=null;
@@ -75,6 +83,7 @@ async function run(p,env,resolveCustomer,execute) {
  const save=async(state,output)=>db.prepare('UPDATE store_cashier_requests SET status=?,result_json=?,updated_at=CURRENT_TIMESTAMP WHERE actor_id=? AND request_id=?').bind(state,JSON.stringify(output),a,id).run();
  try {
   const beforeWrite=async(actualCustomer=customer)=>{
+   if(directDebit)await checkDebitRole();
    if(actualCustomer!==customer) throw Error('點數身分已改變，請重新確認顧客');
    if(product) {const check=await getRedemptionProduct(p,env);if(!check.success||JSON.stringify(check.data)!==JSON.stringify(product)) throw Error('商品已更新，尚未扣點，請重新確認');}
    if(credential) {
@@ -88,7 +97,7 @@ async function run(p,env,resolveCustomer,execute) {
   };
   const result=await execute({authenticatedUserId:a,authenticatedNetworkId:p.authenticatedNetworkId,
     customerUserId:customer,amount,deductPoints,mode,autoBindPointAccount:p.autoBindPointAccount===true,
-    cashierSessionId:'',transactionId:id,...(directReward?{rewardPoints:p.rewardPoints}:{})},beforeWrite,product);
+    cashierSessionId:'',transactionId:id,...(directReward?{rewardPoints:p.rewardPoints}:{}),...(directDebit?{debitPoints:p.debitPoints}:{})},beforeWrite,product);
   const state=result?.success===true?'succeeded':attempted?'unknown':'failed';
   const output={...(state==='unknown'?pending(id):result),transactionId:id,transactionStatus:state};
   await save(state,output);return output;

@@ -99,7 +99,7 @@
       if(!canMerchantHome())throw new Error('此帳號未開放商家版點數操作');
       if(mode==='redeem'&&rewardOnly())throw new Error('贈點單位只能贈點，不能扣點');
       if(mode==='reward'&&redeemOnly())throw new Error('扣點用戶不能贈點');
-      const module=await import('./store-point-operation.js?v=7');
+      const module=await import('./store-point-operation.js?v=8');
       const isCurrent=()=>version===epoch&&root.isConnected&&entry?.isConnected&&root.contains(entry)&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.()&&canMerchantHome();
       if(isCurrent())module.openStorePointOperationPopup({standalone,isCurrent,mode});
     }
