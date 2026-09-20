@@ -32,6 +32,25 @@
     #admin-sidebar.sidebar-collapsed .nav-label { display: none; }
     #admin-sidebar.sidebar-collapsed .nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
     #admin-sidebar.sidebar-collapsed .material-symbols-outlined { margin-right: 0 !important; }
+    #admin-sidebar.sidebar-collapsed > div > div { display: none; }
+    #admin-sidebar.sidebar-collapsed > div { justify-content: center; padding: 0; }
+    #admin-sidebar.sidebar-collapsed > div > button { margin: 0; }
+    .admin-content, .crm-hero-header > div { min-width: 0; }
+    .crm-hero-header { flex-wrap: wrap; }
+    .crm-hero-header > div:first-child { flex: 1 1 300px; }
+    .crm-hero-header > div:last-child { flex-wrap: wrap; max-width: 100%; }
+    @media (max-width: 1024px) {
+      #admin-sidebar { position: absolute; inset: 0 auto 0 0; width: min(256px, 85vw); z-index: 20; }
+      #admin-sidebar.sidebar-collapsed { width: 64px; }
+      #admin-sidebar.sidebar-collapsed nav { padding-left: 8px; padding-right: 8px; }
+      .admin-content { margin-left: 64px; }
+      .admin-content > header { height: auto; min-height: 64px; padding: 12px; gap: 8px; flex-wrap: wrap; }
+      .admin-content > header > div { gap: 8px; flex-wrap: wrap; }
+      #admin-name { max-width: 140px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .crm-hero-header { flex-direction: column; }
+      .crm-hero-header > div:first-child { flex-basis: auto; width: 100%; }
+      .crm-hero-header > div:last-child button { padding: 10px 12px; font-size: 14px; }
+    }
     
     .data-table { width: 100%; border-collapse: collapse; text-align: left; }
     .data-table th { background-color: #f8fafc; padding: 14px 16px; font-size: 13px; color: #344054; font-weight: 700; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
@@ -406,9 +425,10 @@
   <!-- 全域載入遮罩 -->
   <div id="loading-screen" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center transition-opacity duration-500">
     <span id="loading-icon" class="material-symbols-outlined animate-spin text-5xl text-blue-600 mb-4">refresh</span>
-    <p id="loading-text" class="text-slate-500 font-bold tracking-widest text-sm text-center px-6">系統初始化與安全驗證中...</p>
-    <div id="error-actions" class="hidden mt-6 flex gap-3">
-      <button onclick="liff.logout(); window.location.reload();" class="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">重新登入</button>
+    <p id="loading-text" role="status" aria-live="polite" class="text-slate-500 font-bold tracking-widest text-sm text-center px-6">正在載入 LINE 登入服務...</p>
+    <div id="error-actions" class="hidden mt-6 flex flex-wrap justify-center gap-3 px-4">
+      <button onclick="window.location.reload();" class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm">重新嘗試</button>
+      <button onclick="window.liff?.logout?.(); window.location.reload();" class="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">重新登入</button>
       <button onclick="window.location.href='index.html'" class="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm">回首頁</button>
     </div>
   </div>
@@ -495,7 +515,7 @@
   </aside>
 
   <!-- 右側主內容區 -->
-  <div class="flex-1 flex flex-col overflow-hidden">
+  <div class="admin-content flex-1 flex flex-col overflow-hidden">
     
     <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-0 shrink-0">
       <h2 id="page-title" class="text-lg font-bold text-slate-700">經銷商 CRM</h2>
@@ -519,6 +539,7 @@
               <div>
                 <h3 class="font-black text-slate-950 text-3xl">經銷商 CRM</h3>
                 <p class="text-slate-600 text-lg mt-2 font-semibold">用客戶生命週期管理經銷商：狀態、意向、組織位置、年費與下一步跟進集中處理。</p>
+                <p class="text-sm mt-2">名冊直接載入；需要補註冊時，請點「同步已綁名片」。</p>
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 <button id="btn-sync-bound-cards" onclick="syncBoundCardsToUsers()" class="text-base border border-blue-200 text-blue-700 px-5 py-3 rounded-xl hover:bg-blue-50 flex items-center gap-2 font-black"><span class="material-symbols-outlined text-[20px]">sync</span> 同步已綁名片</button>
@@ -1825,7 +1846,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+  <script id="admin-liff-sdk" async src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
   <script>
     const LIFF_ID = "1660923784-vViMTZ1y";
     const WORKER_URL = "https://line-engine.fangwl591021.workers.dev/"; 
@@ -2139,7 +2160,11 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       const navBtn = document.getElementById('nav-' + tabId);
       if(navBtn) navBtn.classList.add('active');
       
-      document.getElementById('page-title').innerText = navBtn ? navBtn.innerText.trim() : "管理後台";
+      document.getElementById('page-title').textContent = navBtn ? navBtn.getAttribute('aria-label') || navBtn.textContent.trim() : "管理後台";
+      if (window.matchMedia('(max-width: 1024px)').matches) {
+        document.getElementById('admin-sidebar')?.classList.add('sidebar-collapsed');
+        document.getElementById('sidebar-toggle-icon').textContent = 'left_panel_open';
+      }
       
       if (tabId === 'users') loadUsers();
       if (tabId === 'card-quota') loadAdminCardQuotaSettings();
@@ -2313,8 +2338,17 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       await loadLineOAKeywordRules(true);
     }
 
+    document.querySelectorAll('#admin-sidebar .nav-item').forEach(link => {
+      const label = document.createElement('span');
+      label.className = 'nav-label';
+      Array.from(link.childNodes).filter(node => node.nodeType === 3).forEach(node => label.appendChild(node));
+      link.appendChild(label);
+      link.setAttribute('aria-label', label.textContent.trim());
+      link.title = label.textContent.trim();
+    });
+    document.querySelectorAll('#admin-sidebar nav p').forEach(node => node.classList.add('sidebar-section'));
     try {
-      if (localStorage.getItem('admin_sidebar_collapsed') === '1') {
+      if (window.matchMedia('(max-width: 1024px)').matches || localStorage.getItem('admin_sidebar_collapsed') === '1') {
         document.getElementById('admin-sidebar')?.classList.add('sidebar-collapsed');
         const icon = document.getElementById('sidebar-toggle-icon');
         if (icon) icon.textContent = 'left_panel_open';
@@ -3896,15 +3930,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         allCardsData = cards;
         populateCardTenantFilter(cards);
         if (orders.length) allBonusOrdersData = orders.map(normalizeBonusOrder);
-        const sync = await registerBoundCardUsers(users, cards);
-        if (sync.created > 0) {
-          const refreshedUsers = await fetchAPI('getAllUsers', {}, { silent: true, omitDefaultUserId: true });
-          const refreshedList = normalizeApiList(refreshedUsers, ['members']);
-          if (refreshedList.length) users = refreshedList;
-          showToast(`已補註冊 ${sync.created} 位已綁名片用戶`);
-        } else if (sync.failed > 0) {
-          showToast(`有 ${sync.failed} 位已綁名片用戶補註冊失敗`, true);
-        }
+        // Loading the roster is read-only. Registration stays behind the explicit sync button.
         allUsersData = mergeUsersWithBoundCards(users, cards);
         loadSavedAdminCrmFilters();
         applyAdminCrmFilterControls();
@@ -5586,16 +5612,38 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (adminCropperInstance) adminCropperInstance.destroy();
     }
 
+    async function withAdminDeadline(task, label, timeoutMs = 15000) {
+      let timer;
+      try {
+        return await Promise.race([
+          Promise.resolve().then(task),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label + '逾時，請檢查網路後重新嘗試')), timeoutMs); })
+        ]);
+      } finally { clearTimeout(timer); }
+    }
+
+    async function waitForAdminLiff() {
+      if (window.liff?.init) return;
+      const sdk = document.getElementById('admin-liff-sdk');
+      if (!sdk) throw new Error('LINE 登入服務尚未載入，請重新嘗試');
+      await new Promise((resolve, reject) => {
+        sdk.addEventListener('load', () => window.liff?.init ? resolve() : reject(new Error('LINE 登入服務載入失敗')), { once: true });
+        sdk.addEventListener('error', () => reject(new Error('LINE 登入服務載入失敗，請檢查網路')), { once: true });
+      });
+    }
+
     async function initAdmin() {
       const loadingText = document.getElementById('loading-text');
       const loadingIcon = document.getElementById('loading-icon');
       const errorActions = document.getElementById('error-actions');
 
       try {
+        await withAdminDeadline(() => waitForAdminLiff(), '載入 LINE 登入服務');
+        loadingText.innerText = '正在連線到 LINE...';
         if (typeof window.initActmasterLiff === 'function') {
-          await window.initActmasterLiff(LIFF_ID);
+          await withAdminDeadline(() => window.initActmasterLiff(LIFF_ID), 'LINE 初始化');
         } else {
-          await liff.init({ liffId: LIFF_ID });
+          await withAdminDeadline(() => liff.init({ liffId: LIFF_ID }), 'LINE 初始化');
         }
         if (!liff.isLoggedIn()) {
           if (!liff.isInClient()) {
@@ -5606,12 +5654,14 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           return;
         }
 
-        adminProfile = await liff.getProfile();
+        loadingText.innerText = '正在確認 LINE 身分...';
+        adminProfile = await withAdminDeadline(() => liff.getProfile(), 'LINE 身分確認');
         document.getElementById('admin-name').innerText = adminProfile.displayName;
         document.getElementById('admin-avatar').src = adminProfile.pictureUrl;
 
         loadingText.innerText = "驗證管理權限中...";
-        const check = await fetchAPI('checkUser', { userId: adminProfile.userId });
+        const check = await withAdminDeadline(() => fetchAPI('checkUser', { userId: adminProfile.userId }, { timeoutMs: 15000, silent: true }), '管理權限驗證');
+        if (!check) throw new Error('暫時無法確認管理權限，請重新嘗試');
 
         if (check && isHardAdminAccount(adminProfile.userId, check.info || adminProfile)) {
           check.info = check.info || {};
@@ -5620,7 +5670,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         } else if (check && check.info && check.info.role === 'admin') {
           check.info.role = 'user';
         }
-        if (check && (check.info.role === 'admin' || check.info.role === 'store')) {
+        if (check && (check.info?.role === 'admin' || check.info?.role === 'store')) {
           adminRole = check.info.role || 'store';
           adminNetworkId = check.info.networkId || check.info.storeId || 'admin';
           document.getElementById('nav-partners')?.classList.toggle('hidden', adminRole !== 'admin');
