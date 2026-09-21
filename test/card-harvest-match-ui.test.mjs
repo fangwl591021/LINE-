@@ -91,7 +91,7 @@ test('invalid or absent score never turns into a misleading zero percent', () =>
     assert.doesNotMatch(h.render(), /75%/, `a ${status} cache is not a current result`);
   }
   const h = harness([card('INTENT', null, { aiMatch: { status: 'needs_intent', score: null } })]);
-  assert.match(h.render(), /先填需求/);
+  assert.match(h.render(), /待配對/); assert.doesNotMatch(h.render(), /先填需求/);
 });
 
 test('latest is default; match sorts globally before pagination, with pending last and newest ties', () => {
@@ -136,11 +136,12 @@ test('sort switching retains search, industry filters, harvest ownership and det
   assert.equal(h.window.canEditCardRecord(cards.at(-1)), false, 'claimed cards remain read only');
 });
 
-test('authoritative own business intent invalidates stale percentages, not the last viewed card', () => {
+test('changing own intent preserves score with historical label, not a fabricated current match', () => {
   const h = harness([card('CURRENT', 82)], { getCurrentBusinessIntent: () => ({ offer: '別張名片', seek: '錯誤來源', collaboration: '' }) });
   assert.match(h.render(), /82%/, 'last-viewed-card helper must not invalidate own-card match');
   h.window.currentUserCard.自訂名片設定 = JSON.stringify({ businessIntent: { ...intent, seek: '加拿大經銷商' } });
-  assert.doesNotMatch(h.render(), /82%/, 'changed own intent must hide older result');
+  assert.match(h.render(), /82%/, 'changed own intent must preserve older result');
+  assert.match(h.render(), /既有 AI 配對/);
   const noOwnCard = harness([card('SERVER', 82)], { currentUserCard: null });
   assert.match(noOwnCard.render(), /82%/, 'server metadata remains usable before own-card background load');
 });
@@ -160,6 +161,15 @@ test('reason popup escapes untrusted text, is closable and cannot reveal another
   assert.match(allMarkup + allText, /關閉|取消|close/i);
   await h.window.showCollectedCardMatch('FOREIGN');
   assert.doesNotMatch(h.created.map(node => node.innerHTML + node.textContent).join('\n'), /不應公開的配對理由/);
+});
+
+test('historical score stays visible with no intent and popup explains basis and original date',()=>{
+  const old=card('OLD',82);old.aiMatch.basis='previous';old.aiMatch.intentKey='';
+  const h=harness([old],{currentUserCard:{自訂名片設定:'{}'}});
+  assert.match(h.render(),/82%/);assert.doesNotMatch(h.render(),/先填需求/);
+  h.window.showCollectedCardMatch('OLD');const html=h.created.map(n=>n.innerHTML).join('\n');
+  assert.match(html,/沿用既有需求評估/);assert.match(html,/2026-09-18/);
+  assert.doesNotMatch(html,/依目前業務需求評估/);
 });
 
 test('refresh only reads collection data and retains the selected filters and sort mode', async () => {

@@ -375,24 +375,24 @@
   }
 
   function collectionMatch(card) {
-    const match = card && card.aiMatch || {};
+    let match = card && card.aiMatch || {};
     const intentKey = currentCollectionIntentKey();
-    if (intentKey !== null && match.intentKey && match.intentKey !== intentKey) {
-      return { status: "stale", score: null, label: "待更新", reason: "您的業務需求已變更，舊分數不再適用。請重新整理讀取目前需求的配對結果。" };
+    if (!match.basis && intentKey !== null && match.intentKey && match.intentKey !== intentKey) {
+      match = { ...match, basis: "previous" };
     }
     if (match.status === "completed" && typeof match.score === "number" && Number.isFinite(match.score)
       && match.score >= 0 && match.score <= 100 && ["ai", "rules"].includes(match.source)) {
-      return { ...match, score: Math.round(match.score), label: match.source === "ai" ? "AI 配對" : "規則評估" };
+      return { ...match, score: Math.round(match.score), label: match.source === "rules" ? "規則評估" : match.basis === "previous" ? "既有 AI 配對" : "AI 配對" };
     }
-    const labels = { needs_intent: "先填需求", stale: "待更新", unavailable: "暫無結果", needs_login: "請重新登入" };
+    const labels = { needs_intent: "待配對", stale: "待更新", unavailable: "暫無結果", needs_login: "請重新登入", processing: "AI 配對中", failed: "稍後重試" };
     const reasons = {
-      needs_intent: "請先在本人名片填寫業務需求，系統才能依您提供、尋找的資源進行配對。",
+      needs_intent: "系統會優先沿用既有分數；沒有結果的名片依本人商務資料自動配對，不必先填業務需求。",
       stale: "名片資料或需求已更新，舊分數不再適用，等待新的配對結果。",
       unavailable: "目前無法讀取配對結果，請稍後重新整理；收藏名片仍可正常查看。",
       needs_login: "請重新登入以驗證身份，再查看您的配對結果。"
     };
     const status = match.status === "completed" ? "unavailable" : (match.status || "pending");
-    return { status, score: null, label: labels[status] || "待配對", reason: reasons[status] || "目前業務需求尚無這張名片的有效配對結果；背景配對完成後，可重新整理查看。" };
+    return { status, score: null, label: labels[status] || "待配對", reason: reasons[status] || "這張名片尚無配對分數；系統將依本人商務資料補算，可稍後重新整理查看。" };
   }
 
   function ensureCollectionMatchStyles() {
@@ -451,8 +451,9 @@
     dialog.setAttribute("role", "dialog");
     dialog.setAttribute("aria-labelledby", "collected-card-match-title");
     dialog.innerHTML = `<h2 id="collected-card-match-title" style="font-size:18px;font-weight:800">${escapeHTML(getCardTitle(card))}・${match.score === null ? escapeHTML(match.label) : match.score + "%"}</h2>
-      <p>${match.score === null ? "目前業務需求配對" : escapeHTML(match.label) + "・依目前業務需求評估，非成交機率。"}</p>
+      <p>${match.score === null ? "收藏名片配對" : escapeHTML(match.label) + (match.basis === "previous" ? "・沿用既有需求評估，非目前需求或成交機率。" : match.basis === "profile" ? "・依名片商務資料綜合評估，非成交機率。" : "・依目前業務需求評估，非成交機率。")}</p>
       <p>${escapeHTML(match.reason || "此筆結果未提供配對理由。")}</p>
+      ${match.updatedAt ? "<p>評估時間：" + escapeHTML(match.updatedAt) + "</p>" : ""}
       ${match.source === "rules" ? "<p>這是既有資料的規則評估，並非 AI 分析結果。</p>" : ""}
       <form method="dialog" style="text-align:right"><button type="submit">關閉</button></form>`;
     dialog.addEventListener("close", () => dialog.remove(), { once: true });
@@ -578,13 +579,14 @@
           </div>
         </div>
         <div class="px-4 py-2 flex gap-2 items-center justify-between text-[11px] text-slate-500">
-          <span>依目前業務需求配對；點百分比可看理由。</span>
+          <span>沿用既有配對，新名片自動分析；點百分比可看理由。</span>
           <button type="button" onclick="window.refreshCollectedCardMatches()" ${window.cardMatchRefreshing ? "disabled" : ""} class="shrink-0 text-emerald-700 font-bold py-2">${window.cardMatchRefreshing ? "讀取中…" : "重新整理"}</button>
         </div>
         ${html}
       </div>
       ${footerHtml}
     `;
+    window.ensureCollectedMatchScores?.();
   };
 
   window.loadMoreCards = function () {

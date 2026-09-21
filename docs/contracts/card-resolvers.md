@@ -86,16 +86,18 @@
 - 掃描來的 `private_import` 不得進公開池。
 - 未通過 AI 體檢不得進公開池。
 
-## 收藏列表配對結果（2026-09-18）
+## 收藏列表配對結果（2026-09-21：既有分數優先，受保護流程）
 
 - `getCardHarvestContacts` 先沿用原收藏權限查詢，再附查看者專屬 `aiMatch`；通用 `cardRow()`、公開名片 API 不得附加該私密結果。
-- 分數僅限已驗證 token 的 actor、`own` 範圍、本人目前已儲存業務需求的 exact intent hash、同一候選名片版本。UID-only fallback 不得取得配對理由。
+- 分數僅限已驗證 token 的 actor、`own` 範圍、已授權收藏的同一名片。優先目前 exact intent/version，否則沿用此會員此名片的有效歷史分數與理由；沒有需求、需求或名片版本變更都不得遮掉歷史結果。UID-only fallback 不得取得配對理由。
 - 本人需求只來自真正擁有的 `self_profile`；自己曾建立但已被他人認領的名片不能當成本人。
 - 讀取為批次 SELECT；不得發起 AI、改點數／配額、排程或重算。快取缺表或失敗不得令原收藏名單消失。
-- `aiMatch` 包含 status、score、reason、source、updatedAt、intentKey。未完成、過期或未填需求時 score 為 null；合法 0 分保留。AI 與規則結果必須分別標示。
+- `aiMatch` 包含 status、score、reason、source、updatedAt、intentKey、basis。只有沒有有效結果才為 null；合法 0 分保留。AI 與規則結果必須分別標示。basis=previous 為既有需求評估，profile 為名片綜合配對，均非成交機率。
 - 列表提供「最新收藏／配對排名」，已有有效結果按分數降冪、同分依原最新順序、缺結果置後；切換保留搜尋與分類並重置分頁。
-- 顯示為目前業務需求的配對分數，不是 VEO 的事業夥伴綜合契合度。列表不使用任意搜尋歷史、其他人的結果或虛構分數。
-- 前端本人需求變更後，不得繼續顯示記憶體中的舊需求分數；重新整理只讀取結果。
+- 歷史結果不得假稱目前需求或新 AI 綜合分析。不可取用其他會員或 public pool 的分數。
+- `refreshCardHarvestMatches` 是獨立、token 驗證的補算 action；只處理沒有任何有效歷史分數的名片，每批最多五張。伺服器自行查會員、收藏名片與本人資料，不接受前端傳分數或 key。
+- 沿用既有 OpenAI 服務與配額，只傳公司、職稱、服務、行業、個性/興趣/事業標籤；不傳姓名、電話、生日、健康、財富。資料庫租約防雙分頁重送，失敗退避，AI 不可阻塞名單呈現。
+- 不刪除、不重設、不自動覆寫已有分數；無 migration。此規則由 card-harvest-match、collection-match-history、card-harvest-match-ui 測試鎖定，部署 guard 必須通過，不能為通過測試而刪除保護案例。
 
 ## 版本規則
 

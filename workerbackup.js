@@ -13,6 +13,7 @@ import { ExchangeZoneModule } from './worker/exchange-zone.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
 import { enrichCardHarvestMatches } from './worker/card-harvest-match.mjs';
+import { restoreCollectionHistory, scoreNewCollectionMatches } from './worker/collection-match-history.mjs';
 import { prepareCardSafetyReview, cardSafetyReviewPrompt, normalizeCardSafetyReview, cardSafetyReviewError } from './worker/card-safety-review.mjs';
 
 /**
@@ -101,6 +102,7 @@ const ACTION_POLICIES = {
   getCardContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
   getAdminCardLibraryOverview: { access: 'admin' },
   getCardHarvestContacts: { access: 'authenticated', ownership: 'self', allowD1Fallback: true, legacyAuthSkip: true },
+  refreshCardHarvestMatches: { access: 'authenticated', ownership: 'self' },
   listPublicBusinessCards: { access: 'authenticated', note: 'reviewed_public_card_pool_read' },
   getCrmContacts: { access: 'authenticated', ownership: 'tenant-resource', tenantScoped: true, allowD1Fallback: true },
   listCustomers: { access: 'authenticated', ownership: 'self', tenantScoped: true },
@@ -7665,7 +7667,7 @@ const AIModule = {
     ].filter((key, index, list) => key && list.indexOf(key) === index);
   },
 
-  async callOpenAI(env, body, clientKey = '') {
+  async callOpenAI(env, body, clientKey = '', signal) {
     const keys = this.getOpenAIKeys(env, clientKey);
     if (!keys.length) throw new Error("Missing OPENAI_API_KEY");
 
@@ -7675,7 +7677,8 @@ const AIModule = {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + keys[i], 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
+          ...(signal ? { signal } : {})
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok || result.error) {
@@ -7689,6 +7692,7 @@ const AIModule = {
         }
         return result;
       } catch (e) {
+        if (signal?.aborted) throw e;
         lastError = e.message || String(e);
         console.warn('[OpenAI fallback]', 'key', i + 1, lastError);
       }
@@ -10096,9 +10100,12 @@ const D1ReadModule = {
       LIMIT ${limit}
     `, [...ids, ...ids, ...ids, ...ids, ...ids]);
     const cards = rows.map(row => this.cardRow(row)).filter(Boolean);
-    const data = await enrichCardHarvestMatches(cards, {
+    let data = await enrichCardHarvestMatches(cards, {
       env, actor: verifiedActor, actorId, identityIds: ids, match: AIModule
     });
+    if (verifiedActor?.token && verifiedActor.userId === actorId && verifiedActor.source !== 'd1_identity_fallback') {
+      try { data = await restoreCollectionHistory(data, env.ACTMASTER_DB, actorId); } catch (_) { /* Keep the original collection on cache failure. */ }
+    }
     return { success: true, data };
   },
 
@@ -16882,6 +16889,8 @@ async function dispatchAction(action, payload, request, env) {
     }
     case 'getAdminCardLibraryOverview':
       return await D1ReadModule.getAdminCardLibraryOverview(payload || {}, env);
+    case 'refreshCardHarvestMatches':
+      return await scoreNewCollectionMatches({env,actor,read:D1ReadModule,match:AIModule,rateLimit:(...args)=>SecurityModule.checkRateLimit(...args)});
     case 'getCardHarvestContacts': {
       try {
         const d1Result = await D1ReadModule.getCardHarvestContacts(payload || {}, env, actor);
