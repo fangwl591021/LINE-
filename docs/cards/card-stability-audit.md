@@ -184,3 +184,11 @@ CS-1B adds a feature-flagged, isolated wrapper module only. It is not imported b
 ## CS-1B final verification
 
 The shadow-hook foundation now has both key and value allowlists for structured logs. This remains an isolated module: no Worker import, no D1 query, no D1 write, and no runtime feature-flag enablement were introduced.
+## CS-2A runtime boundary
+
+The selected production entry is `LineOAModule.replySimpleMyCard` for the exact
+LINE OA keyword. CS-2A does not change selector postbacks, AI Card Folder,
+video keyword handling, LIFF, or browser resolvers. When its flag is enabled,
+the keyword reads only a same-network active Personal static version using the
+signed webhook user ID. The runtime query is read-only and bounded by identity
+aliases; contact/scanner/creator evidence cannot become Personal ownership.
