@@ -392,8 +392,8 @@
           case 'detail':detail(button.dataset.id);break;
           case 'tank-game': {
             if(standalone){location.assign(loginLink());break;}
-            if(typeof window.startDailyTankChallenge!=='function')throw new Error('遊戲尚未載入，請重新整理後再試');
-            await window.startDailyTankChallenge();
+            if(typeof window.openGameCenter!=='function')throw new Error('遊戲尚未載入，請重新整理後再試');
+            window.openGameCenter();
             break;
           }
           case 'wallet': {

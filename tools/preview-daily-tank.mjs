@@ -4,14 +4,17 @@ import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath} from 'node:url';
 import {handleDailyTank} from '../worker/daily-tank-challenge.mjs';
+import {handleGameCenter} from '../worker/game-center.mjs';
 const root=new URL('../',import.meta.url);
 export function createTankPreview() {
  const sql=new DatabaseSync(':memory:');
  sql.exec('CREATE TABLE app_meta(key TEXT PRIMARY KEY,value TEXT,updated_at TEXT)');
  sql.exec(readFileSync(new URL('migrations/0004_point_awards.sql',root),'utf8'));
  sql.exec(readFileSync(new URL('migrations/0043_daily_tank_sessions.sql',root),'utf8'));
- const db={prepare(q){return {bind(...args){return {first:async()=>sql.prepare(q).get(...args)||null,
+ sql.exec(readFileSync(new URL('migrations/0044_game_center.sql',root),'utf8'));
+ const db={prepare(q){return {bind(...args){return {q,args,all:async()=>({results:sql.prepare(q).all(...args)}),first:async()=>sql.prepare(q).get(...args)||null,
   run:async()=>({success:true,meta:{changes:Number(sql.prepare(q).run(...args).changes)}})};}};}};
+ db.batch=async statements=>{sql.exec('BEGIN');try{const out=statements.map(({q,args})=>({success:true,meta:{changes:Number(sql.prepare(q).run(...args).changes)}}));sql.exec('COMMIT');return out;}catch(e){sql.exec('ROLLBACK');throw e;}};
  let balance=300;const rows=[];
  const deps={findIdentity:async()=>({user:{line_id:'preview-member',point_line_id:'preview-member'}}),points:{
   async insertUserPoint(p){balance+=p.points;rows.push({id:crypto.randomUUID(),get_point:p.points,event_name:p.eventName,point_type:p.pointType,shop_remark:p.shop_remark});return {success:true,data:{success:true,data:{id:rows.at(-1).id}}};},
@@ -27,6 +30,7 @@ export function createTankPreview() {
  window.loadPointsWallet=async()=>{const r=await fetch('/ledger').then(r=>r.json());document.getElementById('preview-balance').textContent=r.balance;document.getElementById('preview-history').replaceChildren(...r.rows.map(row=>{const el=document.createElement('p');el.textContent=row.event_name+' +'+row.get_point+' 點';return el;}));};
  </script><script type="module" src="/js/modules/daily-tank-challenge.js"></script></body></html>`;
  const assets=new Map([['/css/daily-tank.css','text/css'],['/js/modules/daily-tank-challenge.js','text/javascript'],['/js/modules/tank-engine.mjs','text/javascript'],['/js/modules/tank-renderer.mjs','text/javascript'],['/js/modules/tank-audio.mjs','text/javascript'],['/js/modules/tank-music.mjs','text/javascript']]);
+ assets.set('/js/modules/game-session.mjs','text/javascript');
  const server=createServer(async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   const path=new URL(req.url,'http://localhost').pathname;
@@ -34,7 +38,8 @@ export function createTankPreview() {
    if(req.method==='POST'&&path==='/api') {
     let body='';for await(const part of req){body+=part;if(body.length>180000){res.writeHead(413);res.end();return;}}
     const {action,payload}=JSON.parse(body);
-    const result=await handleDailyTank(action,payload||{},{ACTMASTER_DB:db,MOTHER_CUS_ACCOUNT_SHOP_ID:'preview'},
+    const handler=['gameEvent','completeGame'].includes(action)?handleGameCenter:handleDailyTank;
+    const result=await handler(action,payload||{},{ACTMASTER_DB:db,MOTHER_CUS_ACCOUNT_SHOP_ID:'preview'},
       {userId:'preview-member',token:'synthetic-preview-only'},deps);
     res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));return;
    }

@@ -2,10 +2,12 @@ import {createGame,stepGame,recordInput,FPS} from './tank-engine.mjs?v=2';
 import {createTankAudio} from './tank-audio.mjs?v=20260920b';
 import {createTankRenderer} from './tank-renderer.mjs?v=20260920';
 import {createTankMusic} from './tank-music.mjs?v=1';
+import {gameEvent} from './game-session.mjs?v=1';
 
 const task=document.getElementById('daily-tank-task');
 const $=id=>document.getElementById(id);
 let dialog,game,replay=[],session,owner='',frame=0,last=0,acc=0,run=0,playing=false,submitting=false,returnFocus;
+let exitHandler=null,completeHandler=null,failHandler=null,fromGameCenter=false;
 const music=createTankMusic(state=>{
   const button=dialog?.querySelector('[data-tank="music"]');
   if(button){button.textContent=state==='muted'?'音樂：關':state==='blocked'?'點此開啟音樂':'音樂：開';button.setAttribute('aria-pressed',String(state!=='muted'&&state!=='blocked'));}
@@ -31,7 +33,7 @@ async function api(action,payload={}) {
 }
 function taskState(data) {
   if(!task)return;
-  $('daily-tank-status').textContent=data.message||'每日首次破關贈送 100 點';
+  $('daily-tank-status').textContent=data.message||'遊戲館每日共領 100 點';
   $('daily-tank-start').textContent=playing?'挑戰中':data.state==='completed'?'今日已完成':'開始挑戰';
   $('daily-tank-start').disabled=playing||data.state==='completed';
   $('daily-tank-practice').hidden=data.state!=='completed';
@@ -70,7 +72,7 @@ function ensureDialog() {
     if(action==='close')close();
     if(action==='again')void start();
     if(action==='retry')void confirmReward();
-    if(action==='resume'){paused=false;last=0;$('tank-result').hidden=true;initSound();music.start();}
+    if(action==='resume')resume();
     if(action==='music'){if(e.target.textContent==='點此開啟音樂'&&playing&&!paused)music.start();else music.toggle(playing&&!paused);}
     if(action==='sound'){if(e.target.textContent==='點此開啟音效')initSound(true);else audio.toggle();}
     if(action==='test-sound'){if(!audio.enabled)audio.toggle();else initSound(true);}
@@ -101,22 +103,26 @@ function result(title,message,{retry=false,again=false,resume=false}={}) {
   dialog.querySelector('[data-tank="resume"]').hidden=!resume;
 }
 function close() {
+  if(session?.nonce)void gameEvent('game_exit',session);
   run++;playing=false;paused=false;keys.clear();stick=0;fire=false;cancelAnimationFrame(frame);
   dialog?.close();document.documentElement.style.overflow=dialog?.dataset.previousOverflow||'';
   audio.close();
   music.close();
   void refreshDailyTankStatus();if(returnFocus?.isConnected)returnFocus.focus();
+  const callback=exitHandler;exitHandler=null;fromGameCenter=false;completeHandler=null;failHandler=null;callback?.();
 }
-async function start() {
+async function start(options={}) {
   if(submitting)return;
   if(!uid())return window.showToast?.('請重新進入 LINE LIFF 登入後挑戰',true);
   if(!dialog?.open)returnFocus=document.activeElement;
   ensureDialog();initSound(true);music.start();
+  if(Object.hasOwn(options,'fromGameCenter')){fromGameCenter=!!options.fromGameCenter;exitHandler=options.onExit||null;completeHandler=options.onComplete||null;failHandler=options.onFail||null;}
+  for(const b of dialog.querySelectorAll('[data-tank="close"]'))b.textContent=fromGameCenter?'返回遊戲館':'返回每日任務';
   if(!dialog.open){dialog.dataset.previousOverflow=document.documentElement.style.overflow;dialog.showModal();document.documentElement.style.overflow='hidden';}
   const generation=++run;++statusGeneration;owner=uid();playing=false;paused=false;keys.clear();stick=0;fire=false;
   cancelAnimationFrame(frame);result('準備挑戰','正在取得挑戰憑證…');
   try{
-    const data=await api('startDailyTank',{mapVersion:2});
+    const data=await api('startDailyTank',{mapVersion:2,replay:!!session,deviceType:matchMedia('(pointer:coarse)').matches?'mobile':'desktop'});
     if(generation!==run||owner!==uid())return;
     session=data;game=createGame(data.seed,data.mapVersion||1);renderer.reset();replay=[];playing=true;acc=0;last=0;
     taskState({});$('tank-result').hidden=true;frame=requestAnimationFrame(loop);
@@ -139,7 +145,12 @@ function loop(time) {
       if(game.state==='won'){
         save({sessionId:session.sessionId,date:session.date,replay});
         result('挑戰成功','正在確認今日獎勵，尚未確認入帳…');void confirmReward();
-      }else result('挑戰失敗',game.base.alive?'生命用盡或時間已到，再試一次吧！':'基地失守了，再試一次吧！',{again:true});
+        completeHandler?.(tankResult());
+      }else {
+        result('挑戰失敗',game.base.alive?'生命用盡或時間已到，再試一次吧！':'基地失守了，再試一次吧！',{again:true});
+        if(session?.nonce){save({sessionId:session.sessionId,gameId:'tank_defense',nonce:session.nonce,date:session.date,replay});void confirmReward();}
+        failHandler?.(tankResult());
+      }
       taskState({message:game.state==='won'?'破關成功，正在確認獎勵':'可重新挑戰，首次破關才會贈點'});
     }
   }
@@ -155,7 +166,7 @@ async function confirmReward() {
   if(submitting)return;
   const member=uid(),proof=saved();submitting=true;
   try{
-    const data=await api(proof?'completeDailyTank':'dailyTankStatus',proof||{});
+    const data=await api(proof?(proof.gameId?'completeGame':'completeDailyTank'):'dailyTankStatus',proof||{});
     if(member!==uid())return;
     if(data.state==='completed'){
       save(null);taskState(data);result('挑戰成功',data.message,{again:true});
@@ -163,6 +174,8 @@ async function confirmReward() {
       window.pointWalletData=null;
       if(Number.isFinite(data.balance))window.renderPointBalanceState?.('ready',{balance:data.balance});
       void window.loadPointsWallet?.(true);
+    }else if(data.state==='failed'){
+      save(null);result('挑戰失敗',data.message,{again:true});
     }else{
       const message=data.state==='pending'?data.message:'尚未送出破關結果，請完成挑戰後領取獎勵。';
       taskState({...data,message});result('獎勵待確認',message,{retry:true,again:true});
@@ -173,7 +186,10 @@ async function confirmReward() {
 const recognized=['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d',' '];
 document.addEventListener('keydown',e=>{const key=e.key.length===1?e.key.toLowerCase():e.key;if(dialog?.open&&recognized.includes(key)){e.preventDefault();if(!e.repeat)initSound();keys.add(key);}});
 document.addEventListener('keyup',e=>keys.delete(e.key.length===1?e.key.toLowerCase():e.key));
-function pause(){music.pause();keys.clear();stick=0;fire=false;if(playing){paused=true;result('挑戰暫停','按繼續後恢復遊戲。',{resume:true});}}
+function pause(){music.pause();keys.clear();stick=0;fire=false;if(playing&&!paused){paused=true;cancelAnimationFrame(frame);result('挑戰暫停','按繼續後恢復遊戲。',{resume:true});if(session?.nonce)void gameEvent('game_pause',session);}}
+function resume(){if(!playing||!paused)return;paused=false;last=0;$('tank-result').hidden=true;initSound();music.start();cancelAnimationFrame(frame);frame=requestAnimationFrame(loop);if(session?.nonce)void gameEvent('game_resume',session);}
+function tankResult(){return game?{gameId:'tank_defense',state:game.state,score:game.kills*100,durationMs:game.ticks/FPS*1000}:null;}
+window.getDailyTankAdapter=options=>({gameId:'tank_defense',start:()=>start(options),pause,resume,restart:()=>start(),destroy:close,getScore:()=>game?.kills*100||0,getResult:tankResult,getProgress:()=>({kills:game?.kills||0,target:5}),setMusicEnabled:value=>{if(music.enabled!==!!value)music.toggle(playing&&!paused);},setSoundEnabled:value=>{if(audio.enabled!==!!value)audio.toggle();}});
 window.addEventListener('blur',pause);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)pause();else if(!playing)void refreshDailyTankStatus();});
 window.startDailyTankChallenge=start;window.refreshDailyTankStatus=refreshDailyTankStatus;
