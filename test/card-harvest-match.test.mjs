@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import { enrichCardHarvestMatches, harvestMatchIntentContext, harvestMatchCandidateSnapshot } from '../worker/card-harvest-match.mjs';
 import { isRewardOnlyRole } from '../worker/reward-only-cashier.mjs';
+import { restoreCollectionHistory, scoreNewCollectionMatches } from '../worker/collection-match-history.mjs';
 
 const source = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), OLD_A = 'U' + 'c'.repeat(32);
@@ -61,7 +62,7 @@ function fixture(t) {
     ACTMASTER_KV: { put() { return reject('KV write'); }, delete() { return reject('KV delete'); } }
   };
   const context = { TextEncoder, crypto: webcrypto, console: { log() {}, warn() {}, error() {} },
-    enrichCardHarvestMatches, isRewardOnlyRole, fetch() { return reject('network'); }
+    enrichCardHarvestMatches, restoreCollectionHistory, scoreNewCollectionMatches, isRewardOnlyRole, fetch() { return reject('network'); }
   };
   vm.createContext(context);
   vm.runInContext([object('ACTION_POLICIES'), object('SecurityModule'), object('AIModule'), object('D1ReadModule'),
@@ -107,8 +108,21 @@ function fixture(t) {
     const request = new Request('https://local.invalid/', {headers: token ? {Authorization: 'Bearer ' + token} : {}});
     return context.dispatch('getCardHarvestContacts', {userId: A, ...payload}, request, env);
   }
-  return { sql, env, reads, forbidden, fail, match, read, insertCard, self, dto, cache, job, load };
+  return { sql, env, reads, forbidden, fail, match, read, insertCard, self, dto, cache, job, load, dispatch:context.dispatch };
 }
+
+test('new refresh action rejects tokenless/spoofed actor without D1 fallback or AI',async t=>{
+  const f=fixture(t);
+  const request=new Request('https://local.invalid/');
+  const result=await f.dispatch('refreshCardHarvestMatches',{userId:A,authenticatedUserId:A,actor:{userId:A,token:'token-a'}},request,f.env);
+  assert.equal(result.success,false);assert.match(result.error,/Token/);assert.deepEqual(f.forbidden,[]);
+});
+
+test('real refresh dispatch reuses old score without quota or model call',async t=>{
+  const f=fixture(t);f.self({});f.insertCard('OLD');await f.cache('OLD');
+  const result=await f.dispatch('refreshCardHarvestMatches',{userId:B},new Request('https://local.invalid/',{headers:{Authorization:'Bearer token-a'}}),f.env);
+  assert.equal(result.success,true);assert.equal(result.data.processed,0);assert.equal(result.data.cards[0].aiMatch.score,85);assert.deepEqual(f.forbidden,[]);
+});
 
 test('verified collection returns existing AI and rule results with real zero and no mutations', async t => {
   const f = fixture(t); f.self(); f.insertCard('CARD_AI'); f.insertCard('CARD_RULE');
@@ -125,28 +139,30 @@ test('verified collection returns existing AI and rule results with real zero an
   assert.deepEqual(f.forbidden, []);
 });
 
-test('different requester, public pool and historical search or intent do not supply scores', async t => {
+test('same-actor historical scores survive; other requesters and public pool cannot supply them', async t => {
   const f = fixture(t); f.self(); f.insertCard('CARD');
   await f.cache('CARD', {user: B, score: 99}); await f.cache('CARD', {scope: 'public', score: 98});
   await f.cache('CARD', {intent: {...INTENT, seek: '舊需求'}, score: 97});
   await f.cache('CARD', {intentHash: 'arbitrary-query-history', score: 96});
   const result = (await f.load()).data[0].aiMatch;
-  assert.equal(result.status, 'unavailable'); assert.equal(result.score, null); assert.equal(result.reason, '');
+  assert.equal(result.status, 'completed'); assert.ok([96,97].includes(result.score)); assert.equal(result.basis, 'previous');
+  f.sql.prepare("DELETE FROM ai_match_pair_cache WHERE requester_user_id=? AND pool_scope='own'").run(A);
+  assert.equal((await f.load()).data[0].aiMatch.score, null);
 });
 
-test('changed candidate or candidate business intent invalidates cached percentage', async t => {
+test('changed candidate retains historical percentage and labels its basis', async t => {
   const f = fixture(t); f.self(); f.insertCard('CARD'); await f.cache('CARD');
   f.sql.prepare('UPDATE card_contacts SET custom_config=? WHERE row_id=?').run(JSON.stringify({businessIntent: {offer: '新服務'}}), 'CARD');
   const result = (await f.load()).data[0].aiMatch;
-  assert.equal(result.status, 'stale'); assert.equal(result.score, null); assert.equal(result.reason, '');
+  assert.equal(result.status, 'completed'); assert.equal(result.score, 85); assert.equal(result.basis, 'previous');
 });
 
-test('saved current intent, not client supplied intent or cached previous score, determines the result', async t => {
+test('changed own intent cannot hide existing score and client cannot override it', async t => {
   const f = fixture(t); f.self(); f.insertCard('CARD'); await f.cache('CARD');
   f.sql.prepare('UPDATE card_contacts SET custom_config=? WHERE row_id=?').run(JSON.stringify({businessIntent: {seek: '新市場'}}), 'SELF');
   const result = (await f.load({businessIntent: INTENT, intentHash: 'spoof'})).data[0].aiMatch;
-  assert.equal(result.status, 'unavailable'); assert.equal(result.score, null);
-  assert.equal(result.intentKey, JSON.stringify({offer: '', seek: '新市場', collaboration: ''}));
+  assert.equal(result.status, 'completed'); assert.equal(result.score, 85);
+  assert.equal(result.basis, 'previous'); assert.equal(result.intentKey, '');
 });
 
 test('payload spoofing cannot grant a score on tokenless or invalid-token D1 fallback', async t => {
@@ -175,7 +191,8 @@ test('another person claimed from this collector cannot become the collector bus
   await f.cache('CLAIMED');
   const result = await f.load();
   assert.equal(result.data.length, 1); assert.equal(result.data[0].rowId, 'CLAIMED');
-  assert.equal(result.data[0].aiMatch.status, 'needs_intent'); assert.equal(result.data[0].aiMatch.score, null);
+  assert.equal(result.data[0].aiMatch.status, 'completed'); assert.equal(result.data[0].aiMatch.score, 85);
+  assert.equal(result.data[0].aiMatch.basis, 'previous');
 });
 
 test('real self intent wins over newer claimed, archived, private, or conflicting-owner records', async t => {
@@ -196,13 +213,13 @@ test('verified identity aliases can resolve the real self card but do not read o
   await f.cache('CARD'); assert.equal((await f.load()).data[0].aiMatch.score, 85);
 });
 
-test('missing or malformed own business intent is explicit and never starts work', async t => {
+test('missing or malformed own intent permits new-card eligibility but reads never start AI', async t => {
   for (const config of ['{}', '{invalid', '{"businessIntent":{"offer":"　 ","seek":""}}']) {
     const f = fixture(t); f.self(); f.insertCard('CARD');
     f.sql.prepare('UPDATE card_contacts SET custom_config=? WHERE row_id=?').run(config, 'SELF');
     const result = (await f.load()).data[0].aiMatch;
-    assert.equal(result.status, 'needs_intent'); assert.equal(result.score, null);
-    assert.equal(f.reads.filter(entry => /ai_match_pair_cache/.test(entry.query)).length, 0);
+    assert.equal(result.status, 'pending'); assert.equal(result.score, null); assert.equal(result.autoEligible, true);
+    assert.equal(f.reads.filter(entry => /ai_match_pair_cache/.test(entry.query)).length, 1);
     assert.deepEqual(f.forbidden, []);
   }
 });
@@ -215,7 +232,7 @@ test('job states are batch-read for the actor and missing data does not imply fa
   f.insertCard('OTHER_JOB'); f.job('OTHER_JOB', 'pending', B);
   const result = await f.load();
   for (const card of result.data) {
-    const expected = ['pending', 'waiting_tags', 'waiting_intent', 'leased'].includes(card.rowId) ? 'pending' : 'unavailable';
+    const expected = 'pending';
     assert.equal(card.aiMatch.status, expected); assert.equal(card.aiMatch.score, null);
   }
   assert.equal(f.reads.filter(entry => /FROM card_uploader_match_jobs/.test(entry.query)).length, 1);
@@ -243,10 +260,10 @@ test('invalid score and unknown provenance are unavailable, not AI zero', async 
     f.insertCard(id); await f.cache(id, {score, source: origin});
   }
   const result = await f.load();
-  assert.ok(result.data.every(card => card.aiMatch.score === null && card.aiMatch.status === 'unavailable'));
+  assert.ok(result.data.every(card => card.aiMatch.score === null && card.aiMatch.status === 'pending'));
 });
 
-test('200 or 500 cards add only three bounded SELECTs, never per-card SQL', async t => {
+test('200 or 500 cards add only four bounded SELECTs including history, never per-card SQL', async t => {
   const f = fixture(t); f.self();
   for (let i = 0; i < 500; i++) f.insertCard('CARD_' + i);
   for (const limit of [200, 500]) {
@@ -254,7 +271,7 @@ test('200 or 500 cards add only three bounded SELECTs, never per-card SQL', asyn
     const result = await f.load({limit});
     assert.equal(result.data.length, limit);
     const additional = f.reads.filter(entry => /SELECT custom_config|FROM ai_match_pair_cache|FROM card_uploader_match_jobs/.test(entry.query));
-    assert.equal(additional.length, 3);
+    assert.equal(additional.length, 4);
     assert.ok(additional.every(entry => entry.args.length <= 3));
     assert.ok(additional.filter(entry => /_cache|_jobs/.test(entry.query)).every(entry => /LIMIT 500/.test(entry.query)));
     assert.deepEqual(f.forbidden, []);

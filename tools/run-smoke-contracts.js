@@ -52,6 +52,7 @@ const fullChecks = [
   'test/store-consumption-journal-ui.test.mjs',
   'test/card-harvest-match.test.mjs',
   'test/card-harvest-match-ui.test.mjs',
+  'test/collection-match-history.test.mjs',
   'test/login-bootstrap.test.mjs',
   'test/direct-phone-reward.test.mjs',
   'test/store-phone-reward.test.mjs',
