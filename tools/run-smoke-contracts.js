@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/block-supply-engine.test.mjs',
   'test/tank-engine.test.mjs',
   'test/tank-audio.test.mjs',
   'test/daily-tank-challenge.test.mjs',
