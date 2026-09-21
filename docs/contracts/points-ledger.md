@@ -74,7 +74,7 @@
 
 ## 每日簽到
 
-每日坦克挑戰為獨立任務，沿用共用點數 API 與 point_awards；每日首次破關 100 點，不更動簽到 10 點。領獎、重送與跨站交易限制詳見 [每日坦克挑戰契約](daily-tank-challenge.md)。
+LINE 遊戲館的坦克守衛與方塊補給站共用每日 100 點上限，沿用共用點數 API 與 point_awards，不更動簽到 10 點。保留既有 daily_tank_challenge 冪等鍵，防止舊前端與新遊戲各領一次。領獎、重送與跨站交易限制詳見 [遊戲館契約](game-center.md)。
 
 規則：
 

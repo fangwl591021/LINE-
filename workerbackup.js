@@ -1,6 +1,7 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { handleCrmCardPhoneLink } from './worker/crm-card-phone-link.mjs';
 import { handleDailyTank } from './worker/daily-tank-challenge.mjs';
+import { handleGameCenter } from './worker/game-center.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
 import { isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken } from './worker/reward-only-cashier.mjs';
@@ -125,6 +126,10 @@ const ACTION_POLICIES = {
   dailyTankStatus: { access: 'authenticated', ownership: 'self' },
   startDailyTank: { access: 'authenticated', ownership: 'self' },
   completeDailyTank: { access: 'authenticated', ownership: 'self' },
+  gameCenterStatus: { access: 'authenticated', ownership: 'self' },
+  startGame: { access: 'authenticated', ownership: 'self' },
+  completeGame: { access: 'authenticated', ownership: 'self' },
+  gameEvent: { access: 'authenticated', ownership: 'self' },
   listPersonalTasks: { access: 'authenticated', ownership: 'self', allowD1Fallback: true },
   savePersonalTask: { access: 'authenticated', ownership: 'self' },
   completePersonalTask: { access: 'authenticated', ownership: 'self' },
@@ -17345,6 +17350,13 @@ async function dispatchAction(action, payload, request, env) {
     case 'startDailyTank':
     case 'completeDailyTank':
       return await handleDailyTank(action, payload || {}, env, actor, {
+        findIdentity: (e, uid) => D1ReadModule.findUserByIdentity(e, uid), points: PointModule
+      });
+    case 'gameCenterStatus':
+    case 'startGame':
+    case 'completeGame':
+    case 'gameEvent':
+      return await handleGameCenter(action, payload || {}, env, actor, {
         findIdentity: (e, uid) => D1ReadModule.findUserByIdentity(e, uid), points: PointModule
       });
     case 'getStorePointCustomer': {

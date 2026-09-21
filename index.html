@@ -1066,13 +1066,18 @@
           </div>
         </section>
 
+        <section class="tank-task" aria-label="LINE 遊戲館">
+          <div class="tank-task-heading"><h3>LINE 遊戲館</h3><strong>每日共領 100 點</strong></div>
+          <p>坦克守衛挑戰 × 方塊補給站，完成任一遊戲領取每日獎勵。</p>
+          <button id="game-center-open" type="button">玩遊戲拿點數</button>
+        </section>
         <section id="daily-tank-task" class="tank-task" aria-label="每日坦克挑戰">
           <div class="tank-task-heading"><h3>坦克守衛挑戰</h3><strong>100 點</strong></div>
           <p>守住基地並擊敗 5 輛敵方坦克</p>
           <button id="daily-tank-start" type="button">開始挑戰</button>
           <button id="daily-tank-practice" type="button" hidden>再玩一次（不重複贈點）</button>
           <button id="daily-tank-confirm" type="button" hidden>重新確認獎勵</button>
-          <small id="daily-tank-status" role="status" aria-live="polite">每日首次破關贈送 100 點；以台灣日期計算。</small>
+          <small id="daily-tank-status" role="status" aria-live="polite">遊戲館每日共領 100 點；以台灣日期計算。</small>
         </section>
 
         <section id="store-point-cashier" class="hidden bg-[#FFFFAA] rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
@@ -2911,7 +2916,7 @@
 <script src="js/modules/cards.js?v=8.03"></script>
 <script src="js/modules/business-richman.js?v=1.2"></script>
 <script src="js/modules/store-invite-route.js?v=1"></script>
-<script src="js/modules/store-shop-entry.js?v=48&game=1&manage=1"></script>
+<script src="js/modules/store-shop-entry.js?v=48&game=2&manage=1"></script>
 <script src="js/modules/ecard.js?v=7.56"></script>
 <script src="js/modules/mycard.js?v=8.90"></script>
 <script src="js/modules/matchmake.js?v=7.14"></script>
@@ -2933,7 +2938,8 @@
 <script src="js/modules/purchase.js?v=1.4"></script>
 <script src="js/modules/crm.js?v=7.9"></script>
   <script src="js/modules/points-wallet-qr.js?v=1"></script>
-  <script type="module" src="js/modules/daily-tank-challenge.js?v=4"></script>
+  <script type="module" src="js/modules/daily-tank-challenge.js?v=5"></script>
+  <script type="module" src="js/modules/game-center.mjs?v=1"></script>
   <script src="js/modules/safe-cashier.js?v=2"></script>
   <script src="js/auth.js?v=11.06&manage=1"></script>
 

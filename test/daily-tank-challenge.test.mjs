@@ -12,12 +12,15 @@ function fixture() {
  const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE app_meta(key TEXT PRIMARY KEY,value TEXT,updated_at TEXT)');
  sql.exec(readFileSync(new URL('../migrations/0004_point_awards.sql',import.meta.url),'utf8'));
  sql.exec(readFileSync(new URL('../migrations/0043_daily_tank_sessions.sql',import.meta.url),'utf8'));
+ sql.exec(readFileSync(new URL('../migrations/0044_game_center.sql',import.meta.url),'utf8'));
  const f={sql,time:Date.parse('2026-09-20T03:00:00Z'),sends:0,rows:[],balance:300,mode:'success',hasUser:true};
  const db={prepare(q){return {bind(...args){return {
+  q,args,async all(){return {results:sql.prepare(q).all(...args)};},
   async first(){return sql.prepare(q).get(...args)||null;},
   async run(){if(f.failReceipt && q.startsWith('UPDATE point_awards'))throw Error('D1 unavailable');
    return {success:true,meta:{changes:Number(sql.prepare(q).run(...args).changes)}};}
  };}};}};
+ db.batch=async statements=>{sql.exec('BEGIN');try{const results=statements.map(({q,args})=>({success:true,meta:{changes:Number(sql.prepare(q).run(...args).changes)}}));sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e;}};
  db.withSession=()=>db;f.env={ACTMASTER_DB:db,MOTHER_CUS_ACCOUNT_SHOP_ID:'78'};
  f.deps={now:()=>f.time,findIdentity:async()=>f.hasUser?{user:{line_id:'line-member',point_line_id:f.member||'canonical-point'},canonicalId:'line-member'}:null,
   points:{

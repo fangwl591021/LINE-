@@ -94,6 +94,10 @@ export function recordInput(replay,mask) {
   if(last && last[1]===mask)last[0]++;else replay.push([1,mask]);
 }
 export function verifyReplay(seed,replay,elapsedMs,mapVersion=1) {
+  return verifyTankResult(seed,replay,elapsedMs,mapVersion)?.state==='won';
+}
+export function verifyTankResult(seed,replay,elapsedMs,mapVersion=1) {
+  if(!Number.isInteger(seed)||seed<0||seed>0xffffffff||!Number.isFinite(elapsedMs)||elapsedMs<0)return false;
   if(!Array.isArray(replay)||!replay.length||replay.length>MAX_TICKS)return false;
   let total=0;
   for(const pair of replay) {
@@ -107,5 +111,6 @@ export function verifyReplay(seed,replay,elapsedMs,mapVersion=1) {
     if(s.state!=='playing')return false;
     stepGame(s,mask);
   }
-  return s.state==='won' && s.kills===5 && s.lives>0 && s.base.alive;
+  if(s.state!=='won'&&s.state!=='lost')return false;
+  return {gameId:'tank_defense',state:s.state,score:s.kills*100,energy:0,clearedLines:0,kills:s.kills,lives:s.lives,durationMs:s.ticks/FPS*1000};
 }

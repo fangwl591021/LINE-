@@ -15,7 +15,7 @@ test('storefront game action reuses challenge; standalone requires login',async(
  const branch=mall.slice(mall.indexOf("case 'tank-game':"),mall.indexOf("case 'wallet':",mall.indexOf("case 'tank-game':")));
  assert.ok(branch);
  for(const standalone of [false,true]){
-  const calls=[];await vm.runInNewContext(`(async()=>{switch('tank-game'){${branch}}})()`,{standalone,location:{assign:url=>calls.push(url)},loginLink:()=>'/login',window:{startDailyTankChallenge:()=>calls.push('game')}});
+  const calls=[];await vm.runInNewContext(`(async()=>{switch('tank-game'){${branch}}})()`,{standalone,location:{assign:url=>calls.push(url)},loginLink:()=>'/login',window:{openGameCenter:()=>calls.push('game')}});
   assert.deepEqual(calls,[standalone?'/login':'game']);
  }
  await assert.rejects(vm.runInNewContext(`(async()=>{switch('tank-game'){${branch}}})()`,{standalone:false,window:{}}),/遊戲尚未載入/);
