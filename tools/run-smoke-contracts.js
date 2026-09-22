@@ -39,6 +39,8 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/gomoku.test.mjs',
+  'test/gomoku-integration.test.mjs',
   'test/block-supply-engine.test.mjs',
   'test/block-supply-audio.test.mjs',
   'test/game-center.test.mjs',

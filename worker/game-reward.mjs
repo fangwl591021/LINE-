@@ -20,8 +20,8 @@ export function gameReward(c,points,date=c.today){
   SELECT ?,?,?,?,100,'gift_money','tank_processing',?,CURRENT_TIMESTAMP
   WHERE EXISTS (SELECT 1 FROM daily_tank_sessions WHERE id=? AND status='won')`).bind(awardId,member,`${tenant}:${date}`,CHALLENGE_KEY,JSON.stringify({sessionId:session.id,date,tenantId:tenant,gameId:session.game_id}),session.id);}
  async function send(session){
-  let result;const block=session.game_id==='block_supply';
-  try{result=await points.insertUserPoint({userId:member,points:100,pointType:'gift_money',shop_id:Number(tenant),eventName:block?'每日方塊補給挑戰':'每日坦克挑戰',eventContent:`${block?'方塊補給站':'坦克守衛挑戰'} ${date} 遊戲館每日首次破關獎勵`,shop_remark:marker,skipMotherMemberSetup:true,requireConfirmedResult:true},env);}catch{result=null;}
+  let result;const names={block_supply:['每日方塊補給挑戰','方塊補給站'],gomoku:['每日喵喵五子棋挑戰','喵喵五子棋'],tank_defense:['每日坦克挑戰','坦克守衛挑戰']},[eventName,title]=names[session.game_id]||names.tank_defense;
+  try{result=await points.insertUserPoint({userId:member,points:100,pointType:'gift_money',shop_id:Number(tenant),eventName,eventContent:`${title} ${date} 遊戲館每日首次破關獎勵`,shop_remark:marker,skipMotherMemberSetup:true,requireConfirmedResult:true},env);}catch{result=null;}
   const confirmed=result?.success===true&&result?.data?.success===true,detail={...parse((await read())?.response_json),completedAt:confirmed?new Date(time).toISOString():null,pointTransactionId:confirmed?(result.data?.data?.id||result.data?.id||null):null};
   await db.prepare('UPDATE point_awards SET status=?,response_json=?,updated_at=CURRENT_TIMESTAMP WHERE award_id=?').bind(confirmed?'sent':'tank_unknown',JSON.stringify(detail),awardId).run();
   if(confirmed)await eventStatement(c,'daily_reward_granted',{session,id:`reward:${awardId}`}).run();

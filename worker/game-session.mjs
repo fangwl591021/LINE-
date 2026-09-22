@@ -2,7 +2,7 @@ export const taiwanDate=(now=Date.now())=>new Date(now+28800000).toISOString().s
 export const parse=value=>{try{return JSON.parse(value||'{}');}catch{return {};}};
 export const ok=data=>({success:true,data});
 export const fail=error=>({success:false,error});
-export const GAMES=Object.freeze(['tank_defense','block_supply']);
+export const GAMES=Object.freeze(['tank_defense','block_supply','gomoku']);
 export async function gameContext(env,actor,{findIdentity,now=Date.now}){
  if(!actor?.userId||!actor.token||actor.source==='d1_identity_fallback')throw Error('請重新進入 LINE LIFF 登入後挑戰');
  if(!env.ACTMASTER_DB)throw Error('無法取得會員資料，未贈送點數');

@@ -1,5 +1,6 @@
 import {verifyReplay as verifyBlock} from '../js/modules/block-supply-engine.mjs';
 import {verifyTankResult} from '../js/modules/tank-engine.mjs';
+import {verifyGomokuReplay} from '../js/modules/gomoku-engine.mjs';
 import {gameContext,eventStatement,sessionById,GAMES,taiwanDate,parse,ok,fail} from './game-session.mjs';
 import {gameReward} from './game-reward.mjs';
 const CLIENT_EVENTS=new Set(['game_center_view','game_card_click','game_pause','game_resume','game_exit']);
@@ -31,7 +32,7 @@ async function run(c,action,p,dep,legacy){
   const recent=await db.prepare('SELECT created_at FROM daily_tank_sessions WHERE tenant_id=? AND member_id=? ORDER BY created_at DESC LIMIT 1').bind(tenant,member).first();
   if(recent&&time-recent.created_at<1500)return fail('請稍候一下再開始挑戰');
   const mapVersion=gameId==='tank_defense'?(legacy?(p.mapVersion===2?2:1):2):1;
-  const id=(gameId==='block_supply'?'block:':mapVersion===2?'v2:':'')+crypto.randomUUID(),nonce=crypto.randomUUID(),seed=crypto.getRandomValues(new Uint32Array(1))[0];session={id,game_id:gameId};
+  const id=(gameId==='gomoku'?'gomoku:':gameId==='block_supply'?'block:':mapVersion===2?'v2:':'')+crypto.randomUUID(),nonce=crypto.randomUUID(),seed=crypto.getRandomValues(new Uint32Array(1))[0];session={id,game_id:gameId};
   await db.batch([db.prepare('INSERT INTO daily_tank_sessions (id,tenant_id,member_id,actor_id,challenge_date,seed,created_at,expires_at,game_id,nonce) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id,tenant,member,actor.userId,today,seed,time,time+20*60000,gameId,nonce),eventStatement(c,'game_start',{session,device:p.deviceType}),...(p.replay===true?[eventStatement(c,'game_replay',{session,device:p.deviceType})]:[])]);
   const row=await rewards.read();return ok({sessionId:id,nonce,gameId,seed,mapVersion,date:today,rewardPoints:100,alreadyCompleted:row?.status==='sent'});
  }
@@ -49,7 +50,8 @@ async function run(c,action,p,dep,legacy){
  let result=parse(session.result_json);
  if(session.status==='started'){
   if(session.expires_at<time||session.challenge_date!==today)return fail('挑戰已逾時或已跨日，請重新開始；尚未發點');
-  result=session.game_id==='block_supply'?verifyBlock(session.seed,p.replay,time-session.created_at):verifyTankResult(session.seed,p.replay,time-session.created_at,String(session.id).startsWith('v2:')?2:1);
+  const verify={block_supply:verifyBlock,gomoku:verifyGomokuReplay,tank_defense:verifyTankResult}[session.game_id];
+  result=verify?.(session.seed,p.replay,time-session.created_at,String(session.id).startsWith('v2:')?2:1);
   if(!result||(legacy&&result.state!=='won'))return fail('尚未通過挑戰驗證，請重新挑戰');
  }
  const won=result.state==='won',batch=[db.prepare("UPDATE daily_tank_sessions SET status=?,completed_at=?,score=?,result_json=? WHERE id=? AND status='started'").bind(result.state,time,result.score,JSON.stringify(result),session.id)];
