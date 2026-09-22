@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/scanned-card-contacts.test.mjs',
   'test/gomoku.test.mjs',
   'test/gomoku-integration.test.mjs',
   'test/block-supply-engine.test.mjs',

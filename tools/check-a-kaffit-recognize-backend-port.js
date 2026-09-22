@@ -30,14 +30,14 @@ ok(adapter.includes("['服務項目','名片說明（AI 自動撰寫，可修改
 ok(adapter.includes("window.BarcodeDetector.getSupportedFormats()")&&adapter.includes("formats.includes('qr_code')"),'Android QR detection is capability-gated');
 ok(adapter.includes("lineUrlForReview(safeLineContactUrl(qrLineUrl)||pick(source,['lineUrl'"),'decoded LINE QR URL takes priority over OCR');
 ok(adapter.includes('function serializeSocialReviewFields(root)')&&adapter.includes("if(social)card['社群帳號']=social"),'reviewed social contacts are saved as structured account data');
-ok(ecard.includes('function lineUrlFromSocialValue(value)')&&ecard.includes('const lineUrl = lineUrlFromSocialValue(social)'),'electronic-card LINE button reads structured social accounts');
+ok(ecard.includes('function lineUrlFromSocialValue(value)')&&ecard.includes('socials = JSON.parse(socials)')&&ecard.includes('socials.forEach(item => add('),'electronic-card contact buttons read structured social accounts');
 ok(ecard.includes('function buildECardDescription(card, config)')&&(ecard.match(/buildECardDescription\(card, config\)/g)||[]).length>=3,'existing cards receive a non-empty factual description fallback');
 ok(ecard.includes('function normalizeECardDescriptionText(value)')&&ecard.includes(".replace(/\\r\\n?/g, '\\n')")&&ecard.includes(".replace(/[^\\S\\n]+/g, ' ')"),'electronic-card description preserves authored line breaks');
-ok(html.includes('js/modules/ecard.js?v=7.56'),'electronic-card description fallback cache-bust is active');
+ok(html.includes('js/modules/ecard.js?v=7.57'),'electronic-card description fallback cache-bust is active');
 ok(adapter.includes('id="ak-scan-error" role="alert" aria-live="assertive"'),'OCR failure is visible inside the scan modal');
 ok(adapter.includes("showScanError(message)")&&adapter.includes("button.textContent='重新送出'"),'OCR failure keeps an actionable retry in the modal');
 ok(adapter.includes('已保留完整原圖，請核對下方資料'),'uncertain localization falls back to review instead of rejecting OCR');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.7'),'AI profile review cache-bust is active');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.8'),'AI profile review cache-bust is active');
 ok(core.includes('export function lineUrlFromId(value)'),'LINE ID conversion is deterministic on the Worker');
 ok(core.includes("!['line.me','lin.ee'].includes(host)"),'LINE URL normalization rejects untrusted hosts');
 console.log('A-kaffit recognize backend parity contract passed.');

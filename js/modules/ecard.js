@@ -199,93 +199,50 @@ function getECardButtonKind(button, index) {
 }
 
 function buildAutoECardButtons(card, existingButtons) {
-  const existing = Array.isArray(existingButtons) ? existingButtons : [];
-  const phone = readECardField('\u624b\u6a5f\u865f\u78bc', card) || readECardField('\u516c\u53f8\u96fb\u8a71', card) ||
-    readECardCardValue(card, ['mobile', 'phone', 'officePhone', 'office_phone', '\u624b\u6a5f\u865f\u78bc', '\u516c\u53f8\u96fb\u8a71']);
-  const social = readECardField('\u793e\u7fa4\u5e33\u865f', card) ||
-    readECardCardValue(card, ['socials', 'social', 'lineUrl', 'line_url', '\u793e\u7fa4\u5e33\u865f']);
-  const address = readECardField('\u516c\u53f8\u5730\u5740', card) ||
-    readECardCardValue(card, ['address', 'companyAddress', 'company_address', '\u516c\u53f8\u5730\u5740']);
-  const lineUrl = lineUrlFromSocialValue(social) || ECardAutoDefaults.lineUrl;
-  const addressUrl = buildGoogleMapsUrl(address);
+  // An explicit array is the user's choice, including deleting every button.
+  if (Array.isArray(existingButtons)) return existingButtons.map(button => ({ ...button }));
+  return buildRecognizedCardButtons(card);
+}
 
-  const auto = {
-    line: { l: '加LINE好友', u: lineUrl, c: '#06C755' },
-    phone: { l: '行動電話', u: normalizeTelValue(phone), c: '#3b82f6' },
-    address: { l: '店家地址', u: addressUrl, c: '#1e293b' }
+function buildRecognizedCardButtons(card) {
+  const buttons = [], seen = new Set();
+  const value = keys => readECardCardValue(card, keys);
+  const add = (l, u, c) => {
+    if (!u || seen.has(u)) return;
+    seen.add(u); buttons.push({ l, u, c });
   };
-
-  if (existing.length) {
-    return existing.map((button, index) => {
-      const kind = getECardButtonKind(button, index);
-      const autoButton = auto[kind];
-      if (!autoButton) return button;
-      return {
-        l: resolveECardButtonLabel(kind, button, autoButton.l),
-        u: resolveECardButtonUrl(kind, button, autoButton.u),
-        c: button?.c || autoButton.c
-      };
-    });
-  }
-
-  const used = new Set();
-  const merged = ['line', 'phone', 'address'].map(kind => {
-    const foundIndex = existing.findIndex((button, index) => !used.has(index) && getECardButtonKind(button, index) === kind);
-    const found = foundIndex >= 0 ? existing[foundIndex] : null;
-    if (foundIndex >= 0) used.add(foundIndex);
-    return {
-      l: resolveECardButtonLabel(kind, found, auto[kind].l),
-      u: resolveECardButtonUrl(kind, found, auto[kind].u),
-      c: found?.c || auto[kind].c
-    };
+  const parts = raw => String(raw || '').split(/[\n,，;；]+/).map(s => s.trim()).filter(Boolean);
+  const phones = (raw, label, color) => parts(raw).forEach(part => {
+    const phone = firstPhoneForTel(part);
+    if (phone) add(label, 'tel:' + phone, color);
   });
-
-  existing.forEach((button, index) => {
-    if (!used.has(index) && getECardButtonKind(button, index) === 'custom') {
-      merged.push(button);
-    }
+  const website = raw => {
+    const text = String(raw || '').trim();
+    if (!text || /\s/.test(text) || (/^[a-z][a-z\d+.-]*:/i.test(text) && !/^https?:\/\//i.test(text))) return '';
+    try {
+      const url = new URL(/^https?:\/\//i.test(text) ? text : 'https://' + text);
+      return /^https?:$/.test(url.protocol) && url.hostname.includes('.') && !url.username && !url.password ? url.href : '';
+    } catch { return ''; }
+  };
+  phones(value(['手機號碼', 'mobile', 'phone']), '行動電話', '#3B82F6');
+  phones(value(['公司電話', 'companyPhone', 'officePhone', 'office_phone', 'company_phone', 'tel']), '公司電話', '#0891B2');
+  parts(value(['電子郵件', 'Email', 'email'])).forEach(email => {
+    email = email.replace(/^mailto:/i, '');
+    if (/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) add('電子郵件', 'mailto:' + email, '#F59E0B');
   });
-
-  return merged;
-}
-
-function resolveECardButtonLabel(kind, found, autoLabel) {
-  const label = String(found?.l || '').trim();
-  const url = String(found?.u || '').trim();
-  if (!label) return autoLabel;
-  if (kind === 'address' && (
-    label.includes('包租公') ||
-    label.includes('簡介') ||
-    label.includes('網站') ||
-    label.includes('官網') ||
-    url === ECardAutoDefaults.legacyIntroUrl ||
-    url.includes('lihi2.me/yXhCf')
-  )) return autoLabel;
-  return label;
-}
-
-function resolveECardButtonUrl(kind, found, autoUrl) {
-  const existing = String(found?.u || '').trim();
-  const label = String(found?.l || '').trim();
-  const auto = String(autoUrl || '').trim();
-  if (!existing) return auto;
-  if (kind === 'phone' && /^tel:/i.test(existing)) {
-    const existingPhone = existing.replace(/^tel:/i, '').replace(/[^0-9+]/g, '');
-    if (!existingPhone || /x/i.test(existing)) return auto || existing;
-    return existing;
+  parts(value(['公司網址', 'websiteUrl', 'website_url', 'website', 'Website'])).forEach(url => add('官方網站', website(url), '#64748B'));
+  const address = value(['公司地址', 'address', 'companyAddress', 'company_address', '地址']);
+  if (address) add('地圖導航', 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(address), '#1E293B');
+  let socials = value(['社群帳號', 'socials', 'social', 'lineUrl', 'line_url']);
+  try { socials = JSON.parse(socials); } catch { socials = socials ? [{ t: 'LINE', u: lineUrlFromSocialValue(socials) }] : []; }
+  if (socials && !Array.isArray(socials) && typeof socials === 'object') {
+    socials = Object.entries(socials).map(([t, item]) => typeof item === 'object' ? { t, ...item } : { t, u: item });
   }
-  if (kind === 'line' && existing === ECardAutoDefaults.lineUrl) return auto || existing;
-  if (kind === 'address' && (
-    label.includes('包租公') ||
-    label.includes('簡介') ||
-    label.includes('網站') ||
-    label.includes('官網') ||
-    existing === ECardAutoDefaults.addressUrl ||
-    existing === ECardAutoDefaults.legacyIntroUrl ||
-    existing.includes('lihi2.me/yXhCf')
-  )) return auto || existing;
-  return existing;
+  if (Array.isArray(socials)) socials.forEach(item => add(String(item.t || item.type || '社群連結'), website(item.u || item.url || item.uri), '#06C755'));
+  return buttons;
 }
+window.buildRecognizedCardButtons = buildRecognizedCardButtons;
+
 
 window.currentEcardVideoEnabled = window.currentEcardVideoEnabled || false;
 window.currentEcardVideoUrl = window.currentEcardVideoUrl || '';
@@ -564,7 +521,7 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
       height: 'sm',
       action: { type: 'uri', label: btn.label.substring(0, 40), uri: btn.uri }
     }));
-  buttons = buttons.slice(0, 4);
+  // Contact cards retain every reviewed contact action.
 
   return JSON.parse(JSON.stringify({
     type: 'bubble',
@@ -625,7 +582,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
   const badgeUrl = cleanECardFlexHttpsUri(shareUrl || buildECardShareUrl(card.rowId || card.rowID || card.id || ''));
   const titleText = String(config.title || readECardCardValue(card, ['name', 'title', '\u59d3\u540d']) || '\u6578\u4f4d\u540d\u7247').trim() || '\u6578\u4f4d\u540d\u7247';
   const bodyText = buildECardDescription(card, config);
-  const buttonSource = Array.isArray(config.buttons) && config.buttons.length ? config.buttons : buildAutoECardButtons(card, []);
+  const buttonSource = buildAutoECardButtons(card, config.buttons);
   let buttons = buttonSource
     .map(btn => ({
       label: String(btn?.l || btn?.label || '').trim(),
@@ -641,7 +598,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
       action: { type: 'uri', label: btn.label.substring(0, 40), uri: btn.uri }
     }));
 
-  buttons = buttons.slice(0, 4);
+  // Contact cards retain every reviewed contact action.
 
   const bubble = {
     type: 'bubble',
@@ -770,7 +727,7 @@ window.initECardSettings = function(card) {
   if (typeof window.updateECardVideoButtonState === 'function') window.updateECardVideoButtonState();
 
   // 5. 按鈕列表
-  window.currentEcardButtons = buildAutoECardButtons(card, Array.isArray(cfg.buttons) ? cfg.buttons : []);
+  window.currentEcardButtons = buildAutoECardButtons(card, cfg.buttons);
   window.renderV1Buttons();
 
   // 6. 強制刷新預覽畫面
