@@ -106,7 +106,7 @@ function normalizeCardData(ocr,qrLineUrl=''){
   const source=unwrapOcr(ocr),out={};
   const aliases={
     '姓名':['姓名','name','displayName','fullName'],'英文名':['英文名','englishName'],'公司名稱':['公司名稱','companyName','company'],'職稱':['職稱','jobTitle','title'],'部門':['部門','department'],
-    '手機號碼':['手機號碼','mobile','phone'],'公司電話':['公司電話','companyPhone','officePhone','tel'],'電子郵件':['電子郵件','email'],'公司網址':['公司網址','websiteUrl','website'],'公司地址':['公司地址','address'],'服務項目':['profileDescription','服務項目','serviceDescription','services','description']
+    '手機號碼':['手機號碼','mobile','phone'],'公司電話':['公司電話','companyPhone','officePhone','office_phone','company_phone','tel'],'電子郵件':['電子郵件','Email','email'],'公司網址':['公司網址','websiteUrl','website_url','website','Website'],'公司地址':['公司地址','address'],'服務項目':['profileDescription','服務項目','serviceDescription','services','description']
   };
   for(const [target,keys] of Object.entries(aliases)){const value=pick(source,keys);if(value!=='')out[target]=value}
   Object.assign(out,socialReviewFields(source,qrLineUrl));
@@ -329,6 +329,9 @@ async function saveReviewedCard(modal,previewUrl){
     const card=readReviewFields(modal.querySelector('#ak-review-fields'));
     if(scanState.cropFile)applyImage(card,await uploadFinalCrop(scanState.cropFile));
     applyIndustryClassification(card,readIndustryReview(modal));
+    const cfg=JSON.parse(card['自訂名片設定']||'{}');
+    cfg.buttons=window.buildRecognizedCardButtons(card);
+    card['自訂名片設定']=JSON.stringify(cfg);
     const payload={...card,userId:'',creatorId:window.currentUserProfile?.userId||'','建檔者ID':window.currentUserProfile?.userId||'','建檔人/備註':'掃描建立 by '+(window.currentUser?.name||'')};
     const result=await window.fetchAPI('saveCard',payload,true);if(!result||!result.rowId)throw new Error(result?.error||'儲存失敗');
     if(previewUrl)URL.revokeObjectURL(previewUrl);closeModal('akaffit-card-review');

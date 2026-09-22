@@ -152,12 +152,12 @@
         };
       })
       .filter(function(button) { return !!(button && (button.l || button.u)); })
-      .slice(0, 4);
+      .slice(0, wysiwygState.recordMode ? undefined : 4);
   }
 
   function normalizeMyCardButtonsForSave(buttons) {
     if (!Array.isArray(buttons)) return [];
-    return buttons.slice(0, 4).map(function(button, index) {
+    return buttons.slice(0, wysiwygState.recordMode ? undefined : 4).map(function(button, index) {
       button = button && typeof button === 'object' ? button : {};
       var label = String(button.l || button.label || button.text || button.title || '').trim();
       var uri = String(button.u || button.url || button.uri || button.link || '').trim();
@@ -1637,7 +1637,7 @@
     cfg.buttons = Array.isArray(myEcardButtons) && myEcardButtons.length
       ? normalizeMyCardButtons(myEcardButtons)
       : normalizeMyCardButtons(Array.isArray(cfg.buttons) ? cfg.buttons : cfg.footerBtns);
-    if (!cfg.buttons.length) cfg.buttons = autoMyCardButtons(currentCardData);
+    if (!cfg.buttons.length && !wysiwygState.recordMode) cfg.buttons = autoMyCardButtons(currentCardData);
     myEcardButtons = cfg.buttons.slice();
     return cfg;
   }
@@ -1843,6 +1843,10 @@
     wysiwygState.recordMode = true;
     myEcardStateLoaded = false;
     hydrateMyECardStateFromCurrentCard();
+    var storedConfig = parseCardConfig(card);
+    if (!Array.isArray(storedConfig.buttons) && !Array.isArray(storedConfig.footerBtns)) {
+      myEcardButtons = window.buildRecognizedCardButtons(card);
+    }
     wysiwygState.cfg = getWysiwygConfig();
     writeCurrentCardConfig(wysiwygState.cfg);
     ensureWysiwygModal().classList.remove('hidden');
@@ -2111,7 +2115,7 @@
     var cfg = wysiwygState.cfg;
     if (!cfg) return;
     if (!Array.isArray(cfg.buttons)) cfg.buttons = [];
-    if (cfg.buttons.length >= 4) {
+    if (!wysiwygState.recordMode && cfg.buttons.length >= 4) {
       if (window.showToast) window.showToast('最多 4 個按鈕', true);
       return;
     }

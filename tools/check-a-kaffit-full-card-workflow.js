@@ -60,7 +60,7 @@ ok(adapter.includes('const cropFile=useOriginalImage?scanState.processedFile'), 
 ok(!adapter.includes("throw new Error('名片未完整入鏡'"), 'uncertain card edges are no longer a fatal OCR error');
 ok(adapter.includes("['社群LINE','LINE 網址']")&&adapter.includes("['社群Instagram','Instagram 網址']")&&adapter.includes("['社群Facebook','Facebook 網址']"), 'LINE Instagram and Facebook use separate review fields');
 ok(adapter.includes("if(social)card['社群帳號']=social"), 'separate social review fields retain the existing structured storage contract');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.7'), 'full workflow adapter cache-bust is active');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.8'), 'full workflow adapter cache-bust is active');
 
 ok(legacy.includes('boundingBox 必須只包住真實名片，不可包入桌面、手掌、鍵盤或其他背景'), 'OCR prompt matches A-kaffit background exclusion rule');
 ok(legacy.includes('incomplete=true') && legacy.includes('clippedEdges'), 'OCR prompt preserves incomplete-card contract');
