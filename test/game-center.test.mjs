@@ -13,7 +13,7 @@ test('either game first shares exactly one award with legacy tank API; practice 
   const z=blockFirst?await f.finish(t,tank.replay,true):await f.finish(b,block.replay);
   assert(a.data.awarded);assert(z.data.alreadyCompleted);assert(z.data.scoreSaved);assert.equal(f.sends,1);assert.equal(f.balance,400);
   assert.equal(f.sql.prepare('SELECT count(*) n FROM point_awards').get().n,1);
-  const stats=(await f.call('gameCenterStatus')).data;assert.equal(stats.state,'completed');assert(stats.games.every(g=>g.completedToday&&g.bestScore>0));assert.equal(stats.streak,1);assert.equal(stats.weeklyCompletions,2);
+  const stats=(await f.call('gameCenterStatus')).data;assert.equal(stats.state,'completed');assert(stats.games.filter(g=>g.gameId!=='gomoku').every(g=>g.completedToday&&g.bestScore>0));assert.deepEqual(stats.games.find(g=>g.gameId==='gomoku'),{gameId:'gomoku',bestScore:0,completedToday:false});assert.equal(stats.streak,1);assert.equal(stats.weeklyCompletions,2);
   assert.equal((await f.legacy('dailyTankStatus')).data.state,'completed');
   const again=await f.start();f.time+=20000;assert((await f.finish(again,block.replay)).data.alreadyCompleted);assert.equal(f.sends,1);assert.equal((await f.call('gameCenterStatus')).data.weeklyCompletions,3);
  }finally{f.sql.close();}}

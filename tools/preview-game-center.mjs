@@ -12,14 +12,14 @@ export function createGameCenterPreview(){
  window.fetchAPI=async(action,payload={})=>{const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,payload})});return r.json();};
  window.renderPointBalanceState=(s,d)=>document.querySelector('#preview-balance').textContent=d.balance;window.loadPointsWallet=async()=>{};
  </script><script type="module" src="/js/modules/daily-tank-challenge.js?v=5"></script><script type="module" src="/js/modules/game-center.mjs?v=1"></script></body></html>`;
- const assets=new Set(['css/daily-tank.css','css/game-center.css','css/block-supply.css','js/modules/daily-tank-challenge.js',...['game-center','game-session','block-supply-controller','block-supply-engine','block-supply-renderer','block-supply-audio','tank-engine','tank-renderer','tank-audio','tank-music'].map(n=>`js/modules/${n}.mjs`)]);
+ const assets=new Set(['assets/gomoku/cat-friends-v1.png','css/gomoku.css','css/daily-tank.css','css/game-center.css','css/block-supply.css','js/modules/daily-tank-challenge.js',...['gomoku-controller','gomoku-engine','gomoku-ai-worker','gomoku-audio','game-center','game-session','block-supply-controller','block-supply-engine','block-supply-renderer','block-supply-audio','tank-engine','tank-renderer','tank-audio','tank-music'].map(n=>`js/modules/${n}.mjs`)]);
  const server=createServer(async(req,res)=>{res.setHeader('Cache-Control','no-store');try{
   const path=new URL(req.url,'http://localhost').pathname.slice(1);
   if(req.method==='POST'&&path==='api'){let body='';for await(const p of req){body+=p;if(body.length>180000){res.writeHead(413);res.end();return;}}const {action,payload}=JSON.parse(body);const result=await (['dailyTankStatus','startDailyTank','completeDailyTank'].includes(action)?f.legacy(action,payload):f.call(action,payload));res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));return;}
   if(!path){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(html);return;}
-  if(assets.has(path)){res.setHeader('Content-Type',path.endsWith('.css')?'text/css':'text/javascript');res.end(readFileSync(new URL(path,root)));return;}
+  if(assets.has(path)){res.setHeader('Content-Type',path.endsWith('.png')?'image/png':path.endsWith('.css')?'text/css':'text/javascript');res.end(readFileSync(new URL(path,root)));return;}
   res.writeHead(404);res.end();
  }catch{res.writeHead(500);res.end('Local preview error');}});
  return {server,fixture:f,close:()=>new Promise(resolve=>server.close(()=>{f.sql.close();resolve();}))};
 }
-if(process.argv[1]===fileURLToPath(import.meta.url))createGameCenterPreview().server.listen(8793,'127.0.0.1',()=>console.log('Game center preview http://127.0.0.1:8793/ (synthetic points only)'));
+if(process.argv[1]===fileURLToPath(import.meta.url)){const port=Number(process.env.GAME_CENTER_PREVIEW_PORT||8793);createGameCenterPreview().server.listen(port,'127.0.0.1',()=>console.log(`Game center preview http://127.0.0.1:${port}/ (synthetic points only)`));}

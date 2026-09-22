@@ -74,7 +74,7 @@
 
 ## 每日簽到
 
-LINE 遊戲館的坦克守衛與方塊補給站共用每日 100 點上限，沿用共用點數 API 與 point_awards，不更動簽到 10 點。保留既有 daily_tank_challenge 冪等鍵，防止舊前端與新遊戲各領一次。領獎、重送與跨站交易限制詳見 [遊戲館契約](game-center.md)。
+LINE 遊戲館的坦克守衛、方塊補給站與喵喵五子棋共用每日 100 點上限，沿用共用點數 API 與 point_awards，不更動簽到 10 點。保留既有 daily_tank_challenge 冪等鍵，防止舊前端與新遊戲各領一次。領獎、重送與跨站交易限制詳見 [遊戲館契約](game-center.md)。
 
 規則：
 
