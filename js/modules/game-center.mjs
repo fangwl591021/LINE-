@@ -14,8 +14,17 @@ function ensure(){
  $('.gc-note').textContent='三款遊戲共用每日 100 點上限 · 台灣時間每日重置。已領獎仍能挑戰並保存成績；自由練習不計分、不發點，簽到獎勵不受影響。';
  const gomokuButton=$('[data-game="gomoku"]');gomokuButton.textContent='每日挑戰 · 標準難度';
  const practice=document.createElement('button');practice.dataset.gc='practice';practice.textContent='自由練習 · 三種難度';gomokuButton.after(practice);
+ const explore=document.createElement('article');
+ explore.innerHTML='<div class="gc-cover" aria-hidden="true"><span>🎲</span><small>EXPLORE THE STORES</small></div><div class="gc-card-content"><h2>商城大富翁</h2><p>擲骰前進，隨機逛逛已上架的商城。</p><p>自由探索 · 不贈點、不列入每日挑戰</p><button data-gc="explore-store">開始逛商城</button></div>';
+ $('.gc-cards').append(explore);
  dialog.addEventListener('cancel',e=>{if(e.target!==dialog)return;e.preventDefault();close();});
- dialog.addEventListener('click',e=>{const b=e.target.closest('[data-gc]');if(!b)return;const action=b.dataset.gc;if(action==='close')close();if(action==='refresh')void refresh();if(action==='play')void play(b.dataset.game);if(action==='practice')void practiceGomoku();if(action==='confirm')void confirm();});
+ dialog.addEventListener('click',e=>{const b=e.target.closest('[data-gc]');if(!b)return;const action=b.dataset.gc;if(action==='close')close();if(action==='refresh')void refresh();if(action==='play')void play(b.dataset.game);if(action==='practice')void practiceGomoku();if(action==='explore-store')exploreStores();if(action==='confirm')void confirm();});
+}
+function exploreStores(){
+ if(busy||!current())return;
+ if(typeof window.openStoreRichman!=='function'){$('[data-gc-status]').textContent='商城大富翁尚未載入，請重新整理。';return;}
+ const returnPage=window.currentPage||'home';close();
+ void window.openStoreRichman({onExit:()=>{window.goPage(returnPage,true);openGameCenter();}});
 }
 function close(){generation++;clearTimeout(midnightTimer);controller?.destroy();controller=null;currentSession=null;dialog?.close();document.documentElement.style.overflow=dialog?.dataset.overflow||'';returnFocus?.focus?.();}
 async function refresh(){

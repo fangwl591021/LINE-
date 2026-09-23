@@ -11,6 +11,7 @@
   var providers = Object.create(null);
   var state = null;
   var loadingPromise = null;
+  var mode = 'card', generation = 0, activeOwner = '', exitAction = null, opening = false;
 
   var labels = {
     title: '\u5546\u8108\u5927\u5bcc\u7fc1',
@@ -58,6 +59,10 @@
     5: 'rotateX(-90deg) rotateY(0deg)',
     6: 'rotateX(0deg) rotateY(180deg)'
   };
+  var cardLabels = labels;
+  function isCurrent(version, owner) {
+    return version === generation && owner === userKey() && window.currentPage === 'business-richman';
+  }
 
   function clean(value) {
     return value === null || value === undefined ? '' : String(value).trim();
@@ -190,7 +195,7 @@
   }
 
   function storageKey() {
-    return ['business-richman', STORAGE_VERSION, userKey(), dayKey(), 'card'].join(':');
+    return ['business-richman', STORAGE_VERSION, userKey(), dayKey(), mode].join(':');
   }
 
   function readSaved(tileMap) {
@@ -202,15 +207,16 @@
       var savedDie1 = Math.max(1, Math.min(Number(saved.dice1 || saved.dice) || 1, 6));
       var savedDie2 = Math.max(1, Math.min(Number(saved.dice2) || 1, 6));
       return {
-        mode: 'card',
+        mode: mode,
+        lastId: clean(saved.lastId),
+        arrived: mode === 'store' ? tileMap.get(clean(saved.lastId)) || null : null,
         tiles: tiles,
         position: Math.max(0, Math.min(Number(saved.position) || 0, path.length - 1)),
         round: Math.max(1, Number(saved.round) || 1),
         dice: savedDie1 + savedDie2,
         dice1: savedDie1,
         dice2: savedDie2,
-        rolling: false,
-        arrived: null
+        rolling: false
       };
     } catch (_) {
       return null;
@@ -222,6 +228,7 @@
     try {
       window.sessionStorage.setItem(storageKey(), JSON.stringify({
         version: STORAGE_VERSION,
+        lastId: state.lastId || '',
         order: state.tiles.map(function (tile) { return tile.id; }),
         position: state.position,
         round: state.round,
@@ -240,8 +247,8 @@
     var saved = readSaved(unique);
     if (saved) return saved;
     return {
-      mode: 'card',
-      tiles: shuffle(Array.from(unique.values())).slice(0, path.length),
+      mode: mode,
+      tiles: shuffle(Array.from(unique.values())).slice(0, mode === 'store' ? 40 : path.length),
       position: 0,
       round: 1,
       dice: 2,
@@ -284,6 +291,7 @@
     style.id = 'business-richman-styles';
     style.textContent = [
       '#' + PAGE_ID + '{min-height:calc(100vh - 76px);background:linear-gradient(180deg,#ecfdf5,#f8fafc 45%,#fff);color:#0f172a;padding-bottom:96px}',
+      '#business-richman-feedback[hidden]{display:none}',
       '.br-header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:14px 16px;background:rgba(255,255,255,.94);border-bottom:1px solid #d1fae5;backdrop-filter:blur(12px)}',
       '.br-back{width:40px;height:40px;border-radius:999px;border:1px solid #dbe5e1;background:#fff;color:#0f5c4c;display:flex;align-items:center;justify-content:center}.br-title{font-size:20px;line-height:1.1;font-weight:900;color:#064338}.br-subtitle{margin-top:3px;font-size:11px;font-weight:800;color:#64748b}',
       '.br-modes{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 14px 0}.br-mode{min-height:44px;border-radius:14px;border:1px solid #a7f3d0;background:#fff;color:#047857;font-size:13px;font-weight:900}.br-mode.active{background:#047857;color:#fff}.br-mode:disabled{border-color:#e2e8f0;background:#f8fafc;color:#94a3b8}',
@@ -308,10 +316,11 @@
   function markup() {
     return [
       '<header class="br-header">',
-      '<button type="button" class="br-back" onclick="window.goPage(\'home\')" aria-label="' + labels.back + '"><span class="material-symbols-outlined">arrow_back</span></button>',
+      '<button type="button" class="br-back" onclick="window.exitBusinessRichman()" aria-label="' + labels.back + '"><span class="material-symbols-outlined">arrow_back</span></button>',
       '<div><h2 class="br-title">' + labels.title + '</h2><p class="br-subtitle">' + labels.subtitle + '</p></div></header>',
-      '<div class="br-modes"><button type="button" class="br-mode active"><span class="material-symbols-outlined align-middle text-[18px]">groups</span> ' + labels.peopleMode + '</button>',
+      '<div class="br-modes"><button type="button" class="br-mode active"><span class="material-symbols-outlined align-middle text-[18px]">' + (mode === 'store' ? 'storefront' : 'groups') + '</span> ' + labels.peopleMode + '</button>',
       '<button type="button" class="br-mode" disabled><span class="material-symbols-outlined align-middle text-[18px]">redeem</span> ' + labels.offerMode + '</button></div>',
+      '<div id="business-richman-feedback" role="status" class="br-status" hidden></div>',
       '<div id="business-richman-content"><div class="br-empty"><h3>' + labels.loading + '</h3><p>' + labels.privateNote + '</p></div></div>',
       '<div id="business-richman-modal" class="br-modal hidden" role="dialog" aria-modal="true" aria-labelledby="business-richman-modal-title">',
       '<div class="br-dialog"><div class="br-dialog-head"><div id="business-richman-modal-avatar"></div><div class="min-w-0"><span class="text-[11px] font-black text-emerald-600">' + labels.arrived + '</span><h3 id="business-richman-modal-title"></h3><p id="business-richman-modal-subtitle"></p></div></div>',
@@ -343,7 +352,7 @@
     var content = document.getElementById('business-richman-content');
     if (!content || !state) return;
     if (!state.tiles.length) {
-      content.innerHTML = '<div class="br-empty"><h3>' + labels.noContacts + '</h3><p>' + labels.noContactsNote + '</p><button type="button" onclick="window.goPage(\'card\')">' + labels.goCards + '</button></div>';
+      content.innerHTML = '<div class="br-empty"><h3>' + labels.noContacts + '</h3><p>' + labels.noContactsNote + '</p><button type="button" onclick="' + (mode === 'store' ? 'window.retryBusinessRichman()' : 'window.goPage(\'card\')') + '">' + labels.goCards + '</button></div>';
       return;
     }
 
@@ -353,7 +362,7 @@
     var publicCount = state.tiles.filter(function (tile) { return tile.origin === 'public'; }).length;
     var collectedCount = state.tiles.length - publicCount;
     status.innerHTML = '<span>' + labels.boardCount + ' <strong>' + state.tiles.length + '</strong> ' + labels.peopleUnit +
-      '<small>' + labels.collectedShort + ' ' + collectedCount + ' \u30fb ' + labels.publicShort + ' ' + publicCount + '</small></span><button type="button" class="br-reset" onclick="window.resetBusinessRichman()">' + labels.reset + '</button>';
+      '<small>' + (mode === 'store' ? '隨機探索已上架店家・不贈點' : labels.collectedShort + ' ' + collectedCount + ' \u30fb ' + labels.publicShort + ' ' + publicCount) + '</small></span><button type="button" class="br-reset" onclick="window.resetBusinessRichman()"' + (state.rolling ? ' disabled' : '') + '>' + labels.reset + '</button>';
     content.appendChild(status);
 
     var wrap = document.createElement('div');
@@ -364,13 +373,14 @@
 
     path.forEach(function (point, index) {
       var tile = state.tiles[index % state.tiles.length];
+      if (mode === 'store' && index === state.position && state.arrived) tile = state.arrived;
       var button = document.createElement('button');
       button.type = 'button';
       button.className = 'br-tile' + (index === state.position ? ' current' : '');
       button.style.gridRow = String(point.row);
-      button.disabled = tile.type !== 'card' || index !== state.position;
+      button.disabled = !providers[tile.type] || index !== state.position || state.rolling;
       button.style.gridColumn = String(point.column);
-      if (tile.type === 'card') {
+      if (providers[tile.type]) {
         var source = document.createElement('span');
         source.className = 'br-origin' + (tile.origin === 'public' ? ' public' : '');
         source.textContent = tile.sourceLabel;
@@ -400,6 +410,7 @@
     board.appendChild(center);
     wrap.appendChild(board);
     content.appendChild(wrap);
+    if (state.rolling) rollingUi(true, false);
   }
 
   function wait(milliseconds) {
@@ -416,7 +427,7 @@
     }
   }
 
-  async function animateDice(dice1, dice2) {
+  async function animateDice(dice1, dice2, current) {
     var first = document.getElementById('business-richman-dice-1');
     var second = document.getElementById('business-richman-dice-2');
     if (!first || !second) return;
@@ -428,6 +439,7 @@
     void second.offsetWidth;
     rollingUi(true, true);
     await wait(DICE_ROLL_MS);
+    if (!current()) return;
     first.classList.remove('rolling');
     second.classList.remove('rolling');
     first.style.transform = DICE_ROTATIONS[dice1];
@@ -438,33 +450,50 @@
   }
 
   async function roll() {
-    if (!state || state.rolling || !state.tiles.length) return;
+    if (!state || state.rolling || opening || !state.tiles.length || activeOwner !== userKey()) return;
+    var version = generation, owner = activeOwner, roundState = state;
+    if (!isCurrent(version, owner)) return;
     state.rolling = true;
+    if (mode === 'store') state.arrived = null;
+    var feedback = document.getElementById('business-richman-feedback');
+    if (feedback) feedback.hidden = true;
+    try {
     var dice1 = randomIndex(6) + 1;
     var dice2 = randomIndex(6) + 1;
     var total = dice1 + dice2;
     state.dice1 = dice1;
     state.dice2 = dice2;
     state.dice = total;
-    await animateDice(dice1, dice2);
+    await animateDice(dice1, dice2, function () { return isCurrent(version, owner); });
+    if (!isCurrent(version, owner)) return;
     rollingUi(true, false);
     for (var step = 0; step < total; step += 1) {
       state.position = (state.position + 1) % path.length;
       render();
       rollingUi(true, false);
       await wait(STEP_DELAY_MS);
+      if (!isCurrent(version, owner)) return;
     }
     state.round += 1;
-    state.rolling = false;
     save();
     render();
     await wait(ARRIVAL_DELAY_MS);
+    if (!isCurrent(version, owner)) return;
     var arrived = state.tiles[state.position % state.tiles.length];
-    if (arrived) showArrival(arrived);
+    if (providers[mode].choose) arrived = providers[mode].choose(state.tiles, state.lastId);
+    if (arrived) await showArrival(arrived);
+    } finally {
+      roundState.rolling = false;
+      if (isCurrent(version, owner)) render();
+    }
   }
 
   function showArrival(tile) {
-    if (!tile || tile.type !== 'card') return;
+    if (!tile || !providers[tile.type] || activeOwner !== userKey()) return;
+    if (mode === 'store') {
+      state.arrived = tile; state.lastId = tile.id; save(); render();
+      return window.openBusinessRichmanCard();
+    }
     var modal = document.getElementById('business-richman-modal');
     var avatarHost = document.getElementById('business-richman-modal-avatar');
     var title = document.getElementById('business-richman-modal-title');
@@ -543,33 +572,44 @@
     }
   };
 
-  window.openBusinessRichman = function () {
-    if (typeof window.goPage === 'function') window.goPage('business-richman');
-    return window.initBusinessRichman();
+  window.openBusinessRichman = function (options) {
+    if (typeof window.goPage === 'function') window.goPage('business-richman', true);
+    return window.initBusinessRichman(options);
   };
 
   window.initBusinessRichman = function (options) {
     options = options || {};
     var page = document.getElementById(PAGE_ID);
     if (!page) return Promise.resolve();
+    var requestedMode = options.mode === 'store' && providers.store ? 'store' : 'card';
+    if (options.resume && mode === requestedMode && activeOwner === userKey() && state) { render(); return Promise.resolve(); }
+    if (loadingPromise && !options.force && mode === requestedMode && activeOwner === userKey()) return loadingPromise;
+    var version = ++generation, owner = userKey();
+    mode = requestedMode; activeOwner = owner; state = null; opening = false;
+    labels = mode === 'card' ? cardLabels : Object.assign({}, cardLabels, providers[mode].labels);
+    exitAction = typeof options.onExit === 'function' ? options.onExit : null;
     installStyles();
-    if (page.dataset.ready !== '1') {
+    if (page.dataset.ready !== mode) {
       page.innerHTML = markup();
-      page.dataset.ready = '1';
+      page.dataset.ready = mode;
     }
-    if (loadingPromise && !options.force) return loadingPromise;
+    document.getElementById('business-richman-content').innerHTML = '<div class="br-empty"><h3>' + labels.loading + '</h3><p>' + labels.privateNote + '</p></div>';
+    document.getElementById('business-richman-feedback').hidden = true;
+    closeArrival();
     loadingPromise = (async function () {
       try {
-        var tiles = await providers.card.load();
+        var tiles = await providers[mode].load();
+        if (!isCurrent(version, owner)) return;
         state = createState(tiles);
         save();
         render();
       } catch (error) {
+        if (!isCurrent(version, owner)) return;
         console.error('[business-richman] contact load failed:', error);
         var content = document.getElementById('business-richman-content');
-        if (content) content.innerHTML = '<div class="br-empty"><h3>' + labels.loadFailed + '</h3><p>' + labels.retryNote + '</p><button type="button" onclick="window.initBusinessRichman({force:true})">' + labels.retry + '</button></div>';
+        if (content) content.innerHTML = '<div class="br-empty"><h3>' + labels.loadFailed + '</h3><p>' + labels.retryNote + '</p><button type="button" onclick="window.retryBusinessRichman()">' + labels.retry + '</button></div>';
       } finally {
-        loadingPromise = null;
+        if (version === generation) loadingPromise = null;
       }
     })();
     return loadingPromise;
@@ -579,14 +619,38 @@
   window.closeBusinessRichmanCard = closeArrival;
   window.openBusinessRichmanCard = async function () {
     var tile = state && state.arrived;
-    if (!tile) return;
+    if (!tile || opening || activeOwner !== userKey()) return;
+    var version = generation, owner = activeOwner, onExit = exitAction;
+    if (!isCurrent(version, owner)) return;
+    opening = true;
     closeArrival();
     var provider = providers[tile.type];
-    if (provider && typeof provider.open === 'function') await provider.open(tile);
+    try {
+      if (provider && typeof provider.open === 'function') await provider.open(tile, {isCurrent:function(){return isCurrent(version,owner);},onBack:function(){
+        if (version !== generation) return;
+        if (owner === userKey()) return window.openBusinessRichman({mode:tile.type,resume:true,onExit:onExit});
+        window.goPage('home');
+      }});
+    } catch (error) {
+      if (isCurrent(version,owner)) {
+        var feedback = document.getElementById('business-richman-feedback');
+        if (feedback) {
+          feedback.hidden = false; feedback.textContent = error.message || labels.retryNote;
+          var retry = document.createElement('button'); retry.type = 'button'; retry.className = 'br-reset'; retry.textContent = '重試開啟'; retry.onclick = window.openBusinessRichmanCard; feedback.appendChild(retry);
+        }
+      }
+    } finally { if (version === generation) opening = false; }
+  };
+  window.retryBusinessRichman = function () { return window.initBusinessRichman({mode:mode,force:true,onExit:exitAction}); };
+  window.exitBusinessRichman = function () {
+    generation++; loadingPromise = null; opening = false; closeArrival();
+    if (state) state.rolling = false;
+    if (exitAction) exitAction(); else window.goPage('home');
   };
   window.resetBusinessRichman = function () {
+    if (state && state.rolling || opening) return;
     try { window.sessionStorage.removeItem(storageKey()); } catch (_) {}
     state = null;
-    return window.initBusinessRichman({ force: true });
+    return window.retryBusinessRichman();
   };
 })();
