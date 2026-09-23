@@ -71,7 +71,7 @@ function fixture(options = {}) {
   };
   const env = { ACTMASTER_DB: db, ACTMASTER_KV: new Proxy({}, { get() { throw new Error('Unexpected KV access'); } }) };
   const fetcher = async (url, init) => {
-    calls.push({ url, init }); assert.equal(url, 'https://api.line.me/v2/profile'); assert.ok(init.signal instanceof AbortSignal); assert.equal(init.redirect, 'error');
+    calls.push({ url, init }); assert.equal(url, 'https://api.line.me/v2/profile'); assert.ok(init.signal instanceof AbortSignal); assert.equal(init.redirect, 'manual');
     if (options.authFailure) throw new Error('upstream secret failure');
     if (options.authResponse) return options.authResponse();
     const token = init.headers.Authorization.slice(7), uid = { admin: A, store: B, user: C, reward: D, alias: E, canonical: HARD_ADMIN }[token];
@@ -238,6 +238,18 @@ test('invalid LINE profile, oversized bodies, upstream errors and malformed JSON
     [{ authResponse: () => new Response('{}', { headers: { 'Content-Length': '10000' } }) }, 503]
   ]) {
     const f = fixture(options); try { const result = await f.call(); assert.equal(result.status, expected); assert.equal(f.queries.length, 0); assert.doesNotMatch(JSON.stringify(result), /secret failure|SQL/); } finally { f.sql.close(); }
+  }
+});
+
+test('LINE redirects are never followed or accepted, even with a valid-looking profile body', async () => {
+  for (const status of [301, 302, 303, 307, 308]) {
+    const f = fixture({ authResponse: () => Response.json({ userId: A }, { status, headers: { Location: 'https://untrusted.invalid/profile' } }) });
+    try {
+      const result = await f.call();
+      assert.equal(result.status, 503); assert.equal(result.code, 'AUTH_UNAVAILABLE');
+      assert.equal(f.calls.length, 1); assert.equal(f.calls[0].init.redirect, 'manual');
+      assert.equal(f.queries.length, 0); assert.equal(f.mapped.length, 0);
+    } finally { f.sql.close(); }
   }
 });
 

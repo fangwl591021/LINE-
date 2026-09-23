@@ -41,7 +41,8 @@ async function authenticatedUid(request, fetcher) {
   let response, profile;
   try {
     response = await fetcher('https://api.line.me/v2/profile', {
-      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000), redirect: 'error'
+      // Workers supports manual/follow only. Reject 3xx below without forwarding credentials.
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000), redirect: 'manual'
     });
   } catch { fail('AUTH_UNAVAILABLE', 'LINE 身分驗證暫時無法完成，請稍後重試', 503); }
   if (response.status === 401 || response.status === 403) fail('AUTH_EXPIRED', '登入已失效，請重新登入', 401);

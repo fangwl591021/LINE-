@@ -26,7 +26,7 @@ function fixture(){
     catch(error){sql.exec('ROLLBACK');throw error;}
   }};
   const fetcher=async(url,options)=>{
-    assert.equal(url,'https://api.line.me/v2/profile');assert.equal(options.redirect,'error');
+    assert.equal(url,'https://api.line.me/v2/profile');assert.equal(options.redirect,'manual');
     const value=options.headers.Authorization.slice(7);
     return /^U[0-9a-f]{32}$/.test(value)?Response.json({userId:value}):new Response('',{status:401});
   };
