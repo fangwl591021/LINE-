@@ -85,6 +85,38 @@ test('portal shows own product data and routes all data queries back to chat',as
  assert(actions.filter(a=>a.type==='uri').every(a=>a.uri.endsWith('shopSection=manage')));
 });
 
+test('portal alone enlarges all text while preserving every action and wrapping long labels',async t=>{
+ const f=fixture(t);
+ const title='長商品名稱'.repeat(16);
+ f.sql.prepare("UPDATE store_shop_products SET title=? WHERE id='p-s-a'").run(title);
+ const p=await buildShopKeywordMessage(event('店家專區'),f.env),bubble=p.contents;
+ assert.equal(bubble.size,'giga');assert.equal(bubble.header.contents[0].size,'xl');
+ for(const node of bubble.body.contents){assert.equal(node.size,'lg');assert.equal(node.wrap,true);assert.equal(node.maxLines,undefined);assert.equal(node.lineSpacing,'4px');}
+ assert(bubble.body.contents.some(node=>node.text.startsWith(title+'\n')));
+ const actions=bubble.footer.contents.map(node=>node.action);
+ assert.deepEqual(actions.slice(0,4),[
+  {type:'message',label:'我的商品',text:'商城商品'},
+  {type:'message',label:'我的業績',text:'商城業績'},
+  {type:'message',label:'我的網購訂單',text:'商城訂單'},
+  {type:'message',label:'商城儀錶板',text:'儀錶板'}
+ ]);
+ assert.deepEqual(actions[4],{type:'uri',label:'新增／編輯商品（網頁）',uri:'https://liff.line.me/1660923784-vViMTZ1y?shopSection=manage'});
+ for(const node of bubble.footer.contents){
+  assert.equal(node.type,'box');assert.equal(node.paddingAll,'12px');assert.equal(node.height,undefined);
+  assert.equal(node.contents[0].text,node.action.label);assert.equal(node.contents[0].size,'lg');assert.equal(node.contents[0].wrap,true);assert.equal(node.contents[0].maxLines,undefined);
+ }
+ assert(Buffer.byteLength(JSON.stringify(bubble))<30000);
+ for(const keyword of ['商城商品','商城訂單','商城業績','儀錶板']){
+  const other=(await buildShopKeywordMessage(event(keyword),f.env)).contents;
+  assert.equal(other.size,'mega');assert.equal(other.header.contents[0].size,'lg');
+  assert(other.body.contents.every(node=>node.size==='sm'));
+  assert(other.footer.contents.every(node=>node.type==='button'));
+ }
+ const member=(await buildShopKeywordMessage(event('店家專區',C),f.env)).contents;
+ assert(member.body.contents.every(node=>node.size==='lg'));
+ assert.deepEqual(member.footer.contents.map(node=>node.action.label),['我的商品','新增／編輯商品（網頁）']);
+});
+
 test('product pagination stays owner scoped and has stable bounded pages',async t=>{
  const f=fixture(t);
  for(let i=1;i<=11;i++)f.sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES(?,'s-a',?,12345,'draft','2026-09-11',?)").run('extra-'+String(i).padStart(2,'0'),'商品序號'+i,'extra-'+i);
