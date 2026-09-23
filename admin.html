@@ -486,6 +486,10 @@
             <span class="material-symbols-outlined mr-3 text-[20px]">tune</span>
             名片額度設定
           </a>
+          <a href="#" onclick="switchTab('mall'); return false" id="nav-mall" class="nav-item hidden flex items-center px-4 py-3 rounded-xl text-sm font-bold">
+            <span class="material-symbols-outlined mr-3 text-[20px]">storefront</span>
+            商城店家／商品管理
+          </a>
           <a href="#" onclick="switchTab('partners')" id="nav-partners" class="nav-item hidden flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">storefront</span>
             合作店家管理
@@ -920,6 +924,9 @@
       </div>
 
       <!-- Tab: Point Redemption Partners -->
+      <div id="tab-mall" class="tab-content hidden space-y-6">
+        <div id="admin-mall-content" class="min-w-0" aria-label="商城店家與商品管理"></div>
+      </div>
       <div id="tab-partners" class="tab-content hidden space-y-6">
         <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div><h2 class="text-2xl font-black text-slate-900">合作店家管理</h2><p class="mt-2 text-sm text-slate-500">建立折抵店家、主要服務據點與未來點數折抵政策；本階段不執行扣點。</p></div>
@@ -2201,6 +2208,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (tabId === 'checkin-content') loadSystemCheckinContents();
       if (tabId === 'system-ticker') loadSystemTicker();
       if (tabId === 'partners') loadPartnerAdmin();
+      if (tabId === 'mall') void loadAdminMall();
     }
 
     function lineOAKeywordValue(id) {
@@ -5696,6 +5704,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           adminRole = check.info.role || 'store';
           adminNetworkId = check.info.networkId || check.info.storeId || 'admin';
           document.getElementById('nav-partners')?.classList.toggle('hidden', adminRole !== 'admin');
+          document.getElementById('nav-mall')?.classList.toggle('hidden', adminRole !== 'admin');
           loadSavedAdminCrmFilters();
           applyAdminCrmFilterControls();
           document.getElementById('loading-screen').classList.add('fade-out');
@@ -5724,6 +5733,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   </script>
   <script src="js/modules/partner-onboarding.js?v=1"></script>
   <script src="js/modules/admin-partners-dashboard.js?v=1.2"></script>
+  <script src="js/modules/admin-mall-dashboard.js?v=1"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
 </body>
 </html>

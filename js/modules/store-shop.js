@@ -159,9 +159,9 @@
       content.innerHTML='<button type="button" data-do="manage">返回商城管理</button><p role="status">載入管理員店家列表…</p>';
       const sameSession=()=>canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&sameSession();
-      const module=await import('./store-admin.js?v=3');
+      const module=await import('./store-admin.js?v=4');
       if(!current())return;
-      await module.mountStoreAdmin(content,{api,isCurrent:current,onUploadProducts:id=>run(()=>adminProducts(id)),onManagePartners:()=>window.goPage('admin-partners'),onBack:()=>run(()=>manage()),onView:async id=>{
+      await module.mountStoreAdmin(content,{api,isCurrent:current,onReviewDrafts:()=>run(()=>adminDrafts()),onManageCatalog:id=>run(()=>adminCatalog(id)),onUploadProducts:id=>run(()=>adminProducts(id)),onManagePartners:()=>window.goPage('admin-partners'),onBack:()=>run(()=>manage()),onView:async id=>{
         if(!current())return;
         await run(async()=>{
           await view(id);
@@ -169,6 +169,32 @@
             content.insertAdjacentHTML('afterbegin','<button type="button" data-do="admin-stores">← 返回店家列表</button>');
         });
       }});
+    }
+    async function adminDrafts() {
+      if(!canAdmin())throw new Error('商城草稿僅開放管理員');
+      const owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
+      if(!owner||!token)throw new Error('請先使用管理員帳號登入');
+      pageKind('admin-drafts');const version=++epoch;alert.textContent='';
+      const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
+      const module=await import('./store-admin-catalog.js?v=1');if(!current())return;
+      await module.mountAdminDrafts(content,{api,isCurrent:current,onBack:()=>run(()=>adminStores()),onManageCatalog:id=>run(()=>adminCatalog(id,'draft'))});
+    }
+    async function adminCatalog(id,initialMode='products') {
+      if(!canAdmin())throw new Error('商城後台僅開放管理員');
+      const owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
+      if(!owner||!token)throw new Error('請先使用管理員帳號登入');
+      pageKind('admin-catalog');const version=++epoch;alert.textContent='';
+      content.innerHTML='<p role="status">載入商城管理…</p>';
+      const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
+      const module=await import('./store-admin-catalog.js?v=1');if(!current())return;
+      await module.mountAdminCatalog(content,{shopId:id,initialMode,api,isCurrent:current,onBack:()=>run(()=>adminStores()),onUploadProducts:shopId=>run(()=>adminProducts(shopId)),prepareImage,
+        uploadImage:async base64Image=>{
+          if(!current())throw new Error('登入或頁面已變更');
+          await api('/admin/catalog?shop='+encodeURIComponent(id),null,true);
+          if(!current())throw new Error('登入或頁面已變更');
+          if(typeof window.fetchAPI!=='function')throw new Error('上傳服務尚未就緒');
+          return window.fetchAPI('uploadImageToR2',{base64Image},true);
+        }});
     }
     async function adminProducts(id) {
       if(!canAdmin())throw new Error('代上傳商品僅開放管理員');

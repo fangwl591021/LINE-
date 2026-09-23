@@ -11,6 +11,7 @@ import { handleStoreCommerce } from './worker/store-commerce.mjs';
 import { handleStoreInviteBinding } from './worker/store-invite-binding.mjs';
 import { handleStoreAdmin } from './worker/store-admin.mjs';
 import { handleStoreAdminProducts } from './worker/store-admin-products.mjs';
+import { handleStoreAdminCatalog } from './worker/store-admin-catalog.mjs';
 import { handlePartnerOnboarding } from './worker/partner-onboarding-ai.mjs';
 import { handleStoreConsumptionJournal } from './worker/store-consumption-journal.mjs';
 
@@ -393,6 +394,8 @@ export default {
     if (onboardingResponse) return onboardingResponse;
     const journalResponse = await handleStoreConsumptionJournal(request, env);
     if (journalResponse) return journalResponse;
+    const adminCatalogResponse = await handleStoreAdminCatalog(request, env, storeInviteProfileView);
+    if (adminCatalogResponse) return adminCatalogResponse;
     const adminProductResponse = await handleStoreAdminProducts(request, env, storeInviteProfileView);
     if (adminProductResponse) return adminProductResponse;
     const adminStoreResponse = await handleStoreAdmin(request, env, storeInviteProfileView);
