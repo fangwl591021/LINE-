@@ -16,7 +16,7 @@ function dom(){
   let html='',text='';const classes=new Set(),selectors=new Map();
   const e={dataset:{},style:{},children:[],listeners:{},hidden:false,disabled:false,
    classList:{add:(...x)=>x.forEach(v=>classes.add(v)),remove:(...x)=>x.forEach(v=>classes.delete(v)),toggle(v,on){if(on)classes.add(v);else classes.delete(v);},contains:v=>classes.has(v)},
-   setAttribute(k,v){this[k]=v;},appendChild(c){this.children.push(c);if(c.id)ids.set(c.id,c);return c;},append(c){this.appendChild(c);},prepend(c){this.children.unshift(c);},after(){},focus(){},remove(){},
+   setAttribute(k,v){this[k]=v;},appendChild(c){if(c.parentNode)c.parentNode.children=c.parentNode.children.filter(n=>n!==c);c.parentNode=this;this.children.push(c);if(c.id)ids.set(c.id,c);return c;},append(c){this.appendChild(c);},prepend(c){this.children.unshift(c);},after(){},focus(){},remove(){},
    addEventListener(k,fn){this.listeners[k]=fn;},showModal(){this.open=true;},close(){this.open=false;},
    querySelector(s){if(!selectors.has(s))selectors.set(s,node());return selectors.get(s);},querySelectorAll(){return [];}
   };
@@ -106,6 +106,26 @@ test('late shop validation after navigation/account switch cannot reopen storefr
  const f=setup();let release;f.setResponse(()=>new Promise(resolve=>release=resolve));
  let active=true;const p=f.provider.open({id:id(1)},{isCurrent:()=>active,onBack(){}});active=false;
  release({ok:true,json:async()=>({success:true,shop:shop(1)})});await p;assert.equal(f.opened.length,0);
+});
+
+for(const mode of ['card','store'])test(`${mode} walking reuses every tile, image, die and the same player instead of repainting`,async()=>{
+ const f=setup({hold:true});await (mode==='store'?f.window.openStoreRichman():f.window.openBusinessRichman());
+ const tiles=Array.from({length:22},(_,i)=>f.ids.get('business-richman-tile-'+i));
+ const avatars=tiles.map(t=>t.children[1]);const player=f.ids.get('business-richman-player'),dice=f.ids.get('business-richman-dice-1');
+ const p=f.window.rollBusinessRichman();assert(tiles.every(t=>t.disabled));
+ // Finish dice animation and settling, then inspect each 650ms movement step.
+ f.queue.shift()();await flush();f.queue.shift()();await flush();
+ for(let position=1;position<=2;position++){
+  assert.equal(player.parentNode,tiles[position]);assert.equal(tiles[position].classList.contains('current'),true);
+  assert.equal(f.ids.get('business-richman-player'),player);assert.equal(f.ids.get('business-richman-dice-1'),dice);
+  tiles.forEach((tile,i)=>{assert.equal(f.ids.get('business-richman-tile-'+i),tile);assert.equal(tile.children[1],avatars[i]);});
+  if(position===1){f.queue.shift()();await flush();}
+ }
+ for(let i=0;i<10;i++){while(f.queue.length)f.queue.shift()();await flush();}await p;
+ assert.equal(f.saved(mode).position,2);assert.equal(f.saved(mode).round,2);
+ const css=f.ids.get('business-richman-styles').textContent;
+ assert.doesNotMatch(css,/brHop/);assert.doesNotMatch(css.match(/\.br-tile\.current\{[^}]+\}/)[0],/transform|animation/);
+ assert.equal(f.opened.length,mode==='store'?1:0);
 });
 test('optional board return survives lazy storefront load and is absent from ordinary callers',async()=>{
  const f=setup();let mounts=0,backs=0;
