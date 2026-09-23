@@ -12,7 +12,7 @@ const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
 assert.match(indexHtml, /openBusinessRichman/);
 assert.match(indexHtml, /id="page-business-richman"/);
 assert.match(indexHtml, /js\/modules\/business-richman\.js\?v=1\.2/);
-assert.match(indexHtml, /js\/navigation\.js\?v=8\.02/);
+assert.match(indexHtml, /js\/navigation\.js\?v=8\.03/);
 assert.match(navigation, /page === 'business-richman'.*initBusinessRichman/);
 
 assert.match(source, /loadCardData\(\{ render: false, harvest: true, initPanels: false \}\)/);

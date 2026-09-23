@@ -40,20 +40,32 @@
       retry.type = 'button'; retry.textContent = '重新載入'; retry.onclick = () => window.location.reload(); root.appendChild(retry);
     }
   };
-  window.openStoreShop = async function(productId = '', qrToken = '', memberProduct = '', section = '', shopId = '') {
+  window.openStoreShop = async function(productId = '', qrToken = '', memberProduct = '', section = '', shopId = '', options = {}) {
     if (typeof productId !== 'string') productId = '';
     window.goPage('store-shop');
     const root = document.getElementById('page-store-shop');
     root.innerHTML = '<p role="status">商城載入中…</p><button type="button" onclick="window.goPage(\'home\')">返回首頁</button>';
+    let returned = false;
+    function addReturn() {
+      if (typeof options.onBack !== 'function') return;
+      const back = document.createElement('button');
+      back.type = 'button'; back.textContent = '← 返回棋盤'; back.className = 'shop-link';
+      back.style.cssText = 'position:sticky;top:0;z-index:30;min-height:44px;margin:8px;padding:10px 16px;background:#fff;color:#047857;border:1px solid #047857;border-radius:12px;font-weight:700';
+      back.onclick = () => { returned = true; options.onBack(); }; root.prepend(back);
+    }
+    addReturn();
     try {
       if (section === 'store' && !(window.StoreInviteRoute?.isShopId?.(shopId) ?? (typeof shopId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shopId)))) throw new Error('商城連結格式不正確，請向店家取得新的邀請網址');
       await load();
-      if (window.currentPage === 'store-shop') window.StoreShop.mount(root, false, productId, qrToken, memberProduct, section, shopId);
+      if (!returned && window.currentPage === 'store-shop') {
+        window.StoreShop.mount(root, false, productId, qrToken, memberProduct, section, shopId);
+        addReturn();
+      }
     } catch(error) {
-      if (window.currentPage !== 'store-shop') return;
+      if (returned || window.currentPage !== 'store-shop') return;
       root.querySelector('p').textContent = error.message;
       const retry = document.createElement('button');
-      retry.textContent = '重新載入'; retry.onclick = () => window.openStoreShop(productId, qrToken, memberProduct, section, shopId); root.appendChild(retry);
+      retry.textContent = '重新載入'; retry.onclick = () => window.openStoreShop(productId, qrToken, memberProduct, section, shopId, options); root.appendChild(retry);
     }
   };
 })();

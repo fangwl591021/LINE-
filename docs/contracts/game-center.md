@@ -1,5 +1,15 @@
 # 遊戲館契約
 
+## 商城大富翁（2026-09-23）
+
+- 遊戲館另列「商城大富翁 · 自由探索，不贈點」；不加入獎勵 gameId 白名單、不建立遊戲 session、不呼叫 startGame / completeGame / gameEvent、不計每日 100 點、成績或連玩天數。
+- 與原人脈大富翁共用棋盤／骰子，但模式、文案、資料來源與 sessionStorage 進度分開。原名片版仍讀收藏／公開名片，商城版只讀公開商城。
+- 進場使用既有公開商城 seed 隨機取一頁（最多 40 家）作候選池；停格後隨機抽店，兩家以上時不連續重複同一家。重新排列可換一批。
+- 每次開店前透過公開 ?shop=ID 重查上架狀態；草稿／下架不顯示，網路錯誤不當作無店家。沿用既有店面頁與公開權限，不改商品、訂單、優惠券或點數。
+- 同頁開店並提供返回棋盤；棋子位置與回合保留。返回遊戲館按鈕可用；切換帳號、模式或離開棋盤後的舊動畫／請求不得跳頁或改新棋局。
+
+## 既有每日挑戰
+
 - 同一 tenant + canonical point member + Asia/Taipei 日，坦克、方塊與喵喵五子棋合計最多 100 gift_money；簽到不變。
 - **沿用** daily_tank_challenge:{tenant}:{member}:{date} 領獎鍵與 point_awards 唯一索引，不建立第二把新鍵，避免舊 Worker/快取入口與新遊戲各發一次。
 - 舊 dailyTankStatus/startDailyTank/completeDailyTank 保留語義及格式；舊開始沒 mapVersion 使用地圖 v1，v2: ID 固定地圖 v2。舊完成 API 不接受方塊 session。
