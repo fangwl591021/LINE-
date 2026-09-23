@@ -20,16 +20,16 @@ function link(env,section){
  if(!/^\d+-[A-Za-z0-9]+$/.test(id))throw Error('Invalid LIFF configuration');
  const url=new URL('https://liff.line.me/'+id);url.searchParams.set('shopSection',section);return url.href;
 }
-function card(title,lines,buttons,size='mega'){
- const large=size==='giga';
- return {type:'flex',altText:title,contents:{type:'bubble',size,
- header:{type:'box',layout:'vertical',backgroundColor:'#163b5a',contents:[{type:'text',text:title,color:'#ffffff',weight:'bold',size:large?'xl':'lg',wrap:true}]},
- body:{type:'box',layout:'vertical',spacing:'md',contents:lines.map(value=>large?{...text(value),size:'lg',lineSpacing:'4px'}:text(value))},
+function card(title,lines,buttons){
+ // Store chat only: never apply these sizes to electronic cards or shared senders.
+ return {type:'flex',altText:title,contents:{type:'bubble',size:'giga',
+ header:{type:'box',layout:'vertical',backgroundColor:'#163b5a',contents:[{type:'text',text:title,color:'#ffffff',weight:'bold',size:'xl',wrap:true}]},
+ body:{type:'box',layout:'vertical',spacing:'md',contents:lines.map(value=>({...text(value),size:'lg',lineSpacing:'4px'}))},
  // Native Flex buttons have no font-size property; keep the same action on a wrapping text box.
- footer:{type:'box',layout:'vertical',spacing:'sm',contents:large?buttons.map(button=>({
+ footer:{type:'box',layout:'vertical',spacing:'sm',contents:buttons.map(button=>({
   type:'box',layout:'vertical',backgroundColor:'#DDE0E6',cornerRadius:'md',paddingAll:'12px',action:button.action,
   contents:[{...text(button.action.label),size:'lg',align:'center',weight:'bold'}]
- })):buttons}}};
+ }))}}};
 }
 export async function readMallSummary(db,uid,admin,now=new Date()){
  const today=new Date(now.getTime()+8*3600000).toISOString().slice(0,10);
@@ -80,7 +80,7 @@ export async function buildShopKeywordMessage(event,env,now){
   const lines=[...result.lines];
   if(kind==='portal')lines.unshift(merchant?'商品、業績、訂單直接在聊天室查詢；變更資料才開啟登入操作頁。':'一般會員可管理 1 個商品；店長不限。業績、收款與折抵操作仍限店長／管理員。');
   if(result.more&&page===1000)lines.push('已達聊天室查詢範圍，較早資料請至商城管理查詢。');
-  return card(kind==='portal'?'店家專區':`${kind==='orders'?'我的網購訂單':'我的商品'}・第 ${page} 頁`,lines,buttons,kind==='portal'?'giga':'mega');
+  return card(kind==='portal'?'店家專區':`${kind==='orders'?'我的網購訂單':'我的商品'}・第 ${page} 頁`,lines,buttons);
  }
  if(!merchant)return {type:'text',text:'商城儀錶板僅開放管理員、店長。您仍可輸入「店家專區」管理自己的商品。'};
  const admin=kind==='dashboard'&&admins.includes(role),s=await readMallSummary(db,uid,admin,now);
