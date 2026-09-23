@@ -21,10 +21,15 @@ function link(env,section){
  const url=new URL('https://liff.line.me/'+id);url.searchParams.set('shopSection',section);return url.href;
 }
 function card(title,lines,buttons,size='mega'){
+ const large=size==='giga';
  return {type:'flex',altText:title,contents:{type:'bubble',size,
- header:{type:'box',layout:'vertical',backgroundColor:'#163b5a',contents:[{type:'text',text:title,color:'#ffffff',weight:'bold',size:'lg',wrap:true}]},
- body:{type:'box',layout:'vertical',spacing:'md',contents:lines.map(text)},
- footer:{type:'box',layout:'vertical',spacing:'sm',contents:buttons}}};
+ header:{type:'box',layout:'vertical',backgroundColor:'#163b5a',contents:[{type:'text',text:title,color:'#ffffff',weight:'bold',size:large?'xl':'lg',wrap:true}]},
+ body:{type:'box',layout:'vertical',spacing:'md',contents:lines.map(value=>large?{...text(value),size:'lg',lineSpacing:'4px'}:text(value))},
+ // Native Flex buttons have no font-size property; keep the same action on a wrapping text box.
+ footer:{type:'box',layout:'vertical',spacing:'sm',contents:large?buttons.map(button=>({
+  type:'box',layout:'vertical',backgroundColor:'#DDE0E6',cornerRadius:'md',paddingAll:'12px',action:button.action,
+  contents:[{...text(button.action.label),size:'lg',align:'center',weight:'bold'}]
+ })):buttons}}};
 }
 export async function readMallSummary(db,uid,admin,now=new Date()){
  const today=new Date(now.getTime()+8*3600000).toISOString().slice(0,10);
