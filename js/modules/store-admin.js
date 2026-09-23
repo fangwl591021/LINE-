@@ -4,7 +4,7 @@ const count=value=>Number.isSafeInteger(Number(value))&&Number(value)>=0?Number(
 const number=value=>count(value).toLocaleString('zh-TW');
 
 // Private directory data stays in this mount only, never in a shared/global cache.
-export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onManagePartners,onUploadProducts}) {
+export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onManagePartners,onUploadProducts,onManageCatalog,onReviewDrafts}) {
   if(!isCurrent())return;
   const doc=container.ownerDocument;
   if(!doc.getElementById(stylesheetId)){
@@ -22,6 +22,10 @@ export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onM
   const active=()=>isCurrent()&&container.contains(panel);
   const toolbar=make('div','store-admin-toolbar'),back=button('返回商城管理','back'),refresh=button('重新整理','refresh');
   toolbar.append(back,refresh);
+  if(onReviewDrafts){
+    const drafts=button('全站商品草稿','drafts');
+    drafts.addEventListener('click',()=>{if(active())void navigate(onReviewDrafts);});toolbar.append(drafts);
+  }
   if(onManagePartners){
     const manage=button('代建／管理合作店家','partners');
     manage.addEventListener('click',()=>{if(active())void navigate(onManagePartners);});toolbar.append(manage);
@@ -75,8 +79,8 @@ export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onM
       view.addEventListener('click',()=>{void navigate(onView,shop.id);});card.append(view);
     }else card.append(make('span','store-admin-unavailable','無公開店面'));
     if(onUploadProducts&&shop.listing_only!==1&&shop.owner_uid&&uuid.test(String(shop.id))&&['store','店長','admin','總管','user','用戶'].includes(String(shop.owner_role).toLowerCase())){
-      const upload=button('代上傳商品','upload-products');upload.setAttribute('data-admin-shop',String(shop.id));
-      upload.addEventListener('click',()=>{void navigate(onUploadProducts,shop.id);});card.append(upload);
+      const upload=button(onManageCatalog?'店家／商品管理':'代上傳商品','upload-products');upload.setAttribute('data-admin-shop',String(shop.id));
+      upload.addEventListener('click',()=>{void navigate(onManageCatalog||onUploadProducts,shop.id);});card.append(upload);
     }
     return card;
   };

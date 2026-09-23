@@ -22,8 +22,8 @@ test('settings entry follows admin-only permissions and hides after switching to
 
 test('cache versions and private entry are wired without eager directory loading',()=>{
   const entry=read('js/modules/store-shop-entry.js'),publicPage=read('store-shop.html');
-  assert.match(html,/core\.js\?v=7\.36/);assert.match(html,/store-shop-entry\.js\?v=48/);
-  for(const source of [entry,publicPage]){assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=46/);}
+  assert.match(html,/core\.js\?v=7\.36/);assert.match(html,/store-shop-entry\.js\?v=49/);
+  for(const source of [entry,publicPage]){assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=47/);}
   assert.match(front,/const canAdmin=\(\)=>!standalone/);
   assert.match(front,/case 'admin-stores': await adminStores\(\); break;/);
   assert.match(front,/!standalone&&section==='admin-stores'/);
@@ -56,14 +56,15 @@ test('actual Worker routes delegated creation through verified admin before data
 });
 
 function setup(){
-  const state={allowed:true,loads:0,mounts:[],inserted:[]};
+  const state={allowed:true,loads:0,mounts:[],catalogs:[],drafts:[],uploads:[],inserted:[]};
   const root={isConnected:true,dataset:{shopView:''}},content={innerHTML:'',insertAdjacentHTML(_position,text){state.inserted.push(text);}};
-  const window={currentPage:'store-shop',currentUserProfile:{userId:uid},liff:{isLoggedIn:()=>true,getAccessToken:()=>state.token||'token-a'}};
+  const window={currentPage:'store-shop',currentUserProfile:{userId:uid},liff:{isLoggedIn:()=>true,getAccessToken:()=>state.token||'token-a'},fetchAPI:async(...args)=>{state.uploads.push(args);return {success:true,url:'https://fixture.invalid/image.jpg'};}};
   const context={window,root,content,alert:{textContent:''},epoch:0,viewedShop:null,canAdmin:()=>state.allowed,api:async()=>({}),
-    pageKind:kind=>root.dataset.shopView=kind,run:fn=>fn(),manage:async()=>{state.back=true;},
+    pageKind:kind=>root.dataset.shopView=kind,run:fn=>fn(),manage:async()=>{state.back=true;},prepareImage:async()=>{},
+    loadCatalog:async()=>({mountAdminCatalog:async(_node,options)=>state.catalogs.push(options),mountAdminDrafts:async(_node,options)=>state.drafts.push(options)}),
     loadModule:async()=>{state.loads++;return {mountStoreAdmin:async(_node,options)=>state.mounts.push(options)};}};
   context.view=async id=>{context.epoch++;context.viewedShop={id};root.dataset.shopView='store';};
-  const code=block(front,'    async function adminStores()', '    async function api(').replace("await import('./store-admin.js?v=3')",'await loadModule()');
+  const code=block(front,'    async function adminStores()', '    async function api(').replace("await import('./store-admin.js?v=4')",'await loadModule()').replaceAll("await import('./store-admin-catalog.js?v=1')",'await loadCatalog()');
   context.open=vm.runInNewContext(code+';adminStores',context);
   return {state,context,window,root,content};
 }
@@ -72,6 +73,27 @@ test('private directory wrapper mounts for current admin and offers public view 
   const s=setup();await s.context.open();assert.equal(s.state.mounts.length,1);
   assert.equal(s.state.mounts[0].isCurrent(),true);await s.state.mounts[0].onView('shop-fixture');
   assert.match(s.state.inserted[0],/返回店家列表/);assert.equal(s.state.mounts[0].isCurrent(),false);
+});
+
+test('mobile global drafts and editing use the shared modules with guarded image upload',async()=>{
+  const s=setup();await s.context.open();await s.state.mounts[0].onReviewDrafts();
+  assert.equal(s.state.mounts[0].isCurrent(),false);assert.equal(s.root.dataset.shopView,'admin-drafts');
+  assert.equal(s.state.drafts.length,1);assert.equal(s.state.drafts[0].isCurrent(),true);
+  await s.state.drafts[0].onManageCatalog('shop-fixture');const editor=s.state.catalogs[0];
+  assert.equal(s.state.drafts[0].isCurrent(),false);assert.equal(editor.initialMode,'draft');assert.equal(editor.shopId,'shop-fixture');
+  assert.equal(editor.prepareImage,s.context.prepareImage);
+  const calls=[];s.context.api=async(...args)=>{calls.push(args);};await editor.uploadImage('synthetic-image');
+  assert.deepEqual(calls,[['/admin/catalog?shop=shop-fixture',null,true]]);
+  assert.deepEqual(structuredClone(s.state.uploads),[['uploadImageToR2',{base64Image:'synthetic-image'},true]]);
+  s.context.api=async()=>{s.state.token='new-token';};await assert.rejects(editor.uploadImage('stale'),/變更/);
+  assert.equal(s.state.uploads.length,1);assert.equal(editor.isCurrent(),false);
+});
+
+for(const page of ['drafts','catalog'])test('mobile '+page+' ignores a late module after leaving the mall',async()=>{
+  const s=setup();await s.context.open();let release;
+  s.context.loadCatalog=()=>new Promise(resolve=>{release=()=>resolve({mountAdminDrafts:async()=>s.state.drafts.push('stale'),mountAdminCatalog:async()=>s.state.catalogs.push('stale')});});
+  const pending=page==='drafts'?s.state.mounts[0].onReviewDrafts():s.state.mounts[0].onManageCatalog('shop-fixture');
+  s.window.currentPage='home';release();await pending;assert.deepEqual(s.state.catalogs,[]);assert.deepEqual(s.state.drafts,[]);
 });
 
 test('non-admin and logged-out sessions never import or request directory data',async()=>{
