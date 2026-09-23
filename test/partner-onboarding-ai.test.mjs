@@ -20,7 +20,7 @@ function fixture(t){
   let output={status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(draft())}]}]},upstreamStatus=200,secret='server-only-test-key';
   const fetcher=async(url,options)=>{
     calls.push({url,options});
-    if(url==='https://api.line.me/v2/profile'){assert.equal(options.redirect,'error');return Response.json({userId:options.headers.Authorization.slice(7)});}
+    if(url==='https://api.line.me/v2/profile'){assert.equal(options.redirect,'manual');return Response.json({userId:options.headers.Authorization.slice(7)});}
     if(url.startsWith('https://cloudflare-dns.com/'))return Response.json({Status:0,Answer:[{type:1,data:'93.184.216.34'}]});
     if(url.startsWith('https://www.merchant.com'))return new Response('<html><h1>測試咖啡店</h1><p>地址：台北市測試路 1 號，服務項目包含咖啡與茶飲甜點，歡迎來店。</p></html>',{headers:{'Content-Type':'text/html'}});
     assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(options.headers.Authorization,'Bearer server-only-test-key');assert.equal(options.redirect,'error');
