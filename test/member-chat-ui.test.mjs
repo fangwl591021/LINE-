@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createChatClient, chatMessageHtml } from '../js/modules/member-chat.js';
+import { createChatClient, chatMessageHtml, chatMatchHtml } from '../js/modules/member-chat.js';
 import { memberChatRoute } from '../js/modules/member-chat-route.js';
 import vm from 'node:vm';
 const response = value => new Response(JSON.stringify({ success: true, ...value }));
@@ -33,6 +33,24 @@ test('failure does not masquerade as success and retry reuses exact client id/co
   await assert.rejects(client.request('/threads/x/messages', data), /連線逾時/); fail = false;
   assert.equal((await client.request('/threads/x/messages', data)).item.seq, 1); assert.deepEqual(requests[0], requests[1]); client.close();
 });
+test('score presentation preserves zero, distinguishes rules, and never invents missing results', () => {
+  assert.match(chatMatchHtml({ score: 0, source: 'ai' }), /0%/);
+  assert.match(chatMatchHtml({ score: 82, source: 'rules' }), /規則配對/);
+  for (const match of [null, { score: null }, { score: -1 }, { score: 101 }, { score: NaN }, { score: '<script>' }]) {
+    assert.equal(chatMatchHtml(match), '<span class="mc-match-empty">尚無配對</span>');
+  }
+});
+
+test('attachment references stay in the authorized conversation; opening a popup is not a send or redemption', () => {
+  assert.match(chatMessageHtml({ seq: 1, body: '<b>優惠</b>', hasCoupon: true }), /data-action="coupon" data-seq="1"/);
+  const ui = readFileSync(new URL('../js/modules/member-chat.js', import.meta.url), 'utf8');
+  const popups = readFileSync(new URL('../js/modules/member-chat-popups.js', import.meta.url), 'utf8');
+  assert.match(ui, /data-action="attach"/); assert.match(ui, /data-action="card"/);
+  assert.match(ui, /popups.close\(\)/); assert.match(ui, /couponHandle: selectedCoupon.handle/);
+  assert.match(popups, /確認核銷/); assert.match(popups, /client.request\(path, \{\}\)/);
+  assert.doesNotMatch(popups, /currentCard|fetchAPI|localStorage|innerHTML = error/);
+});
+
 test('plain text messages escape injected HTML and do not execute URLs', () => {
   const html = chatMessageHtml({ seq: 1, body: '<img src=x onerror=alert(1)> javascript:evil()', mine: false, createdAt: '2026-09-24 08:30:00' });
   assert.doesNotMatch(html, /<img|href=/); assert.match(html, /&lt;img/); assert.match(html, /data-action="report"/);
@@ -75,9 +93,9 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /params.set\('industry', memberIndustry\)/);
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
-  assert.match(ui, /member-chat.css\?v=2/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=4/g) || []).length, 2);
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.14/);
+  assert.match(ui, /member-chat.css\?v=3/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=5/g) || []).length, 2);
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.15/);
 });
 
 test('opt-in is explicit, auth precedes deep link, private notifications cron cannot run legacy jobs', () => {

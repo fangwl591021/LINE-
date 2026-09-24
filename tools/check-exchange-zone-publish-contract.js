@@ -44,7 +44,7 @@ ok(!worker.includes("publishExchangeZonePost: { access: 'public'"), 'publish act
 
 includesAll(moduleSource, [
   'const PUBLISH_COST = 10',
-  'const PUBLISH_DAYS = 7',
+  'const PUBLISH_DAYS = 0',
   'crypto.randomUUID()',
   'idempotency_key',
   "state = 'published'",
@@ -67,7 +67,7 @@ ok(!moduleSource.includes('Math.random'), 'opaque handles use Web Crypto, not Ma
 includesAll(html, [
   'id="exchange-zone-compose-button"',
   '新增自我宣傳・10 點',
-  '刊登一則文字交流內容 10 點，有效 7 天'
+  '刊登一則文字交流內容 10 點，內容由您自行管理。'
 ], 'right-side exchange panel contains a 10-point compose entry');
 includesAll(frontend, [
   "window.fetchAPI(editing ? 'updateExchangeZonePost' : 'publishExchangeZonePost'",

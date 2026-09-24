@@ -136,7 +136,7 @@ includesAll(frontend, [
 includesAll(frontend, [
   'exchange-zone-edit-button',
   '儲存修改（不扣點）',
-  '原刊登期限保持不變',
+  '由您自行管理',
   'card?.buttons',
   'safeActionUrl'
 ], 'owner can edit without another charge and attached public cards render safe action buttons');

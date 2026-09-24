@@ -1,12 +1,12 @@
 (function() {
   const current = document.currentScript?.src || location.href;
-  const base = new URL('exchange-zone-core.js?v=20260822-ai-review', current).href;
+  const base = new URL('exchange-zone-core.js?v=20260924-author-managed', current).href;
   const overlay = new URL('exchange-zone-delete-overlay.js?v=20260814-youtube-poster', current).href;
   const coupon = new URL('exchange-zone-coupon.js?v=20260814-coupon-phase1', current).href;
   window.openExchangeMemberChat = async function(tab = 'threads') {
     const owner = window.currentUserProfile?.userId;
     try {
-      const chat = await import(new URL('member-chat.js?v=4', current).href);
+      const chat = await import(new URL('member-chat.js?v=5', current).href);
       if (owner !== window.currentUserProfile?.userId || document.getElementById('page-exchange-zone')?.classList.contains('hidden')) return;
       chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, tab });
     } catch (error) { window.showToast?.(error.message || '私訊載入失敗，請重試', true); }
@@ -21,7 +21,7 @@
       await ready;
       if (owner !== window.currentUserProfile?.userId) return true;
       await window.openExchangeZone();
-      const chat = await import(new URL('member-chat.js?v=4', current).href);
+      const chat = await import(new URL('member-chat.js?v=5', current).href);
       if (owner === window.currentUserProfile?.userId && !document.getElementById('page-exchange-zone')?.classList.contains('hidden')) {
         chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, threadId });
       }
@@ -67,7 +67,7 @@ cardAvailable
 contactTags
 exchange-zone-edit-button
 儲存修改（不扣點）
-原刊登期限保持不變
+由您自行管理
 card?.buttons
 safeActionUrl
 <article class="mt-5 rounded-2xl border border-amber-200 bg-amber-100 px-4 py-4

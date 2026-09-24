@@ -172,7 +172,7 @@ async function archiveExchangeZonePost(db, postHandle, userId) {
   const owned = await db.prepare(`
     SELECT post_handle FROM exchange_zone_posts
     WHERE post_handle = ?1 AND author_user_id = ?2 AND status = 'published'
-      AND (expires_at = '' OR expires_at > CURRENT_TIMESTAMP)
+
     LIMIT 1
   `).bind(postHandle, userId).first();
   if (!owned) return { success: false, error: '找不到可下架的交流內容', code: 'EXCHANGE_ARCHIVE_NOT_ALLOWED' };
@@ -199,7 +199,7 @@ export async function toggleExchangeZoneLike(db, payload, actor) {
   const post = await db.prepare(`
     SELECT post_handle FROM exchange_zone_posts
     WHERE post_handle = ?1 AND status = 'published'
-      AND (expires_at = '' OR expires_at > CURRENT_TIMESTAMP)
+
     LIMIT 1
   `).bind(postHandle).first();
   if (!post) return { success: false, error: '找不到可按讚的交流內容', code: 'EXCHANGE_LIKE_POST_NOT_AVAILABLE' };
