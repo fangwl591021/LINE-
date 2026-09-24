@@ -54,7 +54,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   if (container) modal.classList.add('mc-embedded');
   const client = createChatClient({ base, isCurrent: () => active === modal });
   if (!document.querySelector('link[data-member-chat]')) {
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=6', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=7', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
   }
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
@@ -194,6 +194,9 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     $('.mc-settings').hidden = view !== 'threads'; $('.mc-hint').hidden = view === 'members';
     $('.mc-preferences').hidden = view !== 'threads'; $('.mc-preferences').open = false;
     modal.classList.toggle('mc-thread-list', view === 'threads');
+    const refreshButton = $('[data-action="refresh"]');
+    if (view === 'threads') $('.mc-preferences summary').insertBefore(refreshButton, $('.mc-preferences summary span'));
+    else status.after(refreshButton);
     $('[data-action="older"]').hidden = true; $('[data-action="more"]').hidden = true;
     for (const button of modal.querySelectorAll('nav button')) button.setAttribute('aria-pressed', String(button.dataset.action === view));
     if (container) { modal.querySelector('header').hidden = view !== 'chat'; modal.classList.toggle('mc-conversation', view === 'chat'); }
@@ -265,7 +268,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
       if ((sending || pending) && !window.confirm('訊息可能尚未送達。離開後請查看對話確認結果；確定離開？')) return;
       setView(action === 'members' ? 'members' : 'threads'); await refresh(); schedule();
       if (container) onView?.(view);
-    } else if (action === 'refresh') { if (!ready) await initialize(); else await refresh(); schedule(); }
+    } else if (action === 'refresh') { event.preventDefault(); if (!ready) await initialize(); else await refresh(); schedule(); }
     else if (action === 'open') await openConversation(button);
     else if (action === 'card' && room) await popups.card(room);
     else if (action === 'line-contact' && room && !blocked) await popups.lineContact(room);
