@@ -21,7 +21,7 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: width === 390, isMobile: width === 390 });
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.route('https://cdn.tailwindcss.com**', (route) => route.fulfill({ contentType: 'application/javascript', body: tailwind }));
-    let releaseChat, releaseMembers, delayChat = true, delayMembers = false;
+    let releaseChat, releaseMembers, delayChat = true, delayMembers = false, showThreads = false;
     const chatReads = [];
     await page.route('https://exchange.test/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
@@ -34,6 +34,7 @@ try {
         const payload = endpoint === 'me' ? { accepting: false, notifications: true }
           : endpoint === 'members' ? { items: [{ handle: 'synthetic-card', name: '合成會員', company: '合成公司', match: { score: 82, source: 'ai' } }], next: '', industries: ['科技資訊'] }
           : endpoint === 'threads' && route.request().method() === 'POST' ? { id: '00000000-0000-4000-8000-000000000001' }
+          : endpoint === 'threads' && showThreads ? { items: ['合作交流', '活動討論', '商品詢問', '設計提案', '近況分享'].map((name, i) => ({ id: '00000000-0000-4000-8000-' + String(i + 1).padStart(12, '0'), name: '合成' + name, preview: '您好！我們可以再聊聊合作細節。', createdAt: '2026-09-25 03:00:00', unread: i === 0 ? 2 : 0 })), next: '' }
           : endpoint.endsWith('/messages') ? { items: [], more: false, peer: { name: '合成會員' }, blocked: false, blockedByMe: false, lastRead: 0 }
           : endpoint === 'line-contact' ? { lineContact: '' } : { items: [], next: '' };
         await route.fulfill({ json: { success: true, ...payload } }); return;
@@ -104,13 +105,31 @@ try {
     assert.equal(await page.locator('.mc-search').isVisible(), true);
     assert.ok(await page.locator('#mc-query').evaluate(node => node.getBoundingClientRect().bottom < innerHeight / 2), 'search stays near the top');
     await page.screenshot({ path: join(tmpdir(), `exchange-tabs-members-${width}.png`) });
-    await page.locator('#exchange-tab-threads').click(); await page.locator('.mc-empty').waitFor();
+    showThreads = true;
+    await page.locator('#exchange-tab-threads').click(); await page.locator('.mc-contact').first().waitFor();
+    assert.equal(await page.locator('.mc-settings').isVisible(), false, 'chat list starts with settings collapsed');
+    assert.equal(await page.locator('.mc-hint').isVisible(), false);
+    assert.equal(await page.locator('.mc-contact').count(), 5);
+    assert.equal(await page.locator('.mc-contact-meta b').textContent(), '2');
+    assert.ok(await page.locator('.mc-contact').first().evaluate(node => node.getBoundingClientRect().top < 180), 'first chat is near the top');
+    assert.equal(await page.locator('.member-chat').evaluate(node => node.scrollWidth <= node.clientWidth), true);
+    await page.screenshot({ path: join(tmpdir(), `exchange-chat-list-${width}.png`) });
+    if (width === 390) await page.setViewportSize({ width, height: 500 });
+    const settings = page.locator('.mc-preferences summary');
+    await settings.focus(); await page.keyboard.press('Enter');
     assert.equal(await page.locator('.mc-settings').isVisible(), true);
     assert.equal(await page.locator('.mc-hint').isVisible(), true);
+    assert.ok(await settings.evaluate(node => node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().bottom < innerHeight), 'settings close control remains reachable');
+    assert.ok(await page.locator('.mc-scroll').evaluate(node => node.clientHeight >= 80), 'expanded settings leave list space');
+    await page.locator('.mc-preferences').evaluate(node => { node.scrollTop = node.scrollHeight; });
+    await settings.click(); assert.equal(await page.locator('.mc-settings').isVisible(), false);
+    await settings.focus(); await page.keyboard.press('Space');
     assert.equal(await page.locator('[data-accepting]').isChecked(), false);
     assert.equal(await page.locator('[data-notifications]').isChecked(), true, 'saved opt-in is unchanged');
     await page.locator('[data-action="edit-line-contact"]').click(); await page.locator('#mc-line-contact').waitFor();
     await page.keyboard.press('Escape'); assert.equal(await page.locator('.mc-popup').count(), 0);
+    if (width === 390) await page.setViewportSize({ width, height: 900 });
+    showThreads = false;
     await page.locator('#exchange-tab-members').click(); await page.locator('.mc-contact').waitFor();
     assert.equal(await page.locator('.mc-settings').isVisible(), false);
     assert.equal(await page.locator('.mc-hint').isVisible(), false);
@@ -123,6 +142,7 @@ try {
     }
     await page.locator('[data-action="back"]').click();
     await page.waitForFunction(() => document.querySelector('#exchange-tab-threads').getAttribute('aria-selected') === 'true');
+    assert.equal(await page.locator('.mc-preferences').evaluate(node => node.open), false, 'return from conversation restores compact list');
     delayMembers = true; await page.locator('#exchange-tab-members').click();
     for (let attempt = 0; !releaseMembers && attempt < 100; attempt++) await page.waitForTimeout(20);
     assert.ok(releaseMembers, 'member request was intercepted');

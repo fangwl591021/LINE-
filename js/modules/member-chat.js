@@ -54,19 +54,20 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   if (container) modal.classList.add('mc-embedded');
   const client = createChatClient({ base, isCurrent: () => active === modal });
   if (!document.querySelector('link[data-member-chat]')) {
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=5', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=6', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
   }
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
     <nav aria-label="私訊分類"><button type="button" data-action="threads">我的聊天</button><button type="button" data-action="members">找會員</button></nav>
+    <details class="mc-preferences" hidden><summary aria-label="聊天設定"><strong>聊天</strong><span>⚙ 設定</span></summary>
     <section class="mc-settings"><label><input type="checkbox" data-accepting checked disabled>接受新聯絡</label><div class="mc-line-settings"><label><input type="checkbox" data-notifications disabled>LINE通知</label><button type="button" data-action="edit-line-contact" disabled aria-label="新增或修改供對方加好友的 LINE">（點我新增）</button></div><small>勾選「LINE通知」：有人傳私訊給您時，即使離開頁面，也由點數通官方帳號提醒。請先加入官方帳號好友、解除封鎖，並允許手機的 LINE 通知。</small><small>「點我新增」：填寫供聊天對方加好友的 LINE，與通知開關分開。站內私訊免費，僅對話雙方可見；不是 LINE 原生聊天。</small></section>
+    <p class="mc-hint">開啟 LINE通知後，未讀訊息約 30–90 秒提醒；同一對話每 5 分鐘時段合併通知，不顯示聊天內容。手機是否跳出橫幅，依 LINE、手機通知及勿擾設定。</p></details>
     <form class="mc-search" hidden><div class="mc-search-text"><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></div><label class="mc-industry" for="mc-industry">業種搜尋<select id="mc-industry" disabled><option value="">全部業種</option></select></label></form>
     <section class="mc-peer" hidden><strong></strong><button type="button" data-action="line-contact">加 LINE 好友</button><button type="button" data-action="card">查看名片</button><button type="button" data-action="block">封鎖</button></section>
     <div class="mc-scroll" tabindex="0"><button type="button" data-action="older" hidden>載入較早訊息</button><div class="mc-rows"></div><button type="button" data-action="more" hidden>載入更多</button></div>
     <p class="mc-status" role="status" aria-live="polite"></p><button type="button" class="mc-retry" data-action="refresh">重新整理</button>
     <section class="mc-attachment" hidden><button type="button" data-action="attach">＋ 附加內容</button><span data-selected-coupon></span><button type="button" data-action="remove-coupon" hidden>移除</button></section>
-    <form class="mc-compose" hidden><label class="mc-sr" for="mc-body">輸入訊息</label><textarea id="mc-body" maxlength="2000" rows="2" placeholder="輸入訊息（最多 2000 字）"></textarea><button type="submit">傳送</button></form>
-    <p class="mc-hint">開啟 LINE通知後，未讀訊息約 30–90 秒提醒；同一對話每 5 分鐘時段合併通知，不顯示聊天內容。手機是否跳出橫幅，依 LINE、手機通知及勿擾設定。</p>`;
+    <form class="mc-compose" hidden><label class="mc-sr" for="mc-body">輸入訊息</label><textarea id="mc-body" maxlength="2000" rows="2" placeholder="輸入訊息（最多 2000 字）"></textarea><button type="submit">傳送</button></form>`;
   if (container) { container.replaceChildren(modal); modal.querySelector('nav').hidden = true; modal.querySelector('header').hidden = !threadId; }
   else document.body.append(modal);
   active = modal; if (container) modal.show(); else modal.showModal();
@@ -191,6 +192,8 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     search.hidden = view !== 'members'; compose.hidden = view !== 'chat'; $('.mc-peer').hidden = view !== 'chat';
     $('.mc-attachment').hidden = view !== 'chat';
     $('.mc-settings').hidden = view !== 'threads'; $('.mc-hint').hidden = view === 'members';
+    $('.mc-preferences').hidden = view !== 'threads'; $('.mc-preferences').open = false;
+    modal.classList.toggle('mc-thread-list', view === 'threads');
     $('[data-action="older"]').hidden = true; $('[data-action="more"]').hidden = true;
     for (const button of modal.querySelectorAll('nav button')) button.setAttribute('aria-pressed', String(button.dataset.action === view));
     if (container) { modal.querySelector('header').hidden = view !== 'chat'; modal.classList.toggle('mc-conversation', view === 'chat'); }
