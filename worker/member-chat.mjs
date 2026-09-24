@@ -1,5 +1,6 @@
 // Private member conversations with references to existing coupons. Never writes inbox, cards or points.
 import { ExchangeZoneModule } from './exchange-zone.mjs';
+import { normalizeLineContact } from '../js/modules/member-chat-line-contact.js';
 import { notificationPreference, saveNotificationPreference, deliverChatNotifications } from './member-chat-notifications.mjs';
 import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from './member-chat-industry.mjs';
 import { memberScores, peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat-extras.mjs';
@@ -244,6 +245,17 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
       }
       await saveNotificationPreference(db, actor, body.enabled);
       data = { notifications: body.enabled };
+    } else if (path === '/line-contact') {
+      if (request.method === 'POST') {
+        keys(body, ['lineContact']);
+        const lineContact = normalizeLineContact(body.lineContact);
+        if (lineContact === null) fail('INVALID_LINE_CONTACT', '請填寫私人 LINE ID 或有效的 LINE 加好友網址（line.me／lin.ee）');
+        await run(db, 'INSERT INTO member_chat_preferences(member_id,line_contact_url) VALUES(?,?) ON CONFLICT(member_id) DO UPDATE SET line_contact_url=excluded.line_contact_url', actor.memberId, lineContact);
+        data = { lineContact };
+      } else {
+        const pref = await statement(db, 'SELECT line_contact_url FROM member_chat_preferences WHERE member_id=?', actor.memberId).first();
+        data = { lineContact: normalizeLineContact(pref?.line_contact_url || '') || '' };
+      }
     } else if (path === '/preferences' && request.method === 'POST') {
       keys(body, ['accepting']); if (typeof body.accepting !== 'boolean') fail('INVALID_SETTING', '設定不正確');
       await run(db, 'INSERT INTO member_chat_preferences(member_id,accepting) VALUES(?,?) ON CONFLICT(member_id) DO UPDATE SET accepting=excluded.accepting', actor.memberId, Number(body.accepting));
@@ -256,12 +268,16 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     else if (path === '/threads' && request.method === 'GET') data = await listThreads(db, actor, params);
     else if (path === '/threads' && request.method === 'POST') data = await openThread(db, actor, body);
     else {
-      const match = path.match(/^\/threads\/([^/]+)\/(messages|read|block|report|card|coupon)$/);
+      const match = path.match(/^\/threads\/([^/]+)\/(messages|read|block|report|card|coupon|line-contact)$/);
       if (!match) fail('NOT_FOUND', '找不到功能', 404);
       const room = await thread(db, actor, match[1]);
-      if (['card', 'coupon'].includes(match[2])) {
+      if (['card', 'coupon', 'line-contact'].includes(match[2])) {
         if ((await contactState(db, actor.memberId, room.peer)).blocked) fail('CONTACT_CLOSED', '目前已封鎖聯絡', 403);
-        if (match[2] === 'card') {
+        if (match[2] === 'line-contact') {
+          if (request.method !== 'GET') fail('METHOD_NOT_ALLOWED', '不支援的操作', 405);
+          const pref = await statement(db, 'SELECT line_contact_url FROM member_chat_preferences WHERE member_id=?', room.peer).first();
+          data = { lineContact: normalizeLineContact(pref?.line_contact_url || '') || '' };
+        } else if (match[2] === 'card') {
           if (request.method !== 'GET') fail('METHOD_NOT_ALLOWED', '不支援的操作', 405);
           const card = await peerCard(db, room, cardMemberJoin, ownCard);
           if (!card) fail('CARD_UNAVAILABLE', '對方尚未公開名片，或名片尚未通過檢查', 404);

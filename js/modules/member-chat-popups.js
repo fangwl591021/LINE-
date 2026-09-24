@@ -1,4 +1,5 @@
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+import { normalizeLineContact } from './member-chat-line-contact.js?v=1';
 const date = value => {
   if (!value) return '未設定';
   const stamp = new Date(value);
@@ -27,6 +28,41 @@ export function createChatPopups({ client, getGuard }) {
   }
   return {
     close() { for (const close of [...opened]) close(); },
+    async editLineContact(saved) {
+      const popup = open('我的 LINE 加好友設定');
+      async function load() {
+        popup.body.textContent = '讀取中…';
+        try {
+          const result = await client.request('/line-contact'); if (!popup.valid()) return;
+          popup.body.innerHTML = `<form class="mc-line-form"><label for="mc-line-contact">私人 LINE ID 或 LINE 加好友網址</label><input id="mc-line-contact" type="text" maxlength="500" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="例如 my_line_id 或 https://line.me/ti/p/…" value="${esc(result.lineContact)}"><p>儲存後，聊天對方可點「加 LINE 好友」。建議貼上 LINE「我的 QR 碼」分享的連結；使用 ID 時，請開啟允許利用 ID 加入好友。留白儲存可移除。</p><p>這是加好友資料，不是通知收件設定。手機提醒請另外勾選「LINE通知」。</p><p role="status" aria-live="polite"></p><div><button type="button" data-cancel>取消</button><button type="submit">儲存</button></div></form>`;
+          const form = popup.body.querySelector('form'), input = form.querySelector('input'), status = form.querySelector('[role=status]'), button = form.querySelector('[type=submit]');
+          form.querySelector('[data-cancel]').onclick = popup.close;
+          form.onsubmit = async event => {
+            event.preventDefault(); if (!popup.valid() || button.disabled) return;
+            if (normalizeLineContact(input.value) === null) { status.textContent = '請填寫私人 LINE ID 或有效的 LINE 加好友網址（line.me／lin.ee）'; return; }
+            button.disabled = true; status.textContent = '儲存中…';
+            try {
+              const data = await client.request('/line-contact', { lineContact: input.value });
+              if (popup.valid()) { saved?.(data.lineContact); popup.close(); }
+            } catch (error) { if (popup.valid()) { status.textContent = error.message; button.disabled = false; } }
+          };
+          input.focus();
+        } catch (error) {
+          if (!popup.valid()) return;
+          popup.body.textContent = error.message;
+          const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = '重新讀取'; retry.onclick = load; popup.body.append(retry);
+        }
+      }
+      await load();
+    },
+    async lineContact(room) {
+      const popup = open('加 LINE 好友');
+      try {
+        const result = await client.request(`/threads/${room}/line-contact`); if (!popup.valid()) return;
+        const link = normalizeLineContact(result.lineContact);
+        popup.body.innerHTML = link ? `<p>以下是對方自行提供的 LINE 加好友連結。請確認 LINE 顯示的身分，再加入好友。</p><div class="mc-card-links"><a href="${esc(link)}" target="_blank" rel="noopener noreferrer">前往 LINE 加好友</a></div>` : '<p>對方尚未新增 LINE 加好友資料，您仍可在這裡傳送私訊。</p>';
+      } catch (error) { if (popup.valid()) popup.body.textContent = error.message; }
+    },
     async chooseCoupon(select) {
       const popup = open('附加內容・我的優惠券');
       let after = '', busy = false;
