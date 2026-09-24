@@ -95,7 +95,7 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
   assert.match(ui, /member-chat.css\?v=3/);
   assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=5/g) || []).length, 2);
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.15/);
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.16/);
 });
 
 test('opt-in is explicit, auth precedes deep link, private notifications cron cannot run legacy jobs', () => {

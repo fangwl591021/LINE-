@@ -1,6 +1,6 @@
 (function() {
   const current = document.currentScript?.src || location.href;
-  const base = new URL('exchange-zone-core.js?v=20260924-author-managed', current).href;
+  const base = new URL('exchange-zone-core.js?v=20260924-visibility', current).href;
   const overlay = new URL('exchange-zone-delete-overlay.js?v=20260814-youtube-poster', current).href;
   const coupon = new URL('exchange-zone-coupon.js?v=20260814-coupon-phase1', current).href;
   window.openExchangeMemberChat = async function(tab = 'threads') {

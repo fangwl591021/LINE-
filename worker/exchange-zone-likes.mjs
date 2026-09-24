@@ -171,7 +171,7 @@ export async function hydrateExchangeZoneLikes(db, rows, userId) {
 async function archiveExchangeZonePost(db, postHandle, userId) {
   const owned = await db.prepare(`
     SELECT post_handle FROM exchange_zone_posts
-    WHERE post_handle = ?1 AND author_user_id = ?2 AND status = 'published'
+    WHERE post_handle = ?1 AND author_user_id = ?2 AND status IN ('published', 'hidden')
 
     LIMIT 1
   `).bind(postHandle, userId).first();
@@ -179,7 +179,7 @@ async function archiveExchangeZonePost(db, postHandle, userId) {
   const result = await db.prepare(`
     UPDATE exchange_zone_posts
     SET status = 'archived', updated_at = CURRENT_TIMESTAMP
-    WHERE post_handle = ?1 AND author_user_id = ?2 AND status = 'published'
+    WHERE post_handle = ?1 AND author_user_id = ?2 AND status IN ('published', 'hidden')
   `).bind(postHandle, userId).run();
   const changes = Number(result?.meta?.changes ?? result?.changes ?? 0);
   if (changes < 1) return { success: false, error: '交流內容下架失敗，請重新整理後再試', code: 'EXCHANGE_ARCHIVE_FAILED' };

@@ -2,6 +2,9 @@
   const state = {
     initialized: false,
     loading: false,
+    listScope: 'public',
+    listRequest: 0,
+    drawerRequest: 0,
     publishing: false,
     liking: new Set(),
     access: { mode: 'private', allowed: false, canManage: false, canPublish: false, publishCost: 10, publishDays: 0, contactTags: [] },
@@ -74,6 +77,7 @@
   }
 
   function likeButtonHtml(post, detail = false) {
+    if (post?.isHidden) return '<span class="text-[13px] font-bold text-amber-700">已隱藏・前台不顯示</span>';
     const liked = post?.likedByMe === true;
     const count = Math.max(0, Number(post?.likeCount) || 0);
     const classes = liked
@@ -143,6 +147,7 @@
     if (state.panelCloseTimer) clearTimeout(state.panelCloseTimer);
     state.panelTrigger = document.activeElement;
     state.panelOpen = true;
+    state.listScope = 'public';
     root.classList.remove('hidden');
     document.body.classList.add('overflow-hidden');
     requestAnimationFrame(() => {
@@ -202,20 +207,35 @@
   }
 
   window.loadExchangeZone = async function() {
-    if (state.loading) return;
+    const request = ++state.listRequest;
+    const owner = window.currentUserProfile?.userId;
+    const ownOnly = state.listScope === 'mine';
+    const current = () => request === state.listRequest && owner === window.currentUserProfile?.userId;
     state.loading = true;
+    document.querySelectorAll('[data-exchange-scope]').forEach((button) => {
+      const selected = button.dataset.exchangeScope === state.listScope;
+      button.setAttribute('aria-pressed', String(selected));
+      button.classList.toggle('bg-emerald-50', selected);
+      button.classList.toggle('text-emerald-800', selected);
+    });
+    renderList([]);
+    document.getElementById('exchange-zone-empty')?.classList.add('hidden');
+    const hint = document.getElementById('exchange-zone-scope-hint');
+    if (hint) hint.textContent = ownOnly ? '僅您可見的管理清單（最近 50 則），隱藏後可在這裡重新顯示。' : '只顯示公開貼文。';
     setStatus('正在讀取交流內容…', false);
     try {
-      const result = await window.fetchAPI('listExchangeZonePosts', { limit: 30 }, true);
-      if (result?.success === false) throw new Error(result.error || '交流內容讀取失敗');
+      const result = await window.fetchAPI('listExchangeZonePosts', { limit: ownOnly ? 50 : 30, ownOnly }, true);
+      if (!current()) return;
+      if (result?.success !== true) throw new Error(result?.error || '交流內容讀取失敗');
       if (result?.access) applyAccess(result.access);
       renderList(result?.posts || []);
       setStatus('', false);
     } catch (error) {
+      if (!current()) return;
       renderList([]);
       setStatus(error?.message || '交流內容讀取失敗，請稍後再試', true);
     } finally {
-      state.loading = false;
+      if (current()) state.loading = false;
     }
   };
 
@@ -311,7 +331,31 @@
         ${!post?.canEdit ? `<button id="exchange-zone-inquiry-button" type="button" class="min-h-11 flex-1 rounded-full bg-[#06C755] px-4 text-[13px] font-black text-white flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98]"><span class="material-symbols-outlined text-[19px]">mail</span>有興趣・寄站內信</button>` : ''}
       </div>
       ${cardHtml}
-      ${post?.canEdit ? `<button id="exchange-zone-edit-button" type="button" class="mt-6 w-full min-h-13 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-[15px] font-black text-blue-700 flex items-center justify-center gap-2 active:scale-[0.98]"><span class="material-symbols-outlined text-[20px]">edit</span>編輯這則內容</button>` : ''}`;
+      ${post?.canEdit ? `<button id="exchange-zone-edit-button" type="button" ${post.isHidden ? 'disabled title="請先重新顯示貼文，再編輯內容"' : ''} class="mt-6 w-full min-h-13 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-[15px] font-black text-blue-700 flex items-center justify-center gap-2 active:scale-[0.98]"><span class="material-symbols-outlined text-[20px]">edit</span>${post.isHidden ? '隱藏中・暫停編輯' : '編輯這則內容'}</button>
+      <button id="exchange-zone-visibility-button" type="button" aria-pressed="${post.isHidden ? 'true' : 'false'}" class="mt-3 w-full min-h-14 rounded-2xl border border-amber-200 bg-amber-50 px-4 text-[16px] font-black text-amber-800 flex items-center justify-center gap-2 disabled:opacity-50"><span class="material-symbols-outlined text-[22px]">${post.isHidden ? 'visibility' : 'visibility_off'}</span>${post.isHidden ? '重新顯示貼文' : '隱藏貼文'}</button>` : ''}`;
+
+    document.getElementById('exchange-zone-visibility-button')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const owner = window.currentUserProfile?.userId;
+      const hidden = !post.isHidden;
+      button.disabled = true;
+      try {
+        const confirmed = await window.appConfirm(hidden ? '隱藏後不會出現在前台，可到「我的貼文」重新顯示。內容會保留，不另扣點。' : '要讓這則貼文重新出現在前台嗎？不會再次扣點。', {
+          title: hidden ? '隱藏貼文' : '重新顯示貼文', okText: '確認', cancelText: '取消'
+        });
+        if (!confirmed || !button.isConnected || owner !== window.currentUserProfile?.userId) return;
+        const result = await window.fetchAPI('updateExchangeZonePost', { postHandle: post.postHandle, hidden }, true);
+        if (result?.success !== true) throw new Error(result?.error || '顯示設定儲存失敗');
+        if (owner !== window.currentUserProfile?.userId) return;
+        window.showToast?.(hidden ? '已隱藏，可至「我的貼文」重新顯示' : '已重新顯示貼文');
+        if (button.isConnected) window.closeExchangeZoneDrawer?.();
+        await window.loadExchangeZone?.();
+      } catch (error) {
+        window.showToast?.(error?.message || '設定失敗，請稍後重試', true);
+      } finally {
+        button.disabled = false;
+      }
+    });
 
     document.getElementById('exchange-zone-inquiry-button')?.addEventListener('click', () => {
       if (typeof window.openInboxExchangeInquiry !== 'function') return window.showToast?.('收件夾尚未載入，請稍後重試', true);
@@ -319,7 +363,7 @@
       window.closeExchangeZonePanel?.();
       setTimeout(() => window.openInboxExchangeInquiry(post), 230);
     });
-    document.getElementById('exchange-zone-edit-button')?.addEventListener('click', () => renderCompose(post));
+    document.getElementById('exchange-zone-edit-button')?.addEventListener('click', () => { if (!post.isHidden) renderCompose(post); });
     document.getElementById('exchange-zone-card-toggle')?.addEventListener('click', (event) => {
       const button = event.currentTarget;
       const full = document.getElementById('exchange-zone-card-full');
@@ -335,6 +379,7 @@
   }
 
   function showDrawer(trigger) {
+    state.drawerRequest += 1;
     const drawer = document.getElementById('exchange-zone-drawer');
     const panel = document.getElementById('exchange-zone-drawer-panel');
     const content = document.getElementById('exchange-zone-drawer-content');
@@ -500,6 +545,7 @@
     const panel = document.getElementById('exchange-zone-drawer-panel');
     if (!drawer || !panel || !state.drawerOpen) return;
     state.drawerOpen = false;
+    state.drawerRequest += 1;
     panel.classList.add('translate-x-full');
     if (!state.panelOpen) document.body.classList.remove('overflow-hidden');
     state.closeTimer = setTimeout(() => {
@@ -513,11 +559,16 @@
     const handle = String(postHandle || '').trim();
     if (!handle) return;
     showDrawer(trigger);
+    const request = state.drawerRequest;
+    const owner = window.currentUserProfile?.userId;
+    const current = () => request === state.drawerRequest && owner === window.currentUserProfile?.userId && state.drawerOpen;
     try {
-      const result = await window.fetchAPI('getExchangeZonePost', { postHandle: handle }, true);
+      const result = await window.fetchAPI('getExchangeZonePost', { postHandle: handle, ownOnly: state.listScope === 'mine' }, true);
+      if (!current()) return;
       if (result?.success === false || !result?.post) throw new Error(result?.error || '找不到交流內容');
       renderDrawer(result.post);
     } catch (error) {
+      if (!current()) return;
       const title = document.getElementById('exchange-zone-drawer-title');
       const content = document.getElementById('exchange-zone-drawer-content');
       if (title) title.textContent = '無法顯示';
@@ -528,6 +579,12 @@
   function initialize() {
     if (state.initialized) return;
     state.initialized = true;
+    document.querySelectorAll('[data-exchange-scope]').forEach((button) => {
+      button.addEventListener('click', () => {
+        state.listScope = button.dataset.exchangeScope === 'mine' ? 'mine' : 'public';
+        window.loadExchangeZone();
+      });
+    });
     document.getElementById('exchange-zone-list')?.addEventListener('click', (event) => {
       const like = event.target.closest('[data-exchange-like]');
       if (like) {

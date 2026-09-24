@@ -173,6 +173,7 @@ function publicPost(row, detail = false, actor = null) {
       avatarUrl: avatarUrl(row?.author_avatar_url)
     },
     cardAvailable,
+    isHidden: row?.status === 'hidden',
     canEdit: Boolean(text(actor?.userId, 180) && text(row?.author_user_id, 180) === text(actor?.userId, 180)),
     likeCount: Math.max(0, Number(row?.likeCount) || 0),
     likedByMe: row?.likedByMe === true
@@ -189,7 +190,7 @@ function selectColumns() {
   return `
     SELECT
       p.post_handle, p.title, p.body, p.contact_tags_json,
-      p.author_user_id, p.card_row_id, p.published_at, p.created_at
+      p.author_user_id, p.card_row_id, p.published_at, p.created_at, p.status
     FROM exchange_zone_posts p
   `;
 }
@@ -429,7 +430,16 @@ export const ExchangeZoneModule = {
 
     const limit = boundedLimit(payload?.limit);
     let result;
-    try {
+    if (payload?.ownOnly === true) {
+      const userId = text(actor?.userId, 180);
+      if (!userId) return { success: false, error: '請重新登入後管理自己的貼文' };
+      result = await env.ACTMASTER_DB.prepare(`
+        ${selectColumns()}
+        WHERE p.author_user_id = ?1 AND p.status IN ('published', 'hidden')
+        ORDER BY COALESCE(NULLIF(p.published_at, ''), p.created_at) DESC, p.post_id DESC
+        LIMIT ?2
+      `).bind(userId, limit).all();
+    } else try {
       result = await env.ACTMASTER_DB.prepare(`
         ${selectColumns()}
         WHERE p.status = 'published'
@@ -465,7 +475,15 @@ export const ExchangeZoneModule = {
     const postHandle = text(payload?.postHandle, 120);
     if (!postHandle) return { success: false, error: '缺少交流內容識別碼' };
     let row;
-    try {
+    if (payload?.ownOnly === true) {
+      const userId = text(actor?.userId, 180);
+      if (!userId) return { success: false, error: '請重新登入後管理自己的貼文' };
+      row = await env.ACTMASTER_DB.prepare(`
+        ${selectColumns()}
+        WHERE p.post_handle = ?1 AND p.author_user_id = ?2 AND p.status IN ('published', 'hidden')
+        LIMIT 1
+      `).bind(postHandle, userId).first();
+    } else try {
       row = await env.ACTMASTER_DB.prepare(`
         ${selectColumns()}
         WHERE p.post_handle = ?1 AND p.status = 'published'
@@ -497,6 +515,28 @@ export const ExchangeZoneModule = {
     const access = accessFor(actor, env);
     if (!access.allowed) return denied(access);
     if (!env?.ACTMASTER_DB) return { success: false, error: '交流專區資料庫尚未設定' };
+
+    if (payload?.hidden !== undefined) {
+      const userId = text(actor?.userId, 180);
+      const postHandle = text(payload?.postHandle, 120);
+      if (!userId || !postHandle || typeof payload.hidden !== 'boolean'
+        || payload.toggleLike || payload.coupon !== undefined || payload.title !== undefined || payload.body !== undefined) {
+        return { success: false, error: '貼文顯示設定不正確，請重新登入後再試', code: 'EXCHANGE_VISIBILITY_INVALID' };
+      }
+      try {
+        const result = await env.ACTMASTER_DB.prepare(`
+          UPDATE exchange_zone_posts
+          SET status = ?1, updated_at = CURRENT_TIMESTAMP
+          WHERE post_handle = ?2 AND author_user_id = ?3 AND status IN ('published', 'hidden')
+        `).bind(payload.hidden ? 'hidden' : 'published', postHandle, userId).run();
+        if (result?.success === false || Number(result?.meta?.changes ?? result?.changes ?? 0) < 1) {
+          return { success: false, error: '找不到可設定的本人貼文，請重新整理', code: 'EXCHANGE_VISIBILITY_NOT_ALLOWED' };
+        }
+        return { success: true, postHandle, isHidden: payload.hidden, chargedPoints: 0 };
+      } catch (error) {
+        return { success: false, error: '顯示設定儲存失敗，請稍後重試', code: 'EXCHANGE_VISIBILITY_FAILED' };
+      }
+    }
 
     if (payload?.toggleLike === true) {
       return toggleExchangeZoneLike(env.ACTMASTER_DB, payload, actor);
