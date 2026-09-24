@@ -39,6 +39,8 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/member-chat.test.mjs',
+  'test/member-chat-ui.test.mjs',
   'test/business-richman.test.mjs',
   'test/store-richman.test.mjs',
   'test/store-admin-catalog.test.mjs',
