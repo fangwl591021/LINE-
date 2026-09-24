@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/exchange-zone-visibility.test.mjs',
   'test/member-chat.test.mjs',
   'test/member-chat-ui.test.mjs',
   'test/business-richman.test.mjs',
