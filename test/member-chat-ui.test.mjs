@@ -94,9 +94,9 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /params.set\('industry', memberIndustry\)/);
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
-  assert.match(ui, /member-chat.css\?v=5/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=8/g) || []).length, 1, 'both entry points share the same lazy chat loader');
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.19/);
+  assert.match(ui, /member-chat.css\?v=6/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=9/g) || []).length, 1, 'both entry points share the same lazy chat loader');
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.20/);
 });
 
 test('exchange navigation is a single fixed top tablist with an optional embedded private-chat container', () => {
@@ -117,7 +117,7 @@ test('exchange navigation is a single fixed top tablist with an optional embedde
 test('exchange publishing intro is restricted to My Posts, including before a tab is selected', () => {
   const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   assert.ok(read('css/exchange-zone.css').includes('#page-exchange-zone:not([data-exchange-tab="mine"]) .exchange-feed-intro{display:none}'));
-  assert.match(read('index.html'), /css\/exchange-zone\.css\?v=2/);
+  assert.match(read('index.html'), /css\/exchange-zone\.css\?v=3/);
 });
 
 test('member search hides duplicate preferences and notification copy without changing values', () => {
@@ -126,6 +126,17 @@ test('member search hides duplicate preferences and notification copy without ch
   assert.ok(setView.includes("$('.mc-settings').hidden = view !== 'threads'"));
   assert.ok(setView.includes("$('.mc-hint').hidden = view === 'members'"));
   assert.doesNotMatch(setView, /client\.request|\.checked\s*=/);
+});
+
+test('chat list uses collapsed native settings and preserves original preference controls', () => {
+  const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+  const ui = read('js/modules/member-chat.js');
+  assert.match(ui, /<details class="mc-preferences" hidden><summary aria-label="聊天設定">/);
+  assert.match(ui, /class="mc-hint">[^<]+<\/p><\/details>/);
+  assert.ok(ui.includes("$('.mc-preferences').open = false"));
+  assert.ok(ui.includes("modal.classList.toggle('mc-thread-list', view === 'threads')"));
+  assert.ok(read('css/member-chat.css').includes('.member-chat.mc-thread-list{background:#fff}'));
+  assert.ok(read('css/exchange-zone.css').includes('#page-exchange-zone[data-exchange-tab="threads"] #exchange-zone-panel>header p{display:none}'));
 });
 
 test('LINE contact accepts only IDs or add-friend URLs and is separate from notification opt-in', () => {

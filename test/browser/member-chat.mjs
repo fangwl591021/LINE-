@@ -66,6 +66,9 @@ try {
   await a.locator('[data-handle="card-b"]').click(); await wait(a, () => document.querySelector('.mc-peer strong').textContent.includes('小陳'));
   await send(a, '您好！想了解咖啡禮盒合作 ☕');
   const b = await page('b'); await b.locator('#open').click();
+  assert.equal(await b.locator('.mc-settings').isVisible(), false, 'settings start collapsed');
+  assert.equal(await b.locator('.mc-hint').isVisible(), false);
+  await b.locator('.mc-preferences summary').click();
   assert.equal(await b.locator('.mc-settings').isVisible(), true, 'My Chats retains all preferences');
   assert.equal(await b.locator('.mc-hint').isVisible(), true);
   await b.locator('[data-notifications]').check();
@@ -160,6 +163,8 @@ try {
   const reopened = await page('b&memberChat=' + roomId);
   await wait(reopened, () => document.querySelector('.mc-rows')?.textContent.includes('關閉頁面後仍應收到通知'));
   await reopened.locator('[data-action="back"]').click();
+  assert.equal(await reopened.locator('.mc-settings').isVisible(), false, 'returning to list collapses settings');
+  await reopened.locator('.mc-preferences summary').click();
   assert.equal(await reopened.locator('[data-notifications]').isChecked(), true, 'notification setting persists');
   await reopened.locator('[data-notifications]').uncheck();
   await wait(reopened, () => document.querySelector('.mc-status').textContent.includes('已關閉 LINE通知'));
