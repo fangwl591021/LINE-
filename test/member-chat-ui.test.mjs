@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createChatClient, chatMessageHtml } from '../js/modules/member-chat.js';
+import { memberChatRoute } from '../js/modules/member-chat-route.js';
+import vm from 'node:vm';
 const response = value => new Response(JSON.stringify({ success: true, ...value }));
 function login() { globalThis.window = { currentUserProfile: { userId: 'a' }, liff: { isLoggedIn: () => true, getAccessToken: () => 'token-a' } }; }
 test('private API uses bearer auth only, no UI IDs, no cache or cookies', async () => {
@@ -47,4 +49,33 @@ test('integration stays lazy and isolated from existing public feed/inbox/points
   assert.doesNotMatch(ui, /localStorage|sessionStorage|setInterval|sendInboxMessage|fetchAPI\(/);
   assert.doesNotMatch(root('worker/member-chat.mjs'), /INSERT INTO (users|inbox_items|points_ledger|card_contacts)/);
   assert.match(root('migrations/0046_member_private_chat.sql'), /UNIQUE\(sender_id,client_id\)/);
+});
+
+test('notification link is view-only, validates UUID and cannot take over any other feature route', () => {
+  const id = crypto.randomUUID();
+  assert.equal(memberChatRoute(new URLSearchParams({ memberChat: id, code: 'oauth', state: 'oauth' })), id);
+  for (const key of ['shareCardId','claimCardId','shopSection','shopProduct','ref','net','userId','role','checkin','memberProduct']) {
+    assert.equal(memberChatRoute(new URLSearchParams({ memberChat: id, [key]: 'x' })), '');
+  }
+  for (const value of ['', 'bad', '../secret', '<script>']) assert.equal(memberChatRoute(new URLSearchParams({ memberChat: value })), '');
+  assert.equal(memberChatRoute(new URLSearchParams(`memberChat=${id}&memberChat=${id}`)), '');
+  const config = readFileSync(new URL('../js/config.js', import.meta.url), 'utf8');
+  const reader = config.slice(config.indexOf('function readActmasterInitialParams()'), config.indexOf('function hasNfcCheckinParams'));
+  for (const search of [`?memberChat=${id}&code=oauth&state=opaque_STATE`, `?liff.state=${encodeURIComponent('?memberChat=' + id)}`]) {
+    const context = { window: { location: { search } }, URLSearchParams, console };
+    const parsed = vm.runInNewContext(reader + '\nreadActmasterInitialParams()', context);
+    assert.equal(memberChatRoute(parsed), id, 'actual existing LIFF/OAuth query reader');
+  }
+});
+
+test('opt-in is explicit, auth precedes deep link, private notifications cron cannot run legacy jobs', () => {
+  const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+  const ui = read('js/modules/member-chat.js'), auth = read('js/auth.js'), entry = read('worker-entry.mjs');
+  assert.match(ui, /data-notifications disabled/); assert.doesNotMatch(ui, /data-notifications checked/);
+  assert.match(ui, /client.request\('\/notifications', \{ enabled \}\)/);
+  assert.match(ui, /const me = await client.request\('\/me'\)[\s\S]+room = threadId/);
+  assert.match(auth, /applyRegisteredUserSession\(checkRes.info,[^\n]+\n\s+if \(await window.openMemberChatNotification\?\.\(urlParams\)\) return/);
+  assert.match(read('index.html'), /js\/auth\.js\?v=11\.06&manage=1&chat=1/);
+  assert.match(entry, /controller\?\.cron === '\* \* \* \* \*'[\s\S]+processMemberChatNotifications\(env\)[\s\S]+return;\s+}\s+if \(controller\?\.cron === '\*\/15/);
+  assert.match(read('wrangler.toml'), /crons = \["0 1 \* \* \*", "\*\/15 18-20 \* \* \*", "\* \* \* \* \*"\]/);
 });

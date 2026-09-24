@@ -39,7 +39,7 @@ export function createChatClient({ base, isCurrent = () => true, fetcher = fetch
 export function chatMessageHtml(row) {
   return `<article class="mc-message ${row.mine ? 'mc-mine' : ''}" data-seq="${row.seq}"><p>${esc(row.body)}</p><small>${esc(stamp(row.createdAt))}${row.mine ? ` · <span data-read>${row.read ? '已讀' : '已送出'}</span>` : ''}</small>${row.mine ? '' : `<button type="button" data-action="report" data-seq="${row.seq}" aria-label="檢舉此訊息">檢舉</button>`}</article>`;
 }
-export function openMemberChat({ base, tab = 'threads' } = {}) {
+export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   if (active) { active.focus(); return active; }
   const opener = document.activeElement;
   const modal = document.createElement('dialog'); modal.className = 'member-chat';
@@ -50,13 +50,13 @@ export function openMemberChat({ base, tab = 'threads' } = {}) {
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
     <nav aria-label="私訊分類"><button type="button" data-action="threads">我的聊天</button><button type="button" data-action="members">找會員</button></nav>
-    <section class="mc-settings"><label><input type="checkbox" data-accepting checked disabled>接受新聯絡</label><small>私訊免費，僅對話雙方可見；不是 LINE 原生聊天。</small></section>
+    <section class="mc-settings"><label><input type="checkbox" data-accepting checked disabled>接受新聯絡</label><label><input type="checkbox" data-notifications disabled>LINE 私訊通知（離開頁面也提醒）</label><small>私訊免費，僅對話雙方可見；不是 LINE 原生聊天。開啟通知前請先加入點數通官方帳號好友，並允許手機的 LINE 通知。</small></section>
     <form class="mc-search" hidden><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></form>
     <section class="mc-peer" hidden><strong></strong><button type="button" data-action="block">封鎖</button></section>
     <div class="mc-scroll" tabindex="0"><button type="button" data-action="older" hidden>載入較早訊息</button><div class="mc-rows"></div><button type="button" data-action="more" hidden>載入更多</button></div>
     <p class="mc-status" role="status" aria-live="polite"></p><button type="button" class="mc-retry" data-action="refresh">重新整理</button>
     <form class="mc-compose" hidden><label class="mc-sr" for="mc-body">輸入訊息</label><textarea id="mc-body" maxlength="2000" rows="2" placeholder="輸入訊息（最多 2000 字）"></textarea><button type="submit">傳送</button></form>
-    <p class="mc-hint">只在開啟畫面時更新；關閉後不會收到 LINE 推播。</p>`;
+    <p class="mc-hint">開啟 LINE 私訊通知後，未讀訊息約 30–90 秒提醒；同一對話每 5 分鐘時段合併通知，不顯示聊天內容。</p>`;
   document.body.append(modal); active = modal; modal.showModal();
   const $ = selector => modal.querySelector(selector);
   const list = $('.mc-rows'), scroll = $('.mc-scroll'), status = $('.mc-status'), search = $('.mc-search'), compose = $('.mc-compose');
@@ -197,6 +197,14 @@ export function openMemberChat({ base, tab = 'threads' } = {}) {
     catch (error) { if (valid(ticket)) { input.checked = !value; note(error.message); } }
     finally { if (client.current()) input.disabled = false; }
   });
+  $('[data-notifications]').addEventListener('change', async event => {
+    const input = event.target, enabled = input.checked; input.disabled = true;
+    try {
+      const result = await client.request('/notifications', { enabled });
+      if (client.current()) { input.checked = result.notifications; note(result.notifications ? '已開啟 LINE 私訊通知；新收到的未讀訊息會由官方帳號提醒。' : '已關閉 LINE 私訊通知'); }
+    } catch (error) { if (client.current()) { input.checked = !enabled; note(error.message); } }
+    finally { if (client.current()) input.disabled = false; }
+  });
   modal.addEventListener('click', async event => {
     const button = event.target.closest('[data-action]'); if (!button || !modal.contains(button)) return;
     const action = button.dataset.action;
@@ -231,6 +239,10 @@ export function openMemberChat({ base, tab = 'threads' } = {}) {
     try {
       const me = await client.request('/me'); if (!client.current() || !modal.open) return;
       ready = true; $('[data-accepting]').checked = me.accepting; $('[data-accepting]').disabled = false;
+      $('[data-notifications]').checked = me.notifications === true; $('[data-notifications]').disabled = false;
+      if (/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(threadId)) {
+        setView('chat'); room = threadId; threadId = '';
+      }
       await refresh(); schedule();
     } catch (error) { if (client.current() && modal.open) note(error.message); }
     finally { initializing = false; }

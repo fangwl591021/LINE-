@@ -1,0 +1,2 @@
+# Keep this trigger migration compatible with D1's SQL statement splitter on Windows.
+migrations/0047_member_chat_notifications.sql text eol=lf

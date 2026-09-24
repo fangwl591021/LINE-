@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
-import { handleMemberChat } from '../worker/member-chat.mjs';
+import { handleMemberChat, processMemberChatNotifications } from '../worker/member-chat.mjs';
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), OLD = 'U' + 'd'.repeat(32);
 const BASE = 'https://chat.test/v1/member-chat';
 function fixture(t) {
@@ -15,7 +15,9 @@ function fixture(t) {
     INSERT INTO user_identity_links VALUES('${OLD}','${A}','active');`);
   for (const [id, uid] of [['a', A], ['b', B], ['c', C]]) sql.prepare("INSERT INTO card_contacts(row_id,line_id,profile_user_id,owner_user_id,source_type,visibility,pool_eligible,ai_review_status,name,company_name,title,updated_at) VALUES(?,?,?,?,'self_profile','public',1,'passed',?,'測試公司','業務','2026-09-24')").run('card-' + id, uid, uid, uid, '會員' + id);
   const migration = readFileSync(new URL('../migrations/0046_member_private_chat.sql', import.meta.url), 'utf8'); sql.exec(migration);
-  let failWrites = false, authStatus = 200;
+  sql.exec(readFileSync(new URL('../migrations/0047_member_chat_notifications.sql', import.meta.url), 'utf8'));
+  let failWrites = false, authStatus = 200, botStatus = 200, pushStatus = 200, failFinalize = false;
+  const pushes = [], botLookups = [];
   const writes = [];
   function prepare(query, args = []) {
     return {
@@ -24,6 +26,7 @@ function fixture(t) {
       async all() { return { success: true, results: sql.prepare(query).all(...args) }; },
       async run() {
         if (failWrites) throw Error('private database exception');
+        if (failFinalize && args[0] === 'sent') { failFinalize = false; throw Error('simulated lost completion'); }
         assert.match(query, /^(?:INSERT INTO|UPDATE|DELETE FROM) member_chat_/);
         writes.push(query); const result = sql.prepare(query).run(...args); return { success: true, meta: { changes: Number(result.changes) } };
       }
@@ -31,6 +34,16 @@ function fixture(t) {
   }
   const db = { prepare, withSession() { return this; } }, env = { ACTMASTER_DB: db, EXCHANGE_ZONE_ACCESS_MODE: 'open' };
   const fetcher = async (url, options) => {
+    if (url.startsWith('https://api.line.me/v2/bot/profile/')) {
+      const uid = url.split('/').at(-1); botLookups.push(uid);
+      assert.equal(options.headers.Authorization, 'Bearer test-bot-token');
+      return new Response(JSON.stringify({ userId: uid }), { status: botStatus });
+    }
+    if (url === 'https://api.line.me/v2/bot/message/push') {
+      pushes.push({ body: JSON.parse(options.body), key: options.headers['X-Line-Retry-Key'] });
+      if (pushStatus === 'timeout') throw new DOMException('network', 'TimeoutError');
+      return new Response('{}', { status: pushStatus, headers: pushStatus === 409 ? { 'x-line-accepted-request-id': 'already-accepted' } : {} });
+    }
     assert.equal(url, 'https://api.line.me/v2/profile'); assert.equal(options.redirect, 'manual');
     const uid = { a: A, b: B, c: C, old: OLD }[options.headers.Authorization.slice(7)];
     return new Response(JSON.stringify({ userId: uid }), { status: uid ? authStatus : 401 });
@@ -41,7 +54,12 @@ function fixture(t) {
   }
   const room = async () => { const result = await api('/threads', { data: { cardHandle: 'card-b' } }); assert.equal(result.success, true, JSON.stringify(result)); return result.id; };
   const send = (id, body = '你好', token = 'a', clientId = crypto.randomUUID()) => api(`/threads/${id}/messages`, { token, data: { body, clientId } });
-  return { sql, env, api, room, send, writes, migration, setFail: value => { failWrites = value; }, setAuth: value => { authStatus = value; } };
+  const drain = () => processMemberChatNotifications(env, fetcher);
+  const due = () => sql.exec("UPDATE member_chat_notification_jobs SET due_at=0,lease_until=0 WHERE status='pending'");
+  const enable = (token = 'b') => { env.LINE_CHANNEL_ACCESS_TOKEN = 'test-bot-token'; return api('/notifications', { token, data: { enabled: true } }); };
+  return { sql, env, api, room, send, writes, migration, drain, due, enable, pushes, botLookups,
+    setBot: value => { botStatus = value; }, setPush: value => { pushStatus = value; }, failFinalize: () => { failFinalize = true; },
+    setFail: value => { failWrites = value; }, setAuth: value => { authStatus = value; } };
 }
 test('routing is isolated; LINE auth, registration, own card and exchange access fail closed', async t => {
   const f = fixture(t);
@@ -306,4 +324,109 @@ test('migration is additive and repeatable; ambiguity and missing schema fail cl
   assert.equal((await f.api('/me')).success, true); // An unrelated legacy field is not login authority.
   f.sql.exec("UPDATE users SET legacy_line_id='' WHERE row_id='c'; DROP TABLE member_chat_preferences");
   assert.equal((await f.api('/me')).status, 503);
+});
+
+test('notifications require explicit opt-in and an OA-verified current login, never a points alias', async t => {
+  const f = fixture(t), id = await f.room();
+  assert.equal((await f.api('/me')).notifications, false);
+  await f.send(id); assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_notification_jobs').get().n, 0);
+  assert.equal((await f.api('/notifications', { token: '', data: { enabled: true } })).status, 401);
+  assert.equal((await f.api('/notifications', { data: { enabled: true, line_id: B } })).status, 400);
+  assert.equal((await f.api('/notifications', { data: { enabled: true } })).status, 503);
+  f.env.LINE_CHANNEL_ACCESS_TOKEN = 'test-bot-token'; f.setBot(404);
+  assert.equal((await f.enable()).code, 'FOLLOW_REQUIRED');
+  f.setBot(503); assert.equal((await f.enable()).status, 503); f.setBot(200);
+  f.sql.exec(`UPDATE users SET point_line_id='${C}',legacy_line_id='${C}' WHERE row_id='b'`);
+  assert.equal((await f.enable()).notifications, true);
+  assert.equal(f.botLookups.at(-1), B);
+  assert.equal(f.sql.prepare('SELECT line_id FROM member_chat_notifications WHERE member_id=?').get('b').line_id, B);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_notification_jobs').get().n, 0, 'no historical backlog');
+  const first = await f.send(id, 'new message'); assert.equal(first.success, true);
+  const key = crypto.randomUUID(); await f.send(id, 'retry', 'a', key); await f.send(id, 'retry', 'a', key);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_notification_jobs').get().n, 1);
+  delete f.env.LINE_CHANNEL_ACCESS_TOKEN;
+  assert.equal((await f.api('/notifications', { token: 'b', data: { enabled: false } })).notifications, false);
+  assert.equal(f.sql.prepare('SELECT status FROM member_chat_notification_jobs').get().status, 'cancelled');
+});
+
+test('durable outbox survives closed pages, coalesces and pushes only a generic LINE reminder', async t => {
+  const f = fixture(t), id = await f.room(); await f.enable();
+  await f.send(id, 'private telephone 0912345678'); await f.send(id, 'private second body');
+  await f.drain(); assert.equal(f.pushes.length, 0, 'buffer period');
+  f.due(); await Promise.all([f.drain(), f.drain()]);
+  assert.equal(f.pushes.length, 1); const push = f.pushes[0];
+  assert.equal(push.body.to, B); assert.equal(push.body.notificationDisabled, false);
+  assert.match(push.key, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
+  assert.doesNotMatch(JSON.stringify(push.body.messages), /private|091234|甲|乙|line_id/);
+  assert.equal(push.body.messages[0].template.actions[0].uri, `https://liff.line.me/1660923784-vViMTZ1y?memberChat=${id}`);
+  await f.send(id, 'third within same window'); f.due(); await f.drain(); assert.equal(f.pushes.length, 1);
+  assert.equal((await f.api(`/threads/${id}/messages`, { token: 'c' })).status, 404, 'URL does not grant access');
+});
+
+test('read, disabled notification, bilateral blocks, removed card and identity conflict suppress pending push', async t => {
+  for (const mode of ['read', 'off', 'block-a', 'block-b', 'card', 'identity', 'access']) {
+    const f = fixture(t), id = await f.room(); await f.enable(); const sent = await f.send(id);
+    if (mode === 'read') await f.api(`/threads/${id}/read`, { token: 'b', data: { through: sent.item.seq } });
+    if (mode === 'off') await f.api('/notifications', { token: 'b', data: { enabled: false } });
+    if (mode.startsWith('block')) await f.api(`/threads/${id}/block`, { token: mode.at(-1), data: { blocked: true } });
+    if (mode === 'card') f.sql.exec("UPDATE card_contacts SET archived_at='archived' WHERE row_id='card-b'");
+    if (mode === 'identity') f.sql.exec(`INSERT INTO user_identity_links VALUES('${B}','${A}','active')`);
+    if (mode === 'access') f.env.EXCHANGE_ZONE_ACCESS_MODE = 'private';
+    f.due(); await f.drain(); assert.equal(f.pushes.length, 0, mode);
+    assert.equal(f.sql.prepare('SELECT status FROM member_chat_notification_jobs').get().status, 'cancelled', mode);
+  }
+});
+
+test('an already-read cancelled reminder can be rearmed by a later unread message after leaving', async t => {
+  const f = fixture(t), id = await f.room(); await f.enable(); const sent = await f.send(id);
+  await f.api(`/threads/${id}/read`, { token: 'b', data: { through: sent.item.seq } });
+  f.due(); await f.drain(); const old = f.sql.prepare('SELECT id FROM member_chat_notification_jobs').get().id;
+  await f.send(id, '離開頁面後的新訊息'); f.due(); await f.drain();
+  assert.equal(f.pushes.length, 1); assert.notEqual(f.sql.prepare('SELECT id FROM member_chat_notification_jobs').get().id, old);
+});
+
+test('network timeout and lost completion retry with identical LINE key, destination and payload', async t => {
+  for (const mode of ['timeout', 'finalize', 'server']) {
+    const f = fixture(t), id = await f.room(); await f.enable(); await f.send(id);
+    if (mode === 'finalize') f.failFinalize(); else f.setPush(mode === 'timeout' ? 'timeout' : 500);
+    f.due(); await f.drain(); assert.equal(f.sql.prepare('SELECT status FROM member_chat_notification_jobs').get().status, 'pending');
+    f.env.LIFF_ID = '12345-different'; // Persisted payload must survive deployment/config changes.
+    f.setPush(409); f.due(); await f.drain();
+    assert.equal(f.pushes.length, 2); assert.deepEqual(f.pushes[0], f.pushes[1]);
+    assert.equal(f.sql.prepare('SELECT status FROM member_chat_notification_jobs').get().status, 'sent');
+    await f.drain(); assert.equal(f.pushes.length, 2);
+  }
+});
+
+test('permanent LINE failure and bounded retries do not affect saved chat or loop forever', async t => {
+  for (const status of [400, 401, 429, 503]) {
+    const f = fixture(t), id = await f.room(); await f.enable(); const saved = await f.send(id);
+    f.setPush(status);
+    for (let i=0;i<7;i++) { f.due(); await f.drain(); }
+    assert.equal(f.pushes.length, status === 503 ? 5 : 1);
+    assert.equal(f.sql.prepare('SELECT status FROM member_chat_notification_jobs').get().status, 'failed');
+    assert.equal((await f.api(`/threads/${id}/messages`, { token: 'b' })).items[0].seq, saved.item.seq);
+  }
+});
+
+test('notification enqueue is atomic with message persistence and migration is repeatable', async t => {
+  const f = fixture(t), id = await f.room(); await f.enable();
+  const before = JSON.stringify(f.sql.prepare('SELECT * FROM users').all());
+  f.sql.exec(readFileSync(new URL('../migrations/0047_member_chat_notifications.sql', import.meta.url), 'utf8'));
+  f.sql.exec("CREATE TRIGGER test_enqueue_failure BEFORE INSERT ON member_chat_notification_jobs BEGIN SELECT RAISE(ABORT,'test'); END");
+  assert.equal((await f.send(id)).status, 503);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_messages').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_notification_jobs').get().n, 0);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM users').all()), before);
+});
+
+test('notification leases recover, old jobs expire, and bounded cleanup preserves chat records', async t => {
+  const f = fixture(t), id = await f.room(); await f.enable(); await f.send(id);
+  f.sql.exec("UPDATE member_chat_notification_jobs SET due_at=0,lease_until=unixepoch()+120");
+  await f.drain(); assert.equal(f.pushes.length, 0);
+  f.sql.exec("UPDATE member_chat_notification_jobs SET lease_until=0,created_at=unixepoch()-86400");
+  await f.drain(); assert.equal(f.pushes.length, 0); assert.equal(f.sql.prepare('SELECT status FROM member_chat_notification_jobs').get().status, 'failed');
+  f.sql.exec("UPDATE member_chat_notification_jobs SET created_at=unixepoch()-8*86400");
+  await f.drain(); assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_notification_jobs').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_messages').get().n, 1);
 });

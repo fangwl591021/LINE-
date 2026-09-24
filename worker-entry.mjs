@@ -14,7 +14,7 @@ import { handleStoreAdminProducts } from './worker/store-admin-products.mjs';
 import { handleStoreAdminCatalog } from './worker/store-admin-catalog.mjs';
 import { handlePartnerOnboarding } from './worker/partner-onboarding-ai.mjs';
 import { handleStoreConsumptionJournal } from './worker/store-consumption-journal.mjs';
-import { handleMemberChat } from './worker/member-chat.mjs';
+import { handleMemberChat, processMemberChatNotifications } from './worker/member-chat.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -488,6 +488,12 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
+    if (controller?.cron === '* * * * *') {
+      const run = processMemberChatNotifications(env).catch(() => console.error('member_chat_notification_cron_failed'));
+      if (ctx?.waitUntil) ctx.waitUntil(run);
+      else await run;
+      return;
+    }
     if (controller?.cron === '*/15 18-20 * * *') {
       const now = new Date();
       const cardPipeline = CardFateTagAnalysisModule.processOffPeak(env, now)

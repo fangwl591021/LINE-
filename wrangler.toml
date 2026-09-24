@@ -3,7 +3,7 @@ main = "worker-entry.mjs"
 compatibility_date = "2026-04-23"
 
 [triggers]
-crons = ["0 1 * * *", "*/15 18-20 * * *"]
+crons = ["0 1 * * *", "*/15 18-20 * * *", "* * * * *"]
 
 [[kv_namespaces]]
 binding = "ACTMASTER_KV"

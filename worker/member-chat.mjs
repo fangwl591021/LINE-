@@ -1,5 +1,6 @@
 // Private, text-only member conversations. Never writes inbox, cards or points.
 import { ExchangeZoneModule } from './exchange-zone.mjs';
+import { notificationPreference, saveNotificationPreference, deliverChatNotifications } from './member-chat-notifications.mjs';
 const BASE = '/v1/member-chat';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -217,7 +218,24 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     let data;
     if (path === '/me' && request.method === 'GET') {
       const pref = await statement(db, 'SELECT accepting FROM member_chat_preferences WHERE member_id=?', actor.memberId).first();
-      data = { accepting: pref?.accepting !== 0 };
+      data = { accepting: pref?.accepting !== 0, notifications: await notificationPreference(db, actor.memberId) };
+    } else if (path === '/notifications' && request.method === 'POST') {
+      keys(body, ['enabled']); if (typeof body.enabled !== 'boolean') fail('INVALID_SETTING', '設定不正確');
+      if (body.enabled) {
+        if (!env.LINE_CHANNEL_ACCESS_TOKEN) fail('NOTIFICATIONS_UNAVAILABLE', 'LINE 通知尚未啟用，請聯絡管理員', 503);
+        let response;
+        try { response = await fetcher(`https://api.line.me/v2/bot/profile/${actor.uid}`, { headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` }, redirect: 'manual', signal: AbortSignal.timeout(8000) }); }
+        catch { fail('NOTIFICATIONS_UNAVAILABLE', '暫時無法確認 LINE 通知，請稍後重試', 503); }
+        if (!response.ok) {
+          await response.body?.cancel();
+          if (response.status === 404) fail('FOLLOW_REQUIRED', '請先加入點數通官方帳號好友並解除封鎖，再開啟通知', 403);
+          fail('NOTIFICATIONS_UNAVAILABLE', '暫時無法確認 LINE 通知，請稍後重試', 503);
+        }
+        const profile = await jsonBody(response, 8192);
+        if (profile.userId !== actor.uid) fail('AUTH_INVALID', '無法確認通知收件身分', 403);
+      }
+      await saveNotificationPreference(db, actor, body.enabled);
+      data = { notifications: body.enabled };
     } else if (path === '/preferences' && request.method === 'POST') {
       keys(body, ['accepting']); if (typeof body.accepting !== 'boolean') fail('INVALID_SETTING', '設定不正確');
       await run(db, 'INSERT INTO member_chat_preferences(member_id,accepting) VALUES(?,?) ON CONFLICT(member_id) DO UPDATE SET accepting=excluded.accepting', actor.memberId, Number(body.accepting));
@@ -264,4 +282,15 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     console.error('member_chat_unavailable');
     return reply({ success: false, code: 'CHAT_UNAVAILABLE', error: '會員私訊暫時無法使用，請稍後重試；若尚未啟用，請聯絡管理員' }, 503);
   }
+}
+
+// Scheduled independently of browser polling; no client-triggered push endpoint.
+export async function processMemberChatNotifications(env, fetcher = fetch) {
+  return deliverChatNotifications(env, async (db, uid, memberId) => {
+    let actor;
+    try { actor = await identity(db, uid); }
+    catch (error) { if (error instanceof ChatError) return false; throw error; }
+    if (actor.memberId !== memberId || !ExchangeZoneModule.access({}, env, { userId: uid, role: actor.user.role }).access?.allowed) return false;
+    return !!await statement(db, `SELECT c.row_id FROM card_contacts c WHERE ${ownCard('c')} AND ${cardOwner('c')} IN (SELECT value FROM json_each(?)) LIMIT 1`, JSON.stringify(actor.ids)).first();
+  }, fetcher);
 }
