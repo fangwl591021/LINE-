@@ -160,19 +160,79 @@ test('persisted old and new member rows use the confirmed new account without re
   assert.equal(snapshot(), before);
 });
 
-test('linked duplicates do not authorize unrelated aliases or inactive/ambiguous identity links', async t => {
+test('unconfirmed aliases are ignored; inactive and ambiguous LINE links grant no access', async t => {
   const f = fixture(t);
   f.sql.prepare('INSERT INTO users(row_id,line_id,name,phone) VALUES(?,?,?,?)').run('old-row', OLD, '歷史會員', '');
+  const id = await f.room();
   f.sql.exec("UPDATE user_identity_links SET status='replaced'");
-  assert.equal((await f.api('/me')).code, 'IDENTITY_CONFLICT');
+  assert.equal((await f.api('/me')).success, true);
+  assert.equal((await f.api('/me', { token: 'old' })).code, 'OWN_CARD_REQUIRED');
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,name,updated_at) VALUES('own-old',?,'self_profile','歷史本人','2026-09-24')").run(OLD);
+  assert.equal((await f.api(`/threads/${id}/messages`, { token: 'old' })).status, 404);
   f.sql.exec("UPDATE user_identity_links SET status='active'");
   f.sql.prepare("UPDATE users SET point_line_id=? WHERE row_id='c'").run(OLD);
-  const denied = await f.api('/me');
-  assert.equal(denied.status, 409); assert.equal(denied.code, 'IDENTITY_CONFLICT');
+  assert.equal((await f.api('/me')).success, true);
+  assert.equal((await f.api(`/threads/${id}/messages`, { token: 'c' })).status, 404);
   f.sql.exec("UPDATE users SET point_line_id='' WHERE row_id='c'");
   f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(C, A);
   assert.equal((await f.api('/me')).code, 'IDENTITY_CONFLICT');
+});
+
+test('separate LINE logins sharing a points UID stay searchable and cannot access each others chats', async t => {
+  const f = fixture(t), otherOld = 'U' + 'e'.repeat(32);
+  f.sql.prepare("UPDATE users SET point_line_id=? WHERE row_id IN('a','c')").run(A);
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(otherOld, C);
+  const snapshot = () => JSON.stringify(['users', 'user_identity_links', 'card_contacts'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all()));
+  const before = snapshot();
+  for (const token of ['a', 'old', 'b', 'c']) assert.equal((await f.api('/me', { token })).success, true, token);
+  await f.api('/preferences', { token: 'c', data: { accepting: false } });
+  assert.equal((await f.api('/me')).accepting, true);
+  const list = await f.api('/members?q=' + encodeURIComponent('會員a'), { token: 'b' });
+  assert.deepEqual(list.items.map(item => item.handle), ['card-a']);
+  assert.ok(!(await f.api('/members')).items.some(item => item.handle === 'card-a'));
+  const opened = await f.api('/threads', { token: 'b', data: { cardHandle: 'card-a' } });
+  assert.equal(opened.success, true, JSON.stringify(opened));
+  const sent = await f.send(opened.id, '只給本人', 'b'); assert.equal(sent.success, true);
+  assert.equal((await f.api(`/threads/${opened.id}/messages`, { token: 'a' })).items.length, 1);
+  for (const [suffix, data] of [['messages', undefined], ['messages', { body: '冒用', clientId: crypto.randomUUID() }], ['read', { through: sent.item.seq }], ['block', { blocked: true }], ['report', { seq: sent.item.seq, reason: 'x' }]]) {
+    assert.equal((await f.api(`/threads/${opened.id}/${suffix}`, { token: 'c', data })).status, 404);
+  }
+  await f.api(`/threads/${opened.id}/block`, { token: 'old', data: { blocked: true } });
+  assert.equal((await f.send(opened.id, '封鎖不能繞過', 'b')).success, false);
+  assert.equal((await f.api('/members?q=' + encodeURIComponent('會員a'), { token: 'b' })).items.length, 0);
+  assert.equal(snapshot(), before);
+});
+
+test('points and bare legacy aliases never grant registration or ownership of someone elses card', async t => {
+  const f = fixture(t);
+  f.sql.exec('DELETE FROM user_identity_links');
+  for (const column of ['point_line_id', 'legacy_line_id']) {
+    f.sql.prepare(`UPDATE users SET ${column}=? WHERE row_id='a'`).run(OLD);
+    assert.equal((await f.api('/me', { token: 'old' })).code, 'MEMBER_REQUIRED');
+    f.sql.exec(`UPDATE users SET ${column}='' WHERE row_id='a'`);
+  }
+  f.sql.prepare("UPDATE users SET point_line_id=?,legacy_line_id=? WHERE row_id='c'").run(A, A);
+  f.sql.exec("DELETE FROM card_contacts WHERE row_id='card-c'");
+  assert.equal((await f.api('/me', { token: 'c' })).code, 'OWN_CARD_REQUIRED');
+  assert.deepEqual((await f.api('/members?q=' + encodeURIComponent('會員a'), { token: 'b' })).items.map(item => item.handle), ['card-a']);
   assert.equal(f.writes.length, 0);
+});
+
+test('confirmed LINE links support old row card ownership with or without the new member row', async t => {
+  const f = fixture(t);
+  f.sql.prepare('INSERT INTO users(row_id,line_id,name,phone) VALUES(?,?,?,?)').run('old-row', OLD, '歷史會員', '');
+  f.sql.exec("UPDATE users SET legacy_line_id='',point_line_id=''; UPDATE card_contacts SET profile_user_id='old-row',line_id='',owner_user_id='' WHERE row_id='card-a'");
+  const check = async () => {
+    assert.equal((await f.api('/me')).success, true);
+    assert.equal((await f.api('/me', { token: 'old' })).success, true);
+    assert.deepEqual((await f.api('/members?q=' + encodeURIComponent('會員a'), { token: 'b' })).items.map(item => item.handle), ['card-a']);
+    assert.equal((await f.api('/threads', { token: 'b', data: { cardHandle: 'card-a' } })).success, true);
+    assert.ok(!(await f.api('/members')).items.some(item => item.handle === 'card-a'));
+  };
+  await check();
+  f.sql.exec("DELETE FROM users WHERE row_id='a'");
+  f.sql.prepare("UPDATE card_contacts SET profile_user_id=? WHERE row_id='card-a'").run(A);
+  await check();
 });
 
 test('a genuinely missing member remains denied without inventing registration', async t => {
@@ -243,7 +303,7 @@ test('migration is additive and repeatable; ambiguity and missing schema fail cl
   const before = JSON.stringify(f.sql.prepare('SELECT * FROM users').all());
   f.sql.exec(f.migration); assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM users').all()), before);
   f.sql.exec(`UPDATE users SET legacy_line_id='${A}' WHERE row_id='c'`);
-  assert.equal((await f.api('/me')).status, 409);
+  assert.equal((await f.api('/me')).success, true); // An unrelated legacy field is not login authority.
   f.sql.exec("UPDATE users SET legacy_line_id='' WHERE row_id='c'; DROP TABLE member_chat_preferences");
   assert.equal((await f.api('/me')).status, 503);
 });
