@@ -73,6 +73,15 @@ try {
     const tabs = page.locator('.exchange-top-tabs [role=tab]');
     assert.deepEqual(await tabs.allTextContents(), ['我的聊天', '找會員', '公開動態', '我的貼文']);
     assert.equal(await page.locator('[role=tab][aria-selected=true]').textContent(), '公開動態');
+    const intro = page.locator('.exchange-feed-intro'), compose = page.locator('#exchange-zone-compose-button');
+    assert.equal(await intro.isVisible(), false, 'public feed has no duplicated publishing intro');
+    assert.equal(await compose.isVisible(), false);
+    await page.locator('#exchange-tab-mine').click();
+    assert.equal(await intro.isVisible(), true, 'My Posts retains its publishing intro');
+    assert.equal(await compose.isVisible(), true);
+    await page.locator('#exchange-tab-public').click();
+    assert.equal(await intro.isVisible(), false, 'switching back hides the entire intro again');
+    assert.equal(await page.locator('[data-exchange-post-handle]').count(), 1, 'public posts are unchanged');
     const tabTop = await page.locator('.exchange-top-tabs').evaluate(node => node.getBoundingClientRect().top);
     await page.evaluate(() => { const list = document.querySelector('#exchange-zone-list'); list.style.minHeight = '1800px'; document.querySelector('#exchange-zone-feed').scrollTop = 400; });
     assert.equal(await page.locator('.exchange-top-tabs').evaluate(node => node.getBoundingClientRect().top), tabTop);

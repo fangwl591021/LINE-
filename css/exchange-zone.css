@@ -9,6 +9,7 @@
 #exchange-zone-feed{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:#fff}
 #exchange-zone-chat{flex:1;min-height:0;overflow:hidden;background:#f3fbf8;position:relative}
 #exchange-zone-chat:empty::before{content:"正在讀取…";display:block;padding:24px;color:#52766c}
+#page-exchange-zone:not([data-exchange-tab="mine"]) .exchange-feed-intro{display:none}
 #exchange-zone-panel .exchange-feed-intro{padding:14px 20px}
 #exchange-zone-panel .exchange-feed-intro h3{font-size:17px;margin:0}
 #exchange-zone-panel .exchange-feed-intro>button{min-height:42px;margin-top:12px;font-size:14px}

@@ -114,6 +114,12 @@ test('exchange navigation is a single fixed top tablist with an optional embedde
   assert.match(chat, /closeActive = null/); assert.match(chat, /popups.close\(\); client.close\(\)/);
 });
 
+test('exchange publishing intro is restricted to My Posts, including before a tab is selected', () => {
+  const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+  assert.ok(read('css/exchange-zone.css').includes('#page-exchange-zone:not([data-exchange-tab="mine"]) .exchange-feed-intro{display:none}'));
+  assert.match(read('index.html'), /css\/exchange-zone\.css\?v=2/);
+});
+
 test('LINE contact accepts only IDs or add-friend URLs and is separate from notification opt-in', () => {
   for (const [input, expected] of [[' demo_id ', 'https://line.me/ti/p/~demo_id'], ['@demo', 'https://line.me/R/ti/p/%40demo'], ['https://line.me/ti/p/AB-C_xyz', 'https://line.me/ti/p/AB-C_xyz'], ['https://lin.ee/abc123', 'https://lin.ee/abc123'], ['', '']]) assert.equal(normalizeLineContact(input), expected);
   for (const input of [null, {}, 123, 'abc', 'U' + 'a'.repeat(32), 'a'.repeat(501), 'https://evil.test/a', 'javascript:alert(1)', 'http://line.me/ti/p/abc', 'https://line.me.evil.test/ti/p/abc', 'https://evil@line.me/ti/p/abc', 'https://line.me:444/ti/p/abc', 'https://line.me/R/share?text=x', 'https://line.me/ti/p/a%2fb', 'https://line.me/ti/p/abc\n', 'https://line.me\\evil.test/ti/p/abc']) assert.equal(normalizeLineContact(input), null, String(input));
