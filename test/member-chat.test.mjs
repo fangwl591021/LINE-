@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { handleMemberChat, processMemberChatNotifications } from '../worker/member-chat.mjs';
 import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from '../worker/member-chat-industry.mjs';
+import { chatExtraSchema, seedChatCoupon, seedChatScore } from './member-chat-extra-fixture.mjs';
+import { ExchangeZoneModule } from '../worker/exchange-zone.mjs';
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), OLD = 'U' + 'd'.repeat(32);
 const BASE = 'https://chat.test/v1/member-chat';
 function fixture(t) {
@@ -17,7 +19,8 @@ function fixture(t) {
   for (const [id, uid] of [['a', A], ['b', B], ['c', C]]) sql.prepare("INSERT INTO card_contacts(row_id,line_id,profile_user_id,owner_user_id,source_type,visibility,pool_eligible,ai_review_status,name,company_name,title,updated_at) VALUES(?,?,?,?,'self_profile','public',1,'passed',?,'測試公司','業務','2026-09-24')").run('card-' + id, uid, uid, uid, '會員' + id);
   const migration = readFileSync(new URL('../migrations/0046_member_private_chat.sql', import.meta.url), 'utf8'); sql.exec(migration);
   sql.exec(readFileSync(new URL('../migrations/0047_member_chat_notifications.sql', import.meta.url), 'utf8'));
-  let failWrites = false, authStatus = 200, botStatus = 200, pushStatus = 200, failFinalize = false;
+  chatExtraSchema(sql);
+  let failWrites = false, authStatus = 200, botStatus = 200, pushStatus = 200, failFinalize = false, beforeWrite = null;
   const pushes = [], botLookups = [];
   const writes = [];
   function prepare(query, args = []) {
@@ -26,9 +29,10 @@ function fixture(t) {
       async first() { return sql.prepare(query).get(...args) || null; },
       async all() { return { success: true, results: sql.prepare(query).all(...args) }; },
       async run() {
+        beforeWrite?.(query);
         if (failWrites) throw Error('private database exception');
         if (failFinalize && args[0] === 'sent') { failFinalize = false; throw Error('simulated lost completion'); }
-        assert.match(query, /^(?:INSERT INTO|UPDATE|DELETE FROM) member_chat_/);
+        assert.match(query, /^\s*(?:(?:INSERT INTO|UPDATE|DELETE FROM) member_chat_|INSERT OR IGNORE INTO exchange_zone_coupon_redemptions)/);
         writes.push(query); const result = sql.prepare(query).run(...args); return { success: true, meta: { changes: Number(result.changes) } };
       }
     };
@@ -59,9 +63,118 @@ function fixture(t) {
   const due = () => sql.exec("UPDATE member_chat_notification_jobs SET due_at=0,lease_until=0 WHERE status='pending'");
   const enable = (token = 'b') => { env.LINE_CHANNEL_ACCESS_TOKEN = 'test-bot-token'; return api('/notifications', { token, data: { enabled: true } }); };
   return { sql, env, api, room, send, writes, migration, drain, due, enable, pushes, botLookups,
-    setBot: value => { botStatus = value; }, setPush: value => { pushStatus = value; }, failFinalize: () => { failFinalize = true; },
+    setBot: value => { botStatus = value; }, setPush: value => { pushStatus = value; }, failFinalize: () => { failFinalize = true; }, beforeWrite: value => { beforeWrite = value; },
     setFail: value => { failWrites = value; }, setAuth: value => { authStatus = value; } };
 }
+test('attachments list only own valid published coupons; conditional send and retries include coupon identity', async t => {
+  const f = fixture(t), coupon = seedChatCoupon(f.sql, A), other = seedChatCoupon(f.sql, B);
+  const expired = seedChatCoupon(f.sql, A, { expiry: '2000-01-01' });
+  const inactive = seedChatCoupon(f.sql, A, { status: 'inactive' });
+  const hidden = seedChatCoupon(f.sql, A, { postStatus: 'hidden' });
+  assert.deepEqual((await f.api('/coupons')).items.map(row => row.handle), [coupon]);
+  assert.doesNotMatch(JSON.stringify(await f.api('/coupons')), /owner_user_id|author_user_id|U[a-f]{32}/);
+  const id = await f.room(), clientId = crypto.randomUUID();
+  const data = { body: '我的優惠券', clientId, couponHandle: coupon };
+  for (const handle of [other, expired, inactive, hidden, 'exc_' + crypto.randomUUID()]) assert.equal((await f.api(`/threads/${id}/messages`, { data: { ...data, clientId: crypto.randomUUID(), couponHandle: handle } })).success, false);
+  const sent = await f.api(`/threads/${id}/messages`, { data }); assert.equal(sent.item.hasCoupon, true);
+  assert.equal((await f.api(`/threads/${id}/messages`, { data })).duplicate, true);
+  assert.equal((await f.api(`/threads/${id}/messages`, { data: { ...data, couponHandle: '' } })).code, 'RETRY_CONFLICT');
+  f.sql.prepare("UPDATE exchange_zone_coupons SET status='inactive' WHERE coupon_handle=?").run(coupon);
+  assert.equal((await f.api(`/threads/${id}/messages`, { data })).duplicate, true, 'lost response remains confirmable after coupon removal');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_messages').get().n, 1);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM points_ledger').get().n, 0);
+  assert.ok(f.writes.some(query => query.includes('INSERT INTO member_chat_messages') && query.includes("c.owner_user_id=?7") && query.includes("p.status='published'")));
+});
+
+test('coupon attachment read and explicit redemption are participant scoped, single use, and free', async t => {
+  const f = fixture(t), coupon = seedChatCoupon(f.sql, A), id = await f.room();
+  const sent = await f.api(`/threads/${id}/messages`, { data: { body: '歡迎使用', clientId: crypto.randomUUID(), couponHandle: coupon } });
+  const path = `/threads/${id}/coupon?seq=${sent.item.seq}`;
+  assert.equal((await f.api(path, { token: 'c' })).status, 404);
+  assert.equal((await f.api(path)).coupon.canRedeem, false);
+  assert.equal((await f.api(path, { data: {} })).success, false, 'owner cannot redeem');
+  assert.equal((await f.api(path, { token: 'b' })).coupon.canRedeem, true);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM exchange_zone_coupon_redemptions').get().n, 0, 'view is not redemption');
+  const aToC = await f.api('/threads', { data: { cardHandle: 'card-c' } });
+  assert.equal((await f.api(`/threads/${aToC.id}/coupon?seq=${sent.item.seq}`)).status, 404);
+  await f.api(`/threads/${id}/block`, { data: { blocked: true } });
+  assert.equal((await f.api(path, { token: 'b', data: {} })).status, 403);
+  await f.api(`/threads/${id}/block`, { data: { blocked: false } });
+  f.setFail(true); assert.equal((await f.api(path, { token: 'b', data: {} })).success, false); f.setFail(false);
+  assert.equal((await f.api(path, { token: 'b', data: {} })).coupon.viewerRedeemed, true);
+  assert.equal((await f.api(path, { token: 'b', data: {} })).duplicate, true);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM exchange_zone_coupon_redemptions').get().n, 1);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM points_ledger').get().n, 0);
+  f.sql.prepare("UPDATE exchange_zone_posts SET status='archived' WHERE post_handle=(SELECT post_handle FROM exchange_zone_coupons WHERE coupon_handle=?)").run(coupon);
+  assert.equal((await f.api(path, { token: 'b' })).status, 404);
+});
+
+test('coupon expires after sending; inactive, deleted or expired attachment cannot be redeemed', async t => {
+  const f = fixture(t), coupon = seedChatCoupon(f.sql, A), id = await f.room();
+  const sent = await f.api(`/threads/${id}/messages`, { data: { body: '優惠', clientId: crypto.randomUUID(), couponHandle: coupon } });
+  const path = `/threads/${id}/coupon?seq=${sent.item.seq}`;
+  f.sql.prepare("UPDATE exchange_zone_coupons SET expires_at='2000-01-01' WHERE coupon_handle=?").run(coupon);
+  assert.equal((await f.api(path, { token: 'b' })).coupon.status, 'expired');
+  assert.equal((await f.api(path, { token: 'b', data: {} })).success, false);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM exchange_zone_coupon_redemptions').get().n, 0);
+});
+
+test('directory reuses only this viewers authorized, verified-peer historical scores including zero; never recalculates', async t => {
+  const f = fixture(t), scan = seedChatScore(f.sql, A, B, { score: 0 });
+  seedChatScore(f.sql, C, B, { score: 99 }); seedChatScore(f.sql, A, C, { scope: 'public', score: 100 });
+  const original = JSON.stringify(f.sql.prepare('SELECT * FROM ai_match_pair_cache').all());
+  const list = await f.api('/members');
+  assert.deepEqual(list.items.find(row => row.handle === 'card-b').match, { score: 0, source: 'ai', basis: 'previous' });
+  assert.equal(list.items.find(row => row.handle === 'card-c').match, null);
+  assert.doesNotMatch(JSON.stringify(list), /reason|requester|peer|scan-|U[a-f]{32}/);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM ai_match_pair_cache').all()), original); assert.equal(f.writes.length, 0);
+  f.sql.prepare("UPDATE card_contacts SET scanner_user_id=? WHERE row_id=?").run(C, scan);
+  assert.equal((await f.api('/members')).items.find(row => row.handle === 'card-b').match, null, 'lost collection access removes score');
+  f.sql.prepare("UPDATE card_contacts SET scanner_user_id=?,line_id='' WHERE row_id=?").run(A, scan);
+  assert.equal((await f.api('/members')).items.find(row => row.handle === 'card-b').match, null, 'unclaimed similar-name scans cannot be guessed');
+  f.sql.exec('DROP TABLE ai_match_pair_cache');
+  assert.equal((await f.api('/members')).items.length, 2, 'missing cache does not hide directory');
+});
+
+test('coupon revoked between read and redemption write does not report success or insert a redemption', async t => {
+  const f = fixture(t), coupon = seedChatCoupon(f.sql, A), id = await f.room();
+  const sent = await f.api(`/threads/${id}/messages`, { data: { body: '優惠', clientId: crypto.randomUUID(), couponHandle: coupon } });
+  f.beforeWrite(query => { if (query.includes('INSERT OR IGNORE INTO exchange_zone_coupon_redemptions')) f.sql.prepare("UPDATE exchange_zone_coupons SET status='inactive' WHERE coupon_handle=?").run(coupon); });
+  const result = await f.api(`/threads/${id}/coupon?seq=${sent.item.seq}`, { token: 'b', data: {} });
+  assert.equal(result.success, false); assert.equal(result.code, 'EXCHANGE_COUPON_NOT_AVAILABLE');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM exchange_zone_coupon_redemptions').get().n, 0);
+});
+
+test('peer card POP is read-only, public reviewed latest own card only, and cannot bypass a block or conversation', async t => {
+  const f = fixture(t), id = await f.room(), path = `/threads/${id}/card`;
+  f.sql.exec("UPDATE card_contacts SET email='public@example.com',website='https://example.com',custom_config='{\"buttons\":[{\"label\":\"壞網址\",\"url\":\"javascript:alert(1)\"}]}' WHERE row_id='card-b'");
+  const card = await f.api(path); assert.equal(card.card.name, '會員b');
+  assert.ok(card.card.buttons.some(button => button.url === 'mailto:public@example.com'));
+  assert.doesNotMatch(JSON.stringify(card), /javascript|row_id|custom_config|U[a-f]{32}/);
+  assert.equal((await f.api(path, { token: 'c' })).status, 404);
+  assert.equal((await f.api(path, { data: {} })).status, 405);
+  for (const [field, value] of [['visibility','private'],['ai_review_status','pending'],['source_type','private_import'],['archived_at','2026-09-24']]) {
+    f.sql.prepare(`UPDATE card_contacts SET ${field}=? WHERE row_id='card-b'`).run(value);
+    assert.equal((await f.api(path)).status, 404);
+    f.sql.exec("UPDATE card_contacts SET visibility='public',ai_review_status='passed',source_type='self_profile',archived_at='' WHERE row_id='card-b'");
+  }
+  await f.api(`/threads/${id}/block`, { token: 'b', data: { blocked: true } });
+  assert.equal((await f.api(path)).status, 403);
+});
+
+test('historically expired published posts remain readable; hidden/archive still unavailable', async t => {
+  const f = fixture(t), coupon = seedChatCoupon(f.sql, A), actor = { userId: A, role: 'user' };
+  const { post_handle: postHandle } = f.sql.prepare('SELECT post_handle FROM exchange_zone_coupons WHERE coupon_handle=?').get(coupon);
+  const result = await ExchangeZoneModule.list({}, f.env, actor);
+  assert.equal(result.posts.length, 1); assert.equal(result.access.publishDays, 0);
+  assert.equal((await ExchangeZoneModule.get({ postHandle }, f.env, actor)).success, true);
+  for (const state of ['hidden','archived','draft']) {
+    f.sql.prepare('UPDATE exchange_zone_posts SET status=? WHERE post_handle=?').run(state, postHandle);
+    assert.equal((await ExchangeZoneModule.list({}, f.env, actor)).posts.length, 0);
+    assert.equal((await ExchangeZoneModule.get({ postHandle }, f.env, actor)).success, false);
+  }
+});
+
 test('routing is isolated; LINE auth, registration, own card and exchange access fail closed', async t => {
   const f = fixture(t);
   assert.equal(await handleMemberChat(new Request('https://chat.test/other'), {}), null);

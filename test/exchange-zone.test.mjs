@@ -64,7 +64,7 @@ assert.deepEqual(ExchangeZoneModule.access({}, {}, member).access, {
   canManage: false,
   canPublish: false,
   publishCost: 10,
-  publishDays: 7,
+  publishDays: 0,
   contactTags: ['合作邀約', '商品服務', '活動邀請', '人才交流', '其他']
 });
 assert.equal(ExchangeZoneModule.access({}, {
@@ -135,7 +135,7 @@ const row = {
   assert.equal('cardRowId' in result.posts[0], false);
   assert.equal('postId' in result.posts[0], false);
   assert.match(env.calls[0].sql, /p\.status = 'published'/);
-  assert.match(env.calls[0].sql, /p\.expires_at/);
+  assert.doesNotMatch(env.calls[0].sql, /p\.expires_at/);
   assert.match(env.calls[1].sql, /FROM users u/);
   assert.match(env.calls[2].sql, /LOWER\(COALESCE\(c\.source_type/);
   assert.match(env.calls[2].sql, /LOWER\(COALESCE\(c\.visibility/);
@@ -169,7 +169,7 @@ const row = {
   assert.deepEqual(env.calls[1].bindings, ['U_MUST_NOT_LEAK']);
   assert.deepEqual(env.calls[2].bindings, ['CARD_MUST_NOT_LEAK', 'U_MUST_NOT_LEAK']);
   assert.match(env.calls[0].sql, /p\.post_handle = \?1 AND p\.status = 'published'/);
-  assert.match(env.calls[0].sql, /p\.expires_at/);
+  assert.doesNotMatch(env.calls[0].sql, /p\.expires_at/);
 }
 
 function updateEnv(owned = true) {
@@ -246,9 +246,8 @@ function updateEnv(owned = true) {
   const result = await ExchangeZoneModule.list({ limit: 10 }, env, admin);
   assert.equal(result.success, true);
   assert.equal(result.count, 1);
-  assert.equal(env.calls.length, 4);
-  assert.match(env.calls[0].sql, /p\.expires_at/);
-  assert.doesNotMatch(env.calls[1].sql, /p\.expires_at/);
+  assert.equal(env.calls.length, 3);
+  assert.doesNotMatch(env.calls[0].sql, /p\.expires_at/);
 }
 
 {
@@ -256,8 +255,8 @@ function updateEnv(owned = true) {
   const result = await ExchangeZoneModule.get({ postHandle: 'post_opaque_demo' }, env, member);
   assert.equal(result.success, true);
   assert.equal(result.post.postHandle, 'post_opaque_demo');
-  assert.equal(env.calls.length, 4);
-  assert.doesNotMatch(env.calls[1].sql, /p\.expires_at/);
+  assert.equal(env.calls.length, 3);
+  assert.doesNotMatch(env.calls[0].sql, /p\.expires_at/);
 }
 
 function publishEnv(options = {}) {

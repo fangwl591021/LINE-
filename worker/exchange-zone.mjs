@@ -2,7 +2,7 @@ import { getExchangeZoneLikeState, hydrateExchangeZoneLikes, toggleExchangeZoneL
 
 const MAX_POSTS = 50;
 const PUBLISH_COST = 10;
-const PUBLISH_DAYS = 7;
+const PUBLISH_DAYS = 0; // Published posts are now managed by their author, without automatic expiry.
 const CONTACT_TAGS = Object.freeze(['合作邀約', '商品服務', '活動邀請', '人才交流', '其他']);
 
 function text(value, maxLength = 2000) {
@@ -117,7 +117,7 @@ function firstHttpsIn(value) {
   return actionUrl(match?.[0] || raw);
 }
 
-function publicCard(row) {
+export function publicCard(row) {
   if (Number(row?.card_available) !== 1) return null;
   const config = cardConfig(row?.card_custom_config);
   const configuredButtons = Array.isArray(config.buttons)
@@ -433,7 +433,7 @@ export const ExchangeZoneModule = {
       result = await env.ACTMASTER_DB.prepare(`
         ${selectColumns()}
         WHERE p.status = 'published'
-          AND (p.expires_at = '' OR p.expires_at > CURRENT_TIMESTAMP)
+
         ORDER BY COALESCE(NULLIF(p.published_at, ''), p.created_at) DESC, p.post_id DESC
         LIMIT ?1
       `).bind(limit).all();
@@ -469,7 +469,7 @@ export const ExchangeZoneModule = {
       row = await env.ACTMASTER_DB.prepare(`
         ${selectColumns()}
         WHERE p.post_handle = ?1 AND p.status = 'published'
-          AND (p.expires_at = '' OR p.expires_at > CURRENT_TIMESTAMP)
+
         LIMIT 1
       `).bind(postHandle).first();
     } catch (error) {
@@ -512,7 +512,7 @@ export const ExchangeZoneModule = {
       SELECT post_handle
       FROM exchange_zone_posts
       WHERE post_handle = ?1 AND author_user_id = ?2 AND status = 'published'
-        AND (expires_at = '' OR expires_at > CURRENT_TIMESTAMP)
+
       LIMIT 1
     `).bind(postHandle, authorUserId).first();
     if (!owned) return { success: false, error: '找不到可編輯的交流內容', code: 'EXCHANGE_UPDATE_NOT_ALLOWED' };
@@ -572,7 +572,7 @@ export const ExchangeZoneModule = {
 
     const operationId = `exop_${crypto.randomUUID()}`;
     const postHandle = `exp_${crypto.randomUUID()}`;
-    const expiresAt = new Date(Date.now() + PUBLISH_DAYS * 86400000).toISOString();
+    const expiresAt = '';
     let completedDebit = null;
     try {
       await env.ACTMASTER_DB.prepare(`
@@ -631,7 +631,7 @@ export const ExchangeZoneModule = {
         debit = await points.adjust(authorUserId, -PUBLISH_COST, {
           operationId,
           eventName: '交流專區刊登',
-          eventContent: `交流內容刊登 ${PUBLISH_DAYS} 天`
+          eventContent: '交流內容刊登'
         });
       } catch (debitError) {
         await markOperation(env.ACTMASTER_DB, operationId, 'debit_uncertain', 'POINT_DEBIT_UNCERTAIN', {

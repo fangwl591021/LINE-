@@ -36,12 +36,12 @@ includesAll(likes, [
   'hydrateExchangeZoneLikes',
   'toggleExchangeZoneLike',
   "status = 'published'",
-  "expires_at = '' OR expires_at > CURRENT_TIMESTAMP",
   'INSERT OR IGNORE INTO exchange_zone_post_likes',
   'DELETE FROM exchange_zone_post_likes',
   'likeCount',
   'likedByMe'
-], 'like service supports published non-expired posts and toggle state');
+], 'like service supports author-managed published posts and toggle state');
+ok(!likes.includes("expires_at > CURRENT_TIMESTAMP"), 'post publication has no automatic expiry; coupon expiry is separate');
 
 ok(!likes.includes('payload?.userId'), 'like service never trusts a user id from payload');
 ok(!likes.includes('payload?.authorUserId'), 'like service never trusts an author id from payload');

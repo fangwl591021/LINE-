@@ -1,7 +1,8 @@
-// Private, text-only member conversations. Never writes inbox, cards or points.
+// Private member conversations with references to existing coupons. Never writes inbox, cards or points.
 import { ExchangeZoneModule } from './exchange-zone.mjs';
 import { notificationPreference, saveNotificationPreference, deliverChatNotifications } from './member-chat-notifications.mjs';
 import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from './member-chat-industry.mjs';
+import { memberScores, peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat-extras.mjs';
 const BASE = '/v1/member-chat';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -135,7 +136,7 @@ async function thread(db, actor, id) {
   return { ...row, peer: row.member_a === actor.memberId ? row.member_b : row.member_a };
 }
 function message(row, me) {
-  return { seq: row.seq, body: row.body, mine: row.sender_id === me, clientId: row.sender_id === me ? row.client_id : undefined, createdAt: row.created_at, read: !!row.read_at };
+  return { seq: row.seq, body: row.body, mine: row.sender_id === me, clientId: row.sender_id === me ? row.client_id : undefined, createdAt: row.created_at, read: !!row.read_at, hasCoupon: !!row.coupon_handle };
 }
 async function peerInfo(db, id) {
   // Only minimal account display name, not private contact fields or card contents.
@@ -146,7 +147,7 @@ async function listMembers(db, actor, params) {
   const q = text(params.get('q')), after = text(params.get('after')), industry = text(params.get('industry'));
   if (q.length > 60 || after.length > 180) fail('INVALID_QUERY', '搜尋條件過長');
   if (industry && !CHAT_INDUSTRIES.includes(industry)) fail('INVALID_QUERY', '請選擇有效的業種');
-  const result = await rows(db, `SELECT c.row_id AS handle,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title FROM card_contacts c JOIN users u ON ${CARD_JOIN}
+  const result = await rows(db, `SELECT c.row_id AS handle,u.row_id AS peer,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title FROM card_contacts c JOIN users u ON ${CARD_JOIN}
     WHERE ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} AND CAST(u.row_id AS TEXT)<>?1 AND CAST(c.row_id AS TEXT)>?2
     AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=CAST(u.row_id AS TEXT)),1)=1
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
@@ -155,7 +156,8 @@ async function listMembers(db, actor, params) {
     AND c.row_id=(SELECT c2.row_id FROM card_contacts c2 WHERE ${ownCard('c2')}
       AND ${cardMemberJoin('c2', 'u')} ORDER BY c2.updated_at DESC,c2.row_id DESC LIMIT 1)
     ORDER BY CAST(c.row_id AS TEXT) LIMIT 31`, actor.memberId, after, q.toLowerCase().replace(/ /g, ''), industry);
-  const items = result.slice(0, PAGE).map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80) }));
+  const scores = await memberScores(db, actor, result.slice(0, PAGE), cardMemberJoin);
+  const items = result.slice(0, PAGE).map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), match: scores.get(row.peer) || null }));
   return { items, next: result.length > PAGE ? items.at(-1).handle : '', industries: CHAT_INDUSTRIES };
 }
 async function listThreads(db, actor, params) {
@@ -184,26 +186,29 @@ async function openThread(db, actor, body) {
   return { id: row.id, peer: await peerInfo(db, peer.memberId) };
 }
 async function send(db, actor, room, body) {
-  keys(body, ['body', 'clientId']);
+  keys(body, ['body', 'clientId', 'couponHandle']);
+  const coupon = body.couponHandle ?? '';
+  if (typeof coupon !== 'string' || (coupon && !/^exc_[0-9a-f-]{36}$/i.test(coupon))) fail('INVALID_COUPON', '請重新選擇優惠券');
   if (typeof body.body !== 'string' || !body.body.trim() || [...body.body].length > 2000 || !UUID.test(body.clientId || '')) fail('INVALID_MESSAGE', '請輸入 1–2000 字的文字訊息');
   const content = body.body.trim();
   const previous = await statement(db, 'SELECT * FROM member_chat_messages WHERE sender_id=? AND client_id=?', actor.memberId, body.clientId).first();
   if (previous) {
-    if (previous.thread_id !== room.id || previous.body !== content) fail('RETRY_CONFLICT', '這次重送的內容不一致，請重新傳送', 409);
+    if (previous.thread_id !== room.id || previous.body !== content || (previous.coupon_handle || '') !== coupon) fail('RETRY_CONFLICT', '這次重送的內容不一致，請重新傳送', 409);
     return { item: message(previous, actor.memberId), duplicate: true };
   }
   const peer = await statement(db, 'SELECT row_id,line_id,name,phone FROM users WHERE row_id=?', room.peer).first();
   if (!registered(peer)) fail('CONTACT_CLOSED', '對方目前無法接收訊息', 403);
   // One conditional write enforces block, first-contact preference and rate limits atomically.
-  await run(db, `INSERT INTO member_chat_messages(thread_id,sender_id,client_id,body)
-    SELECT ?3,?1,?4,?5 WHERE ${NO_BLOCK}
+  await run(db, `INSERT INTO member_chat_messages(thread_id,sender_id,client_id,body,coupon_handle)
+    SELECT ?3,?1,?4,?5,?6 WHERE ${NO_BLOCK}
+    AND (?6='' OR ${SENDABLE_COUPON})
     AND (COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=?2),1)=1 OR EXISTS(SELECT 1 FROM member_chat_messages WHERE thread_id=?3))
     AND (SELECT count(*) FROM member_chat_messages WHERE sender_id=?1 AND created_at>=datetime('now','-1 minute'))<20
     AND (SELECT count(*) FROM member_chat_messages WHERE sender_id=?1 AND created_at>=datetime('now','-1 day'))<500
-    ON CONFLICT(sender_id,client_id) DO NOTHING`, actor.memberId, room.peer, room.id, body.clientId, content);
+    ON CONFLICT(sender_id,client_id) DO NOTHING`, actor.memberId, room.peer, room.id, body.clientId, content, coupon, actor.uid);
   const saved = await statement(db, 'SELECT * FROM member_chat_messages WHERE sender_id=? AND client_id=?', actor.memberId, body.clientId).first();
-  if (!saved) fail('SEND_LIMITED', '目前無法傳送：對方可能已關閉聯絡，或傳送太頻繁，請稍後再試', 429);
-  if (saved.thread_id !== room.id || saved.body !== content) fail('RETRY_CONFLICT', '這次重送的內容不一致', 409);
+  if (!saved) fail('SEND_LIMITED', '目前無法傳送：請確認聯絡狀態、優惠券是否仍有效，或稍後再試', 429);
+  if (saved.thread_id !== room.id || saved.body !== content || (saved.coupon_handle || '') !== coupon) fail('RETRY_CONFLICT', '這次重送的內容不一致', 409);
   return { item: message(saved, actor.memberId) };
 }
 export async function handleMemberChat(request, env, fetcher = fetch) {
@@ -215,7 +220,7 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
     const actor = await authenticate(request, db, env, fetcher);
     const path = url.pathname.slice(BASE.length), params = url.searchParams;
-    const allowedParams = path === '/members' ? ['q', 'industry', 'after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
+    const allowedParams = path === '/members' ? ['q', 'industry', 'after'] : path === '/coupons' ? ['after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/coupon$/.test(path) ? ['seq'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
     for (const key of params.keys()) if (!allowedParams.includes(key) || params.getAll(key).length !== 1) fail('INVALID_QUERY', '查詢條件不正確');
     const body = request.method === 'POST' ? await jsonBody(request) : {};
     let data;
@@ -244,13 +249,31 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
       await run(db, 'INSERT INTO member_chat_preferences(member_id,accepting) VALUES(?,?) ON CONFLICT(member_id) DO UPDATE SET accepting=excluded.accepting', actor.memberId, Number(body.accepting));
       data = { accepting: body.accepting };
     } else if (path === '/members' && request.method === 'GET') data = await listMembers(db, actor, params);
+    else if (path === '/coupons' && request.method === 'GET') {
+      const after = text(params.get('after')); if (after.length > 120) fail('INVALID_QUERY', '分頁位置不正確');
+      data = await ownCoupons(db, actor, after);
+    }
     else if (path === '/threads' && request.method === 'GET') data = await listThreads(db, actor, params);
     else if (path === '/threads' && request.method === 'POST') data = await openThread(db, actor, body);
     else {
-      const match = path.match(/^\/threads\/([^/]+)\/(messages|read|block|report)$/);
+      const match = path.match(/^\/threads\/([^/]+)\/(messages|read|block|report|card|coupon)$/);
       if (!match) fail('NOT_FOUND', '找不到功能', 404);
       const room = await thread(db, actor, match[1]);
-      if (match[2] === 'messages' && request.method === 'GET') {
+      if (['card', 'coupon'].includes(match[2])) {
+        if ((await contactState(db, actor.memberId, room.peer)).blocked) fail('CONTACT_CLOSED', '目前已封鎖聯絡', 403);
+        if (match[2] === 'card') {
+          if (request.method !== 'GET') fail('METHOD_NOT_ALLOWED', '不支援的操作', 405);
+          const card = await peerCard(db, room, cardMemberJoin, ownCard);
+          if (!card) fail('CARD_UNAVAILABLE', '對方尚未公開名片，或名片尚未通過檢查', 404);
+          data = { card };
+        } else {
+          keys(body, []);
+          const seq = cursor(params.get('seq')); if (!seq) fail('INVALID_CURSOR', '請重新選擇優惠券');
+          data = await chatCoupon(db, actor, room, seq, request.method === 'POST');
+          if (!data?.coupon) fail(data?.code || 'COUPON_UNAVAILABLE', data?.error || '優惠券已下架或無法使用', 404);
+          if (!data.success) fail(data.code || 'COUPON_UNAVAILABLE', data.error || '優惠券無法使用', 409);
+        }
+      } else if (match[2] === 'messages' && request.method === 'GET') {
         const before = cursor(params.get('before')), after = cursor(params.get('after'));
         if (before && after) fail('INVALID_CURSOR', '分頁條件不正確');
         const result = await rows(db, `SELECT * FROM member_chat_messages WHERE thread_id=? AND seq ${after ? '>' : '<'} ? ORDER BY seq ${after ? 'ASC' : 'DESC'} LIMIT 31`, room.id, after || before || Number.MAX_SAFE_INTEGER);

@@ -26,6 +26,7 @@ try {
   await new Promise(resolve => setTimeout(resolve, 50)); releaseMe();
   await a.locator('[data-handle="card-b"]').waitFor(); await a.unroute('**/v1/member-chat/me');
   assert.equal(await a.locator('.mc-contact').count(), 2);
+  assert.equal(await a.locator('[data-handle="card-b"] .mc-match').textContent(), '82%');
   assert.equal(await a.locator('#mc-industry option').count(), 17);
   const filterBox = await a.locator('#mc-industry').boundingBox(), queryBox = await a.locator('#mc-query').boundingBox();
   assert.ok(filterBox.y >= queryBox.y + queryBox.height && filterBox.height >= 44 && filterBox.x + filterBox.width <= 390);
@@ -67,6 +68,30 @@ try {
   await wait(b, () => document.querySelector('.mc-status').textContent.includes('已開啟 LINE 私訊通知'));
   await b.locator('.mc-contact').first().click();
   await wait(b, () => document.querySelector('.mc-rows').textContent.includes('咖啡禮盒'));
+  await a.locator('[data-action="card"]').click();
+  await a.locator('.mc-popup-body', { hasText: '對方尚未公開名片' }).waitFor();
+  await a.locator('.mc-popup header button').click();
+  await b.locator('[data-action="card"]').click();
+  await b.locator('.mc-card-links a[href="mailto:demo@example.com"]').waitFor();
+  assert.equal(await b.locator('.mc-popup').evaluate(node => node.scrollWidth <= innerWidth), true);
+  await b.screenshot({ path: join(tmpdir(), 'member-chat-card-popup.png') });
+  await b.locator('.mc-popup header button').click();
+  await a.locator('[data-action="attach"]').click();
+  await a.locator('.mc-coupon-option').click();
+  assert.match(await a.locator('[data-selected-coupon]').textContent(), /合成咖啡/);
+  assert.equal(await a.locator('[data-action="coupon"]').count(), 0, 'choosing alone does not send');
+  await a.locator('.mc-compose button').click();
+  await a.locator('[data-action="coupon"]').waitFor();
+  await b.locator('[data-action="refresh"]').click(); await b.locator('[data-action="coupon"]').waitFor();
+  await b.locator('[data-action="coupon"]').click(); await b.locator('[data-redeem]').waitFor();
+  assert.match(await b.locator('.mc-popup-body').textContent(), /2099/);
+  await b.screenshot({ path: join(tmpdir(), 'member-chat-coupon-popup.png') });
+  await b.locator('[data-redeem]').click(); await b.locator('[data-confirm-redeem]').click();
+  await b.locator('.mc-popup-body [role=status]', { hasText: '核銷成功' }).waitFor();
+  await b.locator('.mc-popup header button').click(); await b.locator('[data-action="coupon"]').click();
+  await b.locator('.mc-popup-body [role=status]', { hasText: '已核銷' }).waitFor();
+  assert.equal(await b.locator('[data-redeem]').count(), 0);
+  await b.locator('.mc-popup header button').click();
   await send(b, '您好！歡迎交流，我們可以一起討論。');
   await a.locator('[data-action="refresh"]').click(); await wait(a, () => document.querySelector('.mc-rows').textContent.includes('一起討論'));
   await send(b, '這是對方先送出、稍後才同步的訊息'); await send(a, '本機先顯示的回覆');
@@ -89,10 +114,12 @@ try {
   await b.locator('[data-action="block"]').click(); await wait(b, () => document.querySelector('[data-action="block"]').textContent === '解除封鎖');
   await a.locator('[data-action="refresh"]').click(); await wait(a, () => document.querySelector('.mc-compose button').disabled);
   await b.locator('[data-action="block"]').click(); await wait(b, () => document.querySelector('[data-action="block"]').textContent === '封鎖');
+  await a.locator('[data-action="refresh"]').click(); await wait(a, () => !document.querySelector('[data-action="card"]').disabled);
   const c = await page('c'); await c.locator('#open').click(); await c.locator('.mc-empty').waitFor(); assert.equal(await c.locator('.mc-contact').count(), 0);
   let requests = 0; a.on('request', req => { if (req.url().includes('/v1/member-chat/')) requests++; });
   await a.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
   const start = requests; await a.clock.fastForward(45000); assert.equal(requests, start, 'background makes no polling calls');
+  await a.locator('[data-action="card"]').click(); await a.locator('.mc-popup').waitFor();
   await a.evaluate(() => { window.currentUserProfile.userId = 'changed-account'; Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
   assert.equal(await a.locator('dialog').count(), 0, 'account change removes private UI');
   const stopped = requests; await a.clock.fastForward(45000); assert.equal(requests, stopped, 'closed view makes no polling calls');
@@ -119,5 +146,6 @@ try {
   assert.equal(await reopened.locator('.mc-contact').count(), 1);
   assert.ok(await reopened.locator('dialog').evaluate(node => node.scrollWidth <= 620));
   assert.deepEqual(errors, []);
+  console.log('PASS extras: reused 82% score, attachment selection/send, peer card POP + private denial, coupon popup + explicit single-use redemption, popup cleanup on account change');
   console.log(JSON.stringify({ result: 'PASS', checks: ['industry control below text search', 'primary/secondary industry and text intersection', 'stale filter response ignored', 'clear industry restores all', 'desktop industry filter', 'unpublished own card English-name search without phone', 'empty search feedback', 'two-party replies', 'third-party isolation', 'receive cursor and chronological order', 'lost-response retry', 'block/unblock', 'background/close polling stop', 'account change cleanup', 'mobile/desktop layout', 'explicit notification opt-in', 'synthetic push with recipient page closed', 'notification deep link opens authorized thread', 'persisted opt-out stops push'], screenshot, industryScreenshot }));
 } finally { await browser.close(); }

@@ -4,7 +4,7 @@
     loading: false,
     publishing: false,
     liking: new Set(),
-    access: { mode: 'private', allowed: false, canManage: false, canPublish: false, publishCost: 10, publishDays: 7, contactTags: [] },
+    access: { mode: 'private', allowed: false, canManage: false, canPublish: false, publishCost: 10, publishDays: 0, contactTags: [] },
     panelOpen: false,
     panelTrigger: null,
     panelCloseTimer: null,
@@ -105,7 +105,7 @@
       canManage: normalized.canManage === true,
       canPublish: normalized.canPublish === true,
       publishCost: Number(normalized.publishCost) || 10,
-      publishDays: Number(normalized.publishDays) || 7,
+      publishDays: 0,
       contactTags: Array.isArray(normalized.contactTags) ? normalized.contactTags.slice(0, 8) : []
     };
     const button = document.getElementById('home-exchange-zone-button');
@@ -374,7 +374,7 @@
         <input type="hidden" name="postHandle" value="${escapeHtml(editing ? existingPost.postHandle : '')}">
         <input type="hidden" name="idempotencyKey" value="${escapeHtml(idempotencyKey())}">
         <div class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-[13px] font-bold text-amber-800">
-          ${editing ? '編輯不會再扣點，也不會延長原本 7 天的顯示期限。' : `發布成功才扣 ${state.access.publishCost} 點，內容顯示 ${state.access.publishDays} 天；刪除不退點。`}
+          ${editing ? '編輯不會再扣點；內容由您自行管理。' : `發布成功才扣 ${state.access.publishCost} 點；由您自行管理，刪除不退點。`}活動期間請自行填寫於內容。
         </div>
         <label class="block">
           <span class="text-[13px] font-black text-slate-700">標題</span>
@@ -487,7 +487,7 @@
         <div class="w-full rounded-3xl border border-emerald-100 bg-emerald-50/70 px-5 py-8 text-center">
           <span class="material-symbols-outlined text-[64px] text-emerald-500" aria-hidden="true">check_circle</span>
           <h4 class="mt-3 text-2xl font-black text-slate-800">${editing ? '更新完成' : '刊登完成'}</h4>
-          <p class="mt-3 text-[14px] font-bold leading-6 text-slate-600">${editing ? '內容已更新，本次沒有扣點，原刊登期限保持不變。' : (duplicated ? '這則內容先前已成功刊登，本次沒有重複扣點。' : `已扣除 ${charged} 點，內容將公開顯示 ${state.access.publishDays} 天。`)}</p>
+          <p class="mt-3 text-[14px] font-bold leading-6 text-slate-600">${editing ? '內容已更新，本次沒有扣點，由您自行管理。' : (duplicated ? '這則內容先前已成功刊登，本次沒有重複扣點。' : `已扣除 ${charged} 點，內容已刊登，由您自行管理。`)}</p>
           ${result?.aiReview?.passed ? `<div class="mt-4 rounded-2xl border border-blue-100 bg-white/80 px-4 py-3 text-left text-[12px] font-bold leading-5 text-slate-600"><p class="font-black text-blue-700">AI 審核已通過</p>${suggestions.length ? `<ul class="mt-1 list-disc space-y-1 pl-5">${suggestions.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p class="mt-1">目前沒有其他修改建議。</p>'}</div>` : ''}
           <button id="exchange-zone-success-close" type="button" class="mt-6 w-full min-h-13 rounded-2xl bg-emerald-500 px-4 text-[15px] font-black text-white active:scale-[0.98]">返回交流專區</button>
         </div>

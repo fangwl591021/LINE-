@@ -221,7 +221,7 @@ export const ExchangeZoneCouponModule = {
         WHERE c.coupon_handle = ?1
           AND c.status = 'active'
           AND p.status = 'published'
-          AND (p.expires_at = '' OR p.expires_at > CURRENT_TIMESTAMP)
+
           AND (c.expires_at = '' OR datetime(c.expires_at) >= CURRENT_TIMESTAMP)
         LIMIT 1
       `).bind(couponHandle).first();
@@ -233,11 +233,18 @@ export const ExchangeZoneCouponModule = {
       const result = await db.prepare(`
         INSERT OR IGNORE INTO exchange_zone_coupon_redemptions
           (coupon_handle, user_id, redeemed_at, redeem_note)
-        VALUES (?1, ?2, CURRENT_TIMESTAMP, ?3)
+        SELECT ?1, ?2, CURRENT_TIMESTAMP, ?3
+        WHERE EXISTS (
+          SELECT 1 FROM exchange_zone_coupons c JOIN exchange_zone_posts p ON p.post_handle = c.post_handle
+          WHERE c.coupon_handle = ?1 AND c.owner_user_id <> ?2 AND c.status = 'active' AND p.status = 'published'
+            AND (c.expires_at = '' OR datetime(c.expires_at) >= CURRENT_TIMESTAMP)
+        )
       `).bind(couponHandle, userId, note).run();
 
-      if (!result?.success || Number(result?.meta?.changes || 0) < 1) {
+      if (!result?.success) throw new Error('Coupon redemption write failed');
+      if (Number(result?.meta?.changes || 0) < 1) {
         const existing = await redemptionInfo(db, couponHandle, userId);
+        if (!existing) return { success: false, error: '優惠券已下架或過期，未完成核銷', code: 'EXCHANGE_COUPON_NOT_AVAILABLE' };
         return {
           success: false,
           error: '這張優惠券已核銷，不能重複使用',

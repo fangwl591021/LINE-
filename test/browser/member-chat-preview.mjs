@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { handleMemberChat, processMemberChatNotifications } from '../../worker/member-chat.mjs';
+import { chatExtraSchema, seedChatCoupon, seedChatScore } from '../member-chat-extra-fixture.mjs';
 const sql = new DatabaseSync(':memory:'), root = new URL('../../', import.meta.url);
 const ids = { a: 'U' + 'a'.repeat(32), b: 'U' + 'b'.repeat(32), c: 'U' + 'c'.repeat(32) };
 sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',name TEXT,phone TEXT,role TEXT);
@@ -18,6 +19,9 @@ sql.exec("ALTER TABLE card_contacts ADD COLUMN custom_config TEXT DEFAULT '{}'; 
 sql.prepare("UPDATE card_contacts SET custom_config=? WHERE row_id='card-b'").run(JSON.stringify({ industryClassification: { primary: '餐飲食品', secondary: ['零售電商'] } }));
 sql.exec(readFileSync(new URL('migrations/0046_member_private_chat.sql', root), 'utf8'));
 sql.exec(readFileSync(new URL('migrations/0047_member_chat_notifications.sql', root), 'utf8'));
+chatExtraSchema(sql);
+seedChatCoupon(sql, ids.a); seedChatScore(sql, ids.a, ids.b);
+sql.exec("UPDATE card_contacts SET email='demo@example.com',website='https://example.com',services='合成設計服務' WHERE row_id='card-a'");
 function prepare(query, args = []) {
   return { bind(...values) { return prepare(query, values); }, async first() { return sql.prepare(query).get(...args) || null; }, async all() { return { success: true, results: sql.prepare(query).all(...args) }; }, async run() { const result = sql.prepare(query).run(...args); return { success: true, meta: { changes: Number(result.changes) } }; } };
 }
@@ -30,7 +34,7 @@ const fetcher = async (url, options) => {
   const uid = ids[options.headers.Authorization.slice(7)]; return new Response(JSON.stringify({ userId: uid }), { status: uid ? 200 : 401 });
 };
 let apiReads = 0;
-const assets = new Map([['/js/modules/member-chat.js', 'text/javascript'], ['/js/modules/member-chat-route.js', 'text/javascript'], ['/css/member-chat.css', 'text/css']]);
+const assets = new Map([['/js/modules/member-chat.js', 'text/javascript'], ['/js/modules/member-chat-popups.js', 'text/javascript'], ['/js/modules/member-chat-route.js', 'text/javascript'], ['/css/member-chat.css', 'text/css']]);
 const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>會員私訊・本機測試</title><style>body{font:16px system-ui;background:#f0faf5;color:#163c43;padding:20px}button,select{font:inherit;padding:12px;margin:8px 0}small{display:block;line-height:1.6}</style></head><body><h1>會員私訊・本機測試</h1><small>合成帳號、記憶體資料庫，不連正式 LINE、會員或點數。重啟後清空。</small><label>測試帳號 <select id="account"><option value="a">小林</option><option value="b">小陳</option><option value="c">小張</option></select></label><br><button id="open">開啟我的聊天</button> <button id="members">找會員</button><output></output><script type="module">
 import {openMemberChat} from '/js/modules/member-chat.js';
 const account=document.querySelector('#account');account.value=new URLSearchParams(location.search).get('as')||'a';

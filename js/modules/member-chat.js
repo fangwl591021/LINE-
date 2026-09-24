@@ -1,4 +1,5 @@
 // Loaded only after an explicit click in Exchange Zone. No startup requests/storage.
+import { createChatPopups } from './member-chat-popups.js?v=1';
 let active;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const stamp = value => {
@@ -27,7 +28,9 @@ export function createChatClient({ base, isCurrent = () => true, fetcher = fetch
         });
         const result = await response.json();
         if (!current()) throw Error('登入身分已變更，請重新開啟私訊');
-        if (!response.ok || result?.success !== true) throw Error(result?.error || '私訊暫時無法使用，請稍後重試');
+        if (!response.ok || result?.success !== true) {
+          const error = Error(result?.error || '私訊暫時無法使用，請稍後重試'); error.status = response.status; throw error;
+        }
         return result;
       } catch (error) {
         if (error.name === 'AbortError') throw Error('連線逾時；可重試，同一訊息不會重複送出');
@@ -37,7 +40,11 @@ export function createChatClient({ base, isCurrent = () => true, fetcher = fetch
   };
 }
 export function chatMessageHtml(row) {
-  return `<article class="mc-message ${row.mine ? 'mc-mine' : ''}" data-seq="${row.seq}"><p>${esc(row.body)}</p><small>${esc(stamp(row.createdAt))}${row.mine ? ` · <span data-read>${row.read ? '已讀' : '已送出'}</span>` : ''}</small>${row.mine ? '' : `<button type="button" data-action="report" data-seq="${row.seq}" aria-label="檢舉此訊息">檢舉</button>`}</article>`;
+  return `<article class="mc-message ${row.mine ? 'mc-mine' : ''}" data-seq="${row.seq}"><p>${esc(row.body)}</p>${row.hasCoupon ? `<button type="button" class="mc-coupon-link" data-action="coupon" data-seq="${row.seq}">🎟 查看優惠券</button>` : ''}<small>${esc(stamp(row.createdAt))}${row.mine ? ` · <span data-read>${row.read ? '已讀' : '已送出'}</span>` : ''}</small>${row.mine ? '' : `<button type="button" data-action="report" data-seq="${row.seq}" aria-label="檢舉此訊息">檢舉</button>`}</article>`;
+}
+export function chatMatchHtml(match) {
+  if (!match || typeof match.score !== 'number' || !Number.isFinite(match.score) || match.score < 0 || match.score > 100) return '<span class="mc-match-empty">尚無配對</span>';
+  return `<span class="mc-match" title="${match.source === 'ai' ? 'AI' : '規則'}既有配對分數，非成交機率">${esc(match.score)}%</span><small>${match.source === 'ai' ? 'AI 配對' : '規則配對'}</small>`;
 }
 export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   if (active) { active.focus(); return active; }
@@ -45,16 +52,17 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   const modal = document.createElement('dialog'); modal.className = 'member-chat';
   const client = createChatClient({ base, isCurrent: () => active === modal });
   if (!document.querySelector('link[data-member-chat]')) {
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=2', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=3', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
   }
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
     <nav aria-label="私訊分類"><button type="button" data-action="threads">我的聊天</button><button type="button" data-action="members">找會員</button></nav>
     <section class="mc-settings"><label><input type="checkbox" data-accepting checked disabled>接受新聯絡</label><label><input type="checkbox" data-notifications disabled>LINE 私訊通知（離開頁面也提醒）</label><small>私訊免費，僅對話雙方可見；不是 LINE 原生聊天。開啟通知前請先加入點數通官方帳號好友，並允許手機的 LINE 通知。</small></section>
     <form class="mc-search" hidden><div class="mc-search-text"><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></div><label class="mc-industry" for="mc-industry">業種搜尋<select id="mc-industry" disabled><option value="">全部業種</option></select></label></form>
-    <section class="mc-peer" hidden><strong></strong><button type="button" data-action="block">封鎖</button></section>
+    <section class="mc-peer" hidden><strong></strong><button type="button" data-action="card">查看名片</button><button type="button" data-action="block">封鎖</button></section>
     <div class="mc-scroll" tabindex="0"><button type="button" data-action="older" hidden>載入較早訊息</button><div class="mc-rows"></div><button type="button" data-action="more" hidden>載入更多</button></div>
     <p class="mc-status" role="status" aria-live="polite"></p><button type="button" class="mc-retry" data-action="refresh">重新整理</button>
+    <section class="mc-attachment" hidden><button type="button" data-action="attach">＋ 附加內容</button><span data-selected-coupon></span><button type="button" data-action="remove-coupon" hidden>移除</button></section>
     <form class="mc-compose" hidden><label class="mc-sr" for="mc-body">輸入訊息</label><textarea id="mc-body" maxlength="2000" rows="2" placeholder="輸入訊息（最多 2000 字）"></textarea><button type="submit">傳送</button></form>
     <p class="mc-hint">開啟 LINE 私訊通知後，未讀訊息約 30–90 秒提醒；同一對話每 5 分鐘時段合併通知，不顯示聊天內容。</p>`;
   document.body.append(modal); active = modal; modal.showModal();
@@ -65,11 +73,18 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   let next = '', oldest = 0, newest = 0, readThrough = 0, pending = null, ready = false, initializing = false, blocked = false, blockedByMe = false;
   const seen = new Set();
   const valid = ticket => client.current() && ticket === generation && modal.open;
+  let selectedCoupon = null;
+  const popups = createChatPopups({ client, getGuard: () => { const ticket = generation; return () => valid(ticket); } });
+  function attachmentControls() {
+    $('[data-selected-coupon]').textContent = selectedCoupon ? '🎟 ' + selectedCoupon.title : '';
+    $('[data-action="remove-coupon"]').hidden = !selectedCoupon;
+    for (const button of modal.querySelectorAll('.mc-attachment button')) button.disabled = blocked || sending || !!pending;
+  }
   function note(message = '') { status.textContent = message; }
   function stop() { clearTimeout(timer); }
   function close() {
     if (active !== modal) return;
-    stop(); generation++; client.close(); active = null;
+    stop(); generation++; popups.close(); client.close(); active = null;
     document.removeEventListener('visibilitychange', visibility);
     window.removeEventListener('pagehide', close);
     modal.close(); modal.remove(); list.replaceChildren(); pending = null;
@@ -95,7 +110,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   function renderRows(items, append = false) {
     const html = items.map(row => {
       const member = view === 'members', id = member ? row.handle : row.id;
-      return `<button type="button" class="mc-contact" data-action="open" data-handle="${esc(member ? id : '')}" data-room="${esc(member ? '' : id)}"><span class="mc-avatar" aria-hidden="true">${esc(row.name?.slice(0, 1) || '會')}</span><span class="mc-contact-text"><strong>${esc(row.name || '會員')}</strong><span>${esc(member ? [row.company, row.title].filter(Boolean).join(' · ') : row.preview)}</span></span><span class="mc-contact-meta">${member ? '聊天 ›' : `${esc(stamp(row.createdAt))}${row.unread ? `<b>${Math.min(99, row.unread)}</b>` : ''}`}</span></button>`;
+      return `<button type="button" class="mc-contact" data-action="open" data-handle="${esc(member ? id : '')}" data-room="${esc(member ? '' : id)}"><span class="mc-avatar" aria-hidden="true">${esc(row.name?.slice(0, 1) || '會')}</span><span class="mc-contact-text"><strong>${esc(row.name || '會員')}</strong><span>${esc(member ? [row.company, row.title].filter(Boolean).join(' · ') : row.preview)}</span></span><span class="mc-contact-meta">${member ? chatMatchHtml(row.match) + '<span>聊天 ›</span>' : `${esc(stamp(row.createdAt))}${row.unread ? `<b>${Math.min(99, row.unread)}</b>` : ''}`}</span></button>`;
     }).join('');
     if (append) list.insertAdjacentHTML('beforeend', html);
     else list.innerHTML = html || `<p class="mc-empty">${view === 'members' ? '沒有符合的會員。已建立本人名片並接受新聯絡者即可被找到；不含自己或已封鎖的會員。' : '還沒有聊天，點「找會員」開始交流。'}</p>`;
@@ -132,6 +147,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
         $('.mc-peer strong').textContent = result.peer.name;
         $('[data-action="block"]').textContent = blockedByMe ? '解除封鎖' : '封鎖';
         compose.querySelector('button').disabled = blocked || sending;
+        attachmentControls(); $('[data-action="card"]').disabled = blocked;
         addMessages(result.items, paging);
         // Only fetched pages advance the receive cursor. A local send may jump over unseen replies.
         if (!paging && result.items.length) newest = Math.max(newest, ...result.items.map(item => item.seq));
@@ -160,9 +176,10 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
     finally { if (ticket === generation) busy = false; }
   }
   function setView(nextView) {
-    stop(); generation++; busy = false; view = nextView; room = ''; next = ''; pending = null; sending = false;
+    stop(); generation++; popups.close(); busy = false; view = nextView; room = ''; next = ''; pending = null; sending = false; blocked = false; selectedCoupon = null; attachmentControls();
     oldest = newest = readThrough = 0; seen.clear(); list.replaceChildren(); compose.reset(); compose.querySelector('button').textContent = '傳送'; $('#mc-body').readOnly = false;
     search.hidden = view !== 'members'; compose.hidden = view !== 'chat'; $('.mc-peer').hidden = view !== 'chat';
+    $('.mc-attachment').hidden = view !== 'chat';
     $('.mc-settings').hidden = view === 'chat'; $('[data-action="older"]').hidden = true; $('[data-action="more"]').hidden = true;
     for (const button of modal.querySelectorAll('nav button')) button.setAttribute('aria-pressed', String(button.dataset.action === view));
     note();
@@ -180,19 +197,25 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   }
   compose.addEventListener('submit', async event => {
     event.preventDefault(); if (sending || blocked || !room || !alive()) return;
-    const input = $('#mc-body'), body = input.value.trim(); if (!body) return;
-    pending ||= { body, clientId: crypto.randomUUID() };
+    const input = $('#mc-body'), body = input.value.trim() || (selectedCoupon ? '優惠券：' + selectedCoupon.title : ''); if (!body) return;
+    pending ||= { body, clientId: crypto.randomUUID(), ...(selectedCoupon ? { couponHandle: selectedCoupon.handle } : {}) };
     const ticket = generation, target = room, attempted = pending;
     sending = true; input.readOnly = true; compose.querySelector('button').disabled = true; note('傳送中…');
+    attachmentControls();
     try {
       const result = await client.request(`/threads/${target}/messages`, attempted);
       if (!valid(ticket)) return;
-      addMessages([result.item]); input.value = ''; pending = null; input.readOnly = false;
+      addMessages([result.item]); input.value = ''; pending = null; input.readOnly = false; selectedCoupon = null;
       compose.querySelector('button').textContent = '傳送'; note();
     } catch (error) {
-      if (valid(ticket)) { note(error.message); compose.querySelector('button').textContent = '重試傳送'; }
+      if (valid(ticket)) {
+        note(error.message);
+        // A definitive rejection permits removing an expired attachment; an uncertain network result keeps the original id/payload.
+        if ([400, 403, 404, 409, 429].includes(error.status)) { pending = null; input.readOnly = false; compose.querySelector('button').textContent = '傳送'; }
+        else compose.querySelector('button').textContent = '重試傳送';
+      }
     } finally {
-      if (valid(ticket)) { sending = false; compose.querySelector('button').disabled = blocked; schedule(); }
+      if (valid(ticket)) { sending = false; compose.querySelector('button').disabled = blocked; attachmentControls(); schedule(); }
     }
   });
   function searchMembers() {
@@ -228,6 +251,10 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
       setView(action === 'members' ? 'members' : 'threads'); await refresh(); schedule();
     } else if (action === 'refresh') { if (!ready) await initialize(); else await refresh(); schedule(); }
     else if (action === 'open') await openConversation(button);
+    else if (action === 'card' && room) await popups.card(room);
+    else if (action === 'coupon' && room) await popups.coupon(room, button.dataset.seq);
+    else if (action === 'attach' && room && !blocked && !sending && !pending) await popups.chooseCoupon(row => { selectedCoupon = row; attachmentControls(); });
+    else if (action === 'remove-coupon' && !sending && !pending) { selectedCoupon = null; attachmentControls(); }
     else if (action === 'more' || action === 'older') await refresh(false, true);
     else if (action === 'block') {
       const ticket = generation, id = room; button.disabled = true;
