@@ -3175,6 +3175,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 🔓 已註冊用戶邏輯
     window.applyRegisteredUserSession(checkRes.info, { skipHome: directStoreManage });
+    if (await window.openMemberChatNotification?.(urlParams)) return;
     const shopSection = urlParams.get('shopSection');
     const cashierEntryConflict = shopSection === 'cashier' && ['checkin','nfcAct','nfcCheckin','verifyCheckin','checkinRowId','registrationId'].some(key => urlParams.get(key));
     if (['list','mine','manage','sales','online-manage','cashier'].includes(shopSection) && !cashierEntryConflict && !shareCardId && !claimCardId && !likeCardId && !urlParams.get('shopQr') && !urlParams.get('memberProduct') && !urlParams.get('shopProduct')) {

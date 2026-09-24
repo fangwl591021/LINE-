@@ -8,9 +8,10 @@ const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_PATH 
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const errors = []; const pages = [];
+const base = process.env.CHAT_PREVIEW_URL || 'http://127.0.0.1:8804';
 async function page(as) {
   const p = await context.newPage(); pages.push(p); p.on('pageerror', error => errors.push(error.message));
-  await p.clock.install(); await p.goto('http://127.0.0.1:8804/?as=' + as); return p;
+  await p.clock.install(); await p.goto(base + '/?as=' + as); return p;
 }
 const wait = (p, fn) => p.waitForFunction(fn, null, { timeout: 10000 });
 async function send(p, body) {
@@ -33,7 +34,10 @@ try {
   await a.locator('#mc-query').fill('dEmO cHeN'); await a.locator('.mc-search button').click(); await a.locator('[data-handle="card-b"]').waitFor();
   await a.locator('[data-handle="card-b"]').click(); await wait(a, () => document.querySelector('.mc-peer strong').textContent.includes('小陳'));
   await send(a, '您好！想了解咖啡禮盒合作 ☕');
-  const b = await page('b'); await b.locator('#open').click(); await b.locator('.mc-contact').first().click();
+  const b = await page('b'); await b.locator('#open').click();
+  await b.locator('[data-notifications]').check();
+  await wait(b, () => document.querySelector('.mc-status').textContent.includes('已開啟 LINE 私訊通知'));
+  await b.locator('.mc-contact').first().click();
   await wait(b, () => document.querySelector('.mc-rows').textContent.includes('咖啡禮盒'));
   await send(b, '您好！歡迎交流，我們可以一起討論。');
   await a.locator('[data-action="refresh"]').click(); await wait(a, () => document.querySelector('.mc-rows').textContent.includes('一起討論'));
@@ -66,6 +70,21 @@ try {
   const stopped = requests; await a.clock.fastForward(45000); assert.equal(requests, stopped, 'closed view makes no polling calls');
   await b.setViewportSize({ width: 1440, height: 900 });
   assert.ok(await b.locator('dialog').evaluate(node => node.getBoundingClientRect().width <= 620));
+  await b.locator('[data-action="close"]').click(); await b.close();
+  const sender = await page('a'); await sender.locator('#open').click();
+  const roomId = await sender.locator('.mc-contact').first().getAttribute('data-room');
+  await sender.locator('.mc-contact').first().click(); await send(sender, '關閉頁面後仍應收到通知（合成測試）');
+  await context.request.post(base + '/fixture-drain');
+  const fixture = await (await context.request.get(base + '/fixture-status')).json();
+  assert.equal(fixture.pushes.length, 1); assert.doesNotMatch(JSON.stringify(fixture.pushes), /合成測試|咖啡禮盒/);
+  const reopened = await page('b&memberChat=' + roomId);
+  await wait(reopened, () => document.querySelector('.mc-rows')?.textContent.includes('關閉頁面後仍應收到通知'));
+  await reopened.locator('[data-action="back"]').click();
+  assert.equal(await reopened.locator('[data-notifications]').isChecked(), true, 'notification setting persists');
+  await reopened.locator('[data-notifications]').uncheck();
+  await wait(reopened, () => document.querySelector('.mc-status').textContent.includes('已關閉 LINE 私訊通知'));
+  await send(sender, '關閉通知後不推播'); await context.request.post(base + '/fixture-drain');
+  assert.equal((await (await context.request.get(base + '/fixture-status')).json()).pushes.length, 1);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result: 'PASS', checks: ['unpublished own card English-name search without phone', 'empty search feedback', 'two-party replies', 'third-party isolation', 'receive cursor and chronological order', 'lost-response retry', 'block/unblock', 'background/close polling stop', 'account change cleanup', 'mobile/desktop layout'], screenshot }));
+  console.log(JSON.stringify({ result: 'PASS', checks: ['unpublished own card English-name search without phone', 'empty search feedback', 'two-party replies', 'third-party isolation', 'receive cursor and chronological order', 'lost-response retry', 'block/unblock', 'background/close polling stop', 'account change cleanup', 'mobile/desktop layout', 'explicit notification opt-in', 'synthetic push with recipient page closed', 'notification deep link opens authorized thread', 'persisted opt-out stops push'], screenshot }));
 } finally { await browser.close(); }

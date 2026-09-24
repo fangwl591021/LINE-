@@ -6,10 +6,27 @@
   window.openExchangeMemberChat = async function(tab = 'threads') {
     const owner = window.currentUserProfile?.userId;
     try {
-      const chat = await import(new URL('member-chat.js?v=2', current).href);
+      const chat = await import(new URL('member-chat.js?v=3', current).href);
       if (owner !== window.currentUserProfile?.userId || document.getElementById('page-exchange-zone')?.classList.contains('hidden')) return;
       chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, tab });
     } catch (error) { window.showToast?.(error.message || '私訊載入失敗，請重試', true); }
+  };
+
+  window.openMemberChatNotification = async function(params) {
+    if (!params?.has('memberChat')) return false;
+    const route = await import(new URL('member-chat-route.js?v=1', current).href);
+    const threadId = route.memberChatRoute(params); if (!threadId) return false;
+    const owner = window.currentUserProfile?.userId;
+    try {
+      await ready;
+      if (owner !== window.currentUserProfile?.userId) return true;
+      await window.openExchangeZone();
+      const chat = await import(new URL('member-chat.js?v=3', current).href);
+      if (owner === window.currentUserProfile?.userId && !document.getElementById('page-exchange-zone')?.classList.contains('hidden')) {
+        chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, threadId });
+      }
+    } catch (error) { window.showToast?.(error.message || '請從交流專區重新開啟私訊', true); }
+    return true;
   };
 
   function load(src) {
@@ -23,7 +40,7 @@
     });
   }
 
-  load(base)
+  const ready = load(base)
     .then(() => load(overlay))
     .then(() => load(coupon))
     .catch((error) => console.error(error));
