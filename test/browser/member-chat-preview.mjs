@@ -14,6 +14,8 @@ for (const [id, name, company] of [['a', '小林（測試）', '綠葉設計'], 
   sql.prepare("INSERT INTO card_contacts VALUES(?,?,?,?, 'self_profile','public',1,'passed',?,?,?,'2026-09-24')").run('card-' + id, ids[id], ids[id], ids[id], name, company, '負責人');
 }
 sql.exec("ALTER TABLE card_contacts ADD COLUMN english_name TEXT DEFAULT ''; ALTER TABLE card_contacts ADD COLUMN archived_at TEXT DEFAULT ''; ALTER TABLE card_contacts ADD COLUMN merged_into_row_id TEXT DEFAULT ''; UPDATE card_contacts SET english_name='Demo Chen',visibility='private',pool_eligible=0,ai_review_status='pending' WHERE row_id='card-b'; UPDATE users SET phone='' WHERE row_id='b';");
+sql.exec("ALTER TABLE card_contacts ADD COLUMN custom_config TEXT DEFAULT '{}'; ALTER TABLE card_contacts ADD COLUMN tags TEXT DEFAULT ''; ALTER TABLE card_contacts ADD COLUMN services TEXT DEFAULT ''; UPDATE card_contacts SET tags='科技資訊' WHERE row_id='card-c';");
+sql.prepare("UPDATE card_contacts SET custom_config=? WHERE row_id='card-b'").run(JSON.stringify({ industryClassification: { primary: '餐飲食品', secondary: ['零售電商'] } }));
 sql.exec(readFileSync(new URL('migrations/0046_member_private_chat.sql', root), 'utf8'));
 sql.exec(readFileSync(new URL('migrations/0047_member_chat_notifications.sql', root), 'utf8'));
 function prepare(query, args = []) {

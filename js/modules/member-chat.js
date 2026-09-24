@@ -45,13 +45,13 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   const modal = document.createElement('dialog'); modal.className = 'member-chat';
   const client = createChatClient({ base, isCurrent: () => active === modal });
   if (!document.querySelector('link[data-member-chat]')) {
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=1', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=2', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
   }
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
     <nav aria-label="私訊分類"><button type="button" data-action="threads">我的聊天</button><button type="button" data-action="members">找會員</button></nav>
     <section class="mc-settings"><label><input type="checkbox" data-accepting checked disabled>接受新聯絡</label><label><input type="checkbox" data-notifications disabled>LINE 私訊通知（離開頁面也提醒）</label><small>私訊免費，僅對話雙方可見；不是 LINE 原生聊天。開啟通知前請先加入點數通官方帳號好友，並允許手機的 LINE 通知。</small></section>
-    <form class="mc-search" hidden><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></form>
+    <form class="mc-search" hidden><div class="mc-search-text"><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></div><label class="mc-industry" for="mc-industry">業種搜尋<select id="mc-industry" disabled><option value="">全部業種</option></select></label></form>
     <section class="mc-peer" hidden><strong></strong><button type="button" data-action="block">封鎖</button></section>
     <div class="mc-scroll" tabindex="0"><button type="button" data-action="older" hidden>載入較早訊息</button><div class="mc-rows"></div><button type="button" data-action="more" hidden>載入更多</button></div>
     <p class="mc-status" role="status" aria-live="polite"></p><button type="button" class="mc-retry" data-action="refresh">重新整理</button>
@@ -59,7 +59,8 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
     <p class="mc-hint">開啟 LINE 私訊通知後，未讀訊息約 30–90 秒提醒；同一對話每 5 分鐘時段合併通知，不顯示聊天內容。</p>`;
   document.body.append(modal); active = modal; modal.showModal();
   const $ = selector => modal.querySelector(selector);
-  const list = $('.mc-rows'), scroll = $('.mc-scroll'), status = $('.mc-status'), search = $('.mc-search'), compose = $('.mc-compose');
+  const list = $('.mc-rows'), scroll = $('.mc-scroll'), status = $('.mc-status'), search = $('.mc-search'), compose = $('.mc-compose'), industry = $('#mc-industry');
+  let memberQuery = '', memberIndustry = '';
   let view = tab === 'members' ? 'members' : 'threads', room = '', generation = 0, timer, busy = false, sending = false;
   let next = '', oldest = 0, newest = 0, readThrough = 0, pending = null, ready = false, initializing = false, blocked = false, blockedByMe = false;
   const seen = new Set();
@@ -143,10 +144,14 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
         note(blocked ? '目前已封鎖聯絡，無法傳送訊息。' : pending ? '有一則尚未確認送出的訊息，請按「重試傳送」。' : '');
       } else {
         const params = new URLSearchParams();
-        if (view === 'members') params.set('q', $('#mc-query').value.trim());
+        if (view === 'members') { params.set('q', memberQuery); if (memberIndustry) params.set('industry', memberIndustry); }
         if (paging && next) params.set(view === 'members' ? 'after' : 'before', next);
         const result = await client.request(`/${view}?${params}`);
         if (!valid(ticket)) return;
+        if (view === 'members' && industry.disabled && Array.isArray(result.industries)) {
+          industry.innerHTML = '<option value="">全部業種</option>' + result.industries.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join('');
+          industry.disabled = false;
+        }
         renderRows(result.items, paging); next = result.next;
         $('[data-action="more"]').hidden = !next;
         note();
@@ -190,7 +195,14 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
       if (valid(ticket)) { sending = false; compose.querySelector('button').disabled = blocked; schedule(); }
     }
   });
-  search.addEventListener('submit', event => { event.preventDefault(); generation++; busy = false; next = ''; void refresh(); });
+  function searchMembers() {
+    if (view !== 'members') return;
+    memberQuery = $('#mc-query').value.trim(); memberIndustry = industry.value;
+    generation++; busy = false; next = ''; list.replaceChildren(); scroll.scrollTop = 0;
+    $('[data-action="more"]').hidden = true; void refresh();
+  }
+  search.addEventListener('submit', event => { event.preventDefault(); searchMembers(); });
+  industry.addEventListener('change', searchMembers);
   $('[data-accepting]').addEventListener('change', async event => {
     const input = event.target, value = input.checked, ticket = generation; input.disabled = true;
     try { await client.request('/preferences', { accepting: value }); if (valid(ticket)) note(value ? '已開啟新聯絡' : '已停止新聯絡；既有對話仍可回覆'); }

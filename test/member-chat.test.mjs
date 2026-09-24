@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { handleMemberChat, processMemberChatNotifications } from '../worker/member-chat.mjs';
+import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from '../worker/member-chat-industry.mjs';
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), OLD = 'U' + 'd'.repeat(32);
 const BASE = 'https://chat.test/v1/member-chat';
 function fixture(t) {
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
   sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',name TEXT,phone TEXT,role TEXT,network_id TEXT);
     CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
-    CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,line_id TEXT DEFAULT '',profile_user_id TEXT DEFAULT '',owner_user_id TEXT DEFAULT '',source_type TEXT,visibility TEXT,pool_eligible INTEGER,ai_review_status TEXT,name TEXT,company_name TEXT,title TEXT,updated_at TEXT,english_name TEXT DEFAULT '',archived_at TEXT DEFAULT '',merged_into_row_id TEXT DEFAULT '');
+    CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,line_id TEXT DEFAULT '',profile_user_id TEXT DEFAULT '',owner_user_id TEXT DEFAULT '',source_type TEXT,visibility TEXT,pool_eligible INTEGER,ai_review_status TEXT,name TEXT,company_name TEXT,title TEXT,updated_at TEXT,english_name TEXT DEFAULT '',archived_at TEXT DEFAULT '',merged_into_row_id TEXT DEFAULT '',custom_config TEXT DEFAULT '{}',tags TEXT DEFAULT '',services TEXT DEFAULT '');
     CREATE TABLE inbox_items(message_id TEXT); CREATE TABLE points_ledger(id TEXT);
     INSERT INTO users(row_id,line_id,legacy_line_id,name,phone,role,network_id) VALUES('a','${A}','${OLD}','甲','0900000001','user','network-a'),('b','${B}','','乙','0900000002','user','network-b'),('c','${C}','','管理員','0900000003','admin','admin');
     INSERT INTO user_identity_links VALUES('${OLD}','${A}','active');`);
@@ -131,6 +132,74 @@ test('directory chooses one current own card and paginates the expanded member p
   assert.equal(first.items.length, 30); assert.equal(second.items.length, 6); assert.equal(second.next, '');
   assert.equal(new Set([...first.items, ...second.items].map(row => row.handle)).size, 36);
 });
+test('industry filter uses existing primary/secondary classification, tags and safe legacy fallback, without writes', async t => {
+  const f = fixture(t);
+  const update = (config, tags = '', company = '咖啡食品公司') => f.sql.prepare("UPDATE card_contacts SET custom_config=?,tags=?,company_name=?,english_name='Tony Fang' WHERE row_id='card-b'").run(typeof config === 'string' ? config : JSON.stringify(config), tags, company);
+  const found = async (industry, q = '') => {
+    const result = await f.api('/members?' + new URLSearchParams({ industry, q }));
+    assert.equal(result.status, 200, JSON.stringify(result));
+    assert.deepEqual(result.industries, CHAT_INDUSTRIES);
+    assert.doesNotMatch(JSON.stringify(result.items), /custom_config|tags|services|line_id|phone/);
+    return result.items.some(row => row.handle === 'card-b');
+  };
+  update({ industryClassification: { primary: '科技資訊', secondary: ['教育培訓', '金融保險'] } }, '餐飲食品');
+  assert.equal(await found('科技資訊', 'TONYFANG'), true);
+  assert.equal(await found('教育培訓'), true); assert.equal(await found('金融保險'), true);
+  assert.equal(await found('餐飲食品'), false, 'manual classification overrides older tags/company keywords');
+  assert.equal(await found('科技資訊', '不存在'), false);
+  update({ industryClassification: { primary: '待分類', secondary: ' 教育培訓、金融保險 ' } });
+  assert.equal(await found('待分類'), true); assert.equal(await found('教育培訓'), true); assert.equal(await found('餐飲食品'), false);
+  for (const tags of ['科技資訊, 教育培訓，金融保險|餐飲食品', '["科技資訊","教育培訓"]']) {
+    update('{broken', tags); assert.equal(await found('科技資訊'), true); assert.equal(await found('教育培訓'), true);
+  }
+  update('{}', '科技資訊', '健康診所'); assert.equal(await found('健康醫療'), false, 'explicit industry tag beats inferred keyword');
+  update('{broken', 'VIP'); assert.equal(await found('餐飲食品'), true, 'legacy fallback is read-only');
+  update('null', '', '無分類名稱'); assert.equal(await found('其他行業'), true);
+  for (const industry of ["' OR 1=1 --", '金融', 'x'.repeat(100)]) assert.equal((await f.api('/members?' + new URLSearchParams({ industry }))).status, 400);
+  assert.equal((await f.api('/members?industry=科技資訊&industry=餐飲食品')).status, 400);
+  const original = JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all());
+  await found(''); await found('其他行業');
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all()), original);
+  assert.equal(f.writes.length, 0);
+});
+
+test('industry options and inferred fallback stay aligned with existing card-folder rules', async t => {
+  const f = fixture(t), source = readFileSync(new URL('../js/modules/a-kaffit-card-scanner-adapter.js', import.meta.url), 'utf8');
+  const rules = [...source.slice(source.indexOf('const INDUSTRY_RULES'), source.indexOf('let scanState')).matchAll(/\['([^']+)',\/([^/]+)\/i\]/g)].map(([, label, pattern]) => [label, pattern]);
+  assert.equal(rules.length, 14);
+  assert.deepEqual(CHAT_INDUSTRIES, [...rules.map(([label]) => label), '其他行業', '待分類']);
+  for (const [, pattern] of rules) for (const word of pattern.split('|')) {
+    const expected = rules.find(([, rule]) => new RegExp(rule, 'i').test(word))[0];
+    f.sql.prepare("UPDATE card_contacts SET company_name='',title='',services=? WHERE row_id='card-b'").run(word);
+    const result = f.sql.prepare(`SELECT row_id FROM card_contacts c WHERE c.row_id=?1 AND ?2='' AND ?3='' AND ${CHAT_INDUSTRY_FILTER}`).all('card-b', '', '', expected);
+    assert.equal(result.length, 1, word + ' => ' + expected);
+  }
+});
+
+test('industry AND text filter precedes pagination and preserves latest own-card/contact boundaries', async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 66; i++) {
+    const id = 'sample-' + String(i).padStart(2, '0'), uid = 'U' + i.toString(16).padStart(32, '0');
+    f.sql.prepare('INSERT INTO users(row_id,line_id,name) VALUES(?,?,?)').run(id, uid, '測試會員');
+    f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,name,tags,updated_at) VALUES(?,?,'self_profile','篩選會員',?,'2026-09-24')").run(id, uid, i % 2 ? '餐飲食品' : '科技資訊');
+  }
+  const query = new URLSearchParams({ industry: '科技資訊', q: '篩選會員' });
+  const first = await f.api('/members?' + query); query.set('after', first.next);
+  const second = await f.api('/members?' + query);
+  assert.equal(first.items.length, 30); assert.equal(second.items.length, 3); assert.equal(second.next, '');
+  assert.equal(new Set([...first.items, ...second.items].map(row => row.handle)).size, 33);
+  f.sql.exec("UPDATE card_contacts SET tags='科技資訊' WHERE row_id IN ('card-a','card-b')");
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,name,tags,updated_at) VALUES('card-b-new',?,'self_profile','新名片','金融保險','2026-09-25')").run(B);
+  const tech = await f.api('/members?industry=科技資訊');
+  assert.ok(!tech.items.some(row => ['card-a', 'card-b'].includes(row.handle)), 'no self or older classified card');
+  assert.deepEqual((await f.api('/members?industry=金融保險')).items.map(row => row.handle), ['card-b-new']);
+  await f.api('/preferences', { token: 'b', data: { accepting: false } });
+  assert.equal((await f.api('/members?industry=金融保險')).items.length, 0);
+  await f.api('/preferences', { token: 'b', data: { accepting: true } });
+  const room = await f.room(); await f.api(`/threads/${room}/block`, { token: 'b', data: { blocked: true } });
+  assert.equal((await f.api('/members?industry=金融保險')).items.length, 0);
+});
+
 test('paired conversation, reciprocal replies, legacy identity, unique retried messages', async t => {
   const f = fixture(t), id = await f.room();
   assert.equal((await f.api('/threads', { token: 'b', data: { cardHandle: 'card-a' } })).id, id);
