@@ -54,7 +54,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   if (container) modal.classList.add('mc-embedded');
   const client = createChatClient({ base, isCurrent: () => active === modal });
   if (!document.querySelector('link[data-member-chat]')) {
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=7', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=8', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
   }
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
@@ -62,7 +62,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     <details class="mc-preferences" hidden><summary aria-label="聊天設定"><strong>聊天</strong><span>⚙ 設定</span></summary>
     <section class="mc-settings"><label><input type="checkbox" data-accepting checked disabled>接受新聯絡</label><div class="mc-line-settings"><label><input type="checkbox" data-notifications disabled>LINE通知</label><button type="button" data-action="edit-line-contact" disabled aria-label="新增或修改供對方加好友的 LINE">（點我新增）</button></div><small>勾選「LINE通知」：有人傳私訊給您時，即使離開頁面，也由點數通官方帳號提醒。請先加入官方帳號好友、解除封鎖，並允許手機的 LINE 通知。</small><small>「點我新增」：填寫供聊天對方加好友的 LINE，與通知開關分開。站內私訊免費，僅對話雙方可見；不是 LINE 原生聊天。</small></section>
     <p class="mc-hint">開啟 LINE通知後，未讀訊息約 30–90 秒提醒；同一對話每 5 分鐘時段合併通知，不顯示聊天內容。手機是否跳出橫幅，依 LINE、手機通知及勿擾設定。</p></details>
-    <form class="mc-search" hidden><div class="mc-search-text"><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></div><label class="mc-industry" for="mc-industry">業種搜尋<select id="mc-industry" disabled><option value="">全部業種</option></select></label></form>
+    <form class="mc-search" hidden><div class="mc-search-text"><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></div><div class="mc-search-tools"><label class="mc-industry" for="mc-industry">業種搜尋<select id="mc-industry" disabled><option value="">全部業種</option></select></label></div></form>
     <section class="mc-peer" hidden><strong></strong><button type="button" data-action="line-contact">加 LINE 好友</button><button type="button" data-action="card">查看名片</button><button type="button" data-action="block">封鎖</button></section>
     <div class="mc-scroll" tabindex="0"><button type="button" data-action="older" hidden>載入較早訊息</button><div class="mc-rows"></div><button type="button" data-action="more" hidden>載入更多</button></div>
     <p class="mc-status" role="status" aria-live="polite"></p><button type="button" class="mc-retry" data-action="refresh">重新整理</button>
@@ -155,6 +155,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
         if (!valid(ticket)) return;
         blocked = result.blocked; blockedByMe = result.blockedByMe;
         $('.mc-peer strong').textContent = result.peer.name;
+        $('.mc-peer strong').title = result.peer.name;
         $('[data-action="block"]').textContent = blockedByMe ? '解除封鎖' : '封鎖';
         compose.querySelector('button').disabled = blocked || sending;
         attachmentControls(); $('[data-action="card"]').disabled = blocked;
@@ -196,7 +197,8 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     modal.classList.toggle('mc-thread-list', view === 'threads');
     const refreshButton = $('[data-action="refresh"]');
     if (view === 'threads') $('.mc-preferences summary').insertBefore(refreshButton, $('.mc-preferences summary span'));
-    else status.after(refreshButton);
+    else if (view === 'members') $('.mc-search-tools').append(refreshButton);
+    else $('header').insertBefore(refreshButton, $('[data-action="close"]'));
     $('[data-action="older"]').hidden = true; $('[data-action="more"]').hidden = true;
     for (const button of modal.querySelectorAll('nav button')) button.setAttribute('aria-pressed', String(button.dataset.action === view));
     if (container) { modal.querySelector('header').hidden = view !== 'chat'; modal.classList.toggle('mc-conversation', view === 'chat'); }
