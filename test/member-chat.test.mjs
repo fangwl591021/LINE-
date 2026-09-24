@@ -9,7 +9,7 @@ function fixture(t) {
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
   sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',name TEXT,phone TEXT,role TEXT,network_id TEXT);
     CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
-    CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,line_id TEXT DEFAULT '',profile_user_id TEXT DEFAULT '',owner_user_id TEXT DEFAULT '',source_type TEXT,visibility TEXT,pool_eligible INTEGER,ai_review_status TEXT,name TEXT,company_name TEXT,title TEXT,updated_at TEXT);
+    CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,line_id TEXT DEFAULT '',profile_user_id TEXT DEFAULT '',owner_user_id TEXT DEFAULT '',source_type TEXT,visibility TEXT,pool_eligible INTEGER,ai_review_status TEXT,name TEXT,company_name TEXT,title TEXT,updated_at TEXT,english_name TEXT DEFAULT '',archived_at TEXT DEFAULT '',merged_into_row_id TEXT DEFAULT '');
     CREATE TABLE inbox_items(message_id TEXT); CREATE TABLE points_ledger(id TEXT);
     INSERT INTO users(row_id,line_id,legacy_line_id,name,phone,role,network_id) VALUES('a','${A}','${OLD}','甲','0900000001','user','network-a'),('b','${B}','','乙','0900000002','user','network-b'),('c','${C}','','管理員','0900000003','admin','admin');
     INSERT INTO user_identity_links VALUES('${OLD}','${A}','active');`);
@@ -51,21 +51,67 @@ test('routing is isolated; LINE auth, registration, own card and exchange access
   f.setAuth(503); assert.equal((await f.api('/me')).status, 503); f.setAuth(200);
   assert.equal((await f.api('/me?userId=' + B)).status, 400);
   f.env.EXCHANGE_ZONE_ACCESS_MODE = 'private'; assert.equal((await f.api('/me')).status, 403); f.env.EXCHANGE_ZONE_ACCESS_MODE = 'open';
-  f.sql.exec("UPDATE users SET phone='' WHERE row_id='a'"); assert.equal((await f.api('/me')).code, 'REGISTRATION_REQUIRED');
+  f.sql.exec("UPDATE users SET phone='' WHERE row_id='a'"); assert.equal((await f.api('/me')).success, true);
   f.sql.exec("UPDATE users SET phone='09' WHERE row_id='a'; UPDATE card_contacts SET source_type='ocr_scan' WHERE row_id='card-a'");
   assert.equal((await f.api('/me')).code, 'OWN_CARD_REQUIRED'); assert.equal(f.writes.length, 0);
 });
-test('directory shows only eligible own public cards, no phone/UID/private collectors', async t => {
+test('directory accepts own cards regardless of public pool; collectors and inactive cards stay excluded', async t => {
   const f = fixture(t); const list = await f.api('/members'); assert.equal(list.items.length, 2);
   assert.doesNotMatch(JSON.stringify(list), /090000|U[abc][abc]{31}|network-|phone|sender_id/);
   assert.equal((await f.api('/members?q=不存在')).items.length, 0);
-  for (const [column, value] of [['visibility', 'private'], ['source_type', 'ocr_scan'], ['ai_review_status', 'pending'], ['pool_eligible', 0]]) {
+  for (const [column, value] of [['visibility', 'private'], ['ai_review_status', 'pending'], ['ai_review_status', 'failed'], ['pool_eligible', 0]]) {
+    f.sql.prepare(`UPDATE card_contacts SET ${column}=? WHERE row_id='card-b'`).run(value);
+    assert.equal((await f.api('/members')).items.length, 2);
+    assert.equal((await f.api('/threads', { data: { cardHandle: 'card-b' } })).success, true);
+  }
+  for (const [column, value] of [['source_type', 'ocr_scan'], ['archived_at', '2026-09-24'], ['merged_into_row_id', 'card-other']]) {
     f.sql.prepare(`UPDATE card_contacts SET ${column}=? WHERE row_id='card-b'`).run(value);
     assert.equal((await f.api('/members')).items.length, 1);
     assert.equal((await f.api('/threads', { data: { cardHandle: 'card-b' } })).status, 403);
-    f.sql.exec("UPDATE card_contacts SET visibility='public',source_type='self_profile',ai_review_status='passed',pool_eligible=1 WHERE row_id='card-b'");
+    f.sql.exec("UPDATE card_contacts SET source_type='self_profile',archived_at='',merged_into_row_id='' WHERE row_id='card-b'");
   }
   assert.equal((await f.api('/threads', { data: { cardHandle: 'card-a' } })).code, 'SELF_CHAT');
+});
+test('English and account names are searchable, ignoring case and spaces, without changing cards or requiring phone', async t => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE card_contacts SET visibility='private',ai_review_status='pending',pool_eligible=0,english_name='Tony Fang' WHERE row_id='card-b'; UPDATE users SET name='LINE 別名',phone='' WHERE row_id='b'");
+  const original = JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all());
+  for (const query of ['TONYFANG', 'tony fang', '  TonyFang  ', 'LINE別名', '測試公司', '業務']) {
+    const result = await f.api('/members?q=' + encodeURIComponent(query));
+    assert.equal(result.status, 200); assert.ok(result.items.some(row => row.handle === 'card-b'), query);
+    assert.doesNotMatch(JSON.stringify(result), /english_name|line_id|profile_user_id|phone|visibility|pool_eligible/);
+  }
+  assert.equal((await f.api('/me', { token: 'b' })).success, true);
+  const id = await f.room(); assert.equal((await f.send(id)).success, true); assert.equal((await f.send(id, '收到', 'b')).success, true);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all()), original);
+  f.sql.exec("UPDATE card_contacts SET name='' WHERE row_id='card-b'");
+  assert.equal((await f.api('/members?q=tonyfang')).items[0].name, 'Tony Fang');
+  f.sql.exec("UPDATE card_contacts SET english_name='' WHERE row_id='card-b'");
+  assert.equal((await f.api('/members?q=LINE別名')).items[0].name, 'LINE 別名');
+  await f.api('/preferences', { token: 'b', data: { accepting: false } });
+  assert.equal((await f.api('/members?q=LINE別名')).items.length, 0);
+  await f.api('/preferences', { token: 'b', data: { accepting: true } });
+  await f.api(`/threads/${id}/block`, { token: 'b', data: { blocked: true } });
+  assert.equal((await f.api('/members?q=LINE別名')).items.length, 0);
+});
+test('directory chooses one current own card and paginates the expanded member pool', async t => {
+  const f = fixture(t);
+  f.sql.exec(`INSERT INTO card_contacts(row_id,line_id,source_type,visibility,pool_eligible,ai_review_status,name,english_name,updated_at) VALUES('card-b-new','${B}','self_profile','private',0,'pending','新名片','Tony Fang','2026-09-25');`);
+  assert.deepEqual((await f.api('/members?q=tonyfang')).items.map(row => row.handle), ['card-b-new']);
+  assert.equal((await f.api('/members')).items.filter(row => row.handle.startsWith('card-b')).length, 1);
+  f.sql.exec("UPDATE card_contacts SET archived_at='2026-09-26' WHERE row_id='card-b-new'");
+  assert.equal((await f.api('/members?q=tonyfang')).items.length, 0);
+  f.sql.exec("DELETE FROM card_contacts WHERE row_id='card-c'");
+  assert.equal((await f.api('/members')).items.length, 1);
+  assert.equal((await f.api('/me', { token: 'c' })).code, 'OWN_CARD_REQUIRED');
+  for (let i = 0; i < 35; i++) {
+    const uid = 'U' + i.toString(16).padStart(32, '0'), id = 'sample-' + i.toString().padStart(2, '0');
+    f.sql.prepare('INSERT INTO users(row_id,line_id,name,phone) VALUES(?,?,?,?)').run(id, uid, '測試會員', '');
+    f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,pool_eligible,ai_review_status,name,updated_at) VALUES(?,?,'self_profile','private',0,'pending','測試會員','2026-09-24')").run(id, uid);
+  }
+  const first = await f.api('/members'), second = await f.api('/members?after=' + first.next);
+  assert.equal(first.items.length, 30); assert.equal(second.items.length, 6); assert.equal(second.next, '');
+  assert.equal(new Set([...first.items, ...second.items].map(row => row.handle)).size, 36);
 });
 test('paired conversation, reciprocal replies, legacy identity, unique retried messages', async t => {
   const f = fixture(t), id = await f.room();

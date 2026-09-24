@@ -13,6 +13,7 @@ for (const [id, name, company] of [['a', '小林（測試）', '綠葉設計'], 
   sql.prepare('INSERT INTO users(row_id,line_id,name,phone,role) VALUES(?,?,?,?,?)').run(id, ids[id], name, '0900000000', 'user');
   sql.prepare("INSERT INTO card_contacts VALUES(?,?,?,?, 'self_profile','public',1,'passed',?,?,?,'2026-09-24')").run('card-' + id, ids[id], ids[id], ids[id], name, company, '負責人');
 }
+sql.exec("ALTER TABLE card_contacts ADD COLUMN english_name TEXT DEFAULT ''; ALTER TABLE card_contacts ADD COLUMN archived_at TEXT DEFAULT ''; ALTER TABLE card_contacts ADD COLUMN merged_into_row_id TEXT DEFAULT ''; UPDATE card_contacts SET english_name='Demo Chen',visibility='private',pool_eligible=0,ai_review_status='pending' WHERE row_id='card-b'; UPDATE users SET phone='' WHERE row_id='b';");
 sql.exec(readFileSync(new URL('migrations/0046_member_private_chat.sql', root), 'utf8'));
 function prepare(query, args = []) {
   return { bind(...values) { return prepare(query, values); }, async first() { return sql.prepare(query).get(...args) || null; }, async all() { return { success: true, results: sql.prepare(query).all(...args) }; }, async run() { const result = sql.prepare(query).run(...args); return { success: true, meta: { changes: Number(result.changes) } }; } };
@@ -29,7 +30,8 @@ import {openMemberChat} from '/js/modules/member-chat.js';
 const account=document.querySelector('#account');account.value=new URLSearchParams(location.search).get('as')||'a';
 function switchAccount(){window.currentUserProfile={userId:'U'+account.value.repeat(32)};}switchAccount();
 account.onchange=switchAccount;window.liff={isLoggedIn:()=>true,getAccessToken:()=>account.value};window.showToast=message=>document.querySelector('output').textContent=message;
-document.querySelector('#open').onclick=()=>openMemberChat({base:location.origin});document.querySelector('#members').onclick=()=>openMemberChat({base:location.origin,tab:'members'});
+function openPreview(tab){const modal=openMemberChat({base:location.origin,tab});modal.querySelector('.mc-hint').textContent='本機合成測試，不含正式會員。英文搜尋可試 Demo Chen；正式名單請至點數通開啟。';}
+document.querySelector('#open').onclick=()=>openPreview('threads');document.querySelector('#members').onclick=()=>openPreview('members');
 </script></body></html>`;
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1:8804');
