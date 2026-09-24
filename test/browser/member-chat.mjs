@@ -25,6 +25,12 @@ try {
   await new Promise(resolve => setTimeout(resolve, 50)); releaseMe();
   await a.locator('[data-handle="card-b"]').waitFor(); await a.unroute('**/v1/member-chat/me');
   assert.equal(await a.locator('.mc-contact').count(), 2);
+  await a.locator('#mc-query').fill('DEMOCHEN'); await a.locator('.mc-search button').click();
+  await wait(a, () => document.querySelectorAll('.mc-contact').length === 1 && document.querySelector('.mc-status').textContent === '');
+  assert.equal(await a.locator('[data-handle="card-b"]').count(), 1);
+  await a.locator('#mc-query').fill('找不到的會員'); await a.locator('.mc-search button').click();
+  await a.locator('.mc-empty').waitFor(); assert.match(await a.locator('.mc-empty').textContent(), /已建立本人名片/);
+  await a.locator('#mc-query').fill('dEmO cHeN'); await a.locator('.mc-search button').click(); await a.locator('[data-handle="card-b"]').waitFor();
   await a.locator('[data-handle="card-b"]').click(); await wait(a, () => document.querySelector('.mc-peer strong').textContent.includes('小陳'));
   await send(a, '您好！想了解咖啡禮盒合作 ☕');
   const b = await page('b'); await b.locator('#open').click(); await b.locator('.mc-contact').first().click();
@@ -61,5 +67,5 @@ try {
   await b.setViewportSize({ width: 1440, height: 900 });
   assert.ok(await b.locator('dialog').evaluate(node => node.getBoundingClientRect().width <= 620));
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result: 'PASS', checks: ['two-party replies', 'third-party isolation', 'receive cursor and chronological order', 'lost-response retry', 'block/unblock', 'background/close polling stop', 'account change cleanup', 'mobile/desktop layout'], screenshot }));
+  console.log(JSON.stringify({ result: 'PASS', checks: ['unpublished own card English-name search without phone', 'empty search feedback', 'two-party replies', 'third-party isolation', 'receive cursor and chronological order', 'lost-response retry', 'block/unblock', 'background/close polling stop', 'account change cleanup', 'mobile/desktop layout'], screenshot }));
 } finally { await browser.close(); }

@@ -12,7 +12,7 @@
 ## 私訊合約
 
 1. 沿用 LINE access token 向 LINE profile 驗證、users 與 user_identity_links。拒絕前端 UID／role 作身分證明；衝突身分拒絕。
-2. 沿用既有完整註冊（姓名、電話）判定；須有 self_profile 本人名片。找會員只列 public、pool_eligible、ai_review_status=passed 的本人名片，並可關閉新聯絡。收藏名片絕不變成會員。
+2. 2026-09-24 後續依使用者指定修訂：既有 LINE 會員須有有效 self_profile 本人名片即可找會員／私訊，不再要求電話補齊、public、pool_eligible 或 ai_review_status=passed；可關閉新聯絡。收藏名片絕不變成會員，且不變更名片公開與配對資格。詳見同日 member-chat-discovery 工作單。
 3. 同一 LINE 平台內不同推薦歸屬網仍可透過公開名片交流；network_id 是既有推薦歸屬，不拿來新增租戶或更改會員。新表不連接其他平台資料庫。
 4. 私訊存獨立 member_chat_* 表，所有對話／訊息操作都要求當事人；admin 無特權讀取。舊 inbox／管理監控不會讀到新表。不是端對端加密。
 5. 一對會員僅一個對話；每位發送者＋client_id 唯一，重試相同內容回傳同筆，改內容重用鍵拒絕。

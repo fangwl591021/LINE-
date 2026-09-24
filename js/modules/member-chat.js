@@ -51,7 +51,7 @@ export function openMemberChat({ base, tab = 'threads' } = {}) {
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
     <nav aria-label="私訊分類"><button type="button" data-action="threads">我的聊天</button><button type="button" data-action="members">找會員</button></nav>
     <section class="mc-settings"><label><input type="checkbox" data-accepting checked disabled>接受新聯絡</label><small>私訊免費，僅對話雙方可見；不是 LINE 原生聊天。</small></section>
-    <form class="mc-search" hidden><label class="mc-sr" for="mc-query">搜尋會員姓名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、公司或職稱"><button type="submit">搜尋</button></form>
+    <form class="mc-search" hidden><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></form>
     <section class="mc-peer" hidden><strong></strong><button type="button" data-action="block">封鎖</button></section>
     <div class="mc-scroll" tabindex="0"><button type="button" data-action="older" hidden>載入較早訊息</button><div class="mc-rows"></div><button type="button" data-action="more" hidden>載入更多</button></div>
     <p class="mc-status" role="status" aria-live="polite"></p><button type="button" class="mc-retry" data-action="refresh">重新整理</button>
@@ -97,7 +97,7 @@ export function openMemberChat({ base, tab = 'threads' } = {}) {
       return `<button type="button" class="mc-contact" data-action="open" data-handle="${esc(member ? id : '')}" data-room="${esc(member ? '' : id)}"><span class="mc-avatar" aria-hidden="true">${esc(row.name?.slice(0, 1) || '會')}</span><span class="mc-contact-text"><strong>${esc(row.name || '會員')}</strong><span>${esc(member ? [row.company, row.title].filter(Boolean).join(' · ') : row.preview)}</span></span><span class="mc-contact-meta">${member ? '聊天 ›' : `${esc(stamp(row.createdAt))}${row.unread ? `<b>${Math.min(99, row.unread)}</b>` : ''}`}</span></button>`;
     }).join('');
     if (append) list.insertAdjacentHTML('beforeend', html);
-    else list.innerHTML = html || `<p class="mc-empty">${view === 'members' ? '沒有符合的會員。僅列出已公開且通過檢查的本人名片。' : '還沒有聊天，點「找會員」開始交流。'}</p>`;
+    else list.innerHTML = html || `<p class="mc-empty">${view === 'members' ? '沒有符合的會員。已建立本人名片並接受新聯絡者即可被找到；不含自己或已封鎖的會員。' : '還沒有聊天，點「找會員」開始交流。'}</p>`;
   }
   async function markRead(ticket) {
     if (document.hidden || !valid(ticket) || !newest || newest <= readThrough) return;

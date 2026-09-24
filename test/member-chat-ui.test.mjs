@@ -42,6 +42,8 @@ test('integration stays lazy and isolated from existing public feed/inbox/points
   assert.match(root('index.html'), /新增自我宣傳・10 點/); assert.match(root('index.html'), /我的聊天/);
   assert.match(entry, /handleMemberChat\(request, env\)/);
   assert.match(ui, /document.hidden/); assert.match(ui, /clearTimeout\(timer\)/); assert.match(ui, /pagehide/);
+  assert.match(ui, /英文名/); assert.match(ui, /已建立本人名片並接受新聯絡/);
+  assert.doesNotMatch(ui, /僅列出已公開且通過檢查/);
   assert.doesNotMatch(ui, /localStorage|sessionStorage|setInterval|sendInboxMessage|fetchAPI\(/);
   assert.doesNotMatch(root('worker/member-chat.mjs'), /INSERT INTO (users|inbox_items|points_ledger|card_contacts)/);
   assert.match(root('migrations/0046_member_private_chat.sql'), /UNIQUE\(sender_id,client_id\)/);

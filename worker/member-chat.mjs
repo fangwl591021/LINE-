@@ -50,8 +50,8 @@ function cursor(value) {
   return Number(value);
 }
 function registered(user) {
-  return !!text(user?.row_id) && UID.test(user?.line_id || '') && !!text(user?.phone)
-    && !!text(user?.name) && !['未命名', '待補資料'].includes(text(user.name));
+  // Chat membership is an existing LINE account + its own card, not profile completeness.
+  return !!text(user?.row_id) && UID.test(user?.line_id || '');
 }
 // Resolve only persisted identity aliases, just as the existing private journal does.
 async function identity(db, uid) {
@@ -69,7 +69,7 @@ async function identity(db, uid) {
     for (const key of IDS) if (text(members[0][key])) ids.add(text(members[0][key]));
     if (ids.size > 8) fail('IDENTITY_CONFLICT', '會員身分對應異常', 409);
     if (count === ids.size) {
-      if (!registered(members[0])) fail('REGISTRATION_REQUIRED', '請先完成會員姓名與電話資料', 403);
+      if (!registered(members[0])) fail('REGISTRATION_REQUIRED', '請先完成 LINE 會員註冊', 403);
       return { user: members[0], memberId: text(members[0].row_id), ids: [...ids], uid };
     }
   }
@@ -89,18 +89,19 @@ async function authenticate(request, db, env, fetcher) {
   const actor = await identity(db, profile.userId);
   const access = ExchangeZoneModule.access({}, env, { userId: actor.uid, role: actor.user.role });
   if (!access.access?.allowed) fail('ACCESS_DENIED', '交流專區尚未開放', 403);
-  const card = await statement(db, `SELECT row_id FROM card_contacts WHERE source_type='self_profile'
-    AND COALESCE(NULLIF(profile_user_id,''),NULLIF(line_id,''),owner_user_id) IN (SELECT value FROM json_each(?)) LIMIT 1`, JSON.stringify(actor.ids)).first();
+  const card = await statement(db, `SELECT c.row_id FROM card_contacts c WHERE ${ownCard('c')}
+    AND COALESCE(NULLIF(c.profile_user_id,''),NULLIF(c.line_id,''),c.owner_user_id) IN (SELECT value FROM json_each(?)) LIMIT 1`, JSON.stringify(actor.ids)).first();
   if (!card) fail('OWN_CARD_REQUIRED', '請先建立或認領本人的名片，收藏他人名片不適用', 403);
   return actor;
 }
-const PUBLIC_CARD = `c.source_type='self_profile' AND c.visibility='public' AND c.pool_eligible=1 AND c.ai_review_status='passed'`;
+// Only the private-chat directory uses this rule; public card/matchmaking rules stay unchanged.
+const ownCard = alias => `${alias}.source_type='self_profile' AND COALESCE(${alias}.archived_at,'')='' AND COALESCE(${alias}.merged_into_row_id,'')=''`;
 const CARD_JOIN = `COALESCE(NULLIF(c.profile_user_id,''),NULLIF(c.line_id,''),c.owner_user_id) IN (u.row_id,u.line_id,u.legacy_line_id,u.point_line_id)`;
-const REGISTERED = `TRIM(COALESCE(u.line_id,''))<>'' AND TRIM(COALESCE(u.phone,''))<>'' AND TRIM(COALESCE(u.name,'')) NOT IN ('','未命名','待補資料')`;
+const REGISTERED = `length(u.line_id)=33 AND substr(u.line_id,1,1) IN ('U','u') AND substr(u.line_id,2) NOT GLOB '*[^0-9a-fA-F]*'`;
 const NO_BLOCK = `NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=?2) OR (b.member_id=?2 AND b.blocked_id=?1))`;
 async function cardTarget(db, handle) {
   if (typeof handle !== 'string' || !handle || handle.length > 180) fail('INVALID_MEMBER', '請重新選擇會員');
-  const found = await rows(db, `SELECT u.row_id,u.line_id FROM card_contacts c JOIN users u ON ${CARD_JOIN} WHERE c.row_id=? AND ${PUBLIC_CARD} AND ${REGISTERED} LIMIT 3`, handle);
+  const found = await rows(db, `SELECT u.row_id,u.line_id FROM card_contacts c JOIN users u ON ${CARD_JOIN} WHERE c.row_id=? AND ${ownCard('c')} AND ${REGISTERED} LIMIT 3`, handle);
   if (found.length !== 1) fail('MEMBER_UNAVAILABLE', '對方目前未開放聯絡或名片狀態已變更', 403);
   // Resolve ambiguity/legacy aliases for the recipient too, before creating a conversation.
   return identity(db, found[0].line_id);
@@ -127,14 +128,14 @@ async function peerInfo(db, id) {
 async function listMembers(db, actor, params) {
   const q = text(params.get('q')), after = text(params.get('after'));
   if (q.length > 60 || after.length > 180) fail('INVALID_QUERY', '搜尋條件過長');
-  const result = await rows(db, `SELECT c.row_id AS handle,c.name,c.company_name,c.title FROM card_contacts c JOIN users u ON ${CARD_JOIN}
-    WHERE ${PUBLIC_CARD} AND ${REGISTERED} AND CAST(u.row_id AS TEXT)<>?1 AND CAST(c.row_id AS TEXT)>?2
+  const result = await rows(db, `SELECT c.row_id AS handle,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title FROM card_contacts c JOIN users u ON ${CARD_JOIN}
+    WHERE ${ownCard('c')} AND ${REGISTERED} AND CAST(u.row_id AS TEXT)<>?1 AND CAST(c.row_id AS TEXT)>?2
     AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=CAST(u.row_id AS TEXT)),1)=1
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
-    AND (instr(lower(COALESCE(c.name,'')),lower(?3))>0 OR instr(lower(COALESCE(c.company_name,'')),lower(?3))>0 OR instr(lower(COALESCE(c.title,'')),lower(?3))>0)
-    AND c.row_id=(SELECT c2.row_id FROM card_contacts c2 WHERE c2.source_type='self_profile' AND c2.visibility='public' AND c2.pool_eligible=1 AND c2.ai_review_status='passed'
+    AND (${['c.name', 'c.english_name', 'u.name', 'c.company_name', 'c.title'].map(field => `instr(replace(lower(COALESCE(${field},'')),' ',''),?3)>0`).join(' OR ')})
+    AND c.row_id=(SELECT c2.row_id FROM card_contacts c2 WHERE ${ownCard('c2')}
       AND COALESCE(NULLIF(c2.profile_user_id,''),NULLIF(c2.line_id,''),c2.owner_user_id) IN (u.row_id,u.line_id,u.legacy_line_id,u.point_line_id) ORDER BY c2.updated_at DESC,c2.row_id DESC LIMIT 1)
-    ORDER BY CAST(c.row_id AS TEXT) LIMIT 31`, actor.memberId, after, q);
+    ORDER BY CAST(c.row_id AS TEXT) LIMIT 31`, actor.memberId, after, q.toLowerCase().replace(/ /g, ''));
   const items = result.slice(0, PAGE).map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80) }));
   return { items, next: result.length > PAGE ? items.at(-1).handle : '' };
 }
