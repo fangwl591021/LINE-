@@ -23,6 +23,8 @@ try {
   let releaseMe;
   await a.route('**/v1/member-chat/me', async route => { await new Promise(resolve => { releaseMe = resolve; }); await route.continue(); });
   await a.locator('#open').click(); await a.locator('nav [data-action="members"]').click();
+  assert.equal(await a.locator('.mc-settings').isVisible(), false, 'settings stay hidden even while identity is loading');
+  assert.equal(await a.locator('.mc-hint').isVisible(), false);
   await new Promise(resolve => setTimeout(resolve, 50)); releaseMe();
   await a.locator('[data-handle="card-b"]').waitFor(); await a.unroute('**/v1/member-chat/me');
   assert.equal(await a.locator('.mc-contact').count(), 2);
@@ -64,6 +66,8 @@ try {
   await a.locator('[data-handle="card-b"]').click(); await wait(a, () => document.querySelector('.mc-peer strong').textContent.includes('小陳'));
   await send(a, '您好！想了解咖啡禮盒合作 ☕');
   const b = await page('b'); await b.locator('#open').click();
+  assert.equal(await b.locator('.mc-settings').isVisible(), true, 'My Chats retains all preferences');
+  assert.equal(await b.locator('.mc-hint').isVisible(), true);
   await b.locator('[data-notifications]').check();
   await wait(b, () => document.querySelector('.mc-status').textContent.includes('已開啟 LINE通知'));
   await b.locator('[data-action="edit-line-contact"]').click();
@@ -170,6 +174,8 @@ try {
   await reopened.setViewportSize({ width: 1440, height: 900 });
   await reopened.locator('nav [data-action="members"]').click(); await reopened.locator('#mc-industry').selectOption('科技資訊');
   await reopened.locator('[data-handle="card-c"]').waitFor();
+  assert.equal(await reopened.locator('.mc-settings').isVisible(), false);
+  assert.equal(await reopened.locator('.mc-hint').isVisible(), false);
   assert.equal(await reopened.locator('.mc-contact').count(), 1);
   assert.ok(await reopened.locator('dialog').evaluate(node => node.scrollWidth <= 620));
   assert.deepEqual(errors, []);

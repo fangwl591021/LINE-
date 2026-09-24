@@ -190,7 +190,8 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     oldest = newest = readThrough = 0; seen.clear(); list.replaceChildren(); compose.reset(); compose.querySelector('button').textContent = '傳送'; $('#mc-body').readOnly = false;
     search.hidden = view !== 'members'; compose.hidden = view !== 'chat'; $('.mc-peer').hidden = view !== 'chat';
     $('.mc-attachment').hidden = view !== 'chat';
-    $('.mc-settings').hidden = view === 'chat'; $('[data-action="older"]').hidden = true; $('[data-action="more"]').hidden = true;
+    $('.mc-settings').hidden = view !== 'threads'; $('.mc-hint').hidden = view === 'members';
+    $('[data-action="older"]').hidden = true; $('[data-action="more"]').hidden = true;
     for (const button of modal.querySelectorAll('nav button')) button.setAttribute('aria-pressed', String(button.dataset.action === view));
     if (container) { modal.querySelector('header').hidden = view !== 'chat'; modal.classList.toggle('mc-conversation', view === 'chat'); }
     note();

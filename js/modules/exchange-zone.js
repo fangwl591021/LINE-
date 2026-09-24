@@ -14,7 +14,7 @@
     const ticket = ++chatRequest, root = document.getElementById('page-exchange-zone'), container = document.getElementById('exchange-zone-chat');
     const valid = () => ticket === chatRequest && owner === window.currentUserProfile?.userId && !root?.classList.contains('hidden') && root?.dataset.exchangeTab === tab;
     try {
-      const chat = await import(new URL('member-chat.js?v=7', current).href);
+      const chat = await import(new URL('member-chat.js?v=8', current).href);
       if (!valid()) return;
       chatModule = chat;
       chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, tab, threadId: options.threadId || '', container, onExit: () => window.closeExchangeZonePanel?.(), onView: view => {
