@@ -1,0 +1,16 @@
+/* Scoped navigation shell; no changes to cards, home or other dialogs. */
+#exchange-zone-panel [hidden]{display:none!important}
+#exchange-zone-panel>header{padding:12px 16px}
+.exchange-top-tabs{display:flex;flex-shrink:0;gap:0;padding:0 12px;background:#fff;border-bottom:1px solid #e5ece8;overflow-x:auto;overscroll-behavior-x:contain}
+.exchange-top-tabs button{flex:1;position:relative;min-width:max-content;min-height:50px;padding:12px 10px;font:inherit;font-size:15px;font-weight:700;white-space:nowrap;color:#87958f;border:0;background:#fff}
+.exchange-top-tabs button[aria-selected=true]{color:#163c43}
+.exchange-top-tabs button[aria-selected=true]::after{content:"";position:absolute;bottom:0;left:12px;right:12px;height:3px;border-radius:3px;background:#008665}
+.exchange-top-tabs button:focus-visible{outline:3px solid #0b9b76;outline-offset:-4px;border-radius:4px}
+#exchange-zone-feed{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;background:#fff}
+#exchange-zone-chat{flex:1;min-height:0;overflow:hidden;background:#f3fbf8;position:relative}
+#exchange-zone-chat:empty::before{content:"正在讀取…";display:block;padding:24px;color:#52766c}
+#exchange-zone-panel .exchange-feed-intro{padding:14px 20px}
+#exchange-zone-panel .exchange-feed-intro h3{font-size:17px;margin:0}
+#exchange-zone-panel .exchange-feed-intro>button{min-height:42px;margin-top:12px;font-size:14px}
+#exchange-zone-panel #exchange-zone-scope-hint{padding-top:10px;padding-bottom:10px}
+@media(max-width:360px){.exchange-top-tabs{padding:0 4px}.exchange-top-tabs button{font-size:14px;padding:12px 7px}}

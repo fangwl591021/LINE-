@@ -1,6 +1,7 @@
 // Loaded only after an explicit click in Exchange Zone. No startup requests/storage.
 import { createChatPopups } from './member-chat-popups.js?v=2';
-let active;
+let active, closeActive;
+export function closeMemberChat(options) { return closeActive ? closeActive(options) : true; }
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const stamp = value => {
   const date = new Date(String(value || '').replace(' ', 'T') + (String(value || '').endsWith('Z') ? '' : 'Z'));
@@ -46,13 +47,14 @@ export function chatMatchHtml(match) {
   if (!match || typeof match.score !== 'number' || !Number.isFinite(match.score) || match.score < 0 || match.score > 100) return '<span class="mc-match-empty">尚無配對</span>';
   return `<span class="mc-match" title="${match.source === 'ai' ? 'AI' : '規則'}既有配對分數，非成交機率">${esc(match.score)}%</span><small>${match.source === 'ai' ? 'AI 配對' : '規則配對'}</small>`;
 }
-export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
+export function openMemberChat({ base, tab = 'threads', threadId = '', container = null, onExit, onView } = {}) {
   if (active) { active.focus(); return active; }
   const opener = document.activeElement;
   const modal = document.createElement('dialog'); modal.className = 'member-chat';
+  if (container) modal.classList.add('mc-embedded');
   const client = createChatClient({ base, isCurrent: () => active === modal });
   if (!document.querySelector('link[data-member-chat]')) {
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=4', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=5', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
   }
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
@@ -65,7 +67,9 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
     <section class="mc-attachment" hidden><button type="button" data-action="attach">＋ 附加內容</button><span data-selected-coupon></span><button type="button" data-action="remove-coupon" hidden>移除</button></section>
     <form class="mc-compose" hidden><label class="mc-sr" for="mc-body">輸入訊息</label><textarea id="mc-body" maxlength="2000" rows="2" placeholder="輸入訊息（最多 2000 字）"></textarea><button type="submit">傳送</button></form>
     <p class="mc-hint">開啟 LINE通知後，未讀訊息約 30–90 秒提醒；同一對話每 5 分鐘時段合併通知，不顯示聊天內容。手機是否跳出橫幅，依 LINE、手機通知及勿擾設定。</p>`;
-  document.body.append(modal); active = modal; modal.showModal();
+  if (container) { container.replaceChildren(modal); modal.querySelector('nav').hidden = true; modal.querySelector('header').hidden = !threadId; }
+  else document.body.append(modal);
+  active = modal; if (container) modal.show(); else modal.showModal();
   const $ = selector => modal.querySelector(selector);
   const list = $('.mc-rows'), scroll = $('.mc-scroll'), status = $('.mc-status'), search = $('.mc-search'), compose = $('.mc-compose'), industry = $('#mc-industry');
   let memberQuery = '', memberIndustry = '';
@@ -84,15 +88,20 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   function stop() { clearTimeout(timer); }
   function close() {
     if (active !== modal) return;
-    stop(); generation++; popups.close(); client.close(); active = null;
+    stop(); generation++; popups.close(); client.close(); active = null; closeActive = null;
     document.removeEventListener('visibilitychange', visibility);
     window.removeEventListener('pagehide', close);
     modal.close(); modal.remove(); list.replaceChildren(); pending = null;
     opener?.focus?.();
   }
+  closeActive = (options = {}) => {
+    if (options.confirm && (sending || pending) && !window.confirm('訊息可能尚未送達。離開後請查看對話確認結果；確定離開？')) return false;
+    close(); return true;
+  };
+  function leave() { close(); if (container) onExit?.(); }
   function alive() {
     if (client.current()) return true;
-    close(); window.showToast?.('登入身分已變更，請重新開啟私訊', true); return false;
+    leave(); window.showToast?.('登入身分已變更，請重新開啟私訊', true); return false;
   }
   function schedule() {
     stop();
@@ -183,6 +192,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
     $('.mc-attachment').hidden = view !== 'chat';
     $('.mc-settings').hidden = view === 'chat'; $('[data-action="older"]').hidden = true; $('[data-action="more"]').hidden = true;
     for (const button of modal.querySelectorAll('nav button')) button.setAttribute('aria-pressed', String(button.dataset.action === view));
+    if (container) { modal.querySelector('header').hidden = view !== 'chat'; modal.classList.toggle('mc-conversation', view === 'chat'); }
     note();
   }
   async function openConversation(button) {
@@ -244,12 +254,13 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
   modal.addEventListener('click', async event => {
     const button = event.target.closest('[data-action]'); if (!button || !modal.contains(button)) return;
     const action = button.dataset.action;
-    if (action === 'close') { close(); return; }
+    if (action === 'close') { leave(); return; }
     if (!alive()) return;
-    if (action === 'back' && view !== 'chat') { close(); return; }
+    if (action === 'back' && view !== 'chat') { leave(); return; }
     if (['threads', 'members', 'back'].includes(action)) {
       if ((sending || pending) && !window.confirm('訊息可能尚未送達。離開後請查看對話確認結果；確定離開？')) return;
       setView(action === 'members' ? 'members' : 'threads'); await refresh(); schedule();
+      if (container) onView?.(view);
     } else if (action === 'refresh') { if (!ready) await initialize(); else await refresh(); schedule(); }
     else if (action === 'open') await openConversation(button);
     else if (action === 'card' && room) await popups.card(room);
@@ -272,8 +283,12 @@ export function openMemberChat({ base, tab = 'threads', threadId = '' } = {}) {
       finally { button.disabled = false; }
     }
   });
-  modal.addEventListener('cancel', event => { event.preventDefault(); close(); });
-  modal.addEventListener('keydown', event => { if (event.key === 'Escape') event.stopPropagation(); });
+  modal.addEventListener('cancel', event => { event.preventDefault(); leave(); });
+  modal.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    event.stopPropagation();
+    if (container) { event.preventDefault(); leave(); }
+  });
   document.addEventListener('visibilitychange', visibility); window.addEventListener('pagehide', close);
   async function initialize() {
     if (initializing) return;

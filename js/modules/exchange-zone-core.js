@@ -135,7 +135,7 @@
     return applyAccess(result?.access);
   };
 
-  window.openExchangeZone = async function() {
+  window.openExchangeZone = async function(options = {}) {
     const access = state.access.allowed ? state.access : await window.refreshExchangeZoneAccess();
     if (!access.allowed) {
       window.showToast?.('交流專區尚未開放', true);
@@ -154,15 +154,40 @@
       panel.classList.remove('translate-x-full');
       document.getElementById('exchange-zone-panel-close')?.focus();
     });
-    window.loadExchangeZone?.();
+    await window.selectExchangeZoneTab(options.tab || 'public', options);
+  };
+
+  window.selectExchangeZoneTab = async function(tab, options = {}) {
+    if (!state.panelOpen || !['threads', 'members', 'public', 'mine'].includes(tab)) return;
+    if (window.closeExchangeMemberChat?.({ confirm: true }) === false) return;
+    state.listRequest++;
+    const root = document.getElementById('page-exchange-zone');
+    const chat = document.getElementById('exchange-zone-chat'), feed = document.getElementById('exchange-zone-feed');
+    const privateTab = ['threads', 'members'].includes(tab);
+    root.dataset.exchangeTab = tab;
+    document.querySelectorAll('[data-exchange-tab]').forEach(button => {
+      const selected = button.dataset.exchangeTab === tab;
+      button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
+      if (button.hasAttribute('data-exchange-scope')) button.setAttribute('aria-pressed', String(selected));
+    });
+    chat.hidden = !privateTab; feed.hidden = privateTab;
+    (privateTab ? chat : feed).setAttribute('aria-labelledby', 'exchange-tab-' + tab);
+    if (privateTab) {
+      await window.openExchangeMemberChat?.(tab, options);
+    } else {
+      state.listScope = tab; feed.scrollTop = 0;
+      await window.loadExchangeZone();
+    }
   };
 
   window.closeExchangeZonePanel = function() {
     const root = document.getElementById('page-exchange-zone');
     const panel = document.getElementById('exchange-zone-panel');
     if (!root || !panel || !state.panelOpen) return;
+    if (window.closeExchangeMemberChat?.({ confirm: true }) === false) return;
     if (state.drawerOpen) window.closeExchangeZoneDrawer?.();
     state.panelOpen = false;
+    state.listRequest++;
     panel.classList.add('translate-x-full');
     document.body.classList.remove('overflow-hidden');
     state.panelCloseTimer = setTimeout(() => {
@@ -579,11 +604,16 @@
   function initialize() {
     if (state.initialized) return;
     state.initialized = true;
-    document.querySelectorAll('[data-exchange-scope]').forEach((button) => {
-      button.addEventListener('click', () => {
-        state.listScope = button.dataset.exchangeScope === 'mine' ? 'mine' : 'public';
-        window.loadExchangeZone();
-      });
+    document.querySelectorAll('[data-exchange-tab]').forEach((button) => {
+      button.addEventListener('click', () => window.selectExchangeZoneTab(button.dataset.exchangeTab));
+    });
+    document.querySelector('.exchange-top-tabs')?.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const buttons = [...event.currentTarget.querySelectorAll('[role=tab]')], index = buttons.indexOf(document.activeElement);
+      if (index < 0) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+      buttons[next].focus(); buttons[next].click();
     });
     document.getElementById('exchange-zone-list')?.addEventListener('click', (event) => {
       const like = event.target.closest('[data-exchange-like]');

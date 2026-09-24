@@ -1,5 +1,7 @@
 .member-chat{margin:auto;padding:0;border:0;border-radius:20px;width:min(620px,100vw);height:min(850px,100dvh);max-width:100vw;max-height:100dvh;color:#163c43;background:#f3fbf8;font-family:inherit;font-size:16px;overflow:hidden}
 .member-chat[open]{display:flex;flex-direction:column}.member-chat::backdrop{background:#102c3bcc}.member-chat [hidden]{display:none!important}
+.member-chat.mc-embedded{position:relative;inset:auto;margin:0;width:100%;max-width:none;height:100%;max-height:none;border-radius:0}.member-chat.mc-embedded>header [data-action=close]{display:none}
+.member-chat.mc-embedded .mc-scroll{min-height:0}.member-chat.mc-embedded.mc-conversation>.mc-hint{display:none}
 .member-chat header{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fff;border-bottom:1px solid #dcebe6;flex-shrink:0}.member-chat h2{flex:1;font-weight:800;font-size:20px;margin:0}
 .member-chat button{font:inherit;cursor:pointer;min-height:44px;padding:8px 12px;border-radius:12px;border:1px solid #cde1da;background:white;color:#096f56}.member-chat button:disabled{opacity:.55;cursor:default}.member-chat button:focus-visible,.member-chat input:focus-visible,.member-chat textarea:focus-visible{outline:3px solid #0b9b76;outline-offset:2px}
 .member-chat nav{display:flex;padding:10px 16px;gap:8px;background:white;flex-shrink:0}.member-chat nav button{flex:1}.member-chat nav button[aria-pressed=true]{background:#008665;color:white;border-color:#008665}

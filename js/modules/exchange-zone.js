@@ -1,15 +1,30 @@
 (function() {
   const current = document.currentScript?.src || location.href;
-  const base = new URL('exchange-zone-core.js?v=20260924-visibility', current).href;
+  const base = new URL('exchange-zone-core.js?v=20260924-top-tabs', current).href;
   const overlay = new URL('exchange-zone-delete-overlay.js?v=20260814-youtube-poster', current).href;
   const coupon = new URL('exchange-zone-coupon.js?v=20260814-coupon-phase1', current).href;
-  window.openExchangeMemberChat = async function(tab = 'threads') {
+  let chatModule, chatRequest = 0;
+  window.closeExchangeMemberChat = function(options) {
+    if (chatModule?.closeMemberChat(options) === false) return false;
+    chatRequest++;
+    return true;
+  };
+  window.openExchangeMemberChat = async function(tab = 'threads', options = {}) {
     const owner = window.currentUserProfile?.userId;
+    const ticket = ++chatRequest, root = document.getElementById('page-exchange-zone'), container = document.getElementById('exchange-zone-chat');
+    const valid = () => ticket === chatRequest && owner === window.currentUserProfile?.userId && !root?.classList.contains('hidden') && root?.dataset.exchangeTab === tab;
     try {
-      const chat = await import(new URL('member-chat.js?v=6', current).href);
-      if (owner !== window.currentUserProfile?.userId || document.getElementById('page-exchange-zone')?.classList.contains('hidden')) return;
-      chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, tab });
-    } catch (error) { window.showToast?.(error.message || '私訊載入失敗，請重試', true); }
+      const chat = await import(new URL('member-chat.js?v=7', current).href);
+      if (!valid()) return;
+      chatModule = chat;
+      chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, tab, threadId: options.threadId || '', container, onExit: () => window.closeExchangeZonePanel?.(), onView: view => {
+        if (valid() && view === 'threads' && root.dataset.exchangeTab === 'members') void window.selectExchangeZoneTab('threads');
+      } });
+    } catch (error) {
+      if (!valid()) return;
+      if (container) container.textContent = error.message || '私訊載入失敗，請重新點選頁籤重試';
+      window.showToast?.(error.message || '私訊載入失敗，請重試', true);
+    }
   };
 
   window.openMemberChatNotification = async function(params) {
@@ -20,11 +35,7 @@
     try {
       await ready;
       if (owner !== window.currentUserProfile?.userId) return true;
-      await window.openExchangeZone();
-      const chat = await import(new URL('member-chat.js?v=6', current).href);
-      if (owner === window.currentUserProfile?.userId && !document.getElementById('page-exchange-zone')?.classList.contains('hidden')) {
-        chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, threadId });
-      }
+      await window.openExchangeZone({ tab: 'threads', threadId });
     } catch (error) { window.showToast?.(error.message || '請從交流專區重新開啟私訊', true); }
     return true;
   };
