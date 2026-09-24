@@ -35,6 +35,7 @@ const fetcher = async (url, options) => {
 };
 let apiReads = 0;
 const assets = new Map([['/js/modules/member-chat.js', 'text/javascript'], ['/js/modules/member-chat-popups.js', 'text/javascript'], ['/js/modules/member-chat-route.js', 'text/javascript'], ['/css/member-chat.css', 'text/css']]);
+assets.set('/js/modules/member-chat-line-contact.js', 'text/javascript');
 const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>會員私訊・本機測試</title><style>body{font:16px system-ui;background:#f0faf5;color:#163c43;padding:20px}button,select{font:inherit;padding:12px;margin:8px 0}small{display:block;line-height:1.6}</style></head><body><h1>會員私訊・本機測試</h1><small>合成帳號、記憶體資料庫，不連正式 LINE、會員或點數。重啟後清空。</small><label>測試帳號 <select id="account"><option value="a">小林</option><option value="b">小陳</option><option value="c">小張</option></select></label><br><button id="open">開啟我的聊天</button> <button id="members">找會員</button><output></output><script type="module">
 import {openMemberChat} from '/js/modules/member-chat.js';
 const account=document.querySelector('#account');account.value=new URLSearchParams(location.search).get('as')||'a';

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createChatClient, chatMessageHtml, chatMatchHtml } from '../js/modules/member-chat.js';
 import { memberChatRoute } from '../js/modules/member-chat-route.js';
+import { normalizeLineContact } from '../js/modules/member-chat-line-contact.js';
 import vm from 'node:vm';
 const response = value => new Response(JSON.stringify({ success: true, ...value }));
 function login() { globalThis.window = { currentUserProfile: { userId: 'a' }, liff: { isLoggedIn: () => true, getAccessToken: () => 'token-a' } }; }
@@ -93,9 +94,18 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /params.set\('industry', memberIndustry\)/);
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
-  assert.match(ui, /member-chat.css\?v=3/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=5/g) || []).length, 2);
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.16/);
+  assert.match(ui, /member-chat.css\?v=4/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=6/g) || []).length, 2);
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.17/);
+});
+
+test('LINE contact accepts only IDs or add-friend URLs and is separate from notification opt-in', () => {
+  for (const [input, expected] of [[' demo_id ', 'https://line.me/ti/p/~demo_id'], ['@demo', 'https://line.me/R/ti/p/%40demo'], ['https://line.me/ti/p/AB-C_xyz', 'https://line.me/ti/p/AB-C_xyz'], ['https://lin.ee/abc123', 'https://lin.ee/abc123'], ['', '']]) assert.equal(normalizeLineContact(input), expected);
+  for (const input of [null, {}, 123, 'abc', 'U' + 'a'.repeat(32), 'a'.repeat(501), 'https://evil.test/a', 'javascript:alert(1)', 'http://line.me/ti/p/abc', 'https://line.me.evil.test/ti/p/abc', 'https://evil@line.me/ti/p/abc', 'https://line.me:444/ti/p/abc', 'https://line.me/R/share?text=x', 'https://line.me/ti/p/a%2fb', 'https://line.me/ti/p/abc\n', 'https://line.me\\evil.test/ti/p/abc']) assert.equal(normalizeLineContact(input), null, String(input));
+  const ui = readFileSync(new URL('../js/modules/member-chat.js', import.meta.url), 'utf8');
+  assert.match(ui, /data-notifications disabled>LINE通知<\/label><button[^>]+edit-line-contact/);
+  assert.match(ui, /（點我新增）/); assert.match(ui, /member-chat-popups.js\?v=2/);
+  assert.doesNotMatch(ui, /LINE 私訊通知|離開頁面也提醒/);
 });
 
 test('opt-in is explicit, auth precedes deep link, private notifications cron cannot run legacy jobs', () => {

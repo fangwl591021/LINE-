@@ -8,6 +8,53 @@ import { chatExtraSchema, seedChatCoupon, seedChatScore } from './member-chat-ex
 import { ExchangeZoneModule } from '../worker/exchange-zone.mjs';
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), OLD = 'U' + 'd'.repeat(32);
 const BASE = 'https://chat.test/v1/member-chat';
+test('LINE contact is owner-managed, thread-private and never rewrites accepting or the notification recipient', async t => {
+  const f = fixture(t), id = await f.room();
+  assert.equal((await f.send(id, 'establish existing conversation')).success, true);
+  await f.enable('b');
+  await f.api('/preferences', { token: 'b', data: { accepting: false } });
+  assert.equal((await f.api('/line-contact', { token: 'b' })).lineContact, '');
+  const before = JSON.stringify(f.sql.prepare('SELECT * FROM member_chat_notifications').all());
+  assert.equal((await f.api('/line-contact', { token: 'b', data: { lineContact: 'demo_line' } })).lineContact, 'https://line.me/ti/p/~demo_line');
+  assert.equal((await f.api('/me', { token: 'b' })).accepting, false);
+  assert.equal((await f.api('/line-contact', { token: 'b' })).lineContact, 'https://line.me/ti/p/~demo_line');
+  assert.equal((await f.api(`/threads/${id}/line-contact`)).lineContact, 'https://line.me/ti/p/~demo_line');
+  assert.equal((await f.api('/line-contact')).lineContact, '');
+  assert.equal((await f.api(`/threads/${id}/line-contact`, { token: 'c' })).status, 404);
+  assert.equal((await f.api(`/threads/${id}/line-contact`, { data: { lineContact: 'hijack' } })).status, 405);
+  assert.equal((await f.api('/line-contact?memberId=b')).status, 400);
+  assert.equal((await f.api('/line-contact', { data: { lineContact: 'hijack', memberId: 'b' } })).status, 400);
+  for (const path of ['/members', '/threads', `/threads/${id}/messages`]) assert.doesNotMatch(JSON.stringify(await f.api(path)), /demo_line|lineContact|line_contact/);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM member_chat_notifications').all()), before);
+  assert.equal((await f.send(id)).success, true); f.due(); await f.drain();
+  assert.equal(f.pushes.length, 1); assert.equal(f.pushes[0].body.to, B);
+  assert.equal(f.pushes[0].body.notificationDisabled, false); assert.doesNotMatch(JSON.stringify(f.pushes), /demo_line/);
+  await f.api(`/threads/${id}/block`, { token: 'b', data: { blocked: true } });
+  assert.equal((await f.api(`/threads/${id}/line-contact`)).status, 403);
+  assert.equal((await f.api(`/threads/${id}/line-contact`, { token: 'b' })).status, 403);
+  await f.api('/line-contact', { token: 'b', data: { lineContact: '' } });
+  assert.equal((await f.api('/line-contact', { token: 'b' })).lineContact, '');
+  assert.equal((await f.api('/me', { token: 'b' })).notifications, true);
+});
+
+test('LINE contact rejects unauthenticated/invalid values, preserves data on failure and supports retry', async t => {
+  const f = fixture(t);
+  assert.equal((await f.api('/line-contact', { token: '', data: { lineContact: 'demo_line' } })).status, 401);
+  for (const lineContact of [null, {}, 'javascript:alert(1)', 'https://evil.test/', A]) assert.equal((await f.api('/line-contact', { data: { lineContact } })).status, 400);
+  assert.equal(f.writes.length, 0);
+  await f.api('/preferences', { data: { accepting: false } });
+  f.setFail(true);
+  assert.equal((await f.api('/line-contact', { data: { lineContact: 'demo_line' } })).status, 503);
+  assert.equal((await f.api('/line-contact')).lineContact, '');
+  f.setFail(false);
+  assert.equal((await f.api('/line-contact', { data: { lineContact: 'https://lin.ee/demo123' } })).success, true);
+  await f.api('/preferences', { data: { accepting: true } });
+  assert.equal((await f.api('/line-contact', { token: 'old' })).lineContact, 'https://lin.ee/demo123');
+  assert.equal((await f.api('/me')).notifications, false, 'adding a contact does not opt into push');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_notifications').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM points_ledger').get().n, 0);
+});
+
 function fixture(t) {
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
   sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',name TEXT,phone TEXT,role TEXT,network_id TEXT);
