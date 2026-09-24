@@ -31,7 +31,7 @@ try {
         const endpoint = path.slice('/v1/member-chat/'.length);
         if (endpoint.endsWith('/messages') && route.request().method() === 'POST') { await route.fulfill({ status: 503, json: { success: false, error: '合成傳送逾時，請重試' } }); return; }
         if (endpoint === 'members' && delayMembers) { delayMembers = false; await new Promise(resolve => { releaseMembers = resolve; }); }
-        const payload = endpoint === 'me' ? { accepting: true, notifications: false }
+        const payload = endpoint === 'me' ? { accepting: false, notifications: true }
           : endpoint === 'members' ? { items: [{ handle: 'synthetic-card', name: '合成會員', company: '合成公司', match: { score: 82, source: 'ai' } }], next: '', industries: ['科技資訊'] }
           : endpoint === 'threads' && route.request().method() === 'POST' ? { id: '00000000-0000-4000-8000-000000000001' }
           : endpoint.endsWith('/messages') ? { items: [], more: false, peer: { name: '合成會員' }, blocked: false, blockedByMe: false, lastRead: 0 }
@@ -98,9 +98,23 @@ try {
     assert.equal(await page.locator('#exchange-zone-chat .mc-embedded').count(), 1);
     assert.equal(await page.locator('.mc-embedded nav').isVisible(), false);
     assert.equal(await page.locator('#exchange-zone-feed').isVisible(), false);
+    for (const selector of ['.mc-settings', '.mc-hint', '[data-accepting]', '[data-notifications]', '[data-action="edit-line-contact"]']) {
+      assert.equal(await page.locator(selector).isVisible(), false, 'member search omits duplicated setting: ' + selector);
+    }
+    assert.equal(await page.locator('.mc-search').isVisible(), true);
+    assert.ok(await page.locator('#mc-query').evaluate(node => node.getBoundingClientRect().bottom < innerHeight / 2), 'search stays near the top');
     await page.screenshot({ path: join(tmpdir(), `exchange-tabs-members-${width}.png`) });
+    await page.locator('#exchange-tab-threads').click(); await page.locator('.mc-empty').waitFor();
+    assert.equal(await page.locator('.mc-settings').isVisible(), true);
+    assert.equal(await page.locator('.mc-hint').isVisible(), true);
+    assert.equal(await page.locator('[data-accepting]').isChecked(), false);
+    assert.equal(await page.locator('[data-notifications]').isChecked(), true, 'saved opt-in is unchanged');
     await page.locator('[data-action="edit-line-contact"]').click(); await page.locator('#mc-line-contact').waitFor();
     await page.keyboard.press('Escape'); assert.equal(await page.locator('.mc-popup').count(), 0);
+    await page.locator('#exchange-tab-members').click(); await page.locator('.mc-contact').waitFor();
+    assert.equal(await page.locator('.mc-settings').isVisible(), false);
+    assert.equal(await page.locator('.mc-hint').isVisible(), false);
+    assert.equal(chatReads.some(path => /\/(preferences|notifications)$/.test(path)), false, 'tab switching never writes preferences');
     await page.locator('.mc-contact').click(); await page.locator('.mc-peer strong', { hasText: '合成會員' }).waitFor();
     if (width === 390) {
       await page.setViewportSize({ width, height: 500 });

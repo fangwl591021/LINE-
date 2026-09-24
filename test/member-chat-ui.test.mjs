@@ -95,8 +95,8 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
   assert.match(ui, /member-chat.css\?v=5/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=7/g) || []).length, 1, 'both entry points share the same lazy chat loader');
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.18/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=8/g) || []).length, 1, 'both entry points share the same lazy chat loader');
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.19/);
 });
 
 test('exchange navigation is a single fixed top tablist with an optional embedded private-chat container', () => {
@@ -118,6 +118,14 @@ test('exchange publishing intro is restricted to My Posts, including before a ta
   const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   assert.ok(read('css/exchange-zone.css').includes('#page-exchange-zone:not([data-exchange-tab="mine"]) .exchange-feed-intro{display:none}'));
   assert.match(read('index.html'), /css\/exchange-zone\.css\?v=2/);
+});
+
+test('member search hides duplicate preferences and notification copy without changing values', () => {
+  const ui = readFileSync(new URL('../js/modules/member-chat.js', import.meta.url), 'utf8');
+  const setView = ui.slice(ui.indexOf('function setView(nextView)'), ui.indexOf('async function openConversation'));
+  assert.ok(setView.includes("$('.mc-settings').hidden = view !== 'threads'"));
+  assert.ok(setView.includes("$('.mc-hint').hidden = view === 'members'"));
+  assert.doesNotMatch(setView, /client\.request|\.checked\s*=/);
 });
 
 test('LINE contact accepts only IDs or add-friend URLs and is separate from notification opt-in', () => {
