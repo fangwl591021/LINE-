@@ -3,6 +3,14 @@
   const base = new URL('exchange-zone-core.js?v=20260822-ai-review', current).href;
   const overlay = new URL('exchange-zone-delete-overlay.js?v=20260814-youtube-poster', current).href;
   const coupon = new URL('exchange-zone-coupon.js?v=20260814-coupon-phase1', current).href;
+  window.openExchangeMemberChat = async function(tab = 'threads') {
+    const owner = window.currentUserProfile?.userId;
+    try {
+      const chat = await import(new URL('member-chat.js?v=1', current).href);
+      if (owner !== window.currentUserProfile?.userId || document.getElementById('page-exchange-zone')?.classList.contains('hidden')) return;
+      chat.openMemberChat({ base: window.Config?.WORKER_URL || window.WORKER_URL, tab });
+    } catch (error) { window.showToast?.(error.message || '私訊載入失敗，請重試', true); }
+  };
 
   function load(src) {
     return new Promise((resolve, reject) => {

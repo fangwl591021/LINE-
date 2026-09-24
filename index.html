@@ -2531,7 +2531,7 @@
             <h2 id="exchange-zone-panel-title" class="text-2xl font-black text-slate-800 tracking-tight">交流專區</h2>
             <span id="exchange-zone-private-badge" class="rounded-full bg-amber-50 border border-amber-100 px-2 py-1 text-[10px] font-black text-amber-700">私人測試</span>
           </div>
-          <p class="text-[12px] text-slate-400 font-bold mt-0.5">商脈夥伴的公開文字與聯絡方式。</p>
+          <p class="text-[12px] text-slate-400 font-bold mt-0.5">會員私訊與公開交流，聊天內容僅雙方可見。</p>
         </div>
         <button id="exchange-zone-panel-close" type="button" class="w-10 h-10 shrink-0 rounded-full bg-red-600 text-white shadow-sm flex items-center justify-center active:scale-90 transition-transform" aria-label="關閉交流專區">
           <span class="material-symbols-outlined text-[24px]">close</span>
@@ -2539,6 +2539,10 @@
       </header>
 
       <div class="flex-1 overflow-y-auto overscroll-contain pb-safe">
+      <nav class="flex gap-3 px-5 py-4 bg-white border-b border-slate-100" aria-label="會員私訊入口">
+        <button type="button" onclick="window.openExchangeMemberChat?.('threads')" class="flex-1 min-h-12 rounded-2xl bg-emerald-600 text-white font-bold">我的聊天</button>
+        <button type="button" onclick="window.openExchangeMemberChat?.('members')" class="flex-1 min-h-12 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-800 font-bold">找會員</button>
+      </nav>
       <section class="min-h-full w-full bg-white overflow-hidden" aria-labelledby="exchange-zone-title">
         <div class="px-5 py-5 border-b border-slate-100">
           <div class="flex items-start justify-between gap-3">
@@ -2934,7 +2938,7 @@
 <script src="js/modules/settings.js?v=7.10"></script>
 <script src="js/modules/platform-shop.js?v=1.0"></script>
 <script src="js/modules/partner-directory.js?v=1.0"></script>
-<script src="js/modules/exchange-zone.js?v=1.10"></script>
+<script src="js/modules/exchange-zone.js?v=1.11"></script>
 <script src="js/modules/partner-onboarding.js?v=1"></script>
 <script src="js/modules/admin-partners.js?v=1.3"></script>
 <script src="js/modules/purchase.js?v=1.4"></script>
