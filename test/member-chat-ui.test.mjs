@@ -94,9 +94,9 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /params.set\('industry', memberIndustry\)/);
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
-  assert.match(ui, /member-chat.css\?v=6/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=9/g) || []).length, 1, 'both entry points share the same lazy chat loader');
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.20/);
+  assert.match(ui, /member-chat.css\?v=7/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=10/g) || []).length, 1, 'both entry points share the same lazy chat loader');
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.21/);
 });
 
 test('exchange navigation is a single fixed top tablist with an optional embedded private-chat container', () => {
@@ -137,6 +137,14 @@ test('chat list uses collapsed native settings and preserves original preference
   assert.ok(ui.includes("modal.classList.toggle('mc-thread-list', view === 'threads')"));
   assert.ok(read('css/member-chat.css').includes('.member-chat.mc-thread-list{background:#fff}'));
   assert.ok(read('css/exchange-zone.css').includes('#page-exchange-zone[data-exchange-tab="threads"] #exchange-zone-panel>header p{display:none}'));
+});
+
+test('chat toolbar relocates a single refresh control and preserves its retry behavior', () => {
+  const ui = readFileSync(new URL('../js/modules/member-chat.js', import.meta.url), 'utf8');
+  assert.equal((ui.match(/data-action="refresh">/g) || []).length, 1);
+  assert.ok(ui.includes("if (view === 'threads') $('.mc-preferences summary').insertBefore(refreshButton, $('.mc-preferences summary span'))"));
+  assert.ok(ui.includes('else status.after(refreshButton)'));
+  assert.match(ui, /action === 'refresh'\) \{ event\.preventDefault\(\); if \(!ready\) await initialize\(\); else await refresh\(\)/);
 });
 
 test('LINE contact accepts only IDs or add-friend URLs and is separate from notification opt-in', () => {

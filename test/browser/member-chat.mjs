@@ -68,7 +68,7 @@ try {
   const b = await page('b'); await b.locator('#open').click();
   assert.equal(await b.locator('.mc-settings').isVisible(), false, 'settings start collapsed');
   assert.equal(await b.locator('.mc-hint').isVisible(), false);
-  await b.locator('.mc-preferences summary').click();
+  await b.locator('.mc-preferences summary > span').click();
   assert.equal(await b.locator('.mc-settings').isVisible(), true, 'My Chats retains all preferences');
   assert.equal(await b.locator('.mc-hint').isVisible(), true);
   await b.locator('[data-notifications]').check();
@@ -164,7 +164,7 @@ try {
   await wait(reopened, () => document.querySelector('.mc-rows')?.textContent.includes('關閉頁面後仍應收到通知'));
   await reopened.locator('[data-action="back"]').click();
   assert.equal(await reopened.locator('.mc-settings').isVisible(), false, 'returning to list collapses settings');
-  await reopened.locator('.mc-preferences summary').click();
+  await reopened.locator('.mc-preferences summary > span').click();
   assert.equal(await reopened.locator('[data-notifications]').isChecked(), true, 'notification setting persists');
   await reopened.locator('[data-notifications]').uncheck();
   await wait(reopened, () => document.querySelector('.mc-status').textContent.includes('已關閉 LINE通知'));

@@ -21,7 +21,7 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: width === 390, isMobile: width === 390 });
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.route('https://cdn.tailwindcss.com**', (route) => route.fulfill({ contentType: 'application/javascript', body: tailwind }));
-    let releaseChat, releaseMembers, delayChat = true, delayMembers = false, showThreads = false;
+    let releaseChat, releaseMembers, delayChat = true, delayMembers = false, showThreads = false, failMe = false;
     const chatReads = [];
     await page.route('https://exchange.test/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
@@ -29,6 +29,7 @@ try {
       if (path.startsWith('/v1/member-chat/')) {
         chatReads.push(path);
         const endpoint = path.slice('/v1/member-chat/'.length);
+        if (endpoint === 'me' && failMe) { failMe = false; await route.fulfill({ status: 503, json: { success: false, error: '合成登入讀取失敗，請重試' } }); return; }
         if (endpoint.endsWith('/messages') && route.request().method() === 'POST') { await route.fulfill({ status: 503, json: { success: false, error: '合成傳送逾時，請重試' } }); return; }
         if (endpoint === 'members' && delayMembers) { delayMembers = false; await new Promise(resolve => { releaseMembers = resolve; }); }
         const payload = endpoint === 'me' ? { accepting: false, notifications: true }
@@ -105,24 +106,43 @@ try {
     assert.equal(await page.locator('.mc-search').isVisible(), true);
     assert.ok(await page.locator('#mc-query').evaluate(node => node.getBoundingClientRect().bottom < innerHeight / 2), 'search stays near the top');
     await page.screenshot({ path: join(tmpdir(), `exchange-tabs-members-${width}.png`) });
-    showThreads = true;
-    await page.locator('#exchange-tab-threads').click(); await page.locator('.mc-contact').first().waitFor();
+    showThreads = true; failMe = true;
+    await page.locator('#exchange-tab-threads').click();
+    await page.locator('.mc-status', { hasText: '合成登入讀取失敗' }).waitFor();
+    const refreshButton = page.locator('[data-action="refresh"]');
+    assert.equal(await refreshButton.count(), 1);
+    assert.equal(await page.locator('.mc-preferences summary [data-action="refresh"]').isVisible(), true, 'top refresh available even when initialization fails');
+    await refreshButton.click(); await page.locator('.mc-contact').first().waitFor();
     assert.equal(await page.locator('.mc-settings').isVisible(), false, 'chat list starts with settings collapsed');
     assert.equal(await page.locator('.mc-hint').isVisible(), false);
     assert.equal(await page.locator('.mc-contact').count(), 5);
     assert.equal(await page.locator('.mc-contact-meta b').textContent(), '2');
     assert.ok(await page.locator('.mc-contact').first().evaluate(node => node.getBoundingClientRect().top < 180), 'first chat is near the top');
     assert.equal(await page.locator('.member-chat').evaluate(node => node.scrollWidth <= node.clientWidth), true);
+    const refreshBox = await refreshButton.boundingBox(), settingsBox = await page.locator('.mc-preferences summary > span').boundingBox();
+    assert.ok(refreshBox.height >= 44 && refreshBox.x + refreshBox.width <= settingsBox.x && Math.abs(refreshBox.y - settingsBox.y) < 20, 'refresh sits to the left of settings on the same row');
+    const threadReads = chatReads.filter(path => path.endsWith('/threads')).length;
+    const refreshed = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/threads'));
+    await refreshButton.focus(); await page.keyboard.press('Enter');
+    await refreshed;
+    await page.waitForFunction(() => document.querySelector('.mc-status').textContent === '');
+    assert.equal(chatReads.filter(path => path.endsWith('/threads')).length, threadReads + 1);
+    assert.equal(await page.locator('.mc-preferences').evaluate(node => node.open), false, 'refresh must not expand settings');
+    await page.locator('.mc-scroll').evaluate(node => { node.scrollTop = node.scrollHeight; });
+    assert.equal((await refreshButton.boundingBox()).y, refreshBox.y, 'refresh stays above the scrolling list');
+    await page.locator('.mc-scroll').evaluate(node => { node.scrollTop = 0; });
     await page.screenshot({ path: join(tmpdir(), `exchange-chat-list-${width}.png`) });
     if (width === 390) await page.setViewportSize({ width, height: 500 });
     const settings = page.locator('.mc-preferences summary');
     await settings.focus(); await page.keyboard.press('Enter');
     assert.equal(await page.locator('.mc-settings').isVisible(), true);
     assert.equal(await page.locator('.mc-hint').isVisible(), true);
+    await refreshButton.click(); await page.waitForFunction(() => document.querySelector('.mc-status').textContent === '');
+    assert.equal(await page.locator('.mc-preferences').evaluate(node => node.open), true, 'refresh must not collapse settings');
     assert.ok(await settings.evaluate(node => node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().bottom < innerHeight), 'settings close control remains reachable');
     assert.ok(await page.locator('.mc-scroll').evaluate(node => node.clientHeight >= 80), 'expanded settings leave list space');
     await page.locator('.mc-preferences').evaluate(node => { node.scrollTop = node.scrollHeight; });
-    await settings.click(); assert.equal(await page.locator('.mc-settings').isVisible(), false);
+    await settings.locator('span').click(); assert.equal(await page.locator('.mc-settings').isVisible(), false);
     await settings.focus(); await page.keyboard.press('Space');
     assert.equal(await page.locator('[data-accepting]').isChecked(), false);
     assert.equal(await page.locator('[data-notifications]').isChecked(), true, 'saved opt-in is unchanged');
@@ -131,6 +151,8 @@ try {
     if (width === 390) await page.setViewportSize({ width, height: 900 });
     showThreads = false;
     await page.locator('#exchange-tab-members').click(); await page.locator('.mc-contact').waitFor();
+    assert.equal(await page.locator('.mc-preferences summary [data-action="refresh"]').count(), 0);
+    assert.equal(await refreshButton.isVisible(), true, 'member search retains its existing refresh');
     assert.equal(await page.locator('.mc-settings').isVisible(), false);
     assert.equal(await page.locator('.mc-hint').isVisible(), false);
     assert.equal(chatReads.some(path => /\/(preferences|notifications)$/.test(path)), false, 'tab switching never writes preferences');
