@@ -127,6 +127,61 @@ test('paired conversation, reciprocal replies, legacy identity, unique retried m
   assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_threads').get().n, 1);
   assert.doesNotMatch(JSON.stringify(a), /sender_id|member_a|U[ab]{32}/);
 });
+test('persisted old and new member rows use the confirmed new account without rewriting member data', async t => {
+  const f = fixture(t);
+  f.sql.prepare('INSERT INTO users(row_id,line_id,name,phone) VALUES(?,?,?,?)').run('old-row', OLD, '歷史會員', '');
+  f.sql.prepare("UPDATE card_contacts SET line_id=?,profile_user_id=?,owner_user_id=? WHERE row_id='card-a'").run(OLD, OLD, OLD);
+  const snapshot = () => JSON.stringify(['users', 'user_identity_links', 'card_contacts'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all()));
+  const before = snapshot();
+  for (const token of ['a', 'old']) {
+    assert.equal((await f.api('/me', { token })).success, true);
+    const list = await f.api('/members', { token });
+    assert.equal(list.success, true); assert.ok(!list.items.some(row => row.handle === 'card-a'));
+  }
+  const found = await f.api('/members?q=' + encodeURIComponent('會員a'), { token: 'b' });
+  assert.deepEqual(found.items.map(row => row.handle), ['card-a']);
+  const opened = await f.api('/threads', { token: 'b', data: { cardHandle: 'card-a' } });
+  assert.equal(opened.success, true, JSON.stringify(opened));
+  const id = opened.id;
+  assert.equal(await f.room(), id);
+  assert.equal((await f.api('/threads', { token: 'old', data: { cardHandle: 'card-b' } })).id, id);
+  const key = crypto.randomUUID(), sent = await f.send(id, '新舊登入同一對話', 'old', key);
+  assert.equal(sent.success, true);
+  assert.equal((await f.send(id, '新舊登入同一對話', 'a', key)).item.seq, sent.item.seq);
+  assert.equal(f.sql.prepare('SELECT sender_id FROM member_chat_messages').get().sender_id, 'a');
+  assert.equal((await f.api(`/threads/${id}/messages`, { token: 'c' })).status, 404);
+  await f.api('/preferences', { token: 'old', data: { accepting: false } });
+  assert.equal((await f.api('/me')).accepting, false);
+  assert.equal((await f.api('/members?q=' + encodeURIComponent('會員a'), { token: 'b' })).items.length, 0);
+  await f.api('/preferences', { data: { accepting: true } });
+  await f.api(`/threads/${id}/block`, { token: 'old', data: { blocked: true } });
+  assert.equal((await f.send(id, '不可傳送', 'b')).success, false);
+  assert.equal((await f.api('/members?q=' + encodeURIComponent('會員a'), { token: 'b' })).items.length, 0);
+  assert.equal(snapshot(), before);
+});
+
+test('linked duplicates do not authorize unrelated aliases or inactive/ambiguous identity links', async t => {
+  const f = fixture(t);
+  f.sql.prepare('INSERT INTO users(row_id,line_id,name,phone) VALUES(?,?,?,?)').run('old-row', OLD, '歷史會員', '');
+  f.sql.exec("UPDATE user_identity_links SET status='replaced'");
+  assert.equal((await f.api('/me')).code, 'IDENTITY_CONFLICT');
+  f.sql.exec("UPDATE user_identity_links SET status='active'");
+  f.sql.prepare("UPDATE users SET point_line_id=? WHERE row_id='c'").run(OLD);
+  const denied = await f.api('/me');
+  assert.equal(denied.status, 409); assert.equal(denied.code, 'IDENTITY_CONFLICT');
+  f.sql.exec("UPDATE users SET point_line_id='' WHERE row_id='c'");
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(C, A);
+  assert.equal((await f.api('/me')).code, 'IDENTITY_CONFLICT');
+  assert.equal(f.writes.length, 0);
+});
+
+test('a genuinely missing member remains denied without inventing registration', async t => {
+  const f = fixture(t); f.sql.exec("DELETE FROM users WHERE row_id='b'");
+  const result = await f.api('/me', { token: 'b' });
+  assert.equal(result.status, 403); assert.equal(result.code, 'MEMBER_REQUIRED');
+  assert.equal(f.writes.length, 0);
+});
+
 test('third user including admin cannot read/send/read-mark/block/report another pair', async t => {
   const f = fixture(t), id = await f.room(); const sent = await f.send(id);
   assert.equal((await f.api('/threads', { token: 'c' })).items.length, 0);
@@ -188,7 +243,7 @@ test('migration is additive and repeatable; ambiguity and missing schema fail cl
   const before = JSON.stringify(f.sql.prepare('SELECT * FROM users').all());
   f.sql.exec(f.migration); assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM users').all()), before);
   f.sql.exec(`UPDATE users SET legacy_line_id='${A}' WHERE row_id='c'`);
-  assert.equal((await f.api('/me')).status, 403);
+  assert.equal((await f.api('/me')).status, 409);
   f.sql.exec("UPDATE users SET legacy_line_id='' WHERE row_id='c'; DROP TABLE member_chat_preferences");
   assert.equal((await f.api('/me')).status, 503);
 });
