@@ -14268,7 +14268,6 @@ const D1InboxModule = {
         SELECT author_user_id
         FROM exchange_zone_posts
         WHERE post_handle = ? AND status = 'published'
-          AND (expires_at = '' OR expires_at > CURRENT_TIMESTAMP)
         LIMIT 1
       `, [exchangePostHandle]).catch(() => null);
       receiverUserId = this.text(exchangePost && exchangePost.author_user_id);

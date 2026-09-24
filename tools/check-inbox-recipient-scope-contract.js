@@ -40,13 +40,14 @@ if (!worker.includes('await this.canReachRecipient(payload, userRow, env)')) {
   'const exchangePostHandle = this.text(payload.exchangePostHandle',
   'SELECT author_user_id',
   "WHERE post_handle = ? AND status = 'published'",
-  "expires_at > CURRENT_TIMESTAMP",
   'exchangeRecipientAuthorized = true',
   '!exchangeRecipientAuthorized && !publicCardRecipientAuthorized && !await this.canReachRecipient',
   "pointPayload.exchangeInquiry = { postHandle: exchangePostHandle }"
 ].forEach(needle => {
   if (!worker.includes(needle)) fail(`missing verified exchange inquiry contract: ${needle}`);
 });
+const exchangeInquiry = worker.slice(worker.indexOf('if (exchangePostHandle) {'), worker.indexOf('if (publicCardRowId) {', worker.indexOf('if (exchangePostHandle) {')));
+if (exchangeInquiry.includes('expires_at')) fail('author-managed published exchange posts must not expire at the contact entry');
 
 [
   'const publicCardRowId = this.text(payload.publicCardRowId',

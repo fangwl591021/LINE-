@@ -175,6 +175,18 @@ test('historically expired published posts remain readable; hidden/archive still
   }
 });
 
+test('legacy exchange contact query follows published status rather than the old seven-day deadline', t => {
+  const f = fixture(t), coupon = seedChatCoupon(f.sql, A);
+  const source = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
+  const query = source.match(/if \(exchangePostHandle\) \{\s+const exchangePost = await D1ReadModule.first\(env, `([\s\S]*?)`/)[1];
+  const { post_handle: handle } = f.sql.prepare('SELECT post_handle FROM exchange_zone_coupons WHERE coupon_handle=?').get(coupon);
+  assert.equal(f.sql.prepare(query).get(handle).author_user_id, A);
+  for (const status of ['hidden', 'archived', 'draft']) {
+    f.sql.prepare('UPDATE exchange_zone_posts SET status=? WHERE post_handle=?').run(status, handle);
+    assert.equal(f.sql.prepare(query).get(handle), undefined);
+  }
+});
+
 test('routing is isolated; LINE auth, registration, own card and exchange access fail closed', async t => {
   const f = fixture(t);
   assert.equal(await handleMemberChat(new Request('https://chat.test/other'), {}), null);

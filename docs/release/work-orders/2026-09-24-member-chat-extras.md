@@ -31,3 +31,10 @@
 - Chrome 合成帳號手機 390×844 與桌面 1440×900 測試通過：既有 82% 顯示、選券不自動送出、聊天附件、POP、明確確認核銷、關閉與切換帳號清除彈窗。不是正式手機 LINE 實機測試。
 - 正式資料庫只新增 member_chat_messages.coupon_handle；採隔離 migration 目錄，只套用 0048，保留既有待執行的 0042／0043 不動。
 - 限制：只展示目前會員自己收藏、可由帳號確認對方的既有分數；未收藏或無法確認同一人顯示尚無配對。未公開／未審核名片不透過 POP 揭露。優惠券期限仍有效，傳送不等於核銷。
+
+## 交叉檢查補丁
+
+- 主版本已以 PR 141 合併 747170a，Worker a2fe61e0-f27a-4faa-83a8-696c92786741；正式六個前端檔案 SHA-256 一致、0048 完成且 0042／0043 未執行。
+- 最後檢查找到 workerbackup.js 的交流貼文站內信入口尚有 post expiry 條件。這屬取消刊登期限的同一授權範圍，只移除該查詢的 expires_at 限制；不改收件者身分、自寄拒絕、發送權限、點數與站內信本身期限。
+- 補丁以 747170a 為起點，codex/exchange-contact-no-expiry；guard before PASS。調整對應契約並加 SQLite 測試驗證舊貼文可聯絡、隱藏／封存不可聯絡；完成後補部署 Worker。
+- 補丁 guard after、47 項私訊相關測試、diff check、Wrangler dry-run 均 PASS；無新增 migration 或前端變更。
