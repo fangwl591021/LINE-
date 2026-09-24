@@ -65,12 +65,21 @@ async function identity(db, uid) {
       ids.add(link.old_line_id); ids.add(link.new_line_id);
     }
     const members = await rows(db, `SELECT row_id,line_id,legacy_line_id,point_line_id,name,phone,role FROM users WHERE ${IDS.map(key => `${key} IN (SELECT value FROM json_each(?1))`).join(' OR ')} LIMIT 3`, JSON.stringify([...ids]));
-    if (members.length !== 1) fail('MEMBER_REQUIRED', '請先完成會員註冊；若已註冊，請聯絡管理員確認帳號', 403);
-    for (const key of IDS) if (text(members[0][key])) ids.add(text(members[0][key]));
+    if (!members.length) fail('MEMBER_REQUIRED', '請先完成會員註冊；若已註冊，請聯絡管理員確認帳號', 403);
+    let member = members[0];
+    if (members.length > 1) {
+      // Migration keeps both rows. Only an explicit active link can prove they are one person.
+      const link = links[0], canonical = members.filter(row => row.line_id === link?.new_line_id);
+      if (!link || canonical.length !== 1 || members.some(row => ![link.old_line_id, link.new_line_id].includes(row.line_id))) {
+        fail('IDENTITY_CONFLICT', '會員身分對應不唯一，請聯絡管理員', 409);
+      }
+      member = canonical[0];
+    }
+    for (const row of members) for (const key of IDS) if (text(row[key])) ids.add(text(row[key]));
     if (ids.size > 8) fail('IDENTITY_CONFLICT', '會員身分對應異常', 409);
     if (count === ids.size) {
-      if (!registered(members[0])) fail('REGISTRATION_REQUIRED', '請先完成 LINE 會員註冊', 403);
-      return { user: members[0], memberId: text(members[0].row_id), ids: [...ids], uid };
+      if (!registered(member)) fail('REGISTRATION_REQUIRED', '請先完成 LINE 會員註冊', 403);
+      return { user: member, memberId: text(member.row_id), ids: [...ids], uid };
     }
   }
   fail('IDENTITY_CONFLICT', '會員身分對應異常', 409);
@@ -98,10 +107,12 @@ async function authenticate(request, db, env, fetcher) {
 const ownCard = alias => `${alias}.source_type='self_profile' AND COALESCE(${alias}.archived_at,'')='' AND COALESCE(${alias}.merged_into_row_id,'')=''`;
 const CARD_JOIN = `COALESCE(NULLIF(c.profile_user_id,''),NULLIF(c.line_id,''),c.owner_user_id) IN (u.row_id,u.line_id,u.legacy_line_id,u.point_line_id)`;
 const REGISTERED = `length(u.line_id)=33 AND substr(u.line_id,1,1) IN ('U','u') AND substr(u.line_id,2) NOT GLOB '*[^0-9a-fA-F]*'`;
+// Keep the same canonical member for discovery, opt-out, blocks and opening a thread.
+const CURRENT_MEMBER = `NOT EXISTS(SELECT 1 FROM user_identity_links l JOIN users n ON n.line_id=l.new_line_id WHERE l.status='active' AND l.old_line_id=u.line_id AND n.row_id<>u.row_id)`;
 const NO_BLOCK = `NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=?2) OR (b.member_id=?2 AND b.blocked_id=?1))`;
 async function cardTarget(db, handle) {
   if (typeof handle !== 'string' || !handle || handle.length > 180) fail('INVALID_MEMBER', '請重新選擇會員');
-  const found = await rows(db, `SELECT u.row_id,u.line_id FROM card_contacts c JOIN users u ON ${CARD_JOIN} WHERE c.row_id=? AND ${ownCard('c')} AND ${REGISTERED} LIMIT 3`, handle);
+  const found = await rows(db, `SELECT u.row_id,u.line_id FROM card_contacts c JOIN users u ON ${CARD_JOIN} WHERE c.row_id=? AND ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} LIMIT 3`, handle);
   if (found.length !== 1) fail('MEMBER_UNAVAILABLE', '對方目前未開放聯絡或名片狀態已變更', 403);
   // Resolve ambiguity/legacy aliases for the recipient too, before creating a conversation.
   return identity(db, found[0].line_id);
@@ -129,7 +140,7 @@ async function listMembers(db, actor, params) {
   const q = text(params.get('q')), after = text(params.get('after'));
   if (q.length > 60 || after.length > 180) fail('INVALID_QUERY', '搜尋條件過長');
   const result = await rows(db, `SELECT c.row_id AS handle,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title FROM card_contacts c JOIN users u ON ${CARD_JOIN}
-    WHERE ${ownCard('c')} AND ${REGISTERED} AND CAST(u.row_id AS TEXT)<>?1 AND CAST(c.row_id AS TEXT)>?2
+    WHERE ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} AND CAST(u.row_id AS TEXT)<>?1 AND CAST(c.row_id AS TEXT)>?2
     AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=CAST(u.row_id AS TEXT)),1)=1
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
     AND (${['c.name', 'c.english_name', 'u.name', 'c.company_name', 'c.title'].map(field => `instr(replace(lower(COALESCE(${field},'')),' ',''),?3)>0`).join(' OR ')})
