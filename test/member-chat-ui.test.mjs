@@ -94,9 +94,9 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /params.set\('industry', memberIndustry\)/);
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
-  assert.match(ui, /member-chat.css\?v=7/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=10/g) || []).length, 1, 'both entry points share the same lazy chat loader');
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.21/);
+  assert.match(ui, /member-chat.css\?v=8/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=11/g) || []).length, 1, 'both entry points share the same lazy chat loader');
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.22/);
 });
 
 test('exchange navigation is a single fixed top tablist with an optional embedded private-chat container', () => {
@@ -117,7 +117,7 @@ test('exchange navigation is a single fixed top tablist with an optional embedde
 test('exchange publishing intro is restricted to My Posts, including before a tab is selected', () => {
   const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   assert.ok(read('css/exchange-zone.css').includes('#page-exchange-zone:not([data-exchange-tab="mine"]) .exchange-feed-intro{display:none}'));
-  assert.match(read('index.html'), /css\/exchange-zone\.css\?v=3/);
+  assert.match(read('index.html'), /css\/exchange-zone\.css\?v=4/);
 });
 
 test('member search hides duplicate preferences and notification copy without changing values', () => {
@@ -143,8 +143,18 @@ test('chat toolbar relocates a single refresh control and preserves its retry be
   const ui = readFileSync(new URL('../js/modules/member-chat.js', import.meta.url), 'utf8');
   assert.equal((ui.match(/data-action="refresh">/g) || []).length, 1);
   assert.ok(ui.includes("if (view === 'threads') $('.mc-preferences summary').insertBefore(refreshButton, $('.mc-preferences summary span'))"));
-  assert.ok(ui.includes('else status.after(refreshButton)'));
+  assert.ok(ui.includes("else if (view === 'members') $('.mc-search-tools').append(refreshButton)"));
+  assert.ok(ui.includes("else $('header').insertBefore(refreshButton, $('[data-action=\"close\"]'))"));
+  assert.ok(ui.includes("$('.mc-peer strong').title = result.peer.name"));
   assert.match(ui, /action === 'refresh'\) \{ event\.preventDefault\(\); if \(!ready\) await initialize\(\); else await refresh\(\)/);
+});
+
+test('short conversation screens shrink the message list and keep long names bounded', () => {
+  const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+  const css = read('css/member-chat.css');
+  assert.ok(css.includes('.mc-scroll{flex:1;min-height:0;'));
+  assert.ok(css.includes('.member-chat .mc-peer strong{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'));
+  assert.ok(read('css/exchange-zone.css').includes('#page-exchange-zone[data-exchange-tab="members"] #exchange-zone-panel>header p{display:none}'));
 });
 
 test('LINE contact accepts only IDs or add-friend URLs and is separate from notification opt-in', () => {

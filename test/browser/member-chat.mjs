@@ -57,13 +57,20 @@ try {
   const industryScreenshot = join(tmpdir(), 'member-chat-industry-mobile.png'); await a.screenshot({ path: industryScreenshot });
   await a.locator('#mc-industry').selectOption('');
   await wait(a, () => document.querySelectorAll('.mc-contact').length === 2);
-  await a.locator('#mc-query').fill('DEMOCHEN'); await a.locator('.mc-search button').click();
+  await a.locator('#mc-query').fill('DEMOCHEN'); await a.locator('.mc-search button[type="submit"]').click();
   await wait(a, () => document.querySelectorAll('.mc-contact').length === 1 && document.querySelector('.mc-status').textContent === '');
   assert.equal(await a.locator('[data-handle="card-b"]').count(), 1);
-  await a.locator('#mc-query').fill('找不到的會員'); await a.locator('.mc-search button').click();
+  await a.locator('#mc-query').fill('找不到的會員'); await a.locator('.mc-search button[type="submit"]').click();
   await a.locator('.mc-empty').waitFor(); assert.match(await a.locator('.mc-empty').textContent(), /已建立本人名片/);
-  await a.locator('#mc-query').fill('dEmO cHeN'); await a.locator('.mc-search button').click(); await a.locator('[data-handle="card-b"]').waitFor();
+  await a.locator('#mc-query').fill('dEmO cHeN'); await a.locator('.mc-search button[type="submit"]').click(); await a.locator('[data-handle="card-b"]').waitFor();
   await a.locator('[data-handle="card-b"]').click(); await wait(a, () => document.querySelector('.mc-peer strong').textContent.includes('小陳'));
+  assert.equal(await a.locator('dialog>header [data-action="refresh"]').isVisible(), true);
+  await a.setViewportSize({ width: 320, height: 500 });
+  assert.ok(await a.locator('dialog>header').evaluate(node => node.scrollWidth <= node.clientWidth), 'standalone conversation header fits narrow screen');
+  for (const selector of ['[data-action="back"]', '[data-action="close"]', '[data-action="refresh"]', '.mc-compose button']) {
+    assert.ok(await a.locator(selector).evaluate(node => { const r = node.getBoundingClientRect(); return r.x >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight; }), 'standalone action visible: ' + selector);
+  }
+  await a.setViewportSize({ width: 390, height: 844 });
   await send(a, '您好！想了解咖啡禮盒合作 ☕');
   const b = await page('b'); await b.locator('#open').click();
   assert.equal(await b.locator('.mc-settings').isVisible(), false, 'settings start collapsed');

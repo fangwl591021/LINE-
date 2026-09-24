@@ -21,7 +21,7 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 900 }, hasTouch: width === 390, isMobile: width === 390 });
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.route('https://cdn.tailwindcss.com**', (route) => route.fulfill({ contentType: 'application/javascript', body: tailwind }));
-    let releaseChat, releaseMembers, delayChat = true, delayMembers = false, showThreads = false, failMe = false;
+    let releaseChat, releaseMembers, delayChat = true, delayMembers = false, showThreads = false, failMe = false, peerName = '合成會員';
     const chatReads = [];
     await page.route('https://exchange.test/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
@@ -36,7 +36,7 @@ try {
           : endpoint === 'members' ? { items: [{ handle: 'synthetic-card', name: '合成會員', company: '合成公司', match: { score: 82, source: 'ai' } }], next: '', industries: ['科技資訊'] }
           : endpoint === 'threads' && route.request().method() === 'POST' ? { id: '00000000-0000-4000-8000-000000000001' }
           : endpoint === 'threads' && showThreads ? { items: ['合作交流', '活動討論', '商品詢問', '設計提案', '近況分享'].map((name, i) => ({ id: '00000000-0000-4000-8000-' + String(i + 1).padStart(12, '0'), name: '合成' + name, preview: '您好！我們可以再聊聊合作細節。', createdAt: '2026-09-25 03:00:00', unread: i === 0 ? 2 : 0 })), next: '' }
-          : endpoint.endsWith('/messages') ? { items: [], more: false, peer: { name: '合成會員' }, blocked: false, blockedByMe: false, lastRead: 0 }
+          : endpoint.endsWith('/messages') ? { items: [], more: false, peer: { name: peerName }, blocked: false, blockedByMe: false, lastRead: 0 }
           : endpoint === 'line-contact' ? { lineContact: '' } : { items: [], next: '' };
         await route.fulfill({ json: { success: true, ...payload } }); return;
       }
@@ -81,6 +81,12 @@ try {
     await page.locator('#exchange-tab-mine').click();
     assert.equal(await intro.isVisible(), true, 'My Posts retains its publishing intro');
     assert.equal(await compose.isVisible(), true);
+    await compose.click();
+    const publish = page.locator('#exchange-zone-publish-button');
+    await publish.scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => { const r = document.querySelector('#exchange-zone-publish-button').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; });
+    assert.ok(await page.locator('#exchange-zone-drawer-close').evaluate(node => node.getBoundingClientRect().top >= 0), 'post editor close stays above its scrolling form');
+    await page.locator('#exchange-zone-drawer-close').click(); await page.locator('#exchange-zone-drawer').waitFor({ state: 'hidden' });
     await page.locator('#exchange-tab-public').click();
     assert.equal(await intro.isVisible(), false, 'switching back hides the entire intro again');
     assert.equal(await page.locator('[data-exchange-post-handle]').count(), 1, 'public posts are unchanged');
@@ -105,6 +111,21 @@ try {
     }
     assert.equal(await page.locator('.mc-search').isVisible(), true);
     assert.ok(await page.locator('#mc-query').evaluate(node => node.getBoundingClientRect().bottom < innerHeight / 2), 'search stays near the top');
+    const memberRefresh = page.locator('.mc-search-tools [data-action="refresh"]');
+    assert.equal(await memberRefresh.isVisible(), true);
+    assert.equal(await page.locator('[data-action="refresh"]').count(), 1);
+    const memberRefreshBox = await memberRefresh.boundingBox();
+    assert.ok(memberRefreshBox.height >= 44 && memberRefreshBox.x >= 0 && memberRefreshBox.x + memberRefreshBox.width <= width, 'member refresh fits at finger size');
+    await page.locator('#mc-industry').selectOption('科技資訊');
+    await page.locator('#mc-query').fill('合成');
+    await page.locator('.mc-search button[type="submit"]').click();
+    await page.waitForFunction(() => document.querySelector('.mc-status').textContent === '');
+    const memberReads = chatReads.filter(path => path.endsWith('/members')).length;
+    const memberReload = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/members'));
+    await memberRefresh.click(); const memberResponse = await memberReload;
+    assert.equal(new URL(memberResponse.url()).searchParams.get('q'), '合成');
+    assert.equal(new URL(memberResponse.url()).searchParams.get('industry'), '科技資訊');
+    assert.equal(chatReads.filter(path => path.endsWith('/members')).length, memberReads + 1, 'refresh does not also submit the search form');
     await page.screenshot({ path: join(tmpdir(), `exchange-tabs-members-${width}.png`) });
     showThreads = true; failMe = true;
     await page.locator('#exchange-tab-threads').click();
@@ -152,16 +173,26 @@ try {
     showThreads = false;
     await page.locator('#exchange-tab-members').click(); await page.locator('.mc-contact').waitFor();
     assert.equal(await page.locator('.mc-preferences summary [data-action="refresh"]').count(), 0);
-    assert.equal(await refreshButton.isVisible(), true, 'member search retains its existing refresh');
+    assert.equal(await page.locator('.mc-search-tools [data-action="refresh"]').isVisible(), true, 'member refresh is above results');
     assert.equal(await page.locator('.mc-settings').isVisible(), false);
     assert.equal(await page.locator('.mc-hint').isVisible(), false);
     assert.equal(chatReads.some(path => /\/(preferences|notifications)$/.test(path)), false, 'tab switching never writes preferences');
+    peerName = '合成會員・' + '超長公司名稱及職稱'.repeat(10);
     await page.locator('.mc-contact').click(); await page.locator('.mc-peer strong', { hasText: '合成會員' }).waitFor();
-    if (width === 390) {
-      await page.setViewportSize({ width, height: 500 });
-      assert.ok(await page.locator('.mc-compose button').evaluate(node => node.getBoundingClientRect().bottom <= innerHeight), 'send button remains reachable in a short mobile viewport');
+    assert.equal(await page.locator('.mc-peer strong').getAttribute('title'), peerName, 'full long name remains available');
+    assert.equal(await page.locator('.member-chat>header [data-action="refresh"]').isVisible(), true);
+    if (width <= 390) {
+      await page.setViewportSize({ width, height: 430 });
+      await page.screenshot({ path: join(tmpdir(), `exchange-conversation-actions-${width}.png`) });
+      for (const selector of ['.member-chat>header [data-action="back"]', '.member-chat>header [data-action="refresh"]', '#exchange-zone-panel-close', '.mc-compose button']) {
+        assert.ok(await page.locator(selector).evaluate(node => { const r = node.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight; }), 'short viewport action fits: ' + selector);
+      }
+      assert.equal(await page.locator('.member-chat').evaluate(node => node.scrollWidth <= node.clientWidth), true, 'long peer name does not widen dialog');
       await page.setViewportSize({ width, height: 900 });
     }
+    const conversationReload = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/messages'));
+    await refreshButton.click(); await conversationReload;
+    peerName = '合成會員';
     await page.locator('[data-action="back"]').click();
     await page.waitForFunction(() => document.querySelector('#exchange-tab-threads').getAttribute('aria-selected') === 'true');
     assert.equal(await page.locator('.mc-preferences').evaluate(node => node.open), false, 'return from conversation restores compact list');
@@ -189,6 +220,9 @@ try {
     await page.screenshot({ path: join(tmpdir(), `exchange-tabs-public-${width}.png`) });
     const item = page.locator('[data-exchange-post-handle]'), visibility = page.locator('#exchange-zone-visibility-button');
     await item.click(); await visibility.waitFor();
+    await page.locator('#exchange-zone-archive-button').scrollIntoViewIfNeeded();
+    assert.ok(await page.locator('#exchange-zone-archive-button').evaluate(node => node.getBoundingClientRect().bottom <= innerHeight), 'post management action can be scrolled into view');
+    assert.ok(await page.locator('#exchange-zone-drawer-close').evaluate(node => node.getBoundingClientRect().top >= 0), 'post detail close remains visible');
     assert.match(await visibility.textContent(), /隱藏貼文/);
     await page.waitForFunction(() => {
       const rect = document.querySelector('#exchange-zone-visibility-button').getBoundingClientRect();
