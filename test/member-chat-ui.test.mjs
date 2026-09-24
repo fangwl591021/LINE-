@@ -94,9 +94,24 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /params.set\('industry', memberIndustry\)/);
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
-  assert.match(ui, /member-chat.css\?v=4/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=6/g) || []).length, 2);
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.17/);
+  assert.match(ui, /member-chat.css\?v=5/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=7/g) || []).length, 1, 'both entry points share the same lazy chat loader');
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.18/);
+});
+
+test('exchange navigation is a single fixed top tablist with an optional embedded private-chat container', () => {
+  const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+  const html = read('index.html'), core = read('js/modules/exchange-zone-core.js'), loader = read('js/modules/exchange-zone.js'), chat = read('js/modules/member-chat.js');
+  const section = html.slice(html.indexOf('<div id="page-exchange-zone"'), html.indexOf('<!-- ==================== 合作店家目錄'));
+  assert.equal((section.match(/role="tablist"/g) || []).length, 1);
+  assert.deepEqual([...section.matchAll(/data-exchange-tab="([^"]+)"/g)].map(match => match[1]), ['threads', 'members', 'public', 'mine']);
+  assert.ok(section.indexOf('role="tablist"') < section.indexOf('id="exchange-zone-feed"'));
+  assert.match(section, /id="exchange-zone-chat" role="tabpanel"/);
+  assert.match(core, /window.closeExchangeMemberChat\?\.\(\{ confirm: true \}\)/);
+  assert.match(loader, /ticket === chatRequest/); assert.match(loader, /root\?\.dataset.exchangeTab === tab/);
+  assert.match(loader, /openExchangeZone\(\{ tab: 'threads', threadId \}\)/);
+  assert.match(chat, /if \(container\) modal.show\(\); else modal.showModal\(\)/);
+  assert.match(chat, /closeActive = null/); assert.match(chat, /popups.close\(\); client.close\(\)/);
 });
 
 test('LINE contact accepts only IDs or add-friend URLs and is separate from notification opt-in', () => {
