@@ -3,7 +3,6 @@ import { ExchangeZoneModule } from './exchange-zone.mjs';
 const BASE = '/v1/member-chat';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const IDS = ['row_id', 'line_id', 'legacy_line_id', 'point_line_id'];
 const PAGE = 30;
 const HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 const text = value => String(value ?? '').trim();
@@ -53,7 +52,7 @@ function registered(user) {
   // Chat membership is an existing LINE account + its own card, not profile completeness.
   return !!text(user?.row_id) && UID.test(user?.line_id || '');
 }
-// Resolve only persisted identity aliases, just as the existing private journal does.
+// Login identity is not a points-account alias. Only confirmed LINE links may bridge UIDs.
 async function identity(db, uid) {
   const ids = new Set([uid]);
   for (let pass = 0; pass < 4; pass++) {
@@ -64,23 +63,21 @@ async function identity(db, uid) {
       if (!UID.test(link.old_line_id) || !UID.test(link.new_line_id) || link.old_line_id === link.new_line_id) fail('IDENTITY_CONFLICT', '會員身分對應異常', 409);
       ids.add(link.old_line_id); ids.add(link.new_line_id);
     }
-    const members = await rows(db, `SELECT row_id,line_id,legacy_line_id,point_line_id,name,phone,role FROM users WHERE ${IDS.map(key => `${key} IN (SELECT value FROM json_each(?1))`).join(' OR ')} LIMIT 3`, JSON.stringify([...ids]));
+    if (count !== ids.size) continue; // Check both endpoints for conflicting links first.
+    const members = await rows(db, 'SELECT row_id,line_id,name,role FROM users WHERE line_id IN (SELECT value FROM json_each(?)) LIMIT 3', JSON.stringify([...ids]));
     if (!members.length) fail('MEMBER_REQUIRED', '請先完成會員註冊；若已註冊，請聯絡管理員確認帳號', 403);
     let member = members[0];
     if (members.length > 1) {
       // Migration keeps both rows. Only an explicit active link can prove they are one person.
       const link = links[0], canonical = members.filter(row => row.line_id === link?.new_line_id);
-      if (!link || canonical.length !== 1 || members.some(row => ![link.old_line_id, link.new_line_id].includes(row.line_id))) {
+      if (!link || members.length > 2 || canonical.length !== 1 || members.some(row => ![link.old_line_id, link.new_line_id].includes(row.line_id))) {
         fail('IDENTITY_CONFLICT', '會員身分對應不唯一，請聯絡管理員', 409);
       }
       member = canonical[0];
     }
-    for (const row of members) for (const key of IDS) if (text(row[key])) ids.add(text(row[key]));
-    if (ids.size > 8) fail('IDENTITY_CONFLICT', '會員身分對應異常', 409);
-    if (count === ids.size) {
-      if (!registered(member)) fail('REGISTRATION_REQUIRED', '請先完成 LINE 會員註冊', 403);
-      return { user: member, memberId: text(member.row_id), ids: [...ids], uid };
-    }
+    if (!registered(member)) fail('REGISTRATION_REQUIRED', '請先完成 LINE 會員註冊', 403);
+    // Row IDs are only used for stored card ownership, never to expand login identity.
+    return { user: member, memberId: text(member.row_id), ids: [...new Set([...ids, ...members.map(row => text(row.row_id)).filter(Boolean)])], uid };
   }
   fail('IDENTITY_CONFLICT', '會員身分對應異常', 409);
 }
@@ -105,7 +102,13 @@ async function authenticate(request, db, env, fetcher) {
 }
 // Only the private-chat directory uses this rule; public card/matchmaking rules stay unchanged.
 const ownCard = alias => `${alias}.source_type='self_profile' AND COALESCE(${alias}.archived_at,'')='' AND COALESCE(${alias}.merged_into_row_id,'')=''`;
-const CARD_JOIN = `COALESCE(NULLIF(c.profile_user_id,''),NULLIF(c.line_id,''),c.owner_user_id) IN (u.row_id,u.line_id,u.legacy_line_id,u.point_line_id)`;
+const cardOwner = alias => `COALESCE(NULLIF(${alias}.profile_user_id,''),NULLIF(${alias}.line_id,''),${alias}.owner_user_id)`;
+// Match stored ownership to a login account, including only explicitly linked old/new rows.
+const cardMemberJoin = (card, user) => `(${cardOwner(card)} IN (${user}.row_id,${user}.line_id) OR EXISTS(
+  SELECT 1 FROM user_identity_links l LEFT JOIN users linked ON linked.line_id=CASE WHEN l.old_line_id=${user}.line_id THEN l.new_line_id ELSE l.old_line_id END
+  WHERE l.status='active' AND ${user}.line_id IN (l.old_line_id,l.new_line_id)
+  AND ${cardOwner(card)} IN (l.old_line_id,l.new_line_id,linked.row_id)))`;
+const CARD_JOIN = cardMemberJoin('c', 'u');
 const REGISTERED = `length(u.line_id)=33 AND substr(u.line_id,1,1) IN ('U','u') AND substr(u.line_id,2) NOT GLOB '*[^0-9a-fA-F]*'`;
 // Keep the same canonical member for discovery, opt-out, blocks and opening a thread.
 const CURRENT_MEMBER = `NOT EXISTS(SELECT 1 FROM user_identity_links l JOIN users n ON n.line_id=l.new_line_id WHERE l.status='active' AND l.old_line_id=u.line_id AND n.row_id<>u.row_id)`;
@@ -113,7 +116,8 @@ const NO_BLOCK = `NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_
 async function cardTarget(db, handle) {
   if (typeof handle !== 'string' || !handle || handle.length > 180) fail('INVALID_MEMBER', '請重新選擇會員');
   const found = await rows(db, `SELECT u.row_id,u.line_id FROM card_contacts c JOIN users u ON ${CARD_JOIN} WHERE c.row_id=? AND ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} LIMIT 3`, handle);
-  if (found.length !== 1) fail('MEMBER_UNAVAILABLE', '對方目前未開放聯絡或名片狀態已變更', 403);
+  if (!found.length) fail('MEMBER_UNAVAILABLE', '對方的本人名片或登入帳號已變更，請重新搜尋', 403);
+  if (found.length > 1) fail('IDENTITY_CONFLICT', '對方的名片帳號對應不唯一，請聯絡管理員', 409);
   // Resolve ambiguity/legacy aliases for the recipient too, before creating a conversation.
   return identity(db, found[0].line_id);
 }
@@ -145,7 +149,7 @@ async function listMembers(db, actor, params) {
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
     AND (${['c.name', 'c.english_name', 'u.name', 'c.company_name', 'c.title'].map(field => `instr(replace(lower(COALESCE(${field},'')),' ',''),?3)>0`).join(' OR ')})
     AND c.row_id=(SELECT c2.row_id FROM card_contacts c2 WHERE ${ownCard('c2')}
-      AND COALESCE(NULLIF(c2.profile_user_id,''),NULLIF(c2.line_id,''),c2.owner_user_id) IN (u.row_id,u.line_id,u.legacy_line_id,u.point_line_id) ORDER BY c2.updated_at DESC,c2.row_id DESC LIMIT 1)
+      AND ${cardMemberJoin('c2', 'u')} ORDER BY c2.updated_at DESC,c2.row_id DESC LIMIT 1)
     ORDER BY CAST(c.row_id AS TEXT) LIMIT 31`, actor.memberId, after, q.toLowerCase().replace(/ /g, ''));
   const items = result.slice(0, PAGE).map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80) }));
   return { items, next: result.length > PAGE ? items.at(-1).handle : '' };
