@@ -1,6 +1,7 @@
 // Private, text-only member conversations. Never writes inbox, cards or points.
 import { ExchangeZoneModule } from './exchange-zone.mjs';
 import { notificationPreference, saveNotificationPreference, deliverChatNotifications } from './member-chat-notifications.mjs';
+import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from './member-chat-industry.mjs';
 const BASE = '/v1/member-chat';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -142,18 +143,20 @@ async function peerInfo(db, id) {
   return { name: text(row?.name).slice(0, 80) || '會員' };
 }
 async function listMembers(db, actor, params) {
-  const q = text(params.get('q')), after = text(params.get('after'));
+  const q = text(params.get('q')), after = text(params.get('after')), industry = text(params.get('industry'));
   if (q.length > 60 || after.length > 180) fail('INVALID_QUERY', '搜尋條件過長');
+  if (industry && !CHAT_INDUSTRIES.includes(industry)) fail('INVALID_QUERY', '請選擇有效的業種');
   const result = await rows(db, `SELECT c.row_id AS handle,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title FROM card_contacts c JOIN users u ON ${CARD_JOIN}
     WHERE ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} AND CAST(u.row_id AS TEXT)<>?1 AND CAST(c.row_id AS TEXT)>?2
     AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=CAST(u.row_id AS TEXT)),1)=1
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
     AND (${['c.name', 'c.english_name', 'u.name', 'c.company_name', 'c.title'].map(field => `instr(replace(lower(COALESCE(${field},'')),' ',''),?3)>0`).join(' OR ')})
+    AND ${CHAT_INDUSTRY_FILTER}
     AND c.row_id=(SELECT c2.row_id FROM card_contacts c2 WHERE ${ownCard('c2')}
       AND ${cardMemberJoin('c2', 'u')} ORDER BY c2.updated_at DESC,c2.row_id DESC LIMIT 1)
-    ORDER BY CAST(c.row_id AS TEXT) LIMIT 31`, actor.memberId, after, q.toLowerCase().replace(/ /g, ''));
+    ORDER BY CAST(c.row_id AS TEXT) LIMIT 31`, actor.memberId, after, q.toLowerCase().replace(/ /g, ''), industry);
   const items = result.slice(0, PAGE).map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80) }));
-  return { items, next: result.length > PAGE ? items.at(-1).handle : '' };
+  return { items, next: result.length > PAGE ? items.at(-1).handle : '', industries: CHAT_INDUSTRIES };
 }
 async function listThreads(db, actor, params) {
   const before = cursor(params.get('before')) || Number.MAX_SAFE_INTEGER;
@@ -212,7 +215,7 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
     const actor = await authenticate(request, db, env, fetcher);
     const path = url.pathname.slice(BASE.length), params = url.searchParams;
-    const allowedParams = path === '/members' ? ['q', 'after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
+    const allowedParams = path === '/members' ? ['q', 'industry', 'after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
     for (const key of params.keys()) if (!allowedParams.includes(key) || params.getAll(key).length !== 1) fail('INVALID_QUERY', '查詢條件不正確');
     const body = request.method === 'POST' ? await jsonBody(request) : {};
     let data;

@@ -68,6 +68,18 @@ test('notification link is view-only, validates UUID and cannot take over any ot
   }
 });
 
+test('member industry selection is below text search, resets paging and versions the scoped assets', () => {
+  const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+  const ui = read('js/modules/member-chat.js');
+  assert.match(ui, /id="mc-query"[^\n]+業種搜尋<select id="mc-industry"/);
+  assert.match(ui, /params.set\('industry', memberIndustry\)/);
+  assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
+  assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
+  assert.match(ui, /member-chat.css\?v=2/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=4/g) || []).length, 2);
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.14/);
+});
+
 test('opt-in is explicit, auth precedes deep link, private notifications cron cannot run legacy jobs', () => {
   const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
   const ui = read('js/modules/member-chat.js'), auth = read('js/auth.js'), entry = read('worker-entry.mjs');

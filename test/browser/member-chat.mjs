@@ -26,6 +26,34 @@ try {
   await new Promise(resolve => setTimeout(resolve, 50)); releaseMe();
   await a.locator('[data-handle="card-b"]').waitFor(); await a.unroute('**/v1/member-chat/me');
   assert.equal(await a.locator('.mc-contact').count(), 2);
+  assert.equal(await a.locator('#mc-industry option').count(), 17);
+  const filterBox = await a.locator('#mc-industry').boundingBox(), queryBox = await a.locator('#mc-query').boundingBox();
+  assert.ok(filterBox.y >= queryBox.y + queryBox.height && filterBox.height >= 44 && filterBox.x + filterBox.width <= 390);
+  await a.locator('#mc-industry').selectOption('餐飲食品');
+  await wait(a, () => document.querySelectorAll('.mc-contact').length === 1 && document.querySelector('.mc-status').textContent === '');
+  assert.equal(await a.locator('[data-handle="card-b"]').count(), 1);
+  await a.locator('#mc-query').fill('DEMOCHEN'); await a.locator('#mc-industry').selectOption('科技資訊');
+  await a.locator('.mc-empty').waitFor();
+  await a.locator('#mc-industry').selectOption('零售電商'); await a.locator('[data-handle="card-b"]').waitFor();
+  assert.equal(await a.locator('#mc-query').inputValue(), 'DEMOCHEN', 'changing industry preserves text search');
+  await a.locator('#mc-query').fill('');
+  let releaseIndustry, industryReady;
+  const delayedIndustry = new Promise(resolve => { industryReady = resolve; });
+  await a.route('**/v1/member-chat/members?*', async route => {
+    if (new URL(route.request().url()).searchParams.get('industry') === '科技資訊') {
+      const response = await route.fetch(); industryReady();
+      await new Promise(resolve => { releaseIndustry = resolve; }); await route.fulfill({ response });
+    } else await route.continue();
+  });
+  await a.locator('#mc-industry').selectOption('科技資訊'); await delayedIndustry;
+  await a.locator('#mc-industry').selectOption('餐飲食品'); await a.locator('[data-handle="card-b"]').waitFor();
+  const staleResponse = a.waitForResponse(response => response.url().includes('industry=') && new URL(response.url()).searchParams.get('industry') === '科技資訊');
+  releaseIndustry(); await (await staleResponse).finished(); await a.unroute('**/v1/member-chat/members?*');
+  await a.locator('[data-action="refresh"]').click(); await wait(a, () => document.querySelector('.mc-status').textContent === '');
+  assert.equal(await a.locator('[data-handle="card-c"]').count(), 0, 'stale industry request cannot replace selected results');
+  const industryScreenshot = join(tmpdir(), 'member-chat-industry-mobile.png'); await a.screenshot({ path: industryScreenshot });
+  await a.locator('#mc-industry').selectOption('');
+  await wait(a, () => document.querySelectorAll('.mc-contact').length === 2);
   await a.locator('#mc-query').fill('DEMOCHEN'); await a.locator('.mc-search button').click();
   await wait(a, () => document.querySelectorAll('.mc-contact').length === 1 && document.querySelector('.mc-status').textContent === '');
   assert.equal(await a.locator('[data-handle="card-b"]').count(), 1);
@@ -85,6 +113,11 @@ try {
   await wait(reopened, () => document.querySelector('.mc-status').textContent.includes('已關閉 LINE 私訊通知'));
   await send(sender, '關閉通知後不推播'); await context.request.post(base + '/fixture-drain');
   assert.equal((await (await context.request.get(base + '/fixture-status')).json()).pushes.length, 1);
+  await reopened.setViewportSize({ width: 1440, height: 900 });
+  await reopened.locator('nav [data-action="members"]').click(); await reopened.locator('#mc-industry').selectOption('科技資訊');
+  await reopened.locator('[data-handle="card-c"]').waitFor();
+  assert.equal(await reopened.locator('.mc-contact').count(), 1);
+  assert.ok(await reopened.locator('dialog').evaluate(node => node.scrollWidth <= 620));
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result: 'PASS', checks: ['unpublished own card English-name search without phone', 'empty search feedback', 'two-party replies', 'third-party isolation', 'receive cursor and chronological order', 'lost-response retry', 'block/unblock', 'background/close polling stop', 'account change cleanup', 'mobile/desktop layout', 'explicit notification opt-in', 'synthetic push with recipient page closed', 'notification deep link opens authorized thread', 'persisted opt-out stops push'], screenshot }));
+  console.log(JSON.stringify({ result: 'PASS', checks: ['industry control below text search', 'primary/secondary industry and text intersection', 'stale filter response ignored', 'clear industry restores all', 'desktop industry filter', 'unpublished own card English-name search without phone', 'empty search feedback', 'two-party replies', 'third-party isolation', 'receive cursor and chronological order', 'lost-response retry', 'block/unblock', 'background/close polling stop', 'account change cleanup', 'mobile/desktop layout', 'explicit notification opt-in', 'synthetic push with recipient page closed', 'notification deep link opens authorized thread', 'persisted opt-out stops push'], screenshot, industryScreenshot }));
 } finally { await browser.close(); }
