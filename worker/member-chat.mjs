@@ -3,7 +3,8 @@ import { ExchangeZoneModule } from './exchange-zone.mjs';
 import { normalizeLineContact } from '../js/modules/member-chat-line-contact.js';
 import { notificationPreference, saveNotificationPreference, deliverChatNotifications } from './member-chat-notifications.mjs';
 import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from './member-chat-industry.mjs';
-import { memberScores, peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat-extras.mjs';
+import { peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat-extras.mjs';
+import { directoryScoresSql, registerDirectoryMatching, directoryMatchState, runDirectoryMatchJobs } from './member-chat-matching.mjs';
 const BASE = '/v1/member-chat';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -144,22 +145,39 @@ async function peerInfo(db, id) {
   const row = await statement(db, 'SELECT name FROM users WHERE row_id=?', id).first();
   return { name: text(row?.name).slice(0, 80) || '會員' };
 }
-async function listMembers(db, actor, params) {
-  const q = text(params.get('q')), after = text(params.get('after')), industry = text(params.get('industry'));
-  if (q.length > 60 || after.length > 180) fail('INVALID_QUERY', '搜尋條件過長');
-  if (industry && !CHAT_INDUSTRIES.includes(industry)) fail('INVALID_QUERY', '請選擇有效的業種');
-  const result = await rows(db, `SELECT c.row_id AS handle,u.row_id AS peer,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title FROM card_contacts c JOIN users u ON ${CARD_JOIN}
-    WHERE ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} AND CAST(u.row_id AS TEXT)<>?1 AND CAST(c.row_id AS TEXT)>?2
+function directorySql() {
+  return `SELECT c.row_id AS handle,u.row_id AS peer,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title,COALESCE(c.updated_at,'') AS latest FROM card_contacts c JOIN users u ON ${CARD_JOIN}
+    WHERE ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} AND CAST(u.row_id AS TEXT)<>?1 AND ?2 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL
     AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=CAST(u.row_id AS TEXT)),1)=1
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
     AND (${['c.name', 'c.english_name', 'u.name', 'c.company_name', 'c.title'].map(field => `instr(replace(lower(COALESCE(${field},'')),' ',''),?3)>0`).join(' OR ')})
     AND ${CHAT_INDUSTRY_FILTER}
     AND c.row_id=(SELECT c2.row_id FROM card_contacts c2 WHERE ${ownCard('c2')}
       AND ${cardMemberJoin('c2', 'u')} ORDER BY c2.updated_at DESC,c2.row_id DESC LIMIT 1)
-    ORDER BY CAST(c.row_id AS TEXT) LIMIT 31`, actor.memberId, after, q.toLowerCase().replace(/ /g, ''), industry);
-  const scores = await memberScores(db, actor, result.slice(0, PAGE), cardMemberJoin);
-  const items = result.slice(0, PAGE).map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), match: scores.get(row.peer) || null }));
-  return { items, next: result.length > PAGE ? items.at(-1).handle : '', industries: CHAT_INDUSTRIES };
+    `;
+}
+const directoryArgs = (actor, after = '', q = '', industry = '') => [actor.memberId, after, q.toLowerCase().replace(/ /g, ''), industry, JSON.stringify(actor.ids), actor.user.line_id];
+async function listMembers(db, actor, params) {
+  const q = text(params.get('q')), after = text(params.get('after')), industry = text(params.get('industry')), sort = text(params.get('sort'));
+  if (q.length > 60 || after.length > 800 || !['', 'latest', 'match'].includes(sort)) fail('INVALID_QUERY', '搜尋條件不正確');
+  if (industry && !CHAT_INDUSTRIES.includes(industry)) fail('INVALID_QUERY', '請選擇有效的業種');
+  let anchor = [-1, '', ''];
+  if (sort && after) {
+    try { anchor = JSON.parse(decodeURIComponent(atob(after))); } catch { fail('INVALID_CURSOR', '請重新整理名單'); }
+    if (!Array.isArray(anchor) || anchor.length !== 3 || !Number.isFinite(anchor[0]) || anchor[0] < -1 || anchor[0] > 100 || typeof anchor[1] !== 'string' || anchor[1].length > 80 || typeof anchor[2] !== 'string' || anchor[2].length > 180) fail('INVALID_CURSOR', '請重新整理名單');
+  }
+  const order = sort === 'match' ? 'COALESCE(score,-1) DESC,latest DESC,CAST(handle AS TEXT)' : sort === 'latest' ? 'latest DESC,CAST(handle AS TEXT)' : 'CAST(handle AS TEXT)';
+  const afterSql = !sort ? 'CAST(handle AS TEXT)>?2' : `(?2='' OR ${sort === 'match' ? 'COALESCE(score,-1)<?7 OR (COALESCE(score,-1)=?7 AND ' : ''}(latest<?8 OR (latest=?8 AND CAST(handle AS TEXT)>?9))${sort === 'match' ? ')' : ''})`;
+  let result;
+  const query = async withScores => rows(db, `${directoryScoresSql(directorySql(), cardMemberJoin, withScores)}
+    SELECT *,SUM(CASE WHEN score IS NULL AND (TRIM(COALESCE(company_name,''))<>'' OR TRIM(COALESCE(title,''))<>'') THEN 1 ELSE 0 END) OVER() AS pending FROM scored
+    WHERE ${afterSql} ORDER BY ${order} LIMIT 31`, ...directoryArgs(actor, after, q, industry), ...(sort ? anchor : []));
+  try { result = await query(true); }
+  catch { result = await query(false); } // A cache outage never hides the authorized directory.
+  const page = result.slice(0, PAGE), last = page.at(-1);
+  const items = page.map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), match: row.score == null ? null : { score: row.score, source: row.source, basis: row.basis } }));
+  return { items, next: result.length > PAGE ? (sort ? btoa(encodeURIComponent(JSON.stringify([last.score ?? -1, last.latest, last.handle]))) : text(last.handle)) : '', industries: CHAT_INDUSTRIES,
+    matchWork: { pending: Number(result[0]?.pending || 0), status: await directoryMatchState(db, actor.memberId) } };
 }
 async function listThreads(db, actor, params) {
   const before = cursor(params.get('before')) || Number.MAX_SAFE_INTEGER;
@@ -221,7 +239,7 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
     const actor = await authenticate(request, db, env, fetcher);
     const path = url.pathname.slice(BASE.length), params = url.searchParams;
-    const allowedParams = path === '/members' ? ['q', 'industry', 'after'] : path === '/coupons' ? ['after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/coupon$/.test(path) ? ['seq'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
+    const allowedParams = path === '/members' ? ['q', 'industry', 'after', 'sort'] : path === '/coupons' ? ['after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/coupon$/.test(path) ? ['seq'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
     for (const key of params.keys()) if (!allowedParams.includes(key) || params.getAll(key).length !== 1) fail('INVALID_QUERY', '查詢條件不正確');
     const body = request.method === 'POST' ? await jsonBody(request) : {};
     let data;
@@ -260,6 +278,8 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
       keys(body, ['accepting']); if (typeof body.accepting !== 'boolean') fail('INVALID_SETTING', '設定不正確');
       await run(db, 'INSERT INTO member_chat_preferences(member_id,accepting) VALUES(?,?) ON CONFLICT(member_id) DO UPDATE SET accepting=excluded.accepting', actor.memberId, Number(body.accepting));
       data = { accepting: body.accepting };
+    } else if (path === '/matches' && request.method === 'POST') {
+      keys(body, []); data = await registerDirectoryMatching(db, actor);
     } else if (path === '/members' && request.method === 'GET') data = await listMembers(db, actor, params);
     else if (path === '/coupons' && request.method === 'GET') {
       const after = text(params.get('after')); if (after.length > 120) fail('INVALID_QUERY', '分頁位置不正確');
@@ -324,6 +344,21 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     console.error('member_chat_unavailable');
     return reply({ success: false, code: 'CHAT_UNAVAILABLE', error: '會員私訊暫時無法使用，請稍後重試；若尚未啟用，請聯絡管理員' }, 503);
   }
+}
+
+export async function processMemberDirectoryMatches(env, score) {
+  const resolve = async (db, uid, memberId) => {
+    let actor;
+    try { actor = await identity(db, uid); } catch (error) { if (error instanceof ChatError) return null; throw error; }
+    if (actor.memberId !== memberId || !ExchangeZoneModule.access({}, env, { userId: uid, role: actor.user.role }).access?.allowed) return null;
+    return await statement(db, `SELECT row_id FROM card_contacts c WHERE ${ownCard('c')} AND ${cardOwner('c')} IN (SELECT value FROM json_each(?)) LIMIT 1`, JSON.stringify(actor.ids)).first() ? actor : null;
+  };
+  return runDirectoryMatchJobs(env, {
+    resolve, score,
+    self: (db, actor) => statement(db, `SELECT c.company_name,c.title FROM card_contacts c WHERE ${ownCard('c')} AND ${cardOwner('c')} IN (SELECT value FROM json_each(?)) ORDER BY c.updated_at DESC,c.row_id DESC LIMIT 1`, JSON.stringify(actor.ids)).first(),
+    candidates: (db, actor, limit) => rows(db, `${directoryScoresSql(directorySql(), cardMemberJoin)} SELECT * FROM scored WHERE score IS NULL
+      AND (TRIM(COALESCE(company_name,''))<>'' OR TRIM(COALESCE(title,''))<>'') ORDER BY latest DESC,CAST(handle AS TEXT) LIMIT ?7`, ...directoryArgs(actor), limit)
+  });
 }
 
 // Scheduled independently of browser polling; no client-triggered push endpoint.

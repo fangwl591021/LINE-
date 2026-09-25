@@ -45,7 +45,7 @@ export function chatMessageHtml(row) {
 }
 export function chatMatchHtml(match) {
   if (!match || typeof match.score !== 'number' || !Number.isFinite(match.score) || match.score < 0 || match.score > 100) return '<span class="mc-match-empty">尚無配對</span>';
-  return `<span class="mc-match" title="${match.source === 'ai' ? 'AI' : '規則'}既有配對分數，非成交機率">${esc(match.score)}%</span><small>${match.source === 'ai' ? 'AI 配對' : '規則配對'}</small>`;
+  return `<span class="mc-match" title="${match.source === 'ai' ? 'AI' : '規則'}${match.basis === 'directory' ? '商務摘要' : '既有'}配對分數，非成交機率">${esc(match.score)}%</span><small>${match.source === 'ai' ? 'AI 配對' : '規則配對'}</small>`;
 }
 export function openMemberChat({ base, tab = 'threads', threadId = '', container = null, onExit, onView } = {}) {
   if (active) { active.focus(); return active; }
@@ -54,7 +54,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   if (container) modal.classList.add('mc-embedded');
   const client = createChatClient({ base, isCurrent: () => active === modal });
   if (!document.querySelector('link[data-member-chat]')) {
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=8', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=9', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
   }
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
@@ -62,7 +62,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     <details class="mc-preferences" hidden><summary aria-label="聊天設定"><strong>聊天</strong><span>⚙ 設定</span></summary>
     <section class="mc-settings"><label><input type="checkbox" data-accepting checked disabled>接受新聯絡</label><div class="mc-line-settings"><label><input type="checkbox" data-notifications disabled>LINE通知</label><button type="button" data-action="edit-line-contact" disabled aria-label="新增或修改供對方加好友的 LINE">（點我新增）</button></div><small>勾選「LINE通知」：有人傳私訊給您時，即使離開頁面，也由點數通官方帳號提醒。請先加入官方帳號好友、解除封鎖，並允許手機的 LINE 通知。</small><small>「點我新增」：填寫供聊天對方加好友的 LINE，與通知開關分開。站內私訊免費，僅對話雙方可見；不是 LINE 原生聊天。</small></section>
     <p class="mc-hint">開啟 LINE通知後，未讀訊息約 30–90 秒提醒；同一對話每 5 分鐘時段合併通知，不顯示聊天內容。手機是否跳出橫幅，依 LINE、手機通知及勿擾設定。</p></details>
-    <form class="mc-search" hidden><div class="mc-search-text"><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></div><div class="mc-search-tools"><label class="mc-industry" for="mc-industry">業種搜尋<select id="mc-industry" disabled><option value="">全部業種</option></select></label></div></form>
+    <form class="mc-search" hidden><div class="mc-search-text"><label class="mc-sr" for="mc-query">搜尋會員姓名、英文名、公司或職稱</label><input id="mc-query" maxlength="60" placeholder="搜尋姓名、英文名、公司或職稱"><button type="submit">搜尋</button></div><div class="mc-search-tools"><label class="mc-industry" for="mc-industry">業種搜尋<select id="mc-industry" disabled><option value="">全部業種</option></select></label></div><div class="mc-match-toolbar"><small class="mc-match-progress" role="status"></small><div class="mc-sort" role="group" aria-label="會員排序"><button type="button" data-sort="latest" aria-pressed="true">最新名單</button><button type="button" data-sort="match" aria-pressed="false">配對排名</button></div></div></form>
     <section class="mc-peer" hidden><strong></strong><button type="button" data-action="line-contact">加 LINE 好友</button><button type="button" data-action="card">查看名片</button><button type="button" data-action="block">封鎖</button></section>
     <div class="mc-scroll" tabindex="0"><button type="button" data-action="older" hidden>載入較早訊息</button><div class="mc-rows"></div><button type="button" data-action="more" hidden>載入更多</button></div>
     <p class="mc-status" role="status" aria-live="polite"></p><button type="button" class="mc-retry" data-action="refresh">重新整理</button>
@@ -73,7 +73,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   active = modal; if (container) modal.show(); else modal.showModal();
   const $ = selector => modal.querySelector(selector);
   const list = $('.mc-rows'), scroll = $('.mc-scroll'), status = $('.mc-status'), search = $('.mc-search'), compose = $('.mc-compose'), industry = $('#mc-industry');
-  let memberQuery = '', memberIndustry = '';
+  let memberQuery = '', memberIndustry = '', memberSort = 'latest', matchTimer, matchRegistered = false, matchRegistering = false, memberPaging = false;
   let view = tab === 'members' ? 'members' : 'threads', room = '', generation = 0, timer, busy = false, sending = false;
   let next = '', oldest = 0, newest = 0, readThrough = 0, pending = null, ready = false, initializing = false, blocked = false, blockedByMe = false;
   const seen = new Set();
@@ -86,7 +86,23 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     for (const button of modal.querySelectorAll('.mc-attachment button')) button.disabled = blocked || sending || !!pending;
   }
   function note(message = '') { status.textContent = message; }
-  function stop() { clearTimeout(timer); }
+  function stop() { clearTimeout(timer); clearTimeout(matchTimer); }
+  async function updateMatching(work, ticket) {
+    if (!work || !valid(ticket) || view !== 'members') return;
+    const progress = $('.mc-match-progress');
+    const messages = { no_profile: '請補上本人名片公司或職稱', limited: '今日配額已用完，稍後自動續配', retry: '配對稍後自動重試', unavailable: '請重新確認本人名片' };
+    progress.textContent = work.pending ? (messages[work.status] || `待配對 ${work.pending} 位，背景補算中`) : '';
+    if (!matchRegistered && !matchRegistering) {
+      matchRegistering = true;
+      try { await client.request('/matches', {}); if (client.current()) matchRegistered = true; }
+      catch { if (valid(ticket)) progress.textContent = '自動配對暫時無法啟動，請重新整理'; }
+      finally { matchRegistering = false; }
+    }
+    clearTimeout(matchTimer);
+    if (valid(ticket) && view === 'members' && !memberPaging && !document.hidden && work.pending && !messages[work.status] && matchRegistered) {
+      matchTimer = setTimeout(() => { if (valid(ticket) && view === 'members' && !document.hidden) void refresh(true); }, 20000);
+    }
+  }
   function close() {
     if (active !== modal) return;
     stop(); generation++; popups.close(); client.close(); active = null; closeActive = null;
@@ -172,7 +188,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
         note(blocked ? '目前已封鎖聯絡，無法傳送訊息。' : pending ? '有一則尚未確認送出的訊息，請按「重試傳送」。' : '');
       } else {
         const params = new URLSearchParams();
-        if (view === 'members') { params.set('q', memberQuery); if (memberIndustry) params.set('industry', memberIndustry); }
+        if (view === 'members') { params.set('q', memberQuery); params.set('sort', memberSort); if (memberIndustry) params.set('industry', memberIndustry); }
         if (paging && next) params.set(view === 'members' ? 'after' : 'before', next);
         const result = await client.request(`/${view}?${params}`);
         if (!valid(ticket)) return;
@@ -183,6 +199,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
         renderRows(result.items, paging); next = result.next;
         $('[data-action="more"]').hidden = !next;
         note();
+        if (view === 'members') { memberPaging = paging; void updateMatching(result.matchWork, ticket); }
       }
     } catch (error) { if (valid(ticket)) note(error.message); }
     finally { if (ticket === generation) busy = false; }
@@ -240,12 +257,19 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   });
   function searchMembers() {
     if (view !== 'members') return;
+    clearTimeout(matchTimer); memberPaging = false;
     memberQuery = $('#mc-query').value.trim(); memberIndustry = industry.value;
     generation++; busy = false; next = ''; list.replaceChildren(); scroll.scrollTop = 0;
     $('[data-action="more"]').hidden = true; void refresh();
   }
   search.addEventListener('submit', event => { event.preventDefault(); searchMembers(); });
   industry.addEventListener('change', searchMembers);
+  for (const button of modal.querySelectorAll('[data-sort]')) button.addEventListener('click', () => {
+    if (view !== 'members' || memberSort === button.dataset.sort) return;
+    memberSort = button.dataset.sort;
+    for (const option of modal.querySelectorAll('[data-sort]')) option.setAttribute('aria-pressed', String(option === button));
+    searchMembers();
+  });
   $('[data-accepting]').addEventListener('change', async event => {
     const input = event.target, value = input.checked, ticket = generation; input.disabled = true;
     try { await client.request('/preferences', { accepting: value }); if (valid(ticket)) note(value ? '已開啟新聯絡' : '已停止新聯絡；既有對話仍可回覆'); }

@@ -116,6 +116,10 @@ try {
     assert.equal(await page.locator('[data-action="refresh"]').count(), 1);
     const memberRefreshBox = await memberRefresh.boundingBox();
     assert.ok(memberRefreshBox.height >= 44 && memberRefreshBox.x >= 0 && memberRefreshBox.x + memberRefreshBox.width <= width, 'member refresh fits at finger size');
+    for (const sort of ['latest', 'match']) {
+      const box = await page.locator(`[data-sort="${sort}"]`).boundingBox();
+      assert.ok(box.height >= 44 && box.x >= 0 && box.x + box.width <= width, 'sort controls fit narrow screens at finger size');
+    }
     await page.locator('#mc-industry').selectOption('科技資訊');
     await page.locator('#mc-query').fill('合成');
     await page.locator('.mc-search button[type="submit"]').click();

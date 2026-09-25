@@ -94,9 +94,9 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /params.set\('industry', memberIndustry\)/);
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
-  assert.match(ui, /member-chat.css\?v=8/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=11/g) || []).length, 1, 'both entry points share the same lazy chat loader');
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.22/);
+  assert.match(ui, /member-chat.css\?v=9/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=12/g) || []).length, 1, 'both entry points share the same lazy chat loader');
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.23/);
 });
 
 test('exchange navigation is a single fixed top tablist with an optional embedded private-chat container', () => {

@@ -1,4 +1,4 @@
-import legacyWorker, { runAutomatedUploaderMatch, storeInviteProfileView } from './workerbackup.js';
+import legacyWorker, { runAutomatedUploaderMatch, storeInviteProfileView, scoreMemberDirectoryBatch } from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
@@ -14,7 +14,7 @@ import { handleStoreAdminProducts } from './worker/store-admin-products.mjs';
 import { handleStoreAdminCatalog } from './worker/store-admin-catalog.mjs';
 import { handlePartnerOnboarding } from './worker/partner-onboarding-ai.mjs';
 import { handleStoreConsumptionJournal } from './worker/store-consumption-journal.mjs';
-import { handleMemberChat, processMemberChatNotifications } from './worker/member-chat.mjs';
+import { handleMemberChat, processMemberChatNotifications, processMemberDirectoryMatches } from './worker/member-chat.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -489,6 +489,9 @@ export default {
 
   async scheduled(controller, env, ctx) {
     if (controller?.cron === '* * * * *') {
+      const matching = processMemberDirectoryMatches(env, scoreMemberDirectoryBatch).catch(() => console.error('member_directory_match_cron_failed'));
+      if (ctx?.waitUntil) ctx.waitUntil(matching);
+      else await matching;
       const run = processMemberChatNotifications(env).catch(() => console.error('member_chat_notification_cron_failed'));
       if (ctx?.waitUntil) ctx.waitUntil(run);
       else await run;
