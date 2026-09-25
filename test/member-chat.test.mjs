@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
-import { handleMemberChat, processMemberChatNotifications } from '../worker/member-chat.mjs';
+import { handleMemberChat, processMemberChatNotifications, processMemberDirectoryMatches } from '../worker/member-chat.mjs';
 import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from '../worker/member-chat-industry.mjs';
 import { chatExtraSchema, seedChatCoupon, seedChatScore } from './member-chat-extra-fixture.mjs';
 import { ExchangeZoneModule } from '../worker/exchange-zone.mjs';
@@ -79,7 +79,8 @@ function fixture(t) {
         beforeWrite?.(query);
         if (failWrites) throw Error('private database exception');
         if (failFinalize && args[0] === 'sent') { failFinalize = false; throw Error('simulated lost completion'); }
-        assert.match(query, /^\s*(?:(?:INSERT INTO|UPDATE|DELETE FROM) member_chat_|INSERT OR IGNORE INTO exchange_zone_coupon_redemptions)/);
+        assert.match(query, /^\s*(?:(?:INSERT INTO|UPDATE|DELETE FROM) member_chat_|INSERT OR IGNORE INTO exchange_zone_coupon_redemptions|INSERT INTO ai_match_pair_cache)/);
+        if (query.includes('INSERT INTO ai_match_pair_cache')) assert.match(query, /'public','member-directory-v1'/);
         writes.push(query); const result = sql.prepare(query).run(...args); return { success: true, meta: { changes: Number(result.changes) } };
       }
     };
@@ -113,6 +114,140 @@ function fixture(t) {
     setBot: value => { botStatus = value; }, setPush: value => { pushStatus = value; }, failFinalize: () => { failFinalize = true; }, beforeWrite: value => { beforeWrite = value; },
     setFail: value => { failWrites = value; }, setAuth: value => { authStatus = value; } };
 }
+test('directory background matching fills missing scores, preserves old zero and never sends private fields to AI', async t => {
+  const f = fixture(t), old = seedChatScore(f.sql, A, B, { score: 0 });
+  f.sql.exec("UPDATE card_contacts SET visibility='private',mobile='secret-mobile',email='secret-email',services='secret-services',tags='secret-tags' WHERE row_id='card-c'");
+  const history = JSON.stringify(f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE candidate_card_row_id=?').all(old));
+  const cards = JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts').all());
+  assert.equal((await f.api('/members?sort=match')).items[0].handle, 'card-b');
+  assert.equal(f.writes.length, 0, 'GET never enrolls or calls AI');
+  assert.equal((await f.api('/matches', { data: {} })).registered, true);
+  let calls = 0;
+  const scorer = async (env, actor, member, targets) => {
+    calls++; assert.equal(actor.user.line_id, A);
+    assert.deepEqual(Object.keys(member), ['company', 'title']);
+    assert.equal(targets.length, 1); assert.deepEqual(Object.keys(targets[0]), ['company', 'title']);
+    assert.doesNotMatch(JSON.stringify({ member, targets }), /secret|會員|U[a-f0-9]{32}/);
+    return { scores: [{ index: 0, score: 73, reason: '公司與職務具有商業互補機會' }] };
+  };
+  assert.equal((await processMemberDirectoryMatches(f.env, scorer)).processed, 1);
+  let list = await f.api('/members?sort=match');
+  assert.deepEqual(list.items.map(row => row.match.score), [73, 0]);
+  assert.equal(list.items[0].match.basis, 'directory');
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE candidate_card_row_id=?').all(old)), history);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts').all()), cards);
+  await f.api('/matches', { data: {} }); await processMemberDirectoryMatches(f.env, scorer);
+  assert.equal(calls, 1, 'reopening cannot reset job delay');
+  f.sql.exec('UPDATE member_chat_match_jobs SET next_run=0');
+  assert.equal((await processMemberDirectoryMatches(f.env, scorer)).status, 'complete'); assert.equal(calls, 1);
+  assert.equal((await f.api('/members', { token: 'b' })).items.find(row => row.handle === 'card-c').match, null, 'other viewer cannot borrow score');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM points_ledger').get().n, 0);
+});
+
+test('directory jobs discover new own cards after the browser leaves and enforce lease, opt-out, blocks and identity', async t => {
+  const f = fixture(t); await f.api('/matches', { data: {} });
+  let calls = 0, release;
+  const delayed = async () => { calls++; await new Promise(resolve => { release = resolve; }); return { scores: [0, 1].map(index => ({ index, score: 60, reason: '商業服務存在互補合作的可能性' })) }; };
+  const running = processMemberDirectoryMatches(f.env, delayed);
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await processMemberDirectoryMatches(f.env, delayed)).processed, 0); assert.equal(calls, 1);
+  f.sql.exec("INSERT INTO member_chat_preferences(member_id,accepting) VALUES('b',0); INSERT INTO member_chat_blocks VALUES('a','c',CURRENT_TIMESTAMP)");
+  release(); assert.equal((await running).processed, 0, 'opt-out or block during AI cannot save score');
+  f.sql.exec("DELETE FROM member_chat_blocks; UPDATE member_chat_preferences SET accepting=1; UPDATE member_chat_match_jobs SET next_run=0");
+  const scorer = async (env, actor, member, targets) => ({ scores: targets.map((_, index) => ({ index, score: 60, reason: '商務職位存在互補交流的機會' })) });
+  assert.equal((await processMemberDirectoryMatches(f.env, scorer)).processed, 2);
+  const uid = 'U' + 'e'.repeat(32);
+  f.sql.prepare("INSERT INTO users(row_id,line_id,name,role) VALUES('new',?,'新會員','user')").run(uid);
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,company_name,title,updated_at) VALUES('card-new',?,'self_profile','新進公司','負責人','2026-09-25')").run(uid);
+  f.sql.exec('UPDATE member_chat_match_jobs SET next_run=0');
+  assert.equal((await processMemberDirectoryMatches(f.env, scorer)).processed, 1, 'cron picks new arrivals without another browser request');
+  const saved = f.sql.prepare('SELECT count(*) n FROM ai_match_pair_cache').get().n;
+  f.sql.exec("UPDATE member_chat_match_jobs SET next_run=0; UPDATE card_contacts SET archived_at='now' WHERE row_id='card-a'");
+  assert.equal((await processMemberDirectoryMatches(f.env, scorer)).status, 'unavailable');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM ai_match_pair_cache').get().n, saved);
+});
+
+test('directory AI failures, malformed output, quota and lost leases never invent results or erase history', async t => {
+  const f = fixture(t); await f.api('/matches', { data: {} });
+  for (const scores of [[{ index: 0, score: '80', reason: '有效長度原因但分數不合法' }], [{ index: 0, score: 110, reason: '超出範圍不可顯示假分數' }], [{ index: 0, score: 70, reason: '短' }], [{ index: 0, score: 80, reason: '重複索引不得推測哪個結果' }, { index: 0, score: 90, reason: '重複索引不得推測哪個結果' }]]) {
+    f.sql.exec('UPDATE member_chat_match_jobs SET next_run=0');
+    assert.equal((await processMemberDirectoryMatches(f.env, async () => ({ scores }))).status, 'retry');
+  }
+  f.sql.exec('UPDATE member_chat_match_jobs SET next_run=0');
+  assert.equal((await processMemberDirectoryMatches(f.env, async () => { throw Error('provider failure'); })).status, 'retry');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM ai_match_pair_cache').get().n, 0);
+  assert.ok(f.sql.prepare('SELECT next_run n FROM member_chat_match_jobs').get().n > Date.now() + 240000);
+  f.sql.exec('UPDATE member_chat_match_jobs SET next_run=0');
+  assert.equal((await processMemberDirectoryMatches(f.env, async () => ({ limited: true }))).status, 'limited');
+  f.sql.exec("UPDATE member_chat_match_jobs SET next_run=0; UPDATE card_contacts SET company_name='',title='' WHERE row_id='card-a'");
+  assert.equal((await processMemberDirectoryMatches(f.env, async () => { throw Error('must not call'); })).status, 'no_profile');
+  assert.equal((await f.api('/matches', { token: '', data: {} })).status, 401);
+  for (const data of [{ userId: B }, { score: 100 }, { candidates: ['card-b'] }]) assert.equal((await f.api('/matches', { data })).status, 400);
+  assert.equal((await f.api('/members?sort=bad')).status, 400);
+  assert.equal((await f.api('/members?sort=match&after=bad')).status, 400);
+  f.sql.exec(readFileSync(new URL('../migrations/0050_member_chat_match_jobs.sql', import.meta.url), 'utf8'));
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_match_jobs').get().n, 1);
+});
+
+test('directory ranks the entire filtered pool before keyset pagination and preserves score ties and zero', async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 65; i++) {
+    const id = 'rank-' + String(i).padStart(2, '0'), uid = 'U' + i.toString(16).padStart(32, '0');
+    f.sql.prepare('INSERT INTO users(row_id,line_id,name) VALUES(?,?,?)').run(id, uid, '排名測試');
+    f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,company_name,title,tags,updated_at) VALUES(?,?,'self_profile','排名測試公司','工程師','科技資訊',?)").run(id, uid, i === 64 ? '2026-09-25' : '2026-09-24');
+    f.sql.prepare("INSERT INTO ai_match_pair_cache VALUES(?,'public','member-directory-v1',?,'v1',?,'測試商務分數','ai',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)").run(A, 'member:' + id, i < 2 ? 0 : i % 3 === 0 ? 90 : i);
+  }
+  const all = []; let after = '';
+  do {
+    const page = await f.api('/members?' + new URLSearchParams({ sort: 'match', q: '排名', industry: '科技資訊', after }));
+    assert.equal(page.status, 200); all.push(...page.items); after = page.next;
+  } while (after);
+  assert.equal(all.length, 65); assert.equal(new Set(all.map(row => row.handle)).size, 65);
+  assert.ok(all.every((row, i) => !i || all[i - 1].match.score >= row.match.score));
+  assert.equal(all.at(-1).match.score, 0);
+  assert.equal((await f.api('/members?sort=latest&q=排名')).items[0].handle, 'rank-64');
+});
+
+test('directory matching stays bounded, recovers expired leases and never accepts a stale worker write', async t => {
+  const f = fixture(t); await f.api('/matches', { data: {} });
+  for (let i = 0; i < 25; i++) {
+    const id = 'batch-' + i, uid = 'U' + i.toString(16).padStart(32, '0');
+    f.sql.prepare('INSERT INTO users(row_id,line_id,name) VALUES(?,?,?)').run(id, uid, '合成會員');
+    f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,company_name,title) VALUES(?,?,'self_profile','合成公司','經理')").run(id, uid);
+  }
+  f.sql.exec("UPDATE member_chat_match_jobs SET lease_until=1,lease_key='expired'");
+  const sizes = [], scorer = async (env, actor, member, candidates) => { sizes.push(candidates.length); return { scores: candidates.map((_, index) => ({ index, score: 50, reason: '合成公司的職務可以商務交流' })) }; };
+  assert.equal((await processMemberDirectoryMatches(f.env, scorer)).processed, 20);
+  f.sql.exec('UPDATE member_chat_match_jobs SET next_run=0');
+  assert.equal((await processMemberDirectoryMatches(f.env, scorer)).processed, 7);
+  assert.deepEqual(sizes, [20, 7]);
+  // Simulate another worker acquiring the lease after this one's deadline.
+  f.sql.exec("DELETE FROM ai_match_pair_cache WHERE intent_hash='member-directory-v1'; UPDATE member_chat_match_jobs SET next_run=0");
+  const result = await processMemberDirectoryMatches(f.env, async (...args) => {
+    f.sql.exec("UPDATE member_chat_match_jobs SET lease_key='replacement'"); return scorer(...args);
+  });
+  assert.equal(result.processed, 0); assert.equal(f.sql.prepare('SELECT count(*) n FROM ai_match_pair_cache').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT lease_key FROM member_chat_match_jobs').get().lease_key, 'replacement');
+});
+
+test('directory AI adapter uses the existing server model, key, daily quota and bounded timeout', async t => {
+  const { scoreMemberDirectoryBatch } = await import('../workerbackup.js');
+  const calls = [], quota = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, 'https://api.openai.com/v1/chat/completions');
+    assert.equal(options.headers.Authorization, 'Bearer synthetic-test-key');
+    assert.ok(options.signal); calls.push(JSON.parse(options.body));
+    return Response.json({ choices: [{ message: { content: '{"scores":[{"index":0,"score":72,"reason":"公司與職務具有業務互補機會"}]}' } }] });
+  });
+  const env = { OPENAI_API_KEY: 'synthetic-test-key', OPENAI_TEXT_MODEL: 'synthetic-model', ACTMASTER_KV: { get: async () => '0', put: async (...args) => quota.push(args) } };
+  const actor = { user: { line_id: A, role: 'user' } };
+  assert.equal((await scoreMemberDirectoryBatch(env, actor, { company: '合成甲', title: '經理' }, [{ company: '合成乙', title: '業務' }])).scores[0].score, 72);
+  assert.equal(calls[0].model, 'synthetic-model'); assert.equal(calls[0].max_tokens, 3200);
+  assert.equal(quota.length, 1); assert.ok(quota[0][0].startsWith('RL_matchmakeContacts_'));
+  env.ACTMASTER_KV.get = async () => '20';
+  assert.deepEqual(await scoreMemberDirectoryBatch(env, actor, {}, []), { limited: true }); assert.equal(calls.length, 1);
+});
+
 test('attachments list only own valid published coupons; conditional send and retries include coupon identity', async t => {
   const f = fixture(t), coupon = seedChatCoupon(f.sql, A), other = seedChatCoupon(f.sql, B);
   const expired = seedChatCoupon(f.sql, A, { expiry: '2000-01-01' });

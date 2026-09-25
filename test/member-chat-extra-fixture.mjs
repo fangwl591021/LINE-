@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 // Shared synthetic schema only; no production data or credentials.
 export function chatExtraSchema(sql) {
   for (const column of ['scanner_user_id','creator_id','department','image_url','mobile','office_phone','email','website','socials','address']) sql.exec(`ALTER TABLE card_contacts ADD COLUMN ${column} TEXT DEFAULT ''`);
-  for (const file of ['0021_exchange_zone_foundation.sql','0022_exchange_zone_publish.sql','0023_exchange_zone_likes.sql','0024_exchange_zone_coupons.sql','0027_incremental_matchmaking_cache.sql','0048_member_chat_coupon.sql','0049_member_chat_line_contact.sql']) sql.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
+  for (const file of ['0021_exchange_zone_foundation.sql','0022_exchange_zone_publish.sql','0023_exchange_zone_likes.sql','0024_exchange_zone_coupons.sql','0027_incremental_matchmaking_cache.sql','0048_member_chat_coupon.sql','0049_member_chat_line_contact.sql','0050_member_chat_match_jobs.sql']) sql.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
 }
 export function seedChatCoupon(sql, uid, options = {}) {
   const handle = 'exc_' + crypto.randomUUID(), post = 'exp_' + crypto.randomUUID();

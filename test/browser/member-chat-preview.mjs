@@ -3,7 +3,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { handleMemberChat, processMemberChatNotifications } from '../../worker/member-chat.mjs';
+import { handleMemberChat, processMemberChatNotifications, processMemberDirectoryMatches } from '../../worker/member-chat.mjs';
 import { chatExtraSchema, seedChatCoupon, seedChatScore } from '../member-chat-extra-fixture.mjs';
 const sql = new DatabaseSync(':memory:'), root = new URL('../../', import.meta.url);
 const ids = { a: 'U' + 'a'.repeat(32), b: 'U' + 'b'.repeat(32), c: 'U' + 'c'.repeat(32) };
@@ -52,6 +52,11 @@ createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'" }); res.end(html); return; }
     if (req.method === 'GET' && url.pathname === '/fixture-status') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ apiReads, pushes, messages: sql.prepare('SELECT count(*) n FROM member_chat_messages').get().n })); return; }
     if (req.method === 'POST' && url.pathname === '/fixture-drain') { sql.exec("UPDATE member_chat_notification_jobs SET due_at=0 WHERE status='pending'"); await processMemberChatNotifications(env, fetcher); res.writeHead(200); res.end('mock cron complete'); return; }
+    if (req.method === 'POST' && url.pathname === '/fixture-matches') {
+      sql.exec('UPDATE member_chat_match_jobs SET next_run=0');
+      await processMemberDirectoryMatches(env, async (env, actor, member, candidates) => ({ scores: candidates.map((_, index) => ({ index, score: 93, reason: '合成公司的業務具互補交流空間' })) }));
+      res.writeHead(200); res.end('mock match cron complete'); return;
+    }
     if (!url.pathname.startsWith('/v1/member-chat/')) { res.writeHead(404); res.end(); return; }
     let raw = ''; for await (const chunk of req) { raw += chunk; if (raw.length > 16000) { res.writeHead(413); res.end(); return; } }
     apiReads++;

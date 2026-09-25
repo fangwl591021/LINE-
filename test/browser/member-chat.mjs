@@ -20,6 +20,7 @@ async function send(p, body) {
 }
 try {
   const a = await page('a');
+  const matchEnrollment = a.waitForResponse(response => new URL(response.url()).pathname.endsWith('/matches') && response.request().method() === 'POST');
   let releaseMe;
   await a.route('**/v1/member-chat/me', async route => { await new Promise(resolve => { releaseMe = resolve; }); await route.continue(); });
   await a.locator('#open').click(); await a.locator('nav [data-action="members"]').click();
@@ -29,6 +30,16 @@ try {
   await a.locator('[data-handle="card-b"]').waitFor(); await a.unroute('**/v1/member-chat/me');
   assert.equal(await a.locator('.mc-contact').count(), 2);
   assert.equal(await a.locator('[data-handle="card-b"] .mc-match').textContent(), '82%');
+  assert.equal((await matchEnrollment).status(), 200, 'opening members registers authenticated background matching');
+  await a.request.post(base + '/fixture-matches');
+  const ranked = a.waitForResponse(response => new URL(response.url()).searchParams.get('sort') === 'match');
+  await a.locator('[data-sort="match"]').click(); await ranked;
+  await wait(a, () => document.querySelector('.mc-contact')?.dataset.handle === 'card-c');
+  assert.equal(await a.locator('[data-handle="card-b"] .mc-match').textContent(), '82%', 'existing score survives background fill');
+  assert.equal(await a.locator('[data-handle="card-c"] .mc-match').textContent(), '93%');
+  await a.screenshot({ path: join(tmpdir(), 'member-directory-match-mobile.png') });
+  await a.locator('[data-sort="latest"]').click();
+  await wait(a, () => document.querySelector('.mc-contact')?.dataset.handle === 'card-b');
   assert.equal(await a.locator('#mc-industry option').count(), 17);
   const filterBox = await a.locator('#mc-industry').boundingBox(), queryBox = await a.locator('#mc-query').boundingBox();
   assert.ok(filterBox.y >= queryBox.y + queryBox.height && filterBox.height >= 44 && filterBox.x + filterBox.width <= 390);
@@ -39,6 +50,11 @@ try {
   await a.locator('.mc-empty').waitFor();
   await a.locator('#mc-industry').selectOption('零售電商'); await a.locator('[data-handle="card-b"]').waitFor();
   assert.equal(await a.locator('#mc-query').inputValue(), 'DEMOCHEN', 'changing industry preserves text search');
+  const sortedFilter = a.waitForResponse(response => new URL(response.url()).searchParams.get('sort') === 'match');
+  await a.locator('[data-sort="match"]').click();
+  const sortedUrl = new URL((await sortedFilter).url());
+  assert.equal(sortedUrl.searchParams.get('q'), 'DEMOCHEN'); assert.equal(sortedUrl.searchParams.get('industry'), '零售電商');
+  assert.equal(sortedUrl.searchParams.has('after'), false, 'sorting resets pagination');
   await a.locator('#mc-query').fill('');
   let releaseIndustry, industryReady;
   const delayedIndustry = new Promise(resolve => { industryReady = resolve; });
