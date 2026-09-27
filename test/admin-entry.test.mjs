@@ -50,6 +50,13 @@ test('only existing verified store/admin authority can reveal CRM; null checks a
 test('external unauthenticated entry preserves existing LIFF redirect',async()=>{
   const f=setup({loggedIn:false});await f.run();assert.deepEqual(f.calls,['/synthetic-login']);
 });
+
+test('activity deep link opens only after existing manager verification',async()=>{
+  const f=setup();f.context.location.search='?tab=activities';await f.run();
+  assert.ok(f.calls.includes('tab:activities'));assert.ok(!f.calls.includes('tab:users'));
+  const denied=setup({role:'user'});denied.context.location.search='?tab=activities';await denied.run();
+  assert.ok(!denied.calls.includes('tab:activities'));
+});
 test('SDK can finish loading asynchronously; no dependency on synchronous script execution',async()=>{
   const f=setup({hang:'sdk'}),pending=f.run();await tick();
   f.context.window.liff=f.context.liff;f.node('admin-liff-sdk').load();await pending;

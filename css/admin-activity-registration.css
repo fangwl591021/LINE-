@@ -1,0 +1,45 @@
+#tab-activities { min-width: 0; }
+#tab-activities [hidden] { display: none !important; }
+#tab-activities .aar-head, #tab-activities .aar-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+#tab-activities .aar-head { margin-bottom: 18px; }
+#tab-activities h2 { margin: 0 0 6px; font-size: 24px; font-weight: 800; color: #173d57; overflow-wrap: anywhere; }
+#tab-activities h3 { margin: 0; font-size: 19px; font-weight: 800; }
+#tab-activities .aar-note { font-size: 14px; line-height: 1.65; color: #64748b; overflow-wrap: anywhere; }
+#tab-activities .aar-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 15px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #173d57; font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: none; }
+#tab-activities .aar-button:hover { background: #f1f5f9; }
+#tab-activities .aar-button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+#tab-activities .aar-button:disabled { opacity: .5; cursor: not-allowed; }
+#tab-activities .aar-primary { color: #fff; background: #173d57; border-color: #173d57; }
+#tab-activities .aar-primary:hover { background: #245675; }
+#tab-activities .aar-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 16px 0; }
+#tab-activities .aar-stat { padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+#tab-activities .aar-stat span { display: block; font-size: 14px; color: #64748b; }
+#tab-activities .aar-stat strong { font-size: 28px; color: #173d57; }
+#tab-activities .aar-filters { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+#tab-activities .aar-filters label { display: flex; flex: 1 1 150px; min-width: 0; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 700; color: #475569; }
+#tab-activities .aar-filters label.aar-search { flex-basis: 260px; }
+#tab-activities input, #tab-activities select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; padding: 9px 11px; font: inherit; }
+#tab-activities .aar-panel { border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; overflow: hidden; }
+#admin-activity-overview table { min-width: 1000px; }
+#admin-activity-overview button { white-space: nowrap; }
+#tab-activities .aar-panel-head { padding: 18px; border-bottom: 1px solid #e2e8f0; }
+#tab-activities .aar-scroll { overflow-x: auto; max-width: 100%; }
+#tab-activities .aar-table { width: 100%; border-collapse: collapse; min-width: 760px; text-align: left; }
+#tab-activities .aar-table th, #tab-activities .aar-table td { padding: 15px; border-bottom: 1px solid #e2e8f0; font-size: 15px; vertical-align: top; }
+#tab-activities .aar-table th { background: #f8fafc; color: #475569; font-size: 14px; }
+#tab-activities .aar-table td { overflow-wrap: anywhere; max-width: 240px; }
+#tab-activities .aar-table .aar-actions { justify-content: flex-start; }
+#tab-activities .aar-empty { text-align: center; padding: 30px 16px; color: #64748b; }
+#tab-activities .aar-status { margin: 12px 0; color: #64748b; line-height: 1.7; font-size: 14px; }
+#tab-activities .aar-status[data-error="true"] { color: #b42318; }
+#tab-activities .aar-badge { display: inline-block; padding: 4px 9px; border-radius: 8px; background: #eff6ff; color: #1d4ed8; white-space: nowrap; font-size: 13px; }
+#tab-activities .aar-badge.aar-muted { background: #f1f5f9; color: #64748b; }
+#tab-activities .aar-badge.aar-ok { background: #ecfdf5; color: #047857; }
+@media (max-width: 700px) {
+  #tab-activities .aar-stats { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  #tab-activities .aar-stat { padding: 12px; }
+  #tab-activities .aar-head { align-items: flex-start; }
+  #tab-activities .aar-head > div { max-width: 100%; }
+  #tab-activities h2 { font-size: 21px; }
+  #tab-activities .aar-filters { padding: 12px; }
+}

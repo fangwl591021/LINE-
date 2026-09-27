@@ -1,0 +1,127 @@
+// Full admin shell, synthetic LINE/auth/activity records; production API requests are blocked.
+import assert from 'node:assert/strict';
+import { readFileSync, mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+const require = createRequire(import.meta.url);
+let playwright; try { playwright = require('playwright'); } catch { playwright = require('C:/Users/User/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'); }
+const tailwindResponse = await fetch('https://cdn.tailwindcss.com', {signal:AbortSignal.timeout(20000)});
+assert.ok(tailwindResponse.ok);
+const tailwind = await tailwindResponse.text();
+// Reserve icon geometry without fetching third-party fonts in this fixture.
+const html = readFileSync(new URL('../../admin.html', import.meta.url), 'utf8').replace('</head>', '<style>.material-symbols-outlined{font-size:0!important;display:inline-block;width:24px;min-width:24px;height:24px}</style></head>');
+const out = join(tmpdir(), 'admin-activity-registration-20260928'); mkdirSync(out, {recursive:true});
+const browser = await playwright.chromium.launch({headless:true,channel:'chrome'});
+const page = await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true});
+const errors=[], calls=[], blocked=[];
+page.on('pageerror', error => errors.push(error.message));
+page.on('dialog', dialog => dialog.accept());
+const activities = [
+  {'活動ID':'A','活動名稱':'秋日交流活動','歸屬網':'admin','開始時間':'2026-09-28 10:00','金額':100,'狀態':'上架'},
+  {'活動ID':'B','活動名稱':'小型讀書會','歸屬網':'branch','開始時間':'2026-10-02 10:00','金額':0,'狀態':'下架'}
+];
+const rows = [
+  {rowId:'r1',activityId:'A','姓名':'測試會員甲','手機':'0912345678','金額':100,'付款狀態':'待對帳','簽到':false},
+  {rowId:'r2',activityId:'A','姓名':'已繳會員乙','手機':'0223456789','金額':100,'付款狀態':'已付款','簽到':true},
+  {rowId:'r3',activityId:'A','姓名':'取消會員丙','金額':100,status:'cancelled'},
+  {rowId:'r4',activityId:'A','姓名':'<img src=x onerror=alert(1)>','金額':0,'簽到':false}
+];
+let failList=false,failRoster=false,loseToggle=false,holdRoster=false,held;
+await page.route('**/*', async route => {
+  const req=route.request(),url=new URL(req.url());
+  if(url.hostname==='cdn.tailwindcss.com') return route.fulfill({contentType:'text/javascript',body:tailwind});
+  if(url.hostname==='static.line-scdn.net') return route.fulfill({contentType:'text/javascript',body:`window.liff={init:async()=>{},isLoggedIn:()=>true,isInClient:()=>false,getProfile:async()=>({userId:'synthetic-manager',displayName:'合成測試管理員'}),getAccessToken:()=>'synthetic-token'};`});
+  if(req.method()==='POST' && url.hostname==='line-engine.fangwl591021.workers.dev') {
+    const {action,payload}=req.postDataJSON(); calls.push({action,payload});
+    assert.equal(payload.lineAccessToken,'synthetic-token');
+    let result;
+    if(action==='checkUser')result={info:{role:'store',networkId:'admin'}};
+    else if(action==='getAllActivities')result=failList?null:activities;
+    else if(action==='getActivityRegistrants') {
+      assert.ok(['A','B'].includes(payload.activityId));
+      result=failRoster?null:payload.activityId==='A'?rows:[];
+      if(holdRoster&&payload.activityId==='A') { holdRoster=false; await new Promise(resolve=>{held=resolve;}); }
+    } else if(action==='toggleCheckin') {
+      const row=rows.find(row=>row.rowId===payload.rowId);row['簽到']=!row['簽到'];
+      result=loseToggle?null:{rowId:payload.rowId};loseToggle=false;
+    } else if(action==='confirmPayment') { rows.find(row=>row.rowId===payload.rowId)['付款狀態']='已付款';result={rowId:payload.rowId}; }
+    else { blocked.push(action); return route.abort(); }
+    return route.fulfill({contentType:'application/json',body:JSON.stringify(result===null?{success:false,error:'合成失敗'}:{success:true,data:result})});
+  }
+  if(req.resourceType()==='image')return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
+  if(url.hostname==='localhost') {
+    if(url.pathname==='/admin.html')return route.fulfill({contentType:'text/html',body:html});
+    if(['/js/modules/admin-activity-registration.js','/css/admin-activity-registration.css'].includes(url.pathname)) return route.fulfill({contentType:url.pathname.endsWith('.js')?'text/javascript':'text/css',body:readFileSync(new URL('../../'+url.pathname.slice(1),import.meta.url),'utf8')});
+    // Other admin modules are unrelated; do not initialize them in this fixture.
+    return route.fulfill({contentType:'text/javascript',body:''});
+  }
+  if(/fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com/.test(url.hostname))return route.fulfill({body:''});
+  blocked.push(url.href);return route.abort();
+});
+const btn=name=>page.getByRole('button',{name,exact:true});
+const openA=async()=>{await page.locator('[data-registrants="A"]').click();await page.getByText('測試會員甲',{exact:true}).waitFor();};
+try {
+  await page.goto('http://localhost/admin.html?tab=activities',{waitUntil:'domcontentloaded'});
+  await page.locator('#loading-screen').waitFor({state:'detached'});
+  await page.locator('[data-registrants="A"]').waitFor();
+  assert.equal(await page.locator('#page-title').textContent(),'活動報名管理');
+  assert.equal(await page.locator('[data-registrants="A"]').textContent(),'查看報名名單');
+  await page.locator('#aar-activity-query').fill('讀書');assert.equal(await page.locator('[data-registrants]').count(),1);
+  await page.locator('#aar-activity-query').fill('');await page.locator('#act-tenant-filter').selectOption('branch');assert.equal(await page.locator('[data-registrants]').count(),1);
+  await page.locator('#act-tenant-filter').selectOption('all');
+  for(const width of [390,1440]) {
+    await page.setViewportSize({width,height:1000});
+    if(width<1024)await page.evaluate(()=>switchTab('activities'));
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:join(out,`activities-${width}.png`),fullPage:true});
+  }
+  await openA();
+  assert.match(await page.locator('#aar-roster-stats').textContent(),/有效報名3已簽到1待付款1已取消1/);
+  assert.equal(await page.locator('#aar-roster-body img').count(),0);
+  assert.equal(await page.locator('tr').filter({hasText:'取消會員丙'}).getByRole('button').count(),0);
+  await page.locator('#aar-roster-state').selectOption('checked');assert.equal(await page.locator('#aar-roster-body tr').count(),1);
+  await page.locator('#aar-roster-state').selectOption('all');await page.locator('#aar-roster-query').fill('0912');
+  const downloadPromise=page.waitForEvent('download');await btn('匯出篩選名單 CSV').click();const download=await downloadPromise;
+  const csv=readFileSync(await download.path(),'utf8');assert.ok(csv.includes('0912345678'));assert.ok(!csv.includes('已繳會員乙'));
+  await page.locator('#aar-roster-query').fill('');
+  loseToggle=true;
+  await page.locator('[data-row="r1"][data-mutation="toggleCheckin"]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-row="r1"][data-mutation="toggleCheckin"]')?.textContent==='取消簽到');
+  assert.match(await page.locator('#aar-roster-status').textContent(),/不會自動重送/);
+  assert.equal(calls.filter(call=>call.action==='toggleCheckin').length,1);
+  await page.locator('[data-row="r1"][data-mutation="confirmPayment"]').click();
+  await page.locator('[data-row="r1"][data-mutation="confirmPayment"]').waitFor({state:'detached'});
+  await page.waitForFunction(()=>document.querySelector('[data-aar="back"]')?.disabled===false);
+  for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:1000});
+    if(width<1024)await page.evaluate(()=>switchTab('activities'));
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    assert.equal(await btn('← 返回活動列表').isVisible(),true);
+    assert.equal(await btn('重新整理名單').isVisible(),true);
+    const overflow = await page.locator('#admin-activity-registrants > .aar-head button, #admin-activity-registrants .aar-filters input, #admin-activity-registrants .aar-filters select').evaluateAll(nodes => nodes.map(node=>({label:node.textContent||node.id,right:node.getBoundingClientRect().right})).filter(item=>item.right>innerWidth+1));
+    assert.deepEqual(overflow,[],`controls fit ${width}px viewport`);
+    await btn('重新整理名單').click({trial:true});
+    await btn('← 返回活動列表').click({trial:true});
+    await page.screenshot({path:join(out,`roster-${width}.png`),fullPage:true});
+  }
+  failRoster=true;await btn('重新整理名單').click();await page.getByText('名單讀取失敗，請使用上方重新整理',{exact:true}).waitFor();
+  assert.equal(await page.locator('[data-mutation]').count(),0);assert.equal(await btn('匯出篩選名單 CSV').isDisabled(),true);
+  failRoster=false;await btn('重新整理名單').click();await page.getByText('測試會員甲',{exact:true}).waitFor();
+  await btn('← 返回活動列表').click();
+  // Old A response cannot overwrite B after navigating away while request is pending.
+  holdRoster=true;await page.locator('[data-registrants="A"]').click();
+  await page.waitForFunction(()=>document.getElementById('aar-roster-status')?.textContent==='正在讀取名單…');
+  await btn('← 返回活動列表').click();await page.locator('[data-registrants="B"]').click();
+  await page.getByText('尚無報名者',{exact:true}).waitFor();
+  assert.ok(held);held();await page.waitForTimeout(150);
+  assert.equal(await page.locator('#admin-activity-registrants h2').textContent(),'小型讀書會');
+  assert.equal(await page.getByText('測試會員甲',{exact:true}).count(),0);
+  await btn('← 返回活動列表').click();failList=true;await btn('重新整理活動').click();await page.getByText('活動資料讀取失敗',{exact:true}).waitFor();
+  failList=false;await btn('重新整理活動').click();await page.locator('[data-registrants="A"]').waitFor();
+  assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
+  console.log(JSON.stringify({passed:true,widths:[320,390,1440],apiActions:[...new Set(calls.map(call=>call.action))],realDataWrites:0,screenshots:out}));
+} catch(error) {
+  console.error(JSON.stringify({errors,blocked:[...new Set(blocked)].slice(0,20),actions:calls.map(call=>call.action)}));
+  throw error;
+} finally { await browser.close(); }
