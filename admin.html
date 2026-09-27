@@ -474,7 +474,7 @@
           </a>
           <a href="#" onclick="switchTab('activities')" id="nav-activities" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold">
             <span class="material-symbols-outlined mr-3 text-[20px]">event_note</span>
-            全站活動監控
+            活動報名管理
           </a>
           <a href="#" onclick="switchTab('checkin-content')" id="nav-checkin-content" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold"><span class="material-symbols-outlined mr-3 text-[20px]">redeem</span>簽到內容管理</a>
           <a href="#" onclick="switchTab('system-ticker')" id="nav-system-ticker" class="nav-item flex items-center px-4 py-3 rounded-xl text-sm font-bold"><span class="material-symbols-outlined mr-3 text-[20px]">campaign</span>系統跑馬燈</a>
@@ -759,19 +759,9 @@
 
       <!-- Tab: Activities -->
       <div id="tab-activities" class="tab-content hidden space-y-6">
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div class="flex items-center gap-4">
-            <span class="text-slate-500 font-bold text-sm">篩選租戶 (歸屬網)：</span>
-            <select id="act-tenant-filter" onchange="renderActivities()" class="border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-700 outline-none focus:ring-1 focus:ring-blue-500">
-              <option value="all">全站所有活動</option>
-            </select>
-          </div>
-          <button onclick="loadActivities()" class="text-sm border border-slate-200 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 flex items-center gap-1">
-            <span class="material-symbols-outlined text-[16px]">refresh</span> 重新整理
-          </button>
-        </div>
+        <div id="admin-activity-toolbar"></div>
 
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div id="admin-activity-overview" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="data-table readable-table">
               <thead>
@@ -792,6 +782,7 @@
             </table>
           </div>
         </div>
+        <section id="admin-activity-registrants" hidden aria-label="活動報名與簽到名單"></section>
       </div>
 
       <!-- Tab: Card Quota -->
@@ -4877,22 +4868,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     }
 
     async function loadActivities() {
-      const tbody = document.getElementById('acts-table-body');
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入活動中...</td></tr>';
-      const actions = ['getPublicActivities', 'getAllActivities', 'getActivities'];
-      let loaded = [];
-      for (const action of actions) {
-        const res = await fetchAPI(action, {}, { silent: true });
-        loaded = normalizeListResponse(res);
-        if (loaded.length) break;
-      }
-      allActivitiesData = loaded;
-      document.getElementById('stat-acts').innerText = loaded.length;
-      if (loaded.length) {
-        renderActivities();
-      } else {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">目前沒有活動資料，或後端查詢暫時無回應</td></tr>';
-      }
+      return window.AdminActivityRegistration.load();
     }
 
     function normalizeListResponse(res) {
@@ -4909,15 +4885,15 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       const status = String(a['狀態'] || a.status || '上架') === '下架' ? '下架' : '上架';
       return {
         id,
-        encodedId: encodeURIComponent(id),
+        encodedId: encodeURIComponent(id).replace(/'/g, '%27'),
         title,
         titleHtml: escapeHTML(title),
         status,
         image: String(a['宣傳圖'] || a.imageUrl || '').trim(),
-        creator: escapeHTML(a['建立者ID'] || a.userId || 'admin'),
+        creator: escapeHTML(a['歸屬網'] || a.networkId || a['建立者ID'] || a.userId || 'admin'),
         start: escapeHTML(a['開始時間'] || a.startTime || ''),
         fee: Number(a['金額'] || a.price || 0) > 0 ? 'NT$ ' + escapeHTML(a['金額'] || a.price || 0) : '<span class="text-green-600 font-bold">免費</span>',
-        registrants: Number(a['報名人數'] || a.registrantCount || 0) || 0
+        registrants: window.AdminActivityRegistration.countFor(a)
       };
     }
 
@@ -4956,14 +4932,14 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
             </div>
           </td>
           <td>
-            <button type="button" onclick="copyActivityId('${escapeHTML(meta.id)}')" class="font-mono text-[12px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors">
+            <button type="button" data-copy-activity="${escapeHTML(meta.id)}" class="font-mono text-[12px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors">
               ${escapeHTML(meta.id)}
             </button>
           </td>
           <td class="text-sm text-slate-500">${meta.creator}</td>
           <td class="text-[12px] text-slate-500 font-mono">${meta.start}</td>
           <td class="text-sm">${meta.fee}</td>
-          <td class="text-sm"><span class="font-bold text-blue-600">${meta.registrants}</span> 人報名</td>
+          <td class="text-sm"><button type="button" class="aar-button aar-primary" data-registrants="${escapeHTML(meta.id)}">${meta.registrants === null ? '查看報名名單' : `${meta.registrants} 人 · 查看名單`}</button></td>
           <td>
             <span class="px-2 py-1 rounded-full text-[10px] font-bold ${statusClass}">
               ${meta.status}
@@ -4984,20 +4960,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     }
 
     function renderActivities() {
-      const tbody = document.getElementById('acts-table-body');
-      const filter = document.getElementById('act-tenant-filter').value;
-      const ownerOf = a => String(a['建立者ID'] || a.userId || a.creatorId || a.creator_id || a['歸屬網'] || a.networkId || '');
-      const filtered = filter === 'all' ? allActivitiesData : allActivitiesData.filter(a => ownerOf(a) === filter);
-      if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">沒有符合條件的活動</td></tr>';
-        return;
-      }
-
-      const active = filtered.filter(a => getMonitorActivityMeta(a).status === '上架');
-      const archived = filtered.filter(a => getMonitorActivityMeta(a).status === '下架');
-      tbody.innerHTML =
-        renderActivitySectionRows('上架區', active, false) +
-        renderActivitySectionRows('下架區', archived, true);
+      window.AdminActivityRegistration.renderActivities();
     }
 
     async function copyActivityId(activityId) {
@@ -5713,7 +5676,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
             openLineOAMonitorTool();
             return;
           }
-          switchTab('users');
+          switchTab(new URLSearchParams(location.search || '').get('tab') === 'activities' ? 'activities' : 'users');
         } else {
           loadingIcon.innerText = "lock_person";
           loadingIcon.classList.remove('animate-spin', 'text-blue-600');
@@ -5735,5 +5698,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <script src="js/modules/admin-partners-dashboard.js?v=1.2"></script>
   <script src="js/modules/admin-mall-dashboard.js?v=1"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
+  <link rel="stylesheet" href="css/admin-activity-registration.css?v=1">
+  <script src="js/modules/admin-activity-registration.js?v=1"></script>
 </body>
 </html>
