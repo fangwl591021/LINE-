@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { extractActivityDmDraft } from './worker/activity-dm-ai.mjs';
 import { handleCrmCardPhoneLink } from './worker/crm-card-phone-link.mjs';
 import { handleDailyTank } from './worker/daily-tank-challenge.mjs';
 import { handleGameCenter } from './worker/game-center.mjs';
@@ -185,6 +186,7 @@ const ACTION_POLICIES = {
   uploadImageToR2: { access: 'authenticated', legacyAuthSkip: true },
 
   bulkAddRegistrants: { access: 'manager', tenantScoped: true },
+  extractActivityDmDraft: { access: 'manager', tenantScoped: true },
   updateActivity: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
   removeAct: { access: 'manager', tenantScoped: true },
   setActivityStatus: { access: 'manager', tenantScoped: true },
@@ -16860,7 +16862,7 @@ async function dispatchAction(action, payload, request, env) {
   }
 
   // 2. 資安防護：OpenAI 限流機制
-  const aiActions = ['recognizeCardWithGPT4o', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy', 'suggestCustomerImportMapping'];
+  const aiActions = ['recognizeCardWithGPT4o', 'calculateFateTags', 'reviewCardSafety', 'generateCardCopy', 'suggestCustomerImportMapping', 'extractActivityDmDraft'];
   if (aiActions.includes(action) && (actor?.userId || payload.userId)) {
     const allowed = await SecurityModule.checkRateLimit(actor?.userId || payload.userId, action, env, actor?.role || payload.role);
     if (!allowed) {
@@ -16883,6 +16885,7 @@ async function dispatchAction(action, payload, request, env) {
   }
 
   switch (action) {
+    case 'extractActivityDmDraft': return await extractActivityDmDraft(payload, env, actor, (...args) => AIModule.callOpenAI(...args));
     case 'checkUser':              return await AuthModule.check(payload, env);
     case 'getCardForClaim':        return await ClaimModule.getCardForClaim(payload || {}, env);
     case 'claimCardAndRegister':   return await ClaimModule.claimCardAndRegister(payload || {}, env);
