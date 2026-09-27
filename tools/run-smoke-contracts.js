@@ -40,6 +40,7 @@ const foundationChecks = [
 
 const fullChecks = [
   'test/admin-activity-registration.test.mjs',
+  'test/activity-dm-ai.test.mjs',
   'test/admin-entry.test.mjs',
   'test/exchange-zone-visibility.test.mjs',
   'test/member-chat.test.mjs',

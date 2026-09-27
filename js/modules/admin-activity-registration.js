@@ -102,12 +102,20 @@
   function openCreate() {
     if (!['admin','store'].includes(adminRole)) return;
     if ($('aar-create-dialog')) { $('aar-create-dialog').showModal(); return; }
-    creation = { id: 'ACT_' + crypto.randomUUID(), payload: null, busy: false, uploadFailed: false };
+    creation = { id: 'ACT_' + crypto.randomUUID(), payload: null, busy: false, uploadFailed: false, aiImage: '', aiDraft: null };
     const dialog = document.createElement('dialog');
     dialog.id = 'aar-create-dialog'; dialog.className = 'aar-create'; dialog.setAttribute('aria-labelledby','aar-create-title');
     dialog.innerHTML = `<form id="aar-create-form">
       <header class="aar-head"><div><h2 id="aar-create-title">新增活動</h2><p class="aar-note">建立後與手機端同步；不會自動新增報名者或發送通知。</p></div><button type="button" class="aar-button" data-create-close aria-label="關閉新增活動">✕</button></header>
       <div class="aar-create-body"><fieldset class="aar-filters" id="aar-create-fields">
+        <section class="aar-ai aar-wide" aria-label="AI 活動上架助手">
+          <h3>✨ AI 活動上架助手</h3><p class="aar-note">上傳活動 DM → AI 整理 → 確認內容後上架，也可以直接手動填寫。</p>
+          <label>上傳活動 DM／宣傳圖<input name="imageFile" type="file" accept="image/jpeg,image/png,image/webp"><span class="aar-note">JPG / PNG / WebP；AI 辨識限 4 MB，僅上傳宣傳圖限 10 MB。</span></label>
+          <img id="aar-ai-image" alt="活動 DM 預覽" hidden>
+          <button type="button" class="aar-button aar-primary" id="aar-ai-read" disabled>AI 讀取 DM 並整理活動資料</button>
+          <p id="aar-ai-status" class="aar-status" role="status">AI 只產生草稿，不會自動上架。</p>
+          <div id="aar-ai-preview" hidden><h3>AI 草稿預覽</h3><div id="aar-ai-content"></div><button type="button" class="aar-button" id="aar-ai-apply">套用草稿到下方表單</button></div>
+        </section>
         <label class="aar-wide">活動名稱 *<input name="activityName" required maxlength="120" placeholder="例如：商務交流講座"></label>
         <label>活動類型<input name="activityType" value="活動" maxlength="40"></label>
         <label>上架狀態<select name="status"><option value="上架">上架（開放報名）</option><option value="下架">草稿（暫不上架）</option></select></label>
@@ -116,7 +124,7 @@
         <label>宣傳圖版型<select name="imageRatio"><option value="16:9">橫式 16:9</option><option value="1:1">正方 1:1</option><option value="2:3">滿版 2:3</option></select></label>
         <label class="aar-wide">活動說明<textarea name="description" rows="4" maxlength="10000" placeholder="地點、活動內容與報名注意事項"></textarea></label>
         <label class="aar-wide">宣傳圖網址<input name="imageUrl" type="url" placeholder="https://…（選填）"></label>
-        <label class="aar-wide">或上傳宣傳圖<input name="imageFile" type="file" accept="image/jpeg,image/png,image/webp"><span class="aar-note">JPG / PNG / WebP，最大 10 MB。</span></label>
+        <label class="aar-wide aar-ai-review" id="aar-ai-review" hidden><input name="aiReviewed" type="checkbox">我已確認 AI 草稿的日期、費用與內容，並完成必要修正</label>
       </fieldset></div>
       <footer><p id="aar-create-status" class="aar-status" role="status"></p><div class="aar-actions"><button type="button" class="aar-button" data-create-close>取消</button><button type="submit" class="aar-button aar-primary" id="aar-create-submit">建立活動</button></div></footer>
     </form>`;
@@ -126,17 +134,60 @@
     $('aar-create-form').addEventListener('submit',event=>{event.preventDefault();void submitCreate();});
     dialog.querySelector('[name="imageFile"]').addEventListener('change',event=>{void uploadCreateImage(event.target);});
     dialog.querySelector('[name="imageUrl"]').addEventListener('input',()=>{creation.uploadFailed=false;});
+    $('aar-ai-read').addEventListener('click',()=>{void readActivityDm();});
+    $('aar-ai-apply').addEventListener('click',applyActivityDraft);
+    $('aar-create-fields').addEventListener('input',event=>{
+      if (event.target.name !== 'aiReviewed' && !$('aar-ai-review').hidden) $('aar-create-form').elements.aiReviewed.checked=false;
+    });
     dialog.showModal();
   }
   function lockCreate(busy) {
     creation.busy = busy;
     $('aar-create-fields').disabled = busy || !!creation.payload;
     $('aar-create-dialog').querySelectorAll('button').forEach(button=>{button.disabled=busy;});
+    $('aar-ai-read').disabled = busy || !!creation.payload || !creation.aiImage;
+    $('aar-ai-apply').disabled = busy || !!creation.payload || !creation.aiDraft;
+  }
+  async function readActivityDm() {
+    if (!creation || creation.busy || creation.payload || !creation.aiImage) return;
+    lockCreate(true); creation.aiDraft=null; $('aar-ai-preview').hidden=true;
+    message('aar-ai-status','AI 正在辨識 DM，可能需要約 30–45 秒，請勿重複送出…');
+    try {
+      const result = await fetchAPI('extractActivityDmDraft',{base64Image:creation.aiImage},{silent:true,timeoutMs:55000});
+      const draft = result?.draft || result?.data?.draft;
+      if (!result || result.success === false || !draft?.activityName) throw new Error('AI 未完成辨識，原表單未變更。請重新辨識或手動填寫。');
+      creation.aiDraft = draft;
+      $('aar-ai-content').innerHTML = `<dl>${[
+        ['活動名稱',draft.activityName],['類型',draft.activityType],['地點',draft.location],
+        ['開始時間',draft.startTime],['結束時間',draft.endTime],
+        ['費用',draft.price === null || draft.price === undefined ? '' : draft.price === 0 ? '免費（0 元）' : `NT$ ${draft.price}`],
+        ['活動說明',draft.description]
+      ].map(([label,value])=>`<dt>${esc(label)}</dt><dd>${esc(value || '待人工補充')}</dd>`).join('')}</dl>`;
+      $('aar-ai-preview').hidden=false;
+      message('aar-ai-status',`辨識完成，請先檢查草稿。${text(draft.confidenceNote) || '日期、費用及內容仍須人工確認。'}`);
+    } catch(error) { message('aar-ai-status',error.message,true); }
+    finally { lockCreate(false); }
+  }
+  function applyActivityDraft() {
+    if (!creation || creation.busy || creation.payload || !creation.aiDraft) return;
+    const form = $('aar-create-form'), draft = creation.aiDraft;
+    const hasEdits = ['activityName','startTime','endTime','description'].some(key=>form.elements[key].value.trim()) ||
+      !['','活動'].includes(form.elements.activityType.value.trim()) || !['','0'].includes(form.elements.price.value);
+    if (hasEdits && !window.confirm('套用 AI 草稿會取代下方名稱、類型、日期、費用與說明，確定套用嗎？')) return;
+    for (const key of ['activityName','activityType','startTime','endTime']) form.elements[key].value=text(draft[key]);
+    form.elements.price.value = draft.price === null || draft.price === undefined ? '' : text(draft.price);
+    form.elements.description.value=[draft.location ? `活動地點：${text(draft.location)}` : '',text(draft.description)].filter(Boolean).join('\n\n');
+    $('aar-ai-review').hidden=false; form.elements.aiReviewed.required=true; form.elements.aiReviewed.checked=false;
+    message('aar-ai-status','已套用草稿。請補齊資料並確認日期、費用與內容，再按「建立活動」。');
+    form.elements.activityName.focus();
   }
   async function uploadCreateImage(input) {
     const file = input.files?.[0];
     if (!file || !creation || creation.busy || creation.payload) return;
     creation.uploadFailed = true;
+    creation.aiImage='';creation.aiDraft=null;$('aar-ai-preview').hidden=true;$('aar-ai-image').hidden=true;
+    $('aar-ai-image').removeAttribute('src');$('aar-ai-read').disabled=true;
+    message('aar-ai-status','請先完成圖片上傳，再以 AI 整理內容。');
     if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
       message('aar-create-status','請選擇 10 MB 以內的 JPG / PNG / WebP 圖片，或直接填寫圖片網址。',true);input.value='';return;
     }
@@ -149,6 +200,9 @@
       const url = text(result?.url || result?.data?.url);
       if (!/^https?:\/\//i.test(url)) throw new Error('圖片上傳失敗，請重新選圖或填寫圖片網址後再建立。');
       $('aar-create-form').elements.imageUrl.value=url;
+      $('aar-ai-image').src=base64Image;$('aar-ai-image').hidden=false;
+      creation.aiImage = file.size <= 4 * 1024 * 1024 ? base64Image : '';
+      message('aar-ai-status',creation.aiImage ? '圖片已就緒，按「AI 讀取 DM 並整理活動資料」。' : '圖片已上傳；若要 AI 辨識，請改選 4 MB 以內圖片。');
       creation.uploadFailed=false;message('aar-create-status','宣傳圖已上傳，請完成表單後按「建立活動」。');
     } catch(error) { message('aar-create-status',error.message,true); }
     finally { input.value='';lockCreate(false); }

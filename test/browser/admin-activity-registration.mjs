@@ -29,6 +29,7 @@ const rows = [
 ];
 let failList=false,failRoster=false,loseToggle=false,holdRoster=false,held;
 let loseCreate=false,holdCreate=false,releaseCreate,failUpload=false;
+let failAi=false,holdAi=false,releaseAi;
 await page.route('**/*', async route => {
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com') return route.fulfill({contentType:'text/javascript',body:tailwind});
@@ -40,6 +41,11 @@ await page.route('**/*', async route => {
     if(action==='checkUser')result={info:{role:'store',networkId:'admin'}};
     else if(action==='getAllActivities')result=failList?null:activities;
     else if(action==='uploadImageToR2')result=failUpload?null:{url:'https://localhost/fixture-poster.png'};
+    else if(action==='extractActivityDmDraft') {
+      assert.ok(payload.base64Image.startsWith('data:image/png;base64,'));
+      if(holdAi){holdAi=false;await new Promise(resolve=>{releaseAi=resolve;});}
+      result=failAi?null:{provider:'OpenAI',draft:{activityName:'AI 活動草稿',activityType:'講座',location:'台北市合成會場',startTime:'2026-10-01T10:00',endTime:'2026-10-01T12:00',price:null,description:'活動亮點\n• <img src=x onerror=alert(1)>\n• 合成活動內容',confidenceNote:'費用不明，請人工確認。'}};
+    }
     else if(action==='bulkAddRegistrants') {
       assert.deepEqual(payload.names,[]);assert.equal(payload.userId,'synthetic-manager');
       const item={'活動ID':payload.activityId,'活動名稱':payload.activityName,'歸屬網':'admin','開始時間':payload.startTime,'金額':payload.price,'狀態':payload.status};
@@ -168,6 +174,37 @@ try {
   await btn('建立活動').click();await page.locator('#aar-create-dialog').waitFor({state:'detached'});
   const draft=calls.filter(call=>call.action==='bulkAddRegistrants').at(-1);assert.equal(draft.payload.status,'下架');assert.equal(draft.payload.feeType,'免費');
   assert.notEqual(draft.payload.activityId,created[0].payload.activityId);
+  // Welfare-style AI DM flow: preview only, explicit apply, editable fields, mandatory review.
+  const beforeAi=createCount();
+  await btn('＋新增活動').click();assert.equal(await btn('AI 讀取 DM 並整理活動資料').isDisabled(),true);
+  await field('activityName').fill('原本手動名稱');
+  await field('imageFile').setInputFiles(image);await page.waitForFunction(()=>!document.getElementById('aar-ai-read').disabled);
+  failAi=true;await btn('AI 讀取 DM 並整理活動資料').click();
+  await page.getByText('AI 未完成辨識，原表單未變更。請重新辨識或手動填寫。',{exact:true}).waitFor();
+  assert.equal(await field('activityName').inputValue(),'原本手動名稱');assert.equal(createCount(),beforeAi);
+  failAi=false;holdAi=true;await btn('AI 讀取 DM 並整理活動資料').click();
+  assert.equal(await btn('建立活動').isDisabled(),true);
+  assert.equal(await field('activityName').isDisabled(),true);
+  while(!releaseAi)await new Promise(resolve=>setTimeout(resolve,10));releaseAi();
+  await page.locator('#aar-ai-preview').waitFor();
+  assert.equal(await page.locator('#aar-ai-content img').count(),0);
+  assert.equal(await field('activityName').inputValue(),'原本手動名稱');assert.equal(createCount(),beforeAi);
+  for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:800});await page.locator('#aar-ai-preview').scrollIntoViewIfNeeded();
+    const overflow=await page.locator('#aar-create-dialog input, #aar-create-dialog button').evaluateAll(nodes=>nodes.filter(n=>n.getBoundingClientRect().width&&n.getBoundingClientRect().right>innerWidth+1).map(n=>n.id||n.name));assert.deepEqual(overflow,[]);
+    await page.screenshot({path:join(out,`ai-preview-${width}.png`),fullPage:true});
+  }
+  await btn('套用草稿到下方表單').click();
+  assert.equal(await field('activityName').inputValue(),'AI 活動草稿');assert.equal(await field('price').inputValue(),'');
+  assert.match(await field('description').inputValue(),/活動地點：台北市合成會場/);
+  await btn('建立活動').click();assert.equal(createCount(),beforeAi);
+  await field('price').fill('350');await field('aiReviewed').check();
+  await field('activityName').fill('人工確認的 AI 活動');assert.equal(await field('aiReviewed').isChecked(),false);
+  await btn('建立活動').click();assert.equal(createCount(),beforeAi);
+  await field('aiReviewed').check();await btn('建立活動').click();await page.locator('#aar-create-dialog').waitFor({state:'detached'});
+  assert.equal(createCount(),beforeAi+1);
+  const aiCreated=calls.filter(call=>call.action==='bulkAddRegistrants').at(-1);
+  assert.equal(aiCreated.payload.activityName,'人工確認的 AI 活動');assert.equal(aiCreated.payload.price,350);assert.equal(aiCreated.payload.status,'上架');
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({passed:true,widths:[320,390,1440],apiActions:[...new Set(calls.map(call=>call.action))],realDataWrites:0,screenshots:out}));
 } catch(error) {
