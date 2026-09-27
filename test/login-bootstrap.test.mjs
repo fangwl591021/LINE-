@@ -10,6 +10,8 @@ const authSource = read('../js/auth.js');
 const coreSource = read('../js/core.js');
 const inboxSource = read('../js/modules/inbox.js');
 const indexSource = read('../index.html');
+const activityEntrySource = read('../js/modules/activity-entry.js');
+const homeSource = read('../js/modules/home.js');
 const actor = 'U' + 'a'.repeat(32);
 const otherActor = 'U' + 'b'.repeat(32);
 
@@ -629,5 +631,135 @@ test('public and keyword-share entries retain their earlier gates', async () => 
     assert(f.calls.some(call => call[0] === expected), query);
     assert(!f.calls.some(call => ['profile', 'friendship-read', 'api'].includes(call[0])), query);
     assert.equal(f.calls.find(call => call[0] === 'finish')?.[1], false, query);
+  }
+});
+
+const activityId = 'ACT_fcfc401d-d559-4d0e-bbf4-73ff21973e09';
+const activityQuery = `?a=${activityId}&r=${otherActor}&n=admin&v=a`;
+const activity = { activityId, networkId:'admin', status:'上架', activityName:'測試活動' };
+function installActivity(f, { member={isRegistered:true,info:{userId:actor,role:'user',networkId:'different-network'}}, result=activity }={}) {
+  const c=f.context;
+  vm.runInContext(activityEntrySource,c);
+  installAuth(f);
+  c.goPage=page=>{ f.calls.push(['page',page]);c.currentPage=page; };
+  c.writeFirstReferral=(...args)=>f.calls.push(['referral',...args]);
+  c.fetchAPI=async(action,payload)=>{
+    f.calls.push(['api',action,payload]);
+    if(action==='checkUser')return member;
+    assert.equal(action,'getActivityById','direct activity must not fetch homepage or mutate data');
+    return typeof result==='function' ? result() : result;
+  };
+  c.openActivityDetail=id=>f.calls.push(['activity-detail',id]);
+}
+
+test('pure activity aliases/nested states resolve explicit admin before ref; other routes keep ownership',()=>{
+  for(const query of [activityQuery,'?activityId='+activityId,'?act='+activityId,'?event='+activityId,
+    '?liff.state='+encodeURIComponent(activityQuery), '?state='+encodeURIComponent(encodeURIComponent(activityQuery))]) {
+    const f=fixture({query});vm.runInContext(activityEntrySource,f.context);
+    const target=f.context.ActivityEntry.readTarget(f.context.readActmasterInitialParams());
+    assert.equal(target.activityId,activityId,query);assert.equal(target.networkId,'admin',query);
+  }
+  for(const extra of ['&shareCardId=card&share=1','&claim=card','&shopSection=manage','&shopId=shop','&checkin=A',
+    '&nfcAct=A','&admin=1','&open=chat','&mode=cardcool-list','&point_friend=1','#open=inbox','&activityId=other','&net=other','&unknown=1']) {
+    const f=fixture({query:activityQuery+extra});vm.runInContext(activityEntrySource,f.context);
+    assert.equal(f.context.ActivityEntry.readTarget(f.context.readActmasterInitialParams()),null,extra);
+  }
+  assert.ok(indexSource.indexOf('js/modules/activity-entry.js?v=1')<indexSource.indexOf('js/auth.js?v='));
+});
+
+test('activity opens immediately after verified member, ignores cached home, retains params cleaned by LIFF',async()=>{
+  const member=deferred();
+  const f=fixture({query:activityQuery,init:c=>{c.location.search='';return Promise.resolve();}});
+  installActivity(f,{member:member.promise});
+  f.context.localStorage.setItem('ACTMASTER_USER_'+actor,JSON.stringify({savedAt:99999,info:{userId:actor,role:'admin'}}));
+  const done=f.domReady();await settle();
+  assert.equal(f.context.currentPage,'my-act-detail');
+  assert.equal(f.context.currentUser,undefined,'no session based on cache');
+  assert.equal(f.calls.filter(c=>c[0]==='api').length,1,'waits for real membership confirmation');
+  member.resolve({isRegistered:true,info:{userId:actor,role:'user',networkId:'different-network'}});
+  await done;
+  assert.deepEqual(f.calls.filter(c=>c[0]==='api').map(c=>c[1]),['checkUser','getActivityById']);
+  const payload=f.calls.find(c=>c[1]==='getActivityById')[2];
+  assert.equal(payload.activityId,activityId);assert.equal(payload.networkId,'admin');
+  assert.equal(payload.userId,actor);assert.equal(payload.lineAccessToken,'fixture-access-token');
+  assert.ok(f.calls.some(c=>c[0]==='activity-detail'&&c[1]===activityId),'no 14s timer required');
+  vm.runInContext(block(homeSource,'function getPublicActivityId_(', 'window.homeActivityFilter ='),f.context);
+  vm.runInContext(block(homeSource,'function getInitialActivityId_(', 'window.loadUserActivities ='),f.context);
+  assert.equal(f.context.getCurrentEffectiveNetwork_(),'admin','captured activity context survives URL cleanup');
+  assert.equal(f.context.canSeePublicActivity_(activity),true);
+  assert.equal(f.context.currentUser.networkId,'different-network','member network is not overwritten');
+  f.context.location.search=activityQuery;
+  f.context.goPage('home');f.context.openActivityFromUrlParam();await f.tick(20000);
+  assert.equal(f.calls.filter(c=>c[0]==='activity-detail').length,1,'return does not reopen the deep link');
+  assert.equal(f.calls.filter(c=>c[0]==='home-data').length,0);
+});
+
+test('activity rejects unknown membership despite fresh cache; confirmed unregistered view does not register',async()=>{
+  for(const member of [null,{error:'offline'},{success:false},{},{isRegistered:true},{isRegistered:true,info:[]},{isRegistered:false}]) {
+    const f=fixture({query:activityQuery});installActivity(f,{member});
+    f.context.localStorage.setItem('ACTMASTER_USER_'+actor,JSON.stringify({savedAt:99999,info:{userId:actor,role:'admin'}}));
+    await f.domReady();await f.tick(20000);
+    if(member?.isRegistered===false) {
+      assert.ok(f.calls.some(c=>c[0]==='unregistered-session'));
+      assert.ok(f.calls.some(c=>c[0]==='activity-detail'));
+    } else {
+      assert.deepEqual(f.calls.filter(c=>c[0]==='api').map(c=>c[1]),['checkUser']);
+      assert.match(f.node('activity-entry-status').textContent,/無法確認會員資料/);
+      assert.equal(f.node('activity-entry-retry').hidden,false);
+    }
+    assert.ok(!f.calls.some(c=>c[0]==='session'||c[0]==='home-data'||(c[0]==='page'&&c[1]==='home')));
+  }
+});
+
+test('activity preserves login and friendship gates',async()=>{
+  for(const gate of ['logged-out','friendship']) {
+    const f=fixture({query:activityQuery,loggedIn:gate!=='logged-out'});installActivity(f);
+    if(gate==='friendship')f.context.ensureActmasterPointFriendship=async()=>false;
+    await f.domReady();
+    assert.equal(f.calls.filter(c=>c[0]==='api').length,0,gate);
+    assert.ok(!f.calls.some(c=>c[0]==='activity-detail'),gate);
+    if(gate==='logged-out')assert.ok(f.calls.some(c=>c[0]==='login'));
+  }
+});
+
+test('activity errors and unpublished or mismatched records never become registration screens; retry reads only',async()=>{
+  for(const result of [null,{error:'offline'},{success:false},{...activity,status:'下架'},{...activity,activityId:'wrong'}]) {
+    const f=fixture({query:activityQuery});let response=result;installActivity(f,{result:()=>response});
+    await f.domReady();
+    assert.ok(!f.calls.some(c=>c[0]==='activity-detail'));
+    assert.equal(f.node('activity-entry-retry').hidden,false);
+    response=activity;f.node('activity-entry-retry').onclick();await settle();
+    assert.equal(f.calls.filter(c=>c[0]==='activity-detail').length,1);
+    assert.deepEqual(f.calls.filter(c=>c[0]==='api').map(c=>c[1]),['checkUser','getActivityById','getActivityById']);
+  }
+});
+
+test('activity timeout exposes retry and a late original reply cannot replace the retry',async()=>{
+  const first=deferred();let count=0;
+  const f=fixture({query:activityQuery});installActivity(f,{result:()=>++count===1?first.promise:activity});
+  const done=f.domReady();await settle();await f.tick(15000);await done;
+  assert.match(f.node('activity-entry-status').textContent,/逾時/);
+  f.node('activity-entry-retry').onclick();await settle();
+  first.resolve({...activity,activityName:'舊回應'});await settle();
+  assert.equal(f.calls.filter(c=>c[0]==='activity-detail').length,1);
+  assert.equal(f.context.allActivities[0].activityName,'測試活動');
+});
+
+test('leaving activity or changing identity while membership/activity request is pending cannot redirect or render',async()=>{
+  for(const stage of ['member','activity']) for(const change of ['back','other-page','uid','token','token-throws']) {
+    const pending=deferred(),f=fixture({query:activityQuery});
+    installActivity(f,stage==='member'?{member:pending.promise}:{result:pending.promise});
+    const done=f.domReady();await settle();
+    if(change==='back')f.node('activity-entry-back').onclick();
+    if(change==='other-page')f.context.goPage('my-activities');
+    if(change==='uid')f.context.currentUserProfile={userId:otherActor};
+    if(change==='token')f.context.currentToken='new-token';
+    if(change==='token-throws')f.context.liff.getAccessToken=()=>{throw Error('logged out');};
+    const pageBefore=f.context.currentPage;
+    pending.resolve(stage==='member'?{isRegistered:true,info:{userId:actor,role:'user'}}:activity);
+    await done;
+    assert.equal(f.context.currentPage,pageBefore,stage+'/'+change);
+    assert.equal(f.calls.filter(c=>c[0]==='activity-detail').length,0,stage+'/'+change);
+    assert.ok(!f.calls.some(c=>c[0]==='startup-failure'),stage+'/'+change);
   }
 });

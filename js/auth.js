@@ -2789,6 +2789,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       : new URLSearchParams(window.location.search));
     const initialStoreInviteTarget = window.StoreInviteRoute?.readTarget(initialUrlParams) || '';
     const directStoreManage = window.prepareStoreManageEntry?.(initialUrlParams) === true;
+    const directActivity = window.ActivityEntry?.readTarget(initialUrlParams);
+    const activityEntryRequest = directActivity ? window.ActivityEntry.prepare(directActivity) : null;
     const instantLikeCardId = initialUrlParams.get('likeCardId');
     const webCardId = initialUrlParams.get('webCardId') || (
       initialUrlParams.get('web') === '1' ? initialUrlParams.get('shareCardId') : ''
@@ -2861,22 +2863,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
       window.__fetchApiEnhanced = true;
     }
-    if (!initialStoreInviteTarget) window.installPendingMotherRegistrationReturnWatcher?.();
+    if (!initialStoreInviteTarget && !directActivity) window.installPendingMotherRegistrationReturnWatcher?.();
 
     const avatarImg = document.getElementById('avatar');
     if (avatarImg && window.currentUserProfile.pictureUrl) {
       avatarImg.src = window.currentUserProfile.pictureUrl;
       avatarImg.classList.remove('hidden');
     }
-    if (!initialStoreInviteTarget && !directStoreManage && typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-    if (!initialStoreInviteTarget && !directStoreManage) setTimeout(() => {
+    if (!initialStoreInviteTarget && !directStoreManage && !directActivity && typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
+    if (!initialStoreInviteTarget && !directStoreManage && !directActivity) setTimeout(() => {
       const aggregateWalletReady = window.subsiteHomeFastData?.wallet?.status === 'ready';
       if (window.pointWalletStatus !== 'ready' && !aggregateWalletReady) {
         window.refreshPointBalanceBadge?.();
       }
     }, 8000);
 
-    const urlParams = window.LoginBootstrap?.initialParams || (typeof window.readActmasterInitialParams === 'function'
+    const urlParams = (directActivity && initialUrlParams) || window.LoginBootstrap?.initialParams || (typeof window.readActmasterInitialParams === 'function'
       ? window.readActmasterInitialParams()
       : new URLSearchParams(window.location.search));
     const storeInviteTarget = window.StoreInviteRoute?.readTarget(urlParams) || '';
@@ -2960,7 +2962,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loadingScreen = document.getElementById('loading-screen');
     if (loadingScreen && !storeInviteTarget) {
       if (directStoreManage) window.showStoreManagePending();
-      else window.goPage('home', true);
+      else if (!directActivity) window.goPage('home', true);
       loadingScreen.classList.add('hidden');
     }
     const pointUid = window.readPointUidFromParams?.(urlParams) || '';
@@ -2975,7 +2977,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let usedCachedUser = false;
     let cachedUserInfo = null;
 
-    if (!storeInviteTarget && !directStoreManage && !shareCardId && !claimCardId) {
+    if (!storeInviteTarget && !directStoreManage && !directActivity && !shareCardId && !claimCardId) {
       try {
         const cached = JSON.parse(localStorage.getItem(authCacheKey) || 'null');
         const isFresh = cached && cached.info && cached.savedAt && (Date.now() - cached.savedAt < 6 * 60 * 60 * 1000);
@@ -3001,7 +3003,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       try { storeInviteAccessToken = liff.isLoggedIn?.() ? liff.getAccessToken?.() || '' : ''; } catch (e) {}
     }
     window.LoginBootstrap?.stage('member');
+    const activityEntryCurrent = directActivity ? window.ActivityEntry.sessionGuard(activityEntryRequest) : null;
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
+    if (directActivity) {
+      if (!activityEntryCurrent()) return;
+      const confirmed = checkRes && !checkRes.error && checkRes.success !== false &&
+        (checkRes.isRegistered === false || (checkRes.isRegistered === true && checkRes.info &&
+          typeof checkRes.info === 'object' && !Array.isArray(checkRes.info)));
+      if (!confirmed) { window.ActivityEntry.showPending(true); return; }
+      if (checkRes.isRegistered) {
+        window.applyRegisteredUserSession(checkRes.info, { skipHome: true });
+        try { localStorage.setItem(authCacheKey, JSON.stringify({info:checkRes.info,savedAt:Date.now()})); } catch (_) {}
+      } else {
+        window.applyUnregisteredHomeSession?.({ referrerId: refId, networkId: netId, skipHome: true });
+      }
+      await window.ActivityEntry.open(directActivity);
+      return;
+    }
     if (directStoreManage && (!checkRes || checkRes.error || checkRes.success === false || typeof checkRes.isRegistered !== 'boolean' || (checkRes.isRegistered && (!checkRes.info || typeof checkRes.info !== 'object' || Array.isArray(checkRes.info))))) {
       window.showStoreManagePending(true);
       return;

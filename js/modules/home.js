@@ -2017,6 +2017,8 @@ const HomeModule = (function() {
         const referrerId = String(window.currentUser?.referrerId || window.currentUser?.referrer_id || '').trim();
         const linkNetwork = getInitialActivityNetwork_();
         if (role === 'admin') return 'admin';
+        const directTarget = window.ActivityEntry?.getTarget() || window.ActivityEntry?.readTarget(window.readActmasterInitialParams?.());
+        if (directTarget) return directTarget.networkId;
         if (linkNetwork && linkNetwork !== 'admin') return linkNetwork;
         if (role === 'store' || role === 'tenant') return userId || networkId || 'admin';
         if (networkId && networkId !== 'admin') return networkId;
@@ -2194,6 +2196,8 @@ const HomeModule = (function() {
             const params = typeof readActmasterInitialParams === 'function'
                 ? readActmasterInitialParams()
                 : new URLSearchParams(window.location.search || '');
+            const directTarget = window.ActivityEntry?.getTarget() || window.ActivityEntry?.readTarget(params);
+            if (directTarget) return directTarget.networkId;
             const networkId = String(params.get('net') || params.get('networkId') || '').trim();
             const referrerId = String(params.get('ref') || params.get('referrerId') || '').trim();
             if (networkId && networkId !== 'admin') return networkId;
