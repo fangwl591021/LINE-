@@ -35,6 +35,19 @@
 #tab-activities .aar-badge { display: inline-block; padding: 4px 9px; border-radius: 8px; background: #eff6ff; color: #1d4ed8; white-space: nowrap; font-size: 13px; }
 #tab-activities .aar-badge.aar-muted { background: #f1f5f9; color: #64748b; }
 #tab-activities .aar-badge.aar-ok { background: #ecfdf5; color: #047857; }
+#tab-activities .aar-create { width: min(680px,calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); border: 0; border-radius: 16px; padding: 0; color: #173d57; background: #fff; }
+#tab-activities .aar-create::backdrop { background: #0f172a99; }
+#tab-activities .aar-create form { display: flex; flex-direction: column; max-height: calc(100dvh - 24px); }
+#tab-activities .aar-create header, #tab-activities .aar-create footer { padding: 16px 20px; flex-shrink: 0; }
+#tab-activities .aar-create header { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; border-bottom: 1px solid #e2e8f0; margin: 0; }
+#tab-activities .aar-create footer { border-top: 1px solid #e2e8f0; }
+#tab-activities .aar-create-body { overflow-y: auto; min-height: 0; padding: 16px 20px; }
+#tab-activities .aar-create .aar-filters { border: 0; padding: 0; margin: 0; min-width: 0; }
+#tab-activities .aar-create .aar-filters label { flex-basis: 260px; }
+#tab-activities .aar-create .aar-filters .aar-wide { flex-basis: 100%; }
+#tab-activities .aar-create textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 9px; padding: 10px; resize: vertical; font: inherit; }
+#tab-activities .aar-create :disabled { opacity: .65; }
+#tab-activities .aar-create .aar-status:empty { display: none; }
 @media (max-width: 700px) {
   #tab-activities .aar-stats { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
   #tab-activities .aar-stat { padding: 12px; }
