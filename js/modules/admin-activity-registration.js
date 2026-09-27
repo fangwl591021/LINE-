@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   const state = { mounted: false, listRequest: 0, rosterRequest: 0, selected: '', rows: null, busy: false, counts: new Map() };
+  let creation = null;
   const $ = id => document.getElementById(id);
   const text = value => String(value ?? '');
   const esc = value => text(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -72,11 +73,116 @@
     return value !== null && Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : null;
   }
   const stats = entries => entries.map(([label, value]) => `<div class="aar-stat"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
+  function creationPayload(values, id) {
+    const name = text(values.activityName).trim();
+    if (!name) throw new Error('請填寫活動名稱');
+    const start = text(values.startTime), end = text(values.endTime);
+    const validTime = value => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) && Number.isFinite(Date.parse(value + '+08:00'));
+    if (!validTime(start)) throw new Error('請填寫活動開始日期與時間');
+    if (end && (!validTime(end) || end <= start)) throw new Error('結束時間必須晚於開始時間');
+    const price = Number(values.price);
+    if (!Number.isSafeInteger(price) || price < 0 || text(values.price).trim() === '') throw new Error('金額請填 0 或正整數');
+    const imageUrl = text(values.imageUrl).trim();
+    if (imageUrl) {
+      let url; try { url = new URL(imageUrl); } catch (_) { throw new Error('宣傳圖請使用完整的 http / https 網址'); }
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('宣傳圖請使用完整的 http / https 網址');
+    }
+    return { activityId: id, activityName: name, activityType: text(values.activityType).trim() || '活動',
+      startTime: start.replace('T',' '), endTime: end.replace('T',' '), price, feeType: price > 0 ? '收費' : '免費',
+      description: text(values.description).trim(), imageUrl,
+      imageRatio: ['16:9','1:1','2:3'].includes(values.imageRatio) ? values.imageRatio : '16:9',
+      status: values.status === '下架' ? '下架' : '上架', names: [], isBatch: false, nfcCheckinSameDayOnly: true };
+  }
+  function closeCreate() {
+    if (!creation || creation.busy) return;
+    $('aar-create-dialog').close();
+    // An uncertain submission is retained when closed, so reopening cannot silently create a second event.
+    if (!creation.payload) { $('aar-create-dialog').remove(); creation = null; }
+  }
+  function openCreate() {
+    if (!['admin','store'].includes(adminRole)) return;
+    if ($('aar-create-dialog')) { $('aar-create-dialog').showModal(); return; }
+    creation = { id: 'ACT_' + crypto.randomUUID(), payload: null, busy: false, uploadFailed: false };
+    const dialog = document.createElement('dialog');
+    dialog.id = 'aar-create-dialog'; dialog.className = 'aar-create'; dialog.setAttribute('aria-labelledby','aar-create-title');
+    dialog.innerHTML = `<form id="aar-create-form">
+      <header class="aar-head"><div><h2 id="aar-create-title">新增活動</h2><p class="aar-note">建立後與手機端同步；不會自動新增報名者或發送通知。</p></div><button type="button" class="aar-button" data-create-close aria-label="關閉新增活動">✕</button></header>
+      <div class="aar-create-body"><fieldset class="aar-filters" id="aar-create-fields">
+        <label class="aar-wide">活動名稱 *<input name="activityName" required maxlength="120" placeholder="例如：商務交流講座"></label>
+        <label>活動類型<input name="activityType" value="活動" maxlength="40"></label>
+        <label>上架狀態<select name="status"><option value="上架">上架（開放報名）</option><option value="下架">草稿（暫不上架）</option></select></label>
+        <label>開始時間 *<input name="startTime" type="datetime-local" required></label><label>結束時間<input name="endTime" type="datetime-local"></label>
+        <label>金額（免費填 0）<input name="price" type="number" min="0" step="1" value="0" required></label>
+        <label>宣傳圖版型<select name="imageRatio"><option value="16:9">橫式 16:9</option><option value="1:1">正方 1:1</option><option value="2:3">滿版 2:3</option></select></label>
+        <label class="aar-wide">活動說明<textarea name="description" rows="4" maxlength="10000" placeholder="地點、活動內容與報名注意事項"></textarea></label>
+        <label class="aar-wide">宣傳圖網址<input name="imageUrl" type="url" placeholder="https://…（選填）"></label>
+        <label class="aar-wide">或上傳宣傳圖<input name="imageFile" type="file" accept="image/jpeg,image/png,image/webp"><span class="aar-note">JPG / PNG / WebP，最大 10 MB。</span></label>
+      </fieldset></div>
+      <footer><p id="aar-create-status" class="aar-status" role="status"></p><div class="aar-actions"><button type="button" class="aar-button" data-create-close>取消</button><button type="submit" class="aar-button aar-primary" id="aar-create-submit">建立活動</button></div></footer>
+    </form>`;
+    $('tab-activities').appendChild(dialog);
+    dialog.querySelectorAll('[data-create-close]').forEach(button => button.addEventListener('click',closeCreate));
+    dialog.addEventListener('cancel',event=>{event.preventDefault();closeCreate();});
+    $('aar-create-form').addEventListener('submit',event=>{event.preventDefault();void submitCreate();});
+    dialog.querySelector('[name="imageFile"]').addEventListener('change',event=>{void uploadCreateImage(event.target);});
+    dialog.querySelector('[name="imageUrl"]').addEventListener('input',()=>{creation.uploadFailed=false;});
+    dialog.showModal();
+  }
+  function lockCreate(busy) {
+    creation.busy = busy;
+    $('aar-create-fields').disabled = busy || !!creation.payload;
+    $('aar-create-dialog').querySelectorAll('button').forEach(button=>{button.disabled=busy;});
+  }
+  async function uploadCreateImage(input) {
+    const file = input.files?.[0];
+    if (!file || !creation || creation.busy || creation.payload) return;
+    creation.uploadFailed = true;
+    if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
+      message('aar-create-status','請選擇 10 MB 以內的 JPG / PNG / WebP 圖片，或直接填寫圖片網址。',true);input.value='';return;
+    }
+    lockCreate(true);message('aar-create-status','正在上傳宣傳圖，請稍候…');
+    try {
+      const base64Image = await new Promise((resolve,reject)=>{
+        const reader = new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('讀取圖片失敗'));reader.readAsDataURL(file);
+      });
+      const result = await fetchAPI('uploadImageToR2',{base64Image},{silent:true});
+      const url = text(result?.url || result?.data?.url);
+      if (!/^https?:\/\//i.test(url)) throw new Error('圖片上傳失敗，請重新選圖或填寫圖片網址後再建立。');
+      $('aar-create-form').elements.imageUrl.value=url;
+      creation.uploadFailed=false;message('aar-create-status','宣傳圖已上傳，請完成表單後按「建立活動」。');
+    } catch(error) { message('aar-create-status',error.message,true); }
+    finally { input.value='';lockCreate(false); }
+  }
+  async function submitCreate() {
+    if (!creation || creation.busy || !['admin','store'].includes(adminRole)) return;
+    if (creation.uploadFailed) { message('aar-create-status','宣傳圖尚未上傳成功，請重新選圖或填寫圖片網址。',true);return; }
+    const form = $('aar-create-form');
+    if (!creation.payload && !form.reportValidity()) return;
+    try {
+      creation.payload ||= creationPayload(Object.fromEntries(new FormData(form)),creation.id);
+    } catch(error) { message('aar-create-status',error.message,true);return; }
+    lockCreate(true);message('aar-create-status','正在建立活動…');
+    $('aar-create-submit').textContent='建立中…';
+    try {
+      // Same mobile creation action. Empty names avoids registration side effects; retry reuses this ID and snapshot.
+      const result = await fetchAPI('bulkAddRegistrants',structuredClone(creation.payload),{silent:true});
+      if (!result || result.success === false || !activityId(result)) throw new Error('尚未確認是否建立成功。請勿另建一筆；可按「重試同一筆建立」，或關閉後再回來繼續。');
+      const published = creation.payload.status === '上架';
+      $('aar-create-dialog').close();$('aar-create-dialog').remove();creation=null;
+      ['aar-activity-query','aar-activity-from','aar-activity-to'].forEach(id=>{$(id).value='';});
+      $('act-tenant-filter').value='all';$('aar-activity-state').value='all';
+      showToast(published ? '活動已建立並上架' : '活動草稿已建立，暫不上架');
+      await load();
+    } catch(error) {
+      if (!creation) return;
+      message('aar-create-status',error.message,true);$('aar-create-submit').textContent='重試同一筆建立';
+    } finally { if (creation) lockCreate(false); }
+  }
   function mount() {
     if (state.mounted) return;
     state.mounted = true;
     $('admin-activity-toolbar').innerHTML = `
-      <div class="aar-head"><div><h2>活動報名與簽到管理</h2><p class="aar-note">與手機端共用活動及報名資料，選擇活動即可管理名單。</p></div><button type="button" class="aar-button" data-aar="refresh-list">重新整理活動</button></div>
+      <div class="aar-head"><div><h2>活動報名與簽到管理</h2><p class="aar-note">與手機端共用活動及報名資料，選擇活動即可管理名單。</p></div><div class="aar-actions"><button type="button" class="aar-button aar-primary" data-aar="create">＋新增活動</button><button type="button" class="aar-button" data-aar="refresh-list">重新整理活動</button></div></div>
       <div class="aar-stats" id="aar-activity-stats"></div>
       <div class="aar-filters">
         <label class="aar-search">搜尋活動<input id="aar-activity-query" type="search" placeholder="活動名稱或編號"></label>
@@ -247,6 +353,7 @@
     if (button.dataset.copyActivity) { void copyActivityId(button.dataset.copyActivity); return; }
     if (button.dataset.mutation) { void mutate(button.dataset.mutation, button.dataset.row); return; }
     switch (button.dataset.aar) {
+      case 'create': openCreate(); break;
       case 'refresh-list': void load(); break;
       case 'back': back(); renderOverview(); break;
       case 'refresh-roster': void refreshRoster(); break;
@@ -254,5 +361,5 @@
     }
   }
   window.AdminActivityRegistration = { load, renderActivities: renderOverview, countFor,
-    list, registrant, summary, filterActivities, filterRegistrants, csv };
+    list, registrant, summary, filterActivities, filterRegistrants, csv, creationPayload };
 })();

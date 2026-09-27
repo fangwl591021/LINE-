@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const source = readFileSync(new URL('../js/modules/admin-activity-registration.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../admin.html', import.meta.url), 'utf8');
-const context = { window: {} };
+const context = { window: {}, URL };
 vm.runInNewContext(source, context);
 const api = context.window.AdminActivityRegistration;
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -68,8 +68,34 @@ test('admin uses authenticated existing APIs, no public fallback, new tables or 
   assert.match(source,/request !== state\.rosterRequest \|\| id !== state\.selected/);
   assert.match(source,/state\.busy \|\| !\['toggleCheckin','confirmPayment'\]/);
   assert.match(source,/row\.cancelled/);
-  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=1/);
+  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=2/);
   assert.match(html,/get\('tab'\) === 'activities' \? 'activities' : 'users'/);
   assert.match(html,/data-registrants=/);
-  assert.doesNotMatch(source,/localStorage|ACTMASTER_DB|CREATE TABLE|https:\/\//);
+  assert.doesNotMatch(source,/localStorage|ACTMASTER_DB|CREATE TABLE|\bfetch\s*\(/);
+});
+
+test('creation maps the mobile payload, keeps a stable id, creates no registrations or points', () => {
+  const data=api.creationPayload({activityName:' 新活動 ',activityType:'講座',startTime:'2026-09-28T10:00',endTime:'2026-09-28T12:00',price:'100',description:'活動地點',imageUrl:'https://example.com/poster.png',imageRatio:'2:3',status:'下架'},'ACT_unique');
+  assert.equal(data.activityId,'ACT_unique');assert.equal(data.activityName,'新活動');
+  assert.equal(data.startTime,'2026-09-28 10:00');assert.equal(data.endTime,'2026-09-28 12:00');
+  assert.equal(data.feeType,'收費');assert.equal(data.price,100);assert.equal(data.status,'下架');
+  assert.equal(data.imageRatio,'2:3');assert.equal(data.isBatch,false);assert.deepEqual(plain(data.names),[]);
+  for(const key of ['userId','networkId','rewardPoints','points'])assert.equal(key in data,false);
+});
+test('creation accepts free published events and validates name, dates, integer price and image protocol', () => {
+  const base={activityName:'活動',startTime:'2026-09-28T10:00',price:'0'};
+  const result=api.creationPayload(base,'ACT_unique');assert.equal(result.feeType,'免費');assert.equal(result.status,'上架');
+  for(const changes of [{activityName:' '},{startTime:''},{endTime:'2026-09-28T09:00'},{endTime:'bad'},{price:-1},{price:'1.5'},{price:''},{price:'NaN'},{imageUrl:'javascript:alert(1)'},{imageUrl:'data:image/png;base64,AA'},{imageUrl:'https://name:pass@example.com/img'}]){
+    assert.throws(()=>api.creationPayload({...base,...changes},'ACT_unique'));
+  }
+});
+test('create UI uses mobile API and keeps pending snapshot and busy guard; existing edit flow is untouched', () => {
+  assert.match(source,/data-aar="create">＋新增活動/);
+  assert.match(source,/fetchAPI\('bulkAddRegistrants',structuredClone\(creation\.payload\)/);
+  assert.match(source,/creation\.payload \|\|= creationPayload/);
+  assert.match(source,/if \(!creation \|\| creation\.busy/);
+  assert.match(source,/if \(!creation\.payload\) \{ \$\('aar-create-dialog'\)\.remove\(\); creation = null/);
+  assert.match(source,/creation\.uploadFailed/);
+  assert.match(source,/form\.reportValidity\(\)/);
+  assert.doesNotMatch(source,/fetchAPI\(['"]updateActivity/);
 });

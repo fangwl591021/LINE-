@@ -28,6 +28,7 @@ const rows = [
   {rowId:'r4',activityId:'A','姓名':'<img src=x onerror=alert(1)>','金額':0,'簽到':false}
 ];
 let failList=false,failRoster=false,loseToggle=false,holdRoster=false,held;
+let loseCreate=false,holdCreate=false,releaseCreate,failUpload=false;
 await page.route('**/*', async route => {
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com') return route.fulfill({contentType:'text/javascript',body:tailwind});
@@ -38,6 +39,14 @@ await page.route('**/*', async route => {
     let result;
     if(action==='checkUser')result={info:{role:'store',networkId:'admin'}};
     else if(action==='getAllActivities')result=failList?null:activities;
+    else if(action==='uploadImageToR2')result=failUpload?null:{url:'https://localhost/fixture-poster.png'};
+    else if(action==='bulkAddRegistrants') {
+      assert.deepEqual(payload.names,[]);assert.equal(payload.userId,'synthetic-manager');
+      const item={'活動ID':payload.activityId,'活動名稱':payload.activityName,'歸屬網':'admin','開始時間':payload.startTime,'金額':payload.price,'狀態':payload.status};
+      if(!activities.some(row=>row['活動ID']===payload.activityId))activities.push(item);
+      if(holdCreate){holdCreate=false;await new Promise(resolve=>{releaseCreate=resolve;});}
+      result=loseCreate?null:{activityId:payload.activityId};loseCreate=false;
+    }
     else if(action==='getActivityRegistrants') {
       assert.ok(['A','B'].includes(payload.activityId));
       result=failRoster?null:payload.activityId==='A'?rows:[];
@@ -119,6 +128,46 @@ try {
   assert.equal(await page.getByText('測試會員甲',{exact:true}).count(),0);
   await btn('← 返回活動列表').click();failList=true;await btn('重新整理活動').click();await page.getByText('活動資料讀取失敗',{exact:true}).waitFor();
   failList=false;await btn('重新整理活動').click();await page.locator('[data-registrants="A"]').waitFor();
+  // Create entry and cancellation: no write until an explicit valid submit.
+  const createCount=()=>calls.filter(call=>call.action==='bulkAddRegistrants').length;
+  await btn('＋新增活動').click();await page.locator('#aar-create-dialog').waitFor();
+  await page.locator('#aar-create-form [name="activityName"]').fill('取消的活動');
+  await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click();assert.equal(createCount(),0);
+  await btn('＋新增活動').click();
+  const field=name=>page.locator('#aar-create-form [name="'+name+'"]');
+  assert.equal(await field('activityName').inputValue(),'');
+  await field('activityName').fill('新增合成活動');await field('startTime').fill('2026-09-28T10:00');await field('endTime').fill('2026-09-28T09:00');
+  await btn('建立活動').click();await page.getByText('結束時間必須晚於開始時間',{exact:true}).waitFor();assert.equal(createCount(),0);
+  await field('endTime').fill('2026-09-28T12:00');await field('price').fill('200');
+  const image={name:'poster.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')};
+  failUpload=true;await field('imageFile').setInputFiles(image);await page.getByText('圖片上傳失敗，請重新選圖或填寫圖片網址後再建立。',{exact:true}).waitFor();
+  await btn('建立活動').click();assert.equal(createCount(),0);
+  failUpload=false;await field('imageFile').setInputFiles(image);await page.getByText('宣傳圖已上傳，請完成表單後按「建立活動」。',{exact:true}).waitFor();
+  for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:800});
+    await btn('建立活動').click({trial:true});
+    await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click({trial:true});
+    const bounds=await page.locator('#aar-create-dialog').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=width);
+    await page.screenshot({path:join(out,`create-${width}.png`),fullPage:true});
+  }
+  // A persisted write with a lost response reuses the same id/snapshot; double-submit is locked.
+  loseCreate=true;holdCreate=true;await btn('建立活動').click();
+  await page.waitForFunction(()=>document.getElementById('aar-create-submit').disabled);
+  assert.equal(await field('activityName').isDisabled(),true);
+  await page.locator('#aar-create-form').evaluate(form=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  while(!releaseCreate)await new Promise(resolve=>setTimeout(resolve,10));
+  releaseCreate();await btn('重試同一筆建立').waitFor();assert.equal(createCount(),1);
+  await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click();await btn('＋新增活動').click();
+  assert.equal(await field('activityName').inputValue(),'新增合成活動');assert.equal(await field('activityName').isDisabled(),true);
+  await btn('重試同一筆建立').click();await page.locator('#aar-create-dialog').waitFor({state:'detached'});
+  const created=calls.filter(call=>call.action==='bulkAddRegistrants');assert.equal(created.length,2);assert.deepEqual(created[0].payload,created[1].payload);
+  assert.equal(created[0].payload.feeType,'收費');assert.equal(created[0].payload.imageUrl,'https://localhost/fixture-poster.png');
+  await page.locator('[data-registrants="'+created[0].payload.activityId+'"]').waitFor();
+  assert.equal(activities.filter(row=>row['活動名稱']==='新增合成活動').length,1);
+  await btn('＋新增活動').click();await field('activityName').fill('草稿合成活動');await field('startTime').fill('2026-10-01T10:00');await field('status').selectOption('下架');
+  await btn('建立活動').click();await page.locator('#aar-create-dialog').waitFor({state:'detached'});
+  const draft=calls.filter(call=>call.action==='bulkAddRegistrants').at(-1);assert.equal(draft.payload.status,'下架');assert.equal(draft.payload.feeType,'免費');
+  assert.notEqual(draft.payload.activityId,created[0].payload.activityId);
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({passed:true,widths:[320,390,1440],apiActions:[...new Set(calls.map(call=>call.action))],realDataWrites:0,screenshots:out}));
 } catch(error) {
