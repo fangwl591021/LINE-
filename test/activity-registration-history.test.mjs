@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { DatabaseSync } from 'node:sqlite';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const source=read('js/modules/home.js');
 function block(text,start,end) {
@@ -35,9 +36,52 @@ function fixture(records=structuredClone(rows)) {
   ])vm.runInContext(block(source,start,end),c);
   return {c,calls,node,records};
 }
-test('existing API orders by registration creation descending; frontend cache version is updated',()=>{
-  assert.match(block(read('workerbackup.js'),'async listMyRegistrations(','async cancelRegistration('),/ORDER BY created_at DESC LIMIT 200/);
+test('frontend uses existing history API and retains its current cache version',()=>{
+  assert.match(source,/\['getMyActivities', 'getUserActivities', 'getMyRegistrations', 'getUserRegistrations'\]/);
   assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.14/);
+});
+
+function historyDatabase() {
+  const sql=new DatabaseSync(':memory:');
+  sql.exec('CREATE TABLE registrants(row_id TEXT PRIMARY KEY,line_id TEXT,phone TEXT,name TEXT,activity_name TEXT,start_time TEXT,created_at TEXT,status TEXT)');
+  const c=vm.createContext({D1ReadModule:{all:async(_env,query,args)=>sql.prepare(query).all(...args)}});
+  const worker=read('workerbackup.js'),begin=worker.indexOf('const D1ActivityModule = {'),end=worker.indexOf('\n};',begin);
+  vm.runInContext(worker.slice(begin,end+3)+'\nglobalThis.activities=D1ActivityModule;',c);
+  const insert=sql.prepare('INSERT INTO registrants VALUES(?,?,?,?,?,?,?,?)');
+  return {sql,add:(id,date,start='2026-10-07 14:00',owner='viewer')=>insert.run(id,owner,'','',id,start,date,'active'),
+    list:()=>c.activities.listMyRegistrations({userId:'viewer'},{ACTMASTER_DB:{}})};
+}
+test('actual history query sorts mixed legacy slash dates and D1 dates before LIMIT, without rewriting registrations',async()=>{
+  const f=historyDatabase();
+  try {
+    // The exact formats that put May registrations above the reported October signup.
+    f.add('may-7','2026/5/7 22:49:55');f.add('may-10','2026/5/10 00:07:05');
+    f.add('october-signup','2026-09-27 23:56:42');
+    f.add('june-signup','2026-06-01T08:00:00Z');
+    f.add('next-year','2027/1/2 09:00:00');
+    f.add('missing','');f.add('invalid','not-a-date');
+    f.add('different-member','2030-01-01 00:00:00','2030-01-01','other');
+    const before=JSON.stringify(f.sql.prepare('SELECT * FROM registrants ORDER BY row_id').all());
+    const result=await f.list();
+    assert.deepEqual(Array.from(result.data.slice(0,5),r=>r.rowId),['next-year','october-signup','june-signup','may-10','may-7']);
+    assert.equal(result.data.length,7);
+    assert.equal(result.data.find(r=>r.rowId==='may-7').createdAt,'2026/5/7 22:49:55','original snapshot remains intact');
+    assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM registrants ORDER BY row_id').all()),before);
+    for(let i=0;i<210;i++)f.add('legacy-'+i,'2026/5/9 12:00:00');
+    const capped=await f.list();
+    assert.equal(capped.data.length,200);
+    assert.deepEqual(Array.from(capped.data.slice(0,3),r=>r.rowId),['next-year','october-signup','june-signup']);
+  } finally {f.sql.close();}
+});
+test('history date order handles one-digit date/time, date-only, ISO offsets and stable ties',async()=>{
+  const f=historyDatabase();
+  try {
+    f.add('dawn','2026/5/9 9:05:00');f.add('noon','2026/5/9 12:00:00');
+    f.add('day-only','2026/5/9');f.add('iso-offset','2026-05-09T23:00:00+08:00');
+    f.add('tie-b','2026-05-10 01:00:00');f.add('tie-a','2026-05-10T01:00:00Z');
+    assert.deepEqual(Array.from((await f.list()).data,r=>r.rowId),['tie-b','tie-a','iso-offset','noon','dawn','day-only']);
+    assert.deepEqual(Array.from((await f.list()).data,r=>r.rowId),['tie-b','tie-a','iso-offset','noon','dawn','day-only']);
+  } finally {f.sql.close();}
 });
 test('newest registration renders first, independent of event start date; response is not mutated',async()=>{
   const f=fixture(),snapshot=JSON.stringify(f.records);await f.c.loadMyActivities();
