@@ -1,5 +1,6 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { extractActivityDmDraft } from './worker/activity-dm-ai.mjs';
+import { createActivityShareLink } from './worker/activity-short-links.mjs';
 import { handleCrmCardPhoneLink } from './worker/crm-card-phone-link.mjs';
 import { handleDailyTank } from './worker/daily-tank-challenge.mjs';
 import { handleGameCenter } from './worker/game-center.mjs';
@@ -156,6 +157,7 @@ const ACTION_POLICIES = {
   createTenantBonusOrder: { access: 'authenticated', ownership: 'self-or-manager' },
   nfcCheckin: { access: 'authenticated' },
   getActivityById: { access: 'authenticated', legacyAuthSkip: true },
+  createActivityShareLink: { access: 'authenticated' },
   cancelActivityRegistration: { access: 'authenticated', ownership: 'self' },
   cancelRegistration: { access: 'authenticated', ownership: 'self' },
   unregisterActivity: { access: 'authenticated', ownership: 'self' },
@@ -17165,6 +17167,9 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await DBModule.forward(action, payload, env);
     }
+    case 'createActivityShareLink':
+      return await createActivityShareLink(payload, request, env, actor,
+        (input, bindings, verified) => D1ActivityModule.getActivityById(input, bindings, verified));
     case 'bulkAddRegistrants': {
       try {
         const d1Result = await D1ActivityModule.bulkAddRegistrants(payload || {}, env);

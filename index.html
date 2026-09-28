@@ -2787,14 +2787,15 @@
     <p id="activity-share-title" class="text-[14px] text-slate-800 font-black text-center mb-3 line-clamp-2"></p>
 
     <div class="w-full mb-3">
-      <input id="activity-share-url" type="text" readonly class="w-full bg-slate-50 border-none rounded-lg p-2.5 text-[11px] font-mono text-slate-600 outline-none">
+      <input id="activity-share-url" type="text" readonly placeholder="正在產生短網址…" class="w-full bg-slate-50 border-none rounded-lg p-2.5 text-[11px] font-mono text-slate-600 outline-none">
+      <p id="activity-share-status" role="status" class="text-xs text-slate-500 mt-2"></p>
     </div>
 
     <div class="flex gap-2 w-full">
-      <button onclick="window.copyActivityShareLink()" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1">
+      <button data-activity-share-action onclick="window.copyActivityShareLink()" class="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1 disabled:opacity-50">
         <span class="material-symbols-outlined text-[16px]">content_copy</span> 複製
       </button>
-      <button onclick="window.shareActivityLinkToLine()" class="flex-[2] bg-[#06C755] text-white py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1 shadow-sm">
+      <button data-activity-share-action onclick="window.shareActivityLinkToLine()" class="flex-[2] bg-[#06C755] text-white py-3 rounded-xl text-[13px] font-bold active:scale-95 flex justify-center items-center gap-1 shadow-sm disabled:opacity-50">
         <span class="material-symbols-outlined text-[16px]">send</span> 分享至 LINE
       </button>
     </div>
@@ -2932,7 +2933,7 @@
 <script src="js/modules/matchmake.js?v=7.14"></script>
 <script src="js/modules/business-intent.js?v=1.7"></script>
 <script src="js/modules/cardmaster.js?v=1.5"></script>
-<script src="js/modules/activities.js?v=7.9"></script>
+<script src="js/modules/activities.js?v=7.10"></script>
 <script src="js/modules/admin.js?v=8.10"></script>
 <script src="js/modules/home-task-buckets.mjs?v=1.0"></script>
 <script src="js/modules/activity-registration.js?v=1"></script>
