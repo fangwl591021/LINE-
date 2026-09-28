@@ -4938,6 +4938,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
               ${thumbnail}
               <div class="min-w-0">
                 <div class="truncate">${meta.titleHtml}</div>
+                ${a.formBatches?.length ? `<details class="mt-2 text-sm font-normal text-slate-600"><summary class="cursor-pointer font-bold text-blue-700">同一張報名表 · ${a.formBatches.length} 個梯次</summary><ul class="mt-2 space-y-1">${a.formBatches.map(b => `<li>${escapeHTML(b.batchName || b['活動名稱'] || b.activityName || '')} · ${escapeHTML(b['開始時間'] || b.startTime || '')}</li>`).join('')}</ul></details>` : ''}
                 ${isArchived ? `<div class="text-[11px] text-slate-400 mt-0.5">下架縮圖</div>` : ''}
               </div>
             </div>
@@ -5715,6 +5716,6 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <script src="js/modules/admin-mall-dashboard.js?v=1"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
   <link rel="stylesheet" href="css/admin-activity-registration.css?v=5">
-  <script src="js/modules/admin-activity-registration.js?v=7"></script>
+  <script src="js/modules/admin-activity-registration.js?v=8"></script>
 </body>
 </html>
