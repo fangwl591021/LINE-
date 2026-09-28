@@ -68,7 +68,7 @@ test('admin uses authenticated existing APIs, no public fallback, new tables or 
   assert.match(source,/request !== state\.rosterRequest \|\| id !== state\.selected/);
   assert.match(source,/state\.busy \|\| !\['toggleCheckin','confirmPayment'\]/);
   assert.match(source,/row\.cancelled/);
-  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=3/);
+  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=4/);
   assert.match(html,/get\('tab'\) === 'activities' \? 'activities' : 'users'/);
   assert.match(html,/data-registrants=/);
   assert.doesNotMatch(source,/localStorage|ACTMASTER_DB|CREATE TABLE|\bfetch\s*\(/);
@@ -98,4 +98,104 @@ test('create UI uses mobile API and keeps pending snapshot and busy guard; exist
   assert.match(source,/creation\.uploadFailed/);
   assert.match(source,/form\.reportValidity\(\)/);
   assert.doesNotMatch(source,/fetchAPI\(['"]updateActivity/);
+});
+
+const shortUrl = 'https://line-engine.fangwl591021.workers.dev/a/AbCd0123456789_-';
+const published = {activityId:'A',networkId:'branch',status:'上架'};
+function editFixture(responder = async () => ({url:shortUrl})) {
+  const elements = new Map(), calls = [], copied = [], toasts = [];
+  const element = id => {
+    if (!elements.has(id)) elements.set(id, {value:id === 'edit-a-id' ? 'A' : '',textContent:'',hidden:false,
+      disabled:false, attrs:{}, classList:{contains:() => false},
+      setAttribute(name,value) {this.attrs[name]=value;}, removeAttribute(name) {delete this.attrs[name];delete this[name];},
+      focus() {this.focused=true;}, select() {this.selected=true;}});
+    return elements.get(id);
+  };
+  const context = {URL,adminProfile:{userId:'member-1'},WORKER_URL:'https://line-engine.fangwl591021.workers.dev/',
+    window:{isSecureContext:true,liff:{isLoggedIn:()=>true,getAccessToken:()=> 'token-1'}},
+    document:{getElementById:element,execCommand:()=>true},
+    navigator:{clipboard:{writeText:async value=>copied.push(value)}},showToast:value=>toasts.push(value),
+    fetchAPI:async (...args)=>{calls.push(args);return responder(...args);}};
+  vm.runInNewContext(source,context);
+  return {context,api:context.window.AdminActivityRegistration,element,calls,copied,toasts};
+}
+
+test('edit link uses the authenticated API and persisted activity network, copies the short URL', async () => {
+  for (const result of [{url:shortUrl},{success:true,data:{url:shortUrl}}]) {
+    const f=editFixture(async()=>result);
+    await f.api.loadEditLink(published);
+    assert.deepEqual(plain(f.calls),[['createActivityShareLink',{activityId:'A',networkId:'branch'},{silent:true,timeoutMs:12000}]]);
+    assert.equal(f.element('edit-a-registration-link').value,shortUrl);
+    assert.equal(f.element('edit-a-link-open').href,shortUrl);
+    assert.equal(f.element('edit-a-link-copy').disabled,false);
+    assert.equal(f.api.canUseEditLink(),true);
+    await f.api.copyEditLink();assert.deepEqual(f.copied,[shortUrl]);
+    assert.deepEqual(f.toasts,['報名連結已複製']);
+    assert.equal(f.element('edit-a-link-retry').hidden,true);
+    f.api.clearEditLink();assert.equal(f.api.canUseEditLink(),false);
+    assert.equal(f.element('edit-a-registration-link').value,'');
+    assert.equal(f.element('edit-a-link-open').href,undefined);
+    assert.equal(f.element('edit-a-link-copy').disabled,true);
+  }
+});
+
+test('unpublished and unauthenticated edits never request or offer a registration link', async () => {
+  const f=editFixture();
+  for (const status of ['下架','draft','']) {
+    await f.api.loadEditLink({...published,status});assert.equal(f.calls.length,0);
+    assert.equal(f.api.canUseEditLink(),false);assert.match(f.element('edit-a-link-status').textContent,/尚未上架/);
+  }
+  f.context.window.liff.isLoggedIn=()=>false;
+  await f.api.loadEditLink(published);assert.equal(f.calls.length,0);
+  assert.match(f.element('edit-a-link-status').textContent,/重新登入/);
+});
+
+test('failed or unsafe edit-link responses stay disabled and allow an explicit retry', async () => {
+  const invalid = [null,{success:false,url:shortUrl},{url:'https://example.com/a/AbCd0123456789_-'},
+    {url:shortUrl+'?x=1'},{url:shortUrl+'#x'},{url:shortUrl.replace('https:','http:')},
+    {url:shortUrl.replace('//','//user:pass@')},{url:shortUrl.slice(0,-1)},{url:'javascript:alert(1)'}];
+  for (const result of invalid) {
+    let response=result;const f=editFixture(async()=>response);
+    await f.api.loadEditLink(published);assert.equal(f.api.canUseEditLink(),false);
+    assert.equal(f.element('edit-a-link-copy').disabled,true);
+    assert.equal(f.element('edit-a-link-retry').hidden,false);
+    response={url:shortUrl};await f.api.loadEditLink();
+    assert.equal(f.calls.length,2);assert.equal(f.api.canUseEditLink(),true);
+  }
+});
+
+test('late responses cannot leak a link after close, activity switch, account or token change', async () => {
+  for (const change of ['close','activity','account','token']) {
+    let release;const f=editFixture(()=>new Promise(resolve=>{release=resolve;}));
+    const pending=f.api.loadEditLink(published);
+    assert.equal(f.element('edit-a-link-copy').disabled,true);
+    if(change==='close')f.api.clearEditLink();
+    if(change==='activity') {
+      f.element('edit-a-id').value='B';
+      await f.api.loadEditLink({activityId:'B',status:'下架'});
+    }
+    if(change==='account')f.context.adminProfile.userId='member-2';
+    if(change==='token')f.context.window.liff.getAccessToken=()=> 'token-2';
+    release({url:shortUrl});await pending;
+    assert.equal(f.api.canUseEditLink(),false);
+    assert.equal(f.element('edit-a-registration-link').value,'');
+    await f.api.copyEditLink();assert.deepEqual(f.copied,[]);
+  }
+});
+
+test('clipboard failures offer manual selection; insecure-context fallback remains available', async () => {
+  const f=editFixture();await f.api.loadEditLink(published);
+  f.context.navigator.clipboard.writeText=async()=>{throw Error('denied');};
+  await f.api.copyEditLink();assert.equal(f.element('edit-a-registration-link').selected,true);
+  assert.match(f.element('edit-a-link-status').textContent,/手動複製/);assert.deepEqual(f.toasts,[]);
+  f.context.window.isSecureContext=false;await f.api.copyEditLink();assert.equal(f.toasts.length,1);
+});
+
+test('edit modal exposes a read-only link without changing existing save API', () => {
+  assert.match(html,/id="edit-a-registration-link"[^>]*readonly/);
+  assert.match(html,/id="edit-a-link-open" target="_blank" rel="noopener noreferrer"/);
+  assert.match(html,/void window\.AdminActivityRegistration\.loadEditLink\(act\)/);
+  assert.match(html,/function closeActivityEditModal\(\) \{\s*window\.AdminActivityRegistration\.clearEditLink\(\)/);
+  const linkCode=source.slice(source.indexOf('  function editToken()'),source.indexOf('  window.AdminActivityRegistration ='));
+  assert.doesNotMatch(linkCode,/updateActivity|deleteActivity|bulkAddRegistrants|edit-a-name/);
 });
