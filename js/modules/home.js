@@ -2180,6 +2180,41 @@ const HomeModule = (function() {
         return baseUrl + '?' + params.toString();
     }
 
+    function parseRegistrationActivityTime_(value) {
+        // Activity wall times are Taipei times, including older slash/AM-PM imports.
+        const match = String(value || '').trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T]+(上午|下午)?\s*(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/i);
+        if (!match) return NaN;
+        const [, year, month, day, period, hour, minute, second, fraction, zone] = match;
+        if (period && (Number(hour) < 1 || Number(hour) > 12)) return NaN;
+        const h = hour === undefined ? 23 : period ? Number(hour) % 12 + (period === '下午' ? 12 : 0) : Number(hour);
+        const m = hour === undefined ? 59 : Number(minute);
+        const s = hour === undefined ? 59 : Number(second || 0);
+        const ms = hour === undefined ? 999 : Number((fraction || '').padEnd(3, '0'));
+        const local = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), h, m, s, ms));
+        if (local.getUTCFullYear() !== Number(year) || local.getUTCMonth() + 1 !== Number(month)
+            || local.getUTCDate() !== Number(day) || local.getUTCHours() !== h
+            || local.getUTCMinutes() !== m || local.getUTCSeconds() !== s) return NaN;
+        const offset = zone ? zone.toUpperCase() === 'Z' ? 0
+            : (Number(zone.slice(1, 3)) * 60 + Number(zone.slice(-2))) * (zone[0] === '-' ? -1 : 1) : 480;
+        if (zone && zone.toUpperCase() !== 'Z' && (Number(zone.slice(1, 3)) > 23 || Number(zone.slice(-2)) > 59)) return NaN;
+        return local.getTime() - offset * 60000;
+    }
+
+    function getRegistrationActivityState_(record, now = Date.now()) {
+        const status = String(record.activityStatus || record['活動狀態'] || '').trim();
+        if (status && status !== '上架') return { state: 'unlisted', label: '已下架', muted: true };
+        const end = record.activityEndTime || record.endTime || record['結束時間'];
+        let expiresAt = parseRegistrationActivityTime_(end);
+        if (!end) {
+            const start = parseRegistrationActivityTime_(record.activityStartTime || record.startTime || record['開始時間']);
+            // No end time: retain availability through the activity's Taipei calendar day.
+            expiresAt = Math.floor((start + 28800000) / 86400000) * 86400000 + 86400000 - 28800000 - 1;
+        }
+        return Number.isFinite(expiresAt) && now > expiresAt
+            ? { state: 'expired', label: '已過期', muted: true }
+            : { state: 'active', label: '', muted: false };
+    }
+
     function getInitialActivityId_() {
         try {
             const params = typeof readActmasterInitialParams === 'function'
@@ -2790,18 +2825,21 @@ const HomeModule = (function() {
                 const title = window.escapeHTML(r['活動名稱'] || r.activityName || r.title || '未命名活動');
                 const time = window.escapeHTML(window.formatDisplayTime(r['開始時間'] || r.startTime || r.createdAt || r['報名時間'] || ''));
                 const status = getRegistrationStatus_(r);
+                const activityState = getRegistrationActivityState_(r);
+                const muted = activityState.muted;
                 const fee = window.escapeHTML(r['繳費狀態'] || r.paymentStatus || '');
                 return `
-                    <div class="p-4 flex items-center justify-between gap-3 active:bg-slate-50 transition-colors cursor-pointer" onclick="window.openMyActivityRecordDetail(${recordIndex})">
+                    <div data-activity-state="${activityState.state}" class="p-4 flex items-center justify-between gap-3 ${muted ? 'bg-slate-50' : 'bg-white'} active:bg-slate-50 transition-colors cursor-pointer" onclick="window.openMyActivityRecordDetail(${recordIndex})">
                         <div class="min-w-0">
-                            <div class="font-black text-slate-800 text-[16px] truncate">${title}</div>
+                            <div class="font-black ${muted ? 'text-slate-500' : 'text-slate-800'} text-[16px] truncate">${title}</div>
                             <div class="text-[13px] text-slate-500 mt-1">${time}</div>
-                            <div class="text-[12px] text-blue-600 font-bold mt-1">點開出示核銷 QR</div>
+                            <div class="text-[12px] ${muted ? 'text-slate-500' : 'text-blue-600'} font-bold mt-1">${muted ? '點開查看報名紀錄' : '點開出示核銷 QR'}</div>
                         </div>
                         <div class="text-right shrink-0 flex flex-col items-end gap-2">
-                            <div class="inline-flex px-3 py-1.5 rounded-full text-[13px] font-black ${status.className}">${status.label}</div>
+                            ${activityState.label ? `<div class="text-[13px] font-bold text-slate-500">${activityState.label}</div>` : ''}
+                            <div class="inline-flex px-3 py-1.5 rounded-full text-[13px] font-black ${muted ? 'bg-slate-100 text-slate-500 border border-slate-200' : status.className}">${status.label}</div>
                             ${fee ? `<div class="text-[11px] text-slate-400 mt-1">${fee}</div>` : ''}
-                            ${(!status.checked && !status.cancelled) ? `<button type="button" onclick="event.stopPropagation(); window.cancelMyActivityRegistration(${recordIndex}, this)" class="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 border border-red-100 text-[12px] font-black active:scale-95 transition-transform">取消報名</button>` : ''}
+                            ${(!status.checked && !status.cancelled) ? `<button type="button" onclick="event.stopPropagation(); window.cancelMyActivityRegistration(${recordIndex}, this)" class="px-3 py-1.5 rounded-xl ${muted ? 'bg-white text-slate-500 border border-slate-200' : 'bg-red-50 text-red-600 border border-red-100'} text-[12px] font-black active:scale-95 transition-transform">取消報名</button>` : ''}
                         </div>
                     </div>`;
             }).join('');
