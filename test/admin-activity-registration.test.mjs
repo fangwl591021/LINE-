@@ -68,7 +68,7 @@ test('admin uses authenticated existing APIs, no public fallback, new tables or 
   assert.match(source,/request !== state\.rosterRequest \|\| id !== state\.selected/);
   assert.match(source,/state\.busy \|\| !\['toggleCheckin','confirmPayment'\]/);
   assert.match(source,/row\.cancelled/);
-  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=4/);
+  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=5/);
   assert.match(html,/get\('tab'\) === 'activities' \? 'activities' : 'users'/);
   assert.match(html,/data-registrants=/);
   assert.doesNotMatch(source,/localStorage|ACTMASTER_DB|CREATE TABLE|\bfetch\s*\(/);
@@ -88,6 +88,19 @@ test('creation accepts free published events and validates name, dates, integer 
   for(const changes of [{activityName:' '},{startTime:''},{endTime:'2026-09-28T09:00'},{endTime:'bad'},{price:-1},{price:'1.5'},{price:''},{price:'NaN'},{imageUrl:'javascript:alert(1)'},{imageUrl:'data:image/png;base64,AA'},{imageUrl:'https://name:pass@example.com/img'}]){
     assert.throws(()=>api.creationPayload({...base,...changes},'ACT_unique'));
   }
+});
+
+test('core field form retains venue and raw schedule in the existing description only',()=>{
+  const body=api.activityDescription('自我介紹 60 秒；限 20 人。','','2026/10/7、10/21 下午2點');
+  const values={activityName:'雙週會',startTime:'2026-10-07T14:00',price:'200',location:'板橋文化路486號3樓之2',description:body};
+  const payload=api.creationPayload(values,'ACT_core');
+  assert.equal(payload.description,'活動地點：板橋文化路486號3樓之2\n\nDM 活動時間原文：2026/10/7、10/21 下午2點\n\n自我介紹 60 秒；限 20 人。');
+  for(const field of ['location','scheduleText','timeStatus'])assert.equal(field in payload,false);
+  const existing='活動地點：板橋\nDM 活動時間原文：2026/10/7 14:00\n原文內容';
+  assert.equal(api.activityDescription(existing,'板橋','2026/10/7 14:00'),existing);
+  assert.throws(()=>api.creationPayload({...values,description:'字'.repeat(10000)},'ACT_core'),/10000/);
+  assert.match(source,/name="location" maxlength="300"/);
+  assert.match(source,/\['activityName','startTime','endTime','location','description'\]/);
 });
 test('create UI uses mobile API and keeps pending snapshot and busy guard; existing edit flow is untouched', () => {
   assert.match(source,/data-aar="create">＋新增活動/);

@@ -74,6 +74,15 @@
     return value !== null && Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : null;
   }
   const stats = entries => entries.map(([label, value]) => `<div class="aar-stat"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
+  function activityDescription(description, location = '', scheduleText = '') {
+    const body = text(description).trim(), place = text(location).trim(), schedule = text(scheduleText).trim();
+    const compact = value => value.replace(/\s+/g,'');
+    const parts = [];
+    if (place && !compact(body).includes(compact(place))) parts.push(`活動地點：${place}`);
+    if (schedule && !compact(body).includes(compact(schedule))) parts.push(`DM 活動時間原文：${schedule}`);
+    if (body) parts.push(body);
+    return parts.join('\n\n');
+  }
   function creationPayload(values, id) {
     const name = text(values.activityName).trim();
     if (!name) throw new Error('請填寫活動名稱');
@@ -88,9 +97,11 @@
       let url; try { url = new URL(imageUrl); } catch (_) { throw new Error('宣傳圖請使用完整的 http / https 網址'); }
       if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('宣傳圖請使用完整的 http / https 網址');
     }
+    const description = activityDescription(values.description,values.location);
+    if (description.length > 10000) throw new Error('活動地點與說明合計請勿超過 10000 字');
     return { activityId: id, activityName: name, activityType: text(values.activityType).trim() || '活動',
       startTime: start.replace('T',' '), endTime: end.replace('T',' '), price, feeType: price > 0 ? '收費' : '免費',
-      description: text(values.description).trim(), imageUrl,
+      description, imageUrl,
       imageRatio: ['16:9','1:1','2:3'].includes(values.imageRatio) ? values.imageRatio : '16:9',
       status: values.status === '下架' ? '下架' : '上架', names: [], isBatch: false, nfcCheckinSameDayOnly: true };
   }
@@ -110,22 +121,23 @@
       <header class="aar-head"><div><h2 id="aar-create-title">新增活動</h2><p class="aar-note">建立後與手機端同步；不會自動新增報名者或發送通知。</p></div><button type="button" class="aar-button" data-create-close aria-label="關閉新增活動">✕</button></header>
       <div class="aar-create-body"><fieldset class="aar-filters" id="aar-create-fields">
         <section class="aar-ai aar-wide" aria-label="AI 活動上架助手">
-          <h3>✨ AI 活動上架助手</h3><p class="aar-note">上傳活動 DM → AI 整理 → 確認內容後上架，也可以直接手動填寫。</p>
+          <h3>✨ AI 活動上架助手</h3><p class="aar-note">重點擷取活動名稱、時間、地點與活動說明；先核對原圖，再確認上架，也可以直接手動填寫。</p>
           <label>上傳活動 DM／宣傳圖<input name="imageFile" type="file" accept="image/jpeg,image/png,image/webp"><span class="aar-note">JPG / PNG / WebP；AI 辨識限 4 MB，僅上傳宣傳圖限 10 MB。</span></label>
           <img id="aar-ai-image" alt="活動 DM 預覽" hidden>
           <button type="button" class="aar-button aar-primary" id="aar-ai-read" disabled>AI 讀取 DM 並整理活動資料</button>
           <p id="aar-ai-status" class="aar-status" role="status">AI 只產生草稿，不會自動上架。</p>
-          <div id="aar-ai-preview" hidden><h3>AI 草稿預覽</h3><div id="aar-ai-content"></div><button type="button" class="aar-button" id="aar-ai-apply">套用草稿到下方表單</button></div>
+          <div id="aar-ai-preview" hidden><h3>活動核心資料核對</h3><p class="aar-note">時間原文供對照；多個場次請自行選定本次日期，不會自動建立多場活動。</p><div id="aar-ai-content"></div><button type="button" class="aar-button" id="aar-ai-apply">套用草稿到下方表單</button></div>
         </section>
         <label class="aar-wide">活動名稱 *<input name="activityName" required maxlength="120" placeholder="例如：商務交流講座"></label>
         <label>活動類型<input name="activityType" value="活動" maxlength="40"></label>
         <label>上架狀態<select name="status"><option value="上架">上架（開放報名）</option><option value="下架">草稿（暫不上架）</option></select></label>
         <label>開始時間 *<input name="startTime" type="datetime-local" required></label><label>結束時間<input name="endTime" type="datetime-local"></label>
+        <label class="aar-wide">活動地點<input name="location" maxlength="300" placeholder="場地名稱、完整地址、樓層／室號或線上平台"></label>
+        <label class="aar-wide">活動說明<textarea name="description" rows="6" maxlength="10000" placeholder="活動主題、內容、講者、議程與注意事項"></textarea></label>
         <label>金額（免費填 0）<input name="price" type="number" min="0" step="1" value="0" required></label>
         <label>宣傳圖版型<select name="imageRatio"><option value="16:9">橫式 16:9</option><option value="1:1">正方 1:1</option><option value="2:3">滿版 2:3</option></select></label>
-        <label class="aar-wide">活動說明<textarea name="description" rows="4" maxlength="10000" placeholder="地點、活動內容與報名注意事項"></textarea></label>
         <label class="aar-wide">宣傳圖網址<input name="imageUrl" type="url" placeholder="https://…（選填）"></label>
-        <label class="aar-wide aar-ai-review" id="aar-ai-review" hidden><input name="aiReviewed" type="checkbox">我已確認 AI 草稿的日期、費用與內容，並完成必要修正</label>
+        <label class="aar-wide aar-ai-review" id="aar-ai-review" hidden><input name="aiReviewed" type="checkbox">我已核對活動名稱、時間、地點、說明與費用，並完成必要修正</label>
       </fieldset></div>
       <footer><p id="aar-create-status" class="aar-status" role="status"></p><div class="aar-actions"><button type="button" class="aar-button" data-create-close>取消</button><button type="submit" class="aar-button aar-primary" id="aar-create-submit">建立活動</button></div></footer>
     </form>`;
@@ -159,27 +171,27 @@
       if (!result || result.success === false || !draft?.activityName) throw new Error('AI 未完成辨識，原表單未變更。請重新辨識或手動填寫。');
       creation.aiDraft = draft;
       $('aar-ai-content').innerHTML = `<dl>${[
-        ['活動名稱',draft.activityName],['類型',draft.activityType],['地點',draft.location],
+        ['活動名稱',draft.activityName],['活動時間原文',draft.scheduleText],
         ['開始時間',draft.startTime],['結束時間',draft.endTime],
-        ['費用',draft.price === null || draft.price === undefined ? '' : draft.price === 0 ? '免費（0 元）' : `NT$ ${draft.price}`],
-        ['活動說明',draft.description]
+        ['活動地點',draft.location],['活動說明',draft.description],['類型',draft.activityType],
+        ['費用',draft.price === null || draft.price === undefined ? '' : draft.price === 0 ? '免費（0 元）' : `NT$ ${draft.price}`]
       ].map(([label,value])=>`<dt>${esc(label)}</dt><dd>${esc(value || '待人工補充')}</dd>`).join('')}</dl>`;
       $('aar-ai-preview').hidden=false;
-      message('aar-ai-status',`辨識完成，請先檢查草稿。${text(draft.confidenceNote) || '日期、費用及內容仍須人工確認。'}`);
+      message('aar-ai-status',`請先核對活動名稱、時間、地點與說明。${text(draft.confidenceNote) || '資料及費用仍須人工確認。'}`);
     } catch(error) { message('aar-ai-status',error.message,true); }
     finally { lockCreate(false); }
   }
   function applyActivityDraft() {
     if (!creation || creation.busy || creation.payload || !creation.aiDraft) return;
     const form = $('aar-create-form'), draft = creation.aiDraft;
-    const hasEdits = ['activityName','startTime','endTime','description'].some(key=>form.elements[key].value.trim()) ||
+    const hasEdits = ['activityName','startTime','endTime','location','description'].some(key=>form.elements[key].value.trim()) ||
       !['','活動'].includes(form.elements.activityType.value.trim()) || !['','0'].includes(form.elements.price.value);
-    if (hasEdits && !window.confirm('套用 AI 草稿會取代下方名稱、類型、日期、費用與說明，確定套用嗎？')) return;
-    for (const key of ['activityName','activityType','startTime','endTime']) form.elements[key].value=text(draft[key]);
+    if (hasEdits && !window.confirm('套用 AI 草稿會取代下方名稱、時間、地點、說明、類型與費用，確定套用嗎？')) return;
+    for (const key of ['activityName','activityType','startTime','endTime','location']) form.elements[key].value=text(draft[key]);
     form.elements.price.value = draft.price === null || draft.price === undefined ? '' : text(draft.price);
-    form.elements.description.value=[draft.location ? `活動地點：${text(draft.location)}` : '',text(draft.description)].filter(Boolean).join('\n\n');
+    form.elements.description.value=activityDescription(draft.description,'',draft.scheduleText);
     $('aar-ai-review').hidden=false; form.elements.aiReviewed.required=true; form.elements.aiReviewed.checked=false;
-    message('aar-ai-status','已套用草稿。請補齊資料並確認日期、費用與內容，再按「建立活動」。');
+    message('aar-ai-status',`已套用草稿。${text(draft.confidenceNote)} 請核對名稱、時間、地點、說明與費用，再按「建立活動」。`);
     form.elements.activityName.focus();
   }
   async function uploadCreateImage(input) {
@@ -484,5 +496,5 @@
   }
   window.AdminActivityRegistration = { load, renderActivities: renderOverview, countFor,
     loadEditLink, clearEditLink, canUseEditLink, copyEditLink,
-    list, registrant, summary, filterActivities, filterRegistrants, csv, creationPayload };
+    list, registrant, summary, filterActivities, filterRegistrants, csv, creationPayload, activityDescription };
 })();
