@@ -68,7 +68,7 @@ test('admin uses authenticated existing APIs, no public fallback, new tables or 
   assert.match(source,/request !== state\.rosterRequest \|\| id !== state\.selected/);
   assert.match(source,/state\.busy \|\| !\['toggleCheckin','confirmPayment'\]/);
   assert.match(source,/row\.cancelled/);
-  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=7/);
+  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=8/);
   assert.match(html,/get\('tab'\) === 'activities' \? 'activities' : 'users'/);
   assert.match(html,/data-registrants=/);
   assert.doesNotMatch(source,/localStorage|ACTMASTER_DB|CREATE TABLE/);
@@ -221,4 +221,36 @@ test('activity description editor stays full width with a taller, darker readabl
   assert.doesNotMatch(field,/text-sm|resize-none/);
   assert.match(html,/<label for="edit-a-desc" class="block text-base font-bold text-slate-700 mb-1\.5">活動說明<\/label>/);
   assert.match(html,/const nextDesc = document\.getElementById\("edit-a-desc"\)\.value;/,'save still reads the existing field unchanged');
+});
+
+test('one form groups its six slots without modifying source data, even when parent sorts last', () => {
+  const root={activityId:'root',name:'商機雙週會',networkId:'admin',isBatch:true,status:'上架',startTime:'2026-10-07 14:00'};
+  const slots=Array.from({length:6},(_,i)=>({activityId:`slot${i}`,seriesId:'root',name:`梯次${i}`,networkId:'admin',startTime:`2026-10-${String(7+i).padStart(2,'0')} 14:00`}));
+  const rows=[...slots.toReversed(),root], snapshot=JSON.stringify(rows);
+  const forms=api.activityForms(rows);
+  assert.equal(forms.length,1);assert.equal(forms[0].activityId,'root');
+  assert.deepEqual(plain(forms[0].formBatches),slots);
+  assert.equal(JSON.stringify(rows),snapshot,'storage IDs and registrations are not changed');
+  assert.equal(api.filterActivities(forms,{query:'梯次5',from:'2026-10-12',to:'2026-10-12'}).length,1);
+  assert.equal(api.filterActivities(forms,{status:'下架'}).length,0);
+});
+
+test('grouping never hides an orphan, cross-network slot, or unrelated standalone activity', () => {
+  const rows=[{activityId:'root',isBatch:true,networkId:'one'},
+    {activityId:'child',seriesId:'root',networkId:'one'},
+    {activityId:'foreign',seriesId:'root',networkId:'two'},
+    {activityId:'orphan',seriesId:'missing',networkId:'one'},
+    {activityId:'single',networkId:'one'}];
+  assert.deepEqual(plain(api.activityForms(rows)).map(r=>r.activityId),['root','foreign','orphan','single']);
+  assert.equal(api.activityForms(rows)[0].formBatches.length,1);
+  const alias=api.activityForms([{'活動ID':'root','是否系列':'TRUE','歸屬網':'one'}, {'活動ID':'child',series_id:'root','歸屬網':'one'}]);
+  assert.equal(alias.length,1);assert.equal(alias[0].formBatches.length,1);
+});
+
+test('editing DM cannot open creation; existing series stays one registration form', () => {
+  const edit=source.slice(source.indexOf('  function mountEditDm('),source.indexOf('  function mount()'));
+  assert.doesNotMatch(edit,/openCreate\(|bulkAddRegistrants|edit-dm-series|另建系列/);
+  assert.match(edit,/同一張報名表的原有梯次、報名網址及報名紀錄全部保留/);
+  assert.match(source,/同一張報名表提供多個梯次（可複選）/);
+  assert.match(html,/同一張報名表 · \$\{a.formBatches.length\} 個梯次/);
 });

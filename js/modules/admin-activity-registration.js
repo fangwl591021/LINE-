@@ -16,6 +16,24 @@
   const title = row => text(pick(row, ['活動名稱', 'activityName', 'name'], '未命名活動'));
   const network = row => text(pick(row, ['歸屬網', 'networkId', '建立者ID', 'creatorId', 'userId'], 'admin'));
   const status = row => pick(row, ['狀態', 'status'], '上架') === '下架' ? '下架' : '上架';
+  const seriesId = row => text(pick(row, ['seriesId', 'series_id']));
+  const isSeries = row => row?.isBatch === true || /^(true|1)$/i.test(text(pick(row, ['是否系列', 'is_series'])));
+  // Keep storage-level slot records intact, but present one activity / registration form.
+  // Orphans stay visible if the parent is absent (e.g. the API's 500-row limit).
+  function activityForms(rows) {
+    const key = row => JSON.stringify([network(row), activityId(row)]);
+    const parents = new Map(rows.filter(row => !seriesId(row) && isSeries(row)).map(row => [key(row), {...row, formBatches: []}]));
+    const parentFor = row => parents.get(JSON.stringify([network(row), seriesId(row)]));
+    for (const row of rows) if (seriesId(row) && parentFor(row)) parentFor(row).formBatches.push(row);
+    for (const parent of parents.values()) parent.formBatches.sort((a,b) => text(pick(a,['開始時間','startTime'])).localeCompare(text(pick(b,['開始時間','startTime']))));
+    const seen = new Set();
+    return rows.flatMap(row => {
+      const form = (seriesId(row) ? parentFor(row) : parents.get(key(row))) || row;
+      const id = key(form);
+      if (seen.has(id)) return [];
+      seen.add(id); return [form];
+    });
+  }
   const date = value => text(value).replace('T', ' ').slice(0, 10);
   function list(result) {
     if (!result || result.success === false) return null;
@@ -48,11 +66,13 @@
   function filterActivities(rows, filters) {
     const query = text(filters.query).trim().toLocaleLowerCase();
     return rows.filter(row => {
-      const start = date(pick(row, ['開始時間', 'startTime']));
-      return (!query || `${title(row)} ${activityId(row)}`.toLocaleLowerCase().includes(query)) &&
-        (!filters.network || filters.network === 'all' || network(row) === filters.network) &&
+      return (!filters.network || filters.network === 'all' || network(row) === filters.network) &&
         (!filters.status || filters.status === 'all' || status(row) === filters.status) &&
-        (!filters.from || (start && start >= filters.from)) && (!filters.to || (start && start <= filters.to));
+        [row, ...(row.formBatches || [])].some(item => {
+          const start = date(pick(item, ['開始時間', 'startTime']));
+          return (!query || `${title(row)} ${title(item)} ${activityId(item)}`.toLocaleLowerCase().includes(query)) &&
+            (!filters.from || (start && start >= filters.from)) && (!filters.to || (start && start <= filters.to));
+        });
     });
   }
   function filterRegistrants(rows, filters) {
@@ -174,7 +194,7 @@
         <label class="aar-wide">活動名稱 *<input name="activityName" required maxlength="120" placeholder="例如：商務交流講座"></label>
         <label>活動類型<input name="activityType" value="活動" maxlength="40"></label>
         <label>上架狀態<select name="status"><option value="上架">上架（開放報名）</option><option value="下架">草稿（暫不上架）</option></select></label>
-        <label class="aar-wide aar-slot-check"><input name="seriesMode" type="checkbox">系列梯次（多時段勾選）</label>
+        <label class="aar-wide aar-slot-check"><input name="seriesMode" type="checkbox">同一張報名表提供多個梯次（可複選）</label>
         <section id="aar-create-slots" class="aar-wide aar-dm-panel" hidden><p>勾選要建立的梯次；未勾選不建立。缺漏時間與費用請自行補齊。</p><div id="aar-slot-list"></div><button type="button" class="aar-button" id="aar-add-slot">＋新增梯次</button></section>
         <label>開始時間 *<input name="startTime" type="datetime-local" required></label><label>結束時間<input name="endTime" type="datetime-local"></label>
         <label class="aar-wide">活動地點<input name="location" maxlength="300" placeholder="場地名稱、完整地址、樓層／室號或線上平台"></label>
@@ -313,10 +333,9 @@
       <button type="button" id="edit-dm-read">重新辨識 DM</button>
       <label>或選擇 DM 檔案供辨識（不變更宣傳圖）<input type="file" id="edit-dm-file" accept="image/jpeg,image/png,image/webp"></label>
       <p id="edit-dm-status" role="status"></p><div id="edit-dm-preview" hidden><div id="edit-dm-content"></div>
-      <section id="edit-dm-slot-picker" hidden aria-label="辨識梯次勾選"><h3>選擇活動梯次</h3><p>勾選要使用的時段；缺少日期或費用仍可先另開系列表單補填，按「建立活動」才會儲存。</p>
+      <section id="edit-dm-slot-picker" hidden aria-label="辨識梯次勾選"><h3>核對本活動時段</h3><p>單場活動請只選本場時段。編輯不會另建活動或報名表。</p>
       <div id="edit-dm-slots"></div><button type="button" id="edit-dm-add-slot">＋新增梯次</button></section>
       <button type="button" id="edit-dm-apply">確認套用至本活動</button>
-      <button type="button" id="edit-dm-series" hidden>以勾選時段另建系列活動</button>
       <p id="edit-dm-action-status" role="status" aria-live="polite" tabindex="-1" hidden></p></div>
       <label id="edit-dm-review" class="aar-slot-check" hidden><input type="checkbox" id="edit-dm-reviewed">我已核對辨識後的內容、時間與費用</label></section>`;
     $('edit-dm-read').onclick=()=>{void readEditDm(s);};
@@ -336,18 +355,6 @@
       if(n>=24){editDmMessage('最多 24 個梯次，請先調整現有項目。',true);return;}
       $('edit-dm-slots').insertAdjacentHTML('beforeend',slotMarkup({},n));
       $('edit-dm-slots').lastElementChild.querySelector('[data-slot-field="name"]').focus();
-    };
-    $('edit-dm-series').onclick=()=>{
-      if(!readyEditDm(s))return;
-      // These are editable candidates, not a publish payload. Unknown dates/prices stay blank.
-      const batches=selectedSlots($('edit-dm-slots'));
-      if(!batches.length){editDmMessage('請至少勾選一個梯次；若沒有辨識出時段，可按「＋新增梯次」補上。',true);return;}
-      if(!window.confirm('另開新增系列表單；原活動及報名名單保持不變。確認後仍須按「建立活動」才會發布。'))return;
-      const draft={...s.draft,batches,timeStatus:'multiple'},url=$('edit-a-image').value;
-      if(creation) {editDmMessage('請先完成或取消目前的新增活動表單，再另建系列。',true);return;}
-      closeActivityEditModal();openCreate();creation.aiDraft=draft;applyActivityDraft();$('aar-create-form').elements.imageUrl.value=url;
-      $('aar-create-slots').scrollIntoView({block:'start'});
-      $('aar-slot-list').querySelector('[data-slot-field="name"]')?.focus({preventScroll:true});
     };
     // Manual edits after applying require review again, without replacing other modal handlers.
     host.closest('#modal-activity-edit').addEventListener('input',event=>{
@@ -397,9 +404,11 @@
       s.draft=draft;s.draftUrl=url;
       $('edit-dm-content').innerHTML=draftMarkup(draft);renderSlots($('edit-dm-slots'),draft.batches||[]);
       const multiple=draft.timeStatus==='multiple'||draft.batches?.length>0;
-      $('edit-dm-preview').hidden=false;$('edit-dm-series').hidden=!multiple;$('edit-dm-slot-picker').hidden=!multiple;
-      $('edit-dm-status').textContent=text(draft.confidenceNote)+' 多時段可勾一項套用本活動，或勾多項另建系列；不自動改動既有報名。';
-      if(multiple){
+      $('edit-dm-preview').hidden=false;$('edit-dm-slot-picker').hidden=!multiple || isSeries(s.activity);
+      $('edit-dm-status').textContent=text(draft.confidenceNote)+(isSeries(s.activity)
+        ? ' 同一張報名表的原有梯次、報名網址及報名紀錄全部保留；本次僅更新活動名稱、類型與說明，不新增活動。'
+        : ' 單場活動請勾選本場時段；編輯只更新原活動，不另建報名表。');
+      if(multiple && !isSeries(s.activity)){
         $('edit-dm-slot-picker').scrollIntoView({block:'start'});
         if(!draft.batches?.length)editDmMessage('辨識到多時段，但未取得可用梯次。請重新辨識，或按「＋新增梯次」依上方時間原文補上；不會自行猜測日期。',true);
       }
@@ -411,7 +420,7 @@
     const draft=s.draft,isSeries=s.activity.isBatch===true||String(s.activity['是否系列']).toUpperCase()==='TRUE';let slot=null;
     if(!isSeries && !$('edit-dm-slot-picker').hidden){
       const slots=selectedSlots($('edit-dm-slots'));
-      if(slots.length!==1){editDmMessage('本活動僅可套用一個時段；請只勾一項，或按「以勾選時段另建系列活動」，保留原報名。',true);return;}
+      if(slots.length!==1){editDmMessage('本活動僅可套用一個時段；請只勾本場時段。原有報名保留，不會另建活動。',true);return;}
       slot=slots[0];
     }
     if(!window.confirm('確認用辨識草稿取代本活動名稱、類型及說明'+(isSeries?'（保留原梯次時間與費用）':'、時間與費用')+'？套用後仍需儲存。'))return;
@@ -465,7 +474,7 @@
       if (!rows) throw new Error('無法讀取活動，請按「重新整理活動」重試。');
       allActivitiesData = rows;
       state.counts.clear();
-      $('stat-acts').innerText = rows.length;
+      $('stat-acts').innerText = activityForms(rows).length;
       const selectedNetwork = $('act-tenant-filter').value;
       $('act-tenant-filter').innerHTML = '<option value="all">全部歸屬網</option>' + [...new Set(rows.map(network))].map(id => `<option value="${esc(id)}">${esc(id === 'admin' ? '平台' : id)}</option>`).join('');
       if ([...$('act-tenant-filter').options].some(option => option.value === selectedNetwork)) $('act-tenant-filter').value = selectedNetwork;
@@ -486,10 +495,11 @@
   }
   function renderOverview() {
     if (!state.mounted) return;
-    const rows = filterActivities(allActivitiesData, { query: $('aar-activity-query').value, network: $('act-tenant-filter').value,
+    const forms = activityForms(allActivitiesData);
+    const rows = filterActivities(forms, { query: $('aar-activity-query').value, network: $('act-tenant-filter').value,
       status: $('aar-activity-state').value, from: $('aar-activity-from').value, to: $('aar-activity-to').value });
-    $('aar-activity-stats').innerHTML = stats([['已載入活動',allActivitiesData.length],['上架',allActivitiesData.filter(row => status(row) === '上架').length],
-      ['下架',allActivitiesData.filter(row => status(row) === '下架').length],['符合篩選',rows.length]]);
+    $('aar-activity-stats').innerHTML = stats([['已載入活動',forms.length],['上架',forms.filter(row => status(row) === '上架').length],
+      ['下架',forms.filter(row => status(row) === '下架').length],['符合篩選',rows.length]]);
     $('acts-table-body').innerHTML = rows.length ? renderActivitySectionRows('上架區', rows.filter(row => status(row) === '上架'), false) +
       renderActivitySectionRows('下架區', rows.filter(row => status(row) === '下架'), true) :
       `<tr><td colspan="8" class="aar-empty">${allActivitiesData.length ? '沒有符合條件的活動' : '目前沒有活動資料'}</td></tr>`;
@@ -682,5 +692,5 @@
   window.AdminActivityRegistration = { load, renderActivities: renderOverview, countFor,
     mountEditDm, clearEditDm, canSaveEditDm, validateBatches,
     loadEditLink, clearEditLink, canUseEditLink, copyEditLink,
-    list, registrant, summary, filterActivities, filterRegistrants, csv, creationPayload, activityDescription };
+    list, registrant, summary, activityForms, filterActivities, filterRegistrants, csv, creationPayload, activityDescription };
 })();

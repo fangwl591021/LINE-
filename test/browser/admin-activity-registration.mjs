@@ -54,6 +54,11 @@ await page.route('**/*', async route => {
       result=failLink?null:{url:shortUrl};
     }
     else if(action==='uploadImageToR2')result=failUpload?null:{url:'https://localhost/fixture-poster.png'};
+    else if(action==='updateActivity') {
+      assert.equal(payload.activityId,'A');
+      Object.assign(activities.find(a=>a['活動ID']==='A'),payload.data);
+      result={activityId:'A'};
+    }
     else if(action==='extractActivityDmDraft') {
       assert.ok(payload.base64Image.startsWith('data:image/png;base64,'));
       if(holdAi){holdAi=false;await new Promise(resolve=>{releaseAi=resolve;});}
@@ -146,25 +151,16 @@ try {
   multiSession=true;await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
   assert.equal(await page.locator('#edit-dm-slots [data-slot-select]').count(),3);
   assert.equal(calls.filter(c=>c.action==='uploadImageToR2').length,uploadsBefore);
-  // Incomplete AI candidates must still open an editable series draft. Validate only on save.
+  // Editing cannot accidentally open a different registration form.
   for(const width of [320,390,1440]) {
     await page.setViewportSize({width,height:800});
     await btn('確認套用至本活動').click();assert.notEqual(await page.locator('#edit-a-name').inputValue(),'AI 活動草稿');
     assert.match(await page.locator('#edit-dm-action-status').textContent(),/僅可套用一個時段/);
     const notice=await page.locator('#edit-dm-action-status').boundingBox();assert.ok(notice.y>=0&&notice.y+notice.height<=800);
-    await btn('以勾選時段另建系列活動').click();
-    await page.locator('#aar-create-dialog').waitFor({timeout:3000});
-    assert.equal(await page.locator('#aar-create-form [name="seriesMode"]').isChecked(),true);
-    assert.equal(await page.locator('#aar-slot-list [data-slot-select]').count(),3);
-    assert.equal(await page.locator('#aar-slot-list [data-slot-field="price"]').nth(1).inputValue(),'');
-    assert.equal(await page.locator('#aar-slot-list [data-slot-field="startTime"]').nth(2).inputValue(),'');
-    assert.equal(await page.locator('#aar-slot-list [data-slot]').nth(1).getAttribute('data-slot-source'),'2026/10/15 10:00');
+    assert.equal(await page.locator('#edit-dm-series').count(),0);
+    assert.equal(await page.locator('#aar-create-dialog').count(),0);
     assert.equal(calls.filter(c=>c.action==='bulkAddRegistrants'||c.action==='updateActivity').length,0);
-    await page.screenshot({path:join(out,`edit-to-series-${width}.png`)});
-    await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click();
-    await page.evaluate(()=>editActivityFromMonitor('A'));
-    await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
-    await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
+    await page.screenshot({path:join(out,`edit-no-new-form-${width}.png`)});
   }
   await page.locator('#edit-dm-slots [data-slot-select]').nth(1).uncheck();await page.locator('#edit-dm-slots [data-slot-select]').nth(2).uncheck();
   await btn('確認套用至本活動').click();assert.equal(await page.locator('#edit-a-start').inputValue(),'2026-10-01 10:00');
@@ -355,40 +351,73 @@ try {
   await page.evaluate(()=>{closeActivityEditModal();editActivityFromMonitor('B');});releaseAi();await page.waitForTimeout(150);
   assert.equal(await page.locator('#edit-a-name').inputValue(),'小型讀書會');assert.equal(await page.locator('#edit-dm-preview').isVisible(),false);
   await page.evaluate(()=>closeActivityEditModal());
-  // Edit -> selected series -> explicit publish works end-to-end without updating the old event.
+  // The existing activity and its six slots are one admin item, one URL, one multiselect form.
   multiSession=true;const beforeEditSeries=createCount();
+  const root=activities.find(a=>a['活動ID']==='A');root.isBatch=true;
+  const slots=Array.from({length:6},(_,i)=>({'活動ID':`A_B0${i+1}`,seriesId:'A',batchName:`第${i+1}梯次`,'活動名稱':`秋日交流活動｜第${i+1}梯次`,'歸屬網':'admin','開始時間':`2026-10-${String(7+i).padStart(2,'0')} 10:00`,'金額':100,'狀態':'上架'}));
+  activities.unshift(...slots.toReversed());
+  const slotsBefore=JSON.stringify(slots),rowsBefore=JSON.stringify(rows);
+  await btn('重新整理活動').click();await page.getByText('同一張報名表 · 6 個梯次',{exact:true}).waitFor();
+  assert.equal(await page.locator('[data-registrants^="A_B"]').count(),0);
+  assert.equal(await page.locator('[data-registrants="A"]').count(),1);
+  await page.locator('#aar-activity-query').fill('第6梯次');
+  assert.equal(await page.locator('[data-registrants]').count(),1);
+  await page.locator('#aar-activity-query').fill('');
+  const formSummary=page.getByText('同一張報名表 · 6 個梯次',{exact:true});
+  await formSummary.click();
+  assert.equal(await formSummary.locator('..').locator('li').count(),6);
+  await page.waitForTimeout(3500); // Let preceding fixture toasts clear before layout screenshots.
+  for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:800});
+    await formSummary.scrollIntoViewIfNeeded();
+    await page.screenshot({path:join(out,`single-form-${width}.png`)});
+  }
+  await openA();assert.equal(await page.locator('#aar-roster-body tr').count(),rows.length);
+  await btn('← 返回活動列表').click();
   await page.evaluate(()=>editActivityFromMonitor('A'));
-  await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
+  await page.waitForFunction(()=>!document.getElementById('edit-a-link-copy').disabled);
+  assert.equal(await page.locator('#edit-a-registration-link').inputValue(),shortUrl);
+  await page.locator('#edit-a-image-file').setInputFiles(image);
+  await page.waitForFunction(()=>document.getElementById('edit-a-image').value==='https://localhost/fixture-poster.png');
   await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
-  await page.locator('#edit-dm-slots [data-slot-select]').nth(2).uncheck();
-  await btn('以勾選時段另建系列活動').click();await page.locator('#aar-create-dialog').waitFor();
-  assert.equal(await page.locator('#aar-slot-list [data-slot]').count(),2);
-  await field('aiReviewed').check();await btn('建立活動').click();assert.equal(createCount(),beforeEditSeries);
-  assert.match(await page.locator('#aar-create-status').textContent(),/費用/);
-  await page.locator('#aar-slot-list [data-slot-field="price"]').nth(1).fill('100');
-  await field('aiReviewed').check();await btn('建立活動').click();await page.locator('#aar-create-dialog').waitFor({state:'detached'});
-  const editSeries=calls.filter(c=>c.action==='bulkAddRegistrants').at(-1).payload;
-  assert.equal(editSeries.isBatch,true);assert.equal(editSeries.batches.length,2);assert.equal(editSeries.batches[1].price,100);
-  assert.notEqual(editSeries.activityId,'A');assert.equal(calls.filter(c=>c.action==='updateActivity').length,0);
+  assert.equal(await page.locator('#edit-dm-slot-picker').isVisible(),false);
+  assert.match(await page.locator('#edit-dm-status').textContent(),/原有梯次、報名網址及報名紀錄全部保留/);
+  await btn('確認套用至本活動').click();
+  assert.equal(await page.locator('#edit-a-start').inputValue(),root['開始時間']);
+  await page.locator('#edit-dm-reviewed').check();await page.locator('#btn-save-activity').click();
+  await page.waitForFunction(()=>document.getElementById('modal-activity-edit').classList.contains('hidden'));
+  await page.getByText('同一張報名表 · 6 個梯次',{exact:true}).waitFor();
+  assert.equal(createCount(),beforeEditSeries);assert.equal(calls.filter(c=>c.action==='updateActivity').length,1);
+  assert.equal(calls.find(c=>c.action==='updateActivity').payload.data['宣傳圖'],'https://localhost/fixture-poster.png');
+  assert.equal(JSON.stringify(slots),slotsBefore);assert.equal(JSON.stringify(rows),rowsBefore);
+  // Mount the actual public selector: six checkboxes on ONE form, select two slots together.
+  await page.addScriptTag({content:readFileSync(new URL('../../js/modules/activity-batches.js',import.meta.url),'utf8')});
+  const chosen=await page.evaluate(async({root,slots})=>{
+    const host=document.createElement('div');host.id='activity-batch-choices';document.body.append(host);
+    await ActivityBatches.mount({...root,batches:slots},host);
+    const choices=host.querySelectorAll('input[type="checkbox"]');
+    if(choices.length!==6)throw Error('Expected all six slots on one form');
+    choices[0].checked=true;choices[5].checked=true;
+    const ids=ActivityBatches.selection(root);host.remove();return ids;
+  },{root,slots});
+  assert.deepEqual(chosen,['A_B01','A_B06']);
   // Empty AI candidates never become a dead-end or invented dates; manual rows remain available.
+  root.isBatch=false;await btn('重新整理活動').click();
+  await page.locator('[data-registrants="A_B01"]').waitFor();
   omitSessionRows=true;await page.evaluate(()=>editActivityFromMonitor('A'));
   await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
   await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
   assert.match(await page.locator('#edit-dm-action-status').textContent(),/未取得可用梯次/);
-  await btn('以勾選時段另建系列活動').click();assert.match(await page.locator('#edit-dm-action-status').textContent(),/至少勾選/);
+  await btn('確認套用至本活動').click();assert.match(await page.locator('#edit-dm-action-status').textContent(),/僅可套用一個時段/);
   await btn('＋新增梯次').click();assert.equal(await page.locator('#edit-dm-slots [data-slot]').count(),1);
   await btn('確認套用至本活動').click();assert.equal(await page.locator('#edit-a-start').inputValue(),'');
   assert.match(await page.locator('#edit-dm-action-status').textContent(),/草稿已套用/);
   assert.equal(await page.evaluate(()=>AdminActivityRegistration.canSaveEditDm()),false);
   await page.locator('#edit-a-image').fill('https://localhost/another-poster.png');
-  await btn('以勾選時段另建系列活動').click();assert.match(await page.locator('#edit-dm-action-status').textContent(),/宣傳圖已變更/);
+  await btn('確認套用至本活動').click();assert.match(await page.locator('#edit-dm-action-status').textContent(),/宣傳圖已變更/);
   assert.equal(await page.locator('#aar-create-dialog').count(),0);
-  await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
-  await btn('以勾選時段另建系列活動').click();await page.locator('#aar-create-dialog').waitFor();
-  assert.equal(await page.locator('#aar-slot-list [data-slot-field="startTime"]').inputValue(),'');
-  assert.equal(await page.locator('#aar-slot-list [data-slot-field="price"]').inputValue(),'');
-  await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click();
-  assert.equal(createCount(),beforeEditSeries+1);
+  await page.evaluate(()=>closeActivityEditModal());
+  assert.equal(createCount(),beforeEditSeries);
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({passed:true,widths:[320,390,1440],apiActions:[...new Set(calls.map(call=>call.action))],realDataWrites:0,screenshots:out}));
 } catch(error) {
