@@ -20,7 +20,7 @@ function fixture(records=structuredClone(rows)) {
     if(!nodes.has(id))nodes.set(id,{innerHTML:'',textContent:'',classList:{add(){},remove(){}}});
     return nodes.get(id);
   };
-  const c={URLSearchParams,console,document:{getElementById:node},DEFAULT_LIFF_ID:'fixture-liff',
+  const c={URLSearchParams,console,Date:class extends Date {static now(){return Date.parse('2026-09-28T04:00:00Z');}},document:{getElementById:node},DEFAULT_LIFF_ID:'fixture-liff',
     currentUserProfile:{userId:'viewer',displayName:'會員'},currentUser:{name:'會員'},
     escapeHTML:String,formatDisplayTime:String,goPage:page=>calls.push(['page',page]),showToast:()=>{},
     ensurePersonalAgendaPanel_:()=>{},loadPersonalAgenda:()=>{},
@@ -36,19 +36,23 @@ function fixture(records=structuredClone(rows)) {
   ])vm.runInContext(block(source,start,end),c);
   return {c,calls,node,records};
 }
-test('frontend uses existing history API and retains its current cache version',()=>{
+test('frontend uses existing history API and bumps the changed module cache version',()=>{
   assert.match(source,/\['getMyActivities', 'getUserActivities', 'getMyRegistrations', 'getUserRegistrations'\]/);
-  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.14/);
+  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.15/);
 });
 
 function historyDatabase() {
   const sql=new DatabaseSync(':memory:');
-  sql.exec('CREATE TABLE registrants(row_id TEXT PRIMARY KEY,line_id TEXT,phone TEXT,name TEXT,activity_name TEXT,start_time TEXT,created_at TEXT,status TEXT)');
+  sql.exec('CREATE TABLE registrants(row_id TEXT PRIMARY KEY,line_id TEXT,phone TEXT,name TEXT,activity_name TEXT,start_time TEXT,created_at TEXT,status TEXT,activity_id TEXT)');
+  sql.exec('CREATE TABLE activities(activity_id TEXT PRIMARY KEY,status TEXT,start_time TEXT,end_time TEXT,series_id TEXT,network_id TEXT)');
   const c=vm.createContext({D1ReadModule:{all:async(_env,query,args)=>sql.prepare(query).all(...args)}});
   const worker=read('workerbackup.js'),begin=worker.indexOf('const D1ActivityModule = {'),end=worker.indexOf('\n};',begin);
   vm.runInContext(worker.slice(begin,end+3)+'\nglobalThis.activities=D1ActivityModule;',c);
-  const insert=sql.prepare('INSERT INTO registrants VALUES(?,?,?,?,?,?,?,?)');
-  return {sql,add:(id,date,start='2026-10-07 14:00',owner='viewer')=>insert.run(id,owner,'','',id,start,date,'active'),
+  const insert=sql.prepare('INSERT INTO registrants VALUES(?,?,?,?,?,?,?,?,?)');
+  return {sql,add:(id,date,start='2026-10-07 14:00',owner='viewer')=>{
+      sql.prepare('INSERT INTO activities VALUES(?,?,?,?,?,?)').run(id,'上架',start,'','','admin');
+      return insert.run(id,owner,'','',id,start,date,'active',id);
+    },
     list:()=>c.activities.listMyRegistrations({userId:'viewer'},{ACTMASTER_DB:{}})};
 }
 test('actual history query sorts mixed legacy slash dates and D1 dates before LIMIT, without rewriting registrations',async()=>{
@@ -82,6 +86,63 @@ test('history date order handles one-digit date/time, date-only, ISO offsets and
     assert.deepEqual(Array.from((await f.list()).data,r=>r.rowId),['tie-b','tie-a','iso-offset','noon','dawn','day-only']);
     assert.deepEqual(Array.from((await f.list()).data,r=>r.rowId),['tie-b','tie-a','iso-offset','noon','dawn','day-only']);
   } finally {f.sql.close();}
+});
+
+test('history adds live activity availability without replacing registration snapshots or status',async()=>{
+  const f=historyDatabase();
+  try {
+    for(const id of ['live','hidden','removed','batch','foreign-parent'])f.add(id,'2026-09-28 12:00');
+    f.sql.prepare('UPDATE activities SET start_time=?,end_time=? WHERE activity_id=?').run('2026-10-08 14:00','2026-10-08 17:00','live');
+    f.sql.exec("UPDATE activities SET status='下架' WHERE activity_id='hidden'; DELETE FROM activities WHERE activity_id='removed';");
+    f.sql.exec("INSERT INTO activities VALUES('series','下架','','','','admin'); UPDATE activities SET series_id='series' WHERE activity_id IN ('batch','foreign-parent'); UPDATE activities SET network_id='other' WHERE activity_id='foreign-parent';");
+    const snapshot=JSON.stringify(f.sql.prepare('SELECT * FROM registrants ORDER BY row_id').all());
+    const records=Object.fromEntries((await f.list()).data.map(r=>[r.rowId,r]));
+    assert.equal(records.live.activityStatus,'上架');
+    assert.equal(records.live.startTime,'2026-10-07 14:00','saved date stays intact');
+    assert.equal(records.live.activityStartTime,'2026-10-08 14:00');
+    assert.equal(records.live.activityEndTime,'2026-10-08 17:00');
+    for(const id of ['hidden','removed','batch'])assert.equal(records[id].activityStatus,'下架',id);
+    assert.equal(records['foreign-parent'].activityStatus,'上架','unrelated network cannot change availability');
+    for(const r of Object.values(records))assert.equal(r.status,'active','registration status remains separate');
+    assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM registrants ORDER BY row_id').all()),snapshot);
+  } finally {f.sql.close();}
+});
+
+test('expired and unlisted rows are muted but remain in place with working details and controls',async()=>{
+  const records=[
+    {...rows[0],activityStatus:'上架',activityEndTime:'2026-10-07 17:00'},
+    {...rows[1],activityStatus:'上架',activityEndTime:'2026-09-27 17:00'},
+    {...rows[2],activityStatus:'下架',activityEndTime:'2026-12-01 17:00'}
+  ];
+  const f=fixture(records);await f.c.loadMyActivities();
+  const html=f.node('my-activities-list').innerHTML;
+  const rendered=[...html.matchAll(/<div data-activity-state="(\w+)"([\s\S]*?)(?=<div data-activity-state=|$)/g)];
+  assert.deepEqual(rendered.map(m=>m[1]),['active','expired','unlisted']);
+  assert.match(rendered[0][2],/text-blue-600/);
+  for(let i=1;i<3;i++){
+    assert.match(rendered[i][2],/bg-slate-50/);assert.match(rendered[i][2],/text-slate-500/);
+    assert.doesNotMatch(rendered[i][2],/text-blue-|text-red-|pointer-events-none|disabled/);
+    assert.match(rendered[i][2],/點開查看報名紀錄/);
+    f.c.openMyActivityRecordDetail(i);assert.match(f.node('my-act-detail-content').innerHTML,new RegExp(records[i].activityName));
+  }
+  assert.match(rendered[1][2],/已過期/);assert.match(rendered[1][2],/已核銷/);
+  assert.match(rendered[2][2],/已下架/);assert.match(rendered[2][2],/已取消/);
+  assert.deepEqual(Array.from(f.c.myActivitiesData,r=>r.rowId),records.map(r=>r.rowId));
+});
+
+test('expiry uses Taipei end time, keeps ongoing events active and never guesses from registration date',()=>{
+  const f=fixture(),state=(r,now='2026-10-07T08:00:00Z')=>f.c.getRegistrationActivityState_(r,Date.parse(now)).state;
+  assert.equal(state({activityEndTime:'2026-10-07 17:00'}),'active');
+  assert.equal(state({activityEndTime:'2026-10-07 17:00'},'2026-10-07T09:00:01Z'),'expired');
+  assert.equal(state({activityEndTime:'2026-10-07T09:00:00Z'},'2026-10-07T09:00:01Z'),'expired');
+  assert.equal(state({activityEndTime:'2026/10/7 下午5:00:00'},'2026-10-07T09:00:01Z'),'expired');
+  assert.equal(state({startTime:'2026/10/7 上午9:00'}),'active','no end: keep through Taipei day');
+  assert.equal(state({startTime:'2026/10/7 09:00'},'2026-10-07T16:00:00Z'),'expired');
+  assert.equal(state({activityEndTime:'2026-10-07'},'2026-10-07T15:59:59Z'),'active');
+  assert.equal(state({activityEndTime:'2026-10-07'},'2026-10-07T16:00:00Z'),'expired');
+  assert.equal(state({activityStartTime:'2026-12-01',startTime:'2026-01-01'}),'active','live reschedule wins');
+  for(const r of [{createdAt:'2020-01-01'}, {}, {activityEndTime:'invalid'}, {activityEndTime:'2026-02-30'}])assert.equal(state(r),'active');
+  assert.equal(state({activityStatus:'下架',activityEndTime:'2020-01-01'}),'unlisted');
 });
 test('newest registration renders first, independent of event start date; response is not mutated',async()=>{
   const f=fixture(),snapshot=JSON.stringify(f.records);await f.c.loadMyActivities();

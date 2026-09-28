@@ -12031,8 +12031,15 @@ const D1ActivityModule = {
     // not separator characters, before the limit. Never rewrite saved snapshots.
     const rows = await D1ReadModule.all(env, `
       WITH history AS (
-        SELECT *, TRIM(created_at) AS registration_time FROM registrants
-        WHERE (? <> '' AND line_id = ?) OR (? <> '' AND phone = ?) OR (? <> '' AND name = ?)
+        SELECT r.*, TRIM(r.created_at) AS registration_time,
+          CASE WHEN a.activity_id IS NULL THEN '下架'
+            WHEN TRIM(COALESCE(p.status, '')) NOT IN ('', '上架') THEN p.status
+            ELSE a.status END AS live_activity_status,
+          a.start_time AS live_activity_start, a.end_time AS live_activity_end
+        FROM registrants r
+        LEFT JOIN activities a ON a.activity_id = r.activity_id
+        LEFT JOIN activities p ON p.activity_id = a.series_id AND p.network_id = a.network_id
+        WHERE (? <> '' AND r.line_id = ?) OR (? <> '' AND r.phone = ?) OR (? <> '' AND r.name = ?)
       ), date_parts AS (
         SELECT *, SUBSTR(registration_time, 6) AS month_day,
           CASE WHEN INSTR(registration_time, ' ') > 0
@@ -12049,7 +12056,12 @@ const D1ActivityModule = {
         ELSE JULIANDAY(registration_time)
       END DESC, row_id DESC LIMIT 200
     `, [userId,userId,phone,phone,name,name]);
-    return { success: true, data: rows.map(row => this.registrantRow(row)).filter(Boolean) };
+    // Live availability is separate from the saved registration and check-in status.
+    return { success: true, data: rows.map(row => ({ ...this.registrantRow(row),
+      activityStatus: this.text(row.live_activity_status),
+      activityStartTime: this.text(row.live_activity_start),
+      activityEndTime: this.text(row.live_activity_end)
+    })) };
   },
 
   async cancelRegistration(payload, env) {
