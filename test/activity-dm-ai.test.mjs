@@ -82,7 +82,7 @@ test('multiple sessions never choose the first date or combine different session
   assert.equal(calls,1);assert.equal(result.success,true);
   const draft=result.data.draft;
   assert.equal(draft.startTime,'');assert.equal(draft.endTime,'');assert.equal(draft.scheduleText,raw.scheduleText);
-  assert.match(draft.confidenceNote,/多個場次/);assert.match(draft.confidenceNote,/選定本次/);
+  assert.match(draft.confidenceNote,/多個場次/);assert.match(draft.confidenceNote,/勾選本次/);
 });
 
 test('incomplete, missing or unrecognized time evidence stays empty with core-field warnings',()=>{

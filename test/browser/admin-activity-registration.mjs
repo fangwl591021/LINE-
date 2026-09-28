@@ -39,6 +39,7 @@ await page.route('**/*', async route => {
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com') return route.fulfill({contentType:'text/javascript',body:tailwind});
   if(url.hostname==='static.line-scdn.net') return route.fulfill({contentType:'text/javascript',body:`window.liff={init:async()=>{},isLoggedIn:()=>true,isInClient:()=>false,getProfile:async()=>({userId:'synthetic-manager',displayName:'合成測試管理員'}),getAccessToken:()=>'synthetic-token'};`});
+  if(url.pathname==='/fixture-poster.png')return route.fulfill({headers:{'access-control-allow-origin':'*'},contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
   if(req.method()==='POST' && url.hostname==='line-engine.fangwl591021.workers.dev') {
     const {action,payload}=req.postDataJSON(); calls.push({action,payload});
     assert.equal(payload.lineAccessToken,'synthetic-token');
@@ -55,7 +56,7 @@ await page.route('**/*', async route => {
     else if(action==='extractActivityDmDraft') {
       assert.ok(payload.base64Image.startsWith('data:image/png;base64,'));
       if(holdAi){holdAi=false;await new Promise(resolve=>{releaseAi=resolve;});}
-      result=failAi?null:{provider:'OpenAI',draft:normalizeActivityDraft({activityName:'AI 活動草稿',activityType:'講座',location:'台北市合成會場3樓之2',timeStatus:multiSession?'multiple':'single',scheduleText:multiSession?'2026/10/01、10/15 上午10:00–12:00':'2026/10/01 上午10:00–12:00',startTime:'2026-10-01T10:00',endTime:'2026-10-01T12:00',price:null,description:'• <img src=x onerror=alert(1)>\n• 合成活動內容：每位自我介紹 60 秒，限 20 位。',confidenceNote:'費用不明，請人工確認。'})};
+      result=failAi?null:{provider:'OpenAI',draft:normalizeActivityDraft({activityName:'AI 活動草稿',activityType:'講座',location:'台北市合成會場3樓之2',timeStatus:multiSession?'multiple':'single',scheduleText:multiSession?'2026/10/01、10/15 上午10:00–12:00':'2026/10/01 上午10:00–12:00',startTime:'2026-10-01T10:00',endTime:'2026-10-01T12:00',price:null,description:'• <img src=x onerror=alert(1)>\n• 合成活動內容：每位自我介紹 60 秒，限 20 位。',confidenceNote:'費用不明，請人工確認。',batches:multiSession?[{name:'早場',scheduleText:'2026/10/01 10:00',startTime:'2026-10-01T10:00',price:200},{name:'第二場',scheduleText:'2026/10/15 10:00',startTime:'2026-10-15T10:00',price:null},{name:'不確定場次',scheduleText:'10/30',startTime:'',price:null}]:[]})};
     }
     else if(action==='bulkAddRegistrants') {
       assert.deepEqual(payload.names,[]);assert.equal(payload.userId,'synthetic-manager');
@@ -121,6 +122,17 @@ try {
   await page.evaluate(()=>AdminActivityRegistration.loadEditLink());
   assert.equal(await page.locator('#edit-a-name').inputValue(),'尚未儲存的名稱');
   await page.evaluate(()=>closeActivityEditModal());
+  // Existing uploaded poster can be re-read without selecting/uploading another file.
+  await page.evaluate(()=>editActivityFromMonitor('A'));
+  await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
+  const uploadsBefore=calls.filter(c=>c.action==='uploadImageToR2').length;
+  multiSession=true;await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
+  assert.equal(await page.locator('#edit-dm-slots [data-slot-select]').count(),3);
+  assert.equal(calls.filter(c=>c.action==='uploadImageToR2').length,uploadsBefore);
+  await btn('確認套用至本活動').click();assert.notEqual(await page.locator('#edit-a-name').inputValue(),'AI 活動草稿');
+  await page.locator('#edit-dm-slots [data-slot-select]').nth(1).uncheck();await page.locator('#edit-dm-slots [data-slot-select]').nth(2).uncheck();
+  await btn('確認套用至本活動').click();assert.equal(await page.locator('#edit-a-start').inputValue(),'2026-10-01 10:00');
+  await page.evaluate(()=>closeActivityEditModal());multiSession=false;
   const beforeDown=linkCount();await page.evaluate(()=>editActivityFromMonitor('B'));
   assert.equal(linkCount(),beforeDown);assert.equal(await btn('複製連結').isDisabled(),true);
   assert.equal(await page.locator('#edit-a-registration-link').inputValue(),'');
@@ -240,7 +252,7 @@ try {
   failAi=true;await btn('AI 讀取 DM 並整理活動資料').click();
   await page.getByText('AI 未完成辨識，原表單未變更。請重新辨識或手動填寫。',{exact:true}).waitFor();
   assert.equal(await field('activityName').inputValue(),'原本手動名稱');assert.equal(createCount(),beforeAi);
-  failAi=false;holdAi=true;await btn('AI 讀取 DM 並整理活動資料').click();
+  failAi=false;holdAi=true;await btn('重新辨識 DM').click();
   assert.equal(await btn('建立活動').isDisabled(),true);
   assert.equal(await field('activityName').isDisabled(),true);
   while(!releaseAi)await new Promise(resolve=>setTimeout(resolve,10));releaseAi();
@@ -270,7 +282,7 @@ try {
   assert.match(aiCreated.payload.description,/活動地點：台北市人工確認會場5樓/);
   assert.doesNotMatch(aiCreated.payload.description,/台北市合成會場3樓之2/);
   assert.match(aiCreated.payload.description,/DM 活動時間原文：2026\/10\/01 上午10:00–12:00/);
-  // Multiple sessions remain visible, but cannot be published until a start is explicitly chosen.
+  // Multiple sessions: select, correct, validate, publish only the selected rows.
   multiSession=true;const beforeMultiple=createCount();
   await btn('＋新增活動').click();await field('imageFile').setInputFiles(image);
   await page.waitForFunction(()=>!document.getElementById('aar-ai-read').disabled);
@@ -279,9 +291,34 @@ try {
   await btn('套用草稿到下方表單').click();
   assert.equal(await field('startTime').inputValue(),'');assert.equal(await field('endTime').inputValue(),'');
   assert.match(await field('description').inputValue(),/2026\/10\/01、10\/15/);
-  await field('price').fill('200');await field('aiReviewed').check();await btn('建立活動').click();
+  assert.equal(await field('seriesMode').isChecked(),true);
+  assert.equal(await page.locator('#aar-slot-list [data-slot]').count(),3);
+  await field('aiReviewed').check();await btn('建立活動').click();
   assert.equal(createCount(),beforeMultiple);
-  await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click();
+  await page.locator('#aar-slot-list [data-slot]').nth(2).locator('[data-slot-select]').uncheck();
+  await page.locator('#aar-slot-list [data-slot]').nth(1).locator('[data-slot-field="price"]').fill('100');
+  await field('aiReviewed').check();await btn('建立活動').click();await page.locator('#aar-create-dialog').waitFor({state:'detached'});
+  const series=calls.filter(c=>c.action==='bulkAddRegistrants').at(-1).payload;
+  assert.equal(series.isBatch,true);assert.equal(series.batches.length,2);assert.equal(series.batches[1].price,100);
+  // Edit re-recognition: local file fallback, retries preserve manual input; preview never saves.
+  multiSession=false;await page.evaluate(()=>editActivityFromMonitor('A'));
+  await page.locator('#edit-a-name').fill('編輯中的手動標題');await page.locator('#edit-dm-file').setInputFiles(image);
+  await page.getByText('DM 已就緒，按「重新辨識 DM」。',{exact:true}).waitFor();
+  failAi=true;await btn('重新辨識 DM').click();await page.getByText('辨識失敗，原表單未變更，可再次按「重新辨識 DM」。',{exact:true}).waitFor();
+  assert.equal(await page.locator('#edit-a-name').inputValue(),'編輯中的手動標題');
+  failAi=false;await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
+  assert.equal(await page.locator('#edit-a-name').inputValue(),'編輯中的手動標題');
+  await btn('確認套用至本活動').click();assert.equal(await page.locator('#edit-a-name').inputValue(),'AI 活動草稿');
+  await page.locator('#btn-save-activity').click();assert.equal(calls.filter(c=>c.action==='updateActivity').length,0);
+  await page.locator('#edit-a-price').fill('100');await page.locator('#edit-dm-reviewed').check();
+  assert.equal(await page.evaluate(()=>AdminActivityRegistration.canSaveEditDm()),true);
+  for(const width of [320,390,1440]) {await page.setViewportSize({width,height:800});await page.locator('#edit-dm-preview').scrollIntoViewIfNeeded();
+    assert.ok(await page.locator('#edit-a-ai').evaluate(e=>e.scrollWidth<=e.clientWidth+1));await page.screenshot({path:join(out,`edit-dm-${width}.png`)});}
+  holdAi=true;releaseAi=null;await btn('重新辨識 DM').click();
+  while(!releaseAi)await new Promise(resolve=>setTimeout(resolve,10));
+  await page.evaluate(()=>{closeActivityEditModal();editActivityFromMonitor('B');});releaseAi();await page.waitForTimeout(150);
+  assert.equal(await page.locator('#edit-a-name').inputValue(),'小型讀書會');assert.equal(await page.locator('#edit-dm-preview').isVisible(),false);
+  await page.evaluate(()=>closeActivityEditModal());
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({passed:true,widths:[320,390,1440],apiActions:[...new Set(calls.map(call=>call.action))],realDataWrites:0,screenshots:out}));
 } catch(error) {

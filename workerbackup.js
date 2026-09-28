@@ -1,5 +1,6 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { extractActivityDmDraft } from './worker/activity-dm-ai.mjs';
+import { createActivityBatches, activityWithBatches, joinActivityBatches } from './worker/activity-batches.mjs';
 import { createActivityShareLink } from './worker/activity-short-links.mjs';
 import { handleCrmCardPhoneLink } from './worker/crm-card-phone-link.mjs';
 import { handleDailyTank } from './worker/daily-tank-challenge.mjs';
@@ -11738,7 +11739,9 @@ const D1ActivityModule = {
       '歸屬網': this.text(row.network_id, 'admin'),
       'NFC簽到開始': this.text(row.nfc_checkin_start),
       'NFC簽到結束': this.text(row.nfc_checkin_end),
-      'NFC限當日': row.nfc_same_day_only !== 0
+      'NFC限當日': row.nfc_same_day_only !== 0,
+      isBatch: Number(row.is_series) === 1, '是否系列': Number(row.is_series) === 1,
+      seriesId: this.text(row.series_id), batchName: this.text(row.batch_name), batchLimit: row.batch_limit ?? null
     };
   },
 
@@ -11911,7 +11914,7 @@ const D1ActivityModule = {
     if (role !== 'admin' && !sameNetwork && !hasRegistration) {
       return { success: false, error: 'Access Denied: Activity outside your scope' };
     }
-    return { success: true, data: this.activityRow(row) };
+    return { success: true, data: await activityWithBatches(row, env, this) };
   },
 
   getActivityNetwork(activity) {
@@ -11956,13 +11959,14 @@ const D1ActivityModule = {
       ON CONFLICT(activity_id) DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
         end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_ratio=excluded.image_ratio,network_id=excluded.network_id,status=excluded.status,
-        is_series=excluded.is_series,nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
+        is_series=MAX(activities.is_series,excluded.is_series),nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
         nfc_same_day_only=excluded.nfc_same_day_only
     `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_ratio,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
     return activity;
   },
 
   async bulkAddRegistrants(payload, env) {
+    if (this.bool(payload.isBatch || payload.isSeries)) return await createActivityBatches(payload, env, this);
     const activity = await this.upsertActivity(payload, env);
     if (!activity) return null;
     const names = Array.isArray(payload.names) ? payload.names : [];
@@ -12011,7 +12015,9 @@ const D1ActivityModule = {
     if (!this.hasD1(env)) return null;
     const activityId = this.pick(payload, ['activityId', '活動ID']);
     const rows = activityId
-      ? await D1ReadModule.all(env, 'SELECT * FROM registrants WHERE activity_id = ? ORDER BY created_at DESC LIMIT 500', [activityId])
+      ? await D1ReadModule.all(env, `SELECT r.* FROM registrants r WHERE r.activity_id = ? OR r.activity_id IN
+          (SELECT c.activity_id FROM activities c JOIN activities p ON p.activity_id=c.series_id AND p.network_id=c.network_id WHERE p.activity_id=?)
+          ORDER BY r.created_at DESC LIMIT 500`, [activityId,activityId])
       : await D1ReadModule.all(env, 'SELECT * FROM registrants ORDER BY created_at DESC LIMIT 500');
     return { success: true, data: rows.map(row => this.registrantRow(row)).filter(Boolean) };
   },
@@ -12144,6 +12150,13 @@ const D1ActivityModule = {
 
     const newActivityId = this.pick(payload, ['newActivityId']) || `ACT_${Date.now()}`;
     const copiedName = `${this.text(source.name, '未命名活動')}（複製）`;
+    if (source.is_series && !source.series_id) {
+      const series = await activityWithBatches(source, env, this);
+      return await createActivityBatches({...payload, activityId:newActivityId, activityName:copiedName,
+        activityType:source.type,description:source.description,imageUrl:source.image_url,imageRatio:source.image_ratio,
+        status:'下架',isBatch:true,names:[],batches:series.batches.map(b=>({name:b.batchName || b.name,
+          startTime:b.startTime,endTime:b.endTime,price:b.price,limit:b.batchLimit}))}, env, this);
+    }
     await env.ACTMASTER_DB.prepare(`
       INSERT INTO activities (
         activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_ratio,
@@ -17171,6 +17184,9 @@ async function dispatchAction(action, payload, request, env) {
       return await createActivityShareLink(payload, request, env, actor,
         (input, bindings, verified) => D1ActivityModule.getActivityById(input, bindings, verified));
     case 'bulkAddRegistrants': {
+      if (D1ActivityModule.bool(payload?.isBatch || payload?.isSeries)) {
+        return await D1ActivityModule.bulkAddRegistrants(payload || {}, env);
+      }
       try {
         const d1Result = await D1ActivityModule.bulkAddRegistrants(payload || {}, env);
         if (d1Result && d1Result.success !== false) return d1Result;
@@ -17189,6 +17205,10 @@ async function dispatchAction(action, payload, request, env) {
       return await DBModule.forward(action, payload, env);
     }
     case 'joinActivity': {
+      try {
+        const seriesResult = await joinActivityBatches(payload || {}, env, request, SecurityModule, D1ActivityModule);
+        if (seriesResult) return seriesResult;
+      } catch (_) { return {success:false,error:'報名狀態尚未確認，請重新整理後重試；已成功的梯次不會重複報名'}; }
       try {
         const d1Result = await D1ActivityModule.insertRegistration(payload || {}, env);
         if (d1Result) return d1Result;

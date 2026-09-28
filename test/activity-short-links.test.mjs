@@ -123,7 +123,7 @@ test('new creation action uses strict existing authentication, no D1 identity fa
   assert.match(legacy, /createActivityShareLink: \{ access: 'authenticated' \}/);
   assert.match(legacy, /case 'createActivityShareLink':[\s\S]*?createActivityShareLink\(payload, request, env, actor,[\s\S]*?D1ActivityModule.getActivityById/);
   assert(entry.indexOf('const activityLinkResponse') < entry.indexOf('const memberChatResponse'));
-  assert.match(read('index.html'), /activities\.js\?v=7\.10/);
+  assert.match(read('index.html'), /activities\.js\?v=7\.11/);
 });
 test('actual Worker denies forged identity without token before accessing D1', async () => {
   let reads = 0;

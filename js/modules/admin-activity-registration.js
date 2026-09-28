@@ -4,6 +4,7 @@
   const state = { mounted: false, listRequest: 0, rosterRequest: 0, selected: '', rows: null, busy: false, counts: new Map() };
   let creation = null;
   let editLink = null;
+  let editDm = null;
   const $ = id => document.getElementById(id);
   const text = value => String(value ?? '');
   const esc = value => text(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -29,6 +30,7 @@
     return {
       id: text(pick(row, ['rowId', 'registrationId', '報名ID'])),
       name: text(pick(row, ['姓名', 'name'], '未命名')),
+      activityName: text(pick(row, ['活動名稱','activityName'])),
       phone: text(pick(row, ['手機', '電話', 'phone'])),
       identity: text(pick(row, ['身份', 'identity'], '會員')),
       cancelled: row.status === 'cancelled' || row['報名狀態'] === '已取消',
@@ -64,7 +66,7 @@
     // Prefix formula-like values and phone numbers with an apostrophe; never use ="..." formulas.
     const cell = value => '"' + (/^[\s]*[=+\-@\t\r\n]/.test(text(value)) ? "'" : '') + text(value).replace(/"/g, '""') + '"';
     return '\ufeff' + [['活動名稱','姓名','電話','身份','付款狀態','報名狀態','簽到狀態','簽到時間','報名編號'],
-      ...rows.map(row => [titleValue,row.name,row.phone ? "'" + row.phone : '',row.identity,row.payment,
+      ...rows.map(row => [row.activityName || titleValue,row.name,row.phone ? "'" + row.phone : '',row.identity,row.payment,
         row.cancelled ? '已取消' : '有效',row.checked ? '已簽到' : '未簽到',row.time,row.id])]
       .map(row => row.map(cell).join(',')).join('\r\n');
   }
@@ -86,12 +88,14 @@
   function creationPayload(values, id) {
     const name = text(values.activityName).trim();
     if (!name) throw new Error('請填寫活動名稱');
-    const start = text(values.startTime), end = text(values.endTime);
-    const validTime = value => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) && Number.isFinite(Date.parse(value + '+08:00'));
+    const series = values.isBatch === true;
+    const batches = series ? validateBatches(values.batches) : [];
+    const start = series ? batches.map(b=>b.startTime).sort()[0] : text(values.startTime), end = series ? '' : text(values.endTime);
+    const validTime = validBatchTime;
     if (!validTime(start)) throw new Error('請填寫活動開始日期與時間');
     if (end && (!validTime(end) || end <= start)) throw new Error('結束時間必須晚於開始時間');
-    const price = Number(values.price);
-    if (!Number.isSafeInteger(price) || price < 0 || text(values.price).trim() === '') throw new Error('金額請填 0 或正整數');
+    const price = series ? Math.max(...batches.map(b=>b.price)) : Number(values.price);
+    if (!Number.isSafeInteger(price) || price < 0 || (!series && text(values.price).trim() === '')) throw new Error('金額請填 0 或正整數');
     const imageUrl = text(values.imageUrl).trim();
     if (imageUrl) {
       let url; try { url = new URL(imageUrl); } catch (_) { throw new Error('宣傳圖請使用完整的 http / https 網址'); }
@@ -103,7 +107,46 @@
       startTime: start.replace('T',' '), endTime: end.replace('T',' '), price, feeType: price > 0 ? '收費' : '免費',
       description, imageUrl,
       imageRatio: ['16:9','1:1','2:3'].includes(values.imageRatio) ? values.imageRatio : '16:9',
-      status: values.status === '下架' ? '下架' : '上架', names: [], isBatch: false, nfcCheckinSameDayOnly: true };
+      status: values.status === '下架' ? '下架' : '上架', names: [], isBatch: series, ...(series?{batches}:{}), nfcCheckinSameDayOnly: true };
+  }
+  function validBatchTime(value) {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return false;
+    const d=new Date(value+':00Z');return Number.isFinite(d.getTime()) && d.toISOString().slice(0,16)===value;
+  }
+  function validateBatches(rows) {
+    if (!Array.isArray(rows) || !rows.length || rows.length>24) throw Error('請勾選 1–24 個梯次');
+    const keys=new Set();
+    return rows.map((b,i)=>{
+      const name=text(b.name).trim(),startTime=text(b.startTime).replace(' ','T'),endTime=text(b.endTime).replace(' ','T'),price=Number(b.price);
+      if(!name || !validBatchTime(startTime))throw Error(`第 ${i+1} 個勾選梯次需填寫名稱與完整開始時間`);
+      if(endTime && (!validBatchTime(endTime)||endTime<=startTime))throw Error('梯次結束時間必須晚於開始時間');
+      if(b.price===null||text(b.price).trim()===''||!Number.isSafeInteger(price)||price<0)throw Error('請確認每個勾選梯次的費用（免費填 0）');
+      if(keys.has(name+startTime))throw Error('請勿重複勾選相同梯次');keys.add(name+startTime);
+      return {name,startTime,endTime,price};
+    });
+  }
+  function slotMarkup(b,i) {
+    return `<div class="aar-slot" data-slot><label class="aar-slot-check"><input type="checkbox" data-slot-select checked> 梯次 ${i+1}</label><p class="aar-note">${esc(b.scheduleText || '請依 DM 核對時段')}</p>
+      <label>梯次名稱<input data-slot-field="name" maxlength="120" value="${esc(b.name||`第 ${i+1} 梯次`)}"></label>
+      <label>開始時間 *<input data-slot-field="startTime" type="datetime-local" value="${esc(b.startTime)}"></label>
+      <label>結束時間<input data-slot-field="endTime" type="datetime-local" value="${esc(b.endTime)}"></label>
+      <label>此梯次費用（免費填 0）<input data-slot-field="price" type="number" min="0" step="1" value="${esc(b.price)}"></label></div>`;
+  }
+  function renderSlots(container,batches) {
+    container.innerHTML=batches.slice(0,24).map(slotMarkup).join('');
+    container.onchange=event=>{
+      if(event.target.matches('[data-slot-select]'))event.target.closest('[data-slot]').querySelectorAll('[data-slot-field]').forEach(input=>{input.disabled=!event.target.checked;});
+    };
+  }
+  function selectedSlots(container) {
+    return [...container.querySelectorAll('[data-slot]')].filter(row=>row.querySelector('[data-slot-select]').checked)
+      .map(row=>Object.fromEntries([...row.querySelectorAll('[data-slot-field]')].map(input=>[input.dataset.slotField,input.value])));
+  }
+  function syncSeriesMode() {
+    const form=$('aar-create-form'),series=form.elements.seriesMode.checked;
+    $('aar-create-slots').hidden=!series;
+    for(const key of ['startTime','endTime','price']) {form.elements[key].disabled=series;form.elements[key].closest('label').hidden=series;}
+    form.elements.startTime.required=!series;form.elements.price.required=!series;
   }
   function closeCreate() {
     if (!creation || creation.busy) return;
@@ -126,11 +169,13 @@
           <img id="aar-ai-image" alt="活動 DM 預覽" hidden>
           <button type="button" class="aar-button aar-primary" id="aar-ai-read" disabled>AI 讀取 DM 並整理活動資料</button>
           <p id="aar-ai-status" class="aar-status" role="status">AI 只產生草稿，不會自動上架。</p>
-          <div id="aar-ai-preview" hidden><h3>活動核心資料核對</h3><p class="aar-note">時間原文供對照；多個場次請自行選定本次日期，不會自動建立多場活動。</p><div id="aar-ai-content"></div><button type="button" class="aar-button" id="aar-ai-apply">套用草稿到下方表單</button></div>
+          <div id="aar-ai-preview" hidden><h3>活動核心資料核對</h3><p class="aar-note">多時段套用後會列出梯次勾選，請逐項核對後建立。</p><div id="aar-ai-content"></div><button type="button" class="aar-button" id="aar-ai-apply">套用草稿到下方表單</button></div>
         </section>
         <label class="aar-wide">活動名稱 *<input name="activityName" required maxlength="120" placeholder="例如：商務交流講座"></label>
         <label>活動類型<input name="activityType" value="活動" maxlength="40"></label>
         <label>上架狀態<select name="status"><option value="上架">上架（開放報名）</option><option value="下架">草稿（暫不上架）</option></select></label>
+        <label class="aar-wide aar-slot-check"><input name="seriesMode" type="checkbox">系列梯次（多時段勾選）</label>
+        <section id="aar-create-slots" class="aar-wide aar-dm-panel" hidden><p>勾選要建立的梯次；未勾選不建立。缺漏時間與費用請自行補齊。</p><div id="aar-slot-list"></div><button type="button" class="aar-button" id="aar-add-slot">＋新增梯次</button></section>
         <label>開始時間 *<input name="startTime" type="datetime-local" required></label><label>結束時間<input name="endTime" type="datetime-local"></label>
         <label class="aar-wide">活動地點<input name="location" maxlength="300" placeholder="場地名稱、完整地址、樓層／室號或線上平台"></label>
         <label class="aar-wide">活動說明<textarea name="description" rows="6" maxlength="10000" placeholder="活動主題、內容、講者、議程與注意事項"></textarea></label>
@@ -149,6 +194,8 @@
     dialog.querySelector('[name="imageUrl"]').addEventListener('input',()=>{creation.uploadFailed=false;});
     $('aar-ai-read').addEventListener('click',()=>{void readActivityDm();});
     $('aar-ai-apply').addEventListener('click',applyActivityDraft);
+    dialog.querySelector('[name="seriesMode"]').addEventListener('change',syncSeriesMode);
+    $('aar-add-slot').onclick=()=>{const n=$('aar-slot-list').children.length;if(n<24)$('aar-slot-list').insertAdjacentHTML('beforeend',slotMarkup({},n));};
     $('aar-create-fields').addEventListener('input',event=>{
       if (event.target.name !== 'aiReviewed' && !$('aar-ai-review').hidden) $('aar-create-form').elements.aiReviewed.checked=false;
     });
@@ -179,7 +226,7 @@
       $('aar-ai-preview').hidden=false;
       message('aar-ai-status',`請先核對活動名稱、時間、地點與說明。${text(draft.confidenceNote) || '資料及費用仍須人工確認。'}`);
     } catch(error) { message('aar-ai-status',error.message,true); }
-    finally { lockCreate(false); }
+    finally { $('aar-ai-read').textContent='重新辨識 DM';lockCreate(false); }
   }
   function applyActivityDraft() {
     if (!creation || creation.busy || creation.payload || !creation.aiDraft) return;
@@ -190,6 +237,8 @@
     for (const key of ['activityName','activityType','startTime','endTime','location']) form.elements[key].value=text(draft[key]);
     form.elements.price.value = draft.price === null || draft.price === undefined ? '' : text(draft.price);
     form.elements.description.value=activityDescription(draft.description,'',draft.scheduleText);
+    form.elements.seriesMode.checked=draft.timeStatus==='multiple' || draft.batches?.length>1;
+    renderSlots($('aar-slot-list'),draft.batches || []);syncSeriesMode();
     $('aar-ai-review').hidden=false; form.elements.aiReviewed.required=true; form.elements.aiReviewed.checked=false;
     message('aar-ai-status',`已套用草稿。${text(draft.confidenceNote)} 請核對名稱、時間、地點、說明與費用，再按「建立活動」。`);
     form.elements.activityName.focus();
@@ -226,7 +275,8 @@
     const form = $('aar-create-form');
     if (!creation.payload && !form.reportValidity()) return;
     try {
-      creation.payload ||= creationPayload(Object.fromEntries(new FormData(form)),creation.id);
+      creation.payload ||= creationPayload({...Object.fromEntries(new FormData(form)),isBatch:form.elements.seriesMode.checked,
+        batches:selectedSlots($('aar-slot-list'))},creation.id);
     } catch(error) { message('aar-create-status',error.message,true);return; }
     lockCreate(true);message('aar-create-status','正在建立活動…');
     $('aar-create-submit').textContent='建立中…';
@@ -244,6 +294,111 @@
       if (!creation) return;
       message('aar-create-status',error.message,true);$('aar-create-submit').textContent='重試同一筆建立';
     } finally { if (creation) lockCreate(false); }
+  }
+  function draftMarkup(draft) {
+    return `<dl>${[['活動名稱',draft.activityName],['活動時間原文',draft.scheduleText],['活動地點',draft.location],['活動說明',draft.description],['開始時間',draft.startTime],['結束時間',draft.endTime],['費用',draft.price]]
+      .map(([label,value])=>`<dt>${label}</dt><dd>${esc(value === 0 ? '免費（0 元）' : value || '待人工補充')}</dd>`).join('')}</dl>`;
+  }
+  function clearEditDm() { editDm?.listeners?.abort();editDm=null; if($('edit-a-ai'))$('edit-a-ai').replaceChildren(); }
+  function editDmCurrent(s) {
+    return editDm===s && $('edit-a-id')?.value===s.id && !$('modal-activity-edit').classList.contains('hidden') &&
+      text(adminProfile?.userId)===s.uid && editAccessToken()===s.token;
+  }
+  function editAccessToken() { try{return text(window.liff?.getAccessToken?.());}catch(_){return '';} }
+  function mountEditDm(activity) {
+    clearEditDm();
+    const host=$('edit-a-ai');if(!host)return;
+    const s=editDm={id:activityId(activity),uid:text(adminProfile?.userId),token:editAccessToken(),busy:false,draft:null,image:'',imageUrl:'',activity};
+    host.innerHTML=`<section class="aar-dm-panel"><h3>✨ DM 重新辨識</h3><p>以目前宣傳圖重新擷取活動資料，先預覽再套用，不會直接儲存。</p>
+      <button type="button" id="edit-dm-read">重新辨識 DM</button>
+      <label>或選擇 DM 檔案供辨識（不變更宣傳圖）<input type="file" id="edit-dm-file" accept="image/jpeg,image/png,image/webp"></label>
+      <p id="edit-dm-status" role="status"></p><div id="edit-dm-preview" hidden><div id="edit-dm-content"></div>
+      <div id="edit-dm-slots"></div><button type="button" id="edit-dm-apply">確認套用至本活動</button>
+      <button type="button" id="edit-dm-series" hidden>以勾選時段另建系列活動</button></div>
+      <label id="edit-dm-review" class="aar-slot-check" hidden><input type="checkbox" id="edit-dm-reviewed">我已核對辨識後的內容、時間與費用</label></section>`;
+    $('edit-dm-read').onclick=()=>{void readEditDm(s);};
+    $('edit-dm-file').onchange=async event=>{
+      const file=event.target.files?.[0];if(!file || s.busy)return;
+      try {
+        const image=await dmFileData(file);
+        if(!editDmCurrent(s))return;
+        s.image=image;s.imageUrl=$('edit-a-image').value;s.draft=null;$('edit-dm-preview').hidden=true;
+        $('edit-dm-status').textContent='DM 已就緒，按「重新辨識 DM」。';
+      }catch(e){if(editDmCurrent(s))$('edit-dm-status').textContent=e.message;}
+    };
+    $('edit-dm-apply').onclick=()=>applyEditDm(s);
+    $('edit-dm-series').onclick=()=>{
+      if(!editDmCurrent(s)||s.busy||!s.draft)return;
+      let batches;try{batches=validateBatches(selectedSlots($('edit-dm-slots')));}catch(e){$('edit-dm-status').textContent=e.message;return;}
+      if(!window.confirm('另開新增系列表單；原活動及報名名單保持不變。確認後仍須按「建立活動」才會發布。'))return;
+      const draft={...s.draft,batches,timeStatus:'multiple'},url=$('edit-a-image').value;
+      if(creation) {showToast('請先完成或取消目前的新增活動表單',true);return;}
+      closeActivityEditModal();openCreate();creation.aiDraft=draft;applyActivityDraft();$('aar-create-form').elements.imageUrl.value=url;
+    };
+    // Manual edits after applying require review again, without replacing other modal handlers.
+    host.closest('#modal-activity-edit').addEventListener('input',event=>{
+      if(editDm===s && event.target.id!=='edit-dm-reviewed' && $('edit-dm-reviewed'))$('edit-dm-reviewed').checked=false;
+    },{signal:(s.listeners=new AbortController()).signal});
+  }
+  async function dmFileData(file) {
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>4*1024*1024)throw Error('辨識請使用 4 MB 以內 JPG / PNG / WebP');
+    return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(Error('無法讀取 DM'));r.readAsDataURL(file);});
+  }
+  async function currentDmImage(url) {
+    let parsed;try{parsed=new URL(url);}catch(_){throw Error('請先上傳宣傳圖，或選擇 DM 檔案供辨識');}
+    if(!['https:','http:'].includes(parsed.protocol)||parsed.username||parsed.password)throw Error('宣傳圖網址無效');
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+    try {
+      const response=await fetch(parsed.href,{credentials:'omit',signal:controller.signal});
+      if(!response.ok||!response.body)throw Error('image');
+      const reader=response.body.getReader(),chunks=[];let total=0;
+      while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>4*1024*1024){await reader.cancel();throw Error('size');}chunks.push(value);}
+      return await dmFileData(new Blob(chunks,{type:(response.headers.get('content-type')||'').split(';')[0]}));
+    }catch(_){throw Error('無法讀取現有宣傳圖（網址限制、逾時或超過 4 MB）。請在此選擇原 DM 檔案再辨識，原表單未變更。');}
+    finally{clearTimeout(timer);}
+  }
+  async function readEditDm(s) {
+    if(!editDmCurrent(s)||s.busy)return;
+    const url=$('edit-a-image').value;s.busy=true;s.draft=null;$('edit-dm-preview').hidden=true;
+    $('edit-dm-status').textContent='重新辨識中，請稍候…';
+    $('edit-a-ai').querySelectorAll('button,input').forEach(e=>{e.disabled=true;});
+    try{
+      const image=s.image && s.imageUrl===url ? s.image : await currentDmImage(url);
+      if(!editDmCurrent(s)||$('edit-a-image').value!==url)return;
+      const result=await fetchAPI('extractActivityDmDraft',{base64Image:image},{silent:true,timeoutMs:55000});
+      if(!editDmCurrent(s)||$('edit-a-image').value!==url)return;
+      const draft=result?.draft||result?.data?.draft;
+      if(!draft?.activityName||result.success===false)throw Error('辨識失敗，原表單未變更，可再次按「重新辨識 DM」。');
+      s.draft=draft;s.draftUrl=url;
+      $('edit-dm-content').innerHTML=draftMarkup(draft);renderSlots($('edit-dm-slots'),draft.batches||[]);
+      $('edit-dm-preview').hidden=false;$('edit-dm-series').hidden=!draft.batches?.length;
+      $('edit-dm-status').textContent=text(draft.confidenceNote)+' 多時段可勾一項套用本活動，或勾多項另建系列；不自動改動既有報名。';
+    }catch(e){if(editDmCurrent(s))$('edit-dm-status').textContent=e.message;}
+    finally{if(editDmCurrent(s)){s.busy=false;$('edit-a-ai').querySelectorAll('button,input').forEach(e=>{e.disabled=false;});}}
+  }
+  function applyEditDm(s) {
+    if(!editDmCurrent(s)||s.busy||!s.draft)return;
+    if(s.draftUrl!==$('edit-a-image').value){$('edit-dm-status').textContent='宣傳圖已變更，請重新辨識。';return;}
+    const draft=s.draft,isSeries=s.activity.isBatch===true||String(s.activity['是否系列']).toUpperCase()==='TRUE';let slot=null;
+    if(!isSeries && draft.timeStatus==='multiple'){
+      try{const slots=validateBatches(selectedSlots($('edit-dm-slots')));if(slots.length!==1)throw Error('本活動僅可套用一個時段；多個時段請用「另建系列活動」，保留原報名。');slot=slots[0];}
+      catch(e){$('edit-dm-status').textContent=e.message;return;}
+    }
+    if(!window.confirm('確認用辨識草稿取代本活動名稱、類型及說明'+(isSeries?'（保留原梯次時間與費用）':'、時間與費用')+'？套用後仍需儲存。'))return;
+    $('edit-a-name').value=draft.activityName;$('edit-a-type').value=draft.activityType||'活動';
+    $('edit-a-desc').value=activityDescription(draft.description,draft.location,draft.scheduleText);
+    if(!isSeries){$('edit-a-start').value=text(slot?.startTime||draft.startTime).replace('T',' ');$('edit-a-end').value=text(slot?.endTime||draft.endTime).replace('T',' ');$('edit-a-price').value=text(slot?.price??draft.price);}
+    $('edit-dm-review').hidden=false;$('edit-dm-reviewed').checked=false;
+    $('edit-dm-status').textContent='草稿已套用，請核對並勾選確認後儲存；尚未更新正式活動。';
+  }
+  function canSaveEditDm() {
+    if(!editDm)return true;
+    if(editDm.busy){showToast('DM 辨識中，請完成後再儲存',true);return false;}
+    const start=$('edit-a-start').value.replace(' ','T'),end=$('edit-a-end').value.replace(' ','T'),price=$('edit-a-price').value.trim();
+    if(!$('edit-dm-review').hidden && (!$('edit-dm-reviewed').checked || !validBatchTime(start) || (end && (!validBatchTime(end)||end<=start)) || price==='' || !Number.isSafeInteger(Number(price)) || Number(price)<0)) {
+      showToast('請補齊日期、費用並勾選核對辨識內容後再儲存',true);return false;
+    }
+    return true;
   }
   function mount() {
     if (state.mounted) return;
@@ -375,7 +530,7 @@
       return;
     }
     $('aar-roster-body').innerHTML = rows.length ? rows.map(row => `<tr>
-      <td><strong>${esc(row.name)}</strong><div class="aar-note">${esc(row.identity)}</div></td><td>${esc(row.phone || '未提供')}</td>
+      <td><strong>${esc(row.name)}</strong><div class="aar-note">${esc(row.identity)}</div>${row.activityName?`<div class="aar-note">${esc(row.activityName)}</div>`:''}</td><td>${esc(row.phone || '未提供')}</td>
       <td>${esc(row.payment || (row.amount > 0 ? '待付款' : '免費'))}<div class="aar-note">NT$ ${esc(row.amount)}</div></td>
       <td><span class="aar-badge ${row.cancelled ? 'aar-muted' : row.checked ? 'aar-ok' : ''}">${row.cancelled ? '已取消' : row.checked ? '已簽到' : '未簽到'}</span></td>
       <td>${esc(row.time || '—')}</td><td><div class="aar-actions">${!row.cancelled && row.id ?
@@ -495,6 +650,7 @@
     }
   }
   window.AdminActivityRegistration = { load, renderActivities: renderOverview, countFor,
+    mountEditDm, clearEditDm, canSaveEditDm, validateBatches,
     loadEditLink, clearEditLink, canUseEditLink, copyEditLink,
     list, registrant, summary, filterActivities, filterRegistrants, csv, creationPayload, activityDescription };
 })();
