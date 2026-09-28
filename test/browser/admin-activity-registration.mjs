@@ -4,6 +4,7 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { normalizeActivityDraft } from '../../worker/activity-dm-ai.mjs';
 const require = createRequire(import.meta.url);
 let playwright; try { playwright = require('playwright'); } catch { playwright = require('C:/Users/User/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'); }
 const tailwindResponse = await fetch('https://cdn.tailwindcss.com', {signal:AbortSignal.timeout(20000)});
@@ -31,6 +32,7 @@ const rows = [
 let failList=false,failRoster=false,loseToggle=false,holdRoster=false,held;
 let loseCreate=false,holdCreate=false,releaseCreate,failUpload=false;
 let failAi=false,holdAi=false,releaseAi;
+let multiSession=false;
 let failLink=false,holdLink=false,releaseLink;
 const shortUrl='https://line-engine.fangwl591021.workers.dev/a/AbCd0123456789_-';
 await page.route('**/*', async route => {
@@ -53,7 +55,7 @@ await page.route('**/*', async route => {
     else if(action==='extractActivityDmDraft') {
       assert.ok(payload.base64Image.startsWith('data:image/png;base64,'));
       if(holdAi){holdAi=false;await new Promise(resolve=>{releaseAi=resolve;});}
-      result=failAi?null:{provider:'OpenAI',draft:{activityName:'AI 活動草稿',activityType:'講座',location:'台北市合成會場',startTime:'2026-10-01T10:00',endTime:'2026-10-01T12:00',price:null,description:'活動亮點\n• <img src=x onerror=alert(1)>\n• 合成活動內容',confidenceNote:'費用不明，請人工確認。'}};
+      result=failAi?null:{provider:'OpenAI',draft:normalizeActivityDraft({activityName:'AI 活動草稿',activityType:'講座',location:'台北市合成會場3樓之2',timeStatus:multiSession?'multiple':'single',scheduleText:multiSession?'2026/10/01、10/15 上午10:00–12:00':'2026/10/01 上午10:00–12:00',startTime:'2026-10-01T10:00',endTime:'2026-10-01T12:00',price:null,description:'• <img src=x onerror=alert(1)>\n• 合成活動內容：每位自我介紹 60 秒，限 20 位。',confidenceNote:'費用不明，請人工確認。'})};
     }
     else if(action==='bulkAddRegistrants') {
       assert.deepEqual(payload.names,[]);assert.equal(payload.userId,'synthetic-manager');
@@ -243,6 +245,7 @@ try {
   assert.equal(await field('activityName').isDisabled(),true);
   while(!releaseAi)await new Promise(resolve=>setTimeout(resolve,10));releaseAi();
   await page.locator('#aar-ai-preview').waitFor();
+  assert.deepEqual(await page.locator('#aar-ai-content dt').allTextContents(),['活動名稱','活動時間原文','開始時間','結束時間','活動地點','活動說明','類型','費用']);
   assert.equal(await page.locator('#aar-ai-content img').count(),0);
   assert.equal(await field('activityName').inputValue(),'原本手動名稱');assert.equal(createCount(),beforeAi);
   for(const width of [320,390,1440]) {
@@ -252,15 +255,33 @@ try {
   }
   await btn('套用草稿到下方表單').click();
   assert.equal(await field('activityName').inputValue(),'AI 活動草稿');assert.equal(await field('price').inputValue(),'');
-  assert.match(await field('description').inputValue(),/活動地點：台北市合成會場/);
+  assert.equal(await field('location').inputValue(),'台北市合成會場3樓之2');
+  assert.match(await field('description').inputValue(),/DM 活動時間原文：2026\/10\/01 上午10:00–12:00/);
   await btn('建立活動').click();assert.equal(createCount(),beforeAi);
   await field('price').fill('350');await field('aiReviewed').check();
+  await field('location').fill('台北市人工確認會場5樓');assert.equal(await field('aiReviewed').isChecked(),false);
+  await field('aiReviewed').check();
   await field('activityName').fill('人工確認的 AI 活動');assert.equal(await field('aiReviewed').isChecked(),false);
   await btn('建立活動').click();assert.equal(createCount(),beforeAi);
   await field('aiReviewed').check();await btn('建立活動').click();await page.locator('#aar-create-dialog').waitFor({state:'detached'});
   assert.equal(createCount(),beforeAi+1);
   const aiCreated=calls.filter(call=>call.action==='bulkAddRegistrants').at(-1);
   assert.equal(aiCreated.payload.activityName,'人工確認的 AI 活動');assert.equal(aiCreated.payload.price,350);assert.equal(aiCreated.payload.status,'上架');
+  assert.match(aiCreated.payload.description,/活動地點：台北市人工確認會場5樓/);
+  assert.doesNotMatch(aiCreated.payload.description,/台北市合成會場3樓之2/);
+  assert.match(aiCreated.payload.description,/DM 活動時間原文：2026\/10\/01 上午10:00–12:00/);
+  // Multiple sessions remain visible, but cannot be published until a start is explicitly chosen.
+  multiSession=true;const beforeMultiple=createCount();
+  await btn('＋新增活動').click();await field('imageFile').setInputFiles(image);
+  await page.waitForFunction(()=>!document.getElementById('aar-ai-read').disabled);
+  await btn('AI 讀取 DM 並整理活動資料').click();await page.locator('#aar-ai-preview').waitFor();
+  assert.match(await page.locator('#aar-ai-status').textContent(),/多個場次/);
+  await btn('套用草稿到下方表單').click();
+  assert.equal(await field('startTime').inputValue(),'');assert.equal(await field('endTime').inputValue(),'');
+  assert.match(await field('description').inputValue(),/2026\/10\/01、10\/15/);
+  await field('price').fill('200');await field('aiReviewed').check();await btn('建立活動').click();
+  assert.equal(createCount(),beforeMultiple);
+  await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click();
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({passed:true,widths:[320,390,1440],apiActions:[...new Set(calls.map(call=>call.action))],realDataWrites:0,screenshots:out}));
 } catch(error) {
