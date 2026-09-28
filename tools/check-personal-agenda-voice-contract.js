@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
@@ -38,4 +39,22 @@ expect(worker, /normalizeTaipeiDateTime\(clean\(value\)\)/, 'AI dates must use t
 expect(timeModule, /timeZone: 'Asia\/Taipei'/, 'timezone-bearing AI dates must normalize to Asia Taipei');
 expect(worker, /location: clean\(parsed\.location\)/, 'voice proposal must preserve a distinct location field');
 expect(core, /'parsePersonalTaskVoice'/, 'voice action must receive the extended request timeout');
+
+// Every status shares the same blue panel, including errors and retries.
+expect(home, /id="agenda-voice-status" class="text-\[11px\] text-white mt-0\.5"/, 'initial voice hint must be white');
+const statusStart = home.indexOf('function setAgendaVoiceStatus_(');
+const statusEnd = home.indexOf('function applyPersonalAgendaVoiceDraft_(', statusStart);
+if (statusStart < 0 || statusEnd < statusStart) fail('voice status renderer must exist');
+const statusNode = { textContent: '', className: '' };
+const context = vm.createContext({ document: { getElementById: id => id === 'agenda-voice-status' ? statusNode : null } });
+vm.runInContext(home.slice(statusStart, statusEnd), context);
+for (const [message, isError] of [
+  ['錄音中，請在 15 秒內說完。', false], ['AI 正在整理語音內容...', false],
+  ['AI 已整理草稿，請確認內容後再儲存。', false], ['語音辨識失敗，請改用文字建立。', true],
+  ['請開始說出日期、時間與行程。', false]
+]) {
+  context.setAgendaVoiceStatus_(message, isError);
+  if (statusNode.textContent !== message) fail('voice status must retain its original message');
+  if (statusNode.className !== 'text-[11px] text-white mt-0.5') fail('all voice states must keep white text without error backgrounds');
+}
 console.log('Personal agenda voice contract passed.');
