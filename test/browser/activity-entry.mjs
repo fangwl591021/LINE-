@@ -13,6 +13,11 @@ const scripts=new Set(['js/config.js','js/login-bootstrap.js','js/core.js','js/n
 const actor='U'+'a'.repeat(32),ref='U'+'b'.repeat(32),id='ACT_fcfc401d-d559-4d0e-bbf4-73ff21973e09';
 const query=`?a=${id}&r=${ref}&n=admin&v=a`;
 const activity={activityId:id,networkId:'admin',status:'上架',activityName:'秋日交流活動',activityType:'交流',startTime:'2026-10-01T10:00',price:100,description:'測試活動內容 <img src=x onerror=alert(1)>'};
+const registrations=[
+  {rowId:'latest',activityId:id,activityName:'最新報名',createdAt:'2026-09-28T03:00:00Z',startTime:'2026-10-01T03:00:00Z',status:'active'},
+  {rowId:'middle',activityId:'B',activityName:'先前報名',createdAt:'2026-09-27T03:00:00Z',startTime:'2026-12-01T03:00:00Z',status:'checkedin'},
+  {rowId:'oldest',activityId:'C',activityName:'最早報名',createdAt:'2026-09-26T03:00:00Z',startTime:'2026-11-01T03:00:00Z',status:'cancelled'}
+];
 const browser=await playwright.chromium.launch({headless:true,channel:'chrome'});
 const page=await browser.newPage({viewport:{width:390,height:844}});
 const out=join(tmpdir(),'activity-direct-entry-20260928');mkdirSync(out,{recursive:true});
@@ -39,7 +44,9 @@ await page.route('**/*',async route=>{
       if(holdActivity){holdActivity=false;await new Promise(resolve=>{releaseActivity=resolve;});}
       if(failActivity)return route.fulfill({contentType:'application/json',body:JSON.stringify({success:false,error:'合成網路失敗'})});
       data=activity;
-    } else {blocked.push(action);return route.abort();}
+    } else if(action==='getMyActivities')data=registrations;
+    else if(action==='listPersonalTasks')data=[];
+    else {blocked.push(action);return route.abort();}
     return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,data})});
   }
   if(req.resourceType()==='image')return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
@@ -90,7 +97,27 @@ try {
   await page.waitForTimeout(150);
   assert.equal(await page.evaluate(()=>currentPage),'home');
   assert.equal(await page.locator('#page-my-act-detail').isVisible(),false);
+  // Registration list keeps the API's newest-first order, and rendered controls target that row.
+  await page.evaluate(()=>goPage('my-activities'));
+  await page.waitForFunction(()=>document.querySelector('#my-activities-list')?.textContent.includes('最新報名'));
+  await page.getByRole('button',{name:'活動報名紀錄'}).click();
+  const list=page.locator('#my-activities-list');
+  assert.deepEqual(await list.locator('.truncate').allTextContents(),registrations.map(r=>r.activityName));
+  for(const width of [390,1440]) {
+    await page.setViewportSize({width,height:844});
+    await page.screenshot({path:join(out,`history-${width}.png`),fullPage:true});
+  }
+  await list.getByText('最新報名',{exact:true}).click();
+  assert.equal(await page.locator('#my-act-detail-content h3').textContent(),'最新報名');
+  await page.getByRole('button',{name:/出示核銷 QR/}).click();
+  const verify=new URL(new URL(await page.locator('#qr-code-img').getAttribute('src')).searchParams.get('text'));
+  assert.equal(verify.searchParams.get('verifyCheckin'),'latest');assert.equal(verify.searchParams.get('activityId'),id);
+  await page.evaluate(()=>document.getElementById('qr-modal').classList.add('hidden'));
+  // Cancel is declined, so this browser fixture cannot mutate any registration.
+  await page.evaluate(()=>{window.__cancelPrompt='';window.appConfirm=async message=>{window.__cancelPrompt=message;return false;};});
+  await page.getByRole('button',{name:'取消報名',exact:true}).click();
+  assert.match(await page.evaluate(()=>__cancelPrompt),/最新報名/);
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
-  assert.ok(calls.every(x=>['checkUser','getActivityById'].includes(x.action)));
+  assert.ok(calls.every(x=>['checkUser','getActivityById','getMyActivities','listPersonalTasks'].includes(x.action)));
   console.log(JSON.stringify({result:'PASS',widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],automaticWrites:0,screenshots:out}));
 } finally {await browser.close();}

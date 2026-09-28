@@ -2785,12 +2785,12 @@ const HomeModule = (function() {
             }
 
             window.myActivitiesData = records.slice();
-            list.innerHTML = records.slice().reverse().map((r, idx) => {
+            // Registration APIs already return newest first; keep display and action indices aligned.
+            list.innerHTML = records.map((r, recordIndex) => {
                 const title = window.escapeHTML(r['活動名稱'] || r.activityName || r.title || '未命名活動');
                 const time = window.escapeHTML(window.formatDisplayTime(r['開始時間'] || r.startTime || r.createdAt || r['報名時間'] || ''));
                 const status = getRegistrationStatus_(r);
                 const fee = window.escapeHTML(r['繳費狀態'] || r.paymentStatus || '');
-                const recordIndex = records.length - 1 - idx;
                 return `
                     <div class="p-4 flex items-center justify-between gap-3 active:bg-slate-50 transition-colors cursor-pointer" onclick="window.openMyActivityRecordDetail(${recordIndex})">
                         <div class="min-w-0">
