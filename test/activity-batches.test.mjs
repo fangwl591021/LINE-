@@ -95,3 +95,45 @@ test('concurrent creation is one parent and one set of children',async()=>{
  assert(results.every(r=>r.success));assert.equal(f.sql.prepare('SELECT count(*) n FROM activities').get().n,3);
  }finally{f.sql.close();}
 });
+
+function batchUi(){
+ const classes=new Set();
+ const host={dataset:{},classList:{add:(...names)=>names.forEach(name=>classes.add(name))},isConnected:true,innerHTML:'',textContent:'',querySelectorAll:()=>[{value:'B1'},{value:'B2'}]};
+ const context=vm.createContext({window:{},document:{getElementById:()=>host}});
+ vm.runInContext(readFileSync(new URL('../js/modules/activity-batches.js',import.meta.url),'utf8'),context);
+ return {host,classes,ui:context.window.ActivityBatches};
+}
+test('batch choices match description typography and width without oversized frame',async()=>{
+ const {host,classes,ui}=batchUi();
+ const activity={activityId:'series',isBatch:true,batches:[{activityId:'B1',batchName:'10/7（三）',startTime:'2026-10-07 14:00',endTime:'2026-10-07 17:00',price:200,status:'上架'}]};
+ await ui.mount(activity,host);
+ assert.deepEqual([...classes],['text-[14px]','text-slate-600']);
+ const home=readFileSync(new URL('../js/modules/home.js',import.meta.url),'utf8');
+ assert.match(home,/<p class="text-\[14px\] text-slate-600 whitespace-pre-wrap">\$\{desc\}<\/p>\s*<div id="activity-batch-choices">/);
+ assert.match(host.innerHTML,/min-width:0;width:100%;margin:0;padding:0;border:0;font:inherit;color:inherit/);
+ assert.match(host.innerHTML,/min-height:44px/);
+ assert.match(host.innerHTML,/width:18px;height:18px/);
+ assert.match(host.innerHTML,/2026\/10\/07 14:00–17:00/);
+ assert.match(host.innerHTML,/NT\$ 200/);
+ assert.doesNotMatch(host.innerHTML,/#a7f3d0|font-weight:bold|<strong>|2026-10-07 17:00/);
+ assert.equal(host.dataset.ready,'true');
+ assert.deepEqual(Array.from(ui.selection(activity)),['B1','B2']);
+ assert.match(readFileSync(new URL('../index.html',import.meta.url),'utf8'),/activity-batches\.js\?v=2/);
+});
+test('compact schedule retains cross-day dates, missing ends, aliases and escaped values',async()=>{
+ const {host,ui}=batchUi();
+ await ui.mount({activityId:'series',isBatch:true,batches:[
+  {activityId:'B1',batchName:'<img onerror=alert(1)>',startTime:'2026-10-07T23:00',endTime:'2026-10-08T01:00',price:0,status:'上架'},
+  {activityId:'B2',batchName:'早場','開始時間':'2026-10-21 14:00','結束時間':'2026-10-21 17:00',price:200,status:'上架'},
+  {activityId:'B3',batchName:'單一時間',startTime:'2026-11-11 14:00',status:'上架'},
+  {activityId:'B4',batchName:'待確認',startTime:'<script>bad</script>',status:'上架'},
+  {activityId:'closed',batchName:'不公開',status:'下架'}
+ ]},host);
+ assert.match(host.innerHTML,/2026\/10\/07 23:00 ～ 2026\/10\/08 01:00/);
+ assert.match(host.innerHTML,/2026\/10\/21 14:00–17:00/);
+ assert.match(host.innerHTML,/2026\/11\/11 14:00<\/span>/);
+ assert.match(host.innerHTML,/免費/);
+ assert.match(host.innerHTML,/&lt;img onerror=alert\(1\)&gt;/);
+ assert.doesNotMatch(host.innerHTML,/<script>|<img|不公開/);
+ assert.equal((host.innerHTML.match(/type="checkbox"/g)||[]).length,4);
+});
