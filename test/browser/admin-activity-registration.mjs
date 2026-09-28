@@ -109,6 +109,8 @@ try {
   await btn('複製連結').click();
   assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),shortUrl);
   await page.locator('#edit-a-name').fill('尚未儲存的名稱');
+  const descriptionDraft='活動地點：新北市板橋區文化路一段486號3樓之2\n\n活動亮點：\n• 來認識人、聊資源、找合作、串商機\n• 小小交流，大大商機，歡迎參加\n\n當日流程：\n14:00 報到\n14:15 相見、相識\n14:45 合作交流\n16:30 交流結束';
+  await page.locator('#edit-a-desc').fill(descriptionDraft);
   for(const width of [320,390,1440]) {
     await page.setViewportSize({width,height:800});
     await page.locator('#edit-a-registration-link').scrollIntoViewIfNeeded();
@@ -118,6 +120,19 @@ try {
     }).map(n=>n.id||n.textContent));
     assert.deepEqual(overflow,[],`edit link controls fit ${width}px`);
     await page.screenshot({path:join(out,`edit-link-${width}.png`),fullPage:true});
+    await page.locator('#btn-save-activity').click({trial:true});
+    await editModal.getByRole('button',{name:'取消',exact:true}).click({trial:true});
+    await page.locator('#edit-a-desc').scrollIntoViewIfNeeded();
+    const descriptionStyle=await page.locator('#edit-a-desc').evaluate(node=>{
+      const style=getComputedStyle(node),box=node.getBoundingClientRect();
+      return {size:style.fontSize,color:style.color,weight:style.fontWeight,lineHeight:style.lineHeight,resize:style.resize,height:box.height,left:box.left,right:box.right};
+    });
+    assert.equal(descriptionStyle.size,'18px');assert.equal(descriptionStyle.color,'rgb(15, 23, 42)');
+    assert.equal(descriptionStyle.weight,'500');assert.ok(parseFloat(descriptionStyle.lineHeight)>=29);
+    assert.equal(descriptionStyle.resize,'vertical');assert.ok(descriptionStyle.height>=320);
+    assert.ok(descriptionStyle.left>=0&&descriptionStyle.right<=width);
+    assert.equal(await page.locator('#edit-a-desc').inputValue(),descriptionDraft);
+    await page.screenshot({path:join(out,`edit-description-${width}.png`),fullPage:true});
     await page.locator('#btn-save-activity').click({trial:true});
     await editModal.getByRole('button',{name:'取消',exact:true}).click({trial:true});
   }

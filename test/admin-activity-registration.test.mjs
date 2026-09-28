@@ -213,3 +213,12 @@ test('edit modal exposes a read-only link without changing existing save API', (
   const linkCode=source.slice(source.indexOf('  function editToken()'),source.indexOf('  window.AdminActivityRegistration ='));
   assert.doesNotMatch(linkCode,/updateActivity|deleteActivity|bulkAddRegistrants|edit-a-name/);
 });
+
+test('activity description editor stays full width with a taller, darker readable text area', () => {
+  const field=html.match(/<textarea id="edit-a-desc"[^>]*>/)?.[0] || '';
+  assert.match(field,/rows="10"/);
+  for(const className of ['w-full','min-h-[320px]','text-[18px]','text-slate-900','font-medium','leading-relaxed','resize-y'])assert.ok(field.includes(className),className);
+  assert.doesNotMatch(field,/text-sm|resize-none/);
+  assert.match(html,/<label for="edit-a-desc" class="block text-base font-bold text-slate-700 mb-1\.5">活動說明<\/label>/);
+  assert.match(html,/const nextDesc = document\.getElementById\("edit-a-desc"\)\.value;/,'save still reads the existing field unchanged');
+});
