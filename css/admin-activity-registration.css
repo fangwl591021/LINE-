@@ -5,6 +5,8 @@
 .aar-dm-panel input:not([type=checkbox]) { display:block; box-sizing:border-box; width:100%; min-width:0; padding:10px; border:1px solid #cbd5e1; border-radius:8px; background:white; }
 .aar-dm-panel button { min-height:44px; margin:8px 8px 8px 0; padding:10px 14px; background:white; border:1px solid #94a3b8; border-radius:10px; font-weight:bold; }
 .aar-dm-panel button:disabled { opacity:.5; }
+.aar-dm-panel #edit-dm-action-status { padding:10px 12px; border-radius:8px; background:#dcfce7; color:#166534; }
+.aar-dm-panel #edit-dm-action-status[data-error="true"] { background:#fff1f2; color:#9f1239; }
 .aar-dm-panel dd { white-space:pre-wrap; margin:0 0 12px; }
 .aar-dm-panel dt { font-weight:bold; }
 .aar-slot { margin:12px 0; padding:12px; background:white; border:1px solid #cbd5e1; border-radius:12px; }

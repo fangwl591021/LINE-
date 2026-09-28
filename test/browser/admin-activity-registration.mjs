@@ -33,6 +33,7 @@ let failList=false,failRoster=false,loseToggle=false,holdRoster=false,held;
 let loseCreate=false,holdCreate=false,releaseCreate,failUpload=false;
 let failAi=false,holdAi=false,releaseAi;
 let multiSession=false;
+let omitSessionRows=false;
 let failLink=false,holdLink=false,releaseLink;
 const shortUrl='https://line-engine.fangwl591021.workers.dev/a/AbCd0123456789_-';
 await page.route('**/*', async route => {
@@ -74,6 +75,7 @@ await page.route('**/*', async route => {
       result=loseToggle?null:{rowId:payload.rowId};loseToggle=false;
     } else if(action==='confirmPayment') { rows.find(row=>row.rowId===payload.rowId)['付款狀態']='已付款';result={rowId:payload.rowId}; }
     else { blocked.push(action); return route.abort(); }
+    if(action==='extractActivityDmDraft' && omitSessionRows && result?.draft)result.draft.batches=[];
     return route.fulfill({contentType:'application/json',body:JSON.stringify(result===null?{success:false,error:'合成失敗'}:{success:true,data:result})});
   }
   if(req.resourceType()==='image')return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
@@ -129,7 +131,26 @@ try {
   multiSession=true;await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
   assert.equal(await page.locator('#edit-dm-slots [data-slot-select]').count(),3);
   assert.equal(calls.filter(c=>c.action==='uploadImageToR2').length,uploadsBefore);
-  await btn('確認套用至本活動').click();assert.notEqual(await page.locator('#edit-a-name').inputValue(),'AI 活動草稿');
+  // Incomplete AI candidates must still open an editable series draft. Validate only on save.
+  for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:800});
+    await btn('確認套用至本活動').click();assert.notEqual(await page.locator('#edit-a-name').inputValue(),'AI 活動草稿');
+    assert.match(await page.locator('#edit-dm-action-status').textContent(),/僅可套用一個時段/);
+    const notice=await page.locator('#edit-dm-action-status').boundingBox();assert.ok(notice.y>=0&&notice.y+notice.height<=800);
+    await btn('以勾選時段另建系列活動').click();
+    await page.locator('#aar-create-dialog').waitFor({timeout:3000});
+    assert.equal(await page.locator('#aar-create-form [name="seriesMode"]').isChecked(),true);
+    assert.equal(await page.locator('#aar-slot-list [data-slot-select]').count(),3);
+    assert.equal(await page.locator('#aar-slot-list [data-slot-field="price"]').nth(1).inputValue(),'');
+    assert.equal(await page.locator('#aar-slot-list [data-slot-field="startTime"]').nth(2).inputValue(),'');
+    assert.equal(await page.locator('#aar-slot-list [data-slot]').nth(1).getAttribute('data-slot-source'),'2026/10/15 10:00');
+    assert.equal(calls.filter(c=>c.action==='bulkAddRegistrants'||c.action==='updateActivity').length,0);
+    await page.screenshot({path:join(out,`edit-to-series-${width}.png`)});
+    await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click();
+    await page.evaluate(()=>editActivityFromMonitor('A'));
+    await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
+    await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
+  }
   await page.locator('#edit-dm-slots [data-slot-select]').nth(1).uncheck();await page.locator('#edit-dm-slots [data-slot-select]').nth(2).uncheck();
   await btn('確認套用至本活動').click();assert.equal(await page.locator('#edit-a-start').inputValue(),'2026-10-01 10:00');
   await page.evaluate(()=>closeActivityEditModal());multiSession=false;
@@ -319,6 +340,40 @@ try {
   await page.evaluate(()=>{closeActivityEditModal();editActivityFromMonitor('B');});releaseAi();await page.waitForTimeout(150);
   assert.equal(await page.locator('#edit-a-name').inputValue(),'小型讀書會');assert.equal(await page.locator('#edit-dm-preview').isVisible(),false);
   await page.evaluate(()=>closeActivityEditModal());
+  // Edit -> selected series -> explicit publish works end-to-end without updating the old event.
+  multiSession=true;const beforeEditSeries=createCount();
+  await page.evaluate(()=>editActivityFromMonitor('A'));
+  await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
+  await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
+  await page.locator('#edit-dm-slots [data-slot-select]').nth(2).uncheck();
+  await btn('以勾選時段另建系列活動').click();await page.locator('#aar-create-dialog').waitFor();
+  assert.equal(await page.locator('#aar-slot-list [data-slot]').count(),2);
+  await field('aiReviewed').check();await btn('建立活動').click();assert.equal(createCount(),beforeEditSeries);
+  assert.match(await page.locator('#aar-create-status').textContent(),/費用/);
+  await page.locator('#aar-slot-list [data-slot-field="price"]').nth(1).fill('100');
+  await field('aiReviewed').check();await btn('建立活動').click();await page.locator('#aar-create-dialog').waitFor({state:'detached'});
+  const editSeries=calls.filter(c=>c.action==='bulkAddRegistrants').at(-1).payload;
+  assert.equal(editSeries.isBatch,true);assert.equal(editSeries.batches.length,2);assert.equal(editSeries.batches[1].price,100);
+  assert.notEqual(editSeries.activityId,'A');assert.equal(calls.filter(c=>c.action==='updateActivity').length,0);
+  // Empty AI candidates never become a dead-end or invented dates; manual rows remain available.
+  omitSessionRows=true;await page.evaluate(()=>editActivityFromMonitor('A'));
+  await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
+  await btn('重新辨識 DM').click();await page.locator('#edit-dm-preview').waitFor();
+  assert.match(await page.locator('#edit-dm-action-status').textContent(),/未取得可用梯次/);
+  await btn('以勾選時段另建系列活動').click();assert.match(await page.locator('#edit-dm-action-status').textContent(),/至少勾選/);
+  await btn('＋新增梯次').click();assert.equal(await page.locator('#edit-dm-slots [data-slot]').count(),1);
+  await btn('確認套用至本活動').click();assert.equal(await page.locator('#edit-a-start').inputValue(),'');
+  assert.match(await page.locator('#edit-dm-action-status').textContent(),/草稿已套用/);
+  assert.equal(await page.evaluate(()=>AdminActivityRegistration.canSaveEditDm()),false);
+  await page.locator('#edit-a-image').fill('https://localhost/another-poster.png');
+  await btn('以勾選時段另建系列活動').click();assert.match(await page.locator('#edit-dm-action-status').textContent(),/宣傳圖已變更/);
+  assert.equal(await page.locator('#aar-create-dialog').count(),0);
+  await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');
+  await btn('以勾選時段另建系列活動').click();await page.locator('#aar-create-dialog').waitFor();
+  assert.equal(await page.locator('#aar-slot-list [data-slot-field="startTime"]').inputValue(),'');
+  assert.equal(await page.locator('#aar-slot-list [data-slot-field="price"]').inputValue(),'');
+  await page.locator('#aar-create-dialog').getByRole('button',{name:'取消',exact:true}).click();
+  assert.equal(createCount(),beforeEditSeries+1);
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({passed:true,widths:[320,390,1440],apiActions:[...new Set(calls.map(call=>call.action))],realDataWrites:0,screenshots:out}));
 } catch(error) {
