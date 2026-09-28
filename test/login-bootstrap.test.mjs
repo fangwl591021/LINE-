@@ -104,6 +104,7 @@ function fixture({ query = '', init, profile = null, token = 'fixture-access-tok
   vm.runInContext(block(configSource, 'window.initActmasterLiff =', 'window.getActmasterLiffProfile ='), context);
   vm.runInContext(block(configSource, 'window.readActmasterPointFriendship =', 'window.showActmasterPointFriendshipGate ='), context);
   vm.runInContext(block(configSource, 'window.ensureActmasterPointFriendship =', 'window.recheckActmasterPointFriendship ='), context);
+  vm.runInContext(block(configSource, 'window.recheckActmasterPointFriendship =', 'window.actmasterShareTargetPicker ='), context);
   context.showActmasterPointFriendshipGate = message => calls.push(['friendship-gate', message]);
   vm.runInContext(bootstrapSource, context);
   async function tick(duration) {
@@ -653,18 +654,75 @@ function installActivity(f, { member={isRegistered:true,info:{userId:actor,role:
 }
 
 test('pure activity aliases/nested states resolve explicit admin before ref; other routes keep ownership',()=>{
-  for(const query of [activityQuery,'?activityId='+activityId,'?act='+activityId,'?event='+activityId,
+  for(const query of [activityQuery,activityQuery+'&point_friend=1','?activityId='+activityId,'?act='+activityId,'?event='+activityId,
     '?liff.state='+encodeURIComponent(activityQuery), '?state='+encodeURIComponent(encodeURIComponent(activityQuery))]) {
     const f=fixture({query});vm.runInContext(activityEntrySource,f.context);
     const target=f.context.ActivityEntry.readTarget(f.context.readActmasterInitialParams());
     assert.equal(target.activityId,activityId,query);assert.equal(target.networkId,'admin',query);
   }
   for(const extra of ['&shareCardId=card&share=1','&claim=card','&shopSection=manage','&shopId=shop','&checkin=A',
-    '&nfcAct=A','&admin=1','&open=chat','&mode=cardcool-list','&point_friend=1','#open=inbox','&activityId=other','&net=other','&unknown=1']) {
+    '&nfcAct=A','&admin=1','&open=chat','&mode=cardcool-list','&point_friend=0','&point_friend=','&point_friend=1&point_friend=1','#open=inbox','&activityId=other','&net=other','&unknown=1']) {
     const f=fixture({query:activityQuery+extra});vm.runInContext(activityEntrySource,f.context);
     assert.equal(f.context.ActivityEntry.readTarget(f.context.readActmasterInitialParams()),null,extra);
   }
-  assert.ok(indexSource.indexOf('js/modules/activity-entry.js?v=1')<indexSource.indexOf('js/auth.js?v='));
+  assert.ok(indexSource.indexOf('js/modules/activity-entry.js?v=2')<indexSource.indexOf('js/auth.js?v='));
+});
+
+test('new friend confirmation returns to original activity after LIFF URL cleanup, without OAuth data or registration',async()=>{
+  for(const query of [activityQuery,'?code=synthetic-code&liff.state='+encodeURIComponent(activityQuery),
+    '?liff.state='+encodeURIComponent(encodeURIComponent(activityQuery))]) {
+    let friend=false;
+    const f=fixture({query,init:c=>{c.location.search='';return Promise.resolve();}});
+    installActivity(f,{member:{isRegistered:false}});
+    f.context.liff.getFriendship=async()=>({friendFlag:friend});
+    await f.domReady();
+    assert.ok(f.calls.some(c=>c[0]==='friendship-gate'));
+    assert.ok(!f.calls.some(c=>c[0]==='api'));
+    await f.context.recheckActmasterPointFriendship();
+    assert.ok(!f.calls.some(c=>c[0]==='replace'),'declined friendship cannot continue');
+    friend=true;
+    await f.context.recheckActmasterPointFriendship();
+    const redirect=new URL(f.calls.find(c=>c[0]==='replace')[1]);
+    assert.equal(redirect.origin,'https://example.invalid');assert.equal(redirect.pathname,'/LINE-/');
+    assert.equal(redirect.searchParams.get('activityId'),activityId);
+    assert.equal(redirect.searchParams.get('net'),'admin');assert.equal(redirect.searchParams.get('ref'),otherActor);
+    assert.equal(redirect.searchParams.get('via'),'a');assert.equal(redirect.searchParams.get('point_friend'),'1');
+    assert.deepEqual([...redirect.searchParams.keys()].sort(),['activityId','net','point_friend','ref','via']);
+    const returned=fixture({query:redirect.search});installActivity(returned,{member:{isRegistered:false}});
+    await returned.domReady();
+    assert.ok(returned.calls.some(c=>c[0]==='unregistered-session'));
+    assert.ok(returned.calls.some(c=>c[0]==='activity-detail'&&c[1]===activityId));
+    assert.ok(!returned.calls.some(c=>c[0]==='home-data'||(c[0]==='page'&&c[1]==='home')));
+    assert.deepEqual(returned.calls.filter(c=>c[0]==='api').map(c=>c[1]),['checkUser','getActivityById']);
+    assert.equal(returned.calls.find(c=>c[1]==='getActivityById')[2].userId,actor);
+  }
+});
+
+test('friend marker is not authority: logged-out, nonfriend and unavailable friendship cannot reach activity APIs',async()=>{
+  for(const gate of ['logged-out','nonfriend','unavailable']) {
+    const f=fixture({query:activityQuery+'&point_friend=1',loggedIn:gate!=='logged-out'});installActivity(f);
+    f.context.liff.getFriendship=async()=>{if(gate==='unavailable')throw Error('offline');return {friendFlag:false};};
+    await f.domReady();
+    assert.ok(!f.calls.some(c=>c[0]==='api'||c[0]==='activity-detail'),gate);
+    if(gate!=='logged-out') {
+      await f.context.recheckActmasterPointFriendship();
+      assert.ok(!f.calls.some(c=>c[0]==='replace'),gate);
+      assert.equal(f.node('point-friendship-continue').disabled,false);
+    }
+  }
+});
+
+test('friend confirmation leaves non-activity routes and manually departed activity pages unchanged',async()=>{
+  for(const query of ['', '?shareCardId=card&share=1','?shopSection=manage','?open=chat',activityQuery+'&claim=card']) {
+    const f=fixture({query});vm.runInContext(activityEntrySource,f.context);
+    await f.context.recheckActmasterPointFriendship();
+    const expected=new URL(f.context.location.href);expected.searchParams.set('point_friend','1');
+    assert.equal(f.calls.find(c=>c[0]==='replace')[1],expected.toString(),query);
+  }
+  const f=fixture({query:activityQuery});installActivity(f);await f.domReady();
+  f.context.goPage('home');f.context.location.search='?open=chat';
+  await f.context.recheckActmasterPointFriendship();
+  assert.equal(new URL(f.calls.find(c=>c[0]==='replace')[1]).search,'?open=chat&point_friend=1');
 });
 
 test('activity opens immediately after verified member, ignores cached home, retains params cleaned by LIFF',async()=>{

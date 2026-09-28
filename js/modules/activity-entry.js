@@ -2,10 +2,13 @@
 (function () {
   let sequence = 0;
   let entryTarget = null;
+  let friendshipReturnUrl = '';
   const allowed = new Set(['a','activityId','act','event','r','ref','referrerId','n','net','networkId','v','via',
-    'liff.state','code','state','liffClientId','liffRedirectUri','friendship_status_changed','liffIsEscapedFromApp']);
+    'liff.state','code','state','liffClientId','liffRedirectUri','friendship_status_changed','liffIsEscapedFromApp','point_friend']);
   function readTarget(params) {
     if (!params || window.location.hash || [...params.keys()].some(key=>!allowed.has(key))) return null;
+    const friendMarkers = params.getAll('point_friend');
+    if (friendMarkers.length > 1 || friendMarkers.some(value=>value !== '1')) return null;
     const values = keys => [...new Set(keys.flatMap(key=>params.getAll(key)).map(value=>value.trim()))];
     const ids=values(['a','activityId','act','event']), networks=values(['n','net','networkId']), refs=values(['r','ref','referrerId']);
     if (ids.length!==1 || !/^[A-Za-z0-9_-]{1,160}$/.test(ids[0]) || networks.length>1 || refs.length>1) return null;
@@ -22,6 +25,16 @@
   }
   function prepare(target) {
     entryTarget = target;
+    // Capture only route data before LIFF may clean the URL; never replay OAuth credentials.
+    const params = window.readActmasterInitialParams?.() || new URLSearchParams(window.location.search);
+    const url = new URL(window.location.origin + window.location.pathname);
+    url.searchParams.set('activityId', target.activityId);
+    url.searchParams.set('net', target.networkId);
+    for (const [key, aliases] of [['ref',['ref','r','referrerId']], ['via',['via','v']]]) {
+      const value = aliases.map(alias=>params.get(alias)).find(Boolean);
+      if (value) url.searchParams.set(key, value);
+    }
+    friendshipReturnUrl = url.toString();
     window.__openedActivityParam = target.activityId;
     showPending();
     return ++sequence;
@@ -63,5 +76,6 @@
     } finally { clearTimeout(timer); }
   }
   window.ActivityEntry={readTarget,showPending,prepare,sessionGuard,open,
+    getFriendshipReturnUrl:()=>window.currentPage==='my-act-detail' ? friendshipReturnUrl : '',
     getTarget:()=>window.currentPage==='my-act-detail' ? entryTarget : null};
 })();
