@@ -14,6 +14,7 @@ const html = readFileSync(new URL('../../admin.html', import.meta.url), 'utf8').
 const out = join(tmpdir(), 'admin-activity-registration-20260928'); mkdirSync(out, {recursive:true});
 const browser = await playwright.chromium.launch({headless:true,channel:'chrome'});
 const page = await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true});
+await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'http://localhost'});
 const errors=[], calls=[], blocked=[];
 page.on('pageerror', error => errors.push(error.message));
 page.on('dialog', dialog => dialog.accept());
@@ -30,6 +31,8 @@ const rows = [
 let failList=false,failRoster=false,loseToggle=false,holdRoster=false,held;
 let loseCreate=false,holdCreate=false,releaseCreate,failUpload=false;
 let failAi=false,holdAi=false,releaseAi;
+let failLink=false,holdLink=false,releaseLink;
+const shortUrl='https://line-engine.fangwl591021.workers.dev/a/AbCd0123456789_-';
 await page.route('**/*', async route => {
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com') return route.fulfill({contentType:'text/javascript',body:tailwind});
@@ -40,6 +43,12 @@ await page.route('**/*', async route => {
     let result;
     if(action==='checkUser')result={info:{role:'store',networkId:'admin'}};
     else if(action==='getAllActivities')result=failList?null:activities;
+    else if(action==='createActivityShareLink') {
+      assert.equal(payload.activityId,'A');assert.equal(payload.networkId,'admin');
+      assert.equal(payload.userId,'synthetic-manager');
+      if(holdLink){holdLink=false;await new Promise(resolve=>{releaseLink=resolve;});}
+      result=failLink?null:{url:shortUrl};
+    }
     else if(action==='uploadImageToR2')result=failUpload?null:{url:'https://localhost/fixture-poster.png'};
     else if(action==='extractActivityDmDraft') {
       assert.ok(payload.base64Image.startsWith('data:image/png;base64,'));
@@ -82,6 +91,53 @@ try {
   await page.locator('[data-registrants="A"]').waitFor();
   assert.equal(await page.locator('#page-title').textContent(),'活動報名管理');
   assert.equal(await page.locator('[data-registrants="A"]').textContent(),'查看報名名單');
+  // The real admin edit modal offers the same short URL without saving any form fields.
+  const linkCount=()=>calls.filter(call=>call.action==='createActivityShareLink').length;
+  const editModal=page.locator('#modal-activity-edit');
+  await page.evaluate(()=>editActivityFromMonitor('A'));
+  await page.waitForFunction(()=>document.getElementById('edit-a-link-copy').disabled===false);
+  assert.equal(await page.locator('#edit-a-registration-link').inputValue(),shortUrl);
+  assert.equal(await page.locator('#edit-a-registration-link').getAttribute('readonly'),'');
+  assert.equal(await page.locator('#edit-a-link-open').getAttribute('href'),shortUrl);
+  assert.equal(await page.locator('#edit-a-link-open').getAttribute('target'),'_blank');
+  assert.equal(await page.locator('#edit-a-link-open').getAttribute('rel'),'noopener noreferrer');
+  await btn('複製連結').click();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),shortUrl);
+  await page.locator('#edit-a-name').fill('尚未儲存的名稱');
+  for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:800});
+    await page.locator('#edit-a-registration-link').scrollIntoViewIfNeeded();
+    await btn('複製連結').click({trial:true});
+    const overflow=await editModal.locator('input, button, a').evaluateAll(nodes=>nodes.filter(n=>{
+      const box=n.getBoundingClientRect();return box.width&&(box.right>innerWidth+1||box.x<0);
+    }).map(n=>n.id||n.textContent));
+    assert.deepEqual(overflow,[],`edit link controls fit ${width}px`);
+    await page.screenshot({path:join(out,`edit-link-${width}.png`),fullPage:true});
+    await page.locator('#btn-save-activity').click({trial:true});
+    await editModal.getByRole('button',{name:'取消',exact:true}).click({trial:true});
+  }
+  await page.evaluate(()=>AdminActivityRegistration.loadEditLink());
+  assert.equal(await page.locator('#edit-a-name').inputValue(),'尚未儲存的名稱');
+  await page.evaluate(()=>closeActivityEditModal());
+  const beforeDown=linkCount();await page.evaluate(()=>editActivityFromMonitor('B'));
+  assert.equal(linkCount(),beforeDown);assert.equal(await btn('複製連結').isDisabled(),true);
+  assert.equal(await page.locator('#edit-a-registration-link').inputValue(),'');
+  assert.match(await page.locator('#edit-a-link-status').textContent(),/尚未上架/);
+  await page.evaluate(()=>closeActivityEditModal());
+  failLink=true;await page.evaluate(()=>editActivityFromMonitor('A'));
+  await btn('重新取得').waitFor();assert.equal(await btn('複製連結').isDisabled(),true);
+  failLink=false;await btn('重新取得').click();
+  await page.waitForFunction(()=>!document.getElementById('edit-a-link-copy').disabled);
+  await page.evaluate(()=>closeActivityEditModal());
+  holdLink=true;await page.evaluate(()=>editActivityFromMonitor('A'));
+  await page.waitForFunction(()=>document.getElementById('edit-a-link-status').textContent==='正在取得報名短網址…');
+  await page.evaluate(()=>{closeActivityEditModal();editActivityFromMonitor('B');});
+  while(!releaseLink)await new Promise(resolve=>setTimeout(resolve,10));releaseLink();
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('#edit-a-registration-link').inputValue(),'');
+  assert.match(await page.locator('#edit-a-link-status').textContent(),/尚未上架/);
+  await page.evaluate(()=>closeActivityEditModal());
+  assert.equal(calls.filter(call=>call.action==='updateActivity').length,0);
   await page.locator('#aar-activity-query').fill('讀書');assert.equal(await page.locator('[data-registrants]').count(),1);
   await page.locator('#aar-activity-query').fill('');await page.locator('#act-tenant-filter').selectOption('branch');assert.equal(await page.locator('[data-registrants]').count(),1);
   await page.locator('#act-tenant-filter').selectOption('all');

@@ -3,6 +3,7 @@
   'use strict';
   const state = { mounted: false, listRequest: 0, rosterRequest: 0, selected: '', rows: null, busy: false, counts: new Map() };
   let creation = null;
+  let editLink = null;
   const $ = id => document.getElementById(id);
   const text = value => String(value ?? '');
   const esc = value => text(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -414,6 +415,74 @@
       case 'export': download(); break;
     }
   }
+  function editToken() {
+    try { return window.liff?.isLoggedIn() ? window.liff.getAccessToken() : ''; } catch (_) { return ''; }
+  }
+  function isCurrentEditLink(link) {
+    return !!link && editLink === link && adminProfile?.userId === link.uid && editToken() === link.token &&
+      $('edit-a-id').value === link.id && !$('modal-activity-edit').classList.contains('hidden');
+  }
+  function clearEditLink() {
+    editLink = null;
+    $('edit-a-registration-link').value = '';
+    $('edit-a-registration-link').placeholder = '尚未取得報名短網址';
+    $('edit-a-link-status').textContent = '';
+    $('edit-a-link-copy').disabled = true;
+    $('edit-a-link-open').removeAttribute('href');
+    $('edit-a-link-open').setAttribute('aria-disabled', 'true');
+    $('edit-a-link-open').tabIndex = -1;
+    $('edit-a-link-retry').hidden = true;
+  }
+  async function loadEditLink(activity = editLink?.activity) {
+    clearEditLink();
+    if (!activity) return;
+    const link = { activity, id: activityId(activity), uid: adminProfile?.userId, token: editToken(), url: '' };
+    editLink = link;
+    const statusEl = $('edit-a-link-status');
+    if (!['上架','active','published'].includes(text(pick(activity, ['狀態','status'])))) {
+      statusEl.textContent = '此活動尚未上架，請先回活動列表上架，再取得報名連結。'; return;
+    }
+    if (!link.uid || !link.token) { statusEl.textContent = '請重新登入後台後取得報名連結。'; return; }
+    statusEl.textContent = '正在取得報名短網址…';
+    try {
+      const result = await fetchAPI('createActivityShareLink', { activityId: link.id,
+        networkId: text(pick(activity, ['歸屬網','networkId','network_id'], 'admin')) }, { silent: true, timeoutMs: 12000 });
+      if (!isCurrentEditLink(link)) return;
+      const url = new URL((result?.data || result)?.url || '');
+      if (result?.success === false || url.protocol !== 'https:' || url.origin !== new URL(WORKER_URL).origin ||
+          url.username || url.password || url.search || url.hash || !/^\/a\/[A-Za-z0-9_-]{16}$/.test(url.pathname)) throw Error('INVALID_SHORT_LINK');
+      link.url = url.href;
+      $('edit-a-registration-link').value = link.url;
+      $('edit-a-link-copy').disabled = false;
+      $('edit-a-link-open').href = link.url;
+      $('edit-a-link-open').setAttribute('aria-disabled', 'false');
+      $('edit-a-link-open').tabIndex = 0;
+      statusEl.textContent = '可直接複製分享；修改活動內容後，請記得按「儲存變更」。';
+    } catch (_) {
+      if (!isCurrentEditLink(link)) return;
+      statusEl.textContent = '暫時無法取得報名連結，請按「重新取得」；不影響活動編輯。';
+      $('edit-a-link-retry').hidden = false;
+    }
+  }
+  function canUseEditLink() { return isCurrentEditLink(editLink) && !!editLink.url; }
+  async function copyEditLink() {
+    if (!canUseEditLink()) return;
+    const link = editLink;
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(link.url);
+      else {
+        $('edit-a-registration-link').focus(); $('edit-a-registration-link').select();
+        if (!document.execCommand('copy')) throw Error('COPY_FAILED');
+      }
+      if (isCurrentEditLink(link)) showToast('報名連結已複製');
+    } catch (_) {
+      if (isCurrentEditLink(link)) {
+        $('edit-a-registration-link').focus(); $('edit-a-registration-link').select();
+        $('edit-a-link-status').textContent = '無法自動複製，請長按或選取上方連結手動複製。';
+      }
+    }
+  }
   window.AdminActivityRegistration = { load, renderActivities: renderOverview, countFor,
+    loadEditLink, clearEditLink, canUseEditLink, copyEditLink,
     list, registrant, summary, filterActivities, filterRegistrants, csv, creationPayload };
 })();

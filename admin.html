@@ -1784,6 +1784,16 @@
       </div>
       <div class="p-6 overflow-y-auto bg-slate-50">
         <input type="hidden" id="edit-a-id">
+        <section class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4" aria-labelledby="edit-a-link-label">
+          <label id="edit-a-link-label" for="edit-a-registration-link" class="block text-sm font-bold text-emerald-800 mb-2">活動報名連結</label>
+          <input id="edit-a-registration-link" type="text" readonly placeholder="尚未取得報名短網址" class="w-full min-w-0 bg-white border border-emerald-200 rounded-lg px-3 py-2.5 text-sm outline-none">
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button id="edit-a-link-copy" type="button" disabled onclick="AdminActivityRegistration.copyEditLink()" class="px-4 py-2.5 rounded-lg bg-emerald-700 text-white text-sm font-bold disabled:opacity-50">複製連結</button>
+            <a id="edit-a-link-open" target="_blank" rel="noopener noreferrer" aria-disabled="true" tabindex="-1" class="px-4 py-2.5 rounded-lg border border-emerald-200 bg-white text-emerald-800 text-sm font-bold" onclick="return AdminActivityRegistration.canUseEditLink()">開啟報名頁</a>
+            <button id="edit-a-link-retry" type="button" hidden onclick="AdminActivityRegistration.loadEditLink()" class="px-4 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-bold">重新取得</button>
+          </div>
+          <p id="edit-a-link-status" role="status" class="mt-2 text-xs text-emerald-800 leading-relaxed"></p>
+        </section>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
             <label class="block text-sm font-bold text-slate-500 mb-1.5">活動名稱</label>
@@ -5050,6 +5060,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       const modal = document.getElementById("modal-activity-edit");
       modal.classList.remove("hidden");
       modal.classList.add("flex");
+      void window.AdminActivityRegistration.loadEditLink(act);
     }
 
     function updateActivityImagePreview() {
@@ -5095,6 +5106,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     }
 
     function closeActivityEditModal() {
+      window.AdminActivityRegistration.clearEditLink();
       const modal = document.getElementById("modal-activity-edit");
       modal.classList.add("hidden");
       modal.classList.remove("flex");
@@ -5699,6 +5711,6 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <script src="js/modules/admin-mall-dashboard.js?v=1"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
   <link rel="stylesheet" href="css/admin-activity-registration.css?v=3">
-  <script src="js/modules/admin-activity-registration.js?v=3"></script>
+  <script src="js/modules/admin-activity-registration.js?v=4"></script>
 </body>
 </html>
