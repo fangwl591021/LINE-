@@ -317,7 +317,7 @@ window.recheckActmasterPointFriendship = async function() {
   try {
     const latest = await window.readActmasterPointFriendship();
     if (latest.friendFlag) {
-      const url = new URL(window.location.href);
+      const url = new URL(window.ActivityEntry?.getFriendshipReturnUrl?.() || window.location.href);
       url.searchParams.set('point_friend', '1');
       window.location.replace(url.toString());
       return;

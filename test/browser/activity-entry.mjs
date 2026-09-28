@@ -22,7 +22,9 @@ const browser=await playwright.chromium.launch({headless:true,channel:'chrome'})
 const page=await browser.newPage({viewport:{width:390,height:844}});
 const out=join(tmpdir(),'activity-direct-entry-20260928');mkdirSync(out,{recursive:true});
 const calls=[],errors=[],blocked=[];
+const documents=[];
 let holdMember=true,releaseMember,failActivity=false,holdActivity=false,releaseActivity;
+let friendScenario=false;
 page.on('pageerror',e=>errors.push(e.message));
 await page.addInitScript(({actor})=>{
   window.__pages=[];
@@ -31,14 +33,14 @@ await page.addInitScript(({actor})=>{
 await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com')return route.fulfill({contentType:'text/javascript',body:tailwind});
-  if(url.hostname==='static.line-scdn.net')return route.fulfill({contentType:'text/javascript',body:`window.liff={init:async()=>{},isLoggedIn:()=>true,isInClient:()=>true,getProfile:async()=>({userId:'${actor}',displayName:'合成會員'}),getAccessToken:()=>'synthetic-token',getFriendship:async()=>({friendFlag:true})};`});
+  if(url.hostname==='static.line-scdn.net')return route.fulfill({contentType:'text/javascript',body:`window.liff={init:async()=>{if(${friendScenario})history.replaceState(null,'',location.pathname);},isLoggedIn:()=>true,isInClient:()=>true,getProfile:async()=>({userId:'${actor}',displayName:'合成會員'}),getAccessToken:()=>'synthetic-token',getFriendship:async()=>{window.__friendReads=(window.__friendReads||0)+1;return {friendFlag:!${friendScenario}||sessionStorage.getItem('fixture-friend')==='1'};}};`});
   if(req.method()==='POST'&&url.hostname==='line-engine.fangwl591021.workers.dev') {
     const {action,payload}=req.postDataJSON();calls.push({action,payload});
     assert.equal(payload.lineAccessToken,'synthetic-token');assert.equal(payload.userId,actor);
     let data;
     if(action==='checkUser') {
       if(holdMember){holdMember=false;await new Promise(resolve=>{releaseMember=resolve;});}
-      data={isRegistered:true,info:{userId:actor,name:'合成會員',role:'user',networkId:'other-network'}};
+      data=friendScenario?{isRegistered:false,info:null}:{isRegistered:true,info:{userId:actor,name:'合成會員',role:'user',networkId:'other-network'}};
     } else if(action==='getActivityById') {
       assert.equal(payload.activityId,id);assert.equal(payload.networkId,'admin');
       if(holdActivity){holdActivity=false;await new Promise(resolve=>{releaseActivity=resolve;});}
@@ -51,7 +53,7 @@ await page.route('**/*',async route=>{
   }
   if(req.resourceType()==='image')return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
   if(url.hostname==='localhost') {
-    if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:html});
+    if(url.pathname==='/'){documents.push(url.href);return route.fulfill({contentType:'text/html',body:html});}
     const path=url.pathname.slice(1);
     let body=scripts.has(path)?read(path):'';
     if(path==='js/navigation.js')body+='\nconst originalGoPage=window.goPage;window.goPage=function(...args){window.__pages.push(args[0]);return originalGoPage(...args);};';
@@ -117,6 +119,32 @@ try {
   await page.evaluate(()=>{window.__cancelPrompt='';window.appConfirm=async message=>{window.__cancelPrompt=message;return false;};});
   await page.getByRole('button',{name:'取消報名',exact:true}).click();
   assert.match(await page.evaluate(()=>__cancelPrompt),/最新報名/);
+  // New/unregistered friend: real gate + Continue navigation with LIFF cleaning query parameters.
+  friendScenario=true;
+  for(const entry of [query+'&point_friend=1','?code=synthetic-code&liff.state='+encodeURIComponent(query)]) {
+    await page.evaluate(()=>sessionStorage.removeItem('fixture-friend'));
+    const before=calls.length;
+    await page.goto('http://localhost/'+entry,{waitUntil:'domcontentloaded'});
+    await page.locator('#point-friendship-modal').waitFor({state:'visible'});
+    assert.equal(await page.evaluate(()=>__pages.includes('home')),false);
+    assert.equal(calls.length,before,'not a friend: no member or activity API, even with marker');
+    await page.getByRole('button',{name:'已加入，繼續進入',exact:true}).click();
+    await page.getByText('尚未確認加入，請先加入官方帳號後再按一次。',{exact:true}).waitFor();
+    assert.equal(calls.length,before);
+    await page.evaluate(()=>sessionStorage.setItem('fixture-friend','1'));
+    await page.getByRole('button',{name:'已加入，繼續進入',exact:true}).click();
+    await page.getByRole('button',{name:'我要報名',exact:true}).waitFor({timeout:7000});
+    assert.deepEqual(calls.slice(before).map(c=>c.action),['checkUser','getActivityById']);
+    assert.equal(await page.locator('#my-act-detail-content h3').textContent(),activity.activityName);
+    assert.equal(await page.evaluate(()=>currentUser.isRegistered),false);
+    assert.equal(await page.evaluate(()=>__pages.includes('home')),false);
+    assert.ok(await page.evaluate(()=>__friendReads>=1),'returned page rechecks real friendship');
+    const returned=new URL(documents.at(-1));
+    assert.equal(returned.origin,'http://localhost');assert.equal(returned.searchParams.get('activityId'),id);
+    assert.equal(returned.searchParams.get('net'),'admin');assert.equal(returned.searchParams.get('ref'),ref);
+    assert.equal(returned.searchParams.get('via'),'a');assert.equal(returned.searchParams.get('point_friend'),'1');
+    assert.deepEqual([...returned.searchParams.keys()].sort(),['activityId','net','point_friend','ref','via']);
+  }
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   assert.ok(calls.every(x=>['checkUser','getActivityById','getMyActivities','listPersonalTasks'].includes(x.action)));
   console.log(JSON.stringify({result:'PASS',widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],automaticWrites:0,screenshots:out}));
