@@ -10655,12 +10655,15 @@ const D1WriteModule = {
     return { rowId, created: true };
   },
 
-  async upsertUser(payload, env) {
+  async upsertUser(payload, env, options = {}) {
     if (!this.hasD1(env)) return null;
     const user = this.normalizeUser(payload);
     if (!user) return { success: false, error: 'Missing userId' };
     const data = payload.data || payload.profile || payload;
     const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [user.line_id, user.line_id]);
+    if (options.createOnly && existing) {
+      return { success: true, data: { isRegistered: true, info: D1ReadModule.userRow(existing), existed: true } };
+    }
     const hasReferrerInput = ['referrerId', 'referrer_id', '?刻鈭?'].some(key => data && data[key] !== undefined && data[key] !== null);
     const canOverrideReferrer = SecurityModule.normalizeRole(payload.authenticatedRole || '') === 'admin'
       && hasReferrerInput
@@ -10703,7 +10706,7 @@ const D1WriteModule = {
       user.role = existing ? this.role(existing.role) : 'user';
     }
     user.role = SecurityModule.sanitizeRole(user.line_id, user.role, user);
-    await env.ACTMASTER_DB.prepare(`
+    const userWrite = await env.ACTMASTER_DB.prepare(`
       INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(line_id) DO UPDATE SET
@@ -10718,7 +10721,13 @@ const D1WriteModule = {
         END,
         store_id=excluded.store_id,
         referrer_id=excluded.referrer_id,network_id=excluded.network_id,tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
+      WHERE ${options.createOnly ? '0' : '1'}
     `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id).run();
+    if (options.createOnly && Number(userWrite.meta?.changes) === 0) {
+      const concurrent = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? LIMIT 1', [user.line_id]);
+      if (!concurrent) throw new Error('Activity member result unavailable');
+      return { success: true, data: { isRegistered: true, info: D1ReadModule.userRow(concurrent), existed: true } };
+    }
     await this.clearUserCache(env, user.line_id);
     const referralPlaceholder = await this.ensureReferralPlaceholderCard(env, user).catch(e => {
       console.error('D1 referral placeholder failed', e && e.message ? e.message : e);
@@ -16969,7 +16978,27 @@ async function dispatchAction(action, payload, request, env) {
     }
     case 'registerUser': {
       try {
-        const d1Result = await D1WriteModule.upsertUser(payload || {}, env);
+        const activityRegistration = payload.activityRegistration === true;
+        if (activityRegistration) {
+          // This opt-in signup path never trusts URL/payload identity or mutates an existing member.
+          const verified = await SecurityModule.getActor(payload, request, env);
+          if (!verified?.userId) return { success: false, error: '請重新從 LINE 開啟活動並登入' };
+          if (payload.privacyAgreed !== true) return { success: false, error: '請先同意會員註冊及個資聲明' };
+          const activity = await D1ActivityModule.getActivityById({ activityId: payload.activityId, networkId: payload.activityNetworkId }, env, verified);
+          if (!activity?.success || activity.data?.status !== '上架') return { success: false, error: '活動已下架或無法報名，請重新確認' };
+          const identity = await D1ReadModule.findUserByIdentity(env, verified.userId);
+          if (identity?.user) return { success: true, data: { isRegistered: true, info: D1ReadModule.userRow(identity.user), existed: true } };
+          const name = String(payload.name || '').trim();
+          const phone = String(payload.phone || '').trim().replace(/[\s()（）-]/g, '');
+          if (!name || name.length > 100 || !/^\+?\d{8,15}$/.test(phone)) return { success: false, error: '請填寫姓名及有效手機號碼' };
+          payload = {
+            userId: verified.userId, name, phone, role: 'user',
+            referrerId: String(payload.referrerId || '').trim(),
+            networkId: String(payload.networkId || 'admin').trim()
+          };
+        }
+        const d1Result = await D1WriteModule.upsertUser(payload || {}, env, { createOnly: activityRegistration });
+        if (activityRegistration && (d1Result?.success === false || d1Result?.data?.existed)) return d1Result;
         if (d1Result) {
           const pointWallet = await PointModule.ensureSubsitePointWalletOnJoin(payload || {}, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
           const shareJoinAward = await PointModule.awardShareJoinPoints(payload || {}, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));

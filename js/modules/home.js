@@ -1496,12 +1496,12 @@ const HomeModule = (function() {
         const headerName = document.getElementById('header-site-name');
         if (headerName && d.siteName !== undefined) {
             const siteName = String(d.siteName || '').trim();
-            headerName.innerText = (!siteName || siteName === 'LINE商機引擎' || siteName === 'AI商脈系統') ? 'AI工坊' : siteName;
+            headerName.innerText = (!siteName || ['LINE商機引擎', 'AI商脈系統', 'AI工坊'].includes(siteName)) ? 'AI商脈' : siteName;
         }
         const homeHeaderName = document.getElementById('home-header-site-name');
         if (homeHeaderName && d.siteName !== undefined) {
             const siteName = String(d.siteName || '').trim();
-            homeHeaderName.innerText = (!siteName || siteName === 'LINE商機引擎' || siteName === 'AI商脈系統') ? 'AI工坊' : siteName;
+            homeHeaderName.innerText = (!siteName || ['LINE商機引擎', 'AI商脈系統', 'AI工坊'].includes(siteName)) ? 'AI商脈' : siteName;
         }
 
         const bannerImg = document.getElementById('home-main-banner');
@@ -2912,7 +2912,7 @@ const HomeModule = (function() {
 
         content.innerHTML = `
             <div class="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
-                ${img ? `<img src="${window.escapeHTML(img)}" class="w-full aspect-video object-cover">` : ''}
+                ${img ? `<img src="${window.escapeHTML(img)}" alt="活動 DM" class="block w-full h-auto object-contain" style="height:auto;aspect-ratio:auto">` : ''}
                 <div class="p-5 space-y-4">
                     <div class="flex items-center justify-between gap-2">
                         <span class="bg-orange-50 text-orange-600 text-[12px] px-2.5 py-1 rounded-full font-bold">${window.escapeHTML(type)}</span>
@@ -3279,7 +3279,7 @@ const HomeModule = (function() {
 
         content.innerHTML = `
             <div class="bg-white rounded-3xl overflow-hidden">
-                ${img ? `<img src="${img}" class="w-full aspect-video object-cover">` : ''}
+                ${img ? `<img src="${img}" alt="活動 DM" class="block w-full h-auto object-contain" style="height:auto;aspect-ratio:auto">` : ''}
                 <div class="p-5 space-y-4">
                     <div class="flex items-center justify-between">
                         <span class="bg-orange-50 text-orange-600 text-[12px] px-2.5 py-1 rounded-full font-bold">${type}</span>
@@ -3335,18 +3335,26 @@ const HomeModule = (function() {
     async function goActivityRecordAfterJoin_(activityId) {
         await ensurePointOAFriendForActivity_();
         if (typeof window.loadMyActivities === 'function') await window.loadMyActivities();
-        window.goPage('my-activities');
+        const index = (window.myActivitiesData || []).findIndex(record => getRegistrationActivityId_(record) === String(activityId) && !getRegistrationStatus_(record).cancelled);
+        const activity = (window.allActivities || []).find(item => getPublicActivityId_(item) === String(activityId));
+        if (index >= 0 && activity) renderRegisteredActivityDetail_(activity, index);
+        else window.goPage('my-activities');
     }
 
+    let activityJoinBusy = false;
     window.joinPublicActivity = async function(activityId, btn) {
+        if (activityJoinBusy) return;
         const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId) && canSeePublicActivity_(a));
         if (!activity) return window.showToast('活動已下架', true);
 
+        activityJoinBusy = true;
         const oriHtml = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[15px]">refresh</span>';
 
         try {
+            if (!window.ActivityRegistration) throw new Error('報名表單尚未載入，請重新整理後再試');
+            if (!await window.ActivityRegistration.ensureMember(activity)) return;
             const res = await window.fetchAPI('joinActivity', {
                 activityId: getPublicActivityId_(activity),
                 activityName: activity.activityName || activity.name || activity.title || activity['活動名稱'] || '',
@@ -3356,14 +3364,15 @@ const HomeModule = (function() {
             }, true);
 
             if (res && !res.error) {
-                window.showToast(res.existed ? '您已報名過此活動，正在前往活動紀錄' : '報名成功，正在前往活動紀錄');
+                window.showToast(res.existed ? '您已報名過此活動' : '報名成功');
                 await goActivityRecordAfterJoin_(getPublicActivityId_(activity));
             } else {
-                throw new Error(res?.error || '報名失敗');
+                throw new Error('會員資料已確認，但活動報名未完成：' + (res?.error || '請重試'));
             }
         } catch (e) {
             window.showToast(e.message, true);
         } finally {
+            activityJoinBusy = false;
             btn.disabled = false;
             btn.innerHTML = oriHtml;
         }
