@@ -12027,10 +12027,27 @@ const D1ActivityModule = {
     const userId = this.pick(payload, ['userId', 'lineId']);
     const phone = this.pick(payload, ['phone', '手機']);
     const name = this.pick(payload, ['name', '姓名']);
+    // Legacy imports use unpadded YYYY/M/D; D1 uses YYYY-MM-DD. Compare dates,
+    // not separator characters, before the limit. Never rewrite saved snapshots.
     const rows = await D1ReadModule.all(env, `
-      SELECT * FROM registrants
-      WHERE (? <> '' AND line_id = ?) OR (? <> '' AND phone = ?) OR (? <> '' AND name = ?)
-      ORDER BY created_at DESC LIMIT 200
+      WITH history AS (
+        SELECT *, TRIM(created_at) AS registration_time FROM registrants
+        WHERE (? <> '' AND line_id = ?) OR (? <> '' AND phone = ?) OR (? <> '' AND name = ?)
+      ), date_parts AS (
+        SELECT *, SUBSTR(registration_time, 6) AS month_day,
+          CASE WHEN INSTR(registration_time, ' ') > 0
+            THEN TRIM(SUBSTR(registration_time, INSTR(registration_time, ' ') + 1)) ELSE '' END AS clock_time
+        FROM history
+      )
+      SELECT * FROM date_parts
+      ORDER BY CASE
+        WHEN registration_time GLOB '[0-9][0-9][0-9][0-9]/[0-9]*/*' THEN
+          JULIANDAY(PRINTF('%04d-%02d-%02d', CAST(registration_time AS INTEGER),
+            CAST(month_day AS INTEGER), CAST(SUBSTR(month_day, INSTR(month_day, '/') + 1) AS INTEGER))
+            || CASE WHEN clock_time = '' THEN ''
+              ELSE ' ' || PRINTF('%02d', CAST(clock_time AS INTEGER)) || SUBSTR(clock_time, INSTR(clock_time, ':')) END)
+        ELSE JULIANDAY(registration_time)
+      END DESC, row_id DESC LIMIT 200
     `, [userId,userId,phone,phone,name,name]);
     return { success: true, data: rows.map(row => this.registrantRow(row)).filter(Boolean) };
   },
