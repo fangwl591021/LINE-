@@ -9,10 +9,10 @@ let playwright;try{playwright=require('playwright');}catch{playwright=require('C
 const read=path=>readFileSync(new URL('../../'+path,import.meta.url),'utf8');
 const tailwind=await (await fetch('https://cdn.tailwindcss.com',{signal:AbortSignal.timeout(20000)})).text();
 const html=read('index.html').replace('</head>','<style>.material-symbols-outlined{font-size:0!important;display:inline-block;width:24px;min-width:24px;height:24px}</style></head>');
-const scripts=new Set(['js/config.js','js/login-bootstrap.js','js/core.js','js/navigation.js','js/modules/activities.js','js/modules/admin.js','js/modules/home.js','js/modules/activity-entry.js','js/auth.js']);
+const scripts=new Set(['js/config.js','js/login-bootstrap.js','js/core.js','js/navigation.js','js/modules/activities.js','js/modules/admin.js','js/modules/home.js','js/modules/activity-registration.js','js/modules/activity-entry.js','js/auth.js']);
 const actor='U'+'a'.repeat(32),ref='U'+'b'.repeat(32),id='ACT_fcfc401d-d559-4d0e-bbf4-73ff21973e09';
 const query=`?a=${id}&r=${ref}&n=admin&v=a`;
-const activity={activityId:id,networkId:'admin',status:'上架',activityName:'秋日交流活動',activityType:'交流',startTime:'2026-10-01T10:00',price:100,description:'測試活動內容 <img src=x onerror=alert(1)>'};
+const activity={activityId:id,networkId:'admin',status:'上架',activityName:'秋日交流活動',activityType:'交流',startTime:'2026-10-01T10:00',price:100,imageUrl:'https://fixture.invalid/dm.svg',description:'測試活動內容 <img src=x onerror=alert(1)>'};
 const registrations=[
   {rowId:'latest',activityId:id,activityName:'最新報名',createdAt:'2026-09-28T03:00:00Z',startTime:'2026-10-01T03:00:00Z',status:'active'},
   {rowId:'middle',activityId:'B',activityName:'先前報名',createdAt:'2026-09-27T03:00:00Z',startTime:'2026-12-01T03:00:00Z',status:'checkedin'},
@@ -25,6 +25,7 @@ const calls=[],errors=[],blocked=[];
 const documents=[];
 let holdMember=true,releaseMember,failActivity=false,holdActivity=false,releaseActivity;
 let friendScenario=false;
+let registrationMember=null,registrationFailure=false,registrationTimeout=false,joinFailure=false;
 page.on('pageerror',e=>errors.push(e.message));
 await page.addInitScript(({actor})=>{
   window.__pages=[];
@@ -40,17 +41,29 @@ await page.route('**/*',async route=>{
     let data;
     if(action==='checkUser') {
       if(holdMember){holdMember=false;await new Promise(resolve=>{releaseMember=resolve;});}
-      data=friendScenario?{isRegistered:false,info:null}:{isRegistered:true,info:{userId:actor,name:'合成會員',role:'user',networkId:'other-network'}};
+      data=friendScenario?(registrationMember?{isRegistered:true,info:registrationMember}:{isRegistered:false,info:null}):{isRegistered:true,info:{userId:actor,name:'合成會員',role:'user',networkId:'other-network'}};
     } else if(action==='getActivityById') {
       assert.equal(payload.activityId,id);assert.equal(payload.networkId,'admin');
       if(holdActivity){holdActivity=false;await new Promise(resolve=>{releaseActivity=resolve;});}
       if(failActivity)return route.fulfill({contentType:'application/json',body:JSON.stringify({success:false,error:'合成網路失敗'})});
       data=activity;
+    } else if(action==='registerUser') {
+      assert.equal(payload.activityRegistration,true);assert.equal(payload.privacyAgreed,true);
+      assert.equal(payload.activityId,id);assert.equal(payload.activityNetworkId,'admin');assert.equal(payload.referrerId,ref);
+      if(registrationFailure)return route.fulfill({contentType:'application/json',body:JSON.stringify({success:false,error:'合成註冊失敗'})});
+      registrationMember={userId:actor,name:payload.name,phone:payload.phone,networkId:payload.networkId,referrerId:payload.referrerId,role:'user'};
+      if(registrationTimeout)return route.fulfill({contentType:'application/json',body:JSON.stringify({success:false,error:'合成回應逾時，請重試'})});
+      data={isRegistered:true,info:registrationMember};
+    } else if(action==='joinActivity') {
+      assert.equal(payload.userName,registrationMember.name);assert.equal(payload.userPhone,registrationMember.phone);
+      if(joinFailure)return route.fulfill({contentType:'application/json',body:JSON.stringify({success:false,error:'合成報名失敗'})});
+      data={rowId:'latest',activityId:id,existed:false};
     } else if(action==='getMyActivities')data=registrations;
     else if(action==='listPersonalTasks')data=[];
     else {blocked.push(action);return route.abort();}
     return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,data})});
   }
+  if(url.href===activity.imageUrl)return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="#eef7f2"/><rect width="600" height="80" fill="#007b62"/><text x="200" y="52" fill="white" font-size="40">DM TOP</text><text x="150" y="460" fill="#007b62" font-size="52">FULL POSTER</text><rect y="820" width="600" height="80" fill="#007b62"/><text x="140" y="875" fill="white" font-size="40">DM BOTTOM</text></svg>'});
   if(req.resourceType()==='image')return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
   if(url.hostname==='localhost') {
     if(url.pathname==='/'){documents.push(url.href);return route.fulfill({contentType:'text/html',body:html});}
@@ -74,10 +87,12 @@ try {
   assert.equal(await page.evaluate(()=>currentUser.role),'user','confirmed session instead of admin cache');
   assert.equal(await page.evaluate(()=>currentNetworkId),'other-network');
   assert.equal(await page.evaluate(()=>__pages.includes('home')),false);
-  assert.equal(await page.locator('#my-act-detail-content img').count(),0,'description is escaped');
+  assert.equal(await page.locator('#my-act-detail-content img').count(),1,'only DM image, description is escaped');
+  assert.equal(await page.locator('#header-site-name').textContent(),'AI商脈');
   for(const width of [320,390,1440]) {
     await page.setViewportSize({width,height:844});
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    const dm=await page.getByAltText('活動 DM').boundingBox();assert.ok(Math.abs(dm.height/dm.width-1.5)<0.01,'full portrait DM ratio');
     await page.getByRole('button',{name:'我要報名',exact:true}).click({trial:true});
     await page.locator('#page-my-act-detail > div > button').click({trial:true});
     await page.screenshot({path:join(out,`activity-${width}.png`),fullPage:true});
@@ -145,7 +160,40 @@ try {
     assert.equal(returned.searchParams.get('via'),'a');assert.equal(returned.searchParams.get('point_friend'),'1');
     assert.deepEqual([...returned.searchParams.keys()].sort(),['activityId','net','point_friend','ref','via']);
   }
+  assert.ok(calls.every(x=>['checkUser','getActivityById','getMyActivities','listPersonalTasks'].includes(x.action)),'opening pages never writes');
+  const signup=page.getByRole('button',{name:'我要報名',exact:true});
+  await signup.click();await page.locator('#activity-registration-modal').waitFor({state:'visible'});
+  assert.equal(await page.locator('#activity-reg-name').inputValue(),'合成會員');
+  for(const width of [320,390,1440]){
+    await page.setViewportSize({width,height:660});
+    await page.getByRole('button',{name:'註冊並報名',exact:true}).click({trial:true});
+    await page.getByRole('button',{name:'關閉報名資料',exact:true}).click({trial:true});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:join(out,`signup-${width}.png`),fullPage:true});
+  }
+  await page.getByRole('button',{name:'取消',exact:true}).click();assert.ok(!calls.some(c=>c.action==='registerUser'));
+  await signup.click();await page.locator('#activity-reg-name').fill('報名測試');await page.locator('#activity-reg-phone').fill('0912-345-678');
+  await page.getByRole('button',{name:'註冊並報名',exact:true}).click();assert.ok(!calls.some(c=>c.action==='registerUser'),'explicit consent required');
+  await page.locator('#activity-reg-agree').check();registrationFailure=true;
+  await page.getByRole('button',{name:'註冊並報名',exact:true}).click();
+  await page.locator('#activity-registration-modal [data-error]').filter({hasText:'合成註冊失敗'}).waitFor();assert.ok(!calls.some(c=>c.action==='joinActivity'));
+  registrationFailure=false;registrationTimeout=true;
+  await page.getByRole('button',{name:'註冊並報名',exact:true}).click();
+  await page.locator('#activity-registration-modal [data-error]').filter({hasText:'合成回應逾時'}).waitFor();
+  assert.ok(!calls.some(c=>c.action==='joinActivity'));
+  const registrationsSent=calls.filter(c=>c.action==='registerUser').length;
+  registrationTimeout=false;joinFailure=true;
+  await page.getByRole('button',{name:'註冊並報名',exact:true}).click();
+  await page.locator('#activity-registration-modal').waitFor({state:'detached'});
+  await page.waitForFunction(()=>document.body.textContent.includes('會員資料已確認，但活動報名未完成'));
+  assert.equal(calls.filter(c=>c.action==='registerUser').length,registrationsSent,'retry reads created member, no duplicate signup');
+  joinFailure=false;await signup.click();await page.getByRole('button',{name:'返回報名資料',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>currentPage),'my-act-detail');assert.equal(await page.locator('#my-act-detail-content h3').textContent(),activity.activityName);
+  assert.equal(await page.evaluate(()=>__pages.includes('home')),false);
+  assert.equal(calls.filter(c=>c.action==='registerUser').length,registrationsSent);
+  const completeDm=await page.getByAltText('活動 DM').boundingBox();assert.ok(Math.abs(completeDm.height/completeDm.width-1.5)<0.01);
+  await page.evaluate(()=>applyStoreSettingsToHome({siteName:'AI工坊',networkId:currentNetworkId}));assert.equal(await page.locator('#header-site-name').textContent(),'AI商脈');
+  await page.evaluate(()=>applyStoreSettingsToHome({siteName:'租戶自訂',networkId:currentNetworkId}));assert.equal(await page.locator('#header-site-name').textContent(),'租戶自訂');
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
-  assert.ok(calls.every(x=>['checkUser','getActivityById','getMyActivities','listPersonalTasks'].includes(x.action)));
-  console.log(JSON.stringify({result:'PASS',widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],automaticWrites:0,screenshots:out}));
+  console.log(JSON.stringify({result:'PASS',widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],automaticWrites:0,syntheticExplicitSignup:true,screenshots:out}));
 } finally {await browser.close();}
