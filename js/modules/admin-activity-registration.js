@@ -126,7 +126,7 @@
     });
   }
   function slotMarkup(b,i) {
-    return `<div class="aar-slot" data-slot><label class="aar-slot-check"><input type="checkbox" data-slot-select checked> 梯次 ${i+1}</label><p class="aar-note">${esc(b.scheduleText || '請依 DM 核對時段')}</p>
+    return `<div class="aar-slot" data-slot data-slot-source="${esc(b.scheduleText||'')}"><label class="aar-slot-check"><input type="checkbox" data-slot-select checked> 梯次 ${i+1}</label><p class="aar-note">${esc(b.scheduleText || '請依 DM 核對時段')}</p>
       <label>梯次名稱<input data-slot-field="name" maxlength="120" value="${esc(b.name||`第 ${i+1} 梯次`)}"></label>
       <label>開始時間 *<input data-slot-field="startTime" type="datetime-local" value="${esc(b.startTime)}"></label>
       <label>結束時間<input data-slot-field="endTime" type="datetime-local" value="${esc(b.endTime)}"></label>
@@ -140,7 +140,7 @@
   }
   function selectedSlots(container) {
     return [...container.querySelectorAll('[data-slot]')].filter(row=>row.querySelector('[data-slot-select]').checked)
-      .map(row=>Object.fromEntries([...row.querySelectorAll('[data-slot-field]')].map(input=>[input.dataset.slotField,input.value])));
+      .map(row=>({scheduleText:row.dataset.slotSource||'',...Object.fromEntries([...row.querySelectorAll('[data-slot-field]')].map(input=>[input.dataset.slotField,input.value]))}));
   }
   function syncSeriesMode() {
     const form=$('aar-create-form'),series=form.elements.seriesMode.checked;
@@ -313,8 +313,11 @@
       <button type="button" id="edit-dm-read">重新辨識 DM</button>
       <label>或選擇 DM 檔案供辨識（不變更宣傳圖）<input type="file" id="edit-dm-file" accept="image/jpeg,image/png,image/webp"></label>
       <p id="edit-dm-status" role="status"></p><div id="edit-dm-preview" hidden><div id="edit-dm-content"></div>
-      <div id="edit-dm-slots"></div><button type="button" id="edit-dm-apply">確認套用至本活動</button>
-      <button type="button" id="edit-dm-series" hidden>以勾選時段另建系列活動</button></div>
+      <section id="edit-dm-slot-picker" hidden aria-label="辨識梯次勾選"><h3>選擇活動梯次</h3><p>勾選要使用的時段；缺少日期或費用仍可先另開系列表單補填，按「建立活動」才會儲存。</p>
+      <div id="edit-dm-slots"></div><button type="button" id="edit-dm-add-slot">＋新增梯次</button></section>
+      <button type="button" id="edit-dm-apply">確認套用至本活動</button>
+      <button type="button" id="edit-dm-series" hidden>以勾選時段另建系列活動</button>
+      <p id="edit-dm-action-status" role="status" aria-live="polite" tabindex="-1" hidden></p></div>
       <label id="edit-dm-review" class="aar-slot-check" hidden><input type="checkbox" id="edit-dm-reviewed">我已核對辨識後的內容、時間與費用</label></section>`;
     $('edit-dm-read').onclick=()=>{void readEditDm(s);};
     $('edit-dm-file').onchange=async event=>{
@@ -327,18 +330,40 @@
       }catch(e){if(editDmCurrent(s))$('edit-dm-status').textContent=e.message;}
     };
     $('edit-dm-apply').onclick=()=>applyEditDm(s);
+    $('edit-dm-add-slot').onclick=()=>{
+      if(!readyEditDm(s))return;
+      const n=$('edit-dm-slots').children.length;
+      if(n>=24){editDmMessage('最多 24 個梯次，請先調整現有項目。',true);return;}
+      $('edit-dm-slots').insertAdjacentHTML('beforeend',slotMarkup({},n));
+      $('edit-dm-slots').lastElementChild.querySelector('[data-slot-field="name"]').focus();
+    };
     $('edit-dm-series').onclick=()=>{
-      if(!editDmCurrent(s)||s.busy||!s.draft)return;
-      let batches;try{batches=validateBatches(selectedSlots($('edit-dm-slots')));}catch(e){$('edit-dm-status').textContent=e.message;return;}
+      if(!readyEditDm(s))return;
+      // These are editable candidates, not a publish payload. Unknown dates/prices stay blank.
+      const batches=selectedSlots($('edit-dm-slots'));
+      if(!batches.length){editDmMessage('請至少勾選一個梯次；若沒有辨識出時段，可按「＋新增梯次」補上。',true);return;}
       if(!window.confirm('另開新增系列表單；原活動及報名名單保持不變。確認後仍須按「建立活動」才會發布。'))return;
       const draft={...s.draft,batches,timeStatus:'multiple'},url=$('edit-a-image').value;
-      if(creation) {showToast('請先完成或取消目前的新增活動表單',true);return;}
+      if(creation) {editDmMessage('請先完成或取消目前的新增活動表單，再另建系列。',true);return;}
       closeActivityEditModal();openCreate();creation.aiDraft=draft;applyActivityDraft();$('aar-create-form').elements.imageUrl.value=url;
+      $('aar-create-slots').scrollIntoView({block:'start'});
+      $('aar-slot-list').querySelector('[data-slot-field="name"]')?.focus({preventScroll:true});
     };
     // Manual edits after applying require review again, without replacing other modal handlers.
     host.closest('#modal-activity-edit').addEventListener('input',event=>{
       if(editDm===s && event.target.id!=='edit-dm-reviewed' && $('edit-dm-reviewed'))$('edit-dm-reviewed').checked=false;
     },{signal:(s.listeners=new AbortController()).signal});
+  }
+  function editDmMessage(value,error=false) {
+    const node=$('edit-dm-action-status');if(!node)return;
+    node.hidden=false;node.textContent=value;node.dataset.error=String(error);
+    node.scrollIntoView({block:'nearest'});node.focus({preventScroll:true});
+  }
+  function readyEditDm(s) {
+    if(!editDmCurrent(s)){editDmMessage('登入狀態或活動已變更，請重新開啟活動後再辨識。',true);return false;}
+    if(s.busy||!s.draft){editDmMessage('請先完成 DM 重新辨識。',true);return false;}
+    if(s.draftUrl!==$('edit-a-image').value){editDmMessage('宣傳圖已變更，請重新辨識。',true);return false;}
+    return true;
   }
   async function dmFileData(file) {
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>4*1024*1024)throw Error('辨識請使用 4 MB 以內 JPG / PNG / WebP');
@@ -359,7 +384,7 @@
   }
   async function readEditDm(s) {
     if(!editDmCurrent(s)||s.busy)return;
-    const url=$('edit-a-image').value;s.busy=true;s.draft=null;$('edit-dm-preview').hidden=true;
+    const url=$('edit-a-image').value;s.busy=true;s.draft=null;$('edit-dm-preview').hidden=true;$('edit-dm-action-status').hidden=true;
     $('edit-dm-status').textContent='重新辨識中，請稍候…';
     $('edit-a-ai').querySelectorAll('button,input').forEach(e=>{e.disabled=true;});
     try{
@@ -371,25 +396,30 @@
       if(!draft?.activityName||result.success===false)throw Error('辨識失敗，原表單未變更，可再次按「重新辨識 DM」。');
       s.draft=draft;s.draftUrl=url;
       $('edit-dm-content').innerHTML=draftMarkup(draft);renderSlots($('edit-dm-slots'),draft.batches||[]);
-      $('edit-dm-preview').hidden=false;$('edit-dm-series').hidden=!draft.batches?.length;
+      const multiple=draft.timeStatus==='multiple'||draft.batches?.length>0;
+      $('edit-dm-preview').hidden=false;$('edit-dm-series').hidden=!multiple;$('edit-dm-slot-picker').hidden=!multiple;
       $('edit-dm-status').textContent=text(draft.confidenceNote)+' 多時段可勾一項套用本活動，或勾多項另建系列；不自動改動既有報名。';
+      if(multiple){
+        $('edit-dm-slot-picker').scrollIntoView({block:'start'});
+        if(!draft.batches?.length)editDmMessage('辨識到多時段，但未取得可用梯次。請重新辨識，或按「＋新增梯次」依上方時間原文補上；不會自行猜測日期。',true);
+      }
     }catch(e){if(editDmCurrent(s))$('edit-dm-status').textContent=e.message;}
     finally{if(editDmCurrent(s)){s.busy=false;$('edit-a-ai').querySelectorAll('button,input').forEach(e=>{e.disabled=false;});}}
   }
   function applyEditDm(s) {
-    if(!editDmCurrent(s)||s.busy||!s.draft)return;
-    if(s.draftUrl!==$('edit-a-image').value){$('edit-dm-status').textContent='宣傳圖已變更，請重新辨識。';return;}
+    if(!readyEditDm(s))return;
     const draft=s.draft,isSeries=s.activity.isBatch===true||String(s.activity['是否系列']).toUpperCase()==='TRUE';let slot=null;
-    if(!isSeries && draft.timeStatus==='multiple'){
-      try{const slots=validateBatches(selectedSlots($('edit-dm-slots')));if(slots.length!==1)throw Error('本活動僅可套用一個時段；多個時段請用「另建系列活動」，保留原報名。');slot=slots[0];}
-      catch(e){$('edit-dm-status').textContent=e.message;return;}
+    if(!isSeries && !$('edit-dm-slot-picker').hidden){
+      const slots=selectedSlots($('edit-dm-slots'));
+      if(slots.length!==1){editDmMessage('本活動僅可套用一個時段；請只勾一項，或按「以勾選時段另建系列活動」，保留原報名。',true);return;}
+      slot=slots[0];
     }
     if(!window.confirm('確認用辨識草稿取代本活動名稱、類型及說明'+(isSeries?'（保留原梯次時間與費用）':'、時間與費用')+'？套用後仍需儲存。'))return;
     $('edit-a-name').value=draft.activityName;$('edit-a-type').value=draft.activityType||'活動';
     $('edit-a-desc').value=activityDescription(draft.description,draft.location,draft.scheduleText);
-    if(!isSeries){$('edit-a-start').value=text(slot?.startTime||draft.startTime).replace('T',' ');$('edit-a-end').value=text(slot?.endTime||draft.endTime).replace('T',' ');$('edit-a-price').value=text(slot?.price??draft.price);}
+    if(!isSeries){const chosen=slot||draft;$('edit-a-start').value=text(chosen.startTime).replace('T',' ');$('edit-a-end').value=text(chosen.endTime).replace('T',' ');$('edit-a-price').value=text(chosen.price);}
     $('edit-dm-review').hidden=false;$('edit-dm-reviewed').checked=false;
-    $('edit-dm-status').textContent='草稿已套用，請核對並勾選確認後儲存；尚未更新正式活動。';
+    editDmMessage('草稿已套用至下方表單。請補齊日期、費用，核對並勾選確認後儲存；尚未更新正式活動。');
   }
   function canSaveEditDm() {
     if(!editDm)return true;
