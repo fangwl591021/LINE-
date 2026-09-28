@@ -41,6 +41,7 @@ const foundationChecks = [
 const fullChecks = [
   'test/activity-short-links.test.mjs',
   'test/admin-activity-registration.test.mjs',
+  'test/activity-batches.test.mjs',
   'test/activity-dm-ai.test.mjs',
   'test/activity-registration-history.test.mjs',
   'test/activity-registration-profile.test.mjs',

@@ -10,6 +10,7 @@ const read=path=>readFileSync(new URL('../../'+path,import.meta.url),'utf8');
 const tailwind=await (await fetch('https://cdn.tailwindcss.com',{signal:AbortSignal.timeout(20000)})).text();
 const html=read('index.html').replace('</head>','<style>.material-symbols-outlined{font-size:0!important;display:inline-block;width:24px;min-width:24px;height:24px}</style></head>');
 const scripts=new Set(['js/config.js','js/login-bootstrap.js','js/core.js','js/navigation.js','js/modules/activities.js','js/modules/admin.js','js/modules/home.js','js/modules/activity-registration.js','js/modules/activity-entry.js','js/auth.js']);
+scripts.add('js/modules/activity-batches.js');
 const actor='U'+'a'.repeat(32),ref='U'+'b'.repeat(32),id='ACT_fcfc401d-d559-4d0e-bbf4-73ff21973e09';
 const query=`?a=${id}&r=${ref}&n=admin&v=a`;
 const activity={activityId:id,networkId:'admin',status:'上架',activityName:'秋日交流活動',activityType:'交流',startTime:'2026-10-01T10:00',price:100,imageUrl:'https://fixture.invalid/dm.svg',description:'測試活動內容 <img src=x onerror=alert(1)>'};
@@ -194,6 +195,21 @@ try {
   const completeDm=await page.getByAltText('活動 DM').boundingBox();assert.ok(Math.abs(completeDm.height/completeDm.width-1.5)<0.01);
   await page.evaluate(()=>applyStoreSettingsToHome({siteName:'AI工坊',networkId:currentNetworkId}));assert.equal(await page.locator('#header-site-name').textContent(),'AI商脈');
   await page.evaluate(()=>applyStoreSettingsToHome({siteName:'租戶自訂',networkId:currentNetworkId}));assert.equal(await page.locator('#header-site-name').textContent(),'租戶自訂');
+  // Existing direct-entry and membership flow with selectable series slots.
+  activity.isBatch=true;activity.batches=[{activityId:id+'_B01',batchName:'上午梯次',startTime:'2026-10-01 10:00',price:100,status:'上架'},
+    {activityId:id+'_B02',batchName:'晚間梯次',startTime:'2026-10-01 19:00',price:200,status:'上架'},
+    {activityId:id+'_B03',batchName:'已下架梯次',status:'下架',price:100}];
+  await page.evaluate(a=>{window.allActivities=[a];window.openActivityDetail(a.activityId);},activity);
+  assert.equal(await page.locator('#activity-batch-choices input').count(),2);
+  const beforeJoin=calls.filter(c=>c.action==='joinActivity').length;
+  await page.getByRole('button',{name:'我要報名',exact:true}).click();assert.equal(calls.filter(c=>c.action==='joinActivity').length,beforeJoin);
+  for(const width of [320,390,1440]) {await page.setViewportSize({width,height:844});await page.locator('#activity-batch-choices').scrollIntoViewIfNeeded();
+    assert.ok(await page.locator('#activity-batch-choices').evaluate(e=>e.scrollWidth<=e.clientWidth+1));
+    await page.screenshot({path:join(out,`series-${width}.png`)});}
+  await page.locator('#activity-batch-choices input').nth(0).check();await page.locator('#activity-batch-choices input').nth(1).check();
+  await page.getByRole('button',{name:'我要報名',exact:true}).click();
+  await page.waitForFunction(()=>window.currentPage==='my-activities');
+  assert.deepEqual(calls.filter(c=>c.action==='joinActivity').at(-1).payload.batchIds,[id+'_B01',id+'_B02']);
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({result:'PASS',widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],automaticWrites:0,syntheticExplicitSignup:true,screenshots:out}));
 } finally {await browser.close();}

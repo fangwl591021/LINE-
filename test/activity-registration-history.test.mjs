@@ -37,7 +37,7 @@ function fixture(records=structuredClone(rows)) {
 }
 test('existing API orders by registration creation descending; frontend cache version is updated',()=>{
   assert.match(block(read('workerbackup.js'),'async listMyRegistrations(','async cancelRegistration('),/ORDER BY created_at DESC LIMIT 200/);
-  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.13/);
+  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.14/);
 });
 test('newest registration renders first, independent of event start date; response is not mutated',async()=>{
   const f=fixture(),snapshot=JSON.stringify(f.records);await f.c.loadMyActivities();

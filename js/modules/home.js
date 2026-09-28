@@ -2072,7 +2072,7 @@ const HomeModule = (function() {
         const list = document.getElementById('user-activities-list');
         if (!list) return;
 
-        const activities = (Array.isArray(window.allActivities) ? window.allActivities : []).filter(canSeePublicActivity_);
+        const activities = (Array.isArray(window.allActivities) ? window.allActivities : []).filter(a=>!a.seriesId && canSeePublicActivity_(a));
         const allActiveActs = activities
             .filter(a => getPublicActivityStatus_(a) === '上架')
             .slice()
@@ -3290,6 +3290,7 @@ const HomeModule = (function() {
                         <span class="material-symbols-outlined text-[17px]">schedule</span> ${startTime}
                     </div>
                     <p class="text-[14px] text-slate-600 whitespace-pre-wrap">${desc}</p>
+                    <div id="activity-batch-choices"></div>
                     <div class="grid grid-cols-2 gap-2">
                         <button onclick="window.joinPublicActivity('${window.escapeJS(activityId)}', this)" class="py-4 bg-[#06C755] text-white rounded-2xl font-black text-[16px]">我要報名</button>
                         <button onclick="window.openActivityShareModal('${window.escapeJS(activityId)}', '${window.escapeJS(rawTitle)}')" class="py-4 bg-blue-600 text-white rounded-2xl font-black text-[16px] flex justify-center items-center gap-1">
@@ -3302,6 +3303,7 @@ const HomeModule = (function() {
                 </div>
             </div>`;
         window.goPage('my-act-detail', true);
+        void window.ActivityBatches?.mount(activity,document.getElementById('activity-batch-choices'));
     };
 
     async function ensurePointOAFriendForActivity_() {
@@ -3346,6 +3348,9 @@ const HomeModule = (function() {
         if (activityJoinBusy) return;
         const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId) && canSeePublicActivity_(a));
         if (!activity) return window.showToast('活動已下架', true);
+        let batchIds;
+        try { batchIds=window.ActivityBatches?.selection(activity); }
+        catch(e) { return window.showToast(e.message,true); }
 
         activityJoinBusy = true;
         const oriHtml = btn.innerHTML;
@@ -3357,6 +3362,7 @@ const HomeModule = (function() {
             if (!await window.ActivityRegistration.ensureMember(activity)) return;
             const res = await window.fetchAPI('joinActivity', {
                 activityId: getPublicActivityId_(activity),
+                ...(batchIds ? {batchIds} : {}),
                 activityName: activity.activityName || activity.name || activity.title || activity['活動名稱'] || '',
                 userName: window.currentUser?.name || window.currentUserProfile?.displayName || '',
                 userPhone: window.currentUser?.phone || '',
@@ -3365,7 +3371,7 @@ const HomeModule = (function() {
 
             if (res && !res.error) {
                 window.showToast(res.existed ? '您已報名過此活動' : '報名成功');
-                await goActivityRecordAfterJoin_(getPublicActivityId_(activity));
+                await goActivityRecordAfterJoin_(batchIds?.[0] || getPublicActivityId_(activity));
             } else {
                 throw new Error('會員資料已確認，但活動報名未完成：' + (res?.error || '請重試'));
             }

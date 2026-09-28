@@ -1794,6 +1794,7 @@
           </div>
           <p id="edit-a-link-status" role="status" class="mt-2 text-xs text-emerald-800 leading-relaxed"></p>
         </section>
+        <div id="edit-a-ai"></div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
             <label class="block text-sm font-bold text-slate-500 mb-1.5">活動名稱</label>
@@ -5061,6 +5062,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       modal.classList.remove("hidden");
       modal.classList.add("flex");
       void window.AdminActivityRegistration.loadEditLink(act);
+      window.AdminActivityRegistration.mountEditDm(act);
     }
 
     function updateActivityImagePreview() {
@@ -5107,12 +5109,14 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
 
     function closeActivityEditModal() {
       window.AdminActivityRegistration.clearEditLink();
+      window.AdminActivityRegistration.clearEditDm();
       const modal = document.getElementById("modal-activity-edit");
       modal.classList.add("hidden");
       modal.classList.remove("flex");
     }
 
     async function saveActivityFromMonitor() {
+      if (!window.AdminActivityRegistration.canSaveEditDm()) return;
       const btn = document.getElementById("btn-save-activity");
       const originalHtml = btn ? btn.innerHTML : "";
       const activityId = document.getElementById("edit-a-id").value;
@@ -5710,7 +5714,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <script src="js/modules/admin-partners-dashboard.js?v=1.2"></script>
   <script src="js/modules/admin-mall-dashboard.js?v=1"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
-  <link rel="stylesheet" href="css/admin-activity-registration.css?v=3">
-  <script src="js/modules/admin-activity-registration.js?v=5"></script>
+  <link rel="stylesheet" href="css/admin-activity-registration.css?v=4">
+  <script src="js/modules/admin-activity-registration.js?v=6"></script>
 </body>
 </html>
