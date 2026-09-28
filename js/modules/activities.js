@@ -94,7 +94,21 @@ window.buildActivityShareUrl = function(activityId, activity) {
   return baseUrl + '?' + params.toString();
 };
 
-window.openActivityShareModal = function(activityId, title, options = {}) {
+function renderActivityShareLink(share, message) {
+  const input = document.getElementById('activity-share-url');
+  const qr = document.getElementById('activity-share-qr');
+  const status = document.getElementById('activity-share-status');
+  if (input) input.value = share.pending ? '' : share.url;
+  if (qr) {
+    qr.hidden = share.pending;
+    if (share.pending) qr.removeAttribute('src');
+    else qr.src = 'https://quickchart.io/qr?text=' + encodeURIComponent(share.url) + '&size=300&margin=2';
+  }
+  if (status) status.textContent = message;
+  document.querySelectorAll('[data-activity-share-action]').forEach(button => { button.disabled = share.pending; });
+}
+
+window.openActivityShareModal = async function(activityId, title, options = {}) {
   const activity = findActivityForShare(activityId) || {};
   const id = String(activityId || getActivityIdValue(activity)).trim();
   if (!id) return window.showToast('找不到活動 ID，請重新整理後再試', true);
@@ -103,14 +117,33 @@ window.openActivityShareModal = function(activityId, title, options = {}) {
   const url = window.buildActivityShareUrl(id, activity);
   const modal = document.getElementById('activity-share-modal');
   const titleEl = document.getElementById('activity-share-title');
-  const input = document.getElementById('activity-share-url');
-  const qr = document.getElementById('activity-share-qr');
-
-  window.currentActivityShare = { activityId: id, title: shareTitle, url, activity, returnToAdmin: !!options.returnToAdmin };
+  const uid = window.currentUserProfile?.userId;
+  const share = { activityId: id, title: shareTitle, url, activity, pending: true, returnToAdmin: !!options.returnToAdmin };
+  window.currentActivityShare = share;
   if (titleEl) titleEl.textContent = shareTitle;
-  if (input) input.value = url;
-  if (qr) qr.src = 'https://quickchart.io/qr?text=' + encodeURIComponent(url) + '&size=300&margin=2';
+  renderActivityShareLink(share, '正在產生活動短網址…');
   if (modal) modal.classList.remove('hidden');
+  let timer;
+  let message = '活動短網址已準備好';
+  try {
+    const result = await Promise.race([
+      window.fetchAPI('createActivityShareLink', { activityId: id, networkId: getActivityNetworkValue(activity) }, true),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('SHORT_LINK_TIMEOUT')), 12000); })
+    ]);
+    const shortUrl = new URL((result?.data || result)?.url || '');
+    if (result?.success === false || shortUrl.origin !== new URL(window.WORKER_URL).origin ||
+        shortUrl.protocol !== 'https:' || shortUrl.username || shortUrl.password || shortUrl.search || shortUrl.hash ||
+        !/^\/a\/[A-Za-z0-9_-]{16}$/.test(shortUrl.pathname)) throw new Error('SHORT_LINK_FAILED');
+    share.url = shortUrl.href;
+  } catch (_) {
+    message = '短網址暫時無法產生，仍可使用下方原活動網址。';
+  } finally {
+    clearTimeout(timer);
+  }
+  if (window.currentActivityShare !== share) return;
+  if (window.currentUserProfile?.userId !== uid) { window.closeActivityShareModal(); return; }
+  share.pending = false;
+  renderActivityShareLink(share, message);
 };
 
 window.closeActivityShareModal = function() {
@@ -122,6 +155,7 @@ window.closeActivityShareModal = function() {
 };
 
 window.copyActivityShareLink = async function() {
+  if (!window.currentActivityShare || window.currentActivityShare.pending) return window.showToast('請稍候，活動連結準備中');
   const input = document.getElementById('activity-share-url');
   const url = input ? input.value : (window.currentActivityShare && window.currentActivityShare.url) || '';
   if (!url) return window.showToast('沒有可複製的活動連結', true);
@@ -242,6 +276,7 @@ function buildActivityFlexMessage(share) {
 
 window.shareActivityLinkToLine = async function() {
   const share = window.currentActivityShare || {};
+  if (share.pending) return window.showToast('請稍候，活動連結準備中');
   const title = share.title || '活動報名';
   const url = share.url || '';
   if (!url) return window.showToast('沒有可分享的活動連結', true);

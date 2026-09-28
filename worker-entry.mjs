@@ -15,6 +15,7 @@ import { handleStoreAdminCatalog } from './worker/store-admin-catalog.mjs';
 import { handlePartnerOnboarding } from './worker/partner-onboarding-ai.mjs';
 import { handleStoreConsumptionJournal } from './worker/store-consumption-journal.mjs';
 import { handleMemberChat, processMemberChatNotifications, processMemberDirectoryMatches } from './worker/member-chat.mjs';
+import { handleActivityShortLink } from './worker/activity-short-links.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -391,6 +392,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const activityLinkResponse = await handleActivityShortLink(request, env);
+    if (activityLinkResponse) return activityLinkResponse;
     const memberChatResponse = await handleMemberChat(request, env);
     if (memberChatResponse) return memberChatResponse;
     const onboardingResponse = await handlePartnerOnboarding(request, env, storeInviteProfileView);
