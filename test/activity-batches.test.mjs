@@ -17,6 +17,8 @@ function fixture(){
  CREATE TABLE registrants(row_id TEXT PRIMARY KEY,line_id TEXT,activity_id TEXT,activity_name TEXT,name TEXT,phone TEXT,identity TEXT,amount INTEGER,payment_status TEXT,start_time TEXT,description TEXT,image_url TEXT,status TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
  CREATE TABLE users(line_id TEXT PRIMARY KEY,name TEXT,phone TEXT); INSERT INTO users VALUES('member','測試會員','0912345678'),('other','另一會員','0987654321');`);
  sql.exec(readFileSync(new URL('../migrations/0052_activity_form_options.sql',import.meta.url),'utf8'));
+ sql.exec("CREATE UNIQUE INDEX idx_registrants_unique_line ON registrants(activity_id,line_id) WHERE line_id IS NOT NULL AND line_id != ''; CREATE UNIQUE INDEX idx_registrants_unique_phone ON registrants(activity_id,phone) WHERE phone IS NOT NULL AND phone != '';");
+ sql.exec(readFileSync(new URL('../migrations/0053_activity_option_uniqueness.sql',import.meta.url),'utf8'));
  sql.exec("ALTER TABLE registrants ADD COLUMN checked_in INTEGER DEFAULT 0; ALTER TABLE registrants ADD COLUMN nfc_checkin_time TEXT DEFAULT ''; ALTER TABLE registrants ADD COLUMN nfc_checkin_source TEXT DEFAULT ''; ALTER TABLE registrants ADD COLUMN cancelled_at TEXT DEFAULT ''; ALTER TABLE registrants ADD COLUMN payment_last5 TEXT DEFAULT '';");
  let failIndex=-1;
  const prepare=query=>({bind:(...args)=>({query,args,run:async()=>({meta:{changes:Number(sql.prepare(query).run(...args).changes)}}),first:async()=>sql.prepare(query).get(...args),all:async()=>({results:sql.prepare(query).all(...args)})})});
@@ -130,6 +132,19 @@ test('NFC targets one selected date registration, never an arbitrary registratio
   assert.equal((await f.mod.nfcCheckin({activityId:'ACT_series',batchId:'ACT_series_B02',userId:'member'},f.env)).success,true);
   const regs=f.sql.prepare('SELECT batch_id,checked_in FROM registrants ORDER BY batch_id').all();
   assert.deepEqual(regs.map(r=>r.checked_in),[0,1]);
+ }finally{f.sql.close();}
+});
+
+test('production uniqueness permits different dates but rejects same-date member/phone duplicates; single event rules unchanged',async()=>{
+ const f=fixture();try{
+  await f.mod.bulkAddRegistrants(payload,f.env);await f.join({batchIds:['ACT_series_B01','ACT_series_B02']});
+  const insert=f.sql.prepare("INSERT INTO registrants(row_id,line_id,activity_id,batch_id,phone,status) VALUES(?,?,'ACT_series',?,?,'active')");
+  assert.throws(()=>insert.run('duplicate-member','member','ACT_series_B01','different-phone'),/UNIQUE/);
+  assert.throws(()=>insert.run('duplicate-phone','different-member','ACT_series_B02','0912345678'),/UNIQUE/);
+  insert.run('single','single-member','','single-phone');
+  f.sql.exec("UPDATE registrants SET status='cancelled' WHERE row_id='single'");
+  assert.throws(()=>insert.run('single-retry','single-member','','different-phone'),/UNIQUE/);
+  assert.throws(()=>insert.run('single-phone-retry','different-member','','single-phone'),/UNIQUE/);
  }finally{f.sql.close();}
 });
 
