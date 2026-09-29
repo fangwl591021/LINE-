@@ -68,7 +68,7 @@ test('admin uses authenticated existing APIs, no public fallback, new tables or 
   assert.match(source,/request !== state\.rosterRequest \|\| id !== state\.selected/);
   assert.match(source,/state\.busy \|\| !\['toggleCheckin','confirmPayment'\]/);
   assert.match(source,/row\.cancelled/);
-  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=8/);
+  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=9/);
   assert.match(html,/get\('tab'\) === 'activities' \? 'activities' : 'users'/);
   assert.match(html,/data-registrants=/);
   assert.doesNotMatch(source,/localStorage|ACTMASTER_DB|CREATE TABLE/);
@@ -245,6 +245,12 @@ test('grouping never hides an orphan, cross-network slot, or unrelated standalon
   assert.equal(api.activityForms(rows)[0].formBatches.length,1);
   const alias=api.activityForms([{'活動ID':'root','是否系列':'TRUE','歸屬網':'one'}, {'活動ID':'child',series_id:'root','歸屬網':'one'}]);
   assert.equal(alias.length,1);assert.equal(alias[0].formBatches.length,1);
+});
+
+test('single-row forms expose embedded dates without requiring separate activity records', () => {
+  const root={activityId:'root',name:'商機雙週會',networkId:'tenant',isBatch:true,batches:Array.from({length:6},(_,i)=>({activityId:`B${i}`,name:`梯次${i}`,startTime:`2026-10-${10+i} 14:00`}))};
+  const forms=api.activityForms([root]);assert.equal(forms.length,1);assert.equal(forms[0].formBatches.length,6);
+  assert.equal(api.filterActivities(forms,{query:'梯次5',from:'2026-10-15'}).length,1);
 });
 
 test('editing DM cannot open creation; existing series stays one registration form', () => {

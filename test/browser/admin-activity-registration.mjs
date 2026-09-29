@@ -355,7 +355,7 @@ try {
   multiSession=true;const beforeEditSeries=createCount();
   const root=activities.find(a=>a['活動ID']==='A');root.isBatch=true;
   const slots=Array.from({length:6},(_,i)=>({'活動ID':`A_B0${i+1}`,seriesId:'A',batchName:`第${i+1}梯次`,'活動名稱':`秋日交流活動｜第${i+1}梯次`,'歸屬網':'admin','開始時間':`2026-10-${String(7+i).padStart(2,'0')} 10:00`,'金額':100,'狀態':'上架'}));
-  activities.unshift(...slots.toReversed());
+  root.batches=slots;
   const slotsBefore=JSON.stringify(slots),rowsBefore=JSON.stringify(rows);
   await btn('重新整理活動').click();await page.getByText('同一張報名表 · 6 個梯次',{exact:true}).waitFor();
   assert.equal(await page.locator('[data-registrants^="A_B"]').count(),0);
@@ -402,7 +402,7 @@ try {
   },{root,slots});
   assert.deepEqual(chosen,['A_B01','A_B06']);
   // Empty AI candidates never become a dead-end or invented dates; manual rows remain available.
-  root.isBatch=false;await btn('重新整理活動').click();
+  root.isBatch=false;delete root.batches;activities.unshift(...slots.toReversed());await btn('重新整理活動').click();
   await page.locator('[data-registrants="A_B01"]').waitFor();
   omitSessionRows=true;await page.evaluate(()=>editActivityFromMonitor('A'));
   await page.locator('#edit-a-image').fill('http://localhost/fixture-poster.png');

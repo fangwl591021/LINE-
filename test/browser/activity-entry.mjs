@@ -58,6 +58,10 @@ await page.route('**/*',async route=>{
     } else if(action==='joinActivity') {
       assert.equal(payload.userName,registrationMember.name);assert.equal(payload.userPhone,registrationMember.phone);
       if(joinFailure)return route.fulfill({contentType:'application/json',body:JSON.stringify({success:false,error:'合成報名失敗'})});
+      if(payload.batchIds?.length) {
+        const slot=activity.batches.find(b=>b.activityId===payload.batchIds[0]);
+        registrations[0]={...registrations[0],batchId:slot.activityId,activityName:activity.activityName+'｜'+slot.batchName,startTime:slot.startTime,amount:slot.price};
+      }
       data={rowId:'latest',activityId:id,existed:false};
     } else if(action==='getMyActivities')data=registrations;
     else if(action==='listPersonalTasks')data=[];
@@ -208,7 +212,8 @@ try {
     await page.screenshot({path:join(out,`series-${width}.png`)});}
   await page.locator('#activity-batch-choices input').nth(0).check();await page.locator('#activity-batch-choices input').nth(1).check();
   await page.getByRole('button',{name:'我要報名',exact:true}).click();
-  await page.waitForFunction(()=>window.currentPage==='my-activities');
+  await page.waitForFunction(()=>window.currentPage==='my-act-detail' && document.querySelector('#my-act-detail-content h3')?.textContent.includes('上午梯次'));
+  assert.match(await page.locator('#my-act-detail-content').textContent(),/2026.*10.*01.*10:00/);
   assert.deepEqual(calls.filter(c=>c.action==='joinActivity').at(-1).payload.batchIds,[id+'_B01',id+'_B02']);
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({result:'PASS',widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],automaticWrites:0,syntheticExplicitSignup:true,screenshots:out}));

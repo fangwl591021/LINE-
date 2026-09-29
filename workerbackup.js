@@ -1,6 +1,6 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { extractActivityDmDraft } from './worker/activity-dm-ai.mjs';
-import { createActivityBatches, activityWithBatches, joinActivityBatches } from './worker/activity-batches.mjs';
+import { createActivityBatches, activityWithBatches, joinActivityBatches, activityBatchRows } from './worker/activity-batches.mjs';
 import { createActivityShareLink } from './worker/activity-short-links.mjs';
 import { handleCrmCardPhoneLink } from './worker/crm-card-phone-link.mjs';
 import { handleDailyTank } from './worker/daily-tank-challenge.mjs';
@@ -11741,6 +11741,7 @@ const D1ActivityModule = {
       'NFC簽到結束': this.text(row.nfc_checkin_end),
       'NFC限當日': row.nfc_same_day_only !== 0,
       isBatch: Number(row.is_series) === 1, '是否系列': Number(row.is_series) === 1,
+      ...(row.batch_options && row.batch_options !== '[]' ? {batches:activityBatchRows(row).map(b=>this.activityRow(b))} : {}),
       seriesId: this.text(row.series_id), batchName: this.text(row.batch_name), batchLimit: row.batch_limit ?? null
     };
   },
@@ -11752,6 +11753,7 @@ const D1ActivityModule = {
     return {
       rowId: this.text(row.row_id),
       registrationId: this.text(row.row_id),
+      batchId: this.text(row.batch_id),
       lineId: this.text(row.line_id),
       userId: this.text(row.line_id),
       activityId: this.text(row.activity_id),
@@ -11834,7 +11836,7 @@ const D1ActivityModule = {
         ),
         'admin'
       )
-      WHERE network_id = '' OR network_id = 'admin'
+      WHERE (network_id = '' OR network_id = 'admin') AND batch_options = '[]'
     `).run().catch(() => null);
     await env.ACTMASTER_DB.prepare('CREATE INDEX IF NOT EXISTS idx_activities_network_status ON activities(network_id, status, start_time)').run().catch(() => null);
     this._networkScopeReady = true;
@@ -11958,7 +11960,7 @@ const D1ActivityModule = {
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(activity_id) DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
-        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_ratio=excluded.image_ratio,network_id=excluded.network_id,status=excluded.status,
+        end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_ratio=excluded.image_ratio,status=excluded.status,
         is_series=MAX(activities.is_series,excluded.is_series),nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
         nfc_same_day_only=excluded.nfc_same_day_only
     `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_ratio,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
@@ -12033,11 +12035,14 @@ const D1ActivityModule = {
       WITH history AS (
         SELECT r.*, TRIM(r.created_at) AS registration_time,
           CASE WHEN a.activity_id IS NULL THEN '下架'
+            WHEN r.batch_id <> '' AND (b.value IS NULL OR json_extract(b.value,'$.status') <> '上架') THEN '下架'
             WHEN TRIM(COALESCE(p.status, '')) NOT IN ('', '上架') THEN p.status
             ELSE a.status END AS live_activity_status,
-          a.start_time AS live_activity_start, a.end_time AS live_activity_end
+          CASE WHEN r.batch_id <> '' THEN json_extract(b.value,'$.start_time') ELSE a.start_time END AS live_activity_start,
+          CASE WHEN r.batch_id <> '' THEN json_extract(b.value,'$.end_time') ELSE a.end_time END AS live_activity_end
         FROM registrants r
         LEFT JOIN activities a ON a.activity_id = r.activity_id
+        LEFT JOIN json_each(COALESCE(a.batch_options,'[]')) b ON json_extract(b.value,'$.activity_id') = r.batch_id
         LEFT JOIN activities p ON p.activity_id = a.series_id AND p.network_id = a.network_id
         WHERE (? <> '' AND r.line_id = ?) OR (? <> '' AND r.phone = ?) OR (? <> '' AND r.name = ?)
       ), date_parts AS (
@@ -12109,9 +12114,17 @@ const D1ActivityModule = {
     const activityId = this.pick(payload, ['activityId', 'checkin']);
     const userId = this.pick(payload, ['userId', 'lineId']);
     if (!activityId || !userId) return { success: false, error: '缺少活動或會員資料' };
-    const activity = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    let activity = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
     if (!activity || this.text(activity.status) !== '上架') return { success: false, error: '活動不存在或已下架' };
-    const reg = await D1ReadModule.first(env, "SELECT * FROM registrants WHERE activity_id = ? AND line_id = ? AND status <> 'cancelled' LIMIT 1", [activityId, userId]);
+    let batchId = this.text(payload.batchId);
+    const options = activityBatchRows(activity);
+    if (options.length) {
+      const today = this.taipeiNow().date;
+      const candidates = options.filter(b => b.status === '上架' && (batchId ? b.activity_id === batchId : b.start_time.slice(0,10) === today));
+      if (candidates.length !== 1) return { success:false, error:'請選擇本次報名梯次，或出示該梯次的核銷 QR' };
+      activity = candidates[0]; batchId = activity.activity_id;
+    }
+    const reg = await D1ReadModule.first(env, "SELECT * FROM registrants WHERE activity_id = ? AND batch_id = ? AND line_id = ? AND status <> 'cancelled' LIMIT 1", [activityId, batchId, userId]);
     if (!reg) return { success: false, error: '尚未報名，無法簽到' };
 
     const start = this.text(activity.nfc_checkin_start);
@@ -12246,21 +12259,24 @@ const D1ActivityModule = {
         r.line_id AS receiver_user_id,
         r.name AS registrant_name,
         a.activity_id,
-        a.name AS activity_name,
-        a.start_time,
-        a.end_time,
+        r.batch_id,
+        CASE WHEN r.batch_id <> '' THEN r.activity_name ELSE a.name END AS activity_name,
+        CASE WHEN r.batch_id <> '' THEN json_extract(b.value,'$.start_time') ELSE a.start_time END AS start_time,
+        CASE WHEN r.batch_id <> '' THEN json_extract(b.value,'$.end_time') ELSE a.end_time END AS end_time,
         a.description,
         a.image_url,
         a.network_id,
         a.creator_id
       FROM registrants r
       JOIN activities a ON a.activity_id = r.activity_id
+      LEFT JOIN json_each(a.batch_options) b ON json_extract(b.value,'$.activity_id') = r.batch_id
       WHERE r.status <> 'cancelled'
         AND TRIM(COALESCE(r.line_id, '')) <> ''
-        AND a.status <> '銝'
-        AND a.start_time >= ?
-        AND a.start_time < ?
-      ORDER BY a.start_time ASC, r.created_at ASC
+        AND a.status = '上架'
+        AND (r.batch_id = '' OR json_extract(b.value,'$.status') = '上架')
+        AND (CASE WHEN r.batch_id <> '' THEN json_extract(b.value,'$.start_time') ELSE a.start_time END) >= ?
+        AND (CASE WHEN r.batch_id <> '' THEN json_extract(b.value,'$.start_time') ELSE a.start_time END) < ?
+      ORDER BY start_time ASC, r.created_at ASC
       LIMIT 1000
     `, [targetDate, nextDate]);
     let sent = 0;
@@ -12285,12 +12301,12 @@ const D1ActivityModule = {
           AND message_type = 'activity_reminder'
           AND payload_json LIKE ?
         LIMIT 1
-      `, [receiverId, `%"activityId":"${activityId}"%`]).catch(() => null);
+      `, [receiverId, row.batch_id ? `%"registrationId":"${this.text(row.registration_id)}"%` : `%"activityId":"${activityId}"%`]).catch(() => null);
       if (exists) {
         skipped++;
         continue;
       }
-      const messageId = `ACTREM_${activityId}_${receiverId}_${targetDate}`.replace(/[^A-Za-z0-9_:-]/g, '_');
+      const messageId = `ACTREM_${row.batch_id || activityId}_${receiverId}_${targetDate}`.replace(/[^A-Za-z0-9_:-]/g, '_');
       const senderId = this.text(row.creator_id, 'system');
       const context = await D1InboxModule.senderContext(env, senderId).catch(() => ({ snapshot: { name: '系統提醒', lineId: senderId } }));
       const bodyLines = [

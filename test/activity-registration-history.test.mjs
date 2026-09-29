@@ -38,19 +38,20 @@ function fixture(records=structuredClone(rows)) {
 }
 test('frontend uses existing history API and bumps the changed module cache version',()=>{
   assert.match(source,/\['getMyActivities', 'getUserActivities', 'getMyRegistrations', 'getUserRegistrations'\]/);
-  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.16/);
+  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.17/);
 });
 
 function historyDatabase() {
   const sql=new DatabaseSync(':memory:');
   sql.exec('CREATE TABLE registrants(row_id TEXT PRIMARY KEY,line_id TEXT,phone TEXT,name TEXT,activity_name TEXT,start_time TEXT,created_at TEXT,status TEXT,activity_id TEXT)');
   sql.exec('CREATE TABLE activities(activity_id TEXT PRIMARY KEY,status TEXT,start_time TEXT,end_time TEXT,series_id TEXT,network_id TEXT)');
+  sql.exec(read('migrations/0052_activity_form_options.sql'));
   const c=vm.createContext({D1ReadModule:{all:async(_env,query,args)=>sql.prepare(query).all(...args)}});
   const worker=read('workerbackup.js'),begin=worker.indexOf('const D1ActivityModule = {'),end=worker.indexOf('\n};',begin);
   vm.runInContext(worker.slice(begin,end+3)+'\nglobalThis.activities=D1ActivityModule;',c);
-  const insert=sql.prepare('INSERT INTO registrants VALUES(?,?,?,?,?,?,?,?,?)');
+  const insert=sql.prepare('INSERT INTO registrants(row_id,line_id,phone,name,activity_name,start_time,created_at,status,activity_id) VALUES(?,?,?,?,?,?,?,?,?)');
   return {sql,add:(id,date,start='2026-10-07 14:00',owner='viewer')=>{
-      sql.prepare('INSERT INTO activities VALUES(?,?,?,?,?,?)').run(id,'上架',start,'','','admin');
+      sql.prepare('INSERT INTO activities(activity_id,status,start_time,end_time,series_id,network_id) VALUES(?,?,?,?,?,?)').run(id,'上架',start,'','','admin');
       return insert.run(id,owner,'','',id,start,date,'active',id);
     },
     list:()=>c.activities.listMyRegistrations({userId:'viewer'},{ACTMASTER_DB:{}})};
@@ -94,7 +95,7 @@ test('history adds live activity availability without replacing registration sna
     for(const id of ['live','hidden','removed','batch','foreign-parent'])f.add(id,'2026-09-28 12:00');
     f.sql.prepare('UPDATE activities SET start_time=?,end_time=? WHERE activity_id=?').run('2026-10-08 14:00','2026-10-08 17:00','live');
     f.sql.exec("UPDATE activities SET status='下架' WHERE activity_id='hidden'; DELETE FROM activities WHERE activity_id='removed';");
-    f.sql.exec("INSERT INTO activities VALUES('series','下架','','','','admin'); UPDATE activities SET series_id='series' WHERE activity_id IN ('batch','foreign-parent'); UPDATE activities SET network_id='other' WHERE activity_id='foreign-parent';");
+    f.sql.exec("INSERT INTO activities(activity_id,status,start_time,end_time,series_id,network_id) VALUES('series','下架','','','','admin'); UPDATE activities SET series_id='series' WHERE activity_id IN ('batch','foreign-parent'); UPDATE activities SET network_id='other' WHERE activity_id='foreign-parent';");
     const snapshot=JSON.stringify(f.sql.prepare('SELECT * FROM registrants ORDER BY row_id').all());
     const records=Object.fromEntries((await f.list()).data.map(r=>[r.rowId,r]));
     assert.equal(records.live.activityStatus,'上架');
