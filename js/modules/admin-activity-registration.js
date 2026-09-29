@@ -18,11 +18,11 @@
   const status = row => pick(row, ['狀態', 'status'], '上架') === '下架' ? '下架' : '上架';
   const seriesId = row => text(pick(row, ['seriesId', 'series_id']));
   const isSeries = row => row?.isBatch === true || /^(true|1)$/i.test(text(pick(row, ['是否系列', 'is_series'])));
-  // Keep storage-level slot records intact, but present one activity / registration form.
+  // New forms contain their own options. Group legacy child rows only for compatibility.
   // Orphans stay visible if the parent is absent (e.g. the API's 500-row limit).
   function activityForms(rows) {
     const key = row => JSON.stringify([network(row), activityId(row)]);
-    const parents = new Map(rows.filter(row => !seriesId(row) && isSeries(row)).map(row => [key(row), {...row, formBatches: []}]));
+    const parents = new Map(rows.filter(row => !seriesId(row) && isSeries(row)).map(row => [key(row), {...row, formBatches: [...(row.batches || [])]}]));
     const parentFor = row => parents.get(JSON.stringify([network(row), seriesId(row)]));
     for (const row of rows) if (seriesId(row) && parentFor(row)) parentFor(row).formBatches.push(row);
     for (const parent of parents.values()) parent.formBatches.sort((a,b) => text(pick(a,['開始時間','startTime'])).localeCompare(text(pick(b,['開始時間','startTime']))));

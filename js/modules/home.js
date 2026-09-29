@@ -2938,6 +2938,8 @@ const HomeModule = (function() {
     function renderRegisteredActivityDetail_(activity, recordIndex) {
         const content = document.getElementById('my-act-detail-content');
         if (!content) return;
+        const record = (window.myActivitiesData || [])[recordIndex];
+        if (record?.batchId) activity = {...activity, ...buildActivityFromRegistration_(record), endTime:record.activityEndTime || ''};
         const activityId = getPublicActivityId_(activity);
         const rawTitle = activity.activityName || activity.name || activity.title || activity['活動名稱'] || '活動報名';
         const type = activity.activityType || activity.type || activity['活動類型'] || '活動';
@@ -3409,7 +3411,7 @@ const HomeModule = (function() {
 
             if (res && !res.error) {
                 window.showToast(res.existed ? '您已報名過此活動' : '報名成功');
-                await goActivityRecordAfterJoin_(batchIds?.[0] || getPublicActivityId_(activity));
+                await goActivityRecordAfterJoin_(res.data?.activityId || res.activityId || getPublicActivityId_(activity));
             } else {
                 throw new Error('會員資料已確認，但活動報名未完成：' + (res?.error || '請重試'));
             }
