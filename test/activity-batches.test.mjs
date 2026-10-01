@@ -79,6 +79,21 @@ test('invalid token, missing selection, foreign/closed slot and wrong tenant nev
   assert.equal(f.sql.prepare('SELECT count(*) n FROM registrants').get().n,0);
  }finally{f.sql.close();}}
 });
+test('cross-store signup uses explicit activity scope without changing membership or bypassing scope checks',async()=>{
+ const f=fixture();try{
+  await f.mod.bulkAddRegistrants({...payload,authenticatedNetworkId:'organizer'},f.env);
+  f.security.getActor=async()=>({userId:'member',role:'store',networkId:'member',token:'verified'});
+  const before=JSON.stringify(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all());
+  const denied=await f.join({networkId:'member',batchIds:['ACT_series_B01']});
+  assert.equal(denied.error,'系列活動不在您的可查看範圍');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM registrants').get().n,0);
+  const joined=await f.join({networkId:'organizer',batchIds:['ACT_series_B01','ACT_series_B02']});
+  assert.equal(joined.success,true);assert.equal(joined.data.registrations.length,2);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all()),before);
+  assert.equal(f.sql.prepare('SELECT network_id FROM activities').get().network_id,'organizer');
+ }finally{f.sql.close();}
+});
+
 test('capacity is checked inside batch; partial success reports missing slot, retry never duplicates',async()=>{
  const f=fixture();try{
   await f.mod.bulkAddRegistrants(payload,f.env);await f.join({batchIds:['ACT_series_B01']});

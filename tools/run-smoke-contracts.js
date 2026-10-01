@@ -45,6 +45,7 @@ const fullChecks = [
   'test/activity-dm-ai.test.mjs',
   'test/activity-registration-history.test.mjs',
   'test/activity-registration-profile.test.mjs',
+  'test/activity-signup-context.test.mjs',
   'test/admin-entry.test.mjs',
   'test/exchange-zone-visibility.test.mjs',
   'test/member-chat.test.mjs',

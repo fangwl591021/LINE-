@@ -3402,6 +3402,8 @@ const HomeModule = (function() {
             if (!await window.ActivityRegistration.ensureMember(activity)) return;
             const res = await window.fetchAPI('joinActivity', {
                 activityId: getPublicActivityId_(activity),
+                // Member refresh restores their own network; signup stays with this activity.
+                networkId: getPublicActivityNetwork_(activity),
                 ...(batchIds ? {batchIds} : {}),
                 activityName: activity.activityName || activity.name || activity.title || activity['活動名稱'] || '',
                 userName: window.currentUser?.name || window.currentUserProfile?.displayName || '',
