@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/mycard-keyword-reply.test.mjs',
   'test/card-links-v2.test.mjs',
   'test/activity-short-links.test.mjs',
   'test/admin-activity-registration.test.mjs',
