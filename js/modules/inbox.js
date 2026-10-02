@@ -212,15 +212,16 @@
   }
 
   function renderInboxECardPreview(card, options = {}) {
-    const cfg = getCardConfig(card);
+    const linksV2 = window.CardLinksRuntime?.enabled() === true;
+    const cfg = linksV2 ? window.CardLinks.project(getCardConfig(card), card, true) : getCardConfig(card);
     const img = getPreviewImage(card, cfg);
     const ratio = getPreviewRatio(cfg);
-    const name = cardText(card, ["name", "姓名"], "未命名名片");
+    const name = (linksV2 && cfg.title) || cardText(card, ["name", "姓名"], "未命名名片");
     const company = cardText(card, ["companyName", "公司名稱"]);
     const title = cardText(card, ["title", "職稱"]);
     const mobile = cardText(card, ["mobile", "手機號碼", "手機"]);
     const desc = String(cfg.desc || cardText(card, ["services", "服務項目", "notes", "備註"])).trim();
-    const buttons = Array.isArray(cfg.buttons) ? cfg.buttons.slice(0, 4) : [];
+    const buttons = Array.isArray(cfg.buttons) ? cfg.buttons.slice(0, linksV2 ? undefined : 4) : [];
     const compact = options.compact === true;
     const imageHtml = img
       ? '<div class="relative w-full overflow-hidden rounded-2xl bg-slate-100 border border-slate-100">' +
@@ -244,7 +245,7 @@
           ([company, title, mobile].filter(Boolean).length ? '<div class="mt-2 text-[13px] font-bold text-slate-500 leading-relaxed">' + escapeHTML([company, title, mobile].filter(Boolean).join(" / ")) + '</div>' : '') +
           (desc ? '<div class="mt-4 text-[14px] font-bold leading-relaxed text-slate-600 whitespace-pre-wrap text-left">' + escapeHTML(desc) + '</div>' : '') +
         '</div>' +
-        (buttonHtml ? '<div class="px-5 pb-5 grid gap-2">' + buttonHtml + '</div>' : '') +
+        (buttonHtml ? '<div class="px-5 pb-5 grid gap-2 ' + (linksV2 ? 'card-links-grid' : '') + '">' + buttonHtml + '</div>' : '') +
       '</div>'
     );
   }
@@ -876,6 +877,7 @@
     if (!messageId || !canUseInbox()) return;
     try {
       const item = await window.fetchAPI("getInboxItem", { messageId }, true);
+      await window.CardLinksRuntime?.refresh();
       renderDetail(item);
       await window.refreshInboxBadge();
       await window.loadInbox({ silent: true });
@@ -1035,8 +1037,9 @@
     }
   };
 
-  window.openInboxCardPreview = function (card) {
+  window.openInboxCardPreview = async function (card) {
     if (!card) return window.showToast?.("找不到名片資料", true);
+    await window.CardLinksRuntime?.refresh();
     let modal = $("inbox-card-preview-modal");
     if (!modal) {
       modal = document.createElement("div");

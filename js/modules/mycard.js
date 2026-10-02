@@ -29,6 +29,20 @@
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
   var wysiwygState = { cfg: null, field: '', buttonIndex: -1, recordMode: false };
+  var cardLinksEditingV2 = false;
+  function cardLinksConfig(cfg, card) {
+    if (!cardLinksEditingV2 || !window.CardLinks) return cfg;
+    var projected = window.CardLinks.project(cfg, card, true);
+    projected._cardLinksEditing = 'v2';
+    return projected;
+  }
+  async function refreshCardLinksMode() {
+    cardLinksEditingV2 = !!(window.CardLinksRuntime && await window.CardLinksRuntime.refresh(true));
+  }
+  async function checkCardLinksSaveMode() {
+    if (!window.CardLinksRuntime) return;
+    if (await window.CardLinksRuntime.refresh(true) !== cardLinksEditingV2) throw new Error('名片版型已切換；草稿仍保留，請重新開啟編輯器後再儲存。');
+  }
   var myVideoDraftApplied = false;
   var myVideoDraftCache = null;
   var myVideoModeRequested = false;
@@ -152,11 +166,12 @@
         };
       })
       .filter(function(button) { return !!(button && (button.l || button.u)); })
-      .slice(0, wysiwygState.recordMode ? undefined : 4);
+      .slice(0, wysiwygState.recordMode || cardLinksEditingV2 ? undefined : 4);
   }
 
   function normalizeMyCardButtonsForSave(buttons) {
     if (!Array.isArray(buttons)) return [];
+    if (cardLinksEditingV2) return window.CardLinks.normalize(buttons, true);
     return buttons.slice(0, wysiwygState.recordMode ? undefined : 4).map(function(button, index) {
       button = button && typeof button === 'object' ? button : {};
       var label = String(button.l || button.label || button.text || button.title || '').trim();
@@ -563,10 +578,10 @@
     for (var i = 0; i < candidates.length; i++) {
       var raw = candidates[i];
       if (!raw) continue;
-      if (typeof raw === 'object') return raw;
+      if (typeof raw === 'object') return cardLinksConfig(raw, source);
       try {
         var parsed = JSON.parse(String(raw));
-        if (parsed && typeof parsed === 'object') return parsed;
+        if (parsed && typeof parsed === 'object') return cardLinksConfig(parsed, source);
       } catch (e) {}
     }
     var keys = Object.keys(source);
@@ -585,11 +600,11 @@
           inferred.title ||
           inferred.desc
         )) {
-          return inferred;
+          return cardLinksConfig(inferred, source);
         }
       } catch (e) {}
     }
-    return {};
+    return cardLinksConfig({}, source);
   }
 
   function getMyCardRoleText() {
@@ -759,6 +774,7 @@
   }
 
   async function load() {
+    await refreshCardLinksMode();
     updateMyCardVideoButtonState();
     moduleCore.showLoading(true);
 
@@ -1423,7 +1439,7 @@
         '<div class="font-black text-[22px] text-slate-800 mb-2">' + escapeHTML(name) + '</div>' +
         '<div class="text-[14px] leading-relaxed" style="color:' + escapeHTML(color) + ';text-align:' + escapeHTML(align) + ';">' + escapeHTML(desc).replace(/\n/g, '<br>') + '</div>' +
       '</div>' +
-      (buttonHtml ? '<div class="px-6">' + buttonHtml + '</div>' : '') +
+      (buttonHtml ? '<div class="px-6 ' + (cardLinksEditingV2 ? 'card-links-grid' : '') + '">' + buttonHtml + '</div>' : '') +
     '</div>';
     initMyCardSocialLikeWidget();
   }
@@ -1520,7 +1536,9 @@
     }
 
     try {
-      currentCardData = await resolveCurrentUserCard(true) || currentCardData;
+      await checkCardLinksSaveMode();
+      // Keep the editor's revision and draft. Refetching here masks stale writes.
+      if (!currentCardData) currentCardData = await resolveCurrentUserCard(true);
       if (!currentCardData) throw new Error('\u627e\u4e0d\u5230\u53ef\u5132\u5b58\u7684\u5c08\u5c6c\u540d\u7247');
 
       syncCurrentImageInput();
@@ -1534,6 +1552,7 @@
         }
       }
       var cfg = parseCardConfig(currentCardData);
+      if (wysiwygState.cfg && !wysiwygState.recordMode) cfg = Object.assign({}, wysiwygState.cfg);
       cfg.cardVersion = targetVersion;
       cfg.layoutStyle = layout;
       applyCurrentVersionMediaToConfig(cfg, targetVersion, layout);
@@ -1560,19 +1579,23 @@
           '自訂名片設定': JSON.stringify(cfg)
         }
       }, true);
-      if (res && !res.error) {
-        var rawCfg = JSON.stringify(cfg);
+      if (res && !res.error && res.success !== false) {
+        var savedCard = res.data || res;
+        var rawCfg = savedCard.customConfig || savedCard.custom_config || savedCard['自訂名片設定'] || JSON.stringify(cfg);
         currentCardData['名片圖檔'] = activeImageUrl;
         currentCardData['自訂名片設定'] = rawCfg;
         currentCardData.customConfig = rawCfg;
         currentCardData.custom_config = rawCfg;
         setActiveMyCard(currentCardData);
+        wysiwygState.cfg = parseCardConfig(currentCardData);
         if (window.showToast) window.showToast('✅ 專屬名片設定已儲存');
+        return true;
       } else {
         throw new Error((res && res.error) || '儲存失敗');
       }
     } catch (e) {
       if (window.showToast) window.showToast('⚠️ 儲存失敗: ' + e.message, true);
+      return false;
     } finally {
       if (btn) {
         btn.innerHTML = originalHtml;
@@ -1637,7 +1660,7 @@
     cfg.buttons = Array.isArray(myEcardButtons) && myEcardButtons.length
       ? normalizeMyCardButtons(myEcardButtons)
       : normalizeMyCardButtons(Array.isArray(cfg.buttons) ? cfg.buttons : cfg.footerBtns);
-    if (!cfg.buttons.length && !wysiwygState.recordMode) cfg.buttons = autoMyCardButtons(currentCardData);
+    if (!cfg.buttons.length && !wysiwygState.recordMode && !cardLinksEditingV2) cfg.buttons = autoMyCardButtons(currentCardData);
     myEcardButtons = cfg.buttons.slice();
     return cfg;
   }
@@ -1795,6 +1818,7 @@
     if (directWysiwyg) ensureWysiwygModal().classList.remove('hidden');
     else moduleCore.showLoading(true);
     try {
+      await refreshCardLinksMode();
       currentCardData = resolvedCard || await resolveCurrentUserCard(true);
       if (!currentCardData) {
         var preview = document.getElementById('my-card-wysiwyg-preview');
@@ -1827,7 +1851,7 @@
     return !!(card && typeof window.canEditCardRecord === 'function' && window.canEditCardRecord(card));
   }
 
-  function openCardRecordWysiwyg(card, evt) {
+  async function openCardRecordWysiwyg(card, evt) {
     if (evt && evt.preventDefault) evt.preventDefault();
     if (!canEditCardRecord(card)) {
       if (window.showToast) window.showToast('此名片已認領，您目前沒有編輯權限', true);
@@ -1838,6 +1862,7 @@
       return;
     }
 
+    await refreshCardLinksMode();
     currentCardData = card;
     window.currentCard = card;
     wysiwygState.recordMode = true;
@@ -1966,7 +1991,8 @@
             escapeHTML(displayDesc || '點這裡編輯名片說明').replace(/\n/g, '<br>') +
           '</button>' +
         '</div>' +
-        '<div class="px-5 pb-5">' + buttonHtml +
+        '<div class="px-5 pb-5"><div class="' + (cardLinksEditingV2 ? 'card-links-grid' : '') + '">' + buttonHtml + '</div>' +
+          (cardLinksEditingV2 ? '<button type="button" onclick="window.completeMyCardLinks()" class="w-full my-3 py-3 rounded-xl border border-emerald-300 text-emerald-700 text-[14px] font-black">補齊名片聯絡連結</button>' : '') +
           '<button type="button" onclick="window.addMyCardWysiwygButton()" class="w-full py-3 rounded-xl border border-dashed border-blue-300 bg-blue-50 text-blue-600 text-[14px] font-black active:scale-95">+ 新增按鈕</button>' +
         '</div>' +
       '</div>' +
@@ -2033,6 +2059,7 @@
           '</div>' +
           '<input id="my-wysiwyg-button-label" value="' + escapeAttr(btn.l || '') + '" placeholder="按鈕文字" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-black outline-none focus:ring-2 focus:ring-blue-500">' +
           '<input id="my-wysiwyg-button-url" value="' + escapeAttr(btn.u || '') + '" placeholder="網址 / tel: / line://" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-mono text-[13px] outline-none focus:ring-2 focus:ring-blue-500">' +
+          (cardLinksEditingV2 ? '<div class="grid grid-cols-2 gap-2"><button type="button" onclick="window.moveMyCardWysiwygButton(-1)" class="py-2 border rounded-xl">往前移</button><button type="button" onclick="window.moveMyCardWysiwygButton(1)" class="py-2 border rounded-xl">往後移</button></div><p class="text-[12px] text-slate-500">Email：網頁可寄信，LINE 訊息按鈕可複製信箱。</p>' : '') +
           '<div class="grid grid-cols-[56px_minmax(0,1fr)] gap-3">' +
             '<input id="my-wysiwyg-button-color" type="color" value="' + escapeAttr(safeCssColor(btn.c, '#06C755')) + '" class="w-14 h-12 rounded-xl border border-blue-300 bg-white p-1">' +
             '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
@@ -2046,6 +2073,7 @@
     if (modal) modal.classList.add('hidden');
     closeMyCardWysiwygEditor();
     wysiwygState.recordMode = false;
+    wysiwygState.cfg = null;
     if (isWysiwygMyCardRequest() && typeof liff !== 'undefined' && liff && typeof liff.closeWindow === 'function') {
       try { liff.closeWindow(); } catch (e) {}
     }
@@ -2115,7 +2143,7 @@
     var cfg = wysiwygState.cfg;
     if (!cfg) return;
     if (!Array.isArray(cfg.buttons)) cfg.buttons = [];
-    if (!wysiwygState.recordMode && cfg.buttons.length >= 4) {
+    if (!wysiwygState.recordMode && !cardLinksEditingV2 && cfg.buttons.length >= 4) {
       if (window.showToast) window.showToast('最多 4 個按鈕', true);
       return;
     }
@@ -2140,6 +2168,24 @@
     renderMyCardWysiwyg();
     closeMyCardWysiwygEditor();
   }
+
+  window.completeMyCardLinks = function() {
+    if (!cardLinksEditingV2 || !wysiwygState.cfg) return;
+    var cfg = wysiwygState.cfg;
+    cfg.buttons = window.CardLinks.mergeRecognized(cfg.buttons, currentCardData);
+    myEcardButtons = cfg.buttons.slice();
+    writeCurrentCardConfig(cfg);
+    renderButtons(); updatePreview(); renderMyCardWysiwyg();
+  };
+  window.moveMyCardWysiwygButton = function(direction) {
+    var cfg = wysiwygState.cfg, index = wysiwygState.buttonIndex, next = index + direction;
+    if (!cfg || next < 0 || next >= cfg.buttons.length) return;
+    applyMyCardWysiwygEditor();
+    var moved = cfg.buttons.splice(index, 1)[0];
+    cfg.buttons.splice(next, 0, moved);
+    myEcardButtons = cfg.buttons.slice(); writeCurrentCardConfig(cfg);
+    renderButtons(); updatePreview(); renderMyCardWysiwyg(); renderWysiwygEditor('button', next);
+  };
 
   function getMyCardUploadAspectRatio() {
     var layout = normalizeWysiwygLayout((wysiwygState && wysiwygState.cfg && wysiwygState.cfg.layoutStyle) || getLayout());
@@ -2170,6 +2216,7 @@
     }
 
     try {
+      await checkCardLinksSaveMode();
       var cfg = wysiwygState.cfg || getWysiwygConfig();
       cfg.layoutStyle = normalizeWysiwygLayout(cfg.layoutStyle || 'landscape');
       cfg.cardVersion = layoutToCardVersion(cfg.layoutStyle);
@@ -2185,6 +2232,9 @@
       if (!res || res.error || res.success === false) {
         throw new Error((res && res.error) || '儲存失敗');
       }
+      var savedCard = res.data || res;
+      rawCfg = savedCard.customConfig || savedCard.custom_config || savedCard['自訂名片設定'] || rawCfg;
+      payloadData['自訂名片設定'] = rawCfg;
 
       Object.keys(payloadData).forEach(function(key) { currentCardData[key] = payloadData[key]; });
       currentCardData.customConfig = rawCfg;
@@ -2407,11 +2457,15 @@
     var originalHtml = btn ? btn.innerHTML : '';
     if (btn) btn.disabled = true;
     try {
+      if (useCurrentEditorCard) await checkCardLinksSaveMode();
+      else await refreshCardLinksMode();
       var rowId = await ensureCurrentCardRowId();
       if (!rowId) throw new Error('找不到名片編號，請重新整理後再試');
       currentCardData.rowId = currentCardData.rowId || rowId;
       var shareUrl = buildMyCardShareUrl(rowId);
-      var editorConfig = useCurrentEditorCard ? Object.assign({}, wysiwygState.cfg) : buildCurrentShareConfig();
+      // Outside the canvas, share the fetched saved version, never a stale
+      // button array left behind by a different card or a rollback toggle.
+      var editorConfig = useCurrentEditorCard ? Object.assign({}, wysiwygState.cfg) : parseCardConfig(currentCardData);
       var shareConfig = await attachUnifiedLikeCountToConfig(editorConfig, rowId);
       var flexMsg = typeof window.buildLocalECardFlexMessage === 'function'
         ? window.buildLocalECardFlexMessage(currentCardData, shareConfig, shareUrl)

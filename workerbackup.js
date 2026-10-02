@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { CardLinks, cardLinksEnabled, cardLinksConfigResponse } from './worker/card-links.mjs';
 import { extractActivityDmDraft } from './worker/activity-dm-ai.mjs';
 import { createActivityBatches, activityWithBatches, joinActivityBatches, activityBatchRows } from './worker/activity-batches.mjs';
 import { createActivityShareLink } from './worker/activity-short-links.mjs';
@@ -1504,7 +1505,7 @@ const LineOAChatModule = {
     if (version === 'video') return config.thumbnailUrl || config.previewUrl || config.imgUrl || config.imgUrlLandscape || card.imageUrl || config.imgUrlSquare;
     return config.imgUrl || config.imgUrlLandscape || card.imageUrl || config.imgUrlPortrait || config.imgUrlSquare;
   },
-  buildExistingMyCardFlex(row, userId, env) {
+  async buildExistingMyCardFlex(row, userId, env) {
     const card = D1ReadModule.cardRow(row);
     if (!card || !card.rowId) return null;
     let config = {};
@@ -1513,6 +1514,8 @@ const LineOAChatModule = {
     } catch (e) {
       config = {};
     }
+    const cardLinksV2 = await cardLinksEnabled(env);
+    if (cardLinksV2) config = CardLinks.project(config, card, true);
     const cardVersion = this.myCardVersionFromRowId(card, config);
     const layoutStyle = this.myCardLayoutForVersion(cardVersion, config);
     config = {
@@ -1525,11 +1528,14 @@ const LineOAChatModule = {
       imgRatioSquare: config.imgRatioSquare || '1:1',
       title: config.title || card.name,
       desc: config.desc || card.services || card.title || '',
-      buttons: this.normalizeCardButtons(config.buttons)
+      buttons: cardLinksV2 ? config.buttons : this.normalizeCardButtons(config.buttons)
     };
-    if (!config.buttons.length) config.buttons = this.autoCardButtons(card);
-    else config.buttons = this.addMissingAddressButton(config.buttons, card);
+    if (!cardLinksV2) {
+      if (!config.buttons.length) config.buttons = this.autoCardButtons(card);
+      else config.buttons = this.addMissingAddressButton(config.buttons, card);
+    }
     const flex = MessagingModule.buildFlex({
+      cardLinksV2,
       card,
       config,
       referrerId: userId,
@@ -1801,8 +1807,8 @@ const LineOAChatModule = {
         messageCardRow = selectedCard || null;
         message = selectedCard
           ? (this.isLineOaVideoCard(selectedCard) && typeof LineOAMyVideoKeywordModule !== 'undefined'
-            ? LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(selectedCard, userId, env)
-            : this.buildExistingMyCardFlex(selectedCard, userId, env))
+            ? await LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(selectedCard, userId, env)
+            : await this.buildExistingMyCardFlex(selectedCard, userId, env))
           : null;
       } else if (showRowId !== null) {
         const cards = await this.myCardSelectorRows(env, userId);
@@ -1812,8 +1818,8 @@ const LineOAChatModule = {
         if (selectedCard) {
           messageCardRow = selectedCard;
           message = this.isLineOaVideoCard(selectedCard) && typeof LineOAMyVideoKeywordModule !== 'undefined'
-            ? LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(selectedCard, userId, env)
-            : this.buildExistingMyCardFlex(selectedCard, userId, env);
+            ? await LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(selectedCard, userId, env)
+            : await this.buildExistingMyCardFlex(selectedCard, userId, env);
         } else {
           const profile = await this.fetchProfile(env, userId);
           message = this.buildSimpleMyCardFlex(profile, userId, env);
@@ -1824,7 +1830,7 @@ const LineOAChatModule = {
         message = existingCards.length > 1
           ? this.buildMyCardSelectorFlex(existingCards, userId, env)
           : (existingCards.length === 1
-            ? (messageCardRow = existingCards[0], (this.isLineOaVideoCard(existingCards[0]) && typeof LineOAMyVideoKeywordModule !== 'undefined' ? LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(existingCards[0], userId, env) : this.buildExistingMyCardFlex(existingCards[0], userId, env)))
+            ? (messageCardRow = existingCards[0], (this.isLineOaVideoCard(existingCards[0]) && typeof LineOAMyVideoKeywordModule !== 'undefined' ? await LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(existingCards[0], userId, env) : await this.buildExistingMyCardFlex(existingCards[0], userId, env)))
             : this.buildSimpleMyCardFlex(profile, userId, env));
       }
       if (messageCardRow) message = await this.attachSocialLikeCountToFlexMessage(message, messageCardRow, env);
@@ -3744,8 +3750,8 @@ const LineOAMyVideoKeywordModule = {
     }];
   },
 
-  buildExistingVideoCardFlex(row, userId, env) {
-    const message = LineOAChatModule.buildExistingMyCardFlex(row, userId, env);
+  async buildExistingVideoCardFlex(row, userId, env) {
+    const message = await LineOAChatModule.buildExistingMyCardFlex(row, userId, env);
     if (!message) return null;
     const rowId = this.text(row && row.row_id);
     message.altText = `${this.text(row && row.name, '影音名片')} 的影音名片`;
@@ -3875,7 +3881,7 @@ const LineOAMyVideoKeywordModule = {
         if (this.isKeyword(event)) {
           const existingVideo = await this.findDedicatedVideoCard(env, userId);
           if (existingVideo) {
-            let message = this.buildExistingVideoCardFlex(existingVideo, userId, env);
+            let message = await this.buildExistingVideoCardFlex(existingVideo, userId, env);
             if (message) message = await LineOAChatModule.attachSocialLikeCountToFlexMessage(message, existingVideo, env);
             if (message) {
               const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
@@ -4373,17 +4379,20 @@ const LineOACardCoolKeywordModule = {
     };
   },
 
-  buildSavedCardMessage(card, userId, env) {
+  async buildSavedCardMessage(card, userId, env) {
     let config = {};
     try {
       config = card.customConfig ? JSON.parse(card.customConfig) : {};
     } catch (e) {
       config = {};
     }
-    if (!Array.isArray(config.buttons) || !config.buttons.length) {
+    const cardLinksV2 = await cardLinksEnabled(env);
+    if (cardLinksV2) config = CardLinks.project(config, card, true);
+    if (!cardLinksV2 && (!Array.isArray(config.buttons) || !config.buttons.length)) {
       config.buttons = LineOAChatModule.autoCardButtons(card);
     }
     const flex = MessagingModule.buildFlex({
+      cardLinksV2,
       card,
       config,
       referrerId: userId,
@@ -4515,7 +4524,7 @@ const LineOACardCoolKeywordModule = {
     }
     if (!cardId && env.ACTMASTER_KV) await env.ACTMASTER_KV.delete(this.reviewKey(jobId)).catch(() => {});
     const shouldPush = payload.pushToChat !== false;
-    const push = shouldPush ? await this.pushLine(userId, [this.buildSavedCardMessage(saved.data, userId, env)], env) : { success: false };
+    const push = shouldPush ? await this.pushLine(userId, [await this.buildSavedCardMessage(saved.data, userId, env)], env) : { success: false };
     if (shouldPush && !push.success) console.error('Card cool saved card push failed', push);
     return { success: true, data: { card: saved.data, pushed: push.success } };
   },
@@ -4527,7 +4536,7 @@ const LineOACardCoolKeywordModule = {
     if (!userId || !cardId) return { success: false, error: 'Missing card id' };
     const card = await this.loadOwnedCard(env, cardId, userId, role);
     if (!card) return { success: false, error: 'Access Denied: card owner mismatch' };
-    const push = await this.pushLine(userId, [this.buildSavedCardMessage(card, userId, env)], env);
+    const push = await this.pushLine(userId, [await this.buildSavedCardMessage(card, userId, env)], env);
     return push.success ? { success: true, data: { pushed: true } } : { success: false, error: push.error || 'LINE push failed' };
   },
 
@@ -4557,7 +4566,7 @@ const LineOACardCoolKeywordModule = {
       if (sendCardId) {
         const card = await this.loadOwnedCard(env, sendCardId, userId, '');
         const message = card
-          ? this.buildSavedCardMessage(card, userId, env)
+          ? await this.buildSavedCardMessage(card, userId, env)
           : { type: 'text', text: '找不到可發送的名片，請回名片列表確認。' };
         const result = await LineOAChatModule.replyLine({ replyToken, messages: [message] }, env);
         if (!result.success) console.error('Card cool resend reply failed', result);
@@ -8677,7 +8686,8 @@ const MessagingModule = {
   },
 
   buildFlex(payload) {
-    const { card, config, referrerId, networkId, liffId, socialLikeLiffId } = payload;
+    const { card, referrerId, networkId, liffId, socialLikeLiffId } = payload;
+    const config = CardLinks.project(payload.config, card, payload.cardLinksV2 === true);
     
     const activeLiffId = liffId || '1660923784-vViMTZ1y';
     let badgeUrl = 'https://liff.line.me/' + activeLiffId + '?shareCardId=' + card.rowId;
@@ -8709,6 +8719,7 @@ const MessagingModule = {
         type: "button", style: "primary", color: btn.c || "#06C755", height: "sm",
         action: { type: "uri", label: btn.l.substring(0, 40), uri: btn.u }
       }));
+    if (payload.cardLinksV2 === true) buttons = CardLinks.flexRows(config.buttons);
 
     let hero = { type: "image", url: imgUrl, size: "full", aspectRatio: aspectRatio, aspectMode: imageAspectMode, action: { type: "uri", uri: badgeUrl } };
     if (config.cardType === 'video' && config.videoUrl) {
@@ -9052,7 +9063,11 @@ const D1BackfillModule = {
         department=excluded.department,tax_id=excluded.tax_id,mobile=excluded.mobile,office_phone=excluded.office_phone,
         extension=excluded.extension,fax=excluded.fax,email=excluded.email,website=excluded.website,socials=excluded.socials,
         address=excluded.address,services=excluded.services,notes=excluded.notes,creator_id=excluded.creator_id,
-        image_url=excluded.image_url,custom_config=excluded.custom_config,network_id=excluded.network_id,tags=excluded.tags,updated_at=CURRENT_TIMESTAMP
+        image_url=excluded.image_url,
+        custom_config=CASE WHEN json_valid(card_contacts.custom_config)
+          THEN CASE WHEN json_type(card_contacts.custom_config,'$.contactLinksV2') = 'object' THEN card_contacts.custom_config ELSE excluded.custom_config END
+          ELSE excluded.custom_config END,
+        network_id=excluded.network_id,tags=excluded.tags,updated_at=CURRENT_TIMESTAMP
     `).bind(card.card_id,card.owner_user_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.company_phone,card.extension,card.fax,card.email,card.website,card.social_accounts,card.address,card.service,card.note,card.creator_user_id,card.image_url,card.config_json,card.network_id,card.tags).run();
   },
 
@@ -11188,6 +11203,16 @@ const D1WriteModule = {
         : '';
       preserveExistingCardIdentity = isAdminSupportEdit && !isBoundToActor && !privateImportOwnerTransferUserId;
     }
+    const hasCardConfigInput = ['customConfig','custom_config','cardConfig','電子名片設定','自訂名片設定'].some(key => Object.prototype.hasOwnProperty.call(sourceData, key));
+    const previousCardConfig = existing?.custom_config || '';
+    const protectCardConfig = hasCardConfigInput || !!CardLinks.parse(previousCardConfig).contactLinksV2;
+    try {
+      card.custom_config = hasCardConfigInput
+        ? JSON.stringify(CardLinks.saveConfig(previousCardConfig, card.custom_config, await cardLinksEnabled(env)))
+        : (existing ? previousCardConfig : card.custom_config);
+    } catch (error) {
+      return { success:false, code:'CARD_CONFIG_CONFLICT', error:error.message };
+    }
     const rawAwardUserId = this.text(payload.authenticatedUserId || card.creator_id || payload.creatorId || payload.userId);
     const awardUserId = await this.resolvePointAwardUserId(env, rawAwardUserId);
     const cardLineId = await this.resolvePointAwardUserId(env, card.line_id);
@@ -11251,7 +11276,7 @@ const D1WriteModule = {
     card.crm_type = card.crm_type || D1ReadModule.inferCrmType(card);
     card.crm_next_action = card.crm_next_action || D1ReadModule.inferCrmNextAction(card, card.crm_type);
     card.crm_ai_suggestion = card.crm_ai_suggestion || D1ReadModule.inferCrmSuggestion(card, card.crm_type, card.crm_next_action);
-    await env.ACTMASTER_DB.prepare(`
+    const cardWriteResult = await env.ACTMASTER_DB.prepare(`
       INSERT INTO card_contacts (row_id,line_id,name,english_name,company_name,title,department,tax_id,mobile,office_phone,extension,fax,email,website,socials,address,birthday,personality,hobbies,wealth,health,career,services,notes,creator_id,image_url,custom_config,network_id,tags,owner_user_id,profile_user_id,scanner_user_id,scanner_name,source_type,visibility,pool_eligible,ai_review_status,crm_status,crm_type,crm_next_action,crm_next_followup_at,crm_ai_suggestion,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
       ON CONFLICT(row_id) DO UPDATE SET
@@ -11267,7 +11292,9 @@ const D1WriteModule = {
         crm_status=excluded.crm_status,crm_type=excluded.crm_type,crm_next_action=excluded.crm_next_action,
         crm_next_followup_at=excluded.crm_next_followup_at,crm_ai_suggestion=excluded.crm_ai_suggestion,
         updated_at=CURRENT_TIMESTAMP
-    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags,card.owner_user_id,card.profile_user_id,card.scanner_user_id,card.scanner_name,card.source_type,card.visibility,card.pool_eligible,card.ai_review_status,card.crm_status,card.crm_type,card.crm_next_action,card.crm_next_followup_at,card.crm_ai_suggestion).run();
+      WHERE ? = 0 OR COALESCE(card_contacts.custom_config,'') = ?
+    `).bind(card.row_id,card.line_id,card.name,card.english_name,card.company_name,card.title,card.department,card.tax_id,card.mobile,card.office_phone,card.extension,card.fax,card.email,card.website,card.socials,card.address,card.birthday,card.personality,card.hobbies,card.wealth,card.health,card.career,card.services,card.notes,card.creator_id,card.image_url,card.custom_config,card.network_id,card.tags,card.owner_user_id,card.profile_user_id,card.scanner_user_id,card.scanner_name,card.source_type,card.visibility,card.pool_eligible,card.ai_review_status,card.crm_status,card.crm_type,card.crm_next_action,card.crm_next_followup_at,card.crm_ai_suggestion,protectCardConfig ? 1 : 0,previousCardConfig).run();
+    if (protectCardConfig && cardWriteResult.meta?.changes !== 1) return { success:false, code:'CARD_CONFIG_CONFLICT', error:'名片剛在另一頁更新，請重新開啟再編輯；本次未覆蓋資料。' };
     await env.ACTMASTER_DB.prepare(`
       UPDATE card_contacts
       SET source_event_id = CASE WHEN ? <> '' THEN ? ELSE COALESCE(source_event_id,'') END,
@@ -17587,7 +17614,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'mlmPreviewBonusPlan':     return await MLMModule.previewBonusPlan(payload, env);
     case 'mlmGetOrganizationTree':  return await MLMModule.getOrganizationTree(payload, env);
     case 'd1BackfillFromGas':       return await D1BackfillModule.backfillFromGas(payload, env);
-    case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex(payload) };
+    case 'buildFlexMessage':       return { success: true, data: MessagingModule.buildFlex({ ...payload, cardLinksV2:await cardLinksEnabled(env) }) };
     case 'uploadImageToR2':        return { success: true, url: await StorageModule.upload(payload.base64Image, env) };
     case 'deployRichMenu':         return await LineOAModule.deployRichMenu(payload, env);
     case 'listLineOAKeywordRules': return await LineOAKeywordRuleModule.list(payload, env);
@@ -17622,6 +17649,7 @@ export default {
     }
     try {
       const url = new URL(request.url);
+      if (request.method === 'GET' && url.pathname === '/api/card-links/config') return await cardLinksConfigResponse(env);
       if (request.method === 'GET' && url.pathname === '/hub-test') {
         return await LineOAChatModule.hubTest(env);
       }
