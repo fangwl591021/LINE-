@@ -79,7 +79,7 @@ const legacy=readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8');
 
 test('store typography never changes electronic card payloads in shared LINE senders',async()=>{
  const sent=[],scope={console,fetch:async(url,options)=>{sent.push(JSON.parse(options.body));return {ok:true,status:200,text:async()=>'',json:async()=>({})};}};
- const chat=vm.runInNewContext('({'+legacy.slice(legacy.indexOf('  async replyLine(replyPayload, env) {'),legacy.indexOf('  decodeBase64DataUrl(value = '))+'})',scope);
+ const chat=vm.runInNewContext('({'+legacy.slice(legacy.indexOf('  async replyLine(replyPayload, env, options = {}) {'),legacy.indexOf('  decodeBase64DataUrl(value = '))+'})',scope);
  chat.text=value=>String(value||'').trim();
  const cool=legacy.slice(legacy.indexOf('const LineOACardCoolKeywordModule ='));
  const scanner=vm.runInNewContext('({'+cool.slice(cool.indexOf('  async pushLine(userId, messages, env) {'),cool.indexOf('  buildReviewUrl(jobId, env, cardId = '))+'})',scope);
@@ -218,6 +218,7 @@ function webhookHarness(f){
  const noop={reply:async()=>false},scope={Response,JSON,console,consumeShopKeywords,signRemainingShopEvents,LineOAMyVideoKeywordModule:noop,LineOACardCoolKeywordModule:noop,ReferralFriendKeywordModule:noop,LineOAStoreSearchKeywordModule:noop,LineOAKeywordRuleModule:{replyPayload:async()=>null}};
  const method=legacy.slice(legacy.indexOf('  async handleWebhook(request, env, ctx) {'),legacy.indexOf('  async isAiPaused(env, threadId) {'));
  const handler=vm.runInNewContext('({'+method+'})',scope);
+ handler.consumeMyCardEvents=async events=>events;
  Object.assign(handler,{text:v=>String(v||'').trim(),ensure:async()=>{},verifySignature:async(raw,sig,env)=>sig===await signRemainingShopEvents(raw,env.LINE_CHANNEL_SECRET),saveEvent:async(e,event)=>saved.push(event),followPointOnboardingJob:async()=>{},replyLine:async p=>{replies.push(p);return{success:true};},forwardToSecondSystem:async(raw,sig)=>{forward.push({raw,sig});return{success:true};},replySimpleMyCard:async()=>false,filterAutoReplyPayload:async raw=>raw,forwardToGas:async raw=>{gas.push(raw);return{success:true};},normalizeReplyPayload:()=>null});
  return{handler,replies,forward,gas,saved};
 }

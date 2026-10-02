@@ -1788,6 +1788,47 @@ const LineOAChatModule = {
     };
   },
 
+  async myCardDeadline(work, timeoutMs = 8000) {
+    let timer;
+    try {
+      return await Promise.race([work, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('MYCARD_TIMEOUT')), timeoutMs);
+      })]);
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
+  async consumeMyCardEvents(events, env, ctx) {
+    const remaining = [], seen = new Set(), jobs = [];
+    for (const event of events) {
+      const owned = this.isSimpleMyCardKeyword(event) || this.myCardPostbackRowId(event) || this.myCardShowPostbackRowId(event) !== null;
+      if (!owned) { remaining.push(event); continue; }
+      const token = this.text(event.replyToken);
+      const shouldReply = event.mode !== 'standby' && token && !seen.has(token);
+      if (shouldReply) seen.add(token);
+      const job = (async () => {
+        // A claimed token never reaches another replier, even if this reply fails.
+        try {
+          if (shouldReply) await this.replySimpleMyCard([event], env);
+        } catch {
+          console.error(JSON.stringify({ event: 'my_card_reply', stage: 'unexpected_failure' }));
+        }
+        // Logging/index maintenance must not delay the interactive reply.
+        try {
+          await this.ensure(env);
+          await this.saveEvent(env, event);
+        } catch {
+          console.error(JSON.stringify({ event: 'my_card_reply', stage: 'event_save_failed' }));
+        }
+      })();
+      if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(job);
+      else jobs.push(job);
+    }
+    await Promise.all(jobs);
+    return remaining;
+  },
+
   async replySimpleMyCard(events, env) {
     for (const event of events) {
       const selectedRowId = this.myCardPostbackRowId(event);
@@ -1797,6 +1838,38 @@ const LineOAChatModule = {
       const replyToken = this.text(event.replyToken);
       const userId = this.eventUserId(event);
       if (!replyToken || !userId) continue;
+      const startedAt = Date.now();
+      const trace = (stage, extra = {}) => console.log(JSON.stringify({
+        event: 'my_card_reply', eventId: this.text(event.webhookEventId || event.message?.id),
+        stage, elapsedMs: Date.now() - startedAt, ...extra
+      }));
+      trace('prepare');
+      let message;
+      try {
+        message = await this.myCardDeadline(this.prepareMyCardReply(event, env, trace));
+      } catch (error) {
+        trace(error?.message === 'MYCARD_TIMEOUT' ? 'prepare_timeout' : 'prepare_failed');
+        message = { type: 'text', text: '名片暫時無法載入，請稍後再輸入「我的名片」，或點下方「編輯名片」查看。',
+          quickReply: { items: this.myCardQuickReplyItems(userId, env).slice(0, 1) } };
+      }
+      if (!message) message = { type: 'text', text: '找不到這張可用的個人名片，請重新輸入「我的名片」選擇。' };
+      trace('reply_start');
+      try {
+        const result = await this.replyLine({ replyToken, messages: [message] }, env, { timeoutMs: 8000 });
+        trace(result.success ? 'reply_ok' : 'reply_rejected', { status: result.status || 0 });
+      } catch (error) {
+        // An uncertain send must not retry or hand its token to another handler.
+        trace(error?.name === 'AbortError' ? 'reply_timeout' : 'reply_failed');
+      }
+      return true;
+    }
+    return false;
+  },
+
+  async prepareMyCardReply(event, env, trace = () => {}) {
+      const selectedRowId = this.myCardPostbackRowId(event);
+      const showRowId = this.myCardShowPostbackRowId(event);
+      const userId = this.eventUserId(event);
       let message = null;
       let messageCardRow = null;
       if (selectedRowId) {
@@ -1821,25 +1894,26 @@ const LineOAChatModule = {
             ? await LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(selectedCard, userId, env)
             : await this.buildExistingMyCardFlex(selectedCard, userId, env);
         } else {
-          const profile = await this.fetchProfile(env, userId);
+          const profile = {};
           message = this.buildSimpleMyCardFlex(profile, userId, env);
         }
       } else {
-        const profile = await this.fetchProfile(env, userId);
+        // Stored cards already contain their display data; no LINE profile round trip.
+        const profile = {};
         const existingCards = await this.myCardSelectorRows(env, userId);
+        trace('cards_loaded', { count: existingCards.length });
         message = existingCards.length > 1
           ? this.buildMyCardSelectorFlex(existingCards, userId, env)
           : (existingCards.length === 1
             ? (messageCardRow = existingCards[0], (this.isLineOaVideoCard(existingCards[0]) && typeof LineOAMyVideoKeywordModule !== 'undefined' ? await LineOAMyVideoKeywordModule.buildExistingVideoCardFlex(existingCards[0], userId, env) : await this.buildExistingMyCardFlex(existingCards[0], userId, env)))
             : this.buildSimpleMyCardFlex(profile, userId, env));
       }
-      if (messageCardRow) message = await this.attachSocialLikeCountToFlexMessage(message, messageCardRow, env);
-      if (!message) continue;
-      const replyResult = await this.replyLine({ replyToken, messages: [message] }, env);
-      if (!replyResult.success) console.error('Simple my-card reply failed', replyResult);
-      return true;
-    }
-    return false;
+      // Likes are decorative; a stalled count must not suppress the card itself.
+      if (messageCardRow) message = await this.myCardDeadline(
+        this.attachSocialLikeCountToFlexMessage(message, messageCardRow, env), 1000
+      ).catch(() => message);
+      trace('message_ready');
+      return message;
   },
 
   async getMyVideoDraft(payload, env) {
@@ -1904,20 +1978,27 @@ const LineOAChatModule = {
     };
   },
 
-  async replyLine(replyPayload, env) {
+  async replyLine(replyPayload, env, options = {}) {
     if (!replyPayload) return { success: true, skipped: true };
     if (!env.LINE_CHANNEL_ACCESS_TOKEN) return { success: false, error: 'Missing LINE_CHANNEL_ACCESS_TOKEN' };
+    const controller = options.timeoutMs ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : null;
+    try {
     const res = await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(replyPayload)
+      body: JSON.stringify(replyPayload),
+      ...(controller ? { signal: controller.signal } : {})
     });
     const text = await res.text();
     if (!res.ok) return { success: false, status: res.status, error: text || `LINE Reply API HTTP ${res.status}` };
     return { success: true, status: res.status };
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
   },
 
   async pushLineMessage(userId, text, env) {
@@ -2465,6 +2546,13 @@ const LineOAChatModule = {
     const ok = await this.verifySignature(rawBody, signature, env);
     if (!ok && events.length > 0) return new Response('Invalid LINE signature', { status: 401 });
     if (!ok && events.length === 0) return new Response('OK', { status: 200 });
+    const afterMyCard = await this.consumeMyCardEvents(events, env, ctx);
+    if (afterMyCard.length !== events.length) {
+      events = afterMyCard;
+      if (!events.length) return new Response('OK', { status: 200 });
+      rawBody = JSON.stringify({ ...body, events });
+      signature = await signRemainingShopEvents(rawBody, this.text(env.LINE_CHANNEL_SECRET));
+    }
     await this.ensure(env);
     const saveJob = Promise.all(events.map(event => this.saveEvent(env, event).catch(e => console.error('LINE OA event save failed', e))));
     const followPointJob = this.followPointOnboardingJob(env, events).catch(e => console.error('LINE OA follow point onboarding failed', e));
