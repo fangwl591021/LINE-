@@ -3,6 +3,7 @@ window.currentEcardButtons = [];
 window.currentEcardImgs = { landscape: '', portrait: '', square: '' };
 window.currentEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
 window.__ecardAutoSyncBound = window.__ecardAutoSyncBound || false;
+window.currentEcardLinksV2 = false;
 
 const ECardAutoDefaults = {
   lineUrl: 'https://lin.ee/y7h8BUF',
@@ -170,6 +171,7 @@ function normalizeECardActionUriForSave(value) {
 }
 
 function normalizeECardButtonsForSave(buttons) {
+  if (window.currentEcardLinksV2) return window.CardLinks.normalize(buttons, true);
   return (Array.isArray(buttons) ? buttons : []).map((button, index) => {
     const label = String(button?.l || '').trim();
     const uri = String(button?.u || '').trim();
@@ -342,6 +344,8 @@ window.buildECardConfigFromFields = function() {
   window.syncECardButtonsFromFields({ render: false });
   window.currentEcardButtons = normalizeECardButtonsForSave(window.currentEcardButtons);
   return {
+    ...(window.currentEcardLinksV2 ? window.CardLinks.project(parseStoredECardConfig(window.currentCard), window.currentCard, true) : parseStoredECardConfig(window.currentCard)),
+    ...(window.currentEcardLinksV2 ? { _cardLinksEditing:'v2' } : {}),
     layoutStyle: layoutVal,
     imgUrl: window.currentEcardImgs.landscape,
     imgUrlPortrait: window.currentEcardImgs.portrait,
@@ -562,6 +566,8 @@ function buildLocalECardFlexMessageLegacy(card, config, shareUrl) {
 function buildLocalECardFlexMessage(card, config, shareUrl) {
   const savedConfig = parseStoredECardConfig(card);
   config = Object.assign({}, savedConfig, config || {});
+  const linksV2 = window.CardLinksRuntime?.enabled() === true;
+  if (linksV2) config = window.CardLinks.project(config, card, true);
   const rawLayoutStyle = String(config.layoutStyle || config.layout || 'landscape').trim();
   const cleanVideoUrl = cleanECardFlexHttpsUri(config.videoUrl || config.video_url || config.heroVideoUrl || '');
   const isVideoCard = !!cleanVideoUrl || config.cardType === 'video' || config.cardVersion === 'video' || config.videoCard === true;
@@ -600,6 +606,7 @@ function buildLocalECardFlexMessage(card, config, shareUrl) {
 
   // Contact cards retain every reviewed contact action.
 
+  if (linksV2) buttons = window.CardLinks.flexRows(config.buttons);
   const bubble = {
     type: 'bubble',
     size: layoutStyle === 'portrait' ? 'giga' : 'mega',
@@ -680,17 +687,18 @@ function bindECardFieldAutoSync() {
  * 載入名片設定到 UI (請確保在 cards.js 的 openCardDetail 中呼叫此函數)
  * 範例呼叫: window.initECardSettings(cardData);
  */
-window.initECardSettings = function(card) {
+let ecardInitSequence = 0;
+window.initECardSettings = async function(card) {
   if (!card) return;
+  const sequence = ++ecardInitSequence;
+  const enabled = !!(window.CardLinksRuntime && await window.CardLinksRuntime.refresh());
+  if (sequence !== ecardInitSequence || (window.currentCard && String(window.currentCard.rowId || '') !== String(card.rowId || ''))) return;
+  window.currentEcardLinksV2 = enabled;
   bindECardFieldAutoSync();
 
   // 1. 安全解析 JSON
-  let cfg = {};
-  try { 
-    cfg = JSON.parse(card['自訂名片設定'] || '{}'); 
-  } catch(e) {
-    console.error("JSON 解析錯誤", e);
-  }
+  let cfg = parseStoredECardConfig(card);
+  if (window.currentEcardLinksV2) cfg = window.CardLinks.project(cfg, card, true);
 
   window.currentEcardImgs = {
     landscape: cleanECardFlexImageUrl(cfg.imgUrl || card['名片圖檔'] || ''),
@@ -888,7 +896,7 @@ window.updateECardPreview = function() {
         <div class="font-black text-[22px] text-slate-800 mb-2">${escapeHTML(name)}</div>
         <div class="text-[14px] leading-relaxed" style="color: ${color}; text-align: ${align};">${desc}</div>
       </div>
-      ${btnsHtml ? `<div class="px-6">${btnsHtml}</div>` : ''}
+      ${btnsHtml ? `<div class="px-6 ${window.currentEcardLinksV2 ? 'card-links-grid' : ''}">${btnsHtml}</div>` : ''}
     </div>
   `;
   const cardId = window.currentCard?.rowId || window.currentCard?.cardRowId || window.currentCard?.id || '';
@@ -915,6 +923,7 @@ window.saveECardConfig = async function() {
 
   let cfg;
   try {
+    if (window.CardLinksRuntime && await window.CardLinksRuntime.refresh(true) !== window.currentEcardLinksV2) throw new Error('名片版型已切換，請重新開啟編輯後再儲存。');
     cfg = window.buildECardConfigFromFields();
   } catch (e) {
     window.showToast(e.message || '按鈕連結格式錯誤，請修正後再儲存。', true);
@@ -945,11 +954,14 @@ window.saveECardConfig = async function() {
     if (!res || res.error || res.success === false) {
       throw new Error((res && res.error) || '後端沒有確認儲存成功');
     }
+    const savedCard = res.data || res;
+    payloadData['自訂名片設定'] = savedCard.customConfig || savedCard.custom_config || savedCard['自訂名片設定'] || payloadData['自訂名片設定'];
 
     window.showToast('✅ 數位名片設定已成功儲存');
 
     window.currentCard['自訂名片設定'] = payloadData['自訂名片設定'];
     window.currentCard.customConfig = payloadData['自訂名片設定'];
+    window.currentCard.custom_config = payloadData['自訂名片設定'];
     window.currentCard['名片圖檔'] = payloadData['名片圖檔'];
     window.currentCard.imageUrl = payloadData['名片圖檔'];
     window.currentCard['服務項目'] = payloadData['服務項目'];
@@ -1004,6 +1016,7 @@ window.shareECardToLine = async function(btnId) {
   }
 
   try {
+    await window.CardLinksRuntime?.refresh(true);
     const rowId = window.currentCard.rowId || window.currentCard["rowId"] || window.currentCard.id || "";
     const fallbackUrl = buildECardShareUrl(rowId);
     const cfg = window.buildECardConfigFromFields();

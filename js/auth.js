@@ -349,6 +349,7 @@ function buildCardShareConfig(card) {
       break;
     } catch (e) {}
   }
+  if (window.CardLinksRuntime?.enabled()) cfg = window.CardLinks.project(cfg, card, true);
   return {
     ...cfg,
     layoutStyle: cfg.layoutStyle || cfg.layout || 'landscape',
@@ -459,6 +460,7 @@ async function loadCardByPublicId(cardId) {
 }
 
 async function buildFlexForCardLink(card, options = {}) {
+  await window.CardLinksRuntime?.refresh(true);
   const referrerId = options.referrerId || window.currentUserProfile?.userId || '';
   const networkId = options.networkId || window.currentNetworkId || 'admin';
   const shareUrl = buildPlainCardViewUrl(card, referrerId, networkId);
@@ -694,6 +696,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
   try {
     const card = await loadCardByPublicId(webCardId);
     if (!card) throw new Error('找不到這張名片');
+    await window.CardLinksRuntime?.refresh(true);
 
     const cfg = buildCardShareConfig(card);
     const videoUrl = String(cfg.videoUrl || cfg.video_url || cfg.heroVideoUrl || '').trim();
@@ -714,7 +717,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
     const mediaHtml = isVideoCard && videoUrl
       ? '<video src="' + window.escapeHTML(videoUrl) + '" poster="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-contain bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" controls playsinline preload="metadata"></video>'
       : '<img src="' + window.escapeHTML(imgUrl || 'https://placehold.co/800x520?text=Card') + '" class="block w-full object-contain bg-slate-100" style="aspect-ratio:' + window.escapeHTML(ratio) + ';" onerror="this.src=\'https://placehold.co/800x520?text=Card\';">';
-    const name = cardTextValue(card, ['姓名', 'name', 'displayName'], '數位名片');
+    const name = (window.CardLinksRuntime?.enabled() && cfg.title) || cardTextValue(card, ['姓名', 'name', 'displayName'], '數位名片');
     const company = cardTextValue(card, ['公司名稱', 'companyName', 'company'], '');
     const title = cardTextValue(card, ['職稱', 'title', 'industry'], '');
     const desc = String(cfg.desc || cardTextValue(card, ['服務項目', 'services', 'description'], '')).trim();
@@ -745,7 +748,7 @@ async function renderStandaloneWebCardPage(webCardId, refId, netId) {
             '<h1 class="text-[22px] font-black text-slate-900 leading-tight">' + window.escapeHTML(name) + '</h1>' +
             '<p class="mt-1.5 text-[12px] font-bold text-slate-500">' + window.escapeHTML([company, title].filter(Boolean).join(' / ')) + '</p>' +
             (desc ? '<div class="mt-3 rounded-2xl bg-slate-50 px-3.5 py-3.5 text-[13px] font-bold leading-6 whitespace-pre-wrap" style="color:' + window.escapeHTML(cfg.descColor || '#475569') + ';text-align:' + window.escapeHTML(cfg.descAlign || 'center') + ';">' + window.escapeHTML(desc) + '</div>' : '') +
-            (buttonHtml ? '<div class="mt-4 space-y-1.5">' + buttonHtml + '</div>' : '') +
+            (buttonHtml ? '<div class="mt-4 ' + (window.CardLinksRuntime?.enabled() ? 'card-links-grid' : 'space-y-1.5') + '">' + buttonHtml + '</div>' : '') +
           '</div>' +
         '</section>' +
       '</main>';

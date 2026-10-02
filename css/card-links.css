@@ -1,0 +1,4 @@
+.card-links-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.card-links-grid>*{min-width:0;margin:0!important;overflow-wrap:anywhere;}
+.card-links-grid>:last-child:nth-child(odd){grid-column:1/-1;}
+.card-links-grid button,.card-links-grid a{min-height:44px;}

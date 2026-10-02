@@ -31,8 +31,9 @@ test('button editor preserves each visible row before structural changes', () =>
 
 test('save validation never silently compacts button rows', () => {
   const normalize = section('function normalizeMyCardButtonsForSave', 'function normalizeId');
-  assert.match(normalize, /buttons\.slice\(0, 4\)\.map/);
+  assert.match(normalize, /buttons\.slice\(0, wysiwygState\.recordMode \? undefined : 4\)\.map/);
+  assert.match(normalize, /if \(cardLinksEditingV2\) return window\.CardLinks\.normalize\(buttons, true\)/);
   assert.doesNotMatch(normalize, /normalizeMyCardButtons\(buttons\)/);
   assert.match(normalize, /顆按鈕是空白的，請使用刪除按鈕移除/);
-  assert.match(index, /js\/modules\/mycard\.js\?v=8\.85/);
+  assert.match(index, /js\/modules\/mycard\.js\?v=8\.92/);
 });
