@@ -32,7 +32,7 @@ assertIncludes("locked:true,source:'human_review'", 'human review lock');
 assertIncludes("card['標籤']", 'industry tag persistence');
 assertIncludes('installIndustryFilterBridge', 'card-folder industry filter bridge');
 
-const compilable = source.replace(/^import[^\n]*\n/, '');
+const compilable = source.replace(/^import[^\n]*\n/gm, '');
 try {
   new Function(compilable);
 } catch (error) {

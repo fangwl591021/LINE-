@@ -798,7 +798,7 @@
 
     const detailFields = $("detail-fields");
     if (detailFields) {
-      detailFields.innerHTML = infoHtml || '<div class="text-center text-slate-400 py-8 text-sm">無詳細資料</div>';
+      detailFields.innerHTML = (window.renderCollectedCardSides?.(card) || '') + (infoHtml || '<div class="text-center text-slate-400 py-8 text-sm">無詳細資料</div>');
     }
 
     if (canEdit) {
