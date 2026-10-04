@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import * as sides from '../js/modules/card-collection-sides.mjs';
 
 const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 const ecard = read('js/modules/ecard.js');
@@ -50,7 +51,8 @@ test('custom and deleted buttons never regenerate or change into map actions', (
 
 test('scan review saves every contact and preserves private ownership payload', async () => {
   const ctx = runtime();
-  vm.runInContext(adapter.replace(/^import[^\n]*\n/, ''), ctx);
+  Object.assign(ctx, sides);
+  vm.runInContext(adapter.replace(/^import[^\n]*\n/gm, ''), ctx);
   ctx.input = { data: { displayName: '測試聯絡人', mobile: '0912-345-678', office_phone: '02-2345-6789', Email: 'contact@example.com', website_url: 'www.example.com', address: '台北市測試路 1 號' } };
   const normalized = plain(vm.runInContext('normalizeCardData(input)', ctx));
   assert.equal(normalized['電子郵件'], card['電子郵件']);
@@ -58,10 +60,11 @@ test('scan review saves every contact and preserves private ownership payload', 
   assert.equal(normalized['公司網址'], card['公司網址']);
   let saved;
   ctx.window.currentUserProfile = { userId: 'scanner-test' };
+  vm.runInContext("scanState={actorId:'scanner-test',newRowId:'test-card',savedFrontUrl:'https://example.com/front.jpg'}",ctx);
   ctx.window.fetchAPI = async (action, payload) => { assert.equal(action, 'saveCard'); saved = payload; return { rowId: 'test-card' }; };
   const button = {};
   const fields = { querySelectorAll: () => Object.entries(normalized).map(([key, value]) => ({ dataset: { akField: key }, value })), querySelector: () => null };
-  const modal = { querySelector: selector => selector === '#ak-review-save' ? button : selector === '#ak-review-fields' ? fields : null, querySelectorAll: () => [] };
+  const modal = { querySelector: selector => selector === '#ak-review-save' ? button : selector === '#ak-review-fields' ? fields : selector === '#ak-review-error' ? {} : null, querySelectorAll: () => [] };
   await ctx.saveReviewedCard(modal, '');
   assert.ok(saved, 'saveCard must be called');
   assert.equal(saved.userId, '');

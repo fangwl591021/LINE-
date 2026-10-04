@@ -166,9 +166,23 @@ async function callAiResponses(apiKey, body) {
   }
 }
 
-async function callGeminiVision(apiKey, model, base64Image) {
+function recognitionRequest(payload) {
+  if (!payload?.base64Image) throw new Error('請先上傳名片正面');
+  const images = [payload.base64Image];
+  if (payload.base64BackImage) images.push(payload.base64BackImage);
+  for (const image of images) {
+    if (typeof image !== 'string' || image.length > 8 * 1024 * 1024) throw new Error('名片圖片過大，請壓縮後重試');
+    imageData(image);
+  }
+  const paired = images.length === 2;
+  const schema = paired ? {...OCR_SCHEMA, required:[...OCR_SCHEMA.required,'backCardLocalization'], properties:{...OCR_SCHEMA.properties,backCardLocalization:CARD_LOCALIZATION_SCHEMA}} : OCR_SCHEMA;
+  const prompt = RECOGNITION_PROMPT + (paired ? '\n這兩張圖片依序是同一張名片的正面、背面。合併兩面資訊，只回傳一位聯絡人的資料，不得建立兩張名片。背面只有服務、外文或 QR Code 仍可屬於同一張名片。欄位衝突時姓名及主要聯絡資料以正面為主，其他有價值文字放 note；服務項目合併去重，不猜測。cardLocalization 僅定位第一張正面；backCardLocalization 僅定位第二張背面，各自使用該張圖片的座標。' : '');
+  return {images, schema, prompt, paired};
+}
+
+async function callGeminiVision(apiKey, model, request) {
   if (!apiKey) throw new Error('名片 AI 辨識服務尚未連線');
-  const image = imageData(base64Image);
+  const images = request.images.map(imageData);
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(),70000);
   try {
@@ -176,8 +190,8 @@ async function callGeminiVision(apiKey, model, base64Image) {
       method:'POST',
       headers:{'x-goog-api-key':apiKey,'content-type':'application/json'},
       body:JSON.stringify({
-        contents:[{role:'user',parts:[{text:RECOGNITION_PROMPT},{inline_data:{mime_type:image.mimeType,data:image.data}}]}],
-        generationConfig:{temperature:0,responseMimeType:'application/json',responseSchema:geminiSchema(OCR_SCHEMA)},
+        contents:[{role:'user',parts:[{text:request.prompt},...images.map(image=>({inline_data:{mime_type:image.mimeType,data:image.data}}))]}],
+        generationConfig:{temperature:0,responseMimeType:'application/json',responseSchema:geminiSchema(request.schema)},
       }),
       signal:controller.signal,
     });
@@ -191,30 +205,32 @@ async function callGeminiVision(apiKey, model, base64Image) {
   }
 }
 
-function validateRecognition(parsed) {
+function validateRecognition(parsed, paired = false) {
   if (!parsed || typeof parsed !== 'object') throw new Error('AI 未回傳名片辨識結果');
   if (!parsed.cardLocalization) throw new Error('AI 未回傳名片定位結果');
+  if (paired && !parsed.backCardLocalization) throw new Error('AI 未回傳背面定位結果，請重新辨識');
   const enriched = enrichSocialContacts(parsed);
   return { ...enriched, profileDescription:buildProfileDescription(enriched) };
 }
 
 export async function recognizeAkaffitBusinessCard(payload, env) {
+  const request = recognitionRequest(payload);
   const apiKey = normalizeClientOpenAIKey(payload?.clientOpenAIKey) || String(env.OPENAI_API_KEY || '').trim();
   const geminiApiKey = String(env.GEMINI_API_KEY || '').trim();
   if (!apiKey && !geminiApiKey) throw new Error('名片 AI 辨識服務尚未連線');
   const model = String(payload?.model || env.OPENAI_VISION_MODEL || env.OPENAI_MODEL || 'gpt-5.6-terra').trim();
   if (apiKey) {
     try {
-      const content=[{type:'input_text',text:RECOGNITION_PROMPT},imageInput(payload?.base64Image)];
-      const result=await callAiResponses(apiKey,{model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:2100,input:[{role:'user',content}],text:{format:{type:'json_schema',name:'business_card',strict:true,schema:OCR_SCHEMA}}});
+      const content=[{type:'input_text',text:request.prompt},...request.images.map(imageInput)];
+      const result=await callAiResponses(apiKey,{model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:request.paired?3200:2100,input:[{role:'user',content}],text:{format:{type:'json_schema',name:'business_card',strict:true,schema:request.schema}}});
       const parsedText=outputText(result);
       if(!parsedText)throw new Error('AI 未回傳名片辨識結果');
-      return validateRecognition(JSON.parse(parsedText));
+      return validateRecognition(JSON.parse(parsedText), request.paired);
     } catch (error) {
       if (!geminiApiKey) throw error;
       console.warn('A-kaffit OpenAI unavailable; switching to Gemini');
     }
   }
   const geminiModel = String(env.GEMINI_VISION_MODEL || env.GEMINI_MODEL || 'gemini-3.7-flash').trim();
-  return validateRecognition(await callGeminiVision(geminiApiKey, geminiModel, payload?.base64Image));
+  return validateRecognition(await callGeminiVision(geminiApiKey, geminiModel, request), request.paired);
 }

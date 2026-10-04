@@ -10,11 +10,11 @@ function ok(v,label){if(!v){console.error('FAIL',label);process.exit(1)}console.
 ok(core.includes("const FIELD_LIMITS = { displayName:120, englishName:120, companyName:180"),'A-kaffit field limits preserved');
 ok(core.includes("'健康醫療','美容美業','餐飲食品','零售電商','直銷／社群電商'"),'A-kaffit industry options preserved');
 ok(core.includes("required:['detected','incomplete','cropConfidence','boundingBox','corners','clippedEdges']"),'localization schema preserved');
-ok(core.includes("additionalProperties:false") && core.includes("strict:true,schema:OCR_SCHEMA"),'strict JSON schema preserved');
+ok(core.includes("additionalProperties:false") && core.includes("strict:true,schema:request.schema"),'strict JSON schema preserved for either one or two sides');
 ok(core.includes("detail:'high'"),'A-kaffit high-detail image input preserved');
 ok(core.includes("https://api.openai.com/v1/responses"),'Responses API used');
 ok(core.includes("reasoning:{effort:'low'}"),'reasoning effort preserved');
-ok(core.includes("max_output_tokens:2100"),'output token limit preserved');
+ok(core.includes("max_output_tokens:request.paired?3200:2100"),'single-sided token limit preserved, two-sided localization has bounded extra room');
 ok(core.includes("'gpt-5.6-terra'"),'A-kaffit model fallback preserved');
 ok(core.includes('不得包入明顯桌面、手掌、鍵盤等背景'),'background exclusion prompt preserved');
 ok(core.includes('不得憑空補出不存在的邊'),'incomplete edge rule preserved');
@@ -33,11 +33,11 @@ ok(adapter.includes('function serializeSocialReviewFields(root)')&&adapter.inclu
 ok(ecard.includes('function lineUrlFromSocialValue(value)')&&ecard.includes('socials = JSON.parse(socials)')&&ecard.includes('socials.forEach(item => add('),'electronic-card contact buttons read structured social accounts');
 ok(ecard.includes('function buildECardDescription(card, config)')&&(ecard.match(/buildECardDescription\(card, config\)/g)||[]).length>=3,'existing cards receive a non-empty factual description fallback');
 ok(ecard.includes('function normalizeECardDescriptionText(value)')&&ecard.includes(".replace(/\\r\\n?/g, '\\n')")&&ecard.includes(".replace(/[^\\S\\n]+/g, ' ')"),'electronic-card description preserves authored line breaks');
-ok(html.includes('js/modules/ecard.js?v=7.57'),'electronic-card description fallback cache-bust is active');
+ok(html.includes('js/modules/ecard.js?v=7.58'),'electronic-card description fallback cache-bust is active');
 ok(adapter.includes('id="ak-scan-error" role="alert" aria-live="assertive"'),'OCR failure is visible inside the scan modal');
 ok(adapter.includes("showScanError(message)")&&adapter.includes("button.textContent='重新送出'"),'OCR failure keeps an actionable retry in the modal');
 ok(adapter.includes('已保留完整原圖，請核對下方資料'),'uncertain localization falls back to review instead of rejecting OCR');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.8'),'AI profile review cache-bust is active');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.9'),'AI profile review cache-bust is active');
 ok(core.includes('export function lineUrlFromId(value)'),'LINE ID conversion is deterministic on the Worker');
 ok(core.includes("!['line.me','lin.ee'].includes(host)"),'LINE URL normalization rejects untrusted hosts');
 console.log('A-kaffit recognize backend parity contract passed.');

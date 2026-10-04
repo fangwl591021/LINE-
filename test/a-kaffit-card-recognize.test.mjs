@@ -44,6 +44,42 @@ const recognized = {
   note:'',
 };
 
+const backImage = 'data:image/png;base64,YmFjaw==';
+const paired = {...recognized, backCardLocalization:recognized.cardLocalization};
+test('OpenAI receives ordered front and back in ONE request with a two-side schema', async t => {
+  const calls=[];
+  t.mock.method(globalThis,'fetch',async (url,init)=>{calls.push(JSON.parse(init.body));return Response.json({output_text:JSON.stringify(paired)});});
+  const result=await recognizeAkaffitBusinessCard({base64Image:image,base64BackImage:backImage},{OPENAI_API_KEY:'sk-test'});
+  assert.equal(calls.length,1);
+  assert.deepEqual(calls[0].input[0].content.filter(x=>x.type==='input_image').map(x=>x.image_url),[image,backImage]);
+  assert.ok(calls[0].text.format.schema.required.includes('backCardLocalization'));
+  assert.equal(result.displayName,recognized.displayName);
+  assert.deepEqual(result.backCardLocalization,recognized.cardLocalization);
+});
+test('provider fallback retains BOTH sides, order and independent localization', async t => {
+  const calls=[];
+  t.mock.method(globalThis,'fetch',async (url,init)=>{
+    calls.push(JSON.parse(init.body));
+    if(calls.length===1)return Response.json({error:{message:'temporary error'}},{status:503});
+    return Response.json({candidates:[{content:{parts:[{text:JSON.stringify(paired)}]}}]});
+  });
+  await recognizeAkaffitBusinessCard({base64Image:image,base64BackImage:backImage},{OPENAI_API_KEY:'sk-test',GEMINI_API_KEY:'test'});
+  assert.equal(calls.length,2);
+  assert.deepEqual(calls[1].contents[0].parts.slice(1).map(x=>x.inline_data.data),['ZmFrZS1jYXJk','YmFjaw==']);
+  assert.ok(calls[1].generationConfig.responseSchema.required.includes('backCardLocalization'));
+});
+test('front is mandatory and invalid or oversized back never reaches providers', async t => {
+  let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;throw Error('unexpected network');});
+  await assert.rejects(recognizeAkaffitBusinessCard({base64BackImage:backImage},{OPENAI_API_KEY:'sk-test'}),/正面/);
+  await assert.rejects(recognizeAkaffitBusinessCard({base64Image:image,base64BackImage:'https://example.com/back.jpg'},{OPENAI_API_KEY:'sk-test'}));
+  await assert.rejects(recognizeAkaffitBusinessCard({base64Image:image,base64BackImage:'a'.repeat(8*1024*1024+1)},{OPENAI_API_KEY:'sk-test'}),/過大/);
+  assert.equal(calls,0);
+});
+test('paired OCR cannot silently save a response without the back result', async t => {
+  t.mock.method(globalThis,'fetch',async()=>Response.json({output_text:JSON.stringify(recognized)}));
+  await assert.rejects(recognizeAkaffitBusinessCard({base64Image:image,base64BackImage:backImage},{OPENAI_API_KEY:'sk-test'}),/背面定位/);
+});
+
 test('falls back to Gemini when OpenAI has no credits', async (t) => {
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (url, init) => {
