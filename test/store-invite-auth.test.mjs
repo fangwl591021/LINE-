@@ -265,6 +265,7 @@ test('existing fixed network with empty ref remains empty when later saving a pe
   f.context.getSocialLikeActorId=()=>actor;
   f.context.requirePrivacyTermsAgreement=id=>{f.calls.push(['privacy',id]);return true;};
   f.context.fetchAPI=async(action,payload)=>{f.calls.push(['profile-api',action,payload]);return action==='checkUser'?{isRegistered:true,info:answer.info}:{success:true};};
+  vm.runInContext(block(source,'function registrationBirthdayToISO(', 'window.submitRegistration ='),f.context);
   vm.runInContext(block(source,'window.saveProfileRegistration = async function(', 'window.submitClaimRegistration = async function('),f.context);
   await f.context.saveProfileRegistration();
   const update=f.calls.find(call=>call[0]==='profile-api'&&call[1]==='updateUserProfile');

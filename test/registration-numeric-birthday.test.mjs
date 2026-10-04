@@ -71,12 +71,57 @@ test('required name/phone and privacy consent still guard registration', async (
   }
 });
 
-test('only registration uses numeric text entry; profile/customer date pickers stay unchanged', () => {
-  const field = html.match(/<input id="reg-birthday"[^>]+>/)[0];
+test('both member-registration entries use numeric text; customer date picker stays unchanged', () => {
+  for (const id of ['reg-birthday', 'profile-birthday']) {
+  const field = html.match(new RegExp('<input id="' + id + '"[^>]+>'))[0];
   assert.match(field, /type="text"/); assert.match(field, /inputmode="numeric"/);
   assert.match(field, /maxlength="7"/); assert.match(field, /autocomplete="off"/);
   assert.doesNotMatch(field, /type="(?:date|number)"|required/);
-  for (const id of ['profile-birthday', 'customer-birthday']) assert.match(html.match(new RegExp('<input id="' + id + '"[^>]+>'))[0], /type="date"/);
-  assert.match(html, /js\/auth\.js\?[^"\s]+&birthday=1/);
-  assert.doesNotMatch(auth.slice(end), /registrationBirthdayToISO\(/);
+  }
+  assert.match(html.match(/<input id="customer-birthday"[^>]+>/)[0], /type="date"/);
+  assert.match(html, /js\/auth\.js\?[^"\s]+&birthday=2/);
+});
+
+test('stored ISO birthday displays ROC digits and manual input is not overwritten', () => {
+  const fields = { 'profile-birthday': { value: '', dataset: {} }, 'profile-name': { value: '', dataset: {} } };
+  const context = vm.createContext({ document: { getElementById: id => fields[id] } });
+  vm.runInContext(auth.slice(start, submit), context);
+  const setterStart = auth.indexOf('function setInputValueUnlessTouched(');
+  vm.runInContext(auth.slice(setterStart, auth.indexOf('window.prepareRegistrationInputs', setterStart)), context);
+  for (const [iso, digits] of [['1970-10-21','591021'],['1950-03-05','390305'],['2011-01-01','1000101'],['1912-01-01','010101']]) {
+    context.setInputValueUnlessTouched('profile-birthday', iso);
+    assert.equal(fields['profile-birthday'].value, digits);
+    assert.equal(context.registrationBirthdayToISO(digits), iso);
+  }
+  fields['profile-birthday'].dataset.userTouched = '1';
+  fields['profile-birthday'].value = '390305';
+  context.setInputValueUnlessTouched('profile-birthday', '1970-10-21');
+  assert.equal(fields['profile-birthday'].value, '390305');
+  context.setInputValueUnlessTouched('profile-name', '1970-10-21');
+  assert.equal(fields['profile-name'].value, '1970-10-21');
+});
+
+test('home member registration/data-maintenance converts birthday on both create and update', async () => {
+  for (const registered of [false, true]) {
+    const f = registration('591021');
+    for (const name of ['name','phone','industry','birthday']) f.elements['profile-' + name] = f.elements['reg-' + name];
+    f.elements['btn-save-profile-registration'] = { disabled: false, innerHTML: '儲存' };
+    f.context.window.getSocialLikeActorId = () => 'user-test';
+    f.context.window.currentUser = { referrerId: 'original-ref', networkId: 'original-net' };
+    f.context.window.fetchAPI = async (action, payload) => {
+      f.calls.push([action, payload]);
+      return action === 'checkUser' ? { isRegistered: registered } : { success: true };
+    };
+    vm.runInContext(auth.slice(end, auth.indexOf('window.submitClaimRegistration =', end)), f.context);
+    await f.context.window.saveProfileRegistration();
+    const saved = f.calls.find(([action]) => action !== 'checkUser');
+    assert.equal(saved[0], registered ? 'updateUserProfile' : 'registerUser');
+    assert.equal(saved[1].birthday, '1970-10-21');
+    assert.equal(saved[1].referrerId, 'original-ref');
+    assert.equal(saved[1].networkId, 'original-net');
+    assert.equal(f.elements['btn-save-profile-registration'].disabled, false);
+    f.calls.length = 0; f.elements['profile-birthday'].value = '590231';
+    await f.context.window.saveProfileRegistration();
+    assert.equal(f.calls.length, 0); assert.equal(f.elements['profile-birthday'].focused, true);
+  }
 });

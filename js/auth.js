@@ -296,7 +296,7 @@ function setInputValueUnlessTouched(id, value) {
   const next = String(value || '').trim();
   if (!next) return;
   if (el.dataset.userTouched === '1' && String(el.value || '').trim()) return;
-  el.value = next;
+  el.value = id === 'profile-birthday' ? registrationBirthdayFromISO(next) : next;
 }
 
 window.prepareRegistrationInputs = function() {
@@ -799,6 +799,15 @@ function registrationBirthdayToISO(value, today = new Date().toLocaleDateString(
   return iso;
 }
 
+function registrationBirthdayFromISO(value) {
+  const iso = String(value || '').trim();
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!parts) return iso;
+  const rocYear = Number(parts[1]) - 1911;
+  if (rocYear < 1) return iso; // Never erase an unsupported stored value.
+  return String(rocYear).padStart(2, '0') + parts[2] + parts[3];
+}
+
 window.submitRegistration = async function() {
   const name = document.getElementById('reg-name').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
@@ -867,10 +876,17 @@ window.saveProfileRegistration = async function(event) {
   const name = (document.getElementById('profile-name')?.value || '').trim();
   const phone = (document.getElementById('profile-phone')?.value || '').trim();
   const industry = (document.getElementById('profile-industry')?.value || '').trim();
-  const birthday = document.getElementById('profile-birthday')?.value || '';
 
   if (!userId) return window.showToast('請先重新登入後再補完資料', true);
   if (!name || !phone) return window.showToast('真實姓名與手機號碼必填', true);
+  let birthday;
+  try {
+    birthday = registrationBirthdayToISO(document.getElementById('profile-birthday')?.value || '');
+  } catch (error) {
+    window.showToast(error.message, true);
+    document.getElementById('profile-birthday')?.focus();
+    return;
+  }
   if (!window.requirePrivacyTermsAgreement('profile-privacy-agree')) return;
 
   const originalHtml = btn ? btn.innerHTML : '';
