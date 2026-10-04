@@ -782,10 +782,35 @@ window.requirePrivacyTermsAgreement = function(checkboxId) {
   return false;
 };
 
+function registrationBirthdayToISO(value, today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })) {
+  const digits = String(value || '').normalize('NFKC').trim();
+  if (!digits) return ''; // Keep the existing optional birthday field optional.
+  if (!/^\d{6,7}$/.test(digits)) throw new Error('生日請填民國年月日數字，例如 591021；民國100年起填7位數');
+  const rocYear = Number(digits.slice(0, -4));
+  const year = rocYear + 1911;
+  const month = Number(digits.slice(-4, -2));
+  const day = Number(digits.slice(-2));
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (rocYear < 1 || date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new Error('生日日期不正確，請確認民國年、月、日');
+  }
+  const iso = `${year}-${digits.slice(-4, -2)}-${digits.slice(-2)}`;
+  if (iso > today) throw new Error('生日不能晚於今天，請確認輸入的民國年');
+  return iso;
+}
+
 window.submitRegistration = async function() {
   const name = document.getElementById('reg-name').value.trim();
   const phone = document.getElementById('reg-phone').value.trim();
   if (!name || !phone) return window.showToast('姓名與手機為必填', true);
+  let birthday;
+  try {
+    birthday = registrationBirthdayToISO(document.getElementById('reg-birthday').value);
+  } catch (error) {
+    window.showToast(error.message, true);
+    document.getElementById('reg-birthday').focus();
+    return;
+  }
   if (!window.requirePrivacyTermsAgreement('reg-privacy-agree')) return;
 
   const btn = document.getElementById('btn-register');
@@ -805,7 +830,7 @@ window.submitRegistration = async function() {
       name: name,
       phone: phone,
       industry: document.getElementById('reg-industry').value.trim(),
-      birthday: document.getElementById('reg-birthday').value,
+      birthday,
       '推薦人': refId,
       referrerId: referral.referrerId,
       networkId: referral.networkId
