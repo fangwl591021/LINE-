@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/registration-numeric-birthday.test.mjs',
   'test/mycard-keyword-reply.test.mjs',
   'test/card-links-v2.test.mjs',
   'test/activity-short-links.test.mjs',

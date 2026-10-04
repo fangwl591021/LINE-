@@ -407,7 +407,7 @@
         <div><label class="text-xs text-slate-500 font-bold ml-1">真實姓名</label><input id="reg-name" name="name" class="custom-input mt-1" type="text" autocomplete="name" autocapitalize="off" enterkeyhint="next" placeholder="例:王大明"></div>
         <div><label class="text-xs text-slate-500 font-bold ml-1">手機號碼</label><input id="reg-phone" name="tel" class="custom-input mt-1 font-mono" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next" placeholder="09xxxxxxxx"></div>
         <div><label class="text-xs text-slate-500 font-bold ml-1">主要業種</label><input id="reg-industry" name="organization-title" class="custom-input mt-1" type="text" autocomplete="organization-title" enterkeyhint="next" placeholder="例:保險、房仲、設計"></div>
-        <div><label class="text-xs text-slate-500 font-bold ml-1">出生年月日</label><input id="reg-birthday" name="bday" class="custom-input mt-1 font-mono text-slate-500" type="date" autocomplete="bday"></div>
+        <div><label for="reg-birthday" class="text-xs text-slate-500 font-bold ml-1">出生年月日（民國）</label><input id="reg-birthday" name="birthday_roc" class="custom-input mt-1 font-mono text-slate-500" type="text" inputmode="numeric" maxlength="7" autocomplete="off" enterkeyhint="next" placeholder="例：591021、390305" aria-describedby="reg-birthday-hint"><p id="reg-birthday-hint" class="text-xs text-slate-500 mt-1 ml-1">直接填數字，例如 591021＝民國59年10月21日；100年起填7位數。</p></div>
         <label class="flex items-start gap-2 rounded-2xl bg-slate-50 border border-slate-100 px-3 py-3 text-[12px] font-bold text-slate-600 leading-relaxed">
           <input id="reg-privacy-agree" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
           <span>我已閱讀並同意 <button type="button" onclick="window.openPrivacyTermsModal?.()" class="text-blue-600 underline underline-offset-2 font-black">個資聲明</button></span>
@@ -2958,7 +2958,7 @@
   <script type="module" src="js/modules/daily-tank-challenge.js?v=5"></script>
   <script type="module" src="js/modules/game-center.mjs?v=2&richman=1"></script>
   <script src="js/modules/safe-cashier.js?v=2"></script>
-  <script src="js/auth.js?v=11.07&manage=1&chat=1&activity=1&cardlinks=1"></script>
+  <script src="js/auth.js?v=11.07&manage=1&chat=1&activity=1&cardlinks=1&birthday=1"></script>
 
     <script src="js/modules/card-page-banner-shortcuts.js?v=1.3"></script>
 </body>
