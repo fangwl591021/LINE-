@@ -99,3 +99,43 @@ test('front/back OCR is one call, returns review before any card write',async()=
   await h.ctx.runOcrAndReview();assert.equal(h.calls.length,1);assert.equal(h.calls[0].action,'recognizeCardWithGPT4o');
   assert.ok(h.calls[0].payload.base64Image);assert.ok(h.calls[0].payload.base64BackImage);assert.equal(reviewed,true);
 });
+test('every uploaded face requires confirmation and a missing back never silently saves',async()=>{
+  for(const cropConfirmed of [{front:false,back:true},{front:true,back:false}]){
+    const h=runtime();h.state({actorId:'ACTOR',savedFrontUrl:front,back:{},backCrop:{},cropConfirmed});
+    const modal=h.modal();await h.ctx.saveReviewedCard(modal);assert.equal(h.calls.length,0);assert.match(modal.error.textContent,/確認圖片完整/);
+  }
+  const h=runtime();h.state({actorId:'ACTOR',savedFrontUrl:front,back:{},cropConfirmed:{front:true,back:true}});
+  const modal=h.modal();await h.ctx.saveReviewedCard(modal);assert.equal(h.calls.length,0);assert.match(modal.error.textContent,/背面圖片/);
+});
+test('failed localization keeps each complete source for review, not a missing back',async()=>{
+  const h=runtime(),frontFile={side:'front'},backFile={side:'back'};
+  const state=h.state({actorId:'ACTOR',processedFile:frontFile,back:{processedFile:backFile}});
+  h.ctx.cropByVisionLocalization=async()=>null;h.ctx.showReview=()=>{};
+  h.ctx.window.fetchAPI=async()=>({displayName:'測試',cardLocalization:{},backCardLocalization:{}});
+  await h.ctx.runOcrAndReview();
+  assert.equal(state.cropFile,frontFile);assert.equal(state.backCrop,backFile);
+  assert.deepEqual(plain(state.cropConfirmed),{front:false,back:false});
+});
+test('image-only repair updates same ID with no OCR/contact or identity edits; cancellation writes nothing',async()=>{
+  for(const cancel of [false,true]){
+    const h=runtime(),cfg={collectionImages:{front,back},imgUrl:front,buttons:[{l:'保留',u:'https://example.com'}],layoutStyle:'portrait'};
+    h.ctx.window.currentCard={rowId:'ORIGINAL',姓名:'原姓名',手機號碼:'0912000000',customConfig:JSON.stringify(cfg)};
+    h.ctx.fetch=async()=>({ok:true,blob:async()=>({type:'image/png'})});h.ctx.File=class{};
+    h.ctx.editCardSideImage=async()=>cancel?null:{};
+    await h.ctx.window.repairCollectedCardSide('front');
+    if(cancel){assert.equal(h.calls.length,0);continue;}
+    assert.deepEqual(h.calls.map(c=>c.action),['uploadImageToR2','updateCard']);
+    const payload=h.calls[1].payload;assert.equal(payload.rowId,'ORIGINAL');
+    assert.deepEqual(Object.keys(payload.data),['自訂名片設定']);
+    const saved=JSON.parse(payload.data['自訂名片設定']);assert.deepEqual(saved.buttons,cfg.buttons);assert.equal(saved.layoutStyle,'portrait');assert.equal(saved.collectionImages.back,back);
+  }
+});
+test('image repair rechecks actor after editor and after upload',async()=>{
+  for(const stage of ['editor','upload']){
+    const h=runtime();h.ctx.window.currentCard={rowId:'ORIGINAL',customConfig:JSON.stringify({collectionImages:{front,back}})};
+    h.ctx.fetch=async()=>({ok:true,blob:async()=>({type:'image/png'})});h.ctx.File=class{};
+    h.ctx.editCardSideImage=async()=>{if(stage==='editor')h.ctx.window.currentUserProfile.userId='OTHER';return {};};
+    const api=h.ctx.window.fetchAPI;h.ctx.window.fetchAPI=async(a,p)=>{const r=await api(a,p);if(a==='uploadImageToR2')h.ctx.window.currentUserProfile.userId='OTHER';return r;};
+    await h.ctx.window.repairCollectedCardSide('back');assert.equal(h.calls.filter(c=>c.action==='updateCard').length,0);
+  }
+});

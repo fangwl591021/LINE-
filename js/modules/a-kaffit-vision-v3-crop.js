@@ -62,11 +62,9 @@ export async function cropByVisionLocalization(file,rawLocalization){
       }
     }
 
-    if(!output){
-      output=document.createElement('canvas');
-      output.width=bw;output.height=bh;
-      output.getContext('2d',{alpha:false}).drawImage(source,bx,by,bw,bh,0,0,bw,bh);
-    }
+    // A plausible rectangle alone is not evidence that it contains the whole card.
+    // Conflicting/missing corners must go to full-source manual review, not a destructive bbox fallback.
+    if(!output)return null;
     const blob=await new Promise(resolve=>output.toBlob(resolve,'image/webp',.9));
     return blob?new File([blob],'business-card-vision-crop.webp',{type:'image/webp'}):null;
   }finally{bitmap.close?.();}

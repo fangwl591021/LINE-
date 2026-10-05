@@ -41,6 +41,7 @@ const foundationChecks = [
 const fullChecks = [
   'test/tutorial-center.test.mjs',
   'test/card-collection-sides.test.mjs',
+  'test/card-side-crop.test.mjs',
   'test/a-kaffit-card-recognize.test.mjs',
   'test/registration-numeric-birthday.test.mjs',
   'test/mycard-keyword-reply.test.mjs',
