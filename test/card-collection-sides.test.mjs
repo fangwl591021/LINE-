@@ -139,3 +139,22 @@ test('image repair rechecks actor after editor and after upload',async()=>{
     await h.ctx.window.repairCollectedCardSide('back');assert.equal(h.calls.filter(c=>c.action==='updateCard').length,0);
   }
 });
+test('card save waits for both archives and rechecks actor afterwards',async()=>{
+  for(const changedLogin of [false,true]){
+    const h=runtime();let release;const pending=new Promise(r=>release=r);
+    const task={status:'uploading',cancel(){},ensure:()=>pending};
+    h.state({actorId:'ACTOR',newRowId:'ARCHIVED',savedFrontUrl:front,savedBackUrl:back,backCrop:{},archive:task,back:{archive:task}});
+    const modal=h.modal(),saving=h.ctx.saveReviewedCard(modal);
+    await Promise.resolve();assert.equal(h.calls.length,0);assert.match(modal.querySelector('#ak-review-save').textContent,/照片上傳/);
+    if(changedLogin)h.ctx.window.currentUserProfile.userId='OTHER';release();await saving;
+    assert.equal(h.calls.filter(c=>c.action==='saveCard').length,changedLogin?0:1);
+  }
+});
+test('failed archive blocks record write and preserves retry ID and review draft',async()=>{
+  const h=runtime();let attempts=0;
+  const task={status:'failed',cancel(){},async ensure(){if(++attempts===1)throw Error('網路離線');}};
+  const state=h.state({actorId:'ACTOR',newRowId:'ARCHIVE_RETRY',savedFrontUrl:front,archive:task});
+  const modal=h.modal({姓名:'人工核對'});await h.ctx.saveReviewedCard(modal);
+  assert.equal(h.calls.length,0);assert.equal(state.busy,false);assert.match(modal.error.textContent,/原照上傳未完成/);
+  await h.ctx.saveReviewedCard(modal);assert.equal(h.calls[0].payload.rowId,'ARCHIVE_RETRY');assert.equal(h.calls[0].payload.姓名,'人工核對');
+});

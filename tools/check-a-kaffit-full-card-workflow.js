@@ -28,13 +28,13 @@ ok(adapter.includes('[1600, 1280, 1024, 800, 640, 512]'), 'A-kaffit compression 
 ok(adapter.includes('[0.84, 0.72, 0.60, 0.48, 0.36]'), 'A-kaffit WebP quality ladder preserved');
 ok(adapter.includes('async function prepareBusinessCardImage'), 'prepareBusinessCardImage preserved');
 ok(adapter.includes('const [job,processed]=await Promise.all(['), 'original upload and local compression start together');
-ok(adapter.indexOf("showCardOcrProgress?.('名片辨識準備中')") < adapter.indexOf("prepareBusinessCardImage(file,'正面','collection')"), 'scan selection shows progress before image preparation');
+ok(adapter.indexOf("showCardOcrProgress?.('名片辨識準備中')") < adapter.indexOf("prepareBusinessCardImage(file,'正面','collection'"), 'scan selection shows progress before image preparation');
 ok(adapter.includes('requestAnimationFrame(()=>requestAnimationFrame(resolve))'), 'scan progress receives a paint frame before image preparation');
-ok(adapter.includes("setCardOcrProgressStage?.(8,'正在上傳並壓縮名片照片...')"), 'scan progress explains the initial upload and compression stage');
-ok(adapter.includes("catch(error){state.busy=false;window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片圖片處理失敗',true)"), 'scan preparation failure closes progress feedback');
+ok(adapter.includes("setCardOcrProgressStage?.(8,'正在準備名片預覽...')"), 'scan progress explains local preview preparation');
+ok(adapter.includes("catch(error){prepared?.archive?.cancel();state.busy=false;window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片圖片處理失敗',true)"), 'scan preparation failure cancels archive and closes progress feedback');
 ok(adapter.indexOf('prepareBusinessCardImage(file') < adapter.indexOf("fetchAPI('recognizeCardWithGPT4o'"), 'image job happens before OCR');
 ok((adapter.match(/fetchAPI\('recognizeCardWithGPT4o'/g) || []).length === 1, 'primary flow has exactly one OCR Vision call');
-ok(adapter.includes("import { cropByVisionLocalization, normalizedVisionLocalization } from './a-kaffit-vision-v3-crop.js'"), 'A-kaffit Vision V3 crop is primary crop runtime');
+ok(/import \{ cropByVisionLocalization, normalizedVisionLocalization \} from '.\/a-kaffit-vision-v3-crop\.js(?:\?v=[\d.]+)?'/.test(adapter), 'A-kaffit Vision V3 crop is primary crop runtime');
 ok(!adapter.includes('cardVisionCrop'), 'legacy LINE crop runtime is not used by primary adapter');
 ok(adapter.includes('送出名片'), 'A-kaffit send-before-OCR draft step preserved');
 ok(adapter.includes('確認名片資料'), 'A-kaffit review-before-save step preserved');
@@ -56,11 +56,11 @@ ok(worker.includes("request.method === 'OPTIONS'"), 'cross-origin preflight is h
 ok(worker.includes('X-Card-File-Size, X-Card-Side, X-Card-Purpose'), 'A-kaffit image-job headers allowed by CORS');
 ok(adapter.includes('id="ak-scan-error" role="alert" aria-live="assertive"'), 'OCR errors remain visible above the scan actions');
 ok(adapter.includes('useOriginalImage=localization.incomplete'), 'incomplete localization does not discard successful OCR');
-ok(adapter.includes('const cropFile=useOriginalImage?front'), 'already-cropped cards retain the complete image when edges are uncertain');
+ok(adapter.includes('const cropFile=(useOriginalImage?null:await cropByVisionLocalization(front,localization))||front'), 'already-cropped cards retain the complete image when edges are uncertain');
 ok(!adapter.includes("throw new Error('名片未完整入鏡'"), 'uncertain card edges are no longer a fatal OCR error');
 ok(adapter.includes("['社群LINE','LINE 網址']")&&adapter.includes("['社群Instagram','Instagram 網址']")&&adapter.includes("['社群Facebook','Facebook 網址']"), 'LINE Instagram and Facebook use separate review fields');
 ok(adapter.includes("if(social)card['社群帳號']=social"), 'separate social review fields retain the existing structured storage contract');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=3.9'), 'full workflow adapter cache-bust is active');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=4.1'), 'full workflow adapter cache-bust is active');
 
 ok(legacy.includes('boundingBox 必須只包住真實名片，不可包入桌面、手掌、鍵盤或其他背景'), 'OCR prompt matches A-kaffit background exclusion rule');
 ok(legacy.includes('incomplete=true') && legacy.includes('clippedEdges'), 'OCR prompt preserves incomplete-card contract');
