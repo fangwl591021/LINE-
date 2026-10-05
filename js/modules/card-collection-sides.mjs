@@ -28,3 +28,14 @@ export function withCollectionImages(config, front, back) {
   cfg.collectionImages={...cfg.collectionImages,front:imageUrl(front||cfg.collectionImages?.front),back:imageUrl(back||cfg.collectionImages?.back)};
   return cfg;
 }
+// Change only this image and matching legacy cover references, never other layouts.
+export function replaceCollectionImage(card, side, url) {
+  if(!['front','back'].includes(side)||!imageUrl(url))throw new Error('無效的名片圖片');
+  const images=collectionImages(card),cfg=withCollectionImages(cardConfig(card),side==='front'?url:images.front,side==='back'?url:images.back);
+  const data={};
+  if(side==='front'){
+    for(const key of ['imgUrl','imgUrlLandscape'])if(cfg[key]===images.front)cfg[key]=url;
+    if((card['名片圖檔']||card.image_url)===images.front)data['名片圖檔']=url;
+  }
+  data['自訂名片設定']=JSON.stringify(cfg);return data;
+}

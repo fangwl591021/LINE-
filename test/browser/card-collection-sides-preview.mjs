@@ -4,7 +4,9 @@ import {readFile} from 'node:fs/promises';
 const root=new URL('../../',import.meta.url);
 const files=new Set(['js/modules/a-kaffit-card-scanner-adapter.js','js/modules/a-kaffit-vision-v3-crop.js','js/modules/card-collection-sides.mjs','js/shared/card-links.js']);
 files.add('js/modules/a-kaffit-card-scanner/card-scanner-v2.js');
+files.add('js/modules/card-side-crop-editor.mjs');
 const html=`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>名片正反面本機驗證</title><style>body{font:16px system-ui;margin:16px;color:#183a3a;background:#f3faf7}button{font:inherit;padding:12px;margin:4px}#fixture{position:fixed;bottom:0;left:0;z-index:14000;background:#fff4c7;padding:4px;font-size:12px}#result{white-space:pre-wrap}#detail{max-width:520px;margin:auto}</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 <h2>收藏名片 · 合成測試</h2><button id="new">新增正面名片</button><button id="old">已收藏名片</button><div id="detail"></div><pre id="result"></pre><div id="fixture">僅本機測試<button id="back" style="font-size:12px">選取合成背面</button></div>
 <script src="/js/shared/card-links.js"></script><script type="module">
 await import('/js/modules/a-kaffit-card-scanner-adapter.js');
@@ -20,8 +22,9 @@ const originalFetch=window.fetch.bind(window);window.fetch=async(url,opts)=>{
 };
 window.Config={API_URL:location.origin};window.liff={getAccessToken:()=> 'LOCAL-ONLY'};window.currentUserProfile={userId:'LOCAL'};window.currentUser={name:'合成示範'};window.canEditCardRecord=()=>true;
 window.buildRecognizedCardButtons=()=>[];window.showToast=m=>result.textContent=m;
-window.allCards=[];let writes=0,ocr=0,uploads=0;
+window.allCards=[];window.testCalls=[];let writes=0,ocr=0,uploads=0;
 window.fetchAPI=async(a,p)=>{
+ window.testCalls.push({action:a,payload:p});
  if(a==='recognizeCardWithGPT4o'){ocr++;const loc={detected:true,incomplete:true,cropConfidence:.8,boundingBox:{x:0,y:0,width:1,height:1},corners:[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}],clippedEdges:[]};return {displayName:'陳小明',companyName:'測試企業',email:'hello@example.com',websiteUrl:p.base64BackImage?'https://example.com':'',profileDescription:p.base64BackImage?'提供網站設計、品牌整合及教育培訓。':'測試企業業務顧問。',primaryIndustry:'科技資訊',cardLocalization:loc,...(p.base64BackImage?{backCardLocalization:loc}:{})}}
  if(a==='uploadImageToR2')return {url:location.origin+'/'+(uploads++===0?'front':'back')+'.png'};
  if(a==='saveCard'||a==='updateCard'){writes++;const cfg=p.data||p;window.currentCard={...window.currentCard,...cfg,rowId:p.rowId};window.allCards=[window.currentCard];return {success:true,...window.currentCard};}
@@ -39,4 +42,4 @@ http.createServer(async(req,res)=>{
  if(path==='/front.png'||path==='/back.png'){res.setHeader('Content-Type','image/svg+xml');res.end('<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500"><rect width="900" height="500" fill="#e0f4ed"/><text x="60" y="180" font-size="52" fill="#183a3a">'+(path==='/front.png'?'測試企業・陳小明':'專業服務・背面')+'</text></svg>');return;}
  if(!files.has(path.slice(1))){res.writeHead(404);res.end();return;}
  res.setHeader('Content-Type','text/javascript;charset=utf-8');res.end(await readFile(new URL(path.slice(1),root)));
-}).listen(8821,'127.0.0.1',()=>console.log('Local synthetic preview http://127.0.0.1:8821/'));
+}).listen(Number(process.env.PORT||8821),'127.0.0.1',()=>console.log('Local synthetic preview ready'));

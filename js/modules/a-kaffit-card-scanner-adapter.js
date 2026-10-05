@@ -1,5 +1,6 @@
-import { cropByVisionLocalization, normalizedVisionLocalization } from './a-kaffit-vision-v3-crop.js';
-import {cardConfig,collectionImages,mergeReviewedFields,withCollectionImages} from './card-collection-sides.mjs';
+import { cropByVisionLocalization, normalizedVisionLocalization } from './a-kaffit-vision-v3-crop.js?v=4.0';
+import {editCardSideImage} from './card-side-crop-editor.mjs';
+import {cardConfig,collectionImages,mergeReviewedFields,withCollectionImages,replaceCollectionImage} from './card-collection-sides.mjs?v=4.0';
 
 const FIELD_MAP = [
   ['姓名','姓名'],['英文名','英文姓名'],['公司名稱','公司名稱'],['職稱','職稱'],['部門','部門'],
@@ -344,10 +345,10 @@ async function runOcrAndReview(){
     if(!actorStillMatches(state))throw new Error('登入或名片權限已變更，請重新開啟');
     if(!ocr||ocr.error||ocr.success===false||unwrapOcr(ocr).isBusinessCard===false)throw new Error(ocr?.error||'圖片無法辨識為名片');
     const localization=normalizedVisionLocalization(extractLocalization(ocr)||{}),useOriginalImage=localization.incomplete;
-    const cropFile=useOriginalImage?front:await cropByVisionLocalization(front,localization);
+    const cropFile=(useOriginalImage?null:await cropByVisionLocalization(front,localization))||front;
     let backCrop=null;
-    if(state.back){const loc=unwrapOcr(ocr).backCardLocalization;if(!loc)throw new Error('缺少背面辨識結果，請重新辨識');const normalized=normalizedVisionLocalization(loc);backCrop=normalized.incomplete?state.back.processedFile:await cropByVisionLocalization(state.back.processedFile,normalized);}
-    Object.assign(state,{ocr,localization,cropFile,backCrop,qrLineUrl:frontQr||backQr,useOriginalImage,savedFrontUrl:'',savedBackUrl:''});
+    if(state.back){const loc=unwrapOcr(ocr).backCardLocalization;if(!loc)throw new Error('缺少背面辨識結果，請重新辨識');const normalized=normalizedVisionLocalization(loc);backCrop=(normalized.incomplete?null:await cropByVisionLocalization(state.back.processedFile,normalized))||state.back.processedFile;}
+    Object.assign(state,{ocr,localization,cropFile,backCrop,qrLineUrl:frontQr||backQr,useOriginalImage,savedFrontUrl:'',savedBackUrl:'',cropConfirmed:{front:Boolean(state.existing&&state.frontUrl),back:!state.back}});
     state.busy=false;window.hideCardOcrProgress?.();closeModal('akaffit-scan-draft');showReview();
   }catch(error){state.busy=false;window.hideCardOcrProgress?.();if(state.frontLoadFailed)showPreparedDraft();setScanBusy(modal,false);showScanError(error?.message||'名片辨識失敗');if(button)button.textContent='重新送出';}
 }
@@ -359,12 +360,37 @@ function showReview(){
   modal.innerHTML='<section style="box-sizing:border-box;width:min(100%,560px);max-height:92vh;overflow:auto;background:#fff;border-radius:24px;padding:18px"><h2 style="margin:0">確認名片資料</h2><p style="color:#64748b;line-height:1.5">'+(state.existing?'將更新原本這張名片。既有聯絡資料優先保留；背面服務內容已補入，請核對後儲存。':'正反面合併為同一張名片，請核對資料後再儲存。')+'</p>'+
     (state.useOriginalImage?'<p style="color:#64748b">已保留完整原圖，請核對下方資料。</p>':'')+
     (merged.conflicts.length?'<details style="background:#fff7ed;color:#9a3412;padding:12px;border-radius:12px"><summary>辨識結果與原資料不同，已保留原值（點開核對）</summary>'+merged.conflicts.map(key=>'<p>'+escapeHtml(key)+'：新辨識為「'+escapeHtml(recognized[key])+'」</p>').join('')+'如需修改，請在下方手動確認。</details>':'')+
-    previewImage(state,state.existing&&state.frontUrl?null:state.cropFile,state.frontUrl,'正面')+previewImage(state,state.backCrop,'','背面')+
+    '<div id="ak-front-review">'+previewImage(state,state.existing&&state.frontUrl?null:state.cropFile,state.frontUrl,'正面')+'</div>'+sideReviewControls('front',Boolean(state.existing&&state.frontUrl))+
+    (state.back?'<div id="ak-back-review">'+previewImage(state,state.backCrop,'','背面')+'</div>'+sideReviewControls('back',false):'')+
     '<div id="ak-review-fields">'+reviewFields(card)+'</div>'+(state.existing?'':industryReviewHtml(industry))+
     '<div id="ak-review-error" role="alert" style="color:#b91c1c;white-space:pre-wrap;margin-top:12px"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:14px"><button id="ak-review-cancel" style="'+scanButtonStyle+';background:#e2e8f0">返回調整</button><button id="ak-review-save" style="'+scanButtonStyle+';background:#06c755;color:white">'+(state.existing?'儲存至原名片':'儲存至名片收藏')+'</button></div></section>';
   if(!state.existing)wireIndustryControls(modal);
+  for(const side of ['front','back']){
+    const confirm=modal.querySelector('#ak-confirm-'+side),adjust=modal.querySelector('#ak-adjust-'+side);
+    if(confirm)confirm.onchange=()=>{state.cropConfirmed[side]=confirm.checked;};
+    if(adjust)adjust.onclick=()=>adjustReviewSide(state,side,modal);
+  }
   modal.querySelector('#ak-review-cancel').onclick=()=>{if(!state.busy){closeModal('akaffit-card-review');showPreparedDraft();}};
   modal.querySelector('#ak-review-save').onclick=()=>saveReviewedCard(modal);
+}
+function sideReviewControls(side,unchanged){
+  if(unchanged)return '';
+  const label=side==='front'?'正面':'背面';
+  return '<div style="margin-bottom:18px"><button type="button" id="ak-adjust-'+side+'" style="'+scanButtonStyle+';background:#eff6ff;color:#2563eb">調整'+label+'裁切</button><label style="display:flex;align-items:center;gap:8px;min-height:48px"><input id="ak-confirm-'+side+'" type="checkbox" style="width:22px;height:22px">已確認'+label+'完整，沒有裁掉內容</label></div>';
+}
+async function adjustReviewSide(state,side,modal){
+  if(state.busy||!actorStillMatches(state))return;
+  state.busy=true;setScanBusy(modal,true);
+  try{
+    const file=await editCardSideImage(side==='front'?state.processedFile:state.back.processedFile,side==='front'?'正面':'背面');
+    if(!file)return;
+    if(!actorStillMatches(state))throw new Error('登入或名片權限已變更，請重新開啟');
+    if(side==='front'){state.cropFile=file;state.savedFrontUrl='';}else{state.backCrop=file;state.savedBackUrl='';}
+    state.cropConfirmed[side]=true;
+    modal.querySelector('#ak-'+side+'-review').innerHTML=previewImage(state,file,'',side==='front'?'正面':'背面');
+    modal.querySelector('#ak-confirm-'+side).checked=true;
+  }catch(e){modal.querySelector('#ak-review-error').textContent=e.message||'裁切失敗';}
+  finally{state.busy=false;setScanBusy(modal,false);}
 }
 async function uploadFinalCrop(file){if(!file)return '';const dataUrl=await fileToDataUrl(file);const result=await window.fetchAPI('uploadImageToR2',{base64Image:dataUrl},true);const url=result?.url||result?.data?.url||'';if(!url)throw new Error(result?.error||'名片分離圖片儲存失敗');return url;}
 function applyImage(card,url){if(!url)return card;card['名片圖檔']=url;let cfg=cardConfig(card);cfg.imgUrl=url;cfg.imgUrlLandscape=url;cfg.isPrivate=true;card['自訂名片設定']=JSON.stringify(cfg);return card;}
@@ -372,6 +398,8 @@ async function saveReviewedCard(modal){
   const state=scanState;if(state.busy)return;
   const errorBox=modal.querySelector('#ak-review-error'),button=modal.querySelector('#ak-review-save'),label=button.textContent;
   if(!actorStillMatches(state)){errorBox.textContent='登入或名片權限已變更，請重新開啟';return;}
+  if(state.cropConfirmed&&(!state.cropConfirmed.front||!state.cropConfirmed.back)){errorBox.textContent='請先逐面確認圖片完整；若位置不正確，點「調整裁切」。';return;}
+  if(state.back&&!state.backCrop){errorBox.textContent='背面圖片尚未準備完成，請返回調整';return;}
   state.busy=true;errorBox.textContent='';setScanBusy(modal,true);button.textContent='儲存中…';
   try{
     const card=readReviewFields(modal.querySelector('#ak-review-fields'));
@@ -404,7 +432,34 @@ async function saveReviewedCard(modal){
 window.renderCollectedCardSides=function(card){
   const images=collectionImages(card),editable=window.canEditCardRecord?.(card);
   if(!images.front&&!images.back&&!editable)return '';
-  return '<section style="margin:0 0 16px;padding:14px;border:1px solid #d1e6db;border-radius:16px;background:#f6fcf9"><h3 style="font-weight:800;margin:0 0 10px">名片正反面</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px">'+['front','back'].map(side=>images[side]?'<figure style="margin:0"><figcaption>'+ (side==='front'?'正面':'背面')+'</figcaption><a href="'+escapeHtml(images[side])+'" target="_blank" rel="noopener"><img src="'+escapeHtml(images[side])+'" alt="名片'+(side==='front'?'正面':'背面')+'" style="width:100%;max-height:240px;object-fit:contain;background:#fff;border-radius:10px"></a></figure>':'').join('')+'</div>'+(editable?'<button type="button" onclick="window.openCollectedCardBack()" style="'+scanButtonStyle+';margin-top:12px;background:#eff6ff;color:#2563eb">'+(images.back?'更換／重新辨識背面':'補上背面')+'</button>':'')+'</section>';
+  return '<section style="margin:0 0 16px;padding:14px;border:1px solid #d1e6db;border-radius:16px;background:#f6fcf9"><h3 style="font-weight:800;margin:0 0 10px">名片正反面</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px">'+['front','back'].map(side=>images[side]?'<figure style="margin:0"><figcaption>'+ (side==='front'?'正面':'背面')+'</figcaption><a href="'+escapeHtml(images[side])+'" target="_blank" rel="noopener"><img src="'+escapeHtml(images[side])+'" alt="名片'+(side==='front'?'正面':'背面')+'" style="width:100%;max-height:240px;object-fit:contain;background:#fff;border-radius:10px"></a>'+(editable?'<button type="button" data-repair-side="'+side+'" style="'+scanButtonStyle+';background:#eff6ff;color:#2563eb" onclick="window.repairCollectedCardSide(this.dataset.repairSide)">修正'+(side==='front'?'正面':'背面')+'圖片</button>':'')+'</figure>':'').join('')+'</div>'+(editable?'<button type="button" onclick="window.openCollectedCardBack()" style="'+scanButtonStyle+';margin-top:12px;background:#eff6ff;color:#2563eb">'+(images.back?'更換／重新辨識背面':'補上背面')+'</button>':'')+'</section>';
+};
+window.repairCollectedCardSide=async function(side){
+  const card=window.currentCard;
+  if(scanState.busy||!['front','back'].includes(side))return;
+  if(!card||!window.canEditCardRecord?.(card)){window.showToast?.('沒有編輯此名片的權限',true);return;}
+  const url=collectionImages(card)[side];if(!url)return;
+  finishScan();const state=scanState={existing:structuredClone(card),actorId:String(window.currentUserProfile?.userId||''),busy:true};
+  try{
+    const response=await fetch(url,{signal:AbortSignal.timeout(30000)});if(!response.ok)throw new Error('無法讀取名片圖片，請稍後再試');
+    const blob=await response.blob();
+    if(!actorStillMatches(state))throw new Error('登入或名片權限已變更，請重新開啟');
+    const file=await editCardSideImage(new File([blob],'card-image',{type:blob.type}),side==='front'?'正面':'背面',{allowReplace:true});
+    if(!file)return;
+    if(!actorStillMatches(state))throw new Error('登入或名片權限已變更，請重新開啟');
+    const savedUrl=await uploadFinalCrop(file);
+    if(!actorStillMatches(state))throw new Error('登入或名片權限已變更，請重新開啟');
+    const rowId=card.rowId||card.row_id,data=replaceCollectionImage(state.existing,side,savedUrl);
+    const result=await window.fetchAPI('updateCard',{rowId,data},true);
+    if(!result||result.error||result.success===false)throw new Error(result?.error||'圖片儲存失敗');
+    if(!actorStillMatches(state))return;
+    const stored=result.data||result,cfg=stored['自訂名片設定']||stored.customConfig||stored.custom_config||data['自訂名片設定'];
+    const updated={...card,...data,...stored,'自訂名片設定':cfg,customConfig:cfg,custom_config:cfg};
+    for(const list of [window.allCards,window.cardListRenderSource])if(Array.isArray(list)){const index=list.findIndex(c=>(c.rowId||c.row_id)===rowId);if(index>=0)list[index]={...list[index],...updated};}
+    if((window.currentCard?.rowId||window.currentCard?.row_id)===rowId)window.openCardDetail?.(updated);
+    window.showToast?.('名片圖片已修正，聯絡資料保持不變');
+  }catch(e){window.showToast?.(e.message||'圖片修正失敗',true);}
+  finally{if(scanState===state)finishScan();}
 };
 window.openCollectedCardBack=function(){
   const card=window.currentCard;if(!card||!window.canEditCardRecord?.(card)){window.showToast?.('沒有編輯此名片的權限',true);return;}
