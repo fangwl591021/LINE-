@@ -8,7 +8,8 @@ const themeUrl = new URL('css/home-reference-theme.css', root);
 const css = readFileSync(themeUrl, 'utf8');
 const scope = 'body.home-page:not(.business-home-v2-active)';
 const shortcutStart = html.indexOf('id="home-primary-shortcuts"');
-const shortcutEnd = html.indexOf('id="home-mall-banner"', shortcutStart);
+// The tutorial banner is a sibling, not a ninth primary shortcut.
+const shortcutEnd = html.indexOf('id="home-tutorial-entry"', shortcutStart);
 const shortcuts = html.slice(shortcutStart, shortcutEnd);
 const shortcutElements = [...shortcuts.matchAll(/<(button|a)\b[\s\S]*?<\/\1>/g)].map(match => match[0]);
 
