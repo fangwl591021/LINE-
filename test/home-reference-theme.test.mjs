@@ -113,7 +113,7 @@ test('theme assets are local files and the existing mall banner remains a genuin
 
 test('network search remains the existing three-scope form with accessible focus', () => {
   const start = html.indexOf('id="home-network-search-entry"');
-  const end = html.indexOf('id="home-system-ticker"', start);
+  const end = html.indexOf('id="home-recurring-task-panel"', start);
   const section = html.slice(start, end);
   assert.match(section, /onsubmit="return window\.openBusinessHomeSearch\(event\)"/);
   for (const value of ['own', 'public', 'ai']) assert.match(section, new RegExp(`name="businessHomeSearchScope" value="${value}"`));

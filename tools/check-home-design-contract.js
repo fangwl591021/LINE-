@@ -95,6 +95,12 @@ if (!index.includes('&#32879;&#35516;') || index.includes('&#32879;&#35522;')) {
 const defaultSearchEntry = index.indexOf('id="home-network-search-entry"');
 const quickActionsEnd = index.indexOf('id="home-exchange-zone-button"');
 const systemTicker = index.indexOf('id="home-system-ticker"');
+const memberStrip = index.indexOf('id="home-profile-card"');
+const primaryShortcuts = index.indexOf('id="home-primary-shortcuts"');
+const recurringTasks = index.indexOf('id="home-recurring-task-panel"');
+if (!(memberStrip >= 0 && memberStrip < systemTicker && systemTicker < primaryShortcuts)) {
+  fail('system ticker must appear between the green member strip and primary shortcuts');
+}
 const mallBanner = index.indexOf('id="home-mall-banner"');
 if (!(mallBanner > quickActionsEnd && mallBanner < defaultSearchEntry)) {
   fail('mall banner must appear between the eight shortcuts and network search');
@@ -106,7 +112,7 @@ if (!index.includes('src="assets/points-mall-banner-20260916.png" width="2170" h
     !fs.existsSync(path.join(root, 'assets', 'points-mall-banner-20260916.png'))) {
   fail('mall banner must use the supplied image with reserved dimensions');
 }
-if (defaultSearchEntry < 0 || defaultSearchEntry < quickActionsEnd || defaultSearchEntry > systemTicker) {
+if (defaultSearchEntry < 0 || defaultSearchEntry < quickActionsEnd || defaultSearchEntry > recurringTasks) {
   fail('network search entry must be visible on the default home below quick actions');
 }
 const matchInterestPrompt = index.indexOf('id="home-ai-match-interest-summary"', defaultSearchEntry);
