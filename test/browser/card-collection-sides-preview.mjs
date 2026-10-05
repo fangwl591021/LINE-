@@ -5,6 +5,7 @@ const root=new URL('../../',import.meta.url);
 const files=new Set(['js/modules/a-kaffit-card-scanner-adapter.js','js/modules/a-kaffit-vision-v3-crop.js','js/modules/card-collection-sides.mjs','js/shared/card-links.js']);
 files.add('js/modules/a-kaffit-card-scanner/card-scanner-v2.js');
 files.add('js/modules/card-side-crop-editor.mjs');
+files.add('js/modules/card-image-archive.mjs');
 const html=`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>名片正反面本機驗證</title><style>body{font:16px system-ui;margin:16px;color:#183a3a;background:#f3faf7}button{font:inherit;padding:12px;margin:4px}#fixture{position:fixed;bottom:0;left:0;z-index:14000;background:#fff4c7;padding:4px;font-size:12px}#result{white-space:pre-wrap}#detail{max-width:520px;margin:auto}</style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 <h2>收藏名片 · 合成測試</h2><button id="new">新增正面名片</button><button id="old">已收藏名片</button><div id="detail"></div><pre id="result"></pre><div id="fixture">僅本機測試<button id="back" style="font-size:12px">選取合成背面</button></div>

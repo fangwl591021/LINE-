@@ -1,5 +1,6 @@
 import { cropByVisionLocalization, normalizedVisionLocalization } from './a-kaffit-vision-v3-crop.js?v=4.0';
 import {editCardSideImage} from './card-side-crop-editor.mjs';
+import {createCardImageArchive} from './card-image-archive.mjs';
 import {cardConfig,collectionImages,mergeReviewedFields,withCollectionImages,replaceCollectionImage} from './card-collection-sides.mjs?v=4.0';
 
 const FIELD_MAP = [
@@ -250,24 +251,34 @@ async function compressCardImage(file) {
   } finally { source.close?.(); }
 }
 
-async function uploadCardImageOriginal(file, sideLabel='正面', purpose='collection') {
+async function uploadCardImageOriginal(file, sideLabel='正面', purpose='collection', options={}) {
   if (file.size > 15 * 1024 * 1024) throw new Error('名片原圖不可超過 15MB');
-  const token=getLineToken(); if(!token) throw new Error('LINE 登入已逾時，請重新開啟頁面');
-  const response=await fetch(workerApiUrl('/v1/card-images'),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':file.type,'x-card-file-size':String(file.size),'x-card-side':sideLabel==='背面'?'back':'front','x-card-purpose':purpose},body:file});
+  const token=options.token||getLineToken(); if(!token) throw new Error('LINE 登入已逾時，請重新開啟頁面');
+  const response=await fetch(workerApiUrl('/v1/card-images'),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':file.type,'x-card-file-size':String(file.size),'x-card-side':sideLabel==='背面'?'back':'front','x-card-purpose':purpose},body:file,signal:options.signal});
   const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'名片原圖上傳失敗');return body.job;
 }
-async function saveCardImageProcessingResult(jobId,file,metadata,status='completed'){
-  const token=getLineToken(); if(!token) throw new Error('LINE 登入已逾時，請重新開啟頁面');
+async function saveCardImageProcessingResult(jobId,file,metadata,status='completed',options={}){
+  const token=options.token||getLineToken(); if(!token) throw new Error('LINE 登入已逾時，請重新開啟頁面');
   const form=new FormData();form.append('image',file);form.append('metadata',JSON.stringify(metadata));form.append('status',status);
-  const response=await fetch(workerApiUrl('/v1/card-images/'+encodeURIComponent(jobId)+'/result'),{method:'POST',headers:{authorization:'Bearer '+token},body:form});
+  const response=await fetch(workerApiUrl('/v1/card-images/'+encodeURIComponent(jobId)+'/result'),{method:'POST',headers:{authorization:'Bearer '+token},body:form,signal:options.signal});
   const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'名片影像處理結果儲存失敗');return body.job;
 }
-async function prepareBusinessCardImage(file,sideLabel='正面',purpose='collection'){
+async function prepareBusinessCardImage(file,sideLabel='正面',purpose='collection',options={}){
+  if(!file?.type?.startsWith('image/'))throw new Error('請選擇圖片檔案');
+  if(file.size>15*1024*1024)throw new Error('名片原圖不可超過 15MB');
+  const metadata={processingVersion:'vision-localization-v3',detection:{detected:false,confidence:0,strategy:'vision-pending'},quality:{overall:100,blur:100,brightness:100,glare:100,coverage:100},processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},corners:[],warning:'等待單次 AI Vision 同時完成 OCR 與名片定位'};
+  if(options.deferUpload){
+    const token=getLineToken();if(!token)throw new Error('LINE 登入已逾時，請重新開啟頁面');
+    const prepared=compressCardImage(file);
+    const archive=createCardImageArchive({prepared,
+      uploadOriginal:signal=>uploadCardImageOriginal(file,sideLabel,purpose,{token,signal}),
+      uploadProcessed:(id,image,signal)=>saveCardImageProcessingResult(id,image,metadata,'completed',{token,signal})});
+    try{return {file:await prepared,jobId:archive.jobId,metadata,archive};}catch(error){archive.cancel();throw error;}
+  }
   const [job,processed]=await Promise.all([
     uploadCardImageOriginal(file,sideLabel,purpose),
     compressCardImage(file)
   ]);
-  const metadata={processingVersion:'vision-localization-v3',detection:{detected:false,confidence:0,strategy:'vision-pending'},quality:{overall:100,blur:100,brightness:100,glare:100,coverage:100},processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},corners:[],warning:'等待單次 AI Vision 同時完成 OCR 與名片定位'};
   await saveCardImageProcessingResult(job.id,processed,metadata,'completed');
   return {file:processed,jobId:job.id,metadata};
 }
@@ -282,10 +293,24 @@ function showScanError(message){
 }
 
 function releasePreviews(state=scanState){for(const url of state.previewUrls||[])URL.revokeObjectURL(url);state.previewUrls=[];}
-function finishScan(){releasePreviews();closeModal('akaffit-scan-draft');closeModal('akaffit-card-review');scanState={};}
+function finishScan(){scanState.archive?.cancel();scanState.back?.archive?.cancel();releasePreviews();closeModal('akaffit-scan-draft');closeModal('akaffit-card-review');scanState={};}
 function actorStillMatches(state){return state===scanState&&state.actorId===String(window.currentUserProfile?.userId||'')&&(!state.existing||window.canEditCardRecord?.(state.existing));}
 function previewImage(state,file,url,label){if(file){url=URL.createObjectURL(file);(state.previewUrls||=[]).push(url);}return url?'<figure style="margin:8px 0"><figcaption style="font-weight:800;margin-bottom:6px">'+label+'</figcaption><img src="'+escapeHtml(url)+'" alt="'+label+'" style="display:block;width:100%;max-height:240px;object-fit:contain;border-radius:12px;background:#f1f5f9"></figure>':'';}
 const scanButtonStyle='min-height:48px;border:0;border-radius:14px;padding:10px 14px;font-weight:800;cursor:pointer';
+function refreshImageUploadStatus(state){
+  if(state!==scanState)return;
+  const box=document.getElementById('ak-upload-status');if(!box)return;
+  const tasks=[state.archive,state.back?.archive].filter(Boolean);
+  const failed=tasks.some(task=>task.status==='failed'||task.status==='cancelled');
+  const pending=tasks.some(task=>task.status==='uploading'||task.status==='pending');
+  box.textContent=failed?'原照尚未完成上傳。資料會保留，按儲存可重試。':pending?'照片已準備好，可以繼續操作；原照正在背景上傳。':'';
+  box.style.display=failed||pending?'block':'none';
+}
+function observeImageArchive(state,archive){archive?.promise.finally(()=>refreshImageUploadStatus(state));refreshImageUploadStatus(state);}
+async function ensureImageArchives(state){
+  const faces=[['正面',state.archive],['背面',state.back?.archive]];
+  await Promise.all(faces.map(async([label,task])=>{if(task)try{await task.ensure();}catch(error){throw new Error(label+'原照上傳未完成：'+error.message+'。請保留此畫面再按儲存重試。');}}));
+}
 function showPreparedDraft(){
   const state=scanState;releasePreviews(state);
   const modal=ensureModal('akaffit-scan-draft'),front=state.processedFile||null,back=state.back?.processedFile;
@@ -294,24 +319,27 @@ function showPreparedDraft(){
     (!front&&(!state.frontUrl||state.frontLoadFailed)?'<label style="display:block;padding:14px;border:1px dashed #94a3b8;border-radius:12px">選擇正面圖片<input id="ak-front-input" type="file" accept="image/*" style="display:block;margin-top:8px"></label>':'')+
     previewImage(state,back,'','背面（選填）')+
     '<div style="display:flex;flex-wrap:wrap;gap:10px;margin:12px 0"><label style="'+scanButtonStyle+';background:#eff6ff;color:#2563eb">拍攝背面<input id="ak-back-camera" type="file" accept="image/*" capture="environment" style="display:none"></label><label style="'+scanButtonStyle+';background:#eff6ff;color:#2563eb">上傳背面<input id="ak-back-input" type="file" accept="image/*" style="display:none"></label>'+(back?'<button id="ak-remove-back" type="button" style="'+scanButtonStyle+';background:#f1f5f9">取消這次背面</button>':'')+'</div>'+
-    '<div id="ak-scan-error" role="alert" aria-live="assertive" style="display:none;color:#b91c1c;background:#fef2f2;padding:12px;border-radius:12px;margin:12px 0;white-space:pre-wrap"></div>'+
+    '<p id="ak-upload-status" role="status" aria-live="polite" style="color:#64748b;font-size:13px;line-height:1.5"></p><div id="ak-scan-error" role="alert" aria-live="assertive" style="display:none;color:#b91c1c;background:#fef2f2;padding:12px;border-radius:12px;margin:12px 0;white-space:pre-wrap"></div>'+
     '<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button id="ak-cancel-scan" style="'+scanButtonStyle+';background:#e2e8f0">取消</button><button id="ak-start-ocr" style="'+scanButtonStyle+';background:#06c755;color:white">'+(back?'正反面一起辨識':'送出名片')+'</button></div></section>';
   modal.querySelector('#ak-cancel-scan').onclick=()=>{if(!state.busy)finishScan()};
   modal.querySelector('#ak-start-ocr').onclick=runOcrAndReview;
   for(const id of ['ak-back-camera','ak-back-input','ak-front-input']){const input=modal.querySelector('#'+id);if(input)input.onchange=()=>selectSide(input,id==='ak-front-input'?'front':'back',state);}
-  const remove=modal.querySelector('#ak-remove-back');if(remove)remove.onclick=()=>{if(!state.busy){state.back=null;state.savedBackUrl='';state.backCrop=null;showPreparedDraft();}};
+  const remove=modal.querySelector('#ak-remove-back');if(remove)remove.onclick=()=>{if(!state.busy){state.back?.archive?.cancel();state.back=null;state.savedBackUrl='';state.backCrop=null;showPreparedDraft();}};
+  refreshImageUploadStatus(state);
 }
 function setScanBusy(modal,busy){modal?.querySelectorAll('button,input,textarea,select').forEach(el=>el.disabled=busy);}
 async function selectSide(input,side,state){
   const file=input.files?.[0];input.value='';if(!file||state.busy)return;
   state.busy=true;const modal=document.getElementById('akaffit-scan-draft');setScanBusy(modal,true);clearScanError();
+  let prepared;
   try{
-    const prepared=await prepareBusinessCardImage(file,side==='back'?'背面':'正面','collection');
+    prepared=await prepareBusinessCardImage(file,side==='back'?'背面':'正面','collection',{deferUpload:true});
     if(!actorStillMatches(state))throw new Error('登入或名片權限已變更，請重新開啟');
-    if(side==='back'){state.back={file,processedFile:prepared.file,jobId:prepared.jobId};state.savedBackUrl='';state.backCrop=null;}
-    else Object.assign(state,{file,processedFile:prepared.file,jobId:prepared.jobId,frontUrl:'',frontLoadFailed:false,savedFrontUrl:''});
+    if(side==='back'){state.back?.archive?.cancel();state.back={file,processedFile:prepared.file,jobId:prepared.jobId,archive:prepared.archive};state.savedBackUrl='';state.backCrop=null;}
+    else{state.archive?.cancel();Object.assign(state,{file,processedFile:prepared.file,jobId:prepared.jobId,archive:prepared.archive,frontUrl:'',frontLoadFailed:false,savedFrontUrl:''});}
     state.busy=false;showPreparedDraft();
-  }catch(error){state.busy=false;setScanBusy(modal,false);showScanError(error.message||'圖片處理失敗');}
+    observeImageArchive(state,prepared.archive);
+  }catch(error){prepared?.archive?.cancel();state.busy=false;setScanBusy(modal,false);showScanError(error.message||'圖片處理失敗');}
 }
 function reviewFields(card){return FIELD_MAP.map(([key,label])=>{const control=key==='服務項目'||key==='社群其他'?'<textarea data-ak-field="'+escapeHtml(key)+'" rows="4" style="box-sizing:border-box;width:100%;padding:11px;border:1px solid #dbe3ee;border-radius:12px;font:inherit;line-height:1.55">'+escapeHtml(card[key]||'')+'</textarea>':'<input data-ak-field="'+escapeHtml(key)+'" value="'+escapeHtml(card[key]||'')+'" style="box-sizing:border-box;width:100%;padding:11px;border:1px solid #dbe3ee;border-radius:12px;font:inherit">';return '<label style="display:block;margin:9px 0;font-weight:800;color:#334155">'+label+control+'</label>';}).join('');}
 function readReviewFields(root){const card={};root.querySelectorAll('[data-ak-field]').forEach(input=>{const key=input.dataset.akField;if(!key.startsWith('社群'))card[key]=input.value.trim();});const social=serializeSocialReviewFields(root);if(social)card['社群帳號']=social;return card;}
@@ -363,7 +391,7 @@ function showReview(){
     '<div id="ak-front-review">'+previewImage(state,state.existing&&state.frontUrl?null:state.cropFile,state.frontUrl,'正面')+'</div>'+sideReviewControls('front',Boolean(state.existing&&state.frontUrl))+
     (state.back?'<div id="ak-back-review">'+previewImage(state,state.backCrop,'','背面')+'</div>'+sideReviewControls('back',false):'')+
     '<div id="ak-review-fields">'+reviewFields(card)+'</div>'+(state.existing?'':industryReviewHtml(industry))+
-    '<div id="ak-review-error" role="alert" style="color:#b91c1c;white-space:pre-wrap;margin-top:12px"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:14px"><button id="ak-review-cancel" style="'+scanButtonStyle+';background:#e2e8f0">返回調整</button><button id="ak-review-save" style="'+scanButtonStyle+';background:#06c755;color:white">'+(state.existing?'儲存至原名片':'儲存至名片收藏')+'</button></div></section>';
+    '<p id="ak-upload-status" role="status" aria-live="polite" style="color:#64748b;font-size:13px;line-height:1.5"></p><div id="ak-review-error" role="alert" style="color:#b91c1c;white-space:pre-wrap;margin-top:12px"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:14px"><button id="ak-review-cancel" style="'+scanButtonStyle+';background:#e2e8f0">返回調整</button><button id="ak-review-save" style="'+scanButtonStyle+';background:#06c755;color:white">'+(state.existing?'儲存至原名片':'儲存至名片收藏')+'</button></div></section>';
   if(!state.existing)wireIndustryControls(modal);
   for(const side of ['front','back']){
     const confirm=modal.querySelector('#ak-confirm-'+side),adjust=modal.querySelector('#ak-adjust-'+side);
@@ -372,6 +400,7 @@ function showReview(){
   }
   modal.querySelector('#ak-review-cancel').onclick=()=>{if(!state.busy){closeModal('akaffit-card-review');showPreparedDraft();}};
   modal.querySelector('#ak-review-save').onclick=()=>saveReviewedCard(modal);
+  refreshImageUploadStatus(state);
 }
 function sideReviewControls(side,unchanged){
   if(unchanged)return '';
@@ -402,6 +431,10 @@ async function saveReviewedCard(modal){
   if(state.back&&!state.backCrop){errorBox.textContent='背面圖片尚未準備完成，請返回調整';return;}
   state.busy=true;errorBox.textContent='';setScanBusy(modal,true);button.textContent='儲存中…';
   try{
+    if([state.archive,state.back?.archive].some(task=>task&&task.status!=='completed'))button.textContent='照片上傳中…';
+    await ensureImageArchives(state);
+    if(!actorStillMatches(state))throw new Error('登入或名片權限已變更，請重新開啟');
+    button.textContent='儲存中…';
     const card=readReviewFields(modal.querySelector('#ak-review-fields'));
     const frontUrl=state.existing&&state.frontUrl?state.frontUrl:(state.savedFrontUrl||await uploadFinalCrop(state.cropFile));
     if(!frontUrl)throw new Error('請先上傳並辨識名片正面');
@@ -427,7 +460,7 @@ async function saveReviewedCard(modal){
       for(const list of [window.allCards,window.cardListRenderSource])if(Array.isArray(list)){const index=list.findIndex(c=>(c.rowId||c.row_id)===rowId);if(index>=0)list[index]={...list[index],...updated};}
       finishScan();window.openCardDetail?.(updated);window.showToast?.('背面與合併資料已儲存至原名片');
     }else{finishScan();window.showToast?.('客戶名片建立成功，業種對應已儲存');window.refreshPointBalanceBadge?.();window.goPage?.('card');window.loadCardData?.({force:true});}
-  }catch(error){state.busy=false;setScanBusy(modal,false);button.textContent=label;errorBox.textContent=error.message||'名片儲存失敗';}
+  }catch(error){state.busy=false;setScanBusy(modal,false);button.textContent=label;errorBox.textContent=error.message||'名片儲存失敗';refreshImageUploadStatus(state);}
 }
 window.renderCollectedCardSides=function(card){
   const images=collectionImages(card),editable=window.canEditCardRecord?.(card);
@@ -474,13 +507,15 @@ window.recognizeCard=async function(input){
   finishScan();const state=scanState={actorId:String(window.currentUserProfile?.userId||''),newRowId:'CARD_'+crypto.randomUUID(),previewUrls:[],back:null,busy:true};
   window.showCardOcrProgress?.('名片辨識準備中');
   window.setCardOcrProgressStage?.(5,'照片已收到，正在準備辨識...');
+  let prepared;
   try{
     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    window.setCardOcrProgressStage?.(8,'正在上傳並壓縮名片照片...');
-    const prepared=await prepareBusinessCardImage(file,'正面','collection');
+    window.setCardOcrProgressStage?.(8,'正在準備名片預覽...');
+    prepared=await prepareBusinessCardImage(file,'正面','collection',{deferUpload:true});
     if(!actorStillMatches(state))throw new Error('登入已變更，請重新開啟');
-    Object.assign(state,{file,processedFile:prepared.file,jobId:prepared.jobId,busy:false});
+    Object.assign(state,{file,processedFile:prepared.file,jobId:prepared.jobId,archive:prepared.archive,busy:false});
     window.hideCardOcrProgress?.();showPreparedDraft();
-  }catch(error){state.busy=false;window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片圖片處理失敗',true);}
+    observeImageArchive(state,prepared.archive);
+  }catch(error){prepared?.archive?.cancel();state.busy=false;window.hideCardOcrProgress?.();window.showToast?.(error.message||'名片圖片處理失敗',true);}
 };
 if(!installIndustryFilterBridge())setTimeout(installIndustryFilterBridge,0);
