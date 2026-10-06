@@ -15,7 +15,7 @@ function text(value,label,max,required=false){if(typeof value!=='string'||value.
 function key(value){if(!UUID.test(value||''))fail('INVALID_KEY','請重新送出');return value;}
 function date(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)||!Number.isFinite(Date.parse(value)))fail('INVALID_DATE','請填寫有效活動時間');const d=new Date(value);if(d.toISOString().slice(0,19)!==value.slice(0,19)||d.getUTCFullYear()<2020||d.getUTCFullYear()>2100)fail('INVALID_DATE','日期不正確');return d.toISOString();}
 function input(body){
-  const value={title:text(body.title,'活動名稱',100,true),description:text(body.description,'活動內容',2000,true),location:text(body.location,'活動地點',300,true),starts_at:date(body.startsAt),ends_at:date(body.endsAt),registration_closes_at:date(body.registrationClosesAt||body.startsAt),capacity:body.capacity,fee_text:text(body.feeText??'免費','收費說明',100,true),cover_url:text(body.coverUrl??'','封面網址',2048)};
+  const value={title:text(body.title,'活動名稱',100,true),description:text(body.description,'活動內容',2000,true),location:text(body.location,'活動地點',300,true),starts_at:date(body.startsAt),ends_at:date(body.endsAt),registration_closes_at:date(body.registrationClosesAt||body.startsAt),capacity:body.capacity,fee_text:text(body.feeText??'免費','收費說明',100,true),cover_url:text(body.coverUrl??'','封面網址',2048),category:text(body.category===undefined?'活動':body.category,'活動分類',40,true)};
   if(!Number.isInteger(value.capacity)||value.capacity<0||value.capacity>10000)fail('INVALID_CAPACITY','人數上限須為 0–10000 的整數，0 表示不限。');
   if(value.ends_at<=value.starts_at||value.registration_closes_at>value.ends_at)fail('INVALID_DATE','結束時間須晚於開始，截止不可晚於結束。');
   if(value.cover_url){try{const u=new URL(value.cover_url);if(u.protocol!=='https:'||u.username||u.password)throw Error();}catch{fail('INVALID_COVER','封面須使用 HTTPS 圖片網址。');}}
@@ -36,7 +36,7 @@ const SELECT=`SELECT e.*,COALESCE(NULLIF(u.name,''),'活動主辦人') AS organi
  (SELECT COUNT(*) FROM member_event_registrations r WHERE r.event_id=e.id AND r.status='registered' AND r.checked_in_at IS NOT NULL) AS checkedInCount,
  (SELECT COUNT(*) FROM member_event_registrations r WHERE r.event_id=e.id AND r.status='cancelled') AS cancelledCount
  FROM member_hosted_events e LEFT JOIN users u ON u.row_id=e.owner_id`;
-function mapped(row,memberId){return {id:row.id,title:row.title,description:row.description,location:row.location,startsAt:row.starts_at,endsAt:row.ends_at,registrationClosesAt:row.registration_closes_at,capacity:row.capacity,feeText:row.fee_text,coverUrl:visibleCover(row.cover_url),status:row.status,revision:row.revision,organizerName:row.organizerName,isOwner:row.owner_id===memberId,registrationCount:row.registrationCount,checkedInCount:row.checkedInCount,cancelledCount:row.cancelledCount};}
+function mapped(row,memberId){return {id:row.id,title:row.title,category:row.category||'活動',description:row.description,location:row.location,startsAt:row.starts_at,endsAt:row.ends_at,registrationClosesAt:row.registration_closes_at,capacity:row.capacity,feeText:row.fee_text,coverUrl:visibleCover(row.cover_url),status:row.status,revision:row.revision,organizerName:row.organizerName,isOwner:row.owner_id===memberId,registrationCount:row.registrationCount,checkedInCount:row.checkedInCount,cancelledCount:row.cancelledCount};}
 async function eventFor(db,id,actor,owned=false){const e=await stmt(db,SELECT+' WHERE e.id=?',id).first();if(!e)fail('NOT_FOUND','找不到這場活動',404);if(owned&&e.owner_id!==actor.memberId)fail('FORBIDDEN','你不能管理這場活動',403);return e;}
 async function overview(db,actor){
   const [all,my,hosting]=await Promise.all([
@@ -47,12 +47,13 @@ async function overview(db,actor){
   const mine=await rows(db,'SELECT event_id,status,registered_at,checked_in_at FROM member_event_registrations WHERE member_id=? ORDER BY registered_at DESC,id DESC LIMIT 200',actor.memberId),byId=new Map(my.map(e=>[e.id,e]));
   return {sessions:all.map(e=>mapped(e,actor.memberId)),hosting:hosting.map(e=>mapped(e,actor.memberId)),my:mine.filter(r=>byId.has(r.event_id)).map(r=>({...mapped(byId.get(r.event_id),actor.memberId),registrationStatus:r.status,registeredAt:r.registered_at,checkedInAt:r.checked_in_at||''}))};
 }
-const INPUT_FIELDS=['title','description','location','startsAt','endsAt','registrationClosesAt','capacity','feeText','coverUrl'];
+const INPUT_FIELDS=['title','description','location','startsAt','endsAt','registrationClosesAt','capacity','feeText','coverUrl','category'];
 async function save(db,actor,body,id='',bucket){
   fields(body,[...INPUT_FIELDS,'requestKey','dmFile',...(id?['revision']:[])]);
   const metadata={...body};delete metadata.dmFile;if(new TextEncoder().encode(JSON.stringify(metadata)).length>16384)fail('BODY_TOO_LARGE','活動文字資料過大',413);
   const requestKey=key(body.requestKey),value=input(body);
   const current=id?await eventFor(db,id,actor,true):await stmt(db,'SELECT * FROM member_hosted_events WHERE owner_id=? AND create_key=?',actor.memberId,requestKey).first();
+  if(id&&body.category===undefined)value.category=current.category||'活動';
   if(current&&(!id||current.last_key===requestKey))return mapped(await eventFor(db,current.id,actor),actor.memberId);
   if(!id&&(value.registration_closes_at<=at()||value.ends_at<=at()))fail('PAST_EVENT','請設定未來的截止及結束時間');
   if(id&&(!Number.isInteger(body.revision)||body.revision!==current.revision))fail('STALE_EVENT','活動已更新，請重新整理',409);
@@ -65,8 +66,8 @@ async function save(db,actor,body,id='',bucket){
   let media;
   try{
   if('dmFile' in body){media=await storeMedia(bucket,eventId,body.dmFile);value.cover_url=media.url;args[8]=media.url;}
-  const result=id?await run(db,`UPDATE member_hosted_events SET title=?,description=?,location=?,starts_at=?,ends_at=?,registration_closes_at=?,capacity=?,fee_text=?,cover_url=?,revision=revision+1,last_key=?,updated_at=? WHERE id=? AND owner_id=? AND revision=?`,...args,requestKey,now,id,actor.memberId,body.revision):
-    await run(db,`INSERT INTO member_hosted_events(id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,cover_url,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,eventId,actor.memberId,requestKey,...args,now,now);
+  const result=id?await run(db,`UPDATE member_hosted_events SET title=?,description=?,location=?,starts_at=?,ends_at=?,registration_closes_at=?,capacity=?,fee_text=?,cover_url=?,category=?,revision=revision+1,last_key=?,updated_at=? WHERE id=? AND owner_id=? AND revision=?`,...args,requestKey,now,id,actor.memberId,body.revision):
+    await run(db,`INSERT INTO member_hosted_events(id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,cover_url,category,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,eventId,actor.memberId,requestKey,...args,now,now);
   if(!result.meta?.changes)fail('STALE_EVENT','活動已更新，請重新整理',409);return mapped(await eventFor(db,eventId,actor),actor.memberId);
   }catch(error){
     // Do not remove a committed reference if a later response/read failed.

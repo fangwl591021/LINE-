@@ -10,6 +10,7 @@ export function fixture(t){
     CREATE TABLE points_ledger(id TEXT);CREATE TABLE activities(id TEXT);CREATE TABLE personal_tasks(id TEXT);`);
   sql.exec(readFileSync(new URL('../../migrations/0055_member_hosted_events.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../../migrations/0056_member_event_dm_usage.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../../migrations/0057_member_event_category.sql',import.meta.url),'utf8'));
   const writes=[];let authStatus=200,beforeRun=null,badWrite=false;
   function prepare(query,args=[]){return {bind(...a){return prepare(query,a);},async first(){return sql.prepare(query).get(...args)||null;},async all(){return {success:true,results:sql.prepare(query).all(...args)};},async run(){beforeRun?.(query,args);if(badWrite)return {success:false};if(!/^\s*(?:INSERT(?: OR IGNORE)? INTO|UPDATE|DELETE FROM) member_(?:hosted_events|event_registrations|event_dm_usage)/.test(query))throw Error('Unexpected write: '+query);writes.push(query);const r=sql.prepare(query).run(...args);return {success:true,meta:{changes:Number(r.changes)}};}};}
   const db={prepare,withSession(){return this;}},env={ACTMASTER_DB:db};
