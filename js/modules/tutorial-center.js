@@ -6,7 +6,7 @@
     { id: 'registration', icon: 'person_add', title: '會員註冊', description: '接收與使用購物金', duration: '1:24', file: 'registration-v2.mp4', chapters: [[0, '從頭觀看']], note: '中文旁白＋繁體字幕。購物金依實際入帳與店家規則為準。' },
     { id: 'mycard', icon: 'badge', title: '建立與分享名片', description: '三種版型，打造專屬名片', duration: '3:12', file: 'business-card-v2.mp4', chapters: [[0, '建立名片'], [131.01, '分享給好友／群組']], note: '中文旁白＋繁體字幕。分享介面可能因 LINE 版本略有不同。' },
     { id: 'collection', icon: 'wallet', title: '收藏名片', description: '正面必填・背面選填・兩面辨識', duration: '6:26', file: 'card-collection-v2.mp4', chapters: [[25.016, '上傳正反面'], [52.905, '兩面一起辨識'], [104.6, '搜尋與篩選'], [125.389, '聯絡資料'], [156.096, '補上背面'], [177.487, '核對與儲存'], [218.278, '編輯名片'], [231.968, '標籤與星座'], [278.437, '名片版型'], [299.943, '分享名片'], [325.266, '本人認領'], [354.669, '配對排名']], note: '中文旁白＋操作重點。原段落保留字幕，正反面新增段落使用固定步驟文字。' },
-    { id: 'merchant', icon: 'storefront', title: '店家登錄與商品上架', description: '公司資訊、商品圖片與訂購連結' }
+    { id: 'merchant', icon: 'storefront', title: '店家登錄與商品上架', description: '公司資訊、商品圖片、分享與網購折抵預覽', duration: '6:35', file: 'merchant-tutorial-v2.mp4', mediaBase: 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-06/', chapters: [[0, '從頭觀看'], [22.047, '公司／店家登錄'], [94.917, '商品上架'], [168.74, '收款與運費設定'], [196.728, '網購折抵預覽'], [243.084, '取消與退點'], [272.941, 'DM 輔助辨識'], [309.522, '檢查與分享'], [349.622, '修改與封存']], note: '中文旁白＋繁體字幕。網購折抵是新流程預覽，尚待安全驗收、未正式開放；實際交易依帳號權限與系統開關為準。' }
   ];
   let dialog = null;
   let opener = null;
@@ -134,7 +134,7 @@
       });
       chapters.appendChild(button);
     });
-    currentVideo.src = mediaBase + course.file;
+    currentVideo.src = (course.mediaBase || mediaBase) + course.file;
     dialog.querySelector('[data-tutorial-close]').focus({ preventScroll: true });
   }
 
