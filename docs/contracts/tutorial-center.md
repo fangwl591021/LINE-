@@ -1,7 +1,7 @@
 # Tutorial center contract
 
 - Home has one compact tutorial entry immediately after its primary shortcut grid. Existing shortcuts and bottom navigation are unchanged.
-- Four static course entries with versioned movies. Merchant v2 covers store registration, listing, sharing and the new online-point workflow preview. Its narration, captions and player note explicitly say that online points await safety acceptance and are not yet released; tutorial publishing does not enable commerce point transactions.
+- Four static course entries with versioned movies. Merchant v3 begins at the homepage mall banner, then the mall's 店家設定 button, before store registration and product listing. It retains sharing and the online-point workflow preview. Its narration, captions and player note explicitly say that online points await safety acceptance and are not yet released; tutorial publishing does not enable commerce point transactions.
 - Contextual help never submits forms, routes to another business page, writes records, changes identity, or starts LIFF sharing.
 - A single native modal contains either course list or player. Close / Escape returns focus to the opener; returning to list retains the original opener.
 - No autoplay. No media request before selecting a course. Native video controls support pause, seek and fullscreen, with playsinline on mobile.
