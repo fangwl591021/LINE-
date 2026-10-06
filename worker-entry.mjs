@@ -17,6 +17,7 @@ import { handleStoreConsumptionJournal } from './worker/store-consumption-journa
 import { handleMemberChat, processMemberChatNotifications, processMemberDirectoryMatches } from './worker/member-chat.mjs';
 import { handleActivityShortLink } from './worker/activity-short-links.mjs';
 import { handleAiAdvance, processAiAdvanceReminders } from './worker/ai-advance.mjs';
+import { handleMemberEvents } from './worker/member-hosted-events.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -393,6 +394,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const memberEventResponse = await handleMemberEvents(request, env);
+    if (memberEventResponse) return memberEventResponse;
     const aiAdvanceResponse = await handleAiAdvance(request, env, ctx);
     if (aiAdvanceResponse) return aiAdvanceResponse;
     const activityLinkResponse = await handleActivityShortLink(request, env);
