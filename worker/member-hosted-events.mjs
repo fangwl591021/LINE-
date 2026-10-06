@@ -1,6 +1,7 @@
 // Semantic port of VEO member-events. One authoritative event; no private task/course/point writes.
 import { resolveMemberIdentity, boundedJson } from './member-chat.mjs';
 import { extractMemberEventDm, MEMBER_DM_BODY_LIMIT } from './member-event-dm.mjs';
+import { MEMBER_MEDIA_LIMIT, mediaRef, visibleCover, storeMedia, readMedia } from './member-event-media.mjs';
 const BASE='/v1/member-events';
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
@@ -35,7 +36,7 @@ const SELECT=`SELECT e.*,COALESCE(NULLIF(u.name,''),'活動主辦人') AS organi
  (SELECT COUNT(*) FROM member_event_registrations r WHERE r.event_id=e.id AND r.status='registered' AND r.checked_in_at IS NOT NULL) AS checkedInCount,
  (SELECT COUNT(*) FROM member_event_registrations r WHERE r.event_id=e.id AND r.status='cancelled') AS cancelledCount
  FROM member_hosted_events e LEFT JOIN users u ON u.row_id=e.owner_id`;
-function mapped(row,memberId){return {id:row.id,title:row.title,description:row.description,location:row.location,startsAt:row.starts_at,endsAt:row.ends_at,registrationClosesAt:row.registration_closes_at,capacity:row.capacity,feeText:row.fee_text,coverUrl:row.cover_url,status:row.status,revision:row.revision,organizerName:row.organizerName,isOwner:row.owner_id===memberId,registrationCount:row.registrationCount,checkedInCount:row.checkedInCount,cancelledCount:row.cancelledCount};}
+function mapped(row,memberId){return {id:row.id,title:row.title,description:row.description,location:row.location,startsAt:row.starts_at,endsAt:row.ends_at,registrationClosesAt:row.registration_closes_at,capacity:row.capacity,feeText:row.fee_text,coverUrl:visibleCover(row.cover_url),status:row.status,revision:row.revision,organizerName:row.organizerName,isOwner:row.owner_id===memberId,registrationCount:row.registrationCount,checkedInCount:row.checkedInCount,cancelledCount:row.cancelledCount};}
 async function eventFor(db,id,actor,owned=false){const e=await stmt(db,SELECT+' WHERE e.id=?',id).first();if(!e)fail('NOT_FOUND','找不到這場活動',404);if(owned&&e.owner_id!==actor.memberId)fail('FORBIDDEN','你不能管理這場活動',403);return e;}
 async function overview(db,actor){
   const [all,my,hosting]=await Promise.all([
@@ -47,22 +48,37 @@ async function overview(db,actor){
   return {sessions:all.map(e=>mapped(e,actor.memberId)),hosting:hosting.map(e=>mapped(e,actor.memberId)),my:mine.filter(r=>byId.has(r.event_id)).map(r=>({...mapped(byId.get(r.event_id),actor.memberId),registrationStatus:r.status,registeredAt:r.registered_at,checkedInAt:r.checked_in_at||''}))};
 }
 const INPUT_FIELDS=['title','description','location','startsAt','endsAt','registrationClosesAt','capacity','feeText','coverUrl'];
-async function save(db,actor,body,id=''){
-  fields(body,[...INPUT_FIELDS,'requestKey',...(id?['revision']:[])]);const requestKey=key(body.requestKey),value=input(body);
+async function save(db,actor,body,id='',bucket){
+  fields(body,[...INPUT_FIELDS,'requestKey','dmFile',...(id?['revision']:[])]);
+  const metadata={...body};delete metadata.dmFile;if(new TextEncoder().encode(JSON.stringify(metadata)).length>16384)fail('BODY_TOO_LARGE','活動文字資料過大',413);
+  const requestKey=key(body.requestKey),value=input(body);
   const current=id?await eventFor(db,id,actor,true):await stmt(db,'SELECT * FROM member_hosted_events WHERE owner_id=? AND create_key=?',actor.memberId,requestKey).first();
   if(current&&(!id||current.last_key===requestKey))return mapped(await eventFor(db,current.id,actor),actor.memberId);
   if(!id&&(value.registration_closes_at<=at()||value.ends_at<=at()))fail('PAST_EVENT','請設定未來的截止及結束時間');
   if(id&&(!Number.isInteger(body.revision)||body.revision!==current.revision))fail('STALE_EVENT','活動已更新，請重新整理',409);
+  if(id&&current.status!=='active')fail('hosted_event_closed',safeErrors.hosted_event_closed,409);
+  if(mediaRef(value.cover_url)){
+    if(!current||value.cover_url!==visibleCover(current.cover_url))fail('INVALID_COVER','請選擇自己的 DM 檔案，不可引用其他活動附件');
+    value.cover_url=current.cover_url;
+  }
   const eventId=id||crypto.randomUUID(),now=at(),args=Object.values(value);
+  let media;
+  try{
+  if('dmFile' in body){media=await storeMedia(bucket,eventId,body.dmFile);value.cover_url=media.url;args[8]=media.url;}
   const result=id?await run(db,`UPDATE member_hosted_events SET title=?,description=?,location=?,starts_at=?,ends_at=?,registration_closes_at=?,capacity=?,fee_text=?,cover_url=?,revision=revision+1,last_key=?,updated_at=? WHERE id=? AND owner_id=? AND revision=?`,...args,requestKey,now,id,actor.memberId,body.revision):
     await run(db,`INSERT INTO member_hosted_events(id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,cover_url,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,eventId,actor.memberId,requestKey,...args,now,now);
   if(!result.meta?.changes)fail('STALE_EVENT','活動已更新，請重新整理',409);return mapped(await eventFor(db,eventId,actor),actor.memberId);
+  }catch(error){
+    // Do not remove a committed reference if a later response/read failed.
+    if(media)try{const saved=await stmt(db,'SELECT cover_url FROM member_hosted_events WHERE id=?',eventId).first();if(saved?.cover_url!==media.url)await bucket.delete(media.objectKey);}catch{}
+    throw error;
+  }
 }
 async function sha(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),v=>v.toString(16).padStart(2,'0')).join('');}
 async function registration(db,eventId,memberId){return stmt(db,'SELECT * FROM member_event_registrations WHERE event_id=? AND member_id=?',eventId,memberId).first();}
-async function action(db,actor,id,verb,body){
+async function action(db,actor,id,verb,body,bucket){
   const event=await eventFor(db,id,actor,['update','cancel-event','redeem'].includes(verb));
-  if(verb==='update')return {event:await save(db,actor,body,id)};
+  if(verb==='update')return {event:await save(db,actor,body,id,bucket)};
   if(verb==='cancel-event'){
     fields(body,['requestKey','revision']);const k=key(body.requestKey);
     if(event.status==='cancelled')return {success:true};
@@ -106,9 +122,11 @@ export async function handleMemberEvents(request,env,fetcher=fetch){
       const active=await stmt(db,"SELECT id FROM member_hosted_events WHERE owner_id=? AND status='active' AND julianday(ends_at)>julianday('now') LIMIT 1",actor.memberId).first();
       return reply({success:true,canHost:!active,activeEventId:active?.id||''});
     }
-    if(request.method==='POST'&&path==='/events')return reply({success:true,event:await save(db,actor,await boundedJson(request,16384))});
+    if(request.method==='POST'&&path==='/events')return reply({success:true,event:await save(db,actor,await boundedJson(request,MEMBER_MEDIA_LIMIT),'',env.IMG_BUCKET)});
+    const media=path.match(/^\/([0-9a-f-]{36})\/media\/([0-9a-f-]{36})\.(jpg|png|webp|pdf)$/i);
+    if(request.method==='GET'&&media&&UUID.test(media[1])&&UUID.test(media[2])){const e=await eventFor(db,media[1],actor);return await readMedia(env.IMG_BUCKET,e.cover_url,url,HEADERS);}
     const match=path.match(/^\/([0-9a-f-]{36})(?:\/([a-z-]+))?$/i);if(!match||!UUID.test(match[1]))fail('NOT_FOUND','找不到這個操作',404);const [,id,verb]=match;
-    if(request.method==='POST')return reply({success:true,...await action(db,actor,id,verb,await boundedJson(request,16384))});
+    if(request.method==='POST')return reply({success:true,...await action(db,actor,id,verb,await boundedJson(request,verb==='update'?MEMBER_MEDIA_LIMIT:16384),env.IMG_BUCKET)});
     const event=await eventFor(db,id,actor,verb==='registrations');
     if(!verb){const mine=await registration(db,id,actor.memberId);return reply({success:true,event:mapped(event,actor.memberId),registration:mine?{status:mine.status,registeredAt:mine.registered_at,checkedInAt:mine.checked_in_at||''}:null});}
     if(verb==='registrations'){
