@@ -1,6 +1,6 @@
 // Draft extraction only; authenticated caller supplies canonical memberId, never a client role.
 import { activityDmImage } from './activity-dm-ai.mjs';
-import { MEMBER_EVENT_DM_MODEL, MEMBER_EVENT_DM_SCHEMA, MEMBER_EVENT_DM_INSTRUCTIONS, normalizeMemberEventDmDraft, memberEventDmOutputText } from './member-event-dm-schema.mjs';
+import { MEMBER_EVENT_DM_MODEL, MEMBER_EVENT_DM_SCHEMA, memberEventDmInstructions, normalizeMemberEventDmDraft, memberEventDmOutputText } from './member-event-dm-schema.mjs';
 import { boundedJson } from './member-chat.mjs';
 export const MEMBER_DM_BODY_LIMIT=Math.ceil(4*1024*1024/3)*4+4096;
 const fail=(code,message,status=400)=>{throw Object.assign(new Error(message),{code,status});};
@@ -33,7 +33,7 @@ export async function extractMemberEventDm(body,env,db,actor,fetcher=fetch,signa
     // The deployed Workers runtime rejects redirect:error before network I/O. Manual keeps credentials on this fixed origin; 3xx is rejected below.
     const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',redirect:'manual',signal:AbortSignal.any([AbortSignal.timeout(45000),...(signal?[signal]:[])]),
       headers:{Authorization:'Bearer '+env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:MEMBER_EVENT_DM_MODEL,reasoning:{effort:'low'},store:false,max_output_tokens:4000,
-        instructions:MEMBER_EVENT_DM_INSTRUCTIONS,input:[{role:'user',content:[{type:'input_text',text:'忠實擷取附件活動資料，逐項核對名稱、時段、地點與說明；只產生待確認草稿。'},file]}],text:{format:{type:'json_schema',name:'member_activity_dm',strict:true,schema:MEMBER_EVENT_DM_SCHEMA}}})});
+        instructions:memberEventDmInstructions(now),input:[{role:'user',content:[{type:'input_text',text:'忠實擷取附件活動資料，逐項核對名稱、時段、地點與說明；只產生待確認草稿。'},file]}],text:{format:{type:'json_schema',name:'member_activity_dm',strict:true,schema:MEMBER_EVENT_DM_SCHEMA}}})});
     diagnostic.httpStatus=response.status;
     if(!response.ok){
       diagnostic.stage='provider_http';diagnostic.reason='provider_http_error';

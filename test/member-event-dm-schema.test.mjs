@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {fixture} from './helpers/member-events-fixture.mjs';
 import {dmValue} from './helpers/member-event-dm-output.mjs';
 import {extractMemberEventDm} from '../worker/member-event-dm.mjs';
-import {MEMBER_EVENT_DM_MODEL,MEMBER_EVENT_DM_SCHEMA,normalizeMemberEventDmDraft,memberEventDmOutputText} from '../worker/member-event-dm-schema.mjs';
+import {MEMBER_EVENT_DM_MODEL,MEMBER_EVENT_DM_SCHEMA,memberEventDmInstructions,normalizeMemberEventDmDraft,memberEventDmOutputText} from '../worker/member-event-dm-schema.mjs';
+import {ACTIVITY_DM_PROMPT} from '../worker/activity-dm-ai.mjs';
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
 const input={file:{type:'image/png',data:png}},actor={memberId:'host'};
 const batch={name:'第一場',scheduleText:'2027年10月7日14:00–17:00',startTime:'2027-10-07T14:00',endTime:'2027-10-07T17:00',price:200};
@@ -22,9 +23,33 @@ test('one dedicated provider call, existing secret, no shared model override or 
   assert.equal(payload.model,MEMBER_EVENT_DM_MODEL);assert.deepEqual(payload.reasoning,{effort:'low'});assert.equal(payload.store,false);assert.equal(payload.max_output_tokens,4000);
   assert.deepEqual(payload.text.format,{type:'json_schema',name:'member_activity_dm',strict:true,schema:MEMBER_EVENT_DM_SCHEMA});
   assert.equal(payload.input[0].content[1].detail,'high');assert.match(payload.instructions,/rawOcrText/);assert.doesNotMatch(JSON.stringify(payload),/test-only-key|unrelated-card/);
+  const year=new Date(Date.now()+8*3600000).getUTCFullYear();assert.match(payload.instructions,new RegExp('台灣當年為 '+year+' 年'));
   return Response.json({status:'completed',output_text:JSON.stringify(valid)});
  });
  assert.equal(result.success,true);assert.equal(result.draft.activityName,valid.activityName);assert.equal(result.draft.rawOcrText,valid.rawOcrText);assert.equal(result.draft.price,200);assert.equal(calls,1);assert.equal(f.writes.length,1);
+});
+
+test('year default is computed per request at Taiwan midnight, not cached or taken from the client',()=>{
+ assert.match(memberEventDmInstructions(Date.parse('2026-12-31T15:59:59Z')),/台灣當年為 2026 年/);
+ assert.match(memberEventDmInstructions(Date.parse('2026-12-31T16:00:00Z')),/台灣當年為 2027 年/);
+ assert.match(memberEventDmInstructions(Date.parse('2028-01-01T00:00:00Z')),/台灣當年為 2028 年/);
+});
+
+test('member-only default instructions preserve explicit years, original text and missing-date safety',()=>{
+ const value=memberEventDmInstructions(Date.parse('2026-10-06T12:00:00Z'));
+ assert.doesNotMatch(value,/不能補今年/);assert.match(value,/明示西元年份.*民國年份優先/);
+ assert.match(value,/年份未標示，預設為 2026 年，請確認/);assert.match(value,/日期已過去也仍用當年，不改明年/);
+ assert.match(value,/scheduleText、rawOcrText 保留圖上原文/);assert.match(value,/沒有月、日或開始時間、無效日期、未寫結束時間仍留空/);
+ assert.match(ACTIVITY_DM_PROMPT,/缺少年份、日期或開始時間時不能補今年/);
+});
+
+test('default-year single and multiple drafts normalize without overwriting explicit years or original text',()=>{
+ const result=normalizeMemberEventDmDraft({...valid,scheduleText:'10月8日（四）14:00至16:00',startTime:'2026-10-08T14:00',endTime:'2026-10-08T16:00',confidenceNote:'年份未標示，預設為 2026 年，請確認'});
+ assert.equal(result.startTime,'2026-10-08T14:00');assert.equal(result.endTime,'2026-10-08T16:00');assert.equal(result.scheduleText,'10月8日（四）14:00至16:00');assert.match(result.confidenceNote,/預設為 2026 年/);
+ assert.equal(normalizeMemberEventDmDraft(valid).startTime,'2027-10-07T14:00');
+ const multiple=normalizeMemberEventDmDraft({...valid,timeStatus:'multiple',batches:[{...batch,startTime:'2026-10-07T14:00',endTime:'2026-10-07T17:00',scheduleText:'10/7 14:00–17:00'},batch]});
+ assert.equal(multiple.startTime,'');assert.equal(multiple.batches[0].startTime,'2026-10-07T14:00');assert.equal(multiple.batches[1].startTime,'2027-10-07T14:00');
+ for(const startTime of ['2026-02-29T14:00','2026-10T14:00','2026-10-08'])assert.equal(normalizeMemberEventDmDraft({...valid,startTime}).startTime,'');
 });
 
 test('Responses output_text and message content forms both supported without unsafe coercion',()=>{
