@@ -1,9 +1,51 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
 import {fixture,UIDS} from './helpers/member-events-fixture.mjs';
 import {handleMemberEvents} from '../worker/member-hosted-events.mjs';
 const ongoing=f=>({...f.input(),startsAt:new Date(Date.now()-1800000).toISOString(),endsAt:new Date(Date.now()+7200000).toISOString(),registrationClosesAt:new Date(Date.now()+3600000).toISOString()});
+
+test('category create/update stays on the same event and keeps registrations, tickets, media and owner',async t=>{
+  const f=fixture(t),data={...f.input(),category:'合作商業交流',coverUrl:'https://example.com/dm.jpg'},e=await f.create(data);
+  await f.api('/'+e.id+'/register',{member:'guest',data:{}});await f.api('/'+e.id+'/ticket',{member:'guest',data:{}});
+  const before=f.sql.prepare('SELECT * FROM member_hosted_events WHERE id=?').get(e.id),registrations=f.sql.prepare('SELECT * FROM member_event_registrations').all();
+  const update={...data,category:' 課程 ',revision:e.revision,requestKey:crypto.randomUUID()};
+  const saved=await f.api('/'+e.id+'/update',{data:update});assert.equal(saved.success,true);assert.equal(saved.event.category,'課程');assert.equal(saved.event.id,e.id);
+  const after=f.sql.prepare('SELECT * FROM member_hosted_events WHERE id=?').get(e.id);
+  for(const name of Object.keys(before))if(!['category','revision','last_key','updated_at'].includes(name))assert.equal(after[name],before[name],name);
+  assert.deepEqual(f.sql.prepare('SELECT * FROM member_event_registrations').all(),registrations);
+  assert.equal((await f.api('/'+e.id+'/update',{data:update})).event.revision,1);
+  const overview=await f.api('/overview',{member:'guest'});assert.equal(overview.sessions[0].category,'課程');assert.equal(overview.my[0].category,'課程');assert.equal((await f.api('/overview')).hosting[0].category,'課程');
+  assert.equal((await f.api('/'+e.id+'/update',{member:'guest',data:{...update,revision:1,requestKey:crypto.randomUUID()}})).httpStatus,403);
+  assert.equal((await f.api('/'+e.id+'/update',{data:{...update,requestKey:crypto.randomUUID()}})).code,'STALE_EVENT');
+});
+
+test('category default is backward compatible; old edit clients preserve a saved custom category',async t=>{
+  const f=fixture(t),data=f.input(),e=await f.create(data);assert.equal(e.category,'活動');
+  await f.api('/'+e.id+'/update',{data:{...data,category:'自訂交流',revision:0,requestKey:crypto.randomUUID()}});
+  const saved=await f.api('/'+e.id+'/update',{data:{...data,title:'舊版更新名稱',revision:1,requestKey:crypto.randomUUID()}});
+  assert.equal(saved.event.category,'自訂交流');assert.equal(saved.event.title,'舊版更新名稱');
+});
+
+test('invalid categories are rejected without writing an event or changing an existing one',async t=>{
+  const f=fixture(t);for(const category of ['', '  ',null,2,{},[], '字'.repeat(41)]){
+    assert.equal((await f.api('/events',{data:{...f.input(),category}})).code,'INVALID_INPUT');
+    assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM member_hosted_events').get().n,0);
+  }
+  const data=f.input(),e=await f.create(data),before=f.sql.prepare('SELECT * FROM member_hosted_events').get();
+  assert.equal((await f.api('/'+e.id+'/update',{data:{...data,category:' ',revision:0,requestKey:crypto.randomUUID()}})).code,'INVALID_INPUT');
+  assert.deepEqual(f.sql.prepare('SELECT * FROM member_hosted_events').get(),before);
+});
+
+test('category migration preserves legacy ended event rows and does not trigger prohibited updates',t=>{
+  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());sql.exec("CREATE TABLE users(row_id TEXT PRIMARY KEY);INSERT INTO users VALUES('owner');");
+  sql.exec(readFileSync(new URL('../migrations/0055_member_hosted_events.sql',import.meta.url),'utf8'));
+  sql.prepare("INSERT INTO member_hosted_events(id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,created_at,updated_at) VALUES('legacy','owner','key','舊活動','說明','地點','2020-01-01T00:00:00Z','2020-01-01T01:00:00Z','2020-01-01T00:00:00Z','2020-01-01','2020-01-01')").run();
+  const before=sql.prepare('SELECT * FROM member_hosted_events').get();sql.exec(readFileSync(new URL('../migrations/0057_member_event_category.sql',import.meta.url),'utf8'));
+  assert.deepEqual({...sql.prepare('SELECT * FROM member_hosted_events').get()},{...before,category:'活動'});
+  assert.throws(()=>sql.prepare("UPDATE member_hosted_events SET category='課程' WHERE id='legacy'").run(),/hosted_event_closed/);
+});
 test('registered canonical LINE identity only, no card gating, points or official/private agenda writes',async t=>{
   const f=fixture(t);assert.equal((await f.api('/overview',{member:''})).httpStatus,401);assert.equal((await f.api('/overview',{member:'invalid'})).httpStatus,401);
   const input=f.input();assert.equal((await f.api('/events',{data:{...input,ownerId:'other'}})).httpStatus,400);const e=await f.create(input);
