@@ -75,3 +75,13 @@ test('diagnostic sink failure cannot mask the original safe error',async t=>{
   const f=setup(t);t.mock.method(console,'error',()=>{throw Error(secret);});
   await assert.rejects(extractMemberEventDm(input,f.env,f.db,actor,async()=>output(secret)),e=>e.code==='DM_FAILED'&&/診斷碼：DM-[0-9a-f]{12}/.test(e.message)&&!e.message.includes(secret));
 });
+
+for(const status of [301,302,303,307,308])test('provider redirect '+status+' never follows or applies a draft',async t=>{
+  const f=setup(t),logs=capture(t);let calls=0,caught;
+  try{await extractMemberEventDm(input,f.env,f.db,actor,async(url,init)=>{
+    calls++;assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(init.redirect,'manual');
+    return new Response(null,{status,headers:{Location:'https://untrusted.example/'+secret}});
+  });}catch(error){caught=error;}
+  assert.equal(calls,1);assert.equal(caught?.code,'AI_UNAVAILABLE');assert.equal(logs.length,1);
+  safe(logs[0],caught);assert.equal(logs[0].stage,'provider_http');assert.equal(logs[0].httpStatus,status);noBusinessWrites(f);
+});

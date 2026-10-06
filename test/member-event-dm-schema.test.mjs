@@ -18,7 +18,7 @@ test('fixed member-only DM schema is strict at every object and covers all requi
 test('one dedicated provider call, existing secret, no shared model override or classification',async t=>{
  const f=fixture(t);f.env.OPENAI_API_KEY='test-only-key';f.env.OPENAI_MODEL='unrelated-card-model';f.env.OPENAI_VISION_MODEL='unrelated-card-vision';let calls=0;
  const result=await extractMemberEventDm(input,f.env,f.db,actor,async(url,init)=>{
-  calls++;assert.equal(url,'https://api.openai.com/v1/responses');const payload=JSON.parse(init.body);
+  calls++;assert.equal(url,'https://api.openai.com/v1/responses');assert.equal(init.redirect,'manual');const payload=JSON.parse(init.body);
   assert.equal(payload.model,MEMBER_EVENT_DM_MODEL);assert.deepEqual(payload.reasoning,{effort:'low'});assert.equal(payload.store,false);assert.equal(payload.max_output_tokens,4000);
   assert.deepEqual(payload.text.format,{type:'json_schema',name:'member_activity_dm',strict:true,schema:MEMBER_EVENT_DM_SCHEMA});
   assert.equal(payload.input[0].content[1].detail,'high');assert.match(payload.instructions,/rawOcrText/);assert.doesNotMatch(JSON.stringify(payload),/test-only-key|unrelated-card/);
