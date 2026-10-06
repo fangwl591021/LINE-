@@ -24,14 +24,16 @@ const {mkdirSync}=require('node:fs');
       assert.equal(await page.locator('.tutorial-course').count(),4);
       assert.equal(await page.locator('button.tutorial-course').count(),4);
       assert.equal(mediaRequests,0,'list must not fetch videos');
-      assert.equal(await page.locator('[data-course="merchant"]').innerText().then(t=>t.includes('6:35')),true);
+      assert.equal(await page.locator('[data-course="merchant"]').innerText().then(t=>t.includes('6:41')),true);
       await page.locator('[data-course="merchant"]').click();
       await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
       assert.equal(await page.locator('#tutorial-dialog video').evaluate(v=>v.paused),true,'merchant no autoplay');
-      assert.equal(Math.round(await page.locator('#tutorial-dialog video').evaluate(v=>v.duration)),395);
+      assert.equal(Math.round(await page.locator('#tutorial-dialog video').evaluate(v=>v.duration)),401);
       assert.match(await page.locator('.tutorial-note').first().innerText(),/未正式開放/);
-      await page.locator('[data-time="196.728"]').click();
-      await page.waitForFunction(()=>{const v=document.querySelector('#tutorial-dialog video');return v&&v.currentTime>=196&&!v.seeking&&v.readyState>=2&&!v.paused;},{},{timeout:60000});
+      for(const time of [10.938,18.410,203.027]){
+        await page.locator(`[data-time="${time}"]`).click();
+        await page.waitForFunction(t=>{const v=document.querySelector('#tutorial-dialog video');return v&&v.currentTime>=t-.05&&!v.seeking&&v.readyState>=2&&!v.paused;},time,{timeout:60000});
+      }
       await page.waitForTimeout(500);
       assert.ok(await page.locator('#tutorial-dialog video').evaluate(v=>(v.webkitAudioDecodedByteCount||0)>0),'merchant audible stream decodes');
       if(width===390){mkdirSync('.wrangler/tutorial-proof',{recursive:true});await page.screenshot({path:'.wrangler/tutorial-proof/merchant-390.png'});}
