@@ -119,6 +119,18 @@ test('concurrent creation is exactly one activity, never separate date activitie
  }finally{f.sql.close();}
 });
 
+test('admin category update persists on the same row without changing dates, DM, network or registrations',async()=>{
+ const f=fixture();try{
+  await f.mod.bulkAddRegistrants({...payload,activityType:'合作商業交流',imageUrl:'https://example.com/dm.jpg'},f.env);
+  await f.join({batchIds:['ACT_series_B01']});
+  const before=f.sql.prepare('SELECT * FROM activities').get(),registrations=f.sql.prepare('SELECT * FROM registrants').all();
+  await f.mod.upsertActivity({activityId:'ACT_series',data:{'活動名稱':before.name,'活動類型':'課程','開始時間':before.start_time,'結束時間':before.end_time,'金額':before.price,feeType:before.fee_type,'活動說明':before.description,'宣傳圖':before.image_url,imageRatio:before.image_ratio,status:before.status,nfcCheckinStart:before.nfc_checkin_start,nfcCheckinEnd:before.nfc_checkin_end}},f.env);
+  assert.deepEqual({...f.sql.prepare('SELECT * FROM activities').get()},{...before,type:'課程'});
+  assert.deepEqual(f.sql.prepare('SELECT * FROM registrants').all(),registrations);
+  assert.equal(f.mod.activityRow(f.sql.prepare('SELECT * FROM activities').get()).activityType,'課程');
+ }finally{f.sql.close();}
+});
+
 test('edit preserves authoritative network, options, registration IDs, and per-date availability',async()=>{
  const f=fixture();try{
   await f.mod.bulkAddRegistrants({...payload,authenticatedNetworkId:'tenant'},f.env);

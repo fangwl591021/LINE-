@@ -46,7 +46,7 @@ ok(auth.includes("window.goPage(wantsCardCoolList ? 'card' : 'home', true)"), 'l
 ok(auth.includes('aggregateWalletReady') && !auth.includes('setTimeout(() => window.refreshPointBalanceBadge?.(), 300)'), 'point balance uses aggregate home data before its delayed fallback');
 ok(home.includes('window.__homeLoadPromises'), 'home background tasks coalesce matching in-flight work');
 ok(home.includes('window.__subsiteHomeFastDataPromise'), 'subsite home bootstrap coalesces concurrent aggregate requests');
-ok(home.includes("runHomeBackgroundTask_('store-settings', 3000") && home.includes("runHomeBackgroundTask_('activities-for-admin', 14000"), 'noncritical home APIs are staged after the aggregate bootstrap');
+ok(home.includes("runHomeBackgroundTask_('store-settings', 3000") && home.includes("runHomeBackgroundTask_('home-activities', 100") && !home.includes("'activities-for-admin', 14000"), 'recent activities start early; noncritical home APIs remain staged after the aggregate bootstrap');
 ok(!home.includes("runHomeBackgroundTask_('cards-for-admin'") && !home.includes("runHomeBackgroundTask_('cards-for-user'"), 'home bootstrap does not preload the full card library');
 ok(auth.includes("body && !body.classList.contains('hidden')"), 'cashier logs stay lazy while the cashier panel is collapsed');
 ok(inbox.includes('__inboxBadgeRequestedAt') && inbox.includes('< 15000'), 'inbox badge refreshes are throttled during login');

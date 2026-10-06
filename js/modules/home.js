@@ -2136,12 +2136,18 @@ const HomeModule = (function() {
         return [];
     }
 
-    async function fetchActivitiesByFallback_(actions, payload) {
+    async function fetchActivitiesByFallback_(actions, payload, acceptEmpty = false) {
         for (const action of actions) {
             const res = await window.fetchAPI(action, payload || {}, true);
+            if (acceptEmpty && (res?.success === false || res?.error)) {
+                if (res.authRelogin) throw new Error('請重新登入後載入活動');
+                continue;
+            }
             const list = normalizeActivityList_(res);
-            if (list.length) return list;
+            if (list.length || (acceptEmpty && (Array.isArray(res) ||
+                ['data', 'activities', 'items', 'registrations'].some(key => Array.isArray(res?.[key]))))) return list;
         }
+        if (acceptEmpty) throw new Error('活動載入失敗，請重試');
         return [];
     }
 
@@ -2259,23 +2265,55 @@ const HomeModule = (function() {
         return true;
     };
 
+    let homeActivitiesRequest_;
+    let homeActivitiesRenderedScope_;
+    function homeActivitiesScope_() {
+        return JSON.stringify([
+            window.currentUserProfile?.userId || window.currentUser?.userId || '',
+            window.liff?.isLoggedIn?.() ? window.liff.getAccessToken?.() : '',
+            window.userRole || 'user', getActivityListNetwork_()
+        ]);
+    }
+    function renderHomeActivityLoadState_(failed = false) {
+        const list = document.getElementById('user-activities-list');
+        if (!list) return;
+        document.getElementById('home-activity-filters')?.remove();
+        list.className = 'space-y-4';
+        list.innerHTML = failed
+            ? '<div class="text-center py-6 text-sm"><p role="status">活動載入失敗，請重試</p><button type="button" onclick="window.loadUserActivities()" class="mt-3 rounded-xl border border-emerald-200 bg-white px-5 py-2 text-emerald-700">重新載入活動</button></div>'
+            : '<p role="status" class="text-center text-slate-500 py-6 text-sm">活動載入中…</p>';
+    }
     window.loadUserActivities = async function() {
+        const scope = homeActivitiesScope_();
+        if (homeActivitiesRequest_?.scope === scope) return homeActivitiesRequest_.promise;
         if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
-
-        try {
-            window.allActivities = await fetchActivitiesByFallback_(
+        if (homeActivitiesRenderedScope_ !== scope) {
+            window.allActivities = [];
+            renderHomeActivityLoadState_();
+        }
+        const request = { scope };
+        homeActivitiesRequest_ = request;
+        request.promise = (async () => { try {
+            const activities = await fetchActivitiesByFallback_(
                 ['getPublicActivities', 'getAllActivities', 'getActivities'],
-                { networkId: getActivityListNetwork_(), role: window.userRole || 'user' }
+                { networkId: getActivityListNetwork_(), role: window.userRole || 'user' }, true
             );
+            if (homeActivitiesRequest_ !== request || homeActivitiesScope_() !== scope) return [];
+            window.allActivities = activities;
+            homeActivitiesRenderedScope_ = scope;
             window.renderHomeActivities();
             window.openActivityFromUrlParam();
             return window.allActivities;
         } catch (e) {
-            console.error('活動載入失敗', e);
+            if (homeActivitiesRequest_ !== request || homeActivitiesScope_() !== scope) return [];
             window.allActivities = [];
-            window.renderHomeActivities();
+            homeActivitiesRenderedScope_ = undefined;
+            renderHomeActivityLoadState_(true);
             return [];
-        }
+        } finally {
+            if (homeActivitiesRequest_ === request) homeActivitiesRequest_ = undefined;
+        } })();
+        return request.promise;
     };
 
     function recurringTaskTimeLabel_(task) {
@@ -3111,7 +3149,7 @@ const HomeModule = (function() {
             const promise = Promise.resolve()
                 .then(() => {
                     // Keep the aggregate first; let delayed secondary work yield to input/paint.
-                    if (key === 'subsite-home-fast') return;
+                    if (key === 'subsite-home-fast' || key === 'home-activities') return;
                     return new Promise(resolve => {
                         if (typeof window.requestIdleCallback === 'function') {
                             window.requestIdleCallback(() => resolve(), { timeout: 1000 });
@@ -3228,6 +3266,9 @@ const HomeModule = (function() {
         runHomeBackgroundTask_('subsite-home-fast', force ? 0 : 20, async () => {
             await window.loadSubsiteHomeFastData?.({ force });
         });
+        runHomeBackgroundTask_('home-activities', 100, async () => {
+            await window.loadUserActivities?.();
+        });
 
         runHomeBackgroundTask_('store-settings', 3000, async () => {
             if (typeof window.syncStoreSettingsToHome === 'function') await window.syncStoreSettingsToHome();
@@ -3249,9 +3290,6 @@ const HomeModule = (function() {
             runHomeBackgroundTask_('store-point-panel', 2500, async () => {
                 window.updateStorePointCashierVisibility?.();
             });
-            runHomeBackgroundTask_('activities-for-tenant', 14000, async () => {
-                if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
-            });
             return true;
         }
 
@@ -3259,15 +3297,9 @@ const HomeModule = (function() {
             runHomeBackgroundTask_('admin-sales-assistant', 11000, async () => {
                 if (typeof window.loadHomeSalesAssistant === 'function') await window.loadHomeSalesAssistant();
             });
-            runHomeBackgroundTask_('activities-for-admin', 14000, async () => {
-                if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
-            });
             return true;
         }
 
-        runHomeBackgroundTask_('activities-for-user', 14000, async () => {
-            if (typeof window.loadUserActivities === 'function') await window.loadUserActivities();
-        });
         return true;
     };
 
