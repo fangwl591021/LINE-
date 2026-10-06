@@ -39,6 +39,8 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/ai-advance.test.mjs',
+  'test/ai-advance-ui.test.mjs',
   'test/tutorial-center.test.mjs',
   'test/card-collection-sides.test.mjs',
   'test/card-side-crop.test.mjs',

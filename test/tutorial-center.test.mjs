@@ -8,9 +8,12 @@ const css=readFileSync(new URL('../css/tutorial-center.css',import.meta.url),'ut
 const context=vm.createContext({window:{addEventListener(){}},document:{addEventListener(){}}});
 vm.runInContext(source.replace('  let dialog = null;', '  window.testCourses = courses; window.testMediaBase = mediaBase;\n  let dialog = null;'),context);
 const courses=JSON.parse(JSON.stringify(context.window.testCourses));
-test('four versioned movies with merchant preview accurately labelled, other courses unchanged',()=>{
-  assert.equal(courses.length,4);
-  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant']);
+test('AI advance joins beginner lessons while original four movies remain unchanged',()=>{
+  assert.equal(courses.length,5);
+  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance']);
+  assert.equal(courses[4].file,'ai-advance-tutorial-v1.mp4');
+  assert.equal(courses[4].duration,'4:18');
+  assert.match(courses[4].note,/直接點首頁「AI推進」/);
   assert.equal(courses[3].file,'merchant-tutorial-v3.mp4');
   assert.equal(courses[3].duration,'6:41');
   assert.deepEqual(courses[3].chapters.slice(1,3),[[10.938,'首頁點商城橫幅'],[18.410,'商城點店家設定']]);
@@ -19,7 +22,7 @@ test('four versioned movies with merchant preview accurately labelled, other cou
   assert.match(courses[3].note,/未正式開放/);
   assert.deepEqual(courses.slice(0,3).map(c=>c.file),['registration-v2.mp4','business-card-v2.mp4','card-collection-v2.mp4']);
   assert.equal(context.window.testMediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-05/');
-  assert.match(html,/tutorial-center\.js\?v=3/);
+  assert.match(html,/tutorial-center\.js\?v=4/);
 });
 test('chapters match existing masters and stay within video duration',()=>{
   for(const course of courses.filter(c=>c.file)){

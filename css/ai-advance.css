@@ -1,0 +1,26 @@
+/* Independent, reversible visual layer. Equal-width homepage entries preserve existing help. */
+.home-teaching-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin:12px 0}
+.home-teaching-row .tutorial-entry{margin:0;min-width:0;padding:13px 11px;gap:9px;min-height:92px}
+.home-teaching-row .tutorial-entry-play{width:32px;height:32px;font-size:15px}
+.home-teaching-row .tutorial-entry strong{font-size:16px}.home-teaching-row .tutorial-entry small{font-size:11px}
+.home-teaching-row .ai-teaching-entry{border-color:#d8caff;background:#f5f1ff;color:#65419b}
+.ai-teaching-entry .tutorial-entry-play{background:#7854b5}.ai-teaching-entry small{color:#816b9e}
+.ai-advance-dialog{box-sizing:border-box;width:calc(100% - 20px);max-width:640px;max-height:calc(100dvh - 24px);margin:auto;padding:0;border:1px solid #dfd6ec;border-radius:20px;background:#fff;color:#25334a;overflow:hidden;color-scheme:light}
+.ai-advance-dialog::backdrop{background:#17202e80}.ai-advance-dialog[open]{display:flex;flex-direction:column}.ai-advance-dialog [hidden]{display:none!important}
+.ai-advance-dialog *{box-sizing:border-box}.ai-advance-dialog header{display:flex;align-items:center;gap:6px;flex-shrink:0;padding:12px;border-bottom:1px solid #ece5f5;background:#fff}
+.ai-advance-dialog h2{flex:1;font-size:20px;line-height:1.4;margin:0;color:#463060}.ai-advance-dialog h3{font-size:18px;line-height:1.5;margin:0 0 9px}
+.ai-advance-dialog button{cursor:pointer;font-family:inherit;min-height:44px;border:1px solid #ddd2ed;border-radius:12px;padding:9px 12px;background:#fff;color:#604185;font-size:14px;font-weight:700}
+.ai-advance-dialog button:disabled{opacity:.55;cursor:wait}.ai-advance-dialog button:focus-visible,.ai-advance-dialog input:focus-visible,.ai-advance-dialog select:focus-visible,.ai-advance-dialog textarea:focus-visible{outline:3px solid #9775cf;outline-offset:2px}
+.ai-advance-dialog .aa-primary{background:#7650b1;color:#fff;border-color:#7650b1}.ai-advance-dialog .aa-close{font-size:26px;padding:0;width:44px}
+.aa-body{overflow:auto;min-height:0;overscroll-behavior:contain;padding:16px 16px max(20px,env(safe-area-inset-bottom));scrollbar-gutter:stable}
+.aa-body p{line-height:1.7;margin:0 0 12px}.aa-body ol{padding-left:24px;line-height:1.8}.aa-body small,.aa-muted{color:#687485;font-size:12px;line-height:1.6}
+.aa-body input:not([type=checkbox]),.aa-body textarea,.aa-body select{display:block;width:100%;max-width:100%;margin:7px 0 16px;padding:12px;border:1px solid #cfd8e5;border-radius:12px;background:#fff;color:#23364b;font:inherit;font-size:16px;min-height:46px}
+.aa-body textarea{min-height:112px;resize:vertical}.aa-body label{display:block;font-size:14px;font-weight:700}.aa-body input[type=checkbox]{width:20px;height:20px;vertical-align:middle;accent-color:#7650b1}
+.aa-controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.aa-controls button{flex:1}.aa-notice{padding:11px;border:1px solid #e2d7f1;border-radius:12px;background:#f8f4fd;font-size:13px;color:#54416c}
+.aa-status{flex-shrink:0;line-height:1.5;padding:8px 16px;margin:0;color:#a04421;font-size:13px;overflow-wrap:anywhere}.aa-status:empty{display:none}
+.aa-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:14px 0}.aa-tabs button{font-size:12px;padding:8px 3px;font-weight:400}.aa-tabs strong{display:block;font-size:22px}.aa-tabs [aria-pressed=true]{background:#f0e8fc;border-color:#9370c3}
+.aa-task{display:block;width:100%;text-align:left;margin:10px 0}.aa-task strong{display:block;color:#29364a;font-size:16px;overflow-wrap:anywhere}.aa-task small{display:block;margin-top:5px}.aa-task.aa-overdue{border-left:4px solid #cc6c43}
+.aa-events{list-style:none;padding:0;margin:12px 0}.aa-events li{padding:10px 0;border-bottom:1px solid #ecedf0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7}.aa-events strong,.aa-events small{display:block}
+.aa-description{white-space:pre-wrap;overflow-wrap:anywhere}.aa-suggestion{padding:14px;border:1px solid #d8c4f2;border-radius:14px;background:#f8f4fe;margin:16px 0}
+.aa-guide-video{display:block;width:100%;max-height:54dvh;min-height:160px;background:#17202e;border-radius:12px;margin:12px 0;object-fit:contain}
+@media(max-width:360px){.home-teaching-row{gap:7px}.home-teaching-row .tutorial-entry{gap:6px;padding:11px 8px}.home-teaching-row .tutorial-entry-play{width:27px;height:27px}.home-teaching-row .tutorial-entry>span:last-child{display:none}.home-teaching-row .tutorial-entry strong{font-size:14px}.aa-body{padding:12px}.ai-advance-dialog h2{font-size:18px}}
