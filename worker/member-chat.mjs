@@ -6,6 +6,8 @@ import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from './member-chat-industry.mj
 import { peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat-extras.mjs';
 import { directoryScoresSql, registerDirectoryMatching, directoryMatchState, runDirectoryMatchJobs } from './member-chat-matching.mjs';
 const BASE = '/v1/member-chat';
+// Shared verified membership only; AI navigation does not inherit private-chat feature/card gates.
+export { identity as resolveMemberIdentity, jsonBody as boundedJson };
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const PAGE = 30;

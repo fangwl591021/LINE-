@@ -16,6 +16,7 @@ import { handlePartnerOnboarding } from './worker/partner-onboarding-ai.mjs';
 import { handleStoreConsumptionJournal } from './worker/store-consumption-journal.mjs';
 import { handleMemberChat, processMemberChatNotifications, processMemberDirectoryMatches } from './worker/member-chat.mjs';
 import { handleActivityShortLink } from './worker/activity-short-links.mjs';
+import { handleAiAdvance, processAiAdvanceReminders } from './worker/ai-advance.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -392,6 +393,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const aiAdvanceResponse = await handleAiAdvance(request, env, ctx);
+    if (aiAdvanceResponse) return aiAdvanceResponse;
     const activityLinkResponse = await handleActivityShortLink(request, env);
     if (activityLinkResponse) return activityLinkResponse;
     const memberChatResponse = await handleMemberChat(request, env);
@@ -492,6 +495,9 @@ export default {
 
   async scheduled(controller, env, ctx) {
     if (controller?.cron === '* * * * *') {
+      const advance = processAiAdvanceReminders(env).catch(() => console.error('ai_advance_reminder_cron_failed'));
+      if (ctx?.waitUntil) ctx.waitUntil(advance);
+      else await advance;
       const matching = processMemberDirectoryMatches(env, scoreMemberDirectoryBatch).catch(() => console.error('member_directory_match_cron_failed'));
       if (ctx?.waitUntil) ctx.waitUntil(matching);
       else await matching;
