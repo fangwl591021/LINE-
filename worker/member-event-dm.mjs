@@ -30,7 +30,8 @@ export async function extractMemberEventDm(body,env,db,actor,fetcher=fetch,signa
   // Only fixed categories and numeric metadata may leave this request. Never log raw errors or AI text.
   const diagnostic={message:'member_event_dm_failed',diagnosticCode:'DM-'+crypto.randomUUID().replace(/-/g,'').slice(0,12),stage:'provider_request',reason:'unexpected_error',httpStatus:0,responseStatus:'unknown',incompleteReason:'unknown',providerCode:'unknown',outputTextChars:0,elapsedMs:0};
   try{
-    const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',redirect:'error',signal:AbortSignal.any([AbortSignal.timeout(45000),...(signal?[signal]:[])]),
+    // The deployed Workers runtime rejects redirect:error before network I/O. Manual keeps credentials on this fixed origin; 3xx is rejected below.
+    const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',redirect:'manual',signal:AbortSignal.any([AbortSignal.timeout(45000),...(signal?[signal]:[])]),
       headers:{Authorization:'Bearer '+env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:MEMBER_EVENT_DM_MODEL,reasoning:{effort:'low'},store:false,max_output_tokens:4000,
         instructions:MEMBER_EVENT_DM_INSTRUCTIONS,input:[{role:'user',content:[{type:'input_text',text:'忠實擷取附件活動資料，逐項核對名稱、時段、地點與說明；只產生待確認草稿。'},file]}],text:{format:{type:'json_schema',name:'member_activity_dm',strict:true,schema:MEMBER_EVENT_DM_SCHEMA}}})});
     diagnostic.httpStatus=response.status;
