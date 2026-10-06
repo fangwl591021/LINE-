@@ -9,6 +9,37 @@ vm.runInNewContext(source, context);
 const api = context.window.AdminActivityRegistration;
 const plain = value => JSON.parse(JSON.stringify(value));
 
+function categoryEditor(result={activityId:'A'}) {
+  const nodes=new Map(),calls=[],toasts=[];let closed=0,reloaded=0;
+  const defaults={'edit-a-id':'A','edit-a-name':'同一活動','edit-a-type':'合作商業交流','edit-a-start':'2026-10-07 14:00','edit-a-end':'2026-10-07 17:00','edit-a-price':'200','edit-a-reward':'0','edit-a-nfc-start':'','edit-a-nfc-end':'','edit-a-desc':'原說明','edit-a-image':'https://example.com/dm.jpg','edit-a-image-ratio':'16:9'};
+  const node=id=>{if(!nodes.has(id))nodes.set(id,{value:defaults[id]||'',innerHTML:'儲存變更',disabled:false,events:[],dispatchEvent(e){this.events.push(e);},focus(){}});return nodes.get(id);};
+  const sandbox={document:{getElementById:node},Event,showToast:(...args)=>toasts.push(args),
+    window:{AdminActivityRegistration:{canSaveEditDm:()=>true}},normalizeActivityImageRatioForAdmin_:v=>v,
+    fetchAPI:async(action,payload)=>{calls.push({action,payload});return result;},closeActivityEditModal:()=>closed++,loadActivities:async()=>reloaded++};
+  const start=html.indexOf('    function selectActivityTypeFromMonitor('),end=html.indexOf('    function editActivityFromMonitor(',start);
+  vm.runInNewContext(html.slice(start,end),sandbox);
+  const save=html.indexOf('    async function saveActivityFromMonitor('),saveEnd=html.indexOf('    function safeStringForPrompt_(',save);
+  vm.runInNewContext(html.slice(save,saveEnd),sandbox);
+  return {sandbox,node,calls,toasts,get closed(){return closed;},get reloaded(){return reloaded;}};
+}
+
+test('admin category is selectable or custom; choosing never auto-saves and emits input for DM review',async()=>{
+  assert.match(html,/for="edit-a-type"[^>]*>活動分類/);assert.match(html,/id="edit-a-type"[^>]*maxlength="40"/);
+  for(const label of ['活動','課程','聯誼','其他'])assert.ok(html.includes("selectActivityTypeFromMonitor('"+label+"')"));
+  const f=categoryEditor();f.sandbox.selectActivityTypeFromMonitor('課程');assert.equal(f.node('edit-a-type').value,'課程');
+  assert.equal(f.calls.length,0);assert.equal(f.node('edit-a-type').events[0].type,'input');assert.equal(f.node('edit-a-type').events[0].bubbles,true);
+  f.node('edit-a-type').value='合作商業交流';await f.sandbox.saveActivityFromMonitor();
+  assert.equal(f.calls[0].action,'updateActivity');assert.equal(f.calls[0].payload.activityId,'A');assert.equal(f.calls[0].payload.data['活動類型'],'合作商業交流');
+  assert.equal(f.calls[0].payload.data['宣傳圖'],'https://example.com/dm.jpg');assert.equal(f.closed,1);assert.equal(f.reloaded,1);
+});
+
+test('empty/oversize categories cannot save; failed category save retains editor and does not claim success',async()=>{
+  for(const value of ['', '字'.repeat(41)]){const f=categoryEditor();f.node('edit-a-type').value=value;await f.sandbox.saveActivityFromMonitor();assert.equal(f.calls.length,0);assert.match(f.toasts[0][0],/活動分類/);}
+  const f=categoryEditor({success:false,error:'儲存失敗'});await f.sandbox.saveActivityFromMonitor();
+  assert.equal(f.closed,0);assert.equal(f.reloaded,0);assert.equal(f.node('btn-save-activity').disabled,false);
+  assert.equal(f.toasts[0][0],'儲存失敗');assert.ok(!f.toasts.some(([text])=>text==='活動已更新'));
+});
+
 test('normalizes actual D1 and legacy phone/payment/checkin fields including false', () => {
   const a = api.registrant({rowId:'r','姓名':'甲','手機':'0912345678','簽到':false,checkedIn:true,'付款狀態':'已付款','金額':100});
   assert.equal(a.checked, false); assert.equal(a.paid, true); assert.equal(a.phone, '0912345678');

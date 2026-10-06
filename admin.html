@@ -1801,8 +1801,16 @@
             <input id="edit-a-name" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
           </div>
           <div>
-            <label class="block text-sm font-bold text-slate-500 mb-1.5">活動類型</label>
-            <input id="edit-a-type" type="text" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+            <label for="edit-a-type" class="block text-sm font-bold text-slate-600 mb-1.5">活動分類</label>
+            <input id="edit-a-type" type="text" list="edit-a-type-options" maxlength="40" placeholder="選擇或自行輸入分類" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500">
+            <datalist id="edit-a-type-options"></datalist>
+            <div class="flex flex-wrap gap-2 mt-2" aria-label="常用活動分類">
+              <button type="button" onclick="selectActivityTypeFromMonitor('活動')" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">活動</button>
+              <button type="button" onclick="selectActivityTypeFromMonitor('課程')" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">課程</button>
+              <button type="button" onclick="selectActivityTypeFromMonitor('聯誼')" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">聯誼</button>
+              <button type="button" onclick="selectActivityTypeFromMonitor('其他')" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">其他</button>
+            </div>
+            <p class="mt-2 text-xs text-slate-500">可點常用分類或自行輸入，例如「合作商業交流」；儲存後更新首頁分類標籤。</p>
           </div>
           <div>
             <label class="block text-sm font-bold text-slate-500 mb-1.5">金額</label>
@@ -5039,6 +5047,13 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       }
     }
 
+    function selectActivityTypeFromMonitor(value) {
+      const input = document.getElementById('edit-a-type');
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus({ preventScroll: true });
+    }
+
     function editActivityFromMonitor(encodedActivityId) {
       const activityId = decodeURIComponent(encodedActivityId || "");
       const act = allActivitiesData.find(a => String(a["活動ID"] || a.rowId || "") === activityId);
@@ -5048,6 +5063,13 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       document.getElementById("edit-a-id-label").textContent = activityId;
       document.getElementById("edit-a-name").value = safeStringForPrompt_(act["活動名稱"]);
       document.getElementById("edit-a-type").value = safeStringForPrompt_(act["活動類型"] || "例會");
+      const typeOptions = document.getElementById('edit-a-type-options');
+      typeOptions.replaceChildren();
+      const types = new Set(['活動', '例會', '課程', '聯誼', '其他', ...allActivitiesData.map(a => safeStringForPrompt_(a['活動類型'] || a.activityType || a.type).trim())]);
+      for (const type of types) {
+        if (!type) continue;
+        const option = document.createElement('option');option.value = type;typeOptions.append(option);
+      }
       document.getElementById("edit-a-start").value = safeStringForPrompt_(act["開始時間"]);
       document.getElementById("edit-a-end").value = safeStringForPrompt_(act["結束時間"]);
       document.getElementById("edit-a-price").value = safeStringForPrompt_(act["金額"] || 0);
@@ -5135,6 +5157,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
 
       if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
       if (!nextName) return showToast("請輸入活動名稱", true);
+      if (!nextType || nextType.length > 40) return showToast("請填寫 1–40 字的活動分類", true);
       if ((nextNfcStart && !nextNfcEnd) || (!nextNfcStart && nextNfcEnd)) return showToast("NFC 簽到開始與結束時間需同時填寫", true);
       if (nextNfcStart && nextNfcEnd && nextNfcStart >= nextNfcEnd) return showToast("NFC 簽到結束時間必須晚於開始時間", true);
 
@@ -5166,10 +5189,12 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           }
         });
 
-        if (result) {
+        if (result && result.success !== false && !result.error) {
           showToast("活動已更新");
           closeActivityEditModal();
           await loadActivities();
+        } else {
+          showToast(result?.error || '活動尚未儲存成功，請重試', true);
         }
       } finally {
         if (btn) {
