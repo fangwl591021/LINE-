@@ -1,5 +1,6 @@
 // Draft extraction only; authenticated caller supplies canonical memberId, never a client role.
-import { activityDmImage, normalizeActivityDraft, ACTIVITY_DM_PROMPT } from './activity-dm-ai.mjs';
+import { activityDmImage } from './activity-dm-ai.mjs';
+import { MEMBER_EVENT_DM_MODEL, MEMBER_EVENT_DM_SCHEMA, MEMBER_EVENT_DM_INSTRUCTIONS, normalizeMemberEventDmDraft, memberEventDmOutputText } from './member-event-dm-schema.mjs';
 import { boundedJson } from './member-chat.mjs';
 export const MEMBER_DM_BODY_LIMIT=Math.ceil(4*1024*1024/3)*4+4096;
 const fail=(code,message,status=400)=>{throw Object.assign(new Error(message),{code,status});};
@@ -26,23 +27,45 @@ export async function extractMemberEventDm(body,env,db,actor,fetcher=fetch,signa
     WHERE next_allowed_at<=? AND (usage_day!=excluded.usage_day OR attempts<20)`).bind(actor.memberId,day,now+15000,now).run();
   if(claim.success===false)fail('AI_UNAVAILABLE','活動辨識暫時無法使用',503);
   if(!claim.meta?.changes)fail('DM_LIMIT','辨識請間隔 15 秒，每日最多 20 次；仍可手動填寫',429);
+  // Only fixed categories and numeric metadata may leave this request. Never log raw errors or AI text.
+  const diagnostic={message:'member_event_dm_failed',diagnosticCode:'DM-'+crypto.randomUUID().replace(/-/g,'').slice(0,12),stage:'provider_request',reason:'unexpected_error',httpStatus:0,responseStatus:'unknown',incompleteReason:'unknown',providerCode:'unknown',outputTextChars:0,elapsedMs:0};
   try{
     const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',redirect:'error',signal:AbortSignal.any([AbortSignal.timeout(45000),...(signal?[signal]:[])]),
-      headers:{Authorization:'Bearer '+env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:env.OPENAI_VISION_MODEL||env.OPENAI_MODEL||'gpt-4o',store:false,max_output_tokens:4000,
-        instructions:ACTIVITY_DM_PROMPT,input:[{role:'user',content:[{type:'input_text',text:'忠實擷取附件活動資料，逐項核對名稱、時段、地點與說明；只產生待確認草稿。'},file]}],text:{format:{type:'json_object'}}})});
-    if(!response.ok){await response.body?.cancel();fail('AI_UNAVAILABLE','AI 辨識服務暫時無法使用，原表單未變更',503);}
+      headers:{Authorization:'Bearer '+env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:MEMBER_EVENT_DM_MODEL,reasoning:{effort:'low'},store:false,max_output_tokens:4000,
+        instructions:MEMBER_EVENT_DM_INSTRUCTIONS,input:[{role:'user',content:[{type:'input_text',text:'忠實擷取附件活動資料，逐項核對名稱、時段、地點與說明；只產生待確認草稿。'},file]}],text:{format:{type:'json_schema',name:'member_activity_dm',strict:true,schema:MEMBER_EVENT_DM_SCHEMA}}})});
+    diagnostic.httpStatus=response.status;
+    if(!response.ok){
+      diagnostic.stage='provider_http';diagnostic.reason='provider_http_error';
+      const errorBody=await boundedJson(response,8192).catch(()=>null),code=errorBody?.error?.code;
+      if(['invalid_api_key','insufficient_quota','rate_limit_exceeded','model_not_found','invalid_request_error','unsupported_parameter','invalid_image','invalid_image_format','invalid_image_url','server_error'].includes(code))diagnostic.providerCode=code;
+      fail('AI_UNAVAILABLE','AI 辨識服務暫時無法使用，原表單未變更',503);
+    }
+    diagnostic.stage='provider_json';
     const result=await boundedJson(response,128000);
-    if(result.status&&result.status!=='completed')throw Error('Incomplete AI');
-    const value=(result.output||[]).flatMap(r=>r.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('');
-    if(!value||value.length>30000)throw Error('Invalid AI');
-    const draft=normalizeActivityDraft(JSON.parse(value));
+    diagnostic.responseStatus=['completed','incomplete','failed','in_progress','queued','cancelled'].includes(result.status)?result.status:'unknown';
+    if(['max_output_tokens','content_filter'].includes(result.incomplete_details?.reason))diagnostic.incompleteReason=result.incomplete_details.reason;
+    diagnostic.stage='provider_status';
+    if(result.status&&result.status!=='completed'){diagnostic.reason='incomplete_response';throw Error('Incomplete AI');}
+    diagnostic.stage='output_text';
+    const value=memberEventDmOutputText(result);
+    diagnostic.outputTextChars=value.length;
+    if(!value||value.length>30000){diagnostic.reason=!value?'missing_output_text':'output_too_large';throw Error('Invalid AI');}
+    diagnostic.stage='draft_json';const parsed=JSON.parse(value);
+    diagnostic.stage='normalize_draft';const draft=normalizeMemberEventDmDraft(parsed);
     if(draft.timeStatus==='multiple')draft.confidenceNote=draft.confidenceNote.replace('DM 有多個場次，請依時間原文勾選本次要建立的梯次，並補齊日期、時間與費用','DM 有多個時段，本次會員活動請單選一個時段，其他時段不會另建活動');
-    if(!draft.activityName||!(draft.location||draft.description||draft.scheduleText))fail('DM_UNCLEAR','未辨識到活動資料，請换清楚的檔案或手動填寫',422);
+    diagnostic.stage='core_fields';
+    if(!draft.activityName||!(draft.location||draft.description||draft.scheduleText)){diagnostic.reason='missing_core_fields';fail('DM_UNCLEAR','未辨識到活動資料，請换清楚的檔案或手動填寫',422);}
     // Same existing field limits; do not silently truncate material that the host must verify.
     if(draft.activityName.length>100||draft.description.length>2000)draft.confidenceNote+='；内容超出活動欄位限制，請手動精簡後發布';
     return {success:true,draft};
   }catch(e){
-    if(e.code&&['DM_UNCLEAR','AI_UNAVAILABLE'].includes(e.code))throw e;
-    fail('DM_FAILED',['AbortError','TimeoutError'].includes(e.name)?'辨識逾時或已取消，原表單未變更':'AI 未能完成辨識，原表單未變更；可重新辨識或手動填寫',503);
+    const aborted=['AbortError','TimeoutError'].includes(e.name);
+    if(aborted)diagnostic.reason='timeout_or_cancelled';
+    else if(diagnostic.reason==='unexpected_error')diagnostic.reason=diagnostic.stage==='provider_request'?'network_or_request_failure':diagnostic.stage==='provider_json'?(e.code==='BODY_TOO_LARGE'?'response_too_large':'invalid_provider_json'):diagnostic.stage==='draft_json'?'invalid_draft_json':diagnostic.stage==='normalize_draft'?'invalid_draft_schema':'unexpected_error';
+    diagnostic.elapsedMs=Math.max(0,Date.now()-now);
+    try{console.error(JSON.stringify(diagnostic));}catch{} // Diagnostics must never mask the original failure.
+    const suffix='（診斷碼：'+diagnostic.diagnosticCode+'）';
+    if(e.code&&['DM_UNCLEAR','AI_UNAVAILABLE'].includes(e.code)){e.message+=suffix;throw e;}
+    fail('DM_FAILED',(aborted?'辨識逾時或已取消，原表單未變更':'AI 未能完成辨識，原表單未變更；可重新辨識或手動填寫')+suffix,503);
   }
 }
