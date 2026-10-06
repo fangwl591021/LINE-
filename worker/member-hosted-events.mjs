@@ -1,5 +1,6 @@
 // Semantic port of VEO member-events. One authoritative event; no private task/course/point writes.
 import { resolveMemberIdentity, boundedJson } from './member-chat.mjs';
+import { extractMemberEventDm, MEMBER_DM_BODY_LIMIT } from './member-event-dm.mjs';
 const BASE='/v1/member-events';
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
@@ -99,6 +100,7 @@ export async function handleMemberEvents(request,env,fetcher=fetch){
     if(String(env.MEMBER_EVENTS_DISABLED)==='1')fail('FEATURE_DISABLED','會員辦活動暫未開放',503);
     if(!['GET','POST'].includes(request.method))fail('METHOD_NOT_ALLOWED','不支援的操作',405);
     const db=env.ACTMASTER_DB.withSession?env.ACTMASTER_DB.withSession('first-primary'):env.ACTMASTER_DB,actor=await actorFor(request,db,fetcher),path=url.pathname.slice(BASE.length);
+    if(request.method==='POST'&&path==='/dm-draft')return reply(await extractMemberEventDm(await boundedJson(request,MEMBER_DM_BODY_LIMIT),env,db,actor,fetcher,request.signal));
     if(request.method==='GET'&&path==='/overview')return reply({success:true,...await overview(db,actor)});
     if(request.method==='GET'&&path==='/eligibility'){
       const active=await stmt(db,"SELECT id FROM member_hosted_events WHERE owner_id=? AND status='active' AND julianday(ends_at)>julianday('now') LIMIT 1",actor.memberId).first();

@@ -41,6 +41,7 @@ const foundationChecks = [
 const fullChecks = [
   'test/member-hosted-events.test.mjs',
   'test/member-hosted-events-ui.test.mjs',
+  'test/member-event-dm.test.mjs',
   'test/ai-advance.test.mjs',
   'test/ai-advance-ui.test.mjs',
   'test/tutorial-center.test.mjs',
