@@ -2523,7 +2523,8 @@ const HomeModule = (function() {
         { key: 'company', label: '公司', color: 'emerald', types: ['followup', 'visit'] },
         { key: 'uncategorized', label: '未分類', color: 'rose', types: ['todo'] },
         { key: 'birthday', label: '生日', color: 'amber', types: ['event'] },
-        { key: 'work', label: '工作', color: 'blue', types: ['payment'] }
+        { key: 'work', label: '工作', color: 'blue', types: ['payment'] },
+        { key: 'member-events', label: '會員活動', color: 'emerald', types: ['hosted'] }
     ];
     function agendaFilteredRows_(rows) {
         const active = window.personalAgendaActiveLabels || AGENDA_LABELS_.map(item => item.key);
@@ -2585,6 +2586,7 @@ const HomeModule = (function() {
         }
         list.innerHTML = `<div class="px-4 pt-4 text-[12px] font-black text-slate-500">${selectedKey} 的行程</div>` + selectedRows.map(task => {
             const index = (window.personalAgendaTasks || sourceRows).indexOf(task);
+            if (task.memberHosted) return `<div class="p-4 border-b border-slate-100"><div class="text-[15px] font-black text-slate-800">${window.escapeHTML(task.title)}</div><p class="text-[13px] text-slate-500">${window.escapeHTML(formatAgendaTime_(task.startTime))} · 會員活動</p><button type="button" onclick="window.openMemberEvents('catalog','${task.taskId}')" class="px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 font-bold">活動詳情／報名紀錄</button></div>`;
             const recurring = ['daily', 'weekly'].includes(String(task.recurrenceType || ''));
             const done = recurring ? task.currentOccurrenceDone === true : String(task.status || '') === 'done';
             const recurrenceLabel = task.recurrenceType === 'daily' ? '每日' : task.recurrenceType === 'weekly' ? '每週' : '';
@@ -2605,12 +2607,19 @@ const HomeModule = (function() {
     };
     window.loadPersonalAgenda = async function() {
         ensurePersonalAgendaPanel_();
+        window.attachMemberHostedAgenda?.();
+        const loadSequence = window.personalAgendaLoadSequence = (window.personalAgendaLoadSequence || 0) + 1;
+        const loadOwner = window.currentUserProfile?.userId;
         const list = document.getElementById('personal-agenda-list');
         if (!list) return [];
         list.innerHTML = '<div class="py-8 text-center text-slate-400 text-sm font-bold">載入跟進提醒中...</div>';
         try {
-            const tasks = await window.fetchAPI('listPersonalTasks', {}, true);
-            const rows = Array.isArray(tasks) ? tasks : [];
+            const [tasks, hosted] = await Promise.all([
+                window.fetchAPI('listPersonalTasks', {}, true),
+                window.loadMemberHostedAgenda?.().catch(e => { window.showToast(e.message || '會員活動載入失敗', true); return []; }) || []
+            ]);
+            const rows = [...(Array.isArray(tasks) ? tasks : []), ...(Array.isArray(hosted) ? hosted : [])];
+            if (loadSequence !== window.personalAgendaLoadSequence || loadOwner !== window.currentUserProfile?.userId) return [];
             window.personalAgendaTasks = rows;
             if (!window.personalAgendaSelectedDate) window.personalAgendaSelectedDate = agendaDateKey_(new Date());
             if (!(window.personalAgendaMonth instanceof Date)) window.personalAgendaMonth = new Date();
@@ -2708,6 +2717,10 @@ const HomeModule = (function() {
         window.personalAgendaRecordTimer = setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, 15000);
     };
     window.savePersonalAgendaTask = async function(btn) {
+        if (document.getElementById('agenda-host-activity')?.checked) {
+            window.reviewMemberHostedAgenda?.();
+            return;
+        }
         const title = String(document.getElementById('agenda-title')?.value || '').trim();
         if (!title) return window.showToast('請輸入提醒標題', true);
         const startTime = String(document.getElementById('agenda-start')?.value || '').trim();
