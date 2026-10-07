@@ -2078,7 +2078,8 @@ const HomeModule = (function() {
             .slice()
             .reverse();
         
-        const types = Array.from(new Set(allActiveActs.map(a => String(a.activityType || a.type || a['活動類型'] || '活動').trim()).filter(Boolean)));
+        const memberEvents = window.getHomeMemberEvents?.() || [];
+        const types = Array.from(new Set([...allActiveActs.map(a => String(a.activityType || a.type || a['活動類型'] || '活動').trim()), ...memberEvents.map(e => e.category || '活動')].filter(Boolean)));
         renderHomeActivityFilters_(types);
 
         const activeActs = window.homeActivityFilter === '全部'
@@ -2086,12 +2087,6 @@ const HomeModule = (function() {
             : allActiveActs.filter(a => String(a.activityType || a.type || a['活動類型'] || '活動').trim() === window.homeActivityFilter);
 
         list.className = 'grid grid-cols-2 gap-3';
-
-        if (activeActs.length === 0) {
-            list.className = 'space-y-4';
-            list.innerHTML = '<p class="text-center text-slate-400 py-8 text-sm">目前暫無開放中的活動</p>';
-            return;
-        }
 
         list.innerHTML = activeActs.map(a => {
             const actId = window.escapeJS(getPublicActivityId_(a));
@@ -2125,6 +2120,12 @@ const HomeModule = (function() {
                     </div>
                 </div>`;
         }).join('');
+        if (homeActivitiesLoadState_ !== 'ready') list.insertAdjacentHTML('beforeend', `<div class="col-span-2">${homeActivityLoadMarkup_(homeActivitiesLoadState_ === 'failed')}</div>`);
+        const memberCount = window.renderHomeMemberEvents?.(list, window.homeActivityFilter) || 0;
+        if (!activeActs.length && !memberCount && homeActivitiesLoadState_ === 'ready') {
+            list.className = 'space-y-4';
+            list.innerHTML = '<p class="text-center text-slate-400 py-8 text-sm">目前暫無開放中的活動</p>';
+        }
     };
 
     function normalizeActivityList_(res) {
@@ -2267,6 +2268,7 @@ const HomeModule = (function() {
 
     let homeActivitiesRequest_;
     let homeActivitiesRenderedScope_;
+    let homeActivitiesLoadState_ = 'loading';
     function homeActivitiesScope_() {
         return JSON.stringify([
             window.currentUserProfile?.userId || window.currentUser?.userId || '',
@@ -2274,16 +2276,22 @@ const HomeModule = (function() {
             window.userRole || 'user', getActivityListNetwork_()
         ]);
     }
-    function renderHomeActivityLoadState_(failed = false) {
-        const list = document.getElementById('user-activities-list');
-        if (!list) return;
-        document.getElementById('home-activity-filters')?.remove();
-        list.className = 'space-y-4';
-        list.innerHTML = failed
+    function homeActivityLoadMarkup_(failed) {
+        return failed
             ? '<div class="text-center py-6 text-sm"><p role="status">活動載入失敗，請重試</p><button type="button" onclick="window.loadUserActivities()" class="mt-3 rounded-xl border border-emerald-200 bg-white px-5 py-2 text-emerald-700">重新載入活動</button></div>'
             : '<p role="status" class="text-center text-slate-500 py-6 text-sm">活動載入中…</p>';
     }
+    function renderHomeActivityLoadState_(failed = false) {
+        homeActivitiesLoadState_ = failed ? 'failed' : 'loading';
+        const list = document.getElementById('user-activities-list');
+        if (!list) return;
+        if (window.renderHomeMemberEvents) { window.renderHomeActivities(); return; }
+        document.getElementById('home-activity-filters')?.remove();
+        list.className = 'space-y-4';
+        list.innerHTML = homeActivityLoadMarkup_(failed);
+    }
     window.loadUserActivities = async function() {
+        void window.loadHomeMemberEvents?.();
         const scope = homeActivitiesScope_();
         if (homeActivitiesRequest_?.scope === scope) return homeActivitiesRequest_.promise;
         if (typeof window.refreshHomeProfileCard === 'function') window.refreshHomeProfileCard();
@@ -2301,6 +2309,7 @@ const HomeModule = (function() {
             if (homeActivitiesRequest_ !== request || homeActivitiesScope_() !== scope) return [];
             window.allActivities = activities;
             homeActivitiesRenderedScope_ = scope;
+            homeActivitiesLoadState_ = 'ready';
             window.renderHomeActivities();
             window.openActivityFromUrlParam();
             return window.allActivities;
