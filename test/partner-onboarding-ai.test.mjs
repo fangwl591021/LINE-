@@ -118,6 +118,15 @@ test('revalidates every redirect DNS and supports safe HTTPS redirect',async()=>
   await assert.rejects(readWebsite('https://www.merchant.com',mock(true)),/公開網站/);assert.equal(pageReads,1);
   pageReads=0;const page=await readWebsite('https://www.merchant.com',mock(false));assert.equal(page.url,'https://second.com/');assert.equal(pageReads,2);
 });
+test('DNS uses Workers-compatible manual and rejects resolver redirects before visiting any page',async()=>{
+  let calls=0;
+  await assert.rejects(readWebsite('https://www.merchant.com',async(url,options)=>{
+    calls++;assert.match(url,/^https:\/\/cloudflare-dns\.com\/dns-query\?/);
+    assert.equal(options.redirect,'manual');assert.equal(options.headers.Authorization,undefined);
+    return new Response('',{status:302,headers:{Location:'https://127.0.0.1/'}});
+  }),/無法確認官網/);
+  assert.equal(calls,1);
+});
 test('private source with blank scanner matches existing save rules and claimed self cards remain excluded',async t=>{
   const f=fixture(t);f.card('mine',{scanner_user_id:'',creator_id:ADMIN,owner_user_id:OTHER});f.card('not-mine',{scanner_user_id:OTHER,creator_id:ADMIN});f.card('claimed',{source_type:'self_profile',scanner_user_id:ADMIN,owner_user_id:OTHER});
   const page=await searchSourceCards(f.db,ADMIN);assert.deepEqual(page.cards.map(c=>c.rowId),['mine']);

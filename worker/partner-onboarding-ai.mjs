@@ -65,7 +65,8 @@ export function publicIp(ip){
 async function verifyPublicDns(host,fetcher,signal){
   const records=[];
   for(const type of ['A','AAAA']){
-    const response=await fetcher('https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(host)+'&type='+type,{headers:{Accept:'application/dns-json'},redirect:'error',signal});
+    // Same Workers-compatible no-follow policy as the protected page fetch. DNS redirects fail the non-success check below.
+    const response=await fetcher('https://cloudflare-dns.com/dns-query?name='+encodeURIComponent(host)+'&type='+type,{headers:{Accept:'application/dns-json'},redirect:'manual',signal});
     if(!response.ok){await response.body?.cancel();fail('無法確認官網位址，請改上傳名片或 DM',422);}
     const data=JSON.parse(await boundedText(response,32768));
     if(data.Status!==0)fail('官網 DNS 無法解析，請確認網址',422);
