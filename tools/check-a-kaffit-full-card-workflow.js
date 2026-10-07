@@ -56,11 +56,12 @@ ok(worker.includes("request.method === 'OPTIONS'"), 'cross-origin preflight is h
 ok(worker.includes('X-Card-File-Size, X-Card-Side, X-Card-Purpose'), 'A-kaffit image-job headers allowed by CORS');
 ok(adapter.includes('id="ak-scan-error" role="alert" aria-live="assertive"'), 'OCR errors remain visible above the scan actions');
 ok(adapter.includes('useOriginalImage=localization.incomplete'), 'incomplete localization does not discard successful OCR');
-ok(adapter.includes('const cropFile=(useOriginalImage?null:await cropByVisionLocalization(front,localization))||front'), 'already-cropped cards retain the complete image when edges are uncertain');
+ok(adapter.includes('const automaticCrop=useOriginalImage?null:await tryReviewCrop(front,localization)') && adapter.includes('const cropFile=automaticCrop||front'), 'uncertain edges retain the complete source for explicit review');
+ok(adapter.includes("mode:'needs_adjustment'") && adapter.includes("const unresolved=['front','back'].find"), 'failed crop cannot save via only a completeness checkbox');
 ok(!adapter.includes("throw new Error('名片未完整入鏡'"), 'uncertain card edges are no longer a fatal OCR error');
 ok(adapter.includes("['社群LINE','LINE 網址']")&&adapter.includes("['社群Instagram','Instagram 網址']")&&adapter.includes("['社群Facebook','Facebook 網址']"), 'LINE Instagram and Facebook use separate review fields');
 ok(adapter.includes("if(social)card['社群帳號']=social"), 'separate social review fields retain the existing structured storage contract');
-ok(html.includes('a-kaffit-card-scanner-adapter.js?v=4.1'), 'full workflow adapter cache-bust is active');
+ok(html.includes('a-kaffit-card-scanner-adapter.js?v=4.2'), 'full workflow adapter cache-bust is active');
 
 ok(legacy.includes('boundingBox 必須只包住真實名片，不可包入桌面、手掌、鍵盤或其他背景'), 'OCR prompt matches A-kaffit background exclusion rule');
 ok(legacy.includes('incomplete=true') && legacy.includes('clippedEdges'), 'OCR prompt preserves incomplete-card contract');
