@@ -27,10 +27,17 @@ function readActmasterInitialParams() {
 
   if (state) {
     try {
-      const stateText = decodeURIComponent(state);
-      const queryText = stateText.includes('?')
-        ? stateText.split('?').slice(1).join('?')
-        : stateText.replace(/^\?/, '');
+      // URLSearchParams already decoded the outer state. Only unwrap a legacy
+      // fully encoded route; decoding normal values again would leak & into keys.
+      let stateText = state;
+      if (!/[?=]/.test(stateText) && /%(?:3f|3d)/i.test(stateText)) {
+        stateText = decodeURIComponent(stateText);
+      }
+      const queryStart = stateText.indexOf('?');
+      const valueStart = stateText.indexOf('=');
+      const queryText = (queryStart >= 0 && (valueStart < 0 || queryStart < valueStart)
+        ? stateText.slice(queryStart + 1)
+        : stateText).split('#')[0];
       const stateParams = new URLSearchParams(queryText);
       stateParams.forEach((value, key) => {
         if (!params.has(key)) params.set(key, value);

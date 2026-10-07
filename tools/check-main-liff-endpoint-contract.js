@@ -28,7 +28,7 @@ ok(config.includes('window.liff.requestFriendship()'), 'main app preserves the b
 ok(config.includes('window.ensureActmasterPointFriendship'), 'main app exposes the friendship startup guard');
 ok(auth.includes('await window.ensureActmasterPointFriendship({ initialCheck: friendshipRead })'), 'authenticated main startup still awaits friendship verification after the overlapped read');
 ok(config.includes("url.searchParams.set('point_friend', '1')"), 'successful recheck preserves the existing point_friend contract');
-ok(/js\/config\.js\?v=9\.16/.test(html), 'main endpoint configuration is cache-busted');
+ok(/js\/config\.js\?v=9\.17/.test(html), 'main endpoint configuration is cache-busted');
 ok(html.includes('#home-ai-assistant{display:none!important}'), 'floating assistant is hidden, including cached module versions');
 ok(!html.includes('<link rel="preload" as="image" href="assets/ai-home-assistant.png'), 'hidden assistant does not preload its image');
 ok(home.includes('const HOME_AI_ASSISTANT_VISIBLE = false;'), 'assistant starts disabled');
