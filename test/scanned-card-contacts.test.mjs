@@ -97,3 +97,19 @@ test('local LINE share includes all six contacts and respects empty buttons', ()
   assert.equal(flex.footer.contents.length, 6);
   assert.equal(ctx.buildLocalECardFlexMessage(card, { ...cfg, buttons: [] }, 'https://example.com/card').footer, undefined);
 });
+
+test('collected WYSIWYG shows the complete photo; personal layouts and videos retain their ratio',()=>{
+  const ctx=runtime(),preview={innerHTML:'',insertAdjacentHTML(){}};
+  ctx.document.getElementById=id=>id==='my-card-wysiwyg-preview'?preview:null;
+  const expose='\nwindow.testImagePreview={render:renderMyCardWysiwyg,seed:(cfg,record)=>{wysiwygState={cfg,recordMode:record};currentCardData={姓名:"測試"};}};renderMyCardCopyUrlPanelHtml=()=>"";initMyCardSocialLikeWidget=()=>{};\n';
+  vm.runInContext(mycard.replace(/\}\)\(\);\s*$/,expose+'})();'),ctx);
+  const cfg={layoutStyle:'landscape',imgUrl:'https://example.com/portrait.jpg',buttons:[]};
+  const api=ctx.window.testImagePreview;
+  for(const layoutStyle of ['landscape','portrait','square']){
+    api.seed({...cfg,layoutStyle},true);api.render();
+    const image=preview.innerHTML.match(/<img[^>]+>/)[0];
+    assert.match(image,/height:auto;object-fit:contain/);assert.doesNotMatch(image,/aspect-ratio|object-cover/);
+  }
+  api.seed(cfg,false);api.render();assert.match(preview.innerHTML,/object-fit:cover;aspect-ratio:20\/13/);
+  api.seed({...cfg,cardType:'video',videoUrl:'https://example.com/video.mp4'},true);api.render();assert.match(preview.innerHTML,/<video[^>]+object-cover[^>]+aspect-ratio/);
+});

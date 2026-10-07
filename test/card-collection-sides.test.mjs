@@ -115,6 +115,68 @@ test('failed localization keeps each complete source for review, not a missing b
   await h.ctx.runOcrAndReview();
   assert.equal(state.cropFile,frontFile);assert.equal(state.backCrop,backFile);
   assert.deepEqual(plain(state.cropConfirmed),{front:false,back:false});
+  assert.equal(state.cropReview.front.mode,'needs_adjustment');
+  assert.equal(state.cropReview.back.mode,'needs_adjustment');
+});
+
+test('crop failure stays blocked even if a completeness checkbox was forced true',async()=>{
+  for(const side of ['front','back']){
+    const h=runtime();h.state({actorId:'ACTOR',savedFrontUrl:front,backCrop:{},cropConfirmed:{front:true,back:true},cropReview:{[side]:{mode:'needs_adjustment',reason:'外框不可靠'}}});
+    const modal=h.modal();await h.ctx.saveReviewedCard(modal);
+    assert.equal(h.calls.length,0);assert.match(modal.error.textContent,/請先調整.*裁切/);
+    assert.match(h.ctx.sideReviewControls(side,false),/disabled/);
+  }
+});
+
+test('manual crop or explicit original choice records how the image was accepted',async()=>{
+  for(const mode of ['auto','manual','original']){
+    const h=runtime();h.state({actorId:'ACTOR',newRowId:'MODES',savedFrontUrl:front,cropConfirmed:{front:true,back:true},cropReview:{front:{mode}}});
+    await h.ctx.saveReviewedCard(h.modal());
+    const cfg=JSON.parse(h.calls[0].payload['自訂名片設定']);
+    assert.deepEqual(cfg.collectionImageReview.front,{mode,confirmed:true});
+  }
+});
+
+test('original image is an explicit confirmed choice, not the completeness checkbox',()=>{
+  const h=runtime(),state=h.state({actorId:'ACTOR',cropReview:{front:{mode:'needs_adjustment'}},cropConfirmed:{front:false}});
+  const checkbox={checked:true},original={},modal={querySelector:sel=>sel==='#ak-confirm-front'?checkbox:sel==='#ak-original-front'?original:null};
+  h.ctx.wireSideReviewControls(state,'front',modal);
+  checkbox.onchange();assert.equal(state.cropConfirmed.front,false);
+  h.ctx.window.confirm=()=>false;original.onclick();assert.equal(state.cropReview.front.mode,'needs_adjustment');
+  h.ctx.window.confirm=()=>true;original.onclick();assert.equal(state.cropReview.front.mode,'original');assert.equal(state.cropConfirmed.front,true);
+  assert.match(h.ctx.sideReviewControls('front',false),/不是自動裁切結果/);
+});
+
+test('cancelled crop keeps unresolved status and contact edits; correcting front cannot unlock back',async()=>{
+  const h=runtime(),state=h.state({actorId:'ACTOR',processedFile:{front:true},cropConfirmed:{front:false,back:false},cropReview:{front:{mode:'needs_adjustment'},back:{mode:'needs_adjustment'}}});
+  const modal=h.modal({姓名:'人工核對姓名'}),view={},checkbox={checked:false};
+  const query=modal.querySelector;modal.querySelector=sel=>sel==='#ak-front-review'?view:sel==='#ak-confirm-front'?checkbox:query(sel);
+  h.ctx.editCardSideImage=async()=>null;await h.ctx.adjustReviewSide(state,'front',modal);
+  assert.equal(state.cropReview.front.mode,'needs_adjustment');assert.equal(state.cropConfirmed.front,false);assert.equal(h.calls.length,0);
+  h.ctx.URL.createObjectURL=()=>front;
+  const cropped={corrected:true};h.ctx.editCardSideImage=async()=>cropped;await h.ctx.adjustReviewSide(state,'front',modal);
+  assert.equal(state.cropFile,cropped);assert.equal(state.cropReview.front.mode,'manual');assert.equal(state.cropConfirmed.front,true);
+  assert.equal(state.cropReview.back.mode,'needs_adjustment');assert.equal(state.cropConfirmed.back,false);
+  await h.ctx.saveReviewedCard(modal);assert.equal(h.calls.length,0);assert.match(modal.error.textContent,/背面裁切/);
+});
+
+test('auto/manual review statuses are independent and failed face stays disabled after busy ends',()=>{
+  const h=runtime();
+  assert.equal(h.ctx.reviewCropStatus({detected:true},{}).mode,'auto');
+  assert.match(h.ctx.reviewCropStatus({detected:true,incomplete:true},null).reason,/未完整入鏡/);
+  assert.match(h.ctx.reviewCropStatus({detected:true,cropConfidence:.3},null).reason,/信心不足/);
+  const pending={},normal={};h.ctx.setScanBusy({querySelectorAll:sel=>sel.includes('data-crop-status')?[pending]:[pending,normal]},false);
+  assert.equal(pending.disabled,true);assert.equal(normal.disabled,false);
+});
+
+test('canvas crop failure retains successful OCR and uncut source without retrying AI',async()=>{
+  const h=runtime(),file={source:true},state=h.state({actorId:'ACTOR',processedFile:file});
+  let reviewed=false;h.ctx.showReview=()=>{reviewed=true;};
+  h.ctx.window.fetchAPI=async(a,p)=>{h.calls.push({action:a});return {displayName:'文字辨識已完成',cardLocalization:{detected:true,incomplete:false,cropConfidence:.9}};};
+  h.ctx.cropByVisionLocalization=async()=>{throw Error('canvas decoder failed');};
+  await h.ctx.runOcrAndReview();
+  assert.equal(reviewed,true);assert.equal(state.cropFile,file);assert.equal(state.ocr.displayName,'文字辨識已完成');
+  assert.equal(state.cropReview.front.mode,'needs_adjustment');assert.deepEqual(h.calls.map(x=>x.action),['recognizeCardWithGPT4o']);
 });
 test('image-only repair updates same ID with no OCR/contact or identity edits; cancellation writes nothing',async()=>{
   for(const cancel of [false,true]){
