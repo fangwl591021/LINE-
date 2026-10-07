@@ -39,6 +39,8 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/store-ai-draft.test.mjs',
+  'test/store-ai-draft-ui.test.mjs',
   'test/member-hosted-events.test.mjs',
   'test/member-hosted-events-ui.test.mjs',
   'test/home-activities-loading.test.mjs',
