@@ -1,6 +1,7 @@
 // Catalog and read-only sales. No point writes or cashier execution calls.
 import {readShopSales} from './store-shop-sales.mjs';
 import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
+import {generateStoreDraft,StoreDraftError} from './store-ai-draft.mjs';
 import {publicPartnerShops} from './store-partner-catalog.mjs';
 import {catalogOrder,CatalogOrderError} from './store-catalog-order.mjs';
 const roles = ['store','店長','admin','總管','user','用戶'];
@@ -107,8 +108,13 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     const writeStore=request.method==='POST'&&url.pathname==='/v1/store-shop/store';
     const writeProduct=request.method==='POST'&&url.pathname==='/v1/store-shop/product';
     const recognizeDm=request.method==='POST'&&url.pathname==='/v1/store-shop/product-ocr';
-    if(!manage&&!sales&&!writeStore&&!writeProduct&&!recognizeDm) fail('不支援此商城操作',404);
+    const storeDraft=request.method==='POST'&&url.pathname==='/v1/store-shop/store-ai-draft';
+    if(!manage&&!sales&&!writeStore&&!writeProduct&&!recognizeDm&&!storeDraft) fail('不支援此商城操作',404);
     const {uid,limit}=await actor(request,db,fetcher);
+    if(storeDraft){
+      if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))fail('請使用 JSON 草稿資料',415);
+      return reply(await generateStoreDraft(await readJson(request,4096),env,uid,fetcher));
+    }
     const shop=await own(db,uid);
     if(recognizeDm){
       if(!shop)fail('請先儲存店面，再辨識 DM',400);
@@ -162,7 +168,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     }
     return reply(await management(db,shop,limit));
   } catch(error) {
-    if(error instanceof ShopError||error instanceof ProductDmError||error instanceof CatalogOrderError) return reply({success:false,error:error.message},error.status);
+    if(error instanceof ShopError||error instanceof ProductDmError||error instanceof CatalogOrderError||error instanceof StoreDraftError) return reply({success:false,error:error.message},error.status);
     const missing=/no such table/.test(String(error?.message));
     console.error(JSON.stringify({event:'store_shop_failed',path:url.pathname,code:missing?'SCHEMA_NOT_READY':'UNAVAILABLE'}));
     return reply({success:false,error:missing?'商城尚未啟用，請管理員完成資料庫更新':'商城服務暫時無法使用，請稍後重試'},503);

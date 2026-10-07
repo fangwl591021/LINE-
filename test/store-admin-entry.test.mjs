@@ -23,7 +23,7 @@ test('settings entry follows admin-only permissions and hides after switching to
 test('cache versions and private entry are wired without eager directory loading',()=>{
   const entry=read('js/modules/store-shop-entry.js'),publicPage=read('store-shop.html');
   assert.match(html,/core\.js\?v=7\.36/);assert.match(html,/store-shop-entry\.js\?v=49/);
-  for(const source of [entry,publicPage]){assert.match(source,/store-shop\.css\?v=27/);assert.match(source,/store-shop\.js\?v=47/);}
+  for(const source of [entry,publicPage]){assert.match(source,/store-shop\.css\?v=28/);assert.match(source,/store-shop\.js\?v=48/);}
   assert.match(front,/const canAdmin=\(\)=>!standalone/);
   assert.match(front,/case 'admin-stores': await adminStores\(\); break;/);
   assert.match(front,/!standalone&&section==='admin-stores'/);

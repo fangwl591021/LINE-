@@ -310,6 +310,11 @@
       content.insertAdjacentHTML('beforeend',moreButton(productNext,true));
       if(shop&&!standalone) content.insertAdjacentHTML('afterbegin',`<button type="button" data-do="share-store" ${shop.status!=='active'?'disabled':''}>商城邀請 QR／網址</button>`);
       if(canAdmin())content.insertAdjacentHTML('afterbegin','<button type="button" data-do="admin-stores">管理員・店家列表</button>');
+      const storeName=content.querySelector('[data-form="store"] [name="name"]').closest('label');
+      const nameRow=document.createElement('div');nameRow.className='shop-store-name-row';
+      storeName.before(nameRow);nameRow.append(storeName);
+      nameRow.insertAdjacentHTML('beforeend','<button type="button" data-do="store-ai-draft">✨ AI 產生店家草稿</button>');
+      nameRow.insertAdjacentHTML('afterend','<p class="shop-meta">輸入公司／店家名稱，AI 查公開資訊；先預覽、勾選帶入，核對後再儲存。</p><div data-store-ai-draft></div>');
       content.querySelector('[data-form="store"] .shop-image-field>p')?.insertAdjacentHTML('afterend','<p class="shop-meta" data-shop-cover-guide>建議尺寸：800 × 533 px（約 3:2 橫式）。前台依版位滿版置中裁切，重要文字與主體請置中並預留四周邊界；上傳原圖仍完整保留。</p>');
       addProductTags();
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
@@ -438,6 +443,13 @@
             break;
           case 'view': await view(button.dataset.id); break;
           case 'manage': await manage(); break;
+          case 'store-ai-draft': {
+            const form=button.closest('[data-form="store"]'),version=epoch,owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.(),role=window.userRole;
+            const isCurrent=()=>version===epoch&&root.isConnected&&form?.isConnected&&root.contains(form)&&!standalone&&window.currentPage==='store-shop'&&!busy&&canManage()&&role===window.userRole&&owner===window.currentUserProfile?.userId&&token===window.liff?.getAccessToken?.()&&!!window.liff?.isLoggedIn?.();
+            const module=await import('./store-ai-draft.js?v=1');
+            if(isCurrent())module.openStoreDraft({form,base,isCurrent});
+            break;
+          }
           case 'admin-stores': await adminStores(); break;
           case 'online-buy':
           case 'online-orders':
