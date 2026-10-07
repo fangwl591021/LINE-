@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const ui=readFileSync(new URL('../js/modules/member-hosted-events.js',import.meta.url),'utf8'),home=readFileSync(new URL('../js/modules/home.js',import.meta.url),'utf8');
 const css=readFileSync(new URL('../css/member-hosted-events.css',import.meta.url),'utf8');
+const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const settle=async()=>{for(let i=0;i<35;i++)await Promise.resolve();};
 const event=(overrides={})=>({id:'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',title:'範例會員活動',category:'課程',location:'範例教室',startsAt:'2099-10-08T06:00:00Z',endsAt:'2099-10-08T08:00:00Z',registrationClosesAt:'2099-10-08T06:00:00Z',status:'active',capacity:0,registrationCount:0,feeText:'150元',coverUrl:'',...overrides});
@@ -67,8 +68,17 @@ test('leaving/hiding cancels late requests and returning reloads; successful sav
   const old=f.window.loadHomeMemberEvents(),oldRelease=resolve,forced=f.window.loadHomeMemberEvents({force:true});assert.ok(f.calls[3].init.signal.aborted);resolve(Response.json({success:true,sessions:[]}));await forced;oldRelease(Response.json({success:true,sessions:[event()]}));await old;assert.equal(f.cards().length,0);f.listeners.pagehide();
   assert.match(ui,/cancel-event[\s\S]*?loadHomeMemberEvents\(\{force:true\}\)/);assert.match(ui,/const result=await api\(eventId[\s\S]*?loadHomeMemberEvents\(\{force:true\}\)/);
 });
+test('homepage thumbnail matches official 4:3 cover without changing list or detail/full-image containment',()=>{
+  assert.match(home,/aspect-\[4\/3\][\s\S]*?w-full h-full object-cover/);
+  assert.match(css,/\.me-home-card \.me-thumbnail\{[^}]*position:relative;[^}]*height:auto;min-height:0;aspect-ratio:4\/3/);
+  assert.match(css,/\.me-home-card \.me-thumbnail-image\{[^}]*position:absolute;inset:0;width:100%;height:100%;[^}]*object-fit:cover/);
+  assert.match(css,/(?:^|\n)\.me-thumbnail-image\{[^}]*height:180px;object-fit:contain/);
+  assert.match(css,/\.me-cover\{width:100%;height:auto;object-fit:contain/);
+  assert.match(css,/\.me-full-dm\{[^}]*width:100%;height:auto;object-fit:contain/);
+  assert.match(html,/member-hosted-events\.css\?v=5/);
+});
 test('protected thumbnail uses bearer/no-store blob and releases it on departure; full/deadline buttons do not post',async()=>{
-  assert.match(css,/\.me-home-card \.me-thumbnail\{[^}]*height:180px;min-height:180px/);assert.match(css,/\.me-home-card \[hidden\]\{display:none!important\}/);
+  assert.match(css,/\.me-home-card \[hidden\]\{display:none!important\}/);
   const media='https://point.test/v1/member-events/'+event().id+'/media/bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb.jpg';
   const f=fixture(async url=>url.endsWith('/overview')?Response.json({success:true,sessions:[event({coverUrl:media,capacity:1,registrationCount:1})]}):new Response('fake-image',{headers:{'Content-Type':'image/jpeg'}}));await f.window.loadHomeMemberEvents();await settle();
   assert.equal(f.calls.length,2);assert.equal(f.calls[1].init.headers.Authorization,'Bearer test-a');assert.equal(f.calls[1].init.redirect,'error');assert.equal(f.cards()[0].children[0].children[0].src,'blob:synthetic');assert.equal(f.cards()[0].children.at(-1).children.at(-1).disabled,true);
