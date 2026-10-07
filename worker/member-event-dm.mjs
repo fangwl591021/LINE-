@@ -52,7 +52,7 @@ export async function extractMemberEventDm(body,env,db,actor,fetcher=fetch,signa
     diagnostic.outputTextChars=value.length;
     if(!value||value.length>30000){diagnostic.reason=!value?'missing_output_text':'output_too_large';throw Error('Invalid AI');}
     diagnostic.stage='draft_json';const parsed=JSON.parse(value);
-    diagnostic.stage='normalize_draft';const draft=normalizeMemberEventDmDraft(parsed);
+    diagnostic.stage='normalize_draft';const draft=normalizeMemberEventDmDraft(parsed,now);
     if(draft.timeStatus==='multiple')draft.confidenceNote=draft.confidenceNote.replace('DM 有多個場次，請依時間原文勾選本次要建立的梯次，並補齊日期、時間與費用','DM 有多個時段，本次會員活動請單選一個時段，其他時段不會另建活動');
     diagnostic.stage='core_fields';
     if(!draft.activityName||!(draft.location||draft.description||draft.scheduleText)){diagnostic.reason='missing_core_fields';fail('DM_UNCLEAR','未辨識到活動資料，請换清楚的檔案或手動填寫',422);}
