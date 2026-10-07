@@ -71,7 +71,7 @@ export async function generateStoreDraft(data,env,uid,fetcher=fetch){
     ON CONFLICT(actor_uid) DO UPDATE SET usage_day=excluded.usage_day,attempts=CASE WHEN usage_day=excluded.usage_day THEN attempts+1 ELSE 1 END,next_allowed_at=excluded.next_allowed_at
     WHERE next_allowed_at<=? AND (usage_day!=excluded.usage_day OR attempts<20)`).bind('store-draft:'+uid,day,now+15000,now).run();
   if(!allowance.meta?.changes)fail('請至少隔 15 秒再試；店面 AI 草稿每日上限 20 次',429);
-  let stage='website';const diagnosticId='SD-'+crypto.randomUUID().slice(0,12);
+  let stage='website',providerStatus=0;const diagnosticId='SD-'+crypto.randomUUID().slice(0,12);
   try{
     let officialPage=null;
     if(input.websiteUrl)try{officialPage=await readWebsite(input.websiteUrl,fetcher);}catch{fail('官網無法安全讀取或內容不足，請換公開官網／移除官網重試；尚未修改店面',422);}
@@ -80,7 +80,9 @@ export async function generateStoreDraft(data,env,uid,fetcher=fetch){
       text:{format:{type:'json_schema',name:'store_info_draft',strict:true,schema}},
       ...(!officialPage?{tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',include:['web_search_call.action.sources']}:{})};
     stage='provider';
-    const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',redirect:'error',signal:AbortSignal.timeout(45000),headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    // Workers rejects redirect:error before network I/O. Manual never forwards the key; non-2xx (including redirects) is rejected below.
+    const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',redirect:'manual',signal:AbortSignal.timeout(45000),headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    providerStatus=response.status;
     if(!response.ok){await response.body?.cancel();fail(response.status===429?'AI 服務忙碌，請稍後重試':'AI 服務暫時無法產生草稿，請稍後重試',503);}
     stage='output';
     const result=JSON.parse(await boundedText(response,262144));
@@ -93,7 +95,8 @@ export async function generateStoreDraft(data,env,uid,fetcher=fetch){
   }catch(error){
     const status=error instanceof StoreDraftError?error.status:stage==='output'?502:503;
     const timeout=['AbortError','TimeoutError'].includes(error?.name);
-    console.warn(JSON.stringify({event:'store_ai_draft_failed',diagnosticId,stage,status,timeout}));
+    const errorClass=error instanceof StoreDraftError?'validation':['TypeError','SyntaxError','AbortError','TimeoutError'].includes(error?.name)?error.name:'Error';
+    console.warn(JSON.stringify({event:'store_ai_draft_failed',diagnosticId,stage,status,timeout,providerStatus,errorClass}));
     throw new StoreDraftError((error instanceof StoreDraftError?error.message:timeout?'AI 分析逾時，請稍後重試；尚未修改店面':'AI 草稿服務暫時無法完成；尚未修改店面')+`（診斷碼：${diagnosticId}）`,status);
   }
 }

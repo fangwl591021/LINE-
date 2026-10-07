@@ -12,3 +12,4 @@
 - 有取消／關閉、即時狀態、重送阻擋；換頁／帳號、改搜尋資料、取消後的結果不能帶入。
 - bounded response 256 KiB、AI timeout 45 秒、公開頁每次 15 秒；最多核對兩頁，前端 90 秒上限。錯誤只回安全訊息及診斷碼，不記录私人輸入、key、UID、上游原文。
 - 測試包含真實 route 權限、白名單、quota、source、安全失敗、取消／手動資料保護、mobile 版面、no auto-save。
+- Worker compatibility 2026-04-23 的 OpenAI 與來源 DNS fetch 必須採 redirect:manual；非成功 HTTP（含3xx）拒絕，不跟隨轉址、不把金鑰傳到其他 origin。實際 Workers fetch 驗證與 mocked AI 成功須分開記錄。安全失敗紀錄只增加 providerStatus 與固定白名單 errorClass，不記錄 error.message 或上游原文。

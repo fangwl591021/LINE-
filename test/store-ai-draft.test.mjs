@@ -17,7 +17,21 @@ test('bounded allowlisted inputs, content type and server-only key/model',async 
   f.setNoKey(true);assert.equal((await f.call()).status,503);assert.equal(f.writes.length,0);f.setNoKey(false);
   const r=await f.call(undefined,UID,{env:{OPENAI_MODEL:'gpt-4.1'}});assert.equal(r.status,200);assert.equal(r.headers.get('Cache-Control'),'no-store');assert.doesNotMatch(JSON.stringify(r),/server-only/);
   const request=f.calls.find(c=>c.url.includes('openai'));const sent=JSON.parse(request.opts.body);
-  assert.equal(request.opts.headers.Authorization,'Bearer server-only-test-secret');assert.equal(request.opts.redirect,'error');assert.equal(sent.model,'gpt-4.1');assert.equal(sent.store,false);assert.equal(sent.tool_choice,'required');assert.deepEqual(sent.include,['web_search_call.action.sources']);assert.equal(sent.text.format.strict,true);assert.equal(sent.tools[0].type,'web_search');assert.match(sent.instructions,/不可信資料/);
+  assert.equal(request.opts.headers.Authorization,'Bearer server-only-test-secret');assert.equal(request.opts.redirect,'manual');assert.equal(sent.model,'gpt-4.1');assert.equal(sent.store,false);assert.equal(sent.tool_choice,'required');assert.deepEqual(sent.include,['web_search_call.action.sources']);assert.equal(sent.text.format.strict,true);assert.equal(sent.tools[0].type,'web_search');assert.match(sent.instructions,/不可信資料/);
+});
+test('Workers-compatible no-follow fetch covers provider and source DNS; rejects provider redirects without business writes',async t=>{
+  const f=fixture(t);
+  const strictFetch=async(url,opts)=>{if(opts.redirect==='error')throw new TypeError('Invalid redirect value');return f.fetcher(url,opts);};
+  const {generateStoreDraft}=await import('../worker/store-ai-draft.mjs');
+  const result=await generateStoreDraft({name:sampleFields.name},f.env(),UID,strictFetch);
+  assert.deepEqual(result.fields,sampleFields);
+  assert.ok(f.calls.filter(c=>c.url.includes('dns-query')).every(c=>c.opts.redirect==='manual'&&!c.opts.headers.Authorization));
+  f.resetQuota();f.setStatus(302);f.setOutput({redirect:'private secret'});
+  const warnings=[];t.mock.method(console,'warn',value=>warnings.push(JSON.parse(value)));
+  await assert.rejects(generateStoreDraft({name:sampleFields.name},f.env(),UID,strictFetch),/AI 服務暫時/);
+  assert.equal(warnings[0].stage,'provider');assert.equal(warnings[0].providerStatus,302);
+  assert.doesNotMatch(JSON.stringify(warnings),/server-only|private secret|merchant\.com|a{32}/);
+  assert.equal(f.calls.filter(c=>c.url.includes('openai')).length,2);assert.equal(f.metrics.saves,0);
 });
 test('actual consulted and fetched evidence protects contact facts; fabricated source/value stripped',async t=>{
   const f=fixture(t);const result=await f.call();assert.deepEqual(result.fields,sampleFields);assert.equal(result.sources[0].url,SOURCE);
