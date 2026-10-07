@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>AI商脈系統</title>
-  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/versions/2.31.2/sdk.js"></script>
   <style>
     :root {
       --green: #06c755;
@@ -106,10 +106,16 @@
       const state = params.get('liff.state') || params.get('state') || '';
       if (state) {
         try {
-          const stateText = decodeURIComponent(state);
-          const queryText = stateText.includes('?')
-            ? stateText.split('?').slice(1).join('?')
-            : stateText.replace(/^\?/, '');
+          // The outer query is already decoded. Unwrap only legacy encoded routes.
+          let stateText = state;
+          if (!/[?=]/.test(stateText) && /%(?:3f|3d)/i.test(stateText)) {
+            stateText = decodeURIComponent(stateText);
+          }
+          const queryStart = stateText.indexOf('?');
+          const valueStart = stateText.indexOf('=');
+          const queryText = (queryStart >= 0 && (valueStart < 0 || queryStart < valueStart)
+            ? stateText.slice(queryStart + 1)
+            : stateText).split('#')[0];
           const stateParams = new URLSearchParams(queryText);
           stateParams.forEach((value, key) => {
             if (!params.has(key)) params.set(key, value);
