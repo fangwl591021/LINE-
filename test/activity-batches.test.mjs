@@ -15,7 +15,8 @@ function fixture(){
  const sql=new DatabaseSync(':memory:');
  sql.exec(`CREATE TABLE activities(activity_id TEXT PRIMARY KEY,name TEXT,type TEXT,fee_type TEXT,price INTEGER,start_time TEXT,end_time TEXT,description TEXT,image_url TEXT,image_ratio TEXT,creator_id TEXT,network_id TEXT,status TEXT,is_series INTEGER,series_id TEXT DEFAULT '',batch_name TEXT DEFAULT '',batch_limit INTEGER,nfc_checkin_start TEXT,nfc_checkin_end TEXT,nfc_same_day_only INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP,ever_unpublished INTEGER DEFAULT 0);
  CREATE TABLE registrants(row_id TEXT PRIMARY KEY,line_id TEXT,activity_id TEXT,activity_name TEXT,name TEXT,phone TEXT,identity TEXT,amount INTEGER,payment_status TEXT,start_time TEXT,description TEXT,image_url TEXT,status TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
- CREATE TABLE users(line_id TEXT PRIMARY KEY,name TEXT,phone TEXT); INSERT INTO users VALUES('member','測試會員','0912345678'),('other','另一會員','0987654321');`);
+ CREATE TABLE users(line_id TEXT PRIMARY KEY,row_id TEXT,role TEXT DEFAULT 'user',network_id TEXT DEFAULT 'admin',referrer_id TEXT DEFAULT '',name TEXT,phone TEXT); INSERT INTO users(line_id,name,phone) VALUES('member','測試會員','0912345678'),('other','另一會員','0987654321');
+ ALTER TABLE activities ADD COLUMN visibility TEXT NOT NULL DEFAULT 'network';`);
  sql.exec(readFileSync(new URL('../migrations/0052_activity_form_options.sql',import.meta.url),'utf8'));
  sql.exec("CREATE UNIQUE INDEX idx_registrants_unique_line ON registrants(activity_id,line_id) WHERE line_id IS NOT NULL AND line_id != ''; CREATE UNIQUE INDEX idx_registrants_unique_phone ON registrants(activity_id,phone) WHERE phone IS NOT NULL AND phone != '';");
  sql.exec(readFileSync(new URL('../migrations/0053_activity_option_uniqueness.sql',import.meta.url),'utf8'));
@@ -49,7 +50,7 @@ test('existing bulk API persists exactly one activity with options, stable retry
   assert.equal(f.sql.prepare('SELECT count(*) n FROM registrants').get().n,0);
   const retry=await f.mod.bulkAddRegistrants({...payload,activityName:'do not replace'},f.env);assert.equal(retry.data.existed,true);assert.equal(f.sql.prepare('SELECT name FROM activities WHERE activity_id=?').get(payload.activityId).name,'系列活動');
   const denied=await f.mod.bulkAddRegistrants({...payload,authenticatedUserId:'attacker'},f.env);assert.equal(denied.success,false);
-  const loaded=await f.mod.getActivityById({activityId:'ACT_series',networkId:'admin'},f.env,{userId:'member',role:'user',networkId:'admin'});
+  const loaded=await f.mod.getActivityById({activityId:'ACT_series',networkId:'admin'},f.env,{userId:'member',role:'user',networkId:'admin',token:'verified'});
   assert.equal(loaded.data.batches.length,2);assert.equal(loaded.data['是否系列'],true);
  }finally{f.sql.close();}
 });
@@ -72,21 +73,23 @@ test('invalid token, missing selection, foreign/closed slot and wrong tenant nev
  for(const mode of ['token','empty','foreign','closed','tenant','member']){const f=fixture();try{
   await f.mod.bulkAddRegistrants(payload,f.env);
   if(mode==='token')f.security.getActor=async()=>null;
-  if(mode==='tenant')f.security.getActor=async()=>({userId:'member',networkId:'foreign',token:'valid'});
+  if(mode==='tenant'){f.sql.exec("UPDATE users SET network_id='foreign' WHERE line_id='member'");f.security.getActor=async()=>({userId:'member',networkId:'foreign',token:'valid'});}
   if(mode==='closed')f.sql.exec("UPDATE activities SET status='下架' WHERE activity_id='ACT_series'");
   if(mode==='member')f.sql.exec('DELETE FROM users');
   const r=await f.join({batchIds:mode==='empty'?[]:[mode==='foreign'?'wrong':'ACT_series_B01']});assert.equal(r.success,false,mode);
   assert.equal(f.sql.prepare('SELECT count(*) n FROM registrants').get().n,0);
  }finally{f.sql.close();}}
 });
-test('cross-store signup uses explicit activity scope without changing membership or bypassing scope checks',async()=>{
+test('cross-store signup requires platform publication, never a client network override or membership rewrite',async()=>{
  const f=fixture();try{
   await f.mod.bulkAddRegistrants({...payload,authenticatedNetworkId:'organizer'},f.env);
   f.security.getActor=async()=>({userId:'member',role:'store',networkId:'member',token:'verified'});
   const before=JSON.stringify(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all());
   const denied=await f.join({networkId:'member',batchIds:['ACT_series_B01']});
-  assert.equal(denied.error,'系列活動不在您的可查看範圍');
+  assert.equal(denied.error,'系列活動僅限歸屬會員報名');
   assert.equal(f.sql.prepare('SELECT count(*) n FROM registrants').get().n,0);
+  const forged=await f.join({networkId:'organizer',batchIds:['ACT_series_B01','ACT_series_B02']});assert.equal(forged.success,false);
+  await f.mod.setActivityStatus({activityId:'ACT_series',status:'上架',visibility:'platform'},f.env);
   const joined=await f.join({networkId:'organizer',batchIds:['ACT_series_B01','ACT_series_B02']});
   assert.equal(joined.success,true);assert.equal(joined.data.registrations.length,2);
   assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all()),before);
@@ -134,6 +137,7 @@ test('admin category update persists on the same row without changing dates, DM,
 test('edit preserves authoritative network, options, registration IDs, and per-date availability',async()=>{
  const f=fixture();try{
   await f.mod.bulkAddRegistrants({...payload,authenticatedNetworkId:'tenant'},f.env);
+  f.sql.exec("UPDATE users SET network_id='tenant' WHERE line_id='member'");
   f.security.getActor=async()=>({userId:'member',networkId:'tenant',token:'valid'});
   await f.join({batchIds:['ACT_series_B01','ACT_series_B02']});
   const before=f.sql.prepare('SELECT * FROM registrants ORDER BY row_id').all();
@@ -185,7 +189,7 @@ test('legacy split forms remain compatible until explicitly converted',async()=>
   f.sql.exec("UPDATE activities SET batch_options='[]' WHERE activity_id='ACT_series'");
   assert.equal((await f.join({batchIds:['ACT_series_B01']})).success,true);
   assert.equal(f.sql.prepare('SELECT activity_id,batch_id FROM registrants').get().activity_id,'ACT_series_B01');
-  assert.equal((await f.mod.getActivityById({activityId:'ACT_series',networkId:'admin'},f.env)).data.batches.length,2);
+  assert.equal((await f.mod.getActivityById({activityId:'ACT_series',networkId:'admin'},f.env,await f.security.getActor())).data.batches.length,2);
  }finally{f.sql.close();}
 });
 
@@ -212,6 +216,7 @@ test('scoped conversion preserves registrations and root link, deletes only chil
   }
   f.sql.exec("UPDATE activities SET batch_options='[]' WHERE activity_id='ACT_series'");
   f.security.getActor=async()=>({userId:'member',networkId:'tenant',token:'valid'});
+  f.sql.exec("UPDATE users SET network_id='tenant' WHERE line_id='member'");
   await f.join({batchIds:['ACT_series_B01','ACT_series_B02']});
   f.sql.exec(`UPDATE activities SET network_id='admin' WHERE activity_id='ACT_series';
     INSERT INTO activities(activity_id,name,network_id) VALUES('unrelated','其他活動','other');
@@ -234,7 +239,7 @@ test('scoped conversion preserves registrations and root link, deletes only chil
   const after=f.sql.prepare('SELECT * FROM registrants ORDER BY row_id').all();
   assert.equal(after.length,2);assert.deepEqual(after.map(r=>({...r,activity_id:r.batch_id,batch_id:''})),before.map(r=>({...r})));
   assert.equal(f.sql.prepare('SELECT activity_id FROM activity_share_links').get().activity_id,'ACT_series');
-  const loaded=await f.mod.getActivityById({activityId:'ACT_series',networkId:'tenant'},f.env);assert.equal(loaded.data.batches.length,2);
+  const loaded=await f.mod.getActivityById({activityId:'ACT_series',networkId:'tenant'},f.env,await f.security.getActor());assert.equal(loaded.data.batches.length,2);
   const retry=await f.join({batchIds:args.childIds});assert.equal(retry.success,true);assert.equal(retry.existed,true);
  }finally{f.sql.close();}}
 });

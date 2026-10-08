@@ -1,0 +1,16 @@
+.activity-visibility-dialog{box-sizing:border-box;width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;border:0;border-radius:24px;padding:24px;color:#153e40;background:#fff;box-shadow:0 20px 60px #003b3540;font-family:inherit}
+.activity-visibility-dialog::backdrop{background:#102d3a88}
+.activity-visibility-dialog header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.activity-visibility-dialog h2{margin:0;font-size:22px;line-height:1.4}
+.activity-visibility-dialog header button{flex:none;width:40px;height:40px;border:0;border-radius:50%;background:#eff7f5;font-size:26px;color:#426a66;cursor:pointer}
+.activity-visibility-dialog p{line-height:1.6;font-size:15px;margin:12px 0}
+.activity-visibility-dialog .av-current:empty{display:none}
+.activity-visibility-dialog .av-current{font-size:13px;color:#537672}
+.activity-visibility-dialog [data-scope]{display:block;box-sizing:border-box;width:100%;text-align:left;border-radius:16px;padding:18px;margin:14px 0;cursor:pointer;font-family:inherit;line-height:1.5}
+.activity-visibility-dialog [data-scope] strong{display:block;font-size:18px}
+.activity-visibility-dialog [data-scope] span{display:block;font-size:14px;margin-top:6px}
+.activity-visibility-dialog .av-public{border:2px solid #00886d;background:#00886d;color:#fff}
+.activity-visibility-dialog .av-network{border:1px solid #bddbd5;background:#f0faf7;color:#075d52}
+.activity-visibility-dialog .av-note{font-size:13px;color:#617873}
+.activity-visibility-dialog .av-cancel{width:100%;padding:12px;border:0;background:#f1f5f4;border-radius:12px;font:inherit;color:#526560;cursor:pointer}
+.activity-visibility-dialog button:focus-visible{outline:3px solid #efbb40;outline-offset:3px}

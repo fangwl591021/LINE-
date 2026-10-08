@@ -4994,6 +4994,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     }
 
     async function setActivityStatusFromMonitor(encodedActivityId, status, btn) {
+      if (btn?.disabled) return;
       const activityId = decodeURIComponent(encodedActivityId || "");
       if (!activityId) return showToast("找不到活動 ID，請重新整理", true);
       const confirmText = status === "上架"
@@ -5006,9 +5007,12 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span>';
       }
       try {
+        const uid = adminProfile?.userId, token = window.liff?.getAccessToken?.();
+        const visibility = status === '上架' ? await window.chooseActivityVisibility({isCurrent:()=>adminProfile?.userId===uid && window.liff?.getAccessToken?.()===token}) : undefined;
+        if (status === '上架' && !visibility) return;
         const action = status === "下架" ? "removeAct" : "setActivityStatus";
-        const res = await fetchAPI(action, { activityId, status });
-        if (res) {
+        const res = await fetchAPI(action, { activityId, status, ...(visibility ? {visibility} : {}) });
+        if (res && res.success !== false && !res.error) {
           showToast(status === "上架" ? "活動已重新上架" : "活動已下架");
           await loadActivities();
         }
@@ -5141,6 +5145,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     async function saveActivityFromMonitor() {
       if (!window.AdminActivityRegistration.canSaveEditDm()) return;
       const btn = document.getElementById("btn-save-activity");
+      if (btn?.disabled) return;
       const originalHtml = btn ? btn.innerHTML : "";
       const activityId = document.getElementById("edit-a-id").value;
       const nextName = document.getElementById("edit-a-name").value.trim();
@@ -5170,9 +5175,16 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       }
 
       try {
+        const uid = typeof adminProfile === 'object' ? adminProfile?.userId : '', token = window.liff?.getAccessToken?.();
+        const visibility = await window.chooseActivityVisibility({
+          isCurrent:()=>document.getElementById('edit-a-id').value===activityId &&
+            (typeof adminProfile === 'object' ? adminProfile?.userId : '')===uid && window.liff?.getAccessToken?.()===token
+        });
+        if (!visibility) return;
         const result = await fetchAPI("updateActivity", {
           activityId,
           data: {
+            visibility,
             "活動名稱": nextName,
             "活動類型": nextType,
             "開始時間": nextStart,
@@ -5741,6 +5753,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <script src="js/modules/admin-mall-dashboard.js?v=2"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
   <link rel="stylesheet" href="css/admin-activity-registration.css?v=5">
-    <script src="js/modules/admin-activity-registration.js?v=9"></script>
+    <link rel="stylesheet" href="css/activity-visibility.css?v=1">
+    <script src="js/modules/activity-visibility.js?v=1"></script>
+    <script src="js/modules/admin-activity-registration.js?v=10"></script>
 </body>
 </html>

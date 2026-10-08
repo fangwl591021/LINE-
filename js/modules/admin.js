@@ -318,13 +318,18 @@ window.republishActivity = async function(actId, btnEl) {
 };
 
 window.setActivityStatus = async function(actId, status, btnEl) {
+  if (btnEl.disabled) return;
   const oriHtml = btnEl.innerHTML;
   btnEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span>';
   btnEl.disabled = true;
 
   try {
+    const boundUid = currentUserProfile?.userId, boundToken = window.liff?.getAccessToken?.();
+    const isCurrent = () => currentUserProfile?.userId === boundUid && window.liff?.getAccessToken?.() === boundToken;
+    const visibility = status === '上架' ? await window.chooseActivityVisibility({isCurrent}) : undefined;
+    if (status === '上架' && (!visibility || !isCurrent())) return;
     const action = status === '下架' ? 'removeAct' : 'setActivityStatus';
-    const res = await window.fetchAPI(action, { activityId: actId, status: status }, true);
+    const res = await window.fetchAPI(action, { activityId: actId, status: status, ...(visibility ? {visibility} : {}) }, true);
     if (res && !res.error) {
       window.showToast(status === '下架' ? '✅ 活動已下架' : '✅ 活動已重新上架');
       // 清快取讓下次進核銷頁時重新從 API 拉
@@ -339,6 +344,7 @@ window.setActivityStatus = async function(actId, status, btnEl) {
     btnEl.innerHTML = oriHtml;
     btnEl.disabled = false;
   }
+  finally { btnEl.innerHTML = oriHtml; btnEl.disabled = false; }
 };
 
 window.duplicateActivity = async function(actId, btnEl) {

@@ -312,6 +312,8 @@ window.openEditActivity = async function(actId) {
   }
 
   // 設定編輯模式
+  const editingButton = document.getElementById('btn-submit-full');
+  if (editingButton) delete editingButton._activitySubmission;
   window.currentEditingActId = actId;
   window._currentEditingAct = act;
 
@@ -412,6 +414,7 @@ window.cancelEditActivity = function() {
   // 還原按鈕
   const submitBtn = document.getElementById('btn-submit-full');
   if (submitBtn) {
+    delete submitBtn._activitySubmission;
     submitBtn.innerHTML = '確認建立並發佈';
     submitBtn.classList.add('bg-[#06C755]');
     submitBtn.classList.remove('bg-amber-500');
@@ -489,9 +492,17 @@ window.submitActivityForm = async function(mode) {
   const btnId = 'btn-submit-' + mode;
   const btn = document.getElementById(btnId);
   if (btn && btn.disabled) return;
+  if (window._activitySubmitPending) return;
+  window._activitySubmitPending = true;
+  const boundUid = currentUserProfile?.userId, boundToken = window.liff?.getAccessToken?.(), editingId = window.currentEditingActId;
+  const isCurrent = () => currentUserProfile?.userId === boundUid && window.liff?.getAccessToken?.() === boundToken && window.currentEditingActId === editingId;
+  const savedSubmission = btn?._activitySubmission;
+  const pendingSubmission = savedSubmission?.uid === boundUid && savedSubmission?.token === boundToken && savedSubmission?.editingId === editingId ? savedSubmission : null;
+  if (btn && !pendingSubmission) delete btn._activitySubmission;
+  try {
 
   const role = currentUser?.role || 'user';
-  if (role !== 'admin') {
+  if (role !== 'admin' && !pendingSubmission) {
     try {
       const acts = await window.fetchAPI('getPublicActivities', {}, true);
       const myActs = (acts || []).filter(a => String(a.userId) === String(currentUserProfile.userId));
@@ -507,7 +518,7 @@ window.submitActivityForm = async function(mode) {
   const pfx = mode === 'quick' ? 'q' : (mode === 'full' ? 'f' : 's');
 
   const nameInput = document.getElementById(pfx + '-name');
-  const name = nameInput ? nameInput.value.trim() : '';
+  const name = pendingSubmission?.payload.activityName || (nameInput ? nameInput.value.trim() : '');
   if (!name) { alert('⚠️ 請填寫活動名稱/標題'); return nameInput?.focus(); }
 
   const oriText = btn ? btn.innerHTML : '建立';
@@ -518,7 +529,15 @@ window.submitActivityForm = async function(mode) {
     btn.classList.add('opacity-70');
   }
 
-  let rawImageUrl = document.getElementById('in-image-url-' + mode)
+  let visibility;
+  try { visibility = pendingSubmission?.payload.visibility || await window.chooseActivityVisibility({current:window._currentEditingAct?.visibility,isCurrent}); }
+  catch (_) { alert('公開範圍選擇無法開啟，請重新載入後再試'); }
+  if (!visibility || !isCurrent()) {
+    if (btn) { btn.innerHTML = oriText; btn.disabled = false; btn.classList.remove('opacity-70'); }
+    return;
+  }
+
+  let rawImageUrl = pendingSubmission ? pendingSubmission.payload.imageUrl : document.getElementById('in-image-url-' + mode)
     ? document.getElementById('in-image-url-' + mode).value
     : '';
   let finalImageUrl = rawImageUrl;
@@ -555,7 +574,7 @@ window.submitActivityForm = async function(mode) {
 
   let nfcWindow;
   try {
-    nfcWindow = getNfcWindow();
+    nfcWindow = pendingSubmission ? {start:pendingSubmission.payload.nfcCheckinStart,end:pendingSubmission.payload.nfcCheckinEnd} : getNfcWindow();
   } catch (e) {
     if (btn) { btn.innerHTML = oriText; btn.disabled = false; btn.classList.remove('opacity-70'); }
     alert('⚠️ ' + e.message);
@@ -563,6 +582,7 @@ window.submitActivityForm = async function(mode) {
   }
 
   let p = {
+    visibility,
     activityName: name,
     activityType: document.getElementById(pfx + '-type') ? document.getElementById(pfx + '-type').value : '例會',
     feeType: '免費',
@@ -581,7 +601,7 @@ window.submitActivityForm = async function(mode) {
     userId: currentUserProfile.userId
   };
 
-  if (mode === 'quick' || mode === 'full') {
+  if (!pendingSubmission && (mode === 'quick' || mode === 'full')) {
     const feeRadio = document.querySelector('input[name="' + pfx + '-fee-type"]:checked');
     p.feeType = feeRadio ? feeRadio.value : '免費';
     p.price = document.getElementById(pfx + '-price') ? document.getElementById(pfx + '-price').value : '';
@@ -595,7 +615,7 @@ window.submitActivityForm = async function(mode) {
       const namesStr = document.getElementById('q-names') ? document.getElementById('q-names').value : '';
       p.names = namesStr.split(String.fromCharCode(10)).filter(n=>n.trim());
     }
-  } else if (mode === 'series') {
+  } else if (!pendingSubmission && mode === 'series') {
     const cards = document.querySelectorAll('#batch-container > [id^="batch-"]');
       p.batches = Array.from(cards).map(card => ({
         name: card.querySelector('.batch-name-input').value.trim(),
@@ -632,12 +652,20 @@ window.submitActivityForm = async function(mode) {
 
   try {
     let res;
+    if (pendingSubmission) p = pendingSubmission.payload;
+    else {
+      p.activityId = editingId || 'ACT_' + crypto.randomUUID();
+      if (!editingId) p.createOnly = true;
+      if (btn) btn._activitySubmission = {uid:boundUid,token:boundToken,editingId,payload:structuredClone(p)};
+    }
 
     // 🎯 編輯模式:呼叫 updateActivity API
     if (window.currentEditingActId) {
+      if (!isCurrent()) throw Error('登入或活動已變更，請重新開啟');
       res = await window.fetchAPI('updateActivity', {
         activityId: window.currentEditingActId,
         data: {
+          visibility: p.visibility,
           '活動名稱': p.activityName,
           '活動類型': p.activityType,
           '預設身份': p.defaultIdentity,
@@ -655,6 +683,8 @@ window.submitActivityForm = async function(mode) {
       }, true);
 
       if (!res || res.error) throw new Error(res.error || '更新失敗');
+      if (res.success === false) throw new Error('更新尚未確認成功，請重試同一筆');
+      if (btn) delete btn._activitySubmission;
 
       alert('✅ 活動已更新!即將返回核銷頁...');
 
@@ -676,8 +706,11 @@ window.submitActivityForm = async function(mode) {
     }
     // 🆕 新建模式:走原本的批次建立路徑
     else {
+      if (!isCurrent()) throw Error('登入或活動已變更，請重新開啟');
       res = await window.fetchAPI('bulkAddRegistrants', p, true);
       if (!res || res.error) throw new Error(res.error || '未知的錯誤');
+      if (res.success === false) throw new Error('建立尚未確認成功，請重試同一筆');
+      if (btn) delete btn._activitySubmission;
 
       // 清快取讓核銷頁能看到新活動
       const createdActivityId = getCreatedActivityId(res, p);
@@ -694,6 +727,7 @@ window.submitActivityForm = async function(mode) {
   } catch(e) {
     alert('⚠️ 操作失敗:' + e.message);
   } finally {
-    if (btn) { btn.innerHTML = oriText; btn.disabled = false; btn.classList.remove('opacity-70'); }
+    if (btn) { btn.innerHTML = btn._activitySubmission ? '重試同一筆送出' : oriText; btn.disabled = false; btn.classList.remove('opacity-70'); }
   }
+  } finally { window._activitySubmitPending = false; }
 };
