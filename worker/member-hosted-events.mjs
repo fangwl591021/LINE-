@@ -27,7 +27,14 @@ async function actorFor(request,db,fetcher){
   if([401,403].includes(response.status))fail('AUTH_EXPIRED','登入已失效，請重新進入 LINE',401);
   if(!response.ok)fail('AUTH_UNAVAILABLE','LINE 驗證暫時無法完成',503);
   const profile=await boundedJson(response,8192);if(!/^U[0-9a-f]{32}$/i.test(profile.userId||''))fail('AUTH_INVALID','無法確認 LINE 身分',401);
-  return resolveMemberIdentity(db,profile.userId);
+  const actor=await resolveMemberIdentity(db,profile.userId);
+  // Canonical membership is unchanged; affiliation comes from the verified row, never the upload body.
+  const member=await stmt(db,'SELECT line_id,role,network_id,referrer_id FROM users WHERE row_id=?',actor.memberId).first();
+  if(!member)fail('MEMBER_REQUIRED','請先完成會員註冊',403);
+  const role=String(member.role||'').toLowerCase();
+  actor.networkId=['admin','總管'].includes(role)?'admin':['store','tenant','店長','租戶'].includes(role)?member.line_id:
+    (member.network_id&&member.network_id!=='admin'?member.network_id:member.referrer_id)||'admin';
+  return actor;
 }
 async function rows(db,query,...args){const r=await stmt(db,query,...args).all();if(r.success===false||!Array.isArray(r.results))throw Error('MEMBER_EVENTS_READ_FAILED');return r.results;}
 async function run(db,query,...args){const r=await stmt(db,query,...args).run();if(r.success===false)throw Error('MEMBER_EVENTS_WRITE_FAILED');return r;}
@@ -36,24 +43,33 @@ const SELECT=`SELECT e.*,COALESCE(NULLIF(u.name,''),'活動主辦人') AS organi
  (SELECT COUNT(*) FROM member_event_registrations r WHERE r.event_id=e.id AND r.status='registered' AND r.checked_in_at IS NOT NULL) AS checkedInCount,
  (SELECT COUNT(*) FROM member_event_registrations r WHERE r.event_id=e.id AND r.status='cancelled') AS cancelledCount
  FROM member_hosted_events e LEFT JOIN users u ON u.row_id=e.owner_id`;
-function mapped(row,memberId){return {id:row.id,title:row.title,category:row.category||'活動',description:row.description,location:row.location,startsAt:row.starts_at,endsAt:row.ends_at,registrationClosesAt:row.registration_closes_at,capacity:row.capacity,feeText:row.fee_text,coverUrl:visibleCover(row.cover_url),status:row.status,revision:row.revision,organizerName:row.organizerName,isOwner:row.owner_id===memberId,registrationCount:row.registrationCount,checkedInCount:row.checkedInCount,cancelledCount:row.cancelledCount};}
-async function eventFor(db,id,actor,owned=false){const e=await stmt(db,SELECT+' WHERE e.id=?',id).first();if(!e)fail('NOT_FOUND','找不到這場活動',404);if(owned&&e.owner_id!==actor.memberId)fail('FORBIDDEN','你不能管理這場活動',403);return e;}
+function mapped(row,memberId){return {id:row.id,title:row.title,category:row.category||'活動',visibility:row.visibility,description:row.description,location:row.location,startsAt:row.starts_at,endsAt:row.ends_at,registrationClosesAt:row.registration_closes_at,capacity:row.capacity,feeText:row.fee_text,coverUrl:visibleCover(row.cover_url),status:row.status,revision:row.revision,organizerName:row.organizerName,isOwner:row.owner_id===memberId,registrationCount:row.registrationCount,checkedInCount:row.checkedInCount,cancelledCount:row.cancelledCount};}
+function visibleTo(e,actor){return e.owner_id===actor.memberId||e.visibility==='platform'||(e.visibility==='network'&&e.network_id===actor.networkId);}
+async function eventFor(db,id,actor,owned=false,history=true){
+  const e=await stmt(db,SELECT+' WHERE e.id=?',id).first();if(!e)fail('NOT_FOUND','找不到這場活動',404);
+  if(owned){if(e.owner_id!==actor.memberId)fail('FORBIDDEN','你不能管理這場活動',403);}
+  else if(!visibleTo(e,actor)&&!(history&&await registration(db,id,actor.memberId)))fail('FORBIDDEN','這場活動僅開放歸屬會員查看',403);
+  return e;
+}
 async function overview(db,actor){
   const [all,my,hosting]=await Promise.all([
-    rows(db,SELECT+" WHERE e.status='active' AND julianday(e.ends_at)>julianday('now') ORDER BY e.starts_at,e.id LIMIT 200"),
+    rows(db,SELECT+" WHERE e.status='active' AND julianday(e.ends_at)>julianday('now') AND (e.visibility='platform' OR (e.visibility='network' AND e.network_id=?) OR e.owner_id=?) ORDER BY e.starts_at,e.id LIMIT 200",actor.networkId,actor.memberId),
     rows(db,SELECT+' WHERE EXISTS(SELECT 1 FROM member_event_registrations r WHERE r.event_id=e.id AND r.member_id=?) ORDER BY e.starts_at DESC,e.id LIMIT 200',actor.memberId),
     rows(db,SELECT+' WHERE e.owner_id=? ORDER BY e.starts_at DESC,e.id LIMIT 200',actor.memberId)
   ]);
   const mine=await rows(db,'SELECT event_id,status,registered_at,checked_in_at FROM member_event_registrations WHERE member_id=? ORDER BY registered_at DESC,id DESC LIMIT 200',actor.memberId),byId=new Map(my.map(e=>[e.id,e]));
   return {sessions:all.map(e=>mapped(e,actor.memberId)),hosting:hosting.map(e=>mapped(e,actor.memberId)),my:mine.filter(r=>byId.has(r.event_id)).map(r=>({...mapped(byId.get(r.event_id),actor.memberId),registrationStatus:r.status,registeredAt:r.registered_at,checkedInAt:r.checked_in_at||''}))};
 }
-const INPUT_FIELDS=['title','description','location','startsAt','endsAt','registrationClosesAt','capacity','feeText','coverUrl','category'];
+const INPUT_FIELDS=['title','description','location','startsAt','endsAt','registrationClosesAt','capacity','feeText','coverUrl','category','visibility'];
 async function save(db,actor,body,id='',bucket){
   fields(body,[...INPUT_FIELDS,'requestKey','dmFile',...(id?['revision']:[])]);
   const metadata={...body};delete metadata.dmFile;if(new TextEncoder().encode(JSON.stringify(metadata)).length>16384)fail('BODY_TOO_LARGE','活動文字資料過大',413);
   const requestKey=key(body.requestKey),value=input(body);
   const current=id?await eventFor(db,id,actor,true):await stmt(db,'SELECT * FROM member_hosted_events WHERE owner_id=? AND create_key=?',actor.memberId,requestKey).first();
   if(id&&body.category===undefined)value.category=current.category||'活動';
+  value.visibility=body.visibility===undefined?(current?.visibility||'platform'):body.visibility;
+  if(!['platform','network'].includes(value.visibility))fail('INVALID_VISIBILITY','請選擇公開或僅歸屬可見');
+  value.network_id=current?.network_id||actor.networkId;
   if(current&&(!id||current.last_key===requestKey))return mapped(await eventFor(db,current.id,actor),actor.memberId);
   if(!id&&(value.registration_closes_at<=at()||value.ends_at<=at()))fail('PAST_EVENT','請設定未來的截止及結束時間');
   if(id&&(!Number.isInteger(body.revision)||body.revision!==current.revision))fail('STALE_EVENT','活動已更新，請重新整理',409);
@@ -66,8 +82,8 @@ async function save(db,actor,body,id='',bucket){
   let media;
   try{
   if('dmFile' in body){media=await storeMedia(bucket,eventId,body.dmFile);value.cover_url=media.url;args[8]=media.url;}
-  const result=id?await run(db,`UPDATE member_hosted_events SET title=?,description=?,location=?,starts_at=?,ends_at=?,registration_closes_at=?,capacity=?,fee_text=?,cover_url=?,category=?,revision=revision+1,last_key=?,updated_at=? WHERE id=? AND owner_id=? AND revision=?`,...args,requestKey,now,id,actor.memberId,body.revision):
-    await run(db,`INSERT INTO member_hosted_events(id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,cover_url,category,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,eventId,actor.memberId,requestKey,...args,now,now);
+  const result=id?await run(db,`UPDATE member_hosted_events SET title=?,description=?,location=?,starts_at=?,ends_at=?,registration_closes_at=?,capacity=?,fee_text=?,cover_url=?,category=?,visibility=?,network_id=?,revision=revision+1,last_key=?,updated_at=? WHERE id=? AND owner_id=? AND revision=?`,...args,requestKey,now,id,actor.memberId,body.revision):
+    await run(db,`INSERT INTO member_hosted_events(id,owner_id,create_key,title,description,location,starts_at,ends_at,registration_closes_at,capacity,fee_text,cover_url,category,visibility,network_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,eventId,actor.memberId,requestKey,...args,now,now);
   if(!result.meta?.changes)fail('STALE_EVENT','活動已更新，請重新整理',409);return mapped(await eventFor(db,eventId,actor),actor.memberId);
   }catch(error){
     // Do not remove a committed reference if a later response/read failed.
@@ -89,7 +105,11 @@ async function action(db,actor,id,verb,body,bucket){
   }
   if(verb==='register'){
     fields(body,[]);const old=await registration(db,id,actor.memberId);if(old?.status==='registered')return {duplicate:true};
-    await run(db,`INSERT INTO member_event_registrations(id,event_id,member_id) VALUES(?,?,?) ON CONFLICT(event_id,member_id) DO UPDATE SET status='registered',registered_at=CURRENT_TIMESTAMP,cancelled_at=NULL,ticket_hash=NULL,ticket_expires_at=NULL WHERE member_event_registrations.status='cancelled' AND member_event_registrations.checked_in_at IS NULL`,crypto.randomUUID(),id,actor.memberId);
+    if(!visibleTo(event,actor))fail('FORBIDDEN','這場活動僅開放歸屬會員報名',403);
+    const result=await run(db,`INSERT INTO member_event_registrations(id,event_id,member_id)
+      SELECT ?,e.id,? FROM member_hosted_events e WHERE e.id=? AND (e.visibility='platform' OR (e.visibility='network' AND e.network_id=?) OR e.owner_id=?)
+      ON CONFLICT(event_id,member_id) DO UPDATE SET status='registered',registered_at=CURRENT_TIMESTAMP,cancelled_at=NULL,ticket_hash=NULL,ticket_expires_at=NULL WHERE member_event_registrations.status='cancelled' AND member_event_registrations.checked_in_at IS NULL`,crypto.randomUUID(),actor.memberId,id,actor.networkId,actor.memberId);
+    if(!result.meta?.changes)fail('FORBIDDEN','活動範圍已變更，請重新確認',403);
     return {duplicate:false};
   }
   if(verb==='cancel'){

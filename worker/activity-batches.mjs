@@ -3,7 +3,7 @@ const text = v => String(v ?? '').trim();
 export function activityBatchRows(row) {
   const options = JSON.parse(row.batch_options || '[]');
   if (!Array.isArray(options)) throw Error('Invalid activity date options');
-  return options.map(b => ({...row,...b,network_id:row.network_id,creator_id:row.creator_id,
+  return options.map(b => ({...row,...b,network_id:row.network_id,creator_id:row.creator_id,visibility:row.visibility,
     name:`${row.name}｜${b.batch_name}`,is_series:0,series_id:row.activity_id,batch_options:'[]',
     fee_type:b.price?'收費':'免費',status:row.status==='上架'?b.status:row.status}));
 }
@@ -52,7 +52,7 @@ export async function createActivityBatches(payload, env, module) {
   root.start_time=batches.map(b=>b.startTime).sort()[0];
   root.end_time=batches.map(b=>b.endTime || b.startTime).sort().at(-1);
   root.price=Math.max(...batches.map(b=>b.price));root.fee_type=root.price?'收費':'免費';
-  const fields=['activity_id','name','type','fee_type','price','start_time','end_time','description','image_url','image_ratio','creator_id','network_id','status','is_series','series_id','batch_name','batch_limit','nfc_checkin_start','nfc_checkin_end','nfc_same_day_only','batch_options'];
+  const fields=['activity_id','name','type','fee_type','price','start_time','end_time','description','image_url','image_ratio','creator_id','network_id','status','is_series','series_id','batch_name','batch_limit','nfc_checkin_start','nfc_checkin_end','nfc_same_day_only','batch_options','visibility'];
   root.batch_options=JSON.stringify(batches.map((b,i)=>({
     activity_id:`${root.activity_id}_B${String(i+1).padStart(2,'0')}`,batch_name:b.name,
     start_time:b.startTime,end_time:b.endTime,price:b.price,batch_limit:b.limit,status:'上架',
@@ -68,19 +68,20 @@ export async function activityWithBatches(row, env, module) {
   const activity=module.activityRow(row);
   if (row.is_series && !row.series_id && !activity.batches?.length) {
     const result=await env.ACTMASTER_DB.prepare('SELECT * FROM activities WHERE series_id=? AND network_id=? ORDER BY start_time,activity_id LIMIT 25').bind(row.activity_id,row.network_id || 'admin').all();
-    activity.batches=result.results.map(r=>module.activityRow(r));
+    activity.batches=result.results.map(r=>module.activityRow({...r,visibility:row.visibility}));
   }
   return activity;
 }
-export async function joinActivityBatches(payload, env, request, security, module) {
+export async function joinActivityBatches(payload, env, request, security, module, verifiedMember=null) {
   const db=env.ACTMASTER_DB;
   if (!db) return payload.batchIds ? {success:false,error:'梯次資料庫無法使用'} : null;
   const row=await db.prepare('SELECT * FROM activities WHERE activity_id=?').bind(text(payload.activityId)).first();
   if (!row?.is_series && !row?.series_id) return payload.batchIds ? {success:false,error:'活動不是系列梯次'} : null;
-  const actor=await security.getActor(payload,request,env);
+  const actor=verifiedMember||await module.verifiedActivityMember(await security.getActor(payload,request,env),env);
   if (!actor?.userId || !actor.token) return {success:false,error:'請重新從 LINE 登入後報名'};
   const root=row.series_id ? await db.prepare('SELECT * FROM activities WHERE activity_id=?').bind(row.series_id).first() : row;
   if (!root || root.status!=='上架') return {success:false,error:'系列活動未開放'};
+  if (!module.canReadActivity(root,actor)) return {success:false,error:'系列活動僅限歸屬會員報名'};
   const visible=await module.getActivityById({...payload,activityId:root.activity_id},env,actor);
   if (!visible?.success) return {success:false,error:'系列活動不在您的可查看範圍'};
   const ids=row.series_id ? [row.activity_id] : Array.isArray(payload.batchIds) ? [...new Set(payload.batchIds.map(text))] : [];
@@ -101,18 +102,20 @@ export async function joinActivityBatches(payload, env, request, security, modul
     FROM activities a, json_each(a.batch_options) b
     WHERE a.activity_id=? AND a.network_id=? AND a.status='上架'
       AND json_extract(b.value,'$.activity_id')=? AND json_extract(b.value,'$.status')='上架'
+      AND (a.visibility='platform' OR a.network_id=? OR a.creator_id IN (SELECT value FROM json_each(?)) OR ?=1)
       AND NOT EXISTS (SELECT 1 FROM registrants r WHERE r.activity_id=a.activity_id AND r.batch_id=json_extract(b.value,'$.activity_id') AND r.line_id=? AND r.status<>'cancelled')
       AND (COALESCE(json_extract(b.value,'$.batch_limit'),0)<=0 OR
         (SELECT COUNT(*) FROM registrants r WHERE r.activity_id=a.activity_id AND r.batch_id=json_extract(b.value,'$.activity_id') AND r.status<>'cancelled')<json_extract(b.value,'$.batch_limit'))`)
-    .bind(`REG_${crypto.randomUUID()}`,actor.userId,member.name,member.phone,root.activity_id,root.network_id,c.activity_id,actor.userId)
+    .bind(`REG_${crypto.randomUUID()}`,actor.userId,member.name,member.phone,root.activity_id,root.network_id,c.activity_id,actor.networkId,JSON.stringify(actor.identityIds),actor.role==='admin'?1:0,actor.userId)
     : db.prepare(`INSERT INTO registrants
     (row_id,line_id,activity_id,activity_name,name,phone,identity,amount,payment_status,start_time,description,image_url,status)
     SELECT ?,?,a.activity_id,a.name,?,?,'會員',a.price,CASE WHEN a.price>0 THEN '待付款' ELSE '免費' END,a.start_time,a.description,a.image_url,'active'
     FROM activities a JOIN activities p ON p.activity_id=a.series_id
     WHERE a.activity_id=? AND a.network_id=? AND p.network_id=a.network_id AND a.status='上架' AND p.status='上架'
+    AND (p.visibility='platform' OR p.network_id=? OR p.creator_id IN (SELECT value FROM json_each(?)) OR ?=1)
     AND NOT EXISTS (SELECT 1 FROM registrants r WHERE r.activity_id=a.activity_id AND r.line_id=? AND r.status<>'cancelled')
     AND (COALESCE(a.batch_limit,0)<=0 OR (SELECT COUNT(*) FROM registrants r WHERE r.activity_id=a.activity_id AND r.status<>'cancelled')<a.batch_limit)`)
-    .bind(`REG_${crypto.randomUUID()}`,actor.userId,member.name,member.phone,c.activity_id,root.network_id,actor.userId));
+    .bind(`REG_${crypto.randomUUID()}`,actor.userId,member.name,member.phone,c.activity_id,root.network_id,actor.networkId,JSON.stringify(actor.identityIds),actor.role==='admin'?1:0,actor.userId));
   const results=await db.batch(statements);
   const registrations=embedded.length
     ? (await db.prepare(`SELECT * FROM registrants WHERE line_id=? AND activity_id=? AND batch_id IN (${ids.map(()=>'?').join(',')}) AND status<>'cancelled'`).bind(actor.userId,root.activity_id,...ids).all()).results

@@ -2030,8 +2030,16 @@ const HomeModule = (function() {
         const role = String(window.userRole || '').toLowerCase();
         if (role === 'admin') return true;
         const userId = String(window.currentUserProfile?.userId || window.currentUser?.userId || window.currentUser?.lineId || '').trim();
+        if (activity.visibility === 'platform' && userId && window.currentUser && window.liff?.isLoggedIn?.()) return true;
         const creatorId = String(activity.creatorId || activity.creator_id || activity.userId || '').trim();
         if (userId && creatorId && userId === creatorId) return true;
+        if (activity.visibility === 'network') {
+            if (!userId || !window.currentUser || !window.liff?.isLoggedIn?.()) return false;
+            const memberNetwork = role === 'store' || role === 'tenant' ? userId :
+                String(window.currentUser.networkId && window.currentUser.networkId !== 'admin' ? window.currentUser.networkId :
+                    window.currentUser.referrerId || window.currentUser.referrer_id || 'admin').trim();
+            return getPublicActivityNetwork_(activity) === memberNetwork;
+        }
         const currentNetwork = getCurrentEffectiveNetwork_();
         const activityNetwork = getPublicActivityNetwork_(activity);
         if (!activityNetwork || activityNetwork === 'admin') return currentNetwork === 'admin';

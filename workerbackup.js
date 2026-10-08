@@ -11846,6 +11846,7 @@ const D1ActivityModule = {
       imageRatio: this.text(row.image_ratio, '16:9'),
       image_ratio: this.text(row.image_ratio, '16:9'),
       status: this.text(row.status, '上架'),
+      visibility: row.visibility === 'platform' ? 'platform' : 'network',
       networkId: this.text(row.network_id, 'admin'),
       network_id: this.text(row.network_id, 'admin'),
       nfcCheckinStart: this.text(row.nfc_checkin_start),
@@ -11918,7 +11919,7 @@ const D1ActivityModule = {
 
   normalizeActivity(payload = {}) {
     const data = payload.data || payload;
-    const activityId = this.pick(data, ['activityId', '活動ID'], this.pick(payload, ['activityId'])) || `ACT_${Date.now()}`;
+    const activityId = this.pick(payload, ['activityId', '活動ID'], this.pick(data, ['activityId', '活動ID'])) || `ACT_${Date.now()}`;
     return {
       activity_id: activityId,
       name: this.pick(data, ['activityName', 'name', '活動名稱'], '未命名活動'),
@@ -11930,9 +11931,10 @@ const D1ActivityModule = {
       description: this.pick(data, ['description', '活動說明']),
       image_url: this.pick(data, ['imageUrl', '宣傳圖']),
       image_ratio: this.pick(data, ['imageRatio', 'image_ratio', 'posterRatio', 'poster_ratio', 'posterLayout', 'imageLayout'], '16:9'),
-      creator_id: this.pick(data, ['userId', 'creatorId'], this.pick(payload, ['userId'], 'admin')),
+      creator_id: this.pick(payload, ['authenticatedUserId'], this.pick(data, ['userId', 'creatorId'], this.pick(payload, ['userId'], 'admin'))),
       network_id: this.pick(payload, ['authenticatedNetworkId'], this.pick(data, ['networkId', 'network_id', '歸屬網'], this.pick(payload, ['networkId'], 'admin'))),
       status: this.pick(data, ['status', '狀態'], '上架'),
+      visibility: this.visibilityValue(data.visibility !== undefined ? data.visibility : payload.visibility),
       nfc_checkin_start: this.pick(data, ['nfcCheckinStart', 'NFC簽到開始']),
       nfc_checkin_end: this.pick(data, ['nfcCheckinEnd', 'NFC簽到結束']),
       nfc_same_day_only: this.bool(data.nfcCheckinSameDayOnly ?? data['NFC限當日'] ?? true) ? 1 : 0,
@@ -11968,15 +11970,70 @@ const D1ActivityModule = {
     this._networkScopeReady = true;
   },
 
-  async listActivities(payload, env, actor = null) {
+  visibilityValue(value, fallback = 'network') {
+    if (value === undefined) return fallback;
+    if (value !== 'platform' && value !== 'network') throw Error('請選擇公開或僅歸屬可見');
+    return value;
+  },
+
+  async verifiedActivityMember(actor, env) {
+    if (!actor?.token || !actor.userId) return null;
+    const row = typeof D1ReadModule.findUserByIdentity === 'function'
+      ? (await D1ReadModule.findUserByIdentity(env, actor.userId))?.user
+      : await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [actor.userId, actor.userId]);
+    if (!row?.line_id) return null;
+    const role = SecurityModule.normalizeRole(actor.role);
+    const networkId = role === 'admin' ? 'admin' : role === 'store' ? row.line_id :
+      this.text(row.network_id && row.network_id !== 'admin' ? row.network_id : row.referrer_id, 'admin');
+    return {...actor, role, networkId, identityIds: [actor.userId, row.line_id, row.row_id].filter(Boolean)};
+  },
+
+  async activityScopeRow(row, env) {
+    if (!row) return null;
+    if (!row.series_id) return row;
+    const root = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [row.series_id]);
+    if (!root || root.network_id !== row.network_id) return null;
+    return {...row, visibility: root.visibility, status: root.status === '上架' ? row.status : root.status};
+  },
+
+  canReadActivity(row, actor) {
+    return !!(row && actor && (actor.role === 'admin' || actor.identityIds.includes(row.creator_id) ||
+      (row.status === '上架' && (row.visibility === 'platform' || row.network_id === actor.networkId))));
+  },
+
+  async requireActivityManagement(payload, env, actor) {
+    if (!actor || !['admin','store'].includes(SecurityModule.normalizeRole(actor.role))) throw Error('Access Denied: Manager role required');
+    const activityId = this.pick(payload, ['activityId', '活動ID']);
+    if (!activityId) throw Error('Missing activityId');
+    const nestedId = this.pick(payload.data || {}, ['activityId', '活動ID']);
+    if (nestedId && nestedId !== activityId) throw Error('活動編號不一致');
+    const row = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    if (!row) throw Error('找不到活動資料');
+    if ((payload.data?.visibility !== undefined || payload.visibility !== undefined) && !actor.token) throw Error('請重新從 LINE 登入後修改公開範圍');
+    if (actor.role !== 'admin' && row.network_id !== actor.networkId && row.creator_id !== actor.userId) throw Error('Access Denied: Activity outside your management scope');
+    if ((payload.data?.visibility !== undefined || payload.visibility !== undefined) && actor.role !== 'admin' && row.creator_id !== actor.userId) throw Error('只有活動主辦可修改公開範圍');
+    return row;
+  },
+
+  async listActivities(payload, env, actor = null, publicCatalog = false) {
     if (!this.hasD1(env)) return null;
     await this.ensureActivityNetworkScope(env);
+    if (publicCatalog) {
+      const member = await this.verifiedActivityMember(actor, env);
+      if (!member) return {success:true,data:[]};
+      const rows = await D1ReadModule.all(env, `SELECT a.* FROM activities a
+        WHERE a.status='上架' AND (a.visibility='platform' OR a.network_id=? OR a.creator_id IN (SELECT value FROM json_each(?)) OR ?=1)
+          AND COALESCE(a.series_id,'')=''
+        ORDER BY COALESCE(a.start_time,a.created_at) DESC,a.created_at DESC LIMIT 500`,
+        [member.networkId, JSON.stringify(member.identityIds), member.role === 'admin' ? 1 : 0]);
+      return {success:true,data:rows.map(row=>this.activityRow(row))};
+    }
     const role = actor
       ? SecurityModule.normalizeRole(actor.role)
       : SecurityModule.normalizeRole(payload.authenticatedRole || payload.role || payload.operatorRole || payload.actorRole || '');
     const requestedNetworkId = this.text(payload.networkId || payload.net || '');
     const actorNetworkId = this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
-    const networkId = requestedNetworkId || actorNetworkId;
+    const networkId = role === 'admin' ? requestedNetworkId || actorNetworkId : actorNetworkId;
     const actorId = this.text(actor?.userId || payload.authenticatedUserId || payload.userId);
     const isAdmin = role === 'admin';
     const adminWantsAll = isAdmin && (!requestedNetworkId || requestedNetworkId === 'all' || requestedNetworkId === 'admin');
@@ -12022,27 +12079,20 @@ const D1ActivityModule = {
     const row = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
     if (!row) return { success: false, error: '找不到活動資料' };
 
-    const role = actor
-      ? SecurityModule.normalizeRole(actor.role)
-      : SecurityModule.normalizeRole(payload.authenticatedRole || payload.role || payload.operatorRole || payload.actorRole || '');
-    const actorId = this.text(actor?.userId || payload.authenticatedUserId || payload.userId);
-    const requestedNetwork = this.text(payload.networkId || payload.net || '');
-    const actorNetwork = requestedNetwork || this.text(actor?.networkId || payload.authenticatedNetworkId || 'admin', 'admin');
-    const activityNetwork = this.text(row.network_id, 'admin');
-    const sameNetwork = (!activityNetwork || activityNetwork === 'admin')
-      ? actorNetwork === 'admin'
-      : activityNetwork === actorNetwork;
+    const member = await this.verifiedActivityMember(actor, env);
+    if (!member) return {success:false,error:'請先登入並完成會員註冊'};
+    const scoped = await this.activityScopeRow(row, env);
 
     let hasRegistration = false;
-    if (actorId) {
-      const reg = await D1ReadModule.first(env, "SELECT row_id FROM registrants WHERE activity_id = ? AND line_id = ? AND status <> 'cancelled' LIMIT 1", [activityId, actorId]).catch(() => null);
+    if (member.userId) {
+      const reg = await D1ReadModule.first(env, "SELECT row_id FROM registrants WHERE activity_id = ? AND line_id IN (SELECT value FROM json_each(?)) AND status <> 'cancelled' LIMIT 1", [activityId, JSON.stringify(member.identityIds)]);
       hasRegistration = !!reg;
     }
 
-    if (role !== 'admin' && !sameNetwork && !hasRegistration) {
+    if (!this.canReadActivity(scoped, member) && !hasRegistration) {
       return { success: false, error: 'Access Denied: Activity outside your scope' };
     }
-    return { success: true, data: await activityWithBatches(row, env, this) };
+    return { success: true, data: await activityWithBatches(scoped || row, env, this) };
   },
 
   getActivityNetwork(activity) {
@@ -12081,16 +12131,25 @@ const D1ActivityModule = {
     if (!this.hasD1(env)) return null;
     await this.ensureActivityNetworkScope(env);
     const activity = this.normalizeActivity(payload);
-    await env.ACTMASTER_DB.prepare(`
-      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_ratio,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      ON CONFLICT(activity_id) DO UPDATE SET
+    const existing = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activity.activity_id]);
+    activity.visibility = this.visibilityValue((payload.data || payload).visibility !== undefined ? (payload.data || payload).visibility : payload.visibility, existing?.visibility || 'network');
+    if (existing) activity.status = this.pick(payload.data || payload, ['status','狀態'], existing.status);
+    const conflict = payload.createOnly === true ? 'DO NOTHING' : `DO UPDATE SET
         name=excluded.name,type=excluded.type,fee_type=excluded.fee_type,price=excluded.price,start_time=excluded.start_time,
         end_time=excluded.end_time,description=excluded.description,image_url=excluded.image_url,image_ratio=excluded.image_ratio,status=excluded.status,
         is_series=MAX(activities.is_series,excluded.is_series),nfc_checkin_start=excluded.nfc_checkin_start,nfc_checkin_end=excluded.nfc_checkin_end,
-        nfc_same_day_only=excluded.nfc_same_day_only
-    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_ratio,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only).run();
-    return activity;
+        nfc_same_day_only=excluded.nfc_same_day_only,visibility=excluded.visibility`;
+    const result = await env.ACTMASTER_DB.prepare(`
+      INSERT INTO activities (activity_id,name,type,fee_type,price,start_time,end_time,description,image_url,image_ratio,creator_id,network_id,status,is_series,nfc_checkin_start,nfc_checkin_end,nfc_same_day_only,visibility)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(activity_id) ${conflict}
+    `).bind(activity.activity_id,activity.name,activity.type,activity.fee_type,activity.price,activity.start_time,activity.end_time,activity.description,activity.image_url,activity.image_ratio,activity.creator_id,activity.network_id,activity.status,activity.is_series,activity.nfc_checkin_start,activity.nfc_checkin_end,activity.nfc_same_day_only,activity.visibility).run();
+    if (payload.createOnly === true && !result.meta?.changes) {
+      const committed = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activity.activity_id]);
+      if (!committed || committed.creator_id !== activity.creator_id) throw Error('活動編號已存在，請重新確認主辦身分');
+      return {...committed,existed:true};
+    }
+    return {...activity,existed:false};
   },
 
   async bulkAddRegistrants(payload, env) {
@@ -12098,10 +12157,14 @@ const D1ActivityModule = {
     const activity = await this.upsertActivity(payload, env);
     if (!activity) return null;
     const names = Array.isArray(payload.names) ? payload.names : [];
+    let inserted = 0;
     for (let i = 0; i < names.length; i++) {
       const name = this.text(names[i]);
       if (!name) continue;
+      const guestRowId = payload.createOnly === true ? `REG_${activity.activity_id}_G${i + 1}` : '';
+      if (guestRowId && await D1ReadModule.first(env, 'SELECT row_id FROM registrants WHERE row_id=? AND activity_id=?', [guestRowId,activity.activity_id])) continue;
       await this.insertRegistration({
+        ...(guestRowId ? {rowId:guestRowId} : {}),
         activityId: activity.activity_id,
         activityName: activity.name,
         name,
@@ -12112,11 +12175,12 @@ const D1ActivityModule = {
         description: activity.description,
         imageUrl: activity.image_url
       }, env);
+      inserted++;
     }
-    return { success: true, data: { activityId: activity.activity_id, inserted: names.filter(Boolean).length } };
+    return { success: true, data: { activityId: activity.activity_id, inserted, existed: activity.existed } };
   },
 
-  async insertRegistration(payload, env) {
+  async insertRegistration(payload, env, member = null) {
     const activityId = this.pick(payload, ['activityId', '活動ID']);
     if (!activityId) return { success: false, error: 'Missing activityId' };
     const lineId = this.pick(payload, ['userId', 'lineId', 'LINE ID']);
@@ -12125,6 +12189,7 @@ const D1ActivityModule = {
       if (existing) return { success: true, data: this.registrantRow(existing), existed: true };
     }
     const activity = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    if (member && !this.canReadActivity(await this.activityScopeRow(activity, env), member)) return {success:false,error:'活動僅限歸屬會員報名'};
     const rowId = this.pick(payload, ['rowId', 'registrationId']) || `REG_${activityId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const activityName = this.pick(payload, ['activityName', '活動名稱'], activity ? activity.name : '');
     const name = this.pick(payload, ['userName', 'name', '姓名'], '未命名');
@@ -12132,10 +12197,15 @@ const D1ActivityModule = {
     const identity = this.pick(payload, ['defaultIdentity', 'identity', '身份'], '會員');
     const amount = Number(this.pick(payload, ['amount', 'price', '金額'], activity ? activity.price : 0)) || 0;
     const payment = this.pick(payload, ['paymentStatus', '付款狀態'], amount > 0 ? '待付款' : '免費');
-    await env.ACTMASTER_DB.prepare(`
+    const eligibility = member ? `SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS (
+      SELECT 1 FROM activities a WHERE a.activity_id=? AND a.status='上架'
+      AND (a.visibility='platform' OR a.network_id=? OR a.creator_id IN (SELECT value FROM json_each(?)) OR ?=1))` : 'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+    const result = await env.ACTMASTER_DB.prepare(`
       INSERT INTO registrants (row_id,line_id,activity_name,name,phone,identity,checked_in,payment_status,activity_id,amount,start_time,description,image_url,status)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `).bind(rowId,lineId,activityName,name,phone,identity,0,payment,activityId,amount,activity ? activity.start_time : '',activity ? activity.description : '',activity ? activity.image_url : '','active').run();
+      ${eligibility}
+    `).bind(rowId,lineId,activityName,name,phone,identity,0,payment,activityId,amount,activity ? activity.start_time : '',activity ? activity.description : '',activity ? activity.image_url : '','active',
+      ...(member ? [activityId,member.networkId,JSON.stringify(member.identityIds),member.role==='admin'?1:0] : [])).run();
+    if (member && !result.meta?.changes) return {success:false,error:'活動已下架或範圍已變更，請重新確認'};
     return { success: true, data: { rowId, activityId }, existed: false };
   },
 
@@ -12297,13 +12367,14 @@ const D1ActivityModule = {
     const status = this.pick(payload, ['status', '狀態'], '上架') === '下架' ? '下架' : '上架';
     if (!activityId) return { success: false, error: 'Missing activityId' };
 
-    const existing = await D1ReadModule.first(env, 'SELECT activity_id FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
+    const existing = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id = ? LIMIT 1', [activityId]);
     if (!existing) return { success: false, error: '找不到活動資料' };
 
     if (status === '下架') {
       await env.ACTMASTER_DB.prepare("UPDATE activities SET status = '下架', ever_unpublished = 1 WHERE activity_id = ?").bind(activityId).run();
     } else {
-      await env.ACTMASTER_DB.prepare("UPDATE activities SET status = '上架' WHERE activity_id = ?").bind(activityId).run();
+      const visibility = this.visibilityValue(payload.visibility, existing.visibility || 'network');
+      await env.ACTMASTER_DB.prepare("UPDATE activities SET status = '上架', visibility=? WHERE activity_id = ?").bind(visibility,activityId).run();
     }
     return { success: true, data: { activityId, status } };
   },
@@ -17079,6 +17150,12 @@ async function dispatchAction(action, payload, request, env) {
     if (rowId) payload.rowId = rowId;
   }
 
+  // Public reach never grants management rights; do not let the legacy fallback bypass this check.
+  if (['updateActivity','removeAct','setActivityStatus','duplicateActivity','getActivityRegistrants'].includes(action)) {
+    try { await D1ActivityModule.requireActivityManagement(payload, env, actor); }
+    catch (_) { return {success:false,error:'找不到活動，或不在您的活動管理範圍；請確認登入身分'}; }
+  }
+
   switch (action) {
     case 'extractActivityDmDraft': return await extractActivityDmDraft(payload, env, actor, (...args) => AIModule.callOpenAI(...args));
     case 'checkUser':              return await AuthModule.check(payload, env);
@@ -17331,16 +17408,15 @@ async function dispatchAction(action, payload, request, env) {
     case 'getActivities': {
       let listActor = actor;
       try {
-        if (!listActor && payload && payload.lineAccessToken) {
+        if (!listActor && (payload?.lineAccessToken || request.headers.get('Authorization'))) {
           listActor = await SecurityModule.getActor(payload, request, env).catch(() => null);
         }
-        const d1Result = await D1ActivityModule.listActivities(payload || {}, env, listActor);
+        const d1Result = await D1ActivityModule.listActivities(payload || {}, env, listActor, action === 'getPublicActivities');
         if (d1Result) return d1Result;
       } catch (e) {
         console.error("D1 listActivities fallback", e);
       }
-      const fallbackResult = await DBModule.forward(action, payload, env);
-      return D1ActivityModule.filterResultByActor(fallbackResult, payload || {}, listActor);
+      return {success:false,error:'活動列表暫時無法載入，請稍後重試'};
     }
     case 'getActivityById': {
       try {
@@ -17349,14 +17425,21 @@ async function dispatchAction(action, payload, request, env) {
       } catch (e) {
         console.error("D1 getActivityById fallback", e);
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'活動暫時無法載入，請稍後重試'};
     }
     case 'createActivityShareLink':
       return await createActivityShareLink(payload, request, env, actor,
         (input, bindings, verified) => D1ActivityModule.getActivityById(input, bindings, verified));
     case 'bulkAddRegistrants': {
-      if (D1ActivityModule.bool(payload?.isBatch || payload?.isSeries)) {
-        return await D1ActivityModule.bulkAddRegistrants(payload || {}, env);
+      if (!actor?.token) return {success:false,error:'請從 LINE 登入後建立活動'};
+      payload.userId = actor.userId;
+      const requestedId = D1ActivityModule.pick(payload, ['activityId','活動ID'], D1ActivityModule.pick(payload.data || {}, ['activityId','活動ID']));
+      if (requestedId) {
+        payload.activityId = requestedId;
+        try {
+          const existing = await D1ReadModule.first(env, 'SELECT activity_id FROM activities WHERE activity_id=?', [requestedId]);
+          if (existing) await D1ActivityModule.requireActivityManagement(payload, env, actor);
+        } catch (_) { return {success:false,error:'活動編號已存在或無法確認管理權限，請重新整理'}; }
       }
       try {
         const d1Result = await D1ActivityModule.bulkAddRegistrants(payload || {}, env);
@@ -17364,7 +17447,7 @@ async function dispatchAction(action, payload, request, env) {
       } catch (e) {
         console.error("D1 bulkAddRegistrants fallback", e);
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'活動尚未建立成功，請重試同一筆'};
     }
     case 'updateActivity': {
       try {
@@ -17373,29 +17456,41 @@ async function dispatchAction(action, payload, request, env) {
       } catch (e) {
         console.error("D1 updateActivity fallback", e);
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'活動尚未更新成功，請稍後重試'};
     }
     case 'joinActivity': {
+      let member;
       try {
-        const seriesResult = await joinActivityBatches(payload || {}, env, request, SecurityModule, D1ActivityModule);
+        const verified = await SecurityModule.getActor(payload, request, env);
+        member = await D1ActivityModule.verifiedActivityMember(verified, env);
+        if (!member) return {success:false,error:'請從 LINE 登入並完成會員註冊後報名'};
+        const row = await D1ReadModule.first(env, 'SELECT * FROM activities WHERE activity_id=?', [payload.activityId]);
+        const scope = await D1ActivityModule.activityScopeRow(row, env);
+        if (!D1ActivityModule.canReadActivity(scope, member) || scope.status !== '上架') return {success:false,error:'活動僅限歸屬會員報名或已下架'};
+        const profile = (await D1ReadModule.findUserByIdentity(env, member.userId))?.user;
+        payload.userId=member.userId;payload.userName=profile?.name;payload.userPhone=profile?.phone;
+        delete payload.amount;delete payload.price;delete payload['金額'];
+      } catch (_) { return {success:false,error:'無法確認活動報名權限，請重新整理'}; }
+      try {
+        const seriesResult = await joinActivityBatches(payload || {}, env, request, SecurityModule, D1ActivityModule, member);
         if (seriesResult) return seriesResult;
       } catch (_) { return {success:false,error:'報名狀態尚未確認，請重新整理後重試；已成功的梯次不會重複報名'}; }
       try {
-        const d1Result = await D1ActivityModule.insertRegistration(payload || {}, env);
+        const d1Result = await D1ActivityModule.insertRegistration(payload || {}, env, member);
         if (d1Result) return d1Result;
       } catch (e) {
         console.error("D1 joinActivity fallback", e);
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'報名尚未確認成功，請重新整理'};
     }
     case 'getActivityRegistrants': {
       try {
         const d1Result = await D1ActivityModule.listRegistrants(payload || {}, env);
         if (d1Result) return d1Result;
       } catch (e) {
-        console.error("D1 listRegistrants fallback", e);
+        console.error("D1 listRegistrants failed", e);
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'活動報名名單暫時無法載入，請稍後重試'};
     }
     case 'getMyActivities':
     case 'getUserActivities':
@@ -17453,27 +17548,27 @@ async function dispatchAction(action, payload, request, env) {
         const d1Result = await D1ActivityModule.removeActivity(payload || {}, env);
         if (d1Result) return d1Result;
       } catch (e) {
-        console.error("D1 removeAct fallback", e);
+        console.error("D1 removeAct failed", e);
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'活動尚未下架成功，請稍後重試'};
     }
     case 'setActivityStatus': {
       try {
         const d1Result = await D1ActivityModule.setActivityStatus(payload || {}, env);
         if (d1Result) return d1Result;
       } catch (e) {
-        console.error("D1 setActivityStatus fallback", e);
+        console.error("D1 setActivityStatus failed", e);
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'活動上架狀態尚未更新成功，請稍後重試'};
     }
     case 'duplicateActivity': {
       try {
         const d1Result = await D1ActivityModule.duplicateActivity(payload || {}, env);
         if (d1Result) return d1Result;
       } catch (e) {
-        console.error("D1 duplicateActivity fallback", e);
+        console.error("D1 duplicateActivity failed", e);
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'活動尚未複製成功，請稍後重試'};
     }
     case 'listPersonalTasks':
       return await D1PersonalTaskModule.list(payload || {}, env);

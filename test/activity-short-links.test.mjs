@@ -123,7 +123,7 @@ test('new creation action uses strict existing authentication, no D1 identity fa
   assert.match(legacy, /createActivityShareLink: \{ access: 'authenticated' \}/);
   assert.match(legacy, /case 'createActivityShareLink':[\s\S]*?createActivityShareLink\(payload, request, env, actor,[\s\S]*?D1ActivityModule.getActivityById/);
   assert(entry.indexOf('const activityLinkResponse') < entry.indexOf('const memberChatResponse'));
-  assert.match(read('index.html'), /activities\.js\?v=7\.11/);
+  assert.match(read('index.html'), /activities\.js\?v=7\.12/);
 });
 test('actual Worker denies forged identity without token before accessing D1', async () => {
   let reads = 0;
@@ -134,14 +134,16 @@ test('actual Worker denies forged identity without token before accessing D1', a
 });
 test('actual Worker dispatcher and existing activity reader create and resolve a verified link', async () => {
   const f = fixture(); try {
-    f.sql.exec('CREATE TABLE users(line_id TEXT,row_id TEXT,role TEXT,network_id TEXT,referrer_id TEXT,name TEXT,phone TEXT); CREATE TABLE registrants(row_id TEXT,activity_id TEXT,line_id TEXT,status TEXT);');
+    f.sql.exec("CREATE TABLE users(line_id TEXT,row_id TEXT,role TEXT,network_id TEXT,referrer_id TEXT,name TEXT,phone TEXT,point_line_id TEXT,legacy_line_id TEXT); CREATE TABLE registrants(row_id TEXT,activity_id TEXT,line_id TEXT,status TEXT); ALTER TABLE activities ADD COLUMN visibility TEXT NOT NULL DEFAULT 'network';");
+    f.sql.prepare('INSERT INTO users(line_id,row_id,role,network_id,referrer_id,name,phone) VALUES(?,?,?,?,?,?,?)').run(uid,uid,'user','admin','','測試會員','0912345678');
+    const before = f.sql.prepare('SELECT * FROM users').all();
     f.env.ACTMASTER_KV = { get: async key => key === 'AUTH_synthetic-token' ? uid : null };
     const res = await worker.fetch(new Request(origin, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'createActivityShareLink', payload: { activityId: 'ACT_test', networkId: 'admin', userId: other, role: 'admin', lineAccessToken: 'synthetic-token' } }) }), f.env, {});
     const result = await res.json(); assert.equal(result.success, true, JSON.stringify(result));
     const redirect = await worker.fetch(new Request(result.data.url), f.env, {});
     assert.equal(redirect.status, 302); assert.equal(new URL(redirect.headers.get('Location')).searchParams.get('r'), uid);
-    assert.equal(f.sql.prepare('SELECT count(*) n FROM users').get().n, 0);
+    assert.deepEqual(f.sql.prepare('SELECT * FROM users').all(), before);
     assert.equal(f.sql.prepare('SELECT count(*) n FROM registrants').get().n, 0);
   } finally { f.close(); }
 });

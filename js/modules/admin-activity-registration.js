@@ -294,13 +294,18 @@
     if (creation.uploadFailed) { message('aar-create-status','宣傳圖尚未上傳成功，請重新選圖或填寫圖片網址。',true);return; }
     const form = $('aar-create-form');
     if (!creation.payload && !form.reportValidity()) return;
+    const boundCreation=creation,uid=text(adminProfile?.userId),token=editAccessToken();
+    const formValues=creation.payload?null:{...Object.fromEntries(new FormData(form)),isBatch:form.elements.seriesMode.checked,batches:selectedSlots($('aar-slot-list'))};
+    lockCreate(true);
     try {
-      creation.payload ||= creationPayload({...Object.fromEntries(new FormData(form)),isBatch:form.elements.seriesMode.checked,
-        batches:selectedSlots($('aar-slot-list'))},creation.id);
-    } catch(error) { message('aar-create-status',error.message,true);return; }
-    lockCreate(true);message('aar-create-status','正在建立活動…');
-    $('aar-create-submit').textContent='建立中…';
-    try {
+      if (!creation.payload) {
+        const payload=creationPayload(formValues,creation.id);
+        const visibility=await window.chooseActivityVisibility({isCurrent:()=>creation===boundCreation && $('aar-create-dialog')?.open && text(adminProfile?.userId)===uid && editAccessToken()===token});
+        if (!visibility) return;
+        payload.visibility=visibility;payload.createOnly=true;creation.payload=payload;
+      }
+      if (creation!==boundCreation || text(adminProfile?.userId)!==uid || editAccessToken()!==token) throw Error('登入或活動已變更，請重新開啟');
+      message('aar-create-status','正在建立活動…');$('aar-create-submit').textContent='建立中…';
       // Same mobile creation action. Empty names avoids registration side effects; retry reuses this ID and snapshot.
       const result = await fetchAPI('bulkAddRegistrants',structuredClone(creation.payload),{silent:true});
       if (!result || result.success === false || !activityId(result)) throw new Error('尚未確認是否建立成功。請勿另建一筆；可按「重試同一筆建立」，或關閉後再回來繼續。');

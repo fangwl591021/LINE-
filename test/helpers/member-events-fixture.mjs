@@ -4,13 +4,14 @@ import {handleMemberEvents} from '../../worker/member-hosted-events.mjs';
 export const UIDS={host:'U'+'a'.repeat(32),guest:'U'+'b'.repeat(32),other:'U'+'c'.repeat(32),old:'U'+'d'.repeat(32)};
 export function fixture(t){
   const sql=new DatabaseSync(':memory:');t?.after(()=>sql.close());
-  sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,name TEXT,role TEXT);CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
-    INSERT INTO users VALUES('host','${UIDS.host}','範例主辦','user'),('guest','${UIDS.guest}','範例來賓','user'),('other','${UIDS.other}','其他主辦','admin');
+  sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,name TEXT,role TEXT,network_id TEXT DEFAULT 'admin',referrer_id TEXT DEFAULT '');CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
+    INSERT INTO users(row_id,line_id,name,role) VALUES('host','${UIDS.host}','範例主辦','user'),('guest','${UIDS.guest}','範例來賓','user'),('other','${UIDS.other}','其他主辦','admin');
     INSERT INTO user_identity_links VALUES('${UIDS.old}','${UIDS.host}','active');
-    CREATE TABLE points_ledger(id TEXT);CREATE TABLE activities(id TEXT);CREATE TABLE personal_tasks(id TEXT);`);
+    CREATE TABLE points_ledger(id TEXT);CREATE TABLE activities(id TEXT,status TEXT,start_time TEXT);CREATE TABLE personal_tasks(id TEXT);`);
   sql.exec(readFileSync(new URL('../../migrations/0055_member_hosted_events.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../../migrations/0056_member_event_dm_usage.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../../migrations/0057_member_event_category.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../../migrations/0059_activity_visibility.sql',import.meta.url),'utf8'));
   const writes=[];let authStatus=200,beforeRun=null,badWrite=false;
   function prepare(query,args=[]){return {bind(...a){return prepare(query,a);},async first(){return sql.prepare(query).get(...args)||null;},async all(){return {success:true,results:sql.prepare(query).all(...args)};},async run(){beforeRun?.(query,args);if(badWrite)return {success:false};if(!/^\s*(?:INSERT(?: OR IGNORE)? INTO|UPDATE|DELETE FROM) member_(?:hosted_events|event_registrations|event_dm_usage)/.test(query))throw Error('Unexpected write: '+query);writes.push(query);const r=sql.prepare(query).run(...args);return {success:true,meta:{changes:Number(r.changes)}};}};}
   const db={prepare,withSession(){return this;}},env={ACTMASTER_DB:db};

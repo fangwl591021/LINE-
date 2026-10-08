@@ -14,7 +14,7 @@ function categoryEditor(result={activityId:'A'}) {
   const defaults={'edit-a-id':'A','edit-a-name':'同一活動','edit-a-type':'合作商業交流','edit-a-start':'2026-10-07 14:00','edit-a-end':'2026-10-07 17:00','edit-a-price':'200','edit-a-reward':'0','edit-a-nfc-start':'','edit-a-nfc-end':'','edit-a-desc':'原說明','edit-a-image':'https://example.com/dm.jpg','edit-a-image-ratio':'16:9'};
   const node=id=>{if(!nodes.has(id))nodes.set(id,{value:defaults[id]||'',innerHTML:'儲存變更',disabled:false,events:[],dispatchEvent(e){this.events.push(e);},focus(){}});return nodes.get(id);};
   const sandbox={document:{getElementById:node},Event,showToast:(...args)=>toasts.push(args),
-    window:{AdminActivityRegistration:{canSaveEditDm:()=>true}},normalizeActivityImageRatioForAdmin_:v=>v,
+    window:{AdminActivityRegistration:{canSaveEditDm:()=>true},chooseActivityVisibility:async()=> 'network'},normalizeActivityImageRatioForAdmin_:v=>v,
     fetchAPI:async(action,payload)=>{calls.push({action,payload});return result;},closeActivityEditModal:()=>closed++,loadActivities:async()=>reloaded++};
   const start=html.indexOf('    function selectActivityTypeFromMonitor('),end=html.indexOf('    function editActivityFromMonitor(',start);
   vm.runInNewContext(html.slice(start,end),sandbox);
@@ -99,7 +99,7 @@ test('admin uses authenticated existing APIs, no public fallback, new tables or 
   assert.match(source,/request !== state\.rosterRequest \|\| id !== state\.selected/);
   assert.match(source,/state\.busy \|\| !\['toggleCheckin','confirmPayment'\]/);
   assert.match(source,/row\.cancelled/);
-  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=9/);
+  assert.match(html,/js\/modules\/admin-activity-registration\.js\?v=10/);
   assert.match(html,/get\('tab'\) === 'activities' \? 'activities' : 'users'/);
   assert.match(html,/data-registrants=/);
   assert.doesNotMatch(source,/localStorage|ACTMASTER_DB|CREATE TABLE/);
@@ -137,7 +137,8 @@ test('core field form retains venue and raw schedule in the existing description
 test('create UI uses mobile API and keeps pending snapshot and busy guard; existing edit flow is untouched', () => {
   assert.match(source,/data-aar="create">＋新增活動/);
   assert.match(source,/fetchAPI\('bulkAddRegistrants',structuredClone\(creation\.payload\)/);
-  assert.match(source,/creation\.payload \|\|= creationPayload/);
+  assert.match(source,/if \(!creation\.payload\)/);
+  assert.match(source,/payload\.visibility=visibility;payload\.createOnly=true;creation\.payload=payload/);
   assert.match(source,/if \(!creation \|\| creation\.busy/);
   assert.match(source,/if \(!creation\.payload\) \{ \$\('aar-create-dialog'\)\.remove\(\); creation = null/);
   assert.match(source,/creation\.uploadFailed/);
