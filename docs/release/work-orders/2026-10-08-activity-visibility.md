@@ -81,3 +81,5 @@ UID resolver、推薦人／會員歸屬、點數 ledger、LINE reply ownership�
 - 教學中心新增第 6 課「活動上架」，原 5 課不變。使用 10 張實際 UI 畫面與完整操作錄影、14 段台灣中文旁白、native Higgsedit；197.792 秒時間軸、章節依 edit manifest，無正式活動／報名或 AI 呼叫。
 - 新增 capture 腳本供可重現操作示範；首頁入口、草稿核對（2026 當年）、分類、POP cancel/network/platform、首頁縮圖及全圖均錄製。
 - 教學整合後 full `guard after` 再次 PASS，紀錄 `C:/Users/User/AppData/Local/Temp/activity-release-guard-after.log`。媒體輸出及前端發布需完成影片檢查後驗收。
+- 成品已由 native Higgsedit 輸出並完整解碼通過：197.793 秒、720×1600、H.264／AAC、22,153,464 bytes；MP4 faststart 重新封裝、14 段中文重點文字與成品抽幀確認，沒有缺字方框。SHA256 `92e2fa1d17a76fdbcfb6d39a3d339ed37338933255fdaffefbba92c985b969c7`。
+- 媒體已發布至 `linengine/tutorials/2026-10-08/activity-publish-tutorial-v1.mp4`；全檔 GET SHA256 與成品一致，HEAD 200／video/mp4／22,153,464 bytes，Range 0-1023 回 206／1,024 bytes，支援快速載入與跳轉。沒有覆蓋原有 5 課影片。
