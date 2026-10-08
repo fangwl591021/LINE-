@@ -2319,7 +2319,7 @@ window.renderStorePointCustomer = function(customer) {
       bindHint.textContent = '母站可操作 ' + Number(customer.motherBalance || 0).toLocaleString('zh-TW') + ' 點；本系統待同步 ' + Number(customer.localBalance || 0).toLocaleString('zh-TW') + ' 點；合計 ' + Number(customer.totalBalance || customer.balance || 0).toLocaleString('zh-TW') + ' 點。';
     } else if (customer.localWalletRepaired) {
       bindHint.className = 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] font-black leading-relaxed text-emerald-800';
-      bindHint.textContent = '\u5df2\u88dc\u5efa\u9ede\u6578\u9322\u5305\u641c\u5c0b\u7d22\u5f15\uff0c\u53ef\u6b63\u5e38\u8d08\u6263\u9ede\u3002';
+      bindHint.textContent = '會員帳號已確認；點數異動以送出後的入帳結果為準。';
     } else {
       bindHint.classList.add('hidden');
       bindHint.textContent = '';
@@ -2331,7 +2331,7 @@ window.renderStorePointCustomer = function(customer) {
 
 window.prepareStorePointCashierSession = async function(customer) {
   if (window.isRewardOnlyPointCashier?.()) return null;
-  if (!customer || customer.needsBinding || !customer.customerPointUserId) return null;
+  if (!customer || customer.needsBinding || !/^U[0-9a-fA-F]{20,64}$/.test(customer.customerPointUserId || '')) return null;
   const activeCustomerId = customer.customerPointUserId;
   try {
     const res = await window.fetchAPI('prepareStorePointCashierSession', { customerUserId: activeCustomerId }, true);
@@ -2414,6 +2414,9 @@ window.lookupStorePointCustomer = async function() {
       window.renderStorePointCustomerCandidates(data.candidates);
       window.showToast?.('找到多筆客戶，請先選擇正確對象', false);
       return data;
+    }
+    if (!data.needsBinding && !/^U[0-9a-fA-F]{20,64}$/.test(data.customerPointUserId || '')) {
+      throw new Error('查無已綁定的會員，請客戶登入平台並確認會員手機，或改掃會員錢包 QR');
     }
     if (input && !rewardPhone && data.customerPointUserId && !data.needsBinding && input.value !== data.customerPointUserId) {
       input.value = data.customerPointUserId;
@@ -2507,6 +2510,9 @@ window.submitStorePointCashier = async function(btn) {
   }
 
   if (!customerUserId) return window.showToast?.('請先掃描或輸入客戶帳號', true);
+  if (!/^U[0-9a-fA-F]{20,64}$/.test(customerUserId)) {
+    return window.showToast?.('查無已綁定的會員，請客戶登入平台並確認會員手機，或改掃會員錢包 QR', true);
+  }
   if (!amount || amount <= 0) return window.showToast?.('請輸入正確消費金額', true);
 
   if (mode !== 'reward' && (!deductPoints || deductPoints <= 0)) return window.showToast?.('請輸入本次折抵點數。', true);

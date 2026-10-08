@@ -6070,21 +6070,30 @@ const PointModule = {
           error: '',
           needsSelection: true,
           rawCustomerId: raw,
-          candidates: search.matches.slice(0, 10).map(match => ({
-            customerPointUserId: match.id,
-            name: match.name || '未命名',
-            phone: match.phone || '',
-            industry: match.industry || '',
-            avatarUrl: match.avatarUrl || '',
-            needsBinding: !!match.needsBinding,
-            canAdjust: !!match.id,
-            matchedBy: match.kind
-          }))
+          candidates: search.matches.slice(0, 10).map(match => {
+            const validMember = /^U[0-9a-fA-F]{20,64}$/.test(match.id || '');
+            const needsBinding = !!match.needsBinding || !validMember;
+            return {
+              customerPointUserId: validMember ? match.id : '',
+              name: match.name || '未命名',
+              phone: match.phone || '',
+              industry: match.industry || '',
+              avatarUrl: match.avatarUrl || '',
+              needsBinding,
+              canAdjust: validMember && !needsBinding,
+              matchedBy: match.kind
+            };
+          })
         };
       }
     }
 
     const customerPointUserId = await this.resolvePointUserId(env, matchedId);
+    // Phone lookup may leave the raw phone as matchedId, or find a phone-keyed
+    // repair row. Neither is a member identity accepted by the cashier boundary.
+    if (!/^U[0-9a-fA-F]{20,64}$/.test(customerPointUserId || '')) {
+      return { error: '查無已綁定的會員，請客戶登入平台並確認會員手機，或改掃會員錢包 QR' };
+    }
     const identity = env.ACTMASTER_DB
       ? await D1ReadModule.findUserByIdentity(env, matchedId).catch(() => null)
       : null;
@@ -6151,10 +6160,10 @@ const PointModule = {
     ).trim();
     const resolved = await this.resolveStorePointCustomer(env, rawCustomerId);
     if (resolved.error) return { success: false, error: resolved.error };
-    // Reward phone lookup must resolve a real member before any wallet lookup/index repair.
-    if (isRewardOnlyRole(payload.authenticatedRole) && !resolved.needsSelection && !resolved.needsBinding &&
+    // Every cashier role must resolve a real member before wallet/index work.
+    if (!resolved.needsSelection && !resolved.needsBinding &&
         !/^U[0-9a-fA-F]{20,64}$/.test(resolved.customerPointUserId || '')) {
-      return { success: false, error: '查無已綁定的會員，請確認手機號碼或改掃會員錢包 QR' };
+      return { success: false, error: '查無已綁定的會員，請客戶登入平台並確認會員手機，或改掃會員錢包 QR' };
     }
     if (resolved.needsSelection) {
       return {
@@ -6328,7 +6337,9 @@ const PointModule = {
       return { success: false, error: 'Customer is not ready for cashier session' };
     }
     const customerPointUserId = resolved.customerPointUserId;
-    if (!customerPointUserId) return { success: false, error: 'Missing customer user id' };
+    if (!/^U[0-9a-fA-F]{20,64}$/.test(customerPointUserId || '')) {
+      return { success: false, error: '查無已綁定的會員，請客戶登入平台並確認會員手機，或改掃會員錢包 QR' };
+    }
 
     const actorPointUserId = await this.resolvePointUserId(env, actorId).catch(() => actorId);
     const [wallet, customerMotherReady] = await Promise.all([

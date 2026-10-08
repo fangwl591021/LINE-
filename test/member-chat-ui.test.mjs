@@ -173,7 +173,7 @@ test('opt-in is explicit, auth precedes deep link, private notifications cron ca
   assert.match(ui, /client.request\('\/notifications', \{ enabled \}\)/);
   assert.match(ui, /const me = await client.request\('\/me'\)[\s\S]+room = threadId/);
   assert.match(auth, /applyRegisteredUserSession\(checkRes.info,[^\n]+\n\s+if \(await window.openMemberChatNotification\?\.\(urlParams\)\) return/);
-  assert.match(read('index.html'), /js\/auth\.js\?v=11\.07&manage=1&chat=1/);
+  assert.match(read('index.html'), /js\/auth\.js\?v=11\.08&manage=1&chat=1/);
   assert.match(entry, /controller\?\.cron === '\* \* \* \* \*'[\s\S]+processMemberChatNotifications\(env\)[\s\S]+return;\s+}\s+if \(controller\?\.cron === '\*\/15/);
   assert.match(read('wrangler.toml'), /crons = \["0 1 \* \* \*", "\*\/15 18-20 \* \* \*", "\* \* \* \* \*"\]/);
 });
