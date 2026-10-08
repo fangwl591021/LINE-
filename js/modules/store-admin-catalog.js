@@ -35,6 +35,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
   function editor(type,record){
     dirty=false;body.replaceChildren();
     const form=make('form'),fields={},heading=make('h3',type==='store'?'店家資料':'編輯商品／優惠');form.append(heading);
+    form.append(make('p','公開／上架修改需經 AI 審核文案與圖片；疑似、違反政策或審核未完成不公開。可修改重送或明確選擇草稿。'));
     const label=(key,text,tag='input',options={})=>{
       const wrapper=make('label',text),input=make(tag);input.name=key;Object.assign(input,options);
       input.value=record[key]??'';wrapper.append(input);form.append(wrapper);fields[key]=input;return input;
@@ -93,13 +94,13 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
         if(!ask(`確定儲存「${record.name||record.title}」？狀態：${statusName(changes.status)}。將同步影響手機商城顯示。`))return;
         pending={type,id:record.id,shop_id:shop.id,version:record.version,shop_version:shop.version,request_key:crypto.randomUUID(),changes};dirty=true;
       }
-      const requestEpoch=epoch;busy=true;lock();message.textContent='儲存中…';
+      const requestEpoch=epoch;busy=true;lock();message.textContent=(pending.changes.status||record.status)==='active'?'AI 上架審核中…通過後才儲存公開。':'儲存中…';
       try{
         const result=await api('/admin/catalog',pending);
         if(!active()||requestEpoch!==epoch)return;
         if(result?.success!==true||result.id!==record.id)throw new Error('未確認儲存結果');
         finished=true;dirty=false;message.textContent='已儲存；手機商城重新載入即使用更新資料。請重新載入後繼續編輯。';
-      }catch(error){if(active()&&requestEpoch===epoch)message.textContent=(error.message||'儲存失敗')+'。可重新確認同一筆儲存；若版本衝突請重新載入。';}
+      }catch(error){if(active()&&requestEpoch===epoch){const reviewFailure=String(error.code||'').startsWith('LISTING_');if(reviewFailure)pending=null;message.textContent=(error.message||'儲存失敗')+(reviewFailure?'。表單已保留，可修改或選草稿再送。':'。可重新確認同一筆儲存；若版本衝突請重新載入。');}}
       finally{busy=false;if(active()&&requestEpoch===epoch)lock();}
     };
   }

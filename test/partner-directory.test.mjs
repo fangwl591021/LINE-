@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { PartnerDirectoryModule } from '../worker/partner-directory.mjs';
+import {listingTestFetch} from './fixtures/store-listing-review.mjs';
 
 function fakeEnv(rows, firstRows = []) {
   const calls = [];
   const batches = [];
   return {
+    OPENAI_API_KEY:'synthetic-only',
     calls,
     batches,
     ACTMASTER_DB: {
       prepare(sql) {
+        if(sql.includes('store_listing_review'))return {bind(){return this;},async first(){return null;},async run(){return {success:true,meta:{changes:1}};}};
         const call = { sql, bindings: [] };
         calls.push(call);
         return {
@@ -127,10 +130,11 @@ const rows = [{
 {
   const env = fakeEnv([], [{ partner_id: 7 }]);
   const result = await PartnerDirectoryModule.save({
+    authenticatedUserId:'U_ADMIN',
     partner: { name: '正式測試店家', category: '餐飲', status: 'active', websiteUrl: 'https://example.com' },
     redeemPolicy: { enabled: true, maxRedeemPercent: 20, minSpendAmount: 100 },
     location: { branchName: '中壢店', city: '桃園市', district: '中壢區', status: 'active' }
-  }, env);
+  }, env, listingTestFetch(()=>{throw Error('External calls forbidden');}));
   assert.equal(result.success, true);
   assert.match(result.partnerHandle, /^partner_/);
   assert.match(result.locationHandle, /^location_/);

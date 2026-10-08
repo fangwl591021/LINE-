@@ -1,3 +1,4 @@
+import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 const MAX_DIRECTORY_LIMIT = 50;
 
 function text(value, maxLength = 160) {
@@ -214,7 +215,7 @@ export const PartnerDirectoryModule = {
     return { success: true, partners, count: partners.length };
   },
 
-  async save(payload, env) {
+  async save(payload, env, fetcher=fetch) {
     if (!env?.ACTMASTER_DB) return { success: false, error: '合作店家資料庫尚未設定' };
     const partner = payload?.partner && typeof payload.partner === 'object' ? payload.partner : payload || {};
     const contact = payload?.contact && typeof payload.contact === 'object' ? payload.contact : {};
@@ -246,6 +247,10 @@ export const PartnerDirectoryModule = {
     }
     const maxRedeemPercent = Math.min(100, Math.max(0, Number.parseInt(policy.maxRedeemPercent, 10) || 0));
     const minSpendAmount = Math.max(0, Number.parseInt(policy.minSpendAmount, 10) || 0);
+    // Caller overwrites authenticatedUserId after server-side admin authorization.
+    try{
+      await requireListingReview({value:{status,name,category:text(partner.category,80),summary:text(partner.summary,500),description:text(partner.description,2000),image_url:safeHttpUrl(partner.coverImageUrl,'封面圖片網址'),extra_images:[safeHttpUrl(partner.logoUrl,'Logo 網址')].filter(Boolean),website:safeHttpUrl(partner.websiteUrl,'官方網站'),line:safeHttpUrl(partner.lineUrl,'LINE 網址'),branch:text(location.branchName,160),policy_note:text(policy.note,500)},scope:'partner:'+partnerHandle,uid:text(payload?.authenticatedUserId,160),env,fetcher});
+    }catch(error){if(error instanceof ListingReviewError)return listingReviewFailure(error);throw error;}
 
     const savedPartner = await env.ACTMASTER_DB.prepare(`
       INSERT INTO point_redemption_partners (

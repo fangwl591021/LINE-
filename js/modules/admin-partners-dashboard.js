@@ -214,9 +214,9 @@ async function savePartnerAdmin(button) {
   const payload = partnerAdminPayload();
   if (!payload.partner.name) return showToast('請輸入店家名稱', true);
   const original = button?.textContent || '儲存店家';
-  if (button) { button.disabled = true; button.textContent = '儲存中...'; }
+  if (button) { button.disabled = true; button.textContent = payload.partner.status==='active'?'AI 上架審核中…':'儲存中...'; }
   try {
-    const response = await fetchAPI('savePointRedemptionPartner', payload);
+    const response = await fetchAPI('savePointRedemptionPartner', payload, {timeoutMs:65000});
     if (!response) return;
     clearPartnerAdminForm();
     showToast('合作店家已儲存');

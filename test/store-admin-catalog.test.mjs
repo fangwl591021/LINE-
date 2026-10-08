@@ -6,6 +6,7 @@ import {handleStoreAdminCatalog} from '../worker/store-admin-catalog.mjs';
 import {handleStoreShop} from '../worker/store-shop.mjs';
 import {storeInviteProfileView} from '../workerbackup.js';
 import worker from '../worker-entry.mjs';
+import {listingTestEnv,listingTestFetch} from './fixtures/store-listing-review.mjs';
 const uid=n=>'U'+String(n).repeat(32),id=n=>String(n).padStart(8,'0')+'-1111-4111-8111-111111111111';
 const ADMIN='Uf729764dbb5b652a5a90a467320bea29',OWNER=uid(2),MEMBER=uid(3);
 const payload=(extra={})=>({type:'product',id:id(10),shop_id:id(1),version:1,shop_version:1,request_key:id(99),changes:{title:'更新商品',status:'active'},...extra});
@@ -56,9 +57,10 @@ function fixture(){
     try{const results=[];for(const statement of statements)results.push(await statement.all());sql.exec('COMMIT');return results;}
     catch(error){sql.exec('ROLLBACK');throw error;}finally{release();}
   }};
-  const fetcher=async(_url,options)=>{const user=options.headers.Authorization.slice(7);return /^U[0-9a-f]{32}$/.test(user)?Response.json({userId:user}):new Response('',{status:401});};
+  const env=listingTestEnv(sql,db);
+  const fetcher=listingTestFetch(async(_url,options)=>{const user=options.headers.Authorization.slice(7);return /^U[0-9a-f]{32}$/.test(user)?Response.json({userId:user}):new Response('',{status:401});});
   const call=async(data=null,actor=ADMIN,query='shop='+id(1))=>{
-    const response=await handleStoreAdminCatalog(new Request('https://test.invalid/v1/store-shop/admin/catalog'+(data?'':'?'+query),{method:data?'POST':'GET',headers:actor?{Authorization:'Bearer '+actor}:{},...(data?{body:typeof data==='string'?data:JSON.stringify(data)}:{})}),{ACTMASTER_DB:db},storeInviteProfileView,fetcher);
+    const response=await handleStoreAdminCatalog(new Request('https://test.invalid/v1/store-shop/admin/catalog'+(data?'':'?'+query),{method:data?'POST':'GET',headers:actor?{Authorization:'Bearer '+actor}:{},...(data?{body:typeof data==='string'?data:JSON.stringify(data)}:{})}),env,storeInviteProfileView,fetcher);
     return {http:response.status,...await response.json()};
   };
   const publicStore=async()=>{

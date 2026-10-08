@@ -4,9 +4,10 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {handleStoreAdminProducts} from '../worker/store-admin-products.mjs';
 import {storeInviteProfileView} from '../workerbackup.js';
+import {listingTestEnv,listingTestFetch} from './fixtures/store-listing-review.mjs';
 const uid=n=>'U'+String(n).repeat(32),id=n=>String(n).padStart(8,'0')+'-1111-4111-8111-111111111111';
 const ADMIN='Uf729764dbb5b652a5a90a467320bea29',OWNER=uid(2),MEMBER=uid(3),REWARD=uid(4);
-const product=(extra={})=>({shop_id:id(1),shop_version:1,request_key:id(99),title:'商品',description:'介紹',image_url:'https://img.test/item.png',price_cents:12345,category:'食',status:'draft',redeem_type:'none',redeem_value:0,purchase_mode:'in_store',...extra});
+const product=(extra={})=>({shop_id:id(1),shop_version:1,request_key:id(99),title:'商品',description:'介紹',image_url:'https://img.example.com/item.png',price_cents:12345,category:'食',status:'draft',redeem_type:'none',redeem_value:0,purchase_mode:'in_store',...extra});
 function fixture(){
   const sql=new DatabaseSync(':memory:');
   sql.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '',points INTEGER DEFAULT 500); CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);");
@@ -25,14 +26,15 @@ function fixture(){
     try{const results=[];for(const s of statements)results.push(await s.all());sql.exec('COMMIT');return results;}
     catch(error){sql.exec('ROLLBACK');throw error;}
   }};
-  const fetcher=async(url,options)=>{
+  const env=listingTestEnv(sql,db);
+  const fetcher=listingTestFetch(async(url,options)=>{
     assert.equal(url,'https://api.line.me/v2/profile');assert.equal(options.redirect,'manual');
     const value=options.headers.Authorization.slice(7);
     return /^U[0-9a-f]{32}$/.test(value)?Response.json({userId:value}):new Response('',{status:401});
-  };
+  });
   const call=async(data=null,actor=ADMIN,query='shop='+id(1),method=data?'POST':'GET')=>{
     const req=new Request('https://test.invalid/v1/store-shop/admin/products'+(method==='GET'?'?'+query:''),{method,headers:actor?{Authorization:'Bearer '+actor,'Content-Type':'application/json'}:{},...(data?{body:typeof data==='string'?data:JSON.stringify(data)}:{})});
-    const response=await handleStoreAdminProducts(req,{ACTMASTER_DB:db},storeInviteProfileView,fetcher);
+    const response=await handleStoreAdminProducts(req,env,storeInviteProfileView,fetcher);
     return {status:response.status,...await response.json()};
   };
   return {sql,db,call,setBeforeBatch:fn=>{beforeBatch=fn;},failAudit:()=>{failAudit=true;},count:table=>sql.prepare('SELECT count(*) n FROM '+table).get().n,

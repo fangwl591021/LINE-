@@ -10,10 +10,10 @@ async function loadAdminMall(){
   const api=async(path,data)=>{
     if(!current())throw new Error('頁面或登入已變更，請重新進入商城管理');
     const headers={Authorization:'Bearer '+token};if(data)headers['Content-Type']='application/json';
-    const response=await fetch(WORKER_URL.replace(/\/+$/,'')+'/v1/store-shop'+path,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,cache:'no-store',signal:AbortSignal.timeout(15000)});
+    const response=await fetch(WORKER_URL.replace(/\/+$/,'')+'/v1/store-shop'+path,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,cache:'no-store',signal:AbortSignal.timeout(data?65000:15000)});
     const result=await response.json();
     if(!current())throw new Error('登入已變更');
-    if(!response.ok||result?.success!==true)throw new Error(result?.error||'商城服務暫時無法使用');
+    if(!response.ok||result?.success!==true){const error=new Error(result?.error||'商城服務暫時無法使用');error.code=result?.code;throw error;}
     return result;
   };
   async function directory(){
@@ -26,11 +26,11 @@ async function loadAdminMall(){
       }});
   }
   async function drafts(){
-    const module=await import('./store-admin-catalog.js?v=1');if(!current())return;
+    const module=await import('./store-admin-catalog.js?v=2');if(!current())return;
     await module.mountAdminDrafts(container,{api,isCurrent:current,onBack:directory,onManageCatalog:id=>catalog(id,'draft')});
   }
   async function catalog(shopId,initialMode='products'){
-    const module=await import('./store-admin-catalog.js?v=1');if(!current())return;
+    const module=await import('./store-admin-catalog.js?v=2');if(!current())return;
     await module.mountAdminCatalog(container,{shopId,initialMode,api,isCurrent:current,onBack:directory,onUploadProducts:upload,prepareImage:prepareAdminMallImage,
       uploadImage:async base64Image=>{
         await api('/admin/catalog?shop='+encodeURIComponent(shopId));
@@ -39,7 +39,7 @@ async function loadAdminMall(){
       }});
   }
   async function upload(shopId){
-    const module=await import('./store-admin-products.js?v=1');if(!current())return;
+    const module=await import('./store-admin-products.js?v=2');if(!current())return;
     await module.mountAdminProducts(container,{shopId,api,isCurrent:current,onBack:()=>catalog(shopId),prepareImage:prepareAdminMallImage,
       uploadImage:async base64Image=>{
         await api('/admin/products?shop='+encodeURIComponent(shopId));

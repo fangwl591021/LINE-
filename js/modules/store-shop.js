@@ -2,6 +2,7 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const statusText = status => ({draft:'草稿',active:'已上架',archived:'已封存'}[status] || status);
   const categories = ['食','宿','遊','購','行','服務','製造'];
+  const listingNotice='公開／上架前由平台 AI 審核文案與圖片。禁止八大行業、詐騙、菸酒、醫療用品、犯罪、色情與賭博；疑似或審核未完成不公開，可先存草稿。';
   const industryLabels={'食':'餐飲食品','宿':'住宿','遊':'旅遊休閒','購':'購物零售','行':'交通接送','服務':'專業服務','製造':'製造手作'};
   const categoryIcons={'':'✦','食':'☕','宿':'⌂','遊':'☀','購':'🛍','行':'🚆','服務':'♡','製造':'⚙'};
   function categoryTags(scope, selected='') {
@@ -176,7 +177,7 @@
       if(!owner||!token)throw new Error('請先使用管理員帳號登入');
       pageKind('admin-drafts');const version=++epoch;alert.textContent='';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-catalog.js?v=1');if(!current())return;
+      const module=await import('./store-admin-catalog.js?v=2');if(!current())return;
       await module.mountAdminDrafts(content,{api,isCurrent:current,onBack:()=>run(()=>adminStores()),onManageCatalog:id=>run(()=>adminCatalog(id,'draft'))});
     }
     async function adminCatalog(id,initialMode='products') {
@@ -186,7 +187,7 @@
       pageKind('admin-catalog');const version=++epoch;alert.textContent='';
       content.innerHTML='<p role="status">載入商城管理…</p>';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-catalog.js?v=1');if(!current())return;
+      const module=await import('./store-admin-catalog.js?v=2');if(!current())return;
       await module.mountAdminCatalog(content,{shopId:id,initialMode,api,isCurrent:current,onBack:()=>run(()=>adminStores()),onUploadProducts:shopId=>run(()=>adminProducts(shopId)),prepareImage,
         uploadImage:async base64Image=>{
           if(!current())throw new Error('登入或頁面已變更');
@@ -203,7 +204,7 @@
       pageKind('admin-products');const version=++epoch;alert.textContent='';
       content.innerHTML='<p role="status">載入代上傳商品…</p>';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-products.js?v=1');
+      const module=await import('./store-admin-products.js?v=2');
       if(!current())return;
       await module.mountAdminProducts(content,{shopId:id,api,isCurrent:current,onBack:()=>run(()=>adminStores()),prepareImage,
         uploadImage:async base64Image=>{
@@ -223,9 +224,10 @@
         headers.Authorization=`Bearer ${token}`;
       }
       if(data) headers['Content-Type']='application/json';
-      const response=await fetch(`${base}/v1/store-shop${path}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(15000)});
+      const reviewing=data&&['/store','/product','/admin/catalog','/admin/products'].includes(path);
+      const response=await fetch(`${base}/v1/store-shop${path}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(reviewing?65000:15000)});
       const result=await response.json();
-      if(!response.ok||!result.success) throw new Error(result.error||'商城操作失敗');
+      if(!response.ok||!result.success){const error=new Error(result.error||'商城操作失敗');error.code=result.code;throw error;}
       return result;
     }
     function shopLink(id) {
@@ -307,6 +309,7 @@
     function renderManage() {
       const s=shop||{};
       content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary" ${atCapacity()?'disabled':''}>新增商品</button></div><h2>商品管理（${productCount} 件${productLimit===null?'・不限件數':`／上限 ${productLimit} 件`}）</h2><p class="shop-meta">${productLimit===null?'商品分頁載入，每頁 100 件。':'一般會員最多一件（草稿也計入），封存後可更換；店長與管理員不限。一般會員限店內展示，不開放收款與扣點。'}</p><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
+      content.querySelector('[data-form="store"] [name="status"]').closest('label').insertAdjacentHTML('afterend',`<p class="shop-meta">${listingNotice}</p>`);
       content.insertAdjacentHTML('beforeend',moreButton(productNext,true));
       if(shop&&!standalone) content.insertAdjacentHTML('afterbegin',`<button type="button" data-do="share-store" ${shop.status!=='active'?'disabled':''}>商城邀請 QR／網址</button>`);
       if(canAdmin())content.insertAdjacentHTML('afterbegin','<button type="button" data-do="admin-stores">管理員・店家列表</button>');
@@ -341,6 +344,7 @@
       editor.querySelector('[name="category"]').closest('label').insertAdjacentHTML('afterend',select('purchase_mode','銷售方式',productLimit===null?[['in_store','限店內'],['online','網購']]:[['in_store','限店內']],p.purchase_mode||'in_store'));
       if(!p.id)editor.querySelector('h2').insertAdjacentHTML('afterend','<button type="button" data-do="dm-import" class="primary">上傳 DM・AI 辨識建商品</button><p class="shop-meta">DM 送至 AI 擷取商品資料，先帶入表單、核對後再儲存。不自動上架。</p>');
       editor.querySelector('form').dataset.requestKey=crypto.randomUUID();
+      editor.querySelector('[name="status"]').closest('label').insertAdjacentHTML('afterend',`<p class="shop-meta">${listingNotice}</p>`);
       if(canTransact()) {
         editor.querySelector('[name="status"]').closest('label').insertAdjacentHTML('afterend',onlineWarningBox('product'));
         void checkOnlineWarnings();
@@ -556,7 +560,12 @@
       const form=event.target.closest('[data-form]'); if(!form) return; event.preventDefault(); if(busy) return;
       const data=Object.fromEntries(new FormData(form));
       if(form.dataset.form==='search') { void run(()=>list('',data.q,listCategory)); return; }
-      busy=true; alert.textContent=''; const buttons=[...root.querySelectorAll('button')]; const disabled=buttons.map(b=>b.disabled); buttons.forEach(b=>b.disabled=true);
+      busy=true; alert.textContent=data.status==='active'?'AI 上架審核中…通過後才會公開，請稍候。':'儲存草稿／封存中…'; const buttons=[...root.querySelectorAll('button,input,select,textarea')]; const disabled=buttons.map(b=>b.disabled); buttons.forEach(b=>b.disabled=true);
+      let formMessage=form.querySelector('[data-listing-status]');
+      if(!formMessage){formMessage=document.createElement('p');formMessage.dataset.listingStatus='';formMessage.className='shop-meta';formMessage.setAttribute('role','status');formMessage.setAttribute('aria-live','polite');form.appendChild(formMessage);}
+      formMessage.textContent=alert.textContent;
+      const submit=event.submitter||form.querySelector('button.primary'),submitText=submit?.textContent;
+      if(submit)submit.textContent=data.status==='active'?'AI 審核中…':'儲存中…';
       void run(async()=>{
         try {
           if(form.dataset.form==='store') {
@@ -569,7 +578,8 @@
             const result=await api('/product',data); setManagement(result); renderManage();
           }
           alert.textContent='已儲存；本次沒有扣除點數。';
-        } finally { busy=false; buttons.forEach((b,i)=>b.disabled=disabled[i]); }
+        } catch(error){formMessage.textContent=error.name==='TimeoutError'?'連線逾時；請重新載入確認結果，勿連續重送。':error.message;formMessage.scrollIntoView({block:'center',behavior:'smooth'});throw error;}
+        finally { busy=false; if(submit)submit.textContent=submitText;buttons.forEach((b,i)=>b.disabled=disabled[i]); }
       });
     };
     const id=initialShopId;

@@ -1,6 +1,7 @@
 // Shared admin/mobile catalog editing. No identity, payment, reward or order mutations.
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {normalizeStore,normalizeProduct,readJson,ShopError} from './store-shop.mjs';
+import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 const PATH='/v1/store-shop/admin/catalog';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES=['store','店長','admin','總管','user','用戶'];
@@ -70,6 +71,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     const updated=Object.fromEntries(fields.map(key=>[key,normalized[key]]));
     const limited=!UNLIMITED.includes(String(shop.owner_role).toLowerCase());
     if(data.type==='product'&&limited&&updated.status!=='archived'&&(original.purchase_mode!=='in_store'||original.redeem_type!=='none'))fail('OWNER_LIMIT','一般會員商品限店內且不折抵，可封存後由店家整理',403);
+    await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
     const auditId=crypto.randomUUID(),now=new Date().toISOString();
     const table=data.type==='store'?'store_shop_stores':'store_shop_products';
     let gate=`t.id=? AND t.version=? AND EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(key=>'a.'+key+' IS ?').join(' AND ')})
@@ -95,6 +97,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     if(!saved)fail('VERSION_CONFLICT','店家資料或資格已變更，請重新載入後再修改',409);
     return reply({...saved,replayed:!(results[1].meta?.changes>0)});
   }catch(error){
+    if(error instanceof ListingReviewError)return reply(listingReviewFailure(error),error.status);
     if(error instanceof DirectoryError||error instanceof ShopError)return reply({success:false,code:error.code||'INVALID_CATALOG',error:error.message},error.status);
     return reply({success:false,code:'CATALOG_UNAVAILABLE',error:'商城管理暫時無法使用，請重新確認；尚未確認儲存成功'},503);
   }

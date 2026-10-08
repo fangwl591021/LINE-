@@ -1,5 +1,6 @@
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {normalizeProduct,readJson,ShopError} from './store-shop.mjs';
+import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 
 const PATH='/v1/store-shop/admin/products';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,7 +17,7 @@ async function rows(db,sql,args=[]){
   return result.results;
 }
 async function target(db,id){
-  const found=await rows(db,`SELECT s.id,s.name,s.owner_uid,s.status,s.version,u.role AS owner_role,u.name AS owner_name,
+  const found=await rows(db,`SELECT s.id,s.name,s.description,s.owner_uid,s.status,s.version,u.role AS owner_role,u.name AS owner_name,
     (SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status!='archived') AS product_count
     FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? LIMIT 2`,[id]);
   if(found.length!==1||!found[0].owner_uid||!ROLES.includes(String(found[0].owner_role).toLowerCase()))fail('REGISTERED_STORE_REQUIRED','僅能替已註冊且仍具商城資格的店家新增商品',403);
@@ -59,6 +60,7 @@ export async function handleStoreAdminProducts(request,env,profileMapper,fetcher
     if(shop.version!==data.shop_version)fail('STORE_CHANGED','店家資料已變更，請返回列表重新確認',409);
     if(shop.product_limit===1&&(product.purchase_mode!=='in_store'||product.redeem_type!=='none'))fail('OWNER_LIMIT','一般會員商品僅能店內展示，不能設定折抵或網購',403);
     if(shop.product_limit!==null&&shop.product_count>=shop.product_limit)fail('PRODUCT_LIMIT','此店家已達商品件數上限',409);
+    await requireListingReview({value:product,parent:shop,scope:'product:'+shop.id+':'+data.request_key,uid,env,fetcher});
     const id=crypto.randomUUID(),now=new Date().toISOString();
     // Recheck the exact authorized actor and target snapshot inside the atomic write.
     // Quota is evaluated by SQL, so simultaneous creates cannot bypass a one-product limit.
@@ -81,6 +83,7 @@ export async function handleStoreAdminProducts(request,env,profileMapper,fetcher
     if(!saved)fail('STORE_CHANGED','店家資格、資料或商品件數已變更，請返回列表重新確認',409);
     return reply({...saved,replayed:saved.product_id!==id});
   }catch(error){
+    if(error instanceof ListingReviewError)return reply(listingReviewFailure(error),error.status);
     if(error instanceof DirectoryError||error instanceof ShopError)return reply({success:false,code:error.code||'INVALID_PRODUCT',error:error.message},error.status);
     return reply({success:false,code:'ADMIN_PRODUCT_UNAVAILABLE',error:'代上傳暫時無法完成，請保留畫面重試'},503);
   }

@@ -58,6 +58,17 @@ test('double click is suppressed and uncertain retry keeps identical frozen requ
   wait.reject(new Error('網路中斷'));await pending;assert.equal(g.save().disabled,false);assert.equal(g.field('title').disabled,true);assert.match(g.text(),/重試會沿用同一筆資料/);
   g.field('title').value='不得換資料';await g.form().fire('submit');assert.equal(writes,2);assert.equal(sent[0],sent[1]);assert.equal(g.uuidCount(),1);
 });
+test('known review failure preserves fields and permits editing or explicit draft retry',async()=>{
+  let attempt=0;const sent=[];
+  const f=await loaded({api:async(_path,data)=>{
+    if(!data)return {success:true,shop:{id:ID,name:'測試店',version:1,product_count:0,product_limit:null,status:'active'},products:[]};
+    sent.push({...data});if(++attempt===1){const error=new Error('內容需人工核對，未公開');error.code='LISTING_REVIEW_REQUIRED';throw error;}
+    return {success:true,shop_id:ID,product_id:'draft'};
+  }});fill(f);f.field('status').value='active';await f.form().fire('submit');
+  assert.equal(f.field('title').value,'測試商品');assert.equal(f.field('title').disabled,false);assert.equal(f.field('status').disabled,false);assert.match(f.text(),/表單已保留/);
+  f.field('title').value='修改草稿';f.field('status').value='draft';await f.form().fire('submit');
+  assert.equal(sent[1].status,'draft');assert.equal(sent[1].title,'修改草稿');assert.notEqual(sent[0].request_key,sent[1].request_key);
+});
 test('failed image upload preserves prior image and does not create any product',async()=>{
   let fail=false;const f=await loaded({uploadImage:async()=>fail?{success:false,error:'上傳失敗'}:{success:true,url:'https://img.test/old.jpg'}});fill(f);
   f.field('image_file').files=[{}];await f.field('image_file').fire('change');fail=true;await f.field('image_file').fire('change');

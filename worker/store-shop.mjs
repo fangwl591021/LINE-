@@ -4,6 +4,7 @@ import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
 import {generateStoreDraft,StoreDraftError} from './store-ai-draft.mjs';
 import {publicPartnerShops} from './store-partner-catalog.mjs';
 import {catalogOrder,CatalogOrderError} from './store-catalog-order.mjs';
+import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 const roles = ['store','店長','admin','總管','user','用戶'];
 const unlimitedRoles = ['store','店長','admin','總管'];
 const categories = ['','食','宿','遊','購','行','服務','製造'];
@@ -130,35 +131,51 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     if(manage) return reply(await management(db,shop,limit,url.searchParams.get('product_after')||''));
     const data=await readJson(request); const now=new Date().toISOString();
     if(writeStore) {
-      const vals=Object.values(normalizeStore(data));
+      const value=normalizeStore(data),vals=Object.values(value);
+      if(!shop&&data.version!==0)fail('店面狀態已改變，請重新載入',409);
+      if(shop&&integer(data.version,1000000000,'版本')!==shop.version)fail('資料已被更新，請重新載入後再編輯',409);
+      await requireListingReview({value,scope:'store:'+uid,uid,env,fetcher});
       if(!shop) {
         if(data.version!==0) fail('店面狀態已改變，請重新載入',409);
-        try { await db.prepare('INSERT INTO store_shop_stores (id,owner_uid,name,description,category,address,phone,hours,image_url,status,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),uid,...vals,now).run(); }
+        try { const result=await db.prepare("INSERT INTO store_shop_stores (id,owner_uid,name,description,category,address,phone,hours,image_url,status,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE line_id=? AND lower(role) IN ('store','店長','admin','總管','user','用戶'))").bind(crypto.randomUUID(),uid,...vals,now,uid).run();if(!result.meta.changes)fail('上架身分已變更，請重新登入確認',403); }
         catch(error) { if(String(error.message).includes('UNIQUE')) fail('店面已建立，請重新載入',409); throw error; }
       } else {
         const version=integer(data.version,1000000000,'版本');
-        const result=await db.prepare('UPDATE store_shop_stores SET name=?,description=?,category=?,address=?,phone=?,hours=?,image_url=?,status=?,updated_at=?,version=version+1 WHERE id=? AND owner_uid=? AND version=?').bind(...vals,now,shop.id,uid,version).run();
+        const result=await db.prepare("UPDATE store_shop_stores SET name=?,description=?,category=?,address=?,phone=?,hours=?,image_url=?,status=?,updated_at=?,version=version+1 WHERE id=? AND owner_uid=? AND version=? AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND lower(role) IN ('store','店長','admin','總管','user','用戶'))").bind(...vals,now,shop.id,uid,version,uid).run();
         if(!result.meta.changes) fail('資料已被更新，請重新載入後再編輯',409);
       }
       return reply(await management(db,await own(db,uid),limit));
     }
     if(!shop) fail('請先建立店面');
     const id=field(data,'id',80);
+    const previous=id?await db.prepare('SELECT * FROM store_shop_products WHERE id=? AND shop_id=?').bind(id,shop.id).first():null;
+    if(id&&(!previous||previous.status==='archived'||integer(data.version,1000000000,'版本')!==previous.version))fail('商品不存在、已更新或無權修改；請重新載入',409);
     // Older cached clients must not reset the owner's category or sales channel.
     if(id && (data.category===undefined || data.purchase_mode===undefined)) {
-      const previous=await db.prepare('SELECT category,purchase_mode FROM store_shop_products WHERE id=? AND shop_id=?').bind(id,shop.id).first();
       if(data.category===undefined)data.category=previous?.category ?? '';
       if(data.purchase_mode===undefined)data.purchase_mode=previous?.purchase_mode ?? 'in_store';
     }
     const value=normalizeProduct(data);
     if(limit!==null&&value.status!=='archived'&&(value.purchase_mode!=='in_store'||value.redeem_type!=='none'))fail('一般會員商品目前限店內展示，不開放網購收款或點數折抵');
+    const key=id?'':field(data,'request_key',80,true);
+    if(!id&&!/^[0-9a-f-]{36}$/i.test(key))fail('請重新開啟新增商品表單');
+    if(!id){
+      const replay=await db.prepare('SELECT * FROM store_shop_products WHERE shop_id=? AND request_key=?').bind(shop.id,key).first();
+      if(replay){
+        if(!Object.entries(value).every(([name,v])=>replay[name]===v))fail('這次新增已儲存，請重新載入後使用編輯商品修改',409);
+        return reply(await management(db,shop,limit));
+      }
+    }
+    if(limit!==null&&value.status!=='archived'){
+      const other=await db.prepare("SELECT count(*) AS total FROM store_shop_products WHERE shop_id=? AND id!=? AND status!='archived'").bind(shop.id,id).first();
+      if(other.total)fail(id?'商品超過一件名額；請先封存多餘商品後重試':'非店長最多一件商品（含草稿）；請先封存原商品再新增，店長與管理員不限',id?409:400);
+    }
+    await requireListingReview({value,parent:shop,scope:'product:'+shop.id+':'+(id||key),uid,env,fetcher});
     if(id) {
       const version=integer(data.version,1000000000,'版本');
       const result=await db.prepare(`UPDATE store_shop_products SET title=?,description=?,image_url=?,price_cents=?,redeem_type=?,redeem_value=?,status=?,category=?,purchase_mode=?,updated_at=?,version=version+1 WHERE id=? AND shop_id=? AND version=? AND status!='archived' AND (?='archived' OR ${capacity})`).bind(...Object.values(value),now,id,shop.id,version,value.status,uid,shop.id,id).run();
       if(!result.meta.changes) fail('商品不存在、已更新、無權修改或超過一件名額；請先封存多餘商品後重試',409);
     } else {
-      const key=field(data,'request_key',80,true);
-      if(!/^[0-9a-f-]{36}$/i.test(key)) fail('請重新開啟新增商品表單');
       const result=await db.prepare(`INSERT INTO store_shop_products (id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,updated_at,request_key) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${capacity} ON CONFLICT(shop_id,request_key) DO NOTHING`).bind(crypto.randomUUID(),shop.id,...Object.values(value),now,key,uid,shop.id,'').run();
       if(!result.meta.changes) {
         const previous=await db.prepare('SELECT * FROM store_shop_products WHERE shop_id=? AND request_key=?').bind(shop.id,key).first();
@@ -168,6 +185,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     }
     return reply(await management(db,shop,limit));
   } catch(error) {
+    if(error instanceof ListingReviewError)return reply(listingReviewFailure(error),error.status);
     if(error instanceof ShopError||error instanceof ProductDmError||error instanceof CatalogOrderError||error instanceof StoreDraftError) return reply({success:false,error:error.message},error.status);
     const missing=/no such table/.test(String(error?.message));
     console.error(JSON.stringify({event:'store_shop_failed',path:url.pathname,code:missing?'SCHEMA_NOT_READY':'UNAVAILABLE'}));
