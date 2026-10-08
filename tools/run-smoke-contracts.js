@@ -94,6 +94,7 @@ const fullChecks = [
   'test/login-bootstrap.test.mjs',
   'test/liff-query-compat.test.mjs',
   'test/direct-phone-reward.test.mjs',
+  'test/store-point-member-lookup.test.mjs',
   'test/store-phone-reward.test.mjs',
   'test/point-history-cashier-dedupe.test.mjs',
   'test/store-points-home.test.mjs',

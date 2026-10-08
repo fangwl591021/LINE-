@@ -49,6 +49,44 @@ test('reward role can use cashier but never gains diagnostic/admin role',()=>{
  for(const role of ['store','admin','tenant','店長','總管','租戶']){const legacy=setup(role);assert.equal(legacy.window.canUseStorePointCashier(),true);assert.equal(legacy.window.isRewardOnlyPointCashier(),false);}
  assert.equal(setup('user').window.canUseStorePointCashier(),false);
 });
+test('store/admin/redeem reject phone-keyed successful lookups and clear stale member/balance state',async()=>{
+ for(const role of ['store','admin','redeem']){
+  const s=setup(role);
+  s.window.renderStorePointCustomer({customerPointUserId:customer,name:'Previous member',balance:350,canAdjust:true,localWalletRepaired:true});
+  assert.equal(s.get('store-point-customer-card').classList.contains('hidden'),false);
+  s.window.fetchAPI=async()=>({success:true,data:{customerPointUserId:'0912345678',name:'未命名用戶',balance:350,canAdjust:true,localWalletRepaired:true}});
+  s.get('store-point-customer').value='0912345678';await s.window.lookupStorePointCustomer();
+  assert.equal(s.window.storePointCustomer,null);
+  assert.equal(s.get('store-point-customer-card').classList.contains('hidden'),true);
+  assert.equal(s.get('store-point-bind-hint').classList.contains('hidden'),true);
+  assert.ok(s.toasts.some(([message])=>/查無已綁定.*會員錢包 QR/.test(message)));
+  assert.equal(s.submitted.length,0);
+ }
+});
+test('phone lookup errors clear a previously verified customer instead of leaving gifting authority',async()=>{
+ const s=setup('store');
+ s.window.renderStorePointCustomer({customerPointUserId:customer,name:'Previous member',balance:350,canAdjust:true});
+ s.window.fetchAPI=async()=>({success:false,error:'查無已綁定的會員，請改掃會員錢包 QR'});
+ s.get('store-point-customer').value='0912345678';await s.window.lookupStorePointCustomer();
+ assert.equal(s.window.storePointCustomer,null);
+ assert.equal(s.get('store-point-customer-card').classList.contains('hidden'),true);
+ assert.ok(s.toasts.some(([message])=>/會員錢包 QR/.test(message)));
+});
+test('stale phone identity cannot prepare a session or submit a cashier request',async()=>{
+ const s=setup('store'),legacy={customerPointUserId:'0912345678',canAdjust:true,balance:350};
+ assert.equal(await s.window.prepareStorePointCashierSession(legacy),null);assert.equal(s.calls.length,0);
+ s.window.storePointCustomer=legacy;s.get('store-point-customer').value='0912345678';
+ s.get('store-point-amount').value='599';s.get('store-point-deduct').value='10';
+ const button=node();button.textContent='確認送出';await s.window.submitStorePointCashier(button);
+ assert.equal(s.submitted.length,0);assert.equal(button.disabled,false);assert.equal(button.textContent,'確認送出');
+ assert.ok(s.toasts.some(([message])=>/查無已綁定.*會員錢包 QR/.test(message)));
+});
+test('wallet index creation is not advertised as a guarantee that points can be transferred',()=>{
+ const s=setup('store');
+ s.window.renderStorePointCustomer({customerPointUserId:customer,name:'Verified member',balance:350,canAdjust:true,localWalletRepaired:true});
+ assert.match(s.get('store-point-bind-hint').textContent,/會員帳號已確認.*入帳結果為準/);
+ assert.doesNotMatch(s.get('store-point-bind-hint').textContent,/可正常贈扣點/);
+});
 test('reward UI enables phone lookup and scan while debit controls remain disabled',()=>{
  const {get,radios,window}=setup();
  for(const id of ['store-point-redeem-option','store-point-deduct-wrap'])assert.equal(get(id).classList.contains('hidden'),true,id);
