@@ -10,7 +10,7 @@
 ## 禁止
 - 不改既有 AI 上架審核、登入／角色／owner、商品狀態／價格、點數、订单、收銀、分享歸屬、bindings 或 secrets。
 - 無 migration 或正式資料修改；不逐店追加請求／不等候 AI。
-- 本次只有開始實作授權；未部署／未推送。
+- 實作階段不部署／不推送；2026-10-08 使用者後續明確回覆「部署」，只授權本次入口標籤及唯讀旗標發布。
 
 ## 契約與驗證
 - 已讀 feature-change-protocol、core-invariants、store-shop；修改前 guard PASS，.wrangler/store-entry-label-before.log。
@@ -28,3 +28,10 @@
 - Chrome 手機尺寸 390×844：首頁推薦與店家列表的無商品／僅草稿顯示「前往店家」，active 商品顯示「進入商城」。兩種入口皆能進原本店面，草稿不外露，active 商品正常顯示。
 - 截圖：.wrangler/store-entry-label-preview.png、.wrangler/store-entry-label-phone.png。臨時尺寸已還原、測試頁已關閉。
 - 僅本機完成；未部署 Worker、未推送 GitHub／Pages、沒有 migration 或正式資料更動。
+
+## 本次發布授權與基線
+- 使用者授權：「部署」。功能 commit 3a3dd7b；正式 origin/main d83bc6f13dfe75680dee67142409f8ed4175fb7c。
+- 正式目標：line-engine／account 8058cf61f0cd44c4edd78080b193033a／Worker b673861b-01b9-4d89-863b-b8ba75815ee9（100%）；前端 https://fangwl591021.github.io/LINE-/。
+- 保留現有 bindings、vars、secrets、compatibility_date、crons、AI 上架審核；無 migration、無正式店家／商品／點數／訂單寫入。
+- 發布前重新驗證完整 guard、打包與精確差異；PR 通過才發布。發布後核對版本、metadata、前端檔案 hash 與唯讀公開目錄／商品判斷。
+- 回復只撤回本次入口欄位、文案與載入版號，保留已上線 AI 審核，不回復 D1 資料。
