@@ -22,5 +22,5 @@ export function renderPointsHome({merchant=false,rewardOnly=false,redeemOnly=fal
 }
 export function renderRecommendedShops(shops,photo) {
   if(!shops.length)return '<p>目前沒有已上架店家。</p>';
-  return shops.slice(0,3).map(shop=>`<article>${photo(shop.image_url)||'<div class="shop-no-photo" aria-hidden="true">⌂</div>'}<h2>${escape(shop.name)}</h2><p class="shop-meta">${escape([shop.category,shop.address].filter(Boolean).join('・'))}</p><button type="button" data-do="view" data-id="${escape(shop.id)}" class="shop-store-link">進入商城 ›</button></article>`).join('');
+  return shops.slice(0,3).map(shop=>`<article>${photo(shop.image_url)||'<div class="shop-no-photo" aria-hidden="true">⌂</div>'}<h2>${escape(shop.name)}</h2><p class="shop-meta">${escape([shop.category,shop.address].filter(Boolean).join('・'))}</p><button type="button" data-do="view" data-id="${escape(shop.id)}" class="shop-store-link">${shop.has_active_products===1?'進入商城':'前往店家'} ›</button></article>`).join('');
 }

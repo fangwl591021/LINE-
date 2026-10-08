@@ -8,7 +8,7 @@ import {requireListingReview,ListingReviewError,listingReviewFailure} from './st
 const roles = ['store','店長','admin','總管','user','用戶'];
 const unlimitedRoles = ['store','店長','admin','總管'];
 const categories = ['','食','宿','遊','購','行','服務','製造'];
-const publicColumns = 's.id,s.name,s.description,s.category,s.address,s.phone,s.hours,s.image_url,s.status,s.version,s.updated_at,(EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN (\'store\',\'店長\',\'admin\',\'總管\'))) AS merchant_enabled';
+const publicColumns = 's.id,s.name,s.description,s.category,s.address,s.phone,s.hours,s.image_url,s.status,s.version,s.updated_at,(EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN (\'store\',\'店長\',\'admin\',\'總管\'))) AS merchant_enabled,(EXISTS(SELECT 1 FROM store_shop_products p WHERE p.shop_id=s.id AND p.status=\'active\')) AS has_active_products';
 const eligible = "EXISTS (SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶'))";
 const headers = { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'Content-Type, Authorization', 'Access-Control-Allow-Methods':'GET, POST, OPTIONS' };
 export class ShopError extends Error { constructor(message,status=400) { super(message); this.status=status; } }

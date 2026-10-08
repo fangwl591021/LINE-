@@ -40,7 +40,7 @@ test('shared brand uses supplied logo without replacing it on role changes; imag
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=28/);assert.match(source,/store-shop\.js\?v=50/);
+  assert.match(source,/store-shop\.css\?v=28/);assert.match(source,/store-shop\.js\?v=51/);
  }
 });
 test('shared storefront places an accessible main-home return before the brand for every role',()=>{
@@ -113,6 +113,25 @@ test('store/admin cover reuses existing functions and never fabricates budget, r
 test('untrusted shop text is escaped, list limited to three without invented distance',()=>{
  const html=renderRecommendedShops(Array.from({length:6},()=>({name:'<script>x</script>',id:'" onclick="x',address:'<img>'})),()=> '');
  assert.equal((html.match(/<article>/g)||[]).length,3);assert.doesNotMatch(html,/<script>|onclick="x/);assert.match(html,/&lt;script&gt;/);
+});
+test('recommended entry is a mall only when its own published-product flag is one',()=>{
+ for(const [flag,label]of [[0,'前往店家'],[1,'進入商城'],[undefined,'前往店家']]){
+  const html=renderRecommendedShops([{id:'same-shop',name:'店家',has_active_products:flag,merchant_enabled:1}],()=> '');
+  assert.match(html,new RegExp('>'+label+' ›</button>'));
+  assert.match(html,/data-do="view" data-id="same-shop"/);
+ }
+});
+test('directory and search use the same flag, keep each view id, and request only one catalog page',async()=>{
+ const start=mall.indexOf('async function list('),end=mall.indexOf('function filterProducts(',start);
+ assert.ok(start>=0&&end>start);
+ const shops=[{id:'store-only',name:'店家',has_active_products:0},{id:'store-mall',name:'商城',has_active_products:1},{id:'legacy',name:'舊回應'}];
+ const calls=[],content={innerHTML:'',querySelector:()=>({classList:{add(){}},insertAdjacentHTML(){}}),querySelectorAll:()=>[],insertAdjacentHTML(){}};
+ const context={epoch:0,alert:{},content,discoverySeed:'0123456789abcdef',listCategory:'',listQuery:'',encodeURIComponent,pageKind(){},canManage:()=>false,esc:String,photo:()=>'',categoryTags:()=>'',api:async url=>{calls.push(url);return {shops,next:''};}};
+ await vm.runInNewContext(mall.slice(start,end)+';list("","咖啡","食");',context);
+ assert.equal(calls.length,1);assert.match(calls[0],/seed=0123456789abcdef/);
+ assert.match(content.innerHTML,/data-id="store-only">前往店家<\/button>/);
+ assert.match(content.innerHTML,/data-id="store-mall">進入商城<\/button>/);
+ assert.match(content.innerHTML,/data-id="legacy">前往店家<\/button>/);
 });
 test('point home starts narrow wallet and public shop reads independently; history remains on demand',()=>{
  const source=mall.slice(mall.indexOf('async function pointsHome('),mall.indexOf('function memberHome()'));

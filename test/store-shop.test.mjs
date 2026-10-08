@@ -38,7 +38,7 @@ test('store and admin have unlimited products with complete private/public pagin
    const next=await call('/manage?product_after='+first.product_next,null,token);
    assert.equal(next.products.length,2);assert.equal(next.product_next,'');assert.equal(new Set([...first.products,...next.products].map(p=>p.id)).size,102);
    const pub=await call('?shop='+s.id),pubNext=await call('?shop='+s.id+'&product_after='+pub.product_next);
-   assert.equal(pub.shop.merchant_enabled,1);assert.equal(pub.products.length,100);assert.equal(pubNext.products.length,2);assert.equal(pubNext.product_next,'');
+   assert.equal(pub.shop.merchant_enabled,1);assert.equal(pub.shop.has_active_products,1);assert.equal(pub.products.length,100);assert.equal(pubNext.products.length,2);assert.equal(pubNext.shop.has_active_products,1);assert.equal(pubNext.product_next,'');
   }
  }finally{sql.close();}
 });
@@ -112,6 +112,32 @@ function fixture() {
 }
 const store=(extra={})=>({name:'測試店面',description:'第一行\n第二行',status:'active',version:0,...extra});
 const product=(extra={})=>({title:'商品',price_cents:19900,redeem_type:'fixed',redeem_value:30,status:'active',request_key:crypto.randomUUID(),...extra});
+
+test('public shop flag counts only its own active products, not drafts, archives or other stores',async()=>{
+ const {call,sql}=fixture();try{
+  const a=(await call('/store',store({name:'只有店家'}),'a')).shop;
+  const b=(await call('/store',store({name:'有商品'}),'b')).shop;
+  assert.equal((await call('?shop='+a.id)).shop.has_active_products,0);
+  await call('/product',product({status:'draft'}),'a');
+  await call('/product',product({status:'archived'}),'a');
+  const other=(await call('/product',product(),'b')).products[0];
+  assert.equal((await call('?shop='+a.id)).shop.has_active_products,0);
+  assert.equal((await call('?shop='+b.id)).shop.has_active_products,1);
+  const listed=await call();
+  assert.equal(listed.shops.find(s=>s.id===a.id).has_active_products,0);
+  assert.equal(listed.shops.find(s=>s.id===b.id).has_active_products,1);
+  assert.ok(listed.shops.every(s=>!('owner_uid'in s)));
+  sql.prepare("UPDATE store_shop_products SET status='draft' WHERE id=?").run(other.id);
+  assert.equal((await call('?shop='+b.id)).shop.has_active_products,0);
+  for(const mode of ['in_store','online']){
+   sql.prepare("UPDATE store_shop_products SET status='active',purchase_mode=? WHERE id=?").run(mode,other.id);
+   const last=await call('?shop='+b.id+'&product_after=ffffffff-ffff-ffff-ffff-ffffffffffff');
+   assert.equal(last.products.length,0);assert.equal(last.shop.has_active_products,1,mode);
+  }
+  sql.prepare("UPDATE store_shop_products SET status='archived' WHERE id=?").run(other.id);
+  assert.equal((await call()).shops.find(s=>s.id===b.id).has_active_products,0);
+ }finally{sql.close();}
+});
 
 test('sales buyers: canonical aliases, ambiguous and missing names, no raw identity and no duplicate totals',async()=>{
   const {call,sql}=fixture();await call('/store',store(),'a');await call('/store',store(),'b');

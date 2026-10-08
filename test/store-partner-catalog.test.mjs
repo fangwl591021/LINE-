@@ -84,7 +84,8 @@ test('partner industry select preserves custom values and does not accumulate le
 test('active complete partners are public without accounts and expose no financial authority',async()=>{
  const {sql,db}=setup();try{
   const key=add(sql,1);const res=await (await call(db,'?shop='+key)).json();
-  assert.equal(res.success,true);assert.equal(res.shop.listing_only,1);assert.equal(res.shop.merchant_enabled,0);assert.deepEqual(res.products,[]);
+  assert.equal(res.success,true);assert.equal(res.shop.listing_only,1);assert.equal(res.shop.merchant_enabled,0);assert.equal(res.shop.has_active_products,0);assert.deepEqual(res.products,[]);
+  assert.equal((await (await call(db)).json()).shops[0].has_active_products,0);
   assert.equal('owner_uid'in res.shop,false);assert.equal('partner_id'in res.shop,false);
   assert.equal(sql.prepare('SELECT count(*) n FROM users').get().n,0);
   assert.equal(sql.prepare('SELECT count(*) n FROM store_shop_stores').get().n,0);
