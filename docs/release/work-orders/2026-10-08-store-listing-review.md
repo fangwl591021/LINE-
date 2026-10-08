@@ -42,6 +42,7 @@
 - 不批次審查既有公開內容，不爬訂購連結目的頁；外部圖片在發佈後被替換仍是殘餘風險，重新上架時會重讀位元組。未新增人工覆核批准入口或管理員跳過開關。
 
 ## 8. 經授權才部署
+- 部署授權：2026-10-08 使用者明確回覆「好了就部署」。發布基線已重新核對：origin/main ba4f407c、line-engine 正式 c5a3c9e3-3661-46b5-8b12-38b421279b46（100%）；現有 OPENAI_API_KEY secret 名稱存在，25 個 binding／var／secret 項目及原相容日期保留。0058 的兩張表尚不存在；0042／0043 是無關待執行 migration，禁止本次套用。
 - 先核對 checkout／branch／origin main／Worker metadata 與現有 secret 名稱，保留設定；只套用 0058（不執行其他 pending migrations），再部署 Worker --keep-vars 與對應前端。
 - 正式驗證需區分 health、Worker 版本、前端載入 hash／版號、migration 與使用既有金鑰的無公開寫入審核測試；不可拿真實違禁商品公開作為驗收。
 - 退版保留新稽核表及資料。正式舊版並未實施此門檻，回退會撤除新審核，需明確報告。
