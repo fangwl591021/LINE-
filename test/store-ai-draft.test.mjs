@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleStoreShop} from '../worker/store-shop.mjs';
-import {createFixture,UID,OTHER,SOURCE,sampleFields,sampleDraft,providerResult} from './fixtures/store-ai-draft.mjs';
+import {createFixture,UID,OTHER,SOURCE,sampleFields,sampleDraft,providerResult,REGISTRY_TAX,registryCompany} from './fixtures/store-ai-draft.mjs';
+import {registryApis,lookupStoreRegistration,registrationItemPage} from '../worker/store-registration.mjs';
 const fixture=t=>{const f=createFixture();t.after(f.close);return f;};
 test('store draft reuses actor: no unregistered/expired/forged identity; no existing shop required',async t=>{
   const f=fixture(t);for(const [uid,status]of [[null,401],['expired',401],['U'+'c'.repeat(32),403]])assert.equal((await f.call(undefined,uid)).status,status);
@@ -58,3 +59,48 @@ test('provider HTTP/timeout errors are safe and diagnostic, failed retry cannot 
   const f=fixture(t);f.setStatus(500);f.setOutput({error:'private secret'});let r=await f.call();assert.equal(r.status,503);assert.doesNotMatch(r.error,/private|secret/);assert.match(r.error,/SD-/);f.resetQuota();f.setThrow(true);r=await f.call();assert.match(r.error,/逾時/);assert.equal(f.metrics.saves,0);
 });
 test('new route CORS and unrelated routing unchanged',async()=>{assert.equal((await handleStoreShop(new Request('https://app.com/v1/store-shop/store-ai-draft',{method:'OPTIONS'}),{})).status,204);assert.equal(await handleStoreShop(new Request('https://app.com/unrelated'),{}),null);});
+
+test('tax alone returns authoritative name/address without OpenAI key or provider and without business writes',async t=>{
+  const f=fixture(t);f.setNoKey(true);const r=await f.call({taxId:REGISTRY_TAX,mode:'registry'});
+  assert.equal(r.status,200);assert.equal(r.match,'matched');assert.equal(r.fields.name,registryCompany.Company_Name);assert.equal(r.fields.address,registryCompany.Company_Location);assert.equal(r.fields.phone,'');assert.equal(r.fields.hours,'');assert.equal(r.fields.description,'');assert.equal(f.metrics.analyses,0);assert.equal(f.metrics.saves,0);
+  assert.doesNotMatch(JSON.stringify(r),/Responsible_Name|Capital|actor_uid/);assert.match(r.warnings.join(''),/登記地址/);
+  const request=f.calls.find(c=>c.url.includes('data.gcis'));const url=new URL(request.url);assert.equal(url.hostname,'data.gcis.nat.gov.tw');assert.equal(url.searchParams.get('$filter'),'Business_Accounting_NO eq '+REGISTRY_TAX);assert.equal(request.opts.redirect,'manual');assert.equal(request.opts.credentials,'omit');assert.equal(request.opts.headers.Authorization,undefined);assert.equal(request.opts.signal.aborted,false);
+});
+test('tax malformed/missing/oversized and unauthorized inputs are rejected before lookup or quota',async t=>{
+  const f=fixture(t);for(const taxId of ['1234567','123456789','1234abcd',12345678,'https://evil.com'])assert.equal((await f.call({taxId,mode:'registry'})).status,400);
+  for(const data of [{mode:'registry'},{taxId:REGISTRY_TAX,mode:'bad'},{taxId:REGISTRY_TAX,uid:OTHER}])assert.equal((await f.call(data)).status,400);
+  assert.equal((await f.call({taxId:REGISTRY_TAX,mode:'registry'},null)).status,401);assert.equal(f.writes.length,0);assert.equal(f.calls.some(c=>c.url.includes('data.gcis')),false);
+});
+test('registry lookup independent quota allows immediate AI enrichment but never resets or bypasses either limit',async t=>{
+  const f=fixture(t);assert.equal((await f.call({taxId:REGISTRY_TAX,mode:'registry'})).status,200);assert.equal((await f.call({taxId:REGISTRY_TAX})).status,200);assert.equal((await f.call({taxId:REGISTRY_TAX,mode:'registry'})).status,429);
+  const row=f.sql.prepare('SELECT * FROM partner_onboarding_ai_usage WHERE actor_uid=?').get('store-lookup:'+UID);assert.equal(row.attempts,1);assert.ok(row.next_allowed_at-Date.now()<=3000);f.sql.prepare('UPDATE partner_onboarding_ai_usage SET attempts=60,next_allowed_at=0 WHERE actor_uid=?').run('store-lookup:'+UID);assert.equal((await f.call({taxId:REGISTRY_TAX,mode:'registry'})).status,429);assert.equal(f.metrics.saves,0);
+});
+test('company empty falls back to business exact tax; both empty is not_found not a service error',async t=>{
+  const f=fixture(t);f.setRegistry({company:[],business:[{President_No:REGISTRY_TAX,Business_Name:'合成商號',Business_Address:'合成地址',Business_Current_Status_Desc:'核准設立'}],items:[]});let r=await f.call({taxId:REGISTRY_TAX,mode:'registry'});assert.equal(r.fields.name,'合成商號');assert.equal(r.fields.address,'合成地址');
+  f.resetQuota();f.setRegistry({company:[],business:[],items:[]});r=await f.call({taxId:REGISTRY_TAX,mode:'registry'});assert.equal(r.status,200);assert.equal(r.match,'not_found');assert.ok(Object.values(r.fields).every(v=>v===''));assert.equal(f.metrics.analyses,0);
+});
+for(const [label,data,status,type] of [
+  ['wrong-id',{company:[{...registryCompany,Business_Accounting_NO:'20828393'}]},200,'application/json'],
+  ['duplicate',{company:[registryCompany,registryCompany]},200,'application/json'],
+  ['HTTP',{company:[]},503,'application/json'],
+  ['IP-denied',{company:'非授權介接之IP(private)'},200,'application/json'],
+  ['non-JSON',{company:[]},200,'text/html'],
+  ['oversized',{company:[{...registryCompany,extra:'x'.repeat(70000)}]},200,'application/json']
+])test('registry '+label+' fails safely and is never mislabeled not_found',async t=>{
+  const f=fixture(t);f.setRegistry(data,status,type);const r=await f.call({taxId:REGISTRY_TAX,mode:'registry'});assert.ok(r.status>=500);assert.equal(r.fields,undefined);assert.match(r.error,/SD-/);assert.doesNotMatch(r.error,/private|20828393|查無公司/);assert.equal(f.metrics.saves,0);assert.equal(f.metrics.analyses,0);
+});
+test('registry redirect never follows or forwards credentials; broken JSON and timeout fail safely',async t=>{
+  const f=fixture(t);for(const fetcher of [async()=>new Response('',{status:302,headers:{Location:'https://evil.com'}}),async()=>new Response('broken',{headers:{'Content-Type':'application/json'}}),async()=>{throw new DOMException('private IP','TimeoutError');}])await assert.rejects(lookupStoreRegistration(REGISTRY_TAX,fetcher));assert.equal(f.metrics.saves,0);
+});
+test('AI enrichment failure or unmatched generated output cannot erase official registry facts',async t=>{
+  const f=fixture(t);f.setStatus(503);let r=await f.call({taxId:REGISTRY_TAX,name:'另一家旧店'});assert.equal(r.status,200);assert.equal(r.fields.name,registryCompany.Company_Name);assert.equal(r.fields.address,registryCompany.Company_Location);assert.match(r.warnings.join(''),/AI 補充未完成/);assert.equal(r.sources.length,1);
+  f.resetQuota();f.setStatus(200);f.setOutput(providerResult({...sampleDraft(),match:'ambiguous'}));r=await f.call({taxId:REGISTRY_TAX});assert.equal(r.fields.name,registryCompany.Company_Name);assert.equal(r.fields.address,registryCompany.Company_Location);assert.equal(r.fields.phone,'');assert.equal(r.fields.description,'');assert.equal(f.metrics.saves,0);
+});
+test('verified registration business items support AI summary without re-fetching JSON as HTML',async t=>{
+  const f=fixture(t),taxRequest={taxId:REGISTRY_TAX};f.setRegistry({company:[registryCompany],business:[],items:[{Business_Accounting_NO:REGISTRY_TAX,Company_Name:registryCompany.Company_Name,Cmp_Business:[{Business_Item_Desc:'資訊軟體服務業'}]}]});
+  const reg=await lookupStoreRegistration(REGISTRY_TAX,f.fetcher),item=await registrationItemPage(reg,f.fetcher);
+  const fields={name:reg.name,address:reg.address,description:'登記業務包括資訊軟體服務。',category:'服務',phone:'0900-999999',hours:'24小時'};
+  const draft={match:'matched',fields,warnings:[],evidence:[{field:'name',url:reg.page.url,quote:reg.name},{field:'address',url:reg.page.url,quote:reg.address},{field:'description',url:item.url,quote:'資訊軟體服務業'},{field:'category',url:item.url,quote:'資訊軟體服務業'},{field:'phone',url:reg.page.url,quote:'0900-999999'},{field:'hours',url:reg.page.url,quote:'24小時'}]};f.setOutput({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(draft)}]}]});
+  const r=await f.call(taxRequest);assert.equal(r.fields.description,'登記業務摘要：'+fields.description);assert.equal(r.fields.category,'服務');assert.equal(r.fields.phone,'');assert.equal(r.fields.hours,'');assert.equal(r.fields.name,reg.name);assert.equal(r.sources.length,2);
+  const body=JSON.parse(f.calls.find(c=>c.url.includes('openai')).opts.body);assert.equal(body.tools,undefined);assert.equal(body.store,false);assert.match(body.input[0].content[0].text,/登記業務摘要/);assert.equal(f.calls.some(c=>c.opts.headers.Accept==='text/html'),false);assert.equal(f.metrics.saves,0);
+});
