@@ -13,7 +13,7 @@ class Element{
   addEventListener(k,f){(this.listeners[k]??=[]).push(f);}removeEventListener(k,f){this.listeners[k]=(this.listeners[k]||[]).filter(x=>x!==f);}
   dispatchEvent(e){for(const f of this.listeners[e.type]||[])f(e);}
   find(fn){return this.children.flatMap(c=>[...(fn(c)?[c]:[]),...c.find(fn)]);}
-  querySelector(selector){return this.find(c=>selector==='[data-store-ai-draft]'?c.attrs['data-store-ai-draft']!==undefined:c.name===selector.match(/name="(.*?)"/)?.[1])[0];}
+  querySelector(selector){return this.find(c=>selector==='[data-store-ai-draft]'?c.attrs['data-store-ai-draft']!==undefined:selector==='[data-store-tax-id]'?c.attrs['data-store-tax-id']!==undefined:c.name===selector.match(/name="(.*?)"/)?.[1])[0];}
   focus(){}scrollIntoView(){}
   fire(type){this.dispatchEvent({type,target:this});}
 }
@@ -25,10 +25,11 @@ function fixture(t,handler=()=>good()){
   const fields={};for(const key of [...Object.keys(sampleFields),'status','image_url','version']){const input=doc.createElement('input');input.name=key;fields[key]=input;form.append(input);}fields.name.value='原店名';fields.status.value='draft';fields.version.value='3';fields.image_url.value='原圖';
   let token='original-token',current=true;const calls=[];
   const context=vm.createContext({window:{liff:{isLoggedIn:()=>true,getAccessToken:()=>token}},URL,Event,AbortController,setInterval,clearInterval,setTimeout,clearTimeout,fetch:async(url,opts)=>{calls.push({url,opts});return Response.json(await handler());}});vm.runInContext(source,context);
-  let widget;const open=()=>widget=context.openStoreDraft({form,base:'https://worker.test',isCurrent:()=>current});t.after(()=>widget?.dispose());
+  const taxId=doc.createElement('input');taxId.setAttribute('data-store-tax-id','');form.append(taxId);
+  let widget;const open=(mode='generate')=>widget=context.openStoreDraft({form,base:'https://worker.test',isCurrent:()=>current,mode});t.after(()=>widget?.dispose());
   const button=text=>panel.find(c=>c.tagName==='button'&&c.textContent===text)[0];const check=key=>panel.find(c=>c.attrs['data-ai-field']===key)[0];
   const edit=(key,value)=>{fields[key].value=value;form.dispatchEvent({type:'input',target:fields[key]});};
-  return {form,panel,fields,calls,open,button,check,edit,setCurrent:v=>current=v,setToken:v=>token=v,text:()=>panel.textContent};
+  return {form,panel,fields,taxId,calls,open,button,check,edit,setCurrent:v=>current=v,setToken:v=>token=v,text:()=>panel.textContent};
 }
 test('preview only; empty fields selected, existing unchecked; explicit apply never saves',async t=>{
   const f=fixture(t);f.open();await flush();assert.equal(f.calls.length,1);assert.equal(f.calls[0].opts.headers.Authorization,'Bearer original-token');assert.equal(f.fields.address.value,'');assert.equal(f.check('name').checked,false);assert.equal(f.check('phone').checked,true);
@@ -53,7 +54,21 @@ test('invalid result or unsafe URL returns visible failure without changing form
 test('blank name does not call AI, panel retains close control',async t=>{const f=fixture(t);f.fields.name.value='';f.open();await flush();assert.equal(f.calls.length,0);assert.match(f.text(),/至少 2 字/);assert.ok(f.button('關閉草稿'));});
 test('optional website cannot prevent the existing manual save validation',async t=>{const f=fixture(t);f.open();await flush();const url=f.panel.find(c=>c.placeholder==='https://公司官網')[0];assert.equal(url.type,'text');assert.equal(url.inputMode,'url');assert.equal(url.name,undefined);});
 test('integration is lazy, narrow and cache versions updated together',()=>{
-  const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');const shop=read('js/modules/store-shop.js');assert.match(shop,/import\('\.\/store-ai-draft.js\?v=1'\)/);assert.match(shop,/data-do="store-ai-draft"/);assert.match(shop,/owner===window.currentUserProfile\?\.userId/);
-  for(const p of ['store-shop.html','js/modules/store-shop-entry.js']){assert.match(read(p),/store-shop.js\?v=48/);assert.match(read(p),/store-shop.css\?v=28/);}
-  assert.match(read('index.html'),/store-shop-entry.js\?v=50/);
+  const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');const shop=read('js/modules/store-shop.js');assert.match(shop,/import\('\.\/store-ai-draft.js\?v=2'\)/);assert.match(shop,/data-do="store-ai-draft"/);assert.match(shop,/owner===window.currentUserProfile\?\.userId/);
+  for(const p of ['store-shop.html','js/modules/store-shop-entry.js']){assert.match(read(p),/store-shop.js\?v=49/);assert.match(read(p),/store-shop.css\?v=28/);}
+  assert.match(read('index.html'),/store-shop-entry.js\?v=51/);
+});
+
+test('tax number alone can request registry preview and then optional AI; neither action saves',async t=>{
+  const f=fixture(t);f.fields.name.value='';f.taxId.value='24456660';f.open('registry');await flush();
+  assert.deepEqual(JSON.parse(f.calls[0].opts.body),{name:'',hint:'',websiteUrl:'',taxId:'24456660',mode:'registry'});assert.match(f.text(),/官方登記資料已查到/);assert.equal(f.fields.name.value,'');
+  f.button('AI 補充介紹').fire('click');await flush();assert.equal(f.calls.length,2);assert.equal(JSON.parse(f.calls[1].opts.body).mode,undefined);assert.equal(f.fields.name.value,'');
+  f.check('name').checked=true;f.button('確認帶入勾選欄位').fire('click');assert.equal(f.fields.name.value,sampleFields.name);assert.equal(f.fields.status.value,'draft');assert.equal(f.calls.length,2);
+});
+test('tax changes cancel in-flight results and malformed tax never sends',async t=>{
+  const wait=deferred(),f=fixture(t,()=>wait.promise);f.taxId.value='24456660';f.open('registry');f.taxId.value='20828393';f.form.dispatchEvent({type:'input',target:f.taxId});wait.resolve(good());await flush();assert.equal(f.fields.address.value,'');assert.equal(f.calls[0].opts.signal.aborted,true);
+  f.taxId.value='1234abcd';f.open('registry');f.button('重新產生草稿').fire('click');await flush();assert.equal(f.calls.length,1);assert.match(f.text(),/8 位數字/);
+});
+test('tax input is a lookup aid without a stored name or native pattern blocking manual save',()=>{
+  const shop=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');const input=shop.match(/<input[^>]*data-store-tax-id[^>]*>/)[0];assert.doesNotMatch(input,/\bname=|\bpattern=|\brequired\b/);assert.match(shop,/data-do="store-registry-draft"/);
 });

@@ -1,5 +1,6 @@
 // Preview only. Reuses public-page safety helpers, never the admin AI handler.
 import {boundedText,publicWebsiteUrl,readWebsite} from './partner-onboarding-ai.mjs';
+import {lookupStoreRegistration,registrationItemPage,RegistrationError} from './store-registration.mjs';
 export class StoreDraftError extends Error {constructor(message,status=400){super(message);this.status=status;}}
 const fail=(message,status)=>{throw new StoreDraftError(message,status);};
 export const draftLimits={name:80,description:2000,category:20,address:200,phone:40,hours:200};
@@ -19,12 +20,15 @@ const norm=value=>value.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/
 function onlyKeys(value,allowed){return value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(key=>allowed.includes(key));}
 function text(value,max){return typeof value==='string'&&value.length<=max&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value);}
 export function normalizeDraftInput(data){
-  if(!onlyKeys(data,['name','hint','websiteUrl']))fail('草稿請求包含不允許的欄位');
-  for(const [key,max]of [['name',80],['hint',120],['websiteUrl',500]])if(!text(data[key]??'',max))fail('店名或補充資料格式不正確');
-  const name=clean(data.name),hint=clean(data.hint),websiteUrl=clean(data.websiteUrl);
-  if(name.length<2)fail('請先輸入至少 2 字的公司／店家名稱');
-  if(websiteUrl)try{publicWebsiteUrl(websiteUrl);}catch{fail('官網須為公開 HTTPS 網址，不可使用內網或含帳密的網址');}
-  return {name,hint,websiteUrl};
+  if(!onlyKeys(data,['name','hint','websiteUrl','taxId','mode']))fail('草稿請求包含不允許的欄位');
+  for(const [key,max]of [['name',80],['hint',120],['websiteUrl',500],['taxId',8]])if(!text(data[key]??'',max))fail('店名或補充資料格式不正確');
+  const name=clean(data.name),hint=clean(data.hint),websiteUrl=clean(data.websiteUrl),taxId=clean(data.taxId),mode=data.mode??'generate';
+  if(!['generate','registry'].includes(mode))fail('草稿操作不正確');
+  if(taxId&&!/^\d{8}$/.test(taxId))fail('統一編號請填 8 位數字');
+  if(mode==='registry'&&!taxId)fail('請先填 8 位統一編號');
+  if(!taxId&&name.length<2)fail('請填 8 位統一編號，或至少 2 字的公司／店家名稱');
+  if(mode!=='registry'&&websiteUrl)try{publicWebsiteUrl(websiteUrl);}catch{fail('官網須為公開 HTTPS 網址，不可使用內網或含帳密的網址');}
+  return {name,hint,websiteUrl,taxId,mode};
 }
 function parseDraft(data){
   if(!onlyKeys(data,['match','fields','evidence','warnings'])||!['matched','ambiguous','not_found'].includes(data.match)||!onlyKeys(data.fields,keys)||!Array.isArray(data.evidence)||data.evidence.length>12||!Array.isArray(data.warnings)||data.warnings.length>8)fail('AI 草稿格式不完整，請重試',502);
@@ -44,13 +48,13 @@ function retrievedSources(result){
   }
   return sources;
 }
-async function supportedFields(draft,sources,officialPage,fetcher){
+async function supportedFields(draft,sources,officialPage,fetcher,verifiedPages=new Map()){
   const fields={...draft.fields},warnings=[...draft.warnings];
   if(draft.match!=='matched')return {fields:Object.fromEntries(keys.map(k=>[k,''])),warnings:[...warnings,draft.match==='ambiguous'?'有同名公司／分店，請補城市、分店或官網後重試。':'找不到足夠的公開資料，請補官網或手動填寫。'],sources:[]};
   const evidence=draft.evidence.map(e=>({...e,url:safeUrl(e.url)})).filter(e=>e.url&&sources.has(e.url));
   // Read at most two actual consulted sources, prioritizing contact evidence.
   const candidates=[...new Set([...evidence.filter(e=>['address','phone','hours'].includes(e.field)),...evidence].map(e=>e.url))].slice(0,2);
-  const pages=new Map();if(officialPage)pages.set(officialPage.url,officialPage.source);
+  const pages=new Map(verifiedPages);if(officialPage)pages.set(officialPage.url,officialPage.source);
   await Promise.all(candidates.filter(url=>!pages.has(url)).map(async url=>{try{const page=await readWebsite(url,fetcher);pages.set(url,page.source);}catch{/* Unsupported/unreadable source is not factual evidence. */}}));
   const proven=evidence.filter(e=>pages.has(e.url)&&fields.name&&norm(pages.get(e.url)).includes(norm(fields.name))&&norm(e.quote)&&norm(pages.get(e.url)).includes(norm(e.quote)));
   const nameProof=proven.find(e=>e.field==='name'&&fields.name&&norm(e.quote).includes(norm(fields.name)));
@@ -65,18 +69,27 @@ async function supportedFields(draft,sources,officialPage,fetcher){
 }
 export async function generateStoreDraft(data,env,uid,fetcher=fetch){
   const input=normalizeDraftInput(data);
-  const key=clean(env.OPENAI_API_KEY);if(!key)fail('平台 AI 尚未設定，請聯絡管理員',503);
+  const key=clean(env.OPENAI_API_KEY);if(!key&&input.mode!=='registry'&&!input.taxId)fail('平台 AI 尚未設定，請聯絡管理員',503);
+  const registryOnly=input.mode==='registry',namespace=registryOnly?'store-lookup:':'store-draft:',limit=registryOnly?60:20,interval=registryOnly?3000:15000;
   const now=Date.now(),day=new Date(now+8*3600000).toISOString().slice(0,10);
   const allowance=await env.ACTMASTER_DB.prepare(`INSERT INTO partner_onboarding_ai_usage(actor_uid,usage_day,attempts,next_allowed_at) VALUES(?,?,1,?)
     ON CONFLICT(actor_uid) DO UPDATE SET usage_day=excluded.usage_day,attempts=CASE WHEN usage_day=excluded.usage_day THEN attempts+1 ELSE 1 END,next_allowed_at=excluded.next_allowed_at
-    WHERE next_allowed_at<=? AND (usage_day!=excluded.usage_day OR attempts<20)`).bind('store-draft:'+uid,day,now+15000,now).run();
-  if(!allowance.meta?.changes)fail('請至少隔 15 秒再試；店面 AI 草稿每日上限 20 次',429);
-  let stage='website',providerStatus=0;const diagnosticId='SD-'+crypto.randomUUID().slice(0,12);
+    WHERE next_allowed_at<=? AND (usage_day!=excluded.usage_day OR attempts<${limit})`).bind(namespace+uid,day,now+interval,now).run();
+  if(!allowance.meta?.changes)fail(registryOnly?'請至少隔 3 秒再查；統編查詢每日上限 60 次':'請至少隔 15 秒再試；店面 AI 草稿每日上限 20 次',429);
+  let stage='website',providerStatus=0,registration=null;const diagnosticId='SD-'+crypto.randomUUID().slice(0,12);
   try{
-    let officialPage=null;
-    if(input.websiteUrl)try{officialPage=await readWebsite(input.websiteUrl,fetcher);}catch{fail('官網無法安全讀取或內容不足，請換公開官網／移除官網重試；尚未修改店面',422);}
+    let officialPage=null,extraPage=null;const verifiedPages=new Map();
+    if(input.taxId){
+      stage='registry';registration=await lookupStoreRegistration(input.taxId,fetcher);
+      if(!registration)return {success:true,match:'not_found',fields:Object.fromEntries(keys.map(k=>[k,''])),sources:[],warnings:['官方登記資料未查到此統編；請確認數字，或改用公司名称搜尋。']};
+      if(registryOnly)return registration.result;
+      if(!key)return {...registration.result,warnings:[...registration.result.warnings,'平台 AI 尚未設定，已保留官方登記資料；若需 AI 補充請聯絡管理員。']};
+      input.name=registration.name;officialPage=registration.page;verifiedPages.set(officialPage.url,officialPage.source);
+      try{extraPage=await registrationItemPage(registration,fetcher);if(extraPage)verifiedPages.set(extraPage.url,extraPage.source);}catch{/* Basic verified facts remain usable when optional business items are unavailable. */}
+    }
+    if(input.websiteUrl)try{const website=await readWebsite(input.websiteUrl,fetcher);if(registration&&!norm(website.source).includes(norm(registration.name)))fail('官網與統編公司名稱不符，已保留登記資料',422);if(registration)verifiedPages.set(website.url,website.source);else officialPage=website;}catch{fail('官網無法安全讀取或內容不符，請換公開官網／移除官網重試；尚未修改店面',422);}
     const body={model:clean(env.OPENAI_MODEL)||'gpt-4.1-mini',store:false,max_output_tokens:3500,instructions,
-      input:[{role:'user',content:[{type:'input_text',text:JSON.stringify({company:input.name,hint:input.hint,...(officialPage?{officialWebsite:officialPage.url,source:officialPage.source}:{research:'搜尋公開店家資訊；若同名且無法確認則回傳 ambiguous'})})}]}],
+      input:[{role:'user',content:[{type:'input_text',text:JSON.stringify({company:input.name,hint:input.hint,...(officialPage?{officialWebsite:officialPage.url,source:officialPage.source,...(registration?{taxId:input.taxId,verifiedSources:[...verifiedPages].map(([url,source])=>({url,source})),note:'名稱與登記地址以官方統編結果為準；登記營業項目不等於實際銷售商品，介紹須標為登記業務摘要，不捏造電話／營業時間。'}:{})}:{research:'搜尋公開店家資訊；若同名且無法確認則回傳 ambiguous'})})}]}],
       text:{format:{type:'json_schema',name:'store_info_draft',strict:true,schema}},
       ...(!officialPage?{tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',include:['web_search_call.action.sources']}:{})};
     stage='provider';
@@ -89,14 +102,19 @@ export async function generateStoreDraft(data,env,uid,fetcher=fetch){
     if(result.status!=='completed'||!Array.isArray(result.output))fail('AI 尚未完成草稿，請重試或手動填寫',502);
     if(!officialPage&&!result.output.some(item=>item.type==='web_search_call'&&item.status==='completed'))fail('AI 未完成公開資料搜尋，請重試或補官網',502);
     const output=result.output.flatMap(o=>o.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('');
-    const draft=parseDraft(JSON.parse(output)),sources=officialPage?new Map([[officialPage.url,{url:officialPage.url,title:'提供的官網'}]]):retrievedSources(result);
-    stage='source';const supported=await supportedFields(draft,sources,officialPage,fetcher);
+    const draft=parseDraft(JSON.parse(output)),sources=officialPage?new Map([[officialPage.url,{url:officialPage.url,title:registration?'經濟部商工登記資料':'提供的官網'}],...[...verifiedPages.keys()].filter(url=>url!==officialPage.url).map(url=>[url,{url,title:extraPage?.url===url?'經濟部登記營業項目':'提供的官網'}])]):retrievedSources(result);
+    stage='source';const supported=await supportedFields(draft,sources,officialPage,fetcher,verifiedPages);
+    if(registration){
+      if(supported.fields.description&&extraPage&&supported.sources.some(s=>s.url===extraPage.url)&&!/^登記業務摘要[：:]/.test(supported.fields.description))supported.fields.description=('登記業務摘要：'+supported.fields.description).slice(0,draftLimits.description);
+      return {...registration.result,fields:{...supported.fields,name:registration.name,address:registration.address},sources:[...new Map([...registration.result.sources,...supported.sources].map(s=>[s.url,s])).values()],warnings:[...registration.result.warnings,...supported.warnings].slice(0,12)};
+    }
     return {success:true,match:draft.match,...supported};
   }catch(error){
-    const status=error instanceof StoreDraftError?error.status:stage==='output'?502:503;
+    const status=error instanceof StoreDraftError||error instanceof RegistrationError?error.status:stage==='output'?502:503;
     const timeout=['AbortError','TimeoutError'].includes(error?.name);
     const errorClass=error instanceof StoreDraftError?'validation':['TypeError','SyntaxError','AbortError','TimeoutError'].includes(error?.name)?error.name:'Error';
     console.warn(JSON.stringify({event:'store_ai_draft_failed',diagnosticId,stage,status,timeout,providerStatus,errorClass}));
-    throw new StoreDraftError((error instanceof StoreDraftError?error.message:timeout?'AI 分析逾時，請稍後重試；尚未修改店面':'AI 草稿服務暫時無法完成；尚未修改店面')+`（診斷碼：${diagnosticId}）`,status);
+    if(registration)return {...registration.result,warnings:[...registration.result.warnings,`AI 補充未完成，已保留官方名稱／登記地址；可直接帶入或稍後重試（診斷碼：${diagnosticId}）。`]};
+    throw new StoreDraftError((error instanceof StoreDraftError||error instanceof RegistrationError?error.message:timeout?'查詢／AI 分析逾時，請稍後重試；尚未修改店面':'AI 草稿服務暫時無法完成；尚未修改店面')+`（診斷碼：${diagnosticId}）`,status);
   }
 }
