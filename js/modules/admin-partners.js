@@ -193,7 +193,8 @@
     const payload = readPayload();
     if (!payload.partner.name) return message('請輸入店家名稱', true);
     const original = button?.innerHTML || '';
-    if (button) { button.disabled = true; button.textContent = '儲存中…'; }
+    if (button) { button.disabled = true; button.textContent = payload.partner.status==='active'?'AI 上架審核中…':'儲存中…'; }
+    message(payload.partner.status==='active'?'AI 正在審核公開文案與圖片；通過後才儲存。疑似、違反政策或服務失敗都不會公開。':'儲存草稿中…',false);
     try {
       const response = await window.fetchAPI('savePointRedemptionPartner', payload, true);
       if (!response?.success) throw new Error(response?.error || '儲存失敗');

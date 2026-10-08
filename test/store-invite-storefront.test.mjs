@@ -14,7 +14,7 @@ function node(){
  const element={innerHTML:'',textContent:'',dataset:{},isConnected:true,appended:[],disabled:false,
   classList:{add:(...list)=>list.forEach(x=>classes.add(x)),remove:(...list)=>list.forEach(x=>classes.delete(x)),contains:x=>classes.has(x),toggle(x,on){if(on===undefined)on=!classes.has(x);if(on)classes.add(x);else classes.delete(x);}},
   querySelector:selector=>{if(!children.has(selector))children.set(selector,node());return children.get(selector);},querySelectorAll:()=>[],
-  insertAdjacentHTML(_position,html){this.appended.push(html);},appendChild(child){this.appended.push(child);},contains:target=>!!target,setAttribute(){},scrollIntoView(){},focus(){}};
+  closest(){return this;},insertAdjacentHTML(_position,html){this.appended.push(html);},appendChild(child){this.appended.push(child);},contains:target=>!!target,setAttribute(){},scrollIntoView(){},focus(){}};
  return element;
 }
 const flush=async()=>{for(let i=0;i<15;i++)await Promise.resolve();};

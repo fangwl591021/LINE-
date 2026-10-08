@@ -82,6 +82,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {handleStoreShop,normalizeProduct,normalizeStore} from '../worker/store-shop.mjs';
+import {listingTestEnv,listingTestFetch} from './fixtures/store-listing-review.mjs';
 
 const A='U'+'a'.repeat(32), B='U'+'b'.repeat(32), USER='U'+'c'.repeat(32);
 function fixture() {
@@ -96,14 +97,15 @@ function fixture() {
   sql.exec(readFileSync(new URL('../migrations/0033_store_shop_sales_index.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0035_store_product_purchase_mode.sql',import.meta.url),'utf8'));
   const db={prepare(query){return {bind(...args){return {async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){const result=sql.prepare(query).run(...args);return {meta:{changes:Number(result.changes)}};}};}};}};
-  const fetcher=async(url,options)=>{
+  const env=listingTestEnv(sql,db);
+  const fetcher=listingTestFetch(async(url,options)=>{
     assert.equal(url,'https://api.line.me/v2/profile');
     const token=options.headers.Authorization.slice(7);
     return ['a','b','c'].includes(token)?Response.json({userId:{a:A,b:B,c:USER}[token]}):new Response('',{status:401});
-  };
+  });
   async function call(path='',data,token) {
     const headers={}; if(token) headers.Authorization=`Bearer ${token}`;
-    const response=await handleStoreShop(new Request(`https://example.test/v1/store-shop${path}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined}),{ACTMASTER_DB:db},fetcher);
+    const response=await handleStoreShop(new Request(`https://example.test/v1/store-shop${path}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined}),env,fetcher);
     return {status:response.status,...await response.json()};
   }
   return {sql,call};

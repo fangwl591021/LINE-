@@ -55,8 +55,8 @@ test('blank name does not call AI, panel retains close control',async t=>{const 
 test('optional website cannot prevent the existing manual save validation',async t=>{const f=fixture(t);f.open();await flush();const url=f.panel.find(c=>c.placeholder==='https://公司官網')[0];assert.equal(url.type,'text');assert.equal(url.inputMode,'url');assert.equal(url.name,undefined);});
 test('integration is lazy, narrow and cache versions updated together',()=>{
   const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');const shop=read('js/modules/store-shop.js');assert.match(shop,/import\('\.\/store-ai-draft.js\?v=2'\)/);assert.match(shop,/data-do="store-ai-draft"/);assert.match(shop,/owner===window.currentUserProfile\?\.userId/);
-  for(const p of ['store-shop.html','js/modules/store-shop-entry.js']){assert.match(read(p),/store-shop.js\?v=49/);assert.match(read(p),/store-shop.css\?v=28/);}
-  assert.match(read('index.html'),/store-shop-entry.js\?v=51/);
+  for(const p of ['store-shop.html','js/modules/store-shop-entry.js']){assert.match(read(p),/store-shop.js\?v=50/);assert.match(read(p),/store-shop.css\?v=28/);}
+  assert.match(read('index.html'),/store-shop-entry.js\?v=52/);
 });
 
 test('tax number alone can request registry preview and then optional AI; neither action saves',async t=>{

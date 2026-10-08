@@ -62,7 +62,7 @@ export function publicIp(ip){
   const [a,b,c]=parts;
   return !(a===0||a===10||a===127||a>=224||(a===100&&b>=64&&b<=127)||(a===169&&b===254)||(a===172&&b>=16&&b<=31)||(a===192&&(b===168||b===0||b===2))||(a===198&&(b===18||b===19||b===51&&c===100))||(a===203&&b===0&&c===113));
 }
-async function verifyPublicDns(host,fetcher,signal){
+export async function verifyPublicDns(host,fetcher,signal){
   const records=[];
   for(const type of ['A','AAAA']){
     // Same Workers-compatible no-follow policy as the protected page fetch. DNS redirects fail the non-success check below.

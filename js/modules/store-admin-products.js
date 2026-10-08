@@ -54,6 +54,7 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
   value.disabled=true;
   fields.redeem_type.addEventListener('change',()=>{value.disabled=['none','full'].includes(fields.redeem_type.value);if(value.disabled)value.value='0';});
   select('status','建立後狀態',[['draft','先存草稿'],['active','立即上架']]);
+  form.append(make('p','上架需經平台 AI 審核文案與圖片。八大行業、詐騙、菸酒、醫療用品、犯罪、色情與賭博禁止上架；疑似或服務未完成不公開，可先存草稿。'));
   const confirm=field('confirm','我已確認資料與目標店家：'+shop.name,'input',{type:'checkbox',required:true});
   const save=make('button','確認新增商品');save.type='submit';save.className='primary';save.setAttribute('data-admin-save','');form.append(save);
   panel.append(form);
@@ -88,12 +89,12 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
         title:fields.title.value.trim(),description:fields.description.value.trim(),price_cents:Math.round(Number(price)*100),
         category:fields.category.value,image_url:imageUrl,purchase_mode:fields.purchase_mode.value,redeem_type:type,redeem_value:amount,status:fields.status.value};
     }
-    busy=true;lock();status.textContent='為「'+shop.name+'」建立商品中…';
+    busy=true;lock();status.textContent=pending.status==='active'?'AI 上架審核中…通過後才建立商品。':'為「'+shop.name+'」建立商品中…';
     try{
       const result=await api('/admin/products',pending);if(!active())return;
       if(result?.success!==true||result.shop_id!==shopId||!result.product_id)throw new Error('尚未確認建立結果');
       complete=true;status.textContent='已為「'+shop.name+'」新增商品（'+(pending.status==='active'?'已上架':'草稿')+'）。'+(shop.status==='draft'?'店面尚未公開。':'')+' 可返回列表繼續新增。';
-    }catch(error){if(active())status.textContent=(error.message||'無法確認建立結果')+'。為避免重複商品，重試會沿用同一筆資料；若需修改請先返回列表確認是否已建立。';}
+    }catch(error){if(active()){const reviewFailure=String(error.code||'').startsWith('LISTING_');if(reviewFailure)pending=null;status.textContent=(error.message||'無法確認建立結果')+(reviewFailure?'。表單已保留，可修改或選草稿再送。':'。為避免重複商品，重試會沿用同一筆資料；若需修改請先返回列表確認是否已建立。');}}
     finally{busy=false;if(active()){lock();status.scrollIntoView?.({block:'center',behavior:'smooth'});}}
   });
 }

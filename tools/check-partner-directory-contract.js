@@ -84,7 +84,7 @@ includesAll(moduleSource, [
 
 includesAll(moduleSource, [
   'async adminList(payload, env)',
-  'async save(payload, env)',
+  'async save(payload, env, fetcher=fetch)',
   'async archive(payload, env)',
   'crypto.randomUUID()',
   'ON CONFLICT(partner_handle) DO UPDATE',
