@@ -8,9 +8,9 @@ const css=readFileSync(new URL('../css/tutorial-center.css',import.meta.url),'ut
 const context=vm.createContext({window:{addEventListener(){}},document:{addEventListener(){}}});
 vm.runInContext(source.replace('  let dialog = null;', '  window.testCourses = courses; window.testMediaBase = mediaBase;\n  let dialog = null;'),context);
 const courses=JSON.parse(JSON.stringify(context.window.testCourses));
-test('activity publishing joins beginner lessons while the original five movies remain unchanged',()=>{
-  assert.equal(courses.length,6);
-  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish']);
+test('three ordered setting lessons join beginner lessons while the original six movies remain unchanged',()=>{
+  assert.equal(courses.length,9);
+  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish','activity-settings','course-settings','social-settings']);
   assert.equal(courses[4].file,'ai-advance-tutorial-v1.mp4');
   assert.equal(courses[4].duration,'4:18');
   assert.match(courses[4].note,/直接點首頁「AI推進」/);
@@ -22,7 +22,33 @@ test('activity publishing joins beginner lessons while the original five movies 
   assert.match(courses[3].note,/未正式開放/);
   assert.deepEqual(courses.slice(0,3).map(c=>c.file),['registration-v2.mp4','business-card-v2.mp4','card-collection-v2.mp4']);
   assert.equal(context.window.testMediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-05/');
-  assert.match(html,/tutorial-center\.js\?v=5/);
+  assert.match(html,/tutorial-center\.js\?v=6/);
+});
+test('setting series uses distinct versioned movies, measured chapters and accurate scope notes',()=>{
+  const series=courses.slice(6);
+  assert.deepEqual(series.map(c=>c.title),['活動設定','課程設定','聯誼設定']);
+  assert.deepEqual(series.map(c=>c.duration),['4:48','4:10','4:13']);
+  assert.deepEqual(series.map(c=>c.file),['activity-settings-tutorial-v1.mp4','course-settings-tutorial-v1.mp4','social-settings-tutorial-v1.mp4']);
+  assert.deepEqual(series.map(c=>c.chapters.find(ch=>ch[1]==='公開／僅歸屬可見')[0]),[166.167,139.792,143]);
+  assert.deepEqual(series.map(c=>c.chapters.find(ch=>ch[1]==='修改後再選公開範圍')[0]),[251.917,221.417,224.375]);
+  for(const course of series){
+    assert.equal(course.mediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-09/');
+    assert.match(course.description,/首頁近期活動 →/);
+    assert.match(course.note,/中文旁白＋步驟標示/);
+    assert.match(course.note,/虛構資料/);
+    assert.match(course.note,/沒有建立正式/);
+    assert.match(course.note,/所有登入且已註冊的平台會員/);
+    assert.match(course.note,/未登入不開放/);
+    assert.match(course.note,/僅歸屬會員可見/);
+    assert.match(course.note,/取消不送出/);
+    assert.match(course.note,/不會自動扣點/);
+    assert.doesNotMatch(course.note,/繁體字幕|實錄/);
+    assert.ok(course.chapters.every((ch,i)=>i===0||ch[0]>course.chapters[i-1][0]),'chapters must be ordered');
+  }
+  assert.match(series[0].note,/保留例會類型/);
+  assert.match(series[1].note,/保留課程類型/);
+  assert.match(series[2].note,/保留聯誼類型/);
+  assert.equal(courses.some(c=>c.id==='other-settings'),false,'unfinished lesson must not be published');
 });
 test('activity publishing lesson explains the real entry, verified-member scope and explicit cancellation',()=>{
   const course=courses.find(c=>c.id==='activity-publish');
