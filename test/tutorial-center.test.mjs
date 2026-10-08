@@ -8,9 +8,9 @@ const css=readFileSync(new URL('../css/tutorial-center.css',import.meta.url),'ut
 const context=vm.createContext({window:{addEventListener(){}},document:{addEventListener(){}}});
 vm.runInContext(source.replace('  let dialog = null;', '  window.testCourses = courses; window.testMediaBase = mediaBase;\n  let dialog = null;'),context);
 const courses=JSON.parse(JSON.stringify(context.window.testCourses));
-test('AI advance joins beginner lessons while original four movies remain unchanged',()=>{
-  assert.equal(courses.length,5);
-  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance']);
+test('activity publishing joins beginner lessons while the original five movies remain unchanged',()=>{
+  assert.equal(courses.length,6);
+  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish']);
   assert.equal(courses[4].file,'ai-advance-tutorial-v1.mp4');
   assert.equal(courses[4].duration,'4:18');
   assert.match(courses[4].note,/直接點首頁「AI推進」/);
@@ -22,7 +22,25 @@ test('AI advance joins beginner lessons while original four movies remain unchan
   assert.match(courses[3].note,/未正式開放/);
   assert.deepEqual(courses.slice(0,3).map(c=>c.file),['registration-v2.mp4','business-card-v2.mp4','card-collection-v2.mp4']);
   assert.equal(context.window.testMediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-05/');
-  assert.match(html,/tutorial-center\.js\?v=4/);
+  assert.match(html,/tutorial-center\.js\?v=5/);
+});
+test('activity publishing lesson explains the real entry, verified-member scope and explicit cancellation',()=>{
+  const course=courses.find(c=>c.id==='activity-publish');
+  assert.equal(course.title,'活動上架');
+  assert.equal(course.file,'activity-publish-tutorial-v1.mp4');
+  assert.equal(course.duration,'3:18');
+  assert.equal(course.chapters.find(c=>c[1]==='選擇公開／歸屬可見')[0],100.833);
+  assert.equal(course.chapters.find(c=>c[1]==='首頁活動縮圖')[0],154.833);
+  assert.match(course.note,/AI 辨識回應為示範資料/);
+  assert.match(course.note,/DM 未標示年分採當年/);
+  assert.equal(course.mediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-08/');
+  assert.equal(course.description,'首頁個人行事曆 → 辦活動 → DM核對 → 選擇公開範圍');
+  assert.match(course.note,/台灣中文旁白/);
+  assert.match(course.note,/真實 UI 模擬活動/);
+  assert.match(course.note,/所有登入平台會員可見/);
+  assert.match(course.note,/未登入不開放/);
+  assert.match(course.note,/僅歸屬會員可見/);
+  assert.match(course.note,/取消不送出活動/);
 });
 test('chapters match existing masters and stay within video duration',()=>{
   for(const course of courses.filter(c=>c.file)){

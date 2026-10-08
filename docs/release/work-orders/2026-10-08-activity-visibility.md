@@ -77,3 +77,7 @@ UID resolver、推薦人／會員歸屬、點數 ledger、LINE reply ownership�
 - 使用只含 0059 的隔離 migration 目錄，仍由 Wrangler migration apply 記錄與回復單份失敗。
 - 回復時可還原前版 Worker／前端；保留新增欄位與發布範圍資料，不刪資料或反向刪欄位。
 - 0059 已單獨套用並登錄 migration：官方 network 16、會員 platform 3，數量不變；0042／0043 未執行。
+- Worker `aa0909f` 已部署：`a1846426-354b-43cf-b122-43d8dfefbca2`。正式 API 匿名會員活动 overview 回 401；官方目錄空陣列，偽造 network/role 仍不能讀明細。確認相容日期及 D1／KV／R2、secret binding 名稱和額外 STORE_COMMERCE_ENABLED 保留。
+- 教學中心新增第 6 課「活動上架」，原 5 課不變。使用 10 張實際 UI 畫面與完整操作錄影、14 段台灣中文旁白、native Higgsedit；197.792 秒時間軸、章節依 edit manifest，無正式活動／報名或 AI 呼叫。
+- 新增 capture 腳本供可重現操作示範；首頁入口、草稿核對（2026 當年）、分類、POP cancel/network/platform、首頁縮圖及全圖均錄製。
+- 教學整合後 full `guard after` 再次 PASS，紀錄 `C:/Users/User/AppData/Local/Temp/activity-release-guard-after.log`。媒體輸出及前端發布需完成影片檢查後驗收。
