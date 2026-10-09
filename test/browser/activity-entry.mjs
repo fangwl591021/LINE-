@@ -34,7 +34,7 @@ const registrations=[
 ];
 const browser=await playwright.chromium.launch({headless:true,channel:'chrome'});
 const page=await browser.newPage({viewport:{width:390,height:844}});
-const out=join(tmpdir(),'home-my-registration'+(liveAssets?'-live-assets':'')+'-20261009');mkdirSync(out,{recursive:true});
+const out=join(tmpdir(),'my-registration-leftmost'+(liveAssets?'-live-assets':'')+'-20261009');mkdirSync(out,{recursive:true});
 const calls=[],memberReads=[],errors=[],blocked=[];
 const memberRegistrations=['活動','課程'].map((category,index)=>({id:`ca095158-0aa4-41af-9ddd-569d62d6d18${index}`,title:'已報名會員'+category,category,
   status:'active',visibility:'platform',startsAt:'2027-10-01T02:00:00Z',endsAt:'2027-10-01T04:00:00Z',organizerName:'合成主辦',feeText:'免費',
@@ -147,7 +147,7 @@ try {
   // The homepage shortcut directly expands the real existing registration panel.
   await page.evaluate(async()=>{await window.loadUserActivities();window.goPage('home',true);});
   const filters=page.locator('#home-activity-filters');
-  assert.deepEqual((await filters.getByRole('button').allTextContents()).slice(0,2),['全部','我的報名']);
+  assert.deepEqual((await filters.getByRole('button').allTextContents()).slice(0,2),['我的報名','全部']);
   await filters.getByRole('button',{name:'我的報名',exact:true}).click();
   assert.equal(await page.evaluate(()=>currentPage),'my-activities');
   await page.waitForFunction(()=>document.querySelector('#my-activities-list')?.textContent.includes('最新報名'));
@@ -251,10 +251,10 @@ try {
   assert.equal(await cards.getByRole('button',{name:'報名',exact:true}).count(),1);
   for(const width of [320,390,1440]) {
     await page.setViewportSize({width,height:844});
-    assert.deepEqual((await filters.getByRole('button').allTextContents()).slice(0,2),['全部','我的報名']);
+    assert.deepEqual((await filters.getByRole('button').allTextContents()).slice(0,2),['我的報名','全部']);
     const allBox=await filters.getByRole('button',{name:'全部',exact:true}).boundingBox();
     const mineBox=await filters.getByRole('button',{name:'我的報名',exact:true}).boundingBox();
-    assert.ok(mineBox.x>allBox.x&&Math.abs(mineBox.y-allBox.y)<1&&mineBox.x+mineBox.width<=width,'shortcut next to all, on screen');
+    assert.ok(mineBox.x<allBox.x&&mineBox.x>=0&&Math.abs(mineBox.y-allBox.y)<1&&allBox.x+allBox.width<=width,'shortcut leftmost before all, both on screen');
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await filters.screenshot({path:join(out,`registration-tab-${width}.png`)});
     assert.ok(await cards.getByRole('button',{name:'選擇梯次',exact:true}).evaluate(e=>e.scrollWidth<=e.clientWidth+1));

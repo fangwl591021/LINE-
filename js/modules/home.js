@@ -2106,7 +2106,7 @@ const HomeModule = (function() {
             const safeType = window.escapeHTML(type);
             const jsType = window.escapeJS(type);
             const category = `<button type="button" onclick="window.setHomeActivityFilter('${jsType}')" class="shrink-0 px-4 py-2 rounded-full text-[13px] font-black transition-all active:scale-95 ${active ? 'bg-[#ff5a1f] text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-100'}">${safeType}</button>`;
-            return category + (index === 0 ? '<button id="home-my-registrations-tab" type="button" onclick="window.openHomeMyRegistrations()" class="shrink-0 px-4 py-2 rounded-full text-[13px] font-black transition-all active:scale-95 bg-white text-slate-500 border border-slate-100">我的報名</button>' : '');
+            return (index === 0 ? '<button id="home-my-registrations-tab" type="button" onclick="window.openHomeMyRegistrations()" class="shrink-0 px-4 py-2 rounded-full text-[13px] font-black transition-all active:scale-95 bg-white text-slate-500 border border-slate-100">我的報名</button>' : '') + category;
         }).join('');
     }
 
