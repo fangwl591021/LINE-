@@ -6,6 +6,17 @@ import {fixture,UIDS} from './helpers/member-events-fixture.mjs';
 import {handleMemberEvents} from '../worker/member-hosted-events.mjs';
 const ongoing=f=>({...f.input(),startsAt:new Date(Date.now()-1800000).toISOString(),endsAt:new Date(Date.now()+7200000).toISOString(),registrationClosesAt:new Date(Date.now()+3600000).toISOString()});
 
+test('ended hosting roster remains readable only to its canonical owner, including checked-in and cancelled history',async t=>{
+  const f=fixture(t),e=await f.create();await f.api('/'+e.id+'/register',{member:'guest',data:{}});await f.api('/'+e.id+'/register',{member:'other',data:{}});
+  await f.api('/'+e.id+'/cancel',{member:'other',data:{}});
+  f.sql.prepare("UPDATE member_event_registrations SET checked_in_at='2020-10-08T06:30:00.000Z' WHERE member_id='guest'").run();
+  f.sql.prepare("UPDATE member_hosted_events SET starts_at='2020-10-08T06:00:00.000Z',ends_at='2020-10-08T08:00:00.000Z',registration_closes_at='2020-10-08T06:00:00.000Z' WHERE id=?").run(e.id);
+  const result=await f.api('/'+e.id+'/registrations');assert.equal(result.httpStatus,200);assert.equal(result.event.registrationCount,1);assert.equal(result.event.checkedInCount,1);assert.equal(result.event.cancelledCount,1);assert.equal(result.registrations.length,2);
+  for(const member of ['guest','other'])assert.equal((await f.api('/'+e.id+'/registrations',{member})).httpStatus,403);
+  assert.equal((await f.api('/'+e.id+'/registrations',{member:'old'})).httpStatus,200);
+  assert.equal((await f.api('/'+e.id+'/registrations',{member:null})).httpStatus,401);
+});
+
 test('category create/update stays on the same event and keeps registrations, tickets, media and owner',async t=>{
   const f=fixture(t),data={...f.input(),category:'合作商業交流',coverUrl:'https://example.com/dm.jpg'},e=await f.create(data);
   await f.api('/'+e.id+'/register',{member:'guest',data:{}});await f.api('/'+e.id+'/ticket',{member:'guest',data:{}});
