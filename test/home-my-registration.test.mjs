@@ -26,11 +26,11 @@ function fixture(){
   return {c,calls,nodes,list,parent,records};
 }
 
-test('registration shortcut is second after all and before every category, including no categories',()=>{
+test('registration shortcut is leftmost before all and every category, including no categories',()=>{
   for(const types of [[],['活動'],['課程','聯誼','其他'],['<img onerror=evil>']]){
     const f=fixture();f.c.renderHomeActivityFilters_(types);
     const labels=[...f.nodes.get('home-activity-filters').innerHTML.matchAll(/>([^<]*)<\/button>/g)].map(m=>m[1]);
-    assert.deepEqual(labels.slice(0,2),['全部','我的報名']);
+    assert.deepEqual(labels.slice(0,2),['我的報名','全部']);
     assert.equal(labels.filter(label=>label==='我的報名').length,1);
     assert.equal(labels.length,types.length+2);
     assert.doesNotMatch(f.nodes.get('home-activity-filters').innerHTML,/<img/);
@@ -78,7 +78,7 @@ test('late records do not scroll another page or reopen a user-collapsed panel',
 test('loading and failed public lists still keep all and my registration shortcuts',()=>{
   for(const failed of [false,true]){
     const f=fixture();f.c.renderHomeActivityLoadState_(failed);
-    assert.match(f.nodes.get('home-activity-filters').innerHTML,/全部<\/button><button id="home-my-registrations-tab"/);
+    assert.match(f.nodes.get('home-activity-filters').innerHTML,/^<button id="home-my-registrations-tab"[^>]*>我的報名<\/button><button[^>]*>全部<\/button>/);
     assert.match(f.nodes.get('home-activity-filters').innerHTML,/>我的報名<\/button>/);
     assert.match(f.list.innerHTML,failed?/活動載入失敗/:/活動載入中/);
   }
