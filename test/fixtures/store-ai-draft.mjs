@@ -14,11 +14,13 @@ export function createFixture(){
   for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0041_partner_onboarding_ai_usage.sql'])sql.exec(readFileSync(new URL('../../migrations/'+file,import.meta.url),'utf8'));
   const writes=[],calls=[],metrics={analyses:0,saves:0};let output=providerResult(sampleDraft()),upstream=200,noKey=false,websitePrivate=false,html='<h1>'+sampleFields.name+'</h1><p>'+Object.values(sampleFields).join(' ')+'</p>',throwProvider=false,delay=0;
   let registryData={company:[registryCompany],business:[],items:[]},registryStatus=200,registryType='application/json';
+  const publicPages=new Map();
   const db={prepare(query){const statement=(args=[])=>({bind(...values){return statement(values);},async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){writes.push(query);if(!query.startsWith('INSERT INTO partner_onboarding_ai_usage'))metrics.saves++;const result=sql.prepare(query).run(...args);return {success:true,meta:{changes:Number(result.changes)}};}});return statement();}};
   const fetcher=async(url,opts)=>{
     calls.push({url,opts});
     if(url==='https://api.line.me/v2/profile'){const uid=opts.headers.Authorization.slice(7);return /^U[0-9a-f]{32}$/.test(uid)?Response.json({userId:uid}):new Response('',{status:401});}
     if(url.includes('cloudflare-dns.com/dns-query'))return Response.json({Status:0,Answer:[{type:1,data:websitePrivate?'10.0.0.1':'93.184.216.34'}]});
+    if(publicPages.has(url))return new Response(publicPages.get(url),{headers:{'Content-Type':'text/html'}});
     if(url.startsWith(SOURCE))return new Response(html,{headers:{'Content-Type':'text/html'}});
     if(url.startsWith('https://data.gcis.nat.gov.tw/od/data/api/')){const kind=Object.keys(registryApis).find(k=>url.includes(registryApis[k]));if(!kind)throw Error('Unexpected registry API');return new Response(JSON.stringify(registryData[kind]),{status:registryStatus,headers:{'Content-Type':registryType}});}
     if(url==='https://api.openai.com/v1/responses'){metrics.analyses++;if(delay)await new Promise(r=>setTimeout(r,delay));if(throwProvider)throw new DOMException('private provider secret','TimeoutError');return Response.json(output,{status:upstream});}
@@ -30,5 +32,5 @@ export function createFixture(){
     return {status:response.status,headers:response.headers,...await response.json()};
   };
   const resetQuota=()=>sql.exec('DELETE FROM partner_onboarding_ai_usage');
-  return {sql,db,env,fetcher,calls,writes,metrics,call,resetQuota,close:()=>sql.close(),setOutput:v=>output=v,setStatus:v=>upstream=v,setHtml:v=>html=v,setPrivate:v=>websitePrivate=v,setNoKey:v=>noKey=v,setThrow:v=>throwProvider=v,setDelay:v=>delay=v,setRegistry:(v,status=200,type='application/json')=>{registryData=v;registryStatus=status;registryType=type;}};
+  return {sql,db,env,fetcher,calls,writes,metrics,call,resetQuota,close:()=>sql.close(),setOutput:v=>output=v,setStatus:v=>upstream=v,setHtml:v=>html=v,setPage:(url,value)=>publicPages.set(url,value),setPrivate:v=>websitePrivate=v,setNoKey:v=>noKey=v,setThrow:v=>throwProvider=v,setDelay:v=>delay=v,setRegistry:(v,status=200,type='application/json')=>{registryData=v;registryStatus=status;registryType=type;}};
 }

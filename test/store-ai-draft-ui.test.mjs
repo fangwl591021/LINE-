@@ -54,9 +54,9 @@ test('invalid result or unsafe URL returns visible failure without changing form
 test('blank name does not call AI, panel retains close control',async t=>{const f=fixture(t);f.fields.name.value='';f.open();await flush();assert.equal(f.calls.length,0);assert.match(f.text(),/至少 2 字/);assert.ok(f.button('關閉草稿'));});
 test('optional website cannot prevent the existing manual save validation',async t=>{const f=fixture(t);f.open();await flush();const url=f.panel.find(c=>c.placeholder==='https://公司官網')[0];assert.equal(url.type,'text');assert.equal(url.inputMode,'url');assert.equal(url.name,undefined);});
 test('integration is lazy, narrow and cache versions updated together',()=>{
-  const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');const shop=read('js/modules/store-shop.js');assert.match(shop,/import\('\.\/store-ai-draft.js\?v=2'\)/);assert.match(shop,/data-do="store-ai-draft"/);assert.match(shop,/owner===window.currentUserProfile\?\.userId/);
-  for(const p of ['store-shop.html','js/modules/store-shop-entry.js']){assert.match(read(p),/store-shop.js\?v=51/);assert.match(read(p),/store-shop.css\?v=28/);}
-  assert.match(read('index.html'),/store-shop-entry.js\?v=53/);
+  const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');const shop=read('js/modules/store-shop.js');assert.match(shop,/import\('\.\/store-ai-draft.js\?v=3'\)/);assert.match(shop,/data-do="store-ai-draft"/);assert.match(shop,/owner===window.currentUserProfile\?\.userId/);
+  for(const p of ['store-shop.html','js/modules/store-shop-entry.js']){assert.match(read(p),/store-shop.js\?v=52/);assert.match(read(p),/store-shop.css\?v=28/);}
+  assert.match(read('index.html'),/store-shop-entry.js\?v=54/);
 });
 
 test('tax number alone can request registry preview and then optional AI; neither action saves',async t=>{
@@ -71,4 +71,19 @@ test('tax changes cancel in-flight results and malformed tax never sends',async 
 });
 test('tax input is a lookup aid without a stored name or native pattern blocking manual save',()=>{
   const shop=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');const input=shop.match(/<input[^>]*data-store-tax-id[^>]*>/)[0];assert.doesNotMatch(input,/\bname=|\bpattern=|\brequired\b/);assert.match(shop,/data-do="store-registry-draft"/);
+});
+test('generation with identity-only results is partial, never a completed business introduction',async t=>{
+  const value=good();value.fields.description='';value.fields.category='';value.fields.phone='';value.fields.hours='';value.warnings=['未找到可核對的實際營業內容；不以公司登記項目代替店家介紹。'];
+  const f=fixture(t,()=>value);f.taxId.value='24456660';f.open();await flush();
+  assert.match(f.text(),/已取得部分資料/);assert.doesNotMatch(f.text(),/草稿已完成/);assert.equal(f.check('description'),undefined);assert.equal(f.fields.description.value,'');
+  f.button('重新產生草稿').fire('click');await flush();assert.equal(f.calls.length,2);assert.equal(JSON.parse(f.calls[1].opts.body).mode,undefined);assert.equal(f.fields.status.value,'draft');
+});
+test('indexed introduction is explicitly labeled and unchecked even when the field is empty',async t=>{
+  const f=fixture(t,()=>({...good(),reviewFields:['description','category']}));f.fields.category.value='';f.fields.description.value='';f.open();await flush();
+  assert.equal(f.check('description').checked,false);assert.equal(f.check('category').checked,false);assert.equal(f.check('phone').checked,true);assert.match(f.text(),/搜尋索引草稿/);assert.match(f.text(),/核對索引來源/);
+  f.button('確認帶入勾選欄位').fire('click');assert.equal(f.fields.description.value,'');assert.equal(f.fields.category.value,'');
+  f.open();f.button('重新產生草稿').fire('click');await flush();f.check('description').checked=true;f.button('確認帶入勾選欄位').fire('click');assert.equal(f.fields.description.value,sampleFields.description);assert.equal(f.fields.status.value,'draft');
+});
+test('invalid indexed-review metadata cannot change checked fields or bypass result validation',async t=>{
+  const f=fixture(t,()=>({...good(),reviewFields:['status']}));f.open();await flush();assert.match(f.text(),/格式不完整/);assert.equal(f.fields.status.value,'draft');assert.equal(f.fields.description.value,'');
 });
