@@ -20,10 +20,10 @@ export function openStoreDraft({form,base,isCurrent,mode='generate'}){
   const button=text=>{const n=el('button',text);n.type='button';return n;};
   const box=el('section','','shop-ai-draft'),heading=el('div','','shop-ai-heading'),close=button('關閉草稿');
   const title=el('h3',mode==='registry'?'官方登記草稿':'AI 店面草稿');heading.append(title,close);
-  const help=el('p','統編只確認官方名稱與登記地址；AI 另搜尋網路公開的實際產品／服務，不用登記營業項目代替介紹。先預覽、核對來源再帶入，不自動儲存或公開。','shop-meta');
+  const help=el('p','統編／公司名稱用來找到正確商家；AI 自行搜尋官網、品牌與公開社群的實際產品／服務，不用登記項目作介紹。網址可留白；先核對來源再勾選帶入，不自動儲存或公開。','shop-meta');
   const hint=el('input'),website=el('input');hint.type='text';hint.maxLength=120;website.type='text';website.inputMode='url';website.maxLength=500;
   hint.placeholder='例如：新北板橋、分店名稱';website.placeholder='https://公司官網';
-  const hintLabel=el('label','城市／分店補充（選填）'),urlLabel=el('label','公司官網（選填）');hintLabel.append(hint);urlLabel.append(website);
+  const hintLabel=el('label','城市／品牌／分店補充（選填）'),urlLabel=el('label','官網／公開社群網址（選填，可留白）');hintLabel.append(hint);urlLabel.append(website);
   const actions=el('div','','shop-row'),analyze=button('重新產生草稿'),enrich=button('AI 補充介紹'),cancel=button('取消分析');cancel.hidden=true;enrich.hidden=true;actions.append(analyze,enrich,cancel);
   const status=el('p','','shop-ai-status');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
   const preview=el('div'),apply=button('確認帶入勾選欄位');apply.hidden=true;apply.className='primary';
@@ -56,7 +56,7 @@ export function openStoreDraft({form,base,isCurrent,mode='generate'}){
     if(queryMode!=='registry'&&website.value.trim()&&!safeLink(website.value.trim())){status.textContent='官網請填公開的 HTTPS 網址。';return;}
     stop();clearPreview();snapshot=Object.fromEntries(keys.map(k=>[k,field(k).value]));touched=new Set();
     const version=ticket,requestController=new AbortController();controller=requestController;loading=true;analyze.disabled=true;enrich.disabled=true;cancel.hidden=false;
-    const progress=queryMode==='registry'?'正在以統編查詢經濟部登記資料…':taxId?'正在以統編確認公司，並搜尋實際產品／服務…':'正在搜尋實際產品／服務並核對來源…';
+    const progress=queryMode==='registry'?'正在以統編查詢經濟部登記資料…':taxId?'正在以統編確認公司，並搜尋官網／公開社群的營業內容…':'正在確認商家，並搜尋官網／公開社群的營業內容…';
     let timedOut=false;const start=Date.now();status.textContent=progress;
     timer=setInterval(()=>{if(!current()){dispose();return;}status.textContent=`${progress}已等待 ${Math.floor((Date.now()-start)/1000)} 秒，可取消。`;},1000);
     timeout=setTimeout(()=>{timedOut=true;requestController.abort();},90000);
@@ -83,7 +83,7 @@ export function openStoreDraft({form,base,isCurrent,mode='generate'}){
       }
       apply.hidden=!rows.length;apply.disabled=false;
       enrich.hidden=!(taxId&&rows.length);enrich.disabled=false;
-      status.textContent=rows.length?(queryMode==='registry'?'官方登記資料已查到；可直接勾選帶入，或用 AI 補充介紹。尚未儲存。':data.fields.description?(data.reviewFields?.length?'搜尋介紹草稿已整理；請核對索引來源後勾選帶入。尚未儲存。':'草稿已完成；尚未帶入或儲存。'):'已取得部分資料；尚未找到可核對的實際營業內容。尚未帶入或儲存。'):taxId?'官方登記未查到此統編；請確認數字，或改用公司名稱搜尋。':'未取得可核對的資料；請填統編、官網，或手動填寫。';
+      status.textContent=rows.length?(queryMode==='registry'?'官方登記資料已查到；可直接勾選帶入，或用 AI 補充介紹。尚未儲存。':data.fields.description?(data.reviewFields?.length?'搜尋介紹草稿已整理；請核對索引來源後勾選帶入。尚未儲存。':'草稿已完成；尚未帶入或儲存。'):'已取得部分資料；尚未找到可核對的實際營業內容。尚未帶入或儲存。'):taxId?'官方登記未查到此統編；請確認數字，或改用公司名稱搜尋。':data.match==='ambiguous'?'搜尋到同名商家，尚未確定是哪一家；可補充城市／品牌再搜尋。':'尚未確認正確商家的公開資料；可補充城市／品牌再搜尋。網址非必填，原表單保留。';
     }catch(error){if(version===ticket&&current()){clearPreview();status.textContent=timedOut?'分析逾時，請重試或手動填寫；原表單未變更。':error.name==='AbortError'?'已取消分析，原表單未變更。':error.message;}}
     finally{if(version===ticket){clearTimers();controller=null;loading=false;analyze.disabled=false;enrich.disabled=false;cancel.hidden=true;}}
   }

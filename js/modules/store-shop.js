@@ -318,7 +318,7 @@
       storeName.before(nameRow);nameRow.append(storeName);
       nameRow.insertAdjacentHTML('beforebegin','<div class="shop-store-name-row"><label>統一編號（選填）<input type="text" inputmode="numeric" maxlength="8" data-store-tax-id placeholder="填 8 位統編，名稱可留白"></label><button type="button" data-do="store-registry-draft">統編查公司</button></div>');
       nameRow.insertAdjacentHTML('beforeend','<button type="button" data-do="store-ai-draft">✨ AI 產生店家草稿</button>');
-      nameRow.insertAdjacentHTML('afterend','<p class="shop-meta">可只填統編查官方名稱與登記地址；AI 另從網路搜尋實際產品／服務，不用登記項目作介紹。先預覽、勾選帶入，核對後再儲存。</p><div data-store-ai-draft></div>');
+      nameRow.insertAdjacentHTML('afterend','<p class="shop-meta">統編／公司名稱用來找到正確商家；AI 自行搜尋官網、品牌與公開社群的營業內容，不用登記項目作介紹。網址非必填；先預覽、核對來源，勾選帶入後再儲存。</p><div data-store-ai-draft></div>');
       content.querySelector('[data-form="store"] .shop-image-field>p')?.insertAdjacentHTML('afterend','<p class="shop-meta" data-shop-cover-guide>建議尺寸：800 × 533 px（約 3:2 橫式）。前台依版位滿版置中裁切，重要文字與主體請置中並預留四周邊界；上傳原圖仍完整保留。</p>');
       addProductTags();
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
@@ -452,7 +452,7 @@
           case 'store-ai-draft': {
             const form=button.closest('[data-form="store"]'),version=epoch,owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.(),role=window.userRole;
             const isCurrent=()=>version===epoch&&root.isConnected&&form?.isConnected&&root.contains(form)&&!standalone&&window.currentPage==='store-shop'&&!busy&&canManage()&&role===window.userRole&&owner===window.currentUserProfile?.userId&&token===window.liff?.getAccessToken?.()&&!!window.liff?.isLoggedIn?.();
-            const module=await import('./store-ai-draft.js?v=3');
+            const module=await import('./store-ai-draft.js?v=4');
             if(isCurrent())module.openStoreDraft({form,base,isCurrent,mode:button.dataset.do==='store-registry-draft'?'registry':'generate'});
             break;
           }

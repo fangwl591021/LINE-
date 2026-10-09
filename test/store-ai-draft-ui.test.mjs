@@ -54,9 +54,9 @@ test('invalid result or unsafe URL returns visible failure without changing form
 test('blank name does not call AI, panel retains close control',async t=>{const f=fixture(t);f.fields.name.value='';f.open();await flush();assert.equal(f.calls.length,0);assert.match(f.text(),/至少 2 字/);assert.ok(f.button('關閉草稿'));});
 test('optional website cannot prevent the existing manual save validation',async t=>{const f=fixture(t);f.open();await flush();const url=f.panel.find(c=>c.placeholder==='https://公司官網')[0];assert.equal(url.type,'text');assert.equal(url.inputMode,'url');assert.equal(url.name,undefined);});
 test('integration is lazy, narrow and cache versions updated together',()=>{
-  const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');const shop=read('js/modules/store-shop.js');assert.match(shop,/import\('\.\/store-ai-draft.js\?v=3'\)/);assert.match(shop,/data-do="store-ai-draft"/);assert.match(shop,/owner===window.currentUserProfile\?\.userId/);
-  for(const p of ['store-shop.html','js/modules/store-shop-entry.js']){assert.match(read(p),/store-shop.js\?v=52/);assert.match(read(p),/store-shop.css\?v=28/);}
-  assert.match(read('index.html'),/store-shop-entry.js\?v=54/);
+  const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');const shop=read('js/modules/store-shop.js');assert.match(shop,/import\('\.\/store-ai-draft.js\?v=4'\)/);assert.match(shop,/data-do="store-ai-draft"/);assert.match(shop,/owner===window.currentUserProfile\?\.userId/);
+  for(const p of ['store-shop.html','js/modules/store-shop-entry.js']){assert.match(read(p),/store-shop.js\?v=53/);assert.match(read(p),/store-shop.css\?v=28/);}
+  assert.match(read('index.html'),/store-shop-entry.js\?v=55/);
 });
 
 test('tax number alone can request registry preview and then optional AI; neither action saves',async t=>{
@@ -86,4 +86,14 @@ test('indexed introduction is explicitly labeled and unchecked even when the fie
 });
 test('invalid indexed-review metadata cannot change checked fields or bypass result validation',async t=>{
   const f=fixture(t,()=>({...good(),reviewFields:['status']}));f.open();await flush();assert.match(f.text(),/格式不完整/);assert.equal(f.fields.status.value,'draft');assert.equal(f.fields.description.value,'');
+});
+
+test('company-only discovery does not require a website and keeps no-match distinct from ambiguity',async t=>{
+  for(const match of ['not_found','ambiguous']){
+    const value=good();value.match=match;value.fields=Object.fromEntries(Object.keys(sampleFields).map(k=>[k,'']));value.sources=[];
+    const f=fixture(t,()=>value);f.open();await flush();
+    assert.equal(JSON.parse(f.calls[0].opts.body).websiteUrl,'');assert.match(f.text(),/公開社群/);
+    assert.match(f.text(),match==='ambiguous'?/搜尋到同名商家/:/網址非必填/);assert.doesNotMatch(f.text(),/請填統編、官網/);
+    assert.equal(f.fields.name.value,'原店名');assert.equal(f.fields.status.value,'draft');
+  }
 });

@@ -42,9 +42,9 @@ test('actual consulted and fetched evidence protects contact facts; fabricated s
 });
 test('source blocked, unreadable or identity unproven leaves all facts blank, not invented',async t=>{
   const f=fixture(t);f.setPrivate(true);let r=await f.call();assert.equal(r.status,200);assert.ok(Object.values(r.fields).every(v=>v===''));assert.equal(r.sources.length,0);
-  f.resetQuota();f.setPrivate(false);f.setHtml('<h1>不同公司</h1><p>'+Object.values(sampleFields).slice(1).join(' ')+'</p>');r=await f.call();assert.equal(r.fields.phone,'');assert.match(r.warnings.join(''),/店名來源/);
+  f.resetQuota();f.setPrivate(false);f.setHtml('<h1>不同公司</h1><p>'+Object.values(sampleFields).slice(1).join(' ')+'</p>');r=await f.call();assert.equal(r.fields.phone,'');assert.match(r.warnings.join(''),/尚未確認/);
 });
-for(const match of ['ambiguous','not_found'])test(match+' never mixes store fields',async t=>{const f=fixture(t);f.setOutput(providerResult({...sampleDraft(),match}));const r=await f.call();assert.equal(r.status,200);assert.ok(Object.values(r.fields).every(v=>v===''));assert.match(r.warnings.join(''),/官網/);assert.equal(f.calls.filter(c=>c.url===SOURCE).length,0);});
+for(const match of ['ambiguous','not_found'])test(match+' never mixes store fields',async t=>{const f=fixture(t);f.setOutput(providerResult({...sampleDraft(),match}));const r=await f.call();assert.equal(r.status,200);assert.ok(Object.values(r.fields).every(v=>v===''));assert.match(r.warnings.join(''),/商家/);assert.equal(f.calls.filter(c=>c.url===SOURCE).length,0);});
 test('official website is safe single-call extraction, no token forwarding or search',async t=>{
   const f=fixture(t);const r=await f.call({name:sampleFields.name,websiteUrl:SOURCE});assert.deepEqual(r.fields,sampleFields);const sent=JSON.parse(f.calls.find(c=>c.url.includes('openai')).opts.body);assert.equal(sent.tools,undefined);assert.match(sent.input[0].content[0].text,/source/);assert.equal(f.calls.filter(c=>c.url===SOURCE).length,1);
   f.resetQuota();f.setPrivate(true);assert.equal((await f.call({name:sampleFields.name,websiteUrl:SOURCE})).status,422);assert.equal(f.metrics.analyses,1);
@@ -99,7 +99,7 @@ test('AI enrichment failure or unmatched generated output cannot erase official 
 // Synthetic business content for the company in the user's screenshot. This is
 // deterministic route coverage, not a live AI-generated description.
 const operatingFields={name:registryCompany.Company_Name,description:'提供網站設計、APP 行銷與 LINE 群購服務。',category:'服務',address:registryCompany.Company_Location,phone:'',hours:''};
-function operatingDraft(url=SOURCE){return {match:'matched',fields:{...operatingFields},warnings:[],evidence:[
+function operatingDraft(url=SOURCE){return {match:'matched',identity:{companyName:operatingFields.name,taxId:'',brandName:'',evidence:[]},fields:{...operatingFields},warnings:[],evidence:[
   {field:'name',url,quote:operatingFields.name},{field:'address',url,quote:operatingFields.address},
   ...['description','category'].map(field=>({field,url,quote:operatingFields.description}))
 ]};}

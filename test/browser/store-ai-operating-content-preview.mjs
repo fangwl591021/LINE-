@@ -9,7 +9,7 @@ const files=['js/modules/store-shop-entry.js','js/modules/store-shop.js','js/mod
 export function startPreview(port=0){
   const fixture=createFixture();
   const fields={name:registryCompany.Company_Name,description,category:'服務',address:registryCompany.Company_Location,phone:'',hours:''};
-  const draft=()=>({match:'matched',fields:{...fields},warnings:[],evidence:['name','address','description','category'].map(field=>({field,url:SOURCE,quote:field==='category'?description:fields[field]}))});
+  const draft=()=>({match:'matched',identity:{companyName:fields.name,taxId:'',brandName:'',evidence:[]},fields:{...fields},warnings:[],evidence:['name','address','description','category'].map(field=>({field,url:SOURCE,quote:field==='category'?description:fields[field]}))});
   const server=createServer(async(req,res)=>{
     try{
       const url=new URL(req.url,'http://127.0.0.1');
@@ -18,7 +18,16 @@ export function startPreview(port=0){
         fixture.setDelay(url.searchParams.get('mode')==='slow'?1000:0);fixture.setStatus(url.searchParams.get('mode')==='provider-error'?503:200);
         fixture.setHtml('<h1>'+fields.name+'</h1><p>'+description+'</p><address>'+fields.address+'</address>');
         const output=draft();if(url.searchParams.get('mode')==='bad-summary')output.fields.description='登記業務摘要：食品什貨批發業、化粧品批發業、資訊軟體批發業。';
-        if(url.searchParams.get('mode')==='indexed'){
+        if(['brand-social','social-indexed'].includes(url.searchParams.get('mode'))){
+          const brand='範例數位工作室',link=SOURCE+'brand',social='https://www.facebook.com/example.digital/',gov='https://findbiz.nat.gov.tw/fts/company/24456660';
+          output.identity.brandName=brand;output.identity.evidence=[{url:link,quote:fields.name+'旗下品牌為'+brand+'。'}];
+          output.fields.address='';output.evidence=output.evidence.filter(e=>e.field!=='address');output.evidence.forEach(e=>e.url=e.field==='name'?gov:social);
+          fixture.setPage(gov,'<h1>'+fields.name+'</h1><p>統一編號：24456660；合成經濟部登記公示資料查詢。</p>');
+          fixture.setPage(link,'<p>'+output.identity.evidence[0].quote+'</p><footer>合成品牌關聯公開介紹，僅供隔離測試使用。</footer>');
+          if(url.searchParams.get('mode')==='brand-social')fixture.setPage(social,'<h1>'+brand+'</h1><p>'+description+'</p>');
+          else fixture.setPage(social,'<h1>'+brand+'</h1><p>請登入以查看完整頁面，合成社群登入限制頁。</p>');
+          const provider=providerResult(output);provider.output[0].action.sources=[gov,link,social].map(url=>({url}));provider.output[1].content[0].annotations=[{type:'url_citation',url:social,title:brand+'｜公開社群介紹'}];fixture.setOutput(provider);
+        }else if(url.searchParams.get('mode')==='indexed'){
           const profile='https://www.1111.com.tw/corp/68637932/';
           fixture.setPage(profile,'<title>'+fields.name+'</title><p>背景驗證中，安全驗證完成後繼續，請稍候頁面載入。</p>');output.evidence.forEach(e=>e.url=profile);
           const provider=providerResult(output);provider.output[0].action.sources=[{url:profile,title:fields.name}];fixture.setOutput(provider);
