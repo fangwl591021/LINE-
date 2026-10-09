@@ -2,7 +2,7 @@
 
 - 需求：統編／公司名稱只用來找正確店家，介紹應從官網與公開社群取得，不要求使用者先自行找網址。
 - 起點：origin/main e153b297466c23c03603558ec7d451dd45a916ac；分支 codex/store-ai-identity-social-20261009。
-- 部署：否；本次先修正與驗證，發布需另有明確授權。
+- 部署授權：使用者於 2026-10-09 明確要求「部署」；本次發布既有修正，不增加其他功能或範圍。
 - 修改前完整 `node tools/run-change-guard.js before`：PASS，store-ai-identity-social-before-20261009.log。
 - 已讀：core-invariants、store-shop、store-ai-draft、feature-change-protocol、change-work-order-template、regression-matrix；沿用平台 OPENAI_API_KEY，僅確認 secret 名稱，不取出或改寫金鑰。
 
@@ -37,10 +37,13 @@
 - 一次真實公開頁 fetch ＋合成 provider 驗證：完整公司名出現在可讀的 1111 驗證頁，可保留其搜尋介紹為 reviewFields 草稿，不列不可讀登記頁為已確認來源。正式 OpenAI 呼叫 0、正式資料寫入 0。這不是正式 AI 搜尋精準度或 LINE 手機端到端驗收。
 - 首次 after guard 僅因四個上述快取版號靜態期待值仍為 v52／v54 失敗；同步期待值後 full after guard PASS，新測試已納入 full smoke runner。log：C:\Users\User\AppData\Local\Temp\store-ai-identity-social-after-final-20261009.log。
 - Wrangler 4.148.0 `deploy --dry-run --keep-vars --strict` PASS；只打包，不發布。不變更 wrangler.toml／bindings／secrets／compatibility，沒有 migration。
-- 技能使用：openai-platform-api-key（沿用現有 secret，只確認名称）、workers-best-practices（有限公開來源、安全失敗、credential 不轉送）、wrangler（既有 CLI 與 dry-run，未部署）。
+- 技能使用：openai-platform-api-key（沿用現有 secret，只確認名称）、workers-best-practices（有限公開來源、安全失敗、credential 不轉送）、wrangler（既有 CLI、dry-run 與保留既有設定的正式部署）。
 
 ## 發布與剩餘驗收
 
-- 本次尚未部署、未 push／開 PR，正式站仍為先前版本。
+- 發布前再次完整 `node tools/run-change-guard.js after` PASS；log：C:\Users\User\AppData\Local\Temp\store-ai-identity-social-release-guard-20261009.log。
+- Worker 已發布來源 a40adabe5cad069fbee688738ed52999de276805，CLI `deploy --name line-engine --keep-vars --strict --tag a40adab`，version cc7f6a0a-dacd-4d57-8f0d-f6701f7225ac，100%；deployment bbf8de18-44b9-43a2-91ee-020564975584，2026-10-09T02:59:15Z。
+- 發布前版 f9bb6ba5-4688-442a-b2be-953cbcd39e40 為回退參考；25 個 bindings／vars／secret 名稱與資源指紋前後相同：66511d25c96ca063e4067ad1f4618190bb0e05311ad49592a9a693b65136eba4。runtime 指紋也相同，OPENAI_API_KEY 存在；未設定／改寫 secrets，未改登入、點數、D1／R2 或相容日期。
+- 前端透過此分支的 PR／Contract Guard 合併到 main，沿用既有 Deploy GitHub Pages 工作流程；CI 與正式檔案 hash 需在交付前再核對，正式結果記錄在隔離 release 檢查 log，而非以 push 當作上線證明。
 - 尚未以登入平台的有效 actor 跑正式 OpenAI 的公司名稱／統編搜尋；發布後需驗收真實公司結果、來源與公開社群摘要品質。不能用合成 provider 測試宣稱正式 AI 已成功。
 - 不保证所有公司或受限／未索引社群必有資料；沒有可核對來源時保留空白與原值，不能改用登記項目、猜測品牌或捏造電話補齊。
