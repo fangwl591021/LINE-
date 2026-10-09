@@ -2060,6 +2060,32 @@ const HomeModule = (function() {
         window.renderHomeActivities();
     };
 
+    window.openHomeMyRegistrations = async function() {
+        // Load once explicitly so the final layout can be positioned after records arrive.
+        window.goPage('my-activities', true);
+        const loading = window.loadMyActivities();
+        window.toggleMyActivitySection('activity-records-panel', true);
+        const records = document.getElementById('activity-records-panel');
+        if (!records) return;
+        if (!document.getElementById('home-member-registration-link')) {
+            const memberLink = document.createElement('button');
+            memberLink.id = 'home-member-registration-link';
+            memberLink.type = 'button';
+            memberLink.className = 'w-full px-4 py-4 text-left text-[14px] font-bold text-emerald-700 bg-emerald-50 border-b border-emerald-100';
+            memberLink.textContent = '查看會員活動／課程報名 ›';
+            memberLink.onclick = () => {
+                if (typeof window.openMemberEvents !== 'function') return window.showToast('會員活動功能尚未載入，請重新整理後再試', true);
+                window.openMemberEvents('mine');
+            };
+            records.prepend(memberLink);
+        }
+        records.scrollIntoView({block: 'start'});
+        await loading;
+        if (window.currentPage === 'my-activities' && !records.classList.contains('hidden')) {
+            records.scrollIntoView({block: 'start'});
+        }
+    };
+
     function renderHomeActivityFilters_(types) {
         const list = document.getElementById('user-activities-list');
         if (!list || !list.parentElement) return;
@@ -2075,11 +2101,12 @@ const HomeModule = (function() {
         if (categories.indexOf(window.homeActivityFilter) === -1) window.homeActivityFilter = '全部';
 
         filterBar.className = 'flex gap-2 overflow-x-auto hide-scrollbar pb-2 mb-3';
-        filterBar.innerHTML = categories.map(type => {
+        filterBar.innerHTML = categories.map((type, index) => {
             const active = type === window.homeActivityFilter;
             const safeType = window.escapeHTML(type);
             const jsType = window.escapeJS(type);
-            return `<button type="button" onclick="window.setHomeActivityFilter('${jsType}')" class="shrink-0 px-4 py-2 rounded-full text-[13px] font-black transition-all active:scale-95 ${active ? 'bg-[#ff5a1f] text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-100'}">${safeType}</button>`;
+            const category = `<button type="button" onclick="window.setHomeActivityFilter('${jsType}')" class="shrink-0 px-4 py-2 rounded-full text-[13px] font-black transition-all active:scale-95 ${active ? 'bg-[#ff5a1f] text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-100'}">${safeType}</button>`;
+            return category + (index === 0 ? '<button id="home-my-registrations-tab" type="button" onclick="window.openHomeMyRegistrations()" class="shrink-0 px-4 py-2 rounded-full text-[13px] font-black transition-all active:scale-95 bg-white text-slate-500 border border-slate-100">我的報名</button>' : '');
         }).join('');
     }
 
@@ -2303,7 +2330,7 @@ const HomeModule = (function() {
         const list = document.getElementById('user-activities-list');
         if (!list) return;
         if (window.renderHomeMemberEvents) { window.renderHomeActivities(); return; }
-        document.getElementById('home-activity-filters')?.remove();
+        renderHomeActivityFilters_([]);
         list.className = 'space-y-4';
         list.innerHTML = homeActivityLoadMarkup_(failed);
     }

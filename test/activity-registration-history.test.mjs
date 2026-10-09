@@ -39,7 +39,7 @@ function fixture(records=structuredClone(rows)) {
 }
 test('frontend uses existing history API and bumps the changed module cache version',()=>{
   assert.match(source,/\['getMyActivities', 'getUserActivities', 'getMyRegistrations', 'getUserRegistrations'\]/);
-  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.24/);
+  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.25/);
 });
 
 function historyDatabase() {
