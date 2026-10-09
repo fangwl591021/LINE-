@@ -33,12 +33,18 @@ const registrations=[
   {rowId:'oldest',activityId:'C',activityName:'最早報名',createdAt:'2026-09-26T03:00:00Z',startTime:'2026-11-01T03:00:00Z',status:'cancelled'}
 ];
 const browser=await playwright.chromium.launch({headless:true,channel:'chrome'});
-const page=await browser.newPage({viewport:{width:390,height:844}});
-const out=join(tmpdir(),'my-registration-leftmost'+(liveAssets?'-live-assets':'')+'-20261009');mkdirSync(out,{recursive:true});
-const calls=[],memberReads=[],errors=[],blocked=[];
+const page=await browser.newPage({viewport:{width:390,height:844},timezoneId:'Asia/Taipei'});
+const out=join(tmpdir(),'member-hosting-calendar-roster'+(liveAssets?'-live-assets':'')+'-20261009');mkdirSync(out,{recursive:true});
+const calls=[],memberReads=[],memberWrites=[],errors=[],blocked=[];
 const memberRegistrations=['活動','課程'].map((category,index)=>({id:`ca095158-0aa4-41af-9ddd-569d62d6d18${index}`,title:'已報名會員'+category,category,
   status:'active',visibility:'platform',startsAt:'2027-10-01T02:00:00Z',endsAt:'2027-10-01T04:00:00Z',organizerName:'合成主辦',feeText:'免費',
   registrationCount:1,registrationStatus:'registered',registeredAt:'2026-10-09T02:00:00Z'}));
+const hostedEvents=[{...memberRegistrations[0],id:'50145127-cc64-4611-a19d-01978f26bcf2',title:'我的已結束活動',isOwner:true,startsAt:'2026-10-08T06:00:00Z',endsAt:'2026-10-08T08:00:00Z',registrationCount:2,checkedInCount:1,cancelledCount:1},
+  {...memberRegistrations[0],id:'ebad670f-79c6-4eab-ab61-4354d07b9b99',title:'我的已取消活動',status:'cancelled',isOwner:true,startsAt:'2026-10-08T06:00:00Z',endsAt:'2026-10-08T08:00:00Z'}];
+const rosterRows=[{displayName:'最新來賓',status:'registered',registeredAt:'2026-10-08T03:00:00Z'},
+  {displayName:'已到場來賓',status:'registered',checkedInAt:'2026-10-08T06:30:00Z',registeredAt:'2026-10-07T03:00:00Z'},
+  {displayName:'取消的來賓',status:'cancelled',registeredAt:'2026-10-06T03:00:00Z'}];
+let emptyRoster=false,failRoster=false,holdHistory=false,releaseHistory;
 const documents=[];
 let holdMember=true,releaseMember,failActivity=false,holdActivity=false,releaseActivity;
 let friendScenario=false;
@@ -52,9 +58,27 @@ await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com')return route.fulfill({contentType:'text/javascript',body:tailwind});
   if(url.hostname==='static.line-scdn.net')return route.fulfill({contentType:'text/javascript',body:`window.liff={init:async()=>{if(${friendScenario})history.replaceState(null,'',location.pathname);},isLoggedIn:()=>true,isInClient:()=>true,getProfile:async()=>({userId:'${actor}',displayName:'合成會員'}),getAccessToken:()=>'synthetic-token',getFriendship:async()=>{window.__friendReads=(window.__friendReads||0)+1;return {friendFlag:!${friendScenario}||sessionStorage.getItem('fixture-friend')==='1'};}};`});
-  if(req.method()==='GET'&&url.hostname==='line-engine.fangwl591021.workers.dev'&&url.pathname==='/v1/member-events/overview') {
-    assert.equal(req.headers().authorization,'Bearer synthetic-token');memberReads.push(url.pathname);
-    return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,sessions:[],my:memberRegistrations,hosting:[]})});
+  if(url.hostname==='line-engine.fangwl591021.workers.dev'&&url.pathname.startsWith('/v1/member-events/')) {
+    assert.equal(req.headers().authorization,'Bearer synthetic-token');
+    const path=url.pathname.replace('/v1/member-events','');let data;
+    if(req.method()==='GET'){
+      memberReads.push(path+url.search);
+      if(path==='/overview')data={sessions:[],my:memberRegistrations,hosting:hostedEvents};
+      else if(path==='/eligibility')data={canHost:!hostedEvents.some(e=>e.status==='active'&&Date.parse(e.endsAt)>Date.now())};
+      else if(path.endsWith('/registrations')&&hostedEvents.some(e=>path==='/'+e.id+'/registrations')){
+        if(failRoster)return route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({success:false,error:'僅本場主辦可查看'})});
+        const offset=Number(url.searchParams.get('offset'));
+        const event=hostedEvents.find(e=>path.startsWith('/'+e.id));
+        data={event:emptyRoster?{...event,registrationCount:0,checkedInCount:0,cancelledCount:0}:event,registrations:emptyRoster?[]:offset?rosterRows.slice(2):rosterRows.slice(0,2),nextOffset:emptyRoster||offset?null:100};
+      }else if(hostedEvents.some(e=>path==='/'+e.id))data={event:hostedEvents.find(e=>path==='/'+e.id),registration:null};
+      else{blocked.push(req.method()+' '+url.href);return route.abort();}
+    }else if(req.method()==='POST'&&path==='/events'){
+      const draft=req.postDataJSON();assert.equal(draft.title,'新辦活動日曆測試');assert.equal(draft.visibility,'platform');assert.equal(draft.startsAt,'2027-10-15T06:30:00.000Z');assert.equal(draft.endsAt,'2027-10-15T08:00:00.000Z');
+      assert.match(draft.requestKey,/^[0-9a-f-]{36}$/);memberWrites.push({path,draft});
+      const event={...draft,id:'c33c4f2d-1a1b-434b-9622-21a3dc0df63c',status:'active',isOwner:true,organizerName:'合成主辦',registrationCount:0,checkedInCount:0,cancelledCount:0};
+      hostedEvents.push(event);data={event};
+    }else{blocked.push(req.method()+' '+url.href);return route.abort();}
+    return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,...data})});
   }
   if(req.method()==='POST'&&url.hostname==='line-engine.fangwl591021.workers.dev') {
     const {action,payload}=req.postDataJSON();calls.push({action,payload});
@@ -83,7 +107,9 @@ await page.route('**/*',async route=>{
         registrations[0]={...registrations[0],batchId:slot.activityId,activityName:activity.activityName+'｜'+slot.batchName,startTime:slot.startTime,amount:slot.price};
       }
       data={rowId:'latest',activityId:id,existed:false};
-    } else if(action==='getMyActivities')data=registrations;
+    } else if(action==='getMyActivities'){
+      if(holdHistory){holdHistory=false;await new Promise(resolve=>{releaseHistory=resolve;});}data=registrations;
+    }
     else if(action==='getPublicActivities') {
       // Homepage roots do not have loaded dates; entering detail must read them first.
       const {batches,...root}=activity;
@@ -325,10 +351,73 @@ try {
   }
   assert.equal(calls.filter(c=>['joinActivity','registerUser'].includes(c.action)).length,writesBeforeShortcut,'shortcuts never register');
   assert.ok(memberReads.length>=3,'real member overview API, authenticated synthetic fixture');
+  // Hosting cards expose the existing owner-only roster, even for ended/cancelled events.
+  for(const width of [320,390,1440]){
+    await page.setViewportSize({width,height:844});await page.evaluate(()=>window.openMemberEvents('hosting'));
+    const dialog=page.getByRole('dialog',{name:'會員辦活動',exact:true});await dialog.getByText('我的已結束活動',{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('button',{name:'報名名冊',exact:true}).count(),2);
+    await page.screenshot({path:join(out,`hosting-${width}.png`),fullPage:true});
+    await dialog.locator('.me-card').filter({hasText:'我的已結束活動'}).getByRole('button',{name:'報名名冊',exact:true}).click();
+    await dialog.getByText('最新來賓',{exact:true}).waitFor();assert.match(await dialog.textContent(),/有效報名 2.*已核銷 1.*未到 1.*已取消 1/);
+    assert.deepEqual(await dialog.locator('.me-card strong').allTextContents(),['最新來賓','已到場來賓']);
+    await page.screenshot({path:join(out,`roster-${width}.png`),fullPage:true});
+    await dialog.getByRole('button',{name:'下一頁',exact:true}).click();await dialog.getByText('取消的來賓',{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'重新整理名單',exact:true}).click();await dialog.getByText('取消的來賓',{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'上一頁',exact:true}).click();await dialog.getByText('最新來賓',{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'開啟核銷掃描器',exact:true}).click();await dialog.getByText('開始掃描',{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'‹ 返回',exact:true}).click();await dialog.getByText('最新來賓',{exact:true}).waitFor();
+    await dialog.getByRole('button',{name:'‹ 返回',exact:true}).click();await dialog.getByText('我的已結束活動',{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('button',{name:'我辦的活動',exact:true}).getAttribute('aria-pressed'),'true');
+    await dialog.getByRole('button',{name:'活動列表',exact:true}).click();await dialog.getByText('目前沒有紀錄',{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('button',{name:'報名名冊',exact:true}).count(),0);
+    await dialog.getByRole('button',{name:'我的報名',exact:true}).click();await dialog.getByText('已報名會員課程',{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('button',{name:'報名名冊',exact:true}).count(),0);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await dialog.getByRole('button',{name:'關閉會員活動',exact:true}).click();
+  }
+  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.openMemberEvents('hosting'));
+  const hostDialog=page.getByRole('dialog',{name:'會員辦活動',exact:true});await hostDialog.getByText('我的已結束活動',{exact:true}).waitFor();
+  emptyRoster=true;await hostDialog.locator('.me-card').first().getByRole('button',{name:'報名名冊',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.me-body')?.textContent.includes('尚無報名'));
+  assert.match(await hostDialog.textContent(),/有效報名 0.*已核銷 0.*未到 0.*已取消 0/);
+  await hostDialog.getByRole('button',{name:'‹ 返回',exact:true}).click();await hostDialog.getByText('我的已結束活動',{exact:true}).waitFor();
+  emptyRoster=false;failRoster=true;await hostDialog.locator('.me-card').first().getByRole('button',{name:'報名名冊',exact:true}).click();await hostDialog.getByText('僅本場主辦可查看',{exact:true}).waitFor();
+  assert.equal(await hostDialog.getByText('最新來賓',{exact:true}).count(),0);failRoster=false;
+  assert.equal(memberWrites.length,0,'viewing records/scanner/calendar does not publish or redeem');
+  // Open from the homepage; private history is deliberately held to prove immediate visible navigation.
+  const historyBefore=calls.filter(c=>c.action==='getMyActivities').length;holdHistory=true;
+  await hostDialog.getByRole('button',{name:'＋ 到行事曆辦活動',exact:true}).click();
+  await page.locator('.me-dialog').waitFor({state:'detached'});assert.equal(await page.evaluate(()=>currentPage),'my-activities');
+  await page.locator('#personal-agenda-form').waitFor({state:'visible'});assert.equal(await page.locator('#agenda-host-activity').isChecked(),true);
+  await page.waitForFunction(()=>document.getElementById('my-activities-list')?.textContent.includes('載入中'));
+  assert.ok(releaseHistory);assert.equal(calls.filter(c=>c.action==='getMyActivities').length,historyBefore+1);
+  for(const width of [320,390,1440]){await page.setViewportSize({width,height:844});assert.equal(await page.locator('#personal-agenda-form').isVisible(),true);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(out,`hosting-draft-${width}.png`),fullPage:true});}
+  releaseHistory();await page.waitForFunction(title=>document.getElementById('my-activities-list')?.textContent.includes(title),registrations[0].activityName);
+  await page.evaluate(()=>{window.toggleAgendaForm(false);window.personalAgendaMonth=new Date(2026,9,1);window.selectPersonalAgendaDate('2026-10-08');});
+  await page.getByText('我的已結束活動',{exact:true}).waitFor();assert.equal(await page.getByText('我的已取消活動',{exact:true}).count(),0);
+  assert.equal(await page.evaluate(()=>personalAgendaTasks.filter(r=>r.taskId==='50145127-cc64-4611-a19d-01978f26bcf2').length),1);
+  await page.setViewportSize({width:390,height:844});await page.screenshot({path:join(out,'calendar-history-390.png'),fullPage:true});
+  // Explicit create still reviews dates and visibility before any synthetic write, then projects once.
+  await page.addStyleTag({content:await readAsset('css/activity-visibility.css')});await page.addScriptTag({content:await readAsset('js/modules/activity-visibility.js')});
+  await page.evaluate(()=>window.toggleAgendaForm(true));await page.locator('#agenda-title').fill('新辦活動日曆測試');
+  await page.locator('#agenda-start').fill('2027-10-15T14:30');await page.locator('#agenda-end').fill('2027-10-15T16:00');
+  await page.locator('#agenda-location').fill('合成會議室');await page.locator('#agenda-notes').fill('平台活動草稿與行事曆投影測試');
+  await page.getByRole('button',{name:'儲存行程',exact:true}).click();
+  const reviewDialog=page.getByRole('dialog',{name:'確認活動草稿',exact:true});await reviewDialog.waitFor();assert.equal(await reviewDialog.locator('[name=startsAt]').inputValue(),'2027-10-15T14:30');
+  assert.equal(memberWrites.length,0);await reviewDialog.getByRole('button',{name:'確認發布活動',exact:true}).click();
+  const visibility=page.getByRole('dialog',{name:'是否公開這個活動？',exact:true});await visibility.waitFor();
+  await visibility.getByRole('button',{name:'取消，返回修改',exact:true}).click();assert.equal(memberWrites.length,0);
+  await reviewDialog.getByRole('button',{name:'確認發布活動',exact:true}).click();await visibility.waitFor();
+  await visibility.locator('[data-scope=platform]').click();await page.locator('.me-dialog h2').filter({hasText:'新辦活動日曆測試'}).waitFor();
+  assert.equal(memberWrites.length,1);assert.ok(!calls.some(c=>c.action==='savePersonalTask'),'one event, no private duplicate');
+  await page.getByRole('button',{name:'關閉會員活動',exact:true}).click();
+  await page.evaluate(()=>{window.personalAgendaMonth=new Date(2027,9,1);window.selectPersonalAgendaDate('2027-10-15');});
+  await page.getByText('新辦活動日曆測試',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>personalAgendaTasks.filter(r=>r.taskId==='c33c4f2d-1a1b-434b-9622-21a3dc0df63c').length),1);
+  assert.ok(await page.locator('#personal-agenda-calendar-grid button').filter({hasText:/^15$/}).locator('i').count());
+  await page.screenshot({path:join(out,'calendar-created-390.png'),fullPage:true});
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
-  console.log(JSON.stringify({result:'PASS',liveAssets,assets:[...assetReads.keys()],widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],productionWrites:0,automaticWrites:0,myRegistrationShortcut:true,memberActivityAndCourseHistory:true,homepageSeriesSelection:true,seriesLoadingAndRetry:true,hiddenChoicesCannotSubmit:true,syntheticExplicitSignup:true,screenshots:out}));
+  console.log(JSON.stringify({result:'PASS',liveAssets,assets:[...assetReads.keys()],widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],productionWrites:0,automaticWrites:0,myRegistrationShortcut:true,memberActivityAndCourseHistory:true,hostingCalendarNavigation:true,hostingRosterAndReturn:true,endedCalendarHistory:true,syntheticExplicitHostPublish:true,homepageSeriesSelection:true,seriesLoadingAndRetry:true,hiddenChoicesCannotSubmit:true,syntheticExplicitSignup:true,screenshots:out}));
 } catch(error) {
-  console.error(JSON.stringify({state:await page.evaluate(()=>({page:window.currentPage,choices:document.getElementById('activity-batch-choices')?.textContent})),calls:calls.slice(-8).map(c=>c.action),errors,blocked}));
+  console.error(JSON.stringify({state:await page.evaluate(()=>({page:window.currentPage,choices:document.getElementById('activity-batch-choices')?.textContent,records:document.getElementById('my-activities-list')?.textContent,agenda:document.getElementById('personal-agenda-list')?.textContent})),calls:calls.slice(-8).map(c=>c.action),memberReads:memberReads.slice(-8),memberWrites,errors,blocked}));
   await page.screenshot({path:join(out,'failure.png'),fullPage:true});
   throw error;
 } finally {await browser.close();}
