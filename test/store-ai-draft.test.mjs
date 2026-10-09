@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleStoreShop} from '../worker/store-shop.mjs';
 import {createFixture,UID,OTHER,SOURCE,sampleFields,sampleDraft,providerResult,REGISTRY_TAX,registryCompany} from './fixtures/store-ai-draft.mjs';
-import {registryApis,lookupStoreRegistration,registrationItemPage} from '../worker/store-registration.mjs';
+import {registryApis,lookupStoreRegistration} from '../worker/store-registration.mjs';
 const fixture=t=>{const f=createFixture();t.after(f.close);return f;};
 test('store draft reuses actor: no unregistered/expired/forged identity; no existing shop required',async t=>{
   const f=fixture(t);for(const [uid,status]of [[null,401],['expired',401],['U'+'c'.repeat(32),403]])assert.equal((await f.call(undefined,uid)).status,status);
@@ -96,11 +96,92 @@ test('AI enrichment failure or unmatched generated output cannot erase official 
   const f=fixture(t);f.setStatus(503);let r=await f.call({taxId:REGISTRY_TAX,name:'另一家旧店'});assert.equal(r.status,200);assert.equal(r.fields.name,registryCompany.Company_Name);assert.equal(r.fields.address,registryCompany.Company_Location);assert.match(r.warnings.join(''),/AI 補充未完成/);assert.equal(r.sources.length,1);
   f.resetQuota();f.setStatus(200);f.setOutput(providerResult({...sampleDraft(),match:'ambiguous'}));r=await f.call({taxId:REGISTRY_TAX});assert.equal(r.fields.name,registryCompany.Company_Name);assert.equal(r.fields.address,registryCompany.Company_Location);assert.equal(r.fields.phone,'');assert.equal(r.fields.description,'');assert.equal(f.metrics.saves,0);
 });
-test('verified registration business items support AI summary without re-fetching JSON as HTML',async t=>{
-  const f=fixture(t),taxRequest={taxId:REGISTRY_TAX};f.setRegistry({company:[registryCompany],business:[],items:[{Business_Accounting_NO:REGISTRY_TAX,Company_Name:registryCompany.Company_Name,Cmp_Business:[{Business_Item_Desc:'資訊軟體服務業'}]}]});
-  const reg=await lookupStoreRegistration(REGISTRY_TAX,f.fetcher),item=await registrationItemPage(reg,f.fetcher);
-  const fields={name:reg.name,address:reg.address,description:'登記業務包括資訊軟體服務。',category:'服務',phone:'0900-999999',hours:'24小時'};
-  const draft={match:'matched',fields,warnings:[],evidence:[{field:'name',url:reg.page.url,quote:reg.name},{field:'address',url:reg.page.url,quote:reg.address},{field:'description',url:item.url,quote:'資訊軟體服務業'},{field:'category',url:item.url,quote:'資訊軟體服務業'},{field:'phone',url:reg.page.url,quote:'0900-999999'},{field:'hours',url:reg.page.url,quote:'24小時'}]};f.setOutput({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(draft)}]}]});
-  const r=await f.call(taxRequest);assert.equal(r.fields.description,'登記業務摘要：'+fields.description);assert.equal(r.fields.category,'服務');assert.equal(r.fields.phone,'');assert.equal(r.fields.hours,'');assert.equal(r.fields.name,reg.name);assert.equal(r.sources.length,2);
-  const body=JSON.parse(f.calls.find(c=>c.url.includes('openai')).opts.body);assert.equal(body.tools,undefined);assert.equal(body.store,false);assert.match(body.input[0].content[0].text,/登記業務摘要/);assert.equal(f.calls.some(c=>c.opts.headers.Accept==='text/html'),false);assert.equal(f.metrics.saves,0);
+// Synthetic business content for the company in the user's screenshot. This is
+// deterministic route coverage, not a live AI-generated description.
+const operatingFields={name:registryCompany.Company_Name,description:'提供網站設計、APP 行銷與 LINE 群購服務。',category:'服務',address:registryCompany.Company_Location,phone:'',hours:''};
+function operatingDraft(url=SOURCE){return {match:'matched',fields:{...operatingFields},warnings:[],evidence:[
+  {field:'name',url,quote:operatingFields.name},{field:'address',url,quote:operatingFields.address},
+  ...['description','category'].map(field=>({field,url,quote:operatingFields.description}))
+]};}
+const withSources=(draft,urls)=>({status:'completed',output:[{type:'web_search_call',status:'completed',action:{sources:urls.map(url=>({url,title:'公司公開介紹'}))}},{type:'message',content:[{type:'output_text',text:JSON.stringify(draft)}]}]});
+function operatingFixture(t){const f=fixture(t);f.setHtml('<h1>'+operatingFields.name+'</h1><p>'+operatingFields.description+'</p><address>'+operatingFields.address+'</address>');f.setOutput(providerResult(operatingDraft()));return f;}
+test('tax-only generation and regeneration search actual services, never registered business items',async t=>{
+  const f=operatingFixture(t);
+  for(let i=0;i<2;i++){
+    f.resetQuota();const r=await f.call({taxId:REGISTRY_TAX,hint:'新北板橋'});
+    assert.deepEqual(r.fields,operatingFields);assert.doesNotMatch(r.fields.description,/登記|批發業/);assert.equal(r.sources.length,2);assert.ok(r.sources.some(s=>s.url===SOURCE));
+  }
+  for(const request of f.calls.filter(c=>c.url.includes('openai'))){
+    const body=JSON.parse(request.opts.body),input=JSON.parse(body.input[0].content[0].text);
+    assert.equal(body.tools[0].type,'web_search');assert.equal(body.tool_choice,'required');assert.equal(body.store,false);
+    assert.equal(input.company,operatingFields.name);assert.equal(input.hint,'新北板橋');assert.equal(input.registeredIdentity.taxId,REGISTRY_TAX);
+    assert.equal(input.officialWebsite,undefined);assert.equal(input.source,undefined);assert.match(input.research,/產品／服務/);assert.match(body.instructions,/禁止使用政府／公司登記/);
+  }
+  assert.equal(f.calls.some(c=>c.url.includes(registryApis.items)),false);assert.equal(f.metrics.saves,0);
+  assert.ok(f.calls.filter(c=>c.url===SOURCE).every(c=>c.opts.credentials==='omit'&&!c.opts.headers.Authorization));
+});
+test('registry fast lookup remains AI-free; separate enrichment searches actual services',async t=>{
+  const f=operatingFixture(t);const basic=await f.call({taxId:REGISTRY_TAX,mode:'registry'});
+  assert.equal(basic.fields.description,'');assert.equal(f.metrics.analyses,0);
+  const enriched=await f.call({taxId:REGISTRY_TAX});assert.equal(enriched.fields.description,operatingFields.description);assert.equal(f.metrics.analyses,1);assert.equal(f.metrics.saves,0);
+});
+test('tax plus supplied matching website extracts actual services without registry-item fallback',async t=>{
+  const f=operatingFixture(t),r=await f.call({taxId:REGISTRY_TAX,websiteUrl:SOURCE});assert.deepEqual(r.fields,operatingFields);
+  const body=JSON.parse(f.calls.find(c=>c.url.includes('openai')).opts.body);assert.equal(body.tools,undefined);assert.match(body.input[0].content[0].text,/產品／服務/);
+  assert.equal(f.calls.filter(c=>c.url===SOURCE).length,1);assert.equal(f.calls.some(c=>c.url.includes(registryApis.items)),false);assert.equal(f.metrics.saves,0);
+});
+for(const [label,description,quote]of [
+  ['explicit summary','登記業務摘要：登記營業項目包含資訊軟體服務業。','提供網站設計、APP 行銷與 LINE 群購服務。'],
+  ['paraphrased legal items','提供食品什貨批發業、化粧品批發業、電信器材批發業服務。','食品什貨批發業、化粧品批發業、電信器材批發業'],
+  ['one legal item as proof',operatingFields.description,'資訊軟體服務業'],
+  ['business code as proof',operatingFields.description,'I301010 資訊軟體服務業']
+])test('rejects '+label+' in any generated business field despite matched identity',async t=>{
+  const f=operatingFixture(t),draft=operatingDraft();draft.fields.description=description;
+  draft.evidence.filter(e=>['description','category'].includes(e.field)).forEach(e=>e.quote=quote);
+  f.setHtml('<h1>'+operatingFields.name+'</h1><p>'+quote+'</p><address>'+operatingFields.address+'</address>');f.setOutput(providerResult(draft));
+  const r=await f.call({taxId:REGISTRY_TAX});assert.equal(r.fields.description,'');if(label!=='explicit summary')assert.equal(r.fields.category,'');
+  assert.equal(r.fields.name,operatingFields.name);assert.equal(r.fields.address,operatingFields.address);assert.match(r.warnings.join(''),/實際營業內容/);assert.equal(f.metrics.saves,0);
+});
+for(const source of ['https://findbiz.nat.gov.tw/fts/company/24456660','https://data.gcis.nat.gov.tw/od/data/api/'+registryApis.items,'https://mygov.tw/company/24456660','https://www5cdn.technews.tw/company/24456660'])test('registry-only source cannot prove services: '+new URL(source).hostname,async t=>{
+  const f=operatingFixture(t);f.setOutput(withSources(operatingDraft(source),[source]));
+  const r=await f.call({taxId:REGISTRY_TAX});assert.equal(r.fields.description,'');assert.equal(r.fields.category,'');assert.equal(r.fields.name,operatingFields.name);assert.equal(r.sources.length,1);
+  assert.equal(f.calls.some(c=>c.url===source&&c.opts.headers.Accept==='text/html'),false);assert.equal(f.metrics.saves,0);
+});
+test('name-only search rejects registry summaries too; mixed real service paragraph remains usable',async t=>{
+  const f=operatingFixture(t),draft=operatingDraft();draft.fields.description='登記業務摘要：資訊軟體服務業';f.setOutput(providerResult(draft));
+  let r=await f.call({name:operatingFields.name});assert.equal(r.fields.description,'');
+  f.resetQuota();f.setHtml('<h1>'+operatingFields.name+'</h1><p>登記營業項目：資訊軟體服務業</p><p>'+operatingFields.description+'</p><address>'+operatingFields.address+'</address>');f.setOutput(providerResult(operatingDraft()));
+  r=await f.call({name:operatingFields.name});assert.equal(r.fields.description,operatingFields.description);assert.equal(r.fields.category,'服務');assert.equal(f.metrics.saves,0);
+});
+test('no completed search or another company cannot enrich the verified tax identity',async t=>{
+  const f=operatingFixture(t);f.setOutput({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(operatingDraft())}]}]});
+  let r=await f.call({taxId:REGISTRY_TAX});assert.equal(r.fields.description,'');assert.match(r.warnings.join(''),/AI 補充未完成/);
+  f.resetQuota();f.setHtml('<h1>'+sampleFields.name+'</h1><p>'+Object.values(sampleFields).join(' ')+'</p>');f.setOutput(providerResult(sampleDraft()));
+  r=await f.call({taxId:REGISTRY_TAX});assert.equal(r.fields.name,operatingFields.name);assert.equal(r.fields.address,operatingFields.address);assert.equal(r.fields.description,'');assert.equal(r.fields.phone,'');assert.equal(f.metrics.saves,0);
+});
+for(const url of ['https://www.1111.com.tw/corp/68637932/','https://www.104.com.tw/company/abc123'])test('indexed company-profile draft is marked for review, never promoted to fetched contact facts: '+new URL(url).hostname,async t=>{
+  const f=operatingFixture(t),draft=operatingDraft(url);
+  draft.fields.phone='02-8787-1111';draft.fields.hours='全天';
+  draft.evidence.push({field:'phone',url,quote:draft.fields.phone},{field:'hours',url,quote:draft.fields.hours});
+  f.setPage(url,'<title>'+operatingFields.name+'</title><p>背景驗證中，安全驗證完成後繼續。平台客服：02-8787-1111 全天</p>');f.setOutput(withSources(draft,[url]));
+  const r=await f.call({taxId:REGISTRY_TAX});assert.equal(r.fields.description,operatingFields.description);assert.equal(r.fields.category,'服務');
+  assert.deepEqual(r.reviewFields,['description','category']);assert.equal(r.fields.phone,'');assert.equal(r.fields.hours,'');assert.equal(r.fields.address,operatingFields.address);
+  assert.match(r.warnings.join(''),/公開搜尋索引/);assert.match(r.warnings.join(''),/可能過時/);assert.ok(r.sources.some(s=>s.url===url));
+  assert.equal(f.metrics.saves,0);assert.equal(f.calls.filter(c=>c.url===url).length,1);assert.equal(f.calls.some(c=>/captcha-gate/.test(c.url)),false);
+});
+test('index fallback rejects unknown publisher, fabricated citation, mismatched identity, and registration proof',async t=>{
+  const f=operatingFixture(t),profile='https://www.1111.com.tw/corp/68637932/';
+  for(const mode of ['unknown-publisher','fabricated-citation','wrong-company','registry-proof']){
+    f.resetQuota();const url=mode==='unknown-publisher'?'https://www.merchant.com/corp/68637932/':profile,draft=operatingDraft(url);
+    f.setPage(url,'<title>'+(mode==='wrong-company'?'另一家股份有限公司':operatingFields.name)+'</title><p>背景驗證中，安全驗證完成後繼續，請稍候頁面載入。</p>');
+    if(mode==='registry-proof')draft.evidence.filter(e=>['description','category'].includes(e.field)).forEach(e=>e.quote='登記營業項目：資訊軟體服務業');
+    const output=withSources(draft,mode==='fabricated-citation'?[SOURCE]:[url]);
+    if(mode==='fabricated-citation')output.output[1].content[0].annotations=[{type:'url_citation',url:profile,title:operatingFields.name}];
+    f.setOutput(output);const r=await f.call({taxId:REGISTRY_TAX});assert.equal(r.fields.description,'',mode);assert.equal(r.reviewFields,undefined,mode);assert.equal(f.metrics.saves,0);
+  }
+});
+test('name-only exact query may preview indexed services, but cannot use it for another company',async t=>{
+  const f=operatingFixture(t),url='https://www.1111.com.tw/corp/68637932/';f.setPage(url,'<title>'+operatingFields.name+'</title><p>背景驗證中，安全驗證完成後繼續，請稍候頁面載入。</p>');f.setOutput(withSources(operatingDraft(url),[url]));
+  let r=await f.call({name:operatingFields.name});assert.equal(r.fields.description,operatingFields.description);assert.equal(r.fields.address,'');assert.deepEqual(r.reviewFields,['description','category']);
+  f.resetQuota();r=await f.call({name:'另一家公司'});assert.equal(r.fields.description,'');assert.equal(r.reviewFields,undefined);assert.equal(f.metrics.saves,0);
 });
