@@ -22,5 +22,14 @@
 .aa-task{display:block;width:100%;text-align:left;margin:10px 0}.aa-task strong{display:block;color:#29364a;font-size:16px;overflow-wrap:anywhere}.aa-task small{display:block;margin-top:5px}.aa-task.aa-overdue{border-left:4px solid #cc6c43}
 .aa-events{list-style:none;padding:0;margin:12px 0}.aa-events li{padding:10px 0;border-bottom:1px solid #ecedf0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7}.aa-events strong,.aa-events small{display:block}
 .aa-description{white-space:pre-wrap;overflow-wrap:anywhere}.aa-suggestion{padding:14px;border:1px solid #d8c4f2;border-radius:14px;background:#f8f4fe;margin:16px 0}
+.aa-task{border:1px solid #dfd6ec;border-radius:14px;padding:14px;background:#fff;min-width:0}
+.aa-task-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px}.aa-task-heading time{font-size:12px;color:#687485}
+.aa-badge,.aa-meta span{display:inline-block;border-radius:999px;background:#f2ebfa;padding:3px 9px;font-size:12px;color:#604185}.aa-overdue .aa-badge{background:#fff0eb;color:#a03c20}
+.aa-task h3 button{width:100%;padding:0;min-height:32px;border:0;border-radius:0;text-align:left;background:transparent;color:#25334a;font-size:17px;white-space:normal;overflow-wrap:anywhere}
+.aa-task .aa-contact{color:#9d522b;font-size:14px}.aa-task .aa-description{font-size:14px;line-height:1.7}.aa-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.aa-task-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.aa-task-actions button{min-width:0;padding:9px 5px}.aa-task-reminder{grid-column:1/-1}
+.aa-timeline{border-top:1px solid #ece5f5;margin-top:12px;padding-top:10px;font-size:13px;overflow-wrap:anywhere}.aa-timeline summary{cursor:pointer;min-height:32px;color:#604185}
+.aa-crm-candidates .aa-task label{overflow-wrap:anywhere}.aa-crm-candidates .aa-task p{margin-top:10px}
+@media(min-width:540px){.aa-task-actions{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .aa-guide-video{display:block;width:100%;max-height:54dvh;min-height:160px;background:#17202e;border-radius:12px;margin:12px 0;object-fit:contain}
 @media(max-width:360px){.home-teaching-row{gap:7px}.home-teaching-row .tutorial-entry{gap:6px;padding:11px 8px}.home-teaching-row .tutorial-entry-play{width:27px;height:27px}.home-teaching-row .tutorial-entry>span:last-child{display:none}.home-teaching-row .tutorial-entry strong{font-size:14px}.aa-body{padding:12px}.ai-advance-dialog h2{font-size:18px}}

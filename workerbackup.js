@@ -13,6 +13,7 @@ import { checkRedeemOnlyAction, validateRedeemOperator } from './worker/redeem-o
 import { issueMemberProductQr } from './worker/store-member-product-qr.mjs';
 import { isTaipeiLocalDateTime, normalizeTaipeiDateTime, taipeiDateTimeEpoch } from './worker/personal-agenda-time.mjs';
 import { PartnerDirectoryModule } from './worker/partner-directory.mjs';
+import { ensureAiAdvanceCardTask } from './worker/ai-advance.mjs';
 import { ExchangeZoneModule } from './worker/exchange-zone.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
@@ -275,6 +276,8 @@ const ACTION_POLICIES = {
 };
 // ==================== 模組 0: 資安防護 (Security Module) ====================
 const SecurityModule = {
+  // Private marker cannot be manufactured by a JSON client; no permission decision is changed.
+  aiAdvanceVerifiedActor: Symbol('ai-advance-verified-actor'),
   hardAdminAccounts: [
     {
       label: '方萬隆',
@@ -591,6 +594,7 @@ const SecurityModule = {
     payload.authenticatedUserId = actor.userId;
     payload.authenticatedRole = actor.role;
     payload.authenticatedNetworkId = actor.networkId;
+    if ((action === 'saveCard' || action === 'updateCard') && actor.token && actor.source !== 'd1_identity_fallback') payload[this.aiAdvanceVerifiedActor] = actor.userId;
 
     if (policy.access === 'admin' && actor.role !== 'admin') {
       return { allowed: false, error: 'Access Denied: Admin only action' };
@@ -11417,10 +11421,13 @@ const D1WriteModule = {
     const awardedPoints = pointAward && pointAward.awarded ? pointAward.points : 0;
     const pipelineEnqueue = await Promise.allSettled([
       CardFateTagAnalysisModule.enqueueCard(card.row_id, env),
-      CardUploaderMatchModule.enqueueCard(card.row_id, env)
+      CardUploaderMatchModule.enqueueCard(card.row_id, env),
+      // New authenticated collections only; failures must not undo or retry the saved card / award.
+      ...(!existing && !isOwnCard && payload[SecurityModule.aiAdvanceVerifiedActor]
+        ? [ensureAiAdvanceCardTask(env, payload[SecurityModule.aiAdvanceVerifiedActor], card.row_id)] : [])
     ]);
     pipelineEnqueue.forEach((result, index) => {
-      if (result.status === 'rejected') console.error(index === 0 ? 'card fate tag enqueue failed' : 'card uploader match enqueue failed', result.reason?.message || 'UNKNOWN');
+      if (result.status === 'rejected') console.error(index === 0 ? 'card fate tag enqueue failed' : index === 1 ? 'card uploader match enqueue failed' : 'card crm task enqueue failed');
     });
     const responseCard = D1ReadModule.cardRow(card);
     responseCard.awardedPoints = awardedPoints;

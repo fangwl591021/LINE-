@@ -12,11 +12,20 @@ CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,name TEXT,company_name TEXT,t
 INSERT INTO users VALUES('demo-member','${uid}','示範會員','user');
 INSERT INTO card_contacts VALUES('demo-contact','陳怡君','好日子設計','專案經理','${uid}','','','ocr_scan','','');`);
 sql.exec(readFileSync(path.join(root,'migrations/0054_ai_advance_tasks.sql'),'utf8'));
+sql.exec(readFileSync(path.join(root,'migrations/0061_ai_advance_manual_reminders.sql'),'utf8'));
+sql.exec(`ALTER TABLE card_contacts ADD COLUMN crm_status TEXT DEFAULT '新名片';
+ALTER TABLE card_contacts ADD COLUMN crm_next_action TEXT DEFAULT '首次聯繫';
+ALTER TABLE card_contacts ADD COLUMN crm_next_followup_at TEXT DEFAULT '';
+ALTER TABLE card_contacts ADD COLUMN crm_ai_suggestion TEXT DEFAULT '確認公開資料，討論合作需求並記錄首次聯繫結果。';`);
+if(process.env.AI_ADVANCE_CRM_FIXTURE==='1') {
+  for(let n=1;n<10;n++)sql.prepare("INSERT INTO card_contacts(row_id,name,company_name,title,scanner_user_id,source_type) VALUES(?,?,?,?,?,'ocr_scan')").run('demo-crm-'+n,'展示聯絡人 '+n,'展示公司','業務',uid);
+}
 function prepare(query,args=[]){return{bind(...values){return prepare(query,values);},async first(){return sql.prepare(query).get(...args)||null;},async all(){return{success:true,results:sql.prepare(query).all(...args)};},async run(){return{success:true,meta:{changes:Number(sql.prepare(query).run(...args).changes)}};}};}
 const db={prepare,async batch(statements){sql.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e;}}};
-const env={ACTMASTER_DB:db,OPENAI_API_KEY:'local-fixture-not-a-real-key',OPENAI_MODEL:'local-fixture'};
+const env={ACTMASTER_DB:db,OPENAI_API_KEY:'local-fixture-not-a-real-key',OPENAI_MODEL:'local-fixture',LINE_CHANNEL_ACCESS_TOKEN:'local-fixture-not-a-real-key'};
 const fetcher=async(url,options)=>{
   if(url==='https://api.line.me/v2/profile')return new Response(JSON.stringify({userId:uid}));
+  if(url==='https://api.line.me/v2/bot/message/push')return new Response('{}');
   if(url!=='https://api.openai.com/v1/responses')throw Error('UNEXPECTED_EXTERNAL_REQUEST');
   return new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({createNextTask:true,title:'下週確認合作提案',description:'再次聯絡陳怡君，確認提案方向與預算。',dueInDays:7,priority:'normal',reason:'已寄出提案，對方希望下週再聯繫。'})}]}]}));
 };
@@ -24,7 +33,7 @@ const html=readFileSync(path.join(root,'index.html'),'utf8');
 const buttons=html.match(/<div class="home-teaching-row">[\s\S]*?<\/div>/)[0];
 const page=`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"><title>AI 推進 · 本機驗收</title><link rel="stylesheet" href="/css/tutorial-center.css"><link rel="stylesheet" href="/css/ai-advance.css"><style>body{font-family:system-ui,'Microsoft JhengHei',sans-serif;margin:0;background:#f1faf6;color:#123f34}main{max-width:600px;margin:0 auto;padding:12px}.demo-head{background:#00866b;color:#fff;border-radius:18px;padding:22px;font-size:22px;font-weight:700}.demo-shortcuts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.demo-shortcuts span{background:#fff;border-radius:16px;padding:16px 3px;text-align:center;font-size:14px}.demo-banner{background:#fff0ce;border-radius:16px;padding:24px;font-size:24px;font-weight:700;margin-top:12px}small{font-size:12px}</style></head><body><main><p><small>本機驗收｜虛構資料與 AI 示範回覆｜不連線正式會員資料</small></p><div class="demo-head">點數通<br><small>會員專區　購物金　簽到贈點　專屬 QR</small></div><div class="demo-shortcuts"><span>收藏名片</span><span>我的名片</span><span>星座運勢</span><span>加LINE好友</span></div>${buttons}<div class="demo-banner">把消費串起來<br><small>購物金 × 跨店折抵 × 更多優惠</small></div></main><script>window.currentUserProfile={userId:'${uid}'};window.liff={isLoggedIn:()=>true,getAccessToken:()=>'local-fixture'};window.Config={API_URL:location.origin};</script><script src="/js/modules/tutorial-center.js"></script><script src="/js/modules/ai-advance.js"></script></body></html>`;
 const allowed=new Map([['/css/tutorial-center.css','text/css'],['/css/ai-advance.css','text/css'],['/js/modules/tutorial-center.js','text/javascript'],['/js/modules/ai-advance.js','text/javascript']]);
-http.createServer(async(req,res)=>{
+const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://127.0.0.1');
   try{
     if(url.pathname==='/__reset' && req.method==='POST'){
@@ -42,4 +51,5 @@ http.createServer(async(req,res)=>{
     }
     res.writeHead(404);res.end('Not found');
   }catch(e){console.error(e);res.writeHead(500);res.end('Local fixture failed');}
-}).listen(Number(process.env.PORT||8828),'127.0.0.1',()=>console.log('Synthetic preview: http://127.0.0.1:'+Number(process.env.PORT||8828)));
+});
+server.listen(Number(process.env.PORT||8828),'127.0.0.1',()=>console.log('Synthetic preview: http://127.0.0.1:'+server.address().port));
