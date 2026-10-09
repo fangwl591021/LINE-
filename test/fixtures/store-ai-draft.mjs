@@ -6,7 +6,7 @@ export const UID='U'+'a'.repeat(32),OTHER='U'+'b'.repeat(32),SOURCE='https://www
 export const sampleFields={name:'測試咖啡公司',description:'提供咖啡、茶飲與甜點。',category:'食',address:'台北市測試路 1 號',phone:'02-12345678',hours:'週一至週五 09:00–18:00'};
 const quotes={...sampleFields,category:'提供咖啡、茶飲與甜點。'};
 export const REGISTRY_TAX='24456660',registryCompany={Business_Accounting_NO:REGISTRY_TAX,Company_Name:'米樂數位行銷股份有限公司',Company_Location:'新北市板橋區文化路2段486號3樓之2',Company_Status_Desc:'核准設立'};
-export const sampleDraft=()=>({match:'matched',fields:{...sampleFields},evidence:Object.keys(sampleFields).map(field=>({field,url:SOURCE,quote:quotes[field]})),warnings:[]});
+export const sampleDraft=()=>({match:'matched',identity:{companyName:sampleFields.name,taxId:'',brandName:'',evidence:[]},fields:{...sampleFields},evidence:Object.keys(sampleFields).map(field=>({field,url:SOURCE,quote:quotes[field]})),warnings:[]});
 export const providerResult=draft=>({status:'completed',output:[{type:'web_search_call',status:'completed',action:{sources:[{type:'url',url:SOURCE,title:'測試咖啡公司官網'}]}},{type:'message',content:[{type:'output_text',text:JSON.stringify(draft)}]}]});
 export function createFixture(){
   const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT);');

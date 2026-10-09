@@ -44,6 +44,7 @@ const fullChecks = [
   'test/store-listing-review.test.mjs',
   'test/store-ai-draft.test.mjs',
   'test/store-ai-draft-ui.test.mjs',
+  'test/store-ai-identity-social.test.mjs',
   'test/member-hosted-events.test.mjs',
   'test/member-hosted-events-ui.test.mjs',
   'test/home-activities-loading.test.mjs',

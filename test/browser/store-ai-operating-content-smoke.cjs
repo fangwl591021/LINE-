@@ -49,7 +49,20 @@ const {mkdirSync}=require('node:fs');
       if(process.env.STORE_AI_SCREENSHOTS)await page.locator('[data-store-ai-draft]').screenshot({path:process.env.STORE_AI_SCREENSHOTS+'/indexed-'+width+'.png'});
       await page.getByRole('button',{name:'確認帶入勾選欄位',exact:true}).click();assert.equal(await page.locator('[name="description"]').inputValue(),'');
       metrics=await(await page.request.get(base+'/test-metrics')).json();assert.equal(metrics.saves,0);assert.equal(external.length,0);
-      await context.close();console.log('PASS '+width+'px: registry→services→regenerate; search; no auto-save; legal-source rejection; partial status; index review unchecked; no overflow; close');
+      for(const mode of ['brand-social','social-indexed']){
+        await page.goto(base+'/?mode='+mode,{waitUntil:'networkidle'});await page.locator('[name="description"]').fill('');
+        await page.getByRole('button',{name:'✨ AI 產生店家草稿',exact:true}).click();
+        await page.getByRole('status').filter({hasText:mode==='social-indexed'?'核對索引來源':'草稿已完成'}).waitFor();
+        assert.equal(await page.locator('[data-store-tax-id]').inputValue(),'');
+        assert.equal(await page.locator('.shop-ai-field').filter({has:page.locator('[data-ai-field="description"]')}).locator('.shop-ai-value').innerText(),description);
+        assert.equal(await page.locator('.shop-ai-sources a[href="https://www.facebook.com/example.digital/"]').count(),1);
+        assert.equal(await page.locator('[data-ai-field="description"]').isChecked(),mode==='brand-social');
+        assert.equal(await page.locator('[name="description"]').inputValue(),'');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+        if(process.env.STORE_AI_SCREENSHOTS)await page.locator('[data-store-ai-draft]').screenshot({path:process.env.STORE_AI_SCREENSHOTS+'/'+mode+'-'+width+'.png'});
+        await page.getByRole('button',{name:'確認帶入勾選欄位',exact:true}).click();assert.equal(await page.locator('[name="description"]').inputValue(),mode==='brand-social'?description:'');
+        metrics=await(await page.request.get(base+'/test-metrics')).json();assert.equal(metrics.saves,0);assert.deepEqual(metrics.providerSearches,[true]);assert.equal(metrics.businessItemLookups,0);assert.equal(external.length,0);
+      }
+      await context.close();console.log('PASS '+width+'px: registry→services→regenerate; company-only discovery→proven brand→public social; direct/indexed distinction; no auto-save; legal-source rejection; partial status; index review unchecked; no overflow; close');
     }
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});
