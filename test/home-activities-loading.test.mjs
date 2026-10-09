@@ -13,6 +13,7 @@ function fixture(fetchAPI){
     renderHomeActivities(){calls.push('render');list.innerHTML=window.allActivities.length?'活動卡片':'目前暫無開放中的活動';},openActivityFromUrlParam(){calls.push('deep-link');}};
   const context=vm.createContext({window,document:{getElementById:id=>id==='user-activities-list'?list:filter},console,
     getActivityListNetwork_:()=>network,Promise,JSON,Date,
+    renderHomeActivityFilters_:()=>calls.push('render-filters'),
     setTimeout(fn,delay){const id=++next;timers.set(id,{fn,delay});return id;},clearTimeout(id){timers.delete(id);}});
   vm.runInContext(block('    function normalizeActivityList_(', '    function isTruthy_('),context);
   vm.runInContext(block('    let homeActivitiesRequest_;','    function recurringTaskTimeLabel_('),context);
@@ -52,6 +53,7 @@ test('concurrent loads coalesce, show loading immediately and render after respo
 test('bounded legacy fallback only for malformed/error responses; failure is retryable, not empty success',async()=>{
   let fail=true;const calls=[],f=fixture(async(action)=>{calls.push(action);return fail?{success:false,error:'offline'}:[];});
   await f.window.loadUserActivities();assert.deepEqual(calls,['getPublicActivities','getAllActivities','getActivities']);
+  assert.ok(f.calls.includes('render-filters'),'my registration navigation remains reachable on loading/failure');
   assert.match(f.list.innerHTML,/載入失敗/);assert.match(f.list.innerHTML,/重新載入活動/);assert.ok(!f.calls.includes('render'));
   fail=false;await f.window.loadUserActivities();assert.equal(calls.length,4);assert.match(f.list.innerHTML,/暫無/);
   const authCalls=[],auth=fixture(async(action)=>{authCalls.push(action);return {success:false,authRelogin:true};});

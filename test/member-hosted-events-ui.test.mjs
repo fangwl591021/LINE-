@@ -21,7 +21,7 @@ test('pure deep link waits existing login; mixed/duplicate/invalid links do noth
 test('calendar branch precedes private save, one projection, review and existing functions retained',()=>{
   const branch=home.slice(home.indexOf('window.savePersonalAgendaTask ='));assert.ok(branch.indexOf('reviewMemberHostedAgenda')<branch.indexOf("fetchAPI('savePersonalTask'"));
   assert.match(home,/task\.memberHosted/);assert.match(home,/loadMemberHostedAgenda/);assert.match(home,/loadSequence !== window\.personalAgendaLoadSequence/);
-  assert.match(html,/member-hosted-events\.js\?v=7/);assert.match(html,/home\.js\?v=8\.24/);assert.match(ui,/確認發布活動/);assert.match(ui,/確認儲存修改/);assert.match(ui,/capacity.*人數上限/);assert.match(ui,/收費只作資訊展示/);
+  assert.match(html,/member-hosted-events\.js\?v=7/);assert.match(html,/home\.js\?v=8\.25/);assert.match(ui,/確認發布活動/);assert.match(ui,/確認儲存修改/);assert.match(ui,/capacity.*人數上限/);assert.match(ui,/收費只作資訊展示/);
   assert.doesNotMatch(ui,/localStorage|sessionStorage|OPENAI_API_KEY|gift_money|\/activities\/|courses\/|registerUser/);
 });
 test('privacy, auth captured on every request, stale response and close/scan/ticket cleanup',()=>{

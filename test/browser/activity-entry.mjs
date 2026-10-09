@@ -34,8 +34,11 @@ const registrations=[
 ];
 const browser=await playwright.chromium.launch({headless:true,channel:'chrome'});
 const page=await browser.newPage({viewport:{width:390,height:844}});
-const out=join(tmpdir(),'activity-batch-entry'+(liveAssets?'-live-assets':'')+'-20261009');mkdirSync(out,{recursive:true});
-const calls=[],errors=[],blocked=[];
+const out=join(tmpdir(),'home-my-registration'+(liveAssets?'-live-assets':'')+'-20261009');mkdirSync(out,{recursive:true});
+const calls=[],memberReads=[],errors=[],blocked=[];
+const memberRegistrations=['活動','課程'].map((category,index)=>({id:`ca095158-0aa4-41af-9ddd-569d62d6d18${index}`,title:'已報名會員'+category,category,
+  status:'active',visibility:'platform',startsAt:'2027-10-01T02:00:00Z',endsAt:'2027-10-01T04:00:00Z',organizerName:'合成主辦',feeText:'免費',
+  registrationCount:1,registrationStatus:'registered',registeredAt:'2026-10-09T02:00:00Z'}));
 const documents=[];
 let holdMember=true,releaseMember,failActivity=false,holdActivity=false,releaseActivity;
 let friendScenario=false;
@@ -49,6 +52,10 @@ await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());
   if(url.hostname==='cdn.tailwindcss.com')return route.fulfill({contentType:'text/javascript',body:tailwind});
   if(url.hostname==='static.line-scdn.net')return route.fulfill({contentType:'text/javascript',body:`window.liff={init:async()=>{if(${friendScenario})history.replaceState(null,'',location.pathname);},isLoggedIn:()=>true,isInClient:()=>true,getProfile:async()=>({userId:'${actor}',displayName:'合成會員'}),getAccessToken:()=>'synthetic-token',getFriendship:async()=>{window.__friendReads=(window.__friendReads||0)+1;return {friendFlag:!${friendScenario}||sessionStorage.getItem('fixture-friend')==='1'};}};`});
+  if(req.method()==='GET'&&url.hostname==='line-engine.fangwl591021.workers.dev'&&url.pathname==='/v1/member-events/overview') {
+    assert.equal(req.headers().authorization,'Bearer synthetic-token');memberReads.push(url.pathname);
+    return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,sessions:[],my:memberRegistrations,hosting:[]})});
+  }
   if(req.method()==='POST'&&url.hostname==='line-engine.fangwl591021.workers.dev') {
     const {action,payload}=req.postDataJSON();calls.push({action,payload});
     assert.equal(payload.lineAccessToken,'synthetic-token');assert.equal(payload.userId,actor);
@@ -137,10 +144,16 @@ try {
   await page.waitForTimeout(150);
   assert.equal(await page.evaluate(()=>currentPage),'home');
   assert.equal(await page.locator('#page-my-act-detail').isVisible(),false);
-  // Registration list keeps the API's newest-first order, and rendered controls target that row.
-  await page.evaluate(()=>goPage('my-activities'));
+  // The homepage shortcut directly expands the real existing registration panel.
+  await page.evaluate(async()=>{await window.loadUserActivities();window.goPage('home',true);});
+  const filters=page.locator('#home-activity-filters');
+  assert.deepEqual((await filters.getByRole('button').allTextContents()).slice(0,2),['全部','我的報名']);
+  await filters.getByRole('button',{name:'我的報名',exact:true}).click();
+  assert.equal(await page.evaluate(()=>currentPage),'my-activities');
   await page.waitForFunction(()=>document.querySelector('#my-activities-list')?.textContent.includes('最新報名'));
-  await page.getByRole('button',{name:'活動報名紀錄'}).click();
+  assert.equal(await page.locator('#activity-records-panel').isVisible(),true,'no extra expand click');
+  assert.equal(await page.locator('#home-member-registration-link').isVisible(),true);
+  // Registration list keeps the API's newest-first order, and controls target that row.
   const list=page.locator('#my-activities-list');
   assert.deepEqual(await list.locator('.truncate').allTextContents(),registrations.map(r=>r.activityName));
   for(const width of [390,1440]) {
@@ -193,7 +206,7 @@ try {
     assert.equal(returned.searchParams.get('via'),'a');assert.equal(returned.searchParams.get('point_friend'),'1');
     assert.deepEqual([...returned.searchParams.keys()].sort(),['activityId','net','point_friend','ref','via']);
   }
-  assert.ok(calls.every(x=>['checkUser','getActivityById','getMyActivities','listPersonalTasks'].includes(x.action)),'opening pages never writes');
+  assert.ok(calls.every(x=>['checkUser','getActivityById','getPublicActivities','getMyActivities','listPersonalTasks'].includes(x.action)),'opening pages never writes');
   const signup=page.getByRole('button',{name:'我要報名',exact:true});
   await signup.click();await page.locator('#activity-registration-modal').waitFor({state:'visible'});
   assert.equal(await page.locator('#activity-reg-name').inputValue(),'合成會員');
@@ -238,6 +251,12 @@ try {
   assert.equal(await cards.getByRole('button',{name:'報名',exact:true}).count(),1);
   for(const width of [320,390,1440]) {
     await page.setViewportSize({width,height:844});
+    assert.deepEqual((await filters.getByRole('button').allTextContents()).slice(0,2),['全部','我的報名']);
+    const allBox=await filters.getByRole('button',{name:'全部',exact:true}).boundingBox();
+    const mineBox=await filters.getByRole('button',{name:'我的報名',exact:true}).boundingBox();
+    assert.ok(mineBox.x>allBox.x&&Math.abs(mineBox.y-allBox.y)<1&&mineBox.x+mineBox.width<=width,'shortcut next to all, on screen');
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await filters.screenshot({path:join(out,`registration-tab-${width}.png`)});
     assert.ok(await cards.getByRole('button',{name:'選擇梯次',exact:true}).evaluate(e=>e.scrollWidth<=e.clientWidth+1));
     await cards.screenshot({path:join(out,`series-home-${width}.png`)});
   }
@@ -282,8 +301,32 @@ try {
   assert.deepEqual(calls.filter(c=>c.action==='joinActivity').at(-1).payload.batchIds,[id+'_B01',id+'_B02']);
   assert.equal(calls.filter(c=>c.action==='joinActivity').at(-1).payload.activityId,id);
   assert.equal(calls.filter(c=>c.action==='joinActivity').at(-1).payload.networkId,'admin');
+  // Keep the member activity/course engine separate; use its real authenticated read-only modal.
+  await page.addStyleTag({content:await readAsset('css/member-hosted-events.css')});
+  await page.addScriptTag({content:await readAsset('js/modules/member-hosted-events.js')});
+  await page.evaluate(()=>window.goPage('home',true));
+  const writesBeforeShortcut=calls.filter(c=>['joinActivity','registerUser'].includes(c.action)).length;
+  for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:844});
+    await filters.getByRole('button',{name:'我的報名',exact:true}).click();
+    await page.locator('#home-member-registration-link').click();
+    const dialog=page.getByRole('dialog',{name:'會員辦活動',exact:true});
+    await dialog.getByText('已報名會員課程',{exact:true}).waitFor();
+    assert.equal(await dialog.getByRole('button',{name:'我的報名',exact:true}).getAttribute('aria-pressed'),'true');
+    assert.equal(await dialog.locator('.me-card').count(),2);
+    assert.ok((await dialog.locator('.me-card').allTextContents()).every(text=>text.includes('已報名')));
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:join(out,`member-history-${width}.png`),fullPage:true});
+    await dialog.getByRole('button',{name:'關閉會員活動',exact:true}).click();
+    assert.equal(await page.locator('#activity-records-panel').isVisible(),true);
+    assert.equal(await page.locator('#home-member-registration-link').count(),1);
+    await page.getByRole('button',{name:'返回',exact:true}).first().click();
+    await page.waitForFunction(()=>window.currentPage==='home');
+  }
+  assert.equal(calls.filter(c=>['joinActivity','registerUser'].includes(c.action)).length,writesBeforeShortcut,'shortcuts never register');
+  assert.ok(memberReads.length>=3,'real member overview API, authenticated synthetic fixture');
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
-  console.log(JSON.stringify({result:'PASS',liveAssets,assets:[...assetReads.keys()],widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],productionWrites:0,automaticWrites:0,homepageSeriesSelection:true,seriesLoadingAndRetry:true,hiddenChoicesCannotSubmit:true,syntheticExplicitSignup:true,screenshots:out}));
+  console.log(JSON.stringify({result:'PASS',liveAssets,assets:[...assetReads.keys()],widths:[320,390,1440],apis:[...new Set(calls.map(x=>x.action))],productionWrites:0,automaticWrites:0,myRegistrationShortcut:true,memberActivityAndCourseHistory:true,homepageSeriesSelection:true,seriesLoadingAndRetry:true,hiddenChoicesCannotSubmit:true,syntheticExplicitSignup:true,screenshots:out}));
 } catch(error) {
   console.error(JSON.stringify({state:await page.evaluate(()=>({page:window.currentPage,choices:document.getElementById('activity-batch-choices')?.textContent})),calls:calls.slice(-8).map(c=>c.action),errors,blocked}));
   await page.screenshot({path:join(out,'failure.png'),fullPage:true});
