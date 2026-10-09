@@ -6,16 +6,22 @@ import {resolve} from 'node:path';
 import {startActivityCheckinFixture} from './activity-checkin-flow-server.mjs';
 const require=createRequire(import.meta.url);
 let playwright;try{playwright=require('playwright');}catch{playwright=require('C:/Users/User/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');}
-const f=await startActivityCheckinFixture(),out=resolve('.wrangler/activity-checkin-fixed-20261009');mkdirSync(out,{recursive:true});
-const report={productionWrites:0,camera:'Canvas stream simulation, not physical LINE camera',checks:[],screenshots:[],pageErrors:[],blockedRequests:[]};
+const liveAssets=process.argv.includes('--live-assets');
+const f=await startActivityCheckinFixture(),out=resolve('.wrangler/activity-checkin-'+(liveAssets?'live-assets':'fixed')+'-20261009');mkdirSync(out,{recursive:true});
+const report={productionWrites:0,liveAssets,camera:'Canvas stream simulation, not physical LINE camera',checks:[],screenshots:[],pageErrors:[],blockedRequests:[]};
 const browser=await playwright.chromium.launch({channel:'chrome',headless:true});
 const member=await browser.newPage({viewport:{width:390,height:844}}),host=await browser.newPage({viewport:{width:390,height:844}});
 const check=(name,detail='')=>{report.checks.push({name,detail});console.log('PASS '+name);};
 async function shot(page,name){const path=resolve(out,name+'.png');await page.screenshot({path});report.screenshots.push(path);}
 for(const page of [member,host]){
   page.on('pageerror',e=>report.pageErrors.push(e.message));
-  await page.route('**/*',route=>{
-    const u=new URL(route.request().url());if(u.origin===f.origin)return route.continue();
+  await page.route('**/*',async route=>{
+    const u=new URL(route.request().url());
+    if(liveAssets&&u.origin===f.origin&&/^\/(?:js|css)\//.test(u.pathname)){
+      const response=await fetch('https://fangwl591021.github.io/LINE-'+u.pathname+'?checkin-acceptance='+Date.now());
+      assert.ok(response.ok,'Live asset '+u.pathname);return route.fulfill({contentType:response.headers.get('content-type')||'text/javascript',body:Buffer.from(await response.arrayBuffer())});
+    }
+    if(u.origin===f.origin)return route.continue();
     if(u.hostname==='code.jquery.com')return route.fulfill({contentType:'text/javascript',body:'/* unrelated optional jQuery disabled */'});
     if(route.request().resourceType()==='image')return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#def4ec"/></svg>'});
     report.blockedRequests.push(u.hostname+u.pathname);return route.abort();
