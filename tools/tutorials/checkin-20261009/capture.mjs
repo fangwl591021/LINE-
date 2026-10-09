@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {createHash,randomBytes} from 'node:crypto';
-import {chromium} from 'playwright';
+import {createRequire} from 'node:module';
+const {chromium}=createRequire(import.meta.url)(process.env.TUTORIAL_PLAYWRIGHT||'playwright');
 const revision='4a4b94785df0388d3ec0121b90e9ca0c17b1da70';
 const origin='https://fangwl591021.github.io/LINE-/';
 const assets=new Map(),hashes={};
@@ -30,7 +31,7 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const base='http://localhost:'+server.address().port;
-const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const browser=await chromium.launch({headless:true,args:['--no-sandbox'],...(process.env.TUTORIAL_CHROME?{executablePath:process.env.TUTORIAL_CHROME}:{})});
 const runs=[];
 async function setup(role){
   const dir=role;mkdirSync(dir,{recursive:true});
