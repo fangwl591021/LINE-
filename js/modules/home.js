@@ -1997,6 +1997,13 @@ const HomeModule = (function() {
         return String(activity.status || activity['狀態'] || '上架').trim();
     }
 
+    function isPublicActivitySeries_(activity) {
+        return window.ActivityBatches?.isSeries(activity) ?? (
+            activity?.isBatch === true || activity?.['是否系列'] === true ||
+            String(activity?.['是否系列']).toUpperCase() === 'TRUE'
+        );
+    }
+
     function getPublicActivityNetwork_(activity) {
         const explicitNetwork = String(
             activity.networkId ||
@@ -2098,6 +2105,8 @@ const HomeModule = (function() {
 
         list.innerHTML = activeActs.map(a => {
             const actId = window.escapeJS(getPublicActivityId_(a));
+            const series = isPublicActivitySeries_(a);
+            const signupAction = series ? `window.openActivityDetail('${actId}')` : `window.joinPublicActivity('${actId}', this)`;
             const rawTitle = a.activityName || a.name || a.title || a['活動名稱'] || '未命名活動';
             const shareTitle = window.escapeJS(rawTitle);
             const title = window.escapeHTML(rawTitle);
@@ -2123,7 +2132,7 @@ const HomeModule = (function() {
                             <button type="button" onclick="event.stopPropagation(); window.openActivityShareModal('${actId}', '${shareTitle}')" class="py-2 bg-blue-50 text-blue-600 rounded-xl text-[12px] font-bold active:scale-95 transition-transform flex items-center justify-center gap-1">
                                 <span class="material-symbols-outlined text-[15px]">ios_share</span> 分享
                             </button>
-                            <button type="button" onclick="event.stopPropagation(); window.joinPublicActivity('${actId}', this)" class="py-2 bg-[#06C755] text-white rounded-xl text-[12px] font-bold active:scale-95 transition-transform">報名</button>
+                            <button type="button" onclick="event.stopPropagation(); ${signupAction}" class="py-2 bg-[#06C755] text-white rounded-xl text-[12px] font-bold active:scale-95 transition-transform" aria-label="${series ? '選擇梯次' : '報名'}">${series ? '選擇<br>梯次' : '報名'}</button>
                         </div>
                     </div>
                 </div>`;
@@ -3458,6 +3467,16 @@ const HomeModule = (function() {
         if (activityJoinBusy) return;
         const activity = (window.allActivities || []).find(a => getPublicActivityId_(a) === String(activityId) && canSeePublicActivity_(a));
         if (!activity) return window.showToast('活動已下架', true);
+        if (isPublicActivitySeries_(activity)) {
+            const choices = document.getElementById('activity-batch-choices');
+            // Cached card callers must not submit hidden or another activity's selections.
+            if (window.currentPage !== 'my-act-detail' || choices?.dataset.activityId !== getPublicActivityId_(activity)) {
+                window.openActivityDetail(activityId);
+                return;
+            }
+            if (!window.ActivityBatches) return window.showToast('梯次選擇功能尚未載入，請重新整理後再試', true);
+            if (choices.dataset.ready !== 'true') return window.showToast('梯次尚未載入完成，請稍候或按「重新讀取梯次」', true);
+        }
         let batchIds;
         try { batchIds=window.ActivityBatches?.selection(activity); }
         catch(e) { return window.showToast(e.message,true); }
