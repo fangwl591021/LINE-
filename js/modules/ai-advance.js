@@ -3,6 +3,8 @@
   'use strict';
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   const labels = { create:'建立任務', complete:'完成回報', postpone:'延期', cancel:'取消', note:'補充紀錄', pending:'待辦', completed:'已完成', cancelled:'已取消', low:'低', normal:'一般', high:'高' };
+  const sources = {manual:'手動建立',card_crm:'名片 CRM',ai:'AI 下一步'};
+  const reminderLabels = {pending:'提醒排程中',sent:'LINE 已接受提醒',failed:'提醒未送出',cancelled:'提醒已停止'};
   const stamp = value => new Intl.DateTimeFormat('zh-TW', { timeZone:'Asia/Taipei', year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit' }).format(new Date(value));
   const localDate = value => { const d = new Date(value); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); };
   const dayKey = value => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date(value));
@@ -58,23 +60,50 @@
       frame('AI商務導航','dashboard');
       const today=dayKey(Date.now()), tasks=dashboard.tasks, pending=tasks.filter(t=>t.status==='pending');
       const counts={pending:pending.length,overdue:pending.filter(t=>Date.parse(t.due_at)<Date.now()).length,today:pending.filter(t=>dayKey(t.due_at)===today).length,completed:tasks.filter(t=>t.status==='completed').length};
-      body.innerHTML='<p class="aa-muted">提醒 → 執行 → 回報 → AI 下一步</p><div class="aa-tabs"></div><div class="aa-controls"><button type="button" class="aa-primary" data-new>＋ 建立任務</button><button type="button" data-refresh>重新整理</button></div><label><input type="checkbox" data-remind> 開啟 LINE 到期提醒</label><p class="aa-muted">預設關閉。需加入官方帳號好友、解除封鎖並允許 LINE 通知。到期後約 1–2 分鐘處理；手機顯示依 LINE／系統設定。與私訊通知分開。</p><div class="aa-rows"></div>';
+      body.innerHTML='<p class="aa-muted">提醒 → 執行 → 回報 → AI 下一步</p><div class="aa-tabs"></div><div class="aa-controls"><button type="button" class="aa-primary" data-new>＋ 建立任務</button><button type="button" data-refresh>重新整理</button><button type="button" data-crm>整理名片 CRM 待辦</button></div><p class="aa-muted">新收藏名片會建立首次 CRM 待辦；已有收藏請先預覽、勾選補建。完成或取消後不重複建立。</p><label><input type="checkbox" data-remind> 開啟 LINE 到期提醒</label><p class="aa-muted">預設關閉。需加入官方帳號好友、解除封鎖並允許 LINE 通知。到期後約 1–2 分鐘處理；手機顯示依 LINE／系統設定。與私訊通知分開。手動提醒僅發給自己，同任務同期限最多一次。</p><h3 data-list-title></h3><div class="aa-rows"></div>';
       for(const [key,title]of Object.entries({pending:'待辦',overdue:'逾期',today:'今日到期',completed:'已完成'})){
         const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed',String(filter===key));button.innerHTML=`<strong>${counts[key]}</strong>${title}`;
         button.onclick=()=>{filter=key;showDashboard();};$('.aa-tabs').append(button);
       }
       const selected=tasks.filter(t=>filter==='pending'?t.status==='pending':['completed','cancelled'].includes(filter)?t.status===filter:t.status==='pending'&&(filter==='today'?dayKey(t.due_at)===today:Date.parse(t.due_at)<Date.now()));
+      $('[data-list-title]').textContent=({pending:'待辦任務',overdue:'逾期待辦',today:'今日到期',completed:'已完成 · CRM 任務紀錄',cancelled:'已取消 · CRM 任務紀錄'}[filter])+'（'+selected.length+'）';
       if(!selected.length)$('.aa-rows').innerHTML='<p class="aa-notice">目前沒有這類任務。您可以先建立一個下一步。</p>';
-      selected.forEach(task=>{const button=document.createElement('button');button.type='button';button.className='aa-task'+(task.status==='pending'&&Date.parse(task.due_at)<Date.now()?' aa-overdue':'');
-        const contact=dashboard.contacts.find(c=>c.row_id===task.contact_card_id);
-        button.innerHTML=`<strong>${esc(task.title)}</strong><small>${esc(stamp(task.due_at))} · 優先：${labels[task.priority]}${contact?' · '+esc(contact.name||contact.company_name):''}</small>`;
-        button.onclick=()=>work(()=>loadTask(task.id));$('.aa-rows').append(button);
+      selected.forEach(task=>{const card=document.createElement('article');const overdue=task.status==='pending'&&Date.parse(task.due_at)<Date.now();card.className='aa-task'+(overdue?' aa-overdue':'');card.dataset.taskId=task.id;
+        const contact=(dashboard.taskContacts||dashboard.contacts).find(c=>c.row_id===task.contact_card_id), events=(dashboard.events||[]).filter(e=>e.task_id===task.id), reminder=(dashboard.reminders||[]).find(r=>r.task_id===task.id);
+        card.innerHTML=`<div class="aa-task-heading"><span class="aa-badge">${overdue?'逾期':labels[task.status]}</span><time>${esc(stamp(task.due_at))}</time></div><h3><button type="button" data-detail>${esc(task.title)}</button></h3>${task.contact_card_id?`<p class="aa-contact">名片｜${contact?esc(contact.name||contact.company_name):'原收藏已封存或不再可讀'}</p>`:''}<p class="aa-description">${esc(task.description)}</p><div class="aa-meta"><span>${labels[task.priority]}</span><span>${sources[task.source]||'手動建立'}</span></div><div class="aa-task-actions">${(task.status==='pending'?['complete','postpone','cancel','note']:['note']).map(a=>`<button type="button" data-report-action="${a}">${{complete:'✓ 已完成',postpone:'⏰ 延期',cancel:'× 取消',note:'＋ 新增紀錄'}[a]}</button>`).join('')}${task.status==='pending'?`<button type="button" class="aa-primary aa-task-reminder" data-push>發送提醒</button>`:''}</div>${events.length?`<details class="aa-timeline"><summary>CRM 歷程 · 最近 ${events.length} 筆</summary><ul class="aa-events">${events.map(event=>`<li><strong>${labels[event.action]||esc(event.action)}</strong>${esc(event.note||'建立首次待辦')}<small>${esc(stamp(event.created_at))}</small></li>`).join('')}</ul><button type="button" data-full-history>查看任務與完整歷程</button></details>`:''}${reminder?`<p class="aa-muted" data-delivery>${reminderLabels[reminder.status]||'提醒狀態待確認'}</p>`:''}`;
+        card.querySelector('[data-detail]').onclick=()=>work(()=>loadTask(task.id));
+        card.querySelector('[data-full-history]')?.addEventListener('click',()=>work(()=>loadTask(task.id)));
+        card.querySelectorAll('[data-report-action]').forEach(button=>button.onclick=()=>work(()=>loadTask(task.id,button.dataset.reportAction)));
+        const push=card.querySelector('[data-push]');if(push)push.onclick=()=>{
+          if(!dashboard.notifications){note('請先開啟 LINE 到期提醒；提醒只發給您本人。');return;}
+          if(!window.confirm('將這筆任務提醒發給您本人（不是名片聯絡人）？同任務同期限最多一次。'))return;
+          work(async()=>{const result=await api('/tasks/'+task.id+'/remind',{revision:task.revision});await loadDashboard();note(reminderLabels[result.reminder.status]+'；可按重新整理查看。手機是否顯示取決於 LINE 與通知設定。');});
+        };
+        $('.aa-rows').append(card);
       });
       const history=document.createElement('button');history.type='button';history.textContent=filter==='cancelled'?'返回待辦清單':'查看已取消任務';history.onclick=()=>{filter=filter==='cancelled'?'pending':'cancelled';showDashboard();};body.append(history);
       const limit=document.createElement('p');limit.className='aa-muted';limit.textContent='統計以目前清單為準：待辦優先、結束任務依最近更新，最多顯示 400 筆。';body.append(limit);
       $('[data-new]').onclick=newTask; $('[data-refresh]').onclick=()=>work(loadDashboard);
+      $('[data-crm]').onclick=()=>work(async()=>showCrmCandidates(await api('/crm-candidates')));
       const checkbox=$('[data-remind]');checkbox.checked=dashboard.notifications;
       checkbox.onchange=()=>{const enabled=checkbox.checked;work(async()=>{try{const r=await api('/preferences',{enabled});dashboard.notifications=r.enabled;note(r.enabled?'LINE 提醒已開啟':'LINE 提醒已關閉');}catch(e){checkbox.checked=dashboard.notifications;throw e;}});};
+    }
+    function showCrmCandidates(result) {
+      frame('名片 CRM · 補建首次待辦','crm');
+      const candidates=result.candidates;
+      body.innerHTML='<p class="aa-notice">只整理您的有效收藏名片，不搬入 VEO 資料、不改名片或行事曆。介紹取自已儲存的 CRM 建議；缺期限預設三天後，請核對。一次最多 20 張。</p><form data-crm-form><div class="aa-crm-candidates"></div><button type="submit" class="aa-primary">確認建立勾選的待辦</button></form>';
+      if(!candidates.length){$('.aa-crm-candidates').innerHTML='<p>沒有尚待建立的收藏名片；已建立、已完成或已取消的首次 CRM 任務不會重複建立。</p>';$('[data-crm-form] button[type=submit]').disabled=true;return;}
+      candidates.forEach((candidate,index)=>{
+        const section=document.createElement('section');section.className='aa-task';section.dataset.candidate=index;
+        section.innerHTML=`<label><input type="checkbox" data-select> ${esc(candidate.name)}</label><p><strong>${esc(candidate.title)}</strong></p><p class="aa-description">${esc(candidate.description)}</p><label>核對期限${candidate.defaultDue?'（預設三天後）':''}<input type="datetime-local" data-due required></label>`;
+        section.querySelector('[data-due]').value=localDate(candidate.dueAt);$('.aa-crm-candidates').append(section);
+      });
+      $('[data-crm-form]').oninput=()=>{draft=true;};
+      $('[data-crm-form]').onsubmit=e=>{e.preventDefault();const cards=[];
+        for(const section of body.querySelectorAll('[data-candidate]')){if(!section.querySelector('[data-select]').checked)continue;const input=section.querySelector('[data-due]');if(!input.reportValidity())return;cards.push({contactCardId:candidates[Number(section.dataset.candidate)].contactCardId,dueAt:new Date(input.value).toISOString()});}
+        if(!cards.length||cards.length>20){note('請勾選 1–20 張名片。');return;}
+        work(async()=>{const result=await api('/crm-tasks',{cards}),success=result.results.filter(r=>r.task).length,errors=result.results.filter(r=>r.error);draft=false;await loadDashboard();note(`已建立／保留 ${success} 筆 CRM 待辦。`+(errors.length?`${errors.length} 筆未完成：${errors[0].error}；請重新整理名片 CRM 待辦重試。`:''));});
+      };
     }
     function newTask() {
       frame('建立推進任務','create');const key=crypto.randomUUID();
@@ -83,13 +112,14 @@
       $('[name=dueAt]').value=localDate(Date.now()+86400000); $('[data-create]').oninput=()=>{draft=true;};
       $('[data-create]').onsubmit=e=>{e.preventDefault();if(!e.target.reportValidity())return;const form=new FormData(e.target);work(async()=>{const r=await api('/tasks',{requestKey:key,title:form.get('title'),description:form.get('description'),contactCardId:form.get('contactCardId'),priority:form.get('priority'),dueAt:new Date(form.get('dueAt')).toISOString()});draft=false;await loadTask(r.task.id);note('任務已建立');});};
     }
-    async function loadTask(id) { const result=await api('/tasks/'+id);currentTask=result.task;showTask(result); }
-    function showTask(result) {
+    async function loadTask(id,action='complete') { const result=await api('/tasks/'+id);currentTask=result.task;showTask(result,action); }
+    function showTask(result,selectedAction='complete') {
       frame('任務與執行回報','task');const task=result.task, key=crypto.randomUUID();
       body.innerHTML=`<h3>${esc(task.title)}</h3><p class="aa-muted">${labels[task.status]} · ${esc(stamp(task.due_at))} · 優先：${labels[task.priority]}</p><p class="aa-description">${esc(task.description)}</p><ul class="aa-events"></ul><form data-report><label>回報方式<select name="action">${(task.status==='pending'?['complete','postpone','cancel','note']:['note']).map(a=>`<option value="${a}">${labels[a]}</option>`).join('')}</select></label><label data-postpone hidden>新期限<input name="dueAt" type="datetime-local"></label><label>回報內容（必填）<textarea name="note" required maxlength="2000" placeholder="例如：已寄出提案，對方請我下週聯絡"></textarea></label><div class="aa-controls"><button type="submit" class="aa-primary">儲存回報</button></div></form><div class="aa-controls"><button type="button" data-ai ${task.revision===0?'disabled':''}>AI 建議下一步</button></div><p class="aa-muted">請先儲存執行回報。AI 僅提出建議，不會自動建立任務。</p><div data-suggestion></div>`;
       if(task.contact_card_id){const linked=document.createElement('p');linked.className='aa-muted';linked.textContent=result.contact?'關聯名片：'+[result.contact.name,result.contact.company_name,result.contact.title].filter(Boolean).join(' · '):'原連結名片已封存、移除或不再屬於您的收藏。';body.querySelector('.aa-description').after(linked);}
       for(const event of result.events){const li=document.createElement('li');li.innerHTML=`<strong>${labels[event.action]||esc(event.action)}</strong>${esc(event.note)}<small>${esc(stamp(event.created_at))}</small>`;$('.aa-events').append(li);}
       $('[name=action]').onchange=()=>{$('[data-postpone]').hidden=$('[name=action]').value!=='postpone';$('[name=dueAt]').required=!$('[data-postpone]').hidden;};
+      $('[name=action]').value=task.status==='pending'?selectedAction:'note';$('[name=action]').onchange();
       const privacy=document.createElement('p');privacy.className='aa-notice';privacy.textContent='點選 AI 建議會將任務、回報及選取名片的姓名、公司、職稱送交 AI 分析；不提供電話、電子郵件或圖片。每日最多 10 次。不自動扣點，不代替您聯絡對方。';$('[data-ai]').parentElement.before(privacy);
       $('[name=dueAt]').value=localDate(Date.now()+86400000);$('[data-report]').oninput=()=>{draft=true;};
       $('[data-report]').onsubmit=e=>{e.preventDefault();if(!e.target.reportValidity())return;const form=new FormData(e.target);work(async()=>{await api('/tasks/'+task.id+'/action',{requestKey:key,revision:task.revision,action:form.get('action'),note:form.get('note'),...(form.get('action')==='postpone'?{dueAt:new Date(form.get('dueAt')).toISOString()}:{})});draft=false;await loadTask(task.id);note('回報已儲存，現在可請 AI 建議下一步');});};
@@ -115,7 +145,7 @@
     const stopVideo=()=>modal.querySelectorAll('video').forEach(v=>v.pause());
     document.addEventListener('visibilitychange',hideVideo);window.addEventListener('pagehide',stopVideo);
     modal.addEventListener('close',()=>{document.removeEventListener('visibilitychange',hideVideo);window.removeEventListener('pagehide',stopVideo);},{once:true});
-    frame('AI商務導航','dashboard');work(loadDashboard);
+    frame('AI商務導航','dashboard');body.innerHTML='<p class="aa-muted">正在載入待辦任務…</p><button type="button" data-initial-retry>重新載入</button>';$('[data-initial-retry]').onclick=()=>work(loadDashboard);work(loadDashboard);
   }
   window.openAiAdvanceGuide=()=>window.openTutorialCenter?.('ai-advance');
   window.openAiAdvance=()=>open();

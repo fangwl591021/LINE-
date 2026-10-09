@@ -32,3 +32,9 @@ test('isolated client uses verified bearer, never stored keys; close, draft and 
  assert.match(source,/openAiAdvanceGuide=\(\)=>window\.openTutorialCenter\?\.\('ai-advance'\)/);
  assert.match(source,/view==='dashboard'\)close\(\)/);assert.match(source,/pagehide/);
 });
+test('VEO task cards show source, inline reports and bounded CRM history; backfill and self reminders require confirmation',()=>{
+ assert.match(source,/document\.createElement\('article'\)/);assert.match(source,/data-report-action/);assert.match(source,/CRM 歷程/);assert.match(source,/整理名片 CRM 待辦/);assert.match(source,/確認建立勾選的待辦/);
+ assert.match(source,/data-select/);assert.match(source,/cards\.length>20/);assert.match(source,/不是名片聯絡人/);assert.match(source,/if\(!dashboard\.notifications\)/);assert.match(source,/window\.confirm\('將這筆任務提醒/);
+ assert.match(css,/\.aa-task-actions\{display:grid/);assert.match(html,/ai-advance\.js\?v=3/);assert.match(html,/ai-advance\.css\?v=2/);
+ const worker=readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8');assert.match(worker,/aiAdvanceVerifiedActor: Symbol/);assert.match(worker,/actor\.token && actor\.source !== 'd1_identity_fallback'/);assert.match(worker,/!existing && !isOwnCard && payload\[SecurityModule\.aiAdvanceVerifiedActor\]/);
+});
