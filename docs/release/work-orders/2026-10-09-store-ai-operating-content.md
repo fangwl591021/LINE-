@@ -7,7 +7,7 @@
 - 起點：origin/main ae635376bdd186a288c0d3310a951c383728d8c7。
 - 分支：codex/store-ai-business-description-20261009。
 - 修改前 full guard：PASS（store-ai-business-before-20261009.log）。
-- 部署：否；本次尚未收到新的部署授權。
+- 製作完成時尚未部署；後續部署授權與進度見文末。
 
 ## 範圍與契約
 
@@ -40,3 +40,15 @@
 - 安全檢查：已確認平台存在 OPENAI_API_KEY secret_text（只列名稱）；沒有讀出、建立、更換或寫入金鑰。
 - 已檢視 390px 索引／部分成功的實際 UI 截圖。正式金鑰端到端與實體 LINE 手機驗收需授權部署後另驗證；本次未部署、未修改正式店面。
 - 程式與隔離 fixture 測試不等於正式環境 AI／實體手機驗收；分開記錄。
+
+## 2026-10-09 部署授權與發布紀錄
+
+- 使用者於修正完成後明確要求「部署」；只發布上述範圍，沿用平台現有金鑰。
+- 程式版本：58bffa1a58620c1675233d262ec828c8be29a970；正式 main 基線仍為 ae635376bdd186a288c0d3310a951c383728d8c7。
+- 發布前再次執行 full after guard：PASS（store-ai-business-deploy-guard-20261009.log）；Worker dry-run：PASS。
+- 已以 `deploy --keep-vars --strict` 發布 line-engine；新 Worker version：f9bb6ba5-4688-442a-b2be-953cbcd39e40。
+- 發布前 Worker 回復錨點：a1846426-354b-43cf-b122-43d8dfefbca2；其 aa0909f 程式與目前 main 的 Worker 檔案沒有差異。
+- 新舊版本 25 個 bindings 完整指紋相同：66511d25c96ca063e4067ad1f4618190bb0e05311ad49592a9a693b65136eba4；compatibility_date 保持 2026-04-23，三個 cron 不變。只比對指紋，未輸出 secret 內容。
+- 未執行 migration、金鑰變更、正式店面儲存、商品／點數／會員資料寫入。
+- 前端將透過本次範圍 PR、Contract Guard 及 GitHub Pages 工作流程發布；完成後須比對正式 HTML／JS 內容與本次提交，不以合併或工作流程開始代替正式驗證。
+- 正式 OpenAI 預覽與實體 LINE 手機仍是獨立驗收項目；沒有有效平台登入時不建立測試身分或繞過認證。
