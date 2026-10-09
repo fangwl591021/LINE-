@@ -11,19 +11,20 @@ function section(source, start, end) {
 }
 const home = read('js/modules/home.js');
 function fixture({ role = 'store', networkField = 'networkId', batches = true, registered = true, visible = true } = {}) {
-    const activity = { activityId: 'ACT_fixture', [networkField]: 'organizer-network', status: '上架' };
+    const activity = { activityId: 'ACT_fixture', [networkField]: 'organizer-network', status: '上架', isBatch: batches };
+    const choices = { dataset: {activityId: activity.activityId, ready: 'true'}, querySelectorAll: () =>
+        ['ACT_fixture_B01', 'ACT_fixture_B02'].map(value => ({value})) };
     const member = { userId: 'attendee', role, name: '原會員', phone: '0912345678', networkId: 'member-network', referrerId: 'original-referrer' };
     const calls = [], toasts = [];
     const context = {
         console, AbortController, setTimeout, clearTimeout,
         Config: { WORKER_URL: 'https://fixture.invalid' },
-        document: { getElementById: () => null, createElement: () => { throw Error('must not open registration'); } },
+        document: { getElementById: id => id === 'activity-batch-choices' ? choices : null, createElement: () => { throw Error('must not open registration'); } },
         currentUserProfile: { userId: member.userId }, currentUser: { ...member }, userRole: role,
         currentNetworkId: 'organizer-network', currentPage: 'my-act-detail', allActivities: [activity],
         liff: { isLoggedIn: () => true, getAccessToken: () => 'verified-fixture-token' },
         applyUserPermissions() {}, addUserSocial() {},
         ActivityEntry: { getTarget: () => ({ networkId: visible ? 'organizer-network' : 'unrelated-network' }) },
-        ActivityBatches: { selection: () => batches ? ['ACT_fixture_B01', 'ACT_fixture_B02'] : undefined },
         getInitialActivityNetwork_: () => '',
         goActivityRecordAfterJoin_: async () => {},
         showToast: (message, error) => toasts.push({ message, error }),
@@ -42,6 +43,7 @@ function fixture({ role = 'store', networkField = 'networkId', batches = true, r
     vm.runInContext(section(read('js/auth.js'), 'window.applyRegisteredUserSession =', 'window.setPointWalletStatus ='), context);
     vm.runInContext(section(read('js/core.js'), '    window.fetchAPI =', '    // 強效配對機制'), context);
     vm.runInContext(read('js/modules/activity-registration.js'), context);
+    vm.runInContext(read('js/modules/activity-batches.js'), context);
     vm.runInContext(section(home, '    function getPublicActivityId_', '    window.homeActivityFilter'), context);
     vm.runInContext(section(home, '    let activityJoinBusy = false;', '    // === 模組初始化入口'), context);
     return { context, calls, member, activity, toasts, button: { innerHTML: '我要報名', disabled: false } };
