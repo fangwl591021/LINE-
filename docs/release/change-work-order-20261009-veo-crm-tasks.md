@@ -31,4 +31,3 @@
 - 回退：上述舊 Worker 版本与 Pages 7c8cc774 為參考。0061 屬新增欄位，回退保留該欄位與新任務資料，不還原整個 D1。
 - 整理後 guard after：PASS（C:/Users/User/AppData/Local/Temp/veo-tasks-release-after.log）；名片／reward-only／AI 回歸 79/79 PASS（veo-tasks-release-targeted.log）；320/390/768/1200px 瀏覽器全部 PASS（veo-tasks-release-browser.log）；Wrangler deploy --dry-run --keep-vars --strict PASS（veo-tasks-release-dryrun.log）；語法與 git diff --check PASS。
 - PR/CI、migration、正式 Worker 與 Pages 資產雜湊驗收：進行中；發布結果另記錄，不能以 push/dry-run 宣稱上線。
-
