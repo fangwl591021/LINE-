@@ -527,7 +527,7 @@
     const panel = $('admin-activity-registrants');
     panel.hidden = false;
     panel.innerHTML = `
-      <div class="aar-head"><button type="button" class="aar-button" data-aar="back">← 返回活動列表</button><div class="aar-actions"><button type="button" class="aar-button" data-aar="refresh-roster">重新整理名單</button><button type="button" class="aar-button aar-primary" data-aar="export" disabled>匯出篩選名單 CSV</button></div></div>
+      <div class="aar-head"><button type="button" class="aar-button" data-aar="back">← 返回活動列表</button><div class="aar-actions"><button type="button" class="aar-button aar-primary" data-aar="scan">掃描活動／課程核銷 QR</button><button type="button" class="aar-button" data-aar="refresh-roster">重新整理名單</button><button type="button" class="aar-button aar-primary" data-aar="export" disabled>匯出篩選名單 CSV</button></div></div>
       <h2>${esc(title(activity))}</h2><p class="aar-note">${esc(pick(activity,['開始時間','startTime'],'時間未設定'))} · ${esc(status(activity))} · ${esc(id)}</p>
       <div id="aar-roster-stats" class="aar-stats"></div>
       <div class="aar-filters"><label class="aar-search">搜尋報名者<input id="aar-roster-query" type="search" placeholder="姓名、電話或報名編號"></label>
@@ -599,7 +599,7 @@
     try { await refreshRoster(note); }
     finally {
       state.busy = false;
-      $('admin-activity-registrants').querySelectorAll('[data-aar="back"], [data-aar="refresh-roster"]').forEach(button => { button.disabled = false; });
+      $('admin-activity-registrants').querySelectorAll('[data-aar="back"], [data-aar="refresh-roster"], [data-aar="scan"]').forEach(button => { button.disabled = false; });
       renderRoster();
     }
   }
@@ -624,6 +624,18 @@
       case 'refresh-list': void load(); break;
       case 'back': back(); renderOverview(); break;
       case 'refresh-roster': void refreshRoster(); break;
+      case 'scan': {
+        const id = state.selected;
+        if (!id) break;
+        const panel = $('admin-activity-registrants');
+        const activity = allActivitiesData.find(row => activityId(row) === id);
+        window.openActivityCheckinScanner({activityId: id, title: title(activity || {}),
+          api: (action, payload) => fetchAPI(action, payload, {silent: true}),
+          getActor: () => ({uid: adminProfile?.userId, token: editToken()}),
+          isCurrent: () => state.selected === id && !panel.hidden,
+          onComplete: () => refreshRoster('核銷完成，已更新名單。')});
+        break;
+      }
       case 'export': download(); break;
     }
   }

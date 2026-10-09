@@ -3071,7 +3071,8 @@ const HomeModule = (function() {
         }
     };
 
-    window.showActivityCheckinQr = function(index) {
+    let activityQrRevision_=0;
+    window.showActivityCheckinQr = async function(index) {
         const record = (window.myActivitiesData || [])[index];
         if (!record) return window.showToast('找不到活動紀錄，請重新整理後再試', true);
 
@@ -3095,11 +3096,18 @@ const HomeModule = (function() {
         if (loading) loading.classList.remove('hidden');
 
         if (img) {
+            const revision=++activityQrRevision_,uid=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
+            const valid=()=>revision===activityQrRevision_&&uid===window.currentUserProfile?.userId&&token===window.liff?.getAccessToken?.()&&!modal?.classList.contains('hidden');
             img.onload = function() {
+                if(!valid())return;
                 if (loading) loading.classList.add('hidden');
                 img.classList.remove('hidden');
             };
-            img.src = 'https://quickchart.io/qr?text=' + encodeURIComponent(verifyUrl) + '&size=300&margin=2';
+            img.onerror = function(){if(valid()){loading?.classList.add('hidden');window.showToast('QR 顯示失敗，請重新開啟',true);}};
+            try {
+                if(!window.renderActivityCheckinQr)throw Error('QR 元件未載入，請重新開啟');
+                await window.renderActivityCheckinQr(img,verifyUrl,300,valid);
+            } catch(error) { if(valid()){loading?.classList.add('hidden');window.showToast(error.message||'QR 產生失敗，請重試',true);} }
         }
     };
 

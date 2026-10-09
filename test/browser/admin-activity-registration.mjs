@@ -78,6 +78,9 @@ await page.route('**/*', async route => {
     } else if(action==='toggleCheckin') {
       const row=rows.find(row=>row.rowId===payload.rowId);row['簽到']=!row['簽到'];
       result=loseToggle?null:{rowId:payload.rowId};loseToggle=false;
+    } else if(action==='redeemActivityCheckin') {
+      assert.equal(payload.activityId,'A');const row=rows.find(row=>row.rowId===payload.rowId);
+      result=!row||row.status==='cancelled'?null:{rowId:payload.rowId,checkedIn:true,duplicate:!!row['簽到']};if(result)row['簽到']=true;
     } else if(action==='confirmPayment') { rows.find(row=>row.rowId===payload.rowId)['付款狀態']='已付款';result={rowId:payload.rowId}; }
     else { blocked.push(action); return route.abort(); }
     if(action==='extractActivityDmDraft' && omitSessionRows && result?.draft)result.draft.batches=[];
@@ -86,17 +89,19 @@ await page.route('**/*', async route => {
   if(req.resourceType()==='image')return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
   if(url.hostname==='localhost') {
     if(url.pathname==='/admin.html')return route.fulfill({contentType:'text/html',body:html});
-    if(['/js/modules/admin-activity-registration.js','/css/admin-activity-registration.css'].includes(url.pathname)) return route.fulfill({contentType:url.pathname.endsWith('.js')?'text/javascript':'text/css',body:readFileSync(new URL('../../'+url.pathname.slice(1),import.meta.url),'utf8')});
+    if(['/js/modules/admin-activity-registration.js','/css/admin-activity-registration.css','/js/modules/activity-checkin.js','/css/activity-checkin.css','/js/modules/activity-visibility.js','/css/activity-visibility.css','/js/vendor/jsQR.js','/js/vendor/qrcode-generator-2.0.4.mjs'].includes(url.pathname)) return route.fulfill({contentType:/\.m?js$/.test(url.pathname)?'text/javascript':'text/css',body:readFileSync(new URL('../../'+url.pathname.slice(1),import.meta.url),'utf8')});
     // Other admin modules are unrelated; do not initialize them in this fixture.
     return route.fulfill({contentType:'text/javascript',body:''});
   }
   if(/fonts\.(googleapis|gstatic)\.com|cdnjs\.cloudflare\.com/.test(url.hostname))return route.fulfill({body:''});
   blocked.push(url.href);return route.abort();
 });
-const btn=name=>page.getByRole('button',{name,exact:true});
+const btn=name=>name==='建立活動'?page.locator('#aar-create-submit'):page.getByRole('button',{name,exact:true});
 const openA=async()=>{await page.locator('[data-registrants="A"]').click();await page.getByText('測試會員甲',{exact:true}).waitFor();};
 try {
   await page.goto('http://localhost/admin.html?tab=activities',{waitUntil:'domcontentloaded'});
+  // The visibility POP has its own interactive tests; choose public explicitly in this broad fixture.
+  await page.evaluate(()=>new MutationObserver(()=>document.querySelector('.activity-visibility-dialog [data-scope="platform"]')?.click()).observe(document.body,{childList:true}));
   await page.locator('#loading-screen').waitFor({state:'detached'});
   await page.locator('[data-registrants="A"]').waitFor();
   assert.equal(await page.locator('#page-title').textContent(),'活動報名管理');
@@ -418,6 +423,26 @@ try {
   assert.equal(await page.locator('#aar-create-dialog').count(),0);
   await page.evaluate(()=>closeActivityEditModal());
   assert.equal(createCount(),beforeEditSeries);
+  await openA();
+  await btn('掃描活動／課程核銷 QR').click();
+  await page.locator('.activity-checkin-dialog summary').click();
+  const checkinUrl='https://liff.line.me/1660923784-vViMTZ1y?verifyCheckin=r1&activityId=A';
+  await page.locator('.activity-checkin-dialog [data-ticket]').fill(checkinUrl);
+  await btn('核銷貼上的 QR').click();
+  await page.locator('.activity-checkin-dialog [data-status]').filter({hasText:/核銷成功|已核銷/}).waitFor();
+  await page.locator('[data-row="r1"][data-mutation="toggleCheckin"]').filter({hasText:'取消簽到'}).waitFor();
+  for(const width of [320,390,1440]) {
+    await page.setViewportSize({width,height:800});
+    const overflow=await page.locator('.activity-checkin-dialog button,.activity-checkin-dialog input').evaluateAll(nodes=>nodes.filter(n=>{const b=n.getBoundingClientRect();return b.width&&(b.x<0||b.right>innerWidth+1);}).map(n=>n.textContent));
+    assert.deepEqual(overflow,[]);await page.screenshot({path:join(out,`activity-checkin-scanner-${width}.png`)});
+  }
+  await btn('‹ 返回名單').click();await page.locator('.activity-checkin-dialog').waitFor({state:'detached'});
+  await btn('掃描活動／課程核銷 QR').click();await page.locator('.activity-checkin-dialog summary').click();
+  await page.locator('.activity-checkin-dialog [data-ticket]').fill('https://evil.invalid/?verifyCheckin=r1');
+  const scans=calls.filter(c=>c.action==='redeemActivityCheckin').length;
+  await btn('核銷貼上的 QR').click();await page.locator('[data-status]').filter({hasText:'不是本平台'}).waitFor();
+  assert.equal(calls.filter(c=>c.action==='redeemActivityCheckin').length,scans);
+  await page.getByRole('button',{name:'關閉核銷掃描器',exact:true}).click();
   assert.deepEqual(errors,[]);assert.deepEqual(blocked,[]);
   console.log(JSON.stringify({passed:true,widths:[320,390,1440],apiActions:[...new Set(calls.map(call=>call.action))],realDataWrites:0,screenshots:out}));
 } catch(error) {

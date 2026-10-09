@@ -17,7 +17,7 @@ const rows=[
 function fixture(records=structuredClone(rows)) {
   const nodes=new Map(),calls=[];
   const node=id=>{
-    if(!nodes.has(id))nodes.set(id,{innerHTML:'',textContent:'',classList:{add(){},remove(){}}});
+    if(!nodes.has(id))nodes.set(id,{innerHTML:'',textContent:'',classList:{add(){},remove(){},contains(){return false;}}});
     return nodes.get(id);
   };
   const c={URLSearchParams,console,Date:class extends Date {static now(){return Date.parse('2026-09-28T04:00:00Z');}},document:{getElementById:node},DEFAULT_LIFF_ID:'fixture-liff',
@@ -26,19 +26,20 @@ function fixture(records=structuredClone(rows)) {
     ensurePersonalAgendaPanel_:()=>{},loadPersonalAgenda:()=>{},
     fetchActivitiesByFallback_:async()=>records,
     appConfirm:async message=>{calls.push(['confirm',message]);return true;},
-    fetchAPI:async(action,payload)=>{calls.push([action,payload]);return {success:true};}
+    fetchAPI:async(action,payload)=>{calls.push([action,payload]);return {success:true};},
+    renderActivityCheckinQr:async(img,url)=>{img.fixtureQr=url;return true;}
   };
   c.window=c;vm.createContext(c);
   for(const [start,end] of [
     ['function isTruthy_(', 'function getInitialActivityId_('],
     ['window.loadMyActivities =', 'function buildActivityFromRegistration_('],
-    ['window.showActivityCheckinQr =', 'function getHomeLoadRole_(']
+    ['let activityQrRevision_', 'function getHomeLoadRole_(']
   ])vm.runInContext(block(source,start,end),c);
   return {c,calls,node,records};
 }
 test('frontend uses existing history API and bumps the changed module cache version',()=>{
   assert.match(source,/\['getMyActivities', 'getUserActivities', 'getMyRegistrations', 'getUserRegistrations'\]/);
-  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.22/);
+  assert.match(read('index.html'),/js\/modules\/home\.js\?v=8\.23/);
 });
 
 function historyDatabase() {
@@ -168,8 +169,8 @@ test('detail, QR and explicit cancel still target the row displayed at each inde
     f.c.openMyActivityRecordDetail(index);
     assert.ok(f.node('my-act-detail-content').innerHTML.includes(rows[index].activityName));
     assert.ok(f.node('my-act-detail-content').innerHTML.includes(`showActivityCheckinQr(${index})`));
-    f.c.showActivityCheckinQr(index);
-    const qr=new URL(f.node('qr-code-img').src),verify=new URL(qr.searchParams.get('text'));
+    await f.c.showActivityCheckinQr(index);
+    const verify=new URL(f.node('qr-code-img').fixtureQr);
     assert.equal(verify.searchParams.get('verifyCheckin'),rows[index].rowId);
     assert.equal(verify.searchParams.get('activityId'),rows[index].activityId);
   }

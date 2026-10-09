@@ -199,6 +199,7 @@ const ACTION_POLICIES = {
   getActivityRegistrants: { access: 'manager', tenantScoped: true },
   confirmPayment: { access: 'manager', tenantScoped: true },
   toggleCheckin: { access: 'manager', tenantScoped: true },
+  redeemActivityCheckin: { access: 'manager', tenantScoped: true },
   getInboxMonitor: { access: 'manager', tenantScoped: true },
   saveStoreSettings: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
   getStoreKnowledgeBase: { access: 'manager', tenantScoped: true, allowD1Fallback: true },
@@ -12279,15 +12280,42 @@ const D1ActivityModule = {
     return { success: true, data: { rowId, status: 'cancelled' } };
   },
 
-  async toggleCheckin(payload, env, source = 'manual') {
+  async toggleCheckin(payload, env, source = 'manual', actor = null) {
+    if (!actor?.token || !['admin','store'].includes(SecurityModule.normalizeRole(actor.role))) return {success:false,error:'請以本場主辦／店主身分重新登入後核銷'};
     const rowId = this.pick(payload, ['rowId', 'registrationId', 'verifyCheckin']);
     if (!rowId) return { success: false, error: 'Missing registrationId' };
     const row = await D1ReadModule.first(env, "SELECT * FROM registrants WHERE row_id = ? AND status <> 'cancelled' LIMIT 1", [rowId]);
     if (!row) return { success: false, error: '找不到有效報名資料' };
-    const next = Number(row.checked_in || 0) === 1 ? 0 : 1;
-    await env.ACTMASTER_DB.prepare('UPDATE registrants SET checked_in = ?, nfc_checkin_time = ?, nfc_checkin_source = ? WHERE row_id = ?')
-      .bind(next, next ? new Date().toISOString() : '', source, rowId).run();
-    return { success: true, data: { rowId, checkedIn: next === 1 } };
+    let activity;
+    try { activity = await this.requireActivityManagement({activityId:row.activity_id},env,actor); }
+    catch (_) { return {success:false,error:'找不到報名，或不在您的活動管理範圍'}; }
+    const requested = this.pick(payload,['activityId','活動ID']);
+    if (requested && requested !== row.activity_id && requested !== this.text(activity.series_id)) return {success:false,error:'這不是本場活動／課程的報名 QR'};
+    if (activity.series_id) {
+      try { const parent=await this.requireActivityManagement({activityId:activity.series_id},env,actor);if(parent.network_id!==activity.network_id)throw Error(); }
+      catch (_) { return {success:false,error:'梯次不在您的活動管理範圍'}; }
+    }
+    const qr=source==='qr',previous=Number(row.checked_in||0)===1?1:0,next=qr?1:1-previous;
+    const result=await env.ACTMASTER_DB.prepare(`UPDATE registrants SET checked_in=?, nfc_checkin_time=?, nfc_checkin_source=?
+      WHERE row_id=? AND activity_id=? AND status <> 'cancelled' AND COALESCE(checked_in,0)=?
+      AND EXISTS (SELECT 1 FROM activities a WHERE a.activity_id=registrants.activity_id
+        AND (a.activity_id=? OR a.series_id=?)
+        AND (?=1 OR a.network_id=? OR a.creator_id=?) AND (?=0 OR a.status='上架')
+        AND (COALESCE(a.series_id,'')='' OR EXISTS (SELECT 1 FROM activities p WHERE p.activity_id=a.series_id
+          AND p.network_id=a.network_id AND (?=1 OR p.network_id=? OR p.creator_id=?) AND (?=0 OR p.status='上架'))))`)
+      .bind(next,next?new Date().toISOString():'',source,rowId,row.activity_id,qr?0:previous,requested||row.activity_id,requested||row.activity_id,
+        actor.role==='admin'?1:0,actor.networkId,actor.userId,qr?1:0,
+        actor.role==='admin'?1:0,actor.networkId,actor.userId,qr?1:0).run();
+    if(result.success===false)throw Error('CHECKIN_WRITE_FAILED');
+    const saved=await D1ReadModule.first(env,`SELECT r.* FROM registrants r JOIN activities a ON a.activity_id=r.activity_id
+      WHERE r.row_id=? AND r.activity_id=? AND r.status <> 'cancelled' AND (a.activity_id=? OR a.series_id=?) AND (?=1 OR a.network_id=? OR a.creator_id=?)
+      AND (?=0 OR a.status='上架') AND (COALESCE(a.series_id,'')='' OR EXISTS (SELECT 1 FROM activities p
+        WHERE p.activity_id=a.series_id AND p.network_id=a.network_id AND (?=1 OR p.network_id=? OR p.creator_id=?) AND (?=0 OR p.status='上架')))`,
+      [rowId,row.activity_id,requested||row.activity_id,requested||row.activity_id,actor.role==='admin'?1:0,actor.networkId,actor.userId,qr?1:0,actor.role==='admin'?1:0,actor.networkId,actor.userId,qr?1:0]);
+    const changed=Number(result.meta?.changes||0)>0;
+    if(!saved||(qr?Number(saved.checked_in)!==1:!changed))return {success:false,error:'報名、活動權限或簽到狀態已變更，請重新整理本場名單核對'};
+    return { success: true, data: { rowId, activityId:row.activity_id, checkedIn:Number(saved.checked_in)===1,
+      ...(qr?{duplicate:!changed,checkedInAt:saved.nfc_checkin_time}: {}) } };
   },
 
   taipeiNow() {
@@ -17523,14 +17551,14 @@ async function dispatchAction(action, payload, request, env) {
       }
       return await DBModule.forward(action, payload, env);
     }
-    case 'toggleCheckin': {
+    case 'toggleCheckin':
+    case 'redeemActivityCheckin': {
       try {
-        const d1Result = await D1ActivityModule.toggleCheckin(payload || {}, env, 'manual');
-        if (d1Result) return d1Result;
+        return await D1ActivityModule.toggleCheckin(payload || {}, env, action==='redeemActivityCheckin'?'qr':'manual',actor);
       } catch (e) {
-        console.error("D1 toggleCheckin fallback", e);
+        console.error(JSON.stringify({message:'activity_checkin_failed'}));
       }
-      return await DBModule.forward(action, payload, env);
+      return {success:false,error:'核銷狀態尚未確認，請重新整理本場名單核對；系統不會自動重送'};
     }
     case 'nfcCheckin': {
       try {

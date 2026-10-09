@@ -67,5 +67,5 @@ test('five fixed LIFF entrypoints load 2.31.2 while edge entrypoints keep their 
 });
 
 test('both config consumers load the patched cache version', () => {
-  for (const file of ['index.html', 'ocr-lab.html']) assert.ok(readFileSync(new URL(file, root), 'utf8').includes('js/config.js?v=9.17'), file);
+  for (const file of ['index.html', 'ocr-lab.html']) assert.ok(readFileSync(new URL(file, root), 'utf8').includes('js/config.js?v=9.18'), file);
 });
