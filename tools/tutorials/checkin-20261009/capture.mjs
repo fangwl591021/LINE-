@@ -80,7 +80,7 @@ async function setup(role){
     const cursor=document.createElement('div');cursor.id='tutorial-pointer';cursor.style.cssText='position:fixed;left:-50px;top:-50px;width:22px;height:22px;border:3px solid #ff8b23;border-radius:50%;background:#ff8b2333;z-index:2147483647;pointer-events:none;transform:translate(-50%,-50%)';document.body.append(cursor);
     document.addEventListener('mousemove',e=>{cursor.style.left=e.clientX+'px';cursor.style.top=e.clientY+'px';});
   },{base,uid,role});
-  for(const p of ['js/navigation.js','js/modules/home.js','js/modules/activity-checkin.js','js/modules/member-hosted-events.js'])await page.addScriptTag({content:(await source(p)).toString()});
+  for(const p of ['js/navigation.js','js/modules/home.js','js/modules/activity-checkin.js','js/modules/member-hosted-events.js'])await page.addScriptTag({url:base+'/'+p});
   await page.addStyleTag({content:(await source('css/member-hosted-events.css')).toString()+'\n[data-tutorial-target]{outline:3px solid #ff8b23!important;outline-offset:3px!important}'});
   await page.evaluate(async()=>{window.goPage('home',true);await window.loadUserActivities();await window.loadHomeMemberEvents({force:true});window.renderHomeActivities();});
   const run={role,dir,page,ctx,started,timeline};runs.push(run);return run;
