@@ -203,8 +203,10 @@ window._renderAdminActivities = function(res) {
 
 // 開啟核銷名單頁
 window.openCheckinPage = async function(actId, actTitle) {
+  if (!actId) { window.showToast('請先選擇要核銷的活動／課程', true); return; }
   window.goPage('admin-checkin');
-  window._currentCheckinExport = { activityId: actId || '', activityTitle: actTitle || '', rows: [] };
+  const context = { activityId: actId, activityTitle: actTitle || '', rows: [] };
+  window._currentCheckinExport = context;
   const titleEl = document.getElementById('checkin-act-title');
   const countEl = document.getElementById('checkin-count-display');
   const listEl = document.getElementById('admin-checkin-list');
@@ -215,8 +217,9 @@ window.openCheckinPage = async function(actId, actTitle) {
 
   try {
     const res = await window.fetchAPI('getActivityRegistrants', { activityId: actId }, true);
+    if (window._currentCheckinExport !== context) return;
     if (res && Array.isArray(res)) {
-      window._currentCheckinExport = { activityId: actId || '', activityTitle: actTitle || (titleEl ? titleEl.textContent : ''), rows: res };
+      context.rows = res;
       if (countEl) countEl.textContent = res.length;
       if (res.length === 0) {
         if (listEl) listEl.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm font-bold">尚無報名者</div>';
@@ -225,6 +228,7 @@ window.openCheckinPage = async function(actId, actTitle) {
       if (listEl) {
         listEl.innerHTML = res.map(reg => {
           const isCheckedIn = reg['簽到'] === true || String(reg['簽到']).toUpperCase() === 'TRUE';
+          const cancelled = ['cancelled', '已取消', '取消'].includes(String(reg.status || reg['狀態'] || '').toLowerCase());
           const payStatus = reg['繳費狀態'] || '';
           const name = window.escapeJS(reg['姓名'] || '未知');
           const phone = window.escapeJS(reg['手機'] || '');
@@ -232,7 +236,8 @@ window.openCheckinPage = async function(actId, actTitle) {
           const rowId = window.escapeJS(reg.rowId);
 
           let statusBadge = '';
-          if (isCheckedIn) statusBadge = '<span class="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded-full font-bold">已簽到</span>';
+          if (cancelled) statusBadge = '<span class="text-slate-500 text-[12px]">已取消</span>';
+          else if (isCheckedIn) statusBadge = '<span class="bg-slate-100 text-slate-500 text-[10px] px-2 py-0.5 rounded-full font-bold">已簽到</span>';
           else if (payStatus === '已繳費') statusBadge = '<span class="bg-emerald-700 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">已繳費</span>';
           else if (payStatus === '待對帳') statusBadge = '<span class="bg-orange-50 text-orange-500 text-[10px] px-2 py-0.5 rounded-full font-bold">待對帳</span>';
           else statusBadge = '<span class="bg-blue-50 text-blue-500 text-[10px] px-2 py-0.5 rounded-full font-bold">已報名</span>';
@@ -244,10 +249,10 @@ window.openCheckinPage = async function(actId, actTitle) {
               '<div>' + statusBadge + '</div>' +
             '</div>' +
             '<div class="flex gap-1">' +
-              (!isCheckedIn
+              (cancelled ? '' : !isCheckedIn
                 ? '<button onclick="window.toggleCheckin(\'' + rowId + '\', this)" class="px-3 py-2 bg-[#06C755] text-white rounded-lg text-[12px] font-bold active:scale-95 transition-transform">簽到</button>'
                 : '<button onclick="window.toggleCheckin(\'' + rowId + '\', this)" class="px-3 py-2 bg-slate-200 text-slate-600 rounded-lg text-[12px] font-bold active:scale-95 transition-transform">取消簽到</button>') +
-              (payStatus !== '已繳費' && parseInt(reg['金額']) > 0
+              (!cancelled && payStatus !== '已繳費' && parseInt(reg['金額']) > 0
                 ? '<button onclick="window.confirmPayment(\'' + rowId + '\', this)" class="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-[12px] font-bold active:scale-95 transition-transform">確認繳費</button>'
                 : '') +
             '</div>' +
@@ -258,21 +263,34 @@ window.openCheckinPage = async function(actId, actTitle) {
       if (listEl) listEl.innerHTML = '<div class="text-center py-10 text-red-400 text-sm font-bold">無法載入名單</div>';
     }
   } catch (e) {
+    if (window._currentCheckinExport !== context) return;
     if (listEl) listEl.innerHTML = '<div class="text-center py-10 text-red-400 text-sm font-bold">載入失敗:' + e.message + '</div>';
   }
 };
 
+window.openOfficialActivityCheckin = function() {
+  const context = window._currentCheckinExport;
+  if (!context?.activityId) return;
+  window.openActivityCheckinScanner({
+    activityId: context.activityId, title: context.activityTitle,
+    api: (action, payload) => window.fetchAPI(action, payload, true),
+    isCurrent: () => window._currentCheckinExport?.activityId === context.activityId && !document.getElementById('page-admin-checkin').classList.contains('hidden'),
+    onComplete: () => window.openCheckinPage(context.activityId, context.activityTitle)
+  });
+};
+
 // 切換簽到狀態
 window.toggleCheckin = async function(rowId, btnEl) {
+  const context = window._currentCheckinExport;
+  if (!context?.activityId) return;
   const oriHtml = btnEl.innerHTML;
   btnEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-[14px]">refresh</span>';
   btnEl.disabled = true;
   try {
-    const res = await window.fetchAPI('toggleCheckin', { rowId: rowId }, true);
-    if (res && !res.error) {
+    const res = await window.fetchAPI('toggleCheckin', { rowId: rowId, activityId: context.activityId }, true);
+    if (res && !res.error && res.success !== false) {
       window.showToast('✅ 狀態已更新');
-      const titleEl = document.getElementById('checkin-act-title');
-      window.openCheckinPage('', titleEl ? titleEl.textContent : '');
+      if (window._currentCheckinExport === context) await window.openCheckinPage(context.activityId, context.activityTitle);
     } else {
       throw new Error(res.error || '更新失敗');
     }
@@ -285,6 +303,8 @@ window.toggleCheckin = async function(rowId, btnEl) {
 
 // 確認繳費
 window.confirmPayment = async function(rowId, btnEl) {
+  const context = window._currentCheckinExport;
+  if (!context?.activityId) return;
   if (!await window.appConfirm('確認此筆款項已收款？')) return;
   const oriHtml = btnEl.innerHTML;
   btnEl.innerHTML = '<span class="material-symbols-outlined animate-spin text-[14px]">refresh</span>';
@@ -293,8 +313,7 @@ window.confirmPayment = async function(rowId, btnEl) {
     const res = await window.fetchAPI('confirmPayment', { rowId: rowId }, true);
     if (res && !res.error) {
       window.showToast('✅ 已確認繳費');
-      const titleEl = document.getElementById('checkin-act-title');
-      window.openCheckinPage('', titleEl ? titleEl.textContent : '');
+      if (window._currentCheckinExport === context) await window.openCheckinPage(context.activityId, context.activityTitle);
     } else {
       throw new Error(res.error || '更新失敗');
     }

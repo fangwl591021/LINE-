@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/activity-checkin.test.mjs',
   'test/activity-visibility.test.mjs',
   'test/activity-visibility-ui.test.mjs',
   'test/store-listing-review.test.mjs',

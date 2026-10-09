@@ -503,9 +503,12 @@ window.getActmasterUrlParams = function() {
     try {
       window.goPage('home');
       window.showToast('正在核銷活動報名...');
-      const res = await window.fetchAPI('toggleCheckin', { rowId }, true);
+      const activityId=window.getActmasterUrlParams().get('activityId')||'';
+      const res = await window.fetchAPI('redeemActivityCheckin', { rowId, activityId }, true);
       if (res && res.error) throw new Error(res.error);
-      window.showToast('活動核銷完成');
+      const data=res?.data||res;
+      if(data?.checkedIn!==true)throw Error('未確認成功，請重新整理本場報名名單核對');
+      window.showToast(data.duplicate?'已核銷，未重複計算':'活動核銷完成');
       finishNfcCheckinFlow();
     } catch (e) {
       window.showToast('活動核銷失敗：' + (e.message || '請洽工作人員'), true);
