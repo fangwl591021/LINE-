@@ -86,7 +86,7 @@ async function setup(role){
   const run={role,dir,page,ctx,started,timeline};runs.push(run);return run;
 }
 async function click(run,locator){await locator.scrollIntoViewIfNeeded();await locator.evaluate(el=>el.setAttribute('data-tutorial-target',''));
-  const b=await locator.boundingBox();await run.page.mouse.move(b.x+b.width/2,b.y+b.height/2,{steps:12});await run.page.waitForTimeout(450);await locator.click();await locator.evaluate(el=>el.removeAttribute('data-tutorial-target')).catch(()=>{});}
+  const b=await locator.boundingBox();await run.page.mouse.move(b.x+b.width/2,b.y+b.height/2,{steps:12});await run.page.waitForTimeout(450);await locator.click();await run.page.evaluate(()=>document.querySelectorAll('[data-tutorial-target]').forEach(el=>el.removeAttribute('data-tutorial-target')));}
 async function scene(run,id,title,tip,text,action){
   const from=(Date.now()-run.started)/1000;if(action)await action();await run.page.waitForTimeout(350);
   const to=(Date.now()-run.started)/1000,shot=run.dir+'/'+id+'.png';await run.page.screenshot({path:shot});
