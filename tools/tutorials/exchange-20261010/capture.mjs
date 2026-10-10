@@ -79,7 +79,8 @@ async function capture(kind){
   const tab=id=>click(page.locator('#exchange-tab-'+id));
   async function closeDrawer(){await click(page.locator('#exchange-zone-drawer-close'));await page.locator('#exchange-zone-drawer').waitFor({state:'hidden'});}
   async function compose(title,body,tag='合作邀約'){
-    await tab('mine');await click(page.locator('#exchange-zone-compose-button'));await page.locator('[name=title]').fill(title);await page.locator('[name=body]').fill(body);await page.locator(`[name=contactTags][value="${tag}"]`).check({force:true});await page.locator('[name=attachMyCard]').uncheck();await page.locator('[name=body]').scrollIntoViewIfNeeded();
+    await tab('mine');await click(page.locator('#exchange-zone-compose-button'));await page.locator('[name=title]').fill(title);await page.locator('[name=body]').fill(body);
+    const checkbox=page.locator(`[name=contactTags][value="${tag}"]`);await click(checkbox.locator('..'));assert.equal(await checkbox.isChecked(),true);await page.locator('[name=attachMyCard]').uncheck();await page.locator('[name=body]').scrollIntoViewIfNeeded();
   }
   async function publish(){await click(page.locator('#exchange-zone-publish-button'));await page.locator('#exchange-zone-success-close').waitFor();}
   async function memberSearch(){await tab('members');await page.locator('.mc-contact').waitFor();await page.locator('#mc-query').fill('品牌設計');await click(page.locator('.mc-search button[type=submit]'));await page.locator('.mc-contact').waitFor();}
