@@ -83,19 +83,19 @@ async function actor(run,which,home=false){
   await page.evaluate(({base,role,which,member,store})=>{
     window.Config={WORKER_URL:base+'/fixture-api',API_URL:base};window.currentPage='home';window.userRole=which==='store'?'store':'user';
     window.currentUserProfile={userId:which==='store'?store:member,displayName:which==='store'?'教學測試店主':'教學示範會員',pictureUrl:base+'/assets/points-logo-transparent-20260916.png'};
-    window.currentUser={name:currentUserProfile.displayName,role:userRole};window.liff={isLoggedIn:()=>true,getAccessToken:()=> 'synthetic-'+role+'-'+which};
+    window.currentUser={name:currentUserProfile.displayName,role:userRole};window.currentViewMode='user';window.loadUserActivities=async()=>{};window.liff={isLoggedIn:()=>true,getAccessToken:()=> 'synthetic-'+role+'-'+which};
     window.resolvePointUserIdForCurrentProfile=id=>id;window.pointWalletStatus='idle';window.pointWalletData=null;
     window.fetchAPI=async(action,payload={})=>{const response=await fetch(Config.WORKER_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,payload:{...payload,lineAccessToken:liff.getAccessToken()}})});return response.json();};
     window.refreshPointBalanceBadge=async()=>{};window.formatDisplayTime=value=>String(value||'').replace('T',' ').slice(0,16);
-    window.goPage=p=>{window.currentPage=p;document.querySelectorAll('[id^="page-"]').forEach(n=>n.classList.add('hidden'));document.getElementById('page-'+p)?.classList.remove('hidden');document.body.classList.toggle('store-shop-page',p==='store-shop');document.body.classList.toggle('home-page',p==='home');window.scrollTo(0,0);};
     document.getElementById('loading-screen')?.remove();document.getElementById('top-nav').classList.add('hidden');document.getElementById('bottom-nav').classList.add('hidden');
     document.querySelectorAll('[id="home-profile-name"]').forEach(n=>n.textContent=currentUserProfile.displayName);
     document.querySelectorAll('[id="home-profile-avatar"]').forEach(n=>n.src=currentUserProfile.pictureUrl);
     document.querySelectorAll('[id="home-profile-points"]').forEach(n=>n.textContent=which==='store'?'1,000':'500');
     const cursor=document.createElement('div');cursor.id='tutorial-pointer';cursor.style.cssText='position:fixed;left:-50px;top:-50px;width:22px;height:22px;border:3px solid #ff8b23;border-radius:50%;background:#ff8b2333;z-index:2147483647;pointer-events:none;transform:translate(-50%,-50%)';document.body.append(cursor);
-    document.addEventListener('mousemove',e=>{cursor.style.left=e.clientX+'px';cursor.style.top=e.clientY+'px';});window.goPage('home');
+    document.addEventListener('mousemove',e=>{cursor.style.left=e.clientX+'px';cursor.style.top=e.clientY+'px';});
   },{base,role,which,member,store});
-  for(const p of ['fixture-core.js','fixture-auth.js','js/modules/safe-cashier.js','js/vendor/jsQR.js','js/modules/store-shop-entry.js'])await page.addScriptTag({url:base+'/'+p});
+  for(const p of ['fixture-core.js','fixture-auth.js','js/navigation.js','js/modules/safe-cashier.js','js/vendor/jsQR.js','js/modules/store-shop-entry.js'])await page.addScriptTag({url:base+'/'+p});
+  await page.evaluate(()=>{window.goPage('home',true);window.scrollTo(0,0);});
   await page.addStyleTag({content:'[data-tutorial-target]{outline:3px solid #ff8b23!important;outline-offset:3px!important}'});
   if(!home){await page.evaluate(()=>window.openStoreShop());await page.locator('[data-home-qr] svg').waitFor();}
 }
