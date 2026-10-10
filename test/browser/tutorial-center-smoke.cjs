@@ -30,11 +30,25 @@ const {mkdirSync}=require('node:fs');
         await filter.focus();await page.keyboard.press('Space');
         assert.equal(await page.locator(`[data-tutorial-category="${id}"]`).getAttribute('aria-pressed'),'true');
         assert.equal(await page.locator('.tutorial-course').count(),count);
+        const row=await page.locator('.tutorial-categories').evaluate(el=>{
+          const container=el.getBoundingClientRect();
+          return {left:container.left,right:container.right,items:Array.from(el.querySelectorAll('button')).map(button=>{const r=button.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,height:r.height};})};
+        });
+        assert.ok(row.items.every(item=>Math.abs(item.y-row.items[0].y)<1),'all four categories must be on the same horizontal row');
+        assert.ok(row.items.every((item,i)=>i===0||item.x>row.items[i-1].x),'category x order must increase');
+        assert.ok(row.items.every(item=>item.height>=44),'minimum touch height');
+        assert.ok(row.items[0].x>=row.left&&row.items[3].right<=row.right+1,'all four labels must fit at normal phone and desktop widths');
         assert.equal(await page.locator('.tutorial-body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
         discovered.push(...await page.locator('.tutorial-course').evaluateAll(items=>items.map(el=>el.dataset.course)));
       }
       assert.equal(new Set(discovered).size,13);assert.equal(discovered.length,13);
       assert.equal(mediaRequests,0,'list must not fetch videos');
+      // Enlarged/narrow layouts scroll only the category row, never wrap vertically.
+      await page.locator('.tutorial-categories').evaluate(el=>{el.style.width='180px';el.scrollLeft=el.scrollWidth;});
+      const narrow=await page.locator('.tutorial-categories').evaluate(el=>({scrollLeft:el.scrollLeft,overflow:el.scrollWidth>el.clientWidth,ys:Array.from(el.children).map(button=>button.getBoundingClientRect().y)}));
+      assert.equal(narrow.overflow,true);assert.ok(narrow.scrollLeft>0);assert.ok(narrow.ys.every(y=>Math.abs(y-narrow.ys[0])<1));
+      assert.equal(await page.locator('.tutorial-body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+      await page.locator('.tutorial-categories').evaluate(el=>{el.style.removeProperty('width');el.scrollLeft=0;});
       await page.locator('[data-tutorial-category="stores"]').click();
       if(width===390){mkdirSync('.wrangler/tutorial-proof',{recursive:true});await page.screenshot({path:'.wrangler/tutorial-proof/categories-stores-390.png'});}
       for(const [id,duration,chapter] of [['store-point-gift',142.542,93.167],['point-redemption',180.336,109.833]]){
