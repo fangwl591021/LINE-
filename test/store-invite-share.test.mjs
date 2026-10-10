@@ -64,6 +64,25 @@ test('explicit store choice resolves own active store with a read-only authentic
   assert.doesNotMatch(s.shared[0][0].text,/名片庫|商機配對/);
   assert.equal(new URL(s.element('invite-qr-img').src).searchParams.get('data'),url);
 });
+
+test('friend invitation cancellation has no success toast and copy does not invoke LINE sharing',async()=>{
+  const s=setup();s.window.showInviteLink();
+  await s.window.copyInviteLink();
+  assert.equal(s.copied.length,1);assert.equal(s.shared.length,0);
+  const before=s.toasts.length;
+  s.window.liff.shareTargetPicker=async()=>undefined;
+  await s.window.shareInviteLink();
+  assert.equal(s.toasts.length,before,'cancelled picker must not report sent');
+  assert.equal(s.requests.length,0,'functional invitation does not read or publish a shop');
+});
+
+test('friend invitation sharing failure reports failure instead of sent',async()=>{
+  const s=setup();s.window.showInviteLink();
+  s.window.liff.shareTargetPicker=async()=>{throw Error('synthetic share unavailable');};
+  await s.window.shareInviteLink();
+  assert.deepEqual(s.toasts,[['發送失敗',true]]);
+  assert.equal(s.requests.length,0);
+});
 test('missing, draft, archived and invalid stores cannot create a shareable invitation or auto-publish',async()=>{
   for (const invalid of [null,{...shop,status:'draft'},{...shop,status:'archived'},{...shop,id:'not-a-shop'}]) {
     const s=setup();const pending=s.window.showInviteLink('store');s.reply(0,{success:true,shop:invalid});await pending;

@@ -21,11 +21,11 @@ const {mkdirSync}=require('node:fs');
       const entry=page.locator('#home-tutorial-entry');
       await entry.click();
       await page.locator('#tutorial-dialog[open]').waitFor();
-      assert.equal(await page.locator('.tutorial-course').count(),3);
-      assert.equal(await page.locator('button.tutorial-course').count(),3);
+      assert.equal(await page.locator('.tutorial-course').count(),4);
+      assert.equal(await page.locator('button.tutorial-course').count(),4);
       assert.equal(await page.locator('[data-tutorial-category]').count(),4);
       const discovered=[];
-      for(const [id,count] of [['members',3],['stores',3],['activities',6],['tasks',1]]){
+      for(const [id,count] of [['members',4],['stores',3],['activities',6],['tasks',1]]){
         const filter=page.locator(`[data-tutorial-category="${id}"]`);
         await filter.focus();await page.keyboard.press('Space');
         assert.equal(await page.locator(`[data-tutorial-category="${id}"]`).getAttribute('aria-pressed'),'true');
@@ -41,7 +41,7 @@ const {mkdirSync}=require('node:fs');
         assert.equal(await page.locator('.tutorial-body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
         discovered.push(...await page.locator('.tutorial-course').evaluateAll(items=>items.map(el=>el.dataset.course)));
       }
-      assert.equal(new Set(discovered).size,13);assert.equal(discovered.length,13);
+      assert.equal(new Set(discovered).size,14);assert.equal(discovered.length,14);
       assert.equal(mediaRequests,0,'list must not fetch videos');
       // Enlarged/narrow layouts scroll only the category row, never wrap vertically.
       await page.locator('.tutorial-categories').evaluate(el=>{el.style.width='180px';el.scrollLeft=el.scrollWidth;});
@@ -83,6 +83,22 @@ const {mkdirSync}=require('node:fs');
       if(width===390){mkdirSync('.wrangler/tutorial-proof',{recursive:true});await page.screenshot({path:'.wrangler/tutorial-proof/merchant-390.png'});}
       await page.locator('[data-tutorial-back]').click();
       await page.locator('[data-tutorial-category="members"]').click();
+      await page.locator('[data-course="friend-share"]').click();
+      await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
+      const friend=page.locator('#tutorial-dialog video');
+      assert.equal(await friend.evaluate(v=>v.paused),true,'friend sharing must not autoplay');
+      assert.ok(Math.abs(await friend.evaluate(v=>v.duration)-171)<.3);
+      assert.match(await page.locator('.tutorial-note').first().innerText(),/未傳送真實 LINE 訊息/);
+      for(const time of [54.167,91.542,107.375]){
+        await page.locator(`[data-time="${time}"]`).click();
+        await page.waitForFunction(t=>{const v=document.querySelector('#tutorial-dialog video');return v&&v.currentTime>=t-.05&&!v.seeking&&v.readyState>=2&&!v.paused&&v.webkitAudioDecodedByteCount>0;},time,{timeout:60000});
+      }
+      if(width===390)await page.screenshot({path:'.wrangler/tutorial-proof/friend-share-390.png'});
+      await friend.evaluate(el=>window.retiredVideo=el);
+      await page.locator('[data-tutorial-back]').click();
+      assert.equal(await page.evaluate(()=>retiredVideo.paused&&!retiredVideo.getAttribute('src')),true);
+      assert.equal(await page.locator('[data-tutorial-category="members"]').getAttribute('aria-pressed'),'true');
+      assert.equal(await page.locator('[data-course="friend-share"]').evaluate(el=>el===document.activeElement),true);
       await page.locator('[data-course="collection"]').click();
       await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
       assert.equal(await page.locator('#tutorial-dialog video').evaluate(v=>v.paused),true,'no autoplay');
@@ -186,7 +202,7 @@ const {mkdirSync}=require('node:fs');
       await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
       await page.locator('[data-tutorial-close]').click();
       assert.deepEqual(badRequests,[]);
-      checks.push(`${width}px: thirteen lessons across four exclusive categories, two point and two check-in movies, actual playback/audio, chapters, cleanup, category/lesson focus, draft PASS`);
+      checks.push(`${width}px: fourteen lessons across four horizontal categories, friend invitation plus point/check-in movies, actual playback/audio, chapters, cleanup, category/lesson focus, draft PASS`);
       await context.close();
     }
     console.log(checks.join('\n'));
