@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync,statSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {execFileSync,spawnSync} from 'node:child_process';
+import {resolve} from 'node:path';
+const file='friend-share-tutorial-v1.mp4',m=JSON.parse(readFileSync('share/edit-manifest.json'));
+execFileSync('higgsedit',['render','share/native-edit','--out',resolve(file),'--bitrate','1600k','--shards','4','--concurrency','2'],{stdio:'inherit'});
+const probe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-show_format','-of','json',file],{encoding:'utf8'}));
+const v=probe.streams.find(s=>s.codec_type==='video'),a=probe.streams.find(s=>s.codec_type==='audio'),duration=Number(probe.format.duration);
+assert.equal(v.codec_name,'h264');assert.equal(v.width,720);assert.equal(v.height,1600);assert.equal(v.r_frame_rate,'24/1');assert.equal(a.codec_name,'aac');assert.ok(Math.abs(duration-m.duration)<.3);
+execFileSync('ffmpeg',['-v','error','-i',file,'-f','null','-'],{stdio:'inherit'});
+const volume=spawnSync('ffmpeg',['-i',file,'-af','volumedetect','-vn','-sn','-dn','-f','null','-'],{encoding:'utf8'});assert.equal(volume.status,0);
+const mean=Number(/mean_volume: ([-\d.]+) dB/.exec(volume.stderr)?.[1]),peak=Number(/max_volume: ([-\d.]+) dB/.exec(volume.stderr)?.[1]);assert.ok(mean>-45&&peak<=0&&peak>-25);
+const c=JSON.parse(readFileSync('share/capture-evidence.json'));assert.deepEqual(c.errors,[]);assert.equal(c.realLineMessagesSent,0);assert.equal(c.productionWrites,0);assert.equal(c.nativePickerCaptured,false);
+const evidence={success:true,file,duration,bytes:statSync(file).size,sha256:createHash('sha256').update(readFileSync(file)).digest('hex'),width:v.width,height:v.height,fps:v.r_frame_rate,audio:a.codec_name,audioMeanDb:mean,audioPeakDb:peak,fullDecodePassed:true,productionWrites:0,realLineMessagesSent:0,nativePickerCaptured:false,sourceCommit:c.sourceCommit,chapters:m.scenes.map(s=>[Number(s.at.toFixed(3)),s.title])};
+writeFileSync('export-evidence.json',JSON.stringify(evidence,null,2));
+writeFileSync('README.md','# 分享好友操作教學\n\n正式版介面與函式搭配隔離虛構身分；不連接真實 LINE SDK，不傳訊、不註冊、不改點數。LINE 原生選人畫面為 Higgsedit 原生圖解，非手機實錄。QR、複製與分享內容使用相同測試推薦連結，測試 LIFF ID 不可當正式邀請使用。\n\n720×1600、24fps、H.264/AAC，台灣中文旁白與步驟標示，未宣稱完整語音字幕。\n\n重新建置：node prepare.mjs；TUTORIAL_PREVIEW=1 higgsedit build edit.jsx；node export.mjs。源字型授權 OFL.txt。\n\n參考：目前正式 CRM 邀請函式、LINE 官方 LIFF shareTargetPicker 文件 https://developers.line.biz/en/reference/liff/#share-target-picker 。\n');
+execFileSync('zip',['-qr','friend-share-editable-source-v1.zip','capture.mjs','prepare.mjs','edit.jsx','export.mjs','README.md','export-evidence.json','NotoSansTC.ttf','OFL.txt','share','-x','*native-edit*','*page@*','*.webm','*preview-*.png']);
+for(const id of ['qr','picker','copy','store']){const s=m.scenes.find(s=>s.id===id);execFileSync('ffmpeg',['-y','-ss',String(s.at+s.dur-1),'-i',file,'-frames:v','1','-vf','scale=360:800','-q:v','3','share/review-'+id+'.jpg'],{stdio:'ignore'});}
+console.log(JSON.stringify(evidence));
