@@ -21,11 +21,11 @@ const {mkdirSync}=require('node:fs');
       const entry=page.locator('#home-tutorial-entry');
       await entry.click();
       await page.locator('#tutorial-dialog[open]').waitFor();
-      assert.equal(await page.locator('.tutorial-course').count(),4);
-      assert.equal(await page.locator('button.tutorial-course').count(),4);
+      assert.equal(await page.locator('.tutorial-course').count(),6);
+      assert.equal(await page.locator('button.tutorial-course').count(),6);
       assert.equal(await page.locator('[data-tutorial-category]').count(),4);
       const discovered=[];
-      for(const [id,count] of [['members',4],['stores',3],['activities',6],['tasks',1]]){
+      for(const [id,count] of [['members',6],['stores',3],['activities',6],['tasks',1]]){
         const filter=page.locator(`[data-tutorial-category="${id}"]`);
         await filter.focus();await page.keyboard.press('Space');
         assert.equal(await page.locator(`[data-tutorial-category="${id}"]`).getAttribute('aria-pressed'),'true');
@@ -41,7 +41,7 @@ const {mkdirSync}=require('node:fs');
         assert.equal(await page.locator('.tutorial-body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
         discovered.push(...await page.locator('.tutorial-course').evaluateAll(items=>items.map(el=>el.dataset.course)));
       }
-      assert.equal(new Set(discovered).size,14);assert.equal(discovered.length,14);
+      assert.equal(new Set(discovered).size,16);assert.equal(discovered.length,16);
       assert.equal(mediaRequests,0,'list must not fetch videos');
       // Enlarged/narrow layouts scroll only the category row, never wrap vertically.
       await page.locator('.tutorial-categories').evaluate(el=>{el.style.width='180px';el.scrollLeft=el.scrollWidth;});
@@ -83,6 +83,19 @@ const {mkdirSync}=require('node:fs');
       if(width===390){mkdirSync('.wrangler/tutorial-proof',{recursive:true});await page.screenshot({path:'.wrangler/tutorial-proof/merchant-390.png'});}
       await page.locator('[data-tutorial-back]').click();
       await page.locator('[data-tutorial-category="members"]').click();
+      for(const [id,duration,times] of [['exchange-use',248,[73.75,155.292,202.792]],['exchange-applications',196.084,[75.417,135.042,156.583]]]){
+        await page.locator(`[data-course="${id}"]`).click();
+        assert.equal(await page.locator('#tutorial-heading').innerText(),id==='exchange-use'?'交流專區使用教學':'交流專區應用教學');
+        await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
+        const v=page.locator('#tutorial-dialog video');assert.equal(await v.evaluate(el=>el.paused),true);
+        assert.ok(Math.abs(await v.evaluate(el=>el.duration)-duration)<.3);assert.equal(await v.evaluate(el=>el.videoWidth),720);assert.equal(await v.evaluate(el=>el.videoHeight),1600);
+        assert.match(await page.locator('.tutorial-note').first().innerText(),/未發布正式貼文/);
+        for(const time of times){await page.locator(`[data-time="${time}"]`).click();await page.waitForFunction(t=>{const v=document.querySelector('#tutorial-dialog video');return v&&v.currentTime>=t-.05&&!v.seeking&&!v.paused&&v.readyState>=2&&v.webkitAudioDecodedByteCount>0;},time,{timeout:60000});}
+        if(width===390)await page.screenshot({path:`.wrangler/tutorial-proof/${id}-390.png`});
+        await v.evaluate(el=>window.retiredVideo=el);await page.locator('[data-tutorial-back]').click();
+        assert.equal(await page.evaluate(()=>retiredVideo.paused&&!retiredVideo.getAttribute('src')),true);
+        assert.equal(await page.locator(`[data-course="${id}"]`).evaluate(el=>el===document.activeElement),true);
+      }
       await page.locator('[data-course="friend-share"]').click();
       await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
       const friend=page.locator('#tutorial-dialog video');
@@ -202,7 +215,7 @@ const {mkdirSync}=require('node:fs');
       await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
       await page.locator('[data-tutorial-close]').click();
       assert.deepEqual(badRequests,[]);
-      checks.push(`${width}px: fourteen lessons across four horizontal categories, friend invitation plus point/check-in movies, actual playback/audio, chapters, cleanup, category/lesson focus, draft PASS`);
+      checks.push(`${width}px: sixteen lessons across four horizontal categories, exchange plus friend/point/check-in movies, actual playback/audio, chapters, cleanup, category/lesson focus, draft PASS`);
       await context.close();
     }
     console.log(checks.join('\n'));
