@@ -14,7 +14,18 @@
     ,{ id: 'social-settings', icon: 'celebration', title: '聯誼設定', description: '首頁近期活動 → 聯誼 → 對象、流程與公開範圍', duration: '4:13', file: 'social-settings-tutorial-v1.mp4', mediaBase: 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-09/', chapters: [[0, '從頭觀看'], [14.208, '首頁聯誼入口'], [25.958, '完整發佈單場聯誼'], [37.917, '上傳聯誼封面'], [54.708, '名稱與聯誼時間'], [71.125, '感應簽到時段'], [85.583, '確認聯誼類型'], [99.25, '免費或聯誼費用'], [113.208, '對象、地點與交流流程'], [132.375, '確認建立並發佈'], [143, '公開／僅歸屬可見'], [159.542, '取消返回、不送出'], [172.125, '選是完成發布'], [184.292, '首頁聯誼縮圖'], [198.667, '詳細與完整封面'], [211.958, '編輯原活動'], [224.375, '修改後再選公開範圍']], note: '第三種設定教學。中文旁白＋步驟標示，以真實前端搭配虛構資料示範，沒有建立正式聯誼或報名。從首頁「近期活動 → 聯誼」進入並保留聯誼類型，設定對象、地點、交流流程與注意事項。公開指所有登入且已註冊的平台會員，未登入不開放；選「否」僅歸屬會員可見。取消不送出；填費用不代表已收款，也不會自動扣點。範例日期請改成實際活動日期。' }
     ,{"id":"attendee-checkin","icon":"qr_code_2","title":"報名者接受核銷","description":"我的報名 → 出示報名 QR → 重新產生 → 確認已核銷","duration":"2:06","file":"attendee-accept-checkin-tutorial-v1.mp4","mediaBase":"https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-10/","chapters":[[0,"從頭觀看"],[13.583,"首頁我的報名"],[28.458,"會員活動／課程報名"],[40.542,"查看本場活動"],[52.125,"出示報名 QR"],[65.667,"重新產生 QR"],[80.375,"現場出示 QR"],[93.208,"確認已核銷"],[110.208,"重點複習"]],"note":"中文旁白＋步驟標示，示範會員自建活動／課程。真實平台介面搭配虛構會員、測試資料與測試相機，未異動正式報名或核銷紀錄。請登入原報名帳號，出示本場活動的報名 QR，不是商城點數 QR。QR 五分鐘有效，重新產生後舊碼失效；由本場主辦人使用平台內的核銷掃描器，不能用 LINE 一般掃描器代替。只能在活動期間核銷，成功後可返回活動確認已核銷。"}
     ,{"id":"organizer-checkin","icon":"qr_code_scanner","title":"主辦人核銷報名者","description":"我辦的活動 → 報名名冊 → 平台掃描器 → 更新名單","duration":"2:24","file":"organizer-checkin-roster-tutorial-v1.mp4","mediaBase":"https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-10/","chapters":[[0,"從頭觀看"],[14.583,"首頁個人行事曆"],[27.292,"我辦的活動"],[39.333,"報名名冊"],[55.167,"開啟核銷掃描器"],[68.833,"開始掃描"],[83.75,"確認核銷成功"],[96,"貼上 QR 內容"],[111.917,"查看更新名單"],[125.958,"重點複習"]],"note":"中文旁白＋步驟標示，示範會員自建活動／課程。真實平台介面搭配虛構會員、測試資料與測試相機，未異動正式報名或核銷紀錄；不等同真人手機相機驗收。僅本場主辦人可以在活動期間核銷。從報名名冊開啟平台內的核銷掃描器，允許相機並掃描報名者的活動 QR，不能用 LINE 一般掃描器或商城點數 QR 代替。看到核銷成功才算完成；無法使用相機可貼上 QR 內容，重複核銷不重複計算，再查看更新名單。"}
+    ,{ id: 'store-point-gift', icon: 'redeem', title: '店家贈點', description: '店家電話查找會員 → 核對 → 確認贈點 → 查看入帳', duration: '2:23', file: 'store-point-gift-tutorial-v1.mp4', mediaBase: 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-10/', chapters: [[0, '從頭觀看'], [15.958, '首頁店家商城'], [31.958, '贈送點數'], [47.958, '輸入行動電話查找'], [62.458, '核對會員姓名與手機'], [79.625, '填寫贈送點數'], [93.167, '確認贈點'], [110.417, '會員點數紀錄'], [125.958, '重點複習']], note: '中文旁白＋步驟標示，真實平台介面搭配虛構會員與測試資料，未異動正式點數或交易紀錄。由具贈點權限的店家帳號操作，電話贈點填點數、不填消費金額；核對會員後按確認贈點，看到成功訊息再查看會員入帳。QR 消費贈點為另一入口，本片不示範該筆交易。結果不明時先查原交易，勿重複贈點。此流程不是活動／課程核銷。' }
+    ,{ id: 'point-redemption', icon: 'qr_code_scanner', title: '點數折抵', description: '會員出示點數 QR → 店家掃碼 → 核對金額與點數 → 查紀錄', duration: '3:00', file: 'point-redemption-tutorial-v1.mp4', mediaBase: 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-10/', chapters: [[0, '從頭觀看'], [16.875, '會員店家商城'], [29.5, '會員點數 QR'], [45, '店家折抵點數'], [60.708, '掃描會員錢包 QR'], [77.292, '核對會員與消費金額'], [94.25, '填寫折抵點數'], [109.833, '確認送出'], [129.708, '店家最近收銀紀錄'], [144.833, '會員點數紀錄'], [161.958, '重點複習']], note: '中文旁白＋步驟標示，真實平台介面搭配虛構會員、測試資料與測試相機，未異動正式點數或交易紀錄；不等同真人手機相機驗收。會員出示自己的共用點數錢包 QR，由具扣點權限的店家使用平台掃描器。掃碼只查找會員，不會直接扣點；核對消費金額與折抵點數後按確認送出，看到已完成折抵再查雙方紀錄。範例消費 100 元、折抵 30 點、預估應收 70 元；應收不代表平台已收款。此流程不是活動／課程核銷，也不是網購付款。結果不明先查原交易，勿重複送出。' }
   ];
+  // Separate mapping preserves all existing lesson metadata and media URLs.
+  const categories = [
+    { id: 'members', title: '會員與名片', courses: ['registration', 'mycard', 'collection'] },
+    { id: 'stores', title: '店家與點數', courses: ['merchant', 'store-point-gift', 'point-redemption'] },
+    { id: 'activities', title: '活動與課程', courses: ['activity-publish', 'activity-settings', 'course-settings', 'social-settings', 'attendee-checkin', 'organizer-checkin'] },
+    { id: 'tasks', title: 'AI任務', courses: ['ai-advance'] }
+  ];
+  let selectedCategory = categories[0].id;
+  let returningCourseId = null;
   let dialog = null;
   let opener = null;
   let video = null;
@@ -78,9 +89,26 @@
 
   function showList() {
     const body = frame('新手教學', false);
-    body.innerHTML = '<p class="tutorial-intro">選擇想了解的功能</p><div class="tutorial-courses"></div><p class="tutorial-note">影片可暫停、重播與全螢幕觀看。關閉教學即可繼續原本的操作。</p>';
+    const category = categories.find(item => item.id === selectedCategory) || categories[0];
+    body.innerHTML = '<p class="tutorial-intro">先選分類，再選擇教學影片</p><div class="tutorial-categories" role="group" aria-label="教學分類"></div><p class="tutorial-category-summary" role="status" aria-live="polite"></p><div class="tutorial-courses"></div><p class="tutorial-note">影片可暫停、重播與全螢幕觀看。關閉教學即可繼續原本的操作。</p>';
+    const filters = body.querySelector('.tutorial-categories');
+    categories.forEach(item => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.tutorialCategory = item.id;
+      button.setAttribute('aria-pressed', String(item.id === category.id));
+      button.innerHTML = `<span>${item.title}</span><small>${item.courses.length} 支</small>`;
+      button.addEventListener('click', () => {
+        selectedCategory = item.id;
+        returningCourseId = null;
+        listScroll = 0;
+        showList();
+      });
+      filters.appendChild(button);
+    });
+    body.querySelector('.tutorial-category-summary').textContent = `${category.title} · ${category.courses.length} 支教學（全部共 ${courses.length} 支）`;
     const list = body.querySelector('.tutorial-courses');
-    courses.forEach(course => {
+    courses.filter(course => category.courses.includes(course.id)).forEach(course => {
       const item = document.createElement(course.file ? 'button' : 'div');
       item.className = 'tutorial-course';
       item.dataset.course = course.id;
@@ -90,6 +118,7 @@
         item.type = 'button';
         item.addEventListener('click', () => {
           listScroll = body.scrollTop;
+          returningCourseId = course.id;
           fromList = true;
           showPlayer(course);
         });
@@ -97,7 +126,8 @@
       list.appendChild(item);
     });
     body.scrollTop = listScroll;
-    body.querySelector('button')?.focus({ preventScroll: true });
+    const returnTarget = returningCourseId && Array.from(list.children).find(item => item.dataset.course === returningCourseId);
+    (returnTarget || filters.querySelector('[aria-pressed="true"]'))?.focus({ preventScroll: true });
   }
 
   function showPlayer(course) {
@@ -149,6 +179,8 @@
     const course = courses.find(item => item.id === courseId && item.file);
     fromList = false;
     listScroll = 0;
+    returningCourseId = null;
+    selectedCategory = categories.find(item => item.courses.includes(course?.id))?.id || categories[0].id;
     if (course) showPlayer(course); else showList();
   };
   window.closeTutorialCenter = close;
