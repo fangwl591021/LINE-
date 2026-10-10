@@ -71,7 +71,7 @@ async function setup(role){
       else throw Error('Unexpected isolated action '+action);
       return route.fulfill({contentType:'application/json',body:JSON.stringify(result)});
     }
-    if(u.origin===base&&u.pathname==='/v1/store-shop'&&req.method()==='GET')return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,shops:[],next:null})});
+    if(u.origin===base&&u.pathname.endsWith('/v1/store-shop')&&req.method()==='GET')return route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,shops:[],next:null})});
     if(u.origin===base&&req.method()==='GET')return route.continue();
     if(['cdn.tailwindcss.com','fonts.googleapis.com','fonts.gstatic.com'].includes(u.hostname)&&['script','stylesheet','font'].includes(req.resourceType()))return route.continue();
     // Never allow a real business service, token or point transaction to leave the fixture.
