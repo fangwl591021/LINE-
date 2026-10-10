@@ -5,7 +5,14 @@ export default async({project,frame,text,rect,media})=>{
   const m=JSON.parse(fs.readFileSync(kind+'/edit-manifest.json','utf8'));
   const p=await project({dir:path.resolve(kind+'/native-edit'),size:'720x1600',fps:24,background:'#103f37'});
   const font=await p.add(path.resolve('NotoSansTC.ttf')),capture=await p.add(path.resolve(kind+'/capture.mp4'));
-  const label=(value,opts={})=>text(value,{typography:{fontAssetId:font.id,script:'Hani',axes:{wght:600},language:'zh-TW'},fontSize:27,lineHeight:1.25,color:'#fff',...opts});
+  const label=(value,opts={})=>{
+    const style={typography:{fontAssetId:font.id,script:'Hani',axes:{wght:600},language:'zh-TW'},fontSize:27,lineHeight:1.25,color:'#fff',...opts};
+    if(!/[A-Za-z]/.test(value))return text(value,style);
+    let x=0;const parts=value.split(/([A-Za-z]+)/).filter(Boolean).map(part=>{
+      const latin=/^[A-Za-z]+$/.test(part),width=style.fontSize*Array.from(part).reduce((n,c)=>n+(latin?.72:c.charCodeAt(0)<128?.56:1),0);
+      const leaf=text(part,{...style,x,y:0,width:width+4,typography:{...style.typography,script:latin?'Latn':'Hani'}});x+=width;return leaf;
+    });return frame({x:style.x,y:style.y,width:style.width,height:style.height,layout:'none'},parts);
+  };
   for(let i=0;i<m.scenes.length;i++){
     const s=m.scenes[i],shot=await p.add(path.resolve(s.shot));const clip=s.from===undefined?0:Math.max(0,Math.min(s.to-s.from,s.dur-0.5));
     const ui=(handle,extra={})=>frame({x:27,y:108,width:666,height:1442,layout:'none',clip:true,radius:14,background:'#fff'},[media({file:handle,x:0,y:0,width:666,height:1442,fit:'contain',...extra})]);
