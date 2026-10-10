@@ -2,15 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {createHash} from 'node:crypto';
 const source=readFileSync(new URL('../js/modules/tutorial-center.js',import.meta.url),'utf8');
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const css=readFileSync(new URL('../css/tutorial-center.css',import.meta.url),'utf8');
 const context=vm.createContext({window:{addEventListener(){}},document:{addEventListener(){}}});
 vm.runInContext(source.replace('  let dialog = null;', '  window.testCourses = courses; window.testMediaBase = mediaBase;\n  let dialog = null;'),context);
 const courses=JSON.parse(JSON.stringify(context.window.testCourses));
-test('three ordered setting lessons join beginner lessons while the original six movies remain unchanged',()=>{
-  assert.equal(courses.length,9);
-  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish','activity-settings','course-settings','social-settings']);
+test('two check-in lessons follow the original nine movies without changing existing metadata',()=>{
+  assert.equal(courses.length,11);
+  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish','activity-settings','course-settings','social-settings','attendee-checkin','organizer-checkin']);
+  assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,9))).digest('hex'),'3c7a17942e387bce6366c6be58498627a9ad0010fe276ac7f5b52b6e07226958','all original nine course fields must remain unchanged');
   assert.equal(courses[4].file,'ai-advance-tutorial-v1.mp4');
   assert.equal(courses[4].duration,'4:18');
   assert.match(courses[4].note,/直接點首頁「AI推進」/);
@@ -22,10 +24,10 @@ test('three ordered setting lessons join beginner lessons while the original six
   assert.match(courses[3].note,/未正式開放/);
   assert.deepEqual(courses.slice(0,3).map(c=>c.file),['registration-v2.mp4','business-card-v2.mp4','card-collection-v2.mp4']);
   assert.equal(context.window.testMediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-05/');
-  assert.match(html,/tutorial-center\.js\?v=6/);
+  assert.match(html,/tutorial-center\.js\?v=7/);
 });
 test('setting series uses distinct versioned movies, measured chapters and accurate scope notes',()=>{
-  const series=courses.slice(6);
+  const series=courses.slice(6,9);
   assert.deepEqual(series.map(c=>c.title),['活動設定','課程設定','聯誼設定']);
   assert.deepEqual(series.map(c=>c.duration),['4:48','4:10','4:13']);
   assert.deepEqual(series.map(c=>c.file),['activity-settings-tutorial-v1.mp4','course-settings-tutorial-v1.mp4','social-settings-tutorial-v1.mp4']);
@@ -49,6 +51,25 @@ test('setting series uses distinct versioned movies, measured chapters and accur
   assert.match(series[1].note,/保留課程類型/);
   assert.match(series[2].note,/保留聯誼類型/);
   assert.equal(courses.some(c=>c.id==='other-settings'),false,'unfinished lesson must not be published');
+});
+test('check-in lessons use measured chapters and accurately disclose the member-hosted test flow',()=>{
+  const series=courses.slice(9);
+  assert.deepEqual(series.map(c=>c.title),['報名者接受核銷','主辦人核銷報名者']);
+  assert.deepEqual(series.map(c=>c.duration),['2:06','2:24']);
+  assert.deepEqual(series.map(c=>c.file),['attendee-accept-checkin-tutorial-v1.mp4','organizer-checkin-roster-tutorial-v1.mp4']);
+  assert.deepEqual(series[0].chapters,[[0,'從頭觀看'],[13.583,'首頁我的報名'],[28.458,'會員活動／課程報名'],[40.542,'查看本場活動'],[52.125,'出示報名 QR'],[65.667,'重新產生 QR'],[80.375,'現場出示 QR'],[93.208,'確認已核銷'],[110.208,'重點複習']]);
+  assert.deepEqual(series[1].chapters,[[0,'從頭觀看'],[14.583,'首頁個人行事曆'],[27.292,'我辦的活動'],[39.333,'報名名冊'],[55.167,'開啟核銷掃描器'],[68.833,'開始掃描'],[83.75,'確認核銷成功'],[96,'貼上 QR 內容'],[111.917,'查看更新名單'],[125.958,'重點複習']]);
+  for(const course of series){
+    assert.equal(course.mediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-10/');
+    for(const label of ['中文旁白＋步驟標示','會員自建活動／課程','虛構會員','測試資料','測試相機','未異動正式報名或核銷紀錄','平台內的核銷掃描器','LINE 一般掃描器','商城點數 QR','活動期間'])assert.ok(course.note.includes(label),label);
+    assert.doesNotMatch(course.note,/繁體字幕|正式操作實錄/);
+    assert.ok(course.chapters.every((ch,i)=>i===0||ch[0]>course.chapters[i-1][0]));
+  }
+  assert.match(series[0].note,/五分鐘有效/);
+  assert.match(series[0].note,/舊碼失效/);
+  assert.match(series[1].note,/僅本場主辦人/);
+  assert.match(series[1].note,/重複核銷不重複計算/);
+  assert.match(series[1].note,/不等同真人手機相機驗收/);
 });
 test('activity publishing lesson explains the real entry, verified-member scope and explicit cancellation',()=>{
   const course=courses.find(c=>c.id==='activity-publish');

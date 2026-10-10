@@ -21,8 +21,8 @@ const {mkdirSync}=require('node:fs');
       const entry=page.locator('#home-tutorial-entry');
       await entry.click();
       await page.locator('#tutorial-dialog[open]').waitFor();
-      assert.equal(await page.locator('.tutorial-course').count(),9);
-      assert.equal(await page.locator('button.tutorial-course').count(),9);
+      assert.equal(await page.locator('.tutorial-course').count(),11);
+      assert.equal(await page.locator('button.tutorial-course').count(),11);
       assert.equal(mediaRequests,0,'list must not fetch videos');
       assert.equal(await page.locator('[data-course="merchant"]').innerText().then(t=>t.includes('6:41')),true);
       await page.locator('[data-course="merchant"]').click();
@@ -79,6 +79,28 @@ const {mkdirSync}=require('node:fs');
         await page.locator('[data-tutorial-back]').click();
         assert.equal(await page.evaluate(()=>retiredVideo.paused&&!retiredVideo.getAttribute('src')),true);
       }
+      for(const [id,duration,file,times] of [['attendee-checkin',126,'attendee-accept-checkin-tutorial-v1.mp4',[52.125,65.667,93.208]],['organizer-checkin',144,'organizer-checkin-roster-tutorial-v1.mp4',[68.833,83.75,111.917]]]){
+        await page.locator(`[data-course="${id}"]`).click();
+        await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
+        const v=page.locator('#tutorial-dialog video');
+        assert.equal(await v.evaluate(el=>el.paused),true,'check-in lessons must not autoplay');
+        assert.equal(await v.evaluate(el=>el.muted),false);
+        assert.equal(Math.round(await v.evaluate(el=>el.duration)),duration);
+        assert.equal(await v.evaluate(el=>el.videoWidth),720);assert.equal(await v.evaluate(el=>el.videoHeight),1600);
+        assert.ok((await v.getAttribute('src')).endsWith(`/tutorials/2026-10-10/${file}`));
+        assert.match(await page.locator('.tutorial-note').first().innerText(),/測試相機/);
+        for(const chapter of times){
+          await page.locator(`[data-time="${chapter}"]`).click();
+          await page.waitForFunction(t=>{const v=document.querySelector('#tutorial-dialog video');return v&&v.currentTime>=t-.05&&!v.seeking&&v.readyState>=2&&!v.paused;},chapter,{timeout:60000});
+        }
+        await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video').webkitAudioDecodedByteCount>0,{},{timeout:15000});
+        const bounds=await page.locator('#tutorial-dialog').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=width+1);
+        assert.equal(await page.locator('.tutorial-body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+        if(width===390)await page.screenshot({path:`.wrangler/tutorial-proof/${id}-390.png`});
+        await v.evaluate(el=>window.retiredVideo=el);
+        await page.locator('[data-tutorial-back]').click();
+        assert.equal(await page.evaluate(()=>retiredVideo.paused&&!retiredVideo.getAttribute('src')),true);
+      }
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#tutorial-dialog').count(),0);
       assert.equal(await entry.evaluate(e=>e===document.activeElement),true);
@@ -118,7 +140,7 @@ const {mkdirSync}=require('node:fs');
       await page.waitForFunction(()=>document.querySelector('#tutorial-dialog video')?.readyState>=2,{},{timeout:60000});
       await page.locator('[data-tutorial-close]').click();
       assert.deepEqual(badRequests,[]);
-      checks.push(`${width}px: nine lessons, three new movies, actual playback/audio, chapters, cleanup, focus, draft PASS`);
+      checks.push(`${width}px: eleven lessons, two check-in and three setting movies, actual playback/audio, chapters, cleanup, focus, draft PASS`);
       await context.close();
     }
     console.log(checks.join('\n'));
