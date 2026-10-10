@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {readFileSync,writeFileSync} from 'node:fs';
+const dir=process.env.TUTORIAL_PROOF_DIR;
+assert.ok(dir,'Set TUTORIAL_PROOF_DIR to the downloaded export directory');
+const e=JSON.parse(readFileSync(dir+'/source/export-evidence.json','utf8'));
+const sha=b=>createHash('sha256').update(b).digest('hex');
+assert.equal(sha(readFileSync(dir+'/friend-share-tutorial-v1.mp4')),e.sha256);
+const url='https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-10/friend-share-tutorial-v1.mp4';
+const head=await fetch(url,{method:'HEAD',cache:'no-store'});assert.equal(head.status,200);assert.equal(head.headers.get('content-type'),'video/mp4');assert.equal(Number(head.headers.get('content-length')),e.bytes);
+const range=await fetch(url,{headers:{Range:'bytes=0-1023'},cache:'no-store'});assert.equal(range.status,206);assert.equal(range.headers.get('content-range'),'bytes 0-1023/'+e.bytes);assert.equal((await range.arrayBuffer()).byteLength,1024);
+const r=await fetch(url,{cache:'no-store'});assert.equal(r.status,200);const bytes=Buffer.from(await r.arrayBuffer());assert.equal(bytes.length,e.bytes);assert.equal(sha(bytes),e.sha256);
+const result={result:'PASS',verifiedAt:new Date().toISOString(),url,bytes:e.bytes,sha256:e.sha256,contentType:'video/mp4',range206:true,master:e};
+writeFileSync(dir+'/media-verification.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));

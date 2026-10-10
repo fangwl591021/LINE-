@@ -10,9 +10,10 @@ const context=vm.createContext({window:{addEventListener(){}},document:{addEvent
 vm.runInContext(source.replace('  let dialog = null;', '  window.testCourses = courses; window.testCategories = categories; window.testMediaBase = mediaBase;\n  let dialog = null;'),context);
 const courses=JSON.parse(JSON.stringify(context.window.testCourses));
 const categories=JSON.parse(JSON.stringify(context.window.testCategories));
-test('two point lessons follow the original eleven movies without changing existing metadata',()=>{
-  assert.equal(courses.length,13);
-  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish','activity-settings','course-settings','social-settings','attendee-checkin','organizer-checkin','store-point-gift','point-redemption']);
+test('friend lesson follows the original thirteen movies without changing existing metadata',()=>{
+  assert.equal(courses.length,14);
+  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish','activity-settings','course-settings','social-settings','attendee-checkin','organizer-checkin','store-point-gift','point-redemption','friend-share']);
+  assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,13))).digest('hex'),'128d3e8e3494120d173b96bc4321b09ae5c7659ced0301dc4180af9f2977495d','all original thirteen course fields must remain unchanged');
   assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,9))).digest('hex'),'3c7a17942e387bce6366c6be58498627a9ad0010fe276ac7f5b52b6e07226958','all original nine course fields must remain unchanged');
   assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,11))).digest('hex'),'6f80ab1c681b7a009f389cf133b068c3a26692bc2b72095ea10b7d5b534b3092','all original eleven course fields must remain unchanged');
   assert.equal(courses[4].file,'ai-advance-tutorial-v1.mp4');
@@ -26,7 +27,7 @@ test('two point lessons follow the original eleven movies without changing exist
   assert.match(courses[3].note,/未正式開放/);
   assert.deepEqual(courses.slice(0,3).map(c=>c.file),['registration-v2.mp4','business-card-v2.mp4','card-collection-v2.mp4']);
   assert.equal(context.window.testMediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-05/');
-  assert.match(html,/tutorial-center\.js\?v=8/);
+  assert.match(html,/tutorial-center\.js\?v=9/);
   assert.match(html,/tutorial-center\.css\?v=3/);
 });
 test('setting series uses distinct versioned movies, measured chapters and accurate scope notes',()=>{
@@ -75,9 +76,9 @@ test('check-in lessons use measured chapters and accurately disclose the member-
   assert.match(series[1].note,/不等同真人手機相機驗收/);
 });
 test('exclusive categories cover every lesson once and do not default to an all-course list',()=>{
-  assert.deepEqual(categories.map(c=>[c.id,c.title,c.courses.length]),[['members','會員與名片',3],['stores','店家與點數',3],['activities','活動與課程',6],['tasks','AI任務',1]]);
+  assert.deepEqual(categories.map(c=>[c.id,c.title,c.courses.length]),[['members','會員與名片',4],['stores','店家與點數',3],['activities','活動與課程',6],['tasks','AI任務',1]]);
   const ids=categories.flatMap(c=>c.courses);
-  assert.equal(new Set(ids).size,13);
+  assert.equal(new Set(ids).size,14);
   assert.deepEqual([...ids].sort(),courses.map(c=>c.id).sort());
   assert.match(source,/let selectedCategory = categories\[0\]\.id/);
   assert.match(source,/courses\.filter\(course => category\.courses\.includes\(course\.id\)\)/);
@@ -105,6 +106,16 @@ test('point tutorials have measured chapters and disclose synthetic, distinct co
   assert.match(redeem.note,/應收不代表平台已收款/);
   assert.match(redeem.note,/測試相機/);
 });
+test('friend lesson distinguishes invitation, synthetic picker, copy, cancellation and registration',()=>{
+  const c=courses.find(c=>c.id==='friend-share');
+  assert.equal(c.title,'分享好友');assert.equal(c.duration,'2:51');assert.equal(c.file,'friend-share-tutorial-v1.mp4');
+  assert.equal(c.mediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-10/');
+  assert.ok(categories.find(c=>c.id==='members').courses.includes('friend-share'));
+  assert.deepEqual(c.chapters.map(ch=>ch[0]),[0,18.083,32.625,54.167,71.708,91.542,107.375,127.042,147.542]);
+  for(const label of ['虛構會員','未傳送真實 LINE 訊息','非手機選人實錄','剪貼簿由測試替身模擬','複製不會自動發送','取消不算已發送','不代表好友已完成加入','已有歸屬沿用平台規則'])assert.ok(c.note.includes(label),label);
+  assert.doesNotMatch(c.note,/繁體字幕|正式操作實錄/);
+});
+
 test('activity publishing lesson explains the real entry, verified-member scope and explicit cancellation',()=>{
   const course=courses.find(c=>c.id==='activity-publish');
   assert.equal(course.title,'活動上架');
