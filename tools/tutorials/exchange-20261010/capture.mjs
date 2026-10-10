@@ -45,6 +45,8 @@ async function capture(kind){
     }
     if(u.origin===base&&req.method()==='GET')return route.continue();
     if(['cdn.tailwindcss.com','fonts.googleapis.com','fonts.gstatic.com'].includes(u.hostname)&&['script','stylesheet','font'].includes(req.resourceType()))return route.continue();
+    if(u.hostname==='cdnjs.cloudflare.com'&&['stylesheet','font'].includes(req.resourceType()))return route.continue();
+    if(u.hostname==='upload.wikimedia.org'&&req.resourceType()==='image')return route.continue();
     blocked.push({host:u.hostname,method:req.method()});return route.abort();
   });
   await page.addInitScript(base=>{
