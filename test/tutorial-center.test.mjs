@@ -27,7 +27,7 @@ test('two point lessons follow the original eleven movies without changing exist
   assert.deepEqual(courses.slice(0,3).map(c=>c.file),['registration-v2.mp4','business-card-v2.mp4','card-collection-v2.mp4']);
   assert.equal(context.window.testMediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-05/');
   assert.match(html,/tutorial-center\.js\?v=8/);
-  assert.match(html,/tutorial-center\.css\?v=2/);
+  assert.match(html,/tutorial-center\.css\?v=3/);
 });
 test('setting series uses distinct versioned movies, measured chapters and accurate scope notes',()=>{
   const series=courses.slice(6,9);
@@ -83,7 +83,11 @@ test('exclusive categories cover every lesson once and do not default to an all-
   assert.match(source,/courses\.filter\(course => category\.courses\.includes\(course\.id\)\)/);
   assert.match(source,/aria-pressed/);
   assert.match(source,/returnTarget.*filters\.querySelector/);
-  assert.match(css,/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css,/\.tutorial-categories\{display:flex;flex-wrap:nowrap/);
+  assert.match(css,/overflow-x:auto/);
+  assert.match(css,/white-space:nowrap/);
+  assert.match(css,/min-height:44px/);
+  assert.doesNotMatch(css,/grid-template-columns/);
 });
 test('point tutorials have measured chapters and disclose synthetic, distinct commerce workflows',()=>{
   const gift=courses.find(c=>c.id==='store-point-gift'),redeem=courses.find(c=>c.id==='point-redemption');
