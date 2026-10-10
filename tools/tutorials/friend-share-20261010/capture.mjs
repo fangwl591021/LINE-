@@ -27,7 +27,7 @@ const scripts={
 const server=createServer(async(req,res)=>{
   try{
     assert.equal(req.method,'GET');const path=decodeURIComponent(new URL(req.url,'http://localhost').pathname).slice(1);
-    assert.ok(!path.includes('..'));res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.png')?'image/png':'text/html');
+    assert.ok(!path.includes('..'));res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.png')?'image/png':path.endsWith('.svg')?'image/svg+xml':'text/html');
     res.end(!path?html:scripts[path]||await source(path));
   }catch(e){errors.push(e.message);res.statusCode=404;res.end('Fixture asset failed');}
 });
@@ -83,7 +83,7 @@ try{
   await scene('result','04｜送出後確認結果','本例回報由測試替身模擬','選人並確認送出後，再確認結果。系統收到分享成功回報時，會顯示邀約連結已發送。本片回報由測試替身模擬，並未真的送到任何聊天室。若取消選人，不應當作已發送。',async()=>{await page.evaluate(()=>__pendingShare({status:'success'}));await page.locator('#toast-container').filter({hasText:'邀約連結已發送'}).waitFor();});
   await scene('cancel','05｜取消選人，不算完成','沒選好友、沒確認，就沒有送出','如果按錯，可以在 LINE 選人畫面取消或返回。回到邀約視窗，不代表已傳送。若分享失敗，請先確認 LINE 登入及網路，或改用複製網址。',async()=>{await page.waitForTimeout(3200);await click(page.locator('#invite-share-button'));await page.evaluate(()=>__pendingShare(undefined));assert.equal(await page.locator('#toast-container').innerText(),'');});
   await scene('copy','06｜替代方式：複製網址','切回聊天室，貼上後再按傳送','按複製，看到邀約連結已複製後，切回 LINE 好友或群組聊天室，長按輸入欄貼上，再按傳送。複製只是放進剪貼簿，不會自動傳訊。本片攔截剪貼簿，不會改寫您的真實剪貼簿。',async()=>{await click(page.locator('#invite-copy-button'));assert.equal(await page.evaluate(()=>__copied[0]),originalUrl);});
-  await scene('store','07｜要邀朋友逛店，改選店家商城','限已有公開店面的店主','如果您是店主，而且店面已建立並公開，可以改選店家商城。等待店面確認完成，再分享或複製。這個目的地會帶朋友進入您的公開店面；沒有公開店面時，不會產生可分享的商城邀請網址。',async()=>{await click(page.locator('#invite-destination-store'));await page.locator('#invite-destination-status').filter({hasText:'教學測試店家'}).waitFor();await page.locator('#invite-qr-img').evaluate(img=>img.decode());});
+  await scene('store','07｜要邀朋友逛店，改選店家商城','限已有公開店面的店主','如果您是店主，而且店面已建立並公開，可以改選店家商城。等待店面確認完成，再分享或複製。這個目的地會帶朋友進入您的公開店面；沒有公開店面時，不會產生可分享的商城邀請網址。',async()=>{await page.waitForTimeout(3200);await click(page.locator('#invite-destination-store'));await page.locator('#invite-destination-status').filter({hasText:'教學測試店家'}).waitFor();await page.locator('#invite-qr-img').evaluate(img=>img.decode());});
   await scene('summary','分享好友｜重點複習','選目的地 → 分享／掃 QR／複製','重點是先選對目的地，再讓好友掃碼、使用 LINE 選人分享，或複製後自行貼上傳送。QR 與網址都保留推薦來源；已存在的歸屬依平台規則，不會因分享而直接改寫。分享本身不保證好友已加入，也不代表任何點數已入帳。',async()=>{await click(page.locator('#invite-destination-function'));});
   assert.deepEqual(errors,[]);
   const fixtures=await page.evaluate(()=>({shares:__shares,copied:__copied}));assert.equal(fixtures.shares.length,2);assert.ok(fixtures.shares.every(s=>s[0].text.endsWith(originalUrl)));
