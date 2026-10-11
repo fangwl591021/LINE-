@@ -4,6 +4,7 @@ import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
 import {generateStoreDraft,StoreDraftError} from './store-ai-draft.mjs';
 import {publicPartnerShops} from './store-partner-catalog.mjs';
 import {catalogOrder,CatalogOrderError} from './store-catalog-order.mjs';
+import {readPublicProducts,ProductDiscoveryError} from './store-product-discovery.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 const roles = ['store','店長','admin','總管','user','用戶'];
 const unlimitedRoles = ['store','店長','admin','總管'];
@@ -84,6 +85,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
   if(request.method==='OPTIONS') return new Response(null,{status:204,headers});
   try {
     const db=env.ACTMASTER_DB;
+    if(request.method==='GET'&&url.pathname==='/v1/store-shop/products')return reply(await readPublicProducts(db,url.searchParams,eligible));
     if(request.method==='GET'&&url.pathname==='/v1/store-shop') {
       const id=url.searchParams.get('shop');
       if(id) {
@@ -186,7 +188,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     return reply(await management(db,shop,limit));
   } catch(error) {
     if(error instanceof ListingReviewError)return reply(listingReviewFailure(error),error.status);
-    if(error instanceof ShopError||error instanceof ProductDmError||error instanceof CatalogOrderError||error instanceof StoreDraftError) return reply({success:false,error:error.message},error.status);
+    if(error instanceof ShopError||error instanceof ProductDmError||error instanceof CatalogOrderError||error instanceof StoreDraftError||error instanceof ProductDiscoveryError) return reply({success:false,error:error.message},error.status);
     const missing=/no such table/.test(String(error?.message));
     console.error(JSON.stringify({event:'store_shop_failed',path:url.pathname,code:missing?'SCHEMA_NOT_READY':'UNAVAILABLE'}));
     return reply({success:false,error:missing?'商城尚未啟用，請管理員完成資料庫更新':'商城服務暫時無法使用，請稍後重試'},503);

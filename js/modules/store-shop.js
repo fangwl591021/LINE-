@@ -4,6 +4,7 @@
   const categories = ['食','宿','遊','購','行','服務','製造'];
   const listingNotice='公開／上架前由平台 AI 審核文案與圖片。禁止八大行業、詐騙、菸酒、醫療用品、犯罪、色情與賭博；疑似或審核未完成不公開，可先存草稿。';
   const industryLabels={'食':'餐飲食品','宿':'住宿','遊':'旅遊休閒','購':'購物零售','行':'交通接送','服務':'專業服務','製造':'製造手作'};
+  const productLabels={'食':'餐飲食品','宿':'住宿方案','遊':'旅遊休閒','購':'購物商品','行':'交通接送','服務':'服務方案','製造':'手作製品',unclassified:'未分類'};
   const categoryIcons={'':'✦','食':'☕','宿':'⌂','遊':'☀','購':'🛍','行':'🚆','服務':'♡','製造':'⚙'};
   function categoryTags(scope, selected='') {
     return `<div class="shop-category-tags" role="group" aria-label="${scope==='shops'?'店家業種':'商品分類'}篩選">${['',...categories].map(c=>`<button type="button" data-do="category" data-scope="${scope}" data-category="${c}" aria-pressed="${c===selected}"><span aria-hidden="true">${categoryIcons[c]}</span>${(scope==='shops'?industryLabels[c]:c)||'全部'}</button>`).join('')}</div>`;
@@ -84,6 +85,7 @@
       } finally {button.disabled=false;}
     }
     let listCategory='', listQuery='';
+    let discovery={q:'',category:'',purchase_mode:'',redeem:'',after:''};
     let viewedShop=null, viewedProducts=[];
     let walletModule,walletImport;
     function loadWalletModule(){
@@ -105,7 +107,7 @@
       if(isCurrent())module.openStorePointOperationPopup({standalone,isCurrent,mode});
     }
     root.classList.add('store-shop');
-    root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="list">店家列表</button>${canManage()?'<button data-do="manage" class="primary">我的商城管理</button>':''}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
+    root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="discover">找商品</button><button data-do="list">店家列表</button>${canManage()?'<button data-do="manage" class="primary">我的商城管理</button>':''}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
     root.classList.add('shop-lifestyle','shop-points-theme');
     root.querySelector('h1').textContent='生活好店';
@@ -116,7 +118,7 @@
       clearHomeWallet?.();clearHomeWallet=null;
       root.dataset.shopView=kind;
       const notice=root.querySelector?.('.shop-notice');if(notice)notice.hidden=false;
-      root.querySelectorAll('.shop-bottom-nav button').forEach(b=>{const active=kind==='home'?b.dataset.do==='points-home':kind==='directory'||kind==='store'||kind==='product'?b.dataset.do==='find':kind==='mine'?b.dataset.do==='mine':false;b.setAttribute('aria-current',active?'page':'false');});
+      root.querySelectorAll('.shop-bottom-nav button').forEach(b=>{const active=kind==='home'?b.dataset.do==='points-home':['directory','discovery','store','product'].includes(kind)?b.dataset.do==='find':kind==='mine'?b.dataset.do==='mine':false;b.setAttribute('aria-current',active?'page':'false');});
     }
     async function pointsHome(toggle=false) {
       pageKind('home');const version=++epoch;alert.textContent='';
@@ -129,6 +131,7 @@
       const switcher=root.querySelector('.points-view-switch');switcher.hidden=!allowed;switcher.textContent=merchantView?'消費者版':'商家版';
       const brand=root.querySelector('.shop-brand-entry');brand.dataset.do=allowed?'point-operation':'wallet';brand.setAttribute('aria-label',allowed?'點數通：開啟會員點數操作':'點數通：我的點數 QR');
       content.innerHTML=home.renderPointsHome({merchant:merchantView,rewardOnly:rewardOnly(),redeemOnly:redeemOnly(),standalone,canManage:canManage()});
+      content.querySelector('.points-section-title')?.insertAdjacentHTML('beforebegin','<button type="button" data-do="discover" class="shop-discover-entry"><strong>探索商品 ›</strong><span>跨店搜尋商品，查看價格與店家折抵規則</span></button>');
       if(!standalone)content.querySelector('.points-actions')?.insertAdjacentHTML('afterend','<button type="button" data-do="consumption-journal" class="shop-journal-entry">▤ 我的消費日誌 <span>店內消費・網購明細 ›</span></button>');
       const nav=root.querySelector('.shop-bottom-nav');
       const scan=nav.querySelector('.shop-bottom-qr');scan.dataset.do=merchantView?'point-operation':'wallet';scan.innerHTML=`<span aria-hidden="true">${home.pointIcon('scan')}</span>${merchantView?'掃碼':'點數 QR'}`;
@@ -145,10 +148,10 @@
       content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?`<a class="shop-link" href="${esc(loginLink())}">登入／註冊後查看消費紀錄與網路訂單，並返回本店商城</a>`:'<button data-do="registration">♙ 會員註冊／資料維護 <span>›</span></button><button data-do="spending-history">▤ 我的點數紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
       if(!standalone)content.querySelector('[data-do="spending-history"]').insertAdjacentHTML('beforebegin','<button type="button" data-do="consumption-journal">▤ 我的消費日誌 <span>›</span></button>');
     }
-    function detail(id) {
+    function detail(id,fromDiscovery=false) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
       ++epoch;pageKind('product');alert.textContent='';
-      content.innerHTML=`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button><article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?`<a class="shop-link" href="${esc(loginLink(viewedShop.id))}">登入後線上選購</a>`:`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}${viewedShop.merchant_enabled===0?'':`<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button>`}</div></article>`;
+      content.innerHTML=`${fromDiscovery?'<button data-do="discover-back">← 返回商品探索</button>':`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button>`}<article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2>${fromDiscovery?`<p class="shop-meta">販售店家：${esc(viewedShop.name)}</p><button data-do="view" data-id="${esc(viewedShop.id)}">前往店家</button>`:''}<p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(viewedShop.merchant_enabled===0?'店面展示，未開放交易':policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?`<a class="shop-link" href="${esc(loginLink(viewedShop.id))}">登入後線上選購</a>`:`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}${viewedShop.merchant_enabled===0?'':`<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button>`}</div></article>`;
     }
     const base=String(root.dataset.worker||window.Config?.WORKER_URL||'').replace(/\/+$/,'');
     async function adminStores() {
@@ -251,6 +254,7 @@
       listCategory=category; listQuery=q;
       content.innerHTML=`<form data-form="search" class="shop-row"><input name="q" aria-label="搜尋店名、類別或地址" placeholder="搜尋店名、類別或地址" value="${esc(q)}" maxlength="80"><button class="primary">搜尋</button></form><p class="shop-meta">${result.shops.length} 家店家</p><div class="shop-grid">${result.shops.map(s=>`<article>${photo(s.image_url)}<h2>${esc(s.name)}</h2><p class="shop-meta">${esc(s.category)} · ${esc(s.address)}</p><p>${esc(s.description)}</p><button class="primary" data-do="view" data-id="${esc(s.id)}">${s.has_active_products===1?'進入商城':'前往店家'}</button></article>`).join('')}</div>${result.shops.length?'':'<p>目前沒有符合條件的已上架店家。</p>'}${result.next?`<button data-do="next" data-id="${esc(result.next)}" data-query="${esc(q)}">下一頁</button>`:''}`;
       content.insertAdjacentHTML('afterbegin',categoryTags('shops',category));
+      content.insertAdjacentHTML('afterbegin',discoveryTabs(false));
       content.querySelector('.shop-grid')?.classList.add('shop-discovery-grid');
       content.querySelectorAll('.shop-discovery-grid article').forEach(card=>{
         if(!card.querySelector('img'))card.insertAdjacentHTML('afterbegin','<div class="shop-no-photo" aria-hidden="true">⌂<small>探索在地好店</small></div>');
@@ -259,6 +263,28 @@
       });
       content.querySelector('.shop-grid')?.insertAdjacentHTML('beforebegin',`<div class="shop-section-title"><h2>${q||category?'符合條件的好店':'探索好店'}</h2><span>各店自行收款</span></div>`);
       content.insertAdjacentHTML('beforeend',`<div class="shop-discovery-promos"><button data-do="wallet"><span aria-hidden="true">🎁</span><strong>點數用在喜歡的生活<small>查看本人共用點數與折抵入口</small></strong></button>${canManage()?'<button data-do="manage"><span aria-hidden="true">🏪</span><strong>我是店家<small>管理本人店面與商品</small></strong></button>':''}</div>`);
+    }
+    function discoveryTabs(products){return `<nav class="shop-discovery-tabs" aria-label="探索方式"><button type="button" data-do="discover" aria-pressed="${products}">找商品</button><button type="button" data-do="list" aria-pressed="${!products}">找店家</button></nav>`;}
+    function discoveryForm(){return content.querySelector('[data-form="product-search"]');}
+    function discoveryValues(){const form=discoveryForm();return form?{...Object.fromEntries(new FormData(form)),redeem:form.elements.redeem.checked?'1':'',category:discovery.category}:discovery;}
+    function discoveredProduct(p){
+      return `<article class="shop-product-card" data-discovered-product="${esc(p.id)}"><button class="shop-product-image" data-do="discover-detail" data-id="${esc(p.id)}" aria-label="查看 ${esc(p.title)} 詳情">${photo(p.image_url)||'<span class="shop-product-placeholder" aria-hidden="true">🛍</span>'}</button><div class="shop-product-summary"><span class="shop-category-badge">${esc(productLabels[p.category]||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h3><button class="shop-product-title" data-do="discover-detail" data-id="${esc(p.id)}">${esc(p.title)}</button></h3><p class="shop-discovered-store">${esc(p.shop.name)}</p><p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p class="shop-meta shop-product-policy">${esc(p.shop.merchant_enabled===0?'店面展示，未開放交易':policy(p))}</p><div class="shop-product-actions"><button data-do="discover-detail" data-id="${esc(p.id)}">商品詳情</button><button data-do="view" data-id="${esc(p.shop.id)}">前往店家</button></div></div></article>`;
+    }
+    async function discover(filters={},after=''){
+      pageKind('discovery');const version=++epoch;alert.textContent='';
+      const values={...discovery,...filters,after};
+      content.innerHTML=discoveryTabs(true)+'<p role="status">載入商品中…</p><button data-do="discover-back">重新載入商品</button>';
+      try{
+        const result=await api('/products?'+new URLSearchParams(values));if(version!==epoch||!content.isConnected||!root.contains(content))return;
+        discovery=values;
+        const tags=['',...categories,'unclassified'].map(c=>`<button type="button" data-do="discover-category" data-category="${esc(c)}" aria-pressed="${c===values.category}">${esc(productLabels[c]||'全部')}</button>`).join('');
+        content.innerHTML=discoveryTabs(true)+`<section class="shop-product-search"><h2>探索商品</h2><p class="shop-meta">依商品內容搜尋，不受店家公司業種限制。未分類商品仍可搜尋。</p><form data-form="product-search"><div class="shop-row"><input name="q" aria-label="搜尋商品名稱、介紹或店名" placeholder="搜尋商品，例如：按摩機" value="${esc(values.q)}" maxlength="80"><button class="primary">搜尋商品</button></div><div class="shop-discovery-filters"><label>購買方式<select name="purchase_mode"><option value="" ${!values.purchase_mode?'selected':''}>全部方式</option><option value="online" ${values.purchase_mode==='online'?'selected':''}>網購</option><option value="in_store" ${values.purchase_mode==='in_store'?'selected':''}>限店內</option></select></label><label class="shop-redeem-filter"><input type="checkbox" name="redeem" ${values.redeem==='1'?'checked':''}>只看可折抵商品</label></div></form><div class="shop-category-tags" role="group" aria-label="跨店商品分類篩選">${tags}</div></section><p class="shop-meta" role="status">本頁 ${result.products.length} 件商品${result.next?'，可載入下一頁':''}</p><div class="shop-grid shop-browse-products">${result.products.map(discoveredProduct).join('')}</div>${result.products.length?'':'<p>沒有符合條件的已上架商品。可清除條件，或查看「未分類」。</p>'}${result.next?`<button data-do="discover-next" data-cursor="${esc(result.next)}">下一頁商品</button>`:''}<p class="shop-meta">折抵與購買以商品、店家設定及結帳查核為準；瀏覽不會扣點。</p>`;
+      }catch(error){if(version!==epoch||!content.isConnected||!root.contains(content))return;content.innerHTML=discoveryTabs(true)+'<p>商品暫時無法載入，原資料未變動。</p><button data-do="discover-back">重新載入商品</button>';throw error;}
+    }
+    async function discoverDetail(id){
+      const version=++epoch;alert.textContent='';content.innerHTML='<button data-do="discover-back">← 返回商品探索</button><p role="status">讀取商品詳情…</p>';
+      const result=await api('/products?id='+encodeURIComponent(id));if(version!==epoch||!content.isConnected||!root.contains(content))return;
+      const p=result.products[0];viewedShop=p.shop;viewedProducts=[p];detail(p.id,true);
     }
     function filterProducts(category) {
       const cards=[...content.querySelectorAll('[data-product-category]')];
@@ -398,6 +424,11 @@
           case 'point-operation': await openPointOperations();break;
           case 'exit': ++epoch; standalone?location.assign(new URL('index.html',location.href).href):window.goPage('home'); break;
           case 'list': await list(); break;
+          case 'discover':await discover({},'');break;
+          case 'discover-back':await discover(discovery,discovery.after);break;
+          case 'discover-detail':await discoverDetail(button.dataset.id);break;
+          case 'discover-next':await discover(discovery,button.dataset.cursor);break;
+          case 'discover-category':await discover({...discoveryValues(),category:button.dataset.category});break;
           case 'find': await list();content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
           case 'region': await list();content.querySelector('[name=q]').placeholder='輸入地區，例如：板橋';content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
           case 'shopping': if(viewedShop)await view(viewedShop.id);else {await list();content.querySelector('.shop-section-title')?.scrollIntoView({block:'center'});}break;
@@ -526,6 +557,7 @@
     };
     root.onchange=event=>{
       const picker=event.target;
+      if(picker.closest('[data-form="product-search"]')&&['purchase_mode','redeem'].includes(picker.name)){void run(()=>discover(discoveryValues()));return;}
       if(picker.closest('[data-form="product"]')&&['purchase_mode','status'].includes(picker.name)){void checkOnlineWarnings();return;}
       if(!picker.matches('.shop-image-file')||busy) return;
       const file=picker.files?.[0]; if(!file) return;
@@ -559,6 +591,7 @@
     root.onsubmit=event=>{
       const form=event.target.closest('[data-form]'); if(!form) return; event.preventDefault(); if(busy) return;
       const data=Object.fromEntries(new FormData(form));
+      if(form.dataset.form==='product-search'){void run(()=>discover(discoveryValues()));return;}
       if(form.dataset.form==='search') { void run(()=>list('',data.q,listCategory)); return; }
       busy=true; alert.textContent=data.status==='active'?'AI 上架審核中…通過後才會公開，請稍候。':'儲存草稿／封存中…'; const buttons=[...root.querySelectorAll('button,input,select,textarea')]; const disabled=buttons.map(b=>b.disabled); buttons.forEach(b=>b.disabled=true);
       let formMessage=form.querySelector('[data-listing-status]');
