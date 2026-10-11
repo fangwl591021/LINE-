@@ -19,6 +19,9 @@ binding = "IMG_BUCKET"
 bucket_name = "linengine"
 
 [vars]
+# Online-only orders: durable at-most-once writes and exact mother ledger checks.
+# Rollback: set false to stop new redemptions; existing order returns remain usable.
+STORE_COMMERCE_POINTS_ENABLED = "true"
 # Set real secrets in Cloudflare Dashboard or with `wrangler secret put`.
 # SOCIAL_LIKE_LIFF_ID must be a LINE LIFF app whose view type is Compact.
 SOCIAL_LIKE_LIFF_ID = "1660923784-NVioaXK7"

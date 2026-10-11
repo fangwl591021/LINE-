@@ -466,7 +466,7 @@
             const version=++epoch;alert.textContent='';
             const mode=button.dataset.do==='online-manage'?'merchant':button.dataset.do==='online-orders'?'orders':'checkout';
             const selected=mode==='checkout'?(viewedShop?.id===button.dataset.id?{shop:viewedShop,products:viewedProducts}:await api(`?shop=${encodeURIComponent(button.dataset.id)}`)):{};
-            const module=await import('./store-commerce.js?v=4');
+            const module=await import('./store-commerce.js?v=5');
             if(version===epoch)await module.mountCommerce(content,{base,mode,shop:selected.shop,products:selected.products,isCurrent:()=>version===epoch&&window.currentPage==='store-shop'});
             break;
           }

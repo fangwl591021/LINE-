@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { createCommercePointService } from './worker/store-commerce-mother.mjs';
 import { CardLinks, cardLinksEnabled, cardLinksConfigResponse } from './worker/card-links.mjs';
 import { extractActivityDmDraft } from './worker/activity-dm-ai.mjs';
 import { createActivityBatches, activityWithBatches, joinActivityBatches, activityBatchRows } from './worker/activity-batches.mjs';
@@ -8733,6 +8734,9 @@ export async function scoreMemberDirectoryBatch(env, actor, member, candidates) 
   ] }, '', AbortSignal.timeout(25000));
   return JSON.parse(result?.choices?.[0]?.message?.content || '{}');
 }
+
+// Thin bridge only; cashier, PointModule, identity and LINE reply ownership stay unchanged.
+export const storeCommercePointService = createCommercePointService(PointModule);
 
 export function storeInviteProfileView(row) {
   return D1ReadModule.userRow(row, 'store_invite');
