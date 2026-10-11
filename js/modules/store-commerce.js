@@ -4,9 +4,10 @@ const money=c=>'NT$ '+(Number(c)/100).toLocaleString('zh-TW');
 const paymentText={pending:'待匯款',reported:'已回報／待核帳',paid:'已收款',cancelled:'已取消'};
 const shippingText={unfulfilled:'未出貨',shipped:'已出貨',completed:'已完成'};
 const carrierText={POST:'中華郵政',FAMILY:'全家店到店',SEVEN:'7-11 店到店'};
+const pointText={none:'未使用點數',pending:'扣點處理中',debited:'已扣點',failed:'未扣點／訂單已取消',unknown:'扣點結果待查核',refunding:'退點處理中',refunded:'已退點',refund_unknown:'退點結果待查核'};
 const field=(name,label,value='',type='text',max=200,attrs='')=>`<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" maxlength="${max}" ${attrs} ${type==='number'?'min="0" step="0.01"':''}></label>`;
 function receipt(s) {
-  return `<h3>${esc(s.shop_name)}</h3>${s.items.map(i=>`<p>${esc(i.title)} × ${i.quantity}　${money(i.line_total_cents)}</p>`).join('')}<p>商品 ${money(s.subtotal_cents)}／運費 ${money(s.shipping_fee_cents)}<br><strong>應匯款 ${money(s.total_cents)}</strong>（本筆不折抵點數）</p>`;
+  return `<h3>${esc(s.shop_name)}</h3>${s.items.map(i=>`<p>${esc(i.title)} × ${i.quantity}　${money(i.line_total_cents)}</p>`).join('')}<p>商品 ${money(s.subtotal_cents)}／運費 ${money(s.shipping_fee_cents)}${s.points_used?`<br>購物金折抵 ${esc(s.points_used)} 點（${money(s.points_used*100)}）`:''}<br><strong>應匯款 ${money(s.total_cents)}</strong>${s.total_cents===0?'（無須匯款）':''}</p>`;
 }
 const deliveryAddress=c=>[c.postal_code,c.city,c.district,c.address].filter(Boolean).join(' ');
 function buyerDetails(s){return s.buyer?`<p>購買人：${esc(s.buyer.name)}<br>手機：${esc(s.buyer.phone)}${s.buyer.email?`<br>Email：${esc(s.buyer.email)}`:''}</p>`:'';}
@@ -18,8 +19,8 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
   const current=()=>isCurrent()&&host.isConnected&&window.liff?.getAccessToken?.()===token;
   host.innerHTML='<button type="button" data-do="manage">返回商城管理</button><section class="commerce-panel"><p role="status">載入線上商城…</p></section>';
   if(mode!=='merchant'){host.querySelector('button').dataset.do='list';host.querySelector('button').textContent='返回店家列表';}
-  const panel=host.querySelector('.commerce-panel');let busy=false,epoch=0,config,quoted,input,orders=[],page=0,sameRecipient=true,savedBuyerProfile=null;
-  function paint(html){if(current())panel.innerHTML=`<p class="shop-notice">各店自行收款。此階段僅匯款；LINE Pay、線上點數折抵、自動退款與物流串接尚未開放。</p><p class="commerce-error" role="alert"></p>${html}`;}
+  const panel=host.querySelector('.commerce-panel');let busy=false,epoch=0,config,quoted,input,orders=[],page=0,sameRecipient=true,savedBuyerProfile=null,pointsEnabled=false;
+  function paint(html){if(current())panel.innerHTML=`<p class="shop-notice">各店自行收款。${pointsEnabled?'購物金依商品上限折抵，運費不折抵；':'本次未開放線上點數折抵；'}剩餘款項以匯款支付。LINE Pay、自動現金退款與物流串接尚未開放。</p><p class="commerce-error" role="alert"></p>${html}`;}
   function error(e){if(current()){const el=panel.querySelector('.commerce-error');if(el)el.textContent=e.message;}}
   async function api(path,data) {
     if(!current())throw new Error('登入身分或頁面已改變，請重新開啟');
@@ -44,21 +45,23 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
     }
     const serial=++epoch;const result=await api(`/orders?scope=${mode==='merchant'?'merchant':'buyer'}&page=${next}`);if(serial!==epoch||!current())return;
     orders=result.orders;page=next;
-    paint(`${mode==='merchant'?'<button data-commerce="settings">返回收款設定</button>':''}<h2>${mode==='merchant'?'本店網路訂單':'我的網路訂單'}</h2><button data-commerce="orders">重新整理</button><div class="shop-sales-list">${orders.map((o,i)=>`<section class="shop-sale-row"><div class="shop-sale-heading"><strong>${esc(o.snapshot.shop_name)}</strong><span>${esc(paymentText[o.payment_status])}／${esc(shippingText[o.fulfillment_status])}</span></div><p>購買者：${esc(o.snapshot.buyer_name||'未提供姓名')}<br>收件人：${esc(o.snapshot.customer.name)}　${money(o.total_cents)}</p><time>${esc(new Date(o.created_at).toLocaleString('zh-TW'))}</time><details><summary>訂單內容與處理</summary>${receipt(o.snapshot)}${buyerDetails(o.snapshot)}<p>訂單：${esc(o.id)}<br>電話：${esc(o.snapshot.customer.phone)}<br>${esc(carrierText[o.snapshot.customer.carrier])}：${esc(o.snapshot.customer.carrier==='POST'?deliveryAddress(o.snapshot.customer):o.snapshot.customer.store_info)}<br>備註：${esc(o.snapshot.customer.note)}</p>${bank(o.snapshot)}${o.remittance_last5?`<p>回報末五碼：${esc(o.remittance_last5)}</p>`:''}${o.tracking_number?`<p>物流編號：${esc(o.tracking_number)}</p>`:''}${actionForm(o,i)}</details></section>`).join('')||'<p>目前沒有訂單。</p>'}</div><div class="shop-row">${page?'<button data-commerce="prev">上一頁</button>':''}${result.has_more?'<button data-commerce="next">下一頁</button>':''}</div>`);
+    paint(`${mode==='merchant'?'<button data-commerce="settings">返回收款設定</button>':''}<h2>${mode==='merchant'?'本店網路訂單':'我的網路訂單'}</h2><button data-commerce="orders">重新整理</button><div class="shop-sales-list">${orders.map((o,i)=>`<section class="shop-sale-row"><div class="shop-sale-heading"><strong>${esc(o.snapshot.shop_name)}</strong><span>${esc(paymentText[o.payment_status])}／${esc(shippingText[o.fulfillment_status])}</span></div><p>購買者：${esc(o.snapshot.buyer_name||'未提供姓名')}<br>收件人：${esc(o.snapshot.customer.name)}　${money(o.total_cents)}${o.snapshot.points_used?`<br>購物金：${esc(pointText[o.points_status]||'結果待查核')}`:''}</p><time>${esc(new Date(o.created_at).toLocaleString('zh-TW'))}</time><details><summary>訂單內容與處理</summary>${receipt(o.snapshot)}${buyerDetails(o.snapshot)}<p>訂單：${esc(o.id)}<br>電話：${esc(o.snapshot.customer.phone)}<br>${esc(carrierText[o.snapshot.customer.carrier])}：${esc(o.snapshot.customer.carrier==='POST'?deliveryAddress(o.snapshot.customer):o.snapshot.customer.store_info)}<br>備註：${esc(o.snapshot.customer.note)}</p>${(!o.snapshot.points_used||o.points_status==='debited')&&o.total_cents>0?bank(o.snapshot):''}${o.remittance_last5?`<p>回報末五碼：${esc(o.remittance_last5)}</p>`:''}${o.tracking_number?`<p>物流編號：${esc(o.tracking_number)}</p>`:''}${actionForm(o,i)}</details></section>`).join('')||'<p>目前沒有訂單。</p>'}</div><div class="shop-row">${page?'<button data-commerce="prev">上一頁</button>':''}${result.has_more?'<button data-commerce="next">下一頁</button>':''}</div>`);
   }
   function actionForm(o,index) {
+    if(!['none','debited'].includes(o.points_status||'none'))return `<p>購物金：${esc(pointText[o.points_status]||'結果待查核')}。請查核原訂單，不要再次付款、扣點或退點。</p>${['pending','unknown','refunding','refund_unknown'].includes(o.points_status)?`<button data-commerce="reconcile" data-index="${index}">查核原交易結果（不重新扣點）</button>`:''}`;
     let action='',html='',label='';
     if(mode==='merchant') {
       if(o.payment_status==='reported'){action='verify_remittance';html=field('received','實際入帳金額（元）','','number')+'<label><input type="checkbox" name="confirmed" required>我已查核銀行入帳，不是僅依買家截圖或末五碼認定。</label>';label='確認收款';}
       else if(o.payment_status==='paid'&&o.fulfillment_status==='unfulfilled'){action='ship';html=field('tracking_number','物流編號','','text',100);label='確認已出貨';}
       else if(o.payment_status==='paid'&&o.fulfillment_status==='shipped'){action='complete';label='標記完成';}
     } else if(['pending','reported'].includes(o.payment_status)){action='report_remittance';html=field('last5','匯款帳號末五碼',o.remittance_last5,'text',5);label='回報匯款（不代表已核帳）';}
-    return `${action?`<form data-commerce-form="action" data-index="${index}" data-action="${action}" data-key="${crypto.randomUUID()}">${html}<button class="primary">${label}</button></form>`:''}${mode!=='merchant'&&o.payment_status==='pending'?`<button data-commerce="cancel" data-index="${index}">取消未付款訂單</button>`:''}`;
+    return `${action?`<form data-commerce-form="action" data-index="${index}" data-action="${action}" data-key="${crypto.randomUUID()}">${html}<button class="primary">${label}</button></form>`:''}${mode!=='merchant'&&o.payment_status==='pending'?`<button data-commerce="cancel" data-index="${index}">取消未付款訂單${o.points_status==='debited'?'並退點':''}</button>`:''}${mode==='merchant'&&o.points_status==='debited'&&o.payment_status==='paid'&&o.fulfillment_status==='unfulfilled'?`<form data-commerce-form="action" data-index="${index}" data-action="refund" data-key="${crypto.randomUUID()}"><p>平台不執行銀行退款。請先自行退還 ${money(o.received_cents)}，才可取消本筆並退回 ${esc(o.snapshot.points_used)} 點。</p><label><input type="checkbox" name="confirmed" required>我已退還全部款項，確認取消並退點</label><button>確認退款完成並退點</button></form>`:''}`;
   }
   function checkoutForm() {
     if(!products.length){paint('<h2>本店目前沒有網購商品</h2><p>限店內商品請至店內購買。</p>');return;}
     paint(`<h2>${esc(shop.name)}・線上選購</h2><form data-commerce-form="quote" class="shop-box">${products.map(p=>`<label>${esc(p.title)}　${money(p.price_cents)}<input type="number" name="qty-${esc(p.id)}" min="0" max="99" step="1" value="0" aria-label="${esc(p.title)}數量"></label>`).join('')}<h3>購買人資訊</h3><button type="button" data-commerce="load-buyer">帶入已儲存網購人資料</button><p class="shop-meta">先至「我的 → 會員註冊 → 網購人資料」填寫。帶入後請核對；勾選同購買人時也會帶入寄送方式、郵寄地址或超商門市。</p>${field('buyer_name','購買人姓名 *','','text',80,'required autocomplete="name"')}${field('buyer_phone','購買人手機 *','','tel',30,'required autocomplete="tel"')}${field('buyer_email','Email（選填）','','email',254,'autocomplete="email"')}<h3>收件人資料</h3><label><input type="checkbox" name="same_recipient" checked>收件人同購買人</label>${field('name','收件人姓名 *','','text',80,'required')}${field('phone','收件人手機 *','','tel',30,'required')}<label>寄送方式<select name="carrier"><option value="POST">中華郵政</option><option value="FAMILY">全家店到店（手填門市）</option><option value="SEVEN">7-11 店到店（手填門市）</option></select></label>${field('postal_code','郵遞區號（選填）','','text',6,'inputmode="numeric" autocomplete="postal-code"')}${field('city','縣市 *','','text',20,'required autocomplete="address-level1"')}${field('district','區域／鄉鎮市 *','','text',20,'required autocomplete="address-level2"')}${field('address','路名、巷弄、門牌、樓層 *','','text',200,'required autocomplete="street-address"')}${field('store_info','超商店號、店名與地址（超商寄送必填）','','text',120)}${field('note','訂單備註','','text',300)}<button class="primary">確認金額與收款店家</button></form>`);
     const form=panel.querySelector('form');
+    if(pointsEnabled){const block=document.createElement('section');block.innerHTML=`<h3>購物金折抵</h3><p>1 點折抵 NT$1，依各商品上限計算，運費不折抵。只在確認下單時扣點。</p><button type="button" data-commerce="wallet">查詢本人可用購物金</button><p data-wallet-status role="status"></p><label>本次折抵點數<input name="points_used" type="number" inputmode="numeric" min="0" max="1000000" step="1" value="${esc(input?.points_used||0)}" required></label>`;form.querySelector('h3').before(block);}
     if(input){for(const [key,value] of Object.entries(input.customer))if(form.elements[key])form.elements[key].value=value;for(const [key,value] of Object.entries(input.buyer))form.elements['buyer_'+key].value=value;for(const item of input.items)if(form.elements['qty-'+item.id])form.elements['qty-'+item.id].value=item.quantity;}
     form.elements.same_recipient.checked=sameRecipient;
     const sync=()=>{
@@ -95,6 +98,7 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
     event.stopPropagation();const button=event.target.closest('[data-commerce]');if(!button)return;
     void run(async()=>{
       const command=button.dataset.commerce;
+      if(command==='wallet'){const result=await api('/wallet');panel.querySelector('[data-wallet-status]').textContent=`目前可用購物金 ${Math.max(0,result.balance).toLocaleString('zh-TW')} 點，實際下單仍會重新查核。`;}
       if(command==='load-buyer'){
         const form=panel.querySelector('[data-commerce-form="quote"]');
         const result=await api('/buyer-profile');
@@ -107,6 +111,7 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
       }
       if(command==='settings')settingsForm(await api('/settings'));
       if(command==='orders')await listOrders(0);
+      if(command==='reconcile'){const o=orders[Number(button.dataset.index)];await api('/orders/reconcile',{order_id:o.id,scope:mode==='merchant'?'merchant':'buyer'});await listOrders(page);}
       if(command==='prev')await listOrders(page-1);
       if(command==='next')await listOrders(page+1);
       if(command==='edit')checkoutForm();
@@ -127,7 +132,8 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
           }
           throw e;
         }
-        paint(`<h2>訂單已建立，尚未付款</h2><p>請只匯款一次，匯款後回報末五碼。</p><p>訂單：${esc(result.order.id)}</p>${receipt(result.order.snapshot)}${bank(result.order.snapshot)}<button data-commerce="orders">我的網路訂單／回報匯款</button>`);
+        const o=result.order,ready=['none','debited'].includes(o.points_status||'none');
+        paint(`<h2>${ready?(o.payment_status==='paid'?'訂單已完成點數付款':'訂單已建立，尚未匯款'):'訂單購物金結果待確認'}</h2><p>${ready?(o.total_cents===0?'本筆無須匯款。':'請只匯款一次，匯款後回報末五碼。'):`${esc(pointText[o.points_status]||'結果待查核')}；請查詢原訂單，勿重新付款或扣點。`}</p><p>訂單：${esc(o.id)}</p>${receipt(o.snapshot)}${ready&&o.total_cents>0?bank(o.snapshot):''}<button data-commerce="orders">我的網路訂單／查核結果</button>`);
         localStorage.removeItem(pending.key);
       }
     });
@@ -142,19 +148,20 @@ export async function mountCommerce(host,{base,mode,shop,products=[],isCurrent})
       }
       if(type==='quote'){
         sameRecipient=values.same_recipient==='on';
-        input={shop_id:shop.id,payment_method:'REMITTANCE',points_used:0,items:products.map(p=>({id:p.id,quantity:Number(values['qty-'+p.id])})).filter(p=>p.quantity!==0),buyer:{name:values.buyer_name,phone:values.buyer_phone,email:values.buyer_email},customer:{name:sameRecipient?values.buyer_name:values.name,phone:sameRecipient?values.buyer_phone:values.phone,carrier:values.carrier,postal_code:values.postal_code||'',city:values.city||'',district:values.district||'',address:values.address||'',store_info:values.store_info||'',note:values.note}};
-        quoted=await api('/quote',input);paint(`<h2>請確認訂單</h2>${receipt(quoted.snapshot)}${buyerDetails(quoted.snapshot)}<p>收件人：${esc(input.customer.name)}<br>${esc(input.customer.phone)}<br>${esc(carrierText[input.customer.carrier])}：${esc(input.customer.carrier==='POST'?deliveryAddress(input.customer):input.customer.store_info)}</p><p>款項直接付給 ${esc(quoted.snapshot.bank.holder)}，平台不代收。建立訂單後才顯示匯款帳號。</p><button data-commerce="place" class="primary">確認建立匯款訂單</button><button data-commerce="edit">返回修改</button>`);
+        input={shop_id:shop.id,payment_method:'REMITTANCE',points_used:pointsEnabled?Number(values.points_used):0,items:products.map(p=>({id:p.id,quantity:Number(values['qty-'+p.id])})).filter(p=>p.quantity!==0),buyer:{name:values.buyer_name,phone:values.buyer_phone,email:values.buyer_email},customer:{name:sameRecipient?values.buyer_name:values.name,phone:sameRecipient?values.buyer_phone:values.phone,carrier:values.carrier,postal_code:values.postal_code||'',city:values.city||'',district:values.district||'',address:values.address||'',store_info:values.store_info||'',note:values.note}};
+        quoted=await api('/quote',input);paint(`<h2>請確認訂單</h2>${receipt(quoted.snapshot)}${buyerDetails(quoted.snapshot)}<p>收件人：${esc(input.customer.name)}<br>${esc(input.customer.phone)}<br>${esc(carrierText[input.customer.carrier])}：${esc(input.customer.carrier==='POST'?deliveryAddress(input.customer):input.customer.store_info)}</p><p>款項直接付給 ${esc(quoted.snapshot.bank.holder)}，平台不代收。建立訂單後才顯示匯款帳號。${input.points_used?'確認下單時扣點；取消未回報匯款的訂單才可自動退點。':''}</p><button data-commerce="place" class="primary">${input.points_used?`確認下單並扣除 ${esc(input.points_used)} 點`:'確認建立匯款訂單'}</button><button data-commerce="edit">返回修改</button>`);
       }
       if(type==='action'){
         const o=orders[Number(form.dataset.index)],action=form.dataset.action;
-        await api('/orders/action',{action,order_id:o.id,version:o.version,request_key:form.dataset.key,...(action==='report_remittance'?{last5:values.last5}:{}),...(action==='ship'?{tracking_number:values.tracking_number}:{}),...(action==='verify_remittance'?{received_cents:Math.round(Number(values.received)*100),confirmed:values.confirmed==='on'}:{})});await listOrders(page);
+        await api('/orders/action',{action,order_id:o.id,version:o.version,request_key:form.dataset.key,...(action==='report_remittance'?{last5:values.last5}:{}),...(action==='ship'?{tracking_number:values.tracking_number}:{}),...(action==='verify_remittance'?{received_cents:Math.round(Number(values.received)*100),confirmed:values.confirmed==='on'}:{}),...(action==='refund'?{returned_cash_cents:o.received_cents,confirmed:values.confirmed==='on'}:{})});await listOrders(page);
       }
     });
   };
   paint('<p role="status">驗證線上商城設定…</p>');
   try {
+    const capability=await api('/capabilities');pointsEnabled=capability.points_enabled===true;
     if(mode==='merchant')settingsForm(await api('/settings'));
     else if(mode==='orders')await listOrders();
-    else {const capability=await api('/capabilities');if(capability.enabled)checkoutForm();else paint('<h2>線上交易準備中</h2><p>目前不會建立訂單或扣點，原有商品 QR 折抵不受影響。</p>');}
+    else {if(capability.enabled)checkoutForm();else paint('<h2>線上交易準備中</h2><p>目前不會建立訂單或扣點，原有商品 QR 折抵不受影響。</p>');}
   }catch(e){error(e);}
 }

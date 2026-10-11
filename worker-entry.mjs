@@ -1,4 +1,4 @@
-import legacyWorker, { runAutomatedUploaderMatch, storeInviteProfileView, scoreMemberDirectoryBatch } from './workerbackup.js';
+import legacyWorker, { runAutomatedUploaderMatch, storeInviteProfileView, scoreMemberDirectoryBatch, storeCommercePointService } from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
@@ -414,7 +414,7 @@ export default {
     if (adminStoreResponse) return adminStoreResponse;
     const inviteResponse = await handleStoreInviteBinding(request, env, storeInviteProfileView);
     if (inviteResponse) return inviteResponse;
-    const commerceResponse = await handleStoreCommerce(request, env);
+    const commerceResponse = await handleStoreCommerce(request, env, fetch, storeCommercePointService);
     if (commerceResponse) return commerceResponse;
     const shopResponse = await handleStoreShop(request, env);
     if (shopResponse) return shopResponse;
