@@ -7,7 +7,7 @@
 - 草稿待確認是現有 draft 篩選，不宣稱草稿已送審，不新增所有店家強制審核門檻。
 - 合作店家未綁帳號仍沿用 partner 編輯器，不替其偽造註冊或建立商品。
 - 店面只允許 draft / active。商品只允許 draft / active / archived；封存保留歷史，管理員此入口不恢復封存品。
-- CAS 比較店面／商品版本，寫入時再核對管理員與店家角色快照。商品保留原 purchase_mode、redeem_type、redeem_value；一般會員仍一件、店內、不折抵。
+- CAS 比較店面／商品版本，寫入時再核對管理員與店家角色快照。2026-10-19 使用者要求：允許管理員修改合資格店家既有商品的 purchase_mode（in_store / online），GET 只提供 online_product_allowed 能力布林，不新增身份資訊；一般會員仍一件、店內、不折抵，不能以封存繞過新設網購限制。未指定銷售方式的舊請求保留原值；redeem_type、redeem_value 仍保留且拒絕由此入口修改。
 - 0045 僅新增商城操作稽核表。request_key 唯一；payload 與操作者一致重試回原成功，異動 key 使用衝突回 409。
 - 快照稽核 INSERT 與 version+1 UPDATE 同一原子 batch；沒有稽核或任一 SQL 失敗不得更新。
 - 修改後公開目錄依原有 active／角色規則顯示，手機管理讀到同一 version。不呼叫收銀或點數服務，不異動舊訂單快照。

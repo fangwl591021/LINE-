@@ -59,6 +59,18 @@ test('administrator editing and assisted uploading cannot bypass policy or write
   }
   f.resetUsage();assert.equal((await f.call('/admin/products',{...product({description:'成人色情影像'}),shop_id:SHOP,shop_version:1},ADMIN)).http,422);assert.equal(f.count('store_admin_product_audit'),0);assert.equal(f.count('store_shop_products'),1);
 });
+
+test('sales channel change alone still requires review; manual or provider error cannot publish the change',async t=>{
+  for(const [review,status]of [[()=>blocked('other','description','待核對的合成商品','manual'),422],[()=>new Response('',{status:500}),503]]){
+    const f=createListingFixture({existing:true});t.after(f.close);
+    f.sql.prepare("UPDATE store_shop_products SET description='待核對的合成商品' WHERE id=?").run(PRODUCT);
+    const original=JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(PRODUCT));
+    f.state.review=review;
+    const result=await f.call('/admin/catalog',{type:'product',id:PRODUCT,shop_id:SHOP,shop_version:1,version:1,request_key:crypto.randomUUID(),changes:{purchase_mode:'online'}},ADMIN);
+    assert.equal(result.http,status);assert.equal(f.count('store_catalog_admin_audit'),0);
+    assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(PRODUCT)),original);
+  }
+});
 test('partner-directory activation blocks prohibited content before partner/policy/location writes',async t=>{
   const f=createListingFixture();t.after(f.close);
   const r=await PartnerDirectoryModule.save({authenticatedUserId:ADMIN,partner:{name:'非法店家',description:'販售毒品',status:'active'},redeemPolicy:{enabled:true},location:{branchName:'新分店'}},f.env,f.fetcher);

@@ -7,7 +7,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES=['store','店長','admin','總管','user','用戶'];
 const UNLIMITED=['store','店長','admin','總管'];
 const STORE=['name','description','category','address','phone','hours','image_url','status'];
-const PRODUCT=['title','description','category','image_url','price_cents','status'];
+const PRODUCT=['title','description','category','image_url','price_cents','status','purchase_mode'];
 const ACTOR=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
 const PRODUCT_SELECT='id,shop_id,title,description,category,image_url,price_cents,status,version,purchase_mode,redeem_type,redeem_value,updated_at';
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
@@ -52,7 +52,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
       const shop=await shopRow(db,shopId);
       const products=await rows(db,`SELECT ${PRODUCT_SELECT} FROM store_shop_products WHERE shop_id=? AND id>? AND (?='' OR status=?) ORDER BY id LIMIT 21`,[shop.id,after,status,status]);
       const summary=(await rows(db,"SELECT count(*) AS total,COALESCE(sum(status='active'),0) AS active,COALESCE(sum(status='draft'),0) AS draft FROM store_shop_products WHERE shop_id=?",[shop.id]))[0];
-      return reply({success:true,shop:publicShop(shop),products:products.slice(0,20),next:products.length>20?products[19].id:'',summary});
+      return reply({success:true,shop:publicShop(shop),online_product_allowed:UNLIMITED.includes(String(shop.owner_role).toLowerCase()),products:products.slice(0,20),next:products.length>20?products[19].id:'',summary});
     }
     if(url.search)fail('INVALID_QUERY','儲存不可附加查詢條件');
     const data=await readJson(request);
@@ -70,7 +70,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     const normalized=data.type==='store'?normalizeStore({...original,...changes}):normalizeProduct({...original,...changes});
     const updated=Object.fromEntries(fields.map(key=>[key,normalized[key]]));
     const limited=!UNLIMITED.includes(String(shop.owner_role).toLowerCase());
-    if(data.type==='product'&&limited&&updated.status!=='archived'&&(original.purchase_mode!=='in_store'||original.redeem_type!=='none'))fail('OWNER_LIMIT','一般會員商品限店內且不折抵，可封存後由店家整理',403);
+    if(data.type==='product'&&limited&&((Object.hasOwn(changes,'purchase_mode')&&normalized.purchase_mode==='online')||(updated.status!=='archived'&&(normalized.purchase_mode!=='in_store'||original.redeem_type!=='none'))))fail('OWNER_LIMIT','一般會員商品限店內且不折抵，可封存後由店家整理',403);
     await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
     const auditId=crypto.randomUUID(),now=new Date().toISOString();
     const table=data.type==='store'?'store_shop_stores':'store_shop_products';
