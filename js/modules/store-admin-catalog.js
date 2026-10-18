@@ -16,7 +16,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
   const tabs=make('nav'),store=make('button','店家資料'),products=make('button','商品／優惠'),drafts=make('button','草稿待確認');
   for(const button of [store,products,drafts])button.type='button';tabs.append(store,products,drafts);
   const body=make('div');panel.append(bar,title,note,tabs,message,body);
-  let epoch=0,shop=null,mode=initialMode==='draft'?'draft':'products',cursor='',next='',busy=false,dirty=false;
+  let epoch=0,shop=null,onlineAllowed=false,mode=initialMode==='draft'?'draft':'products',cursor='',next='',busy=false,dirty=false;
   const lockNavigation=()=>{for(const button of [back,refresh,add,store,products,drafts])button.disabled=busy;};
   const ask=text=>doc.defaultView.confirm(text);
   const safeLeave=()=>!dirty||ask('尚有未儲存或待確認的資料，確定離開？');
@@ -74,7 +74,13 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       label('address','地址','input',{maxLength:200});label('phone','電話','input',{maxLength:40});label('hours','營業時間','input',{maxLength:200});
     }else{
       const price=label('price','售價（NT$）','input',{type:'number',min:'0',max:'1000000',step:'0.01',required:true,inputMode:'decimal'});price.value=String(record.price_cents/100);
-      form.append(make('p','原銷售方式及折抵政策保持不變；不修改既有訂單或發放點數。'));
+      if(onlineAllowed){
+        const purchaseMode=label('purchase_mode','銷售方式','select');
+        for(const [value,text]of [['in_store','限店內'],['online','網購']]){const option=make('option',text);option.value=value;purchaseMode.append(option);}
+        purchaseMode.value=record.purchase_mode||'in_store';
+        form.append(make('p','網購仍需店家完成收款設定，並以結帳查核為準；修改後請重新確認訂單。'));
+      }else form.append(make('p','此店家未具網購資格；銷售方式保持原值，一般會員限店內展示。'));
+      form.append(make('p','原折抵政策保持不變；不修改既有訂單或發放點數。'));
     }
     const status=label('status','公開狀態','select');
     for(const value of type==='store'?['draft','active']:['draft','active','archived']){const option=make('option',statusName(value));option.value=value;status.append(option);}status.value=record.status;
@@ -91,7 +97,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
           if(!/^\d+(?:\.\d{1,2})?$/.test(fields.price.value)||Number(fields.price.value)>1000000){message.textContent='請填寫有效售價';return;}
           changes.price_cents=Math.round(Number(fields.price.value)*100);
         }
-        if(!ask(`確定儲存「${record.name||record.title}」？狀態：${statusName(changes.status)}。將同步影響手機商城顯示。`))return;
+        if(!ask(`確定儲存「${record.name||record.title}」？狀態：${statusName(changes.status)}。${changes.purchase_mode?'銷售方式：'+(changes.purchase_mode==='online'?'網購':'限店內')+'。':''}將同步影響手機商城顯示。`))return;
         pending={type,id:record.id,shop_id:shop.id,version:record.version,shop_version:shop.version,request_key:crypto.randomUUID(),changes};dirty=true;
       }
       const requestEpoch=epoch;busy=true;lock();message.textContent=(pending.changes.status||record.status)==='active'?'AI 上架審核中…通過後才儲存公開。':'儲存中…';
@@ -112,7 +118,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       const result=await api('/admin/catalog?'+params,null,true);
       if(!active()||sequence!==epoch)return;
       if(!result?.success||result.shop?.id!==shopId||!Array.isArray(result.products))throw new Error('商城回傳格式不正確');
-      shop=result.shop;cursor=after;next=result.next||'';title.textContent=shop.name+'｜商城管理';add.disabled=false;
+      shop=result.shop;onlineAllowed=result.online_product_allowed===true;cursor=after;next=result.next||'';title.textContent=shop.name+'｜商城管理';add.disabled=false;
       for(const [button,key]of [[store,'store'],[products,'products'],[drafts,'draft']])button.setAttribute('aria-pressed',String(mode===key));
       message.textContent=`店面：${statusName(shop.status)} · 商品 ${result.summary.total} 件 · 草稿 ${result.summary.draft} 件。`;
       if(mode==='store'){editor('store',shop);return;}

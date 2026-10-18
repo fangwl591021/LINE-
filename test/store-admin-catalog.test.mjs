@@ -112,7 +112,7 @@ test('failed write rolls back audit and hides internal errors',async t=>{
 });
 test('strict fields, cross-shop ids, bounds and archived restoration rejected',async t=>{
   const f=fixture();t.after(()=>f.sql.close());
-  for(const changes of [{owner_uid:ADMIN},{redeem_type:'full'},{purchase_mode:'online'},{price_cents:-1},{image_url:'javascript:alert(1)'},{status:'approved'},{description:'a'.repeat(3001)}])assert.equal((await f.call(payload({changes}))).http,400);
+  for(const changes of [{owner_uid:ADMIN},{redeem_type:'full'},{redeem_value:100},{purchase_mode:'invalid'},{price_cents:-1},{image_url:'javascript:alert(1)'},{status:'approved'},{description:'a'.repeat(3001)}])assert.equal((await f.call(payload({changes}))).http,400);
   assert.equal((await f.call(payload({id:id(11)}))).http,404);
   assert.equal((await f.call(payload({shop_id:id(3)}))).http,403);
   assert.equal((await f.call('x'.repeat(17000))).http,413);
@@ -124,6 +124,42 @@ test('member product capacity and existing policy restrictions survive admin edi
   f.sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key) VALUES(?,?,'另一件',100,'now',?)").run(id(12),id(2),id(12));
   assert.equal((await f.call(data)).http,409);
   assert.equal((await f.call({...data,changes:{status:'archived'}})).http,200);
+});
+
+test('merchant sales channel switches with one audited version and preserves price, policy and ownership',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());
+  f.sql.prepare("UPDATE store_shop_products SET price_cents=1180000,redeem_type='percent',redeem_value=50,status='active' WHERE id=?").run(id(10));
+  const before=f.product(),users=JSON.stringify(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all());
+  const read=await f.call();assert.equal(read.online_product_allowed,true);assert.equal('owner_role' in read.shop,false);
+  const data=payload({changes:{purchase_mode:'online'}}),result=await f.call(data);
+  assert.equal(result.http,200);assert.equal(result.version,2);assert.equal(f.product().purchase_mode,'online');
+  for(const key of ['shop_id','request_key','title','description','category','image_url','price_cents','status','redeem_type','redeem_value'])assert.equal(f.product()[key],before[key],key);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all()),users);
+  assert.equal(f.audit().length,1);assert.equal(JSON.parse(f.audit()[0].before_json).purchase_mode,'in_store');assert.equal(JSON.parse(f.audit()[0].after_json).purchase_mode,'online');
+  assert.equal((await f.publicStore()).products[0].purchase_mode,'online');
+  assert.equal((await f.call(data)).replayed,true);assert.equal(f.audit().length,1);assert.equal(f.product().version,2);
+  assert.equal((await f.call(payload({version:2,request_key:id(98),changes:{purchase_mode:'in_store'}}))).http,200);
+  assert.equal(f.product().purchase_mode,'in_store');assert.equal(f.product().redeem_value,50);
+});
+
+test('ordinary member cannot newly enable online even for drafts or archives, legacy fields stay compatible',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());
+  assert.equal((await f.call(null,ADMIN,'shop='+id(2))).online_product_allowed,false);
+  const data=payload({shop_id:id(2),id:id(11)});
+  for(const status of ['draft','active','archived']){
+    assert.equal((await f.call({...data,changes:{purchase_mode:'online',status}})).http,403);
+    assert.equal(f.audit().length,0);assert.equal(f.sql.prepare('SELECT purchase_mode FROM store_shop_products WHERE id=?').get(id(11)).purchase_mode,'in_store');
+  }
+  f.sql.prepare("UPDATE store_shop_products SET purchase_mode='online' WHERE id=?").run(id(11));
+  assert.equal((await f.call({...data,changes:{status:'archived'}})).http,200);
+  assert.equal(f.sql.prepare('SELECT purchase_mode FROM store_shop_products WHERE id=?').get(id(11)).purchase_mode,'online');
+});
+
+test('sales mode save still fails closed on lost merchant eligibility',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());
+  f.before(()=>f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(OWNER));
+  assert.equal((await f.call(payload({changes:{purchase_mode:'online'}}))).http,409);
+  assert.equal(f.product().purchase_mode,'in_store');assert.equal(f.audit().length,0);
 });
 test('paged catalog includes drafts and archived without exposing owner identifiers',async t=>{
   const f=fixture();t.after(()=>f.sql.close());

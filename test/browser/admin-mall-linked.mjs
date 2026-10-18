@@ -12,8 +12,8 @@ const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[],bl
 page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 const id='00000001-1111-4111-8111-111111111111',pid='00000010-1111-4111-8111-111111111111';
 const shop={id,name:'合成測試咖啡店',owner_name:'合成負責人',owner_uid:'synthetic',owner_role:'store',status:'active',public_visible:true,version:1,product_count:1,product_limit:null,active_product_count:0,phone:'0212345678',address:'合成測試路 1 號',category:'食'};
-const product={id:pid,shop_id:id,title:'合成咖啡優惠',description:'合成測試資料',price_cents:10000,category:'食',status:'draft',version:1,purchase_mode:'in_store',redeem_type:'none',redeem_value:0};
-let loseResponse=true;
+const product={id:pid,shop_id:id,title:'合成咖啡優惠',description:'合成測試資料',price_cents:10000,category:'食',status:'draft',version:1,purchase_mode:'in_store',redeem_type:'percent',redeem_value:50};
+let loseResponse=true,onlineAllowed=true;
 const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
 await page.route('**/*',async route=>{
   const request=route.request(),url=new URL(request.url());
@@ -34,7 +34,7 @@ await page.route('**/*',async route=>{
       if(loseResponse){loseResponse=false;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({success:false,error:'模擬回應遺失'})});return;}
       data={success:true,id:body.id,version:2};
     }else if(url.searchParams.get('queue')==='draft')data={success:true,products:product.status==='draft'?[{...product,shop_name:shop.name}]:[],next:''};
-    else data={success:true,shop,products:url.searchParams.get('status')==='draft'&&product.status!=='draft'?[]:[product],summary:{total:1,active:product.status==='active'?1:0,draft:product.status==='draft'?1:0},next:''};
+    else data={success:true,shop,online_product_allowed:onlineAllowed,products:url.searchParams.get('status')==='draft'&&product.status!=='draft'?[]:[product],summary:{total:1,active:product.status==='active'?1:0,draft:product.status==='draft'?1:0},next:''};
   }else if(url.pathname==='/v1/store-shop/admin/products')data={success:true,shop,products:[product]};
   else{blocked.push(url.pathname);await route.abort();return;}
   assert.equal(request.headers().authorization,'Bearer synthetic');
@@ -43,6 +43,8 @@ await page.route('**/*',async route=>{
 try{
   await page.goto('http://localhost/');await page.getByRole('button',{name:'全站商品草稿',exact:true}).click();
   await page.getByRole('button',{name:'進入店家草稿',exact:true}).click();await page.getByRole('button',{name:'編輯／上下架',exact:true}).click();
+  assert.equal(await page.locator('select[name=purchase_mode]').inputValue(),'in_store');
+  await page.locator('select[name=purchase_mode]').selectOption('online');
   const picker=page.locator('input[name=image_file]');
   await picker.setInputFiles({name:'invalid.txt',mimeType:'text/plain',buffer:Buffer.from('invalid')});
   await page.getByRole('status').filter({hasText:'原圖片未變更'}).waitFor();assert.equal(await page.evaluate(()=>syntheticUploads.length),0);
@@ -61,15 +63,24 @@ try{
   await page.getByRole('button',{name:'重新確認同一筆儲存',exact:true}).click();await page.getByRole('status').filter({hasText:'已儲存'}).waitFor();
   assert.equal(writes.length,2);assert.deepEqual(writes[0],writes[1]);
   assert.equal(writes[0].changes.image_url,'https://localhost/test-image.png');assert.equal('image_file' in writes[0].changes,false);
+  assert.equal(writes[0].changes.purchase_mode,'online');assert.equal('redeem_type' in writes[0].changes,false);assert.equal('redeem_value' in writes[0].changes,false);
+  assert.equal(product.redeem_type,'percent');assert.equal(product.redeem_value,50);
   await page.getByRole('button',{name:'重新載入',exact:true}).click();await page.getByText('目前沒有待確認的商品草稿。').waitFor();
   await page.getByRole('button',{name:'商品／優惠',exact:true}).click();await page.getByRole('button',{name:'編輯／上下架',exact:true}).waitFor();
   assert.equal(await page.locator('.mall-catalog img').count(),0); // title remains text, never HTML
   for(const width of [320,390,1440]){
-    await page.setViewportSize({width,height:900});await page.getByRole('button',{name:'店家資料',exact:true}).click();await page.locator('input[name=name]').waitFor();
+    await page.setViewportSize({width,height:900});await page.getByRole('button',{name:'商品／優惠',exact:true}).click();await page.getByRole('button',{name:'編輯／上下架',exact:true}).click();
+    assert.equal(await page.locator('select[name=purchase_mode]').inputValue(),'online');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:join(out,`sales-mode-${width}.png`),fullPage:true});
+    await page.getByRole('button',{name:'店家資料',exact:true}).click();await page.locator('input[name=name]').waitFor();
     await page.waitForFunction(()=>!!document.getElementById('store-admin-catalog-css')?.sheet);
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     assert.equal(await page.getByRole('button',{name:'← 返回店家列表',exact:true}).isVisible(),true);
     await page.screenshot({path:join(out,`catalog-${width}.png`),fullPage:true});
+  }
+  for(const capability of [false,undefined]){
+    onlineAllowed=capability;await page.getByRole('button',{name:'商品／優惠',exact:true}).click();await page.getByRole('button',{name:'編輯／上下架',exact:true}).click();
+    assert.equal(await page.locator('select[name=purchase_mode]').count(),0);await page.getByText('此店家未具網購資格；銷售方式保持原值，一般會員限店內展示。',{exact:true}).waitFor();
   }
   await page.getByRole('button',{name:'新增商品／優惠',exact:true}).click();await page.locator('[data-admin-product-form]').waitFor();
   await page.getByRole('button',{name:'← 返回店家列表',exact:true}).click();await page.getByRole('button',{name:'商品／優惠',exact:true}).waitFor();
