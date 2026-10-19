@@ -18,7 +18,11 @@ async function api(path,data,token='a'){
  assert.equal(suggestion.status,'completed');
  const next=await api('/tasks/'+task.id+'/accept',{revision:1,dueAt:'2026-01-02T06:00:00.000Z'});assert.equal(next.success,true,JSON.stringify(next));assert.equal(next.task.parent_id,task.id);
  assert.equal((await fetch(origin+'/fixture/reminders').then(r=>r.json())).pushes.length,0);
- await api('/preferences',{enabled:true});assert.equal((await fetch(origin+'/fixture/reminders').then(r=>r.json())).pushes.length,1);assert.equal((await fetch(origin+'/fixture/reminders').then(r=>r.json())).pushes.length,0);
+ await api('/preferences',{enabled:true});
+ await Promise.all([1,2].map(i=>api('/tasks',{...input,requestKey:crypto.randomUUID(),title:'Runtime 合併任務 '+i})));
+ assert.equal((await fetch(origin+'/fixture/reminders').then(r=>r.json())).pushes.length,0);
+ const batched=await fetch(origin+'/fixture/reminders?mature=1').then(r=>r.json());assert.equal(batched.pushes.length,1);assert.equal(batched.pushes[0].messages.length,1);assert.equal(batched.pushes[0].messages[0].contents.contents.length,3);
+ assert.equal((await fetch(origin+'/fixture/reminders').then(r=>r.json())).pushes.length,0);
  const candidate=(await api('/crm-candidates')).candidates[0];assert.equal(candidate.contactCardId,'runtime-contact');
  const crmInput={cards:[{contactCardId:candidate.contactCardId,dueAt:'2099-01-01T06:00:00.000Z'}]};
  const crm=await Promise.all([api('/crm-tasks',crmInput),api('/crm-tasks',crmInput)]);assert.ok(crm.every(r=>r.results[0].task),JSON.stringify(crm));assert.equal(crm[0].results[0].task.id,crm[1].results[0].task.id);

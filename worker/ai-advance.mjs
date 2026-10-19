@@ -2,6 +2,7 @@
 // Never mutates points, original agenda, collected cards, VEO, or existing notification preferences.
 import { resolveMemberIdentity, boundedJson } from './member-chat.mjs';
 import { normalizeTaipeiDateTime } from './personal-agenda-time.mjs';
+import {enqueueDueReminders,processAiReminderBatches} from './ai-advance-reminder-batches.mjs';
 const BASE = '/v1/ai-advance';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -323,14 +324,14 @@ export async function handleAiAdvance(request, env, ctx, fetcher = fetch) {
 }
 export async function processAiAdvanceReminders(env, fetcher = fetch, onlyTaskId = '') {
   if (String(env.AI_ADVANCE_DISABLED) === '1' || !env.LINE_CHANNEL_ACCESS_TOKEN) return;
-  const db = session(env), now = Math.floor(Date.now()/1000), at = nowISO();
+  const db = session(env), now = Math.floor(Date.now()/1000);
   let url; try { url = reminderUrl(env); } catch { return; }
-  // Create reminders only when actually due: a task created months ago retains the full retry window.
-  const candidates = await rows(db, `SELECT t.id,t.member_id,t.revision,t.due_at,p.line_id FROM ai_advance_tasks t JOIN ai_advance_preferences p ON p.member_id=t.member_id AND p.enabled=1
-    WHERE t.status='pending' AND t.due_at<=? AND (?='' OR t.id=?) AND NOT EXISTS(SELECT 1 FROM ai_advance_reminders j WHERE j.task_id=t.id AND j.due_at=t.due_at) ORDER BY t.due_at LIMIT 20`, at, onlyTaskId, onlyTaskId);
-  if (candidates.length) await db.batch(candidates.map(task => stmt(db, 'INSERT OR IGNORE INTO ai_advance_reminders(id,task_id,member_id,line_id,revision,due_at,retry_at,created_at,target_url) VALUES(?,?,?,?,?,?,?,?,?)', crypto.randomUUID(), task.id, task.member_id, task.line_id, task.revision, task.due_at, now, now, url)));
-  await stmt(db, "UPDATE ai_advance_reminders SET status='failed' WHERE status='pending' AND lease_until<=? AND (attempts>=5 OR created_at<?) AND (?='' OR task_id=?)", now, now-23*3600, onlyTaskId, onlyTaskId).run();
-  const jobs = await rows(db, "SELECT * FROM ai_advance_reminders WHERE status='pending' AND retry_at<=? AND lease_until<=? AND attempts<5 AND (?='' OR task_id=?) LIMIT 10", now, now, onlyTaskId, onlyTaskId);
+  const onlyMember=onlyTaskId?(await stmt(db,'SELECT member_id FROM ai_advance_tasks WHERE id=?',onlyTaskId).first())?.member_id:'';
+  if(onlyTaskId&&!onlyMember)return;
+  await enqueueDueReminders(db,onlyMember,now,url);
+  // Pre-upgrade uncertain sends must keep the exact old payload and retry key.
+  await stmt(db, "UPDATE ai_advance_reminders SET status='failed' WHERE batch_id='' AND status='pending' AND lease_until<=? AND (attempts>=5 OR created_at<?) AND (?='' OR member_id=?)", now, now-23*3600, onlyMember, onlyMember).run();
+  const jobs = await rows(db, "SELECT * FROM ai_advance_reminders WHERE batch_id='' AND status='pending' AND attempts>0 AND retry_at<=? AND lease_until<=? AND attempts<5 AND (?='' OR member_id=?) LIMIT 10", now, now, onlyMember, onlyMember);
   const eligible = (job, lease) => stmt(db, `SELECT j.id FROM ai_advance_reminders j JOIN ai_advance_tasks t ON t.id=j.task_id AND t.member_id=j.member_id AND t.due_at=j.due_at AND t.status='pending'
     JOIN ai_advance_preferences p ON p.member_id=j.member_id AND p.line_id=j.line_id AND p.enabled=1 WHERE j.id=? AND j.lease_until=? AND j.status='pending' AND (j.manual_requested=1 OR t.due_at<=?)`, job.id, lease, nowISO()).first();
   await Promise.all(jobs.map(async job => {
@@ -356,4 +357,5 @@ export async function processAiAdvanceReminders(env, fetcher = fetch, onlyTaskId
       console.warn('ai_advance_reminder_retry');
     }
   }));
+  await processAiReminderBatches(db,env,fetcher,onlyMember,now,url);
 }

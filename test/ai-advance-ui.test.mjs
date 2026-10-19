@@ -14,12 +14,12 @@ test('home entries are one equal-width row, original tutorial and mall order pre
  assert.doesNotMatch(html.match(/<nav id="bottom-nav"[\s\S]*?<\/nav>/)[0],/ai-advance|AI推進/);
 });
 test('normal guide does not fetch account data, and mixed deep links cannot take over routes',()=>{
- for(const query of ['', '?a=ACT_demo&aiAdvance=1','?shareCardId=demo&aiAdvance=1','?aiAdvance=1&aiAdvance=1','?aiAdvance=0','?aiAdvance=1&memberChat=demo']){
+ for(const query of ['', '?a=ACT_demo&aiAdvance=1','?shareCardId=demo&aiAdvance=1','?aiAdvance=1&aiAdvance=1','?aiAdvance=0','?aiAdvance=1&memberChat=demo','?aiAdvance=1&aiAdvanceTask=bad','?aiAdvance=1&aiAdvanceTask=00000001-1111-4111-8111-111111111111&aiAdvanceTask=00000001-1111-4111-8111-111111111111','?aiAdvance=1&aiAdvanceTask=00000001-1111-4111-8111-111111111111&liff.state=%3FaiAdvanceTask%3D00000001-1111-4111-8111-111111111111']){
   const calls=[];const window={addEventListener(){}};
   vm.runInNewContext(source,{window,location:{search:query},URLSearchParams,setInterval(){calls.push('interval');},clearInterval(){},document:{},console});
   assert.deepEqual(calls,[]);assert.equal(typeof window.openAiAdvanceGuide,'function');
  }
- for(const query of ['?aiAdvance=1','?liff.state=%3FaiAdvance%3D1']){
+ for(const query of ['?aiAdvance=1','?liff.state=%3FaiAdvance%3D1','?aiAdvance=1&aiAdvanceTask=00000001-1111-4111-8111-111111111111','?liff.state=%3FaiAdvance%3D1%26aiAdvanceTask%3D00000001-1111-4111-8111-111111111111']){
   let calls=0;vm.runInNewContext(source,{window:{addEventListener(){}},location:{search:query},URLSearchParams,setInterval(){calls++;},clearInterval(){},document:{},console});assert.equal(calls,1);
  }
 });
@@ -35,6 +35,6 @@ test('isolated client uses verified bearer, never stored keys; close, draft and 
 test('VEO task cards show source, inline reports and bounded CRM history; backfill and self reminders require confirmation',()=>{
  assert.match(source,/document\.createElement\('article'\)/);assert.match(source,/data-report-action/);assert.match(source,/CRM 歷程/);assert.match(source,/整理名片 CRM 待辦/);assert.match(source,/確認建立勾選的待辦/);
  assert.match(source,/data-select/);assert.match(source,/cards\.length>20/);assert.match(source,/不是名片聯絡人/);assert.match(source,/if\(!dashboard\.notifications\)/);assert.match(source,/window\.confirm\('將這筆任務提醒/);
- assert.match(css,/\.aa-task-actions\{display:grid/);assert.match(html,/ai-advance\.js\?v=3/);assert.match(html,/ai-advance\.css\?v=2/);
+ assert.match(css,/\.aa-task-actions\{display:grid/);assert.match(html,/ai-advance\.js\?v=4/);assert.match(html,/ai-advance\.css\?v=2/);
  const worker=readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8');assert.match(worker,/aiAdvanceVerifiedActor: Symbol/);assert.match(worker,/actor\.token && actor\.source !== 'd1_identity_fallback'/);assert.match(worker,/!existing && !isOwnCard && payload\[SecurityModule\.aiAdvanceVerifiedActor\]/);
 });

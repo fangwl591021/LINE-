@@ -16,6 +16,7 @@ function fixture(t, allowCardSave = false) {
     INSERT INTO card_contacts VALUES('contact-a','王小明','範例公司','經理','${A}','','','ocr_scan','',''),('contact-b','別人的名片','公司','經理','${B}','','${A}','ocr_scan','',''),('self-a','本人','','','${A}','','','self_profile','',''),('archived-a','封存','','','${A}','','','ocr_scan','2026-01-01',''),('legacy-a','舊名片','','','','${OLD}','','ocr_scan','','');`);
   sql.exec(readFileSync(new URL('../migrations/0054_ai_advance_tasks.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0061_ai_advance_manual_reminders.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0065_ai_advance_reminder_batches.sql',import.meta.url),'utf8'));
   sql.exec(`ALTER TABLE card_contacts ADD COLUMN crm_status TEXT NOT NULL DEFAULT '新名片';
     ALTER TABLE card_contacts ADD COLUMN crm_next_action TEXT NOT NULL DEFAULT '';
     ALTER TABLE card_contacts ADD COLUMN crm_next_followup_at TEXT NOT NULL DEFAULT '';
@@ -27,7 +28,8 @@ function fixture(t, allowCardSave = false) {
       beforeWrite?.(query,args);assert.match(query,allowCardSave ? /^\s*((INSERT(?: OR IGNORE)? INTO|UPDATE|DELETE FROM) ai_advance_|(INSERT INTO|UPDATE) card_contacts)/ : /^\s*(INSERT(?: OR IGNORE)? INTO|UPDATE|DELETE FROM) ai_advance_/);writes.push(query);const result=sql.prepare(query).run(...args);return {success:true,meta:{changes:Number(result.changes)}};
     }};
   }
-  const db={prepare,withSession(){return this;},async batch(statements){sql.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());sql.exec('COMMIT');return results;}catch(error){sql.exec('ROLLBACK');throw error;}}};
+  let batchQueue=Promise.resolve();
+  const db={prepare,withSession(){return this;},async batch(statements){const previous=batchQueue;let release;batchQueue=new Promise(r=>{release=r;});await previous;sql.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());sql.exec('COMMIT');return results;}catch(error){sql.exec('ROLLBACK');throw error;}finally{release();}}};
   const env={ACTMASTER_DB:db,OPENAI_API_KEY:'fixture-openai-key',OPENAI_MODEL:'configured-model',LINE_CHANNEL_ACCESS_TOKEN:'fixture-line-key'};
   const fetcher=async(url,options)=>{
     if(url==='https://api.line.me/v2/profile'){
@@ -48,8 +50,11 @@ function fixture(t, allowCardSave = false) {
   const input=()=>({requestKey:crypto.randomUUID(),title:'寄送合作提案',description:'討論店家合作',dueAt:'2026-01-01T06:00:00.000Z',priority:'normal',contactCardId:'contact-a'});
   async function create(data=input()){const result=await api('/tasks',{data});assert.equal(result.success,true,JSON.stringify(result));return result.task;}
   const report=(task,action='complete',note='已寄出提案，對方希望下週聯繫')=>api('/tasks/'+task.id+'/action',{data:{requestKey:crypto.randomUUID(),revision:task.revision,action,note,...(action==='postpone'?{dueAt:'2099-01-01T06:00:00.000Z'}:{})}});
-  const drain=()=>processAiAdvanceReminders(env,fetcher), settle=()=>Promise.all(background.splice(0));
-  return {sql,db,env,api,input,create,report,drain,settle,writes,pushes,aiCalls,setAi(v){aiStatus=v;},invalidAi(v){invalidAi=v;},setPush(v){pushStatus=v;},setAuth(v){authStatus=v;},beforeWrite(fn){beforeWrite=fn;}};
+  const rawDrain=()=>processAiAdvanceReminders(env,fetcher);
+  // Advance only the synthetic coalescing wait, not delivery retries or expired jobs.
+  const drain=async()=>{await rawDrain();sql.prepare("UPDATE ai_advance_reminders SET created_at=created_at-121 WHERE batch_id='' AND status='pending' AND attempts=0 AND created_at>=?").run(Math.floor(Date.now()/1000)-120);await rawDrain();};
+  const settle=()=>Promise.all(background.splice(0));
+  return {sql,db,env,api,input,create,report,drain,rawDrain,settle,writes,pushes,aiCalls,fetcher,setAi(v){aiStatus=v;},invalidAi(v){invalidAi=v;},setPush(v){pushStatus=v;},setAuth(v){authStatus=v;},beforeWrite(fn){beforeWrite=fn;}};
 }
 test('only verified members see their own active collected contacts and tasks; no unrelated writes',async t=>{
   const f=fixture(t);assert.equal((await f.api('/dashboard',{token:''})).status,401);assert.equal((await f.api('/dashboard',{token:'spoof'})).status,401);
@@ -119,15 +124,15 @@ test('AI daily budget limits reservations and invalid provider JSON is never acc
 test('LINE reminders require explicit opt-in and retry same payload/key, not per note; postpone/cancel invalidate jobs',async t=>{
   const f=fixture(t),task=await f.create();await f.drain();assert.equal(f.pushes.length,0);
   await f.api('/preferences',{data:{enabled:true}});f.setPush('timeout');await f.drain();assert.equal(f.pushes.length,1);
-  f.sql.exec("UPDATE ai_advance_reminders SET retry_at=0,lease_until=0");f.setPush(409);await f.drain();assert.equal(f.pushes.length,2);assert.deepEqual(f.pushes[0],f.pushes[1]);
+  f.sql.exec("UPDATE ai_advance_reminders SET retry_at=0,lease_until=0;UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0");f.setPush(409);await f.drain();assert.equal(f.pushes.length,2);assert.deepEqual(f.pushes[0],f.pushes[1]);
   assert.equal(f.pushes[0].body.to,A);assert.doesNotMatch(JSON.stringify(f.pushes),/合作提案|王小明|範例公司/);
   await f.report(task,'note');await f.drain();assert.equal(f.pushes.length,2,'note does not reset deadline reminder');
-  const other=await f.create();f.setPush('timeout');await f.drain();await f.report(other,'postpone');f.sql.exec("UPDATE ai_advance_reminders SET retry_at=0,lease_until=0 WHERE status='pending'");const before=f.pushes.length;await f.drain();assert.equal(f.pushes.length,before);
-  const cancelled=await f.create();await f.drain();await f.report(cancelled,'cancel');f.sql.exec("UPDATE ai_advance_reminders SET retry_at=0,lease_until=0 WHERE status='pending'");const after=f.pushes.length;await f.drain();assert.equal(f.pushes.length,after);
+  const other=await f.create();f.setPush('timeout');await f.drain();await f.report(other,'postpone');f.sql.exec("UPDATE ai_advance_reminders SET retry_at=0,lease_until=0 WHERE status='pending';UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0 WHERE status='pending'");const before=f.pushes.length;await f.drain();assert.equal(f.pushes.length,before);
+  const cancelled=await f.create();await f.drain();await f.report(cancelled,'cancel');f.sql.exec("UPDATE ai_advance_reminders SET retry_at=0,lease_until=0 WHERE status='pending';UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0 WHERE status='pending'");const after=f.pushes.length;await f.drain();assert.equal(f.pushes.length,after);
 });
 test('reminder eligibility rechecked after identity and preference changes; expired retry window not resent',async t=>{
   const f=fixture(t);await f.create();await f.api('/preferences',{data:{enabled:true}});f.setPush('timeout');await f.drain();
-  f.sql.exec("UPDATE ai_advance_reminders SET retry_at=0,lease_until=0,created_at=0");f.setPush(200);await f.drain();assert.equal(f.pushes.length,1);
+  f.sql.exec("UPDATE ai_advance_reminders SET retry_at=0,lease_until=0,created_at=0;UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0,created_at=0");f.setPush(200);await f.drain();assert.equal(f.pushes.length,1);
   await f.create();await f.api('/preferences',{data:{enabled:false}});await f.drain();assert.equal(f.pushes.length,1);
 });
 test('CRM first task bridge: owned cards, existing suggestions and Taipei dates, no AI or unrelated writes',async t=>{
@@ -201,9 +206,9 @@ test('manual own reminder: explicit opt-in, no target spoof, future deadline, re
 test('manual reminder retry payload stays stable; preference off and postpone stop pending future jobs',async t=>{
   const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});
   const task=await f.create({...f.input(),dueAt:'2099-01-01T06:00:00Z'});f.setPush('timeout');await f.api('/tasks/'+task.id+'/remind',{data:{revision:0}});await f.settle();
-  f.sql.exec('UPDATE ai_advance_reminders SET retry_at=0,lease_until=0');f.setPush(409);await f.drain();assert.deepEqual(f.pushes[0],f.pushes[1]);
+  f.sql.exec('UPDATE ai_advance_reminders SET retry_at=0,lease_until=0;UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0');f.setPush(409);await f.drain();assert.deepEqual(f.pushes[0],f.pushes[1]);
   const other=await f.create({...f.input(),dueAt:'2099-01-01T06:00:00Z'});f.setPush('timeout');await f.api('/tasks/'+other.id+'/remind',{data:{revision:0}});await f.settle();
-  await f.api('/tasks/'+other.id+'/action',{data:{requestKey:crypto.randomUUID(),revision:0,action:'postpone',note:'延期一個月',dueAt:'2099-02-01T06:00:00Z'}});f.sql.exec('UPDATE ai_advance_reminders SET retry_at=0,lease_until=0');const count=f.pushes.length;await f.drain();assert.equal(f.pushes.length,count);
+  await f.api('/tasks/'+other.id+'/action',{data:{requestKey:crypto.randomUUID(),revision:0,action:'postpone',note:'延期一個月',dueAt:'2099-02-01T06:00:00Z'}});f.sql.exec('UPDATE ai_advance_reminders SET retry_at=0,lease_until=0;UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0');const count=f.pushes.length;await f.drain();assert.equal(f.pushes.length,count);
   const last=await f.create({...f.input(),dueAt:'2099-01-01T06:00:00Z'}),now=Math.floor(Date.now()/1000);
   f.sql.prepare('INSERT INTO ai_advance_reminders(id,task_id,member_id,line_id,revision,due_at,retry_at,created_at,target_url,manual_requested) VALUES(?,?,?,?,?,?,?,?,?,1)').run(crypto.randomUUID(),last.id,'member-a',A,0,last.due_at,0,now,'https://liff.line.me/1660923784-vViMTZ1y?aiAdvance=1');
   await f.api('/preferences',{data:{enabled:false}});await f.drain();assert.equal(f.pushes.length,count);
@@ -218,7 +223,7 @@ test('manual reminder budget fails closed, action dispatch does not process othe
 test('manual reminder rechecks identity mapping before sending a queued future reminder',async t=>{
   const f=fixture(t),task=await f.create({...f.input(),dueAt:'2099-01-01T06:00:00Z'});await f.api('/preferences',{data:{enabled:true}});
   f.setPush('timeout');await f.api('/tasks/'+task.id+'/remind',{data:{revision:0}});await f.settle();assert.equal(f.pushes.length,1);
-  f.sql.exec(`INSERT INTO user_identity_links VALUES('${A}','${B}','active');UPDATE ai_advance_reminders SET retry_at=0,lease_until=0`);
+  f.sql.exec(`INSERT INTO user_identity_links VALUES('${A}','${B}','active');UPDATE ai_advance_reminders SET retry_at=0,lease_until=0;UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0`);
   f.setPush(200);await f.drain();assert.equal(f.pushes.length,1);assert.equal(f.sql.prepare('SELECT status FROM ai_advance_reminders WHERE task_id=?').get(task.id).status,'cancelled');
 });
 test('actual authenticated card-save hook creates a CRM task; UID-only fallback cannot trigger it and failure cannot undo the saved card',async t=>{
@@ -249,4 +254,106 @@ test('actual authenticated card-save hook creates a CRM task; UID-only fallback 
   security.getActor=async()=>({userId:A,role:'user',networkId:'admin',token:'verified-fixture'});failHook=true;
   assert.equal((await save('saved-despite-hook-failure')).success,true);assert.ok(f.sql.prepare('SELECT row_id FROM card_contacts WHERE row_id=?').get('saved-despite-hook-failure'));assert.equal(awardCalls,3,'award code is not retried');
   assert.equal(f.aiCalls.length,0);assert.equal(f.pushes.length,0);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM agenda').get().n,0);
+});
+
+test('two-minute coalescing produces one Flex carousel for multiple own due tasks',async t=>{
+ const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});
+ const one=await f.create();await f.rawDrain();assert.equal(f.pushes.length,0);
+ const two=await f.create(),three=await f.create();await f.drain();
+ assert.equal(f.pushes.length,1);const message=f.pushes[0].body.messages;
+ assert.equal(message.length,1);assert.equal(message[0].type,'flex');assert.equal(message[0].contents.type,'carousel');assert.equal(message[0].contents.contents.length,3);
+ const links=message[0].contents.contents.map(b=>b.footer.contents[0].action.uri);
+ assert.deepEqual(links.map(u=>new URL(u).searchParams.get('aiAdvanceTask')).sort(),[one.id,two.id,three.id].sort());
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM ai_advance_reminders WHERE status='sent'").get().n,3);
+ assert.doesNotMatch(JSON.stringify(message),/王小明|範例公司|寄送合作提案|討論店家合作|member-a/);
+ await f.drain();assert.equal(f.pushes.length,1);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM ai_advance_reminder_batches').get().n,1);
+});
+test('300 same-member reminders are one capped carousel with overflow summary, not further pushes',async t=>{
+ const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});
+ const insert=f.sql.prepare("INSERT INTO ai_advance_tasks(id,member_id,create_key,title,due_at,priority,created_at,updated_at) VALUES(?,'member-a',?,'私人任務','2020-01-01T00:00:00.000Z','normal','2020-01-01','2020-01-01')");
+ for(let i=0;i<300;i++)insert.run(crypto.randomUUID(),crypto.randomUUID());
+ await f.drain();assert.equal(f.pushes.length,1);
+ const flex=f.pushes[0].body.messages[0],pages=flex.contents.contents;
+ assert.equal(pages.length,12);assert.match(JSON.stringify(pages[11]),/另有 289 筆待辦/);
+ assert.equal(pages[11].footer.contents[0].action.label,'查看全部待辦');assert.equal(new URL(pages[11].footer.contents[0].action.uri).searchParams.has('aiAdvanceTask'),false);
+ assert.ok(Buffer.byteLength(JSON.stringify(flex.contents))<50000);assert.ok(pages.every(b=>b.size==='mega'));
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM ai_advance_reminders WHERE status='sent'").get().n,300);
+ await f.drain();assert.equal(f.pushes.length,1);
+});
+test('different owners never share a payload; single reminder is a Flex bubble',async t=>{
+ const f=fixture(t);for(const token of ['a','b'])await f.api('/preferences',{token,data:{enabled:true}});
+ await f.create();await f.create();await f.api('/tasks',{token:'b',data:{...f.input(),contactCardId:''}});await f.drain();
+ assert.equal(f.pushes.length,2);const a=f.pushes.find(p=>p.body.to===A),b=f.pushes.find(p=>p.body.to===B);
+ assert.equal(a.body.messages[0].contents.type,'carousel');assert.equal(a.body.messages[0].contents.contents.length,2);assert.equal(b.body.messages[0].contents.type,'bubble');
+ const bTask=f.sql.prepare("SELECT id FROM ai_advance_tasks WHERE member_id='member-b'").get().id;
+ assert.doesNotMatch(JSON.stringify(a),new RegExp(bTask));
+});
+test('concurrent cron workers and a manual trigger cannot split or duplicate a cohort',async t=>{
+ const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});
+ const tasks=await Promise.all([1,2,3].map(()=>f.create()));
+ await Promise.all([f.rawDrain(),f.rawDrain()]);
+ f.sql.exec("UPDATE ai_advance_reminders SET created_at=created_at-121");
+ await Promise.all([f.rawDrain(),f.rawDrain(),f.api('/tasks/'+tasks[0].id+'/remind',{data:{revision:0}})]);
+ await f.settle();assert.equal(f.pushes.length,1);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM ai_advance_reminder_batches').get().n,1);
+ assert.equal(f.pushes[0].body.messages[0].contents.contents.length,3);
+});
+test('response loss freezes the cohort and retry key even after another task becomes due',async t=>{
+ const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});await f.create();await f.create();f.setPush('timeout');await f.drain();
+ const first=structuredClone(f.pushes[0]);await f.create();
+ f.sql.exec('UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0');f.setPush(409);await f.rawDrain();
+ assert.equal(f.pushes.length,2);assert.deepEqual(f.pushes[1],first);assert.equal(f.sql.prepare("SELECT item_count FROM ai_advance_reminder_batches WHERE status='sent'").get().item_count,2);
+});
+test('LINE acceptance followed by atomic finalization failure retries identical request only',async t=>{
+ const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});await f.create();await f.create();
+ let once=true;f.beforeWrite((query,args)=>{if(once&&query.startsWith('UPDATE ai_advance_reminders SET status=?')&&args[0]==='sent'){once=false;throw Error('finalize lost');}});
+ await f.drain();assert.equal(f.pushes.length,1);assert.equal(f.sql.prepare('SELECT status FROM ai_advance_reminder_batches').get().status,'pending');
+ f.beforeWrite(null);f.sql.exec('UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0');f.setPush(409);await f.rawDrain();
+ assert.equal(f.pushes.length,2);assert.deepEqual(f.pushes[0],f.pushes[1]);assert.equal(f.sql.prepare('SELECT status FROM ai_advance_reminder_batches').get().status,'sent');
+});
+test('closed item before first attempt releases valid siblings for a new safe cohort',async t=>{
+ const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});const closed=await f.create();await f.create();await f.rawDrain();
+ f.sql.exec('UPDATE ai_advance_reminders SET created_at=created_at-121');
+ let once=true;f.beforeWrite(query=>{if(once&&query.startsWith('UPDATE ai_advance_reminder_batches SET lease_until=?')){once=false;f.sql.prepare("UPDATE ai_advance_tasks SET status='completed' WHERE id=?").run(closed.id);}});
+ await f.rawDrain();assert.equal(f.pushes.length,0);f.beforeWrite(null);await f.rawDrain();assert.equal(f.pushes.length,1);
+ assert.equal(f.pushes[0].body.messages[0].contents.type,'bubble');assert.doesNotMatch(JSON.stringify(f.pushes),new RegExp(closed.id));
+});
+test('postpone or opt-out after an unknown attempt stops the frozen group without repacking it',async t=>{
+ for(const mode of ['postpone','opt-out']){
+  const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});const task=await f.create();await f.create();f.setPush('timeout');await f.drain();assert.equal(f.pushes.length,1);
+  if(mode==='postpone')await f.report(task,'postpone');else await f.api('/preferences',{data:{enabled:false}});
+  f.sql.exec('UPDATE ai_advance_reminder_batches SET retry_at=0,lease_until=0');f.setPush(200);await f.drain();assert.equal(f.pushes.length,1);
+  assert.equal(f.sql.prepare('SELECT status FROM ai_advance_reminder_batches').get().status,'cancelled');
+ }
+});
+test('pre-upgrade uncertain single reminder retains original template and key',async t=>{
+ const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});const task=await f.create(),key=crypto.randomUUID(),now=Math.floor(Date.now()/1000);
+ f.sql.prepare('INSERT INTO ai_advance_reminders(id,task_id,member_id,line_id,revision,due_at,retry_at,created_at,target_url,attempts)VALUES(?,?,?,?,?,?,?,?,?,1)').run(key,task.id,'member-a',A,0,task.due_at,0,now,'https://liff.line.me/1660923784-vViMTZ1y?aiAdvance=1');
+ f.setPush(409);await f.rawDrain();assert.equal(f.pushes.length,1);assert.equal(f.pushes[0].key,key);assert.equal(f.pushes[0].body.messages[0].type,'template');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM ai_advance_reminder_batches').get().n,0);
+});
+test('0065 migration preserves every old reminder column, tasks and opt-in records',t=>{
+ const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
+ for(const file of ['0054_ai_advance_tasks.sql','0061_ai_advance_manual_reminders.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ sql.exec("INSERT INTO ai_advance_preferences VALUES('legacy-member','legacy-line',1)");
+ sql.exec("INSERT INTO ai_advance_tasks(id,member_id,create_key,title,due_at,priority,created_at,updated_at) VALUES('legacy-task','legacy-member','legacy-create','保留舊任務','2026-01-01','normal','2026-01-01','2026-01-01')");
+ const insert=sql.prepare("INSERT INTO ai_advance_reminders(id,task_id,member_id,line_id,revision,due_at,status,attempts,lease_until,retry_at,created_at,target_url,manual_requested)VALUES(?,?,'legacy-member','legacy-line',3,'2026-01-01',?,?,0,123,100,'https://liff.line.me/legacy?aiAdvance=1',?)");
+ for(const [status,attempts,manual]of [['sent',1,0],['pending',2,1],['failed',5,0],['cancelled',0,0]])insert.run(status,status+'-task',status,attempts,manual);
+ const columns=sql.prepare('PRAGMA table_info(ai_advance_reminders)').all().map(c=>c.name).join(','),before=sql.prepare('SELECT '+columns+' FROM ai_advance_reminders ORDER BY id').all(),prefs=sql.prepare('SELECT * FROM ai_advance_preferences').all(),tasks=sql.prepare('SELECT * FROM ai_advance_tasks').all();
+ sql.exec(readFileSync(new URL('../migrations/0065_ai_advance_reminder_batches.sql',import.meta.url),'utf8'));
+ assert.deepEqual(sql.prepare('SELECT '+columns+' FROM ai_advance_reminders ORDER BY id').all(),before);
+ assert.deepEqual(sql.prepare('SELECT * FROM ai_advance_preferences').all(),prefs);
+ assert.deepEqual(sql.prepare('SELECT * FROM ai_advance_tasks').all(),tasks);
+ assert.equal(sql.prepare("SELECT COUNT(*) n FROM ai_advance_reminders WHERE batch_id='' ").get().n,4);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM ai_advance_reminder_batches').get().n,0);
+});
+test('permanent failure, exhausted retries and stale unknown batches never repackage members',async t=>{
+ for(const mode of ['permanent','exhausted','expired']){
+  const f=fixture(t);await f.api('/preferences',{data:{enabled:true}});await f.create();await f.create();
+  f.setPush(mode==='permanent'?400:'timeout');await f.drain();assert.equal(f.pushes.length,1);
+  if(mode==='exhausted')f.sql.exec('UPDATE ai_advance_reminder_batches SET attempts=5,retry_at=0,lease_until=0');
+  if(mode==='expired')f.sql.exec('UPDATE ai_advance_reminder_batches SET created_at=created_at-86400,retry_at=0,lease_until=0');
+  f.setPush(200);await f.drain();await f.drain();assert.equal(f.pushes.length,1);
+  assert.equal(f.sql.prepare('SELECT status FROM ai_advance_reminder_batches').get().status,'failed');
+  assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM ai_advance_reminders WHERE status='failed'").get().n,2);
+ }
 });

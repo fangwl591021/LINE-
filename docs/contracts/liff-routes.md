@@ -182,6 +182,10 @@
 
 ## Scope 錯誤處理
 
+### AI 推進提醒選頁
+
+`aiAdvance=1&aiAdvanceTask=UUID` 只在純 AI 推進入口（含 liff.state）開啟登入者可讀的指定任務；不接受重複／無效 task UUID、不攜帶會員 UID，與其他業務入口混用不自動開啟。只 GET 本人任務，不回報、建單、扣點或接受 AI 建議。無權限顯示錯誤，不換成另一人的任務。
+
 ### 商城所選商品 `shopItem`
 
 與 `shopSection=store&shopId=UUID` 一起使用；只允許單一 UUID 作為商品詳情上下文。商城讀取初始參數、重新驗證商品屬於 shopId；無效、重複或跨店不得選到其他商品。登入後不自動開交易、扣點或核銷，原 `shopProduct` 店內收銀路由不變。

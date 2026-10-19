@@ -11,6 +11,9 @@ export default { async fetch(request, bindings, ctx) {
     if(url==='https://api.line.me/v2/bot/message/push'){pushes.push(JSON.parse(options.body));return new Response('{}');}
     throw Error('UNEXPECTED_OUTBOUND');
   };
-  if(new URL(request.url).pathname==='/fixture/reminders'){await processAiAdvanceReminders(env,fetcher);return Response.json({pushes});}
+  if(new URL(request.url).pathname==='/fixture/reminders'){
+    if(new URL(request.url).searchParams.get('mature')==='1')await env.ACTMASTER_DB.prepare("UPDATE ai_advance_reminders SET created_at=created_at-121 WHERE batch_id='' AND status='pending' AND attempts=0").run();
+    await processAiAdvanceReminders(env,fetcher);return Response.json({pushes});
+  }
   return await handleAiAdvance(request,env,ctx,fetcher) || new Response('Not found',{status:404});
 } };
