@@ -19,6 +19,7 @@ binding = "IMG_BUCKET"
 bucket_name = "linengine"
 
 [vars]
+CHECKIN_MALL_CARD_ENABLED = "true"
 # Online-only orders: durable at-most-once writes and exact mother ledger checks.
 # Rollback: set false to stop new redemptions; existing order returns remain usable.
 STORE_COMMERCE_POINTS_ENABLED = "true"

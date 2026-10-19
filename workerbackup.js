@@ -8,6 +8,7 @@ import { handleCrmCardPhoneLink } from './worker/crm-card-phone-link.mjs';
 import { handleDailyTank } from './worker/daily-tank-challenge.mjs';
 import { handleGameCenter } from './worker/game-center.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
+import { isCheckinMallEvent, supplementCheckinMallCards } from './worker/checkin-mall-card.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
 import { isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken } from './worker/reward-only-cashier.mjs';
 import { checkRedeemOnlyAction, validateRedeemOperator } from './worker/redeem-only-cashier.mjs';
@@ -2544,6 +2545,15 @@ const LineOAChatModule = {
     };
   },
 
+  queueCheckinMallCards(events, env, ctx, forwardJob) {
+    if (env.CHECKIN_MALL_CARD_ENABLED !== 'true' || !events.some(isCheckinMallEvent)) return;
+    const snapshot = events.slice();
+    const job = forwardJob.then(result => supplementCheckinMallCards(snapshot, env, result, { read: (uid, config) => storeCommercePointService.read(uid, config) }))
+      .catch(() => console.error(JSON.stringify({ event: 'checkin_mall_background_failed' })));
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(job);
+    else return job;
+  },
+
   async handleWebhook(request, env, ctx) {
     let rawBody = await request.text();
     let signature = request.headers.get('x-line-signature') || '';
@@ -2574,6 +2584,8 @@ const LineOAChatModule = {
       signature = await signRemainingShopEvents(rawBody, this.text(env.LINE_CHANNEL_SECRET));
     }
     const forwardJob = this.forwardToSecondSystem(rawBody, signature, env);
+    // Does not consume this event/replyToken or retry the mother webhook.
+    await this.queueCheckinMallCards?.(events, env, ctx, forwardJob);
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(saveJob);
       ctx.waitUntil(followPointJob);
