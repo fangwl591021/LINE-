@@ -2,6 +2,7 @@
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {normalizeStore,normalizeProduct,readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
+import {manualOnlineReleaseOffer,manualReleaseConsent,verifySingleProductRelease} from './store-single-product-release.mjs';
 const PATH='/v1/store-shop/admin/catalog';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES=['store','店長','admin','總管','user','用戶'];
@@ -31,7 +32,7 @@ async function receipt(db,key,uid,payload){
   if(audit.actor_uid!==uid||audit.payload_json!==payload)fail('REQUEST_CONFLICT','送出編號已使用，請重新載入資料後再修改',409);
   return {success:true,id:audit.target_id,version:audit.new_version,replayed:true};
 }
-export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=fetch){
+export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=fetch,releaseVerifier=verifySingleProductRelease){
   const url=new URL(request.url);
   if(url.pathname!==PATH)return null;
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
@@ -52,16 +53,21 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
       const shop=await shopRow(db,shopId);
       const products=await rows(db,`SELECT ${PRODUCT_SELECT} FROM store_shop_products WHERE shop_id=? AND id>? AND (?='' OR status=?) ORDER BY id LIMIT 21`,[shop.id,after,status,status]);
       const summary=(await rows(db,"SELECT count(*) AS total,COALESCE(sum(status='active'),0) AS active,COALESCE(sum(status='draft'),0) AS draft FROM store_shop_products WHERE shop_id=?",[shop.id]))[0];
-      return reply({success:true,shop:publicShop(shop),online_product_allowed:UNLIMITED.includes(String(shop.owner_role).toLowerCase()),products:products.slice(0,20),next:products.length>20?products[19].id:'',summary});
+      const onlineAllowed=UNLIMITED.includes(String(shop.owner_role).toLowerCase());
+      return reply({success:true,shop:publicShop(shop),online_product_allowed:onlineAllowed,products:products.slice(0,20).map(p=>{
+        const offer=onlineAllowed?manualOnlineReleaseOffer(p,shop):null;
+        return offer?{...p,manual_online_release:offer}:p;
+      }),next:products.length>20?products[19].id:'',summary});
     }
     if(url.search)fail('INVALID_QUERY','儲存不可附加查詢條件');
     const data=await readJson(request);
-    if(Object.keys(data).some(key=>!['type','id','shop_id','version','shop_version','request_key','changes'].includes(key))||!['store','product'].includes(data.type)||!validId(data.id)||!validId(data.shop_id)||!validId(data.request_key))fail('INVALID_REQUEST','商城儲存資料不正確');
+    if(Object.keys(data).some(key=>!['type','id','shop_id','version','shop_version','request_key','changes','manual_release'].includes(key))||!['store','product'].includes(data.type)||!validId(data.id)||!validId(data.shop_id)||!validId(data.request_key))fail('INVALID_REQUEST','商城儲存資料不正確');
     if(!Number.isSafeInteger(data.version)||data.version<1||data.version>1e9||!Number.isSafeInteger(data.shop_version)||data.shop_version<1||data.shop_version>1e9)fail('INVALID_VERSION','請重新載入後再修改');
     const fields=data.type==='store'?STORE:PRODUCT,changes=data.changes;
     if(!changes||typeof changes!=='object'||Array.isArray(changes)||!Object.keys(changes).length||Object.keys(changes).some(key=>!fields.includes(key)))fail('INVALID_FIELD','僅能修改商城展示欄位，不得變更歸屬或點數規則');
     const sorted=Object.fromEntries(fields.filter(key=>Object.hasOwn(changes,key)).map(key=>[key,changes[key]]));
-    const payload=JSON.stringify({type:data.type,id:data.id,shop_id:data.shop_id,version:data.version,shop_version:data.shop_version,changes:sorted});
+    const release=Object.hasOwn(data,'manual_release')?manualReleaseConsent(data.manual_release):null;
+    const payload=JSON.stringify({type:data.type,id:data.id,shop_id:data.shop_id,version:data.version,shop_version:data.shop_version,changes:sorted,...(release?{manual_release:release}:{})});
     const shop=await shopRow(db,data.shop_id),prior=await receipt(db,data.request_key,uid,payload);
     if(prior)return reply(prior);
     const original=data.type==='store'?shop:(await rows(db,`SELECT ${PRODUCT_SELECT} FROM store_shop_products WHERE id=? AND shop_id=?`,[data.id,shop.id]))[0];
@@ -71,7 +77,8 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     const updated=Object.fromEntries(fields.map(key=>[key,normalized[key]]));
     const limited=!UNLIMITED.includes(String(shop.owner_role).toLowerCase());
     if(data.type==='product'&&limited&&((Object.hasOwn(changes,'purchase_mode')&&normalized.purchase_mode==='online')||(updated.status!=='archived'&&(normalized.purchase_mode!=='in_store'||original.redeem_type!=='none'))))fail('OWNER_LIMIT','一般會員商品限店內且不折抵，可封存後由店家整理',403);
-    await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
+    const releaseProof=release?await releaseVerifier({data,original,shop,db,fetcher}):null;
+    if(!release)await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
     const auditId=crypto.randomUUID(),now=new Date().toISOString();
     const table=data.type==='store'?'store_shop_stores':'store_shop_products';
     let gate=`t.id=? AND t.version=? AND EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(key=>'a.'+key+' IS ?').join(' AND ')})
@@ -82,6 +89,11 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
       if(limited&&updated.status!=='archived'){
         gate+=" AND NOT EXISTS(SELECT 1 FROM store_shop_products other WHERE other.shop_id=t.shop_id AND other.id!=t.id AND other.status!='archived')";
       }
+    }
+    if(releaseProof){
+      const pinned=[...PRODUCT,'redeem_type','redeem_value'];
+      gate+=` AND ${pinned.map(key=>'t.'+key+' IS ?').join(' AND ')} AND EXISTS(SELECT 1 FROM store_listing_reviews r WHERE r.scope=? AND r.content_hash=? AND r.policy_version=? AND r.decision='manual' AND r.review_json=?)`;
+      args.push(...pinned.map(key=>original[key]),releaseProof.scope,releaseProof.hash,releaseProof.policy,releaseProof.reviewJson);
     }
     // The INSERT selects the exact current snapshot. A unique, fresh audit ID gates
     // the UPDATE, so duplicate retries cannot apply a second write after owner edits.

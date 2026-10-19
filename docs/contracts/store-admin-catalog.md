@@ -12,6 +12,7 @@
 - 快照稽核 INSERT 與 version+1 UPDATE 同一原子 batch；沒有稽核或任一 SQL 失敗不得更新。
 - 修改後公開目錄依原有 active／角色規則顯示，手機管理讀到同一 version。不呼叫收銀或點數服務，不異動舊訂單快照。
 - UI 具返回入口、儲存確認、重試同一請求及重新載入；不快取 token、不自動發布、不載入其他 admin 分區。
+- 2026-10-19：GET 只對已核准的按摩機 version1／店家version6附加 `manual_online_release.reference` UI提示；POST 的 `manual_release={reference,confirmed:true}` 只可配合該商品單一 purchase_mode=online 變更。後端驗證固定快照、圖片bytes指紋、原政策 medical-only manual紀錄，寫入時再綁定同review JSON、商品快照／版本與原管理員／owner角色。既有audit payload另記核准原因／指紋／明確確認，不新增無紀錄資料更新或一般免審權限。成功後version2即不再提供，原審核紀錄不被修改。
 - 續作：GET admin/catalog?queue=draft&after=UUID 提供全站草稿，每頁 20 件；僅管理員、只含目前仍具商城資格的店家；回傳商品展示欄位及店名，不回傳會員身份或交易。不得與 shop/status 混用。
 - 管理員手機與後台共用全站草稿入口，開啟店家重新查閱最新草稿，不因點擊待確認便自動上架。
 - 編輯店家／商品圖片沿用既有 uploadImageToR2，先重新確認管理員與目標店家；限制 JPEG/PNG/WebP、10MB、4000 萬像素，等比縮至 1600px、輸出 4MB 以內。上傳不等於儲存，失敗不覆蓋原網址；不改既有點數或發布規則。
