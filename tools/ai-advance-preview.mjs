@@ -13,6 +13,7 @@ INSERT INTO users VALUES('demo-member','${uid}','示範會員','user');
 INSERT INTO card_contacts VALUES('demo-contact','陳怡君','好日子設計','專案經理','${uid}','','','ocr_scan','','');`);
 sql.exec(readFileSync(path.join(root,'migrations/0054_ai_advance_tasks.sql'),'utf8'));
 sql.exec(readFileSync(path.join(root,'migrations/0061_ai_advance_manual_reminders.sql'),'utf8'));
+sql.exec(readFileSync(path.join(root,'migrations/0065_ai_advance_reminder_batches.sql'),'utf8'));
 sql.exec(`ALTER TABLE card_contacts ADD COLUMN crm_status TEXT DEFAULT '新名片';
 ALTER TABLE card_contacts ADD COLUMN crm_next_action TEXT DEFAULT '首次聯繫';
 ALTER TABLE card_contacts ADD COLUMN crm_next_followup_at TEXT DEFAULT '';
@@ -38,7 +39,7 @@ const server=http.createServer(async(req,res)=>{
   try{
     if(url.pathname==='/__reset' && req.method==='POST'){
       // Only synthetic in-memory fixture data; this server never binds publicly or uses real credentials.
-      sql.exec('DELETE FROM ai_advance_events; DELETE FROM ai_advance_suggestions; DELETE FROM ai_advance_reminders; DELETE FROM ai_advance_preferences; DELETE FROM ai_advance_tasks;');res.writeHead(204);res.end();return;
+      sql.exec('DELETE FROM ai_advance_events; DELETE FROM ai_advance_suggestions; DELETE FROM ai_advance_reminders; DELETE FROM ai_advance_reminder_batches; DELETE FROM ai_advance_preferences; DELETE FROM ai_advance_tasks;');res.writeHead(204);res.end();return;
     }
     if(url.pathname==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(page);return;}
     if(allowed.has(url.pathname)){res.writeHead(200,{'Content-Type':allowed.get(url.pathname)+'; charset=utf-8'});res.end(readFileSync(path.join(root,url.pathname)));return;}

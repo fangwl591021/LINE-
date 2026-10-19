@@ -9,7 +9,8 @@
   const localDate = value => { const d = new Date(value); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); };
   const dayKey = value => new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit' }).format(new Date(value));
   let active;
-  function open() {
+  function open(initialTask='') {
+    if(typeof initialTask!=='string'||!(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(initialTask)))initialTask='';
     if (active) { active.focus(); return; }
     const opener = document.activeElement, overflow = document.body.style.overflow;
     const modal = document.createElement('dialog'); active = modal; modal.className = 'ai-advance-dialog'; modal.setAttribute('aria-labelledby','aa-title');
@@ -60,7 +61,7 @@
       frame('AI商務導航','dashboard');
       const today=dayKey(Date.now()), tasks=dashboard.tasks, pending=tasks.filter(t=>t.status==='pending');
       const counts={pending:pending.length,overdue:pending.filter(t=>Date.parse(t.due_at)<Date.now()).length,today:pending.filter(t=>dayKey(t.due_at)===today).length,completed:tasks.filter(t=>t.status==='completed').length};
-      body.innerHTML='<p class="aa-muted">提醒 → 執行 → 回報 → AI 下一步</p><div class="aa-tabs"></div><div class="aa-controls"><button type="button" class="aa-primary" data-new>＋ 建立任務</button><button type="button" data-refresh>重新整理</button><button type="button" data-crm>整理名片 CRM 待辦</button></div><p class="aa-muted">新收藏名片會建立首次 CRM 待辦；已有收藏請先預覽、勾選補建。完成或取消後不重複建立。</p><label><input type="checkbox" data-remind> 開啟 LINE 到期提醒</label><p class="aa-muted">預設關閉。需加入官方帳號好友、解除封鎖並允許 LINE 通知。到期後約 1–2 分鐘處理；手機顯示依 LINE／系統設定。與私訊通知分開。手動提醒僅發給自己，同任務同期限最多一次。</p><h3 data-list-title></h3><div class="aa-rows"></div>';
+      body.innerHTML='<p class="aa-muted">提醒 → 執行 → 回報 → AI 下一步</p><div class="aa-tabs"></div><div class="aa-controls"><button type="button" class="aa-primary" data-new>＋ 建立任務</button><button type="button" data-refresh>重新整理</button><button type="button" data-crm>整理名片 CRM 待辦</button></div><p class="aa-muted">新收藏名片會建立首次 CRM 待辦；已有收藏請先預覽、勾選補建。完成或取消後不重複建立。</p><label><input type="checkbox" data-remind> 開啟 LINE 到期提醒</label><p class="aa-muted">預設關閉。需加入官方帳號好友、解除封鎖並允許 LINE 通知。到期後約 2–3 分鐘彙整；多筆合併為一則多頁卡片；手機顯示依 LINE／系統設定。與私訊通知分開。手動提醒僅發給自己，同任務同期限最多一次。</p><h3 data-list-title></h3><div class="aa-rows"></div>';
       for(const [key,title]of Object.entries({pending:'待辦',overdue:'逾期',today:'今日到期',completed:'已完成'})){
         const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed',String(filter===key));button.innerHTML=`<strong>${counts[key]}</strong>${title}`;
         button.onclick=()=>{filter=key;showDashboard();};$('.aa-tabs').append(button);
@@ -76,7 +77,7 @@
         card.querySelectorAll('[data-report-action]').forEach(button=>button.onclick=()=>work(()=>loadTask(task.id,button.dataset.reportAction)));
         const push=card.querySelector('[data-push]');if(push)push.onclick=()=>{
           if(!dashboard.notifications){note('請先開啟 LINE 到期提醒；提醒只發給您本人。');return;}
-          if(!window.confirm('將這筆任務提醒發給您本人（不是名片聯絡人）？同任務同期限最多一次。'))return;
+          if(!window.confirm('將這筆任務提醒發給您本人（不是名片聯絡人）？其他已到期待辦會合併為同一則多頁卡片；同任務同期限最多一次。'))return;
           work(async()=>{const result=await api('/tasks/'+task.id+'/remind',{revision:task.revision});await loadDashboard();note(reminderLabels[result.reminder.status]+'；可按重新整理查看。手機是否顯示取決於 LINE 與通知設定。');});
         };
         $('.aa-rows').append(card);
@@ -145,16 +146,22 @@
     const stopVideo=()=>modal.querySelectorAll('video').forEach(v=>v.pause());
     document.addEventListener('visibilitychange',hideVideo);window.addEventListener('pagehide',stopVideo);
     modal.addEventListener('close',()=>{document.removeEventListener('visibilitychange',hideVideo);window.removeEventListener('pagehide',stopVideo);},{once:true});
-    frame('AI商務導航','dashboard');body.innerHTML='<p class="aa-muted">正在載入待辦任務…</p><button type="button" data-initial-retry>重新載入</button>';$('[data-initial-retry]').onclick=()=>work(loadDashboard);work(loadDashboard);
+    async function initialLoad(){
+      await loadDashboard();
+      if(initialTask){try{await loadTask(initialTask);initialTask='';}catch(error){note('無法開啟該任務：'+error.message);}}
+    }
+    frame('AI商務導航','dashboard');body.innerHTML='<p class="aa-muted">正在載入待辦任務…</p><button type="button" data-initial-retry>重新載入</button>';$('[data-initial-retry]').onclick=()=>work(initialLoad);work(initialLoad);
   }
   window.openAiAdvanceGuide=()=>window.openTutorialCenter?.('ai-advance');
-  window.openAiAdvance=()=>open();
+  window.openAiAdvance=(taskId='')=>open(taskId);
   // Notification deep links wait for the already existing LINE login; no competing auth flow.
   const query=new URLSearchParams(location.search), nested=new URLSearchParams((query.get('liff.state')||'').replace(/^\?/,''));
-  const allowed=new Set(['aiAdvance','liff.state','liffClientId','liffRedirectUri','code','state','error','error_description','liff.referrer']);
-  const pure=[...query.keys(),...nested.keys()].every(key=>allowed.has(key)) && query.getAll('aiAdvance').length<=1 && nested.getAll('aiAdvance').length<=1;
+  const allowed=new Set(['aiAdvance','aiAdvanceTask','liff.state','liffClientId','liffRedirectUri','code','state','error','error_description','liff.referrer']);
+  const taskValues=[...query.getAll('aiAdvanceTask'),...nested.getAll('aiAdvanceTask')],targetTask=taskValues[0]||'';
+  const pure=[...query.keys(),...nested.keys()].every(key=>allowed.has(key)) && query.getAll('aiAdvance').length<=1 && nested.getAll('aiAdvance').length<=1
+    && taskValues.length<=1 && (!taskValues.length||/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(targetTask));
   if(pure&&(query.get('aiAdvance')==='1'||nested.get('aiAdvance')==='1')){
-    let attempts=0;const timer=setInterval(()=>{attempts++;if(window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()){clearInterval(timer);open();}else if(attempts>=120)clearInterval(timer);},500);
+    let attempts=0;const timer=setInterval(()=>{attempts++;if(window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()){clearInterval(timer);open(targetTask);}else if(attempts>=120)clearInterval(timer);},500);
     window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
   }
 })();

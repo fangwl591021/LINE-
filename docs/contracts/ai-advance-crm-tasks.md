@@ -1,5 +1,13 @@
 # VEO 待辦任務移植契約
 
+## 2026-10-19 節省通知則數
+
+- 自動到期提醒約 2 分鐘彙整，同一 member_id＋LINE 帳號的所有本批待提醒任務一次 push，一個 Flex：單筆 bubble、2–12 筆 carousel；超過 12 筆以 11 任務頁＋剩餘摘要／查看全部，摘要內任務也綁本批，不另逐筆發。
+- 每頁顯示序號、期限、登入後查看該任務；不送名片／任務私人文字。aiAdvanceTask UUID 僅為唯讀選頁，後端仍驗本人；不自動回報／聯絡／扣點。
+- 每會員一個持久 pending 批次；成員、payload、收件人與 LINE retry key 凍結，同鍵重試不加新任務。LINE 接受後原子標記整批，不因本地儲存失敗另換 key。
+- 舊已嘗試送出的單筆保留原 key／payload。發送前重新查核偏好、期限、任務狀態與身份。未曾嘗試的批次可釋放仍有效成員重新合併；可能已送出的批次失效則停止，不重新包裝未知成員。
+- 只改 AI 推進提醒，不修改原通知偏好、母站回覆、掃描／OCR 通知或其他推播；原 task＋due_at 唯一與手動每日 10 筆上限保留。
+
 - 來源僅唯讀參考 VEO `src/personal-calendar.js` 的 ensureContactFirstTask、`src/ai-card-crm.js` 及 `public/app.js` taskCardMarkup。不得搬入 VEO 的會員、名片或任務資料。
 - LINE- 沿用 ai_advance_tasks/events 作唯一任務來源；不另建任務池、不更動既有行事曆。
 - 新收藏名片成功儲存後，以原 SecurityModule 的已驗證登入 actor 與模組內 Symbol 標記（不接受 body 自稱 authenticatedUserId）及有效收藏範圍建立一筆首次 CRM 待辦。只讀儲存的 CRM 下一步與建議，不增加 AI 呼叫，不猜聯絡資料或會員身分；本人、封存、合併、其他人收藏及已結束 CRM 不建立。寫入交易再確認名片收藏範圍與 CRM 狀態。
