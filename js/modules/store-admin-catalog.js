@@ -94,8 +94,9 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
     const save=make('button','確認儲存'),cancel=make('button','取消／返回商品列表');save.type='submit';cancel.type='button';
     cancel.onclick=()=>{if(active()&&!busy&&safeLeave()){mode='products';void load();}};form.append(save,cancel);body.append(form);
     let pending=null,finished=false;
-    form.oninput=()=>{dirty=true;};
-    const lock=()=>{lockNavigation();for(const input of Object.values(fields))input.disabled=busy||!!pending||finished;if(manualConfirmation)manualConfirmation.disabled=busy||!!pending||finished;if(imageFile)imageFile.disabled=busy||!!pending||finished;cancel.disabled=busy;save.disabled=busy||finished;save.textContent=pending&&!finished?'重新確認同一筆儲存':'確認儲存';};
+    const saveLabel=()=>manualConfirmation?.checked?'確認人工放行網購':'確認儲存';
+    form.oninput=()=>{dirty=true;if(!pending&&!finished)save.textContent=saveLabel();};
+    const lock=()=>{lockNavigation();for(const input of Object.values(fields))input.disabled=busy||!!pending||finished;if(manualConfirmation)manualConfirmation.disabled=busy||!!pending||finished;if(imageFile)imageFile.disabled=busy||!!pending||finished;cancel.disabled=busy;save.disabled=busy||finished;save.textContent=pending&&!finished?'重新確認同一筆儲存':saveLabel();};
     form.onsubmit=async event=>{
       event.preventDefault();event.stopPropagation();if(!active()||busy||finished)return;
       if(!pending){
@@ -106,7 +107,9 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
         }
         const manual=manualConfirmation?.checked===true;
         if(manual&&(changes.purchase_mode!=='online'||Object.entries(changes).some(([key,value])=>key!=='purchase_mode'&&value!==(record[key]??'')))){message.textContent='單品人工放行只能切換網購，請還原其他欄位修改，價格、文案、圖片與狀態必須保持原值。';return;}
-        if(!ask(`確定儲存「${record.name||record.title}」？狀態：${statusName(changes.status)}。${changes.purchase_mode?'銷售方式：'+(changes.purchase_mode==='online'?'網購':'限店內')+'。':''}${manual?'依已獲同意的單品例外人工放行，保留操作者、原AI紀錄及稽核；不適用其他商品或之後修改。':''}將同步影響手機商城顯示。`))return;
+        // The pinned exception has its own explicit checkbox + named submit action.
+        // Avoid a second native modal, which can deadlock Chrome/LINE automation.
+        if(!manual&&!ask(`確定儲存「${record.name||record.title}」？狀態：${statusName(changes.status)}。${changes.purchase_mode?'銷售方式：'+(changes.purchase_mode==='online'?'網購':'限店內')+'。':''}將同步影響手機商城顯示。`))return;
         pending={type,id:record.id,shop_id:shop.id,version:record.version,shop_version:shop.version,request_key:crypto.randomUUID(),changes:manual?{purchase_mode:'online'}:changes,...(manual?{manual_release:{reference:record.manual_online_release.reference,confirmed:true}}:{})};dirty=true;
       }
       const requestEpoch=epoch;busy=true;lock();message.textContent=pending.manual_release?'核對本商品人工同意、內容指紋與原審核紀錄中…':(pending.changes.status||record.status)==='active'?'AI 上架審核中…通過後才儲存公開。':'儲存中…';
