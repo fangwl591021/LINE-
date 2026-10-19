@@ -17,6 +17,7 @@ async()=>{
  check(document.querySelector('[name=name]').value==='自動測試收件人','lost recipient');
  document.querySelector('form').requestSubmit();await until(()=>document.querySelector('[data-commerce=place]'));
  const original=window.fetch;
+ document.querySelector('[name=confirm_order]').checked=true;
  try{
   window.fetch=async(url,options)=>{const response=await original(url,options);if(String(url).endsWith('/v1/store-commerce/orders')&&options?.method==='POST')throw Error('TEST_RESPONSE_LOST');return response;};
   document.querySelector('[data-commerce=place]').click();await until(()=>document.querySelector('.commerce-error').textContent.includes('TEST_RESPONSE_LOST'));

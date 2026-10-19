@@ -1,0 +1,21 @@
+/* Online checkout only. Does not style QR cashier or other pages. */
+.store-shop .commerce-panel{max-width:720px;margin:16px auto;min-width:0}
+.store-shop[data-shop-view=commerce]>.shop-safety-note{display:none}
+.store-shop .commerce-panel fieldset{border:0;padding:0;margin:0;min-width:0}
+.store-shop .commerce-panel legend{font-size:14px;color:#506960}
+.store-shop .commerce-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0;list-style:none;font-size:13px;line-height:1.5}
+.store-shop .commerce-steps li{padding:10px;background:#edf3f0;border-radius:10px;color:#506960}
+.store-shop .commerce-steps [aria-current=step]{background:#d5f3e6;color:#006b48;font-weight:700}
+.store-shop .commerce-stage{padding:22px 0;border-bottom:1px solid #dce5e0;scroll-margin-top:120px}
+.store-shop .commerce-stage h3{font-size:19px;margin-bottom:14px}
+.store-shop .commerce-product{padding:12px 0;border-bottom:1px solid #edf3f0}
+.store-shop .commerce-product strong{display:block;font-size:20px;overflow-wrap:anywhere}
+.store-shop .commerce-product p{margin:6px 0;color:#506960;font-size:14px}
+.store-shop .commerce-product input{max-width:140px}
+.store-shop .commerce-check{display:flex;gap:10px;align-items:flex-start;line-height:1.6}
+.store-shop .commerce-check input{width:22px;min-height:22px;flex:0 0 22px;margin:0;accent-color:#008260}
+.store-shop .commerce-panel [data-commerce-form=quote]>.primary,.store-shop .commerce-panel [data-commerce=place]{display:flex;width:100%;margin:20px 0 12px;white-space:normal}
+.store-shop .commerce-panel [data-checkout-review]{scroll-margin-top:120px}
+.store-shop .commerce-panel [data-checkout-fields]:disabled{opacity:.75}
+.store-shop .commerce-panel [hidden]{display:none!important}
+@media(min-width:600px){.store-shop .commerce-steps{grid-template-columns:repeat(4,minmax(0,1fr))}}
