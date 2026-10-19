@@ -67,18 +67,20 @@ async function quote(db,user,input,env,pointService) {
   if(input.points_used&&!commercePointsEnabled(env,pointService))fail('線上點數折抵尚未完成開放，本次不會扣點');
   const shop=await q(db,`SELECT s.* FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管'))`,input.shop_id).first();
   if(!shop)fail('店家尚未開放',404);const config=await settings(db,shop.id);if(!config?.enabled)fail('店家尚未開放線上匯款下單',409);
-  const products=(await q(db,`SELECT id,title,price_cents,version,redeem_type,redeem_value FROM store_shop_products WHERE shop_id=? AND status='active' AND purchase_mode='online' AND id IN (${input.items.map(()=>'?').join(',')})`,shop.id,...input.items.map(i=>i.id)).all()).results;
+  const products=(await q(db,`SELECT id,title,price_cents,version,redeem_type,redeem_value,shipping_fee_cents FROM store_shop_products WHERE shop_id=? AND status='active' AND purchase_mode='online' AND id IN (${input.items.map(()=>'?').join(',')})`,shop.id,...input.items.map(i=>i.id)).all()).results;
   if(products.length!==input.items.length)fail('商品限店內、已下架或不屬於此店，請重新選購',409);
   const items=input.items.map(item=>{const product=products.find(p=>p.id===item.id),unit=Math.floor(product.price_cents/100);
     const max=product.redeem_type==='full'?unit:product.redeem_type==='fixed'?Math.min(unit,product.redeem_value):product.redeem_type==='percent'?Math.min(unit,Math.floor(product.price_cents*product.redeem_value/10000)):0;
-    return {...product,quantity:item.quantity,line_total_cents:product.price_cents*item.quantity,max_points:max*item.quantity};});
-  const subtotal=items.reduce((sum,i)=>sum+i.line_total_cents,0),fee=config.free_shipping_cents>0&&subtotal>=config.free_shipping_cents?0:config.shipping_fee_cents;
+    return {...product,quantity:item.quantity,line_total_cents:product.price_cents*item.quantity,max_points:max*item.quantity,line_shipping_fee_cents:product.shipping_fee_cents==null?null:integer(product.shipping_fee_cents,1000000,'商品運費')*item.quantity};});
+  const subtotal=items.reduce((sum,i)=>sum+i.line_total_cents,0);
+  const legacyFee=items.some(i=>i.shipping_fee_cents==null)?(config.free_shipping_cents>0&&subtotal>=config.free_shipping_cents?0:config.shipping_fee_cents):0;
+  const fee=legacyFee+items.reduce((sum,i)=>sum+(i.line_shipping_fee_cents??0),0);
   integer(subtotal+fee,100000000,'訂單金額',1);
   const maxPoints=items.reduce((sum,i)=>sum+i.max_points,0);
   if(input.points_used>maxPoints)fail('折抵點數超過商品上限，運費不可折抵');
   const wallet=input.points_used?await commerceWallet(pointService,user.line_id,env):null;
   if(wallet&&input.points_used>wallet.balance)fail('購物金不足，請減少折抵點數');
-  const snapshot={shop_id:shop.id,shop_name:shop.name,shop_version:shop.version,settings_version:config.version,buyer_name:input.buyer.name,buyer:input.buyer,items,customer:input.customer,payment_method:'REMITTANCE',points_used:input.points_used,max_points:maxPoints,discount_cents:input.points_used*100,subtotal_cents:subtotal,shipping_fee_cents:fee,total_cents:subtotal+fee-input.points_used*100,bank:{name:config.bank_name,code:config.bank_code,account:config.bank_account,holder:config.bank_holder}};
+  const snapshot={shop_id:shop.id,shop_name:shop.name,shop_version:shop.version,settings_version:config.version,buyer_name:input.buyer.name,buyer:input.buyer,items,customer:input.customer,payment_method:'REMITTANCE',points_used:input.points_used,max_points:maxPoints,discount_cents:input.points_used*100,subtotal_cents:subtotal,shipping_fee_cents:fee,legacy_shipping_fee_cents:legacyFee,total_cents:subtotal+fee-input.points_used*100,bank:{name:config.bank_name,code:config.bank_code,account:config.bank_account,holder:config.bank_holder}};
   return {snapshot,wallet,merchant_uid:shop.owner_uid,quote_hash:await hash({buyer:user.line_id,pointIdentity:wallet?.identity||'',snapshot})};
 }
 function publicOrder(row) {const {buyer_uid,request_hash,request_key,...order}=row;const snapshot=JSON.parse(order.snapshot_json);delete order.snapshot_json;return {...order,snapshot};}

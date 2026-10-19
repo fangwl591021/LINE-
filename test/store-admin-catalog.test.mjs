@@ -41,7 +41,7 @@ test('actual entry routes catalog behind verification and rejects unsupported me
 function fixture(){
   const sql=new DatabaseSync(':memory:');
   sql.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '',points INTEGER DEFAULT 500); CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);");
-  for(const name of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0045_store_catalog_admin_audit.sql'])sql.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+  for(const name of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0045_store_catalog_admin_audit.sql'])sql.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
   for(const [user,role]of [[ADMIN,'admin'],[OWNER,'store'],[MEMBER,'user']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(user,user,role,user===ADMIN?'方萬隆':'合成會員');
   for(const [n,owner]of [[1,OWNER],[2,MEMBER]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','now')").run(id(n),owner,'店家'+n);
   for(const [n,shop]of [[10,1],[11,2]])sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key,category) VALUES(?,?,'原商品',100,'now',?,'食')").run(id(n),id(shop),id(n));

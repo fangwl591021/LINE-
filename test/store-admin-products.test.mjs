@@ -11,7 +11,7 @@ const product=(extra={})=>({shop_id:id(1),shop_version:1,request_key:id(99),titl
 function fixture(){
   const sql=new DatabaseSync(':memory:');
   sql.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '',points INTEGER DEFAULT 500); CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);");
-  for(const name of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0040_store_admin_product_audit.sql'])sql.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+  for(const name of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0040_store_admin_product_audit.sql'])sql.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
   for(const [user,role]of [[ADMIN,'admin'],[OWNER,'store'],[MEMBER,'user'],[REWARD,'reward']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(user,user,role,user===ADMIN?'方萬隆':'會員'+role);
   for(const [n,owner]of [[1,OWNER],[2,MEMBER],[3,REWARD],[4,uid(9)]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','2026-09-19')").run(id(n),owner,'店家'+n);
   let beforeBatch=null,failAudit=false;

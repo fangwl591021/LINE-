@@ -13,7 +13,7 @@ const read=file=>readFileSync(new URL('../'+file,import.meta.url),'utf8');
 const id=handle=>handle.slice(8).replace(/^(........)(....)(....)(....)(............)$/,'$1-$2-$3-$4-$5');
 function fixture(){
  const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);');
- for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql']){
+ for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql']){
    sql.exec(read('migrations/'+file));
  }
  return {sql,db:{prepare(query){let args=[];return {bind(...values){args=values;return this;},async all(){return {success:true,results:sql.prepare(query).all(...args)};},async first(){return sql.prepare(query).get(...args)||null;}};},async batch(statements){return Promise.all(statements.map(s=>s.all()));}}};

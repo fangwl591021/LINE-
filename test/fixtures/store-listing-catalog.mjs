@@ -10,7 +10,7 @@ export const SHOP='11111111-1111-4111-8111-111111111111',PRODUCT='22222222-1111-
 export function createListingFixture({existing=false}={}){
   const sql=new DatabaseSync(':memory:');
   sql.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '',points INTEGER DEFAULT 500); CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);");
-  for(const file of ['0019_point_redemption_partner_directory.sql','0020_partner_card_onboarding.sql','0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0040_store_admin_product_audit.sql','0045_store_catalog_admin_audit.sql'])sql.exec(readFileSync(new URL('../../migrations/'+file,import.meta.url),'utf8'));
+  for(const file of ['0019_point_redemption_partner_directory.sql','0020_partner_card_onboarding.sql','0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0040_store_admin_product_audit.sql','0045_store_catalog_admin_audit.sql'])sql.exec(readFileSync(new URL('../../migrations/'+file,import.meta.url),'utf8'));
   for(const [uid,role,name]of [[OWNER,'store','合成店主'],[ADMIN,'admin','方萬隆']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(uid,uid,role,name);
   if(existing){
     sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,description,status,updated_at) VALUES(?,?,'原咖啡店','原有合法介紹','active','now')").run(SHOP,OWNER);

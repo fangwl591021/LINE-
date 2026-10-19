@@ -8,7 +8,7 @@ import {handleStoreShop} from '../../worker/store-shop.mjs';
 import {industryCorrection} from '../../tools/prepare-aiwe-industry-correction.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE users(line_id TEXT,role TEXT);');
-for(const name of ['0019_point_redemption_partner_directory.sql','0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql'])sql.exec(await readFile(resolve(root,'migrations',name),'utf8'));
+for(const name of ['0019_point_redemption_partner_directory.sql','0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql'])sql.exec(await readFile(resolve(root,'migrations',name),'utf8'));
 sql.exec(await readFile(resolve(root,'.wrangler/partner-import-20260919/import.sql'),'utf8'));
 sql.exec(industryCorrection(JSON.parse(await readFile(resolve(root,'.wrangler/partner-import-20260919/reviewed.json'),'utf8')).approved).sql);
 const db={prepare(query){let values=[];return {bind(...args){values=args;return this;},async first(){return sql.prepare(query).get(...values)||null;},async all(){return {results:sql.prepare(query).all(...values)};}};}};

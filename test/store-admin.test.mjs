@@ -30,6 +30,7 @@ function fixture(options = {}) {
     CREATE UNIQUE INDEX new_identity ON user_identity_links(new_line_id) WHERE new_line_id!='';`);
   sql.exec(readFileSync(new URL('../migrations/0029_store_shop_catalog.sql', import.meta.url), 'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0035_store_product_purchase_mode.sql', import.meta.url), 'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0064_store_product_shipping.sql',import.meta.url),'utf8'));
   const queries = [], calls = [], sessions = [], mapped = [];
   function user(uid, values = {}) {
     const data = { row_id: uid, line_id: uid, ...values }, keys = Object.keys(data);

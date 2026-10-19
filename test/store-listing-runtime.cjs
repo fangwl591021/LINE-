@@ -8,7 +8,7 @@ const {buildSync}=require(process.env.LISTING_ESBUILD_MODULE);
  try{
   const db=await mf.getD1Database('ACTMASTER_DB');
   await db.exec("CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);");await db.prepare('INSERT INTO users VALUES(?,?)').bind('U'+'a'.repeat(32),'store').run();
-  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0058_store_listing_reviews.sql'])for(const stmt of readFileSync('migrations/'+file,'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean))await db.exec(stmt.replace(/\s+/g,' ')+';');
+  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0058_store_listing_reviews.sql'])for(const stmt of readFileSync('migrations/'+file,'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean))await db.exec(stmt.replace(/\s+/g,' ')+';');
   const call=async(data,mode='allow')=>{const r=await mf.dispatchFetch('https://app.com/v1/store-shop/store',{method:'POST',headers:{Authorization:'Bearer synthetic','Content-Type':'application/json','X-Fixture-Mode':mode},body:JSON.stringify(data)});return {http:r.status,...await r.json()};};
   const input={name:'Runtime 咖啡店',description:'咖啡',status:'active',version:0,image_url:'https://img.example.com/card.png'};
   const passed=await call(input);assert.equal(passed.http,200,JSON.stringify(passed));assert.equal(passed.shop.version,1);

@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {handleStoreShop} from '../worker/store-shop.mjs';
 function fixture(){
   const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON;CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);');
-  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
   for(const [id,role,status] of [['service','store','active'],['retail','admin','active'],['normal','user','active'],['hidden','store','draft'],['ineligible','tenant','active']]){
     sql.prepare('INSERT INTO users VALUES(?,?)').run('private-owner-'+id,role);
     sql.prepare('INSERT INTO store_shop_stores(id,owner_uid,name,category,address,status,updated_at) VALUES(?,?,?,?,?,?,?)').run(id,'private-owner-'+id,id==='service'?'數位服務公司':id,'服務','公開地址',status,'2026-10-11');
@@ -42,7 +42,7 @@ test('public allowlist, hidden shops/products/owners, late removal and zero writ
     f.put('visible');f.put('draft','service',{status:'draft'});f.put('archived','service',{status:'archived'});f.put('hidden','hidden');f.put('ineligible','ineligible');
     const before=f.sql.prepare('SELECT total_changes() n').get().n;
     const result=await f.call();assert.deepEqual(result.products.map(p=>p.id),['visible']);
-    assert.deepEqual(Object.keys(result.products[0]).sort(),['id','shop_id','title','description','image_url','price_cents','redeem_type','redeem_value','category','purchase_mode','version','updated_at','shop'].sort());
+    assert.deepEqual(Object.keys(result.products[0]).sort(),['id','shop_id','title','description','image_url','price_cents','redeem_type','redeem_value','category','purchase_mode','shipping_fee_cents','version','updated_at','shop'].sort());
     assert.deepEqual(Object.keys(result.products[0].shop).sort(),['id','name','category','address','merchant_enabled'].sort());
     assert(!JSON.stringify(result).includes('private-'));
     for(const id of ['draft','archived','hidden','ineligible','missing'])assert.equal((await f.call('?id='+id)).status,404);

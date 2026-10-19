@@ -1,6 +1,6 @@
 // Shared admin/mobile catalog editing. No identity, payment, reward or order mutations.
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
-import {normalizeStore,normalizeProduct,readJson,ShopError} from './store-shop.mjs';
+import {normalizeStore,normalizeProduct,isShippingOnlyUpdate,readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 import {manualOnlineReleaseOffer,manualReleaseConsent,verifySingleProductRelease} from './store-single-product-release.mjs';
 const PATH='/v1/store-shop/admin/catalog';
@@ -8,9 +8,9 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES=['store','店長','admin','總管','user','用戶'];
 const UNLIMITED=['store','店長','admin','總管'];
 const STORE=['name','description','category','address','phone','hours','image_url','status'];
-const PRODUCT=['title','description','category','image_url','price_cents','status','purchase_mode'];
+const PRODUCT=['title','description','category','image_url','price_cents','status','purchase_mode','shipping_fee_cents'];
 const ACTOR=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
-const PRODUCT_SELECT='id,shop_id,title,description,category,image_url,price_cents,status,version,purchase_mode,redeem_type,redeem_value,updated_at';
+const PRODUCT_SELECT='id,shop_id,title,description,category,image_url,price_cents,status,version,purchase_mode,redeem_type,redeem_value,shipping_fee_cents,updated_at';
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers});
 const fail=(code,message,status=400)=>{throw new DirectoryError(code,message,status);};
@@ -78,7 +78,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     const limited=!UNLIMITED.includes(String(shop.owner_role).toLowerCase());
     if(data.type==='product'&&limited&&((Object.hasOwn(changes,'purchase_mode')&&normalized.purchase_mode==='online')||(updated.status!=='archived'&&(normalized.purchase_mode!=='in_store'||original.redeem_type!=='none'))))fail('OWNER_LIMIT','一般會員商品限店內且不折抵，可封存後由店家整理',403);
     const releaseProof=release?await releaseVerifier({data,original,shop,db,fetcher}):null;
-    if(!release)await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
+    if(!release&&!(data.type==='product'&&isShippingOnlyUpdate(normalized,original)))await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
     const auditId=crypto.randomUUID(),now=new Date().toISOString();
     const table=data.type==='store'?'store_shop_stores':'store_shop_products';
     let gate=`t.id=? AND t.version=? AND EXISTS(SELECT 1 FROM users a WHERE ${ACTOR.map(key=>'a.'+key+' IS ?').join(' AND ')})

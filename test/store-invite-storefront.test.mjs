@@ -33,8 +33,8 @@ function setup({standalone=true,section='',selected=shopId,products=true,status=
  const context={window,document,location,fetch,URL,URLSearchParams,AbortSignal,crypto,navigator:{clipboard:{writeText:async value=>copies.push(value)}},setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},console};
  vm.runInNewContext(routeSource,context);
  // Isolate only the lazy checkout module boundary; execute the actual storefront event routing.
- assert.ok(source.includes("await import('./store-commerce.js?v=6')"));
- vm.runInNewContext(source.replace("await import('./store-commerce.js?v=6')",'await window.__testLoadCommerce()'),context);
+ assert.ok(source.includes("await import('./store-commerce.js?v=7')"));
+ vm.runInNewContext(source.replace("await import('./store-commerce.js?v=7')",'await window.__testLoadCommerce()'),context);
  const mount=(extraProduct='',extraQr='',extraMember='')=>window.StoreShop.mount(root,standalone,extraProduct,extraQr,extraMember,section,selected);
  const click=async(action,data={})=>{const button=node();button.dataset={do:action,...data};button.closest=()=>button;root.onclick({target:{closest:()=>button}});await flush();};
  return {window,context,root,content:root.querySelector('.shop-content'),alert:root.querySelector('[role=alert]'),calls,redirects,copies,shares,commerce,shop,mount,click};

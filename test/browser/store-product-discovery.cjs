@@ -5,7 +5,7 @@ const {chromium}=require('playwright');
 async function main(){
   const {handleStoreShop}=await import('../../worker/store-shop.mjs');
   const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON;CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);');
-  for(const f of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql'])sql.exec(readFileSync(path.resolve('migrations',f),'utf8'));
+  for(const f of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql'])sql.exec(readFileSync(path.resolve('migrations',f),'utf8'));
   const shopId='11111111-1111-4111-8111-111111111111';sql.prepare('INSERT INTO users VALUES(?,?)').run('test-owner','store');
   sql.prepare('INSERT INTO store_shop_stores(id,owner_uid,name,category,status,updated_at) VALUES(?,?,?,?,?,?)').run(shopId,'test-owner','合成數位服務公司','服務','active','2026-10-11');
   const put=(id,title,category='購',mode='in_store',redeem='percent')=>sql.prepare('INSERT INTO store_shop_products(id,shop_id,title,description,category,purchase_mode,redeem_type,redeem_value,price_cents,status,updated_at,request_key) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id,shopId,title,'合成展示資料，沒有真實交易',category,mode,redeem,redeem==='percent'?50:0,1180000,'active','2026-10-11','fixture-'+id);
