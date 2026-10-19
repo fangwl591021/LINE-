@@ -37,7 +37,11 @@ export function normalizeProduct(data) {
   const value=integer(data.redeem_value,type==='percent'?100:1000000,'折抵上限');
   if(['none','full'].includes(type)&&value!==0) fail('不折抵或全額折抵的數值須為 0');
   if(['fixed','percent'].includes(type)&&value===0) fail('折抵上限必須大於 0');
-  return {title:field(data,'title',100,true),description:field(data,'description',3000),image_url:imageUrl(data),price_cents:integer(data.price_cents,100000000,'價格'),redeem_type:type,redeem_value:value,status:choice(data.status,['draft','active','archived'],'商品狀態'),category:choice(data.category ?? '',categories,'商品分類'),purchase_mode:choice(data.purchase_mode===undefined?'in_store':data.purchase_mode,['in_store','online'],'銷售方式')};
+  return {title:field(data,'title',100,true),description:field(data,'description',3000),image_url:imageUrl(data),price_cents:integer(data.price_cents,100000000,'價格'),redeem_type:type,redeem_value:value,status:choice(data.status,['draft','active','archived'],'商品狀態'),category:choice(data.category ?? '',categories,'商品分類'),purchase_mode:choice(data.purchase_mode===undefined?'in_store':data.purchase_mode,['in_store','online'],'銷售方式'),shipping_fee_cents:data.shipping_fee_cents==null?null:integer(data.shipping_fee_cents,1000000,'單件運費')};
+}
+// Numeric delivery metadata only: never publish, change content or bypass review.
+export function isShippingOnlyUpdate(value,previous){
+  return !!previous&&previous.status!=='archived'&&value.shipping_fee_cents!==(previous.shipping_fee_cents??null)&&Object.entries(value).every(([key,v])=>key==='shipping_fee_cents'||v===previous[key]);
 }
 export async function readJson(request,maxBytes=16000) {
   const reader=request.body?.getReader(); if(!reader) fail('缺少資料');
@@ -69,7 +73,7 @@ async function actor(request,db,fetcher) {
 const own=(db,uid)=>db.prepare('SELECT * FROM store_shop_stores WHERE owner_uid=?').bind(uid).first();
 async function productPage(db,id,privateView,after='') {
   if(after.length>80)fail('商品分頁格式不正確');
-  const rows=(await db.prepare(`SELECT id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,version,updated_at FROM store_shop_products WHERE shop_id=? AND status ${privateView?"!= 'archived'":"= 'active'"} AND id>? ORDER BY id LIMIT 101`).bind(id,after).all()).results;
+  const rows=(await db.prepare(`SELECT id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,shipping_fee_cents,version,updated_at FROM store_shop_products WHERE shop_id=? AND status ${privateView?"!= 'archived'":"= 'active'"} AND id>? ORDER BY id LIMIT 101`).bind(id,after).all()).results;
   return {products:rows.slice(0,100),product_next:rows.length>100?rows[99].id:''};
 }
 async function management(db,shop,limit,after='') {
@@ -158,6 +162,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       if(data.purchase_mode===undefined)data.purchase_mode=previous?.purchase_mode ?? 'in_store';
     }
     const value=normalizeProduct(data);
+    if(id&&data.shipping_fee_cents===undefined)value.shipping_fee_cents=previous.shipping_fee_cents??null;
     if(limit!==null&&value.status!=='archived'&&(value.purchase_mode!=='in_store'||value.redeem_type!=='none'))fail('一般會員商品目前限店內展示，不開放網購收款或點數折抵');
     const key=id?'':field(data,'request_key',80,true);
     if(!id&&!/^[0-9a-f-]{36}$/i.test(key))fail('請重新開啟新增商品表單');
@@ -172,13 +177,13 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       const other=await db.prepare("SELECT count(*) AS total FROM store_shop_products WHERE shop_id=? AND id!=? AND status!='archived'").bind(shop.id,id).first();
       if(other.total)fail(id?'商品超過一件名額；請先封存多餘商品後重試':'非店長最多一件商品（含草稿）；請先封存原商品再新增，店長與管理員不限',id?409:400);
     }
-    await requireListingReview({value,parent:shop,scope:'product:'+shop.id+':'+(id||key),uid,env,fetcher});
+    if(!isShippingOnlyUpdate(value,previous))await requireListingReview({value,parent:shop,scope:'product:'+shop.id+':'+(id||key),uid,env,fetcher});
     if(id) {
       const version=integer(data.version,1000000000,'版本');
-      const result=await db.prepare(`UPDATE store_shop_products SET title=?,description=?,image_url=?,price_cents=?,redeem_type=?,redeem_value=?,status=?,category=?,purchase_mode=?,updated_at=?,version=version+1 WHERE id=? AND shop_id=? AND version=? AND status!='archived' AND (?='archived' OR ${capacity})`).bind(...Object.values(value),now,id,shop.id,version,value.status,uid,shop.id,id).run();
+      const result=await db.prepare(`UPDATE store_shop_products SET title=?,description=?,image_url=?,price_cents=?,redeem_type=?,redeem_value=?,status=?,category=?,purchase_mode=?,shipping_fee_cents=?,updated_at=?,version=version+1 WHERE id=? AND shop_id=? AND version=? AND status!='archived' AND (?='archived' OR ${capacity})`).bind(...Object.values(value),now,id,shop.id,version,value.status,uid,shop.id,id).run();
       if(!result.meta.changes) fail('商品不存在、已更新、無權修改或超過一件名額；請先封存多餘商品後重試',409);
     } else {
-      const result=await db.prepare(`INSERT INTO store_shop_products (id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,updated_at,request_key) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${capacity} ON CONFLICT(shop_id,request_key) DO NOTHING`).bind(crypto.randomUUID(),shop.id,...Object.values(value),now,key,uid,shop.id,'').run();
+      const result=await db.prepare(`INSERT INTO store_shop_products (id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,shipping_fee_cents,updated_at,request_key) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${capacity} ON CONFLICT(shop_id,request_key) DO NOTHING`).bind(crypto.randomUUID(),shop.id,...Object.values(value),now,key,uid,shop.id,'').run();
       if(!result.meta.changes) {
         const previous=await db.prepare('SELECT * FROM store_shop_products WHERE shop_id=? AND request_key=?').bind(shop.id,key).first();
         if(!previous) fail('非店長最多一件商品（含草稿）；請先封存原商品再新增，店長與管理員不限');

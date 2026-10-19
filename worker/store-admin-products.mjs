@@ -10,7 +10,7 @@ const HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:HEADERS});
 const fail=(code,message,status=400)=>{throw new DirectoryError(code,message,status);};
 const ACTOR_FIELDS=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
-const PRODUCT_FIELDS=['title','description','image_url','price_cents','redeem_type','redeem_value','status','category','purchase_mode'];
+const PRODUCT_FIELDS=['title','description','image_url','price_cents','redeem_type','redeem_value','status','category','purchase_mode','shipping_fee_cents'];
 async function rows(db,sql,args=[]){
   const result=await db.prepare(sql).bind(...args).all();
   if(result.success===false||!Array.isArray(result.results))throw new Error('Read unavailable');

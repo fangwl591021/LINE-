@@ -43,12 +43,14 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
   field('title','商品名稱','input',{required:true,maxLength:100});
   field('description','商品介紹','textarea',{maxLength:3000,rows:4});
   field('price','售價（NT$）','input',{type:'number',min:'0',max:'1000000',step:'0.01',required:true,inputMode:'decimal'});
+  field('shipping_fee','單件運費（NT$；0 表示免運）','input',{type:'number',min:'0',max:'10000',step:'0.01',inputMode:'decimal'});
+  form.append(make('p','每個商品獨立設定單件運費，按數量加總；網購商品必填，運費不能折抵。'));
   select('category','業種分類',[['','請選擇分類'],...['食','宿','遊','購','行','服務','製造'].map(value=>[value,value])]).required=true;
   const picker=field('image_file','商品圖片（JPG／PNG／WebP，最大 10 MB）','input',{type:'file',accept:'image/jpeg,image/png,image/webp'});
   const preview=make('img');preview.alt='商品圖片預覽';preview.hidden=true;form.append(preview);
   form.append(make('p','圖片會上傳為公開素材；請勿上傳個資或無權使用的圖片。'));
   select('purchase_mode','銷售方式',limited?[['in_store','店內展示']]:[['in_store','店內購買'],['online','網路選購']]);
-  if(!limited)form.append(make('p','網購沿用店家既有收款與運費設定；店家尚未完成設定或交易未開放時，上架不代表顧客可下單。'));
+  if(!limited)form.append(make('p','網購使用本商品運費與店家收款設定；店家尚未完成收款設定或交易未開放時，上架不代表顧客可下單。'));
   select('redeem_type','折抵規則',limited?[['none','不折抵']]:[['none','不折抵'],['fixed','固定點數上限'],['percent','百分比上限'],['full','全額上限']]);
   const value=field('redeem_value','折抵上限（固定填點數／百分比填 1–100）','input',{type:'number',min:'0',max:'1000000',step:'1',value:'0'});
   value.disabled=true;
@@ -82,11 +84,13 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
     event.preventDefault();event.stopPropagation();if(!active()||busy||complete)return;
     if(!pending){
       const price=fields.price.value.trim();
+      const fee=fields.shipping_fee.value.trim();
+      if((fields.purchase_mode.value==='online'&&fee==='')||(fee!==''&&(!/^\d+(?:\.\d{1,2})?$/.test(fee)||Number(fee)>10000))){status.textContent='請填寫有效單件運費（0 至 10,000 元），0 表示免運。';return;}
       if(!confirm.checked||!fields.title.value.trim()||!fields.category.value||!/^\d+(?:\.\d{1,2})?$/.test(price)||Number(price)>1000000){status.textContent='請確認店家並完整填寫名稱、分類與有效售價。';return;}
       const type=fields.redeem_type.value,amount=['none','full'].includes(type)?0:Number(value.value);
       if(!Number.isSafeInteger(amount)||amount<0||amount>(type==='percent'?100:1000000)||(['fixed','percent'].includes(type)&&amount===0)){status.textContent='請填寫有效折抵上限。';return;}
       pending={shop_id:shopId,shop_version:shop.version,request_key:crypto.randomUUID(),
-        title:fields.title.value.trim(),description:fields.description.value.trim(),price_cents:Math.round(Number(price)*100),
+        title:fields.title.value.trim(),description:fields.description.value.trim(),price_cents:Math.round(Number(price)*100),shipping_fee_cents:fee===''?null:Math.round(Number(fee)*100),
         category:fields.category.value,image_url:imageUrl,purchase_mode:fields.purchase_mode.value,redeem_type:type,redeem_value:amount,status:fields.status.value};
     }
     busy=true;lock();status.textContent=pending.status==='active'?'AI 上架審核中…通過後才建立商品。':'為「'+shop.name+'」建立商品中…';

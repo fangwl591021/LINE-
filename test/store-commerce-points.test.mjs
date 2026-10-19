@@ -9,7 +9,7 @@ const A='U'+'a'.repeat(32),B='U'+'b'.repeat(32),C='U'+'c'.repeat(32),P='U'+'d'.r
 function fixture(t){
  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());sql.exec('PRAGMA foreign_keys=ON;CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT);');
  for(const [id,role] of [[A,'store'],[B,'user'],[C,'store']])sql.prepare('INSERT INTO users VALUES(?,?,?)').run(id,role,role);
- for(const name of ['0029_store_shop_catalog.sql','0030_store_cashier_requests.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0037_store_buyer_profiles.sql','0038_store_buyer_delivery.sql','0062_store_commerce_points.sql'])sql.exec('BEGIN;'+readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8')+';COMMIT;');
+ for(const name of ['0029_store_shop_catalog.sql','0030_store_cashier_requests.sql','0031_store_product_category.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0037_store_buyer_profiles.sql','0038_store_buyer_delivery.sql','0062_store_commerce_points.sql'])sql.exec('BEGIN;'+readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8')+';COMMIT;');
  sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES('shop',?,'測試商店','active','now')").run(A);
  sql.exec("INSERT INTO store_shop_products(id,shop_id,title,price_cents,redeem_type,redeem_value,status,purchase_mode,updated_at,request_key) VALUES('p','shop','測試商品',10000,'full',0,'active','online','now','p');INSERT INTO store_commerce_settings(shop_id,enabled,bank_name,bank_code,bank_account,bank_holder,shipping_fee_cents,free_shipping_cents,updated_at) VALUES('shop',1,'測試','004','123456','測試',6000,0,'now');");
  const state={balance:500,identity:P,reads:0,writes:[],ledger:new Map(),failure:'',failFinalize:false};
@@ -23,6 +23,14 @@ function fixture(t){
  const action=(o,a,extra={},uid=B)=>call('/orders/action',{order_id:o.id,version:o.version,action:a,request_key:crypto.randomUUID(),...extra},uid);
  return {sql,db,state,env,points,call,cart,data,order,action};
 }
+test('explicit product shipping is cash-only and cancellation returns only original points',async t=>{
+ const f=fixture(t);f.sql.exec('UPDATE store_shop_products SET shipping_fee_cents=8000');
+ const q=await f.call('/quote',f.cart({points_used:101,shipping_fee_cents:0}));assert.equal(q.status,400);
+ const priced=await f.call('/quote',f.cart({points_used:100,shipping_fee_cents:0}));assert.equal(priced.snapshot.total_cents,8000);assert.equal(f.state.writes.length,0);
+ let {order}=await f.order({points_used:100});assert.equal(order.total_cents,8000);assert.equal(order.snapshot.items[0].shipping_fee_cents,8000);assert.deepEqual(f.state.writes.map(o=>o.points),[-100]);
+ f.sql.exec('UPDATE store_shop_products SET shipping_fee_cents=0,version=version+1');
+ order=(await f.action(order,'cancel')).order;assert.equal(order.points_status,'refunded');assert.equal(order.snapshot.shipping_fee_cents,8000);assert.deepEqual(f.state.writes.map(o=>o.points),[-100,100]);assert.equal(f.state.balance,500);
+});
 test('gate, verified own wallet, product policy and shipping cannot be spoofed',async t=>{
  const f=fixture(t);delete f.env.STORE_COMMERCE_POINTS_ENABLED;assert.equal((await f.call('/capabilities',null,null)).points_enabled,false);assert.equal((await f.call('/quote',f.cart())).status,400);assert.equal((await f.call('/wallet')).status,503);
  f.env.STORE_COMMERCE_POINTS_ENABLED='true';assert.equal((await f.call('/wallet')).balance,500);assert.equal((await f.call('/wallet',null,null)).status,401);

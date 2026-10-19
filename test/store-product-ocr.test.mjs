@@ -17,7 +17,7 @@ const product=(extra={})=>({title:'測試茶葉',description:'100g\n台灣茶',c
 function fixture(t){
  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());sql.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);');
  for(const [token,role]of [['a','store'],['b','user'],['c','admin'],['d','store']])sql.prepare('INSERT INTO users VALUES(?,?)').run('U'+token.repeat(32),role);
- for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0036_store_product_ocr_usage.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0036_store_product_ocr_usage.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  for(const token of ['a','c'])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,updated_at) VALUES(?,?,?,'now')").run('shop-'+token,'U'+token.repeat(32),'店 '+token);
  const db={prepare(query){return {bind(...args){return {async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){return {meta:{changes:Number(sql.prepare(query).run(...args).changes)}};}};}};}};
  const state={calls:[],response:()=>Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({products:[product()]})}]}]})};

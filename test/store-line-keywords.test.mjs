@@ -10,7 +10,7 @@ function fixture(t){
  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
  sql.exec('CREATE TABLE users(line_id TEXT,role TEXT)');
  for(const [id,role] of [[A,'store'],[B,'admin'],[C,'user']])sql.prepare('INSERT INTO users VALUES(?,?)').run(id,role);
- for(const file of ['0029_store_shop_catalog.sql','0030_store_cashier_requests.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['0029_store_shop_catalog.sql','0030_store_cashier_requests.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  for(const [id,owner] of [['s-a',A],['s-b',B]]){
   sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','now')").run(id,owner,id);
   sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES(?,?,?,10000,'active','now',?)").run('p-'+id,id,'商品',id);

@@ -74,6 +74,8 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       label('address','地址','input',{maxLength:200});label('phone','電話','input',{maxLength:40});label('hours','營業時間','input',{maxLength:200});
     }else{
       const price=label('price','售價（NT$）','input',{type:'number',min:'0',max:'1000000',step:'0.01',required:true,inputMode:'decimal'});price.value=String(record.price_cents/100);
+      const shipping=label('shipping_fee','單件運費（NT$；0 免運，舊商品留白沿用原店家運費）','input',{type:'number',min:'0',max:'10000',step:'0.01',inputMode:'decimal'});shipping.value=record.shipping_fee_cents==null?'':String(record.shipping_fee_cents/100);
+      form.append(make('p','各商品獨立，單件運費 × 數量加總；不折抵、不套用舊店家滿額免運。不修改舊訂單。'));
       if(onlineAllowed){
         const purchaseMode=label('purchase_mode','銷售方式','select');
         for(const [value,text]of [['in_store','限店內'],['online','網購']]){const option=make('option',text);option.value=value;purchaseMode.append(option);}
@@ -100,19 +102,22 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
     form.onsubmit=async event=>{
       event.preventDefault();event.stopPropagation();if(!active()||busy||finished)return;
       if(!pending){
-        const changes=Object.fromEntries(Object.entries(fields).filter(([key])=>key!=='price').map(([key,input])=>[key,input.value.trim()]));
+        const changes=Object.fromEntries(Object.entries(fields).filter(([key])=>!['price','shipping_fee'].includes(key)).map(([key,input])=>[key,input.value.trim()]));
         if(type==='product'){
           if(!/^\d+(?:\.\d{1,2})?$/.test(fields.price.value)||Number(fields.price.value)>1000000){message.textContent='請填寫有效售價';return;}
+          const fee=fields.shipping_fee.value;
+          if(fee!==''&&(!/^\d+(?:\.\d{1,2})?$/.test(fee)||Number(fee)>10000)){message.textContent='請填寫有效單件運費（0 至 10,000 元），0 表示免運';return;}
+          changes.shipping_fee_cents=fee===''?null:Math.round(Number(fee)*100);
           changes.price_cents=Math.round(Number(fields.price.value)*100);
         }
         const manual=manualConfirmation?.checked===true;
-        if(manual&&(changes.purchase_mode!=='online'||Object.entries(changes).some(([key,value])=>key!=='purchase_mode'&&value!==(record[key]??'')))){message.textContent='單品人工放行只能切換網購，請還原其他欄位修改，價格、文案、圖片與狀態必須保持原值。';return;}
+        if(manual&&(changes.purchase_mode!=='online'||Object.entries(changes).some(([key,value])=>key!=='purchase_mode'&&value!==(key==='shipping_fee_cents'?(record[key]??null):(record[key]??''))))){message.textContent='單品人工放行只能切換網購，請還原其他欄位修改，價格、文案、圖片與狀態必須保持原值。';return;}
         // The pinned exception has its own explicit checkbox + named submit action.
         // Avoid a second native modal, which can deadlock Chrome/LINE automation.
         if(!manual&&!ask(`確定儲存「${record.name||record.title}」？狀態：${statusName(changes.status)}。${changes.purchase_mode?'銷售方式：'+(changes.purchase_mode==='online'?'網購':'限店內')+'。':''}將同步影響手機商城顯示。`))return;
         pending={type,id:record.id,shop_id:shop.id,version:record.version,shop_version:shop.version,request_key:crypto.randomUUID(),changes:manual?{purchase_mode:'online'}:changes,...(manual?{manual_release:{reference:record.manual_online_release.reference,confirmed:true}}:{})};dirty=true;
       }
-      const requestEpoch=epoch;busy=true;lock();message.textContent=pending.manual_release?'核對本商品人工同意、內容指紋與原審核紀錄中…':(pending.changes.status||record.status)==='active'?'AI 上架審核中…通過後才儲存公開。':'儲存中…';
+      const requestEpoch=epoch;busy=true;lock();message.textContent=pending.manual_release?'核對本商品人工同意、內容指紋與原審核紀錄中…':(pending.changes.status||record.status)==='active'?'檢查商品設定中…涉及內容或上架變更須通過 AI 審核。':'儲存中…';
       try{
         const result=await api('/admin/catalog',pending);
         if(!active()||requestEpoch!==epoch)return;

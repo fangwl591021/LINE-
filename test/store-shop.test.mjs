@@ -96,6 +96,7 @@ function fixture() {
   sql.exec(readFileSync(new URL('../migrations/0030_store_cashier_requests.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0033_store_shop_sales_index.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0035_store_product_purchase_mode.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0064_store_product_shipping.sql',import.meta.url),'utf8'));
   const db={prepare(query){return {bind(...args){return {async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){const result=sql.prepare(query).run(...args);return {meta:{changes:Number(result.changes)}};}};}};}};
   const env=listingTestEnv(sql,db);
   const fetcher=listingTestFetch(async(url,options)=>{
