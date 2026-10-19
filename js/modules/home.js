@@ -1150,10 +1150,12 @@ const HomeModule = (function() {
         runHomeAiAssistantAction_(action);
     };
 
-    const PUBLIC_PARTNER_STORE_URL = 'https://aiwe.cc/index.php/search_linecard/?shop_id=78&submitted=1';
-
     window.openPartnerStores = function() {
-        window.location.assign(PUBLIC_PARTNER_STORE_URL);
+        if (typeof window.openStoreShop !== 'function') {
+            window.showToast?.('折抵店家尚未載入，請重新整理後再試', true);
+            return;
+        }
+        return window.openStoreShop('', '', '', 'partners');
     };
 
     function isBusinessHomeV2Enabled_() {

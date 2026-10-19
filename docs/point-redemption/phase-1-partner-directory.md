@@ -43,7 +43,7 @@ Migration：`migrations/0019_point_redemption_partner_directory.sql`
 
 ## 前端契約
 
-- 首頁「折抵店家」進入站內 `partner-directory` 頁，不跳出 LIFF。
+- 2026-10-19 起首頁「折抵店家」進入站內 `store-shop` 合併目錄（內部 partners section），可循既有本人管理上架公司資訊與一件商品，不跳母站舊頁。舊 `partner-directory` 仍是唯讀相容入口，其 API／admin-only 維護契約不變。
 - 支援名稱關鍵字、類別與縣市篩選。
 - 店家詳情可顯示據點、聯絡方式與政策預覽。
 - 畫面必須明示 Phase 1 不執行扣點或付款。

@@ -126,11 +126,10 @@ includesAll(indexHtml, [
 
 includesAll(fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8'), [
   'window.openPartnerStores = function()',
-  "const PUBLIC_PARTNER_STORE_URL = 'https://aiwe.cc/index.php/search_linecard/?shop_id=78&submitted=1';",
-  'window.location.assign(PUBLIC_PARTNER_STORE_URL);',
+  "return window.openStoreShop('', '', '', 'partners');",
   "case 'shop':",
   'return window.openPartnerStores?.();'
-], 'home shop actions open the temporary public partner directory');
+], 'home shop actions open the in-app partner/company directory');
 
 const homeSource = fs.readFileSync(path.join(root, 'js', 'modules', 'home.js'), 'utf8');
 ['line_userid=', 'bot_token=', 'client_id=', 'redirect_uri='].forEach((parameter) => {

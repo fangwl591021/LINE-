@@ -40,7 +40,7 @@ test('shared brand uses supplied logo without replacing it on role changes; imag
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=29/);assert.match(source,/store-shop\.js\?v=61/);
+  assert.match(source,/store-shop\.css\?v=30/);assert.match(source,/store-shop\.js\?v=62/);
  }
 });
 test('shared storefront places an accessible main-home return before the brand for every role',()=>{
@@ -126,9 +126,11 @@ test('directory and search use the same flag, keep each view id, and request onl
  assert.ok(start>=0&&end>start);
  const shops=[{id:'store-only',name:'店家',has_active_products:0},{id:'store-mall',name:'商城',has_active_products:1},{id:'legacy',name:'舊回應'}];
  const calls=[],content={innerHTML:'',querySelector:()=>({classList:{add(){}},insertAdjacentHTML(){}}),querySelectorAll:()=>[],insertAdjacentHTML(){}};
- const context={epoch:0,alert:{},content,discoverySeed:'0123456789abcdef',listCategory:'',listQuery:'',encodeURIComponent,pageKind(){},canManage:()=>false,esc:String,photo:()=>'',categoryTags:()=>'',api:async url=>{calls.push(url);return {shops,next:''};}};
+ const notice={hidden:false};
+ const context={epoch:0,alert:{},content,root:{querySelector:()=>notice},discoverySeed:'0123456789abcdef',listCategory:'',listQuery:'',encodeURIComponent,pageKind(){},canManage:()=>false,esc:String,photo:()=>'',categoryTags:()=>'',api:async url=>{calls.push(url);return {shops,next:''};}};
  await vm.runInNewContext(mall.slice(start,end)+';list("","咖啡","食");',context);
  assert.equal(calls.length,1);assert.match(calls[0],/seed=0123456789abcdef/);
+ assert.equal(notice.hidden,true,'Read-only directory does not show the cashier instruction');
  assert.match(content.innerHTML,/data-id="store-only">前往店家<\/button>/);
  assert.match(content.innerHTML,/data-id="store-mall">進入商城<\/button>/);
  assert.match(content.innerHTML,/data-id="legacy">前往店家<\/button>/);
