@@ -151,7 +151,8 @@
     function detail(id,fromDiscovery=false) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
       ++epoch;pageKind('product');alert.textContent='';
-      content.innerHTML=`${fromDiscovery?'<button data-do="discover-back">← 返回商品探索</button>':`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button>`}<article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2>${fromDiscovery?`<p class="shop-meta">販售店家：${esc(viewedShop.name)}</p><button data-do="view" data-id="${esc(viewedShop.id)}">前往店家</button>`:''}<p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(viewedShop.merchant_enabled===0?'店面展示，未開放交易':policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${p.purchase_mode==='online'?(standalone?`<a class="shop-link" href="${esc(loginLink(viewedShop.id))}">登入後線上選購</a>`:`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}">前往本店選購</button>`):'<span class="shop-meta">限店內購買</span>'}${viewedShop.merchant_enabled===0?'':`<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button>`}</div></article>`;
+      const buy=p.purchase_mode==='online'?(standalone?`<a class="shop-link" href="${esc(loginLink(viewedShop.id,p.id))}">登入後購買本商品</a>`:`<button class="primary" data-do="online-buy" data-id="${esc(viewedShop.id)}" data-product-id="${esc(p.id)}">購買本商品</button>`):'<span class="shop-meta">限店內購買；目前未開放本商品網購</span>';
+      content.innerHTML=`${fromDiscovery?'<button data-do="discover-back">← 返回商品探索</button>':`<button data-do="view" data-id="${esc(viewedShop.id)}">← 返回 ${esc(viewedShop.name)}</button>`}<article class="shop-product-detail">${photo(p.image_url)}<span class="shop-category-badge">${esc(p.category||'未分類')}</span><span class="shop-category-badge">${p.purchase_mode==='online'?'網購':'限店內'}</span><h2>${esc(p.title)}</h2>${fromDiscovery?`<p class="shop-meta">販售店家：${esc(viewedShop.name)}</p><button data-do="view" data-id="${esc(viewedShop.id)}">前往店家</button>`:''}<p class="shop-price">NT$ ${(Number(p.price_cents)/100).toLocaleString('zh-TW')}</p><p>${esc(p.description)}</p><p class="shop-meta">${esc(viewedShop.merchant_enabled===0?'店面展示，未開放交易':policy(p))}，實際可用資格由系統確認。</p><div class="shop-row">${viewedShop.merchant_enabled===0?'':buy}${viewedShop.merchant_enabled===0?'':`<button data-do="member-qr" data-id="${esc(p.id)}">出示本商品 QR</button>`}</div></article>`;
     }
     const base=String(root.dataset.worker||window.Config?.WORKER_URL||'').replace(/\/+$/,'');
     async function adminStores() {
@@ -180,7 +181,7 @@
       if(!owner||!token)throw new Error('請先使用管理員帳號登入');
       pageKind('admin-drafts');const version=++epoch;alert.textContent='';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-catalog.js?v=3');if(!current())return;
+      const module=await import('./store-admin-catalog.js?v=4');if(!current())return;
       await module.mountAdminDrafts(content,{api,isCurrent:current,onBack:()=>run(()=>adminStores()),onManageCatalog:id=>run(()=>adminCatalog(id,'draft'))});
     }
     async function adminCatalog(id,initialMode='products') {
@@ -190,7 +191,7 @@
       pageKind('admin-catalog');const version=++epoch;alert.textContent='';
       content.innerHTML='<p role="status">載入商城管理…</p>';
       const current=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&window.liff?.isLoggedIn?.()&&token===window.liff.getAccessToken();
-      const module=await import('./store-admin-catalog.js?v=3');if(!current())return;
+      const module=await import('./store-admin-catalog.js?v=4');if(!current())return;
       await module.mountAdminCatalog(content,{shopId:id,initialMode,api,isCurrent:current,onBack:()=>run(()=>adminStores()),onUploadProducts:shopId=>run(()=>adminProducts(shopId)),prepareImage,
         uploadImage:async base64Image=>{
           if(!current())throw new Error('登入或頁面已變更');
@@ -237,8 +238,12 @@
       if (window.StoreInviteRoute?.buildPublicUrl) return window.StoreInviteRoute.buildPublicUrl(id, sourceParams());
       const url=new URL('store-shop.html',location.href); url.searchParams.set('shop',id); return url.href;
     }
-    function loginLink(id=viewedShop?.id||initialShopId) {
-      if (isShopId(id) && window.StoreInviteRoute?.buildLoginUrl) return window.StoreInviteRoute.buildLoginUrl(id, sourceParams());
+    function loginLink(id=viewedShop?.id||initialShopId,selectedProduct='') {
+      if (isShopId(id) && window.StoreInviteRoute?.buildLoginUrl) {
+        const url=new URL(window.StoreInviteRoute.buildLoginUrl(id, sourceParams()));
+        if(isShopId(selectedProduct))url.searchParams.set('shopItem',selectedProduct);
+        return url.href;
+      }
       const url=new URL('index.html',location.href);
       return window.StoreInviteRoute?.withAttribution?.(url,sourceParams())||url.href;
     }
@@ -314,7 +319,7 @@
         return;
       }
       content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><details><summary>店家介紹與聯絡資訊</summary><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></details></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
-      if(result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',standalone?`<a class="shop-link" href="${esc(loginLink(s.id))}">登入後線上選購</a>`:`<button data-do="online-buy" data-id="${esc(s.id)}">線上選購</button>`);
+      if(result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',standalone?`<a class="shop-link" href="${esc(loginLink(s.id))}">登入後線上選購</a>`:`<button data-do="online-buy" data-id="${esc(s.id)}">選擇本店網購商品</button>`);
       content.insertAdjacentHTML('beforeend',moreButton(result.product_next,false));
       content.querySelector('.shop-grid')?.classList.add('shop-browse-products');
     }
@@ -491,14 +496,24 @@
           case 'online-buy':
           case 'online-orders':
           case 'online-manage': {
-            if(standalone||!window.liff?.isLoggedIn?.()){location.assign(loginLink());break;}
+            if(standalone||!window.liff?.isLoggedIn?.()){location.assign(loginLink(button.dataset.id,button.dataset.do==='online-buy'?button.dataset.productId||'':''));break;}
             if(button.dataset.do==='online-manage'&&!canTransact())throw new Error('收款與訂單管理僅開放管理員、店長');
             pageKind('commerce');
             const version=++epoch;alert.textContent='';
             const mode=button.dataset.do==='online-manage'?'merchant':button.dataset.do==='online-orders'?'orders':'checkout';
-            const selected=mode==='checkout'?(viewedShop?.id===button.dataset.id?{shop:viewedShop,products:viewedProducts}:await api(`?shop=${encodeURIComponent(button.dataset.id)}`)):{};
-            const module=await import('./store-commerce.js?v=5');
-            if(version===epoch)await module.mountCommerce(content,{base,mode,shop:selected.shop,products:selected.products,isCurrent:()=>version===epoch&&window.currentPage==='store-shop'});
+            const productId=button.dataset.productId||'';
+            let selected={};
+            if(mode==='checkout'){
+              if(productId){
+                const result=await api('/products?id='+encodeURIComponent(productId)),p=result.products?.[0];
+                if(!p||p.id!==productId||p.shop?.id!==button.dataset.id||(p.status!==undefined&&p.status!=='active')||p.purchase_mode!=='online'||p.shop.merchant_enabled===0)throw new Error('所選商品目前未開放網購或已更新，未改選其他商品，請返回商品詳情確認。');
+                // /products?id only returns active products from an active eligible shop;
+                // its lean public response intentionally omits status.
+                selected={shop:p.shop,products:[{...p,status:'active'}]};
+              }else selected=viewedShop?.id===button.dataset.id?{shop:viewedShop,products:viewedProducts}:await api(`?shop=${encodeURIComponent(button.dataset.id)}`);
+            }
+            const module=await import('./store-commerce.js?v=6');
+            if(version===epoch)await module.mountCommerce(content,{base,mode,shop:selected.shop,products:selected.products,selectedProductId:productId,isCurrent:()=>version===epoch&&window.currentPage==='store-shop'});
             break;
           }
           case 'sales': {
@@ -611,7 +626,13 @@
             const result=await api('/product',data); setManagement(result); renderManage();
           }
           alert.textContent='已儲存；本次沒有扣除點數。';
-        } catch(error){formMessage.textContent=error.name==='TimeoutError'?'連線逾時；請重新載入確認結果，勿連續重送。':error.message;formMessage.scrollIntoView({block:'center',behavior:'smooth'});throw error;}
+        } catch(error){
+          const original=items.find(p=>p.id===form.dataset.id);
+          const reviewFailure=String(error.code||'').startsWith('LISTING_');
+          formMessage.textContent=error.name==='TimeoutError'?'連線逾時；請重新載入確認結果，勿連續重送。':error.message+(reviewFailure?`。尚未儲存；${original?'銷售方式仍為「'+(original.purchase_mode==='online'?'網購':'限店內')+'」。':''}表單選項尚未生效，請補齊可核對的用途資料再送審。`:'');
+          if(reviewFailure)error.message=formMessage.textContent;
+          formMessage.scrollIntoView({block:'center',behavior:'smooth'});throw error;
+        }
         finally { busy=false; if(submit)submit.textContent=submitText;buttons.forEach((b,i)=>b.disabled=disabled[i]); }
       });
     };
@@ -626,6 +647,15 @@
         await adminStores();
       }else if(!standalone&&section==='store') {
         await view(id);
+        const params=window.readActmasterInitialParams?.()||sourceParams();
+        if(params.has('shopItem')){
+          const selected=params.get('shopItem');
+          if(params.getAll('shopItem').length!==1||!isShopId(selected))throw new Error('所選商品連結格式不正確，請返回店家重新選擇。');
+          const version=epoch,result=await api('/products?id='+encodeURIComponent(selected)),p=result.products?.[0];
+          if(version!==epoch)return;
+          if(!p||p.id!==selected||p.shop?.id!==id)throw new Error('所選商品不存在或不屬於本店，未改選其他商品。');
+          viewedShop=p.shop;viewedProducts=[p];detail(p.id);
+        }
       }else if(memberProduct&&!standalone) {
         const version=++epoch;
         const module=await import('./member-product-qr.js?v=2');

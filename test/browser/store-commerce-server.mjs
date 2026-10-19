@@ -13,6 +13,7 @@ sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) 
 sql.exec("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES('p-a','shop-a','<img src=x onerror=alert(1)> 測試眼鏡',880000,'active','2026-09-10','product-a');");
 sql.exec("INSERT INTO store_commerce_settings(shop_id,enabled,bank_name,bank_code,bank_account,bank_holder,shipping_fee_cents,free_shipping_cents,updated_at) VALUES('shop-a',1,'測試銀行','004','1234567890','測試戶名',6000,1000000,'2026-09-10');");
 sql.exec("UPDATE store_shop_products SET purchase_mode='online'; INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES('p-local','shop-a','限店內測試商品',10000,'active','2026-09-11','product-local');");
+sql.exec("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,purchase_mode,redeem_type,redeem_value,updated_at,request_key) VALUES('p-b','shop-a','合成測試商品B（非醫療）',1180000,'active','online','percent',50,'2026-09-09','product-b'); UPDATE store_commerce_settings SET free_shipping_cents=2000000;");
 const db={prepare(query){return {bind(...args){return {
   sync(){return {meta:{changes:Number(sql.prepare(query).run(...args).changes)}};},async run(){return this.sync();},async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};}
 };}};},async batch(items){sql.exec('BEGIN');try{const results=items.map(s=>s.sync());sql.exec('COMMIT');return results;}catch(e){sql.exec('ROLLBACK');throw e;}}};
@@ -24,13 +25,15 @@ const pointService={contract:{version:'commerce-ledger-v1',rawLedgerVerification
   async read(uid){return {identity:uid,balance:pointState.balance};},async lookup(o){return pointState.ledger.get(o.id)||null;},
   async adjust(o){const before=pointState.balance;pointState.writes.push(o);pointState.balance+=o.points;
     const receipt={success:true,source:'mother',mother_receipt_id:String(1000+pointState.writes.length),event_content:commerceMarker(o),operation_id:o.id,order_id:o.order_id,point_identity:o.point_identity,point_type:'gift_money',kind:o.kind,points:o.points,balance_before:before,balance_after:pointState.balance,...(o.kind==='refund'?{original_operation_id:o.original_operation_id}:{})};pointState.ledger.set(o.id,receipt);return receipt;}};
-if(process.env.TEST_COMMERCE_POINTS==='true'){env.STORE_COMMERCE_POINTS_ENABLED='true';sql.exec("UPDATE store_shop_products SET redeem_type='full'");}
+if(process.env.TEST_COMMERCE_POINTS==='true'){env.STORE_COMMERCE_POINTS_ENABLED='true';sql.exec("UPDATE store_shop_products SET redeem_type='full' WHERE id='p-a'");}
 sql.exec('ALTER TABLE users ADD COLUMN point_line_id TEXT; ALTER TABLE users ADD COLUMN legacy_line_id TEXT; ALTER TABLE users ADD COLUMN row_id TEXT;');
 const files=['js/modules/store-point-operation.js','js/modules/store-shop-sales.js','js/modules/store-buyer-profile.js','js/modules/store-registration-popup.js','js/modules/store-product-ocr.js','css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','js/modules/store-wallet-popup.js','js/modules/store-history-popup.js','js/modules/member-product-qr.js','js/vendor/qrcode-generator-2.0.4.mjs','assets/storefront/lifestyle-cafe-v1.jpg'];
+files.push('js/modules/store-points-home.js','assets/points-logo-transparent-20260916.png');
 const server=createServer(async(req,res)=>{
   const origin='http://127.0.0.1:8794',path=new URL(req.url,origin).pathname;
   try {
     if(path==='/test-point-state'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({balance:pointState.balance,writes:pointState.writes.map(o=>o.points)}));return;}
+    if(path==='/css/store-commerce.css'){res.setHeader('Content-Type','text/css');res.end(readFileSync(new URL('../../css/store-commerce.css',import.meta.url)));return;}
     if(path==='/test-cashier-fixture'){
       const source=readFileSync(new URL('../../index.html',import.meta.url),'utf8');
       const panel=source.slice(source.indexOf('<section id="store-point-cashier"'),source.indexOf('<section id="point-sync-diagnostics"'));
@@ -49,7 +52,7 @@ const server=createServer(async(req,res)=>{
     if(path==='/'){
       res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>本機商城測試</title><body style="margin:0"><main id="page-store-shop"></main><script>window.testToken='b';Object.defineProperty(window,'userRole',{get:()=>({a:'store',b:'user',c:'admin'}[window.testToken]||'user')});window.currentPage='store-shop';window.Config={WORKER_URL:location.origin};window.goPage=p=>window.currentPage=p;window.liff={isLoggedIn:()=>true,getAccessToken:()=>window.testToken,getProfile:async()=>({userId:'U'+window.testToken.repeat(32)})};</script><script src="/js/modules/store-shop-entry.js"></script><script>openStoreShop();</script></body></html>`);return;
     }
-    if(files.includes(path.slice(1))){res.setHeader('Content-Type',path.endsWith('.jpg')?'image/jpeg':path.endsWith('.css')?'text/css':'text/javascript');res.end(readFileSync(new URL('../../'+path.slice(1),import.meta.url)));return;}
+    if(files.includes(path.slice(1))){res.setHeader('Content-Type',path.endsWith('.png')?'image/png':path.endsWith('.jpg')?'image/jpeg':path.endsWith('.css')?'text/css':'text/javascript');res.end(readFileSync(new URL('../../'+path.slice(1),import.meta.url)));return;}
     if(path.startsWith('/v1/')){
       const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>6*1024*1024){res.writeHead(413);res.end();return;}chunks.push(chunk);}
       const body=chunks.length?Buffer.concat(chunks):undefined;

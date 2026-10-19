@@ -106,7 +106,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
         if(!active()||requestEpoch!==epoch)return;
         if(result?.success!==true||result.id!==record.id)throw new Error('未確認儲存結果');
         finished=true;dirty=false;message.textContent='已儲存；手機商城重新載入即使用更新資料。請重新載入後繼續編輯。';
-      }catch(error){if(active()&&requestEpoch===epoch){const reviewFailure=String(error.code||'').startsWith('LISTING_');if(reviewFailure)pending=null;message.textContent=(error.message||'儲存失敗')+(reviewFailure?'。表單已保留，可修改或選草稿再送。':'。可重新確認同一筆儲存；若版本衝突請重新載入。');}}
+      }catch(error){if(active()&&requestEpoch===epoch){const reviewFailure=String(error.code||'').startsWith('LISTING_');if(reviewFailure)pending=null;message.textContent=(error.message||'儲存失敗')+(reviewFailure?`。尚未儲存；${type==='product'?'銷售方式仍為「'+(record.purchase_mode==='online'?'網購':'限店內')+'」。':''}表單選項不是已生效設定，可補齊可核對的用途資料或選草稿再送。`:'。可重新確認同一筆儲存；若版本衝突請重新載入。');message.scrollIntoView({block:'center'});}}
       finally{busy=false;if(active()&&requestEpoch===epoch)lock();}
     };
   }

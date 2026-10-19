@@ -18,7 +18,7 @@ function node(){
  return element;
 }
 const flush=async()=>{for(let i=0;i<15;i++)await Promise.resolve();};
-function setup({standalone=true,section='',selected=shopId,products=true,status='active'}={}){
+function setup({standalone=true,section='',selected=shopId,products=true,status='active',item=''}={}){
  const url=new URL(standalone?'https://store.example.test/LINE-/store-shop.html?shop='+selected+attribution:'https://store.example.test/LINE-/index.html?shopSection='+section+'&shopId='+selected+attribution);
  const root=node();root.dataset.worker='https://worker.example.test';const calls=[],redirects=[],copies=[],shares=[],timers=[],commerce=[];
  const shop={id:shopId,name:'Test store',status,merchant_enabled:1};
@@ -26,14 +26,15 @@ function setup({standalone=true,section='',selected=shopId,products=true,status=
  const window={userRole:'user',currentPage:'store-shop',liff:{isLoggedIn:()=>!standalone,getAccessToken:()=>{throw Error('Public store must not request an auth token');}},Config:{WORKER_URL:'https://worker.example.test'},showInviteLink:async mode=>shares.push(mode)};
  const location={href:url.href,search:url.search,assign:href=>redirects.push(href)};
  window.location=location;
+ if(item)window.readActmasterInitialParams=()=>new URLSearchParams('shopSection=store&shopId='+selected+'&shopItem='+item);
  window.__testLoadCommerce=async()=>({mountCommerce:async(host,options)=>commerce.push({host,options})});
- const fetch=async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>({success:true,shop,products:items,product_next:'',product_count:items.length,product_limit:1})};};
+ const fetch=async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>({success:true,shop,products:items.map(p=>({...p,shop})),product_next:'',product_count:items.length,product_limit:1})};};
  const document={getElementById:()=>null,createElement:node};
  const context={window,document,location,fetch,URL,URLSearchParams,AbortSignal,crypto,navigator:{clipboard:{writeText:async value=>copies.push(value)}},setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},console};
  vm.runInNewContext(routeSource,context);
  // Isolate only the lazy checkout module boundary; execute the actual storefront event routing.
- assert.ok(source.includes("await import('./store-commerce.js?v=5')"));
- vm.runInNewContext(source.replace("await import('./store-commerce.js?v=5')",'await window.__testLoadCommerce()'),context);
+ assert.ok(source.includes("await import('./store-commerce.js?v=6')"));
+ vm.runInNewContext(source.replace("await import('./store-commerce.js?v=6')",'await window.__testLoadCommerce()'),context);
  const mount=(extraProduct='',extraQr='',extraMember='')=>window.StoreShop.mount(root,standalone,extraProduct,extraQr,extraMember,section,selected);
  const click=async(action,data={})=>{const button=node();button.dataset={do:action,...data};button.closest=()=>button;root.onclick({target:{closest:()=>button}});await flush();};
  return {window,context,root,content:root.querySelector('.shop-content'),alert:root.querySelector('[role=alert]'),calls,redirects,copies,shares,commerce,shop,mount,click};
@@ -58,7 +59,7 @@ for(const standalone of [true,false])test(`invalid direct shop target is rejecte
 test('standalone online entry, product details, member account and wallet retain shop context for login',async()=>{
  const s=setup();s.mount();await flush();
  const cta=s.content.appended.find(html=>typeof html==='string'&&html.includes('登入後線上選購'));checkLogin(cta.match(/href="([^"]+)"/)[1]);
- await s.click('detail',{id:productId});checkLogin(s.content.innerHTML.match(/href="([^"]+)"/)[1]);
+ await s.click('detail',{id:productId});const detailLink=checkLogin(s.content.innerHTML.match(/href="([^"]+)"/)[1]);assert.equal(detailLink.searchParams.get('shopItem'),productId);
  await s.click('mine');checkLogin(s.content.innerHTML.match(/href="([^"]+)"/)[1]);
  for(const action of ['wallet','registration','online-buy','online-orders']){await s.click(action,{id:shopId});checkLogin(s.redirects.at(-1));}
  assert.equal(s.calls.length,1,'Explicit login CTAs do not quote, create orders, query wallets or call AI');
@@ -66,6 +67,33 @@ test('standalone online entry, product details, member account and wallet retain
 test('copy public shop link forwards only referral attribution',async()=>{
  const s=setup();s.mount();await flush();await s.click('copy',{id:shopId});
  const url=new URL(s.copies[0]);assert.equal(url.pathname,'/LINE-/store-shop.html');assert.equal(url.searchParams.get('shop'),shopId);assert.deepEqual([...url.searchParams.keys()],['shop','ref','net','via']);assert.equal(s.calls.length,1);
+});
+test('product detail explicitly passes the selected item and rereads eligibility before checkout',async()=>{
+ const s=setup({standalone:false,section:'store'});s.window.liff.getAccessToken=()=> 'test-only';s.mount();await flush();
+ await s.click('detail',{id:productId});assert.match(s.content.innerHTML,/購買本商品/);assert.match(s.content.innerHTML,new RegExp('data-product-id="'+productId+'"'));
+ await s.click('online-buy',{id:shopId,productId});assert.equal(s.commerce.length,1);assert.equal(s.commerce[0].options.selectedProductId,productId);assert.equal(s.commerce[0].options.products.length,1);assert.equal(s.commerce[0].options.products[0].id,productId);
+ assert.equal(s.calls.at(-1).url,'https://worker.example.test/v1/store-shop/products?id='+productId);
+});
+test('mismatched or missing selected product cannot fall back to a shop cart',async()=>{
+ for(const product of ['33333333-3333-4333-8333-333333333333',productId]){
+  const s=setup({standalone:false,section:'store',products:product!==productId});s.mount();await flush();
+  await s.click('online-buy',{id:shopId,productId:product});assert.equal(s.commerce.length,0);assert.match(s.alert.textContent,/未改選其他商品/);
+ }
+});
+test('login retains the selected product as a read-only detail, including saved initial parameters',async()=>{
+ const s=setup({standalone:false,section:'store',item:productId});s.mount();await flush();
+ assert.equal(s.root.dataset.shopView,'product');assert.match(s.content.innerHTML,/購買本商品/);assert.equal(s.commerce.length,0);assert.equal(s.calls.length,2);
+ assert.equal(s.calls.every(c=>c.options.method==='GET'),true);
+});
+test('expired login at a product purchase button retains the item without issuing an order',async()=>{
+ const s=setup({standalone:false,section:'store'});s.mount();await flush();s.window.liff.isLoggedIn=()=>false;
+ await s.click('online-buy',{id:shopId,productId});const target=checkLogin(s.redirects[0]);assert.equal(target.searchParams.get('shopItem'),productId);assert.equal(s.commerce.length,0);assert.equal(s.calls.length,1);
+});
+test('invalid, duplicate, missing and cross-shop login item context never becomes a different purchase',async()=>{
+ for(const item of ['invalid',productId+'&shopItem='+productId,'33333333-3333-4333-8333-333333333333']){
+  const s=setup({standalone:false,section:'store',item});s.mount();await flush();assert.equal(s.commerce.length,0);assert.notEqual(s.root.dataset.shopView,'product');assert.match(s.alert.textContent,/所選商品/);
+ }
+ const s=setup({standalone:false,section:'store',selected:'44444444-4444-4444-8444-444444444444',item:productId});s.mount();await flush();assert.match(s.alert.textContent,/不屬於本店/);assert.equal(s.commerce.length,0);
 });
 test('cashier and member-product QR keep their original LIFF intent while forwarding referral attribution',async()=>{
  const s=setup();s.mount();await flush();await s.click('point-operation');await s.click('member-qr',{id:productId});

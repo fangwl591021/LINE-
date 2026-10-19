@@ -182,6 +182,10 @@
 
 ## Scope 錯誤處理
 
+### 商城所選商品 `shopItem`
+
+與 `shopSection=store&shopId=UUID` 一起使用；只允許單一 UUID 作為商品詳情上下文。商城讀取初始參數、重新驗證商品屬於 shopId；無效、重複或跨店不得選到其他商品。登入後不自動開交易、扣點或核銷，原 `shopProduct` 店內收銀路由不變。
+
 若出現 `The permission is not in LIFF app scope`：
 
 - 顯示可理解錯誤。
