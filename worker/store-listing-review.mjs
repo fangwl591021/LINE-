@@ -71,14 +71,22 @@ function enforce(review){
   const detail=review.issues.map(i=>`${categoryLabels[i.category]}：${i.reason.replace(/[。；;\s]+$/,'')}`).join('；').slice(0,600);
   fail(manual?'LISTING_REVIEW_REQUIRED':'LISTING_POLICY_REJECTED',`${manual?'內容需人工核對，暫不公開':'內容不符合平台上架政策，未公開'}。${detail}。本次未儲存；可修改後重送或明確選擇草稿。`,422,review);
 }
+// Shared read-only evidence builder; preserves image bounds/DNS/byte verification.
+// It grants no permission and never calls the AI provider or writes review rows.
+export async function readListingReviewSnapshot(value,parent=null,fetcher=fetch){
+  const prepared=prepareListingContent(value,parent),images=[];
+  const signal=AbortSignal.timeout(15000);
+  for(const url of prepared.urls)images.push(await readImage(url,fetcher,signal));
+  const hash=await sha(JSON.stringify({content:prepared.content,images:images.map(i=>i.hash),policy:listingPolicyVersion}));
+  return {prepared,images,hash};
+}
 export async function requireListingReview({value,parent=null,scope,uid,env,fetcher=fetch}){
   if(value.status!=='active')return null;
   if(!scope||scope.length>200||!uid)fail('LISTING_REVIEW_SCOPE','缺少已驗證的上架身分，這次不會公開。',403);
-  const prepared=prepareListingContent(value,parent),db=env.ACTMASTER_DB;
+  const db=env.ACTMASTER_DB;
   let stage='image',providerStatus=0;
   try{
-    const images=[];const imageSignal=AbortSignal.timeout(15000);for(const url of prepared.urls)images.push(await readImage(url,fetcher,imageSignal));
-    const hash=await sha(JSON.stringify({content:prepared.content,images:images.map(i=>i.hash),policy:listingPolicyVersion}));
+    const {prepared,images,hash}=await readListingReviewSnapshot(value,parent,fetcher);
     stage='cache';const prior=await db.prepare('SELECT decision,review_json,reviewed_at FROM store_listing_reviews WHERE scope=? AND content_hash=? AND policy_version=?').bind(scope,hash,listingPolicyVersion).first();
     // Revalidate cached output too. Image bytes are always read before checking its hash.
     if(prior&&Date.now()-prior.reviewed_at>=0&&Date.now()-prior.reviewed_at<(prior.decision==='allow'?86400000:600000))return enforce(normalizeListingReview(JSON.parse(prior.review_json),prepared,images.length));

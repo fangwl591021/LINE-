@@ -82,13 +82,20 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       }else form.append(make('p','此店家未具網購資格；銷售方式保持原值，一般會員限店內展示。'));
       form.append(make('p','原折抵政策保持不變；不修改既有訂單或發放點數。'));
     }
+    let manualConfirmation=null;
+    if(type==='product'&&onlineAllowed&&record.manual_online_release?.reference){
+      const wrapper=make('label','我確認已獲店主同意，只對本商品現有內容人工放行網購（NT$11,800／最高折抵50%不變）');
+      manualConfirmation=make('input');manualConfirmation.type='checkbox';manualConfirmation.name='manual_release_confirm';
+      manualConfirmation.style.cssText='width:22px;min-height:22px;display:inline-block;margin-right:10px;vertical-align:middle';wrapper.prepend(manualConfirmation);form.append(wrapper);
+      form.append(make('p','僅此商品本次版本適用。只可把銷售方式改為網購，不可同時改文案、圖片、價格或狀態；保留原AI待確認紀錄及人工同意，不代表型號、醫療用途或安全認證。'));
+    }
     const status=label('status','公開狀態','select');
     for(const value of type==='store'?['draft','active']:['draft','active','archived']){const option=make('option',statusName(value));option.value=value;status.append(option);}status.value=record.status;
     const save=make('button','確認儲存'),cancel=make('button','取消／返回商品列表');save.type='submit';cancel.type='button';
     cancel.onclick=()=>{if(active()&&!busy&&safeLeave()){mode='products';void load();}};form.append(save,cancel);body.append(form);
     let pending=null,finished=false;
     form.oninput=()=>{dirty=true;};
-    const lock=()=>{lockNavigation();for(const input of Object.values(fields))input.disabled=busy||!!pending||finished;if(imageFile)imageFile.disabled=busy||!!pending||finished;cancel.disabled=busy;save.disabled=busy||finished;save.textContent=pending&&!finished?'重新確認同一筆儲存':'確認儲存';};
+    const lock=()=>{lockNavigation();for(const input of Object.values(fields))input.disabled=busy||!!pending||finished;if(manualConfirmation)manualConfirmation.disabled=busy||!!pending||finished;if(imageFile)imageFile.disabled=busy||!!pending||finished;cancel.disabled=busy;save.disabled=busy||finished;save.textContent=pending&&!finished?'重新確認同一筆儲存':'確認儲存';};
     form.onsubmit=async event=>{
       event.preventDefault();event.stopPropagation();if(!active()||busy||finished)return;
       if(!pending){
@@ -97,10 +104,12 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
           if(!/^\d+(?:\.\d{1,2})?$/.test(fields.price.value)||Number(fields.price.value)>1000000){message.textContent='請填寫有效售價';return;}
           changes.price_cents=Math.round(Number(fields.price.value)*100);
         }
-        if(!ask(`確定儲存「${record.name||record.title}」？狀態：${statusName(changes.status)}。${changes.purchase_mode?'銷售方式：'+(changes.purchase_mode==='online'?'網購':'限店內')+'。':''}將同步影響手機商城顯示。`))return;
-        pending={type,id:record.id,shop_id:shop.id,version:record.version,shop_version:shop.version,request_key:crypto.randomUUID(),changes};dirty=true;
+        const manual=manualConfirmation?.checked===true;
+        if(manual&&(changes.purchase_mode!=='online'||Object.entries(changes).some(([key,value])=>key!=='purchase_mode'&&value!==(record[key]??'')))){message.textContent='單品人工放行只能切換網購，請還原其他欄位修改，價格、文案、圖片與狀態必須保持原值。';return;}
+        if(!ask(`確定儲存「${record.name||record.title}」？狀態：${statusName(changes.status)}。${changes.purchase_mode?'銷售方式：'+(changes.purchase_mode==='online'?'網購':'限店內')+'。':''}${manual?'依已獲同意的單品例外人工放行，保留操作者、原AI紀錄及稽核；不適用其他商品或之後修改。':''}將同步影響手機商城顯示。`))return;
+        pending={type,id:record.id,shop_id:shop.id,version:record.version,shop_version:shop.version,request_key:crypto.randomUUID(),changes:manual?{purchase_mode:'online'}:changes,...(manual?{manual_release:{reference:record.manual_online_release.reference,confirmed:true}}:{})};dirty=true;
       }
-      const requestEpoch=epoch;busy=true;lock();message.textContent=(pending.changes.status||record.status)==='active'?'AI 上架審核中…通過後才儲存公開。':'儲存中…';
+      const requestEpoch=epoch;busy=true;lock();message.textContent=pending.manual_release?'核對本商品人工同意、內容指紋與原審核紀錄中…':(pending.changes.status||record.status)==='active'?'AI 上架審核中…通過後才儲存公開。':'儲存中…';
       try{
         const result=await api('/admin/catalog',pending);
         if(!active()||requestEpoch!==epoch)return;
