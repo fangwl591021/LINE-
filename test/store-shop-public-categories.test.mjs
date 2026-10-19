@@ -11,6 +11,7 @@ function section(start,end){
 }
 const productCode=section('    function product(', '    async function list(');
 const viewCode=section('    async function view(', '    function input(');
+const companyCode=section('  function companyInfo(', '  async function prepareImage(');
 const moreCode=section('    function moreButton(', "    let listCategory=");
 const filterCode=section('    function filterProducts(', '    function addProductTags(');
 const products=[
@@ -25,12 +26,12 @@ for(const standalone of [false,true])test(`single-store browsing omits category 
  const content={innerHTML:'',insertAdjacentHTML:(_,html)=>appended.push(html),querySelector(selector){
   assert.equal(selector,'.shop-grid');return {classList:{add:value=>gridClasses.push(value)}};
  }};
- const context={content,standalone,esc,photo:()=>'',policy:()=>'',statusText:()=>'',canTransact:()=>false,
+ const context={content,standalone,esc,URL,encodeURIComponent,photo:()=>'',policy:()=>'',statusText:()=>'',canTransact:()=>false,
   loginLink:id=>'https://example.test/index.html?shopSection=store&shopId='+id,
   alert:{textContent:''},pageKind:kind=>assert.equal(kind,'store'),
   api:async(...args)=>{apiCalls.push(args);return {shop,products,product_next:'next-page'};},
   addProductTags:()=>filterCalls.push('tags'),filterProducts:category=>filterCalls.push(category)};
- const api=vm.runInNewContext(`let epoch=0,viewedShop=null,viewedProducts=[];${productCode}${moreCode}${viewCode};({view,getState:()=>({viewedShop,viewedProducts})})`,context);
+ const api=vm.runInNewContext(`let epoch=0,viewedShop=null,viewedProducts=[];${companyCode}${productCode}${moreCode}${viewCode};({view,getState:()=>({viewedShop,viewedProducts})})`,context);
  // Even a stale caller that supplies the former category argument must show the entire store.
  await api.view(shop.id,'食');
  assert.deepEqual(apiCalls,[[`?shop=${shop.id}`]]);

@@ -26,7 +26,7 @@ async function main(){
     res.writeHead(404);res.end();
   }catch(e){console.error(e);res.writeHead(500);res.end('Fixture error');}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base='http://127.0.0.1:'+server.address().port;
-  const browser=await chromium.launch({channel:'chrome',headless:true});const output=path.resolve('.wrangler/product-discovery-qa');mkdirSync(output,{recursive:true});
+  const browser=await chromium.launch({channel:'chrome',headless:true});const output=path.resolve(process.env.STORE_PRODUCT_DISCOVERY_QA_DIR||'.wrangler/product-discovery-qa');mkdirSync(output,{recursive:true});
   const errors=[],external=[],results=[];
   try{
     for(const width of [320,390,1280]){
@@ -44,7 +44,7 @@ async function main(){
       await page.getByRole('button',{name:'返回商品探索',exact:false}).click();await page.locator('[data-form=product-search]').waitFor();assert.equal(await page.getByRole('textbox',{name:'搜尋商品名稱、介紹或店名'}).inputValue(),'按摩');
       await page.getByRole('textbox',{name:'搜尋商品名稱、介紹或店名'}).fill('');await page.getByRole('button',{name:'搜尋商品',exact:true}).click();
       await page.getByRole('group',{name:'跨店商品分類篩選'}).getByRole('button',{name:'未分類',exact:true}).click();await page.locator('[data-discovered-product]').waitFor();assert.equal(await page.locator('[data-discovered-product]').count(),1);
-      await page.getByRole('button',{name:'商品詳情',exact:true}).click();await page.getByRole('heading',{name:'網購展示商品'}).waitFor();const login=page.getByRole('link',{name:'登入後線上選購'});assert.equal(await login.isVisible(),true);
+      await page.getByRole('button',{name:'商品詳情',exact:true}).click();await page.getByRole('heading',{name:'網購展示商品'}).waitFor();const login=page.getByRole('link',{name:'登入後購買本商品'});assert.equal(await login.isVisible(),true);
       await page.getByRole('button',{name:'返回商品探索',exact:false}).click();await page.locator('[data-form=product-search]').waitFor();
       await page.getByRole('group',{name:'跨店商品分類篩選'}).getByRole('button',{name:'全部',exact:true}).click();await page.locator('[data-discovered-product]').first().waitFor();
       await page.getByLabel('購買方式').selectOption('online');await page.waitForFunction(()=>document.querySelectorAll('[data-discovered-product]').length===1);

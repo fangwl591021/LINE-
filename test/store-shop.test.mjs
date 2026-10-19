@@ -114,6 +114,23 @@ function fixture() {
 const store=(extra={})=>({name:'測試店面',description:'第一行\n第二行',status:'active',version:0,...extra});
 const product=(extra={})=>({title:'商品',price_cents:19900,redeem_type:'fixed',redeem_value:30,status:'active',request_key:crypto.randomUUID(),...extra});
 
+test('company introduction, phone, address and one product persist through the existing owner/review flow; public browsing writes nothing',async()=>{
+ const {call,sql}=fixture();try{
+  const company={name:'合成品牌有限公司',description:'提供手作禮盒與包裝設計服務。',phone:'02-2345-6789',address:'台北市合成路 1 號'};
+  const saved=await call('/store',store(company),'c');assert.equal(saved.status,200);
+  for(const [key,value]of Object.entries(company))assert.equal((await call('/manage',null,'c')).shop[key],value);
+  const item=product({title:'手作禮盒',redeem_type:'none',redeem_value:0});assert.equal((await call('/product',item,'c')).status,200);
+  assert.equal((await call('/product',{...item,request_key:crypto.randomUUID()},'c')).status,400);
+  assert.equal((await call('/store',{...store(company),version:saved.shop.version})).status,401);
+  const before=sql.prepare('SELECT total_changes() n').get().n;
+  const pub=await call('?shop='+saved.shop.id);assert.equal(pub.status,200);assert.equal(pub.products.length,1);assert.equal(pub.shop.merchant_enabled,0);
+  for(const [key,value]of Object.entries(company))assert.equal(pub.shop[key],value);
+  assert.equal('owner_uid'in pub.shop,false);assert.equal(sql.prepare('SELECT total_changes() n').get().n,before);
+  const blocked=await call('/store',{...store(company),name:'販售毒品',version:saved.shop.version},'c');assert.equal(blocked.status,422);
+  assert.equal((await call('?shop='+saved.shop.id)).shop.name,company.name);
+ }finally{sql.close();}
+});
+
 test('public shop flag counts only its own active products, not drafts, archives or other stores',async()=>{
  const {call,sql}=fixture();try{
   const a=(await call('/store',store({name:'只有店家'}),'a')).shop;

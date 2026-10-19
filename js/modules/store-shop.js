@@ -18,6 +18,14 @@
     if(p.redeem_type==='percent') return `預設最高折抵 ${p.redeem_value}%`;
     return p.redeem_type==='full'?'預設可全額折抵':'不提供點數折抵';
   }
+  // Only public shop fields. Missing data stays missing; never import member details.
+  function companyInfo(s) {
+    const phone=String(s.phone||''),address=String(s.address||''),dial=phone.replace(/[\s().-]/g,'');
+    let maps='';
+    try {const url=new URL(s.maps_url);if(url.protocol==='https:'&&!url.username&&!url.password)maps=url.href;} catch {}
+    if(!maps&&address.trim())maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(address);
+    return `<section class="shop-company-info" aria-label="公司聯絡資訊"><h3>公司／店家資訊</h3><dl><div><dt>電話</dt><dd>${esc(phone||'尚未提供')}</dd></div><div><dt>地址</dt><dd>${esc(address||'尚未提供')}</dd></div>${s.hours?`<div><dt>營業時間</dt><dd>${esc(s.hours)}</dd></div>`:''}</dl><div class="shop-row">${/^\+?\d{8,15}$/.test(dial)?`<a class="shop-link" href="tel:${dial}">撥打電話</a>`:''}${maps?`<a class="shop-link" href="${esc(maps)}" target="_blank" rel="noopener noreferrer">開啟地圖</a>`:''}</div></section>`;
+  }
   async function prepareImage(file) {
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error('請選擇 JPG、PNG 或 WebP 圖片；HEIC 請先轉成 JPG');
     if(!file.size || file.size>10*1024*1024) throw new Error('圖片須小於 10MB，且不可為空檔案');
@@ -253,6 +261,7 @@
     }
     async function list(after='',q='',category='') {
       pageKind('directory');
+      root.querySelector('.shop-notice').hidden=true;
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">載入店家中…</p>';
       const result=await api(`?seed=${discoverySeed}&after=${encodeURIComponent(after)}&q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}`);
       if(version!==epoch) return;
@@ -260,6 +269,7 @@
       content.innerHTML=`<form data-form="search" class="shop-row"><input name="q" aria-label="搜尋店名、類別或地址" placeholder="搜尋店名、類別或地址" value="${esc(q)}" maxlength="80"><button class="primary">搜尋</button></form><p class="shop-meta">${result.shops.length} 家店家</p><div class="shop-grid">${result.shops.map(s=>`<article>${photo(s.image_url)}<h2>${esc(s.name)}</h2><p class="shop-meta">${esc(s.category)} · ${esc(s.address)}</p><p>${esc(s.description)}</p><button class="primary" data-do="view" data-id="${esc(s.id)}">${s.has_active_products===1?'進入商城':'前往店家'}</button></article>`).join('')}</div>${result.shops.length?'':'<p>目前沒有符合條件的已上架店家。</p>'}${result.next?`<button data-do="next" data-id="${esc(result.next)}" data-query="${esc(q)}">下一頁</button>`:''}`;
       content.insertAdjacentHTML('afterbegin',categoryTags('shops',category));
       content.insertAdjacentHTML('afterbegin',discoveryTabs(false));
+      if(canManage())content.querySelector('.shop-discovery-tabs').insertAdjacentHTML('afterend','<section class="shop-listing-entry"><h2>上架公司與商品</h2><p>刊登公司介紹、聯絡電話與地址。一般會員可上架 1 件商品；公開前仍需通過平台審核。</p><button type="button" data-do="manage" class="primary">上架公司／商品</button></section>');
       content.querySelector('.shop-grid')?.classList.add('shop-discovery-grid');
       content.querySelectorAll('.shop-discovery-grid article').forEach(card=>{
         if(!card.querySelector('img'))card.insertAdjacentHTML('afterbegin','<div class="shop-no-photo" aria-hidden="true">⌂<small>探索在地好店</small></div>');
@@ -309,16 +319,14 @@
       const result=await api(`?shop=${encodeURIComponent(id)}`); if(version!==epoch) return;
       const s=result.shop;
       viewedShop=s;viewedProducts=result.products;
-      const details=[s.category,s.address,s.phone,s.hours].filter(Boolean).join('\n');
+      if(s.merchant_enabled===0)root.querySelector('.shop-notice').hidden=true;
       if(s.listing_only===1){
         const notice=root.querySelector('.shop-notice');if(notice)notice.hidden=true;
-        const links=[['聯絡 LINE',s.line_url],['店家網站',s.website_url],['查看地圖',s.maps_url]].filter(([,url])=>{try{const u=new URL(url);return u.protocol==='https:'&&!u.username&&!u.password;}catch{return false;}}).map(([label,url])=>`<a class="shop-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`);
-        const phone=String(s.phone||'').replace(/[^+\d]/g,'');
-        if(/^\+?\d{8,15}$/.test(phone))links.unshift(`<a class="shop-link" href="tel:${phone}">電話洽詢</a>`);
-        content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><h3>店家介紹與服務</h3><p style="white-space:pre-line">${esc(s.description)}</p>${details?`<p class="shop-meta" style="white-space:pre-line">${esc(details)}</p>`:''}<div class="shop-row">${links.join('')}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></div><p class="shop-meta">優惠內容請洽店家確認；此頁提供店家資訊與聯絡方式。</p></article>`;
+        const links=[['聯絡 LINE',s.line_url],['店家網站',s.website_url]].filter(([,url])=>{try{const u=new URL(url);return u.protocol==='https:'&&!u.username&&!u.password;}catch{return false;}}).map(([label,url])=>`<a class="shop-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+        content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><h3>店家介紹與服務</h3><p style="white-space:pre-line">${esc(s.description)}</p>${companyInfo(s)}<div class="shop-row">${links.join('')}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></div><p class="shop-meta">優惠內容請洽店家確認；此頁提供店家資訊與聯絡方式。</p></article>`;
         return;
       }
-      content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><details><summary>店家介紹與聯絡資訊</summary><p>${esc(s.description)}</p>${details?`<p class="shop-meta">${esc(details)}</p>`:''}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></details></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
+      content.innerHTML=`<article class="shop-store-intro">${photo(s.image_url,true)}<h2>${esc(s.name)}</h2><p class="shop-company-description">${esc(s.description)}</p>${companyInfo(s)}<button data-do="copy" data-id="${esc(s.id)}">複製商城網址</button></article><h2>商品與服務</h2><div class="shop-grid">${result.products.map(p=>product(p)).join('')}</div>${result.products.length?'':'<p>店家尚未上架商品。</p>'}`;
       if(result.products.some(p=>p.purchase_mode==='online'))content.insertAdjacentHTML('afterbegin',standalone?`<a class="shop-link" href="${esc(loginLink(s.id))}">登入後線上選購</a>`:`<button data-do="online-buy" data-id="${esc(s.id)}">選擇本店網購商品</button>`);
       content.insertAdjacentHTML('beforeend',moreButton(result.product_next,false));
       content.querySelector('.shop-grid')?.classList.add('shop-browse-products');
@@ -340,6 +348,8 @@
     function renderManage() {
       const s=shop||{};
       content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary" ${atCapacity()?'disabled':''}>新增商品</button></div><h2>商品管理（${productCount} 件${productLimit===null?'・不限件數':`／上限 ${productLimit} 件`}）</h2><p class="shop-meta">${productLimit===null?'商品分頁載入，每頁 100 件。':'一般會員最多一件（草稿也計入），封存後可更換；店長與管理員不限。一般會員限店內展示，不開放收款與扣點。'}</p><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
+      content.querySelector('h2').insertAdjacentHTML('afterend','<ol class="shop-listing-steps" aria-label="公司與商品上架步驟"><li>填寫公司介紹、電話與地址</li><li>選擇公開狀態，儲存店面</li><li>按「新增商品」，核對後儲存上架</li></ol>');
+      content.querySelector('[data-form="store"] [name="phone"]').type='tel';
       content.querySelector('[data-form="store"] [name="status"]').closest('label').insertAdjacentHTML('afterend',`<p class="shop-meta">${listingNotice}</p>`);
       content.insertAdjacentHTML('beforeend',moreButton(productNext,true));
       if(shop&&!standalone) content.insertAdjacentHTML('afterbegin',`<button type="button" data-do="share-store" ${shop.status!=='active'?'disabled':''}>商城邀請 QR／網址</button>`);
@@ -678,12 +688,13 @@
       }else if(!standalone&&section==='cashier'){memberHome();await openPointOperations();}
       else if(!standalone&&section==='mine')memberHome();
       else if(!standalone&&section==='discovery')await discover();
+      else if(!standalone&&section==='partners')await list();
       else if(!standalone&&section==='point-history'){
         memberHome();
         root.querySelector('.shop-bottom-nav [data-do="spending-history"]').click();
       }
       else await (id?view(id):pointsHome());
-      if(!standalone&&section!=='cashier'){
+      if(!standalone&&!['cashier','partners'].includes(section)){
         const warm=()=>{if(root.isConnected&&window.currentPage==='store-shop')void loadWalletModule().then(module=>module.prepareStoreWalletQr()).catch(()=>{});};
         if(window.requestIdleCallback)window.requestIdleCallback(warm,{timeout:1000});else setTimeout(warm,50);
       }
