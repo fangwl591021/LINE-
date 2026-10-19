@@ -1,5 +1,5 @@
 (function() {
-  let pending;
+  let pending, opening = 0;
   function load() {
     if (window.StoreShop) return Promise.resolve();
     if (pending) return pending;
@@ -10,7 +10,7 @@
         document.head.appendChild(css);
       }
       const script = document.createElement('script');
-      script.src = 'js/modules/store-shop.js?v=56&game=2';
+      script.src = 'js/modules/store-shop.js?v=57&game=2';
       const timer = setTimeout(() => finish(new Error('商城載入逾時，請重試')), 15000);
       function finish(error) {
         clearTimeout(timer); script.onload = script.onerror = null;
@@ -40,7 +40,26 @@
       retry.type = 'button'; retry.textContent = '重新載入'; retry.onclick = () => window.location.reload(); root.appendChild(retry);
     }
   };
+  // Attribution is not identity. The server verifies the actual opener's LINE token.
+  async function checkinEntry(section) {
+    if (section !== 'list') return '';
+    const params = window.readActmasterInitialParams?.() || new URLSearchParams(location.search);
+    const allowed = new Set(['shopSection','checkinCard','checkinAction','liff.state','code','state','liffClientId','liffRedirectUri','friendship_status_changed']);
+    const id = params.get('checkinCard'), action = params.get('checkinAction');
+    if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id || '') || !['mall','details'].includes(action) ||
+        ['checkinCard','checkinAction','shopSection'].some(key => params.getAll(key).length !== 1) || [...params.keys()].some(key => !allowed.has(key))) return '';
+    const token = window.liff?.isLoggedIn?.() ? window.liff.getAccessToken() : '';
+    if (!token) return '';
+    try {
+      const base = String(window.WORKER_URL || '').replace(/\/+$/, '');
+      if (new URL(base).protocol !== 'https:') return '';
+      await fetch(base + '/v1/checkin-mall/entry', { method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({cardId:id,action}),cache:'no-store',signal:AbortSignal.timeout(6000) });
+    } catch { /* Analytics failure must never block shopping or points history. */ }
+    return action;
+  }
   window.openStoreShop = async function(productId = '', qrToken = '', memberProduct = '', section = '', shopId = '', options = {}) {
+    const ticket = ++opening;
     if (typeof productId !== 'string') productId = '';
     window.goPage('store-shop');
     const root = document.getElementById('page-store-shop');
@@ -56,9 +75,11 @@
     addReturn();
     try {
       if (section === 'store' && !(window.StoreInviteRoute?.isShopId?.(shopId) ?? (typeof shopId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shopId)))) throw new Error('商城連結格式不正確，請向店家取得新的邀請網址');
-      await load();
+      const owner = window.currentUserProfile?.userId, token = window.liff?.getAccessToken?.();
+      const [, entry] = await Promise.all([load(), checkinEntry(section)]);
+      if (ticket !== opening || owner !== window.currentUserProfile?.userId || token !== window.liff?.getAccessToken?.()) return;
       if (!returned && window.currentPage === 'store-shop') {
-        window.StoreShop.mount(root, false, productId, qrToken, memberProduct, section, shopId);
+        window.StoreShop.mount(root, false, productId, qrToken, memberProduct, entry === 'mall' ? 'discovery' : entry === 'details' ? 'point-history' : section, shopId);
         addReturn();
       }
     } catch(error) {

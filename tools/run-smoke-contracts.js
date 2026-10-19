@@ -39,6 +39,8 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/checkin-mall-card.test.mjs',
+  'test/checkin-mall-ui.test.mjs',
   'test/store-product-discovery.test.mjs',
   'test/store-commerce-points.test.mjs',
   'test/store-commerce-mother.test.mjs',

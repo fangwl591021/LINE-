@@ -18,6 +18,7 @@ import { handleMemberChat, processMemberChatNotifications, processMemberDirector
 import { handleActivityShortLink } from './worker/activity-short-links.mjs';
 import { handleAiAdvance, processAiAdvanceReminders } from './worker/ai-advance.mjs';
 import { handleMemberEvents } from './worker/member-hosted-events.mjs';
+import { handleCheckinMall } from './worker/checkin-mall-card.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -396,6 +397,8 @@ export default {
   async fetch(request, env, ctx) {
     const memberEventResponse = await handleMemberEvents(request, env);
     if (memberEventResponse) return memberEventResponse;
+    const checkinMallResponse = await handleCheckinMall(request, env, storeInviteProfileView);
+    if (checkinMallResponse) return checkinMallResponse;
     const aiAdvanceResponse = await handleAiAdvance(request, env, ctx);
     if (aiAdvanceResponse) return aiAdvanceResponse;
     const activityLinkResponse = await handleActivityShortLink(request, env);

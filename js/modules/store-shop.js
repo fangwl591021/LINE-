@@ -644,6 +644,11 @@
         }
       }else if(!standalone&&section==='cashier'){memberHome();await openPointOperations();}
       else if(!standalone&&section==='mine')memberHome();
+      else if(!standalone&&section==='discovery')await discover();
+      else if(!standalone&&section==='point-history'){
+        memberHome();
+        root.querySelector('.shop-bottom-nav [data-do="spending-history"]').click();
+      }
       else await (id?view(id):pointsHome());
       if(!standalone&&section!=='cashier'){
         const warm=()=>{if(root.isConnected&&window.currentPage==='store-shop')void loadWalletModule().then(module=>module.prepareStoreWalletQr()).catch(()=>{});};
