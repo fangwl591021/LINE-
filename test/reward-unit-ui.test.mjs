@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {renderPointsHome} from '../js/modules/store-points-home.js';
 import {renderRewardCards,renderRewardDetail,readRewardUnits} from '../js/modules/reward-units.js';
+test('reward title gets a scoped full-width green bar without styling other sections',()=>{
+  const css=readFileSync(new URL('../css/store-shop.css',import.meta.url),'utf8');
+  const rule=css.match(/\.shop-points-theme \.points-reward-units>\.points-section-title\{([^}]+)\}/)?.[1];
+  assert.ok(rule);assert.match(rule,/background:#e2f5ec/);assert.match(rule,/border:1px solid #b4dfcb/);assert.match(rule,/border-radius:12px/);assert.match(rule,/padding:16px/);
+  assert.match(css,/\.shop-points-theme \.points-reward-units\{grid-column:1\/-1;min-width:0\}/);
+});
 test('all point home roles place separate three-card reward strip before shop discovery',()=>{
   for(const options of [{},{standalone:true},{merchant:true},{merchant:true,rewardOnly:true},{merchant:true,redeemOnly:true}]){const html=renderPointsHome(options);assert.ok(html.indexOf('aria-label="贈點單位"')<html.indexOf('探索好店'));assert.match(html,/data-do="reward-units"/);assert.match(html,/data-home-reward-units/);assert.match(html,/data-home-shops/);}
   const html=renderRewardCards(Array.from({length:7},(_,n)=>({id:String(n),name:'單位'+n,reward_terms:'條件'})),{home:true});assert.equal((html.match(/<article/g)||[]).length,3);
