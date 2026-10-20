@@ -34,6 +34,8 @@ async function main(){
       const page=await browser.newPage({viewport:{width,height:900}});page.on('pageerror',e=>errors.push(e.message));
       await page.route('**/*',async route=>{if(!route.request().url().startsWith(base+'/')){external.push(route.request().url());await route.abort();}else await route.continue();});
       await page.goto(base);await page.getByRole('button',{name:'探索商品 ›',exact:false}).click();await page.locator('[data-form=product-search]').waitFor();
+      assert.equal(await page.locator('.shop-discovery-tabs [data-do=manage]').count(),0,'Public browsing cannot expose management');
+      assert.equal(await page.locator('.shop-bottom-nav [data-do=find]').getAttribute('aria-current'),'false');
       await page.getByRole('group',{name:'跨店商品分類篩選'}).getByRole('button',{name:'購物商品',exact:true}).click();
       await page.getByRole('textbox',{name:'搜尋商品名稱、介紹或店名'}).fill('按摩');await page.getByRole('button',{name:'搜尋商品',exact:true}).click();
       await page.locator('[data-discovered-product]').waitFor();assert.equal(await page.locator('[data-discovered-product]').count(),1);
