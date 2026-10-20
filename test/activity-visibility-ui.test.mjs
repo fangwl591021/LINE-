@@ -76,7 +76,9 @@ browserTest('mobile uncertain create retries reuse the chosen scope, stable ID a
 browserTest('actual member review POP precedes file preparation and API; retry retains same scope/request key',async t=>{
   const browser=await playwright.chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
   const page=await indexPage(browser);const requests=[];let loseFirst=true;
-  const event={id:'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',title:'範例活動',description:'交流合作內容',location:'台北範例場地',startsAt:'2026-10-20T06:00:00Z',endsAt:'2026-10-20T08:00:00Z',registrationClosesAt:'2026-10-20T06:00:00Z',capacity:0,feeText:'免費',coverUrl:'',status:'active',revision:0,isOwner:true,organizerName:'範例主辦',registrationCount:0,visibility:'network'};
+  // This exercises editing an open event, not the ended-event read-only rule.
+  const startsAt=new Date(Date.now()+24*3600000).toISOString(),endsAt=new Date(Date.now()+26*3600000).toISOString();
+  const event={id:'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',title:'範例活動',description:'交流合作內容',location:'台北範例場地',startsAt,endsAt,registrationClosesAt:startsAt,capacity:0,feeText:'免費',coverUrl:'',status:'active',revision:0,isOwner:true,organizerName:'範例主辦',registrationCount:0,visibility:'network'};
   await page.unroute('**/*');await page.route('**/*',async route=>{
     const headers={'access-control-allow-origin':'*','access-control-allow-headers':'Authorization, Content-Type','access-control-allow-methods':'GET, POST, OPTIONS'};
     const req=route.request(),url=new URL(req.url());if(req.method()==='OPTIONS')return route.fulfill({status:204,headers,body:''});if(req.method()==='POST'&&url.pathname===`/v1/member-events/${event.id}/update`){

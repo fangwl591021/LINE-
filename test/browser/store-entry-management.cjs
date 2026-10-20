@@ -39,7 +39,7 @@ const {chromium}=require('playwright');
    if(route.request().url()==='https://tracking.example.test/v1/checkin-mall/entry'){requests.push({method:'POST',path:'/v1/checkin-mall/entry'});return route.fulfill({json:{success:true}});}
    return route.abort();
   };
-  for(const role of ['user','store','admin'])for(const width of [320,390,1280]){
+  for(const role of ['user','store','admin','redeem','扣點用戶'])for(const width of [320,390,1280]){
    const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(12000);
    await page.route('**/*',localOnly);
    await page.goto(origin);await page.evaluate(role=>window.userRole=role,role);await page.locator('#partner').click();await page.locator('[data-form=search]').waitFor();assert.equal(await page.locator('[data-form=product-search]').count(),0);
@@ -72,7 +72,7 @@ const {chromium}=require('playwright');
   const page=await browser.newPage();await page.route('**/*',localOnly);
   await page.goto(origin+'/?shopSection=list&checkinCard=00000000-0000-4000-8000-000000000001&checkinAction=mall');await page.evaluate(()=>openStoreShop('','','','list'));await page.locator('[data-form=product-search]').waitFor();await page.locator('.shop-bar [data-do=manage]').click();await page.locator('[data-form=store]').waitFor();
   const count=requests.length;await page.evaluate(()=>openStoreShop('','','','manage'));await page.locator('[data-form=store]').waitFor();assert.ok(requests.slice(count).every(r=>r.path==='/v1/store-shop/manage'),'Old check-in context cannot override explicit settings');
-  for(const role of ['reward','redeem','tenant','unknown']){
+  for(const role of ['reward','tenant','unknown']){
    await page.evaluate(role=>window.userRole=role,role);const before=requests.filter(r=>r.path==='/v1/store-shop/manage').length;
    await page.evaluate(()=>openStoreShop('','','','discovery'));await page.locator('[data-form=product-search]').waitFor();assert.equal(await page.locator('.shop-discovery-tabs [data-do=manage]').count(),0);
    await page.evaluate(()=>openStoreShop('','','','manage'));await page.locator('[role=alert]').filter({hasText:'請登入已登記的會員帳號'}).waitFor();assert.equal(requests.filter(r=>r.path==='/v1/store-shop/manage').length,before);assert.equal(await page.locator('.shop-bar [data-do=manage]').count(),0);

@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/redeem-catalog.test.mjs',
   'test/store-navigation.test.mjs',
   'test/reward-unit-directory.test.mjs',
   'test/reward-unit-ui.test.mjs',

@@ -4,7 +4,7 @@ import {requireListingReview,ListingReviewError,listingReviewFailure} from './st
 
 const PATH='/v1/store-shop/admin/products';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ROLES=['store','店長','admin','總管','user','用戶'];
+const ROLES=['store','店長','admin','總管','user','用戶','redeem','扣點用戶'];
 const UNLIMITED=['store','店長','admin','總管'];
 const HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:HEADERS});

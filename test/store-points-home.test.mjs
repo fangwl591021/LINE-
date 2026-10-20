@@ -30,6 +30,13 @@ test('redeem operator home shows redemption only and no management or gift contr
  assert.match(html,/不能贈點/);
 });
 
+test('redeem catalog capability adds own company entry without gifts, sales or payment management',()=>{
+ const html=renderPointsHome({merchant:true,redeemOnly:true,canManage:true});
+ assert.match(html,/data-do="manage"/);assert.match(html,/一件展示商品/);assert.match(html,/data-do="point-redeem"/);
+ assert.doesNotMatch(html,/data-do="(?:point-reward|sales|online-manage)"/);
+ assert.match(html,/原會員扣點功能不變/);assert.match(html,/不能贈點/);
+});
+
 test('shared brand uses supplied logo without replacing it on role changes; image stays contained',()=>{
  const css=readFileSync(new URL('../css/store-shop.css',import.meta.url),'utf8');
  const logo=readFileSync(new URL('../assets/points-logo-transparent-20260916.png',import.meta.url));
@@ -40,7 +47,7 @@ test('shared brand uses supplied logo without replacing it on role changes; imag
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=34/);assert.match(source,/store-shop\.js\?v=65/);
+  assert.match(source,/store-shop\.css\?v=34/);assert.match(source,/store-shop\.js\?v=66/);
  }
 });
 test('shared storefront places an accessible main-home return before the brand for every role',()=>{
