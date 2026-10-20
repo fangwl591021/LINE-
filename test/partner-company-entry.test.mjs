@@ -28,9 +28,9 @@ test('hostile or missing public contact fields cannot create executable links or
  assert.doesNotMatch(contact({maps_url:'https://user:pass@example.test/'}),/user:pass/);assert.equal((contact({}).match(/尚未提供/g)||[]).length,2);
 });
 test('entry reuses owner forms, preserves role/quota rules and does not warm QR in the partner list',()=>{
- assert.match(shop,/section==='partners'\)await list\(\)/);assert.match(shop,/!\['cashier','partners'\]\.includes\(section\)/);
+ assert.match(shop,/\['partners','list'\]\.includes\(section\)\)await list\(\)/);assert.match(shop,/!\['cashier','partners','list'\]\.includes\(section\)/);
  assert.match(shop,/上架公司／商品/);assert.match(shop,/公司與商品上架步驟/);assert.match(shop,/一般會員最多一件/);
  assert.match(shop,/api\('\/store',data\)/);assert.match(shop,/api\('\/product',data\)/);
  assert.ok(read('index.html').includes('home.js?v=8.27'));
- for(const file of ['js/modules/store-shop-entry.js','store-shop.html']){assert.ok(read(file).includes('store-shop.js?v=63'));assert.ok(read(file).includes('store-shop.css?v=32'));}
+ for(const file of ['js/modules/store-shop-entry.js','store-shop.html']){assert.ok(read(file).includes('store-shop.js?v=64'));assert.ok(read(file).includes('store-shop.css?v=33'));}
 });

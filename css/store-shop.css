@@ -288,6 +288,7 @@ body:has(.store-history-popup[open]){overflow:hidden}
 .shop-points-theme [hidden]{display:none!important}
 .shop-points-theme .shop-bar{background:#fff;border-radius:12px;padding:4px}
 .shop-points-theme .shop-bar button{font-size:14px;min-height:44px}
+.shop-points-theme .shop-bar button[aria-current=page]{background:#007f68;color:#fff;font-weight:700}
 .shop-points-theme[data-shop-view=home]>.shop-bar,.shop-points-theme[data-shop-view=home]>.shop-safety-note{display:none}
 .shop-points-theme>.shop-content{min-height:320px}
 .shop-points-theme .points-home{min-width:0}

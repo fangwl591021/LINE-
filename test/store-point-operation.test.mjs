@@ -21,7 +21,7 @@ test('standalone brand entry uses the point LIFF and navigation-only query',asyn
  }
  assert.match(mall,/data-do="point-operation"[\s\S]*?aria-haspopup="dialog"/);
  assert.match(mall,/section==='cashier'\)\{memberHome\(\);await openPointOperations\(\);\}/);
- assert.match(mall,/if\(!standalone&&!\['cashier','partners'\]\.includes\(section\)\)/);
+  assert.match(mall,/if\(!standalone&&!\['cashier','partners','list'\]\.includes\(section\)\)/);
 });
 
 function signedIn(canUse=true){
