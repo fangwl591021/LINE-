@@ -1,0 +1,1 @@
+{"actorId":"U_ACTOR","networkId":"tenant-a","requestedVersion":"square","candidates":[{"row_id":"CARD_SQUARE_1","owner_user_id":"U_ACTOR","network_id":"tenant-a","source_type":"self_upload","is_active":1}],"expected":{"status":"RESOLVED","cardId":"CARD_SQUARE_1"}}
