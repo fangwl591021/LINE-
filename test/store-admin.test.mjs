@@ -207,9 +207,9 @@ test('empty directory has stable zero totals and empty pagination', async () => 
 
 test('public visibility uses exact existing catalog eligibility, including case handling but not trimmed roles', async () => {
   const f = fixture(); try {
-    for (const role of ['store', '店長', 'admin', '總管', 'user', '用戶', 'STORE', 'reward', 'tenant', ' store ']) {
+    for (const role of ['store', '店長', 'admin', '總管', 'user', '用戶', 'redeem', '扣點用戶', 'STORE', 'reward', 'tenant', ' store ']) {
       f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role, B);
-      const result = await f.call(); assert.equal(result.shops[0].public_visible, ['store', '店長', 'admin', '總管', 'user', '用戶', 'STORE'].includes(role), role);
+      const result = await f.call(); assert.equal(result.shops[0].public_visible, ['store', '店長', 'admin', '總管', 'user', '用戶', 'redeem', '扣點用戶', 'STORE'].includes(role), role);
     }
   } finally { f.sql.close(); }
 });

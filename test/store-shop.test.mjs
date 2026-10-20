@@ -1,6 +1,7 @@
 import {test} from 'node:test';
-test('normal member owns one catalog product, retries are safe, archive frees quota, transactions stay restricted',async()=>{
+for(const role of ['user','redeem','扣點用戶','REDEEM'])test(role+' owns one catalog product, retries are safe, archive frees quota, transactions stay restricted',async()=>{
  const {call,sql}=fixture();try{
+  sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,USER);
   const s=await call('/store',store({owner_uid:A,role:'admin'}),'c');assert.equal(s.status,200);assert.equal(s.product_limit,1);assert.equal(s.product_count,0);
   assert.equal(sql.prepare('SELECT owner_uid FROM store_shop_stores WHERE id=?').get(s.shop.id).owner_uid,USER);
   assert.equal((await call('?shop='+s.shop.id)).shop.merchant_enabled,0);
@@ -14,14 +15,19 @@ test('normal member owns one catalog product, retries are safe, archive frees qu
   assert.equal((await call('/product',{...data,request_key:crypto.randomUUID()},'c')).status,400);
   const edited=await call('/product',{...saved.products[0],title:'本人上架',status:'active'},'c');assert.equal(edited.status,200);
   assert.equal((await call('?shop='+s.shop.id)).products.length,1);
+  const discovered=await call('/products?q='+encodeURIComponent('本人上架'));
+  assert.equal(discovered.products.length,1);assert.equal(discovered.products[0].shop.merchant_enabled,0);
+  assert.equal((await call('/products?redeem=1')).products.length,0);
+  assert.equal(sql.prepare('SELECT role FROM users WHERE line_id=?').get(USER).role,role);
   const archived=await call('/product',{...edited.products[0],status:'archived'},'c');assert.equal(archived.product_count,0);
   assert.equal((await call('/product',{...data,request_key:crypto.randomUUID()},'c')).status,200);
   assert.equal(sql.prepare('SELECT count(*) n FROM store_shop_products').get().n,2);
  }finally{sql.close();}
 });
 
-test('two concurrent normal-member inserts cannot exceed one product',async()=>{
+for(const role of ['user','redeem','扣點用戶'])test(role+' concurrent inserts cannot exceed one product',async()=>{
  const {call,sql}=fixture();try{
+  sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,USER);
   await call('/store',store(),'c');
   const results=await Promise.all([1,2].map(i=>call('/product',product({title:'商品'+i,redeem_type:'none',redeem_value:0}),'c')));
   assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);
@@ -67,7 +73,7 @@ test('merchant role matrix protects management, writes, sales and DM, not public
    assert.equal((await call('/manage',null,'a')).status,200,role);
    assert.equal((await call('?shop='+id)).status,200,role);
   }
-  for(const role of ['tenant','租戶','staff','manager','administrator','',null]){
+  for(const role of ['reward','贈點用戶','tenant','租戶','staff','manager','administrator','',null]){
    sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
    for(const path of ['/manage','/sales'])assert.equal((await call(path,null,'a')).status,403,role+path);
    for(const path of ['/store','/product','/product-ocr'])assert.equal((await call(path,{role:'admin',owner_uid:A},'a')).status,403,role+path);
