@@ -132,7 +132,7 @@
       pageKind('home');const version=++epoch;alert.textContent='';
       const owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.();
       const current=()=>version===epoch&&root.isConnected&&content.isConnected&&root.contains(content)&&(standalone||window.currentPage==='store-shop')&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.();
-      const home=await import('./store-points-home.js?v=4');if(!current())return;
+      const home=await import('./store-points-home.js?v=5');if(!current())return;
       const allowed=canMerchantHome()&&!!home.merchantRole(role);
       merchantView=allowed&&(toggle?!merchantView:merchantView??true);
       root.dataset.pointsRole=merchantView?'merchant':'consumer';
@@ -150,6 +150,15 @@
         if(version===epoch&&content.isConnected&&root.contains(content)&&window.currentPage==='store-shop'){merchantView=undefined;void run(()=>pointsHome());}
       }});}).catch(()=>{if(current())content.querySelector('[data-home-balance]').textContent='點按 QR 重試';});
       void api('?seed='+discoverySeed).then(result=>{if(current())content.querySelector('[data-home-shops]').innerHTML=home.renderRecommendedShops(result.shops,photo);}).catch(()=>{if(current())content.querySelector('[data-home-shops]').innerHTML='<p>店家暫時無法載入。<button type="button" data-do="points-home">重新載入</button></p>';});
+      void home.readRewardUnits(base).then(result=>{if(current())content.querySelector('[data-home-reward-units]').innerHTML=home.renderRewardCards(result.units,{home:true});}).catch(()=>{if(current())content.querySelector('[data-home-reward-units]').innerHTML='<p>贈點單位暫時無法載入。<button type="button" data-do="reward-units">重新載入</button></p>';});
+    }
+    async function rewardUnits(id='') {
+      pageKind('reward-units');const version=++epoch;alert.textContent='';
+      root.querySelector('.shop-notice').hidden=true;
+      content.innerHTML='<div data-reward-directory></div>';
+      const current=()=>version===epoch&&root.isConnected&&(standalone||window.currentPage==='store-shop');
+      const module=await import('./reward-units.js?v=1');if(!current())return;
+      await module.mountRewardUnits(content.querySelector('[data-reward-directory]'),{base,isCurrent:current,onBack:()=>run(()=>pointsHome()),initialId:id});
     }
     function memberHome() {
       ++epoch;pageKind('mine');alert.textContent='';
@@ -433,6 +442,8 @@
       void run(async()=>{
         switch(button.dataset.do) {
           case 'points-home':await pointsHome();break;
+          case 'reward-units':await rewardUnits();break;
+          case 'reward-unit':await rewardUnits(button.dataset.id);break;
           case 'points-view':await pointsHome(true);break;
           case 'point-reward':await openPointOperations('reward');break;
           case 'point-redeem':await openPointOperations('redeem');break;

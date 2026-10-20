@@ -29,7 +29,7 @@ const pointService={contract:{version:'commerce-ledger-v1',rawLedgerVerification
 if(process.env.TEST_COMMERCE_POINTS==='true'){env.STORE_COMMERCE_POINTS_ENABLED='true';sql.exec("UPDATE store_shop_products SET redeem_type='full' WHERE id='p-a'");}
 sql.exec('ALTER TABLE users ADD COLUMN point_line_id TEXT; ALTER TABLE users ADD COLUMN legacy_line_id TEXT; ALTER TABLE users ADD COLUMN row_id TEXT;');
 const files=['js/modules/store-point-operation.js','js/modules/store-shop-sales.js','js/modules/store-buyer-profile.js','js/modules/store-registration-popup.js','js/modules/store-product-ocr.js','css/store-shop.css','js/modules/store-shop-entry.js','js/modules/store-shop.js','js/modules/store-commerce.js','js/modules/store-wallet-popup.js','js/modules/store-history-popup.js','js/modules/member-product-qr.js','js/vendor/qrcode-generator-2.0.4.mjs','assets/storefront/lifestyle-cafe-v1.jpg'];
-files.push('js/modules/store-points-home.js','assets/points-logo-transparent-20260916.png');
+files.push('js/modules/store-points-home.js','js/modules/reward-units.js','assets/points-logo-transparent-20260916.png');
 const server=createServer(async(req,res)=>{
   const origin='http://127.0.0.1:8794',path=new URL(req.url,origin).pathname;
   try {
