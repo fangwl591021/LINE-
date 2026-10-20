@@ -131,7 +131,7 @@
         const active=button.dataset.do===selected;
         button.classList.toggle('primary',active);button.setAttribute('aria-current',active?'page':'false');
       });
-      root.querySelectorAll('.shop-bottom-nav button').forEach(b=>{const active=kind==='home'?b.dataset.do==='points-home':['directory','discovery','store','product'].includes(kind)?b.dataset.do==='find':kind==='mine'?b.dataset.do==='mine':false;b.setAttribute('aria-current',active?'page':'false');});
+      root.querySelectorAll('.shop-bottom-nav button').forEach(b=>{const active=kind==='home'?b.dataset.do==='points-home':['directory','store'].includes(kind)?b.dataset.do==='find':kind==='mine'?b.dataset.do==='mine':false;b.setAttribute('aria-current',active?'page':'false');});
     }
     async function pointsHome(toggle=false) {
       pageKind('home');const version=++epoch;alert.textContent='';
@@ -293,7 +293,10 @@
       content.querySelector('.shop-grid')?.insertAdjacentHTML('beforebegin',`<div class="shop-section-title"><h2>${q||category?'符合條件的好店':'探索好店'}</h2><span>各店自行收款</span></div>`);
       content.insertAdjacentHTML('beforeend',`<div class="shop-discovery-promos"><button data-do="wallet"><span aria-hidden="true">🎁</span><strong>點數用在喜歡的生活<small>查看本人共用點數與折抵入口</small></strong></button>${canManage()?'<button data-do="manage"><span aria-hidden="true">🏪</span><strong>我是店家<small>管理本人店面與商品</small></strong></button>':''}</div>`);
     }
-    function discoveryTabs(products){return `<nav class="shop-discovery-tabs" aria-label="探索方式"><button type="button" data-do="discover" aria-pressed="${products}">找商品</button><button type="button" data-do="list" aria-pressed="${!products}">找店家</button></nav>`;}
+    function discoveryTabs(products){
+      const settings=canManage();
+      return `<nav class="shop-discovery-tabs${settings?' shop-discovery-with-settings':''}" aria-label="探索方式"><button type="button" data-do="discover" aria-pressed="${products}">找商品</button><button type="button" data-do="list" aria-pressed="${!products}">找店家</button>${settings?'<button type="button" data-do="manage" class="shop-settings-entry">商店設定</button>':''}</nav>`;
+    }
     function discoveryForm(){return content.querySelector('[data-form="product-search"]');}
     function discoveryValues(){const form=discoveryForm();return form?{...Object.fromEntries(new FormData(form)),redeem:form.elements.redeem.checked?'1':'',category:discovery.category}:discovery;}
     function discoveredProduct(p){
@@ -460,7 +463,7 @@
           case 'discover-detail':await discoverDetail(button.dataset.id);break;
           case 'discover-next':await discover(discovery,button.dataset.cursor);break;
           case 'discover-category':await discover({...discoveryValues(),category:button.dataset.category});break;
-          case 'find': await list();content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
+          case 'find': await list();content.querySelector('.shop-discovery-tabs')?.scrollIntoView({block:'start'});break;
           case 'region': await list();content.querySelector('[name=q]').placeholder='輸入地區，例如：板橋';content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
           case 'shopping': if(viewedShop)await view(viewedShop.id);else {await list();content.querySelector('.shop-section-title')?.scrollIntoView({block:'center'});}break;
           case 'mine':memberHome();break;
