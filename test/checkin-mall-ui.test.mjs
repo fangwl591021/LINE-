@@ -54,7 +54,7 @@ test('identity/page changes while entry request is pending cannot mount a stale 
 });
 test('served index/admin surfaces wire only the dedicated entry/report, both destinations retain return controls',()=>{
   const index=readFileSync(new URL('../index.html',import.meta.url),'utf8'),admin=readFileSync(new URL('../admin.html',import.meta.url),'utf8'),shop=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
-  assert.match(index,/store-shop-entry\.js\?v=66/);assert.match(admin,/nav-checkin-mall-report/);assert.match(admin,/checkin-mall-report\.js\?v=1/);assert.match(admin,/loadAdminCheckinMallReport/);
+  assert.match(index,/store-shop-entry\.js\?v=67/);assert.match(admin,/nav-checkin-mall-report/);assert.match(admin,/checkin-mall-report\.js\?v=1/);assert.match(admin,/loadAdminCheckinMallReport/);
   assert.match(admin,/switchTab\('users'\).*返回會員管理/);assert.match(shop,/section==='discovery'\)await discover/);assert.match(shop,/section==='point-history'/);assert.match(shop,/spending-history/);
   assert.doesNotMatch(report,/\.innerHTML|point_line_id|gift_money|\/message\/push/);
 });

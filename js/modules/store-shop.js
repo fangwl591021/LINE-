@@ -115,7 +115,7 @@
       if(isCurrent())module.openStorePointOperationPopup({standalone,isCurrent,mode});
     }
     root.classList.add('store-shop');
-    root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button data-do="exit">返回首頁</button><button data-do="discover">找商品</button><button data-do="list">店家列表</button>${canManage()?'<button data-do="manage" class="primary">我的商城管理</button>':''}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
+    root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button type="button" data-do="exit">返回首頁</button><button type="button" data-do="discover">找商品</button><button type="button" data-do="list">店家列表</button>${canManage()?'<button type="button" data-do="manage">商店設定</button>':''}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
     root.classList.add('shop-lifestyle','shop-points-theme');
     root.querySelector('h1').textContent='生活好店';
@@ -126,6 +126,11 @@
       clearHomeWallet?.();clearHomeWallet=null;
       root.dataset.shopView=kind;
       const notice=root.querySelector?.('.shop-notice');if(notice)notice.hidden=false;
+      const selected=kind==='directory'?'list':kind==='discovery'?'discover':kind==='manage'?'manage':kind.startsWith('admin-')?'admin-stores':'';
+      root.querySelectorAll('.shop-bar button[data-do]').forEach(button=>{
+        const active=button.dataset.do===selected;
+        button.classList.toggle('primary',active);button.setAttribute('aria-current',active?'page':'false');
+      });
       root.querySelectorAll('.shop-bottom-nav button').forEach(b=>{const active=kind==='home'?b.dataset.do==='points-home':['directory','discovery','store','product'].includes(kind)?b.dataset.do==='find':kind==='mine'?b.dataset.do==='mine':false;b.setAttribute('aria-current',active?'page':'false');});
     }
     async function pointsHome(toggle=false) {
@@ -699,13 +704,13 @@
       }else if(!standalone&&section==='cashier'){memberHome();await openPointOperations();}
       else if(!standalone&&section==='mine')memberHome();
       else if(!standalone&&section==='discovery')await discover();
-      else if(!standalone&&section==='partners')await list();
+      else if(!standalone&&['partners','list'].includes(section))await list();
       else if(!standalone&&section==='point-history'){
         memberHome();
         root.querySelector('.shop-bottom-nav [data-do="spending-history"]').click();
       }
       else await (id?view(id):pointsHome());
-      if(!standalone&&!['cashier','partners'].includes(section)){
+      if(!standalone&&!['cashier','partners','list'].includes(section)){
         const warm=()=>{if(root.isConnected&&window.currentPage==='store-shop')void loadWalletModule().then(module=>module.prepareStoreWalletQr()).catch(()=>{});};
         if(window.requestIdleCallback)window.requestIdleCallback(warm,{timeout:1000});else setTimeout(warm,50);
       }

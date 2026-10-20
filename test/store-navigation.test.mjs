@@ -1,0 +1,29 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const source=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
+test('top navigation highlights the current destination only and clears previous selection',()=>{
+ const buttons=['list','discover','manage','admin-stores','online-orders'].map(action=>({dataset:{do:action},attributes:{},classList:{toggle(key,active){this[key]=active;}},setAttribute(key,value){this.attributes[key]=value;}}));
+ const bottom=['points-home','find','mine'].map(action=>({dataset:{do:action},setAttribute(){}})),notice={},root={dataset:{},querySelector:()=>notice,querySelectorAll:selector=>selector.startsWith('.shop-bar')?buttons:bottom};
+ let closed=0;const context={root,clearHomeWallet:()=>{closed++;}};
+ const code=source.slice(source.indexOf('    function pageKind(kind)'),source.indexOf('    async function pointsHome('));
+ vm.runInNewContext(code+';globalThis.choose=pageKind;',context);
+ for(const [view,selected]of [['directory','list'],['discovery','discover'],['manage','manage'],['home',''],['mine',''],['admin-stores','admin-stores'],['store',''],['directory','list']]){
+  context.choose(view);assert.equal(root.dataset.shopView,view);assert.deepEqual(buttons.filter(b=>b.attributes['aria-current']==='page').map(b=>b.dataset.do),selected?[selected]:[]);for(const button of buttons)assert.equal(button.classList.primary,button.dataset.do===selected);
+ }assert.equal(closed,1);
+});
+test('legacy plain list and internal partner entry resolve only to the store directory',()=>{
+ assert.match(source,/else if\(!standalone&&\['partners','list'\]\.includes\(section\)\)await list\(\)/);
+ assert.match(source,/!\['cashier','partners','list'\]\.includes\(section\)/);
+ assert.match(source,/section==='discovery'\)await discover\(\)/);assert.match(source,/section==='point-history'/);
+ assert.match(source,/case 'manage': await manage\(\); break;/);assert.match(source,/api\('\/manage',null,true\)/);
+});
+test('settings remains an independent non-submit action with the existing role boundary',()=>{
+ assert.match(source,/<button type="button" data-do="manage">商店設定<\/button>/);
+ assert.doesNotMatch(source,/<button[^>]*data-do="manage"[^>]*class="primary">我的商城管理/);
+ const gate=source.match(/const canManage=\(\)=>(.*);/)[1];
+ for(const role of ['user','store','admin','tenant','reward','redeem','unknown'])for(const standalone of [true,false]){
+  assert.equal(vm.runInNewContext(gate,{window:{userRole:role},standalone}),!standalone&&['user','store','admin'].includes(role));
+ }
+});
