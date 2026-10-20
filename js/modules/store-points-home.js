@@ -1,4 +1,5 @@
 // Presentation only. Every operation remains in the existing authenticated module.
+export {readRewardUnits,renderRewardCards} from './reward-units.js?v=1';
 export function merchantRole(role) {
   return ({admin:'admin','總管':'admin',store:'store',tenant:'store','店長':'store','租戶':'store',reward:'reward','贈點用戶':'reward',redeem:'redeem','扣點用戶':'redeem'})[String(role||'').toLowerCase()]||'';
 }
@@ -16,6 +17,7 @@ export function renderPointsHome({merchant=false,rewardOnly=false,redeemOnly=fal
       tile('wallet','gift','我要使用點數','出示本人 QR，店家掃描','green')+tile('find','pin','哪裡可以用？','搜尋可用店家','amber')+tile('spending-history','history','我的點數紀錄','贈點・消費折抵','pink')+tile('online-orders','bag','我的網路訂單','訂單・匯款・寄送','blue')}
     </div>
     ${merchant?`<div class="points-tools">${tile('spending-history','history','本人紀錄','我的點數明細','mint')}${!rewardOnly&&!redeemOnly?tile('sales','chart','商品業績','商品 QR 折抵','lavender')+tile('online-manage','bag','網路訂單','收款與出貨','sand')+tile('manage','settings','店家設定','店面與商品','gray'):''}</div><p class="points-permission-note">${redeemOnly?'此帳號僅開放消費折抵，不能贈點或管理店家。':rewardOnly?'此帳號僅開放 QR 或手機贈點，不提供扣點或店家收款管理。':'贈點與折抵皆須核對會員並確認送出，開啟功能不會直接交易。'}</p>`:''}
+    <section class="points-reward-units" aria-label="贈點單位"><div class="points-section-title"><h2>${pointIcon('gift')}贈點單位</h2><button type="button" data-do="reward-units">更多 ›</button></div><div class="reward-unit-strip" data-home-reward-units><p role="status">載入贈點單位中…</p></div><p class="shop-meta">認識提供贈點的單位，贈點方式與資格請洽各單位。</p></section>
     <div class="points-section-title"><h2>${pointIcon('pin')}探索好店</h2><button type="button" data-do="find">更多 ›</button></div><div class="shop-grid shop-discovery-grid points-recommended" data-home-shops><p role="status">載入店家中…</p></div>
     <button type="button" data-do="${canManage?'manage':'wallet'}" class="points-home-banner">${pointIcon(canManage?'bag':'coins')}<span><strong>${canManage?'我的店面與商品':'把點數用在喜歡的生活'}</strong><small>${canManage?'商品管理、DM 建商品與商城邀請':'出示本人 QR，依店家規則使用點數'}</small></span><span aria-hidden="true">›</span></button>
   </section>`;

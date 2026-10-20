@@ -4,12 +4,18 @@ import {readFileSync,mkdirSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {execFileSync} from 'node:child_process';
 const require=createRequire(import.meta.url);
 const runtime=process.env.CODEX_BROWSER_MODULES||'C:/Users/User/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules';
 let playwright;try{playwright=require('playwright');}catch{playwright=require(join(runtime,'playwright'));}
 const origin='http://store-admin.test',out=process.env.STORE_ADMIN_SCREENSHOTS||join(tmpdir(),'store-admin-ui-20260914');mkdirSync(out,{recursive:true});
-const files=['js/modules/store-shop.js','js/modules/store-points-home.js','js/modules/store-wallet-popup.js','js/modules/store-admin.js','css/store-shop.css','css/store-admin.css'];
+const files=['js/modules/store-shop.js','js/modules/store-points-home.js','js/modules/reward-units.js','js/modules/store-wallet-popup.js','js/modules/store-admin.js','css/store-shop.css','css/store-admin.css'];
 const sources=new Map(files.map(file=>['/'+file,readFileSync(new URL('../../'+file,import.meta.url),'utf8')]));
+// Read-only comparison mode for distinguishing old layout assertions from regressions.
+if(process.env.STORE_ADMIN_BASELINE_REF){
+  assert.match(process.env.STORE_ADMIN_BASELINE_REF,/^[0-9a-f]{40}$/);
+  for(const file of ['js/modules/store-shop.js','js/modules/store-points-home.js','css/store-shop.css'])sources.set('/'+file,execFileSync('git',['show',process.env.STORE_ADMIN_BASELINE_REF+':'+file],{encoding:'utf8'}));
+}
 const id=i=>`${String(i).padStart(8,'0')}-1111-4111-8111-111111111111`;
 const shops=Array.from({length:23},(_,i)=>({id:id(i+1),name:i===0?'米樂生活・測試店家':`合成測試店家 ${i+1}`,status:i%2===0?'active':'draft',category:'食',address:'新北市板橋區文化路一段 123 號',phone:'02-12345678',owner_uid:'U_SYNTHETIC_'+i,owner_name:i===1?'':`合成負責人 ${i+1}`,owner_role:'store',product_count:3,active_product_count:2,online_product_count:1,public_visible:i%2===0&&i!==2,image_url:'https://store-admin.test/photo.svg',merchant_enabled:1}));
 const browser=await playwright.chromium.launch({headless:true,channel:process.env.STORE_ADMIN_BROWSER_CHANNEL||'chrome'});const context=await browser.newContext({viewport:{width:390,height:844}});const page=await context.newPage();
@@ -22,6 +28,7 @@ await page.route('**/*',async route=>{
     await route.fulfill({contentType:'text/html',body:'<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>管理員店家列表・合成本機測試</title><link rel="stylesheet" href="/css/store-shop.css"><body style="margin:0;background:#fffaf1"><main id="fixture"></main><script>window.currentPage="store-shop";window.userRole="admin";window.currentUserProfile={userId:"U_TEST_ADMIN"};window.testToken="synthetic-token";window.Config={WORKER_URL:location.origin};window.liff={isLoggedIn:()=>!!window.testToken,getAccessToken:()=>window.testToken};window.requestIdleCallback=()=>0;window.goPage=p=>window.currentPage=p;</script><script src="/js/modules/store-shop.js"></script></body></html>'});return;
   }
   if(sources.has(url.pathname)){await route.fulfill({contentType:url.pathname.endsWith('.css')?'text/css':'text/javascript',body:sources.get(url.pathname)});return;}
+  if(url.pathname==='/v1/reward-units'){await route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,units:[],next:''})});return;}
   if(url.pathname==='/photo.svg'||url.pathname==='/assets/storefront/lifestyle-cafe-v1.jpg'){
     await route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="#f1d8a6"/><circle cx="300" cy="420" r="220" fill="#9bb69c"/><text x="300" y="470" text-anchor="middle" font-size="80" fill="#173e59">合成店家</text></svg>'});return;
   }

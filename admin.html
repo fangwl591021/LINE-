@@ -4238,6 +4238,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
           <td class="text-right whitespace-nowrap">
             <div class="crm-action-stack">
               <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="crm-action-btn">CRM</button>
+              ${role==='reward'&&adminRole==='admin'?`<button type="button" onclick="window.openRewardUnitEditor('${escapeHTML(id)}')" class="crm-action-btn">贈點單位上架</button>`:''}
               <select onchange="updateRole('${escapeHTML(id)}', this.value, this)" ${adminRole !== 'admin' || isHardAdminAccount(id, u) ? 'disabled' : ''} class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
                 ${role === 'admin' || role === 'tenant' ? `<option value="${role}" selected>${escapeHTML(getRoleLabel(role))}</option>` : ''}
                 <option value="user" ${role==='user'?'selected':''}>一般</option>
@@ -5763,6 +5764,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <script src="js/modules/admin-mall-dashboard.js?v=7"></script>
   <script src="js/modules/checkin-mall-report.js?v=1"></script>
   <script src="js/modules/admin-crm-card-link.js?v=1"></script>
+  <link rel="stylesheet" href="css/reward-unit-editor.css?v=1">
+  <script src="js/modules/reward-unit-editor.js?v=1"></script>
   <link rel="stylesheet" href="css/admin-activity-registration.css?v=5">
     <link rel="stylesheet" href="css/activity-visibility.css?v=1">
     <script src="js/modules/activity-visibility.js?v=1"></script>

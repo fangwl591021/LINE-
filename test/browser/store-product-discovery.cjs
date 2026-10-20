@@ -13,13 +13,14 @@ async function main(){
   for(let i=0;i<42;i++)put('z'+String(i).padStart(3,'0'),'分頁展示商品 '+i);
   const before=sql.prepare('SELECT total_changes() n').get().n;
   const db={prepare(q){return {bind(...a){return {async all(){return {results:sql.prepare(q).all(...a)};},async first(){return sql.prepare(q).get(...a)||null;}};}};}};
-  const files=new Set(['js/modules/store-shop.js','js/modules/store-points-home.js','css/store-shop.css','assets/points-logo-transparent-20260916.png']);
+  const files=new Set(['js/modules/store-shop.js','js/modules/store-points-home.js','js/modules/reward-units.js','css/store-shop.css','assets/points-logo-transparent-20260916.png']);
   let base;const server=createServer(async(req,res)=>{try{
     const url=new URL(req.url,base),file=url.pathname.slice(1);
     if(url.pathname==='/'){
       res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>商品探索・隔離測試</title><link rel="stylesheet" href="/css/store-shop.css"><body style="margin:0"><main id="public-store-shop"></main><script>window.Config={WORKER_URL:location.origin};window.requestIdleCallback=()=>0;</script><script src="/js/modules/store-shop.js"></script></body></html>');return;
     }
     if(files.has(file)){res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'image/png');res.end(readFileSync(path.resolve(file)));return;}
+    if(url.pathname==='/v1/reward-units'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({success:true,units:[],next:''}));return;}
     if(url.pathname.startsWith('/v1/store-shop')){
       assert.equal(req.method,'GET','Discovery must never write');const response=await handleStoreShop(new Request(url,{method:req.method}),{ACTMASTER_DB:db},()=>{throw Error('External API forbidden');});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(await response.text());return;
     }

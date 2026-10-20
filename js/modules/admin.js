@@ -772,6 +772,7 @@ window.renderStoreManagement = function() {
         '<span class="material-symbols-outlined text-[14px]">storefront</span> ' +
         'StoreID: <span class="font-mono text-slate-700 font-bold">' + window.escapeJS(u.storeid || '尚未生成') + '</span>' +
       '</div>' +
+      (role === 'reward' && window.userRole === 'admin' ? '<button type="button" onclick="window.openRewardUnitEditor(\'' + window.escapeJS(u.userId) + '\')" class="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg p-3">贈點單位上架</button>' : '') +
     '</div>';
   }).join('');
 };
