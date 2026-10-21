@@ -6,7 +6,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const source=read('js/modules/mycard.js');
 const methods=source.slice(source.indexOf('  function cardBusinessInput('),source.indexOf('  function renderWysiwygEditor('));
 const render=source.slice(source.indexOf('  function renderWysiwygEditor('),source.indexOf('  function closeMyCardWysiwyg()'));
-const copy='提供網站設計、產品打樣與品牌識別設計，依企業需求整理線上服務及商品形象。';
+const copy='提供網站設計與維護，\n讓線上資訊更清楚地呈現。\n從網站畫面到日常內容整理，\n歡迎交流你的網站需求。';
 const response={success:true,data:{service:copy,sources:[{url:'https://www.merchant.com/',title:'合成公司產品服務'}],warnings:[]}};
 function element(){return {value:'',textContent:'',children:[],isConnected:true,classList:{contains:()=>false},appendChild(el){this.children.push(el);},replaceChildren(){this.children=[];}};}
 function fixture(api=async()=>response){
@@ -54,9 +54,11 @@ test('editing after preview refuses stale apply; unsafe source is not an active 
 
 test('reachable desc entry has optional hints, visible preview/source explanation, close and bounded scrolling',()=>{
   assert.match(render,/AI 搜尋並美化說明/);assert.match(render,/選填，不必重填名片/);assert.match(source,/max-height:calc\(100dvh - 3rem\);overflow-y:auto/);
+  assert.match(source,/data-card-business-shortcut onclick="window.startMyCardBusinessCopy\(\)"/);
+  assert.match(render,/4～5 行短句/);
   assert.match(source,/onclick="window.closeMyCardWysiwygEditor\(\)"/);
   assert.match(read('js/core.js'),/action === 'generateCardCopy' \? 100000/);
-  const index=read('index.html');assert.match(index,/mycard.js\?v=8.96/);assert.match(index,/cardmaster.js\?v=1.6/);assert.match(index,/core.js\?v=7.38/);
+  const index=read('index.html');assert.match(index,/mycard.js\?v=8.97/);assert.match(index,/cardmaster.js\?v=1.6/);assert.match(index,/core.js\?v=7.38/);
 });
 
 test('Chromium mobile viewport: actual editor renders, searches, previews then applies without a save', {skip:!process.env.RUN_CARD_BUSINESS_BROWSER_TESTS},async()=>{
@@ -68,6 +70,8 @@ test('Chromium mobile viewport: actual editor renders, searches, previews then a
     await page.setContent('<style>.hidden{display:none}.flex{display:flex}button,input,textarea{box-sizing:border-box;width:100%;margin:4px 0;padding:10px}#my-card-wysiwyg-editor-modal{position:fixed;inset:0;padding:24px 16px;background:#eee}#pop{max-height:calc(100dvh - 3rem);overflow-y:auto;background:#fff;padding:16px}p{font:14px sans-serif}a{display:block}</style><div id="my-card-wysiwyg-editor-modal" class="hidden"><div id="pop"><button id="close">關閉</button><h3 id="my-card-wysiwyg-editor-title"></h3><div id="my-card-wysiwyg-editor-body"></div></div></div>');
     await page.addScriptTag({content:`var currentCardData={name:'合成聯絡人',company:'合成公司',phone:'0912345678',website:'www.merchant.com'},wysiwygState={cfg:{desc:'原說明'},field:'desc'},cardBusinessRequest=null,cardBusinessDraft=null;var moduleAuth={getUserId:()=> 'owner'},apiCalls=[];function readCardValue(c,keys){return keys.map(k=>c[k]).find(Boolean)||''}function parseMyCardSocials(){return []}function escapeHTML(s){return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')}function escapeAttr(s){return escapeHTML(s).replaceAll('"','&quot;')}function safeCssColor(s,f){return s||f}window.fetchAPI=async(a,p)=>{apiCalls.push(a);return ${JSON.stringify(response)}};${methods}${render}window.generateMyCardBusinessCopy=generateMyCardBusinessCopy;window.applyMyCardWysiwygEditor=()=>{wysiwygState.cfg.desc=document.getElementById('my-wysiwyg-desc-input').value};document.getElementById('close').onclick=()=>{cardBusinessRequest=null;document.getElementById('my-card-wysiwyg-editor-modal').classList.add('hidden')};renderWysiwygEditor('desc');`});
     const closeEditor=source.slice(source.indexOf('  function closeMyCardWysiwygEditor()'),source.indexOf('  function editMyCardWysiwygField('));
+    await page.evaluate(()=>{const meta=document.createElement('meta');meta.name='viewport';meta.content='width=device-width, initial-scale=1';document.head.appendChild(meta);});
+    await page.addStyleTag({content:'.whitespace-pre-wrap{white-space:pre-wrap}textarea{font:15px/1.5 sans-serif}'});
     await page.addScriptTag({content:closeEditor+";document.getElementById('close').onclick=closeMyCardWysiwygEditor;"});
     await page.getByRole('button',{name:'AI 搜尋並美化說明'}).click();
     await page.getByRole('button',{name:'核對後帶入說明'}).waitFor();assert.equal(await page.locator('#my-wysiwyg-desc-input').inputValue(),'原說明');
@@ -76,5 +80,14 @@ test('Chromium mobile viewport: actual editor renders, searches, previews then a
     assert.equal(await page.evaluate(()=>wysiwygState.cfg.desc),'原說明');assert.deepEqual(await page.evaluate(()=>apiCalls),['generateCardCopy']);
     await page.getByRole('button',{name:'套用',exact:true}).click();assert.equal(await page.evaluate(()=>wysiwygState.cfg.desc),copy);
     await page.getByRole('button',{name:'關閉',exact:true}).click();assert.equal(await page.locator('#my-card-wysiwyg-editor-modal').isVisible(),false);
+    // Use the real canvas shortcut markup and handler, not a test-only button.
+    const shortcut=source.match(/<button type="button" data-card-business-shortcut[^]*?<\/button>/)[0];
+    await page.evaluate(html=>document.body.insertAdjacentHTML('beforeend',html),shortcut);
+    await page.getByRole('button',{name:'✨ AI 美化介紹 · 4～5 行'}).click();
+    await page.getByRole('button',{name:'核對後帶入說明'}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>apiCalls),['generateCardCopy','generateCardCopy']);
+    assert.equal((await page.locator('#my-card-business-result p').textContent()).split('\n').length,4);
+    assert.equal(await page.evaluate(()=>wysiwygState.cfg.desc),copy);
+    if(process.env.CARD_COPY_SCREENSHOT)await page.screenshot({path:process.env.CARD_COPY_SCREENSHOT,fullPage:true});
   }finally{await browser.close();}
 });

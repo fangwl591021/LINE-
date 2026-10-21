@@ -1,3 +1,4 @@
+import {CARD_COPY_STYLE,formatCardCopy} from './card-copy-style.mjs';
 const FIELD_LIMITS = { displayName:120, englishName:120, companyName:180, jobTitle:120, department:120, mobile:40, companyPhone:40, email:320, websiteUrl:2048, lineId:80, lineUrl:2048, instagramId:120, socialAccounts:1000, address:300, serviceDescription:1600, profileDescription:600, note:1000 };
 export const INDUSTRY_OPTIONS = [
   '健康醫療','美容美業','餐飲食品','零售電商','直銷／社群電商',
@@ -28,7 +29,7 @@ cardLocalization 規則：
 
 名片說明規則：
 1. serviceDescription 只保留名片上實際印出的服務、產品或業務文字。
-2. profileDescription 以 serviceDescription 中可確認的實際產品／服務為主，撰寫2到4句自然、專業的繁體中文介紹，約60到140字；資料少可更短，不硬切16字、不堆砌形容詞。整理有依據的服務對象、特色與合作方向，不重複姓名職稱、不以電話Email洽詢湊內容。
+2. profileDescription 以 serviceDescription 中可確認的實際產品／服務為主。${CARD_COPY_STYLE}
 3. 沒有服務文字時只保留簡短身分資訊，後續可由使用者在說明編輯器搜尋公開業務；此次沒有網路搜尋工具，不假裝已查網站。不從公司名、職稱、照片或登記項目猜業務，不編造專長、成就、客戶、優惠、證照、成效或療效。
 
 並依公司、職稱、部門與服務說明做一次行業分類：主行業只能選 1 個，次行業最多 2 個且不可與主行業相同。可選行業為：${INDUSTRY_OPTIONS.join('、')}。無法可靠判斷時 primaryIndustry 填「待分類」、secondaryIndustries 填空陣列；industryConfidence 填 0 到 1。只回傳符合 JSON Schema 的結果。`;
@@ -133,9 +134,9 @@ function cleanProfilePart(value) {
 }
 
 export function buildProfileDescription(parsed = {}) {
-  const generated = cleanProfilePart(parsed.profileDescription);
+  const generated = formatCardCopy(parsed.profileDescription);
   const boilerplate=/(?:可|歡迎|請|透過).{0,32}(?:名片|電話|電子郵件|聯絡方式).{0,32}(?:聯絡|洽詢|諮詢)/.test(generated);
-  if (generated&&!boilerplate&&cleanProfilePart(parsed.serviceDescription)) return `${generated}。`.replace(/。。+$/g, '。').slice(0, FIELD_LIMITS.profileDescription);
+  if (generated&&!boilerplate&&cleanProfilePart(parsed.serviceDescription)) return generated;
 
   const name = cleanProfilePart(parsed.displayName);
   const company = cleanProfilePart(parsed.companyName);

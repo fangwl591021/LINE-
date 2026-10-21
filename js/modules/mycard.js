@@ -1992,6 +1992,8 @@
             '<span class="my-wysiwyg-edit-icon"><span class="material-symbols-outlined">notes</span></span>' +
             escapeHTML(displayDesc || '點這裡編輯名片說明').replace(/\n/g, '<br>') +
           '</button>' +
+          '<button type="button" data-card-business-shortcut onclick="window.startMyCardBusinessCopy()" class="w-full mt-2 py-3 rounded-xl bg-emerald-600 text-white text-[14px] font-black">✨ AI 美化介紹 · 4～5 行</button>' +
+          '<p class="mt-2 text-[12px] text-slate-500">只有公司／職稱？點上方搜尋實際業務，核對草稿後再儲存。</p>' +
         '</div>' +
         '<div class="px-5 pb-5"><div class="' + (cardLinksEditingV2 ? 'card-links-grid' : '') + '">' + buttonHtml + '</div>' +
           (cardLinksEditingV2 ? '<button type="button" onclick="window.completeMyCardLinks()" class="w-full my-3 py-3 rounded-xl border border-emerald-300 text-emerald-700 text-[14px] font-black">補齊名片聯絡連結</button>' : '') +
@@ -2016,6 +2018,13 @@
       service: typeof serviceText === 'string' ? serviceText : cfg.desc || readCardValue(card, ['services', '服務項目'])
     };
   }
+
+  window.startMyCardBusinessCopy = async function() {
+    if (!currentCardData || !wysiwygState.cfg) return;
+    if (cardBusinessRequest && !cardBusinessRequest.done && cardBusinessRequest.valid()) return;
+    renderWysiwygEditor('desc');
+    await generateMyCardBusinessCopy(document.getElementById('my-card-business-generate'));
+  };
 
   function cardBusinessMessage(message) {
     var status = document.getElementById('my-card-business-status');
@@ -2130,7 +2139,7 @@
           '<textarea id="my-wysiwyg-desc-input" rows="5" class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-blue-500">' + escapeHTML(cfg.desc || '') + '</textarea>' +
           '<div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">' +
             '<button type="button" id="my-card-business-generate" onclick="window.generateMyCardBusinessCopy(this)" class="w-full py-3 rounded-xl bg-emerald-600 text-white font-black disabled:opacity-50">AI 搜尋並美化說明</button>' +
-            '<p class="text-xs text-slate-600">自動用公司、網址、電話與公開社群核對實際業務，不用登記項目當介紹。先預覽來源，不自動儲存。</p>' +
+            '<p class="text-xs text-slate-600">自動用公司、網址、電話與公開社群核對實際業務，整理成 4～5 行短句：業務、特色與自然邀請。不用登記項目當介紹，先預覽來源，不自動儲存。</p>' +
             '<input id="my-card-business-brief" maxlength="800" placeholder="品牌／區域／業務補充（選填，不必重填名片）" class="w-full rounded-lg border p-2 text-sm">' +
             '<p id="my-card-business-status" role="status" aria-live="polite" class="text-xs text-slate-600"></p>' +
             '<div id="my-card-business-result"></div>' +
