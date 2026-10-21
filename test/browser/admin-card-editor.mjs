@@ -43,6 +43,12 @@ try {
     }
     await page.addStyleTag({content:'.hidden{display:none} #modal-card-edit{position:fixed;inset:0;background:white;overflow:auto;z-index:9999}'});
     await page.evaluate(()=>openEditCardModal('CARD_fixture'));
+    assert.deepEqual(await page.evaluate(()=>CardLinks.recognized({mobile:'0926-809669',officePhone:'03-3151679 / FAX 03-3150997'}).map(b=>b.u)),['tel:0926809669','tel:033151679']);
+    await page.evaluate(()=>{currentEditButtons=[{l:'FAX',u:'tel:033150997'}];});
+    await page.locator('#btn-save-card').click();
+    await page.waitForFunction(()=>messages.some(m=>m.includes('FAX')));
+    assert.equal(await page.evaluate(()=>writes),0);
+    await page.evaluate(()=>{currentEditButtons=[];});
     const draft='房屋整修、居家修繕。\n拆除打石，準備空間改造。\n垃圾清運，整理工程廢棄物。\n歡迎洽詢整修需求。';
     await page.locator('#edit-v-desc').fill(draft);
     await page.locator('#btn-save-card').click();
@@ -57,7 +63,7 @@ try {
     assert.equal(await page.evaluate(()=>writes),1);
     assert.equal(await page.evaluate(()=>savedConfig().contactLinksV2.desc),'其他頁修改');
     assert.equal(await page.locator('#edit-v-desc').inputValue(),draft+'（保留草稿）');
-    console.log(file+': Chromium save/reopen/conflict/draft PASS');
+    console.log(file+': Chromium voice-only/FAX rejection/save/reopen/conflict/draft PASS');
     await page.close();
   }
 } finally {await browser.close();}

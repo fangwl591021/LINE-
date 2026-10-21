@@ -54,7 +54,9 @@ function parseStoredECardConfig(card) {
 
 
 function firstPhoneForTel(value) {
+  if (window.CardLinks) return window.CardLinks.phoneNumbers(value)[0] || '';
   const raw = String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/＋/g, '+').trim();
+  if (/fax|傳真|传真/i.test(raw)) return '';
   if (!raw) return '';
   const candidates = raw.match(/(?:\+?886|00886)?[\s().-]*0?9(?:[\s().-]*\d){8}|\+?\d(?:[\s().-]*\d){6,14}/g) || [];
   for (const candidate of candidates) {
@@ -171,6 +173,10 @@ function normalizeECardActionUriForSave(value) {
 }
 
 function normalizeECardButtonsForSave(buttons) {
+  for (const button of (Array.isArray(buttons) ? buttons : [])) {
+    const error = window.CardLinks?.phoneButtonError(button);
+    if (error) throw new Error(error);
+  }
   if (window.currentEcardLinksV2) return window.CardLinks.normalize(buttons, true);
   return (Array.isArray(buttons) ? buttons : []).map((button, index) => {
     const label = String(button?.l || '').trim();
@@ -202,11 +208,12 @@ function getECardButtonKind(button, index) {
 
 function buildAutoECardButtons(card, existingButtons) {
   // An explicit array is the user's choice, including deleting every button.
-  if (Array.isArray(existingButtons)) return existingButtons.map(button => ({ ...button }));
+  if (Array.isArray(existingButtons)) return existingButtons.filter(button => !window.CardLinks?.phoneButtonError(button)).map(button => ({ ...button }));
   return buildRecognizedCardButtons(card);
 }
 
 function buildRecognizedCardButtons(card) {
+  if (window.CardLinks) return window.CardLinks.recognized(card);
   const buttons = [], seen = new Set();
   const value = keys => readECardCardValue(card, keys);
   const add = (l, u, c) => {

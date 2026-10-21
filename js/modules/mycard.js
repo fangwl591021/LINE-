@@ -54,7 +54,9 @@
   var templateAddressUrl = 'https://www.google.com/maps';
 
   function firstPhoneForTel(value) {
+    if (window.CardLinks) return window.CardLinks.phoneNumbers(value)[0] || '';
     var raw = String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/＋/g, '+').trim();
+    if (/fax|傳真|传真/i.test(raw)) return '';
     if (!raw) return '';
     var candidates = raw.match(/(?:\+?886|00886)?[\s().-]*0?9(?:[\s().-]*\d){8}|\+?\d(?:[\s().-]*\d){6,14}/g) || [];
     for (var i = 0; i < candidates.length; i++) {
@@ -167,12 +169,16 @@
           c: safeCssColor(button.c || button.color || button.backgroundColor || button.bgColor, '#06C755')
         };
       })
-      .filter(function(button) { return !!(button && (button.l || button.u)); })
+      .filter(function(button) { return !!(button && (button.l || button.u)) && !window.CardLinks?.phoneButtonError(button); })
       .slice(0, wysiwygState.recordMode || cardLinksEditingV2 ? undefined : 4);
   }
 
   function normalizeMyCardButtonsForSave(buttons) {
     if (!Array.isArray(buttons)) return [];
+    buttons.forEach(function(button) {
+      var error = window.CardLinks?.phoneButtonError(button);
+      if (error) throw new Error(error);
+    });
     if (cardLinksEditingV2) return window.CardLinks.normalize(buttons, true);
     return buttons.slice(0, wysiwygState.recordMode ? undefined : 4).map(function(button, index) {
       button = button && typeof button === 'object' ? button : {};

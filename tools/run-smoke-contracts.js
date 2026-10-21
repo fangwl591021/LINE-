@@ -79,6 +79,7 @@ const fullChecks = [
   'test/registration-numeric-birthday.test.mjs',
   'test/mycard-keyword-reply.test.mjs',
   'test/card-links-v2.test.mjs',
+  'test/card-phone-no-fax.test.mjs',
   'test/admin-card-editor.test.mjs',
   'test/card-email-compose.test.mjs',
   'test/activity-short-links.test.mjs',
