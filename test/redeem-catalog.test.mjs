@@ -36,7 +36,7 @@ for(const operation of ['create-store','update-store','create-product','update-p
  const existing=operation!=='create-store',f=createListingFixture({existing});t.after(f.close);role(f);
  if(operation==='create-product')f.sql.prepare("UPDATE store_shop_products SET status='archived'").run();
  const beforeStores=JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_stores').all()),beforeProducts=JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_products').all());
- f.state.review=()=>{role(f,'reward');return allowListing();};
+ f.state.review=()=>{role(f,'tenant');return allowListing();};
  const result=await f.call(operation.includes('store')?'/store':'/product',operation.includes('store')?store({version:existing?1:0}):product(operation==='update-product'?{id:PRODUCT,version:1}:{}));
  assert.notEqual(result.http,200);assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_stores').all()),beforeStores);assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_products').all()),beforeProducts);
  assert.equal((await f.call('/manage')).http,403);

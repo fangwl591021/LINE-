@@ -6,11 +6,11 @@ import {publicPartnerShops} from './store-partner-catalog.mjs';
 import {catalogOrder,CatalogOrderError} from './store-catalog-order.mjs';
 import {readPublicProducts,ProductDiscoveryError} from './store-product-discovery.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
-const roles = ['store','店長','admin','總管','user','用戶','redeem','扣點用戶'];
+const roles = ['store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'];
 const unlimitedRoles = ['store','店長','admin','總管'];
 const categories = ['','食','宿','遊','購','行','服務','製造'];
 const publicColumns = 's.id,s.name,s.description,s.category,s.address,s.phone,s.hours,s.image_url,s.status,s.version,s.updated_at,(EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN (\'store\',\'店長\',\'admin\',\'總管\'))) AS merchant_enabled,(EXISTS(SELECT 1 FROM store_shop_products p WHERE p.shop_id=s.id AND p.status=\'active\')) AS has_active_products';
-const eligible = "EXISTS (SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶'))";
+const eligible = "EXISTS (SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'))";
 const headers = { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'Content-Type, Authorization', 'Access-Control-Allow-Methods':'GET, POST, OPTIONS' };
 export class ShopError extends Error { constructor(message,status=400) { super(message); this.status=status; } }
 const fail = (message,status) => { throw new ShopError(message,status); };
@@ -81,7 +81,7 @@ async function management(db,shop,limit,after='') {
   return {success:true,shop:publicStore(shop),...(shop?await productPage(db,shop.id,true,after):{products:[],product_next:''}),product_count:count.total,product_limit:limit};
 }
 // Catalog-only quota; this does not grant cashier, payment or order-management access.
-const capacity = `EXISTS(SELECT 1 FROM users u WHERE u.line_id=? AND u.role IS ? AND lower(u.role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶') AND (lower(u.role) IN ('store','店長','admin','總管') OR NOT EXISTS(SELECT 1 FROM store_shop_products p WHERE p.shop_id=? AND p.status!='archived' AND p.id!=?)))`;
+const capacity = `EXISTS(SELECT 1 FROM users u WHERE u.line_id=? AND u.role IS ? AND lower(u.role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶') AND (lower(u.role) IN ('store','店長','admin','總管') OR NOT EXISTS(SELECT 1 FROM store_shop_products p WHERE p.shop_id=? AND p.status!='archived' AND p.id!=?)))`;
 function publicStore(shop) { if(!shop) return null; const {owner_uid,...visible}=shop; return visible; }
 export async function handleStoreShop(request,env,fetcher=fetch) {
   const url=new URL(request.url);
@@ -143,11 +143,11 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       await requireListingReview({value,scope:'store:'+uid,uid,env,fetcher});
       if(!shop) {
         if(data.version!==0) fail('店面狀態已改變，請重新載入',409);
-        try { const result=await db.prepare("INSERT INTO store_shop_stores (id,owner_uid,name,description,category,address,phone,hours,image_url,status,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE line_id=? AND role IS ? AND lower(role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶'))").bind(crypto.randomUUID(),uid,...vals,now,uid,role).run();if(!result.meta.changes)fail('上架身分已變更，請重新登入確認',403); }
+        try { const result=await db.prepare("INSERT INTO store_shop_stores (id,owner_uid,name,description,category,address,phone,hours,image_url,status,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE line_id=? AND role IS ? AND lower(role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'))").bind(crypto.randomUUID(),uid,...vals,now,uid,role).run();if(!result.meta.changes)fail('上架身分已變更，請重新登入確認',403); }
         catch(error) { if(String(error.message).includes('UNIQUE')) fail('店面已建立，請重新載入',409); throw error; }
       } else {
         const version=integer(data.version,1000000000,'版本');
-        const result=await db.prepare("UPDATE store_shop_stores SET name=?,description=?,category=?,address=?,phone=?,hours=?,image_url=?,status=?,updated_at=?,version=version+1 WHERE id=? AND owner_uid=? AND version=? AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND role IS ? AND lower(role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶'))").bind(...vals,now,shop.id,uid,version,uid,role).run();
+        const result=await db.prepare("UPDATE store_shop_stores SET name=?,description=?,category=?,address=?,phone=?,hours=?,image_url=?,status=?,updated_at=?,version=version+1 WHERE id=? AND owner_uid=? AND version=? AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND role IS ? AND lower(role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'))").bind(...vals,now,shop.id,uid,version,uid,role).run();
         if(!result.meta.changes) fail('資料已被更新，請重新載入後再編輯',409);
       }
       return reply(await management(db,await own(db,uid),limit));
@@ -163,7 +163,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     }
     const value=normalizeProduct(data);
     if(id&&data.shipping_fee_cents===undefined)value.shipping_fee_cents=previous.shipping_fee_cents??null;
-    if(limit!==null&&value.status!=='archived'&&(value.purchase_mode!=='in_store'||value.redeem_type!=='none'))fail('一般會員與折抵單位商品僅限店內展示，不開放網購收款或商品點數折抵');
+    if(limit!==null&&value.status!=='archived'&&(value.purchase_mode!=='in_store'||value.redeem_type!=='none'))fail('一般會員、折抵與贈點單位商品僅限店內展示，不開放網購收款或商品點數折抵');
     const key=id?'':field(data,'request_key',80,true);
     if(!id&&!/^[0-9a-f-]{36}$/i.test(key))fail('請重新開啟新增商品表單');
     if(!id){

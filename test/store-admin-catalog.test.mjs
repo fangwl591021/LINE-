@@ -22,7 +22,7 @@ test('global draft queue is read-only, paged across eligible shops and contains 
   assert.ok(products.every(p=>p.status==='draft'&&p.shop_name));
   for(const p of products)for(const field of ['owner_uid','phone','email','line_id','owner_name'])assert.equal(field in p,false);
   assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_products ORDER BY id').all()),before);assert.equal(f.audit().length,0);
-  f.sql.prepare("UPDATE users SET role='reward' WHERE line_id=?").run(OWNER);
+  f.sql.prepare("UPDATE users SET role='tenant' WHERE line_id=?").run(OWNER);
   const eligible=await f.call(null,ADMIN,'queue=draft');assert.ok(eligible.products.length);assert.ok(eligible.products.every(p=>p.shop_id===id(2)));
 });
 test('draft queue rejects unauthenticated access and ambiguous query parameters',async t=>{
