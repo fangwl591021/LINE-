@@ -29,6 +29,46 @@
       return result && typeof result === 'object' && !Array.isArray(result) ? clone(result) : {};
     } catch { return {}; }
   }
+  const isFax = value => /fax|facsimile|傳真|传真|^\s*f\s*[:：.]/i.test(String(value || '').normalize('NFKC'));
+  function singlePhone(value) {
+    const raw = String(value || '').normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    if (!/^\+?[\d () .-]+$/.test(raw)) return '';
+    // Formatting characters may be removed; arbitrary text/separators must never be stripped.
+    let phone = raw.replace(/[ () .-]/g, '');
+    if (phone.startsWith('00')) phone = '+' + phone.slice(2);
+    if (/^(?:886\d{8,10}|86\d{8,13})$/.test(phone)) phone = '+' + phone;
+    return /^\+?\d{7,16}$/.test(phone) ? phone : '';
+  }
+  function phoneNumbers(value) {
+    const raw = String(value || '').normalize('NFKC')
+      .replace(/\b(?:tel(?:ephone)?|phone)\s*[/&]\s*fax\b/gi, 'FAX')
+      .replace(/(?:電話|市話)\s*[/&]\s*傳真/g, '傳真');
+    const numbers = [];
+    let faxSection = false;
+    for (let part of raw.split(/[\n,，;；/|]+/)) {
+      if (isFax(part)) { faxSection = true; continue; }
+      const voiceLabel = /^\s*(?:(?:tel(?:ephone)?|phone|mobile|cell)\b|[tm]\s*[:.]|公司電話|市話|電話|手機|手机)\s*[:.]?\s*/i;
+      if (voiceLabel.test(part)) { faxSection = false; part = part.replace(voiceLabel, ''); }
+      if (faxSection) continue;
+      // Dial the main line only, never append extension digits to the phone number.
+      part = part.replace(/\s*(?:分機|分机|ext\.?|extension|#)\s*:?\s*\d+\s*$/i, '');
+      const phone = singlePhone(part);
+      if (phone && !numbers.includes(phone)) numbers.push(phone);
+    }
+    return numbers;
+  }
+  function phoneButtonError(button) {
+    const label = text(button?.l || button?.label || button?.text || button?.title);
+    const value = text(button?.u || button?.url || button?.uri || button?.link || button?.href);
+    if (isFax(label) || /^fax:/i.test(value)) return 'FAX／傳真不支援名片按鈕，請移除此按鈕。';
+    if (!/^https?:\/\//i.test(value) && isFax(value)) return '電話按鈕不可混入 FAX／傳真資料，請只填語音電話號碼。';
+    if (/^tel:/i.test(value) && !singlePhone(value.slice(4))) return '電話按鈕只能填單一電話號碼，不可混入 FAX、文字或多個號碼。';
+    return '';
+  }
+  function knownFaxNumbers(card) {
+    return phoneNumbers(String(card?.fax || card?.['傳真'] || card?.['传真'] || '').normalize('NFKC')
+      .replace(/(?:\bfax\b|\bfacsimile\b|\btelefax\b|傳真|传真|^\s*f\s*[:.])\s*:?/gi, ''));
+  }
   function uri(value) {
     let raw = text(value).replace(/[\u200B-\u200D\uFEFF]/g, '');
     if (!raw || raw.length > 1000 || /[<>\x00-\x1f]/.test(raw)) return '';
@@ -37,8 +77,8 @@
       return email ? 'mailto:' + email : '';
     }
     if (/^tel:/i.test(raw) || /^\+?[\d ()+.\-]{7,}$/.test(raw)) {
-      const phone = raw.replace(/^tel:/i, '').replace(/[ ()\.\-]/g, '').replace(/^00886/, '+886');
-      return /^\+?\d{7,16}$/.test(phone) ? 'tel:' + phone : '';
+      const phone = singlePhone(raw.replace(/^tel:/i, ''));
+      return phone ? 'tel:' + phone : '';
     }
     if (/\s/.test(raw)) return '';
     if (/^line:\/\//i.test(raw)) return raw;
@@ -51,6 +91,11 @@
   function normalize(buttons, strict = false) {
     const result = [];
     for (const [index, b] of (Array.isArray(buttons) ? buttons : []).entries()) {
+      const phoneError = phoneButtonError(b);
+      if (phoneError) {
+        if (strict) throw new Error('第 ' + (index + 1) + ' 顆按鈕：' + phoneError);
+        continue;
+      }
       const label = text(b?.l || b?.label || b?.text || b?.title);
       const url = uri(b?.u || b?.url || b?.uri || b?.link);
       if (!label || !url || label.length > 40) {
@@ -67,8 +112,9 @@
     const read = keys => { for (const key of keys) if (card?.[key]) return card[key]; return ''; };
     const parts = value => (Array.isArray(value) ? value : text(value).split(/[\n,，;；]+/)).map(text).filter(Boolean);
     const add = (l, value, c = '#06C755') => { const u = uri(value); if (u) result.push({ l, u, c }); };
-    parts(read(['mobile','手機號碼','手機','phone'])).forEach(v => add('行動電話', 'tel:' + v, '#3B82F6'));
-    parts(read(['officePhone','office_phone','companyPhone','company_phone','公司電話','tel'])).forEach(v => add('公司電話', 'tel:' + v, '#0891B2'));
+    const faxNumbers = knownFaxNumbers(card);
+    phoneNumbers(read(['mobile','手機號碼','手機','phone'])).filter(v => !faxNumbers.includes(v)).forEach(v => add('行動電話', 'tel:' + v, '#3B82F6'));
+    phoneNumbers(read(['officePhone','office_phone','companyPhone','company_phone','公司電話','tel'])).filter(v => !faxNumbers.includes(v)).forEach(v => add('公司電話', 'tel:' + v, '#0891B2'));
     parts(read(['email','Email','電子郵件'])).forEach(v => add('電子郵件', v.replace(/^mailto:/i, ''), '#F59E0B'));
     parts(read(['website','websiteUrl','website_url','companyUrl','公司網址','Website'])).forEach(v => add('官方網站', v, '#64748B'));
     const address = text(read(['address','companyAddress','company_address','公司地址','地址']));
@@ -85,11 +131,14 @@
   }
   function project(config, card, enabled) {
     const cfg = parse(config);
-    if (!enabled) return cfg;
+    if (!enabled) {
+      if (Array.isArray(cfg.buttons)) cfg.buttons = cfg.buttons.filter(b => !phoneButtonError(b));
+      return cfg;
+    }
     if (!cfg._cardLinksEditing && cfg.contactLinksV2) Object.assign(cfg, clone(cfg.contactLinksV2));
     if (!Array.isArray(cfg.buttons) && !Array.isArray(cfg.footerBtns)) cfg.buttons = recognized(card);
     else {
-      cfg.buttons = normalize(cfg.buttons || cfg.footerBtns);
+      cfg.buttons = normalize(cfg.buttons || cfg.footerBtns).filter(b => !b.u.startsWith('tel:') || !knownFaxNumbers(card).includes(b.u.slice(4)));
       // First upgrade completes existing contacts without rewriting the legacy snapshot.
       // Once reviewed/saved, explicit edits and deletions are authoritative.
       if (!cfg.contactLinksV2 && !cfg._cardLinksEditing && cfg.buttons.length) cfg.buttons = mergeRecognized(cfg.buttons, card);
@@ -110,6 +159,10 @@
       throw new Error('名片已在其他頁面更新，請重新開啟再編輯；本次沒有覆蓋資料。');
     }
     if (isV2 && !enabled) throw new Error('新版名片目前已切回舊版，草稿仍保留，請重新開啟後再儲存。');
+    for (const button of (Array.isArray(next.buttons) ? next.buttons : [])) {
+      const error = phoneButtonError(button);
+      if (error) throw new Error(error);
+    }
     const merged = { ...before, ...next };
     delete merged._cardLinksEditing;
     // A legacy editor may change its own fields, but never the v2 snapshot.
@@ -139,5 +192,5 @@
     for (let i=0; i<items.length; i+=2) rows.push({ type:'box', layout:'horizontal', spacing:'sm', contents:items.slice(i,i+2) });
     return rows;
   }
-  root.CardLinks = Object.freeze({ parse, uri, normalize, recognized, project, mergeRecognized, saveConfig, flexRows, emailAddress, emailComposeUrl, emailTargets });
+  root.CardLinks = Object.freeze({ parse, uri, normalize, recognized, project, mergeRecognized, saveConfig, flexRows, emailAddress, emailComposeUrl, emailTargets, isFax, singlePhone, phoneNumbers, phoneButtonError });
 })(globalThis);

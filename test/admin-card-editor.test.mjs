@@ -109,7 +109,7 @@ for (const page of ['admin.html','admin-v2.html']) {
     assert.equal(f.requests.length,0);
   });
   test(page + ': HTML includes shared helpers and all inline scripts parse',()=>{
-    const html=read(page);assert.match(html,/js\/shared\/card-links\.js\?v=3/);
+    const html=read(page);assert.match(html,/js\/shared\/card-links\.js\?v=4/);
     assert.match(html,/js\/shared\/admin-card-editor\.js\?v=1/);
     for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
   });

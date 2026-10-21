@@ -1381,32 +1381,23 @@ const LineOAChatModule = {
 
   normalizeCardButton(button) {
     if (!button || typeof button !== 'object') return null;
+    if (CardLinks.phoneButtonError(button)) return null;
     const label = this.text(button.l || button.label || button.text || button.title);
     const uri = this.text(button.u || button.url || button.uri || button.href);
     const color = this.text(button.c || button.color, '#06C755');
-    return label && uri ? { l: label, u: this.normalizeActionUri(uri), c: color } : null;
+    const normalizedUri = this.normalizeActionUri(uri);
+    return label && normalizedUri ? { l: label, u: normalizedUri, c: color } : null;
   },
 
   firstPhoneForTel(value) {
-    const raw = this.text(value).replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/＋/g, '+').trim();
-    if (!raw) return '';
-    const candidates = raw.match(/(?:\+?886|00886)?[\s().-]*0?9(?:[\s().-]*\d){8}|\+?\d(?:[\s().-]*\d){6,14}/g) || [];
-    for (const candidate of candidates) {
-      let phone = candidate.replace(/[^0-9+]/g, '');
-      if (phone.startsWith('00886')) phone = '+886' + phone.slice(5);
-      if (/^\+?\d{7,16}$/.test(phone)) return phone;
-    }
-    const compact = raw.replace(/[^0-9+]/g, '');
-    if (/^09\d{18,}$/.test(compact)) return compact.slice(0, 10);
-    if (/^\+?\d{7,16}$/.test(compact)) return compact;
-    return '';
+    return CardLinks.phoneNumbers(value)[0] || '';
   },
 
   normalizeActionUri(uri) {
     const value = this.text(uri).replace(/[\u200B-\u200D\uFEFF]/g, '');
     if (!value) return '';
     if (/^tel:/i.test(value)) {
-      const phone = this.firstPhoneForTel(value.replace(/^tel:/i, ''));
+      const phone = CardLinks.singlePhone(value.replace(/^tel:/i, ''));
       return phone ? 'tel:' + phone : '';
     }
     if (/^(https?|mailto|line):/i.test(value)) return value;
@@ -7896,22 +7887,7 @@ const AIModule = {
   },
 
   normalizePhoneForTel(value) {
-    const raw = String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/＋/g, '+').trim();
-    if (!raw) return '';
-    const candidates = raw.match(/(?:\+?886|00886)?[\s().-]*0?9(?:[\s().-]*\d){8}|\+?\d(?:[\s().-]*\d){6,14}/g) || [];
-    for (const candidate of candidates) {
-      let phone = candidate.replace(/[^0-9+]/g, '');
-      if (phone.startsWith('00')) phone = '+' + phone.slice(2);
-      if (!phone.startsWith('+') && /^886\d{8,10}$/.test(phone)) phone = '+' + phone;
-      if (!phone.startsWith('+') && /^86\d{8,13}$/.test(phone)) phone = '+' + phone;
-      if (/^\+?\d{7,16}$/.test(phone)) return phone;
-    }
-    let compact = raw.replace(/[^\d+]/g, '');
-    if (/^09\d{18,}$/.test(compact)) compact = compact.slice(0, 10);
-    if (compact.startsWith('00')) compact = '+' + compact.slice(2);
-    if (!compact.startsWith('+') && /^886\d{8,10}$/.test(compact)) compact = '+' + compact;
-    if (!compact.startsWith('+') && /^86\d{8,13}$/.test(compact)) compact = '+' + compact;
-    return /^\+?\d{7,16}$/.test(compact) ? compact : '';
+    return CardLinks.phoneNumbers(value)[0] || '';
   },
 
   normalizeWebsiteUrl(value) {
