@@ -56,7 +56,7 @@ test('reachable desc entry has optional hints, visible preview/source explanatio
   assert.match(render,/AI 搜尋並美化說明/);assert.match(render,/選填，不必重填名片/);assert.match(source,/max-height:calc\(100dvh - 3rem\);overflow-y:auto/);
   assert.match(source,/onclick="window.closeMyCardWysiwygEditor\(\)"/);
   assert.match(read('js/core.js'),/action === 'generateCardCopy' \? 100000/);
-  const index=read('index.html');assert.match(index,/mycard.js\?v=8.95/);assert.match(index,/cardmaster.js\?v=1.6/);assert.match(index,/core.js\?v=7.38/);
+  const index=read('index.html');assert.match(index,/mycard.js\?v=8.96/);assert.match(index,/cardmaster.js\?v=1.6/);assert.match(index,/core.js\?v=7.38/);
 });
 
 test('Chromium mobile viewport: actual editor renders, searches, previews then applies without a save', {skip:!process.env.RUN_CARD_BUSINESS_BROWSER_TESTS},async()=>{

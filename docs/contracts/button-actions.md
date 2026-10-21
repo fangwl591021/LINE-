@@ -54,13 +54,12 @@ mailto:<email>
 
 - 不合法 email 不得儲存。
 
-2026-10-21 Email點擊流程：
+2026-10-21 Email點擊流程（使用者最新指定Gmail網頁）：
 
 - 儲存及網頁名片仍使用mailto:<email>，不批次修改資料或版本設定。
-- 新產生的LINE Flex Email按鈕必須是HTTPS寄信頁URI action，不能再把電子郵件標籤接到clipboard action；前後端Flex使用同一共用規則。
-- 收件人放寄信頁URL fragment，不傳UID、token或名片ID；寄信頁只解析單一合法to，拒絕CRLF、BCC／Subject參數、腳本及外部轉址注入，不接受任意導向網址。
-- 寄信頁主要操作為開啟郵件App（mailto），另提供Gmail與Outlook網頁撰信；只帶入收件人，不寄出、不登入、不自動複製、不寫正式資料。複製是明確點選的次要備援，失敗時可手動選取。
-- 需有可見返回／關閉路徑。不能偵測或保證手機已安裝預設郵件App，不把開啟動作宣稱為信件已寄出。
+- 新產生的LINE Flex Email按鈕直接使用固定Gmail HTTPS撰信URI，經驗證／編碼的收件人放to，不經自有選擇頁、不呼叫App或clipboard；前後端Flex使用同一共用規則，標籤及原mailto儲存不變。
+- 不傳UID、token或名片ID，不寄出、不登入、不複製、不寫正式資料。Google未登入可能要求登入，不繞過登入；不能把跳轉宣稱為郵件已寄出。
+- 先前已發出的card-email.html#to=...保留為相容入口，自動轉往同一固定Gmail網址；只解析單一合法to，拒絕CRLF、BCC／Subject參數、腳本及任意外部轉址。僅自動跳轉受阻時提供一顆手動Gmail連結與返回，不再提供App／Outlook／複製等選擇。
 - 舊LINE訊息內容不能回溯更改；需重新產生／分享名片才會使用新按鈕，不自動重送。
 
 ### 網址

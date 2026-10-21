@@ -5,7 +5,6 @@
   const text = value => String(value ?? '').trim();
   const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
   const clone = value => JSON.parse(JSON.stringify(value));
-  const EMAIL_PAGE = 'https://fangwl591021.github.io/LINE-/card-email.html';
   function emailAddress(value) {
     const raw = String(value ?? '').replace(/[\u200B-\u200D\uFEFF]/g, '');
     if (/[\x00-\x1f\x7f]/.test(raw)) return '';
@@ -15,7 +14,7 @@
   }
   function emailComposeUrl(value) {
     const email = emailAddress(value);
-    return email ? EMAIL_PAGE + '?openExternalBrowser=1#to=' + encodeURIComponent(email) : '';
+    return email ? 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(email) + '&openExternalBrowser=1' : '';
   }
   function emailTargets(value) {
     const email = emailAddress(value);

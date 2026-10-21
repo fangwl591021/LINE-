@@ -5,29 +5,21 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'">
-  <title>寄送電子郵件｜點數通名片</title>
+  <title>開啟 Gmail｜點數通名片</title>
   <style>
     *{box-sizing:border-box}body{margin:0;background:#eff8f5;color:#173d35;font-family:system-ui,-apple-system,sans-serif;line-height:1.6}main{width:min(100% - 32px,460px);margin:28px auto;background:white;border:1px solid #cfe5db;border-radius:24px;padding:24px}nav{display:flex;justify-content:space-between;gap:12px}h1{font-size:25px;margin:24px 0 8px}p{margin:12px 0}.muted{color:#63776f;font-size:14px}.address{display:block;width:100%;font:inherit;padding:12px;border:1px solid #cfe5db;border-radius:12px;background:#f6fbf8;color:#173d35}a,button{font:inherit}a{color:#007f64}a.action,button.action{display:block;width:100%;border-radius:12px;padding:13px 12px;text-align:center;text-decoration:none;border:1px solid #cfe5db;font-weight:700;background:#fff;color:#006d56;margin:10px 0;cursor:pointer}.action.primary{background:#00856a;color:#fff;border-color:#00856a}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}button:disabled{opacity:.5;cursor:default}[hidden]{display:none!important}#status{min-height:24px;font-size:14px}#error{color:#b42318}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #e9ae32;outline-offset:3px}@media(max-width:360px){main{padding:18px}.grid{grid-template-columns:1fr}}
   </style>
-  <script src="js/shared/card-links.js?v=2" defer></script>
-  <script src="js/card-email-compose.js?v=1" defer></script>
+  <script src="js/shared/card-links.js?v=3" defer></script>
+  <script src="js/card-email-compose.js?v=2" defer></script>
 </head>
 <body>
 <main>
   <nav><button type="button" id="back">‹ 返回</button><a href="./">返回平台</a></nav>
-  <h1>寄送電子郵件</h1>
-  <p class="muted">收件人已帶好。請選擇寄信方式；這裡不會自動寄出信件。</p>
+  <h1>正在開啟 Gmail 網頁</h1>
+  <p class="muted">自動帶入收件人，直接撰寫郵件。若尚未登入 Gmail，Google 會先要求登入；不會自動寄出信件。</p>
   <p id="error" role="alert" hidden></p>
   <section id="compose" hidden>
-    <label for="recipient">收件人</label>
-    <input id="recipient" class="address" readonly aria-label="收件人信箱">
-    <a id="mail-app" class="action primary">開啟郵件 App 寄信</a>
-    <p class="muted">若沒有開啟，請確認手機已設定郵件 App，或選擇下方網頁寄信。網頁信箱可能需要登入。</p>
-    <div class="grid">
-      <a id="gmail" class="action" rel="noopener noreferrer">使用 Gmail 網頁</a>
-      <a id="outlook" class="action" rel="noopener noreferrer">使用 Outlook 網頁</a>
-    </div>
-    <details><summary>其他方式</summary><button type="button" id="copy" class="action">複製信箱（備援）</button></details>
+    <a id="gmail" class="action primary" rel="noopener noreferrer">未跳轉？直接開啟 Gmail</a>
     <p id="status" role="status" aria-live="polite"></p>
   </section>
   <noscript><p>請啟用JavaScript以顯示名片收件人，或回到名片查看原信箱。</p></noscript>
