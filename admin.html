@@ -2,6 +2,8 @@
 <html lang="zh-TW">
 <head>
   <script src="js/shared/member-number.js?v=1"></script>
+  <script src="js/shared/card-links.js?v=3"></script>
+  <script src="js/shared/admin-card-editor.js?v=1"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI商脈系統後台 ADMIN DASHBOARD</title>
@@ -1932,6 +1934,8 @@
     let boundCardAutoSyncDone = false;
     let boundCardSyncRunning = false;
     let currentEditButtons = []; 
+    let currentAdminCardSession = null;
+    let adminCardOpenSequence = 0;
     let adminCropperInstance = null;
     let adminRole = 'store';
     let adminNetworkId = 'admin';
@@ -5390,11 +5394,19 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       }
     }
 
-    function openEditCardModal(encodedRowId) {
+    async function openEditCardModal(encodedRowId) {
       window.currentAdminCropRatio = null;
       const rowId = decodeURIComponent(encodedRowId || '');
       const card = allCardsData.find(c => String(c.rowId) === String(rowId));
       if (!card) return;
+
+      const sequence = ++adminCardOpenSequence;
+      let session;
+      try {
+        session = AdminCardEditor.begin(card, await AdminCardEditor.mode(WORKER_URL));
+      } catch (error) { showToast(error.message, true); return; }
+      if (sequence !== adminCardOpenSequence) return;
+      currentAdminCardSession = session;
 
       document.getElementById('edit-c-rowid').value = card.rowId;
       document.getElementById('edit-c-name').value = card['姓名'] || '';
@@ -5406,8 +5418,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       document.getElementById('edit-c-tags').value = card['標籤'] || '';
       document.getElementById('edit-c-notes').value = card['建檔人/備註'] || '';
 
-      let cfg = {};
-      try { cfg = JSON.parse(card['自訂名片設定'] || '{}'); } catch(e){}
+      const cfg = CardLinks.parse(session.config);
       
       currentAdminEcardImgs = {
         landscape: cfg.imgUrl || card['名片圖檔'] || '',
@@ -5508,7 +5519,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       const layoutStyle = getAdminCardLayout();
       const imgUrl = currentAdminEcardImgs[layoutStyle] || 'https://images.unsplash.com/photo-1616628188550-808682f3926d?w=800&q=80';
       
-      const desc = (document.getElementById('edit-v-desc').value || '').replace(/\n/g, '<br>');
+      const desc = escapeHTML(document.getElementById('edit-v-desc').value || '').replace(/\n/g, '<br>');
       const color = document.getElementById('edit-v-color').value || '#666666';
       const align = document.getElementById('edit-v-align').value || 'center';
 
@@ -5543,13 +5554,17 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
     async function saveCardEdit() {
       const rowId = document.getElementById('edit-c-rowid').value;
       const btn = document.getElementById('btn-save-card');
+      if (btn.disabled) return;
+      const session = currentAdminCardSession;
+      if (!session || session.rowId !== String(rowId)) return showToast('請重新開啟名片編輯器。', true);
       const originalText = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">refresh</span> 儲存中...';
 
+      try {
       syncAdminEcardImageInput();
       const layoutVal = getAdminCardLayout();
-      const cfg = {
+      const patch = {
         layoutStyle: layoutVal,
         imgUrl: currentAdminEcardImgs.landscape,
         imgUrlPortrait: currentAdminEcardImgs.portrait,
@@ -5562,6 +5577,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         descColor: document.getElementById('edit-v-color').value,
         buttons: currentEditButtons
       };
+      const cfg = AdminCardEditor.submit(session, patch, await AdminCardEditor.mode(WORKER_URL));
+      if (currentAdminCardSession !== session) throw new Error('編輯中的名片已切換，本次未送出儲存。');
 
       const updateData = {
         '姓名': document.getElementById('edit-c-name').value,
@@ -5578,13 +5595,16 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       };
 
       const res = await fetchAPI('updateCard', { rowId: rowId, data: updateData });
-      btn.disabled = false;
-      btn.innerHTML = originalText;
       if (res) {
+        const saved = res.data || res;
+        const index = allCardsData.findIndex(card => String(card.rowId) === String(rowId));
+        if (index >= 0) allCardsData[index] = { ...allCardsData[index], ...saved };
         showToast('儲存成功');
         loadCards();
-        closeEditCardModal();
+        if (currentAdminCardSession === session) closeEditCardModal();
       }
+      } catch (error) { showToast(error.message, true); }
+      finally { btn.disabled = false; btn.innerHTML = originalText; }
     }
 
     function renderAdminCardButtons() {
@@ -5629,7 +5649,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       });
     }
 
-    function closeEditCardModal() { document.getElementById('modal-card-edit').classList.add('hidden'); }
+    function closeEditCardModal() { ++adminCardOpenSequence; currentAdminCardSession = null; document.getElementById('modal-card-edit').classList.add('hidden'); }
     function escapeHTML(str) { return String(str || '').replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t])); }
 
     function openAdminCropper(inputEl) {
