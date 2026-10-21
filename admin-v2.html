@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
+  <script src="js/shared/member-number.js?v=1"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI商脈系統後台 ADMIN DASHBOARD</title>
@@ -1124,8 +1125,9 @@
                   <option value="member">已成交</option>
                 </select>
               </label>
-              <label class="text-sm font-bold text-slate-500">加入日期<input id="crm-joined-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
-              <label class="text-sm font-bold text-slate-500">推薦人 UID<input id="crm-referrer-id" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono outline-none focus:border-blue-500" placeholder="LINE UID"></label>
+              <label class="text-sm font-bold text-slate-500">個人編號（系統配發）<input id="crm-member-number" readonly class="mt-1 w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono"></label>
+              <label class="text-sm font-bold text-slate-500">加入／建檔日期（系統紀錄）<input id="crm-joined-at" type="date" readonly class="mt-1 w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800"><span id="crm-member-date-source" class="block mt-1 text-xs font-normal"></span></label>
+              <label class="md:col-span-2 text-sm font-bold text-slate-500">推薦人（個人編號／UID）<input id="crm-referrer-id" list="crm-member-number-options" autocomplete="off" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono outline-none focus:border-blue-500" placeholder="例如 20261021001 或 LINE UID"><datalist id="crm-member-number-options"></datalist><span id="crm-referrer-preview" role="status" aria-live="polite" class="block mt-2 text-xs text-emerald-700 break-words"></span></label>
               <label class="text-sm font-bold text-slate-500">年費到期日<input id="crm-expire-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
               <label class="md:col-span-2 text-sm font-bold text-slate-500">標籤<input id="crm-tags" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-blue-600 font-bold outline-none focus:border-blue-500" placeholder="#待跟進 #租戶 #講師"></label>
             </div>
@@ -3084,6 +3086,7 @@
       setInputValue('crm-intent', user.intentLevel || user.crmIntent || 'cold');
       setInputValue('crm-joined-at', String(user.joinedAt || user.createdAt || '').slice(0, 10));
       setInputValue('crm-referrer-id', readSponsorId(user));
+      window.MemberNumber.fill(user, allUsersData);
       setInputValue('crm-expire-at', String(user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '').slice(0, 10));
       setInputValue('crm-tags', user.tags || user.crmTags || '');
       setInputValue('crm-last-contact', String(user.lastContactAt || '').slice(0, 10));
@@ -3237,7 +3240,7 @@
       const res = await fetchAPI('updateUserProfile', payload);
       if (res) {
         const idx = allUsersData.findIndex(u => normalizeLineId(getUserId(u)) === normalizeLineId(userId));
-        if (idx >= 0) allUsersData[idx] = { ...allUsersData[idx], ...payload };
+        if (idx >= 0) allUsersData[idx] = { ...allUsersData[idx], ...payload, ...(res.info || res.data?.info || {}) };
         renderUsersTable(allUsersData);
         fillDistributorCrm(allUsersData[idx] || payload);
         showToast('CRM 已儲存');
@@ -3322,7 +3325,7 @@
         if (!query) return true;
         const haystack = [
           u.name, u.phone, u.email, u.companyName, u.title, u.industry,
-          u.tags, u.crmTags, u.networkId, u.storeId, getUserId(u),
+          u.tags, u.crmTags, u.networkId, u.storeId, getUserId(u), u.memberNumber,
           readSponsorId(u), readPlacementParentId(u)
         ].filter(Boolean).join(' ').toLowerCase();
         return haystack.includes(query);
@@ -3404,7 +3407,8 @@
               <span class="crm-pill ${intent[1]}">意向 ${intent[0]}</span>
               ${isBoundCard ? '<span class="crm-pill crm-pill-green">已綁名片</span>' : ''}
             </div>
-            <div class="crm-code">${escapeHTML(id ? id.substring(0, 12) + '...' : '-')}</div>
+            <div class="crm-code">個人編號 ${escapeHTML(u.memberNumber || '尚未編號')}</div>
+            ${window.MemberNumber.summaryHtml(u)}
           </td>
           <td>
             <div class="crm-main-text">${escapeHTML(u.phone || '待補電話')}</div>
