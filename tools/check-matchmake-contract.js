@@ -32,7 +32,7 @@ if (!matchmake.includes('window.openAiMatchInbox') ||
 if (matchmake.includes('receiverUserId') || matchmake.includes('receiverId')) {
   fail('matchmaking frontend must not receive or forward the recipient user id');
 }
-if (!index.includes('js/modules/cardmaster.js?v=1.5')) {
+if (!index.includes('js/modules/cardmaster.js?v=1.6')) {
   fail('cardmaster.js cache-bust version must be bumped');
 }
 if (!matchmake.includes("toggleWrap.classList.toggle('hidden', scope !== 'public')")) {
