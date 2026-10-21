@@ -3,24 +3,56 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {generateCardBusinessCopy,prepareCardBusinessInput} from '../worker/card-business-copy.mjs';
+import {formatCardCopy,isIdentityOnlyCopy} from '../worker/card-copy-style.mjs';
 import {createFixture,UID,SOURCE,sampleFields,sampleDraft,providerResult} from './fixtures/store-ai-draft.mjs';
-const fixture=t=>{const f=createFixture();t.after(f.close);return f;};
+const cardCopy='提供咖啡、茶飲與甜點，\n讓日常多一點滋味與選擇。\n從想喝杯飲料到品嚐甜點的時刻，\n歡迎聊聊你想了解的品項。';
+const fixture=t=>{const f=createFixture();const draft=sampleDraft();draft.fields.description=cardCopy;f.setOutput(providerResult(draft));t.after(f.close);return f;};
 const card={name:'合成聯絡人',company:sampleFields.name,jobTitle:'負責人',phone:'0912-345678',website:SOURCE,socials:[{t:'Facebook',u:'https://www.facebook.com/synthetic'}]};
+
+test('4–5 short lines preserve meaning, punctuation and product names without padding or truncation',()=>{
+  assert.equal(formatCardCopy(cardCopy),cardCopy);
+  const five='提供網站設計與維護。\n整理品牌的線上資訊。\n呈現想傳達的內容。\n從你的網站需求開始。\n歡迎交流想法。';
+  assert.equal(formatCardCopy(five.replaceAll('\n','')),five);
+  assert.equal(formatCardCopy(five.replaceAll('\n','\r\n')),five);
+  assert.equal(formatCardCopy(five+'\n第六行。'),'');
+  assert.equal(formatCardCopy('文'.repeat(141)),'');
+  assert.equal(formatCardCopy('只有產品名稱'),'');
+  assert.equal(formatCardCopy('1. 提供咖啡與茶飲。\n2. 還有甜點可選擇。\n3. 為日常帶來一些滋味。\n4. 歡迎交流品項。').split('\n').length,4);
+});
+
+for(const description of ['林宏璋任職於誠光照明有限公司。','陳瑞鴻任職於騰森有限公司，職務為經理。','姓名：陳瑞鴻\n公司：騰森有限公司\n職稱：經理\n職務為經理。'])test('reported identity template is not a completed business introduction: '+description.split('\n')[0],async t=>{
+  assert.equal(isIdentityOnlyCopy(description),true);
+  assert.equal(formatCardCopy(description),'');
+  assert.equal(prepareCardBusinessInput({...card,service:description}).context.service,'');
+  const f=fixture(t),draft=sampleDraft();draft.fields.description=description;f.setOutput(providerResult(draft));
+  const result=await generateCardBusinessCopy(card,'',f.env(),UID,f.fetcher);
+  assert.equal(result.success,false);assert.equal(f.metrics.saves,0);
+});
+
+test('verified but one-line or excessively long generation returns an explicit format failure, not false success',async t=>{
+  const f=fixture(t);
+  for(const description of [sampleFields.description,cardCopy+'\n'+ '長'.repeat(150)]){
+    f.resetQuota();const draft=sampleDraft();draft.fields.description=description;f.setOutput(providerResult(draft));
+    const result=await generateCardBusinessCopy(card,'',f.env(),UID,f.fetcher);
+    assert.equal(result.success,false);assert.match(result.error,/4～5 行/);assert.equal(f.metrics.saves,0);
+  }
+});
 
 test('research uses existing key/model, always searches even with website, returns source preview without business writes',async t=>{
   const f=fixture(t),res=await generateCardBusinessCopy(card,'',f.env(),UID,f.fetcher);
-  assert.equal(res.success,true);assert.equal(res.data.service,sampleFields.description);assert.ok(res.data.sources.some(s=>s.url===SOURCE));
+  assert.equal(res.success,true);assert.equal(res.data.service,cardCopy);assert.ok(res.data.sources.some(s=>s.url===SOURCE));
   const {opts}=f.calls.find(c=>c.url.includes('openai'));const body=JSON.parse(opts.body),input=JSON.parse(body.input[0].content[0].text);
   assert.equal(body.store,false);assert.equal(body.tools[0].type,'web_search');assert.equal(body.tool_choice,'required');assert.equal(opts.redirect,'manual');
   assert.equal(input.cardIdentityClues.phone,card.phone);assert.equal(input.cardIdentityClues.socials[0].url,card.socials[0].u);
   assert.match(body.instructions,/交叉確認/);assert.match(body.instructions,/不要重述姓名職稱/);assert.match(body.instructions,/禁止使用政府／公司登記/);
+  assert.match(body.instructions,/4到5行/);assert.match(body.instructions,/生活情境/);assert.match(body.instructions,/最多140字/);
   assert.equal(f.metrics.saves,0);assert.ok(f.writes.every(q=>q.startsWith('INSERT INTO partner_onboarding_ai_usage')));
 });
 
 test('lost website continues public research and source verification, never uses the failed page',async t=>{
   const f=fixture(t),fetcher=async(url,opts)=>url==='https://www.lostsite.com/card'?new Response('',{status:404}):f.fetcher(url,opts);
   const res=await generateCardBusinessCopy({...card,website:'www.lostsite.com/card'},'',f.env(),UID,fetcher);
-  assert.equal(res.success,true);assert.equal(res.data.service,sampleFields.description);assert.match(res.data.warnings.join(''),/網站無法讀取/);
+  assert.equal(res.success,true);assert.equal(res.data.service,cardCopy);assert.match(res.data.warnings.join(''),/網站無法讀取/);
   assert.ok(res.data.sources.every(s=>!s.url.includes('lostsite')));assert.equal(f.metrics.analyses,1);
   const input=JSON.parse(JSON.parse(f.calls.find(c=>c.url.includes('openai')).opts.body).input[0].content[0].text);assert.equal(input.websiteUnavailable,true);
 });
@@ -85,7 +117,7 @@ test('different public brand can use same phone plus full address; supplier othe
   const proof=`${brand} 地址：${address} 電話：${phone}`;
   const services=`${brand} 販售法式冰淇淋及手工香腸。`;
   const draft=sampleDraft();draft.identity={companyName:'合成公司錯字',taxId:'',brandName:brand,evidence:[{url:SOURCE,quote:proof}]};
-  draft.fields.name='合成公司錯字';draft.fields.description='販售法式冰淇淋與手工香腸，提供日常餐桌食材選購。';
+  draft.fields.name='合成公司錯字';draft.fields.description='販售法式冰淇淋與手工香腸，\n為日常餐桌帶來不同選擇。\n從想吃點甜的時刻到備餐的靈感，\n歡迎聊聊你想了解的品項。';
   draft.evidence=[{field:'description',url:SOURCE,quote:services}];
   const matchingCard={...card,company:'合成公司錯字',companyPhone:phone,address};
   f.setHtml('<h1>供應商通路頁</h1><p>'+proof+'</p><p>'+services+'</p>');f.setOutput(providerResult(draft));

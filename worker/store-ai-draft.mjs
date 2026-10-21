@@ -3,6 +3,7 @@ import {boundedText,publicWebsiteUrl,readWebsite} from './partner-onboarding-ai.
 import {lookupStoreRegistration,RegistrationError} from './store-registration.mjs';
 import {identityNorm as norm,resolveStoreIdentity} from './store-ai-identity.mjs';
 import {resolveCardBusinessIdentity} from './card-business-identity.mjs';
+import {CARD_COPY_STYLE} from './card-copy-style.mjs';
 export class StoreDraftError extends Error {constructor(message,status=400){super(message);this.status=status;}}
 const fail=(message,status)=>{throw new StoreDraftError(message,status);};
 export const draftLimits={name:80,description:2000,category:20,address:200,phone:40,hours:200};
@@ -151,7 +152,7 @@ async function runPublicBusinessDraft(data,env,uid,fetcher,cardContext=null){
     let websiteUnavailable=false;
     if(input.websiteUrl)try{officialPage=await readWebsite(input.websiteUrl,fetcher);}catch{if(cardContext)websiteUnavailable=true;else fail('提供的網站無法安全讀取；可移除網址讓 AI 搜尋公開資料，尚未修改店面',422);}
     const searchRequired=!!cardContext||!officialPage;
-    const cardInstructions=cardContext?'\n此次為名片業務文案：即使有網站也要搜尋其他公開頁面，以姓名、公司、名片電話、地址與社群交叉確認同一人／公司。網站失效不能中斷，繼續搜尋官方網站與公開社群。電話只用來核對公開業務身分，不找私人資料、不推論個性或財務。只因同名或相似名稱不能確認；資料矛盾或多人同名就 ambiguous。fields.description 以實際產品／服務開頭，依據來源整理服務對象、特色與合作方向，使用自然繁體中文2到4句、約60到140字，資料少可短些。不要重述姓名職稱、不要用聯絡洽詢湊文案，不硬切16字、不編造能力／成效／客戶／證照／療效／優惠／收益。名片原文與使用者補充可協助搜尋，但不得冒充網路來源；每個業務重點都須有實際產品／服務來源證據。':'';
+    const cardInstructions=cardContext?'\n此次為名片業務文案：即使有網站也要搜尋其他公開頁面，以姓名、公司、名片電話、地址與社群交叉確認同一人／公司。網站失效不能中斷，繼續搜尋官方網站與公開社群。電話只用來核對公開業務身分，不找私人資料、不推論個性或財務。只因同名或相似名稱不能確認；資料矛盾或多人同名就 ambiguous。fields.description 遵循以下文案規則：'+CARD_COPY_STYLE+'\n名片原文與使用者補充可協助搜尋，但不得冒充網路來源；每個實際業務重點都須有產品／服務來源證據。允許針對已確認產品撰寫情境開場與交流邀請，不必照抄來源；不得將一般情境包裝成公司額外提供的服務。':'';
     const cardContactRules=cardContext?'\n名片辨識可能有錯字、公司名可能不同於品牌名：先搜尋公司電話與地址，再比對品牌官方／供應商公開通路頁。這種情況 identity.brandName 填公開品牌，identity.evidence 的連續摘錄必須在同一段含品牌名＋名片相同電話＋相同完整地址（或完整姓名）；一個電話或相似名稱不夠。description.evidence 摘錄必須含這個品牌及它實際販售的產品，不能拿供應商整頁的其他店家或平台服務套用。不要更改輸入的公司名稱；找不到雙線索證據仍留白。':'';
     const body={model:clean(env.OPENAI_MODEL)||'gpt-4.1-mini',store:false,max_output_tokens:3500,instructions:instructions+cardInstructions+cardContactRules,
       input:[{role:'user',content:[{type:'input_text',text:JSON.stringify({company:input.name,hint:input.hint,...(cardContext?{cardIdentityClues:cardContext,websiteHint:input.websiteUrl,websiteUnavailable}:{}),...(registration?{registeredIdentity:{taxId:input.taxId,name:registration.name,address:registration.address},note:'官方資料僅作同一公司識別。請搜尋實際產品／服務的公開介紹，不能使用登記營業項目作介紹；缺少服務來源就留白，不捏造電話或時間。'}:{}),...(officialPage?{officialWebsite:officialPage.url,source:officialPage.source}:{research:'先辨識此公司，再搜尋官網、品牌、公開 Facebook／Instagram、公司公開介紹與產品／服務內容；公司／品牌不同名時取得關聯證據。以公司名稱、統編及區域核對，不要求使用者先提供網址；同名無法確認回傳 ambiguous。'})})}]}],

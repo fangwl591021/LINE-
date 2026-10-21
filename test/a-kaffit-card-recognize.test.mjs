@@ -51,6 +51,8 @@ test('OpenAI receives ordered front and back in ONE request with a two-side sche
   t.mock.method(globalThis,'fetch',async (url,init)=>{calls.push(JSON.parse(init.body));return Response.json({output_text:JSON.stringify(paired)});});
   const result=await recognizeAkaffitBusinessCard({base64Image:image,base64BackImage:backImage},{OPENAI_API_KEY:'sk-test'});
   assert.equal(calls.length,1);
+  assert.match(calls[0].input[0].content[0].text,/4到5行/);
+  assert.match(calls[0].input[0].content[0].text,/真正的換行/);
   assert.deepEqual(calls[0].input[0].content.filter(x=>x.type==='input_image').map(x=>x.image_url),[image,backImage]);
   assert.ok(calls[0].text.format.schema.required.includes('backCardLocalization'));
   assert.equal(result.displayName,recognized.displayName);
@@ -155,9 +157,10 @@ test('builds canonical social accounts without losing other platforms', () => {
 });
 
 test('keeps a business-first AI profile only when printed services are present', () => {
+  const copy='提供網站設計與維護，\n讓線上資訊更清楚地呈現。\n從網站畫面到日常內容整理，\n歡迎交流你的網站需求。';
   assert.equal(
-    buildProfileDescription({serviceDescription:'網站設計與維護',profileDescription:'提供網站設計與維護，協助企業整理線上服務資訊。'}),
-    '提供網站設計與維護，協助企業整理線上服務資訊。',
+    buildProfileDescription({serviceDescription:'網站設計與維護',profileDescription:copy}),
+    copy,
   );
 });
 
@@ -171,4 +174,11 @@ test('builds a factual non-empty profile fallback without inventing services', (
 test('OCR never invents business from a company/title or retains contact boilerplate', () => {
   assert.equal(buildProfileDescription({displayName:'宋先生',companyName:'合成公司',jobTitle:'執行長',profileDescription:'提供保證獲利的專業服務'}),'宋先生任職於合成公司，職務為執行長。');
   assert.equal(buildProfileDescription({serviceDescription:'產品設計與打樣',profileDescription:'歡迎透過名片上的聯絡方式洽詢。'}),'產品設計與打樣。');
+});
+
+test('actual OCR response preserves four short lines through normalization with no second model call',async t=>{
+  const copy='提供網站設計與維護，\n讓線上資訊更清楚地呈現。\n從網站畫面到日常內容整理，\n歡迎交流你的網站需求。';
+  let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;return Response.json({output_text:JSON.stringify({...recognized,serviceDescription:'網站設計與維護',profileDescription:copy})});});
+  const result=await recognizeAkaffitBusinessCard({base64Image:image},{OPENAI_API_KEY:'sk-test'});
+  assert.equal(result.profileDescription,copy);assert.equal(result.profileDescription.split('\n').length,4);assert.equal(calls,1);
 });
