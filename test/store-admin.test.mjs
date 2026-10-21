@@ -93,7 +93,7 @@ test('canonical admin sees all stores including drafts, ineligible and missing o
     const before = f.snapshot(), result = await f.call();
     assert.equal(result.status, 200); assert.equal(result.success, true); assert.equal(result.shops.length, 4); assert.equal(result.next, '');
     assert.deepEqual(result.summary, { total: 4, active: 3, draft: 1 }); assert.equal(result.filtered_total, 4);
-    assert.deepEqual(result.shops.map(shop => shop.public_visible), [true, false, false, false]);
+    assert.deepEqual(result.shops.map(shop => shop.public_visible), [true, false, true, false]);
     assert.equal(result.shops[1].owner_name, '一般會員丙'); assert.equal(result.shops[2].owner_role, 'reward'); assert.equal(result.shops[3].owner_name, '');
     assert.deepEqual(Object.keys(result.shops[0]).sort(), ['id', 'name', 'category', 'status', 'address', 'phone', 'owner_uid', 'owner_name', 'owner_role', 'product_count', 'active_product_count', 'online_product_count', 'public_visible'].sort());
     assert.equal(result.shops[0].product_count, 3); assert.equal(result.shops[0].active_product_count, 2); assert.equal(result.shops[0].online_product_count, 1);
@@ -207,9 +207,9 @@ test('empty directory has stable zero totals and empty pagination', async () => 
 
 test('public visibility uses exact existing catalog eligibility, including case handling but not trimmed roles', async () => {
   const f = fixture(); try {
-    for (const role of ['store', '店長', 'admin', '總管', 'user', '用戶', 'redeem', '扣點用戶', 'STORE', 'reward', 'tenant', ' store ']) {
+    for (const role of ['store', '店長', 'admin', '總管', 'user', '用戶', 'redeem', '扣點用戶', 'STORE', 'reward', '贈點用戶', 'REWARD', 'tenant', ' store ']) {
       f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role, B);
-      const result = await f.call(); assert.equal(result.shops[0].public_visible, ['store', '店長', 'admin', '總管', 'user', '用戶', 'redeem', '扣點用戶', 'STORE'].includes(role), role);
+      const result = await f.call(); assert.equal(result.shops[0].public_visible, ['store', '店長', 'admin', '總管', 'user', '用戶', 'redeem', '扣點用戶', 'STORE', 'reward', '贈點用戶', 'REWARD'].includes(role), role);
     }
   } finally { f.sql.close(); }
 });

@@ -31,7 +31,16 @@ const {buildSync}=require(process.env.LISTING_ESBUILD_MODULE);
   assert.equal((await api('/products?q='+encodeURIComponent(p.title))).products.length,1);
   await api('/product',{...published.products[0],status:'archived'});
   const concurrent=await Promise.all([1,2].map(n=>api('/product',{...p,title:'替換商品'+n,request_key:crypto.randomUUID()})));assert.equal(concurrent.filter(r=>r.http===200).length,1);
-  assert.equal((await api('/manage')).product_count,1);await db.prepare("UPDATE users SET role='reward'").run();assert.equal((await api('/manage')).http,403);
+  assert.equal((await api('/manage')).product_count,1);
+  for(const role of ['reward','贈點用戶']){
+   await db.prepare('UPDATE users SET role=?').bind(role).run();await db.exec('DELETE FROM store_listing_review_usage;');
+   const current=await api('/manage');assert.equal(current.http,200);assert.equal(current.product_limit,1);
+   const company=await call({...input,name:'贈點展示公司',version:current.shop.version,phone:'0223456789',address:'贈點合成路1號'});assert.equal(company.http,200);
+   await db.exec('DELETE FROM store_listing_review_usage;');assert.equal((await api('/product',{...current.products[0],status:'active'})).http,200);
+   const pub=await api('?shop='+shop.id);assert.equal(pub.shop.merchant_enabled,0);assert.equal(pub.shop.address,'贈點合成路1號');assert.equal(pub.products.length,1);
+   assert.equal((await api('/product',{...p,purchase_mode:'online'})).http,400);assert.equal((await api('/products?redeem=1')).products.length,0);
+  }
+  await db.prepare("UPDATE users SET role='tenant'").run();assert.equal((await api('/manage')).http,403);
   console.log('WORKERD PASS: compatibility 2026-04-23 flags=[], D1 AI review/audit, redeem catalog/one item/concurrent quota/public phone/address/discovery/no-online/revocation; no external calls');
  }finally{await mf.dispose();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

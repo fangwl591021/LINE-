@@ -1,5 +1,5 @@
 import {test} from 'node:test';
-for(const role of ['user','redeem','扣點用戶','REDEEM'])test(role+' owns one catalog product, retries are safe, archive frees quota, transactions stay restricted',async()=>{
+for(const role of ['user','redeem','扣點用戶','REDEEM','reward','贈點用戶','REWARD'])test(role+' owns one catalog product, retries are safe, archive frees quota, transactions stay restricted',async()=>{
  const {call,sql}=fixture();try{
   sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,USER);
   const s=await call('/store',store({owner_uid:A,role:'admin'}),'c');assert.equal(s.status,200);assert.equal(s.product_limit,1);assert.equal(s.product_count,0);
@@ -25,7 +25,7 @@ for(const role of ['user','redeem','扣點用戶','REDEEM'])test(role+' owns one
  }finally{sql.close();}
 });
 
-for(const role of ['user','redeem','扣點用戶'])test(role+' concurrent inserts cannot exceed one product',async()=>{
+for(const role of ['user','redeem','扣點用戶','reward','贈點用戶'])test(role+' concurrent inserts cannot exceed one product',async()=>{
  const {call,sql}=fixture();try{
   sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,USER);
   await call('/store',store(),'c');
@@ -73,7 +73,7 @@ test('merchant role matrix protects management, writes, sales and DM, not public
    assert.equal((await call('/manage',null,'a')).status,200,role);
    assert.equal((await call('?shop='+id)).status,200,role);
   }
-  for(const role of ['reward','贈點用戶','tenant','租戶','staff','manager','administrator','',null]){
+  for(const role of ['tenant','租戶','staff','manager','administrator','',null]){
    sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
    for(const path of ['/manage','/sales'])assert.equal((await call(path,null,'a')).status,403,role+path);
    for(const path of ['/store','/product','/product-ocr'])assert.equal((await call(path,{role:'admin',owner_uid:A},'a')).status,403,role+path);

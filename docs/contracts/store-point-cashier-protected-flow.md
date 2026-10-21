@@ -31,6 +31,8 @@
 
 ## 2026-09-13 使用者批准新增贈點用戶
 
+- 2026-10-21 唯一 catalog 例外：贈點單位可用獨立 /v1/store-shop 管理本人公司資訊與一件店內不折抵展示商品；不修改本收銀 action allowlist、QR／手機贈點、180秒驗證、身份解析、防重及母站執行。開店不等於新增扣點、商品 QR、收款／網購或一般 manager 權限。
+
 - CRM 新增獨立 `reward` 角色；僅會員錢包 QR 查詢、既有消費贈點、本人查單／收銀紀錄，不授予店長管理或扣點權限。
 - 新角色必須使用已驗證 LINE Token，不使用 D1 身份 fallback。後端拒絕電話／手動 UID 查詢入口、商品折抵、redeem 及非零扣點。
 - 新增獨立 180 秒掃碼查詢 receipt，綁定操作者及 canonical 顧客，KV 僅存 token 雜湊；在 wallet handler 前及原 beforeWrite 邊界重查角色／憑證。receipt 不保證實體相機來源、不作 KV 原子鎖。

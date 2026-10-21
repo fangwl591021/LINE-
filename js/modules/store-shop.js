@@ -65,7 +65,7 @@
     const initialShopId = standalone ? new URL(location.href).searchParams.get('shop') || '' : section === 'store' ? shopId : '';
     const isShopId = value => window.StoreInviteRoute?.isShopId?.(value) ?? (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
     // UI hint only. Every merchant API rechecks the stored role and owner.
-    const canManage=()=>!standalone&&['admin','store','總管','店長','user','用戶','redeem','扣點用戶'].includes(String(window.userRole||'').toLowerCase());
+    const canManage=()=>!standalone&&['admin','store','總管','店長','user','用戶','redeem','扣點用戶','reward','贈點用戶'].includes(String(window.userRole||'').toLowerCase());
     const canTransact=()=>!standalone&&['admin','store','總管','店長'].includes(String(window.userRole||'').toLowerCase());
     const canAdmin=()=>!standalone&&['admin','總管'].includes(String(window.userRole||'').toLowerCase());
     const canMerchantHome=()=>!standalone&&!!window.currentUserProfile?.userId&&!!window.liff?.isLoggedIn?.()&&['admin','store','tenant','reward','redeem','扣點用戶','總管','店長','租戶','贈點用戶'].includes(String(window.userRole||'').toLowerCase());
@@ -137,7 +137,7 @@
       pageKind('home');const version=++epoch;alert.textContent='';
       const owner=window.currentUserProfile?.userId,role=window.userRole,token=window.liff?.getAccessToken?.();
       const current=()=>version===epoch&&root.isConnected&&content.isConnected&&root.contains(content)&&(standalone||window.currentPage==='store-shop')&&owner===window.currentUserProfile?.userId&&role===window.userRole&&token===window.liff?.getAccessToken?.();
-      const home=await import('./store-points-home.js?v=6');if(!current())return;
+      const home=await import('./store-points-home.js?v=7');if(!current())return;
       const allowed=canMerchantHome()&&!!home.merchantRole(role);
       merchantView=allowed&&(toggle?!merchantView:merchantView??true);
       root.dataset.pointsRole=merchantView?'merchant':'consumer';
@@ -364,7 +364,7 @@
     }
     function renderManage() {
       const s=shop||{};
-      const quotaNotice=productLimit===null?'商品分頁載入，每頁 100 件。':redeemOnly()?'折抵單位最多一件展示商品（草稿也計入），封存後可更換。原會員扣點功能不變；此處不開放網購收款、商品 QR 交易或贈點。':'一般會員最多一件（草稿也計入），封存後可更換；店長與管理員不限。一般會員限店內展示，不開放收款與扣點。';
+      const quotaNotice=productLimit===null?'商品分頁載入，每頁 100 件。':redeemOnly()?'折抵單位最多一件展示商品（草稿也計入），封存後可更換。原會員扣點功能不變；此處不開放網購收款、商品 QR 交易或贈點。':rewardOnly()?'贈點單位最多一件展示商品（草稿也計入），封存後可更換。原會員贈點功能不變；此處不開放扣點、網購收款或商品 QR 交易。':'一般會員最多一件（草稿也計入），封存後可更換；店長與管理員不限。一般會員限店內展示，不開放收款與扣點。';
       content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url)}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary" ${atCapacity()?'disabled':''}>新增商品</button></div><h2>商品管理（${productCount} 件${productLimit===null?'・不限件數':`／上限 ${productLimit} 件`}）</h2><p class="shop-meta">${quotaNotice}</p><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
       content.querySelector('h2').insertAdjacentHTML('afterend','<ol class="shop-listing-steps" aria-label="公司與商品上架步驟"><li>填寫公司介紹、電話與地址</li><li>選擇公開狀態，儲存店面</li><li>按「新增商品」，核對後儲存上架</li></ol>');
       content.querySelector('[data-form="store"] [name="phone"]').type='tel';

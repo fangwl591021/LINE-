@@ -5,7 +5,7 @@ import {requireListingReview,ListingReviewError,listingReviewFailure} from './st
 import {manualOnlineReleaseOffer,manualReleaseConsent,verifySingleProductRelease} from './store-single-product-release.mjs';
 const PATH='/v1/store-shop/admin/catalog';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ROLES=['store','店長','admin','總管','user','用戶','redeem','扣點用戶'];
+const ROLES=['store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'];
 const UNLIMITED=['store','店長','admin','總管'];
 const STORE=['name','description','category','address','phone','hours','image_url','status'];
 const PRODUCT=['title','description','category','image_url','price_cents','status','purchase_mode','shipping_fee_cents'];
@@ -45,7 +45,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
         if([...params.keys()].some(key=>!['queue','after'].includes(key)||params.getAll(key).length!==1)||params.get('queue')!=='draft'||(after&&!validId(after)))fail('INVALID_QUERY','草稿查詢條件不正確');
         const products=await rows(db,`SELECT p.id,p.shop_id,p.title,p.price_cents,p.category,p.status,p.version,p.updated_at,s.name AS shop_name,s.status AS shop_status
           FROM store_shop_products p JOIN store_shop_stores s ON s.id=p.shop_id
-          WHERE p.status='draft' AND p.id>? AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶'))
+          WHERE p.status='draft' AND p.id>? AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'))
           ORDER BY p.id LIMIT 21`,[after]);
         return reply({success:true,products:products.slice(0,20),next:products.length>20?products[19].id:''});
       }

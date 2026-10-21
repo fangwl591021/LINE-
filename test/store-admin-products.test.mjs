@@ -63,9 +63,9 @@ test('verified administrator aliases work but conflicting identity rows fail clo
   f.sql.prepare('INSERT INTO users(row_id,line_id,role) VALUES(?,?,?)').run(alias,alias,'user');
   assert.equal((await f.call(product({request_key:id(98)}),alias)).status,409);assert.equal(f.count('store_shop_products'),1);
 });
-test('unregistered, missing, reward-only and arbitrary targets cannot receive products',async t=>{
+test('unregistered, missing and arbitrary targets cannot receive products',async t=>{
   const f=fixture();t.after(()=>f.sql.close());
-  for(const shop of [id(3),id(4),id(5)])assert.equal((await f.call(product({shop_id:shop}))).status,403);
+  for(const shop of [id(4),id(5)])assert.equal((await f.call(product({shop_id:shop}))).status,403);
   assert.equal((await f.call(product({shop_id:"x' OR 1=1"}))).status,400);
   assert.equal((await f.call(product({owner_uid:ADMIN}))).status,400);
   assert.equal((await f.call(product({id:id(100)}))).status,400);
