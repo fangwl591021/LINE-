@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { findMemberReferrer } from './worker/member-number.mjs';
 import { createCommercePointService } from './worker/store-commerce-mother.mjs';
 import { CardLinks, cardLinksEnabled, cardLinksConfigResponse } from './worker/card-links.mjs';
 import { extractActivityDmDraft } from './worker/activity-dm-ai.mjs';
@@ -93,6 +94,7 @@ const ACTION_POLICIES = {
   listAnnouncements: { access: 'public', legacyAuthSkip: true },
   getSystemTicker: { access: 'public', legacyAuthSkip: true },
   registerUser: { access: 'public', note: 'initial_registration' },
+  adminLookupMemberNumber: { access: 'admin' },
   joinActivity: { access: 'public', note: 'public_activity_registration' },
   getSocialLikeStats: { access: 'public' },
   recordShareCardVisit: { access: 'public' },
@@ -9512,6 +9514,10 @@ const D1ReadModule = {
     const dealerProfile = socials.dealerProfile && typeof socials.dealerProfile === 'object' ? socials.dealerProfile : {};
     return {
       rowId: this.text(row.row_id, userId),
+      memberNumber: this.text(row.member_number),
+      memberJoinedAt: this.text(row.member_joined_at),
+      memberDateSource: this.text(row.member_date_source),
+      createdAt: this.text(row.created_at),
       userId,
       lineId: userId,
       name: this.text(row.name, '未命名'),
@@ -10802,6 +10808,13 @@ const D1WriteModule = {
     if (options.createOnly && existing) {
       return { success: true, data: { isRegistered: true, info: D1ReadModule.userRow(existing), existed: true } };
     }
+    if (/^\d{11,}$/.test(String(user.referrer_id || ''))) {
+      try {
+        const referrer = await findMemberReferrer(env.ACTMASTER_DB, user.referrer_id);
+        if (referrer.userId === user.line_id) return { success:false,code:'MEMBER_REFERRER_INVALID',error:'不可指定自己為推薦人' };
+        user.referrer_id = referrer.userId;
+      } catch (error) { return { success:false,code:'MEMBER_REFERRER_INVALID',error:error.message }; }
+    }
     const hasReferrerInput = ['referrerId', 'referrer_id', '?刻鈭?'].some(key => data && data[key] !== undefined && data[key] !== null);
     const canOverrideReferrer = SecurityModule.normalizeRole(payload.authenticatedRole || '') === 'admin'
       && hasReferrerInput
@@ -10872,6 +10885,7 @@ const D1WriteModule = {
       return null;
     });
     const info = D1ReadModule.userRow({
+      ...await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? LIMIT 1', [user.line_id]),
       row_id: user.row_id,
       line_id: user.line_id,
       name: user.name,
@@ -17209,6 +17223,10 @@ async function dispatchAction(action, payload, request, env) {
 
   switch (action) {
     case 'extractActivityDmDraft': return await extractActivityDmDraft(payload, env, actor, (...args) => AIModule.callOpenAI(...args));
+    case 'adminLookupMemberNumber': {
+      try { return { success:true,data:await findMemberReferrer(env.ACTMASTER_DB,payload.query) }; }
+      catch (error) { return { success:false,error:error.message }; }
+    }
     case 'checkUser':              return await AuthModule.check(payload, env);
     case 'getCardForClaim':        return await ClaimModule.getCardForClaim(payload || {}, env);
     case 'claimCardAndRegister':   return await ClaimModule.claimCardAndRegister(payload || {}, env);
@@ -17312,6 +17330,7 @@ async function dispatchAction(action, payload, request, env) {
           };
         }
         const d1Result = await D1WriteModule.upsertUser(payload || {}, env, { createOnly: activityRegistration });
+        if (d1Result?.success === false) return d1Result;
         if (activityRegistration && (d1Result?.success === false || d1Result?.data?.existed)) return d1Result;
         if (d1Result) {
           const pointWallet = await PointModule.ensureSubsitePointWalletOnJoin(payload || {}, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
@@ -17334,6 +17353,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'updateUserProfile': {
       try {
         const d1Result = await D1WriteModule.upsertUser(payload || {}, env);
+        if (d1Result?.code === 'MEMBER_REFERRER_INVALID') return d1Result;
         if (d1Result && d1Result.success !== false) return d1Result;
       } catch (e) {
         console.error("D1 upsertUser fallback", e);
@@ -17422,6 +17442,7 @@ async function dispatchAction(action, payload, request, env) {
           authenticatedNetworkId: payload.authenticatedNetworkId
         };
         const d1Result = await D1WriteModule.upsertUser(profile, env);
+        if (d1Result?.code === 'MEMBER_REFERRER_INVALID') return d1Result;
         if (d1Result && d1Result.success !== false) return d1Result;
       } catch (e) {
         console.error("D1 adminSyncBoundCardUser fallback", e);

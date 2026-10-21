@@ -192,6 +192,7 @@ const fullChecks = [
   'tools/check-own-card-upload-contract.js',
   'tools/check-matchmake-contract.js',
   'tools/check-admin-crm-referrer-contract.js',
+  'test/member-number.test.mjs',
   'tools/check-cardmaster-public-readiness-contract.js',
   'tools/check-home-profile-owner-controls-contract.js',
   'tools/check-home-profile-restyle-contract.js',
