@@ -51,7 +51,8 @@ test('all actual contacts are normalized, deduplicated and unsafe/guessed links 
   assert.equal(links.uri('https://example.com/order/123456789'),'https://example.com/order/123456789');
   assert.throws(()=>links.normalize([{l:'blank',u:''}],true),/第 1/);
   const emailAction = links.flexRows([{l:'電子郵件',u:'mailto:a@example.com'}])[0].contents[0].action;
-  assert.equal(emailAction.type,'clipboard'); assert.equal(emailAction.clipboardText,'a@example.com');
+  assert.equal(emailAction.type,'uri'); assert.equal(emailAction.clipboardText,undefined);
+  assert.equal(emailAction.uri,'https://fangwl591021.github.io/LINE-/card-email.html?openExternalBrowser=1#to=a%40example.com');
 });
 test('feature switch is server managed and fails closed without schema/DB/flag', async () => {
   for (const value of ['enabled','disabled',null,'true']) {
@@ -131,7 +132,8 @@ test('real upsert SQL rejects concurrent stale writes and unauthorized actors be
   } finally {f.sql.close();}
 });
 test('front-end Flex and Worker share the same 15-button rows, title and description', () => {
-  const cfg=links.saveConfig(legacy,{...legacy,_cardLinksEditing:'v2',title:'標題',desc:'完整說明',buttons:buttons(15)},true);
+  const contacts=buttons(15);contacts[2]={l:'電子郵件',u:'mailto:demo+card@example.com',c:'#F59E0B'};
+  const cfg=links.saveConfig(legacy,{...legacy,_cardLinksEditing:'v2',title:'標題',desc:'完整說明',buttons:contacts},true);
   const context=vm.createContext({window:{CardLinks:links,CardLinksRuntime:{enabled:()=>true},location:{origin:'https://example.com',pathname:'/'}},URL,console,document:{addEventListener(){}}});
   vm.runInContext(read('js/modules/ecard.js'),context);
   const front=plain(context.window.buildLocalECardFlexMessage({rowId:'card'},cfg,'https://example.com/card'));
@@ -143,6 +145,9 @@ test('front-end Flex and Worker share the same 15-button rows, title and descrip
   assert.equal(front.footer.contents.length,8);
   assert.equal(front.body.contents[0].text,'標題');assert.equal(back.body.contents[1].text,'完整說明');
   assert.equal(front.size,'mega');
+  assert.equal(cfg.contactLinksV2.buttons[2].u,'mailto:demo+card@example.com');
+  const email=front.footer.contents.flatMap(r=>r.contents).find(b=>b.action.label==='電子郵件');
+  assert.equal(email.action.type,'uri');assert.equal(email.action.uri,links.emailComposeUrl('demo+card@example.com'));
 });
 
 test('personal WYSIWYG saves 15 buttons and new title, adopts server revision, and keeps a failed draft', async () => {

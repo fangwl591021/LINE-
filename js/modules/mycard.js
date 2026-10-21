@@ -2156,7 +2156,7 @@
           '</div>' +
           '<input id="my-wysiwyg-button-label" value="' + escapeAttr(btn.l || '') + '" placeholder="按鈕文字" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-black outline-none focus:ring-2 focus:ring-blue-500">' +
           '<input id="my-wysiwyg-button-url" value="' + escapeAttr(btn.u || '') + '" placeholder="網址 / tel: / line://" class="w-full rounded-xl border border-blue-300 px-4 py-3 font-mono text-[13px] outline-none focus:ring-2 focus:ring-blue-500">' +
-          (cardLinksEditingV2 ? '<div class="grid grid-cols-2 gap-2"><button type="button" onclick="window.moveMyCardWysiwygButton(-1)" class="py-2 border rounded-xl">往前移</button><button type="button" onclick="window.moveMyCardWysiwygButton(1)" class="py-2 border rounded-xl">往後移</button></div><p class="text-[12px] text-slate-500">Email：網頁可寄信，LINE 訊息按鈕可複製信箱。</p>' : '') +
+          (cardLinksEditingV2 ? '<div class="grid grid-cols-2 gap-2"><button type="button" onclick="window.moveMyCardWysiwygButton(-1)" class="py-2 border rounded-xl">往前移</button><button type="button" onclick="window.moveMyCardWysiwygButton(1)" class="py-2 border rounded-xl">往後移</button></div><p class="text-[12px] text-slate-500">Email：網頁開啟郵件 App；LINE 名片開啟寄信頁，收件人自動帶入，不會直接複製。</p>' : '') +
           '<div class="grid grid-cols-[56px_minmax(0,1fr)] gap-3">' +
             '<input id="my-wysiwyg-button-color" type="color" value="' + escapeAttr(safeCssColor(btn.c, '#06C755')) + '" class="w-14 h-12 rounded-xl border border-blue-300 bg-white p-1">' +
             '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +

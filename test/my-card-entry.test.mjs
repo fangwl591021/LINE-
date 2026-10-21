@@ -19,7 +19,7 @@ test('home My Card opens the tabbed card-detail page', () => {
   assert.match(home, /window\.openMyCardSettings = function\(evt\)[\s\S]*return window\.openMyCardEntry\(evt\)/);
   assert.match(index, /id="home-my-card-button" onclick="window\.openMyCardEntry \? window\.openMyCardEntry\(event\)/);
   assert.match(index, /<details id="details-my-ecard"[\s\S]*?<summary onclick="window\.openMyCardEntry\(event\)"/);
-  assert.match(index, /js\/modules\/mycard\.js\?v=8\.94/);
+  assert.match(index, /js\/modules\/mycard\.js\?v=8\.95/);
   assert.match(index, /js\/modules\/home\.js\?v=8\.27/);
   assert.match(mycard, /await load\(\);\s*await openMyCardDetail\(\);/);
 });

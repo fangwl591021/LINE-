@@ -5,6 +5,25 @@
   const text = value => String(value ?? '').trim();
   const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
   const clone = value => JSON.parse(JSON.stringify(value));
+  const EMAIL_PAGE = 'https://fangwl591021.github.io/LINE-/card-email.html';
+  function emailAddress(value) {
+    const raw = String(value ?? '').replace(/[\u200B-\u200D\uFEFF]/g, '');
+    if (/[\x00-\x1f\x7f]/.test(raw)) return '';
+    const email = raw.trim().replace(/^mailto:/i, '');
+    if (email.length > 254 || /[\s<>"\\,;:%?#&=]/.test(email)) return '';
+    return /^[^@]+@(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(email) && email.indexOf('@') <= 64 ? email : '';
+  }
+  function emailComposeUrl(value) {
+    const email = emailAddress(value);
+    return email ? EMAIL_PAGE + '?openExternalBrowser=1#to=' + encodeURIComponent(email) : '';
+  }
+  function emailTargets(value) {
+    const email = emailAddress(value);
+    if (!email) return null;
+    return { email, app:'mailto:' + email,
+      gmail:'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(email),
+      outlook:'https://outlook.live.com/mail/0/deeplink/compose?to=' + encodeURIComponent(email) };
+  }
   function parse(value) {
     try {
       const result = typeof value === 'string' ? JSON.parse(value) : value;
@@ -14,8 +33,9 @@
   function uri(value) {
     let raw = text(value).replace(/[\u200B-\u200D\uFEFF]/g, '');
     if (!raw || raw.length > 1000 || /[<>\x00-\x1f]/.test(raw)) return '';
-    if (/^(mailto:)?[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(raw) && !/^https?:/i.test(raw)) {
-      return 'mailto:' + raw.replace(/^mailto:/i, '');
+    if (/^mailto:/i.test(raw) || raw.includes('@') && !/^[a-z][a-z\d+.-]*:/i.test(raw)) {
+      const email = emailAddress(raw);
+      return email ? 'mailto:' + email : '';
     }
     if (/^tel:/i.test(raw) || /^\+?[\d ()+.\-]{7,}$/.test(raw)) {
       const phone = raw.replace(/^tel:/i, '').replace(/[ ()\.\-]/g, '').replace(/^00886/, '+886');
@@ -113,12 +133,12 @@
     const items = normalize(buttons).map(b => ({
       type:'button', style:'primary', color:b.c, height:'sm', flex:1,
       action: b.u.startsWith('mailto:')
-        ? { type:'clipboard', label:b.l, clipboardText:b.u.slice(7) }
+        ? { type:'uri', label:b.l, uri:emailComposeUrl(b.u) }
         : { type:'uri', label:b.l, uri:b.u }
     }));
     const rows = [];
     for (let i=0; i<items.length; i+=2) rows.push({ type:'box', layout:'horizontal', spacing:'sm', contents:items.slice(i,i+2) });
     return rows;
   }
-  root.CardLinks = Object.freeze({ parse, uri, normalize, recognized, project, mergeRecognized, saveConfig, flexRows });
+  root.CardLinks = Object.freeze({ parse, uri, normalize, recognized, project, mergeRecognized, saveConfig, flexRows, emailAddress, emailComposeUrl, emailTargets });
 })(globalThis);
