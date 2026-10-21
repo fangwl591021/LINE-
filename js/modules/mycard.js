@@ -29,6 +29,8 @@
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
   var wysiwygState = { cfg: null, field: '', buttonIndex: -1, recordMode: false };
+  var cardBusinessRequest = null;
+  var cardBusinessDraft = null;
   var cardLinksEditingV2 = false;
   function cardLinksConfig(cfg, card) {
     if (!cardLinksEditingV2 || !window.CardLinks) return cfg;
@@ -1932,7 +1934,7 @@
         '<div class="shrink-0 border-t border-white/10 bg-[#1A1B1E] px-4 py-3 text-center text-[12px] font-bold text-slate-300">點圖片、文字或按鈕即可直接修改。</div>' +
       '</div>' +
       '<div id="my-card-wysiwyg-editor-modal" class="hidden fixed inset-0 z-[2110] bg-black/75 backdrop-blur-sm px-4 py-6 items-center justify-center">' +
-        '<div class="my-wysiwyg-modal-pop w-full max-w-sm rounded-[24px] bg-white text-slate-900 p-5 shadow-2xl">' +
+        '<div class="my-wysiwyg-modal-pop w-full max-w-sm rounded-[24px] bg-white text-slate-900 p-5 shadow-2xl" style="max-height:calc(100dvh - 3rem);overflow-y:auto;">' +
           '<div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-4">' +
             '<h3 id="my-card-wysiwyg-editor-title" class="text-lg font-black"></h3>' +
             '<button type="button" onclick="window.closeMyCardWysiwygEditor()" class="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center active:scale-95"><span class="material-symbols-outlined">close</span></button>' +
@@ -2001,7 +2003,95 @@
     initMyCardSocialLikeWidget();
   }
 
+  function cardBusinessInput(card, cfg, serviceText) {
+    return {
+      name: readCardValue(card, ['name', '姓名', 'displayName']),
+      company: readCardValue(card, ['company', 'company_name', 'companyName', '公司名稱']),
+      jobTitle: readCardValue(card, ['jobTitle', 'title', '職稱']),
+      phone: readCardValue(card, ['mobile', 'phone', '手機號碼', '手機']),
+      companyPhone: readCardValue(card, ['officePhone', 'office_phone', 'companyPhone', '公司電話']),
+      website: readCardValue(card, ['website', 'companyUrl', '公司網址']),
+      address: readCardValue(card, ['address', '地址']),
+      socials: parseMyCardSocials(readCardValue(card, ['socials', 'socials_json', '社群帳號'])),
+      service: typeof serviceText === 'string' ? serviceText : cfg.desc || readCardValue(card, ['services', '服務項目'])
+    };
+  }
+
+  function cardBusinessMessage(message) {
+    var status = document.getElementById('my-card-business-status');
+    if (status) status.textContent = message;
+  }
+
+  async function generateMyCardBusinessCopy(btn) {
+    if (!currentCardData || !wysiwygState.cfg || wysiwygState.field !== 'desc') return;
+    if (cardBusinessRequest && !cardBusinessRequest.done && cardBusinessRequest.valid()) return;
+    var input = document.getElementById('my-wysiwyg-desc-input');
+    var brief = document.getElementById('my-card-business-brief');
+    var panel = document.getElementById('my-card-business-result');
+    var card = currentCardData, cfg = wysiwygState.cfg, actor = moduleAuth.getUserId();
+    var before = input.value, hint = brief.value;
+    var context = JSON.stringify(cardBusinessInput(card, cfg, before));
+    var request = { valid: function() {
+      var modal = document.getElementById('my-card-wysiwyg-editor-modal');
+      return cardBusinessRequest === request && card === currentCardData && cfg === wysiwygState.cfg &&
+        actor === moduleAuth.getUserId() && wysiwygState.field === 'desc' && modal && !modal.classList.contains('hidden') &&
+        document.getElementById('my-wysiwyg-desc-input') === input && input.value === before && brief.value === hint &&
+        JSON.stringify(cardBusinessInput(card, cfg, input.value)) === context;
+    }};
+    cardBusinessRequest = request; cardBusinessDraft = null;
+    panel.replaceChildren();
+    if (btn) btn.disabled = true;
+    cardBusinessMessage('正在搜尋官網與公開社群、核對業務來源…原說明不會變更。');
+    try {
+      var result = await window.fetchAPI('generateCardCopy', {card: JSON.parse(context), brief: hint}, true);
+      if (!request.valid()) return;
+      if (!result || result.success !== true) throw new Error(result && result.error || 'AI 搜尋暫時無法完成');
+      var data = result.data || result;
+      if (!String(data.service || '').trim()) throw new Error('未取得可用的業務介紹');
+      var preview = document.createElement('p');
+      preview.className = 'whitespace-pre-wrap text-sm leading-relaxed';
+      preview.textContent = data.service;
+      panel.appendChild(preview);
+      (data.sources || []).slice(0,6).forEach(function(source) {
+        try {
+          var url = new URL(source.url);
+          if (url.protocol !== 'https:' || url.username || url.password) return;
+          var link = document.createElement('a');
+          link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+          link.className = 'block text-xs text-blue-700 underline break-all mt-2';
+          link.textContent = (source.title || url.hostname) + ' ↗'; panel.appendChild(link);
+        } catch (e) {}
+      });
+      var use = document.createElement('button');
+      use.type = 'button'; use.textContent = '核對後帶入說明';
+      use.className = 'w-full py-3 mt-3 rounded-xl bg-emerald-600 text-white font-black';
+      use.onclick = applyMyCardBusinessCopy;
+      panel.appendChild(use);
+      cardBusinessDraft = {request: request, service: data.service};
+      cardBusinessMessage('草稿尚未帶入或儲存。' + (data.needsSourceReview ? '部分內容來自搜尋索引，請開啟來源確認。' : '') + (data.warnings || []).join(' '));
+    } catch (e) {
+      if (request.valid()) cardBusinessMessage((e.message || 'AI 搜尋失敗') + ' 原說明未變更。');
+    } finally {
+      if (btn && btn.isConnected) btn.disabled = false;
+      if (cardBusinessRequest === request && !request.valid()) cardBusinessMessage('編輯內容已變更，未套用過期草稿；可重新搜尋。');
+      // Retain the request identity for the explicit apply/race check, but
+      // allow retry after a completed request without charging duplicate clicks.
+      request.done = true;
+    }
+  }
+
+  function applyMyCardBusinessCopy() {
+    if (!cardBusinessDraft || !cardBusinessDraft.request.valid()) {
+      cardBusinessMessage('名片或文字已變更，這份草稿不再適用；請重新搜尋。'); return;
+    }
+    document.getElementById('my-wysiwyg-desc-input').value = cardBusinessDraft.service;
+    cardBusinessDraft = null;
+    document.getElementById('my-card-business-result').replaceChildren();
+    cardBusinessMessage('已帶入文字框；請按「套用」，再按名片上方「儲存」才會更新。');
+  }
+
   function renderWysiwygEditor(type, index) {
+    cardBusinessRequest = null; cardBusinessDraft = null;
     var modal = document.getElementById('my-card-wysiwyg-editor-modal');
     var title = document.getElementById('my-card-wysiwyg-editor-title');
     var panel = document.getElementById('my-card-wysiwyg-editor-body');
@@ -2038,6 +2128,13 @@
         '<div class="space-y-3">' +
           '<label class="block text-[13px] font-black text-slate-600">說明文字</label>' +
           '<textarea id="my-wysiwyg-desc-input" rows="5" class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-blue-500">' + escapeHTML(cfg.desc || '') + '</textarea>' +
+          '<div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">' +
+            '<button type="button" id="my-card-business-generate" onclick="window.generateMyCardBusinessCopy(this)" class="w-full py-3 rounded-xl bg-emerald-600 text-white font-black disabled:opacity-50">AI 搜尋並美化說明</button>' +
+            '<p class="text-xs text-slate-600">自動用公司、網址、電話與公開社群核對實際業務，不用登記項目當介紹。先預覽來源，不自動儲存。</p>' +
+            '<input id="my-card-business-brief" maxlength="800" placeholder="品牌／區域／業務補充（選填，不必重填名片）" class="w-full rounded-lg border p-2 text-sm">' +
+            '<p id="my-card-business-status" role="status" aria-live="polite" class="text-xs text-slate-600"></p>' +
+            '<div id="my-card-business-result"></div>' +
+          '</div>' +
           '<div class="grid grid-cols-3 gap-2">' +
             '<button type="button" onclick="window.setMyCardWysiwygAlign(\'left\')" class="my-wysiwyg-align-btn py-2.5 rounded-xl border font-black ' + (descAlign === 'left' || descAlign === 'start' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 bg-white text-slate-600') + '">靠左</button>' +
             '<button type="button" onclick="window.setMyCardWysiwygAlign(\'center\')" class="my-wysiwyg-align-btn py-2.5 rounded-xl border font-black ' + (descAlign === 'center' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 bg-white text-slate-600') + '">置中</button>' +
@@ -2080,6 +2177,7 @@
   }
 
   function closeMyCardWysiwygEditor() {
+    cardBusinessRequest = null; cardBusinessDraft = null;
     var modal = document.getElementById('my-card-wysiwyg-editor-modal');
     if (!modal) return;
     modal.classList.add('hidden');
@@ -2547,6 +2645,7 @@
   window.openMyCardDetail = openMyCardDetail;
   window.openQuicklyMyCard = openQuicklyMyCard;
   window.openMyCardWysiwyg = openMyCardWysiwyg;
+  window.generateMyCardBusinessCopy = generateMyCardBusinessCopy;
   window.openCardRecordWysiwyg = openCardRecordWysiwyg;
   window.openMyCardVideoFlow = openMyCardVideoFlow;
   window.updateMyCardVideoButtonState = updateMyCardVideoButtonState;

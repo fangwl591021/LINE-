@@ -40,7 +40,7 @@ const recognized = {
   socialAccounts:'',
   address:'',
   serviceDescription:'',
-  profileDescription:'測試公司的工程師王小明，歡迎透過名片上的聯絡方式洽詢。',
+  profileDescription:'王小明任職於測試公司，職務為工程師。',
   note:'',
 };
 
@@ -154,16 +154,21 @@ test('builds canonical social accounts without losing other platforms', () => {
   assert.equal(result.socialAccounts, 'LINE: https://line.me/ti/p/~jhan1201｜Instagram: https://www.instagram.com/q_q_1201｜Facebook: example.page');
 });
 
-test('keeps the AI profile description when it is present', () => {
+test('keeps a business-first AI profile only when printed services are present', () => {
   assert.equal(
-    buildProfileDescription({profileDescription:'任職於中原大學產學營運處，職稱為專案經理。'}),
-    '任職於中原大學產學營運處，職稱為專案經理。',
+    buildProfileDescription({serviceDescription:'網站設計與維護',profileDescription:'提供網站設計與維護，協助企業整理線上服務資訊。'}),
+    '提供網站設計與維護，協助企業整理線上服務資訊。',
   );
 });
 
 test('builds a factual non-empty profile fallback without inventing services', () => {
   assert.equal(
     buildProfileDescription({displayName:'高靖航',companyName:'中原大學',department:'產學營運處',jobTitle:'專案經理'}),
-    '高靖航任職於中原大學，職務為產學營運處 專案經理。歡迎透過名片所列聯絡方式洽詢。',
+    '高靖航任職於中原大學，職務為產學營運處 專案經理。',
   );
+});
+
+test('OCR never invents business from a company/title or retains contact boilerplate', () => {
+  assert.equal(buildProfileDescription({displayName:'宋先生',companyName:'合成公司',jobTitle:'執行長',profileDescription:'提供保證獲利的專業服務'}),'宋先生任職於合成公司，職務為執行長。');
+  assert.equal(buildProfileDescription({serviceDescription:'產品設計與打樣',profileDescription:'歡迎透過名片上的聯絡方式洽詢。'}),'產品設計與打樣。');
 });

@@ -28,8 +28,8 @@ cardLocalization 規則：
 
 名片說明規則：
 1. serviceDescription 只保留名片上實際印出的服務、產品或業務文字。
-2. profileDescription 使用已確認的姓名、公司、部門、職稱及 serviceDescription，撰寫 1 到 2 句自然、專業的繁體中文介紹，建議 30 到 120 個中文字；即使名片沒有服務說明也不可留白。
-3. 可描述任職單位、職務與名片明列的服務，並提示可透過名片聯絡方式洽詢；不得編造專長、服務項目、成就、客戶、優惠或無法由名片確認的職責。
+2. profileDescription 以 serviceDescription 中可確認的實際產品／服務為主，撰寫2到4句自然、專業的繁體中文介紹，約60到140字；資料少可更短，不硬切16字、不堆砌形容詞。整理有依據的服務對象、特色與合作方向，不重複姓名職稱、不以電話Email洽詢湊內容。
+3. 沒有服務文字時只保留簡短身分資訊，後續可由使用者在說明編輯器搜尋公開業務；此次沒有網路搜尋工具，不假裝已查網站。不從公司名、職稱、照片或登記項目猜業務，不編造專長、成就、客戶、優惠、證照、成效或療效。
 
 並依公司、職稱、部門與服務說明做一次行業分類：主行業只能選 1 個，次行業最多 2 個且不可與主行業相同。可選行業為：${INDUSTRY_OPTIONS.join('、')}。無法可靠判斷時 primaryIndustry 填「待分類」、secondaryIndustries 填空陣列；industryConfidence 填 0 到 1。只回傳符合 JSON Schema 的結果。`;
 
@@ -134,17 +134,18 @@ function cleanProfilePart(value) {
 
 export function buildProfileDescription(parsed = {}) {
   const generated = cleanProfilePart(parsed.profileDescription);
-  if (generated) return `${generated}。`.replace(/。。+$/g, '。').slice(0, FIELD_LIMITS.profileDescription);
+  const boilerplate=/(?:可|歡迎|請|透過).{0,32}(?:名片|電話|電子郵件|聯絡方式).{0,32}(?:聯絡|洽詢|諮詢)/.test(generated);
+  if (generated&&!boilerplate&&cleanProfilePart(parsed.serviceDescription)) return `${generated}。`.replace(/。。+$/g, '。').slice(0, FIELD_LIMITS.profileDescription);
 
   const name = cleanProfilePart(parsed.displayName);
   const company = cleanProfilePart(parsed.companyName);
   const position = [cleanProfilePart(parsed.department), cleanProfilePart(parsed.jobTitle)].filter(Boolean).join(' ');
   const services = cleanProfilePart(parsed.serviceDescription);
+  if (services) return `${services}。`.slice(0, FIELD_LIMITS.profileDescription);
   let first = name || '此名片聯絡人';
   if (company) first += `任職於${company}`;
   if (position) first += company ? `，職務為${position}` : `的職務為${position}`;
-  if (services) first += `，名片列有${services}`;
-  return `${first}。歡迎透過名片所列聯絡方式洽詢。`.slice(0, FIELD_LIMITS.profileDescription);
+  return `${first}。`.slice(0, FIELD_LIMITS.profileDescription);
 }
 
 async function callAiResponses(apiKey, body) {

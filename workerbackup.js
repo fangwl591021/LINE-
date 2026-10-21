@@ -1,5 +1,6 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { findMemberReferrer } from './worker/member-number.mjs';
+import { generateCardBusinessCopy } from './worker/card-business-copy.mjs';
 import { createCommercePointService } from './worker/store-commerce-mother.mjs';
 import { CardLinks, cardLinksEnabled, cardLinksConfigResponse } from './worker/card-links.mjs';
 import { extractActivityDmDraft } from './worker/activity-dm-ai.mjs';
@@ -8675,35 +8676,12 @@ ${contactsList}\
     }
   },
 
-  async generateCardCopy(payload, env) {
+  async generateCardCopy(payload, env, actor) {
     if (String(payload?.outputType || '').trim() === 'business_intent') {
       return await this.generateBusinessIntentDraft(payload, env);
     }
     try {
-      const card = payload.card || {};
-      const brief = payload.brief || '';
-      const prompt = `你是商務名片文案顧問。請根據名片資料與使用者補充，產生適合數位名片的服務介紹。
-要求：
-1. 使用繁體中文。
-2. 4 到 5 行，每行盡量 16 字內。
-3. 具體、可信、不要誇大療效或保證收益。
-4. 不得產生色情、犯罪、詐騙、賭博、毒品、武器等違規內容。
-只回傳純 JSON：{"service":"第一行\\n第二行\\n第三行","headline":"","tips":[]}
-名片資料：${JSON.stringify(card).slice(0, 5000)}
-補充需求：${brief}`;
-
-      let text = '';
-      try {
-        const result = await this.callOpenAI(env, { model: this.openAITextModel(env), messages: [{ role: 'user', content: prompt }], temperature: 0.7 }, payload.clientOpenAIKey);
-        text = result.choices?.[0]?.message?.content || '{}';
-      } catch (openaiError) {
-        if (String(env.AI_FALLBACK_PROVIDER || '').toLowerCase() !== 'gemini') throw openaiError;
-        console.warn('[AI fallback] generateCardCopy GPT failed, trying Gemini:', openaiError.message);
-        text = await this.callGemini(env, prompt, 0.7);
-      }
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      const data = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
-      return { success: true, data };
+      return await generateCardBusinessCopy(payload.card || {}, payload.brief || '', env, actor?.userId);
     } catch (e) {
       return { success: false, error: 'AI 名片代寫失敗: ' + e.message };
     }
@@ -17752,7 +17730,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
     case 'calculateFateTags':      return await AIModule.fateTags(payload, env);
     case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
-    case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env);
+    case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env, actor);
     case 'getSubsiteHome':         return await SubsiteHomeModule.get(payload || {}, env);
     case 'getMotherRegistrationUrl': return await PointModule.getMotherRegistrationUrl(payload || {}, env);
     case 'ensureMotherLineMember': return await PointModule.ensureMotherLineMember(payload || {}, env);

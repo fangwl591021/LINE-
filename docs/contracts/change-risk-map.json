@@ -7,12 +7,15 @@
       "docs": [
         "docs/rules/core-invariants.md",
         "docs/flows/my-card.md",
+        "docs/contracts/card-business-description.md",
         "docs/data/card-ownership-and-versioning.md",
         "docs/contracts/card-resolvers.md",
         "docs/contracts/line-keywords.md"
       ],
       "checks": [
         "tools/check-lineoa-mycard-keyword-contract.js",
+        "test/card-business-copy.test.mjs",
+        "test/card-business-copy-ui.test.mjs",
         "tools/check-mycard-entry-contract.js",
         "tools/check-own-card-upload-contract.js",
         "tools/check-card-resolver-contract.js"

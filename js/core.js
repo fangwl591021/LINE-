@@ -188,8 +188,8 @@ const Core = (function() {
             const customerImportLongActions = ['previewCustomerImportRows', 'commitCustomerImportBatch', 'parsePersonalTaskVoice'];
             const timeoutMs = action === 'checkUser'
                 ? 10000
-                : (action === 'recognizeCardWithGPT4o' ? 70000
-                    : (action === 'savePointRedemptionPartner' ? 65000 : (action === 'refreshCardHarvestMatches' ? 45000 : (customerImportLongActions.includes(action) ? 60000 : 18000))));
+                : (action === 'generateCardCopy' ? 100000 : (action === 'recognizeCardWithGPT4o' ? 70000
+                    : (action === 'savePointRedemptionPartner' ? 65000 : (action === 'refreshCardHarvestMatches' ? 45000 : (customerImportLongActions.includes(action) ? 60000 : 18000)))));
             const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             const res = await fetch(Config.WORKER_URL, {
                 method: 'POST',

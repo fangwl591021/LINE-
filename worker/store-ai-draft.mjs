@@ -2,6 +2,7 @@
 import {boundedText,publicWebsiteUrl,readWebsite} from './partner-onboarding-ai.mjs';
 import {lookupStoreRegistration,RegistrationError} from './store-registration.mjs';
 import {identityNorm as norm,resolveStoreIdentity} from './store-ai-identity.mjs';
+import {resolveCardBusinessIdentity} from './card-business-identity.mjs';
 export class StoreDraftError extends Error {constructor(message,status=400){super(message);this.status=status;}}
 const fail=(message,status)=>{throw new StoreDraftError(message,status);};
 export const draftLimits={name:80,description:2000,category:20,address:200,phone:40,hours:200};
@@ -77,7 +78,7 @@ function retrievedSources(result,wanted){
   }
   return sources;
 }
-async function supportedFields(draft,sources,officialPage,fetcher,{companyName='',taxId='',queryName='',searchedUrls=new Set()}={}){
+async function supportedFields(draft,sources,officialPage,fetcher,{companyName='',taxId='',queryName='',searchedUrls=new Set(),cardContext=null}={}){
   const fields={...draft.fields},warnings=[...draft.warnings];
   if(draft.match!=='matched')return {match:draft.match,fields:Object.fromEntries(keys.map(k=>[k,''])),warnings:[...warnings,draft.match==='ambiguous'?'有同名公司／分店，請補城市或分店以確認正確商家。':'此次未找到能確認的商家公開資料，可補充品牌／城市後再搜尋。'],sources:[]};
   const businessField=key=>['description','category'].includes(key);
@@ -89,9 +90,12 @@ async function supportedFields(draft,sources,officialPage,fetcher,{companyName='
   const candidates=[...new Set([officialPage?.url,...[...identityEvidence,...evidence.filter(e=>e.field==='name'&&(!companyName||!registrationSource(e.url))),...businessEvidence.filter(e=>businessField(e.field)&&!registrationContent(e.quote)),...businessEvidence].map(e=>e.url)].filter(Boolean))].slice(0,4);
   const pages=new Map();if(officialPage)pages.set(officialPage.url,officialPage.source);
   await Promise.all(candidates.filter(url=>!pages.has(url)).map(async url=>{try{const page=await readWebsite(url,fetcher);pages.set(url,page.source);}catch{/* Unsupported/unreadable source is not factual evidence. */}}));
-  const identity=resolveStoreIdentity({draft:{...draft,evidence,identity:{...draft.identity,evidence:identityEvidence}},pages,companyName,taxId,queryName,registrationSource});
+  const checkedDraft={...draft,evidence,identity:{...draft.identity,evidence:identityEvidence}};
+  const base=resolveStoreIdentity({draft:checkedDraft,pages,companyName,taxId,queryName,registrationSource});
+  const identity=resolveCardBusinessIdentity({base,draft:checkedDraft,pages,context:cardContext,queryName,registrationSource});
   if(!identity.verified)return {match:'not_found',fields:Object.fromEntries(keys.map(k=>[k,''])),warnings:[...warnings,'尚未確認搜尋結果與此公司／品牌為同一商家；未帶入其他商家的內容。可補城市／品牌協助辨識。'],sources:[]};
-  const sameCompany=e=>pages.has(e.url)&&identity.samePage(pages.get(e.url),e.url);
+  const sameCompany=e=>pages.has(e.url)&&(identity.sameEvidence?identity.sameEvidence(pages.get(e.url),e.url,e.quote):identity.samePage(pages.get(e.url),e.url));
+  if(identity.contactMatched)warnings.push('公開品牌以名片電話＋地址或姓名交叉核對；公司／品牌名稱不同，請確認來源。名片原公司名稱不會自動更改。');
   const gated=e=>/背景驗證|安全驗證|captcha|verify you are human/i.test(pages.get(e.url)||'')||/log in|login|登入|登录|sign in/i.test(pages.get(e.url)||'')&&!norm(pages.get(e.url)).includes(norm(e.quote));
   const proven=businessEvidence.filter(e=>sameCompany(e)&&norm(e.quote)&&norm(pages.get(e.url)).includes(norm(e.quote))&&(!businessField(e.field)||!registrationContent(e.quote))&&!gated(e));
   // Search can read a publisher's indexed company description when our direct
@@ -118,14 +122,22 @@ async function supportedFields(draft,sources,officialPage,fetcher,{companyName='
   return {match:'matched',fields,warnings:warnings.slice(0,12),sources:[...sources.values()].filter(s=>used.has(s.url)).slice(0,6),...(reviewFields.length?{reviewFields}:{})};
 }
 export async function generateStoreDraft(data,env,uid,fetcher=fetch){
+  return runPublicBusinessDraft(data,env,uid,fetcher);
+}
+// Server-only entry: the store HTTP route cannot select card mode, alter its
+// quota, or inject extra instructions. Both flows share the evidence/SSRF gate.
+export async function generateCardBusinessDraft({name,websiteUrl,context},env,uid,fetcher=fetch){
+  return runPublicBusinessDraft({name,websiteUrl},env,uid,fetcher,context);
+}
+async function runPublicBusinessDraft(data,env,uid,fetcher,cardContext=null){
   const input=normalizeDraftInput(data);
   const key=clean(env.OPENAI_API_KEY);if(!key&&input.mode!=='registry'&&!input.taxId)fail('平台 AI 尚未設定，請聯絡管理員',503);
-  const registryOnly=input.mode==='registry',namespace=registryOnly?'store-lookup:':'store-draft:',limit=registryOnly?60:20,interval=registryOnly?3000:15000;
+  const registryOnly=input.mode==='registry',namespace=cardContext?'card-business:':registryOnly?'store-lookup:':'store-draft:',limit=cardContext?50:registryOnly?60:20,interval=registryOnly?3000:15000;
   const now=Date.now(),day=new Date(now+8*3600000).toISOString().slice(0,10);
   const allowance=await env.ACTMASTER_DB.prepare(`INSERT INTO partner_onboarding_ai_usage(actor_uid,usage_day,attempts,next_allowed_at) VALUES(?,?,1,?)
     ON CONFLICT(actor_uid) DO UPDATE SET usage_day=excluded.usage_day,attempts=CASE WHEN usage_day=excluded.usage_day THEN attempts+1 ELSE 1 END,next_allowed_at=excluded.next_allowed_at
     WHERE next_allowed_at<=? AND (usage_day!=excluded.usage_day OR attempts<${limit})`).bind(namespace+uid,day,now+interval,now).run();
-  if(!allowance.meta?.changes)fail(registryOnly?'請至少隔 3 秒再查；統編查詢每日上限 60 次':'請至少隔 15 秒再試；店面 AI 草稿每日上限 20 次',429);
+  if(!allowance.meta?.changes)fail(cardContext?'請至少隔 15 秒再試；名片業務搜尋每日上限 50 次':registryOnly?'請至少隔 3 秒再查；統編查詢每日上限 60 次':'請至少隔 15 秒再試；店面 AI 草稿每日上限 20 次',429);
   let stage='website',providerStatus=0,registration=null;const diagnosticId='SD-'+crypto.randomUUID().slice(0,12);
   try{
     let officialPage=null;
@@ -136,11 +148,15 @@ export async function generateStoreDraft(data,env,uid,fetcher=fetch){
       if(!key)return {...registration.result,warnings:[...registration.result.warnings,'平台 AI 尚未設定，已保留官方登記資料；若需 AI 補充請聯絡管理員。']};
       input.name=registration.name;
     }
-    if(input.websiteUrl)try{officialPage=await readWebsite(input.websiteUrl,fetcher);}catch{fail('提供的網站無法安全讀取；可移除網址讓 AI 搜尋公開資料，尚未修改店面',422);}
-    const body={model:clean(env.OPENAI_MODEL)||'gpt-4.1-mini',store:false,max_output_tokens:3500,instructions,
-      input:[{role:'user',content:[{type:'input_text',text:JSON.stringify({company:input.name,hint:input.hint,...(registration?{registeredIdentity:{taxId:input.taxId,name:registration.name,address:registration.address},note:'官方資料僅作同一公司識別。請搜尋實際產品／服務的公開介紹，不能使用登記營業項目作介紹；缺少服務來源就留白，不捏造電話或時間。'}:{}),...(officialPage?{officialWebsite:officialPage.url,source:officialPage.source}:{research:'先辨識此公司，再搜尋官網、品牌、公開 Facebook／Instagram、公司公開介紹與產品／服務內容；公司／品牌不同名時取得關聯證據。以公司名稱、統編及區域核對，不要求使用者先提供網址；同名無法確認回傳 ambiguous。'})})}]}],
+    let websiteUnavailable=false;
+    if(input.websiteUrl)try{officialPage=await readWebsite(input.websiteUrl,fetcher);}catch{if(cardContext)websiteUnavailable=true;else fail('提供的網站無法安全讀取；可移除網址讓 AI 搜尋公開資料，尚未修改店面',422);}
+    const searchRequired=!!cardContext||!officialPage;
+    const cardInstructions=cardContext?'\n此次為名片業務文案：即使有網站也要搜尋其他公開頁面，以姓名、公司、名片電話、地址與社群交叉確認同一人／公司。網站失效不能中斷，繼續搜尋官方網站與公開社群。電話只用來核對公開業務身分，不找私人資料、不推論個性或財務。只因同名或相似名稱不能確認；資料矛盾或多人同名就 ambiguous。fields.description 以實際產品／服務開頭，依據來源整理服務對象、特色與合作方向，使用自然繁體中文2到4句、約60到140字，資料少可短些。不要重述姓名職稱、不要用聯絡洽詢湊文案，不硬切16字、不編造能力／成效／客戶／證照／療效／優惠／收益。名片原文與使用者補充可協助搜尋，但不得冒充網路來源；每個業務重點都須有實際產品／服務來源證據。':'';
+    const cardContactRules=cardContext?'\n名片辨識可能有錯字、公司名可能不同於品牌名：先搜尋公司電話與地址，再比對品牌官方／供應商公開通路頁。這種情況 identity.brandName 填公開品牌，identity.evidence 的連續摘錄必須在同一段含品牌名＋名片相同電話＋相同完整地址（或完整姓名）；一個電話或相似名稱不夠。description.evidence 摘錄必須含這個品牌及它實際販售的產品，不能拿供應商整頁的其他店家或平台服務套用。不要更改輸入的公司名稱；找不到雙線索證據仍留白。':'';
+    const body={model:clean(env.OPENAI_MODEL)||'gpt-4.1-mini',store:false,max_output_tokens:3500,instructions:instructions+cardInstructions+cardContactRules,
+      input:[{role:'user',content:[{type:'input_text',text:JSON.stringify({company:input.name,hint:input.hint,...(cardContext?{cardIdentityClues:cardContext,websiteHint:input.websiteUrl,websiteUnavailable}:{}),...(registration?{registeredIdentity:{taxId:input.taxId,name:registration.name,address:registration.address},note:'官方資料僅作同一公司識別。請搜尋實際產品／服務的公開介紹，不能使用登記營業項目作介紹；缺少服務來源就留白，不捏造電話或時間。'}:{}),...(officialPage?{officialWebsite:officialPage.url,source:officialPage.source}:{research:'先辨識此公司，再搜尋官網、品牌、公開 Facebook／Instagram、公司公開介紹與產品／服務內容；公司／品牌不同名時取得關聯證據。以公司名稱、統編及區域核對，不要求使用者先提供網址；同名無法確認回傳 ambiguous。'})})}]}],
       text:{format:{type:'json_schema',name:'store_info_draft',strict:true,schema}},
-      ...(!officialPage?{tools:[{type:'web_search',search_context_size:'medium'}],tool_choice:'required',include:['web_search_call.action.sources']}:{})};
+      ...(searchRequired?{tools:[{type:'web_search',search_context_size:'medium'}],tool_choice:'required',include:['web_search_call.action.sources']}:{})};
     stage='provider';
     // Workers rejects redirect:error before network I/O. Manual never forwards the key; non-2xx (including redirects) is rejected below.
     const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',redirect:'manual',signal:AbortSignal.timeout(45000),headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -149,15 +165,17 @@ export async function generateStoreDraft(data,env,uid,fetcher=fetch){
     stage='output';
     const result=JSON.parse(await boundedText(response,262144));
     if(result.status!=='completed'||!Array.isArray(result.output))fail('AI 尚未完成草稿，請重試或手動填寫',502);
-    if(!officialPage&&!result.output.some(item=>item.type==='web_search_call'&&item.status==='completed'))fail('AI 未完成公開資料搜尋，請重試或補官網',502);
+    if(searchRequired&&!result.output.some(item=>item.type==='web_search_call'&&item.status==='completed'))fail('AI 未完成公開資料搜尋，請重試或補官網',502);
     const output=result.output.flatMap(o=>o.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('');
     const draft=parseDraft(JSON.parse(output)),wanted=new Set([...draft.identity.evidence,...draft.evidence].map(e=>safeUrl(e.url)).filter(Boolean));
-    const sources=officialPage?new Map([[officialPage.url,{url:officialPage.url,title:'提供的網站／公開社群'}]]):retrievedSources(result,wanted);
+    const sources=searchRequired?retrievedSources(result,wanted):new Map();
+    if(officialPage)sources.set(officialPage.url,{url:officialPage.url,title:cardContext?'名片／提供的網站':'提供的網站／公開社群'});
     const searchedUrls=new Set(result.output.filter(o=>o.type==='web_search_call'&&o.status==='completed').flatMap(o=>o.action?.sources||[]).map(s=>safeUrl(s.url)).filter(Boolean));
-    stage='source';const supported=await supportedFields(draft,sources,officialPage,fetcher,{companyName:registration?.name,taxId:registration?input.taxId:'',queryName:input.name,searchedUrls});
+    stage='source';const supported=await supportedFields(draft,sources,officialPage,fetcher,{companyName:registration?.name,taxId:registration?input.taxId:'',queryName:input.name,searchedUrls,cardContext});
     if(registration){
       return {...registration.result,fields:{...supported.fields,name:registration.name,address:registration.address},sources:[...new Map([...registration.result.sources,...supported.sources].map(s=>[s.url,s])).values()],warnings:[...registration.result.warnings,...supported.warnings].slice(0,12),...(supported.reviewFields?{reviewFields:supported.reviewFields}:{})};
     }
+    if(websiteUnavailable)supported.warnings.unshift('名片網站無法讀取，已改搜尋其他公開網站與社群；沒有使用失效網頁作為證據。');
     return {success:true,match:draft.match,...supported};
   }catch(error){
     const status=error instanceof StoreDraftError||error instanceof RegistrationError?error.status:stage==='output'?502:503;

@@ -73,6 +73,8 @@ const fullChecks = [
   'test/card-side-crop.test.mjs',
   'test/card-image-archive.test.mjs',
   'test/a-kaffit-card-recognize.test.mjs',
+  'test/card-business-copy.test.mjs',
+  'test/card-business-copy-ui.test.mjs',
   'test/registration-numeric-birthday.test.mjs',
   'test/mycard-keyword-reply.test.mjs',
   'test/card-links-v2.test.mjs',
