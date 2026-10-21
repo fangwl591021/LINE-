@@ -52,7 +52,7 @@ test('all actual contacts are normalized, deduplicated and unsafe/guessed links 
   assert.throws(()=>links.normalize([{l:'blank',u:''}],true),/第 1/);
   const emailAction = links.flexRows([{l:'電子郵件',u:'mailto:a@example.com'}])[0].contents[0].action;
   assert.equal(emailAction.type,'uri'); assert.equal(emailAction.clipboardText,undefined);
-  assert.equal(emailAction.uri,'https://fangwl591021.github.io/LINE-/card-email.html?openExternalBrowser=1#to=a%40example.com');
+  assert.equal(emailAction.uri,'https://mail.google.com/mail/?view=cm&fs=1&to=a%40example.com&openExternalBrowser=1');
 });
 test('feature switch is server managed and fails closed without schema/DB/flag', async () => {
   for (const value of ['enabled','disabled',null,'true']) {
