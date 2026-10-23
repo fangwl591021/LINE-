@@ -169,6 +169,7 @@
       ++epoch;pageKind('mine');alert.textContent='';
       content.innerHTML=`<section class="shop-member-home"><span class="shop-eyebrow">MY EVERYDAY</span><h2>我的商城生活</h2><p>消費紀錄、訂單、點數與店家管理。</p><div class="shop-member-links"><button data-do="wallet">▦ 我的共用點數與 QR <span>›</span></button>${standalone?`<a class="shop-link" href="${esc(loginLink())}">登入／註冊後查看消費紀錄與網路訂單，並返回本店商城</a>`:'<button data-do="registration">♙ 會員註冊／資料維護 <span>›</span></button><button data-do="spending-history">▤ 我的點數紀錄 <span>›</span></button><button data-do="online-orders">▤ 我的網路訂單 <span>›</span></button>'}${canManage()?'<button data-do="manage">⌂ 我的商城管理 <span>›</span></button>':''}<button data-do="exit">← 返回原系統</button></div></section>`;
       if(!standalone)content.querySelector('[data-do="spending-history"]').insertAdjacentHTML('beforebegin','<button type="button" data-do="consumption-journal">▤ 我的消費日誌 <span>›</span></button>');
+      if(!standalone)content.querySelector('[data-do="registration"]').insertAdjacentHTML('afterend','<button type="button" data-do="reward-applications">✍ 合作申請／我的合約 <span>›</span></button>');
     }
     function detail(id,fromDiscovery=false) {
       const p=viewedProducts.find(p=>p.id===id);if(!p||!viewedShop)return;
@@ -468,6 +469,14 @@
           case 'region': await list();content.querySelector('[name=q]').placeholder='輸入地區，例如：板橋';content.querySelector('[name=q]')?.focus();content.querySelector('[data-form=search]')?.scrollIntoView({block:'center'});break;
           case 'shopping': if(viewedShop)await view(viewedShop.id);else {await list();content.querySelector('.shop-section-title')?.scrollIntoView({block:'center'});}break;
           case 'mine':memberHome();break;
+          case 'reward-applications': {
+            if(standalone){location.assign(loginLink());break;}
+            const version=epoch,owner=window.currentUserProfile?.userId;
+            const isCurrent=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId;
+            const module=await import('./reward-applications.js?v=1');
+            if(isCurrent())await module.openRewardApplications({base,isCurrent});
+            break;
+          }
           case 'registration': {
             if(standalone){location.assign(loginLink());break;}
             const version=epoch;
