@@ -20,6 +20,7 @@ import { handleAiAdvance, processAiAdvanceReminders } from './worker/ai-advance.
 import { handleMemberEvents } from './worker/member-hosted-events.mjs';
 import { handleCheckinMall } from './worker/checkin-mall-card.mjs';
 import { handleRewardUnits } from './worker/reward-unit-directory.mjs';
+import { handleRewardApplications } from './worker/reward-applications.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -396,6 +397,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const applicationResponse = await handleRewardApplications(request, env, storeInviteProfileView);
+    if (applicationResponse) return applicationResponse;
     const rewardUnitResponse = await handleRewardUnits(request, env, storeInviteProfileView);
     if (rewardUnitResponse) return rewardUnitResponse;
     const memberEventResponse = await handleMemberEvents(request, env);
