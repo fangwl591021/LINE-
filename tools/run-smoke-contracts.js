@@ -40,6 +40,7 @@ const foundationChecks = [
 
 const fullChecks = [
   'test/reward-applications.test.mjs',
+  'test/discount-applications.test.mjs',
   'test/redeem-catalog.test.mjs',
   'test/reward-catalog.test.mjs',
   'test/store-navigation.test.mjs',
