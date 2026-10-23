@@ -1,5 +1,6 @@
 import {authorizeStoreAdmin, DirectoryError} from './store-admin.mjs';
 import {readJson, ShopError} from './store-shop.mjs';
+import {discountTerms,discountOptions,discountConfirmations,normalizeDiscountApplication} from './discount-application-definition.mjs';
 const PATH='/v1/reward-applications';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UID=/^U[0-9a-f]{32}$/i;
@@ -43,10 +44,10 @@ export function normalizeApplication(value){
  }
  return out;
 }
-export function normalizeSigning(value){
- keys(value,['preview_id','strokes','electronic','terms','authority']);
+export function normalizeSigning(value,required=confirmations){
+ keys(value,['preview_id','strokes',...Object.keys(required)]);
  if(!UUID.test(value.preview_id||''))fail('簽署預覽編號不正確');
- for(const k of Object.keys(confirmations))if(value[k]!==true)fail('請完成閱讀、電子簽署及代表權確認');
+ for(const k of Object.keys(required))if(value[k]!==true)fail('請完成所有閱讀、電子簽署及合作條款確認');
  const strokes=value.strokes;
  if(!Array.isArray(strokes)||!strokes.length||strokes.length>80)fail('請手寫簽名');
  let count=0,distance=0;
@@ -54,7 +55,7 @@ export function normalizeSigning(value){
   for(let i=0;i<stroke.length;i++){const p=stroke[i];if(!Array.isArray(p)||p.length!==2||p.some(x=>!Number.isFinite(x))||p[0]<0||p[0]>1000||p[1]<0||p[1]>400)fail('簽名格式不正確');if(i)distance+=Math.hypot(p[0]-stroke[i-1][0],p[1]-stroke[i-1][1]);}
  }
  if(count<8||count>2500||distance<80)fail('請完整手寫簽名，不可空白或只點一下');
- return {preview_id:value.preview_id,strokes,electronic:true,terms:true,authority:true};
+ return {preview_id:value.preview_id,strokes,...Object.fromEntries(Object.keys(required).map(k=>[k,true]))};
 }
 async function member(request,env,fetcher){
  const token=request.headers.get('Authorization')?.match(/^Bearer (\S+)$/i)?.[1];if(!token||token.length>4096)fail('請先登入 LINE',401);
@@ -70,17 +71,22 @@ const sha=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA
 async function record(db,id){return db.prepare('SELECT a.*,r.decision,r.note,r.reviewed_at FROM reward_applications a LEFT JOIN reward_application_reviews r ON r.application_id=a.id WHERE a.id=?').bind(id).first();}
 function view(row){return {id:row.id,snapshot:JSON.parse(row.snapshot_json),content_sha256:row.content_sha256,signed_at:row.signed_at,status:row.decision||'pending',review_note:row.note||'',reviewed_at:row.reviewed_at||''};}
 export async function handleRewardApplications(request,env,profileMapper,fetcher=fetch){
- const url=new URL(request.url);if(url.pathname!==PATH&&!url.pathname.startsWith(PATH+'/'))return null;
+ const url=new URL(request.url),discountPath='/v1/discount-applications';
+ const discount=url.pathname===discountPath||url.pathname.startsWith(discountPath+'/');
+ const path=discount?discountPath:PATH;if(url.pathname!==path&&!url.pathname.startsWith(path+'/'))return null;
+ const terms=discount?discountTerms:rewardTerms,consent=discount?discountConfirmations:confirmations,options=discount?discountOptions:applicationOptions;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
-  const route=url.pathname.slice(PATH.length),admin=route==='/admin'||route==='/review';
+  const route=url.pathname.slice(path.length),admin=route==='/admin'||route==='/review';
   if(!['','/template','/preview','/submit','/admin','/review'].includes(route))fail('查無申請功能',404);
   if(!['GET','POST'].includes(request.method))fail('不支援此操作',405);
-  const {uid,db,actor,referrer}=admin?await authorizeStoreAdmin(request,env,profileMapper,fetcher):await member(request,env,fetcher);
+  const {uid,db:authenticatedDb,actor,referrer}=admin?await authorizeStoreAdmin(request,env,profileMapper,fetcher):await member(request,env,fetcher);
+  // Map only these three fixed identifiers. No request value can choose an SQL table.
+  const db=discount?{prepare:sql=>authenticatedDb.prepare(sql.replace(/\breward_application(s|_previews|_reviews)\b/g,'discount_application$1'))}:authenticatedDb;
   const allowed=route==='/admin'?['id','target','after']:route===''?['id','after']:[];
   for(const key of url.searchParams.keys())if(!allowed.includes(key)||url.searchParams.getAll(key).length!==1)fail('查詢條件不正確');
   if(request.method==='GET'){
-   if(route==='/template')return reply({success:true,terms:rewardTerms,confirmations,options:applicationOptions});
+   if(route==='/template')return reply({success:true,terms,confirmations:consent,options});
    if(!['','/admin'].includes(route))fail('不支援此操作',405);
    const id=url.searchParams.get('id'),target=url.searchParams.get('target')||'',after=url.searchParams.get('after')||'';
    if((id&&!UUID.test(id))||(after&&!UUID.test(after))||(target&&!UID.test(target)))fail('查詢編號不正確');
@@ -94,14 +100,14 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
   if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')||''))fail('請使用 JSON 資料',415);
   const data=await readJson(request,100000),now=new Date().toISOString();
   if(route==='/preview'){
-   keys(data,['fields']);const fields=normalizeApplication(data.fields),id=crypto.randomUUID();
-   const snapshot={terms:rewardTerms,confirmations,fields,referrer_uid:referrer||'',assurance:'LINE 帳號驗證；非實名或憑證式數位簽章'};
+   keys(data,['fields']);const fields=(discount?normalizeDiscountApplication:normalizeApplication)(data.fields),id=crypto.randomUUID();
+   const snapshot={...(discount?{form_kind:'discount'}:{}),terms,confirmations:consent,fields,referrer_uid:referrer||'',assurance:'LINE 帳號驗證；非實名或憑證式數位簽章'};
    const expires=new Date(Date.now()+30*60*1000).toISOString();
    await db.prepare('INSERT INTO reward_application_previews(owner_uid,id,snapshot_json,expires_at) VALUES(?,?,?,?) ON CONFLICT(owner_uid) DO UPDATE SET id=excluded.id,snapshot_json=excluded.snapshot_json,expires_at=excluded.expires_at').bind(uid,id,JSON.stringify(snapshot),expires).run();
    return reply({success:true,preview_id:id,snapshot,expires_at:expires});
   }
   if(route==='/submit'){
-   const signing=normalizeSigning(data),serialized=JSON.stringify(signing),old=await record(db,signing.preview_id);
+   const signing=normalizeSigning(data,consent),serialized=JSON.stringify(signing),old=await record(db,signing.preview_id);
    if(old){if(old.owner_uid!==uid||old.request_json!==serialized)fail('此編號已送出不同內容，請重新開啟申請',409);return reply({success:true,application:view(old),replayed:true});}
    const draft=await db.prepare('SELECT * FROM reward_application_previews WHERE owner_uid=? AND id=? AND expires_at>?').bind(uid,signing.preview_id,now).first();
    if(!draft)fail('預覽已失效或資料已變更，請重新預覽並簽名',409);
@@ -125,6 +131,6 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
   return reply({success:true,application:view(await record(db,data.id))});
  }catch(error){
   if(error instanceof ShopError||error instanceof DirectoryError)return reply({success:false,error:error.message},error.status||400);
-  console.error(JSON.stringify({event:'reward_application_unavailable'}));return reply({success:false,error:'申請服務暫時無法完成，請重試或重新開啟確認結果'},503);
+  console.error(JSON.stringify({event:discount?'discount_application_unavailable':'reward_application_unavailable'}));return reply({success:false,error:'申請服務暫時無法完成，請重試或重新開啟確認結果'},503);
  }
 }

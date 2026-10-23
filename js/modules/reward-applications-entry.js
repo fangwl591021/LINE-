@@ -1,5 +1,5 @@
 (function(){
- const moduleUrl=new URL('./reward-applications.js?v=1',document.currentScript.src).href;
+ const moduleUrl=new URL('./reward-applications.js?v=2',document.currentScript.src).href;
  window.openRewardApplicationReview=async function(target=''){
   const role=()=>typeof adminRole!=='undefined'?adminRole:window.userRole;
   if(role()!=='admin')return window.showToast?.('請使用平台管理員帳號登入',true);

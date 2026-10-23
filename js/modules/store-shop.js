@@ -473,7 +473,7 @@
             if(standalone){location.assign(loginLink());break;}
             const version=epoch,owner=window.currentUserProfile?.userId;
             const isCurrent=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId;
-            const module=await import('./reward-applications.js?v=1');
+            const module=await import('./reward-applications.js?v=2');
             if(isCurrent())await module.openRewardApplications({base,isCurrent});
             break;
           }
