@@ -25,7 +25,7 @@ const {mkdirSync}=require('node:fs');
       assert.equal(await page.locator('button.tutorial-course').count(),6);
       assert.equal(await page.locator('[data-tutorial-category]').count(),4);
       const discovered=[];
-      for(const [id,count] of [['members',6],['stores',3],['activities',6],['tasks',1]]){
+      for(const [id,count] of [['members',6],['stores',3],['activities',6],['tasks',2]]){
         const filter=page.locator(`[data-tutorial-category="${id}"]`);
         await filter.focus();await page.keyboard.press('Space');
         assert.equal(await page.locator(`[data-tutorial-category="${id}"]`).getAttribute('aria-pressed'),'true');
@@ -41,7 +41,7 @@ const {mkdirSync}=require('node:fs');
         assert.equal(await page.locator('.tutorial-body').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
         discovered.push(...await page.locator('.tutorial-course').evaluateAll(items=>items.map(el=>el.dataset.course)));
       }
-      assert.equal(new Set(discovered).size,16);assert.equal(discovered.length,16);
+      assert.equal(new Set(discovered).size,17);assert.equal(discovered.length,17);
       assert.equal(mediaRequests,0,'list must not fetch videos');
       // Enlarged/narrow layouts scroll only the category row, never wrap vertically.
       await page.locator('.tutorial-categories').evaluate(el=>{el.style.width='180px';el.scrollLeft=el.scrollWidth;});

@@ -11,8 +11,8 @@ vm.runInContext(source.replace('  let dialog = null;', '  window.testCourses = c
 const courses=JSON.parse(JSON.stringify(context.window.testCourses));
 const categories=JSON.parse(JSON.stringify(context.window.testCategories));
 test('exchange lessons follow all fourteen original movies without changing existing metadata',()=>{
-  assert.equal(courses.length,16);
-  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish','activity-settings','course-settings','social-settings','attendee-checkin','organizer-checkin','store-point-gift','point-redemption','friend-share','exchange-use','exchange-applications']);
+  assert.equal(courses.length,17);
+  assert.deepEqual(courses.filter(c=>c.file).map(c=>c.id),['registration','mycard','collection','merchant','ai-advance','activity-publish','activity-settings','course-settings','social-settings','attendee-checkin','organizer-checkin','store-point-gift','point-redemption','friend-share','exchange-use','exchange-applications','ai-task-workflow']);
   assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,14))).digest('hex'),'4e580a6d60bdeee1be54339a5465d9cee6244c30784303509c36e28bccb4d953','all original fourteen course fields remain unchanged');
   assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,13))).digest('hex'),'128d3e8e3494120d173b96bc4321b09ae5c7659ced0301dc4180af9f2977495d','all original thirteen course fields must remain unchanged');
   assert.equal(createHash('sha256').update(JSON.stringify(courses.slice(0,9))).digest('hex'),'3c7a17942e387bce6366c6be58498627a9ad0010fe276ac7f5b52b6e07226958','all original nine course fields must remain unchanged');
@@ -28,7 +28,7 @@ test('exchange lessons follow all fourteen original movies without changing exis
   assert.match(courses[3].note,/未正式開放/);
   assert.deepEqual(courses.slice(0,3).map(c=>c.file),['registration-v2.mp4','business-card-v2.mp4','card-collection-v2.mp4']);
   assert.equal(context.window.testMediaBase,'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/tutorials/2026-10-05/');
-  assert.match(html,/tutorial-center\.js\?v=10/);
+  assert.match(html,/tutorial-center\.js\?v=11/);
   assert.match(html,/tutorial-center\.css\?v=3/);
 });
 test('setting series uses distinct versioned movies, measured chapters and accurate scope notes',()=>{
@@ -77,9 +77,9 @@ test('check-in lessons use measured chapters and accurately disclose the member-
   assert.match(series[1].note,/不等同真人手機相機驗收/);
 });
 test('exclusive categories cover every lesson once and do not default to an all-course list',()=>{
-  assert.deepEqual(categories.map(c=>[c.id,c.title,c.courses.length]),[['members','會員與名片',6],['stores','店家與點數',3],['activities','活動與課程',6],['tasks','AI任務',1]]);
+  assert.deepEqual(categories.map(c=>[c.id,c.title,c.courses.length]),[['members','會員與名片',6],['stores','店家與點數',3],['activities','活動與課程',6],['tasks','AI任務',2]]);
   const ids=categories.flatMap(c=>c.courses);
-  assert.equal(new Set(ids).size,16);
+  assert.equal(new Set(ids).size,17);
   assert.deepEqual([...ids].sort(),courses.map(c=>c.id).sort());
   assert.match(source,/let selectedCategory = categories\[0\]\.id/);
   assert.match(source,/courses\.filter\(course => category\.courses\.includes\(course\.id\)\)/);

@@ -14,7 +14,7 @@
     if (active) { active.focus(); return; }
     const opener = document.activeElement, overflow = document.body.style.overflow;
     const modal = document.createElement('dialog'); active = modal; modal.className = 'ai-advance-dialog'; modal.setAttribute('aria-labelledby','aa-title');
-    modal.innerHTML = '<header><button type="button" data-back>‹ 返回</button><h2 id="aa-title">AI商務導航</h2><button type="button" class="aa-close" data-close aria-label="關閉 AI 推進">×</button></header><div class="aa-body"></div><p class="aa-status" role="status" aria-live="polite"></p>';
+    modal.innerHTML = '<header><button type="button" data-back>‹ 返回</button><h2 id="aa-title">AI商務導航</h2><button type="button" class="aa-close" data-close aria-label="關閉 AI 推進">×</button><button type="button" class="aa-guide" data-guide>▶ 完整流程影音教學</button></header><div class="aa-body"></div><p class="aa-status" role="status" aria-live="polite"></p>';
     document.body.append(modal); modal.showModal(); document.body.style.overflow='hidden';
     const $ = s => modal.querySelector(s), body = $('.aa-body');
     let view='dashboard', dashboard, currentTask, filter='pending', busy=false, closed=false, draft=false, generation=0, owner='',token='';
@@ -26,6 +26,7 @@
       modal.close(); modal.remove(); active=null; document.body.style.overflow=overflow; if(opener?.isConnected)opener.focus({preventScroll:true});
     }
     $('[data-close]').onclick=close; modal.addEventListener('cancel', e=>{e.preventDefault();close();});
+    $('[data-guide]').onclick=()=>window.openAiAdvanceGuide();
     function valid(ticket) { return !closed && active===modal && ticket===generation; }
     function note(value='') { if(!closed)$('.aa-status').textContent=value; }
     function frame(title,nextView) {
@@ -152,7 +153,7 @@
     }
     frame('AI商務導航','dashboard');body.innerHTML='<p class="aa-muted">正在載入待辦任務…</p><button type="button" data-initial-retry>重新載入</button>';$('[data-initial-retry]').onclick=()=>work(initialLoad);work(initialLoad);
   }
-  window.openAiAdvanceGuide=()=>window.openTutorialCenter?.('ai-advance');
+  window.openAiAdvanceGuide=()=>window.openTutorialCenter?.('ai-task-workflow');
   window.openAiAdvance=(taskId='')=>open(taskId);
   // Notification deep links wait for the already existing LINE login; no competing auth flow.
   const query=new URLSearchParams(location.search), nested=new URLSearchParams((query.get('liff.state')||'').replace(/^\?/,''));

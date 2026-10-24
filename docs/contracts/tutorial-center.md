@@ -19,3 +19,11 @@
 - Media failures show an actionable retry rather than false completion. No analytics or private account values appear in video URLs.
 - Collection video v2 includes front-required, back-optional, paired recognition and adding a back to an existing record. Existing spoken-caption coverage is not misrepresented: added sections use voice and fixed step labels.
 - Versioned R2 assets are uploaded only after confirming absence, verified by hash/length/content-type and HTTP Range. Do not overwrite original local masters.
+
+## AI商務導航完整流程 (2026-10-24)
+
+- Add a seventeenth lesson `ai-task-workflow` in AI任務, before the retained original AI lesson in that category. All original sixteen metadata/media remain unchanged.
+- New 1600×900 H.264/AAC master under `tutorials/2026-10-24/ai-task-workflow-tutorial-v1.mp4`, measured465.875seconds (display7:46), 17 measured chapters. Taiwan Mandarin voice and complete burned Traditional Chinese captions.
+- Cover first CRM task, old-card preview/selection/backfill, manual task creation, four report actions, retained history, confirmed AI next task, self-only opted-in LINE reminders and multi-page Flex entry. Demonstrate completing the current outreach before accepting its next task; accepting a suggestion does not close a pending source task.
+- Capture actual UI/handlers with memory-only synthetic fixtures. Narration and LINE reminder rendering are identified as demonstration data; no production task/message/point or provider calls.
+- Every AI task dialog view has a visible type=button complete-video entry. It opens the existing read-only player above the current task, preserves unsaved fields, restores focus on close and makes no business API calls. Never autoplay; close/hide still pauses and detaches media. No AI task, reminder, identity or point implementation changes.
