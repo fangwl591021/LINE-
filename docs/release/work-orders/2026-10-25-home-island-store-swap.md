@@ -1,0 +1,8 @@
+# Swap home island and partner-store shortcuts
+
+- Request: exchange the positions of the home business island and redeem-store shortcuts.
+- Baseline: LINE- repository, branch codex/home-island-store-swap-20261025 from current main fce7a61 (PR258), clean before edits. Existing island/dice changes are retained.
+- Scope: swap the two complete button blocks in index.html. Island moves to the primary shortcut grid, partner stores to the last featured-function position. Preserve every original label, icon, CSS class, aria label, handler and other shortcut. No application JavaScript, routing, backend, data, points, assets or configuration changes.
+- Contracts: feature-change-protocol, business-island and existing home design contract.
+- Before full guard PASS: TEMP/line-home-island-store-swap-before-20261025.log. Existing reference-theme and exchange-entry checks expected the original seventh shortcut and adjacency; update only those expected handler/icon/order assertions to match the requested swap. No new test files. Independent full-document equality check proves the exact two-button exchange and unchanged contents/handlers; after full guard and served index source verification required, no live feature/API actions.
+- After full guard PASS: TEMP/line-home-island-store-swap-after-20261025.log. Independent byte-content comparison (normalized line endings) PASS: both complete buttons unchanged and the full index equals exactly the requested swap. Existing assertions retain all remaining visibility, handler and icon checks. Standing authorization: tests pass -> deploy Pages, with live index verification recorded privately.

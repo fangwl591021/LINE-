@@ -104,7 +104,7 @@ includesAll(html, [
   'id="exchange-zone-drawer-backdrop"',
   'js/modules/exchange-zone.js?v='
 ], 'frontend includes hidden entry, LINE-style list and right-side drawer controls');
-ok(/開啟折抵店家[\s\S]*id="home-exchange-zone-button"/.test(html), 'exchange entry is placed immediately after the redeem-store shortcut');
+ok(/開啟商務交流島[\s\S]*id="home-exchange-zone-button"/.test(html), 'exchange entry is placed immediately after the business-island shortcut');
 includesAll(html, [
   'id="page-exchange-zone" class="hidden fixed inset-0 z-[110] w-full',
   'id="exchange-zone-panel" class="absolute inset-y-0 right-0 h-[100dvh] w-full max-w-none',
