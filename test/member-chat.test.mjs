@@ -8,6 +8,81 @@ import { chatExtraSchema, seedChatCoupon, seedChatScore } from './member-chat-ex
 import { ExchangeZoneModule } from '../worker/exchange-zone.mjs';
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), OLD = 'U' + 'd'.repeat(32);
 const BASE = 'https://chat.test/v1/member-chat';
+
+test('unread aggregate spans all thread pages, follows canonical identity and is read-only', async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 37; i++) {
+    const peer = 'unread-peer-' + String(i).padStart(2, '0'), id = crypto.randomUUID();
+    f.sql.prepare('INSERT INTO users(row_id,line_id,name,phone,role) VALUES(?,?,?,?,?)').run(peer, 'U' + (i + 1).toString(16).padStart(32, '0'), '私密姓名', '0900000099', 'user');
+    f.sql.prepare('INSERT INTO member_chat_threads(id,member_a,member_b) VALUES(?,?,?)').run(id, 'a', peer);
+    for (const sender of [peer, peer, 'a']) f.sql.prepare('INSERT INTO member_chat_messages(thread_id,sender_id,client_id,body) VALUES(?,?,?,?)').run(id, sender, crypto.randomUUID(), '私密內文');
+    f.sql.prepare('INSERT INTO member_chat_messages(thread_id,sender_id,client_id,body,read_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP)').run(id, peer, crypto.randomUUID(), '已讀內文');
+  }
+  const ghost = crypto.randomUUID(), other = crypto.randomUUID();
+  f.sql.prepare('INSERT INTO member_chat_threads(id,member_a,member_b) VALUES(?,?,?)').run(ghost, 'a', 'deleted-peer');
+  f.sql.prepare('INSERT INTO member_chat_messages(thread_id,sender_id,client_id,body) VALUES(?,?,?,?)').run(ghost, 'deleted-peer', crypto.randomUUID(), '已刪除會員');
+  f.sql.prepare('INSERT INTO member_chat_threads(id,member_a,member_b) VALUES(?,?,?)').run(other, 'b', 'c');
+  f.sql.prepare('INSERT INTO member_chat_messages(thread_id,sender_id,client_id,body) VALUES(?,?,?,?)').run(other, 'c', crypto.randomUUID(), '別人對話');
+  const before = f.sql.prepare('SELECT total_changes() AS n').get().n;
+  for (const token of ['a', 'old']) assert.deepEqual(await f.api('/unread', { token }), { status: 200, success: true, unread: 74 });
+  assert.deepEqual(await f.api('/unread', { token: 'b' }), { status: 200, success: true, unread: 1 });
+  assert.deepEqual(await f.api('/unread', { token: 'c' }), { status: 200, success: true, unread: 0 });
+  const first = await f.api('/threads');
+  assert.equal(first.items.length, 30); assert.ok(first.next);
+  assert.equal(first.items.reduce((n, item) => n + item.unread, 0), 60, 'first page is not the global unread count');
+  assert.equal(f.sql.prepare('SELECT total_changes() AS n').get().n, before);
+  assert.equal(f.writes.length, 0); assert.equal(f.pushes.length, 0); assert.equal(f.botLookups.length, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM inbox_items').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM points_ledger').get().n, 0);
+});
+
+test('unread follows explicit read-through updates while retaining blocked conversation history', async t => {
+  const f = fixture(t), id = await f.room();
+  await f.send(id, '本人訊息'); await f.send(id, '對方第一則', 'b'); await f.send(id, '對方第二則', 'b');
+  assert.equal((await f.api('/unread')).unread, 2); assert.equal((await f.api('/unread', { token: 'b' })).unread, 1);
+  await f.api('/preferences', { data: { accepting: false } });
+  await f.api(`/threads/${id}/block`, { data: { blocked: true } });
+  const messages = await f.api(`/threads/${id}/messages`), peers = messages.items.filter(item => !item.mine);
+  assert.equal(messages.blocked, true); assert.equal((await f.api('/unread')).unread, 2, 'fetching or blocking does not mark existing messages read');
+  const before = f.writes.length;
+  assert.equal((await f.api(`/threads/${id}/read`, { data: { through: peers[0].seq } })).success, true);
+  assert.equal((await f.api('/unread')).unread, 1);
+  assert.equal((await f.api(`/threads/${id}/read`, { data: { through: peers[1].seq } })).success, true);
+  assert.equal((await f.api('/unread', { token: 'old' })).unread, 0);
+  assert.equal((await f.api('/unread', { token: 'b' })).unread, 1);
+  assert.equal(f.writes.length, before + 2, 'only the explicit read posts mutate rows');
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM inbox_items').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) AS n FROM points_ledger').get().n, 0);
+});
+
+test('unread preserves fresh authentication, feature and own-card gates and accepts no selectors or writes', async t => {
+  const f = fixture(t);
+  for (const token of ['', 'forged']) assert.equal((await f.api('/unread', { token })).status, 401);
+  f.setAuth(401); assert.equal((await f.api('/unread')).status, 401); f.setAuth(200);
+  for (const query of ['userId=' + B, 'uid=' + B, 'memberId=b', 'before=1', 'x=1&x=2']) assert.equal((await f.api('/unread?' + query)).status, 400);
+  for (const method of ['POST', 'PUT', 'DELETE']) assert.equal((await f.api('/unread', { method, data: { userId: B } })).status, 405);
+  f.env.EXCHANGE_ZONE_ACCESS_MODE = 'private'; assert.equal((await f.api('/unread')).status, 403);
+  f.env.EXCHANGE_ZONE_ACCESS_MODE = 'open';
+  f.sql.exec("UPDATE card_contacts SET source_type='private_import' WHERE row_id='card-a'");
+  const denied = await f.api('/unread'); assert.equal(denied.status, 403); assert.equal(denied.code, 'OWN_CARD_REQUIRED');
+  assert.equal(f.writes.length, 0); assert.equal(f.pushes.length, 0); assert.equal(f.botLookups.length, 0);
+});
+
+test('unread rejects ambiguous identity and invalid database totals without fabricating zero', async t => {
+  const f = fixture(t);
+  f.sql.prepare('INSERT INTO user_identity_links VALUES(?,?,?)').run(OLD, B, 'active');
+  assert.equal((await f.api('/unread', { token: 'old' })).status, 409);
+  f.sql.prepare('DELETE FROM user_identity_links WHERE new_line_id=?').run(B);
+  const db = f.env.ACTMASTER_DB, original = db.prepare;
+  for (const unread of [null, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '9']) {
+    db.prepare = query => query.includes('SELECT COUNT(*) AS unread') ? { bind() { return this; }, async first() { return { unread }; } } : original(query);
+    const failed = await f.api('/unread');
+    assert.equal(failed.status, 503); assert.equal(failed.code, 'CHAT_UNAVAILABLE'); assert.ok(!Object.hasOwn(failed, 'unread'));
+  }
+  db.prepare = original;
+  assert.equal((await f.api('/unread')).unread, 0); assert.equal(f.writes.length, 0);
+});
+
 test('LINE contact is owner-managed, thread-private and never rewrites accepting or the notification recipient', async t => {
   const f = fixture(t), id = await f.room();
   assert.equal((await f.send(id, 'establish existing conversation')).success, true);

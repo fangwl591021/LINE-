@@ -47,7 +47,7 @@ const respond = (res, body, status = 200) => { if (!res.destroyed && !res.writab
 const ok = (res, data = {}) => respond(res, {success:true,...data});
 const waitUntil = async predicate => { const end=Date.now()+10000;while(!predicate()){assert.ok(Date.now()<end,'local fixture condition timed out');await new Promise(resolve=>setTimeout(resolve,10));} };
 
-const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>商務交流島・合成測試</title><style>
+const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>人脈島・合成測試</title><style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;max-width:100%;height:100%;font:16px system-ui}body{display:flex;justify-content:center;overflow:hidden;background:#eef2f3}.hidden{display:none!important}button,input,select{font:inherit}
 /* Mirror index.html's Tailwind app shell without loading unrelated production scripts. */
 #app{width:100%;max-width:448px;height:100dvh;position:relative;display:flex;flex-direction:column;overflow:hidden;background:#fff}
@@ -59,19 +59,19 @@ const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><m
 body.store-shop-page #top-nav{display:none!important}body.store-shop-page #main{padding-top:0!important}body.store-shop-page #page-store-shop{margin-top:0!important}
 #page-home{padding:20px}.fixture-post{max-width:calc(100vw - 30px)}.material-symbols-outlined{font-size:0!important}.material-symbols-outlined::before{content:'◉';font:24px system-ui}
 </style></head><body><div id="app"><nav id="top-nav">原本會員頁首・合成外框</nav>
-<main id="main"><section id="page-home"><button id="fixture-open" onclick="window.openBusinessRichman()">開啟商務交流島</button></section><section id="page-business-island" class="hidden"></section><section id="page-business-richman" class="hidden"></section><section id="page-store-shop" class="hidden"></section><section id="page-admin-settings" class="hidden"></section></main>
-<nav id="bottom-nav"><button id="fixture-bottom-home" onclick="window.goPage('home')">首頁</button><button onclick="window.openBusinessRichman()">交流島</button></nav><nav id="bottom-nav-admin" class="hidden"><button onclick="window.goPage('home')">管理返回</button></nav></div>
+<main id="main"><section id="page-home"><button id="fixture-open" onclick="window.openBusinessRichman()">開啟人脈島</button></section><section id="page-business-island" class="hidden"></section><section id="page-business-richman" class="hidden"></section><section id="page-store-shop" class="hidden"></section><section id="page-admin-settings" class="hidden"></section></main>
+<nav id="bottom-nav"><button id="fixture-bottom-home" onclick="window.goPage('home')">首頁</button><button onclick="window.openBusinessRichman()">人脈島</button></nav><nav id="bottom-nav-admin" class="hidden"><button onclick="window.goPage('home')">管理返回</button></nav></div>
 <script>
 window.currentPage='home';window.currentViewMode='user';window.currentUserProfile={userId:'${UID}',displayName:'合成登入會員',pictureUrl:'${picture}'};window.__fixtureEvents=[];window.__xss=0;window.__token='synthetic-token-a';
 window.Config={WORKER_URL:location.origin};window.WORKER_URL=location.origin;window.liff={isLoggedIn:()=>true,getAccessToken:()=>window.__token};window.loadUserActivities=()=>{};window.showToast=()=>{};
 window.fixtureSwitchAccount=()=>{window.currentUserProfile={userId:'${OTHER_UID}',displayName:'另一合成會員'};window.__token='synthetic-token-f';};
 window.fetchAPI=async(action,payload)=>{const response=await fetch('/fixture/actions',{method:'POST',headers:{Authorization:'Bearer '+window.__token,'Content-Type':'application/json'},body:JSON.stringify({action,payload})});return response.json();};
 window.openMyCardSettings=()=>{window.__fixtureEvents.push({kind:'my-card'});window.goPage('admin-settings',true);};
-window.openExchangeZone=async options=>{window.__fixtureEvents.push({kind:'exchange',...options});if(options.tab==='threads'){const module=await import('/js/modules/member-chat.js?v=14');module.openMemberChat({base:location.origin,threadId:options.threadId||''});}};
+window.openExchangeZone=async options=>{window.__fixtureEvents.push({kind:'exchange',...options});if(options.tab==='threads'){const module=await import('/js/modules/member-chat.js?v=15');module.openMemberChat({base:location.origin,threadId:options.threadId||''});}};
 window.openExchangeZonePost=async handle=>{window.__fixtureEvents.push({kind:'post',handle});const popup=document.createElement('dialog');popup.className='fixture-post';popup.innerHTML='<h2>原交流詳情合成入口</h2><p>已刊登合作內容</p><button>關閉</button>';popup.querySelector('button').onclick=()=>{popup.close();popup.remove();};document.body.append(popup);popup.showModal();};
 window.openStoreShop=async(...args)=>{window.__fixtureEvents.push({kind:'store',id:args[4]});window.goPage('store-shop',true);const root=document.getElementById('page-store-shop');root.innerHTML='<h2>原商城合成入口</h2><button id="fixture-store-back">返回棋盤</button>';root.querySelector('button').onclick=()=>args[5]?.onBack?.();};
 </script>
-<script src="/js/navigation.js?v=8.04"></script><script src="/js/modules/business-richman.js?v=1.3"></script><script src="/js/modules/store-richman.js?v=1"></script><script src="/js/modules/business-island.js?v=1"></script>
+<script src="/js/navigation.js?v=8.04"></script><script src="/js/modules/business-richman.js?v=1.4"></script><script src="/js/modules/store-richman.js?v=1"></script><script src="/js/modules/business-island.js?v=4"></script>
 </body></html>`;
 
 const server = createServer(async (req,res) => {

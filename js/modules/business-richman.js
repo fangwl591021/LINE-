@@ -14,7 +14,7 @@
   var mode = 'card', generation = 0, activeOwner = '', exitAction = null, opening = false;
 
   var labels = {
-    title: '\u5546\u8108\u5927\u5bcc\u7fc1',
+    title: '\u4eba\u8108\u5cf6',
     subtitle: '\u64f2\u9ab0\u63a2\u7d22\u4f60\u7684\u4eba\u8108\uff0c\u6bcf\u4e00\u683c\u90fd\u662f\u5408\u4f5c\u6a5f\u6703',
     peopleMode: '\u4eba\u8108\u63a2\u7d22',
     offerMode: '\u5e97\u5bb6\u512a\u60e0\u30fb\u5373\u5c07\u63a8\u51fa',
@@ -23,7 +23,7 @@
     boardCount: '\u672c\u5c40\u5df2\u6392\u5217',
     peopleUnit: '\u4f4d\u4eba\u8108',
     reset: '\u91cd\u65b0\u6392\u5217',
-    board: '\u4eba\u8108\u5927\u5bcc\u7fc1\u68cb\u76e4',
+    board: '\u4eba\u8108\u5cf6\u68cb\u76e4',
     today: '\u4eca\u65e5\u4eba\u8108\u63a2\u7d22',
     next: '\u770b\u770b\u4e0b\u4e00\u4f4d\u662f\u8ab0',
     roll: '\u64f2\u9ab0\u63a2\u7d22',

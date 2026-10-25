@@ -12,13 +12,13 @@ const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
 
 assert.match(indexHtml, /openBusinessRichman/);
 assert.match(indexHtml, /id="page-business-richman"/);
-assert.match(indexHtml, /js\/modules\/business-richman\.js\?v=1\.3/);
+assert.match(indexHtml, /js\/modules\/business-richman\.js\?v=1\.4/);
 assert.match(indexHtml, /js\/navigation\.js\?v=8\.04/);
 assert.match(navigation, /page === 'business-richman'.*initBusinessRichman/);
 assert.match(indexHtml, /id="page-business-island"/);
-assert.match(indexHtml, /aria-label="開啟商務交流島"/);
+assert.match(indexHtml, /aria-label="開啟人脈島"/);
 assert.match(indexHtml, /travel_explore/);
-assert.ok(indexHtml.indexOf('js/modules/business-island.js?v=3') > indexHtml.indexOf('js/modules/store-richman.js?v=1'));
+assert.ok(indexHtml.indexOf('js/modules/business-island.js?v=4') > indexHtml.indexOf('js/modules/store-richman.js?v=1'));
 assert.match(navigation, /page === 'business-island'.*initBusinessIsland/);
 
 // Exercise compatibility entry points without mounting either product UI.

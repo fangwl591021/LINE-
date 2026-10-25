@@ -67,7 +67,7 @@ test('all eight home shortcuts keep their real handlers and visibility gates', (
   assert.match(shortcutElements[3], /target="_blank" rel="noopener noreferrer"/);
   assert.match(shortcutElements[5], /id="inbox-nav-button"/);
   assert.match(shortcutElements[5], /id="inbox-unread-badge" class="hidden/);
-  assert.match(shortcutElements[7], /class="hidden home-quick-circle group"/);
+  assert.match(shortcutElements[7], /class="hidden home-quick-circle group relative"/);
   assert.equal((shortcuts.match(/class="home-quick-label ios-home-primary-label"/g) || []).length, 4);
 });
 
