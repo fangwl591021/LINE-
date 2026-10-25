@@ -150,9 +150,11 @@ test('import is idempotent, preserves edits/status, and skips duplicates and inc
 });
 test('display-only view renders escaped contact/description, no product or checkout controls',async()=>{
  const source=read('js/modules/store-shop.js');const code=source.slice(source.indexOf('    async function view(id)'),source.indexOf('    function input('));
- const content={innerHTML:''},notice={hidden:false};const context={content,root:{querySelector:()=>notice},epoch:0,alert:{},pageKind(){},api:async()=>({shop:{id:'x',listing_only:1,name:'<bad>',description:'測試',phone:'0911222333',line_url:'javascript:alert(1)',website_url:'https://example.com',maps_url:'https://user:pass@example.com'},products:[]}),esc:v=>String(v||'').replaceAll('<','&lt;').replaceAll('>','&gt;'),photo:()=>'',URL};
+ const lifecycle=source.slice(source.indexOf('    const initialProductCurrent='),source.indexOf("    root.classList.add('shop-lifestyle'"));
+ // Ordinary public visits have no initial product target/session; execute the real guard.
+ const content={innerHTML:''},notice={hidden:false};const context={content,initialProductSession:null,root:{querySelector:()=>notice},epoch:0,alert:{},pageKind(){},api:async()=>({shop:{id:'x',listing_only:1,name:'<bad>',description:'測試',phone:'0911222333',line_url:'javascript:alert(1)',website_url:'https://example.com',maps_url:'https://user:pass@example.com'},products:[]}),esc:v=>String(v||'').replaceAll('<','&lt;').replaceAll('>','&gt;'),photo:()=>'',URL};
  const companyCode=source.slice(source.indexOf('  function companyInfo('),source.indexOf('  async function prepareImage('));
- await vm.runInNewContext(companyCode+code+';view("x")',context);
+ await vm.runInNewContext(lifecycle+companyCode+code+';view("x")',context);
  assert.match(content.innerHTML,/&lt;bad&gt;/);assert.match(content.innerHTML,/tel:0911222333/);assert.match(content.innerHTML,/https:\/\/example.com/);
  assert.doesNotMatch(content.innerHTML,/javascript:|user:pass|data-do="online-buy"|member-qr|尚未上架商品/);
  assert.equal(notice.hidden,true);

@@ -39,7 +39,9 @@ function setup({hold=false}={}){
   async openCardDetailById(key){cardOpens.push(key);}
  };
  const fetch=async(url,options)=>{calls.push({url,options});if(response)return response(url,options);const key=new URL(url).searchParams.get('shop');return {ok:true,json:async()=>key?{success:true,shop:shops.find(s=>s.id===key)}:{success:true,shops}};};
- const context={window,document:d.document,fetch,URL,Uint32Array,AbortController,setTimeout,clearTimeout,console:{error(){},warn(){}},Promise};
+ // The real entry reads browser query parameters even on an ordinary store visit.
+ window.location={href:'https://fixture.test/',search:'',hash:''};
+ const context={window,document:d.document,fetch,URL,URLSearchParams,location:window.location,Uint32Array,AbortController,setTimeout,clearTimeout,console:{error(){},warn(){}},Promise};
  vm.createContext(context);vm.runInContext(board,context);vm.runInContext(provider,context);
  const registered={};const register=window.registerBusinessRichmanProvider;
  window.registerBusinessRichmanProvider=(key,value)=>{registered[key]=value;register(key,value);};vm.runInContext(provider,context);

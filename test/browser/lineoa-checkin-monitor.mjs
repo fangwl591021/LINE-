@@ -46,6 +46,16 @@ async function fixture({many=false,unauthorized=false,noCredentials=false,allowM
 try{
  {
   const f=await fixture();
+  const pages=[{kind:'wallet',title:'會員購物金',body:'保留首頁',heroImageUrl:'',buttons:[{label:'前往商城',target:'mall'},{label:'查看明細',target:'details'}]},
+    {kind:'product',title:'發送當時的商品名稱'.repeat(8),body:'發送時店家\nNT$ 11,800\n預設最高折抵 50%',heroImageUrl:'',buttons:[{label:'查看商品',target:'product'}]}];
+  f.state.rows[T.a].push(card(T.a,13,12857,{card_preview:{title:'會員購物金',balance:12857,queried_at:at,mother_reply_available:false,template_revision:5,theme_color:'#078655',pages}}));
+  await f.page.locator('#refresh-audience').click();await f.page.locator('.checkin-record-page').nth(1).waitFor();
+  assert.match(await f.page.locator('.checkin-record-page').nth(1).innerText(),/11,800/);assert.equal(await f.page.locator('.checkin-record button:disabled').count(),3);
+  const before=f.calls.length;await f.page.locator('.checkin-record-page').nth(1).getByRole('button').dispatchEvent('click');assert.equal(f.calls.length,before);
+  assert.equal(new URL(f.page.url()).hostname,'127.0.0.1');await f.close();console.log('PASS frozen product snapshot display with inert detail action');
+ }
+ {
+  const f=await fixture();
   const pages=[{kind:'wallet',title:'會員購物金',body:'發送當時的內容',heroImageUrl:'',buttons:[{label:'前往商城',target:'mall'},{label:'查看明細',target:'details'}]},
     {kind:'info',title:'<img src=x onerror=alert(1)>',body:'<script>window.__unsafe=1</script> 說明',heroImageUrl:'',buttons:[{label:'逛商城',target:'mall'}]}];
   const preview={title:'會員購物金',balance:12857,queried_at:at,mother_reply_available:false,template_revision:4,theme_color:'#078655',pages};

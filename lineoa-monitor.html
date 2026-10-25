@@ -584,14 +584,15 @@
           || !/^#[0-9a-f]{6}$/i.test(safe(preview.theme_color)) || !Array.isArray(pages) || pages.length < 2 || pages.length > 12) return null;
       const result = [];
       for (const [index, page] of pages.entries()) {
-        if (!page || page.kind !== (index ? 'info' : 'wallet') || typeof page.title !== 'string' || !page.title.trim() || page.title.length > 60
+        if (!page || !(index ? ['info','product'] : ['wallet']).includes(page.kind) || typeof page.title !== 'string' || !page.title.trim() || page.title.length > (page.kind === 'product' ? 100 : 60)
             || typeof page.body !== 'string' || page.body.length > 600 || typeof page.heroImageUrl !== 'string' || page.heroImageUrl.length > 2000
             || !Array.isArray(page.buttons) || page.buttons.length > 3) return null;
         if (page.heroImageUrl) {
           let url; try { url = new URL(page.heroImageUrl); } catch { return null; }
           if (!index || url.protocol !== 'https:' || url.username || url.password || url.hash || /[\s\\]/.test(page.heroImageUrl)) return null;
         }
-        if (page.buttons.some(button => !button || typeof button.label !== 'string' || !button.label.trim() || button.label.length > 20 || !['mall', 'details'].includes(button.target))) return null;
+        if (page.buttons.some(button => !button || typeof button.label !== 'string' || !button.label.trim() || button.label.length > 20 || !(page.kind === 'product' ? ['mall','product'] : ['mall', 'details']).includes(button.target))) return null;
+        if (page.kind === 'product' && page.buttons.length !== 1) return null;
         if (!index && (page.buttons.length !== 2 || new Set(page.buttons.map(button => button.target)).size !== 2)) return null;
         result.push({ kind: page.kind, title: page.title, body: page.body, heroImageUrl: page.heroImageUrl,
           buttons: page.buttons.map(button => ({ label: button.label, target: button.target })) });

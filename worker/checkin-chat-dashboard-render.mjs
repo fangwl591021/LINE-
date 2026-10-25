@@ -1,4 +1,5 @@
 // Pure, typed display renderer. It cannot award points, send LINE messages or record clicks.
+import { normalizeDashboardProduct, productDisplay } from './checkin-dashboard-products.mjs';
 const ID = /^[a-z][a-z0-9_-]{0,39}$/;
 const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 export class CheckinDashboardError extends Error {
@@ -30,8 +31,12 @@ export function normalizeCheckinDashboardConfig(value) {
   if (!own(value, ['schemaVersion', 'altText', 'themeColor', 'pages']) || value.schemaVersion !== 1) fail('聊天室卡片版本不正確');
   if (typeof value.themeColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(value.themeColor)) fail('主題色須為 #RRGGBB');
   if (!Array.isArray(value.pages) || value.pages.length < 2 || value.pages.length > 12) fail('卡片須為 2 至 12 頁');
-  const seen = new Set();
+  const seen = new Set(), productIds = new Set();
   const pages = value.pages.map((page, index) => {
+    if (page?.kind === 'product') {
+      if (!index || !own(page, ['id','kind','shopId','productId']) || typeof page.id !== 'string' || !ID.test(page.id) || seen.has(page.id) || typeof page.shopId !== 'string' || !UUID.test(page.shopId) || typeof page.productId !== 'string' || !/^[A-Za-z0-9-]{1,80}$/.test(page.productId) || productIds.has(page.productId)) fail('商品頁須使用不同且有效的已上架商品編號，不能覆寫商品內容');
+      seen.add(page.id); productIds.add(page.productId); return { id: page.id, kind: 'product', shopId: page.shopId, productId: page.productId };
+    }
     if (!own(page, ['id', 'kind', 'title', 'body', 'heroImageUrl', 'buttons']) || typeof page.id !== 'string' || !ID.test(page.id) || seen.has(page.id)) fail('每頁須有不同且有效的編號');
     seen.add(page.id);
     if (page.kind !== (index === 0 ? 'wallet' : 'info')) fail('第一頁須保留購物金，其餘頁須為說明卡');
@@ -48,18 +53,23 @@ export function normalizeCheckinDashboardConfig(value) {
   });
   return { schemaVersion: 1, altText: string(value.altText, 120, '通知摘要'), themeColor: value.themeColor.toUpperCase(), pages };
 }
-function liffLink(env, id, action) {
+function liffLink(env, id, action, pageId = '') {
   const liff = String(env.POINT_LIFF_ID || env.LIFF_ID || '1660923784-vViMTZ1y');
   if (!/^\d+-[A-Za-z0-9]+$/.test(liff) || liff.length > 100 || !UUID.test(id || '')) throw new CheckinDashboardError('LIFF_CONFIG_INVALID', '商城入口設定不正確', 503);
   const url = new URL('https://liff.line.me/' + liff);
-  url.searchParams.set('shopSection', 'list'); url.searchParams.set('checkinCard', id); url.searchParams.set('checkinAction', action); return url.href;
+  url.searchParams.set('shopSection', 'list'); url.searchParams.set('checkinCard', id); url.searchParams.set('checkinAction', action); if (action === 'product') url.searchParams.set('checkinPage', pageId); return url.href;
 }
-export function buildCheckinDashboardMessage(env, cardId, balance, now, value) {
+export function buildCheckinDashboardMessage(env, cardId, balance, now, value, productSnapshots = []) {
   const config = normalizeCheckinDashboardConfig(value), valid = Number.isSafeInteger(balance) && balance >= 0;
   if (!Number.isSafeInteger(now) || now < 0 || !Number.isFinite(new Date(now).getTime())) throw new CheckinDashboardError('INVALID_TIME', '查詢時間不正確');
   const text = (value, size = 'sm', color = '#61786f') => ({ type: 'text', text: value, size, color, wrap: true });
   const contents = config.pages.map((page, index) => {
-    const header = [text('點數通 · 會員服務', 'sm', '#FFFFFF'), { ...text(page.title, 'xl', '#FFFFFF'), weight: 'bold' }];
+    const selected = page.kind === 'product' ? productSnapshots.find(row => row.pageId === page.id && row.shopId === page.shopId && row.productId === page.productId) : null;
+    const product = selected?.available === true ? normalizeDashboardProduct(selected.product) : null;
+    if (product && (product.shopId !== page.shopId || product.productId !== page.productId)) throw new CheckinDashboardError('INVALID_PRODUCT', '商品快照與頁面編號不符');
+    const display = page.kind === 'product' ? productDisplay(product) : page;
+    const buttons = page.kind === 'product' ? [{ id: 'view', label: product ? '查看商品' : '前往商城', target: product ? 'product' : 'mall' }] : page.buttons;
+    const header = [text('點數通 · 會員服務', 'sm', '#FFFFFF'), { ...text(display.title, 'xl', '#FFFFFF'), weight: 'bold' }];
     if (!index) header.push(text('打卡結果請以原文字回覆為準', 'xs', '#FFFFFF'));
     const body = [];
     if (!index) body.push({ type: 'box', layout: 'vertical', paddingAll: '17px', cornerRadius: '14px', backgroundColor: '#EEF8F1', spacing: 'sm', contents: [
@@ -67,13 +77,13 @@ export function buildCheckinDashboardMessage(env, cardId, balance, now, value) {
       text('查詢時間 ' + new Date(now).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }), 'xs'),
       ...(!valid ? [text('請點明細重新查詢；不代表餘額為零', 'xs')] : [])
     ] });
-    if (page.body) body.push(text(page.body));
+    if (display.body) body.push(text(display.body));
     if (!body.length) body.push(text('請選擇下方功能，查看詳細內容。'));
-    const footer = page.buttons.map((button, position) => ({ type: 'button', style: position ? 'link' : 'primary', color: config.themeColor, action: { type: 'uri', label: button.label, uri: liffLink(env, cardId, button.target) } }));
+    const footer = buttons.map((button, position) => ({ type: 'button', style: position ? 'link' : 'primary', color: config.themeColor, action: { type: 'uri', label: button.label, uri: liffLink(env, cardId, button.target, page.id) } }));
     footer.push(text(!index ? '實際折抵以商品與結帳確認為準' : `${index + 1} / ${config.pages.length} 頁`, 'xxs'));
     footer.push(text('點擊後將記錄登入身分與時間，供平台統計。', 'xxs'));
     return { type: 'bubble', size: 'mega', header: { type: 'box', layout: 'vertical', paddingAll: '22px', backgroundColor: config.themeColor, spacing: 'md', contents: header },
-      ...(page.heroImageUrl ? { hero: { type: 'image', url: page.heroImageUrl, size: 'full', aspectRatio: '2:1', aspectMode: 'cover' } } : {}),
+      ...(display.heroImageUrl ? { hero: { type: 'image', url: display.heroImageUrl, size: 'full', aspectRatio: '2:1', aspectMode: 'cover' } } : {}),
       body: { type: 'box', layout: 'vertical', paddingAll: '20px', spacing: 'lg', contents: body }, footer: { type: 'box', layout: 'vertical', paddingAll: '18px', spacing: 'sm', contents: footer } };
   });
   const message = { type: 'flex', altText: config.altText, contents: { type: 'carousel', contents } };

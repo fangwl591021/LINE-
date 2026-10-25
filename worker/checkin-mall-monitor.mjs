@@ -1,6 +1,7 @@
 // Read-only CRM projection. LINE acceptance is evidence of API acceptance only;
 // this module never sends, queries a wallet, awards points, or recreates mother text.
 import { readCheckinDashboardSnapshots } from './checkin-chat-dashboard.mjs';
+import { productDisplay } from './checkin-dashboard-products.mjs';
 const UID = /^U[0-9a-f]{32}$/i;
 const PREFIX = 'CHECKIN_MALL:';
 const MAX_THREADS = 100;
@@ -43,8 +44,15 @@ function projectedMessage(card, snapshot) {
     card_preview: { title: '會員購物金', balance, queried_at: queriedAt, mother_reply_available: false, ...(snapshot && snapshot.createdAt === card.created_at ? {
       template_revision: snapshot.templateRevision,
       theme_color: snapshot.config.themeColor,
-      pages: snapshot.config.pages.map(page => ({ kind: page.kind, title: page.title, body: page.body, heroImageUrl: page.heroImageUrl,
-        buttons: page.buttons.map(button => ({ label: button.label, target: button.target })) }))
+      pages: snapshot.config.pages.map(page => {
+        if(page.kind==='product'){
+          const frozen=snapshot.productSnapshots?.find(row=>row.pageId===page.id&&row.shopId===page.shopId&&row.productId===page.productId&&row.createdAt===snapshot.createdAt);
+          const available=frozen?.available===true&&!!frozen.product,display=productDisplay(available?frozen.product:null);
+          return {kind:'product',...display,buttons:[{label:available?'查看商品':'前往商城',target:available?'product':'mall'}]};
+        }
+        return { kind: page.kind, title: page.title, body: page.body, heroImageUrl: page.heroImageUrl,
+          buttons: page.buttons.map(button => ({ label: button.label, target: button.target })) };
+      })
     } : {}) }
   };
 }

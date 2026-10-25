@@ -1,6 +1,7 @@
 // Administrative display config only. No point writes, mother forwarding or LINE sends.
 import { authorizeStoreAdmin } from './store-admin.mjs';
 import { CheckinDashboardError, defaultCheckinDashboardConfig, normalizeCheckinDashboardConfig, buildCheckinDashboardMessage } from './checkin-chat-dashboard-render.mjs';
+import { readDashboardProductCatalog, resolveDashboardProductPages, dashboardProductVisibilityGate, normalizeDashboardProduct } from './checkin-dashboard-products.mjs';
 const ROOT = '/v1/checkin-chat-dashboard', KEY = 'member_checkin';
 const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const ACTOR = ['row_id', 'line_id', 'legacy_line_id', 'point_line_id', 'role', 'name', 'phone'];
@@ -26,6 +27,7 @@ function config(value) {
   // Check against a long, valid LIFF id and the largest authoritative integer balance.
   // A later balance read cannot make an already-published template exceed the Flex cap.
   buildCheckinDashboardMessage({ POINT_LIFF_ID: '1-' + 'a'.repeat(98) }, '00000000-0000-0000-0000-000000000000', Number.MAX_SAFE_INTEGER, Date.parse('9999-01-01T00:00:00Z'), normalized);
+  buildCheckinDashboardMessage({ POINT_LIFF_ID: '1-' + 'a'.repeat(98) }, '00000000-0000-0000-0000-000000000000', null, Date.parse('9999-01-01T00:00:00Z'), normalized);
   return normalized;
 }
 const date = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
@@ -34,6 +36,11 @@ function template(row) {
   return { key: KEY, draftRevision: row.draft_revision, publishedRevision: row.published_revision, draftConfig: config(JSON.parse(row.draft_json)), publishedConfig: config(JSON.parse(row.published_json)), updatedAt: date(row.updated_at), publishedAt: date(row.published_at) };
 }
 async function current(db) { return db.prepare('SELECT * FROM checkin_chat_dashboard_templates WHERE template_key=?').bind(KEY).first(); }
+async function payload(db,row) {
+  const state=template(row), refs=[...state.draftConfig.pages,...state.publishedConfig.pages].filter(page=>page.kind==='product');
+  const resolved=await resolveDashboardProductPages(db,{pages:refs});
+  return {success:true,template:state,products:resolved.products,unavailableProducts:resolved.unavailableProducts};
+}
 export async function readPublishedCheckinDashboard(db) {
   try {
     const row = await db.prepare('SELECT published_revision,published_json FROM checkin_chat_dashboard_templates WHERE template_key=?').bind(KEY).first();
@@ -55,10 +62,23 @@ export async function readCheckinDashboardSnapshots(db, cardIds) {
         if (!ids.includes(row.card_id) || !revision(row.template_revision) || !Number.isSafeInteger(row.created_at) || row.created_at < 0 || row.created_at !== row.card_created_at || !Number.isFinite(new Date(row.created_at).getTime()) || typeof row.config_json !== 'string' || row.config_json.length > 65536 || typeof row.message_json !== 'string' || row.message_json.length > 65536) continue;
         const normalized = config(JSON.parse(row.config_json)), message = JSON.parse(row.message_json);
         if (!message || message.type !== 'flex' || message.altText !== normalized.altText || message.contents?.type !== 'carousel' || !Array.isArray(message.contents.contents) || message.contents.contents.length !== normalized.pages.length || new TextEncoder().encode(JSON.stringify(message.contents)).length > 50000) continue;
-        output.set(row.card_id, { templateRevision: row.template_revision, config: normalized, message, createdAt: row.created_at });
+        output.set(row.card_id, { templateRevision: row.template_revision, config: normalized, message, createdAt: row.created_at, productSnapshots: [] });
       } catch { /* Bad historical data cannot break the existing read-only transcript. */ }
     }
   } catch { /* Older deployments without this additive table retain their old preview. */ }
+  const productCards=[...output].filter(([,snapshot])=>snapshot.config.pages.some(page=>page.kind==='product')).map(([id])=>id);
+  if(productCards.length)try{
+    const result=await db.prepare('SELECT * FROM checkin_chat_dashboard_product_snapshots WHERE card_id IN (SELECT value FROM json_each(?)) LIMIT 880').bind(JSON.stringify(productCards)).all();
+    if(result.success!==false&&Array.isArray(result.results))for(const row of result.results){
+      try{
+        const snapshot=output.get(row.card_id),page=snapshot?.config.pages.find(page=>page.kind==='product'&&page.id===row.page_id&&page.shopId===row.shop_id&&page.productId===row.product_id);
+        if(!page||row.created_at!==snapshot.createdAt||![0,1].includes(row.available))continue;
+        const product=row.available===1?normalizeDashboardProduct(JSON.parse(row.product_json)):null;
+        if(product&&(product.shopId!==page.shopId||product.productId!==page.productId)||!product&&row.product_json!==null)continue;
+        snapshot.productSnapshots.push({pageId:page.id,shopId:page.shopId,productId:page.productId,available:row.available===1,product,createdAt:row.created_at});
+      }catch{/* Malformed targets become neutral previews, never current-catalog substitutes. */}
+    }
+  }catch{/* Missing additive targets table must not affect legacy cards. */}
   return output;
 }
 export async function readCheckinDashboardSnapshot(db, cardId) { return (await readCheckinDashboardSnapshots(db, [cardId])).get(cardId) || null; }
@@ -87,37 +107,48 @@ export async function handleCheckinChatDashboard(request, env, profileMapper, fe
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: HEADERS });
   try {
     const action = url.pathname.slice(ROOT.length + 1);
-    if (url.search) fail('INVALID_QUERY', '卡片設定不接受網址參數');
-    if ((!action && request.method !== 'GET') || (action && !['draft', 'publish', 'preview'].includes(action))) fail('NOT_FOUND', '查無此卡片設定功能', 404);
-    if (action && request.method !== 'POST') fail('METHOD_NOT_ALLOWED', '請使用正確的儲存方式', 405);
+    if (url.search&&action!=='catalog') fail('INVALID_QUERY', '卡片設定不接受網址參數');
+    if ((!action && request.method !== 'GET') || (action && !['draft', 'publish', 'preview','catalog'].includes(action))) fail('NOT_FOUND', '查無此卡片設定功能', 404);
+    if (action && request.method !== (action==='catalog'?'GET':'POST')) fail('METHOD_NOT_ALLOWED', '請使用正確的儲存方式', 405);
     const { uid, db, actor } = await authorizeStoreAdmin(request, env, profileMapper, fetcher);
-    if (!action) return reply({ success: true, template: template(await current(db)) });
+    if(action==='catalog')return reply(await readDashboardProductCatalog(db,url.searchParams));
+    if (!action) return reply(await payload(db,await current(db)));
     const input = await json(request);
     if (action === 'preview') {
       if (!exact(input, ['config'])) fail('INVALID_REQUEST', '預覽內容格式不正確');
-      const normalized = config(input.config), message = buildCheckinDashboardMessage(env, '00000000-0000-0000-0000-000000000000', 12867, now, normalized);
+      const normalized = config(input.config),resolved=await resolveDashboardProductPages(db,normalized), message = buildCheckinDashboardMessage(env, '00000000-0000-0000-0000-000000000000', 12867, now, normalized,resolved.productSnapshots);
       // These values are examples, never a wallet read or a successful check-in claim.
       message.contents.contents[0].body.contents[0].contents.unshift({ type: 'text', text: '示範預覽・金額非實際餘額', size: 'xs', color: '#61786f', wrap: true });
       if (new TextEncoder().encode(JSON.stringify(message.contents)).length > 50000) fail('FLEX_TOO_LARGE', '預覽內容超過 50 KB，請減少文字或圖片網址');
-      return reply({ success: true, message });
+      return reply({ success: true, message,products:resolved.products,unavailableProducts:resolved.unavailableProducts });
     }
     const fields = action === 'draft' ? ['expectedDraftRevision', 'config', 'requestKey'] : ['expectedDraftRevision', 'expectedPublishedRevision', 'requestKey'];
     if (!exact(input, fields) || !revision(input.expectedDraftRevision) || typeof input.requestKey !== 'string' || !UUID.test(input.requestKey) || action === 'publish' && !revision(input.expectedPublishedRevision)) fail('INVALID_REQUEST', '請重新載入版本後再儲存');
     const normalized = action === 'draft' ? config(input.config) : null;
     const digest = await hash(JSON.stringify({ action, expectedDraftRevision: input.expectedDraftRevision, ...(action === 'draft' ? { config: normalized } : { expectedPublishedRevision: input.expectedPublishedRevision }) }));
     let row = await current(db); template(row);
-    if (replay(row, input.requestKey, digest, action, uid)) return reply({ success: true, template: template(row), replayed: true });
+    if (replay(row, input.requestKey, digest, action, uid)) return reply({ ...await payload(db,row), replayed: true });
+    const selected=action==='publish'?await resolveDashboardProductPages(db,template(row).draftConfig):null;
+    if(selected?.unavailableProducts.length){const error=new CheckinDashboardError('PRODUCT_UNAVAILABLE','所選商品目前不可公開顯示，請保留草稿並重新挑選',409);error.unavailableProducts=selected.unavailableProducts;throw error;}
+    if(selected)buildCheckinDashboardMessage({POINT_LIFF_ID:'1-'+'a'.repeat(98)},'00000000-0000-0000-0000-000000000000',Number.MAX_SAFE_INTEGER,Date.parse('9999-01-01T00:00:00Z'),template(row).draftConfig,selected.productSnapshots);
+    const productGate=dashboardProductVisibilityGate(selected?.productSnapshots||[]);
     const gate = await authorityGate(db, uid, actor), at = new Date(now).toISOString();
     const common = [at, uid, input.requestKey, digest, action, uid, KEY, input.expectedDraftRevision];
     const statement = action === 'draft'
       ? db.prepare(`UPDATE checkin_chat_dashboard_templates SET draft_json=?,draft_revision=draft_revision+1,updated_at=?,updated_by=?,last_request_key=?,last_request_hash=?,last_request_action=?,last_request_actor=? WHERE template_key=? AND draft_revision=? AND last_request_key IS NOT ? AND ${gate.sql}`).bind(JSON.stringify(normalized), ...common, input.requestKey, ...gate.args)
-      : db.prepare(`UPDATE checkin_chat_dashboard_templates SET published_json=draft_json,published_revision=published_revision+1,published_at=?,published_by=?,last_request_key=?,last_request_hash=?,last_request_action=?,last_request_actor=? WHERE template_key=? AND draft_revision=? AND published_revision=? AND last_request_key IS NOT ? AND ${gate.sql}`).bind(...common, input.expectedPublishedRevision, input.requestKey, ...gate.args);
+      : db.prepare(`UPDATE checkin_chat_dashboard_templates SET published_json=draft_json,published_revision=published_revision+1,published_at=?,published_by=?,last_request_key=?,last_request_hash=?,last_request_action=?,last_request_actor=? WHERE template_key=? AND draft_revision=? AND published_revision=? AND last_request_key IS NOT ? AND ${gate.sql} AND ${productGate.sql}`).bind(...common, input.expectedPublishedRevision, input.requestKey, ...gate.args,...productGate.args);
     const result = await statement.run(); if (result.success === false || !Number.isSafeInteger(result.meta?.changes)) throw Error('Save unavailable');
     row = await current(db);
-    if (Number(result.meta.changes) !== 1 && !replay(row, input.requestKey, digest, action, uid)) fail('REVISION_CONFLICT', '內容或管理權限已更新；請保留本地編輯，重新載入版本後再確認', 409);
-    return reply({ success: true, template: template(row), replayed: Number(result.meta.changes) !== 1 });
+    if (Number(result.meta.changes) !== 1 && !replay(row, input.requestKey, digest, action, uid)) {
+      if(selected?.productSnapshots.length&&row?.draft_revision===input.expectedDraftRevision&&row?.published_revision===input.expectedPublishedRevision){
+        const latest=await resolveDashboardProductPages(db,template(row).draftConfig);
+        if(latest.unavailableProducts.length||selected.products.some(product=>!latest.products.some(current=>current.shopId===product.shopId&&current.productId===product.productId&&current.version===product.version&&current.shopVersion===product.shopVersion&&current.merchantEnabled===product.merchantEnabled)))fail('PRODUCT_CHANGED','所選商品已更新；請保留本地編輯並重新確認商品',409);
+      }
+      fail('REVISION_CONFLICT', '內容或管理權限已更新；請保留本地編輯，重新載入版本後再確認', 409);
+    }
+    return reply({ ...await payload(db,row), replayed: Number(result.meta.changes) !== 1 });
   } catch (error) {
     const status = error.status || 503;
-    return reply({ success: false, code: error.code || 'DASHBOARD_UNAVAILABLE', error: status >= 500 ? '卡片設定暫時無法使用；尚未確認儲存成功' : error.message }, status);
+    return reply({ success: false, code: error.code || 'DASHBOARD_UNAVAILABLE', error: status >= 500 ? '卡片設定暫時無法使用；尚未確認儲存成功' : error.message,...(error.unavailableProducts?{unavailableProducts:error.unavailableProducts}:{}) }, status);
   }
 }
