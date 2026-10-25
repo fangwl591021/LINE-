@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { projectCheckinMallMonitor } from '../worker/checkin-mall-monitor.mjs';
+import { defaultCheckinDashboardConfig, buildCheckinDashboardMessage } from '../worker/checkin-chat-dashboard-render.mjs';
 
 const A='U'+'1'.repeat(32),B='U'+'2'.repeat(32),NOW=Date.parse('2026-10-25T03:56:00Z');
 const cardId=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
@@ -51,7 +52,7 @@ test('accepted check-in card appears as an honest outbound preview and counts wi
   assert.deepEqual(message.card_preview,{title:'會員購物金',balance:12867,queried_at:'2026-10-25T03:56:00.000Z',mother_reply_available:false});
   assert.match(message.text_content,/12,867 元/);assert.match(message.text_content,/LINE API已接受/);assert.match(message.text_content,/送達與已讀未確認/);assert.doesNotMatch(message.text_content,/打卡成功|已讀成功|已送達|贈點100/);
   assert.equal(result.threads[0].last_message_type,'flex');assert.equal(result.threads[0].unread_count,1);assert.equal(result.summary.unread,1);assert.equal(result.threads[0].status,'open');assert.equal(result.threads[0].note,'勿修改');
-  assert.equal(JSON.stringify(data),input);assert.equal(f.snapshot(),before);assert.equal(f.queries.length,3);
+  assert.equal(JSON.stringify(data),input);assert.equal(f.snapshot(),before);assert.equal(f.queries.length,4);
 });
 
 test('zero is real and unknown or invalid balances never become a fictional zero',async t=>{
@@ -113,5 +114,30 @@ test('recipient aggregate is bounded to the first hundred threads while selected
   const f=fixture(t);for(let n=1;n<=101;n++){const uid='U'+n.toString(16).padStart(32,'0');f.thread(uid);f.card(uid,n);}
   const uid='U'+(101).toString(16).padStart(32,'0'),data=f.data('line:'+uid,100),before=f.snapshot();
   const result=await projectCheckinMallMonitor(f.db,data);assert.equal(result.messages.length,1);assert.equal(result.messages[0].user_id,uid);assert.equal(result.summary.messages,202);
-  const aggregate=f.queries.find(row=>row.query.includes('json_each'));assert.equal(JSON.parse(aggregate.args[0]).length,100);assert.equal(f.queries.length,3);assert.equal(f.snapshot(),before);
+  const aggregate=f.queries.find(row=>row.query.includes('json_each'));assert.equal(JSON.parse(aggregate.args[0]).length,100);assert.equal(f.queries.length,4);assert.equal(f.snapshot(),before);
+});
+
+test('CRM uses the sent carousel snapshot without reading the current draft or changing stored data',async t=>{
+  const f=fixture(t);f.thread(A);f.physical(A);const id=f.card(A);
+  f.sql.exec(readFileSync(new URL('../migrations/0071_checkin_chat_dashboard.sql',import.meta.url),'utf8'));
+  const config=defaultCheckinDashboardConfig();config.pages[1].title='發送當時的說明';
+  const message=buildCheckinDashboardMessage({},id,12867,NOW,config);
+  f.sql.prepare('INSERT INTO checkin_chat_dashboard_snapshots(card_id,template_revision,config_json,message_json,created_at) VALUES(?,?,?,?,?)').run(id,7,JSON.stringify(config),JSON.stringify(message),NOW);
+  const before=f.snapshot(),saved=JSON.stringify(f.sql.prepare('SELECT * FROM checkin_chat_dashboard_snapshots').all());
+  const result=await projectCheckinMallMonitor(f.db,f.data());
+  const preview=result.messages.find(row=>row.message_id==='CHECKIN_MALL:'+id).card_preview;
+  assert.equal(preview.template_revision,7);assert.equal(preview.pages.length,2);assert.equal(preview.pages[1].title,'發送當時的說明');
+  assert.equal(preview.balance,12867);assert.equal(preview.pages[0].kind,'wallet');assert.equal(preview.pages[1].buttons[0].target,'mall');
+  assert.equal(Object.hasOwn(preview.pages[0].buttons[0],'uri'),false,'monitor previews cannot execute a raw URI');
+  assert.ok(!f.queries.some(row=>/FROM checkin_chat_dashboard_templates/i.test(row.query)),'history must not read a mutable current template');
+  assert.equal(f.snapshot(),before);assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM checkin_chat_dashboard_snapshots').all()),saved);
+});
+
+test('a mismatched snapshot timestamp keeps the original legacy summary available',async t=>{
+  const f=fixture(t);f.thread(A);f.physical(A);const id=f.card(A);
+  f.sql.exec(readFileSync(new URL('../migrations/0071_checkin_chat_dashboard.sql',import.meta.url),'utf8'));
+  const config=defaultCheckinDashboardConfig(),message=buildCheckinDashboardMessage({},id,12867,NOW,config);
+  f.sql.prepare('INSERT INTO checkin_chat_dashboard_snapshots(card_id,template_revision,config_json,message_json,created_at) VALUES(?,?,?,?,?)').run(id,2,JSON.stringify(config),JSON.stringify(message),NOW+1);
+  const result=await projectCheckinMallMonitor(f.db,f.data()),preview=result.messages.find(row=>row.message_id==='CHECKIN_MALL:'+id).card_preview;
+  assert.equal(preview.balance,12867);assert.equal(Object.hasOwn(preview,'pages'),false);
 });

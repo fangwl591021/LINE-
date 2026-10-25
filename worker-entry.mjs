@@ -19,6 +19,7 @@ import { handleActivityShortLink } from './worker/activity-short-links.mjs';
 import { handleAiAdvance, processAiAdvanceReminders } from './worker/ai-advance.mjs';
 import { handleMemberEvents } from './worker/member-hosted-events.mjs';
 import { handleCheckinMall } from './worker/checkin-mall-card.mjs';
+import { handleCheckinChatDashboard } from './worker/checkin-chat-dashboard.mjs';
 import { handleRewardUnits } from './worker/reward-unit-directory.mjs';
 import { handleRewardApplications } from './worker/reward-applications.mjs';
 import { handlePartnerContracts } from './worker/partner-bonus-v2.mjs';
@@ -406,6 +407,8 @@ export default {
     if (rewardUnitResponse) return rewardUnitResponse;
     const memberEventResponse = await handleMemberEvents(request, env);
     if (memberEventResponse) return memberEventResponse;
+    const checkinDashboardResponse = await handleCheckinChatDashboard(request, env, storeInviteProfileView);
+    if (checkinDashboardResponse) return checkinDashboardResponse;
     const checkinMallResponse = await handleCheckinMall(request, env, storeInviteProfileView);
     if (checkinMallResponse) return checkinMallResponse;
     const aiAdvanceResponse = await handleAiAdvance(request, env, ctx);

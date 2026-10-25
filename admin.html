@@ -5778,7 +5778,11 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
             return;
           }
           const requestedTab = new URLSearchParams(location.search || '').get('tab');
-          switchTab(requestedTab === 'checkin-chat-dashboard' && adminRole === 'admin' ? 'checkin-chat-dashboard' : requestedTab === 'activities' ? 'activities' : 'users');
+          if (requestedTab === 'checkin-chat-dashboard' && adminRole === 'admin') {
+            switchTab('checkin-chat-dashboard');
+            return;
+          }
+          switchTab(new URLSearchParams(location.search || '').get('tab') === 'activities' ? 'activities' : 'users');
         } else {
           loadingIcon.innerText = "lock_person";
           loadingIcon.classList.remove('animate-spin', 'text-blue-600');
