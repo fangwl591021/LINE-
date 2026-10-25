@@ -12,6 +12,7 @@ import { handleDailyTank } from './worker/daily-tank-challenge.mjs';
 import { handleGameCenter } from './worker/game-center.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
 import { isCheckinMallEvent, supplementCheckinMallCards } from './worker/checkin-mall-card.mjs';
+import { projectCheckinMallMonitor } from './worker/checkin-mall-monitor.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
 import { isRewardOnlyRole, checkRewardOnlyAction, issueRewardScanToken, validateRewardScanToken } from './worker/reward-only-cashier.mjs';
 import { checkRedeemOnlyAction, validateRedeemOperator } from './worker/redeem-only-cashier.mjs';
@@ -2767,7 +2768,7 @@ const LineOAChatModule = {
       : [];
     return {
       success: true,
-      data: {
+      data: await projectCheckinMallMonitor(env.ACTMASTER_DB, {
         summary: {
           threads: Number(summary?.threads || 0),
           messages: Number(summary?.messages || 0),
@@ -2777,7 +2778,7 @@ const LineOAChatModule = {
         threads: enrichedThreads,
         selectedThreadId,
         messages: messages.reverse()
-      }
+      })
     };
   },
 
@@ -3010,7 +3011,7 @@ const LineOAChatModule = {
   },
 
   async monitorPage() {
-    const source = 'https://raw.githubusercontent.com/fangwl591021/LINE-/691416b/lineoa-monitor.html';
+    const source = 'https://raw.githubusercontent.com/fangwl591021/LINE-/44ddefd0bdf5838ec91a69e0e4dfb206e9319f11/lineoa-monitor.html';
     try {
       const res = await fetch(source, {
         headers: { 'User-Agent': 'line-engine-monitor-page/1.0' },

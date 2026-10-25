@@ -50,6 +50,7 @@ const fullChecks = [
   'test/partner-company-entry.test.mjs',
   'test/store-product-shipping.test.mjs',
   'test/checkin-mall-card.test.mjs',
+  'test/checkin-mall-monitor.test.mjs',
   'test/checkin-mall-ui.test.mjs',
   'test/store-product-discovery.test.mjs',
   'test/store-commerce-points.test.mjs',
