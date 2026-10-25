@@ -13,6 +13,7 @@ function fixture(t){
   sql.exec(`PRAGMA foreign_keys=ON;CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '');CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);`);
   sql.exec(readFileSync(new URL('../migrations/0063_checkin_mall_cards.sql',import.meta.url),'utf8'));
   sql.exec(readFileSync(new URL('../migrations/0071_checkin_chat_dashboard.sql',import.meta.url),'utf8'));
+  sql.exec('BEGIN');try{sql.exec(readFileSync(new URL('../migrations/0073_checkin_mall_event_cards.sql',import.meta.url),'utf8'));sql.exec('COMMIT');}catch(error){sql.exec('ROLLBACK');throw error;}
   for(const [uid,role] of [[A,'user'],[B,'store'],[ADMIN,'admin']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(uid,uid,role,uid===ADMIN?'方萬隆':'測試會員');
   const writes=[],pushes=[],reads=[];let fail='',push='ok',point='ok',channel='1660923784',expires=1000;
   const prepare=(query,args=[])=>({bind(...values){return prepare(query,values);},async first(){return sql.prepare(query).get(...args)||null;},async all(){return {success:true,results:sql.prepare(query).all(...args)};},async run(){
@@ -39,7 +40,7 @@ function fixture(t){
     card:()=>sql.prepare('SELECT * FROM checkin_mall_cards').get(),count:table=>sql.prepare('SELECT COUNT(*) n FROM '+table).get().n};
 }
 const UID=value=>/^U[0-9a-f]{32}$/i.test(value||'');
-test('migration is additive and card omits removed rows, fixed gains and false success',t=>{
+test('event-scoped migration preserves members and card omits removed rows, fixed gains and false success',t=>{
   const f=fixture(t);assert.equal(f.count('users'),3);const card=buildCheckinMallCard({},crypto.randomUUID(),12857,NOW),raw=JSON.stringify(card);
   assert.match(raw,/12,857 元/);assert.match(raw,/前往商城/);assert.doesNotMatch(raw,/打卡贈點|剩餘會員點數|轉換為購物金|打卡成功|＋10|replyToken|mother-only/);
   for(const button of card.contents.contents[0].footer.contents.filter(x=>x.type==='button')){const url=new URL(button.action.uri);assert.equal(url.host,'liff.line.me');assert.equal(url.searchParams.get('shopSection'),'list');assert(!url.href.includes(A));}
@@ -49,17 +50,19 @@ test('only exact signed active one-to-one check-in candidates can supplement; ga
   await f.send(wrong);await f.send([event()],{success:false});await f.send([event()],{success:true,skipped:true});f.env.CHECKIN_MALL_CARD_ENABLED='false';await f.send();
   assert.equal(f.writes.length,0);assert.equal(f.reads.length,0);assert.equal(f.pushes.length,0);assert.equal(isCheckinMallEvent(event()),true);
 });
-test('concurrent redelivery/different event IDs push once per member Taipei day with original mother reply untouched',async t=>{
-  const f=fixture(t);await Promise.all(Array.from({length:8},(_,i)=>f.send([event({webhookEventId:'event-'+i})])));
+test('same event concurrent redeliveries push once; distinct events for the same member/day each send one fresh card',async t=>{
+  const f=fixture(t);await Promise.all(Array.from({length:8},()=>f.send()));
   assert.equal(f.pushes.length,1);assert.equal(f.reads.length,1);assert.equal(f.pushes[0].payload.to,A);assert(!('replyToken'in f.pushes[0].payload));assert.match(f.pushes[0].key,/^[0-9a-f-]{36}$/);assert.equal(f.card().state,'accepted');
-  await f.send([event({timestamp:NOW+86400000,webhookEventId:'next-day'})],{success:true},NOW+86400000);assert.equal(f.pushes.length,2);
+  await Promise.all(Array.from({length:8},(_,i)=>f.send([event({webhookEventId:'event-'+i})])));assert.equal(f.pushes.length,9);assert.equal(f.reads.length,9);assert.equal(f.count('checkin_mall_cards'),9);assert.equal(new Set(f.sql.prepare('SELECT id FROM checkin_mall_cards').all().map(row=>row.id)).size,9);assert.equal(new Set(f.pushes.map(item=>item.key)).size,9);assert.ok(f.pushes.every(item=>item.payload.messages.length===1&&item.payload.messages[0].contents.type==='carousel'));
+  await f.send();assert.equal(f.pushes.length,9);assert.equal(f.reads.length,9);
+  await f.send([event({timestamp:NOW+86400000,webhookEventId:'next-day'})],{success:true},NOW+86400000);assert.equal(f.pushes.length,10);
 });
 test('mother read failure produces unavailable instead of false zero; an authoritative zero remains visible',async t=>{
   const f=fixture(t);f.setPoint('failed');await f.send();const raw=JSON.stringify(f.pushes[0]);assert.match(raw,/暫時無法取得/);assert.doesNotMatch(raw,/\b0 元|打卡成功|private mother key/);
   f.setPoint('zero');await f.send([event({source:{type:'user',userId:B},webhookEventId:'b'})]);assert.match(JSON.stringify(f.pushes[1]),/0 元/);
 });
 for(const [push,state] of [['timeout','unknown'],['500','unknown'],['429','failed'],['accepted','accepted']])test('push '+push+' persists '+state+' and never retries on duplicate',async t=>{
-  const f=fixture(t);f.setPush(push);await f.send();await f.send();assert.equal(f.pushes.length,1);assert.equal(f.card().state,state);
+  const f=fixture(t);f.setPush(push);await f.send();await f.send();assert.equal(f.pushes.length,1);assert.equal(f.reads.length,1);assert.equal(f.card().state,state);const first=f.card();f.setPush('ok');f.setPoint('zero');await f.send([event({webhookEventId:'new-'+push})]);assert.equal(f.pushes.length,2);assert.equal(f.reads.length,2);assert.equal(f.count('checkin_mall_cards'),2);assert.notEqual(f.pushes[0].key,f.pushes[1].key);assert.equal(f.sql.prepare('SELECT state FROM checkin_mall_cards WHERE id=?').get(first.id).state,state);assert.match(JSON.stringify(f.pushes[1].payload),/0 元/);
 });
 test('claim failure and persistence failure after LINE acceptance cannot duplicate sends or touch points',async t=>{
   const f=fixture(t);f.setFail('INSERT');await f.send();assert.equal(f.pushes.length,0);f.setFail('accepted_at');await f.send();await f.send();assert.equal(f.pushes.length,1);assert.equal(f.card().state,'sending');assert.equal(f.count('users'),3);
@@ -99,5 +102,6 @@ test('real webhook integration preserves mother bytes/signature, waits for forwa
   Object.assign(handler,{text:v=>String(v||''),verifySignature:async(_,s)=>s==='valid',consumeMyCardEvents:async e=>e,ensure:async()=>{},saveEvent:async()=>{},followPointOnboardingJob:async()=>{},forwardToSecondSystem:async(raw,sig)=>{forward.push({raw,sig});return new Promise(r=>release=r);},replySimpleMyCard:async()=>false,filterAutoReplyPayload:async r=>r,forwardToGas:async()=>({skipped:true}),replyLine:async()=>{throw Error('child cannot reply');}});
   const raw=JSON.stringify({destination:'channel',events:[event()]},null,2),request=sig=>new Request('https://worker.test/line-webhook',{method:'POST',headers:{'x-line-signature':sig},body:raw});
   assert.equal((await handler.handleWebhook(request('invalid'),f.env,{waitUntil:p=>jobs.push(p)})).status,401);assert.equal(forward.length,0);
-  assert.equal((await handler.handleWebhook(request('valid'),f.env,{waitUntil:p=>jobs.push(p)})).status,200);assert.equal(f.pushes.length,0);assert.equal(forward.length,1);assert.equal(forward[0].raw,raw);assert.equal(forward[0].sig,'valid');release({success:true});await Promise.all(jobs);assert.equal(f.pushes.length,1);
+  assert.equal((await handler.handleWebhook(request('valid'),f.env,{waitUntil:p=>jobs.push(p)})).status,200);assert.equal(f.pushes.length,0);assert.equal(forward.length,1);assert.equal(forward[0].raw,raw);assert.equal(forward[0].sig,'valid');const motherReply={success:true,already:true,message:'今日已完成打卡，贈點不重複'};release(motherReply);await Promise.all(jobs);assert.equal(f.pushes.length,1);assert.equal(f.pushes[0].payload.messages.length,1);assert.equal(f.pushes[0].payload.messages[0].contents.type,'carousel');assert.deepEqual(motherReply,{success:true,already:true,message:'今日已完成打卡，贈點不重複'});
+  const secondRaw=JSON.stringify({destination:'channel',events:[event({webhookEventId:'same-day-second-checkin',message:{type:'text',text:'會員打卡',id:'msg-2'}})]});const second=new Request('https://worker.test/line-webhook',{method:'POST',headers:{'x-line-signature':'valid'},body:secondRaw});assert.equal((await handler.handleWebhook(second,f.env,{waitUntil:p=>jobs.push(p)})).status,200);assert.equal(forward.length,2);assert.equal(forward[1].raw,secondRaw);release({success:true,already:true,data:{message:'已打卡'}});await Promise.all(jobs);assert.equal(f.pushes.length,2);assert.equal(f.pushes[1].payload.messages.length,1);assert.equal(f.pushes[1].payload.messages[0].contents.type,'carousel');assert.equal(f.reads.length,2);
 });
