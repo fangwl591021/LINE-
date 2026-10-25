@@ -29,12 +29,14 @@ window.refreshBusinessCardCameraInputs = function(scope) {
 };
 window.goPage = function(page, isInitLoad = false) {
   if (page === 'profile') page = 'admin-settings';
+  if (window.currentPage === 'business-island' && page !== 'business-island' && typeof window.leaveBusinessIsland === 'function') window.leaveBusinessIsland();
   window.previousPage = window.currentPage || '';
   window.currentPage = page;
   const sharedBannerPages = new Set(['home', 'card', 'customers', 'admin-settings', 'card-detail']);
   const showSharedBanner = sharedBannerPages.has(page);
   document.body.classList.toggle('home-page', page === 'home');
   document.body.classList.toggle('store-shop-page', page === 'store-shop');
+  document.body.classList.toggle('business-island-page', page === 'business-island');
   document.body.classList.toggle('shared-front-banner-page', showSharedBanner);
 
   document.querySelectorAll('[id^="page"]').forEach(el => el.classList.add('hidden'));
@@ -59,6 +61,7 @@ window.goPage = function(page, isInitLoad = false) {
     else if (page === 'partner-directory' && typeof window.loadPartnerDirectory === 'function') window.loadPartnerDirectory();
     else if (page === 'exchange-zone' && typeof window.loadExchangeZone === 'function') window.loadExchangeZone();
     else if (page === 'business-richman' && typeof window.initBusinessRichman === 'function') window.initBusinessRichman();
+    else if (page === 'business-island' && typeof window.initBusinessIsland === 'function') window.initBusinessIsland();
     else if (page === 'admin-partners' && typeof window.loadAdminPointRedemptionPartners === 'function') window.loadAdminPointRedemptionPartners();
     else if (page === 'admin-announcements' && typeof window.loadAdminAnnouncements === 'function') window.loadAdminAnnouncements();
     else if (page === 'admin-crm') window.loadCrm();

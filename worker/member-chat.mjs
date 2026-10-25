@@ -161,6 +161,22 @@ function directorySql() {
     `;
 }
 const directoryArgs = (actor, after = '', q = '', industry = '') => [actor.memberId, after, q.toLowerCase().replace(/ /g, ''), industry, JSON.stringify(actor.ids), actor.user.line_id];
+async function directoryCard(db, actor, encodedHandle) {
+  if (encodedHandle.length > 1620) fail('INVALID_MEMBER', '請重新選擇會員');
+  let handle;
+  try { handle = decodeURIComponent(encodedHandle); } catch { fail('INVALID_MEMBER', '請重新選擇會員'); }
+  if (!handle || handle.length > 180 || /[/\\\u0000-\u001f\u007f]/.test(handle)) fail('INVALID_MEMBER', '請重新選擇會員');
+  const peer = await cardTarget(db, handle);
+  if (peer.memberId === actor.memberId) fail('MEMBER_UNAVAILABLE', '請從我的名片查看本人資料', 403);
+  const state = await contactState(db, actor.memberId, peer.memberId);
+  if (state.blocked || !state.accepting) fail('CONTACT_CLOSED', '對方目前未開放聯絡', 403);
+  // Recheck the same current directory entry; a stored/guessed older card ID grants no extra visibility.
+  const visible = await statement(db, `${directorySql()} AND c.row_id=?7 LIMIT 1`, ...directoryArgs(actor), handle).first();
+  if (!visible) fail('MEMBER_UNAVAILABLE', '會員名單已變更，請重新搜尋', 403);
+  const card = await peerCard(db, { peer: peer.memberId }, cardMemberJoin, ownCard);
+  if (!card) fail('CARD_UNAVAILABLE', '對方目前沒有可查看的公開名片', 404);
+  return { card };
+}
 async function listMembers(db, actor, params, env, fetcher) {
   const q = text(params.get('q')), after = text(params.get('after')), industry = text(params.get('industry')), sort = text(params.get('sort'));
   if (q.length > 60 || after.length > 800 || !['', 'latest', 'match'].includes(sort)) fail('INVALID_QUERY', '搜尋條件不正確');
@@ -285,6 +301,9 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
       data = { accepting: body.accepting };
     } else if (path === '/matches' && request.method === 'POST') {
       keys(body, []); data = await registerDirectoryMatching(db, actor);
+    } else if (/^\/members\/[^/]+\/card$/.test(path)) {
+      if (request.method !== 'GET') fail('METHOD_NOT_ALLOWED', '不支援的操作', 405);
+      data = await directoryCard(db, actor, path.slice('/members/'.length, -'/card'.length));
     } else if (path === '/members' && request.method === 'GET') data = await listMembers(db, actor, params, env, fetcher);
     else if (path === '/coupons' && request.method === 'GET') {
       const after = text(params.get('after')); if (after.length > 120) fail('INVALID_QUERY', '分頁位置不正確');

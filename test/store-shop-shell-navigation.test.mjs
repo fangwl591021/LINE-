@@ -38,7 +38,7 @@ test('shell CSS uses ordinary class selectors and keeps the shared header DOM',(
   assert.equal(style.includes(':has('),false);
   for(const rule of ['body.store-shop-page #top-nav { display: none !important; }','body.store-shop-page #main { padding-top: 0 !important; }','body.store-shop-page #page-store-shop { margin-top: 0 !important; }'])assert.ok(style.includes(rule));
   assert.ok(html.includes('id="top-nav"'));
-  assert.ok(html.includes('js/navigation.js?v=8.03'),'Load the navigation version with mall shell state');
+  assert.ok(html.includes('js/navigation.js?v=8.04'),'Load the navigation version with mall shell state');
 });
 
 test('actual router enters, leaves and reenters mall without data requests',()=>{
