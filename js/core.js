@@ -318,6 +318,12 @@ const Core = (function() {
     // 名片資料載入 (按需載入)
     window.loadCardData = async function(options = {}) {
         const harvestMode = options.harvest === true;
+        const collectionIdentity = () => {
+            let token = '';
+            try { token = window.liff?.isLoggedIn?.() ? window.liff.getAccessToken() || '' : ''; } catch (_) {}
+            return String(window.currentUserProfile?.userId || '') + '|' + token;
+        };
+        const requestedCollectionIdentity = harvestMode ? collectionIdentity() : '';
         const cache = harvestMode ? window.harvestCards : window.allCards;
         // Public detail refreshes omit viewer-specific scores. Re-read the
         // collection on return, also when the saved own business intent changed.
@@ -332,7 +338,12 @@ const Core = (function() {
         }
 
         try {
-            const cards = await window.fetchAPI(harvestMode ? 'getCardHarvestContacts' : 'getCardContacts', {}, true);
+            const cards = harvestMode && typeof window.readCollectedMatchCards === 'function'
+                ? await window.readCollectedMatchCards()
+                : await window.fetchAPI(harvestMode ? 'getCardHarvestContacts' : 'getCardContacts', {}, true);
+            if (harvestMode && collectionIdentity() !== requestedCollectionIdentity) {
+                throw new Error('登入身份已變更，已略過先前名單回覆');
+            }
             if (harvestMode && (!cards || cards.success === false || cards.error
                 || (!Array.isArray(cards) && !Array.isArray(cards.data)))) {
                 throw new Error(cards?.error || '收藏名單讀取失敗，請稍後重試');

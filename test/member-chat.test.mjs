@@ -296,7 +296,10 @@ test('directory AI adapter uses the existing server model, key, daily quota and 
   const actor = { user: { line_id: A, role: 'user' } };
   assert.equal((await scoreMemberDirectoryBatch(env, actor, { company: '合成甲', title: '經理' }, [{ company: '合成乙', title: '業務' }])).scores[0].score, 72);
   assert.equal(calls[0].model, 'synthetic-model'); assert.equal(calls[0].max_tokens, 3200);
-  assert.equal(quota.length, 1); assert.ok(quota[0][0].startsWith('RL_matchmakeContacts_'));
+  assert.equal(calls[0].response_format.type,'json_object'); assert.match(calls[0].messages[0].content,/\bJSON\b/i);
+  assert.equal(quota.length, 2);
+  assert.ok(quota[0][0].startsWith('RL_matchmakeContacts_'+A+'_')); // The shared twenty-call authority is still consumed.
+  assert.ok(quota[1][0].startsWith('RL_matchmakeContacts_directory_'+A+'_')); // Background discovery also has its own twelve-batch ceiling.
   env.ACTMASTER_KV.get = async () => '20';
   assert.deepEqual(await scoreMemberDirectoryBatch(env, actor, {}, []), { limited: true }); assert.equal(calls.length, 1);
 });

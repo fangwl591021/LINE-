@@ -244,3 +244,34 @@ test('structured errors and malformed responses preserve the old collection and 
     assert.equal(h.window.cardMatchRefreshing, false);
   }
 });
+
+test('failed, processing and limited collection caches expire; real completed zero remains current',()=>{
+  for(const status of ['failed','processing','limited']){
+    const record=card('RETRY',null,{aiMatch:{status,score:null,autoEligible:false,retryAt:new Date(Date.now()+300000).toISOString()}});
+    const h=harness([record]);assert.equal(h.window.isCollectedCardMatchCacheCurrent([record]),true);
+    record.aiMatch.retryAt=new Date(Date.now()-1).toISOString();assert.equal(h.window.isCollectedCardMatchCacheCurrent([record]),false);
+    delete record.aiMatch.retryAt;assert.equal(h.window.isCollectedCardMatchCacheCurrent([record]),false,'legacy rows need an authoritative deadline');
+  }
+  const zero=card('ZERO',0);zero.aiMatch.retryAt='2020-01-01T00:00:00Z';const h=harness([zero]);assert.equal(h.window.isCollectedCardMatchCacheCurrent([zero]),true);assert.match(h.render(),/0%/);
+});
+
+test('quota status and retry deadline are clear and escaped in the closable explanation',()=>{
+  const h=harness([card('LIMITED',null,{aiMatch:{status:'limited',score:null,failureCode:'quota',reason:'今日額度已用完 <img src=x>',retryAt:'2026-10-26T00:00:00Z'}})]);
+  assert.match(h.render(),/今日額度已用完/);h.window.showCollectedCardMatch('LIMITED');const html=h.created.map(n=>n.innerHTML).join('\n');
+  assert.match(html,/下次確認時間/);assert.match(html,/台北時間/);assert.doesNotMatch(html,/<img src=x>/);assert.match(html,/&lt;img/);
+});
+
+test('explicit refresh resets the bounded retry pause and retains list filters',async()=>{
+  let resets=0;const h=harness([card('OLD',82)],{resetCollectedMatchRetry:()=>resets++,loadCardData:async()=>{}});h.window.cardListSortMode='match';
+  await h.window.refreshCollectedCardMatches();assert.equal(resets,1);assert.equal(h.window.cardListSortMode,'match');assert.equal(h.window.cardMatchRefreshing,false);
+});
+
+test('real core harvest loader rejects a late response after owner or token changes',async()=>{
+  for(const change of ['owner','token']){
+    let release,currentToken='before';const response=new Promise(r=>release=r);
+    const h=harness([card('KEEP',82)],{liff:{isLoggedIn:()=>true,getAccessToken:()=>currentToken},fetchAPI:async()=>response});h.loadActualCoreLoader();
+    const cached=h.window.harvestCards,pending=h.window.loadCardData({harvest:true,force:true,render:false,initPanels:false,throwOnError:true});
+    if(change==='owner')h.window.currentUserProfile={userId:'OTHER'};else currentToken='after';release({success:true,data:[card('LATE',99)]});
+    await assert.rejects(pending,/登入身份已變更/);assert.equal(h.window.harvestCards,cached);assert.equal(h.window.harvestCards[0].rowId,'KEEP');
+  }
+});
