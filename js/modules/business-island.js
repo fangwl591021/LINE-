@@ -10,14 +10,22 @@
     if (contact && (/^tel:\+?[0-9#*(),. -]{5,40}$/.test(raw) || /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw))) return raw;
     try { const url = new URL(raw); return url.protocol === 'https:' && !url.username && !url.password ? url.href : ''; } catch { return ''; }
   };
-  let root, client, world, worldModule, audio, generation = 0, activeOwner = '', zone = 'people', query = '', industry = '', sort = 'random';
+  let root, client, world, worldModule, audio, presence, generation = 0, activeOwner = '', zone = 'people', query = '', industry = '', sort = 'random';
   let members = [], publicMembers = [], industries = [], next = '', selected = '', posts = null, listView = false, exitAction = null, worldState = null, savedScrollTop = 0;
   let memberTicket = 0, publicTicket = 0, selectionTicket = 0, boardTicket = 0, rollTicket = 0, busy = false, publicBusy = false, publicReady = false, actionBusy = false, initializing = false, rolling = false, rollMessage = '', dialog, styleReady;
+  let heartbeatClock={at:-Infinity},presenceStatus='checking';
   const $ = selector => root.querySelector(selector);
   const active = ticket => ticket === generation && activeOwner === owner() && window.currentPage === 'business-island' && root && !root.classList.contains('hidden');
   const valid = ticket => active(ticket) && client?.current();
   const findMember = handle => {const published=publicMembers.find(row=>row.handle===handle),ordinary=members.find(row=>row.handle===handle);return published?{...published,match:ordinary?.match??published.match}:ordinary;};
   function updateRollControl(){const button=$('[data-bi-action="roll"]');button.disabled=rolling||publicBusy||!publicReady;}
+  function renderPublicStatus(){
+    if(!publicReady||publicBusy)return;
+    const online=publicMembers.filter(row=>row.onlineKnown===true&&row.online===true).length;
+    const status=$('[data-bi-public-status]');
+    status.textContent=`${publicMembers.length} 位公開會員上島 · ${online?`${online} 位在線優先`:'在線優先'}${presenceStatus==='unavailable'?'（狀態暫無法更新）':''}`;
+    status.title='在線指最近3分鐘在人脈島活動，狀態可能稍有延遲。';
+  }
   function randomIndex(length) {
     const value = new Uint32Array(1);
     window.crypto.getRandomValues(value);
@@ -63,7 +71,7 @@
     return `<section class="bi-shell" aria-label="人脈島">
       <header class="bi-header"><div class="bi-brand"><span class="bi-brand-mark" aria-hidden="true">島</span><div><h1>人脈島</h1><p>探索人脈，讓合作從交流開始</p></div></div><div class="bi-toolbar"><button type="button" data-bi-action="exit">返回首頁</button><button type="button" data-bi-action="list" aria-pressed="false">快速清單</button></div></header>
       <nav class="bi-tabs" aria-label="人脈島分區"><button type="button" data-bi-zone="people" aria-pressed="true">人脈廣場</button><button type="button" data-bi-zone="board" aria-pressed="false">合作告示板</button><button type="button" data-bi-zone="home" aria-pressed="false">我的小屋</button></nav>
-      <div class="bi-layout"><section class="bi-explore" aria-label="所在島環島探索"><div class="bi-dice"></div><div class="bi-explore-copy"><h2>擲骰，在所在島繞行</h2><p class="bi-roll-result" role="status" aria-live="polite">${esc(rollMessage || '沿著12站步道認識公開會員，換島請點搭船前往。')}</p><small class="bi-audio-status" data-bi-audio-status></small></div><div class="bi-play-controls"><button type="button" class="bi-roll" data-bi-action="roll">擲骰環島</button><button type="button" data-bi-action="music" aria-label="開關背景音樂" aria-pressed="true">音樂開</button><button type="button" data-bi-action="sound" aria-label="開關音效" aria-pressed="true">音效開</button></div></section>
+      <div class="bi-layout"><section class="bi-explore" aria-label="所在島自由探索"><div class="bi-dice"></div><div class="bi-explore-copy"><h2>擲骰，走近島上夥伴</h2><p class="bi-roll-result" role="status" aria-live="polite">${esc(rollMessage || '頭貼人物在島上自由漫遊，點對方就能對話；在線會員優先。')}</p><small class="bi-audio-status" data-bi-audio-status></small></div><div class="bi-play-controls"><button type="button" class="bi-roll" data-bi-action="roll">擲骰找夥伴</button><button type="button" data-bi-action="music" aria-label="開關背景音樂" aria-pressed="true">音樂開</button><button type="button" data-bi-action="sound" aria-label="開關音效" aria-pressed="true">音效開</button></div></section>
       <div class="bi-public-roster"><p data-bi-public-status role="status" aria-live="polite">正在邀請公開會員上島…</p><button type="button" data-bi-action="refresh-public">更新公開名冊</button></div>
       <div class="bi-map" aria-label="七座人脈群島，由上到下探索"><div class="bi-stage"></div></div>
       <section class="bi-panel" aria-label="人脈島資訊"><div class="bi-panel-header"><h2 data-bi-title>人脈廣場</h2><p class="bi-caption" data-bi-caption>選擇會員，查看公開名片或開始交流</p></div><div class="bi-selection" aria-live="polite"></div>
@@ -99,7 +107,7 @@
         const params=new URLSearchParams({scope:'public'});if(after)params.set('after',after);
         const result=await client.request('/members?'+params.toString());
         if(!valid(ticket)||request!==publicTicket)return;
-        const incoming=Array.isArray(result.items)?result.items.filter(row=>typeof row.handle==='string'):[];
+        const incoming=Array.isArray(result.items)?result.items.filter(row=>typeof row.handle==='string').map(row=>({...row,online:row.onlineKnown===true&&row.online===true,onlineKnown:row.onlineKnown===true})):[];
         publicMembers=[...new Map([...publicMembers,...incoming].map(row=>[row.handle,row])).values()];
         after=clean(result.next);
         if(after&&(after.length>800||cursors.has(after)||!incoming.length))throw Error('公開名冊分頁已變更，請重新載入。');
@@ -107,8 +115,9 @@
         $('[data-bi-public-status]').textContent=`已邀請 ${publicMembers.length} 位公開會員${after?'，繼續載入…':'上島'}`;
       }while(after);
       publicReady=true;
+      presence?.refresh();
     }catch(error){if(active(ticket)&&request===publicTicket)$('[data-bi-public-status]').textContent=error.message||'公開名冊載入失敗，請更新重試。';}
-    finally{if(active(ticket)&&request===publicTicket){publicBusy=false;$('[data-bi-action="refresh-public"]').disabled=false;updateRollControl();}}
+    finally{if(active(ticket)&&request===publicTicket){publicBusy=false;$('[data-bi-action="refresh-public"]').disabled=false;updateRollControl();renderPublicStatus();}}
   }
   async function loadMembers(append = false) {
     if (!live()) return;
@@ -144,9 +153,13 @@
     if (zone !== 'people') chooseZone('people');
     renderMembers();world?.clearArrival();world?.showArrival(handle);note();
   }
+  function chatWithMember(handle){
+    if(!live()||actionBusy||zone!=='people'||!publicMembers.some(row=>row.handle===handle))return;
+    cancelRoll();chooseMember(handle);void memberAction('chat');
+  }
   async function rollDice() {
     if (!live() || rolling || busy || actionBusy || zone !== 'people') return;
-    if(!publicReady){$('[data-bi-public-status]').textContent=publicBusy?'公開會員仍在上島，請稍候。':'請先更新公開名冊，再開始環島探索。';return;}
+    if(!publicReady){$('[data-bi-public-status]').textContent=publicBusy?'公開會員仍在上島，請稍候。':'請先更新公開名冊，再開始探索。';return;}
     void audio?.unlock();
     const ticket = generation, request = ++rollTicket, dice1 = randomIndex(6) + 1, dice2 = randomIndex(6) + 1;
     if (!world) { note('群島場景尚未載入，請重試。',true); return; }
@@ -156,8 +169,8 @@
     world.pause(false);
     rolling = true; selectionTicket++; closeCard();
     const button = $('[data-bi-action="roll"]');
-    button.disabled = true; button.textContent = '準備環島…';
-    $('.bi-roll-result').textContent='在目前島的步道上探索…';
+    button.disabled = true; button.textContent = '準備探索…';
+    $('.bi-roll-result').textContent='準備走近島上的夥伴…';
     try {
       button.textContent='正在擲骰…';
       let phase='dice';
@@ -170,21 +183,21 @@
           if(phase==='dice')audio?.play('dice');
           else if(phase==='boarding')audio?.play('depart');
           else if(phase==='arrived')audio?.play('arrive');
-          const labels={dice:'正在擲骰…',walking:'沿著環島步道散步…',arrived:'已到站',cancelled:'環島已暫停，可重新擲骰'};
+          const labels={dice:'正在擲骰…',walking:'走近島上的夥伴…',arrived:'已抵達',cancelled:'探索已暫停，可重新擲骰'};
           button.textContent=labels[phase]||'探索中…';
-          $('.bi-roll-result').textContent=labels[phase]||'環島中…';
+          $('.bi-roll-result').textContent=labels[phase]||'探索中…';
         },
-        onStep:({step,total})=>{if(valid(ticket)&&request===rollTicket){$('.bi-roll-result').textContent=`${dice1} + ${dice2} = ${total} 點 · 環島前進 ${step} / ${total} 站`;}}
+        onStep:({step,total})=>{if(valid(ticket)&&request===rollTicket){$('.bi-roll-result').textContent=`${dice1} + ${dice2} = ${total} 點 · 前進 ${step} / ${total} 步`;}}
       });
       if (!result || !valid(ticket) || request !== rollTicket || zone !== 'people') return;
       selected=result.handle||'';selectionTicket++;renderMembers();if(selected)world.showArrival(selected);
-      rollMessage=selected?`${dice1} + ${dice2} = ${result.total} 點 · 遇見 ${clean(findMember(selected)?.name)||'公開會員'}`:`已走完 ${result.total} 站，這一站目前沒有公開會員，可繼續繞島。`;
+      rollMessage=selected?`${dice1} + ${dice2} = ${result.total} 點 · 遇見 ${clean(findMember(selected)?.name)||'公開會員'}`:`已探索 ${result.total} 步，本島目前沒有公開會員，可繼續散步。`;
       $('.bi-roll-result').textContent = rollMessage;
     } catch (error) {
       if(active(ticket)&&request===rollTicket)note(error.message||'探索暫時中斷，可以重新擲骰。',true);
     } finally {
       if (active(ticket) && request === rollTicket) {
-        rolling = false;updateRollControl();button.textContent = '再擲骰環島';
+        rolling = false;updateRollControl();button.textContent = '再擲骰找夥伴';
       }
     }
   }
@@ -199,9 +212,9 @@
         onPhase:info=>{if(!valid(ticket)||request!==rollTicket)return;if(info.phase==='boarding')audio?.play('depart');else if(info.phase==='arrived')audio?.play('arrive');else if(info.phase==='cancelled')audio?.stopEffects();const labels={walking:'步行前往碼頭…',boarding:'正在登船…',sailing:'搭船航行中…',docking:'正在靠岸…',arrived:'已抵達新島',cancelled:'航程已暫停'};button.textContent=labels[info.phase]||'換島中…';$('.bi-roll-result').textContent=labels[info.phase]||'換島中…';}
       });
       if(!result||!valid(ticket)||request!==rollTicket)return;
-      selected='';renderMembers();const label=worldModule.CATEGORIES.find(item=>item.id===world.currentIsland())?.label||'新島';rollMessage=`已抵達${label}，可以在這裡擲骰環島。`;$('.bi-roll-result').textContent=rollMessage;
+      selected='';renderMembers();const label=worldModule.CATEGORIES.find(item=>item.id===world.currentIsland())?.label||'新島';rollMessage=`已抵達${label}，可以擲骰走近夥伴，或直接點頭貼對話。`;$('.bi-roll-result').textContent=rollMessage;
     }catch(error){if(active(ticket)&&request===rollTicket)note(error.message||'搭船暫時中斷，可以重試。',true);}
-    finally{if(active(ticket)&&request===rollTicket){rolling=false;updateRollControl();button.textContent='擲骰環島';}}
+    finally{if(active(ticket)&&request===rollTicket){rolling=false;updateRollControl();button.textContent='擲骰找夥伴';}}
   }
   async function loadPosts() {
     if (!live()) return;
@@ -224,7 +237,7 @@
   }
   function cancelRoll() {
     rollTicket++; rolling = false; world?.cancel(); world?.clearArrival();audio?.stopEffects();
-    updateRollControl(); $('[data-bi-action="roll"]').textContent = '擲骰環島';
+    updateRollControl(); $('[data-bi-action="roll"]').textContent = '擲骰找夥伴';
   }
   function chooseZone(value) {
     if (!['people','board','home'].includes(value) || !live()) return;
@@ -315,6 +328,7 @@
   }
   window.leaveBusinessIsland = function () {
     generation++; memberTicket++; publicTicket++; selectionTicket++; boardTicket++; rollTicket++;
+    presence?.destroy();presence=null;
     if(world){savedScrollTop=document.getElementById('main')?.scrollTop||0;world.cancel();worldState=world.snapshot();}
     audio?.destroy();audio=null;
     client?.close(); client = null; world?.destroy();world=null;busy = false;publicBusy=false;actionBusy = false; initializing = false; rolling = false; closeCard();
@@ -334,11 +348,12 @@
     initializing = true;
     const changedOwner = activeOwner !== owner(); activeOwner = owner();
     const main = document.getElementById('main'), scrollTop = changedOwner ? 0 : worldState ? savedScrollTop : main?.scrollTop || 0;
-    if (changedOwner) { members=[];publicMembers=[];industries=[];next='';selected='';posts=null;query='';industry='';sort='random';zone='people';listView=false;rollMessage='';worldState=null;savedScrollTop=0; }
+    if (changedOwner) { members=[];publicMembers=[];industries=[];next='';selected='';posts=null;query='';industry='';sort='random';zone='people';listView=false;rollMessage='';worldState=null;savedScrollTop=0;heartbeatClock={at:-Infinity}; }
     publicReady=false;
+    presenceStatus='checking';
     exitAction = typeof options.onExit === 'function' ? options.onExit : null;
     if (!document.querySelector('link[data-business-island]')) {
-      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=6');style.dataset.businessIsland='';
+      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=7');style.dataset.businessIsland='';
       styleReady = new Promise((resolve,reject) => {
         style.addEventListener('load',resolve,{once:true});
         style.addEventListener('error',()=>{style.remove();styleReady=null;reject(Error('人脈島樣式載入失敗，請重試。'));},{once:true});
@@ -353,18 +368,23 @@
     const ticket = generation;
     note('正在連接人脈島…');
     try {
-      const [module,scene,sound] = await Promise.all([import(new URL('member-chat.js?v=15',scriptUrl).href),import(new URL('business-island-world.mjs?v=4',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),styleReady]);
+      const [module,scene,sound,pulse] = await Promise.all([import(new URL('member-chat.js?v=15',scriptUrl).href),import(new URL('business-island-world.mjs?v=5',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),import(new URL('business-island-presence.mjs?v=1',scriptUrl).href),styleReady]);
       if (!active(ticket)) return;
       client=module.createChatClient({base:window.Config?.WORKER_URL||window.WORKER_URL,isCurrent:()=>active(ticket)});
       audio=sound.createIslandAudio({isCurrent:()=>valid(ticket),onState:state=>{if(active(ticket))renderAudioState(state);}});
       worldModule=scene;
       world=scene.createIslandWorld({host:$('.bi-stage'),diceHost:$('.bi-dice'),asset,avatar,profile:window.currentUserProfile,
-        isCurrent:()=>valid(ticket),onMember:chooseMember,onSail:sailToIsland,
-        onCategory:id=>{if(!live()||rolling)return;const row=publicMembers.find(item=>worldModule.classifyMember(item)===id);if(row)chooseMember(row.handle);else $('.bi-roll-result').textContent='這座島目前沒有公開會員，仍可繞島散步。';}
+        isCurrent:()=>valid(ticket),onMember:chooseMember,onChat:chatWithMember,onSail:sailToIsland,
+        onCategory:id=>{if(!live()||rolling)return;const row=publicMembers.find(item=>worldModule.classifyMember(item)===id);if(row)chooseMember(row.handle);else $('.bi-roll-result').textContent='這座島目前沒有公開會員，仍可自由散步。';}
       });
       initializing = false;
+      presence=pulse.createIslandPresence({client,getMembers:()=>publicReady?publicMembers:[],isCurrent:()=>valid(ticket),isVisible:()=>active(ticket),heartbeatClock,
+        onUpdate:statuses=>{if(!valid(ticket))return;const byHandle=new Map(statuses.map(row=>[row.handle,row]));publicMembers=publicMembers.map(row=>{const status=byHandle.get(row.handle);return status?{...row,online:status.online,onlineKnown:status.onlineKnown}:row;});world?.renderMembers(publicMembers,{selected});renderPublicStatus();},
+        onState:state=>{if(valid(ticket)){presenceStatus=state;renderPublicStatus();}}
+      });
       world.renderMembers(publicMembers,{selected});
       chooseZone(zone);
+      presence.refresh();
       if(worldState){world.restore(worldState);if(selected)world.showArrival(selected);}
       if (main) main.scrollTop = scrollTop;
     } catch (error) { if (active(ticket)) note(error.message||'人脈島載入失敗，請重試。',true); }

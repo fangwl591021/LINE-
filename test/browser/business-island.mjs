@@ -37,11 +37,11 @@ const islandKinds=[
   {key:'manufacturing',company:'合成製造工廠',title:'工廠管理人'}
 ];
 const manyMembers=Array.from({length:18},(_,index)=>{const theme=islandKinds[index%islandKinds.length];return {handle:'many-'+String(index+1).padStart(2,'0'),name:'多名單會員'+String(index+1).padStart(2,'0'),company:theme.company+' '+(index+1),title:theme.title,memberNumber:'20261025'+String(index+10).padStart(3,'0'),avatarUrl:index%2?picture:'',industry:'科技資訊',match:null};});
-const publicProjection=row=>({handle:row.handle,name:row.name,avatarUrl:row.avatarUrl,company:row.company,title:row.title,memberNumber:row.memberNumber,industry:row.industry});
-const basePublic=allMembers.map(row=>publicProjection({...row,company:'公開餐飲 '+row.company,industry:'餐飲食品'}));
-const largePublic=Array.from({length:48},(_,index)=>{const theme=index<30?islandKinds[0]:islandKinds[1+Math.floor((index-30)/3)];return publicProjection({handle:'public-current-'+String(index+1).padStart(2,'0'),name:'公開會員'+String(index+1).padStart(2,'0'),company:theme.company,title:theme.title,memberNumber:'PUBLIC-'+String(index+1),avatarUrl:index%2?picture:'',industry:'公開業種'});});
+const publicProjection=row=>({handle:row.handle,name:row.name,avatarUrl:row.avatarUrl,company:row.company,title:row.title,memberNumber:row.memberNumber,industry:row.industry,online:row.online===true,onlineKnown:row.onlineKnown!==false});
+const basePublic=allMembers.map((row,index)=>publicProjection({...row,company:'公開餐飲 '+row.company,industry:'餐飲食品',online:index===0}));
+const largePublic=Array.from({length:48},(_,index)=>{const theme=index<30?islandKinds[0]:islandKinds[1+Math.floor((index-30)/3)];return publicProjection({handle:'public-current-'+String(index+1).padStart(2,'0'),name:'公開會員'+String(index+1).padStart(2,'0'),company:theme.company,title:theme.title,memberNumber:'PUBLIC-'+String(index+1),avatarUrl:index%2?picture:'',industry:'公開業種',online:index===0||index===45});});
 const calls = [], messages = [], pending = new Map();
-let holdNextPage = false, randomBatch = 0, holdNextPublic='', failNextPublic=false, holdNextCard='';
+let holdNextPage = false, randomBatch = 0, holdNextPublic='', failNextPublic=false, holdNextCard='',peerName='陳小商',presenceUnknown=false;
 const checks = [], errors = [], outside = [];
 const record = name => { checks.push(name); console.log('PASS ' + name); };
 const messageWrites = () => calls.filter(call => call.method === 'POST' && call.path.endsWith('/messages'));
@@ -91,6 +91,12 @@ const server = createServer(async (req,res) => {
     calls.push({method:req.method,path:url.pathname,query:Object.fromEntries(url.searchParams),body,authorization:req.headers.authorization});
     if (url.pathname === '/v1/store-shop') {ok(res,url.searchParams.has('shop')?{shop:{id:THREAD,name:'合成商城',status:'active',category:'測試'}}:{shops:[{id:THREAD,name:'合成商城',status:'active',category:'測試'}]});return;}
     assert.match(req.headers.authorization||'',/^Bearer synthetic-token-(?:[af]|large|empty)$/,'fixture APIs require synthetic bearer tokens');
+    if(url.pathname==='/v1/member-chat/presence'){
+      if(req.method==='POST'){assert.deepEqual(body,{},'presence heartbeat cannot choose an actor');ok(res,{heartbeat:true,retryAfterSeconds:60});return;}
+      const pool=req.headers.authorization==='Bearer synthetic-token-large'?largePublic:req.headers.authorization==='Bearer synthetic-token-empty'?[{...largePublic.at(-1),handle:'public-only-manufacturer'}]:basePublic;
+      const handles=JSON.parse(url.searchParams.get('handles')||'[]');assert.ok(Array.isArray(handles)&&handles.length>0&&handles.length<=100);
+      ok(res,{items:pool.filter(row=>handles.includes(row.handle)).map(({handle,online,onlineKnown})=>({handle,online:presenceUnknown?false:online,onlineKnown:presenceUnknown?false:onlineKnown})),presenceAvailable:!presenceUnknown});return;
+    }
     if (url.pathname === '/fixture/actions') {
       assert.equal(body.action,'listExchangeZonePosts');ok(res,{access:{allowed:true},posts:[{postHandle:'post-one',title:'尋找公開合作夥伴',excerpt:'這是已刊登的合成需求',author:{name:'公開作者'}}]});return;
     }
@@ -101,7 +107,7 @@ const server = createServer(async (req,res) => {
         if(failNextPublic){failNextPublic=false;respond(res,{success:false,error:'合成公開名單暫時失敗'},503);return;}
         const pool=req.headers.authorization==='Bearer synthetic-token-large'?largePublic:req.headers.authorization==='Bearer synthetic-token-empty'?[{...largePublic.at(-1),handle:'public-only-manufacturer'}]:basePublic;
         const after=url.searchParams.get('after');assert.ok(!after||after==='public-page-2','public cursors stay opaque and stable');
-        ok(res,{items:after?pool.slice(30):pool.slice(0,30),next:!after&&pool.length>30?'public-page-2':''});return;
+        ok(res,{items:after?pool.slice(30):pool.slice(0,30),next:!after&&pool.length>30?'public-page-2':'',presenceAvailable:true});return;
       }
       const q=url.searchParams.get('q')||'',industry=url.searchParams.get('industry')||'';
       if(q==='未公開') {ok(res,{items:[{...allMembers[0],handle:'general-private-only',name:'未公開一般會員',company:'一般目錄摘要',title:'尚未公開名片'}],next:'',industries:['餐飲食品']});return;}
@@ -126,12 +132,12 @@ const server = createServer(async (req,res) => {
     }
     if (url.pathname === '/v1/member-chat/me') {ok(res,{accepting:true,notifications:false});return;}
     if (url.pathname === '/v1/member-chat/threads') {
-      if(req.method==='POST'){assert.ok(allMembers.some(row=>row.handle===body.cardHandle));ok(res,{id:THREAD});}
+      if(req.method==='POST'){const peer=[...allMembers,...largePublic].find(row=>row.handle===body.cardHandle);assert.ok(peer);peerName=peer.name;ok(res,{id:THREAD});}
       else ok(res,{items:[{id:THREAD,name:'陳小商',preview:'合成對話',unread:0,createdAt:'2026-10-25T00:00:00Z'}],next:''});return;
     }
     if (url.pathname === `/v1/member-chat/threads/${THREAD}/messages`) {
       if(req.method==='POST'){const item={seq:messages.length+1,body:body.body,mine:true,clientId:body.clientId,createdAt:'2026-10-25T00:00:00Z',read:false};messages.push(item);ok(res,{item});}
-      else {const after=Number(url.searchParams.get('after')||0);ok(res,{items:messages.filter(item=>item.seq>after),more:false,peer:{name:'陳小商'},blocked:false,blockedByMe:false,lastRead:0});}return;
+      else {const after=Number(url.searchParams.get('after')||0);ok(res,{items:messages.filter(item=>item.seq>after),more:false,peer:{name:peerName},blocked:false,blockedByMe:false,lastRead:0});}return;
     }
     if(url.pathname===`/v1/member-chat/threads/${THREAD}/read`){ok(res,{through:body.through});return;}
     throw Error('Unexpected fixture API '+req.method+' '+url.pathname);
@@ -173,13 +179,31 @@ const assertDiceGeometry=geometry=>{
 };
 const readWorldState=worldPage=>worldPage.evaluate(()=>{
   const dice=document.querySelector('.bi-3d-dice-box'),player=document.querySelector('.bi-world-player'),world=document.querySelector('.bi-world'),matrix=new DOMMatrix(getComputedStyle(player).transform);
-  return {metadata:{first:dice.dataset.dice1,second:dice.dataset.dice2,total:dice.dataset.total,step:player.dataset.step,steps:player.dataset.total,target:player.dataset.target??'',category:player.dataset.currentCategory,station:player.dataset.station,loopSize:player.dataset.loopSize},x:matrix.m41,y:matrix.m42,width:world.clientWidth,height:world.clientHeight};
+  return {metadata:{first:dice.dataset.dice1,second:dice.dataset.dice2,total:dice.dataset.total,step:player.dataset.step,steps:player.dataset.total,target:player.dataset.target??'',category:player.dataset.currentCategory},x:matrix.m41,y:matrix.m42,width:world.clientWidth,height:world.clientHeight};
 });
 const assertWorldState=(actual,expected,label)=>{
   assert.deepEqual(actual.metadata,expected.metadata,label+' preserves both dice and the walking metadata');
   assert.ok(Math.abs(actual.x-expected.x)<=.05&&Math.abs(actual.y-expected.y)<=.05,label+' preserves the character transform: '+JSON.stringify({actual,expected}));
   assert.equal(actual.width,expected.width);assert.equal(actual.height,expected.height);
 };
+const npcState=worldPage=>worldPage.evaluate(async()=>{
+  const {LAND_POLYGONS}=await import('/js/modules/business-island-world.mjs');
+  const inside=(category,point)=>LAND_POLYGONS[category].some(polygon=>{
+    const vertices=polygon.map(vertex=>Array.isArray(vertex)?{x:vertex[0],y:vertex[1]}:vertex);let hit=false;
+    for(let a=0,b=vertices.length-1;a<vertices.length;b=a++){
+      const start=vertices[a],end=vertices[b],dx=end.x-start.x,dy=end.y-start.y,t=Math.max(0,Math.min(1,((point.x-start.x)*dx+(point.y-start.y)*dy)/(dx*dx+dy*dy||1)));
+      if(Math.hypot(point.x-start.x-t*dx,point.y-start.y-t*dy)<.002)return true;
+      if((start.y>point.y)!==(end.y>point.y)&&point.x<(end.x-start.x)*(point.y-start.y)/(end.y-start.y)+start.x)hit=!hit;
+    }
+    return hit;
+  });
+  window.__testInsideLand=inside;
+  return [...document.querySelectorAll('.bi-world .bi-npc')].map(npc=>{
+    const section=npc.closest('.bi-world-island'),category=section.dataset.island,art=section.querySelector('.bi-world-art').getBoundingClientRect(),rect=npc.getBoundingClientRect(),point={x:Number(npc.dataset.x),y:Number(npc.dataset.y)},actual={x:(rect.left+22-art.left)/art.width,y:(rect.top+52-art.top)/art.height};
+    return {handle:npc.dataset.biMember,category,online:npc.dataset.online==='true',x:point.x,y:point.y,actualX:actual.x,actualY:actual.y,inside:inside(category,point),actualInside:inside(category,actual),renderError:Math.hypot(actual.x-point.x,actual.y-point.y),moving:npc.dataset.moving,frozen:npc.dataset.frozen,roamTarget:npc.dataset.roamTarget,width:rect.width,height:rect.height};
+  });
+});
+const npcPositions=worldPage=>worldPage.locator('.bi-world .bi-npc').evaluateAll(npcs=>npcs.map(npc=>({handle:npc.dataset.biMember,x:npc.dataset.x,y:npc.dataset.y})).toSorted((left,right)=>left.handle.localeCompare(right.handle)));
 // Delegate every operation to Chrome's real Web Audio graph, observing its output and cleanup.
 function installAudioProbe() {
   const Native=window.AudioContext||window.webkitAudioContext;
@@ -272,7 +296,7 @@ try {
   assert.equal(await page.locator('.bi-list [data-bi-member="card-e"]').count(),1,'another random batch reaches members beyond the first batch');
   assert.equal(memberCalls().at(-1).query.sort,'random');
   assert.equal(memberCalls().at(-1).query.after,undefined);
-  let previousStation=Number(await page.locator('.bi-world-player').getAttribute('data-station'));const rolled=[];
+  const rolled=[];
   for(let turn=0;turn<6;turn++) {
     // Exercise every settled face in the real UI; only this synthetic tab's random source is fixed.
     await page.evaluate(value=>{window.__nativeGetRandomValues??=window.crypto.getRandomValues.bind(window.crypto);window.crypto.getRandomValues=values=>values.fill(value);},Math.floor(([0,.99,.4,.6,.2,.8][turn])*4294967296));
@@ -283,20 +307,20 @@ try {
     await page.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&Number(document.querySelector('.bi-world-player').dataset.step)>0);
     assert.ok(Date.now()-reducedStart<1500,'reduced motion must arrive immediately instead of waiting for the full walk');
     const handle=await page.locator('.bi-world-player').getAttribute('data-target');
-    const reducedResult=await page.evaluate(()=>{const dice=document.querySelector('.bi-3d-dice-box'),player=document.querySelector('.bi-world-player');return {first:Number(dice.dataset.dice1),second:Number(dice.dataset.dice2),total:Number(dice.dataset.total),step:Number(player.dataset.step),target:player.dataset.target,moving:player.dataset.moving,category:player.dataset.currentCategory,station:Number(player.dataset.station),loopSize:Number(player.dataset.loopSize)};});
+    const reducedResult=await page.evaluate(()=>{const dice=document.querySelector('.bi-3d-dice-box'),player=document.querySelector('.bi-world-player');return {first:Number(dice.dataset.dice1),second:Number(dice.dataset.dice2),total:Number(dice.dataset.total),step:Number(player.dataset.step),target:player.dataset.target,moving:player.dataset.moving,category:player.dataset.currentCategory};});
     assert.equal(reducedResult.total,reducedResult.first+reducedResult.second);assert.equal(reducedResult.step,reducedResult.total);assert.equal(reducedResult.target,handle);assert.equal(reducedResult.moving,'false');
     assertDiceGeometry(await diceGeometry(page));
-    assert.equal(reducedResult.category,'food');assert.equal(reducedResult.loopSize,12);assert.equal(reducedResult.station,(previousStation+reducedResult.total)%12);
+    assert.equal(reducedResult.category,'food');assert.equal(handle,'card-b','the only genuinely online public NPC is prioritized');
     assert.equal(memberCalls().length,before,'local dice never refetch a global random member batch');
     if(handle){assert.equal(await selectedHandle(),handle);assert.equal(await page.locator('.bi-world [data-island="food"] .bi-pin[data-bi-member="'+handle+'"]').count(),1);}
     else assert.equal(await page.locator('.bi-world-arrival [data-bi-action="card"],.bi-world-arrival [data-bi-action="chat"]').count(),0,'an empty station does not fabricate a member or contact action');
     assert.equal(await page.locator('.bi-card-dialog[open]').count(),0);assert.equal(await page.evaluate(()=>window.currentPage),'business-island');
-    rolled.push(handle);previousStation=reducedResult.station;
+    rolled.push(handle);
   }
   await page.evaluate(()=>{window.crypto.getRandomValues=window.__nativeGetRandomValues;});
-  assert.ok(new Set(rolled).size>1);assert.equal(threadWrites().length,0);assert.equal(messageWrites().length,0);
-  assert.equal(calls.filter(call=>call.method==='POST').length,0,'dice exploration performs only read requests');
-  record('six dice outcomes advance exactly around the current island public-member ring without global refetch, cross-island travel or automatic writes');
+  assert.ok(rolled.every(handle=>handle==='card-b'));assert.equal(threadWrites().length,0);assert.equal(messageWrites().length,0);
+  assert.equal(calls.filter(call=>call.method==='POST'&&call.path!=='/v1/member-chat/presence').length,0,'dice exploration never creates chats, messages or member writes');
+  record('six real dice outcomes stay on the island and prioritize the server-confirmed online NPC without global refetch or automatic chat writes');
 
   await submit('陳');await waitMembers(1);assert.equal(await page.locator('.bi-list .bi-member-select').getAttribute('data-bi-member'),'card-b');
   await page.locator('[data-bi-action="roll"]').click();await waitMembers(1);
@@ -404,7 +428,7 @@ try {
       return {width:innerWidth,documentWidth:document.documentElement.scrollWidth,appWidth:document.querySelector('#app').getBoundingClientRect().width,mainHeight:main.clientHeight,mainScrollHeight:main.scrollHeight,mainOverflowY:getComputedStyle(main).overflowY,topNavDisplay:getComputedStyle(document.querySelector('#top-nav')).display,bottomNavDisplay:getComputedStyle(document.querySelector('#bottom-nav')).display,bottomAdminDisplay:getComputedStyle(document.querySelector('#bottom-nav-admin')).display,rootWidth:document.querySelector('#page-business-island').getBoundingClientRect().width,mapWidth:map.clientWidth,mapScrollWidth:map.scrollWidth,mapOverflowX:getComputedStyle(map).overflowX,mapTop:map.getBoundingClientRect().top,mapBottom:map.getBoundingClientRect().bottom,exploreTop:explore.getBoundingClientRect().top,exploreBottom:explore.getBoundingClientRect().bottom,panelTop:panel.getBoundingClientRect().top,panelHeight:panel.clientHeight,panelScrollHeight:panel.scrollHeight,panelOverflowY:getComputedStyle(panel).overflowY,listHeight:list.clientHeight,listScrollHeight:list.scrollHeight,listOverflowY:getComputedStyle(list).overflowY,buttons:[...document.querySelectorAll('.bi-toolbar button,.bi-tabs button,.bi-selection button,.bi-search button,.bi-roll,.bi-member-select,.bi-member-actions button,.bi-world-category,.bi-world-arrival-actions button,.bi-island-sail,.bi-island-members-more,[data-bi-action="refresh-public"],.bi-pin')].filter(element=>element.getClientRects().length).map(element=>({text:element.textContent.trim(),height:element.getBoundingClientRect().height,width:element.getBoundingClientRect().width}))};
     });
     assert.ok(measure.documentWidth<=width+1,JSON.stringify(measure));assert.ok(measure.buttons.length>=8);
-    assert.ok(measure.buttons.every(button=>button.height>=44&&button.width>=44),JSON.stringify(measure));layouts.push(measure);
+    assert.ok(measure.buttons.every(button=>button.height>=43.99&&button.width>=43.99),JSON.stringify(measure));layouts.push(measure);
     assert.equal(measure.topNavDisplay,'none');assert.equal(measure.mainOverflowY,'auto');
     assert.equal(measure.bottomNavDisplay,'none');assert.equal(measure.bottomAdminDisplay,'none');
     assert.ok(measure.rootWidth<=1000+1,JSON.stringify(measure));assert.ok(["hidden","clip"].includes(measure.mapOverflowX),JSON.stringify(measure));
@@ -432,6 +456,7 @@ try {
   const manyLayouts=[];
   for(const width of [320,390,430,768,1440]) {
     await manyPage.setViewportSize({width,height:width>900?1000:844});
+    await manyPage.waitForTimeout(50);
     await manyPage.locator('#main').evaluate(element=>element.scrollTop=0);
     const measure=await manyPage.evaluate(()=>{
       const rect=element=>{const box=element.getBoundingClientRect();return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,width:box.width,height:box.height};};
@@ -442,17 +467,18 @@ try {
     assert.ok(measure.world.height>=7*400,JSON.stringify(measure));assert.ok(measure.islands.every(island=>island.height>=400));
     assert.ok(measure.islands.every((island,index)=>!index||island.top>=measure.islands[index-1].bottom-1),'the seven islands stack from top to bottom');
     assert.equal(new Set(measure.islands.map(island=>island.image)).size,7,'each category has its own scene asset');
-    assert.equal(measure.pins.length,30,JSON.stringify(measure));
+    const foodBatch=width<=700?8:12;assert.equal(measure.pins.length,foodBatch+18,JSON.stringify(measure));
     for(const pin of measure.pins){const memberIndex=largePublic.findIndex(row=>row.handle===pin.handle);assert.ok(memberIndex>=0);assert.equal(pin.island,memberIndex<30?'food':islandKinds[1+Math.floor((memberIndex-30)/3)].key,'only public company/title places the member on the corresponding island');}
     assert.equal(measure.cards.length,18);assert.equal(new Set(measure.cards.map(row=>row.handle)).size,18);
     assert.ok(measure.cards.every(row=>row.actions.join(',')==='card,chat'),'every member keeps both explicit actions');
     assert.equal(measure.listOverflow,'visible');assert.equal(measure.panelOverflow,'visible');assert.ok(measure.documentWidth<=width+1);
-    const overlap=(a,b)=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
     for(let index=0;index<measure.pins.length;index++) {
       const pin=measure.pins[index];
       assert.ok(pin.left>=measure.map.left-1&&pin.right<=measure.map.right+1&&pin.top>=measure.map.top-1&&pin.bottom<=measure.map.bottom+1,'member pin stays inside the map');
-      assert.ok(!measure.pins.slice(index+1).some(other=>overlap(pin,other)),'member pins must not cover each other at '+width+'px');
     }
+    const landNpcs=await npcState(manyPage);assert.equal(landNpcs.length,foodBatch+18);assert.ok(landNpcs.every(npc=>npc.inside&&npc.actualInside&&npc.renderError<.004&&npc.width>=43.99&&npc.height>=43.99),'visible RPG characters use real land foot positions and accessible tap areas: '+JSON.stringify({width,bad:landNpcs.filter(npc=>!npc.inside||!npc.actualInside||npc.renderError>=.004||npc.width<43.99||npc.height<43.99)}));
+    assert.equal(await manyPage.locator('[data-island="food"] .bi-npc').first().getAttribute('data-bi-member'),'public-current-01');
+    if(width===390){const misses=await manyPage.evaluate(async()=>{const missed=[];for(const npc of document.querySelectorAll('.bi-npc')){npc.scrollIntoView({block:'center',behavior:'instant'});await new Promise(requestAnimationFrame);const rect=npc.getBoundingClientRect();if(![[.5,.3],[.5,.6],[.25,.5],[.75,.5]].some(([x,y])=>document.elementFromPoint(rect.left+rect.width*x,rect.top+rect.height*y)?.closest('.bi-npc')===npc))missed.push(npc.dataset.biMember);}return missed;});assert.deepEqual(misses,[],'every visible mobile NPC must expose a real pointer hit area');}
     for(const section of await manyPage.locator('.bi-world-island').all())await section.scrollIntoViewIfNeeded();
     await manyPage.waitForFunction(()=>[...document.querySelectorAll('.bi-world-art')].every(image=>image.complete&&image.naturalWidth>0));
     for(const card of await manyPage.locator('.bi-list .bi-member').all()) {
@@ -466,22 +492,15 @@ try {
     if(width===390)for(const section of await manyPage.locator('.bi-world-island').all()) {await section.scrollIntoViewIfNeeded();await section.screenshot({path:join(output,`business-island-world-390-${await section.getAttribute('data-island')}.png`)});}
     manyLayouts.push(measure);
   }
-  const foodSeen=new Set();
-  for(let bank=0;bank<3;bank++) {
-    const handles=await manyPage.locator('[data-island="food"] .bi-pin').evaluateAll(pins=>pins.map(pin=>pin.dataset.biMember));
-    assert.ok(handles.length>0&&handles.length<=12);handles.forEach(handle=>foodSeen.add(handle));
-    await manyPage.locator('.bi-island-members-more[data-bi-members-more="food"]').click();
-  }
-  assert.deepEqual([...foodSeen].sort(),largePublic.slice(0,30).map(row=>row.handle).sort(),'all 30 members of one island remain reachable through its member banks');
-  await manyPage.locator('.bi-world .bi-pin[data-bi-member="public-current-01"]').click();
+  for(const width of [390,1440]){await manyPage.setViewportSize({width,height:844});await manyPage.waitForTimeout(50);const foodSeen=new Set(),batch=width<=700?8:12;for(let bank=0;bank<Math.ceil(30/batch);bank++){const handles=await manyPage.locator('[data-island="food"] .bi-pin').evaluateAll(pins=>pins.map(pin=>pin.dataset.biMember));assert.ok(handles.length>0&&handles.length<=batch);handles.forEach(handle=>foodSeen.add(handle));await manyPage.locator('.bi-island-members-more[data-bi-members-more="food"]').click();}assert.deepEqual([...foodSeen].sort(),largePublic.slice(0,30).map(row=>row.handle).sort(),'all 30 public members remain reachable at '+width+'px');}
+  await manyPage.locator('[data-bi-action="roll"]').click();await manyPage.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&document.querySelector('.bi-world-player').dataset.phase==='arrived');
+  assert.equal(await manyPage.locator('.bi-world-player').getAttribute('data-target'),'public-current-01');
   assert.equal(await manyPage.locator('.bi-selection h3').textContent(),'公開會員01','a public-pool member can be selected even when absent from the normal directory page');
   await manyPage.locator('.bi-world-arrival [data-bi-action="card"]').click();await manyPage.locator('.bi-card-dialog[open]').waitFor();
   assert.equal(await manyPage.locator('.bi-card-body h3').textContent(),'保留的公開版本');assert.equal(calls.at(-1).path,'/v1/member-chat/members/public-current-01/card');
   await manyPage.locator('.bi-card-dialog header button').click();
-  const manualPublicOrigin=await readWorldState(manyPage);
   await manyPage.locator('.bi-island-members-more[data-bi-members-more="food"]').click();await manyPage.locator('.bi-island-members-more[data-bi-members-more="food"]').click();
-  await manyPage.locator('.bi-world .bi-pin[data-bi-member="public-current-30"]').click();
-  assert.equal(await manyPage.locator('.bi-selection h3').textContent(),'公開會員30');assertWorldState(await readWorldState(manyPage),manualPublicOrigin,'manual public-member selection');
+  assert.equal(await manyPage.locator('.bi-world .bi-pin[data-bi-member="public-current-30"]').count(),1);assert.equal(await manyPage.locator('.bi-world .bi-pin[data-bi-member="public-current-30"]').getAttribute('data-online'),'false','offline members remain reachable through public banks');
   assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);
   await writeFile(join(output,'many-members-layout-metrics.json'),JSON.stringify(manyLayouts,null,2));
   await manyPage.close();diagnosticPage=page;record('the complete 48-member public pool loads through stable pages and all 30 food members are reachable across island banks without changing the normal directory');
@@ -489,7 +508,7 @@ try {
   const motionPage=await context.newPage();diagnosticPage=motionPage;motionPage.on('pageerror',error=>errors.push(error.message));
   await motionPage.emulateMedia({reducedMotion:'no-preference'});
   await motionPage.addInitScript(installAudioProbe);
-  await motionPage.addInitScript(()=>{window.crypto.getRandomValues=values=>values.fill(0);});
+  await motionPage.addInitScript(()=>{window.crypto.getRandomValues=values=>values.fill(0);let seed=94231;Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};});
   const enterMotion=async()=>{
     await motionPage.goto(base);await motionPage.evaluate(()=>{window.__token='synthetic-token-large';});await motionPage.locator('#fixture-open').click();
     await motionPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===3&&!document.querySelector('[data-bi-action="roll"]').disabled);
@@ -501,9 +520,9 @@ try {
   await enterMotion();await motionPage.bringToFront();
   await motionPage.locator('[data-island="lodging"]').scrollIntoViewIfNeeded();
   await motionPage.waitForFunction(()=>document.querySelector('[data-island="lodging"]').dataset.visible==='true'&&document.querySelector('[data-island="manufacturing"]').dataset.visible==='false');
-  const decorationSample=()=>motionPage.locator('[data-island="lodging"]').evaluate(section=>[...section.querySelectorAll('.bi-world-boat,.bi-pool-ripple,.bi-walker')].filter(element=>element.getClientRects().length).map(element=>{const style=getComputedStyle(element);return {name:style.animationName,state:style.animationPlayState,transform:style.transform,opacity:style.opacity};}));
+  const decorationSample=()=>motionPage.locator('[data-island="lodging"]').evaluate(section=>[...section.querySelectorAll('.bi-world-boat,.bi-pool-ripple')].filter(element=>element.getClientRects().length).map(element=>{const style=getComputedStyle(element);return {name:style.animationName,state:style.animationPlayState,transform:style.transform,opacity:style.opacity};}));
   const movingBefore=await decorationSample();await motionPage.waitForTimeout(350);const movingAfter=await decorationSample();
-  assert.ok(['bi-boat-sail','bi-pool-ripple','bi-wander'].every(name=>movingBefore.some(animation=>animation.name===name)),'the animation probe covers visible boats, pool ripples and residents');
+  assert.ok(['bi-boat-sail','bi-pool-ripple'].every(name=>movingBefore.some(animation=>animation.name===name)),'the animation probe covers visible boats and pool ripples');
   assert.ok(movingBefore.every(animation=>animation.name!=='none'&&animation.state==='running'));
   assert.ok(movingBefore.every((animation,index)=>animation.transform!==movingAfter[index].transform||animation.opacity!==movingAfter[index].opacity),'visible boats, ripples and residents really advance their animation');
   await motionPage.locator('[data-island="manufacturing"]').scrollIntoViewIfNeeded();
@@ -514,46 +533,65 @@ try {
   assert.ok(await motionPage.locator('.bi-world').evaluate(world=>[...world.querySelectorAll('.bi-world-boat,.bi-pool-ripple,.bi-walker')].every(element=>getComputedStyle(element).animationName==='none')),'reduced motion disables decorative animation on every island');
   await motionPage.emulateMedia({reducedMotion:'no-preference'});
   await motionPage.locator('#main').evaluate(element=>element.scrollTop=0);
-  record('real CSS boats, pool ripples and residents animate only on visible islands, pause offscreen and stop for reduced motion');
+  record('real CSS boats and pool ripples animate only on visible islands, pause offscreen and stop for reduced motion');
+
+  await motionPage.waitForFunction(()=>document.querySelector('[data-island="food"]').dataset.visible==='true');
+  assert.equal(await motionPage.locator('.bi-ring-route,.bi-ring-stop').count(),0,'RPG scenes do not retain the numbered board-game route');
+  const roamingBefore=await npcState(motionPage);await motionPage.waitForTimeout(850);const roamingMiddle=await npcState(motionPage);await motionPage.waitForTimeout(850);const roamingAfter=await npcState(motionPage);
+  assert.ok([...roamingBefore,...roamingMiddle,...roamingAfter].every(npc=>npc.inside&&npc.actualInside&&npc.renderError<.004),'both declared coordinates and visible feet stay inside the authored land polygons');
+  const foodBefore=new Map(roamingBefore.filter(npc=>npc.category==='food').map(npc=>[npc.handle,npc])),foodAfter=roamingAfter.filter(npc=>npc.category==='food');
+  assert.ok(foodAfter.filter(npc=>Math.hypot(npc.x-foodBefore.get(npc.handle).x,npc.y-foodBefore.get(npc.handle).y)>.004).length>=2,'visible member characters actually roam over elapsed clock time');
+  assert.ok(new Set(foodAfter.map(npc=>npc.roamTarget).filter(Boolean)).size>=2,'different characters choose distinct roaming destinations');
+  await motionPage.locator('[data-island="manufacturing"]').scrollIntoViewIfNeeded();await motionPage.waitForFunction(()=>document.querySelector('[data-island="food"]').dataset.visible==='false');
+  const offscreenBefore=(await npcPositions(motionPage)).filter(npc=>foodBefore.has(npc.handle));await motionPage.waitForTimeout(300);assert.deepEqual((await npcPositions(motionPage)).filter(npc=>foodBefore.has(npc.handle)),offscreenBefore,'offscreen NPCs stop their roam loop');
+  await motionPage.emulateMedia({reducedMotion:'reduce'});const stillBefore=await npcPositions(motionPage);await motionPage.waitForTimeout(300);assert.deepEqual(await npcPositions(motionPage),stillBefore,'reduced motion freezes member roaming');
+  await motionPage.locator('[data-bi-action="refresh-public"]').click();await motionPage.waitForFunction(()=>!document.querySelector('[data-bi-action="refresh-public"]').disabled&&[...document.querySelectorAll('.bi-world-island')].reduce((sum,section)=>sum+Number(section.dataset.memberCount||0),0)===48);
+  assert.deepEqual(await npcPositions(motionPage),stillBefore,'refreshing the same roster does not teleport NPCs');
+  await motionPage.evaluate(()=>{window.__npcIdentity=new Map([...document.querySelectorAll('.bi-npc')].map(npc=>[npc.dataset.biMember,npc]));Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
+  const hiddenBefore=await npcPositions(motionPage);await motionPage.waitForTimeout(300);assert.deepEqual(await npcPositions(motionPage),hiddenBefore);
+  await motionPage.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});await motionPage.waitForTimeout(100);
+  assert.ok(await motionPage.evaluate(()=>[...document.querySelectorAll('.bi-npc')].every(npc=>window.__npcIdentity.get(npc.dataset.biMember)===npc)),'presence updates preserve the existing NPC DOM');
+  await motionPage.locator('[data-bi-action="list"]').click();const listStill=await npcPositions(motionPage);await motionPage.waitForTimeout(250);assert.deepEqual(await npcPositions(motionPage),listStill);await motionPage.locator('[data-bi-action="list"]').click();
+  await motionPage.emulateMedia({reducedMotion:'no-preference'});await motionPage.locator('#main').evaluate(element=>element.scrollTop=0);await npcState(motionPage);
+  await writeFile(join(output,'npc-roaming-metrics.json'),JSON.stringify({roamingBefore,roamingMiddle,roamingAfter,offscreenBefore,stillBefore},null,2));
+  record('RPG member sprites roam to distinct land destinations while refresh, presence updates, offscreen, hidden, list and reduced-motion states preserve their positions safely');
 
   await motionPage.locator('#main').evaluate(element=>element.scrollTop=0);
-  const loopOrigin=await readWorldState(motionPage);
+  const rpgOrigin=await readWorldState(motionPage);
   await motionPage.evaluate(()=>{window.crypto.getRandomValues=values=>values.fill(4252017623);});
   await motionPage.evaluate(()=>{
     window.__walkTrace={start:performance.now(),steps:[],phases:[],samples:[]};window.__walkPlayer=document.querySelector('.bi-world-player');
-    window.__walkObserver=new MutationObserver(()=>{const step=Number(window.__walkPlayer.dataset.step),phase=window.__walkPlayer.dataset.phase;if(!window.__walkTrace.steps.length||window.__walkTrace.steps.at(-1).step!==step)window.__walkTrace.steps.push({step,at:performance.now()-window.__walkTrace.start,scroll:document.querySelector('#main').scrollTop});if(phase&&window.__walkTrace.phases.at(-1)!==phase)window.__walkTrace.phases.push(phase);});
-    window.__walkObserver.observe(window.__walkPlayer,{attributes:true,attributeFilter:['data-step','data-phase']});
-    window.__sailTimer=setInterval(()=>{const matrix=new DOMMatrix(getComputedStyle(window.__walkPlayer).transform),p=window.__walkPlayer.getBoundingClientRect(),island=document.querySelector('[data-island="food"]').getBoundingClientRect();window.__walkTrace.samples.push({at:performance.now()-window.__walkTrace.start,x:matrix.m41,y:matrix.m42,scroll:document.querySelector('#main').scrollTop,phase:window.__walkPlayer.dataset.phase,inside:p.left>=island.left-1&&p.right<=island.right+1&&p.top>=island.top-1&&p.bottom<=island.bottom+1,category:window.__walkPlayer.dataset.currentCategory});},100);
+    window.__walkObserver=new MutationObserver(records=>{const changes=records.filter(record=>record.attributeName==='data-step');changes.forEach((record,index)=>{const step=Number(changes[index+1]?.oldValue??window.__walkPlayer.dataset.step);if(!window.__walkTrace.steps.length||window.__walkTrace.steps.at(-1).step!==step)window.__walkTrace.steps.push({step,at:performance.now()-window.__walkTrace.start,scroll:document.querySelector('#main').scrollTop});});const phase=window.__walkPlayer.dataset.phase;if(phase&&window.__walkTrace.phases.at(-1)!==phase)window.__walkTrace.phases.push(phase);});
+    window.__walkObserver.observe(window.__walkPlayer,{attributes:true,attributeOldValue:true,attributeFilter:['data-step','data-phase']});
+    window.__sailTimer=setInterval(()=>{const matrix=new DOMMatrix(getComputedStyle(window.__walkPlayer).transform),p=window.__walkPlayer.getBoundingClientRect(),art=document.querySelector('[data-island="food"] .bi-world-art').getBoundingClientRect(),foot={x:(p.left+22-art.left)/art.width,y:(p.top+59-art.top)/art.height};window.__walkTrace.samples.push({at:performance.now()-window.__walkTrace.start,x:matrix.m41,y:matrix.m42,footX:foot.x,footY:foot.y,scroll:document.querySelector('#main').scrollTop,phase:window.__walkPlayer.dataset.phase,inside:window.__testInsideLand('food',foot),category:window.__walkPlayer.dataset.currentCategory});},100);
   });
   await motionPage.locator('[data-bi-action="roll"]').click();
   await motionPage.waitForFunction(()=>document.querySelector('.bi-3d-dice-box').dataset.rolling==='true');
   const shake=await motionPage.locator('.bi-3d-die').evaluateAll(cubes=>cubes.map(cube=>({running:cube.classList.contains('rolling'),duration:cube.getAnimations()[0]?.effect.getTiming().duration})));
   assert.ok(shake.every(cube=>cube.running&&cube.duration===1100),'both cubes shake for the original 1100ms');
+  assert.equal(await motionPage.locator('.bi-npc[data-bi-member="public-current-01"]').getAttribute('data-frozen'),'true','dice freeze the actual online interaction target');
+  const contactBefore=(await npcState(motionPage)).find(npc=>npc.handle==='public-current-01');await motionPage.waitForTimeout(250);const contactFrozen=(await npcState(motionPage)).find(npc=>npc.handle==='public-current-01');assert.equal(contactFrozen.x,contactBefore.x);assert.equal(contactFrozen.y,contactBefore.y);
   await motionPage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.step==='1',{},{timeout:10000});
   assert.equal(await motionPage.locator('.bi-player-ferry').isVisible(),false,'dice walking never starts the ferry');
   await motionPage.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&document.querySelector('.bi-world-player').dataset.moving==='false',{},{timeout:30000});
   const landed=await motionPage.evaluate(()=>{
     window.__walkObserver.disconnect();clearInterval(window.__sailTimer);const player=document.querySelector('.bi-world-player'),pin=[...document.querySelectorAll('.bi-world .bi-pin')].find(element=>element.dataset.biMember===player.dataset.target),p=player.getBoundingClientRect(),target=pin.getBoundingClientRect(),dice=document.querySelector('.bi-3d-dice-box');
-    return {steps:window.__walkTrace.steps.filter(item=>item.step>0),phases:window.__walkTrace.phases,samples:window.__walkTrace.samples,duration:Number(player.dataset.duration),distance:Number(player.dataset.distance),first:Number(dice.dataset.dice1),second:Number(dice.dataset.dice2),total:Number(dice.dataset.total),step:Number(player.dataset.step),station:Number(player.dataset.station),category:player.dataset.currentCategory,handle:player.dataset.target,selectedName:document.querySelector('.bi-selection h3').textContent,pinSelected:pin.getAttribute('aria-pressed'),samePlayer:window.__walkPlayer===player,centerDistance:Math.abs(p.left+p.width/2-target.left-target.width/2),verticalDistance:Math.abs(p.top+p.height/2-target.top-target.height/2)};
+    return {steps:window.__walkTrace.steps.filter(item=>item.step>0),phases:window.__walkTrace.phases,samples:window.__walkTrace.samples,duration:Number(player.dataset.duration),distance:Number(player.dataset.distance),first:Number(dice.dataset.dice1),second:Number(dice.dataset.dice2),total:Number(dice.dataset.total),step:Number(player.dataset.step),category:player.dataset.currentCategory,handle:player.dataset.target,selectedName:document.querySelector('.bi-selection h3').textContent,pinSelected:pin.getAttribute('aria-pressed'),samePlayer:window.__walkPlayer===player,footDistance:Math.hypot(p.left+22-target.left-22,p.top+59-target.top-52)};
   });
-  assert.equal(landed.first,6);assert.equal(landed.second,6);assert.equal(landed.total,12);assert.equal(landed.step,12);assert.equal(landed.station,0);assert.equal(landed.category,'food');
+  assert.equal(landed.first,6);assert.equal(landed.second,6);assert.equal(landed.total,12);assert.equal(landed.step,12);assert.equal(landed.category,'food');assert.equal(landed.handle,'public-current-01');
   assert.deepEqual(landed.steps.map(item=>item.step),Array.from({length:12},(_,index)=>index+1));assert.ok(landed.duration>=7800);
   assert.deepEqual(landed.phases.filter(phase=>phase!=='cancelled'),['dice','walking','arrived']);
-  const ringEnd=await readWorldState(motionPage);assert.ok(Math.abs(ringEnd.x-loopOrigin.x)<.05&&Math.abs(ringEnd.y-loopOrigin.y)<.05,'twelve steps physically return to the same starting point');
-  assert.ok(landed.samples.every(sample=>sample.inside&&sample.category==='food'),'the entire walk stays inside its current island');
-  const xs=landed.samples.map(sample=>sample.x),ys=landed.samples.map(sample=>sample.y),dx=xs.slice(1).map((x,index)=>x-xs[index]),dy=ys.slice(1).map((y,index)=>y-ys[index]);
-  assert.ok(Math.max(...xs)-Math.min(...xs)>190&&Math.max(...ys)-Math.min(...ys)>130,'the route visits the island perimeter rather than a short straight line');
-  assert.ok(dx.some(value=>value>1)&&dx.some(value=>value< -1)&&dy.some(value=>value>1)&&dy.some(value=>value< -1),'a full circuit contains both directions on each axis');
+  const rpgEnd=await readWorldState(motionPage);assert.ok(landed.samples.every(sample=>sample.inside&&sample.category==='food'),'the actual hero feet stay on authored land throughout the NPC approach');
   assert.ok(landed.samePlayer);assert.equal(landed.selectedName,largePublic.find(row=>row.handle===landed.handle).name);assert.equal(landed.pinSelected,'true');
-  assert.ok(landed.centerDistance<=2&&landed.verticalDistance<=2,'the character reaches the public member at its actual stop');
+  assert.ok(landed.footDistance<=2,'the hero reaches the real frozen NPC foot position');
   assertDiceGeometry(await diceGeometry(motionPage));
   assert.equal(await motionPage.locator('.bi-card-dialog[open]').count(),0);assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);
   await motionPage.locator('.bi-world-arrival [data-bi-action="card"]').click();await motionPage.locator('.bi-card-dialog[open]').waitFor();
   assert.equal(calls.at(-1).path,'/v1/member-chat/members/'+encodeURIComponent(landed.handle)+'/card');
   await motionPage.locator('.bi-card-dialog header button').click();assert.equal(await motionPage.evaluate(()=>window.currentPage),'business-island');
-  await writeFile(join(output,'world-loop-metrics.json'),JSON.stringify({shake,landed,loopOrigin,ringEnd,movingBefore,movingAfter,pausedBefore},null,2));
+  await writeFile(join(output,'world-rpg-metrics.json'),JSON.stringify({shake,landed,rpgOrigin,rpgEnd,contactBefore,contactFrozen,movingBefore,movingAfter,pausedBefore},null,2));
   await motionPage.screenshot({path:join(output,'business-island-world-arrival-390.png'),fullPage:true});
-  record('normal six-plus-six walks all twelve local stops, stays inside one island, turns around the perimeter and returns to its exact origin with a public-member card action');
+  record('normal twelve-point dice move the hero along authored land to the frozen online NPC and expose its real public card without starting a chat');
 
   const shipDiceBefore=await motionPage.locator('.bi-3d-dice-box').evaluate(box=>({first:box.dataset.dice1,second:box.dataset.dice2,total:box.dataset.total}));
   await motionPage.evaluate(()=>{window.__shipTrace={phases:[],samples:[]};const player=document.querySelector('.bi-world-player');window.__shipObserver=new MutationObserver(()=>{const phase=player.dataset.phase;if(window.__shipTrace.phases.at(-1)!==phase)window.__shipTrace.phases.push(phase);});window.__shipObserver.observe(player,{attributes:true,attributeFilter:['data-phase']});window.__shipTimer=setInterval(()=>{const matrix=new DOMMatrix(getComputedStyle(player).transform);window.__shipTrace.samples.push({at:performance.now(),x:matrix.m41,y:matrix.m42,scroll:document.querySelector('#main').scrollTop});},100);document.querySelector('[data-bi-sail="manufacturing"]').click();});
@@ -562,15 +600,15 @@ try {
   const voyageAudio={peak:await peakAudio(motionPage,400),probe:await audioSnapshot(motionPage)};assert.ok(voyageAudio.peak>1e-5);assert.ok(await motionPage.evaluate(()=>window.__audioProbe.sources.some(source=>source.kind==='createBufferSource'&&source.started)));
   await motionPage.screenshot({path:join(output,'business-island-ferry-sailing-390.png'),fullPage:true});
   await motionPage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.phase==='arrived'&&document.querySelector('.bi-world-player').dataset.currentCategory==='manufacturing',{},{timeout:30000});
-  const voyage=await motionPage.evaluate(()=>{clearInterval(window.__shipTimer);window.__shipObserver.disconnect();const player=document.querySelector('.bi-world-player');return {...window.__shipTrace,duration:Number(player.dataset.duration),distance:Number(player.dataset.distance),speed:Number(player.dataset.speed),station:Number(player.dataset.station),mode:player.dataset.mode};});
-  assert.equal(voyage.station,0);assert.equal(voyage.mode,'sail');assert.ok(voyage.duration>=12000&&voyage.distance>2400&&voyage.speed<=220);
+  const voyage=await motionPage.evaluate(()=>{clearInterval(window.__shipTimer);window.__shipObserver.disconnect();const player=document.querySelector('.bi-world-player');return {...window.__shipTrace,duration:Number(player.dataset.duration),distance:Number(player.dataset.distance),speed:Number(player.dataset.speed),mode:player.dataset.mode};});
+  assert.equal(voyage.mode,'sail');assert.ok(voyage.duration>=12000&&voyage.distance>2400&&voyage.speed<=220);
   assert.deepEqual(voyage.phases.filter(phase=>phase!=='cancelled'),['walking','boarding','sailing','docking','walking','arrived']);
   assert.deepEqual(await motionPage.locator('.bi-3d-dice-box').evaluate(box=>({first:box.dataset.dice1,second:box.dataset.dice2,total:box.dataset.total})),shipDiceBefore,'explicit sailing never rolls or changes the dice');
   const shipDeltas=voyage.samples.slice(1).map((sample,index)=>{const before=voyage.samples[index],dt=sample.at-before.at;return {camera:Math.abs(sample.scroll-before.scroll)*100/dt,speed:Math.hypot(sample.x-before.x,sample.y-before.y)*1000/dt};});assert.ok(Math.max(...shipDeltas.map(sample=>sample.camera))<=80&&Math.max(...shipDeltas.map(sample=>sample.speed))<=300);
   await motionPage.emulateMedia({reducedMotion:'reduce'});await motionPage.evaluate(()=>{window.crypto.getRandomValues=values=>values.fill(0);});await motionPage.locator('[data-bi-action="roll"]').click();
   await motionPage.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&document.querySelector('.bi-world-player').dataset.phase==='arrived');
-  assert.equal(await motionPage.locator('.bi-world-player').getAttribute('data-current-category'),'manufacturing');assert.equal(await motionPage.locator('.bi-world-player').getAttribute('data-station'),'2');
-  await motionPage.locator('.bi-world-arrival [data-bi-action="card"]').click();await motionPage.locator('.bi-card-dialog[open]').waitFor();assert.equal(calls.at(-1).path,'/v1/member-chat/members/public-current-48/card');await motionPage.locator('.bi-card-dialog header button').click();
+  assert.equal(await motionPage.locator('.bi-world-player').getAttribute('data-current-category'),'manufacturing');assert.equal(await motionPage.locator('.bi-world-player').getAttribute('data-target'),'public-current-46','dice prioritize the online member of the destination island');
+  await motionPage.locator('.bi-world-arrival [data-bi-action="card"]').click();await motionPage.locator('.bi-card-dialog[open]').waitFor();assert.equal(calls.at(-1).path,'/v1/member-chat/members/public-current-46/card');await motionPage.locator('.bi-card-dialog header button').click();
   await writeFile(join(output,'world-motion-metrics.json'),JSON.stringify({voyage,voyageAudio},null,2));await motionPage.emulateMedia({reducedMotion:'no-preference'});
   record('only the explicit destination button sails to another island, preserves dice values and enables local public-member interaction after docking');
 
@@ -581,7 +619,7 @@ try {
     if(kind==='cache') {
       const {beforeCache,travel}=await motionPage.evaluate(()=>{
         const dice=document.querySelector('.bi-3d-dice-box'),player=document.querySelector('.bi-world-player'),world=document.querySelector('.bi-world'),matrix=new DOMMatrix(getComputedStyle(player).transform);
-        const beforeCache={metadata:{first:dice.dataset.dice1,second:dice.dataset.dice2,total:dice.dataset.total,step:player.dataset.step,steps:player.dataset.total,target:player.dataset.target??'',category:player.dataset.currentCategory,station:player.dataset.station,loopSize:player.dataset.loopSize},x:matrix.m41,y:matrix.m42,width:world.clientWidth,height:world.clientHeight},travel=player.dataset.travel;
+        const beforeCache={metadata:{first:dice.dataset.dice1,second:dice.dataset.dice2,total:dice.dataset.total,step:player.dataset.step,steps:player.dataset.total,target:player.dataset.target??'',category:player.dataset.currentCategory},x:matrix.m41,y:matrix.m42,width:world.clientWidth,height:world.clientHeight},travel=player.dataset.travel;
         window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));return {beforeCache,travel};
       });
       await motionPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===18&&!document.querySelector('[data-bi-action="roll"]').disabled);
@@ -611,7 +649,7 @@ try {
   await emptyPage.waitForFunction(()=>document.querySelectorAll('.bi-world [data-island="manufacturing"] .bi-pin').length===1&&!document.querySelector('[data-bi-action="roll"]').disabled);
   assert.equal(await emptyPage.locator('.bi-world [data-island="food"] .bi-pin').count(),0);const emptyRequests=memberCalls().length;
   await emptyPage.locator('[data-bi-action="roll"]').click();await emptyPage.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&document.querySelector('.bi-world-player').dataset.phase==='arrived');
-  assert.equal(await emptyPage.locator('.bi-world-player').getAttribute('data-current-category'),'food');assert.equal(await emptyPage.locator('.bi-world-player').getAttribute('data-station'),'2');assert.equal(await emptyPage.locator('.bi-world-player').getAttribute('data-step'),'2');assert.equal(await emptyPage.locator('.bi-world-player').getAttribute('data-target'),'');
+  assert.equal(await emptyPage.locator('.bi-world-player').getAttribute('data-current-category'),'food');assert.equal(await emptyPage.locator('.bi-world-player').getAttribute('data-step'),'2');assert.equal(await emptyPage.locator('.bi-world-player').getAttribute('data-target'),'');
   assert.equal(await emptyPage.locator('.bi-world-arrival [data-bi-action="card"],.bi-world-arrival [data-bi-action="chat"]').count(),0);assert.equal(await emptyPage.locator('.bi-player-ferry').isVisible(),false);assert.equal(memberCalls().length,emptyRequests);
   await emptyPage.close();diagnosticPage=page;record('an island without public members still walks the local dice steps and never invents contacts or automatically sails elsewhere');
 
@@ -639,7 +677,7 @@ try {
   const reviewPage=await context.newPage();diagnosticPage=reviewPage;reviewPage.on('pageerror',error=>errors.push(error.message));
   await reviewPage.goto(base);await reviewPage.locator('#fixture-open').click();
   await reviewPage.waitForFunction(()=>document.querySelectorAll('.bi-world .bi-pin').length===4&&!document.querySelector('[data-bi-action="refresh-public"]').disabled);
-  await reviewPage.locator('.bi-world .bi-pin[data-bi-member="card-b"]').click();holdNextCard='card-refresh';
+  await reviewPage.locator('#bi-query').fill('陳');await reviewPage.locator('.bi-search button[type=submit]').click();await reviewPage.locator('.bi-list .bi-member-select[data-bi-member="card-b"]').click();holdNextCard='card-refresh';
   await reviewPage.locator('.bi-world-arrival [data-bi-action="card"]').click();await waitUntil(()=>pending.has('card-refresh'));
   await reviewPage.locator('[data-bi-action="refresh-public"]').click();await reviewPage.waitForFunction(()=>!document.querySelector('[data-bi-action="refresh-public"]').disabled);
   pending.get('card-refresh')();pending.delete('card-refresh');await reviewPage.waitForTimeout(100);
@@ -650,7 +688,7 @@ try {
   assert.equal(await reviewPage.locator('[data-bi-title]').textContent(),'合作告示板');assert.equal(await reviewPage.locator('[data-bi-action="more"]').isVisible(),false,'a late public response cannot reveal the normal-directory More button in another zone');
   await reviewPage.locator('.bi-tabs [data-bi-zone="people"]').click();await reviewPage.locator('[data-bi-action="refresh-public"]').click();
   await reviewPage.waitForFunction(()=>document.querySelectorAll('.bi-world .bi-pin').length===4&&!document.querySelector('[data-bi-action="refresh-public"]').disabled);
-  await reviewPage.locator('.bi-world .bi-pin[data-bi-member="card-b"]').click();assert.equal(await reviewPage.locator('.bi-world-arrival').count(),1);
+  await reviewPage.locator('.bi-list .bi-member-select[data-bi-member="card-b"]').click();assert.equal(await reviewPage.locator('.bi-world-arrival').count(),1);
   await reviewPage.locator('#bi-query').fill('未公開');await reviewPage.locator('.bi-search button[type=submit]').click();
   await reviewPage.locator('.bi-list .bi-member-select[data-bi-member="general-private-only"]').click();
   assert.equal(await reviewPage.locator('.bi-selection h3').textContent(),'未公開一般會員');assert.equal(await reviewPage.locator('.bi-world-arrival').count(),0,'selecting a non-public directory member clears the prior public arrival');
@@ -672,7 +710,7 @@ try {
   assert.equal((await audioSnapshot(audioPage)).states.length,0,'turning effects off and on before the first roll does not unlock background music');
   assert.equal(await peakAudio(audioPage,150),0);
   const audioHit=await audioPage.locator('[data-bi-action="music"],[data-bi-action="sound"]').evaluateAll(buttons=>buttons.map(button=>{const rect=button.getBoundingClientRect();return {width:rect.width,height:rect.height};}));
-  assert.ok(audioHit.length===2&&audioHit.every(button=>button.width>=44&&button.height>=44));
+  assert.ok(audioHit.length===2&&audioHit.every(button=>button.width>=43.99&&button.height>=43.99));
   await audioPage.locator('[data-bi-action="roll"]').click();await audioReady();
   const defaultPeak=await peakAudio(audioPage);assert.ok(defaultPeak>1e-5);
   const unlocked=await audioSnapshot(audioPage);assert.equal(unlocked.states.length,1);assert.ok(unlocked.events.find(event=>event.kind==='create').gesture,'the first roll unlocks native audio in a real user gesture');
@@ -704,12 +742,11 @@ try {
   await rejectedAudio.addInitScript(installAudioProbe);await rejectedAudio.addInitScript(()=>{window.__rejectAudioResume=true;});
   await rejectedAudio.goto(base);await rejectedAudio.locator('#fixture-open').click();
   await rejectedAudio.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===3&&!document.querySelector('[data-bi-action="roll"]').disabled);
-  const blockedBefore=Number(await rejectedAudio.locator('.bi-world-player').getAttribute('data-station'));
   await rejectedAudio.locator('[data-bi-action="roll"]').click();
   await rejectedAudio.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&Number(document.querySelector('.bi-world-player').dataset.step)>0);
   const rejectedProbe=await audioSnapshot(rejectedAudio);assert.ok(rejectedProbe.events.some(event=>event.kind==='resume'));assert.equal(rejectedProbe.started,0);
-  const blockedProgress=await rejectedAudio.locator('.bi-world-player').evaluate(player=>({step:Number(player.dataset.step),total:Number(player.dataset.total),station:Number(player.dataset.station),category:player.dataset.currentCategory,phase:player.dataset.phase}));
-  assert.ok(blockedProgress.total>=2&&blockedProgress.total<=12);assert.equal(blockedProgress.step,blockedProgress.total);assert.equal(blockedProgress.station,(blockedBefore+blockedProgress.total)%12);assert.equal(blockedProgress.category,'food');assert.equal(blockedProgress.phase,'arrived','browser audio rejection cannot block local dice movement');
+  const blockedProgress=await rejectedAudio.locator('.bi-world-player').evaluate(player=>({step:Number(player.dataset.step),total:Number(player.dataset.total),category:player.dataset.currentCategory,phase:player.dataset.phase,target:player.dataset.target}));
+  assert.ok(blockedProgress.total>=2&&blockedProgress.total<=12);assert.equal(blockedProgress.step,blockedProgress.total);assert.equal(blockedProgress.category,'food');assert.equal(blockedProgress.target,'card-b');assert.equal(blockedProgress.phase,'arrived','browser audio rejection cannot block local dice movement');
   await rejectedAudio.evaluate(()=>{window.__rejectAudioResume=false;});await rejectedAudio.locator('[data-bi-action="roll"]').click();
   await rejectedAudio.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled);assert.ok(await peakAudio(rejectedAudio,700)>1e-5,'a later permitted gesture recovers audio');
   await rejectedAudio.evaluate(()=>window.goPage('home',true));await rejectedAudio.waitForFunction(()=>window.__audioProbe.contexts.every(context=>context.state==='closed'));
@@ -773,6 +810,36 @@ try {
   assert.equal(await page.evaluate(()=>window.currentPage),'business-island');
   assert.deepEqual(await page.evaluate(()=>Object.entries(sessionStorage).filter(([key])=>key.endsWith(':store'))),savedBefore);
   assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);record('real store provider keeps dice, storefront return and independent progress after island integration');
+
+  const downgradePage=await context.newPage();diagnosticPage=downgradePage;downgradePage.on('pageerror',error=>errors.push(error.message));
+  await downgradePage.goto(base);await downgradePage.locator('#fixture-open').click();await downgradePage.waitForFunction(()=>document.querySelectorAll('.bi-npc').length===4&&!document.querySelector('[data-bi-action="roll"]').disabled);
+  await downgradePage.locator('#bi-query').fill('陳');await downgradePage.locator('.bi-search button[type=submit]').click();await downgradePage.locator('.bi-list [data-bi-member="card-b"]').click();
+  assert.match(await downgradePage.locator('.bi-world-arrival h4').textContent(),/在線/);
+  const beforeDowngrade=await npcPositions(downgradePage),heroBeforeDowngrade=await readWorldState(downgradePage);
+  await downgradePage.evaluate(()=>{window.__arrivalBefore=document.querySelector('.bi-world-arrival');window.__arrivalButton=window.__arrivalBefore.querySelector('[data-bi-action="card"]');window.__arrivalButton.focus({preventScroll:true});window.__npcBefore=document.querySelector('.bi-npc[data-bi-member="card-b"]');});
+  presenceUnknown=true;
+  await downgradePage.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
+  await downgradePage.waitForFunction(()=>document.querySelector('.bi-npc[data-bi-member="card-b"]').dataset.online==='false'&&!document.querySelector('.bi-world-arrival h4').textContent.includes('在線'));
+  assert.ok(await downgradePage.evaluate(()=>document.querySelector('.bi-world-arrival')===window.__arrivalBefore&&document.querySelector('.bi-npc[data-bi-member="card-b"]')===window.__npcBefore&&document.activeElement===window.__arrivalButton),'presence downgrade updates the existing arrival and NPC without stealing button focus');
+  assert.deepEqual(await npcPositions(downgradePage),beforeDowngrade);assertWorldState(await readWorldState(downgradePage),heroBeforeDowngrade,'presence downgrade');
+  assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);presenceUnknown=false;
+  await downgradePage.close();diagnosticPage=page;record('online-to-unknown presence removes the stale arrival label while preserving its DOM, focused action and NPC and hero positions');
+
+  const directPage=await context.newPage();diagnosticPage=directPage;directPage.on('pageerror',error=>errors.push(error.message));await directPage.emulateMedia({reducedMotion:'no-preference'});
+  await directPage.goto(base);await directPage.evaluate(()=>{window.__token='synthetic-token-large';});await directPage.locator('#fixture-open').click();
+  await directPage.waitForFunction(()=>[...document.querySelectorAll('.bi-world-island')].reduce((sum,island)=>sum+Number(island.dataset.memberCount||0),0)===48);
+  await directPage.setViewportSize({width:390,height:844});await directPage.waitForTimeout(50);
+  for(let bank=0;bank<3;bank++)await directPage.locator('.bi-island-members-more[data-bi-members-more="food"]').click();
+  const offlineNpc=directPage.locator('.bi-npc[data-bi-member="public-current-30"]');await offlineNpc.waitFor();assert.equal(await offlineNpc.getAttribute('data-online'),'false');
+  await offlineNpc.evaluate(npc=>npc.scrollIntoView({block:'center',behavior:'instant'}));await directPage.waitForTimeout(350);assert.equal(threadWrites().length,1,'mere roaming and visibility never create a conversation');
+  const npcTap=await offlineNpc.evaluate(npc=>{const rect=npc.getBoundingClientRect();for(const[x,y]of[[.5,.3],[.5,.6],[.25,.5],[.75,.5]]){const point={x:rect.left+rect.width*x,y:rect.top+rect.height*y};if(document.elementFromPoint(point.x,point.y)?.closest('.bi-npc')===npc)return point;}return null;});assert.ok(npcTap,'the offline NPC has a real clickable point');
+  await directPage.mouse.click(npcTap.x,npcTap.y);await directPage.locator('.member-chat[open] .mc-peer strong').waitFor();
+  assert.equal(threadWrites().length,2,'one explicit NPC tap creates or reuses exactly one chat');assert.equal(threadWrites().at(-1).body.cardHandle,'public-current-30');assert.equal(messageWrites().length,1,'opening the chat never sends a message');
+  await directPage.waitForFunction(()=>document.querySelector('.member-chat[open] .mc-peer strong')?.textContent==='公開會員30');
+  await directPage.locator('.member-chat[open] [data-action="close"]').click();assert.equal(await directPage.evaluate(()=>window.currentPage),'business-island');
+  await directPage.evaluate(()=>{window.__leftNpc=document.querySelector('.bi-npc');window.__leftNpcUpdates=0;window.__leftNpcObserver=new MutationObserver(records=>window.__leftNpcUpdates+=records.length);window.__leftNpcObserver.observe(window.__leftNpc,{attributes:true,attributeFilter:['data-x','data-y','style']});window.goPage('home',true);});
+  await directPage.waitForTimeout(50);const leftUpdates=await directPage.evaluate(()=>window.__leftNpcUpdates);await directPage.waitForTimeout(300);assert.equal(await directPage.evaluate(()=>window.__leftNpcUpdates),leftUpdates,'leaving destroys the old NPC animation loop');assert.equal(await directPage.locator('.bi-world .bi-npc').count(),0);
+  await directPage.close();diagnosticPage=page;record('an actual pointer tap on an offline roaming NPC opens the original chat exactly once without sending, and leaving stops detached NPC animation');
   assert.deepEqual(outside,[]);assert.deepEqual(errors,[]);
 } catch(error) {
   failure=error;await mkdir(output,{recursive:true});await diagnosticPage.screenshot({path:join(output,'failure.png'),fullPage:true}).catch(()=>{});

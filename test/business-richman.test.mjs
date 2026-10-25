@@ -18,7 +18,7 @@ assert.match(navigation, /page === 'business-richman'.*initBusinessRichman/);
 assert.match(indexHtml, /id="page-business-island"/);
 assert.match(indexHtml, /aria-label="開啟人脈島"/);
 assert.match(indexHtml, /travel_explore/);
-assert.ok(indexHtml.indexOf('js/modules/business-island.js?v=6') > indexHtml.indexOf('js/modules/store-richman.js?v=1'));
+assert.ok(indexHtml.indexOf('js/modules/business-island.js?v=7') > indexHtml.indexOf('js/modules/store-richman.js?v=1'));
 assert.match(navigation, /page === 'business-island'.*initBusinessIsland/);
 
 // Exercise compatibility entry points without mounting either product UI.

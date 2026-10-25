@@ -457,7 +457,7 @@ test('public island summaries and industries use the newest public version while
   const cardsBefore = JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all());
   const listed = await f.api('/members?scope=public'), member = listed.items.find(row => row.handle === 'private-current');
   assert.equal(listed.status, 200); assert.ok(member);
-  assert.deepEqual(Object.keys(member).sort(), ['avatarUrl', 'company', 'handle', 'industry', 'memberNumber', 'name', 'title']);
+  assert.deepEqual(Object.keys(member).sort(), ['avatarUrl', 'company', 'handle', 'industry', 'memberNumber', 'name', 'online', 'onlineKnown', 'title']);
   assert.deepEqual({name:member.name,company:member.company,title:member.title,industry:member.industry,number:member.memberNumber},
     {name:'最新公開乙',company:'公開咖啡工作室',title:'公開店長',industry:'餐飲食品',number:'20261021002'});
   assert.doesNotMatch(JSON.stringify(listed), /私人|raw-config|raw-tag|raw-services|private-services|matchWork|line_id|custom_config|pool_eligible|ai_review/);
@@ -575,6 +575,82 @@ test('public island cursors validate their scope and current anchor without chan
   f.sql.exec("UPDATE card_contacts SET archived_at='gone' WHERE row_id='card-b'");
   assert.equal((await f.api('/members?'+new URLSearchParams({scope:'public',after}))).code,'INVALID_CURSOR');
   assert.equal(f.writes.length,0);
+});
+
+function presenceStore() {
+  const values=new Map(),gets=[],puts=[];
+  return {values,gets,puts,kv:{
+    async get(key,options){gets.push({key,options});return Array.isArray(key)?new Map(key.map(item=>[item,values.get(item)??null])):values.get(key)??null;},
+    async put(key,value,options){puts.push({key,value:JSON.parse(value),options});values.set(key,JSON.parse(value));}
+  }};
+}
+const presencePath = handles => '/presence?'+new URLSearchParams({handles:JSON.stringify(handles)});
+
+test('island heartbeat only records the authenticated canonical actor and public presence never reorders keyset pages', async t => {
+  const f=fixture(t),store=presenceStore();f.env.ACTMASTER_KV=store.kv;
+  assert.deepEqual(await f.api('/presence',{token:'b',data:{}}),{status:200,success:true,heartbeat:true,retryAfterSeconds:60});
+  const bKey=store.puts[0].key;assert.equal(store.puts[0].options.expirationTtl,180);
+  await f.api('/presence',{token:'a',data:{}});const aKey=store.puts[1].key;
+  await f.api('/presence',{token:'old',data:{}});assert.equal(store.puts.length,2,'old/new logins share one canonical heartbeat');assert.notEqual(aKey,bKey);
+  const result=await f.api(presencePath(['card-a','card-b','card-c','unknown-handle']));
+  assert.deepEqual(result,{status:200,success:true,items:[{handle:'card-b',online:true,onlineKnown:true},{handle:'card-c',online:false,onlineKnown:true}],presenceAvailable:true});
+  assert.doesNotMatch(JSON.stringify(result),/seenAt|memberId|line_id|U[0-9a-f]{32}|MEMBER_CHAT/);
+  store.values.set(bKey,{v:1,seenAt:Date.now()-180000});
+  await f.api('/presence',{token:'c',data:{}});
+  const publicPage=await f.api('/members?scope=public');
+  assert.deepEqual(publicPage.items.map(row=>[row.handle,row.online,row.onlineKnown]),[['card-b',false,true],['card-c',true,true]],'online flags do not change the stable public pagination order');
+  assert.equal(publicPage.presenceAvailable,true);
+  assert.ok((await f.api('/members')).items.every(row=>!Object.hasOwn(row,'online')),'the ordinary member directory projection is unchanged');
+  assert.equal(f.writes.length,0);assert.equal(f.pushes.length,0);
+});
+
+test('presence batch reads recheck current public eligibility, canonical blocks and opt-out before touching KV', async t => {
+  const f=fixture(t),store=presenceStore();f.env.ACTMASTER_KV=store.kv;
+  await f.api('/presence',{token:'b',data:{}});
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,name,updated_at) VALUES('current-private-b',?,'self_profile','private','不能透出的私人摘要','2099-01-01')").run(B);
+  let result=await f.api(presencePath(['card-b','current-private-b','card-a']));
+  assert.deepEqual(result.items,[{handle:'current-private-b',online:true,onlineKnown:true}]);assert.doesNotMatch(JSON.stringify(result),/私人摘要|seenAt|company|title/);
+  for(const [member,blocked] of [['a','b'],['b','a']]){
+    f.sql.prepare('INSERT INTO member_chat_blocks VALUES(?,?,CURRENT_TIMESTAMP)').run(member,blocked);
+    const before=store.gets.length;result=await f.api(presencePath(['current-private-b']));assert.deepEqual(result.items,[]);assert.equal(store.gets.length,before,'blocked handles never reach presence KV reads');f.sql.exec('DELETE FROM member_chat_blocks');
+  }
+  f.sql.exec("INSERT INTO member_chat_preferences(member_id,accepting) VALUES('b',0)");
+  assert.deepEqual((await f.api(presencePath(['current-private-b']))).items,[]);
+  f.sql.exec("UPDATE member_chat_preferences SET accepting=1 WHERE member_id='b'; UPDATE card_contacts SET visibility='private' WHERE row_id='card-b'");
+  assert.deepEqual((await f.api(presencePath(['current-private-b']))).items,[],'a current private-only member has no public presence projection');
+  f.sql.exec("UPDATE card_contacts SET visibility='public' WHERE row_id='card-b'");
+  f.sql.prepare("INSERT INTO users(row_id,line_id,name) VALUES('duplicate-b',?,'歧義會員')").run(B);
+  assert.deepEqual((await f.api(presencePath(['current-private-b','card-c']))).items,[{handle:'card-c',online:false,onlineKnown:true}]);
+  assert.equal(f.writes.length,0);
+});
+
+test('presence refuses spoofed identities, extra body/query fields, oversized batches and unauthorized callers', async t => {
+  const f=fixture(t),store=presenceStore();f.env.ACTMASTER_KV=store.kv;
+  for(const path of ['/presence',presencePath(['card-b'])])for(const token of['','forged'])assert.equal((await f.api(path,{token,...(path==='/presence'?{data:{}}:{})})).status,401);
+  for(const data of[{userId:B},{uid:B},{memberId:'b'},{handles:['card-b']},{seenAt:Date.now()},{active:true}])assert.equal((await f.api('/presence',{data})).code,'INVALID_FIELDS');
+  for(const method of['PUT','DELETE','PATCH'])assert.equal((await f.api('/presence',{method,data:{}})).status,405);
+  for(const handles of[[],Array(101).fill('card-b'),['card-b','card-b'],[null],[''],['bad/handle'],['bad\nhandle'],['x'.repeat(181)]])assert.equal((await f.api(presencePath(handles))).code,'INVALID_QUERY');
+  for(const path of['/presence','/presence?handles=not-json',presencePath(['card-b'])+'&uid='+B,presencePath(['card-b'])+'&handles=[]','/presence?scope=public'])assert.equal((await f.api(path)).code,'INVALID_QUERY');
+  assert.equal((await f.api(presencePath(['card-b']),{data:{}})).code,'INVALID_QUERY','heartbeat POST cannot be used as a batch lookup');
+  assert.equal(store.puts.length,0);assert.equal(f.writes.length,0);
+  f.env.EXCHANGE_ZONE_ACCESS_MODE='private';assert.equal((await f.api('/presence',{data:{}})).status,403);f.env.EXCHANGE_ZONE_ACCESS_MODE='open';
+  f.sql.exec("UPDATE card_contacts SET source_type='private_import' WHERE row_id='card-a'");assert.equal((await f.api('/presence',{data:{}})).code,'OWN_CARD_REQUIRED');
+  f.sql.exec("UPDATE card_contacts SET source_type='self_profile' WHERE row_id='card-a'");f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(OLD,B);
+  assert.equal((await f.api('/presence',{token:'old',data:{}})).code,'IDENTITY_CONFLICT');
+  assert.equal(store.puts.length,0);
+});
+
+test('presence outages remain explicit unknown state and never prevent public cards or ordinary chat', async t => {
+  const f=fixture(t);
+  for(const kv of[undefined,{get:async()=>{throw Error('KV outage');},put:async()=>{throw Error('429');}}]){
+    f.env.ACTMASTER_KV=kv;
+    const heartbeat=await f.api('/presence',{data:{}});assert.equal(heartbeat.status,503);assert.equal(heartbeat.code,'PRESENCE_UNAVAILABLE');
+    const statuses=await f.api(presencePath(['card-b']));assert.equal(statuses.status,200);assert.equal(statuses.presenceAvailable,false);assert.deepEqual(statuses.items,[{handle:'card-b',online:false,onlineKnown:false}]);
+    const page=await f.api('/members?scope=public');assert.equal(page.status,200);assert.equal(page.presenceAvailable,false);assert.ok(page.items.every(row=>!row.online&&!row.onlineKnown));
+    assert.equal((await f.api('/members')).status,200);assert.equal((await f.api('/members/card-b/card')).status,200);
+  }
+  assert.equal(f.writes.length,0);
+  assert.equal((await f.api('/threads',{data:{cardHandle:'card-b'}})).success,true,'an optional presence outage does not block an explicit conversation');
 });
 
 test('directory matching stays bounded, recovers expired leases and never accepts a stale worker write', async t => {
