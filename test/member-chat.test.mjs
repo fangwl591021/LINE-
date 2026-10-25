@@ -57,12 +57,15 @@ test('LINE contact rejects unauthenticated/invalid values, preserves data on fai
 
 function fixture(t) {
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
-  sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',name TEXT,phone TEXT,role TEXT,network_id TEXT);
+  sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',name TEXT,phone TEXT,role TEXT,network_id TEXT,member_number TEXT DEFAULT '',member_joined_at TEXT DEFAULT '',member_date_source TEXT DEFAULT '');
     CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
     CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,line_id TEXT DEFAULT '',profile_user_id TEXT DEFAULT '',owner_user_id TEXT DEFAULT '',source_type TEXT,visibility TEXT,pool_eligible INTEGER,ai_review_status TEXT,name TEXT,company_name TEXT,title TEXT,updated_at TEXT,english_name TEXT DEFAULT '',archived_at TEXT DEFAULT '',merged_into_row_id TEXT DEFAULT '',custom_config TEXT DEFAULT '{}',tags TEXT DEFAULT '',services TEXT DEFAULT '');
     CREATE TABLE inbox_items(message_id TEXT); CREATE TABLE points_ledger(id TEXT);
     INSERT INTO users(row_id,line_id,legacy_line_id,name,phone,role,network_id) VALUES('a','${A}','${OLD}','甲','0900000001','user','network-a'),('b','${B}','','乙','0900000002','user','network-b'),('c','${C}','','管理員','0900000003','admin','admin');
     INSERT INTO user_identity_links VALUES('${OLD}','${A}','active');`);
+  for (const [id, number] of [['a', '20261021001'], ['b', '20261021002'], ['c', '20261021003']]) {
+    sql.prepare("UPDATE users SET member_number=?,member_joined_at='2026-10-21T00:00:00Z',member_date_source='joined' WHERE row_id=?").run(number, id);
+  }
   for (const [id, uid] of [['a', A], ['b', B], ['c', C]]) sql.prepare("INSERT INTO card_contacts(row_id,line_id,profile_user_id,owner_user_id,source_type,visibility,pool_eligible,ai_review_status,name,company_name,title,updated_at) VALUES(?,?,?,?,'self_profile','public',1,'passed',?,'測試公司','業務','2026-09-24')").run('card-' + id, uid, uid, uid, '會員' + id);
   const migration = readFileSync(new URL('../migrations/0046_member_private_chat.sql', import.meta.url), 'utf8'); sql.exec(migration);
   sql.exec(readFileSync(new URL('../migrations/0047_member_chat_notifications.sql', import.meta.url), 'utf8'));
@@ -114,6 +117,56 @@ function fixture(t) {
     setBot: value => { botStatus = value; }, setPush: value => { pushStatus = value; }, failFinalize: () => { failFinalize = true; }, beforeWrite: value => { beforeWrite = value; },
     setFail: value => { failWrites = value; }, setAuth: value => { authStatus = value; } };
 }
+test('directory exposes permanent member numbers with minimal public fields and no read-side writes', async t => {
+  const f = fixture(t);
+  const protectedBefore = JSON.stringify(['users', 'user_identity_links', 'card_contacts'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all()));
+  for (const suffix of ['', '?sort=latest', '?sort=match', '?q=' + encodeURIComponent('會員b')]) {
+    const result = await f.api('/members' + suffix);
+    assert.equal(result.success, true, JSON.stringify(result));
+    const member = result.items.find(item => item.handle === 'card-b');
+    assert.equal(member.memberNumber, '20261021002');
+    assert.deepEqual(Object.keys(member).sort(), ['company', 'handle', 'match', 'memberNumber', 'name', 'title']);
+    assert.doesNotMatch(JSON.stringify(result), /"(?:line_id|row_id|phone|memberJoinedAt|memberDateSource|member_joined_at|member_date_source)"|090000000[123]|U[abc]{32}|2026-10-21T00:00:00Z/);
+  }
+  assert.equal(JSON.stringify(['users', 'user_identity_links', 'card_contacts'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all())), protectedBefore);
+  assert.equal(f.writes.length, 0);
+});
+
+test('missing or malformed member numbers remain blank and do not affect search or contact privacy', async t => {
+  const f = fixture(t);
+  for (const number of [null, '', '20261021', 'not-a-number', '20261021002suffix', '<img src=x onerror=alert(1)>']) {
+    f.sql.prepare('UPDATE users SET member_number=? WHERE row_id=?').run(number, 'b');
+    const result = await f.api('/members?q=' + encodeURIComponent('會員b'));
+    assert.equal(result.success, true); assert.equal(result.items.length, 1);
+    assert.equal(result.items[0].handle, 'card-b'); assert.equal(result.items[0].memberNumber, '');
+  }
+  f.sql.exec("UPDATE users SET member_number='202610211000' WHERE row_id='b'");
+  assert.equal((await f.api('/members?q=' + encodeURIComponent('會員b'))).items[0].memberNumber, '202610211000', 'daily sequences above 999 must remain intact strings');
+  f.sql.exec("UPDATE users SET member_number='20261021002' WHERE row_id='b'");
+  await f.api('/preferences', { token: 'b', data: { accepting: false } });
+  assert.equal((await f.api('/members?q=' + encodeURIComponent('會員b'))).items.length, 0);
+  await f.api('/preferences', { token: 'b', data: { accepting: true } });
+  assert.equal((await f.api('/members?q=' + encodeURIComponent('會員b'))).items[0].memberNumber, '20261021002');
+  const id = await f.room();
+  await f.api(`/threads/${id}/block`, { token: 'b', data: { blocked: true } });
+  assert.equal((await f.api('/members?q=' + encodeURIComponent('會員b'))).items.length, 0);
+});
+
+test('member number follows the current canonical account when a card still belongs to its confirmed old identity', async t => {
+  const f = fixture(t);
+  f.sql.prepare("INSERT INTO users(row_id,line_id,name,phone,member_number,member_joined_at,member_date_source) VALUES(?,?,?,?,?,'2000-01-01','legacy_created_at')").run('old-row', OLD, '歷史會員', '0900000099', '20261019077');
+  f.sql.prepare("UPDATE card_contacts SET line_id=?,profile_user_id=?,owner_user_id=? WHERE row_id='card-a'").run(OLD, OLD, OLD);
+  const before = JSON.stringify(['users', 'user_identity_links', 'card_contacts'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all()));
+  for (const sort of ['latest', 'match']) {
+    const result = await f.api('/members?sort=' + sort + '&q=' + encodeURIComponent('會員a'), { token: 'b' });
+    assert.equal(result.items.length, 1); assert.equal(result.items[0].memberNumber, '20261021001');
+    assert.doesNotMatch(JSON.stringify(result), /20261019077|0900000099|2000-01-01|U[ad]{32}/);
+  }
+  for (const token of ['a', 'old']) assert.ok(!(await f.api('/members', { token })).items.some(item => item.handle === 'card-a'));
+  assert.equal(JSON.stringify(['users', 'user_identity_links', 'card_contacts'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all())), before);
+  assert.equal(f.writes.length, 0);
+});
+
 test('directory background matching fills missing scores, preserves old zero and never sends private fields to AI', async t => {
   const f = fixture(t), old = seedChatScore(f.sql, A, B, { score: 0 });
   f.sql.exec("UPDATE card_contacts SET visibility='private',mobile='secret-mobile',email='secret-email',services='secret-services',tags='secret-tags' WHERE row_id='card-c'");

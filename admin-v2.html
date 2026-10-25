@@ -3456,6 +3456,7 @@
               <button type="button" onclick="openDistributorCrm('${escapeHTML(id)}')" class="crm-action-btn">CRM</button>
               ${role==='reward'&&adminRole==='admin'?`<button type="button" onclick="window.openRewardUnitEditor('${escapeHTML(id)}')" class="crm-action-btn">贈點單位上架</button>`:''}
               ${adminRole==='admin'?`<button type="button" onclick="window.openRewardApplicationReview('${escapeHTML(id)}')" class="crm-action-btn">申請與合約</button>`:''}
+              ${adminRole==='admin'?`<button type="button" onclick="window.openPartnerContracts('${escapeHTML(id)}')" class="crm-action-btn">共創制度</button>`:''}
               <select onchange="updateRole('${escapeHTML(id)}', this.value, this)" ${adminRole !== 'admin' || isHardAdminAccount(id, u) ? 'disabled' : ''} class="crm-role-select outline-none focus:ring-2 focus:ring-blue-500">
                 ${role === 'admin' || role === 'tenant' ? `<option value="${role}" selected>${escapeHTML(getRoleLabel(role))}</option>` : ''}
                 <option value="user" ${role==='user'?'selected':''}>一般</option>
@@ -4625,6 +4626,7 @@
   <link rel="stylesheet" href="css/reward-unit-editor.css?v=1">
   <script src="js/modules/reward-unit-editor.js?v=1"></script>
   <script src="js/modules/reward-applications-entry.js?v=2"></script>
+<script src="js/modules/partner-contracts-entry.js?v=1"></script>
 </body>
 </html>
 

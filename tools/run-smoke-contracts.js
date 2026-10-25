@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/partner-bonus-v2.test.mjs',
   'test/reward-applications.test.mjs',
   'test/discount-applications.test.mjs',
   'test/redeem-catalog.test.mjs',
