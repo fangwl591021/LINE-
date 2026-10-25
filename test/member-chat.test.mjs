@@ -404,7 +404,7 @@ test('coupon revoked between read and redemption write does not report success o
   assert.equal(f.sql.prepare('SELECT count(*) n FROM exchange_zone_coupon_redemptions').get().n, 0);
 });
 
-test('peer card POP is read-only, public reviewed latest own card only, and cannot bypass a block or conversation', async t => {
+test('peer card POP reads public own cards regardless of review and cannot bypass a block or conversation', async t => {
   const f = fixture(t), id = await f.room(), path = `/threads/${id}/card`;
   f.sql.exec("UPDATE card_contacts SET email='public@example.com',website='https://example.com',custom_config='{\"buttons\":[{\"label\":\"壞網址\",\"url\":\"javascript:alert(1)\"}]}' WHERE row_id='card-b'");
   const card = await f.api(path); assert.equal(card.card.name, '會員b');
@@ -412,13 +412,42 @@ test('peer card POP is read-only, public reviewed latest own card only, and cann
   assert.doesNotMatch(JSON.stringify(card), /javascript|row_id|custom_config|U[a-f]{32}/);
   assert.equal((await f.api(path, { token: 'c' })).status, 404);
   assert.equal((await f.api(path, { data: {} })).status, 405);
-  for (const [field, value] of [['visibility','private'],['ai_review_status','pending'],['source_type','private_import'],['archived_at','2026-09-24']]) {
+  for (const review of ['pending', 'failed', '', null]) {
+    f.sql.prepare("UPDATE card_contacts SET ai_review_status=? WHERE row_id='card-b'").run(review);
+    assert.equal((await f.api(path)).card.name, '會員b');
+  }
+  for (const [field, value] of [['visibility','private'],['source_type','private_import'],['archived_at','2026-09-24'],['merged_into_row_id','merged-card'],['source_type','video_profile']]) {
     f.sql.prepare(`UPDATE card_contacts SET ${field}=? WHERE row_id='card-b'`).run(value);
-    assert.equal((await f.api(path)).status, 404);
-    f.sql.exec("UPDATE card_contacts SET visibility='public',ai_review_status='passed',source_type='self_profile',archived_at='' WHERE row_id='card-b'");
+    const unavailable = await f.api(path);
+    assert.equal(unavailable.status, 404); assert.equal(unavailable.error, '對方目前沒有可查看的公開名片');
+    f.sql.exec("UPDATE card_contacts SET visibility='public',ai_review_status='passed',source_type='self_profile',archived_at='',merged_into_row_id='' WHERE row_id='card-b'");
   }
   await f.api(`/threads/${id}/block`, { token: 'b', data: { blocked: true } });
   assert.equal((await f.api(path)).status, 403);
+});
+
+test('peer card POP selects the latest public version ahead of newer private, archived or merged versions', async t => {
+  const f = fixture(t), id = await f.room(), path = `/threads/${id}/card`;
+  f.sql.exec("UPDATE card_contacts SET name='公開待審標準版',ai_review_status='pending',pool_eligible=0 WHERE row_id='card-b'");
+  const add = f.sql.prepare(`INSERT INTO card_contacts(row_id,line_id,profile_user_id,owner_user_id,source_type,visibility,ai_review_status,name,updated_at,archived_at,merged_into_row_id)
+    VALUES(?,?,?,?,'self_profile',?,?,?,?,?,?)`);
+  add.run('new-private', B, B, B, 'private', 'pending', '私人方版不能外洩', '2026-10-25 12:00:00', '', '');
+  add.run('new-archived', B, B, B, 'public', 'passed', '封存不能顯示', '2026-10-25 13:00:00', 'archived', '');
+  add.run('new-merged', B, B, B, 'public', 'passed', '合併不能顯示', '2026-10-25 14:00:00', '', 'merged');
+  const before = JSON.stringify(['users', 'user_identity_links', 'card_contacts', 'member_chat_messages', 'points_ledger'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all()));
+  const writes = f.writes.length;
+  const result = await f.api(path);
+  assert.equal(result.card.name, '公開待審標準版');
+  assert.doesNotMatch(JSON.stringify(result), /私人方版|封存不能|合併不能|avatar_line_id|line_id|row_id|ai_review_status|U[abc]{32}/);
+  assert.equal(JSON.stringify(['users', 'user_identity_links', 'card_contacts', 'member_chat_messages', 'points_ledger'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all())), before);
+  assert.equal(f.writes.length, writes, 'viewing a public card never writes');
+  add.run('public-a', B, B, B, 'public', 'pending', '較新公開甲', '2026-10-24 10:00:00', '', '');
+  add.run('public-z', B, B, B, 'public', 'failed', '較新公開乙', '2026-10-24 10:00:00', '', '');
+  assert.equal((await f.api(path)).card.name, '較新公開乙', 'public ties retain row_id ordering');
+  f.sql.exec("UPDATE card_contacts SET visibility='private' WHERE row_id IN ('card-b','public-a','public-z')");
+  const unavailable = await f.api(path);
+  assert.equal(unavailable.status, 404); assert.equal(unavailable.code, 'CARD_UNAVAILABLE');
+  assert.doesNotMatch(JSON.stringify(unavailable), /私人方版|封存不能|合併不能/);
 });
 
 test('historically expired published posts remain readable; hidden/archive still unavailable', async t => {

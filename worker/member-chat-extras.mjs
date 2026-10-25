@@ -28,9 +28,9 @@ export async function memberScores(db, actor, members, cardMemberJoin) {
 
 export async function peerCard(db, room, cardMemberJoin, ownCard) {
   const row = await db.prepare(`SELECT c.* FROM card_contacts c JOIN users u ON ${cardMemberJoin('c', 'u')}
-    WHERE u.row_id=? AND ${ownCard('c')} ORDER BY c.updated_at DESC,c.row_id DESC LIMIT 1`).bind(room.peer).first();
-  // Check the latest own card, not an older public revision of a now-private card.
-  if (!row || row.visibility !== 'public' || row.ai_review_status !== 'passed') return null;
+    WHERE u.row_id=? AND ${ownCard('c')} AND c.visibility='public' ORDER BY c.updated_at DESC,c.row_id DESC LIMIT 1`).bind(room.peer).first();
+  // This read-only POP selects a public version independently of private drafts or AI review.
+  if (!row) return null;
   const projection = { card_available: 1 };
   for (const field of ['name','company_name','title','department','services','image_url','mobile','office_phone','email','website','socials','address','custom_config']) projection['card_' + field] = row[field];
   return publicCard(projection);
