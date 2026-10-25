@@ -124,8 +124,8 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
   assert.match(ui, /member-chat.css\?v=11/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=15/g) || []).length, 1, 'both entry points share the same lazy chat loader');
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.26/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=16/g) || []).length, 1, 'both entry points share the same lazy chat loader');
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.27/);
 });
 
 test('exchange navigation is a single fixed top tablist with an optional embedded private-chat container', () => {
@@ -175,7 +175,10 @@ test('chat toolbar relocates a single refresh control and preserves its retry be
   assert.ok(ui.includes("else if (view === 'members') $('.mc-search-tools').append(refreshButton)"));
   assert.ok(ui.includes("else $('header').insertBefore(refreshButton, $('[data-action=\"close\"]'))"));
   assert.ok(ui.includes("$('.mc-peer strong').title = result.peer.name"));
-  assert.match(ui, /action === 'refresh'\) \{ event\.preventDefault\(\); if \(!ready\) await initialize\(\); else await refresh\(\)/);
+  const refreshAction = ui.slice(ui.indexOf("action === 'refresh')"), ui.indexOf("else if (action === 'open')"));
+  assert.match(refreshAction, /event\.preventDefault\(\)/);
+  assert.match(refreshAction, /if \(!ready\) await initialize\(\)/);
+  assert.match(refreshAction, /else\s*\{[^}]*await refresh\(\); schedule\(ticket\)/);
 });
 
 test('short conversation screens shrink the message list and keep long names bounded', () => {
