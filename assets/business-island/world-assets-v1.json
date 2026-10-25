@@ -1,0 +1,51 @@
+[
+  {
+    "id": "food",
+    "file": "food-v1.webp",
+    "source": "exec-ee6ac7ef-d15b-4058-9782-8161c94c9e88.png",
+    "generator": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: production game environment cutout for a mobile vertical business archipelago. Generate ONE complete miniature isometric island, seen from a consistent elevated 45-degree camera, in beautifully detailed premium stylized 3D diorama/clay-render style, warm ivory architecture, lush faceted foliage, terracotta, turquoise accents, sunny soft shadows, tiny architectural details matching the reference's craft quality. The entire island's rocky base, sandy edge and wood landing dock must fit inside a square canvas with at least 8% transparent margin. Genuinely transparent background outside the island; no ocean rectangle, no sky, no ground plane. Island fills about 84% width. A clear cream winding plaza/path crosses front and center with room for moving characters added later. No people, no boats, no text, no lettering, no labels, no logos, no UI, no dice. This is a complete final environment asset, not an icon or a mockup. Image 1 is only a STYLE reference, do not copy its layout.\nTheme FOOD island: a lively Taiwanese food street plaza with three small restaurant/cafe/bakery buildings, striped awnings, outdoor tables, dumpling/bread/coffee display shapes, a small vegetable garden, warm orange roof, pretty potted flowers, stone steps and a small dock."
+  },
+  {
+    "id": "lodging",
+    "file": "lodging-v1.webp",
+    "source": "exec-85b643e6-cf16-4f99-8957-a58c2d6585c5.png",
+    "generator": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: production game environment cutout for a mobile vertical business archipelago. Generate ONE complete miniature isometric island, seen from a consistent elevated 45-degree camera, in beautifully detailed premium stylized 3D diorama/clay-render style, warm ivory architecture, lush faceted foliage, terracotta, turquoise accents, sunny soft shadows, tiny architectural details matching the reference's craft quality. The entire island's rocky base, sandy edge and wood landing dock must fit inside a square canvas with at least 8% transparent margin. Genuinely transparent background outside the island; no ocean rectangle, no sky, no ground plane. Island fills about 84% width. A clear cream winding plaza/path crosses front and center with room for moving characters added later. No people, no boats, no text, no lettering, no labels, no logos, no UI, no dice. This is a complete final environment asset, not an icon or a mockup. Image 1 is only a STYLE reference, do not copy its layout.\nTheme LODGING island: a coastal boutique inn and guesthouse courtyard, terracotta hotel roofs, balconies and shutters, palms, sun loungers and a clearly visible oval turquoise swimming pool centered in the front courtyard (water will be animated later), wooden dock and stone terraces."
+  },
+  {
+    "id": "leisure",
+    "file": "leisure-v1.webp",
+    "source": "exec-2a6aed7b-2ca8-4081-ad69-846b32c239b2.png",
+    "generator": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: production game environment cutout for a mobile vertical business archipelago. Generate ONE complete miniature isometric island, seen from a consistent elevated 45-degree camera, in beautifully detailed premium stylized 3D diorama/clay-render style, warm ivory architecture, lush faceted foliage, terracotta, turquoise accents, sunny soft shadows, tiny architectural details matching the reference's craft quality. The entire island's rocky base, sandy edge and wood landing dock must fit inside a square canvas with at least 8% transparent margin. Genuinely transparent background outside the island; no ocean rectangle, no sky, no ground plane. Island fills about 84% width. A clear cream winding plaza/path crosses front and center with room for moving characters added later. No people, no boats, no text, no lettering, no labels, no logos, no UI, no dice. This is a complete final environment asset, not an icon or a mockup. Image 1 is only a STYLE reference, do not copy its layout.\nTheme LEISURE/TRAVEL island: a scenic garden with visitor pavilion, an elegant miniature ferris wheel in the rear, forest hiking trail, tiny observatory/lookout tower, picnic lawn, footbridge and a quiet round fountain/pool at front center, inviting resort atmosphere."
+  },
+  {
+    "id": "shopping",
+    "file": "shopping-v1.webp",
+    "source": "exec-3c102e60-1cf6-47a1-a917-c8a0a90be9f4.png",
+    "generator": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: final production game environment cutout for a mobile vertical business archipelago. Generate ONE complete miniature isometric island, elevated 45-degree camera, beautifully detailed premium stylized 3D diorama, warm ivory architecture, lush faceted foliage, terracotta roofs, turquoise accents, sunny soft shadows and finely crafted miniature props matching the reference's craft quality. Whole island rocky base, shore and small wood landing dock fully visible, centered on square canvas. Genuinely transparent background outside the island with transparent margin, no rectangular ocean or sky. Island fills 84% width. Winding cream plaza/path through front and center left empty for animated people added by code. No people, no boats, no text, no lettering, no logos, no UI, no dice. Image1 is style reference only; make a different themed island.\nTheme SHOPPING: an elegant open-air market square with five small retail boutiques, colorful striped market stalls, unlettered shop windows with clothing/books/flowers/ceramics, gift stalls, shopping arcade, leafy square, a tiny central round fountain, wooden arrival dock."
+  },
+  {
+    "id": "mobility",
+    "file": "mobility-v1.webp",
+    "source": "exec-7d53a8d5-06fe-4989-a959-7b110f9e8203.png",
+    "generator": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: final production game environment cutout for a mobile vertical business archipelago. Generate ONE complete miniature isometric island, elevated 45-degree camera, beautifully detailed premium stylized 3D diorama, warm ivory architecture, lush faceted foliage, terracotta roofs, turquoise accents, sunny soft shadows and finely crafted miniature props matching the reference's craft quality. Whole island rocky base, shore and small wood landing dock fully visible, centered on square canvas. Genuinely transparent background outside the island with transparent margin, no rectangular ocean or sky. Island fills 84% width. Winding cream plaza/path through front and center left empty for animated people added by code. No people, no boats, no text, no lettering, no logos, no UI, no dice. Image1 is style reference only; make a different themed island.\nTheme MOBILITY / TRANSPORT: a beautiful miniature waterfront transport terminal, small ivory train station with teal roof and a parked toy train, curved mini road with a bus and tiny taxi, bicycle racks, harbor lighthouse, accessible stone plaza and boarding jetty. No moving vehicles or people baked into the asset."
+  },
+  {
+    "id": "services",
+    "file": "services-v1.webp",
+    "source": "exec-6daa5f1f-d996-484d-b3d4-3698902263aa.png",
+    "generator": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: final production game environment cutout for a mobile vertical business archipelago. Generate ONE complete miniature isometric island, elevated 45-degree camera, beautifully detailed premium stylized 3D diorama, warm ivory architecture, lush faceted foliage, terracotta roofs, turquoise accents, sunny soft shadows and finely crafted miniature props matching the reference's craft quality. Whole island rocky base, shore and small wood landing dock fully visible, centered on square canvas. Genuinely transparent background outside the island with transparent margin, no rectangular ocean or sky. Island fills 84% width. Winding cream plaza/path through front and center left empty for animated people added by code. No people, no boats, no text, no lettering, no logos, no UI, no dice. Image1 is style reference only; make a different themed island.\nTheme PROFESSIONAL SERVICES: warm contemporary coworking pavilions and consulting studios arranged around an elegant courtyard, cafe pergola, teal glass details, miniature meeting table visible through windows, small garden clinic/spa pavilion, one round ornamental pool in front, flowerbeds and a small landing pier."
+  },
+  {
+    "id": "manufacturing",
+    "file": "manufacturing-v1.webp",
+    "source": "exec-b9389d9c-33fe-4139-88da-66bd970ba438.png",
+    "generator": "built-in image_gen",
+    "prompt": "Use case: stylized-concept. Asset type: final production game environment cutout for a mobile vertical business archipelago. Generate ONE complete miniature isometric island, elevated 45-degree camera, beautifully detailed premium stylized 3D diorama, warm ivory architecture, lush faceted foliage, terracotta roofs, turquoise accents, sunny soft shadows and finely crafted miniature props matching the reference's craft quality. Whole island rocky base, shore and small wood landing dock fully visible, centered on square canvas. Genuinely transparent background outside the island with transparent margin, no rectangular ocean or sky. Island fills 84% width. Winding cream plaza/path through front and center left empty for animated people added by code. No people, no boats, no text, no lettering, no logos, no UI, no dice. Image1 is style reference only; make a different themed island.\nTheme MANUFACTURING: a clean beautiful artisan/industrial innovation island with small terracotta sawtooth workshop roofs, solar panels, craft factory with large windows showing miniature machinery, organized timber/ceramic material crates, small warehouse and crane, trees and a wide cream safe pedestrian plaza plus shipping jetty. Friendly eco-industrial design, no smoke or pollution."
+  }
+]

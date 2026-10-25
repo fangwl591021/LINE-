@@ -20,7 +20,7 @@ body.business-island-page #page-business-island {margin:0!important}
 }
 #page-business-island *, .bi-card-dialog, .bi-card-dialog * {box-sizing:border-box}
 #page-business-island [hidden],.bi-card-dialog [hidden] {display:none!important}
-#page-business-island .bi-shell {width:100%;max-width:1000px;margin:0 auto;background:var(--bi-paper);border:1px solid var(--bi-line);border-radius:24px;overflow:hidden;box-shadow:0 16px 44px #173b2d12}
+#page-business-island .bi-shell {width:100%;max-width:1000px;margin:0 auto;background:var(--bi-paper);border:1px solid var(--bi-line);border-radius:24px;overflow:visible;box-shadow:0 16px 44px #173b2d12}
 #page-business-island .bi-header {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:16px 22px;background:var(--bi-cream);border-bottom:1px solid var(--bi-line)}
 #page-business-island .bi-brand {display:flex;align-items:center;gap:12px;min-width:0;flex:1}
 #page-business-island .bi-brand>div {min-width:0}
@@ -37,33 +37,116 @@ body.business-island-page #page-business-island {margin:0!important}
 #page-business-island .bi-tabs button {flex:1;min-width:0;border-color:transparent;background:transparent;font-size:15px;font-weight:700;white-space:nowrap}
 #page-business-island .bi-tabs button[aria-pressed=true] {color:#fffdf5;background:var(--bi-green);border-color:var(--bi-green);box-shadow:0 4px 12px #23624c1c}
 #page-business-island .bi-layout {display:flex;position:relative;flex-direction:column;gap:0;min-width:0}
-#page-business-island .bi-map {width:100%;min-width:0;max-width:100%;overflow:hidden;position:relative;background:linear-gradient(165deg,#d7eee3,#77b6b9 70%,#579da7);border-bottom:1px solid var(--bi-line);isolation:isolate}
-#page-business-island .bi-stage {position:relative;width:100%;min-width:0;aspect-ratio:16/9;min-height:230px;background:radial-gradient(ellipse at 55% 35%,#f5f5da50,transparent 60%),linear-gradient(155deg,#b9dfd4,#79b6b9 80%);isolation:isolate}
-#page-business-island .bi-backdrop {position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;object-position:center;user-select:none;pointer-events:none}
-#page-business-island .bi-hotspot {position:absolute;z-index:3;transform:translate(-50%,-50%);max-width:190px;min-height:46px;padding:10px 18px;border:1px solid #f9e7bc;background:#fffaf0ed;color:#244b3c;font-weight:750;font-size:15px;white-space:nowrap;border-radius:999px;box-shadow:0 5px 18px #173b3433;backdrop-filter:blur(5px)}
-#page-business-island .bi-hotspot::after {content:"";position:absolute;left:50%;top:100%;width:9px;height:9px;background:inherit;border-right:1px solid #f9e7bc;border-bottom:1px solid #f9e7bc;transform:translate(-50%,-50%) rotate(45deg)}
-#page-business-island .bi-hotspot:hover {background:#fffdf5;box-shadow:0 7px 24px #173b3444}
-#page-business-island .bi-hotspot[aria-pressed=true],#page-business-island .bi-hotspot.is-active {background:var(--bi-green);border-color:#f4dfae;color:#fff9e9;box-shadow:0 0 0 4px #fff9e940,0 7px 24px #173b3444}
-#page-business-island .bi-hotspot[data-zone=people] {left:18%;top:14%}
-#page-business-island .bi-hotspot[data-zone=board] {left:50%;top:14%}
-#page-business-island .bi-hotspot[data-zone=home] {left:82%;top:14%}
-#page-business-island .bi-people-pins {position:absolute;inset:0;z-index:2;pointer-events:none}
-#page-business-island .bi-pin {position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;min-width:54px;max-width:88px;min-height:64px;padding:3px 4px;border:0;border-radius:14px;background:transparent;transform:translate(-50%,-50%);pointer-events:auto;filter:drop-shadow(0 3px 4px #183f3655)}
+#page-business-island .bi-map {width:100%;min-width:0;max-width:100%;overflow:hidden;position:relative;background:#82c6cf;border-bottom:1px solid var(--bi-line);isolation:isolate}
+#page-business-island .bi-stage {position:relative;width:100%;min-width:0;min-height:0;background:linear-gradient(160deg,#a1dcd9 0%,#76bdcb 32%,#92d2d0 65%,#69b4c5 100%);isolation:isolate}
+#page-business-island .bi-world {position:relative;width:100%;min-width:0;background:repeating-linear-gradient(170deg,transparent 0 108px,#e7faf21c 110px 112px,transparent 114px 168px)}
+#page-business-island .bi-world-island {--bi-island-accent:#476e48;--bi-art-size:490px;--bi-art-top:96px;position:relative;width:100%;height:600px;min-width:0;isolation:isolate;scroll-margin-top:130px}
+#page-business-island .bi-world-island::before,#page-business-island .bi-world-island::after {content:"";position:absolute;pointer-events:none;border:2px solid #e7faf142;border-radius:50%;width:83%;height:30%;left:8.5%;top:51%;transform:rotate(-8deg);z-index:-1}
+#page-business-island .bi-world-island::after {width:91%;height:35%;left:4.5%;top:49%;border-color:#e7faf122}
+#page-business-island .bi-world-island[data-island=lodging] {--bi-island-accent:#6b5890}
+#page-business-island .bi-world-island[data-island=leisure] {--bi-island-accent:#397e72}
+#page-business-island .bi-world-island[data-island=shopping] {--bi-island-accent:#ac7043}
+#page-business-island .bi-world-island[data-island=mobility] {--bi-island-accent:#417799}
+#page-business-island .bi-world-island[data-island=services] {--bi-island-accent:#6e7261}
+#page-business-island .bi-world-island[data-island=manufacturing] {--bi-island-accent:#6d7185}
+#page-business-island .bi-world-title {position:relative;z-index:5;display:table;max-width:calc(100% - 28px);margin:0 auto;padding:0;border:1px solid #fff7dba6;border-radius:999px;background:#fffaf0ed;box-shadow:0 7px 20px #23646d22;color:var(--bi-island-accent);font-size:23px;font-weight:800;line-height:1.4;text-align:center;transform:translateY(14px)}
+#page-business-island button.bi-world-category {display:block;min-height:44px;max-width:100%;padding:8px 23px;border:0;border-radius:999px;background:transparent;color:inherit;font-size:inherit;font-weight:inherit;line-height:1.4}
+#page-business-island button.bi-world-category:hover {background:#fffdf5}
+#page-business-island .bi-world-caption {position:relative;z-index:5;margin:20px 20px 0;color:#245561;font-size:13px;font-weight:650;line-height:1.5;text-align:center;text-wrap:balance}
+#page-business-island .bi-world-art {position:absolute;z-index:0;top:96px;left:50%;width:100%;max-width:900px;height:calc(100% - 110px);object-fit:contain;object-position:center;transform:translateX(-50%);filter:drop-shadow(0 17px 11px #225e7333);user-select:none;pointer-events:none}
+#page-business-island .bi-world-members {position:absolute;top:0;left:50%;width:var(--bi-art-size);max-width:100%;height:100%;z-index:5;pointer-events:none;transform:translateX(-50%)}
+#page-business-island .bi-pin {position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;width:88px;min-width:44px;max-width:88px;min-height:64px;padding:3px 4px;border:0;border-radius:14px;background:transparent;transform:translate(-50%,-50%);pointer-events:auto;filter:drop-shadow(0 3px 4px #183f3655)}
 #page-business-island .bi-pin:hover {background:#fffdf54d;border-color:transparent}
 #page-business-island .bi-pin>img,#page-business-island .bi-pin>.bi-avatar {display:grid;place-items:center;flex:none;width:44px;height:44px;border:3px solid #fffdf5;border-radius:50%;background:#e0eee1;color:var(--bi-green-deep);object-fit:cover;overflow:hidden;font-size:20px;font-weight:800}
 #page-business-island .bi-pin>span:not(.bi-avatar) {display:block;max-width:100%;padding:2px 7px;border-radius:999px;background:#214f40ed;color:#fffdf5;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:650;line-height:1.5}
 #page-business-island .bi-pin[aria-pressed=true]>img,#page-business-island .bi-pin[aria-pressed=true]>.bi-avatar {border-color:#f6d881;box-shadow:0 0 0 3px #fffdf580}
+#page-business-island .bi-world-arrival {position:absolute;z-index:9;right:4%;top:60%;display:grid;grid-template-columns:36px minmax(0,1fr);align-items:start;gap:9px;width:62%;max-width:360px;min-width:0;padding:12px;border:1px solid #f4e3b8;border-radius:18px;background:linear-gradient(145deg,#fffdf5f5,#f2f8eaf2);box-shadow:0 9px 25px #194f4938;backdrop-filter:blur(10px);overflow-wrap:anywhere}
+#page-business-island .bi-world-arrival>.bi-avatar {width:36px;height:36px;flex-basis:36px;font-size:18px;border:2px solid #fff4cd}
+#page-business-island .bi-world-arrival-copy {min-width:0}
+#page-business-island .bi-world-arrival h4 {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:0;color:var(--bi-green-deep);font-size:16px;font-weight:800;line-height:1.4}
+#page-business-island .bi-world-arrival p {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:3px 0 0;color:#5a7162;font-size:12px;line-height:1.45}
+#page-business-island .bi-world-arrival-actions {grid-column:1/-1;display:flex;gap:7px;min-width:0}
+#page-business-island .bi-world-arrival-actions button {flex:1;min-width:0;min-height:44px;padding:8px 6px;font-size:13px;font-weight:700;line-height:1.4}
+#page-business-island .bi-world-arrival-actions button:first-child {flex:1.25}
+#page-business-island .bi-world-arrival-actions button:last-child {border-color:var(--bi-green);background:var(--bi-green);color:#fffdf5}
+/* Small clay-style residents and boats are decorative; only member pins are interactive. */
+#page-business-island .bi-world-boat {position:absolute;z-index:2;left:9%;bottom:9px;width:94px;height:58px;pointer-events:none;filter:drop-shadow(0 7px 3px #205a702b);animation:bi-boat-sail 9s ease-in-out infinite alternate;animation-play-state:paused}
+#page-business-island .bi-boat-hull {position:absolute;left:3px;bottom:6px;width:87px;height:27px;border-radius:10% 17% 48% 44%;background:linear-gradient(170deg,#f8b266 0 18%,#d96f45 20% 64%,#8b4b3c 66%);box-shadow:inset 0 -4px 4px #673b3c33;transform:skewX(-10deg)}
+#page-business-island .bi-boat-hull::before {content:"";position:absolute;left:7px;right:8px;top:4px;height:4px;background:#fff2c4;border-radius:50%}
+#page-business-island .bi-boat-cabin {position:absolute;left:30px;top:5px;width:36px;height:30px;border-radius:5px 7px 2px 2px;background:linear-gradient(100deg,#fff7df 0 70%,#dbd1ac 71%);box-shadow:0 -4px 0 #da8351,2px 2px 3px #784e3533}
+#page-business-island .bi-boat-cabin::after {content:"";position:absolute;left:5px;right:5px;top:7px;height:10px;background:linear-gradient(90deg,#679ea5 0 43%,#f9f0d8 44% 55%,#679ea5 56%);border-radius:3px}
+#page-business-island .bi-boat-wake {position:absolute;right:82px;top:35px;width:42px;height:13px;border-top:2px solid #effffa99;border-bottom:2px solid #effffa66;border-radius:50%;transform:rotate(5deg);animation:bi-wake 1.4s ease-out infinite;animation-play-state:paused}
+#page-business-island .bi-pool {--bi-water-x:.026;--bi-water-y:.505;--bi-water-width:.21;--bi-water-height:.083;position:absolute;z-index:1;left:calc(50% + var(--bi-art-size) * var(--bi-water-x));top:calc(var(--bi-art-top) + var(--bi-art-size) * var(--bi-water-y));width:calc(var(--bi-art-size) * var(--bi-water-width));height:calc(var(--bi-art-size) * var(--bi-water-height));border:0;border-radius:50%;background:transparent;box-shadow:none;transform:translate(-50%,-50%);pointer-events:none;overflow:hidden}
+#page-business-island .bi-world-island:not(:is([data-island=lodging],[data-island=leisure],[data-island=shopping],[data-island=services])) .bi-pool {display:none}
+#page-business-island .bi-world-island[data-island=leisure] .bi-pool {--bi-water-x:-.003;--bi-water-y:.60;--bi-water-width:.13;--bi-water-height:.043}
+#page-business-island .bi-world-island[data-island=shopping] .bi-pool {--bi-water-x:.021;--bi-water-y:.455;--bi-water-width:.09;--bi-water-height:.032}
+#page-business-island .bi-world-island[data-island=services] .bi-pool {--bi-water-x:.056;--bi-water-y:.503;--bi-water-width:.15;--bi-water-height:.051}
+#page-business-island .bi-pool-water {position:absolute;inset:0;border-radius:50%;background:radial-gradient(ellipse at 40% 35%,#c2f3e533,#55b8c400 80%);mix-blend-mode:screen}
+#page-business-island .bi-pool-ripple {position:absolute;left:18%;top:20%;width:25%;height:35%;border:1px solid #f1fffbbd;border-radius:50%;animation:bi-pool-ripple 2.8s ease-out infinite;animation-play-state:paused}
+#page-business-island .bi-pool-ripple:last-child {left:58%;top:50%;animation-delay:-1.4s}
+#page-business-island .bi-swimmer {position:absolute;left:25%;top:33%;width:19%;height:20%;border-radius:50%;background:linear-gradient(90deg,#edbb8c 0 27%,#fff0c3 30% 43%,#e87b67 46%);box-shadow:0 2px 1px #248d9e33;animation:bi-swim 4.5s ease-in-out infinite alternate;animation-play-state:paused}
+#page-business-island .bi-world-island:not([data-island=lodging]) .bi-swimmer {display:none}
+#page-business-island .bi-swimmer:nth-of-type(3) {left:57%;top:58%;width:16%;background:linear-gradient(90deg,#dbad82 0 29%,#f9e7c1 30% 43%,#57789f 46%);animation-delay:-2s;animation-direction:alternate-reverse}
+#page-business-island .bi-walker {--bi-person-scale:.7;position:absolute;z-index:3;left:34%;top:44%;width:30px;height:60px;pointer-events:none;transform:scale(var(--bi-person-scale));transform-origin:center bottom;animation:bi-wander 6s ease-in-out infinite alternate;animation-play-state:paused}
+#page-business-island .bi-walker:nth-last-child(2) {left:64%;top:62%;--bi-shirt:#da9270;animation-delay:-2.1s;animation-direction:alternate-reverse}
+#page-business-island .bi-walker:last-child {left:46%;top:83%;--bi-shirt:#86a7c0;animation-delay:-4s}
+#page-business-island .bi-walker-shadow,#page-business-island .bi-player-shadow {position:absolute;left:0;bottom:0;width:32px;height:10px;border-radius:50%;background:#244e452e;filter:blur(2px)}
+#page-business-island .bi-walker-head {position:absolute;z-index:3;left:5px;top:0;width:22px;height:23px;border-radius:48% 48% 43% 43%;background:radial-gradient(circle at 34% 37%,#ffe5bf,#dfaf80 80%);box-shadow:inset -3px -2px 3px #9a6c5133,0 2px 0 #93684433}
+#page-business-island .bi-walker-head::before {content:"";position:absolute;left:0;right:0;top:-2px;height:10px;border-radius:70% 60% 22% 20%;background:linear-gradient(100deg,#594d41,#85705a);transform:rotate(-9deg)}
+#page-business-island .bi-walker-body {position:absolute;z-index:2;left:4px;top:22px;width:25px;height:23px;border-radius:9px 9px 5px 5px;background:linear-gradient(100deg,var(--bi-shirt,#e99051),var(--bi-shirt,#e99051) 70%,#6c716844);box-shadow:inset -4px 0 4px #52564733}
+#page-business-island .bi-walker-arm {position:absolute;z-index:1;top:24px;left:0;width:8px;height:21px;border-radius:5px;background:linear-gradient(var(--bi-shirt,#e99051) 0 65%,#edbd91 67%);transform-origin:50% 4px;animation:bi-arm-swing .56s ease-in-out infinite alternate;animation-play-state:paused}
+#page-business-island .bi-walker-arm.is-right {left:26px;animation-direction:alternate-reverse}
+#page-business-island .bi-walker-leg {position:absolute;z-index:1;left:6px;top:42px;width:9px;height:17px;border-radius:3px 3px 4px 4px;background:linear-gradient(#667886 0 74%,#eae5cc 76%);box-shadow:inset -2px 0 2px #354b5833;transform-origin:50% 2px;animation:bi-leg-stride .56s ease-in-out infinite alternate;animation-play-state:paused}
+#page-business-island .bi-walker-leg.is-right {left:19px;animation-direction:alternate-reverse}
+#page-business-island .bi-world-player {position:absolute;z-index:8;left:0;top:0;width:44px;height:68px;pointer-events:none;will-change:transform}
+#page-business-island .bi-player-person {position:absolute;left:5px;top:0;width:34px;height:60px;--bi-shirt:#327c69;filter:drop-shadow(0 2px 1px #183f3633)}
+#page-business-island .bi-player-label {position:absolute;z-index:4;top:59px;left:50%;min-width:29px;padding:1px 6px;border:1px solid #f9eac4;border-radius:9px;background:#194f40;color:#fff6d9;font-size:10px;font-weight:800;line-height:1.4;text-align:center;transform:translateX(-50%)}
+#page-business-island .bi-player-avatar {position:absolute;z-index:5;top:-2px;left:4px;width:25px;height:25px;border:2px solid #fff1c4;border-radius:50%;object-fit:cover;overflow:hidden;background:#e5efda}
+#page-business-island .bi-player-avatar .bi-avatar {width:21px;height:21px;min-width:0;font-size:11px}
+#page-business-island .bi-world-island[data-visible=true] :is(.bi-world-boat,.bi-boat-wake,.bi-swimmer,.bi-pool-ripple,.bi-walker,.bi-walker-arm,.bi-walker-leg),#page-business-island .bi-world-player[data-moving=true] :is(.bi-walker-arm,.bi-walker-leg) {animation-play-state:running}
+#page-business-island .bi-world[data-paused=true] *,#page-business-island .bi-stage[data-paused=true] * {animation-play-state:paused!important}
+@keyframes bi-boat-sail {0%{transform:translate3d(0,0,0) rotate(-6deg)}50%{transform:translate3d(40px,-7px,0) rotate(-2deg)}100%{transform:translate3d(88px,0,0) rotate(4deg)}}
+@keyframes bi-wake {from{opacity:.8;transform:translateX(4px) scale(.7)}to{opacity:.15;transform:translateX(-15px) scale(1.3)}}
+@keyframes bi-pool-ripple {from{transform:scale(.5);opacity:.8}to{transform:scale(2);opacity:0}}
+@keyframes bi-swim {from{transform:translateX(-8px) rotate(-7deg)}to{transform:translateX(10px) rotate(7deg)}}
+@keyframes bi-wander {0%{transform:translate3d(-8px,3px,0) scale(var(--bi-person-scale))}50%{transform:translate3d(7px,-5px,0) scale(var(--bi-person-scale))}100%{transform:translate3d(22px,2px,0) scale(var(--bi-person-scale))}}
+@keyframes bi-arm-swing {from{transform:rotate(-24deg)}to{transform:rotate(25deg)}}
+@keyframes bi-leg-stride {from{transform:rotate(-20deg)}to{transform:rotate(21deg)}}
 #page-business-island .bi-panel {position:relative;width:100%;min-width:0;padding:22px;background:var(--bi-cream)}
-#page-business-island .bi-explore {display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--bi-line);background:linear-gradient(120deg,#eef5e5,#fff7e5)}
-#page-business-island .bi-dice {display:grid;place-items:center;width:64px;height:64px;border:1px solid #d8deca;border-radius:18px;background:#fffdf5;color:var(--bi-green);font-size:58px;line-height:1;box-shadow:0 5px 13px #264b3812;transform-origin:center}
-#page-business-island .bi-dice.is-rolling,#page-business-island .is-rolling .bi-dice {animation:bi-dice-roll .3s ease-in-out infinite alternate}
+#page-business-island .bi-explore {position:sticky;top:0;z-index:25;display:grid;grid-template-columns:128px minmax(0,1fr) auto;align-items:center;gap:12px;padding:13px 22px;border-block:1px solid #d3dfc8;background:#f5f8eeed;backdrop-filter:blur(14px);box-shadow:0 5px 18px #183f3612}
 #page-business-island .bi-explore-copy {min-width:0}
-#page-business-island .bi-explore-copy h2,#page-business-island .bi-explore-copy h3 {margin:0;font-size:19px;line-height:1.4;font-weight:800}
-#page-business-island .bi-explore-copy p {margin:4px 0 0;font-size:13px;line-height:1.6;color:var(--bi-muted);overflow-wrap:anywhere}
-#page-business-island .bi-roll-result {min-width:0;font-size:14px;color:var(--bi-green-deep);font-weight:650;overflow-wrap:anywhere}
-#page-business-island button.bi-roll {min-height:50px;padding:12px 21px;border-color:var(--bi-green);background:var(--bi-green);color:#fffdf5;font-size:16px;font-weight:750}
+#page-business-island .bi-explore-copy h2,#page-business-island .bi-explore-copy h3 {margin:0;font-size:18px;line-height:1.4;font-weight:800}
+#page-business-island .bi-explore-copy p {margin:3px 0 0;font-size:13px;line-height:1.45;color:var(--bi-muted);overflow-wrap:anywhere}
+#page-business-island .bi-explore-copy .bi-roll-result {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--bi-green-deep);font-weight:650}
+#page-business-island button.bi-roll {min-height:46px;padding:11px 18px;border-color:var(--bi-green);background:var(--bi-green);color:#fffdf5;font-size:15px;font-weight:750}
 #page-business-island button.bi-roll:hover {background:var(--bi-green-deep)}
-@keyframes bi-dice-roll {from{transform:rotate(-12deg) scale(.96)}to{transform:rotate(12deg) scale(1.04)}}
+#page-business-island .bi-dice {display:block;min-width:0;width:auto;height:auto;border:0;background:transparent;box-shadow:none}
+#page-business-island .bi-3d-dice-box {display:flex;justify-content:center;gap:16px;padding:7px 2px 6px}
+#page-business-island .bi-3d-dice-scene {--bi-die-size:52px;--bi-die-half:26px;width:var(--bi-die-size);height:var(--bi-die-size);perspective:600px;display:flex;align-items:center;justify-content:center}
+#page-business-island .bi-3d-die {position:relative;width:var(--bi-die-size);height:var(--bi-die-size);transform-style:preserve-3d;transform:rotateX(0deg) rotateY(0deg)}
+#page-business-island .bi-3d-face {position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:3px;padding:9px;border:1px solid #e4dfcf;border-radius:9px;background:linear-gradient(145deg,#fffef9,#e9e8df);box-shadow:inset 0 0 7px #777e721c,0 3px 7px #274c4226;backface-visibility:hidden}
+#page-business-island .bi-3d-face.front {transform:rotateY(0deg) translateZ(var(--bi-die-half))}
+#page-business-island .bi-3d-face.back {transform:rotateY(180deg) translateZ(var(--bi-die-half))}
+#page-business-island .bi-3d-face.right {transform:rotateY(90deg) translateZ(var(--bi-die-half))}
+#page-business-island .bi-3d-face.left {transform:rotateY(-90deg) translateZ(var(--bi-die-half))}
+#page-business-island .bi-3d-face.top {transform:rotateX(90deg) translateZ(var(--bi-die-half))}
+#page-business-island .bi-3d-face.bottom {transform:rotateX(-90deg) translateZ(var(--bi-die-half))}
+#page-business-island .bi-dot {display:block;width:100%;height:100%;border-radius:50%;background:#285c4c;box-shadow:inset 1px 1px 2px #17382e88,0 1px 0 #fff}
+#page-business-island .bi-face-1 .bi-dot {grid-area:2/2;background:#bc6248}
+#page-business-island :is(.bi-face-2,.bi-face-3,.bi-face-4,.bi-face-5,.bi-face-6) .bi-dot:nth-child(1) {grid-area:1/1}
+#page-business-island :is(.bi-face-2,.bi-face-3) .bi-dot:last-child {grid-area:3/3}
+#page-business-island .bi-face-3 .bi-dot:nth-child(2) {grid-area:2/2}
+#page-business-island :is(.bi-face-4,.bi-face-5,.bi-face-6) .bi-dot:nth-child(2) {grid-area:1/3}
+#page-business-island :is(.bi-face-4,.bi-face-5) .bi-dot:nth-child(3) {grid-area:3/1}
+#page-business-island :is(.bi-face-4,.bi-face-5) .bi-dot:nth-child(4) {grid-area:3/3}
+#page-business-island .bi-face-5 .bi-dot:nth-child(5) {grid-area:2/2}
+#page-business-island .bi-face-6 .bi-dot:nth-child(3) {grid-area:2/1}
+#page-business-island .bi-face-6 .bi-dot:nth-child(4) {grid-area:2/3}
+#page-business-island .bi-face-6 .bi-dot:nth-child(5) {grid-area:3/1}
+#page-business-island .bi-face-6 .bi-dot:nth-child(6) {grid-area:3/3}
+#page-business-island .bi-3d-die.rolling {animation:biDiceRoll 1.1s cubic-bezier(.25,.46,.45,.94);will-change:transform}
+#page-business-island .bi-dice-total {display:block;min-height:15px;font-size:11px;font-weight:800;color:var(--bi-green);line-height:1.3;text-align:center}
+@keyframes biDiceRoll {0%{transform:rotateX(0deg) rotateY(0deg) translateY(-28px)}15%{transform:rotateX(180deg) rotateY(90deg) translateY(0)}25%{transform:rotateX(270deg) rotateY(135deg) translateY(-15px)}35%{transform:rotateX(360deg) rotateY(180deg) translateY(0)}50%{transform:rotateX(540deg) rotateY(270deg) translateY(0)}75%{transform:rotateX(630deg) rotateY(315deg) translateY(0)}100%{transform:rotateX(0deg) rotateY(0deg) translateY(0)}}
 #page-business-island .bi-panel-header {display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:6px 10px;margin-bottom:15px}
 #page-business-island .bi-panel-header h2 {margin:0;font-size:21px;line-height:1.4;font-weight:800;letter-spacing:.02em}
 #page-business-island .bi-caption {margin:5px 0 0;color:var(--bi-muted);font-size:13px;line-height:1.7;overflow-wrap:anywhere}
@@ -138,7 +221,18 @@ body.business-island-page #page-business-island {margin:0!important}
 .bi-card-dialog .bi-card-links a:hover {background:#194b3b}
 @media(max-width:700px) {
   #page-business-island .bi-list {grid-template-columns:minmax(0,1fr)}
-  #page-business-island .bi-pin:nth-child(n+9) {display:none}
+  #page-business-island .bi-world-island {--bi-art-size:min(100vw,330px);--bi-art-top:calc(96px + (330px - var(--bi-art-size)) / 2);height:440px}
+  #page-business-island .bi-world-title {font-size:20px}
+  #page-business-island .bi-world-caption {margin-top:20px;font-size:12px}
+  #page-business-island .bi-world-art {top:96px;height:calc(100% - 110px)}
+  #page-business-island .bi-world-arrival {grid-template-columns:30px minmax(0,1fr);gap:7px;padding:10px;border-radius:15px}
+  #page-business-island .bi-world-arrival>.bi-avatar {width:30px;height:30px;flex-basis:30px;font-size:15px}
+  #page-business-island .bi-world-arrival h4 {font-size:14px}
+  #page-business-island .bi-world-arrival p {font-size:11px;line-height:1.4}
+  #page-business-island .bi-world-arrival-actions {gap:6px}
+  #page-business-island .bi-world-arrival-actions button {padding:8px 4px;font-size:12px}
+  #page-business-island .bi-world-boat {left:8%;bottom:4px;width:94px;transform-origin:left bottom;scale:.78}
+  #page-business-island .bi-walker {--bi-person-scale:.55}
   #page-business-island .bi-pin {width:62px;min-width:44px;max-width:62px;min-height:60px;padding:2px}
   #page-business-island .bi-pin>.bi-avatar {width:38px;height:38px;font-size:18px;border-width:2px}
   #page-business-island .bi-pin>span:not(.bi-avatar) {font-size:10px;padding:1px 4px;max-width:58px}
@@ -157,12 +251,15 @@ body.business-island-page #page-business-island {margin:0!important}
   #page-business-island .bi-tabs button {padding:10px 5px;font-size:13px;border-radius:11px}
   #page-business-island .bi-panel {padding:18px 14px 24px}
   #page-business-island .bi-panel-header h2 {font-size:21px}
-  #page-business-island .bi-stage {width:100%;min-width:0;min-height:230px}
-  #page-business-island .bi-hotspot {max-width:31%;min-height:44px;padding:9px 7px;font-size:12px}
-  #page-business-island .bi-explore {grid-template-columns:56px minmax(0,1fr);gap:10px;padding:15px 14px}
-  #page-business-island .bi-dice {width:56px;height:56px;border-radius:15px;font-size:51px}
-  #page-business-island .bi-explore-copy h2,#page-business-island .bi-explore-copy h3 {font-size:18px}
-  #page-business-island button.bi-roll {grid-column:1/-1;width:100%;min-height:50px}
+  #page-business-island .bi-stage {width:100%;min-width:0;min-height:0}
+  #page-business-island .bi-explore {grid-template-columns:100px minmax(0,1fr);gap:6px 10px;padding:6px 12px}
+  #page-business-island .bi-3d-dice-scene {--bi-die-size:42px;--bi-die-half:21px}
+  #page-business-island .bi-3d-dice-box {gap:12px;padding:5px 2px}
+  #page-business-island .bi-3d-face {padding:7px;gap:2px;border-radius:7px}
+  #page-business-island .bi-dice-total {font-size:10px;min-height:13px}
+  #page-business-island .bi-explore-copy h2,#page-business-island .bi-explore-copy h3 {font-size:16px}
+  #page-business-island .bi-explore-copy p {font-size:12px;line-height:1.4;margin-top:2px}
+  #page-business-island button.bi-roll {grid-column:1/-1;width:100%;min-height:44px;padding:9px 12px;font-size:14px}
   #page-business-island .bi-list {gap:12px;max-height:none;overflow:visible;padding:0}
   #page-business-island .bi-member {min-height:82px;padding:14px;gap:10px}
   #page-business-island .bi-member-copy strong {font-size:16px}
@@ -178,4 +275,4 @@ body.business-island-page #page-business-island {margin:0!important}
   .bi-card-dialog .bi-dialog-header h2 {font-size:20px}
   .bi-card-dialog .bi-card-body {padding:18px 15px}
 }
-@media(prefers-reduced-motion:reduce) {#page-business-island button,.bi-card-dialog button {transition:none}#page-business-island .bi-dice.is-rolling,#page-business-island .is-rolling .bi-dice {animation:none}}
+@media(prefers-reduced-motion:reduce) {#page-business-island button,.bi-card-dialog button {transition:none}#page-business-island :is(.bi-world-boat,.bi-boat-wake,.bi-swimmer,.bi-pool-ripple,.bi-walker,.bi-walker-arm,.bi-walker-leg,.bi-3d-die.rolling) {animation:none!important}#page-business-island .bi-world-player {will-change:auto}}
