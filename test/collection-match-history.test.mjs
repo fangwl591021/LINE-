@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { restoreCollectionHistory, scoreNewCollectionMatches, collectionPartnerProfile, PROFILE_KEY } from '../worker/collection-match-history.mjs';
+import { allowDirectoryMatchBatch, DIRECTORY_DAILY_BATCH_LIMIT, nextMatchQuotaReset } from '../worker/matchmaking-quota.mjs';
 
 function fixture(t) {
   const sql=new DatabaseSync(':memory:'); t.after(()=>sql.close());
@@ -37,6 +38,7 @@ test('PROTECTED: mixed existing and new cards send only unscored candidates; com
   const f=fixture(t);f.add('OLD');f.cache('OLD');f.add('NEW');
   const result=await f.run();assert.equal(result.data.processed,1);assert.equal(f.calls.length,1);
   assert.equal(JSON.parse(f.calls[0].messages[1].content).candidates.length,1);
+  assert.equal(f.calls[0].response_format.type,'json_object');assert.match(f.calls[0].messages[0].content,/\bJSON\b/i);
   assert.equal(result.data.cards[0].aiMatch.score,82);assert.equal(result.data.cards[1].aiMatch.score,76);
   assert.equal(result.data.cards[1].aiMatch.basis,'profile');await f.run();assert.equal(f.calls.length,1);
 });
@@ -62,11 +64,25 @@ test('SQL claim guards against score created after the initial read',async t=>{
   f.options.read.getCardHarvestContacts=async()=>{const result=await read();if(once){once=false;f.cache('NEW',{score:88});}return result;};
   await f.run();assert.equal(f.calls.length,0);assert.equal((await f.load()).data[0].aiMatch.score,88);
 });
+
+test('final write preserves a valid score completed by another intent while this model request was pending, including zero',async t=>{
+  for(const score of [91,0]){
+    const f=fixture(t);f.add('NEW');let entered,release;
+    const ready=new Promise(resolve=>{entered=resolve;}),wait=new Promise(resolve=>{release=resolve;});
+    f.respond(async()=>{entered();await wait;return {choices:[{message:{content:'{"scores":[{"index":0,"score":78,"reason":"較晚完成的模型結果不得掩蓋既有分數。"}]}'}}]};});
+    const pending=f.run();await ready;f.cache('NEW',{key:'completed-during-model-request',score});
+    const original=f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE intent_hash=?').get('completed-during-model-request');release();
+    const response=await pending;assert.equal(response.data.processed,0);assert.equal(response.data.cards[0].aiMatch.score,score);
+    assert.deepEqual(f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE intent_hash=?').get('completed-during-model-request'),original);
+    assert.equal(f.sql.prepare('SELECT result_source FROM ai_match_pair_cache WHERE intent_hash=?').get(PROFILE_KEY).result_source,'partner_processing');
+    assert.equal(f.sql.prepare("SELECT count(*) n FROM ai_match_pair_cache WHERE intent_hash=? AND result_source='ai'").get(PROFILE_KEY).n,0);
+  }
+});
 test('provider failure or invalid JSON never fabricates zero and retries are backed off',async t=>{
   const f=fixture(t);f.add('NEW');f.respond(()=>{throw Error('offline');});await f.run();
   assert.equal((await f.load()).data[0].aiMatch.status,'failed');assert.equal((await f.load()).data[0].aiMatch.score,null);
   await f.run();assert.equal(f.calls.length,1);
-  f.sql.exec("UPDATE ai_match_pair_cache SET updated_at=datetime('now','-6 minutes')");
+  f.sql.prepare("UPDATE ai_match_pair_cache SET updated_at=datetime('now','-6 minutes'),reason=?").run(JSON.stringify({version:1,failureCode:'provider',retryAt:new Date(Date.now()-60000).toISOString()}));
   f.respond(()=>({choices:[{message:{content:'{"scores":[{"index":0,"score":999,"reason":"invalid result"}]}'}}]}));await f.run();
   assert.equal(f.calls.length,2);assert.equal((await f.load()).data[0].aiMatch.score,null);
 });
@@ -90,18 +106,102 @@ test('unverified identities are denied without reading or writing',async t=>{
   for(const actor of [null,{userId:'A'},{userId:'A',token:'x',source:'d1_identity_fallback'}])assert.equal((await scoreNewCollectionMatches({...f.options,actor})).success,false);
 });
 
+test('provider and timeout failures store only safe metadata and a real five-minute retry deadline',async t=>{
+  for(const [name,expected] of [['Error','provider'],['AbortError','timeout'],['TimeoutError','timeout']]){
+    const f=fixture(t);f.add('NEW');f.respond(()=>{const error=Error('PRIVATE_PHONE secret-provider-body token=DO_NOT_STORE');error.name=name;throw error;});
+    const started=Date.now(),response=await f.run(),row=f.sql.prepare('SELECT * FROM ai_match_pair_cache').get(),metadata=JSON.parse(row.reason),view=response.data.cards[0].aiMatch;
+    assert.equal(row.result_source,'partner_failed');assert.equal(metadata.failureCode,expected);assert.equal(metadata.version,1);
+    assert.ok(Date.parse(metadata.retryAt)>=started+300000);assert.ok(Date.parse(metadata.retryAt)<=Date.now()+300000);
+    assert.deepEqual(Object.keys(metadata).sort(),['failureCode','retryAt','version']);
+    assert.equal(view.status,'failed');assert.equal(view.failureCode,expected);assert.equal(view.autoEligible,false);assert.equal(view.score,null);assert.equal(view.retryAt,metadata.retryAt);
+    assert.equal(response.data.failureCode,expected);assert.doesNotMatch(JSON.stringify(response),/PRIVATE_PHONE|DO_NOT_STORE|secret-provider-body/);
+    await f.run();assert.equal(f.calls.length,1);
+  }
+});
+
+test('invalid model output is distinguished from transport failure and never supplies a fake score',async t=>{
+  for(const content of ['not-json','{}','{"scores":[{"index":0,"score":"80","reason":"資料看來相當適合合作。"}]}','{"scores":[{"index":0,"score":80,"reason":"資料看來相當適合合作。"},{"index":0,"score":81,"reason":"重複候選結果不應採用。"}]}']){
+    const f=fixture(t);f.add('NEW');f.respond(()=>({choices:[{message:{content}}]}));
+    const response=await f.run(),view=response.data.cards[0].aiMatch;
+    assert.equal(response.data.processed,0);assert.equal(view.score,null);assert.equal(view.status,'failed');assert.equal(view.failureCode,'invalid_response');
+    assert.equal(JSON.parse(f.sql.prepare('SELECT reason FROM ai_match_pair_cache').get().reason).failureCode,'invalid_response');
+  }
+});
+
+test('upstream billing or quota errors are provider failures, never a promised daily local-quota reset',async t=>{
+  const f=fixture(t);f.add('NEW');f.respond(()=>{throw Error('insufficient_quota billing failed: PRIVATE_UPSTREAM_BODY');});
+  const before=Date.now(),response=await f.run(),view=response.data.cards[0].aiMatch;
+  assert.equal(view.status,'failed');assert.equal(view.failureCode,'provider');assert.ok(Date.parse(view.retryAt)>=before+300000);assert.ok(Date.parse(view.retryAt)<=Date.now()+300000);
+  assert.doesNotMatch(JSON.stringify(response),/08:00|PRIVATE_UPSTREAM_BODY|billing|insufficient_quota/);
+});
+
+test('exhausted shared quota is limited until the next UTC day, without a provider request or five-minute retry loop',async t=>{
+  const f=fixture(t);f.add('OLD');f.cache('OLD',{score:0,source:'rules'});f.add('NEW');f.options.rateLimit=async()=>false;
+  const response=await f.run(),view=response.data.cards[1].aiMatch,row=f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE intent_hash=?').get(PROFILE_KEY);
+  assert.equal(f.calls.length,0);assert.equal(view.status,'limited');assert.equal(view.failureCode,'quota');assert.equal(view.autoEligible,false);assert.equal(view.score,null);
+  assert.equal(view.retryAt,nextMatchQuotaReset());assert.match(view.reason,/08:00/);assert.equal(response.data.failureCode,'quota');
+  assert.equal(row.result_source,'partner_limited');assert.equal(JSON.parse(row.reason).failureCode,'quota');assert.equal(response.data.cards[0].aiMatch.score,0);
+  await f.run();assert.equal(f.calls.length,0);
+  const unchanged=f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE intent_hash=?').get(PROFILE_KEY);assert.deepEqual(unchanged,row);
+  f.sql.prepare("UPDATE ai_match_pair_cache SET updated_at=datetime('now','-1 day'),reason=? WHERE intent_hash=?").run(JSON.stringify({version:1,failureCode:'quota',retryAt:new Date(Date.now()-60000).toISOString()}),PROFILE_KEY);
+  f.options.rateLimit=async()=>true;const recovered=await f.run();assert.equal(recovered.data.processed,1);assert.equal(recovered.data.cards[0].aiMatch.score,0);assert.equal(recovered.data.cards[1].aiMatch.score,76);
+});
+
+test('legacy failed cache remains compatible; processing metadata exposes a deadline but never its lease',async t=>{
+  const f=fixture(t);f.add('LEGACY');f.cache('LEGACY',{key:PROFILE_KEY,source:'partner_failed',score:0,date:new Date().toISOString().slice(0,19).replace('T',' ')});
+  const before=f.sql.prepare('SELECT * FROM ai_match_pair_cache').all(),legacy=(await f.load()).data[0].aiMatch;
+  assert.equal(legacy.status,'failed');assert.equal(legacy.failureCode,'provider');assert.equal(legacy.score,null);assert.ok(Number.isFinite(Date.parse(legacy.retryAt)));assert.deepEqual(f.sql.prepare('SELECT * FROM ai_match_pair_cache').all(),before);
+  f.add('PROCESSING');const retryAt=new Date(Date.now()+120000).toISOString();f.cache('PROCESSING',{key:PROFILE_KEY,source:'partner_processing',score:0,date:new Date().toISOString().slice(0,19).replace('T',' ')});
+  f.sql.prepare('UPDATE ai_match_pair_cache SET reason=? WHERE candidate_card_row_id=?').run(JSON.stringify({version:1,lease:'SECRET_LEASE',retryAt}),'PROCESSING');
+  const processing=(await f.load()).data[1].aiMatch;assert.equal(processing.status,'processing');assert.equal(processing.retryAt,retryAt);assert.equal(processing.autoEligible,false);assert.doesNotMatch(JSON.stringify(processing),/SECRET_LEASE/);
+});
+
+test('UTC quota rollover means precisely 08:00 Taipei, including local midnight before reset',()=>{
+  assert.equal(nextMatchQuotaReset(Date.parse('2026-10-25T15:59:59Z')),'2026-10-26T00:00:00.000Z');
+  assert.equal(nextMatchQuotaReset(Date.parse('2026-10-25T20:00:00Z')),'2026-10-26T00:00:00.000Z');
+  assert.equal(nextMatchQuotaReset(Date.parse('2026-12-31T23:59:59Z')),'2027-01-01T00:00:00.000Z');
+});
+
+test('directory sublimit preserves eight shared calls without raising or clearing the existing twenty-call budget',async()=>{
+  const values=new Map(),writes=[],now=Date.parse('2026-10-25T10:00:00Z');let shared=0;
+  const env={ACTMASTER_KV:{get:async key=>values.get(key)||null,put:async(key,value,options)=>{writes.push({key,value,options});values.set(key,value);}}};
+  const consume=async()=>{if(shared>=20)return false;shared++;return true;};
+  for(let i=0;i<DIRECTORY_DAILY_BATCH_LIMIT;i++)assert.equal(await allowDirectoryMatchBatch(env,'SYNTHETIC',consume,now),true);
+  assert.equal(await allowDirectoryMatchBatch(env,'SYNTHETIC',consume,now),false);assert.equal(shared,12);
+  for(let i=0;i<8;i++)assert.equal(await consume(),true);assert.equal(await consume(),false);assert.equal(shared,20);
+  assert.equal(values.get('RL_matchmakeContacts_directory_SYNTHETIC_2026-10-25'),'12');assert.equal(writes.length,12);assert.ok(writes.every(w=>w.options.expirationTtl===86400));
+  assert.equal(await allowDirectoryMatchBatch(env,'SYNTHETIC',consume,now+86400000),false);assert.equal(values.has('RL_matchmakeContacts_directory_SYNTHETIC_2026-10-26'),false);
+});
+
+test('directory quota failures fail closed and never launch an unaccounted model call',async()=>{
+  let shared=0;const consume=async()=>{shared++;return true;};
+  assert.equal(await allowDirectoryMatchBatch({ACTMASTER_KV:{get:async()=>{throw Error('unavailable');}}},'SYNTHETIC',consume),false);assert.equal(shared,0);
+  assert.equal(await allowDirectoryMatchBatch({ACTMASTER_KV:{get:async()=>'-1'}},'SYNTHETIC',consume),false);assert.equal(shared,0);
+  assert.equal(await allowDirectoryMatchBatch({ACTMASTER_KV:{get:async()=>null,put:async()=>{throw Error('unavailable');}}},'SYNTHETIC',consume),false);assert.equal(shared,1);
+  assert.equal(await allowDirectoryMatchBatch({},'SYNTHETIC',consume),true);assert.equal(shared,2);
+});
+
+test('a new directory counter cannot consume the last shared slots already used before deployment',async()=>{
+  const now=Date.parse('2026-10-25T10:00:00Z'),sharedKey='RL_matchmakeContacts_SYNTHETIC_2026-10-25',directoryKey='RL_matchmakeContacts_directory_SYNTHETIC_2026-10-25';
+  const values=new Map([[sharedKey,'18']]);let sharedChecks=0;const writes=[];
+  const env={ACTMASTER_KV:{get:async key=>values.get(key)||null,put:async(key,value)=>{writes.push(key);values.set(key,value);}}};
+  const consume=async()=>{sharedChecks++;const used=Number(values.get(sharedKey)||0);if(used>=20)return false;await env.ACTMASTER_KV.put(sharedKey,String(used+1));return true;};
+  assert.equal(await allowDirectoryMatchBatch(env,'SYNTHETIC',consume,now),false);assert.equal(sharedChecks,0);assert.equal(values.get(sharedKey),'18');assert.equal(values.has(directoryKey),false);assert.deepEqual(writes,[]);
+  assert.equal(await consume(),true);assert.equal(values.get(sharedKey),'19');assert.equal(await consume(),true);assert.equal(values.get(sharedKey),'20');assert.equal(await consume(),false);
+});
+
 const frontend=readFileSync(new URL('../js/modules/collection-match-auto.js',import.meta.url),'utf8');
 test('frontend does not call AI for existing scores, merges only score fields for new cards',async()=>{
   const old={rowId:'OLD',姓名:'keep',aiMatch:{status:'completed',score:82,source:'ai'}},cards=[old];let calls=0;
   const window={currentUserProfile:{userId:'A'},harvestCards:cards,allCards:cards,fetchAPI:async(action,payload,auth)=>{calls++;assert.equal(action,'refreshCardHarvestMatches');assert.equal(auth,true);assert.equal(Object.keys(payload).length,0);return {success:true,data:{processed:1,cards:[{...old,姓名:'do not replace'},{rowId:'NEW',aiMatch:{status:'completed',score:71,source:'ai'}}]}};}};
-  vm.runInNewContext(frontend,{window,document:{hidden:false,getElementById:()=>null}});
+  vm.runInNewContext(frontend,{window,document:{hidden:false,getElementById:id=>id==='card-list'?{getClientRects:()=>[{}]}:null},setTimeout:()=>1,clearTimeout(){}});
   await window.ensureCollectedMatchScores();assert.equal(calls,0);
   cards.push({rowId:'NEW',aiMatch:{score:null,autoEligible:true}});await window.ensureCollectedMatchScores();assert.equal(calls,1);
   assert.equal(window.harvestCards[0].姓名,'keep');assert.equal(window.harvestCards[0].aiMatch.score,82);assert.equal(window.harvestCards[1].aiMatch.score,71);
 });
 test('frontend ignores a response if account switched while waiting',async()=>{
   const original=[{rowId:'NEW',aiMatch:{score:null,autoEligible:true}}];const window={currentUserProfile:{userId:'A'},harvestCards:original,fetchAPI:async()=>{window.currentUserProfile={userId:'B'};return {success:true,data:{processed:1,cards:[{rowId:'NEW',aiMatch:{score:99}}]}};}};
-  vm.runInNewContext(frontend,{window,document:{hidden:false,getElementById:()=>null}});await window.ensureCollectedMatchScores();assert.equal(window.harvestCards,original);
+  vm.runInNewContext(frontend,{window,document:{hidden:false,getElementById:id=>id==='card-list'?{getClientRects:()=>[{}]}:null},setTimeout:()=>1,clearTimeout(){}});await window.ensureCollectedMatchScores();assert.equal(window.harvestCards,original);
 });
 
 test('actual core API unwrap and timeout contract supports background completion',async()=>{
@@ -109,7 +209,7 @@ test('actual core API unwrap and timeout contract supports background completion
   const start=core.indexOf('window.fetchAPI = async function'),end=core.indexOf('// 強效配對機制',start);
   assert.ok(start>0&&end>start);let timeout,posted;
   const window={currentUserProfile:{userId:'A'},harvestCards:[{rowId:'NEW',aiMatch:{score:null,autoEligible:true}}]};
-  const context=vm.createContext({window,document:{hidden:false,getElementById:()=>null},console,AbortController,Config:{WORKER_URL:'https://local.invalid'},setTimeout:(_fn,ms)=>{timeout=ms;return 1;},clearTimeout(){},liff:{isLoggedIn:()=>true,getAccessToken:()=> 'test-token'},fetch:async(_url,init)=>{posted=JSON.parse(init.body);return {ok:true,json:async()=>({success:true,data:{processed:1,cards:[{rowId:'NEW',aiMatch:{status:'completed',score:76,source:'ai'}}]}})};}});
+  const context=vm.createContext({window,document:{hidden:false,getElementById:id=>id==='card-list'?{getClientRects:()=>[{}]}:null},console,AbortController,Config:{WORKER_URL:'https://local.invalid'},setTimeout:(_fn,ms)=>{timeout=ms;return 1;},clearTimeout(){},liff:{isLoggedIn:()=>true,getAccessToken:()=> 'test-token'},fetch:async(_url,init)=>{posted=JSON.parse(init.body);return {ok:true,json:async()=>({success:true,data:{processed:1,cards:[{rowId:'NEW',aiMatch:{status:'completed',score:76,source:'ai'}}]}})};}});
   vm.runInContext(core.slice(start,end),context);vm.runInContext(frontend,context);await window.ensureCollectedMatchScores();
   assert.equal(timeout,45000);assert.equal(posted.payload.lineAccessToken,'test-token');assert.equal(posted.payload.clientOpenAIKey,undefined);
   assert.equal(window.harvestCards[0].aiMatch.score,76);
