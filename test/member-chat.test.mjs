@@ -404,6 +404,91 @@ test('coupon revoked between read and redemption write does not report success o
   assert.equal(f.sql.prepare('SELECT count(*) n FROM exchange_zone_coupon_redemptions').get().n, 0);
 });
 
+test('directory card preview reads only safe public fields without creating a conversation or writing any data', async t => {
+  const f = fixture(t), path = '/members/card-b/card';
+  f.sql.exec("UPDATE card_contacts SET email='public@example.com',website='https://example.com',custom_config='{\"buttons\":[{\"label\":\"壞網址\",\"url\":\"javascript:alert(1)\"}]}' WHERE row_id='card-b'");
+  const tables = ['users', 'user_identity_links', 'card_contacts', 'member_chat_threads', 'member_chat_messages', 'member_chat_preferences', 'points_ledger'];
+  const snapshot = () => JSON.stringify(tables.map(table => f.sql.prepare(`SELECT * FROM ${table}`).all()));
+  const before = snapshot(); let kvCalls = 0;
+  f.env.ACTMASTER_KV = { get: async () => { kvCalls++; }, put: async () => { kvCalls++; } };
+  for (const review of ['passed', 'pending', 'failed', '', null]) {
+    f.sql.prepare("UPDATE card_contacts SET ai_review_status=?,pool_eligible=0 WHERE row_id='card-b'").run(review);
+    const state = snapshot(), result = await f.api(path);
+    assert.equal(result.success, true); assert.equal(result.card.name, '會員b');
+    assert.ok(result.card.buttons.some(button => button.url === 'mailto:public@example.com'));
+    assert.doesNotMatch(JSON.stringify(result), /javascript|custom_config|row_id|line_id|owner_user_id|U[abc]{32}/);
+    assert.equal(snapshot(), state);
+  }
+  assert.equal((await f.api('/members/card%2Db/card')).card.name, '會員b', 'encoded card IDs are decoded once');
+  f.sql.exec("UPDATE card_contacts SET ai_review_status='passed',pool_eligible=1 WHERE row_id='card-b'");
+  assert.equal(snapshot(), before); assert.equal(f.writes.length, 0); assert.equal(kvCalls, 0);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_threads').get().n, 0);
+});
+
+test('directory card preview requires a current eligible member handle and never reveals private or inactive cards', async t => {
+  const f = fixture(t), path = '/members/card-b/card';
+  f.sql.exec("UPDATE card_contacts SET visibility='private' WHERE row_id='card-b'");
+  let unavailable = await f.api(path);
+  assert.equal(unavailable.status, 404); assert.equal(unavailable.code, 'CARD_UNAVAILABLE');
+  for (const [field, value] of [['source_type','private_import'],['source_type','video_profile'],['archived_at','now'],['merged_into_row_id','merged']]) {
+    f.sql.exec("UPDATE card_contacts SET visibility='public',source_type='self_profile',archived_at='',merged_into_row_id='' WHERE row_id='card-b'");
+    f.sql.prepare(`UPDATE card_contacts SET ${field}=? WHERE row_id='card-b'`).run(value);
+    unavailable = await f.api(path); assert.equal(unavailable.status, 403); assert.equal(unavailable.code, 'MEMBER_UNAVAILABLE');
+  }
+  f.sql.exec("UPDATE card_contacts SET visibility='public',source_type='self_profile',archived_at='',merged_into_row_id='' WHERE row_id='card-b'");
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,name,updated_at) VALUES(?,?,'self_profile','private',?,'2026-10-25')").run('current-b', B, '私人草稿不能顯示');
+  assert.equal((await f.api(path)).status, 403, 'stale directory handles must be refreshed');
+  const current = await f.api('/members/current-b/card');
+  assert.equal(current.card.name, '會員b', 'a current private draft may point to the latest public version of the same verified member');
+  assert.doesNotMatch(JSON.stringify(current), /私人草稿/);
+  f.sql.exec("UPDATE card_contacts SET visibility='private' WHERE row_id='card-b'");
+  assert.equal((await f.api('/members/current-b/card')).code, 'CARD_UNAVAILABLE');
+  assert.equal(f.writes.length, 0);
+});
+
+test('directory card preview enforces bilateral blocks, opt-out, self exclusion and current membership', async t => {
+  const f = fixture(t), path = '/members/card-b/card';
+  assert.equal((await f.api('/members/card-a/card')).status, 403);
+  for (const [member, blocked] of [['a', 'b'], ['b', 'a']]) {
+    f.sql.prepare('INSERT INTO member_chat_blocks VALUES(?,?,CURRENT_TIMESTAMP)').run(member, blocked);
+    const denied = await f.api(path); assert.equal(denied.status, 403); assert.equal(denied.code, 'CONTACT_CLOSED');
+    f.sql.exec('DELETE FROM member_chat_blocks');
+  }
+  f.sql.exec("INSERT INTO member_chat_preferences(member_id,accepting) VALUES('b',0)");
+  assert.equal((await f.api(path)).code, 'CONTACT_CLOSED');
+  f.sql.exec("UPDATE member_chat_preferences SET accepting=1 WHERE member_id='b'; DELETE FROM users WHERE row_id='b'");
+  assert.equal((await f.api(path)).code, 'MEMBER_UNAVAILABLE');
+  assert.equal((await f.api(path, { token: 'b' })).code, 'MEMBER_REQUIRED');
+  assert.equal((await f.api(path, { token: '' })).status, 401);
+  assert.equal(f.writes.length, 0); assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_threads').get().n, 0);
+});
+
+test('directory card preview follows confirmed canonical identity and rejects ambiguous links', async t => {
+  const f = fixture(t), path = '/members/card-a/card';
+  f.sql.prepare("INSERT INTO users(row_id,line_id,name,role) VALUES('old-a',?,'歷史帳號','user')").run(OLD);
+  f.sql.prepare("UPDATE card_contacts SET line_id=?,profile_user_id=?,owner_user_id=? WHERE row_id='card-a'").run(OLD, OLD, OLD);
+  assert.equal((await f.api(path, { token: 'b' })).card.name, '會員a');
+  f.sql.exec("INSERT INTO member_chat_preferences(member_id,accepting) VALUES('a',0),('old-a',1)");
+  assert.equal((await f.api(path, { token: 'b' })).code, 'CONTACT_CLOSED', 'canonical opt-out cannot be bypassed using an old row');
+  f.sql.exec("UPDATE member_chat_preferences SET accepting=1 WHERE member_id='a'");
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(OLD, C);
+  assert.equal((await f.api(path, { token: 'b' })).code, 'IDENTITY_CONFLICT');
+  assert.equal(f.writes.length, 0);
+});
+
+test('directory card preview strictly rejects query fields, unsupported methods and malformed encoded handles', async t => {
+  const f = fixture(t), path = '/members/card-b/card';
+  for (const query of ['?q=x', '?industry=x', '?rowId=card-c', '?ownOnly=true', '?q=x&q=y']) {
+    const result = await f.api(path + query); assert.equal(result.status, 400); assert.equal(result.code, 'INVALID_QUERY');
+  }
+  assert.equal((await f.api(path, { data: {} })).status, 405);
+  assert.equal((await f.api(path, { method: 'DELETE' })).status, 405);
+  for (const handle of ['%', '%E0%A4%A', 'card%2Fb', 'card%5Cb', 'card%00b', 'x'.repeat(181), 'x'.repeat(1621)]) {
+    const result = await f.api('/members/' + handle + '/card'); assert.equal(result.status, 400); assert.equal(result.code, 'INVALID_MEMBER');
+  }
+  assert.equal(f.writes.length, 0);
+});
+
 test('peer card POP reads public own cards regardless of review and cannot bypass a block or conversation', async t => {
   const f = fixture(t), id = await f.room(), path = `/threads/${id}/card`;
   f.sql.exec("UPDATE card_contacts SET email='public@example.com',website='https://example.com',custom_config='{\"buttons\":[{\"label\":\"壞網址\",\"url\":\"javascript:alert(1)\"}]}' WHERE row_id='card-b'");

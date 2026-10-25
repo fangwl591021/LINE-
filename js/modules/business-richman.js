@@ -588,12 +588,15 @@
   };
 
   window.openBusinessRichman = function (options) {
+    options = options || {};
+    if (options.mode !== 'store' && typeof window.openBusinessIsland === 'function') return window.openBusinessIsland(options);
     if (typeof window.goPage === 'function') window.goPage('business-richman', true);
     return window.initBusinessRichman(options);
   };
 
   window.initBusinessRichman = function (options) {
     options = options || {};
+    if (options.mode !== 'store' && typeof window.openBusinessIsland === 'function') return window.openBusinessIsland(options);
     var page = document.getElementById(PAGE_ID);
     if (!page) return Promise.resolve();
     var requestedMode = options.mode === 'store' && providers.store ? 'store' : 'card';
@@ -657,9 +660,12 @@
     } finally { if (version === generation) opening = false; }
   };
   window.retryBusinessRichman = function () { return window.initBusinessRichman({mode:mode,force:true,onExit:exitAction}); };
-  window.exitBusinessRichman = function () {
+  window.leaveBusinessRichman = function () {
     generation++; loadingPromise = null; opening = false; closeArrival();
     if (state) state.rolling = false;
+  };
+  window.exitBusinessRichman = function () {
+    window.leaveBusinessRichman();
     if (exitAction) exitAction(); else window.goPage('home');
   };
   window.resetBusinessRichman = function () {

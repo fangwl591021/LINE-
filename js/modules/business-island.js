@@ -1,0 +1,246 @@
+(function () {
+  'use strict';
+  const scriptUrl = document.currentScript.src;
+  const asset = name => new URL('../../' + name, scriptUrl).href;
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const clean = value => String(value ?? '').trim();
+  const owner = () => clean(window.currentUserProfile?.userId);
+  const safeUrl = (value, contact = false) => {
+    const raw = clean(value);
+    if (contact && (/^tel:\+?[0-9#*(),. -]{5,40}$/.test(raw) || /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw))) return raw;
+    try { const url = new URL(raw); return url.protocol === 'https:' && !url.username && !url.password ? url.href : ''; } catch { return ''; }
+  };
+  let root, client, generation = 0, activeOwner = '', zone = 'people', query = '', industry = '', sort = 'latest';
+  let members = [], industries = [], next = '', selected = '', posts = null, listView = false, exitAction = null;
+  let memberTicket = 0, selectionTicket = 0, boardTicket = 0, busy = false, actionBusy = false, initializing = false, dialog, styleReady;
+  const $ = selector => root.querySelector(selector);
+  const active = ticket => ticket === generation && activeOwner === owner() && window.currentPage === 'business-island' && root && !root.classList.contains('hidden');
+  const valid = ticket => active(ticket) && client?.current();
+  function avatar(row, extra = '') {
+    const url = safeUrl(row.avatarUrl || row.pictureUrl);
+    return `<span class="bi-avatar ${extra}" aria-hidden="true"><span>${esc(clean(row.name || row.displayName).slice(0, 1) || '會')}</span>${url ? `<img data-bi-avatar src="${esc(url)}" alt="" referrerpolicy="no-referrer" hidden>` : ''}</span>`;
+  }
+  function bindAvatars(host = root) {
+    for (const image of host.querySelectorAll('img[data-bi-avatar]:not([data-bound])')) {
+      image.dataset.bound = '';
+      const initial = image.previousElementSibling;
+      const loaded = () => { initial.hidden = true; image.hidden = false; };
+      const failed = () => { initial.hidden = false; image.remove(); };
+      image.addEventListener('load', loaded, {once:true});
+      image.addEventListener('error', failed, {once:true});
+      if (image.complete) { if (image.naturalWidth > 0) loaded(); else failed(); }
+    }
+  }
+  function note(message = '', retry = false) {
+    $('[data-bi-status]').textContent = message;
+    $('[data-bi-retry]').hidden = !retry;
+  }
+  function closeCard() { if (dialog) { dialog.close(); dialog.remove(); dialog = null; } }
+  function live() {
+    if (initializing && active(generation)) { note('正在連接交流島…'); return false; }
+    if (valid(generation)) return true;
+    const message = activeOwner !== owner() ? '登入身分已變更，請重新進入交流島。' : '請重新進入 LINE 登入，再重試。';
+    window.leaveBusinessIsland();
+    if (root) { $('.bi-list').replaceChildren(); $('.bi-selection').replaceChildren(); $('.bi-people-pins').replaceChildren(); note(message, true); }
+    return false;
+  }
+  function markup() {
+    return `<section class="bi-shell" aria-label="商務交流島">
+      <header class="bi-header"><div class="bi-brand"><span class="bi-brand-mark" aria-hidden="true">島</span><div><h1>商脈交流島</h1><p>探索人脈，讓合作從交流開始</p></div></div><div class="bi-toolbar"><button type="button" data-bi-action="exit">返回首頁</button><button type="button" data-bi-action="list" aria-pressed="false">快速清單</button></div></header>
+      <nav class="bi-tabs" aria-label="交流島分區"><button type="button" data-bi-zone="people" aria-pressed="true">人脈廣場</button><button type="button" data-bi-zone="board" aria-pressed="false">合作告示板</button><button type="button" data-bi-zone="home" aria-pressed="false">我的小屋</button></nav>
+      <div class="bi-layout"><div class="bi-map" aria-label="交流島場景"><div class="bi-stage"><img class="bi-backdrop" src="${esc(asset('assets/business-island/island-v1.webp'))}" alt="島嶼上的人脈廣場、合作亭與水岸小屋" decoding="async" fetchpriority="high"><button type="button" class="bi-hotspot" data-zone="people" data-bi-zone="people" aria-pressed="true">人脈廣場</button><button type="button" class="bi-hotspot" data-zone="board" data-bi-zone="board" aria-pressed="false">合作告示板</button><button type="button" class="bi-hotspot" data-zone="home" data-bi-zone="home" aria-pressed="false">我的小屋</button><div class="bi-people-pins"></div></div></div>
+      <section class="bi-panel" aria-label="交流島資訊"><div class="bi-panel-header"><h2 data-bi-title>人脈廣場</h2><p class="bi-caption" data-bi-caption>選擇會員，查看公開名片或開始交流</p></div>
+      <form class="bi-search"><label for="bi-query">找會員</label><div><input id="bi-query" type="search" maxlength="60" placeholder="姓名、英文名、公司或職稱" autocomplete="off"><button type="submit">搜尋</button></div><label for="bi-industry">業種</label><select id="bi-industry"><option value="">全部業種</option></select><label for="bi-sort">排序</label><select id="bi-sort"><option value="latest">最新名單</option><option value="match">配對排名</option></select></form>
+      <p class="bi-status" data-bi-status role="status" aria-live="polite"></p><button type="button" data-bi-retry data-bi-action="retry" hidden>重新載入</button>
+      <div class="bi-selection" aria-live="polite"></div><div class="bi-list"></div><button type="button" class="bi-more" data-bi-action="more" hidden>載入更多會員</button>
+      <div class="bi-post-list" hidden></div><div class="bi-home-card" hidden></div></section></div></section>`;
+  }
+  function renderMembers() {
+    const row = members.find(item => item.handle === selected);
+    $('.bi-list').innerHTML = members.length ? members.map(item => `<button type="button" class="bi-member" data-bi-member="${esc(item.handle)}" aria-pressed="${item.handle === selected}">${avatar(item)}<span class="bi-member-copy"><strong>${esc(item.name || '會員')}</strong><span>${esc([item.company, item.title].filter(Boolean).join(' · '))}</span>${item.memberNumber ? `<small>加入編號：${esc(item.memberNumber)}</small>` : ''}</span></button>`).join('') : '<p class="bi-caption">沒有符合的會員，請調整搜尋或業種。</p>';
+    if (row) {
+      const score = row.match?.score;
+      const match = typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100 ? `<p class="bi-match">${esc(score)}% · ${row.match.source === 'ai' ? 'AI' : '規則'}配對 <small>契合度參考</small></p>` : '';
+      $('.bi-selection').innerHTML = `${avatar(row)}<div><h3>${esc(row.name || '會員')}</h3><p>${esc([row.company,row.title].filter(Boolean).join(' · '))}</p>${match}</div><div class="bi-actions"><button type="button" data-bi-action="card">查看公開名片</button><button type="button" data-bi-action="chat" class="bi-primary">開始交流</button></div>`;
+    } else $('.bi-selection').replaceChildren();
+    $('[data-bi-action="more"]').hidden = !next;
+    $('[data-bi-action="more"]').disabled = busy;
+    const positions = [[35,48],[52,59],[67,48],[26,70]];
+    $('.bi-people-pins').innerHTML = members.slice(0,positions.length).map((item,i) => `<button type="button" class="bi-pin" data-bi-member="${esc(item.handle)}" style="left:${positions[i][0]}%;top:${positions[i][1]}%" aria-label="查看會員 ${esc(item.name || '會員')}" aria-pressed="${item.handle === selected}">${avatar(item)}<span>${esc(item.name || '會員')}</span></button>`).join('');
+    bindAvatars();
+  }
+  async function loadMembers(append = false) {
+    if (!live()) return;
+    if (!append) { selectionTicket++; closeCard(); }
+    const ticket = generation, request = ++memberTicket;
+    busy = true; $('[data-bi-action="more"]').disabled = true;
+    note(append ? '載入更多會員…' : '正在尋找會員…');
+    try {
+      const params = new URLSearchParams({sort});
+      if (query) params.set('q',query);
+      if (industry) params.set('industry',industry);
+      if (append && next) params.set('after',next);
+      const result = await client.request('/members?' + params.toString());
+      if (!valid(ticket) || request !== memberTicket || zone !== 'people') return;
+      const incoming = Array.isArray(result.items) ? result.items.filter(row => typeof row.handle === 'string') : [];
+      members = append ? [...new Map([...members,...incoming].map(row => [row.handle,row])).values()] : incoming;
+      next = clean(result.next); industries = Array.isArray(result.industries) ? result.industries : [];
+      $('#bi-industry').innerHTML = '<option value="">全部業種</option>' + industries.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join('');
+      $('#bi-industry').value = industry;
+      if (!members.some(row => row.handle === selected)) selected = members[0]?.handle || '';
+      renderMembers(); note();
+    } catch (error) {
+      if (active(ticket) && request === memberTicket && zone === 'people') note(error.message || '會員載入失敗，請重試。', true);
+    } finally {
+      if (active(ticket) && request === memberTicket) { busy = false; $('[data-bi-action="more"]').disabled = false; }
+    }
+  }
+  function chooseMember(handle) {
+    if (!live() || !members.some(row => row.handle === handle)) return;
+    selectionTicket++; selected = handle;
+    if (zone !== 'people') chooseZone('people');
+    renderMembers(); note();
+    if (window.matchMedia('(max-width:900px)').matches) $('.bi-panel').scrollIntoView({behavior:'auto',block:'start'});
+  }
+  async function loadPosts() {
+    if (!live()) return;
+    const ticket = generation, request = ++boardTicket;
+    note('正在讀取公開交流內容…');
+    try {
+      if (typeof window.fetchAPI !== 'function') throw Error('交流內容尚未載入，請重新整理。');
+      const result = await window.fetchAPI('listExchangeZonePosts',{limit:30,ownOnly:false},true);
+      if (!valid(ticket) || request !== boardTicket || zone !== 'board') return;
+      if (!result || result.success === false || result.access?.allowed === false || !Array.isArray(result.posts)) throw Error(result?.error || '公開交流內容讀取失敗，請重試。');
+      posts = result.posts;
+      $('.bi-post-list').innerHTML = posts.length ? posts.map(post => `<button type="button" class="bi-post" data-bi-post="${esc(post.postHandle)}"><strong>${esc(post.title)}</strong><p>${esc(post.excerpt)}</p><span>${esc(post.author?.name || '會員')} · 查看公開內容</span></button>`).join('') : '<p class="bi-caption">目前沒有公開交流內容。</p>';
+      note();
+    } catch (error) { if (active(ticket) && request === boardTicket && zone === 'board') note(error.message || '交流內容讀取失敗，請重試。',true); }
+  }
+  function renderHome() {
+    const profile = window.currentUserProfile || {};
+    $('.bi-home-card').innerHTML = `${avatar(profile)}<h3>${esc(profile.displayName || '我的小屋')}</h3><p>讓對方認識你，也接續已開始的交流。</p><div class="bi-actions"><button type="button" data-bi-action="my-card">我的名片</button><button type="button" data-bi-action="my-chats">我的聊天</button></div>`;
+    bindAvatars();
+  }
+  function chooseZone(value, reveal = false) {
+    if (!['people','board','home'].includes(value) || !live()) return;
+    zone = value; memberTicket++; boardTicket++; selectionTicket++; busy = false;
+    for (const button of root.querySelectorAll('[data-bi-zone]')) button.setAttribute('aria-pressed', String(button.dataset.biZone === zone));
+    $('.bi-search').hidden = zone !== 'people'; $('.bi-list').hidden = zone !== 'people'; $('.bi-selection').hidden = zone !== 'people';
+    $('[data-bi-action="more"]').hidden = zone !== 'people' || !next;
+    $('.bi-post-list').hidden = zone !== 'board'; $('.bi-home-card').hidden = zone !== 'home';
+    $('.bi-people-pins').hidden = zone !== 'people';
+    $('[data-bi-title]').textContent = {people:'人脈廣場',board:'合作告示板',home:'我的小屋'}[zone];
+    $('[data-bi-caption]').textContent = {people:'選擇會員，查看公開名片或開始交流',board:'看看大家正在分享的服務與合作方向',home:'維護自己的介紹，接續每一次交流'}[zone];
+    note();
+    const map = $('.bi-map'), hotspot = $(`.bi-hotspot[data-zone="${zone}"]`);
+    map.scrollTo({left:Math.max(0,hotspot.offsetLeft-map.clientWidth/2),behavior:'auto'});
+    if (zone === 'people') { if (!members.length) void loadMembers(); else renderMembers(); }
+    else if (zone === 'board') void loadPosts();
+    else renderHome();
+    if (reveal && window.matchMedia('(max-width:900px)').matches) $('.bi-panel').scrollIntoView({behavior:'auto',block:'start'});
+  }
+  function showCard(card) {
+    closeCard();
+    const opener = document.activeElement;
+    dialog = document.createElement('dialog'); dialog.className = 'bi-card-dialog';
+    dialog.setAttribute('aria-label','公開名片');
+    const image = safeUrl(card.imageUrl);
+    const links = (Array.isArray(card.buttons) ? card.buttons : []).map(item => ({label:clean(item.label),url:safeUrl(item.url,true)})).filter(item => item.url);
+    dialog.innerHTML = `<header class="bi-dialog-header"><h2>公開名片</h2><button type="button">關閉 ×</button></header><div class="bi-card-body">${image ? `<img src="${esc(image)}" alt="${esc(card.name || '公開名片')}" referrerpolicy="no-referrer">` : ''}<h3>${esc(card.name || '會員')}</h3><p>${esc([card.companyName,card.title].filter(Boolean).join(' · '))}</p><p class="bi-prewrap">${esc(card.description || card.services)}</p><div class="bi-card-links">${links.map(item => `<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(item.label || '聯絡')}</a>`).join('')}</div></div>`;
+    const close = () => { closeCard(); opener?.focus?.(); };
+    dialog.querySelector('button').addEventListener('click',close);
+    dialog.addEventListener('cancel',event => {event.preventDefault();close();});
+    dialog.querySelector('img')?.addEventListener('error',event => event.target.remove(),{once:true});
+    document.body.append(dialog); dialog.showModal();
+  }
+  async function memberAction(action) {
+    if (!live() || actionBusy || !selected) return;
+    const row = members.find(item => item.handle === selected); if (!row) return;
+    const ticket = generation, selection = selectionTicket, handle = row.handle;
+    actionBusy = true;
+    for (const button of root.querySelectorAll('.bi-selection button')) button.disabled = true;
+    note(action === 'card' ? '正在讀取公開名片…' : '正在開啟交流…');
+    try {
+      if (action === 'card') {
+        const result = await client.request('/members/' + encodeURIComponent(handle) + '/card');
+        if (!valid(ticket) || selection !== selectionTicket || selected !== handle || zone !== 'people') return;
+        if (!result.card) throw Error('對方目前沒有可查看的公開名片');
+        showCard(result.card); note();
+      } else {
+        const result = await client.request('/threads',{cardHandle:handle});
+        if (!valid(ticket) || selection !== selectionTicket || selected !== handle || zone !== 'people') return;
+        if (typeof window.openExchangeZone !== 'function') throw Error('交流功能尚未載入，請重新整理。');
+        await window.openExchangeZone({tab:'threads',threadId:result.id});
+        if (valid(ticket)) note();
+      }
+    } catch (error) { if (active(ticket) && selection === selectionTicket) note(error.message || '目前無法開啟，請重試。'); }
+    finally { if (active(ticket)) { actionBusy = false; for (const button of root.querySelectorAll('.bi-selection button')) button.disabled = false; } }
+  }
+  function bind() {
+    $('.bi-search').addEventListener('submit',event => {event.preventDefault();query=$('#bi-query').value.trim();industry=$('#bi-industry').value;sort=$('#bi-sort').value;next='';void loadMembers();});
+    $('#bi-industry').addEventListener('change',() => $('.bi-search').requestSubmit());
+    $('#bi-sort').addEventListener('change',() => $('.bi-search').requestSubmit());
+    root.onclick = async event => {
+      const button = event.target.closest('button'); if (!button || !root.contains(button)) return;
+      if (button.dataset.biZone) { chooseZone(button.dataset.biZone, true); return; }
+      if (button.dataset.biMember) { chooseMember(button.dataset.biMember); return; }
+      const action = button.dataset.biAction;
+      if (action === 'exit') { const exit = exitAction; window.leaveBusinessIsland(); if (exit) exit(); else window.goPage('home'); return; }
+      if (action === 'retry') { if (!valid(generation)) await window.initBusinessIsland(); else if (zone === 'people') await loadMembers(); else if (zone === 'board') await loadPosts(); return; }
+      if (!live()) return;
+      if (action === 'list') { listView = !listView; root.dataset.view = listView ? 'list' : 'map'; button.textContent=listView?'回到島嶼':'快速清單';button.setAttribute('aria-pressed',String(listView)); }
+      else if (action === 'more' && !busy && next) await loadMembers(true);
+      else if (action === 'card' || action === 'chat') await memberAction(action);
+      else if (action === 'my-card') { if (typeof window.openMyCardSettings === 'function') window.openMyCardSettings(); else note('名片功能尚未載入，請重新整理。'); }
+      else if (action === 'my-chats') { if (typeof window.openExchangeZone === 'function') await window.openExchangeZone({tab:'threads'}); else note('交流功能尚未載入，請重新整理。'); }
+      else if (button.dataset.biPost && posts?.some(post => post.postHandle === button.dataset.biPost)) {
+        const ticket = generation;
+        try {
+          if (typeof window.openExchangeZone !== 'function' || typeof window.openExchangeZonePost !== 'function') throw Error('交流內容尚未載入，請重新整理。');
+          await window.openExchangeZone({tab:'public'});
+          if (valid(ticket) && zone === 'board') await window.openExchangeZonePost(button.dataset.biPost,button);
+        } catch (error) { if (active(ticket)) note(error.message); }
+      }
+    };
+  }
+  window.leaveBusinessIsland = function () {
+    generation++; memberTicket++; selectionTicket++; boardTicket++;
+    client?.close(); client = null; busy = false; actionBusy = false; initializing = false; closeCard();
+  };
+  window.addEventListener('pagehide', window.leaveBusinessIsland);
+  window.openBusinessIsland = function (options = {}) {
+    window.leaveBusinessRichman?.();
+    window.goPage('business-island',true);
+    return window.initBusinessIsland(options);
+  };
+  window.initBusinessIsland = async function (options = {}) {
+    window.leaveBusinessIsland();
+    root = document.getElementById('page-business-island'); if (!root) return;
+    initializing = true;
+    const changedOwner = activeOwner !== owner(); activeOwner = owner();
+    if (changedOwner) { members=[];industries=[];next='';selected='';posts=null;query='';industry='';sort='latest';zone='people';listView=false; }
+    exitAction = typeof options.onExit === 'function' ? options.onExit : null;
+    if (!document.querySelector('link[data-business-island]')) {
+      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=1');style.dataset.businessIsland='';
+      styleReady = new Promise((resolve,reject) => {
+        style.addEventListener('load',resolve,{once:true});
+        style.addEventListener('error',()=>{style.remove();styleReady=null;reject(Error('交流島樣式載入失敗，請重試。'));},{once:true});
+      });
+      document.head.append(style);
+    }
+    root.innerHTML=markup();root.dataset.view=listView?'list':'map'; bind();
+    $('[data-bi-action="list"]').textContent=listView?'回到島嶼':'快速清單';
+    $('[data-bi-action="list"]').setAttribute('aria-pressed',String(listView));
+    $('#bi-query').value=query;$('#bi-sort').value=sort;
+    const ticket = generation;
+    note('正在連接交流島…');
+    try {
+      const [module] = await Promise.all([import(new URL('member-chat.js?v=14',scriptUrl).href),styleReady]);
+      if (!active(ticket)) return;
+      client=module.createChatClient({base:window.Config?.WORKER_URL||window.WORKER_URL,isCurrent:()=>active(ticket)});
+      initializing = false;
+      const selectedZone=zone;members=[];next='';selected='';chooseZone(selectedZone);
+    } catch (error) { if (active(ticket)) note(error.message||'交流島載入失敗，請重試。',true); }
+    finally { if (active(ticket)) initializing = false; }
+  };
+})();
