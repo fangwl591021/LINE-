@@ -7,11 +7,12 @@ import { handleMemberChat, processMemberChatNotifications, processMemberDirector
 import { chatExtraSchema, seedChatCoupon, seedChatScore } from '../member-chat-extra-fixture.mjs';
 const sql = new DatabaseSync(':memory:'), root = new URL('../../', import.meta.url);
 const ids = { a: 'U' + 'a'.repeat(32), b: 'U' + 'b'.repeat(32), c: 'U' + 'c'.repeat(32) };
-sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',name TEXT,phone TEXT,role TEXT);
+sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',name TEXT,phone TEXT,role TEXT,member_number TEXT DEFAULT '');
   CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
   CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,line_id TEXT,profile_user_id TEXT,owner_user_id TEXT,source_type TEXT,visibility TEXT,pool_eligible INTEGER,ai_review_status TEXT,name TEXT,company_name TEXT,title TEXT,updated_at TEXT);`);
 for (const [id, name, company] of [['a', '小林（測試）', '綠葉設計'], ['b', '小陳（測試）', '晨光咖啡'], ['c', '小張（測試）', '合作商行']]) {
   sql.prepare('INSERT INTO users(row_id,line_id,name,phone,role) VALUES(?,?,?,?,?)').run(id, ids[id], name, '0900000000', 'user');
+  sql.prepare('UPDATE users SET member_number=? WHERE row_id=?').run('2026102100' + ({a:1,b:2,c:3})[id], id);
   sql.prepare("INSERT INTO card_contacts VALUES(?,?,?,?, 'self_profile','public',1,'passed',?,?,?,'2026-09-24')").run('card-' + id, ids[id], ids[id], ids[id], name, company, '負責人');
 }
 sql.exec("ALTER TABLE card_contacts ADD COLUMN english_name TEXT DEFAULT ''; ALTER TABLE card_contacts ADD COLUMN archived_at TEXT DEFAULT ''; ALTER TABLE card_contacts ADD COLUMN merged_into_row_id TEXT DEFAULT ''; UPDATE card_contacts SET english_name='Demo Chen',visibility='private',pool_eligible=0,ai_review_status='pending' WHERE row_id='card-b'; UPDATE users SET phone='' WHERE row_id='b';");

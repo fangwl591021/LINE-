@@ -1,5 +1,6 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { findMemberReferrer } from './worker/member-number.mjs';
+import { createPartnerV2Order, markPartnerV2OrderPaid, updatePartnerV2OrderStatus } from './worker/partner-bonus-v2.mjs';
 import { generateCardBusinessCopy } from './worker/card-business-copy.mjs';
 import { createCommercePointService } from './worker/store-commerce-mother.mjs';
 import { CardLinks, cardLinksEnabled, cardLinksConfigResponse } from './worker/card-links.mjs';
@@ -16056,6 +16057,8 @@ const D1FinanceModule = {
     const order = MLMModule.normalizeOrder(payload || {});
     if (!order.buyerId) return { success: false, error: 'Missing buyerId' };
     if (order.grossAmount <= 0 || order.bv < 0) return { success: false, error: 'Invalid order amount or BV' };
+    const signedPartnerOrder = await createPartnerV2Order(env, order, legacy => ({ ...legacy, bonusPlanPreview: BonusPolicyModule.buildPlan(legacy) }), payload.authenticatedUserId);
+    if (signedPartnerOrder) return signedPartnerOrder;
     order.bonusPlanPreview = BonusPolicyModule.buildPlan(order);
     await this.upsertOrder(order, env);
     return { success: true, data: this.orderRow(await D1ReadModule.first(env, 'SELECT * FROM orders WHERE order_id = ? LIMIT 1', [order.orderId])) };
@@ -16065,6 +16068,8 @@ const D1FinanceModule = {
     if (!this.hasD1(env)) return null;
     const orderId = this.pick(payload, ['orderId']);
     if (!orderId) return { success: false, error: 'Missing orderId' };
+    const signedPartnerPayment = await markPartnerV2OrderPaid(env, payload);
+    if (signedPartnerPayment) return signedPartnerPayment;
     const row = await D1ReadModule.first(env, 'SELECT * FROM orders WHERE order_id = ? LIMIT 1', [orderId]);
     if (!row) return { success: false, error: '找不到訂單' };
     const current = this.orderRow(row);
@@ -16096,6 +16101,8 @@ const D1FinanceModule = {
     if (!this.hasD1(env)) return null;
     const orderId = this.pick(payload, ['orderId']);
     if (!orderId) return { success: false, error: 'Missing orderId' };
+    const signedPartnerStatus = await updatePartnerV2OrderStatus(env, payload, status);
+    if (signedPartnerStatus) return signedPartnerStatus;
     const bonusStatus = status === 'refunded' ? 'reversed' : status;
     await env.ACTMASTER_DB.prepare('UPDATE orders SET payment_status = ?, bonus_status = ?, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?')
       .bind(status, bonusStatus, orderId).run();
@@ -16715,6 +16722,7 @@ const PaymentModule = {
           if (order) {
             await MLMModule.markOrderPaid({
               orderId: order.order_id,
+              ...(order.bonus_policy_type === 'cocreator-2026-10-25-v2' ? { grossAmount: Number(result.Amt) } : {}),
               paymentProvider: 'newebpay',
               paymentNo: result.TradeNo || merchantOrderNo,
               paidAt: result.PayTime || new Date().toISOString(),

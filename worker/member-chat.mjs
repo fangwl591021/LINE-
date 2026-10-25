@@ -5,6 +5,7 @@ import { notificationPreference, saveNotificationPreference, deliverChatNotifica
 import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from './member-chat-industry.mjs';
 import { peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat-extras.mjs';
 import { directoryScoresSql, registerDirectoryMatching, directoryMatchState, runDirectoryMatchJobs } from './member-chat-matching.mjs';
+import {isMemberNumber} from './member-number.mjs';
 const BASE = '/v1/member-chat';
 // Shared verified membership only; AI navigation does not inherit private-chat feature/card gates.
 export { identity as resolveMemberIdentity, jsonBody as boundedJson };
@@ -148,7 +149,7 @@ async function peerInfo(db, id) {
   return { name: text(row?.name).slice(0, 80) || '會員' };
 }
 function directorySql() {
-  return `SELECT c.row_id AS handle,u.row_id AS peer,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title,COALESCE(c.updated_at,'') AS latest FROM card_contacts c JOIN users u ON ${CARD_JOIN}
+  return `SELECT c.row_id AS handle,u.row_id AS peer,u.member_number,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title,COALESCE(c.updated_at,'') AS latest FROM card_contacts c JOIN users u ON ${CARD_JOIN}
     WHERE ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} AND CAST(u.row_id AS TEXT)<>?1 AND ?2 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL
     AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=CAST(u.row_id AS TEXT)),1)=1
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
@@ -177,7 +178,7 @@ async function listMembers(db, actor, params) {
   try { result = await query(true); }
   catch { result = await query(false); } // A cache outage never hides the authorized directory.
   const page = result.slice(0, PAGE), last = page.at(-1);
-  const items = page.map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), match: row.score == null ? null : { score: row.score, source: row.source, basis: row.basis } }));
+  const items = page.map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), memberNumber:isMemberNumber(row.member_number)?text(row.member_number):'', match: row.score == null ? null : { score: row.score, source: row.source, basis: row.basis } }));
   return { items, next: result.length > PAGE ? (sort ? btoa(encodeURIComponent(JSON.stringify([last.score ?? -1, last.latest, last.handle]))) : text(last.handle)) : '', industries: CHAT_INDUSTRIES,
     matchWork: { pending: Number(result[0]?.pending || 0), status: await directoryMatchState(db, actor.memberId) } };
 }

@@ -54,7 +54,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   if (container) modal.classList.add('mc-embedded');
   const client = createChatClient({ base, isCurrent: () => active === modal });
   if (!document.querySelector('link[data-member-chat]')) {
-    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=9', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
+    const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = new URL('../../css/member-chat.css?v=10', import.meta.url).href; style.dataset.memberChat = ''; document.head.append(style);
   }
   modal.setAttribute('aria-labelledby', 'mc-title');
   modal.innerHTML = `<header><button type="button" data-action="back">‹ 返回</button><h2 id="mc-title">會員私訊</h2><button type="button" data-action="close" aria-label="關閉會員私訊">×</button></header>
@@ -136,7 +136,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   function renderRows(items, append = false) {
     const html = items.map(row => {
       const member = view === 'members', id = member ? row.handle : row.id;
-      return `<button type="button" class="mc-contact" data-action="open" data-handle="${esc(member ? id : '')}" data-room="${esc(member ? '' : id)}"><span class="mc-avatar" aria-hidden="true">${esc(row.name?.slice(0, 1) || '會')}</span><span class="mc-contact-text"><strong>${esc(row.name || '會員')}</strong><span>${esc(member ? [row.company, row.title].filter(Boolean).join(' · ') : row.preview)}</span></span><span class="mc-contact-meta">${member ? chatMatchHtml(row.match) + '<span>聊天 ›</span>' : `${esc(stamp(row.createdAt))}${row.unread ? `<b>${Math.min(99, row.unread)}</b>` : ''}`}</span></button>`;
+      return `<button type="button" class="mc-contact" data-action="open" data-handle="${esc(member ? id : '')}" data-room="${esc(member ? '' : id)}"><span class="mc-avatar" aria-hidden="true">${esc(row.name?.slice(0, 1) || '會')}</span><span class="mc-contact-text"><strong>${esc(row.name || '會員')}</strong><span>${esc(member ? [row.company, row.title].filter(Boolean).join(' · ') : row.preview)}</span>${member&&row.memberNumber?`<small class="mc-member-number" title="會員識別編號；舊會員補編日期不一定為最初加入日">加入編號：${esc(row.memberNumber)}</small>`:''}</span><span class="mc-contact-meta">${member ? chatMatchHtml(row.match) + '<span>聊天 ›</span>' : `${esc(stamp(row.createdAt))}${row.unread ? `<b>${Math.min(99, row.unread)}</b>` : ''}`}</span></button>`;
     }).join('');
     if (append) list.insertAdjacentHTML('beforeend', html);
     else list.innerHTML = html || `<p class="mc-empty">${view === 'members' ? '沒有符合的會員。已建立本人名片並接受新聯絡者即可被找到；不含自己或已封鎖的會員。' : '還沒有聊天，點「找會員」開始交流。'}</p>`;

@@ -21,6 +21,7 @@ import { handleMemberEvents } from './worker/member-hosted-events.mjs';
 import { handleCheckinMall } from './worker/checkin-mall-card.mjs';
 import { handleRewardUnits } from './worker/reward-unit-directory.mjs';
 import { handleRewardApplications } from './worker/reward-applications.mjs';
+import { handlePartnerContracts } from './worker/partner-bonus-v2.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -397,6 +398,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const partnerContractResponse = await handlePartnerContracts(request, env, storeInviteProfileView);
+    if (partnerContractResponse) return partnerContractResponse;
     const applicationResponse = await handleRewardApplications(request, env, storeInviteProfileView);
     if (applicationResponse) return applicationResponse;
     const rewardUnitResponse = await handleRewardUnits(request, env, storeInviteProfileView);

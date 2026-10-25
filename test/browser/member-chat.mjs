@@ -29,6 +29,8 @@ try {
   await new Promise(resolve => setTimeout(resolve, 50)); releaseMe();
   await a.locator('[data-handle="card-b"]').waitFor(); await a.unroute('**/v1/member-chat/me');
   assert.equal(await a.locator('.mc-contact').count(), 2);
+  assert.match(await a.locator('[data-handle="card-b"]').innerText(), /加入編號：20261021002/);
+  assert.match(await a.locator('[data-handle="card-c"]').innerText(), /加入編號：20261021003/);
   assert.equal(await a.locator('[data-handle="card-b"] .mc-match').textContent(), '82%');
   assert.equal((await matchEnrollment).status(), 200, 'opening members registers authenticated background matching');
   await a.request.post(base + '/fixture-matches');
