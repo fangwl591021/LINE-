@@ -245,20 +245,23 @@ test('structured errors and malformed responses preserve the old collection and 
   }
 });
 
-test('failed, processing and limited collection caches expire; real completed zero remains current',()=>{
-  for(const status of ['failed','processing','limited']){
+test('failed and processing caches expire; old local quota is immediately invalidated; completed zero remains current',()=>{
+  for(const status of ['failed','processing']){
     const record=card('RETRY',null,{aiMatch:{status,score:null,autoEligible:false,retryAt:new Date(Date.now()+300000).toISOString()}});
     const h=harness([record]);assert.equal(h.window.isCollectedCardMatchCacheCurrent([record]),true);
     record.aiMatch.retryAt=new Date(Date.now()-1).toISOString();assert.equal(h.window.isCollectedCardMatchCacheCurrent([record]),false);
     delete record.aiMatch.retryAt;assert.equal(h.window.isCollectedCardMatchCacheCurrent([record]),false,'legacy rows need an authoritative deadline');
   }
-  const zero=card('ZERO',0);zero.aiMatch.retryAt='2020-01-01T00:00:00Z';const h=harness([zero]);assert.equal(h.window.isCollectedCardMatchCacheCurrent([zero]),true);assert.match(h.render(),/0%/);
+  for(const status of ['limited','failed']){
+    const record=card('OLD_QUOTA',null,{aiMatch:{status,score:null,failureCode:'quota',autoEligible:false,retryAt:new Date(Date.now()+86400000).toISOString()}}),h=harness([record]);assert.equal(h.window.isCollectedCardMatchCacheCurrent([record]),false,'a retired local quota cannot wait until tomorrow');
+  }
+  const zero=card('ZERO',0);zero.aiMatch.retryAt='2020-01-01T00:00:00Z';zero.aiMatch.failureCode='quota';const h=harness([zero]);assert.equal(h.window.isCollectedCardMatchCacheCurrent([zero]),true);assert.match(h.render(),/0%/);
 });
 
-test('quota status and retry deadline are clear and escaped in the closable explanation',()=>{
-  const h=harness([card('LIMITED',null,{aiMatch:{status:'limited',score:null,failureCode:'quota',reason:'今日額度已用完 <img src=x>',retryAt:'2026-10-26T00:00:00Z'}})]);
-  assert.match(h.render(),/今日額度已用完/);h.window.showCollectedCardMatch('LIMITED');const html=h.created.map(n=>n.innerHTML).join('\n');
-  assert.match(html,/下次確認時間/);assert.match(html,/台北時間/);assert.doesNotMatch(html,/<img src=x>/);assert.match(html,/&lt;img/);
+test('legacy quota label and tomorrow deadline are replaced by a status-refresh explanation',()=>{
+  const h=harness([card('LIMITED',null,{aiMatch:{status:'limited',score:null,failureCode:'quota',reason:'今日額度已用完，明早08:00 <img src=x>',retryAt:'2026-10-26T00:00:00Z'}})],{collectionMatchRetryMessage:'今日額度已用完，明早08:00再試'});
+  assert.match(h.render(),/配對狀態更新中/);h.window.showCollectedCardMatch('LIMITED');const html=h.created.map(n=>n.innerHTML).join('\n');
+  assert.match(html,/正在更新這張名片/);assert.doesNotMatch(html,/今日額度|08:00|明早|下次確認時間|<img src=x>/);
 });
 
 test('explicit refresh resets the bounded retry pause and retains list filters',async()=>{

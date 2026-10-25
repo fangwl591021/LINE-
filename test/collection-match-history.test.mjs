@@ -6,7 +6,6 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { restoreCollectionHistory, scoreNewCollectionMatches, collectionPartnerProfile, PROFILE_KEY } from '../worker/collection-match-history.mjs';
-import { allowDirectoryMatchBatch, DIRECTORY_DAILY_BATCH_LIMIT, nextMatchQuotaReset } from '../worker/matchmaking-quota.mjs';
 
 function fixture(t) {
   const sql=new DatabaseSync(':memory:'); t.after(()=>sql.close());
@@ -22,7 +21,7 @@ function fixture(t) {
   const read={identityIdsForUser:async()=>['A'],getCardHarvestContacts:async()=>({success:true,data:await restoreCollectionHistory(cards,db,'A')})};
   let responder=body=>({choices:[{message:{content:JSON.stringify({scores:JSON.parse(body.messages[1].content).candidates.map(c=>({index:c.index,score:76,reason:'商務服務資源互補，可進一步確認合作需求。'}))})}}]});
   const match={matchmakingDigest:async p=>createHash('sha256').update(JSON.stringify(p)).digest('hex'),openAITextModel:()=> 'existing-model',callOpenAI:async(_env,body,key,signal)=>{assert.equal(key,'');assert.ok(signal);calls.push(body);return responder(body);}};
-  const options={env:{ACTMASTER_DB:db},actor:{userId:'A',token:'verified'},read,match,rateLimit:async()=>true};
+  const options={env:{ACTMASTER_DB:db},actor:{userId:'A',token:'verified'},read,match};
   const add=(id,extra={})=>cards.push({rowId:id,公司名稱:'候選公司',職稱:'業務',服務項目:'通路',電話:'0927-136-847',姓名:'勿傳姓名',health:'勿傳健康',wealth:'勿傳財富',birthday:'勿傳生日',aiMatch:{status:'needs_intent',score:null},...extra});
   const cache=(id,{user='A',scope='own',key='old-intent',score=82,source='ai',version='old-version',date='2026-09-01 00:00:00'}={})=>sql.prepare('INSERT INTO ai_match_pair_cache(requester_user_id,pool_scope,intent_hash,candidate_card_row_id,candidate_version,score,reason,result_source,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').run(user,scope,key,id,version,score,'既有配對理由',source,date);
   return {sql,db,cards,calls,add,cache,options,load:()=>read.getCardHarvestContacts(),run:()=>scoreNewCollectionMatches(options),respond:fn=>{responder=fn;}};
@@ -91,11 +90,11 @@ test('expired lease can recover; batches are limited to five and empty profiles 
   for(let i=0;i<7;i++)f.add('NEW'+i);f.cache('NEW0',{key:PROFILE_KEY,source:'partner_processing',score:0});
   assert.equal((await f.run()).data.processed,5);assert.equal((await f.run()).data.processed,2);assert.equal(f.calls.length,2);
 });
-test('only approved fields are sent and quota denial performs no AI call',async t=>{
+test('only approved fields are sent and retired daily quota callbacks cannot block a new card',async t=>{
   const f=fixture(t);f.add('NEW');await f.run();const prompt=JSON.stringify(f.calls[0].messages[1]);
   for(const secret of ['0927','勿傳姓名','勿傳健康','勿傳財富','勿傳生日'])assert.ok(!prompt.includes(secret));
   assert.deepEqual(Object.keys(collectionPartnerProfile({})),['company','title','services','industry','personality','interests','career']);
-  f.add('QUOTA');f.options.rateLimit=async()=>false;await f.run();assert.equal(f.calls.length,1);assert.equal((await f.load()).data[1].aiMatch.score,null);
+  f.add('QUOTA');f.options.rateLimit=async()=>{throw Error('must not call a retired daily quota');};await f.run();assert.equal(f.calls.length,2);assert.equal((await f.load()).data[1].aiMatch.score,76);
 });
 test('missing own card and conflicting/claimed identity cannot generate scores',async t=>{
   const f=fixture(t);f.add('NEW');f.sql.exec("UPDATE card_contacts SET owner_user_id='OTHER'");
@@ -135,16 +134,26 @@ test('upstream billing or quota errors are provider failures, never a promised d
   assert.doesNotMatch(JSON.stringify(response),/08:00|PRIVATE_UPSTREAM_BODY|billing|insufficient_quota/);
 });
 
-test('exhausted shared quota is limited until the next UTC day, without a provider request or five-minute retry loop',async t=>{
-  const f=fixture(t);f.add('OLD');f.cache('OLD',{score:0,source:'rules'});f.add('NEW');f.options.rateLimit=async()=>false;
-  const response=await f.run(),view=response.data.cards[1].aiMatch,row=f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE intent_hash=?').get(PROFILE_KEY);
-  assert.equal(f.calls.length,0);assert.equal(view.status,'limited');assert.equal(view.failureCode,'quota');assert.equal(view.autoEligible,false);assert.equal(view.score,null);
-  assert.equal(view.retryAt,nextMatchQuotaReset());assert.match(view.reason,/08:00/);assert.equal(response.data.failureCode,'quota');
-  assert.equal(row.result_source,'partner_limited');assert.equal(JSON.parse(row.reason).failureCode,'quota');assert.equal(response.data.cards[0].aiMatch.score,0);
-  await f.run();assert.equal(f.calls.length,0);
-  const unchanged=f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE intent_hash=?').get(PROFILE_KEY);assert.deepEqual(unchanged,row);
-  f.sql.prepare("UPDATE ai_match_pair_cache SET updated_at=datetime('now','-1 day'),reason=? WHERE intent_hash=?").run(JSON.stringify({version:1,failureCode:'quota',retryAt:new Date(Date.now()-60000).toISOString()}),PROFILE_KEY);
-  f.options.rateLimit=async()=>true;const recovered=await f.run();assert.equal(recovered.data.processed,1);assert.equal(recovered.data.cards[0].aiMatch.score,0);assert.equal(recovered.data.cards[1].aiMatch.score,76);
+test('old limited and quota-metadata rows unlock immediately on read and can acquire a lease without touching valid scores or quota KV',async t=>{
+  for(const source of ['partner_limited','partner_failed']){
+    const f=fixture(t);f.add('OLD');f.cache('OLD',{score:0,source:'rules'});f.add('NEW');
+    f.cache('NEW',{key:PROFILE_KEY,source,score:0,date:new Date().toISOString().slice(0,19).replace('T',' ')});
+    f.sql.prepare('UPDATE ai_match_pair_cache SET reason=? WHERE candidate_card_row_id=?').run(JSON.stringify({version:1,failureCode:'quota',retryAt:'2099-01-01T00:00:00.000Z'}),'NEW');
+    const old=f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE candidate_card_row_id=?').get('OLD'),before=f.sql.prepare('SELECT * FROM ai_match_pair_cache').all();
+    const projected=(await f.load()).data[1].aiMatch;
+    assert.equal(projected.status,'pending');assert.equal(projected.autoEligible,true);assert.equal(projected.failureCode,'');assert.equal(projected.retryAt,'');assert.equal(projected.score,null);
+    assert.deepEqual(f.sql.prepare('SELECT * FROM ai_match_pair_cache').all(),before,'Reading never clears cache rows or quotas');
+    f.options.env.ACTMASTER_KV={get(){throw Error('must not read daily quota');},put(){throw Error('must not reset daily quota');},delete(){throw Error('must not delete daily quota');}};
+    const recovered=await f.run();assert.equal(recovered.data.processed,1);assert.equal(recovered.data.cards[0].aiMatch.score,0);assert.equal(recovered.data.cards[1].aiMatch.score,76);assert.equal(f.calls.length,1);
+    assert.deepEqual(f.sql.prepare('SELECT * FROM ai_match_pair_cache WHERE candidate_card_row_id=?').get('OLD'),old);
+    assert.equal(f.sql.prepare('SELECT result_source FROM ai_match_pair_cache WHERE intent_hash=?').get(PROFILE_KEY).result_source,'ai');
+  }
+});
+
+test('retired quota metadata cannot bypass another request active processing lease',async t=>{
+  const f=fixture(t);f.add('LEASED');f.cache('LEASED',{key:PROFILE_KEY,source:'partner_processing',score:0,date:new Date().toISOString().slice(0,19).replace('T',' ')});
+  f.sql.prepare('UPDATE ai_match_pair_cache SET reason=?').run(JSON.stringify({version:1,lease:'OTHER_REQUEST',failureCode:'quota',retryAt:new Date(Date.now()+120000).toISOString()}));
+  const before=f.sql.prepare('SELECT * FROM ai_match_pair_cache').all(),response=await f.run();assert.equal(response.data.processed,0);assert.equal(response.data.cards[0].aiMatch.status,'processing');assert.equal(f.calls.length,0);assert.deepEqual(f.sql.prepare('SELECT * FROM ai_match_pair_cache').all(),before);
 });
 
 test('legacy failed cache remains compatible; processing metadata exposes a deadline but never its lease',async t=>{
@@ -156,38 +165,20 @@ test('legacy failed cache remains compatible; processing metadata exposes a dead
   const processing=(await f.load()).data[1].aiMatch;assert.equal(processing.status,'processing');assert.equal(processing.retryAt,retryAt);assert.equal(processing.autoEligible,false);assert.doesNotMatch(JSON.stringify(processing),/SECRET_LEASE/);
 });
 
-test('UTC quota rollover means precisely 08:00 Taipei, including local midnight before reset',()=>{
-  assert.equal(nextMatchQuotaReset(Date.parse('2026-10-25T15:59:59Z')),'2026-10-26T00:00:00.000Z');
-  assert.equal(nextMatchQuotaReset(Date.parse('2026-10-25T20:00:00Z')),'2026-10-26T00:00:00.000Z');
-  assert.equal(nextMatchQuotaReset(Date.parse('2026-12-31T23:59:59Z')),'2027-01-01T00:00:00.000Z');
+test('matching never reads or writes daily quota keys, even past 20 or default 50; other AI limits remain enforced',async()=>{
+  const source=readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8'),method=source.match(/^  async checkRateLimit\([\s\S]*?^  }/m)?.[0];assert.ok(method);
+  const security=vm.runInNewContext('({'+method+'})',{console});let reads=0,writes=0;
+  const full={ACTMASTER_KV:{get:async()=>{reads++;return '1000';},put:async()=>{writes++;},delete:async()=>{throw Error('must not delete quota');}}};
+  for(let i=0;i<55;i++)assert.equal(await security.checkRateLimit('SYNTHETIC','matchmakeContacts',full,'user'),true);
+  assert.equal(reads,0);assert.equal(writes,0);assert.equal(await security.checkRateLimit('SYNTHETIC','generateCardCopy',full,'user'),false);assert.equal(reads,1);
+  assert.equal(await security.checkRateLimit('SYNTHETIC','recognizeCardWithGPT4o',full,'user'),false);assert.equal(reads,2);assert.equal(writes,0);
+  let last;const available={ACTMASTER_KV:{get:async()=> '4',put:async(...args)=>{last=args;}}};assert.equal(await security.checkRateLimit('SYNTHETIC','generateCardCopy',available,'user'),true);assert.match(last[0],/^RL_generateCardCopy_SYNTHETIC_/);assert.equal(last[1],'5');
 });
 
-test('directory sublimit preserves eight shared calls without raising or clearing the existing twenty-call budget',async()=>{
-  const values=new Map(),writes=[],now=Date.parse('2026-10-25T10:00:00Z');let shared=0;
-  const env={ACTMASTER_KV:{get:async key=>values.get(key)||null,put:async(key,value,options)=>{writes.push({key,value,options});values.set(key,value);}}};
-  const consume=async()=>{if(shared>=20)return false;shared++;return true;};
-  for(let i=0;i<DIRECTORY_DAILY_BATCH_LIMIT;i++)assert.equal(await allowDirectoryMatchBatch(env,'SYNTHETIC',consume,now),true);
-  assert.equal(await allowDirectoryMatchBatch(env,'SYNTHETIC',consume,now),false);assert.equal(shared,12);
-  for(let i=0;i<8;i++)assert.equal(await consume(),true);assert.equal(await consume(),false);assert.equal(shared,20);
-  assert.equal(values.get('RL_matchmakeContacts_directory_SYNTHETIC_2026-10-25'),'12');assert.equal(writes.length,12);assert.ok(writes.every(w=>w.options.expirationTtl===86400));
-  assert.equal(await allowDirectoryMatchBatch(env,'SYNTHETIC',consume,now+86400000),false);assert.equal(values.has('RL_matchmakeContacts_directory_SYNTHETIC_2026-10-26'),false);
-});
-
-test('directory quota failures fail closed and never launch an unaccounted model call',async()=>{
-  let shared=0;const consume=async()=>{shared++;return true;};
-  assert.equal(await allowDirectoryMatchBatch({ACTMASTER_KV:{get:async()=>{throw Error('unavailable');}}},'SYNTHETIC',consume),false);assert.equal(shared,0);
-  assert.equal(await allowDirectoryMatchBatch({ACTMASTER_KV:{get:async()=>'-1'}},'SYNTHETIC',consume),false);assert.equal(shared,0);
-  assert.equal(await allowDirectoryMatchBatch({ACTMASTER_KV:{get:async()=>null,put:async()=>{throw Error('unavailable');}}},'SYNTHETIC',consume),false);assert.equal(shared,1);
-  assert.equal(await allowDirectoryMatchBatch({},'SYNTHETIC',consume),true);assert.equal(shared,2);
-});
-
-test('a new directory counter cannot consume the last shared slots already used before deployment',async()=>{
-  const now=Date.parse('2026-10-25T10:00:00Z'),sharedKey='RL_matchmakeContacts_SYNTHETIC_2026-10-25',directoryKey='RL_matchmakeContacts_directory_SYNTHETIC_2026-10-25';
-  const values=new Map([[sharedKey,'18']]);let sharedChecks=0;const writes=[];
-  const env={ACTMASTER_KV:{get:async key=>values.get(key)||null,put:async(key,value)=>{writes.push(key);values.set(key,value);}}};
-  const consume=async()=>{sharedChecks++;const used=Number(values.get(sharedKey)||0);if(used>=20)return false;await env.ACTMASTER_KV.put(sharedKey,String(used+1));return true;};
-  assert.equal(await allowDirectoryMatchBatch(env,'SYNTHETIC',consume,now),false);assert.equal(sharedChecks,0);assert.equal(values.get(sharedKey),'18');assert.equal(values.has(directoryKey),false);assert.deepEqual(writes,[]);
-  assert.equal(await consume(),true);assert.equal(values.get(sharedKey),'19');assert.equal(await consume(),true);assert.equal(values.get(sharedKey),'20');assert.equal(await consume(),false);
+test('real refresh dispatcher cannot apply a default 50-call quota and does not pass a retired rate limiter',async()=>{
+  const source=readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8'),dispatch=source.match(/^async function dispatchAction\([\s\S]*?^}/m)?.[0];assert.ok(dispatch);let calls=0;
+  const context={SecurityModule:{authorizeAction:async()=>({allowed:true,actor:{userId:'SYNTHETIC',token:'verified',role:'user'}}),legacyAuthSkipActions:()=>new Set(),checkRateLimit(){throw Error('refresh must not reach a generic daily quota');}},D1ReadModule:{},AIModule:{},scoreNewCollectionMatches:async options=>{calls++;assert.equal(options.actor.userId,'SYNTHETIC');assert.equal(options.rateLimit,undefined);return {success:true,data:{processed:1,cards:[]}};}};
+  vm.createContext(context);vm.runInContext(dispatch+'\nglobalThis.dispatch=dispatchAction;',context);const result=await context.dispatch('refreshCardHarvestMatches',{},new Request('https://local.invalid'),{});assert.equal(result.success,true);assert.equal(calls,1);
 });
 
 const frontend=readFileSync(new URL('../js/modules/collection-match-auto.js',import.meta.url),'utf8');
