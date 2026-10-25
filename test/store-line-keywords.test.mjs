@@ -6,6 +6,22 @@ import vm from 'node:vm';
 import {shopKeyword,buildShopKeywordMessage,readMallSummary,consumeShopKeywords,signRemainingShopEvents} from '../worker/store-line-keywords.mjs';
 const A='U'+'a'.repeat(32),B='U'+'b'.repeat(32),C='U'+'c'.repeat(32),D='U'+'d'.repeat(32);
 const event=(message='儀錶板',uid=A,extra={})=>({type:'message',mode:'active',source:{type:'user',userId:uid},message:{type:'text',text:message},replyToken:'reply-'+uid,...extra});
+const bubbles=message=>message.contents?.type==='carousel'?message.contents.contents:[message.contents];
+const actions=message=>bubbles(message).flatMap(bubble=>bubble.footer?.contents.map(node=>node.action)||[]);
+function assertCarousel(message,count){
+ assert.equal(message.type,'flex');assert.equal(message.contents.type,'carousel');assert.equal(message.contents.contents.length,count);
+ assert(message.contents.contents.every(bubble=>bubble.type==='bubble'&&bubble.size==='giga'));
+ assert(Buffer.byteLength(JSON.stringify(message.contents))<50000);
+ assert(!actions(message).some(action=>action.label==='店家操作'||action.text==='店家專區'));
+}
+function assertAdminEditorFirst(message){
+ const first=bubbles(message)[0];assert.equal(first.header.contents[0].text,'會員打卡設定');
+ const editor=first.footer.contents.map(node=>node.action).find(action=>action.label==='編輯會員打卡');assert(editor);assert.equal(editor.type,'uri');
+ assert.equal(editor.uri,'https://fangwl591021.github.io/LINE-/admin.html?tab=checkin-chat-dashboard');
+ const url=new URL(editor.uri);assert.equal(url.protocol,'https:');assert.equal(url.username,'');assert.equal(url.password,'');assert.deepEqual([...url.searchParams.keys()],['tab']);
+ for(const uid of [A,B,C,D])assert(!editor.uri.includes(uid));assert(!/access.?token|user.?id|role=/i.test(editor.uri));
+ return editor;
+}
 function fixture(t){
  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
  sql.exec('CREATE TABLE users(line_id TEXT,role TEXT)');
@@ -33,7 +49,7 @@ test('admin global summary and store-owned summary do not mix stores or receipts
  assert.equal(global.shops.total,2);assert.equal(global.orders.unfulfilled,2);assert.equal(global.orders.received,20000);assert.equal(global.redemptions.total,2);
  assert.equal(own.today,'2026-09-11');
  const card=await buildShopKeywordMessage(event('儀表板',B),f.env,now);
- assert.equal(card.contents.size,'giga');
+ assertCarousel(card,3);assertAdminEditorFirst(card);
  assert.equal(card.altText,'全商城營運儀錶板');assert(!JSON.stringify(card).includes(C));assert(JSON.stringify(card).includes('非銀行實收'));
 });
 test('ledger summary excludes malformed, unconfirmed, other-actor and outside-Taipei-day rows',async t=>{
@@ -48,7 +64,7 @@ test('ledger summary excludes malformed, unconfirmed, other-actor and outside-Ta
 });
 test('ordinary member menu preserves one-product rights but denies dashboard and transaction buttons',async t=>{
  const f=fixture(t),p=await buildShopKeywordMessage(event('店家專區',C),f.env);
- assert.equal(p.contents.size,'giga');
+ assertCarousel(p,2);
  assert(JSON.stringify(p).includes('1 個商品'));assert(!JSON.stringify(p).includes('shopSection=sales'));assert(!JSON.stringify(p).includes('shopSection=online-manage'));
  const d=await buildShopKeywordMessage(event('儀錶板',C),f.env);assert.match(d.text,/僅開放/);
  assert(!f.queries.some(q=>q.includes('FROM store_commerce_orders')||q.includes('FROM store_cashier_requests')));
@@ -61,8 +77,9 @@ test('groups, unknown and ambiguous identity never expose dashboard; links carry
  f.sql.prepare('INSERT INTO users VALUES(?,?)').run(A,'admin');
  const ambiguous=await buildShopKeywordMessage(event(),f.env);assert.match(ambiguous.altText,/註冊/);
  const portal=await buildShopKeywordMessage(event('店家專區',B),f.env);
- for(const b of portal.contents.footer.contents.filter(b=>b.action.type==='uri')){
-  const url=new URL(b.action.uri);assert.equal(url.host,'liff.line.me');assert.deepEqual([...url.searchParams.keys()],['shopSection']);
+ assertCarousel(portal,3);const editor=assertAdminEditorFirst(portal);
+ for(const action of actions(portal).filter(action=>action.type==='uri'&&action!==editor)){
+  const url=new URL(action.uri);assert.equal(url.host,'liff.line.me');assert.deepEqual([...url.searchParams.keys()],['shopSection']);
  }
 });
 test('role changes, unknown roles and database failures fail closed',async t=>{
@@ -94,43 +111,47 @@ test('store typography never changes electronic card payloads in shared LINE sen
 });
 test('portal shows own product data and routes all data queries back to chat',async t=>{
  const f=fixture(t),p=await buildShopKeywordMessage(event('店家專區'),f.env),body=JSON.stringify(p);
- assert.equal(p.contents.size,'giga');
+ assertCarousel(p,2);
  assert(body.includes('s-a'));assert(body.includes('商品'));assert(!body.includes('s-b'));
- const actions=p.contents.footer.contents.map(b=>b.action);
- for(const keyword of ['商城商品','商城業績','商城訂單','儀錶板'])assert(actions.some(a=>a.type==='message'&&a.text===keyword));
- assert(actions.filter(a=>a.type==='uri').every(a=>a.uri.endsWith('shopSection=manage')));
+ const operations=bubbles(p)[1].footer.contents.map(b=>b.action);
+ for(const keyword of ['商城商品','商城業績','商城訂單','儀錶板'])assert(operations.some(a=>a.type==='message'&&a.text===keyword));
+ assert(operations.filter(a=>a.type==='uri').every(a=>a.uri.endsWith('shopSection=manage')));
 });
 
 test('all store cards use giga and large text while preserving every action and wrapping long labels',async t=>{
  const f=fixture(t);
  const title='長商品名稱'.repeat(16);
  f.sql.prepare("UPDATE store_shop_products SET title=? WHERE id='p-s-a'").run(title);
- const p=await buildShopKeywordMessage(event('店家專區'),f.env),bubble=p.contents;
- assert.equal(bubble.size,'giga');assert.equal(bubble.header.contents[0].size,'xl');
- for(const node of bubble.body.contents){assert.equal(node.size,'lg');assert.equal(node.wrap,true);assert.equal(node.maxLines,undefined);assert.equal(node.lineSpacing,'4px');}
- assert(bubble.body.contents.some(node=>node.text.startsWith(title+'\n')));
- const actions=bubble.footer.contents.map(node=>node.action);
- assert.deepEqual(actions.slice(0,4),[
+ const p=await buildShopKeywordMessage(event('店家專區'),f.env);assertCarousel(p,2);
+ for(const bubble of bubbles(p)){
+  assert.equal(bubble.size,'giga');assert.equal(bubble.header.contents[0].size,'xl');
+  for(const node of bubble.body.contents){assert.equal(node.size,'lg');assert.equal(node.wrap,true);assert.equal(node.maxLines,undefined);assert.equal(node.lineSpacing,'4px');}
+ }
+ assert(bubbles(p)[0].body.contents.some(node=>node.text.startsWith(title+'\n')));
+ const operations=bubbles(p)[1].footer.contents.map(node=>node.action);
+ assert.deepEqual(operations.slice(0,4),[
   {type:'message',label:'我的商品',text:'商城商品'},
   {type:'message',label:'我的業績',text:'商城業績'},
   {type:'message',label:'我的網購訂單',text:'商城訂單'},
   {type:'message',label:'商城儀錶板',text:'儀錶板'}
  ]);
- assert.deepEqual(actions[4],{type:'uri',label:'新增／編輯商品（網頁）',uri:'https://liff.line.me/1660923784-vViMTZ1y?shopSection=manage'});
- for(const node of bubble.footer.contents){
+ assert.deepEqual(operations[4],{type:'uri',label:'新增／編輯商品（網頁）',uri:'https://liff.line.me/1660923784-vViMTZ1y?shopSection=manage'});
+ for(const node of bubbles(p).flatMap(bubble=>bubble.footer.contents)){
   assert.equal(node.type,'box');assert.equal(node.paddingAll,'12px');assert.equal(node.height,undefined);
   assert.equal(node.contents[0].text,node.action.label);assert.equal(node.contents[0].size,'lg');assert.equal(node.contents[0].wrap,true);assert.equal(node.contents[0].maxLines,undefined);
  }
- assert(Buffer.byteLength(JSON.stringify(bubble))<30000);
  for(const keyword of ['商城商品','商城訂單','商城業績','儀錶板']){
-  const other=(await buildShopKeywordMessage(event(keyword),f.env)).contents;
-  assert.equal(other.size,'giga');assert.equal(other.header.contents[0].size,'xl');
-  assert(other.body.contents.every(node=>node.size==='lg'));
-  assert(other.footer.contents.every(node=>node.type==='box'&&node.contents[0].size==='lg'));
+  const message=await buildShopKeywordMessage(event(keyword),f.env);
+  if(keyword==='儀錶板')assertCarousel(message,2);else assert.equal(message.contents.type,'bubble');
+  for(const other of bubbles(message)){
+   assert.equal(other.size,'giga');assert.equal(other.header.contents[0].size,'xl');
+   assert(other.body.contents.every(node=>node.size==='lg'));
+   assert(other.footer.contents.every(node=>node.type==='box'&&node.contents[0].size==='lg'));
+  }
  }
- const member=(await buildShopKeywordMessage(event('店家專區',C),f.env)).contents;
- assert(member.body.contents.every(node=>node.size==='lg'));
- assert.deepEqual(member.footer.contents.map(node=>node.action.label),['我的商品','新增／編輯商品（網頁）']);
+ const member=await buildShopKeywordMessage(event('店家專區',C),f.env);assertCarousel(member,2);
+ assert(bubbles(member).every(bubble=>bubble.body.contents.every(node=>node.size==='lg')));
+ assert.deepEqual(bubbles(member)[1].footer.contents.map(node=>node.action.label),['我的商品','新增／編輯商品（網頁）']);
 });
 
 test('product pagination stays owner scoped and has stable bounded pages',async t=>{
@@ -176,6 +197,62 @@ test('merchant detail queries stay own scope even for admins, global dashboard i
  assert(JSON.stringify(all).includes('共 2 筆'));
 });
 
+test('admin dashboard and portal put the check-in editor first while operational data stays owner scoped',async t=>{
+ const f=fixture(t);
+ f.sql.prepare("UPDATE store_shop_products SET title='OWNER-A-ONLY' WHERE shop_id='s-a'").run();
+ f.sql.prepare("UPDATE store_shop_products SET title='OWNER-B-ONLY' WHERE shop_id='s-b'").run();
+ for(const keyword of ['儀錶板','儀表板','店家專區']){
+  const message=await buildShopKeywordMessage(event(keyword,B),f.env,new Date('2026-09-11T01:00:00Z'));
+  assertCarousel(message,3);assertAdminEditorFirst(message);
+  assert.equal(message.altText,keyword==='店家專區'?'店家專區':'全商城營運儀錶板');
+  const second=JSON.stringify(bubbles(message)[1]),operations=bubbles(message)[2];
+  if(keyword==='店家專區'){
+   assert(second.includes('OWNER-B-ONLY'));assert(!second.includes('OWNER-A-ONLY'));
+   assert(!JSON.stringify(operations.body).includes('OWNER-B-ONLY'));
+  }else{
+   assert(second.includes('共 2 筆'));assert(JSON.stringify(operations.body).includes('OWNER-B-ONLY'));assert(!JSON.stringify(operations.body).includes('OWNER-A-ONLY'));
+  }
+  for(const command of ['商城商品','商城業績','商城訂單'])assert(operations.footer.contents.some(node=>node.action.type==='message'&&node.action.text===command));
+  assert(operations.footer.contents.some(node=>node.action.type==='uri'&&node.action.uri.endsWith('shopSection=manage')));
+  assert.equal(actions(message).filter(action=>action.label==='編輯會員打卡').length,1);
+ }
+});
+
+test('store and ordinary-member carousels never acquire admin editor or extra transaction privileges',async t=>{
+ const f=fixture(t);
+ f.sql.prepare("UPDATE store_shop_products SET title='OTHER-OWNER-SECRET' WHERE shop_id='s-b'").run();
+ for(const role of ['store','店長']){
+  f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+  for(const keyword of ['儀錶板','店家專區']){
+   const message=await buildShopKeywordMessage(event(keyword,A),f.env);assertCarousel(message,2);
+   assert(!JSON.stringify(message).includes('OTHER-OWNER-SECRET'));assert(!actions(message).some(action=>action.label==='編輯會員打卡'||action.uri?.includes('checkin-chat-dashboard')));
+   if(keyword==='儀錶板'){assert.equal(message.altText,'我的店家儀錶板');assert(JSON.stringify(bubbles(message)[0]).includes('共 1 筆'));}
+  }
+ }
+ for(const role of ['user','用戶']){
+  f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,C);
+  const message=await buildShopKeywordMessage(event('店家專區',C),f.env);assertCarousel(message,2);
+  const routes=actions(message).filter(action=>action.type==='uri').map(action=>new URL(action.uri).searchParams.get('shopSection'));
+  assert(routes.length>0);assert(routes.every(route=>route==='manage'));
+  assert.equal(bubbles(message)[1].footer.contents.filter(node=>node.action.type==='uri'&&new URL(node.action.uri).searchParams.get('shopSection')==='manage').length,1);
+  for(const action of actions(message))assert(!['商城業績','商城訂單','儀錶板','儀表板'].includes(action.text));
+  assert(!JSON.stringify(message).includes('checkin-chat-dashboard'));assert.match((await buildShopKeywordMessage(event('儀錶板',C),f.env)).text,/僅開放/);
+ }
+ f.sql.prepare("UPDATE users SET role='總管' WHERE line_id=?").run(B);assertAdminEditorFirst(await buildShopKeywordMessage(event('儀表板',B),f.env));
+});
+
+test('multiple pages still send one Flex message per claimed event without an operations intermediary',async t=>{
+ const f=fixture(t),sent=[];
+ const events=[event('儀錶板',B),event('店家專區',B),event('儀表板',A),event('店家專區',C)].map((value,index)=>({...value,replyToken:'single-carousel-'+index}));
+ assert.deepEqual(await consumeShopKeywords(events,f.env,async payload=>{sent.push(payload);return{success:true};}),[]);
+ assert.equal(sent.length,4);
+ for(let index=0;index<sent.length;index++){
+  assert.equal(sent[index].replyToken,'single-carousel-'+index);assert.equal(sent[index].messages.length,1);assertCarousel(sent[index].messages[0],index<2?3:2);
+  if(index<2)assertAdminEditorFirst(sent[index].messages[0]);
+ }
+ assert(f.queries.every(query=>/^(SELECT|WITH)\b/.test(query.trim())));
+});
+
 test('new chat commands recheck roles, reject groups and validate page bounds',async t=>{
  const f=fixture(t);
  for(const keyword of ['商城商品','商城訂單','商城業績']){
@@ -211,7 +288,7 @@ test('new chat data commands retain single reply ownership in mixed webhooks',as
  await h.handler.handleWebhook(new Request('https://test/line-webhook',{method:'POST',headers:{'x-line-signature':sig},body}),f.env,{waitUntil(){}});
  assert.equal(h.replies.length,3);assert.equal(JSON.parse(h.forward[0].raw).events.length,1);
  assert.equal(JSON.parse(h.forward[0].raw).events[0].message.text,'會員分享');
- for(const reply of h.replies)assert(Buffer.byteLength(JSON.stringify(reply.messages[0]))<30000);
+ for(const reply of h.replies){assert.equal(reply.messages.length,1);assert(Buffer.byteLength(JSON.stringify(reply.messages[0]))<30000);}
 });
 function webhookHarness(f){
  const replies=[],forward=[],gas=[],saved=[];
@@ -226,7 +303,7 @@ test('signed mixed batch replies once and forwards only unclaimed events with va
  const f=fixture(t),h=webhookHarness(f),body=JSON.stringify({destination:'channel',events:[event('店家專區'),event('會員分享',C)]});
  const sig=await signRemainingShopEvents(body,f.env.LINE_CHANNEL_SECRET),jobs=[];
  const res=await h.handler.handleWebhook(new Request('https://test/line-webhook',{method:'POST',headers:{'x-line-signature':sig},body}),f.env,{waitUntil:p=>jobs.push(p)});
- await Promise.all(jobs);assert.equal(res.status,200);assert.equal(h.replies.length,1);assert.equal(h.saved.length,2);
+ await Promise.all(jobs);assert.equal(res.status,200);assert.equal(h.replies.length,1);assert.equal(h.replies[0].messages.length,1);assertCarousel(h.replies[0].messages[0],2);assert.equal(h.saved.length,2);
  assert.equal(JSON.parse(h.forward[0].raw).events.length,1);assert.equal(JSON.parse(h.gas[0]).events[0].message.text,'會員分享');
  assert.equal(h.forward[0].sig,await signRemainingShopEvents(h.forward[0].raw,f.env.LINE_CHANNEL_SECRET));
  assert(!h.forward[0].raw.includes('reply-'+A));
@@ -237,7 +314,7 @@ test('child-only batch never reaches forwarding; invalid signature performs no w
  assert.equal(bad.status,401);assert.equal(h.replies.length,0);assert.equal(f.queries.length,0);
  const sig=await signRemainingShopEvents(body,f.env.LINE_CHANNEL_SECRET);
  await h.handler.handleWebhook(new Request('https://test/line-webhook',{method:'POST',headers:{'x-line-signature':sig},body}),f.env,{waitUntil(){}});
- assert.equal(h.replies.length,1);assert.equal(h.forward.length,0);assert.equal(h.gas.length,0);
+ assert.equal(h.replies.length,1);assert.equal(h.replies[0].messages.length,1);assertCarousel(h.replies[0].messages[0],2);assert.equal(h.forward.length,0);assert.equal(h.gas.length,0);
 });
 test('standby, duplicate tokens and reply failures never fall through to mother',async t=>{
  const f=fixture(t);let calls=0;
