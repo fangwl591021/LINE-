@@ -96,6 +96,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
   let memberQuery = '', memberIndustry = '', memberSort = 'latest', matchTimer, matchRegistered = false, matchRegistering = false, memberPaging = false;
   let view = tab === 'members' ? 'members' : 'threads', room = '', generation = 0, timer, busy = false, sending = false;
   let next = '', oldest = 0, newest = 0, readThrough = 0, pending = null, ready = false, initializing = false, blocked = false, blockedByMe = false;
+  let readFlight = null, receiveFailures = 0;
   const seen = new Set();
   const valid = ticket => client.current() && ticket === generation && modal.open;
   let selectedCoupon = null;
@@ -140,18 +141,19 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     if (client.current()) return true;
     leave(); window.showToast?.('登入身分已變更，請重新開啟私訊', true); return false;
   }
-  function schedule() {
-    stop();
+  function schedule(ticket) {
+    if (ticket !== generation || !modal.open || !alive()) return;
+    clearTimeout(timer);
     if (!ready || !modal.open || document.hidden || view === 'members') return;
     timer = setTimeout(async () => {
-      if (!alive()) return;
-      if (!busy && !sending) await refresh(true);
-      schedule();
-    }, view === 'chat' ? 8000 : 15000);
+      if (ticket !== generation || !modal.open || !alive()) return;
+      if (!busy) await refresh(true);
+      schedule(ticket);
+    }, view === 'chat' ? Math.min(8000, 1000 * 2 ** receiveFailures) : 15000);
   }
   function visibility() {
     stop();
-    if (!document.hidden && alive()) { void refresh(true).then(schedule); }
+    if (!document.hidden && alive()) { const ticket = generation; void refresh(true).then(() => schedule(ticket)); }
   }
   function renderRows(items, append = false) {
     const html = items.map(row => {
@@ -162,11 +164,22 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     else list.innerHTML = html || `<p class="mc-empty">${view === 'members' ? '沒有符合的會員。已建立本人名片並接受新聯絡者即可被找到；不含自己或已封鎖的會員。' : '還沒有聊天，點「找會員」開始交流。'}</p>`;
     if (view === 'members') bindChatAvatarImages(list);
   }
-  async function markRead(ticket) {
+  function markRead(ticket) {
     if (document.hidden || !valid(ticket) || !newest || newest <= readThrough) return;
-    const through = newest;
-    await client.request(`/threads/${room}/read`, { through });
-    if (valid(ticket)) { readThrough = Math.max(readThrough, through); window.refreshMemberChatUnread?.(); }
+    if (readFlight?.ticket === ticket && readFlight.room === room) return;
+    const flight = { ticket, room };
+    readFlight = flight;
+    void (async () => {
+      while (valid(ticket) && readFlight === flight && room === flight.room && !document.hidden && newest > readThrough) {
+        const through = newest;
+        await client.request(`/threads/${flight.room}/read`, { through });
+        if (!valid(ticket) || readFlight !== flight || room !== flight.room) return;
+        readThrough = Math.max(readThrough, through);
+        if (!document.hidden) window.refreshMemberChatUnread?.();
+      }
+    })().catch(error => {
+      if (valid(ticket) && readFlight === flight && !sending && !pending) note('已讀狀態暫時無法更新，收訊仍會繼續。');
+    }).finally(() => { if (readFlight === flight) readFlight = null; });
   }
   function addMessages(items, prepend = false) {
     const fresh = items.filter(item => !seen.has(item.seq));
@@ -190,6 +203,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
         const query = paging ? `?before=${oldest}` : newest ? `?after=${newest}` : '';
         const result = await client.request(`/threads/${capturedRoom}/messages${query}`);
         if (!valid(ticket)) return;
+        receiveFailures = 0;
         blocked = result.blocked; blockedByMe = result.blockedByMe;
         $('.mc-peer strong').textContent = result.peer.name;
         $('.mc-peer strong').title = result.peer.name;
@@ -203,10 +217,10 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
         for (const row of list.querySelectorAll('.mc-mine')) if (Number(row.dataset.seq) <= result.lastRead) row.querySelector('[data-read]').textContent = '已讀';
         if (!query || paging) $('[data-action="older"]').hidden = !result.more;
         if (!seen.size) list.innerHTML = '<p class="mc-empty">向對方打聲招呼吧！</p>';
-        await markRead(ticket);
+        markRead(ticket);
         if (!valid(ticket)) return;
         // Catch up one bounded page at a time; next poll fetches any remaining newer items.
-        note(blocked ? '目前已封鎖聯絡，無法傳送訊息。' : pending ? '有一則尚未確認送出的訊息，請按「重試傳送」。' : '');
+        if (!sending) note(blocked ? '目前已封鎖聯絡，無法傳送訊息。' : pending ? '有一則尚未確認送出的訊息，請按「重試傳送」。' : '');
       } else {
         const params = new URLSearchParams();
         if (view === 'members') { params.set('q', memberQuery); params.set('sort', memberSort); if (memberIndustry) params.set('industry', memberIndustry); }
@@ -222,11 +236,16 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
         note();
         if (view === 'members') { memberPaging = paging; void updateMatching(result.matchWork, ticket); }
       }
-    } catch (error) { if (valid(ticket)) note(error.message); }
+    } catch (error) {
+      if (valid(ticket)) {
+        if (view === 'chat') receiveFailures = Math.min(3, receiveFailures + 1);
+        if (!sending) note(error.message);
+      }
+    }
     finally { if (ticket === generation) busy = false; }
   }
   function setView(nextView) {
-    stop(); generation++; popups.close(); busy = false; view = nextView; room = ''; next = ''; pending = null; sending = false; blocked = false; selectedCoupon = null; attachmentControls();
+    stop(); generation++; popups.close(); busy = false; readFlight = null; receiveFailures = 0; view = nextView; room = ''; next = ''; pending = null; sending = false; blocked = false; selectedCoupon = null; attachmentControls();
     oldest = newest = readThrough = 0; seen.clear(); list.replaceChildren(); compose.reset(); compose.querySelector('button').textContent = '傳送'; $('#mc-body').readOnly = false;
     search.hidden = view !== 'members'; compose.hidden = view !== 'chat'; $('.mc-peer').hidden = view !== 'chat';
     $('.mc-attachment').hidden = view !== 'chat';
@@ -249,7 +268,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     try {
       const id = button.dataset.room || (await client.request('/threads', { cardHandle: button.dataset.handle })).id;
       if (!valid(ticket)) return;
-      setView('chat'); room = id; await refresh(); schedule();
+      setView('chat'); room = id; const chatTicket = generation; await refresh(); schedule(chatTicket);
     } catch (error) { if (valid(ticket)) note(error.message); }
     finally { button.disabled = false; }
   }
@@ -273,7 +292,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
         else compose.querySelector('button').textContent = '重試傳送';
       }
     } finally {
-      if (valid(ticket)) { sending = false; compose.querySelector('button').disabled = blocked; attachmentControls(); schedule(); }
+      if (valid(ticket)) { sending = false; compose.querySelector('button').disabled = blocked; attachmentControls(); schedule(ticket); }
     }
   });
   function searchMembers() {
@@ -313,9 +332,13 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     if (action === 'back' && view !== 'chat') { leave(); return; }
     if (['threads', 'members', 'back'].includes(action)) {
       if ((sending || pending) && !window.confirm('訊息可能尚未送達。離開後請查看對話確認結果；確定離開？')) return;
-      setView(action === 'members' ? 'members' : 'threads'); await refresh(); schedule();
-      if (container) onView?.(view);
-    } else if (action === 'refresh') { event.preventDefault(); if (!ready) await initialize(); else await refresh(); schedule(); }
+      setView(action === 'members' ? 'members' : 'threads'); const ticket = generation; await refresh(); schedule(ticket);
+      if (container && valid(ticket)) onView?.(view);
+    } else if (action === 'refresh') {
+      event.preventDefault();
+      if (!ready) await initialize();
+      else { const ticket = generation; await refresh(); schedule(ticket); }
+    }
     else if (action === 'open') await openConversation(button);
     else if (action === 'card' && room) await popups.card(room);
     else if (action === 'line-contact' && room && !blocked) await popups.lineContact(room);
@@ -355,7 +378,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
       if (/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(threadId)) {
         setView('chat'); room = threadId; threadId = '';
       }
-      await refresh(); schedule();
+      const ticket = generation; await refresh(); schedule(ticket);
     } catch (error) { if (client.current() && modal.open) note(error.message); }
     finally { initializing = false; }
   }

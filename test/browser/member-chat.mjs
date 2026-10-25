@@ -122,7 +122,7 @@ try {
   await b.locator('[data-action="line-contact"]').click();
   await b.locator('.mc-popup-body', { hasText: '對方尚未新增' }).waitFor(); await b.locator('.mc-popup header button').click();
   await a.locator('[data-action="card"]').click();
-  await a.locator('.mc-popup-body', { hasText: '對方尚未公開名片' }).waitFor();
+  await a.locator('.mc-popup-body', { hasText: '對方目前沒有可查看的公開名片' }).waitFor();
   await a.locator('.mc-popup header button').click();
   await b.locator('[data-action="card"]').click();
   await b.locator('.mc-card-links a[href="mailto:demo@example.com"]').waitFor();
