@@ -305,7 +305,7 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
         } else if (match[2] === 'card') {
           if (request.method !== 'GET') fail('METHOD_NOT_ALLOWED', '不支援的操作', 405);
           const card = await peerCard(db, room, cardMemberJoin, ownCard);
-          if (!card) fail('CARD_UNAVAILABLE', '對方尚未公開名片，或名片尚未通過檢查', 404);
+          if (!card) fail('CARD_UNAVAILABLE', '對方目前沒有可查看的公開名片', 404);
           data = { card };
         } else {
           keys(body, []);
