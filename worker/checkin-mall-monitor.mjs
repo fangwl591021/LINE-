@@ -1,5 +1,6 @@
 // Read-only CRM projection. LINE acceptance is evidence of API acceptance only;
 // this module never sends, queries a wallet, awards points, or recreates mother text.
+import { readCheckinDashboardSnapshots } from './checkin-chat-dashboard.mjs';
 const UID = /^U[0-9a-f]{32}$/i;
 const PREFIX = 'CHECKIN_MALL:';
 const MAX_THREADS = 100;
@@ -29,7 +30,7 @@ function time(value) {
 function exactThread(row) {
   return row && UID.test(row.user_id || '') && row.thread_id === 'line:' + row.user_id && row.source_type === 'user';
 }
-function projectedMessage(card) {
+function projectedMessage(card, snapshot) {
   const queriedAt = new Date(card.created_at).toISOString();
   const balance = Number.isSafeInteger(card.balance) && card.balance >= 0 ? card.balance : null;
   const amount = balance === null ? '暫時無法取得（不代表餘額為零）' : balance.toLocaleString('zh-TW') + ' 元';
@@ -39,7 +40,12 @@ function projectedMessage(card) {
     direction: 'outbound', message_type: 'flex', event_type: 'checkin_mall_card',
     text_content: `會員購物金・前往商城\n購物金：${amount}\n查詢時間：${displayTime}（台北時間）\nLINE API已接受；送達與已讀未確認。\n母站文字回覆未取得，不在此重建。`,
     created_at: queriedAt, delivery_status: 'accepted', record_source: 'checkin_mall_cards',
-    card_preview: { title: '會員購物金', balance, queried_at: queriedAt, mother_reply_available: false }
+    card_preview: { title: '會員購物金', balance, queried_at: queriedAt, mother_reply_available: false, ...(snapshot && snapshot.createdAt === card.created_at ? {
+      template_revision: snapshot.templateRevision,
+      theme_color: snapshot.config.themeColor,
+      pages: snapshot.config.pages.map(page => ({ kind: page.kind, title: page.title, body: page.body, heroImageUrl: page.heroImageUrl,
+        buttons: page.buttons.map(button => ({ label: button.label, target: button.target })) }))
+    } : {}) }
   };
 }
 async function rows(db, sql, args = []) {
@@ -84,8 +90,9 @@ export async function projectCheckinMallMonitor(db, data) {
       || String(a.thread_id || '').localeCompare(String(b.thread_id || '')));
     let messages = data.messages;
     if (selectedCards.length) {
+      const snapshots = await readCheckinDashboardSnapshots(db, selectedCards.map(card => card.id));
       // Physical messages win even if a caller supplies an already-projected list.
-      const merged = new Map(selectedCards.map(card => { const message = projectedMessage(card); return [message.message_id, message]; }));
+      const merged = new Map(selectedCards.map(card => { const message = projectedMessage(card, snapshots.get(card.id)); return [message.message_id, message]; }));
       for (const message of data.messages) merged.set(message.message_id, message);
       messages = [...merged.values()].sort((a, b) => (time(b.created_at) || 0) - (time(a.created_at) || 0)
         || String(b.message_id || '').localeCompare(String(a.message_id || ''))).slice(0, MAX_MESSAGES).reverse();

@@ -44,6 +44,29 @@ async function fixture({many=false,unauthorized=false,noCredentials=false,allowM
  return {page,state,calls,forbidden,reads,audienceReads,waiting:()=>held.length,waitingSave:()=>heldSaves.length,releaseSave(){while(heldSaves.length)heldSaves.shift()();},release(){while(held.length)held.shift()();},async close(){while(held.length)held.shift()();while(heldSaves.length)heldSaves.shift()();assert.deepEqual(forbidden,[]);await context.close();}};
 }
 try{
+ {
+  const f=await fixture();
+  const pages=[{kind:'wallet',title:'會員購物金',body:'發送當時的內容',heroImageUrl:'',buttons:[{label:'前往商城',target:'mall'},{label:'查看明細',target:'details'}]},
+    {kind:'info',title:'<img src=x onerror=alert(1)>',body:'<script>window.__unsafe=1</script> 說明',heroImageUrl:'',buttons:[{label:'逛商城',target:'mall'}]}];
+  const preview={title:'會員購物金',balance:12857,queried_at:at,mother_reply_available:false,template_revision:4,theme_color:'#078655',pages};
+  f.state.rows[T.a].push(card(T.a,11,12857,{card_preview:preview}));
+  await f.page.locator('#refresh-audience').click();await f.page.locator('.checkin-record-page').nth(1).waitFor();
+  assert.equal(await f.page.locator('.checkin-record-page').count(),2);assert.match(await f.page.locator('.checkin-record').innerText(),/發送時版本 4・2 頁/);
+  assert.equal(await f.page.locator('.checkin-record img, .checkin-record script, .checkin-record a').count(),0);assert.equal(await f.page.evaluate(()=>window.__unsafe),undefined);
+  assert.equal(await f.page.locator('.checkin-record button:disabled').count(),3);
+  const scroller=f.page.locator('.checkin-record-carousel');
+  await scroller.evaluate(node=>{node.scrollLeft=node.clientWidth+10;});
+  const scroll=await scroller.evaluate(node=>node.scrollLeft);assert.ok(scroll>0);
+  const reads=f.reads();await f.page.clock.fastForward(12001);await waitFor(()=>f.reads()>reads);
+  assert.equal(await scroller.evaluate(node=>node.scrollLeft),scroll,'polling must preserve historical carousel position');
+  await f.close();console.log('PASS sent carousel snapshot, escaped content, disabled actions and preserved horizontal position');
+ }
+ {
+  const f=await fixture();f.state.rows[T.a].push(card(T.a,12,12857,{card_preview:{title:'會員購物金',balance:12857,queried_at:at,mother_reply_available:false,template_revision:2,theme_color:'red;position:fixed',pages:[{},{}]}}));
+  await f.page.locator('#refresh-audience').click();await f.page.locator('.checkin-record').waitFor();
+  assert.equal(await f.page.locator('.checkin-record-page').count(),0);assert.match(await f.page.locator('.checkin-record').innerText(),/12,857 元/);
+  await f.close();console.log('PASS malformed snapshot falls back to safe legacy balance summary');
+ }
  // Accepted, trusted check-in projections get a fixed safe summary, not a
  // generic Flex renderer or live links that could register analytics.
  {

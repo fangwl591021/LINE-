@@ -1,5 +1,7 @@
 // Display/analytics sidecar only. The mother remains the only check-in/reply owner.
 import { authorizeStoreAdmin } from './store-admin.mjs';
+import { defaultCheckinDashboardConfig, buildCheckinDashboardMessage } from './checkin-chat-dashboard-render.mjs';
+import { readPublishedCheckinDashboard } from './checkin-chat-dashboard.mjs';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const ROOT = '/v1/checkin-mall';
@@ -11,26 +13,8 @@ export function isCheckinMallEvent(event) {
   return event?.type==='message' && event.mode!=='standby' && event.source?.type==='user' && UID.test(event.source.userId||'') &&
     event.message?.type==='text' && String(event.message.text||'').normalize('NFKC').trim()==='會員打卡';
 }
-function liffLink(env,id,action) {
-  const liff=String(env.POINT_LIFF_ID||env.LIFF_ID||'1660923784-vViMTZ1y');
-  if(!/^\d+-[A-Za-z0-9]+$/.test(liff))throw Error('LIFF_CONFIG_INVALID');
-  const url=new URL('https://liff.line.me/'+liff);
-  url.searchParams.set('shopSection','list');url.searchParams.set('checkinCard',id);url.searchParams.set('checkinAction',action);
-  return url.href;
-}
-export function buildCheckinMallCard(env,id,balance,now=Date.now()) {
-  const text=(value,size='sm',color='#61786f')=>({type:'text',text:value,size,color,wrap:true});
-  const valid=Number.isSafeInteger(balance)&&balance>=0;
-  return {type:'flex',altText:'會員購物金・前往商城',contents:{type:'bubble',size:'mega',
-    header:{type:'box',layout:'vertical',paddingAll:'22px',backgroundColor:'#078655',spacing:'md',contents:[
-      text('點數通 · 會員服務','sm','#ffffff'),{...text('會員購物金','xl','#ffffff'),weight:'bold'},text('打卡結果請以原文字回覆為準','xs','#ffffff')]},
-    body:{type:'box',layout:'vertical',paddingAll:'20px',contents:[{type:'box',layout:'vertical',paddingAll:'17px',cornerRadius:'14px',backgroundColor:'#eef8f1',spacing:'sm',contents:[
-      text('目前可用購物金'),{...text(valid?balance.toLocaleString('zh-TW')+' 元':'暫時無法取得',valid?'xxl':'lg','#133f36'),weight:'bold'},
-      text(valid?'查詢時間 '+new Date(now).toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false}):'請點明細重新查詢；不代表餘額為零','xs')]}]},
-    footer:{type:'box',layout:'vertical',paddingAll:'18px',spacing:'sm',contents:[
-      {type:'button',style:'primary',color:'#078655',action:{type:'uri',label:'前往商城',uri:liffLink(env,id,'mall')}},
-      {type:'button',style:'link',color:'#087a51',action:{type:'uri',label:'查看點數與購物金明細',uri:liffLink(env,id,'details')}},
-      text('實際折抵以商品與結帳確認為準','xxs'),text('點擊後將記錄登入身分與時間，供平台統計。','xxs')]}}};
+export function buildCheckinMallCard(env,id,balance,now=Date.now(),config=defaultCheckinDashboardConfig()) {
+  return buildCheckinDashboardMessage(env,id,balance,now,config);
 }
 
 export async function supplementCheckinMallCards(events,env,forwardResult,points,fetcher=fetch,now=Date.now()) {
@@ -46,7 +30,14 @@ export async function supplementCheckinMallCards(events,env,forwardResult,points
       let balance=null;
       try { const wallet=await points.read(event.source.userId,env);if(UID.test(wallet?.identity||'')&&Number.isSafeInteger(wallet.balance)&&wallet.balance>=0)balance=wallet.balance; }
       catch { /* Never use a local fallback or invent a successful check-in. */ }
-      const message=buildCheckinMallCard(env,id,balance,now);
+      const published=await readPublishedCheckinDashboard(db);
+      const message=buildCheckinMallCard(env,id,balance,now,published.config);
+      // Persist the exact compiled message before sending. Later edits never rewrite it.
+      // Failure closes this attempt without sending or changing the daily claim/retry key.
+      const snapshot=await db.prepare(`INSERT INTO checkin_chat_dashboard_snapshots(card_id,template_revision,config_json,message_json,created_at)
+        SELECT id,?,?,?,created_at FROM checkin_mall_cards WHERE id=? AND state='preparing'`)
+        .bind(published.revision,JSON.stringify(published.config),JSON.stringify(message),id).run();
+      if(Number(snapshot.meta?.changes)!==1)return;
       const sending=await db.prepare("UPDATE checkin_mall_cards SET state='sending',balance=? WHERE id=? AND state='preparing'").bind(balance,id).run();
       if(Number(sending.meta?.changes)!==1)return;
       let state='unknown';

@@ -12,10 +12,11 @@ function fixture(t){
   const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
   sql.exec(`PRAGMA foreign_keys=ON;CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '');CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);`);
   sql.exec(readFileSync(new URL('../migrations/0063_checkin_mall_cards.sql',import.meta.url),'utf8'));
+  sql.exec(readFileSync(new URL('../migrations/0071_checkin_chat_dashboard.sql',import.meta.url),'utf8'));
   for(const [uid,role] of [[A,'user'],[B,'store'],[ADMIN,'admin']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(uid,uid,role,uid===ADMIN?'方萬隆':'測試會員');
   const writes=[],pushes=[],reads=[];let fail='',push='ok',point='ok',channel='1660923784',expires=1000;
   const prepare=(query,args=[])=>({bind(...values){return prepare(query,values);},async first(){return sql.prepare(query).get(...args)||null;},async all(){return {success:true,results:sql.prepare(query).all(...args)};},async run(){
-    assert.match(query,/^\s*(INSERT OR IGNORE INTO|UPDATE) checkin_mall_/);writes.push(query);
+    assert.match(query,/^\s*((INSERT OR IGNORE INTO|UPDATE) checkin_mall_|INSERT INTO checkin_chat_dashboard_snapshots)/);writes.push(query);
     if(fail&&query.includes(fail))throw Error('private database error');
     const result=sql.prepare(query).run(...args);return {success:true,meta:{changes:Number(result.changes)}};
   }});
@@ -41,7 +42,7 @@ const UID=value=>/^U[0-9a-f]{32}$/i.test(value||'');
 test('migration is additive and card omits removed rows, fixed gains and false success',t=>{
   const f=fixture(t);assert.equal(f.count('users'),3);const card=buildCheckinMallCard({},crypto.randomUUID(),12857,NOW),raw=JSON.stringify(card);
   assert.match(raw,/12,857 元/);assert.match(raw,/前往商城/);assert.doesNotMatch(raw,/打卡贈點|剩餘會員點數|轉換為購物金|打卡成功|＋10|replyToken|mother-only/);
-  for(const button of card.contents.footer.contents.filter(x=>x.type==='button')){const url=new URL(button.action.uri);assert.equal(url.host,'liff.line.me');assert.equal(url.searchParams.get('shopSection'),'list');assert(!url.href.includes(A));}
+  for(const button of card.contents.contents[0].footer.contents.filter(x=>x.type==='button')){const url=new URL(button.action.uri);assert.equal(url.host,'liff.line.me');assert.equal(url.searchParams.get('shopSection'),'list');assert(!url.href.includes(A));}
 });
 test('only exact signed active one-to-one check-in candidates can supplement; gates and failed forward do nothing',async t=>{
   const f=fixture(t),wrong=[event({mode:'standby'}),event({source:{type:'group',userId:A}}),event({message:{type:'text',text:'請會員打卡'}}),event({source:{type:'user',userId:'bad'}}),event({timestamp:NOW-86400000}),event({timestamp:NOW+600000}),event({webhookEventId:'',message:{type:'text',text:'會員打卡'}})];

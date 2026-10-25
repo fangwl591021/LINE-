@@ -57,6 +57,17 @@ test('activity deep link opens only after existing manager verification',async()
   const denied=setup({role:'user'});denied.context.location.search='?tab=activities';await denied.run();
   assert.ok(!denied.calls.includes('tab:activities'));
 });
+test('direct chat dashboard entry is exposed only after existing administrator verification',async()=>{
+  const admin=setup({role:'admin',hardAdmin:true});admin.context.location.search='?tab=checkin-chat-dashboard';await admin.run();
+  assert.ok(admin.calls.includes('tab:checkin-chat-dashboard'));
+  assert.equal(admin.node('nav-checkin-chat-dashboard').classList.contains('hidden'),false);
+  const store=setup({role:'store'});store.context.location.search='?tab=checkin-chat-dashboard';await store.run();
+  assert.ok(!store.calls.includes('tab:checkin-chat-dashboard'));assert.ok(store.calls.includes('tab:users'));
+  assert.equal(store.node('nav-checkin-chat-dashboard').classList.contains('hidden'),true);
+  const user=setup({role:'user'});user.context.location.search='?tab=checkin-chat-dashboard';await user.run();
+  assert.ok(!user.calls.includes('tab:checkin-chat-dashboard'));
+});
+
 test('SDK can finish loading asynchronously; no dependency on synchronous script execution',async()=>{
   const f=setup({hang:'sdk'}),pending=f.run();await tick();
   f.context.window.liff=f.context.liff;f.node('admin-liff-sdk').load();await pending;

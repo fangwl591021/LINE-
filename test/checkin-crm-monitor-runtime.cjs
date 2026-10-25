@@ -83,7 +83,7 @@ async function setup(mf, mode) {
       const target = mode === 'other-recipient' ? 'line:' + B : mode === 'group' ? 'group:SYNTHETIC' : mode === 'mismatched-thread' ? 'line:' + C : 'line:' + A;
       const fetchView = async () => { const response = await mf.dispatchFetch('https://isolated.test/monitor', { method: 'POST', body: JSON.stringify({ threadId: target, limit: 100 }) }); assert.equal(response.status, 200); return await response.json(); };
       const views = await Promise.all(Array.from({ length: 5 }, fetchView)), { result, queryCount, networkCalls } = views[0], data = result.data;
-      assert.ok(result.success); assert.equal(networkCalls, 0); assert.ok(queryCount <= 7, 'monitor uses bounded reads');
+      assert.ok(result.success); assert.equal(networkCalls, 0); assert.ok(queryCount <= 8, 'monitor uses bounded reads including an optional snapshot');
       for (const view of views) assert.deepEqual(view.result, result, 'concurrent viewing must not double-count virtual records');
       assert.equal(await snapshot(db), before, 'threads, unread, notes, physical messages, points, awards, clicks and delivery rows must remain identical');
       assert.doesNotMatch(JSON.stringify(result), /REPLY_TOKEN_DO_NOT_EXPOSE|RAW_JSON_DO_NOT_EXPOSE|PRIVATE_RETRY_|PRIVATE_EVENT_/);
