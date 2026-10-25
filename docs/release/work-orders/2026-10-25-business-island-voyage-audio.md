@@ -14,3 +14,4 @@
 - 真AudioContext＋Analyser音樂與音效獨立非零RMS，雙關閉為0；首次只切音效不建立context。取消depart音效時sound bus RMS由0.011119變0，music仍0.007445；立即stop音源增加3，context仍running。離頁contextclosed、背景音源0、拒絕resume可繼續擲骰。
 - 六種航行取消含海上BFCache恢復船態均PASS；84次合成API、建聊1／送訊1僅明確合成操作，外部請求0、pageerror0。音效控制獨立localStorage key，原遊戲館偏好保持。
 - 交流島JS／CSS快取v4、world v2、audio v1；僅GitHub Pages發布，Worker和七島圖未改。
+- 整合main b1502ed1c4ac74d900e2fd0b6b01b8e02ac803a1（並行PR259首頁兩快捷入口互換），自動合併index／契約不同hunk並保留新首頁位置；不還原或改動該功能。整合後完整guard:after亦PASS。

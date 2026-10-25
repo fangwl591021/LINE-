@@ -60,7 +60,7 @@ test('all eight home shortcuts keep their real handlers and visibility gates', (
     'href="https://lin.ee/SGdgLJk"',
     "window.goPage('my-activities')",
     "window.goPage('inbox')",
-    'window.openPartnerStores?.()',
+    'window.openBusinessRichman?.()',
     'window.openExchangeZone?.()'
   ];
   expected.forEach((handler, index) => assert.ok(shortcutElements[index].includes(handler), `shortcut ${index + 1}: ${handler}`));
@@ -79,7 +79,7 @@ test('reference icons keep their meanings, requested colors, and readable labels
     null,
     ['event_note', /text-slate-/],
     ['mail', /text-(?:sky|blue|cyan)-/],
-    ['storefront', /text-purple-/],
+    ['travel_explore', /text-emerald-/],
     ['forum', /text-emerald-/]
   ];
   iconExpectations.forEach((expected, index) => {
