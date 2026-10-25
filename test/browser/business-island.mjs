@@ -27,8 +27,9 @@ const allMembers = [
   { handle:'card-d',name:'黃測試',company:'星光商行',title:'服務夥伴',memberNumber:'20261025003',avatarUrl:'https://fixture.invalid/missing.png',industry:'餐飲食品',match:null },
   { handle:'card-e',name:'周新頁',company:'Demo Supply',title:'供應夥伴',memberNumber:'20261025004',avatarUrl:'',industry:'零售電商',match:{score:40,source:'rules'} }
 ];
+const manyMembers=Array.from({length:18},(_,index)=>({handle:'many-'+String(index+1).padStart(2,'0'),name:'多名單會員'+String(index+1).padStart(2,'0'),company:'合成合作工作室 '+(index+1),title:'商務交流夥伴',memberNumber:'20261025'+String(index+10).padStart(3,'0'),avatarUrl:index%2?picture:'',industry:'科技資訊',match:null}));
 const calls = [], messages = [], pending = new Map();
-let holdNextPage = false;
+let holdNextPage = false, randomBatch = 0, holdNextRandom = '', failNextRandom = false;
 const checks = [], errors = [], outside = [];
 const record = name => { checks.push(name); console.log('PASS ' + name); };
 const messageWrites = () => calls.filter(call => call.method === 'POST' && call.path.endsWith('/messages'));
@@ -83,8 +84,20 @@ const server = createServer(async (req,res) => {
     }
     if (url.pathname === '/v1/member-chat/members') {
       const q=url.searchParams.get('q')||'',industry=url.searchParams.get('industry')||'';
+      if(url.searchParams.get('sort')==='random'&&holdNextRandom) {
+        const key=holdNextRandom;holdNextRandom='';
+        pending.set(key,()=>ok(res,{items:[{...allMembers[0],handle:'stale-'+key,name:'舊骰子回應不得呈現 '+key}],next:'',industries:['餐飲食品','科技資訊','零售電商']}));return;
+      }
+      if(url.searchParams.get('sort')==='random'&&failNextRandom) {failNextRandom=false;respond(res,{success:false,error:'合成骰子暫時失敗'},503);return;}
+      if(q==='多名單') {ok(res,{items:manyMembers,next:'',industries:['科技資訊']});return;}
       if(q.startsWith('late-')) {pending.set(q,()=>ok(res,{items:[{...allMembers[0],name:'舊回應不得呈現 '+q}],next:'',industries:['餐飲食品','科技資訊','零售電商']}));return;}
       let rows=allMembers.filter(row=>(!q||[row.name,row.company,row.title].join(' ').toLowerCase().includes(q.toLowerCase()))&&(!industry||row.industry===industry));
+      if(url.searchParams.get('sort')==='random') {
+        if(url.searchParams.has('after')) {respond(res,{success:false,error:'Random batches do not use cursors'},400);return;}
+        const offset=rows.length?randomBatch++%rows.length:0;
+        const batch=[...rows.slice(offset),...rows.slice(0,offset)].slice(0,3);
+        ok(res,{items:batch.map(({industry,...row})=>row),next:'',industries:['餐飲食品','科技資訊','零售電商']});return;
+      }
       if(url.searchParams.get('sort')==='match') rows=rows.toSorted((a,b)=>(b.match?.score??-1)-(a.match?.score??-1));
       const page=url.searchParams.get('after')?rows.slice(3):rows.slice(0,3);
       if(holdNextPage&&url.searchParams.has('after')){holdNextPage=false;pending.set('pagination',()=>ok(res,{items:page.map(({industry,...row})=>row),next:'',industries:['餐飲食品','科技資訊','零售電商']}));return;}
@@ -120,11 +133,13 @@ await context.route('**/*',async route=>{
 });
 const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
 const island=()=>page.locator('#page-business-island');
-const waitMembers=async(count=3)=>{await page.waitForFunction(count=>document.querySelectorAll('#page-business-island .bi-list .bi-member').length===count&&document.querySelector('[data-bi-status]')?.textContent==='',count);};
+const waitMembers=async(count=3)=>{await page.waitForFunction(count=>document.querySelectorAll('#page-business-island .bi-list .bi-member').length===count&&!document.querySelector('[data-bi-action="roll"]')?.disabled&&!document.querySelector('[data-bi-action="more"]')?.disabled,count);};
 const enter=async()=>{await page.evaluate(()=>window.openBusinessIsland());await waitMembers();};
 const selectZone=value=>page.locator(`.bi-tabs [data-bi-zone="${value}"]`).click();
 const submit=async(q='')=>{await page.locator('#bi-query').fill(q);await page.locator('.bi-search button[type=submit]').click();};
-let failure;
+const selectedHandle=()=>page.locator('.bi-list .bi-member-select[aria-pressed="true"]').getAttribute('data-bi-member');
+const memberCalls=()=>calls.filter(call=>call.path==='/v1/member-chat/members');
+let failure, diagnosticPage=page;
 try {
   await mkdir(output,{recursive:true});
   let moduleSeen=false,releaseModule;
@@ -145,7 +160,7 @@ try {
   await slowStyle.evaluate(()=>{document.querySelector('.bi-tabs [data-bi-zone="home"]').click();document.querySelector('[data-bi-action="list"]').click();});
   assert.doesNotMatch(await slowStyle.locator('[data-bi-status]').textContent(),/登入.*失效|重新進入 LINE/);
   releaseStyle();
-  await slowStyle.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===3&&document.querySelector('[data-bi-status]').textContent==='');
+  await slowStyle.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===3&&!document.querySelector('[data-bi-action="roll"]')?.disabled);
   await slowStyle.locator('[data-bi-action="list"]').click();assert.equal(await slowStyle.locator('#page-business-island').getAttribute('data-view'),'list');
   await slowStyle.close();record('fast controls during delayed module or CSS loading do not cancel initialization');
   assert.equal(await page.evaluate(()=>window.currentPage),'business-island');
@@ -161,15 +176,45 @@ try {
   await page.locator('.bi-list [data-bi-member="card-c"]').click();
   assert.equal(await page.locator('.bi-selection h3').textContent(),unsafeName);
   assert.equal(threadWrites().length,0);assert.equal(messageWrites().length,0);
-  await page.locator('[data-bi-action="card"]').click();await page.locator('.bi-card-dialog[open]').waitFor();
+  await page.locator('.bi-selection [data-bi-action="card"]').click();await page.locator('.bi-card-dialog[open]').waitFor();
   assert.equal(await page.locator('.bi-card-body h3').textContent(),'合成公開名片');
   assert.equal(await page.locator('.bi-card-links a').count(),1);assert.equal(await page.evaluate(()=>window.__xss),0);
   assert.equal(threadWrites().length,0);assert.equal(messageWrites().length,0);
   await page.locator('.bi-card-dialog header button').click();record('member summary and public-card GET never create a conversation or send a message');
 
-  await submit('陳');await waitMembers(1);assert.equal(await page.locator('.bi-list .bi-member').getAttribute('data-bi-member'),'card-b');
+  assert.equal(await page.locator('#bi-sort').inputValue(),'random');
+  assert.equal(memberCalls()[0].query.sort,'random');
+  assert.equal(await page.locator('.bi-list article.bi-member').count(),3);
+  assert.equal(await page.locator('.bi-list .bi-member-actions button').count(),6);
+  assert.equal(await page.locator('[data-bi-action="more"]').isVisible(),true,'random batches remain explorable without a cursor');
+  await page.locator('[data-bi-action="more"]').click();await waitMembers(4);
+  assert.equal(await page.locator('.bi-list [data-bi-member="card-e"]').count(),1,'another random batch reaches members beyond the first batch');
+  assert.equal(memberCalls().at(-1).query.sort,'random');
+  assert.equal(memberCalls().at(-1).query.after,undefined);
+  let previous=await selectedHandle();const rolled=[];
+  for(let turn=0;turn<6;turn++) {
+    const before=memberCalls().length;
+    await page.locator('[data-bi-action="roll"]').scrollIntoViewIfNeeded();
+    const rollScroll=await page.locator('#main').evaluate(element=>element.scrollTop);
+    await page.locator('[data-bi-action="roll"]').click();await waitUntil(()=>memberCalls().length>before);
+    await page.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&document.querySelector('.bi-list .bi-member-select[aria-pressed="true"]'));
+    assert.ok(Math.abs(await page.locator('#main').evaluate(element=>element.scrollTop)-rollScroll)<=2,'dice rolls must keep the current scroll position');
+    const handle=await selectedHandle();assert.ok(handle);assert.notEqual(handle,previous,'two or more candidates must not repeat the previous member');
+    assert.equal(memberCalls().at(-1).query.sort,'random');assert.equal(memberCalls().at(-1).query.after,undefined);
+    assert.equal(await page.locator('.bi-card-dialog[open]').count(),0);assert.equal(await page.evaluate(()=>window.currentPage),'business-island');
+    rolled.push(handle);previous=handle;
+  }
+  assert.ok(new Set(rolled).size>1);assert.equal(threadWrites().length,0);assert.equal(messageWrites().length,0);
+  assert.equal(calls.filter(call=>call.method==='POST').length,0,'dice exploration performs only read requests');
+  record('default random batches and six dice rolls reach new members, avoid consecutive repeats and never open or write automatically');
+
+  await submit('陳');await waitMembers(1);assert.equal(await page.locator('.bi-list .bi-member-select').getAttribute('data-bi-member'),'card-b');
+  await page.locator('[data-bi-action="roll"]').click();await waitMembers(1);
+  assert.equal(memberCalls().at(-1).query.q,'陳');assert.equal(memberCalls().at(-1).query.sort,'random');
   await submit();await waitMembers();await page.locator('#bi-industry').selectOption('餐飲食品');await waitMembers(2);
   assert.equal(calls.at(-1).query.industry,'餐飲食品');
+  await page.locator('[data-bi-action="roll"]').click();await waitMembers(2);
+  assert.equal(memberCalls().at(-1).query.industry,'餐飲食品');assert.equal(memberCalls().at(-1).query.sort,'random');
   await page.locator('#bi-sort').selectOption('match');await waitMembers(2);assert.equal(calls.at(-1).query.sort,'match');
   await page.locator('#bi-industry').selectOption('');await waitMembers();
   await page.locator('#bi-sort').selectOption('latest');await waitMembers();
@@ -186,15 +231,43 @@ try {
   await page.locator('[data-bi-action="more"]').click();await waitMembers(4);
   record('switching zones during pagination ignores the old result and keeps More usable');
 
+  await page.locator('.bi-list [data-bi-member="card-b"]').scrollIntoViewIfNeeded();
+  const memberScroll=await page.locator('#main').evaluate(element=>element.scrollTop);
   await page.locator('.bi-list [data-bi-member="card-b"]').click();
-  await page.locator('[data-bi-action="chat"]').click();await page.locator('.member-chat[open] .mc-peer strong').waitFor();
+  assert.ok(Math.abs(await page.locator('#main').evaluate(element=>element.scrollTop)-memberScroll)<=2,'selecting a member must not jump to the panel');
+  await page.evaluate(()=>document.querySelector('#main').scrollTop=0);
+  await selectZone('home');assert.equal(await page.locator('#main').evaluate(element=>element.scrollTop),0,'zone changes must not force the panel into view');
+  await selectZone('people');await waitMembers(4);
+  record('member and zone selection keep the single main scroll position');
+
+  await page.locator('.bi-selection [data-bi-action="chat"]').scrollIntoViewIfNeeded();
+  const chatScroll=await page.locator('#main').evaluate(element=>element.scrollTop), chatMember=await selectedHandle();
+  await page.locator('.bi-selection [data-bi-action="chat"]').click();await page.locator('.member-chat[open] .mc-peer strong').waitFor();
   await page.waitForFunction(()=>document.querySelector('.mc-peer strong')?.textContent==='陳小商');
   assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,0);
   await page.locator('#mc-body').fill('本機合成商務交流訊息');await page.locator('.mc-compose button[type=submit]').click();
   await page.waitForFunction(()=>document.querySelector('#mc-body')?.value==='');
   assert.equal(messageWrites().length,1);assert.equal(messages[0].body,'本機合成商務交流訊息');
   await page.locator('.member-chat[open] [data-action="close"]').click();assert.equal(await island().isVisible(),true);
+  assert.equal(await page.evaluate(()=>window.currentPage),'business-island');assert.equal(await selectedHandle(),chatMember);
+  assert.ok(Math.abs(await page.locator('#main').evaluate(element=>element.scrollTop)-chatScroll)<=2,'closing the original chat returns to the same island position');
   record('explicit Start Exchange creates one thread and opens the original working synthetic message composer');
+
+  const restoredMember=await selectedHandle(), restoredSort=await page.locator('#bi-sort').inputValue();
+  const restoredRows=await page.locator('.bi-list .bi-member-select').evaluateAll(elements=>elements.map(element=>element.dataset.biMember));
+  const restoredScroll=await page.locator('#main').evaluate(element=>element.scrollTop);
+  await page.evaluate(()=>{window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));});
+  await waitMembers(4);
+  assert.equal(await page.evaluate(()=>window.currentPage),'business-island');assert.equal(await selectedHandle(),restoredMember);
+  assert.equal(await page.locator('#bi-sort').inputValue(),restoredSort);
+  assert.deepEqual(await page.locator('.bi-list .bi-member-select').evaluateAll(elements=>elements.map(element=>element.dataset.biMember)),restoredRows);
+  assert.ok(Math.abs(await page.locator('#main').evaluate(element=>element.scrollTop)-restoredScroll)<=2,'BFCache restoration keeps the island scroll position');
+  await page.locator('.bi-list [data-bi-handle="card-b"][data-bi-action="card"]').click();await page.locator('.bi-card-dialog[open]').waitFor();
+  assert.equal(calls.at(-1).path,'/v1/member-chat/members/card-b/card');
+  await page.locator('.bi-card-dialog header button').click();
+  assert.doesNotMatch(await page.locator('[data-bi-status]').textContent(),/重新進入 LINE|登入身分已變更/);
+  assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);
+  record('BFCache pagehide/pageshow restores the same members and selected card with a usable authenticated read client');
 
   await selectZone('board');await page.locator('[data-bi-post="post-one"]').waitFor();
   assert.equal(await page.locator('.bi-post strong').textContent(),'尋找公開合作夥伴');
@@ -208,12 +281,12 @@ try {
   await page.locator('.member-chat[open] [data-action="close"]').click();
   await page.locator('[data-bi-action="my-card"]').click();assert.equal(await page.evaluate(()=>window.currentPage),'admin-settings');
   assert.ok(await page.evaluate(()=>window.__fixtureEvents.some(event=>event.kind==='my-card')));
-  await page.evaluate(()=>window.openBusinessIsland());await selectZone('people');await waitMembers();record('My Hut keeps the existing personal-card and chat entry points');
+  await page.evaluate(()=>window.openBusinessIsland());await selectZone('people');await waitMembers(4);record('My Hut keeps the existing personal-card and chat entry points');
 
   await page.locator('[data-bi-action="list"]').click();assert.equal(await page.locator('.bi-map').isVisible(),false);
   assert.equal(await island().getAttribute('data-view'),'list');
   await page.locator('[data-bi-action="exit"]').click();assert.equal(await island().isVisible(),false);
-  await page.evaluate(()=>window.openBusinessIsland());await waitMembers();
+  await page.evaluate(()=>window.openBusinessIsland());await waitMembers(4);
   assert.equal(await island().getAttribute('data-view'),'list');
   assert.equal(await page.locator('[data-bi-action="list"]').getAttribute('aria-pressed'),'true');
   assert.equal(await page.locator('[data-bi-action="list"]').textContent(),'回到島嶼');
@@ -225,18 +298,95 @@ try {
   for(const width of [320,390,768,1440]){
     await page.setViewportSize({width,height:width>900?1000:844});
     await page.evaluate(()=>{window.scrollTo(0,0);document.querySelector('#main').scrollTop=0;});
-    const measure=await page.evaluate(()=>({width:innerWidth,documentWidth:document.documentElement.scrollWidth,appWidth:document.querySelector('#app').getBoundingClientRect().width,mainHeight:document.querySelector('#main').clientHeight,mainScrollHeight:document.querySelector('#main').scrollHeight,mainOverflowY:getComputedStyle(document.querySelector('#main')).overflowY,topNavDisplay:getComputedStyle(document.querySelector('#top-nav')).display,rootWidth:document.querySelector('#page-business-island').getBoundingClientRect().width,panelHeight:document.querySelector('.bi-panel').getBoundingClientRect().height,mapHeight:document.querySelector('.bi-map').getBoundingClientRect().height,panelScrollHeight:document.querySelector('.bi-panel').scrollHeight,panelOverflowY:getComputedStyle(document.querySelector('.bi-panel')).overflowY,buttons:[...document.querySelectorAll('.bi-toolbar button,.bi-tabs button,.bi-selection button,.bi-search button')].filter(element=>element.getClientRects().length).map(element=>({text:element.textContent.trim(),height:element.getBoundingClientRect().height,width:element.getBoundingClientRect().width}))}));
+    const measure=await page.evaluate(()=>{
+      const main=document.querySelector('#main'),panel=document.querySelector('.bi-panel'),map=document.querySelector('.bi-map'),list=document.querySelector('.bi-list'),explore=document.querySelector('.bi-explore');
+      return {width:innerWidth,documentWidth:document.documentElement.scrollWidth,appWidth:document.querySelector('#app').getBoundingClientRect().width,mainHeight:main.clientHeight,mainScrollHeight:main.scrollHeight,mainOverflowY:getComputedStyle(main).overflowY,topNavDisplay:getComputedStyle(document.querySelector('#top-nav')).display,bottomNavDisplay:getComputedStyle(document.querySelector('#bottom-nav')).display,bottomAdminDisplay:getComputedStyle(document.querySelector('#bottom-nav-admin')).display,rootWidth:document.querySelector('#page-business-island').getBoundingClientRect().width,mapWidth:map.clientWidth,mapScrollWidth:map.scrollWidth,mapBottom:map.getBoundingClientRect().bottom,exploreTop:explore.getBoundingClientRect().top,exploreBottom:explore.getBoundingClientRect().bottom,panelTop:panel.getBoundingClientRect().top,panelHeight:panel.clientHeight,panelScrollHeight:panel.scrollHeight,panelOverflowY:getComputedStyle(panel).overflowY,listHeight:list.clientHeight,listScrollHeight:list.scrollHeight,listOverflowY:getComputedStyle(list).overflowY,buttons:[...document.querySelectorAll('.bi-toolbar button,.bi-tabs button,.bi-selection button,.bi-search button,.bi-roll,.bi-member-select,.bi-member-actions button,.bi-hotspot,.bi-pin')].filter(element=>element.getClientRects().length).map(element=>({text:element.textContent.trim(),height:element.getBoundingClientRect().height,width:element.getBoundingClientRect().width}))};
+    });
     assert.ok(measure.documentWidth<=width+1,JSON.stringify(measure));assert.ok(measure.buttons.length>=8);
     assert.ok(measure.buttons.every(button=>button.height>=44&&button.width>=44),JSON.stringify(measure));layouts.push(measure);
     assert.equal(measure.topNavDisplay,'none');assert.equal(measure.mainOverflowY,'auto');
-    if(width>900){assert.ok(measure.rootWidth>1000,JSON.stringify(measure));assert.ok(Math.abs(measure.panelHeight-measure.mapHeight)<=2,JSON.stringify(measure));assert.equal(measure.panelOverflowY,'auto');await page.locator('.bi-list .bi-member').last().scrollIntoViewIfNeeded();await page.locator('[data-bi-action="card"]').scrollIntoViewIfNeeded();await page.evaluate(()=>{document.querySelector('.bi-panel').scrollTop=0;document.querySelector('.bi-list').scrollTop=0;});}
-    else {assert.ok(measure.mainScrollHeight>measure.mainHeight,JSON.stringify(measure));await page.locator('[data-bi-action="chat"]').scrollIntoViewIfNeeded();assert.ok(await page.locator('#main').evaluate(element=>element.scrollTop)>0);if(width===390)await page.screenshot({path:join(output,'business-island-390-panel.png'),fullPage:true});}
+    assert.equal(measure.bottomNavDisplay,'none');assert.equal(measure.bottomAdminDisplay,'none');
+    assert.ok(measure.rootWidth<=1000+1,JSON.stringify(measure));assert.ok(measure.mapScrollWidth<=measure.mapWidth+1,JSON.stringify(measure));
+    assert.ok(measure.mapBottom<=measure.exploreTop+1&&measure.exploreBottom<=measure.panelTop+1,'scene, dice and member content are ordered from top to bottom');
+    assert.equal(measure.panelOverflowY,'visible');assert.equal(measure.listOverflowY,'visible');
+    assert.ok(measure.panelScrollHeight<=measure.panelHeight+1&&measure.listScrollHeight<=measure.listHeight+1,JSON.stringify(measure));
+    assert.ok(measure.mainScrollHeight>measure.mainHeight,JSON.stringify(measure));
+    await page.locator('.bi-list .bi-member').last().scrollIntoViewIfNeeded();assert.ok(await page.locator('#main').evaluate(element=>element.scrollTop)>0);
+    if(width===390)await page.screenshot({path:join(output,'business-island-390-panel.png'),fullPage:true});
     await page.locator('#main').evaluate(element=>element.scrollTop=0);
     await page.screenshot({path:join(output,`business-island-${width}.png`),fullPage:true});
   }
-  await writeFile(join(output,'layout-metrics.json'),JSON.stringify(layouts,null,2));record('320/390/768/1440 layouts avoid document overflow and keep primary hit areas at least 44px');
+  await writeFile(join(output,'layout-metrics.json'),JSON.stringify(layouts,null,2));record('320/390/768/1440 layouts flow scene, dice and member cards vertically with one scroll container and at least 44px hit areas');
 
-  await page.locator('#fixture-bottom-home').click();assert.equal(await page.evaluate(()=>window.currentPage),'home');
+  const manyPage=await context.newPage();diagnosticPage=manyPage;manyPage.on('pageerror',error=>errors.push(error.message));
+  await manyPage.goto(base);await manyPage.locator('#fixture-open').click();
+  await manyPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===3);
+  await manyPage.locator('#bi-query').fill('多名單');await manyPage.locator('.bi-search button[type=submit]').click();
+  await manyPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===18&&!document.querySelector('[data-bi-action="more"]').disabled);
+  const manyLayouts=[];
+  for(const width of [390,701,730,1440]) {
+    await manyPage.setViewportSize({width,height:width>900?1000:844});
+    await manyPage.locator('#main').evaluate(element=>element.scrollTop=0);
+    const measure=await manyPage.evaluate(()=>{
+      const rect=element=>{const box=element.getBoundingClientRect();return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,width:box.width,height:box.height};};
+      const list=document.querySelector('.bi-list'),map=document.querySelector('.bi-map');
+      return {width:innerWidth,documentWidth:document.documentElement.scrollWidth,map:rect(map),pins:[...document.querySelectorAll('.bi-pin')].filter(element=>element.getClientRects().length).map(rect),hotspots:[...document.querySelectorAll('.bi-hotspot')].map(rect),cards:[...list.querySelectorAll('.bi-member')].map(element=>({handle:element.querySelector('.bi-member-select').dataset.biMember,actions:[...element.querySelectorAll('.bi-member-actions button')].map(button=>button.dataset.biAction)})),listOverflow:getComputedStyle(list).overflowY,panelOverflow:getComputedStyle(document.querySelector('.bi-panel')).overflowY};
+    });
+    assert.equal(measure.pins.length,width<=700?8:12,JSON.stringify(measure));
+    assert.equal(measure.cards.length,18);assert.equal(new Set(measure.cards.map(row=>row.handle)).size,18);
+    assert.ok(measure.cards.every(row=>row.actions.join(',')==='card,chat'),'every member keeps both explicit actions');
+    assert.equal(measure.listOverflow,'visible');assert.equal(measure.panelOverflow,'visible');assert.ok(measure.documentWidth<=width+1);
+    const overlap=(a,b)=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
+    for(let index=0;index<measure.pins.length;index++) {
+      const pin=measure.pins[index];
+      assert.ok(pin.left>=measure.map.left-1&&pin.right<=measure.map.right+1&&pin.top>=measure.map.top-1&&pin.bottom<=measure.map.bottom+1,'member pin stays inside the map');
+      assert.ok(!measure.pins.slice(index+1).some(other=>overlap(pin,other)),'member pins must not cover each other at '+width+'px');
+      assert.ok(!measure.hotspots.some(hotspot=>overlap(pin,hotspot)),'member pins must not cover zone controls at '+width+'px');
+    }
+    for(const card of await manyPage.locator('.bi-list .bi-member').all()) {
+      await card.scrollIntoViewIfNeeded();
+      assert.ok(await card.evaluate(element=>{const row=element.getBoundingClientRect(),main=document.querySelector('#main').getBoundingClientRect();return row.top>=main.top-1&&row.bottom<=main.bottom+1&&row.left>=main.left-1&&row.right<=main.right+1;}),'all 18 member cards are reachable through the main vertical scroll');
+    }
+    assert.ok(await manyPage.locator('#main').evaluate(element=>element.scrollTop)>0);
+    if(width===390)await manyPage.screenshot({path:join(output,'business-island-many-390-last-cards.png'),fullPage:true});
+    await manyPage.locator('#main').evaluate(element=>element.scrollTop=0);
+    await manyPage.screenshot({path:join(output,`business-island-many-${width}.png`),fullPage:true});manyLayouts.push(measure);
+  }
+  await writeFile(join(output,'many-members-layout-metrics.json'),JSON.stringify(manyLayouts,null,2));
+  await manyPage.close();diagnosticPage=page;record('18 synthetic member cards remain vertically reachable with both actions while 390px shows 8 pins and 701/730/1440px show 12 non-overlapping pins');
+
+  const racePage=await context.newPage();diagnosticPage=racePage;racePage.on('pageerror',error=>errors.push(error.message));
+  const raceReady=async(count=3)=>racePage.waitForFunction(count=>document.querySelectorAll('.bi-list .bi-member').length===count&&!document.querySelector('[data-bi-action="roll"]').disabled&&!document.querySelector('[data-bi-action="more"]').disabled,count);
+  const releaseDice=async key=>{pending.get(key)();pending.delete(key);await racePage.waitForTimeout(500);};
+  await racePage.goto(base);await racePage.locator('#fixture-open').click();await raceReady();
+  holdNextRandom='dice-zone';await racePage.locator('[data-bi-action="roll"]').click();await waitUntil(()=>pending.has('dice-zone'));
+  await racePage.locator('.bi-tabs [data-bi-zone="home"]').click();await releaseDice('dice-zone');
+  assert.equal(await racePage.locator('[data-bi-title]').textContent(),'我的小屋');assert.equal(await racePage.locator('.bi-explore').isVisible(),false);
+  await racePage.locator('.bi-tabs [data-bi-zone="people"]').click();await raceReady();
+  assert.equal(await racePage.getByText('舊骰子回應不得呈現 dice-zone',{exact:true}).count(),0);
+  const zoneRows=await racePage.locator('.bi-list .bi-member-select').evaluateAll(elements=>elements.map(element=>element.dataset.biMember));
+  assert.ok(zoneRows.every(handle=>!handle.startsWith('stale-')));
+  holdNextRandom='dice-query';await racePage.locator('[data-bi-action="roll"]').click();await waitUntil(()=>pending.has('dice-query'));
+  await racePage.locator('#bi-query').fill('陳');await racePage.locator('.bi-search button[type=submit]').click();await raceReady(1);
+  const queryResult=await racePage.locator('.bi-roll-result').textContent();await releaseDice('dice-query');
+  assert.equal(await racePage.locator('.bi-list .bi-member-select').getAttribute('data-bi-member'),'card-b');
+  assert.equal(await racePage.locator('#bi-query').inputValue(),'陳');assert.equal(await racePage.locator('.bi-roll-result').textContent(),queryResult);
+  assert.equal(await racePage.getByText('舊骰子回應不得呈現 dice-query',{exact:true}).count(),0);
+  holdNextRandom='dice-exit';await racePage.locator('[data-bi-action="roll"]').click();await waitUntil(()=>pending.has('dice-exit'));
+  await racePage.evaluate(()=>window.goPage('home',true));await releaseDice('dice-exit');
+  assert.equal(await racePage.evaluate(()=>window.currentPage),'home');assert.equal(await racePage.locator('#page-business-island').isVisible(),false);
+  assert.equal(await racePage.getByText('舊骰子回應不得呈現 dice-exit',{exact:true}).count(),0);
+  await racePage.evaluate(()=>window.openBusinessIsland());await raceReady(1);
+  failNextRandom=true;await racePage.locator('[data-bi-action="roll"]').click();
+  await racePage.waitForFunction(()=>document.querySelector('[data-bi-status]').textContent==='合成骰子暫時失敗'&&!document.querySelector('[data-bi-action="roll"]').disabled);
+  assert.equal(await racePage.locator('[data-bi-retry]').isVisible(),true);
+  await racePage.locator('[data-bi-action="roll"]').click();await raceReady(1);
+  assert.notEqual(await racePage.locator('[data-bi-status]').textContent(),'合成骰子暫時失敗');
+  assert.equal(await racePage.evaluate(()=>window.currentPage),'business-island');
+  assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);
+  await racePage.close();diagnosticPage=page;record('delayed dice responses cannot overwrite a new zone, query or exited page, and failed dice requests leave the control retryable');
+
+  await page.locator('[data-bi-action="exit"]').click();assert.equal(await page.evaluate(()=>window.currentPage),'home');
   assert.equal(await page.locator('#app').evaluate(element=>element.getBoundingClientRect().width),448);
   assert.equal(await page.locator('#top-nav').isVisible(),true);assert.equal(await page.locator('#bottom-nav').isVisible(),true);
   assert.equal(await page.locator('#main').evaluate(element=>getComputedStyle(element).paddingTop),'112px');
@@ -245,8 +395,9 @@ try {
   await page.evaluate(()=>window.goPage('store-shop',true));assert.equal(await page.locator('#top-nav').isVisible(),false);assert.equal(await page.locator('#bottom-nav').isVisible(),true);
   assert.equal(await page.locator('#app').evaluate(element=>element.getBoundingClientRect().width),448);
   await page.locator('#fixture-bottom-home').click();assert.equal(await page.locator('#top-nav').isVisible(),true);
-  await page.evaluate(()=>window.openBusinessIsland());await waitMembers();assert.ok(await island().evaluate(element=>element.getBoundingClientRect().width)>1000);
-  record('actual-width app shell expands only on the island and restores home/store headers and usable bottom navigation');
+  await page.evaluate(()=>window.openBusinessIsland());await waitMembers(4);assert.ok(await island().evaluate(element=>element.getBoundingClientRect().width)<=1000);
+  assert.equal(await page.locator('#bottom-nav').isVisible(),false);
+  record('island suppresses accidental main-navigation exits and restores the original home and store navigation on explicit exit');
 
   await page.setViewportSize({width:390,height:844});await submit('late-leave');await waitUntil(()=>pending.has('late-leave'));
   await page.evaluate(()=>window.goPage('home',true));pending.get('late-leave')();pending.delete('late-leave');
@@ -255,7 +406,7 @@ try {
   await page.goto(base);await page.locator('#fixture-open').click();await waitMembers();
   await submit('late-account');await waitUntil(()=>pending.has('late-account'));await page.evaluate(()=>window.fixtureSwitchAccount());pending.get('late-account')();pending.delete('late-account');
   await page.waitForTimeout(75);assert.equal(await page.getByText('舊回應不得呈現 late-account',{exact:true}).count(),0);
-  await page.locator('[data-bi-action="card"]').click();await page.waitForFunction(()=>document.querySelector('[data-bi-status]')?.textContent.includes('登入身分已變更'));
+  await page.locator('.bi-selection [data-bi-action="card"]').click();await page.waitForFunction(()=>document.querySelector('[data-bi-status]')?.textContent.includes('登入身分已變更'));
   assert.equal(await page.locator('.bi-list .bi-member').count(),0);record('leaving or changing account prevents stale member responses and actions');
 
   await page.goto(base);await page.locator('#fixture-open').click();await waitMembers();
@@ -272,7 +423,7 @@ try {
   assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);record('real store provider keeps dice, storefront return and independent progress after island integration');
   assert.deepEqual(outside,[]);assert.deepEqual(errors,[]);
 } catch(error) {
-  failure=error;await mkdir(output,{recursive:true});await page.screenshot({path:join(output,'failure.png'),fullPage:true}).catch(()=>{});
+  failure=error;await mkdir(output,{recursive:true});await diagnosticPage.screenshot({path:join(output,'failure.png'),fullPage:true}).catch(()=>{});
   console.error(error.stack);
 } finally {
   for(const release of pending.values())release();

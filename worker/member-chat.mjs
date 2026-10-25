@@ -179,25 +179,26 @@ async function directoryCard(db, actor, encodedHandle) {
 }
 async function listMembers(db, actor, params, env, fetcher) {
   const q = text(params.get('q')), after = text(params.get('after')), industry = text(params.get('industry')), sort = text(params.get('sort'));
-  if (q.length > 60 || after.length > 800 || !['', 'latest', 'match'].includes(sort)) fail('INVALID_QUERY', '搜尋條件不正確');
+  if (q.length > 60 || after.length > 800 || !['', 'latest', 'match', 'random'].includes(sort) || (sort === 'random' && params.has('after'))) fail('INVALID_QUERY', '搜尋條件不正確');
   if (industry && !CHAT_INDUSTRIES.includes(industry)) fail('INVALID_QUERY', '請選擇有效的業種');
   let anchor = [-1, '', ''];
   if (sort && after) {
     try { anchor = JSON.parse(decodeURIComponent(atob(after))); } catch { fail('INVALID_CURSOR', '請重新整理名單'); }
     if (!Array.isArray(anchor) || anchor.length !== 3 || !Number.isFinite(anchor[0]) || anchor[0] < -1 || anchor[0] > 100 || typeof anchor[1] !== 'string' || anchor[1].length > 80 || typeof anchor[2] !== 'string' || anchor[2].length > 180) fail('INVALID_CURSOR', '請重新整理名單');
   }
-  const order = sort === 'match' ? 'COALESCE(score,-1) DESC,latest DESC,CAST(handle AS TEXT)' : sort === 'latest' ? 'latest DESC,CAST(handle AS TEXT)' : 'CAST(handle AS TEXT)';
-  const afterSql = !sort ? 'CAST(handle AS TEXT)>?2' : `(?2='' OR ${sort === 'match' ? 'COALESCE(score,-1)<?7 OR (COALESCE(score,-1)=?7 AND ' : ''}(latest<?8 OR (latest=?8 AND CAST(handle AS TEXT)>?9))${sort === 'match' ? ')' : ''})`;
+  const random = sort === 'random';
+  const order = random ? 'RANDOM()' : sort === 'match' ? 'COALESCE(score,-1) DESC,latest DESC,CAST(handle AS TEXT)' : sort === 'latest' ? 'latest DESC,CAST(handle AS TEXT)' : 'CAST(handle AS TEXT)';
+  const afterSql = random ? '1=1' : !sort ? 'CAST(handle AS TEXT)>?2' : `(?2='' OR ${sort === 'match' ? 'COALESCE(score,-1)<?7 OR (COALESCE(score,-1)=?7 AND ' : ''}(latest<?8 OR (latest=?8 AND CAST(handle AS TEXT)>?9))${sort === 'match' ? ')' : ''})`;
   let result;
   const query = async withScores => rows(db, `${directoryScoresSql(directorySql(), cardMemberJoin, withScores)}
     SELECT *,SUM(CASE WHEN score IS NULL AND (TRIM(COALESCE(company_name,''))<>'' OR TRIM(COALESCE(title,''))<>'') THEN 1 ELSE 0 END) OVER() AS pending FROM scored
-    WHERE ${afterSql} ORDER BY ${order} LIMIT 31`, ...directoryArgs(actor, after, q, industry), ...(sort ? anchor : []));
+    WHERE ${afterSql} ORDER BY ${order} LIMIT ${random ? PAGE : PAGE + 1}`, ...directoryArgs(actor, after, q, industry), ...(sort && !random ? anchor : []));
   try { result = await query(true); }
   catch { result = await query(false); } // A cache outage never hides the authorized directory.
   const page = result.slice(0, PAGE), last = page.at(-1);
   const avatars = await hydrateMemberAvatars(db, env, actor, page, fetcher);
   const items = page.map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), avatarUrl: avatars.get(text(row.avatar_line_id)) || '', company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), memberNumber:isMemberNumber(row.member_number)?text(row.member_number):'', match: row.score == null ? null : { score: row.score, source: row.source, basis: row.basis } }));
-  return { items, next: result.length > PAGE ? (sort ? btoa(encodeURIComponent(JSON.stringify([last.score ?? -1, last.latest, last.handle]))) : text(last.handle)) : '', industries: CHAT_INDUSTRIES,
+  return { items, next: !random && result.length > PAGE ? (sort ? btoa(encodeURIComponent(JSON.stringify([last.score ?? -1, last.latest, last.handle]))) : text(last.handle)) : '', industries: CHAT_INDUSTRIES,
     matchWork: { pending: Number(result[0]?.pending || 0), status: await directoryMatchState(db, actor.memberId) } };
 }
 async function listThreads(db, actor, params) {

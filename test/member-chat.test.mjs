@@ -285,6 +285,66 @@ test('directory ranks the entire filtered pool before keyset pagination and pres
   assert.equal((await f.api('/members?sort=latest&q=排名')).items[0].handle, 'rank-64');
 });
 
+test('random directory samples the full eligible pool rather than the latest page, without cursors or writes', async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 80; i++) {
+    const id = 'random-' + String(i).padStart(2, '0'), uid = 'U' + i.toString(16).padStart(32, '0');
+    f.sql.prepare('INSERT INTO users(row_id,line_id,name) VALUES(?,?,?)').run(id, uid, '隨機合成會員');
+    f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,name,company_name,title,tags,updated_at) VALUES(?,?,'self_profile','隨機合成會員','隨機科技公司','工程師','科技資訊',?)").run(id, uid, '2026-' + String(i + 1).padStart(3, '0'));
+  }
+  const latest = await f.api('/members?sort=latest&q=隨機');
+  assert.equal(latest.items.length, 30); assert.equal(latest.items[0].handle, 'random-79');
+  assert.ok(latest.next, 'ordered pagination keeps its original cursor');
+  const seen = new Set();
+  for (let draw = 0; draw < 6; draw++) {
+    const result = await f.api('/members?' + new URLSearchParams({ sort: 'random', q: '隨機', industry: '科技資訊' }));
+    assert.equal(result.status, 200); assert.equal(result.items.length, 30); assert.equal(result.next, '');
+    assert.equal(new Set(result.items.map(row => row.handle)).size, 30);
+    for (const item of result.items) { assert.match(item.handle, /^random-/); seen.add(Number(item.handle.slice(7))); }
+    assert.doesNotMatch(JSON.stringify(result), /line_id|row_id|phone|U[0-9a-f]{32}/);
+  }
+  assert.ok([...seen].some(index => index < 20), 'older candidates outside the latest thirty remain discoverable');
+  assert.ok([...seen].some(index => index >= 60), 'newer candidates remain discoverable too');
+  assert.equal(f.writes.length, 0, 'sampling never creates threads, messages or matching jobs');
+});
+
+test('random directory retains filters, current own-card selection, opt-out and bilateral blocks', async t => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE card_contacts SET tags='科技資訊' WHERE row_id='card-b'");
+  const path = '/members?' + new URLSearchParams({ sort: 'random', q: '會員b', industry: '科技資訊' });
+  assert.deepEqual((await f.api(path)).items.map(row => row.handle), ['card-b']);
+  assert.equal((await f.api('/members?sort=random&q=不存在')).items.length, 0);
+  assert.equal((await f.api('/members?sort=random&industry=餐飲食品')).items.length, 0);
+  assert.ok(!(await f.api('/members?sort=random')).items.some(row => row.handle === 'card-a'));
+  await f.api('/preferences', { token: 'b', data: { accepting: false } });
+  assert.equal((await f.api(path)).items.length, 0);
+  await f.api('/preferences', { token: 'b', data: { accepting: true } });
+  const id = await f.room();
+  for (const token of ['a', 'b']) {
+    await f.api(`/threads/${id}/block`, { token, data: { blocked: true } });
+    assert.equal((await f.api(path)).items.length, 0);
+    await f.api(`/threads/${id}/block`, { token, data: { blocked: false } });
+    assert.equal((await f.api(path)).items.length, 1);
+  }
+  f.sql.exec(`INSERT INTO card_contacts(row_id,line_id,source_type,name,tags,updated_at) VALUES('card-b-new','${B}','self_profile','會員b','科技資訊','2026-09-25')`);
+  assert.deepEqual((await f.api(path)).items.map(row => row.handle), ['card-b-new']);
+  f.sql.exec("UPDATE card_contacts SET archived_at='2026-09-26' WHERE row_id='card-b-new'");
+  assert.deepEqual((await f.api(path)).items.map(row => row.handle), ['card-b'], 'only the remaining active own card is eligible');
+  f.sql.exec("UPDATE card_contacts SET source_type='ocr_scan' WHERE row_id='card-b'");
+  assert.equal((await f.api(path)).items.length, 0);
+});
+
+test('random directory requires authentication and rejects any pagination cursor without changing ordered modes', async t => {
+  const f = fixture(t);
+  assert.equal((await f.api('/members?sort=random', { token: '' })).status, 401);
+  for (const after of ['', 'card-b', 'bad']) {
+    const result = await f.api('/members?' + new URLSearchParams({ sort: 'random', after }));
+    assert.equal(result.status, 400); assert.equal(result.code, 'INVALID_QUERY');
+  }
+  for (const sort of ['latest', 'match']) assert.equal((await f.api('/members?sort=' + sort)).status, 200);
+  assert.equal(f.writes.length, 0);
+});
+
 test('directory matching stays bounded, recovers expired leases and never accepts a stale worker write', async t => {
   const f = fixture(t); await f.api('/matches', { data: {} });
   for (let i = 0; i < 25; i++) {
