@@ -1,0 +1,10 @@
+# Check-in card publish button
+
+- Request: publish card cannot be clicked after selecting products/editing.
+- Verified checkout: reward-application-src, codex/checkin-publish-button-20261025 from current main e0f79b5 (PR253); clean before edits, exact LINE- repository.
+- Reproduction: any content edit/product selection sets dirty; disabled=busy||dirty||unavailable prevents the click handler from running, leaving no actionable explanation. Explicit save succeeds, so server normalization and busy-finally are not the cause. Unavailable products also silently disable publication.
+- Scope: editor primary action supports save-then-publish in one busy/session ticket; explicit draft save remains. Invalid product displays page/reason and repair controls. Preserve CAS, phase-specific idempotency, failure/unknown handling, auth/session guards and all backend publication checks. Bump only editor JS asset URL, no backend/migration/points/LINE send changes.
+- Contracts: feature-change-protocol and checkin-chat-dashboard. Before full guard PASS: TEMP/line-checkin-publish-before-20261025.log.
+- Verification: dedicated Chromium regressions for direct publication, save/publish failures, retries, concurrency, unavailable pages and auth changes; existing product/editor browsers; after full guard. Test only synthetic APIs, no production template publication, LINE messages, check-in or wallet writes.
+- After full guard PASS: TEMP/line-checkin-publish-after-20261025.log; adjacent units 25/25 PASS; actual Chromium editor 26 and product picker 16 groups PASS. Added separate content-only, revision-only, combined draft and publication-response races: preserve local edits and send zero publish requests. Shared server normalization of whitespace, color and URL remains accepted. Independent source review PASS.
+- Release: tests pass -> merge/deploy Pages, verify served editor/admin bytes and unchanged Worker version/settings. Release receipt remains private. Worker baseline 41a78b02-5c06-4b84-8331-484a19a74cbf; no Worker or schema deployment is needed.

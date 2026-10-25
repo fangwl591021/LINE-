@@ -28,6 +28,11 @@
     }
     return config;
   }
+  // Compare server-normalized content before a combined action can publish it.
+  function configFingerprint(value){
+    validate(value);
+    return JSON.stringify({schemaVersion:1,altText:value.altText.trim(),themeColor:value.themeColor.toUpperCase(),pages:value.pages.map(page=>page.kind==='product'?{id:page.id,kind:page.kind,shopId:page.shopId,productId:page.productId}:{id:page.id,kind:page.kind,title:page.title.trim(),body:page.body.trim(),heroImageUrl:page.heroImageUrl?imageUrl(page.heroImageUrl.trim()):'',buttons:page.buttons.map(button=>({id:button.id,label:button.label.trim(),target:button.target}))})});
+  }
   window.mountCheckinChatDashboard=async function(root,{api,isCurrent=()=>true}={}){
     if(!root||typeof api!=='function')throw Error('編輯器設定不完整');
     if(controllers.has(root)){const existing=controllers.get(root);existing.resume();await existing.ready;return existing;}
@@ -58,7 +63,7 @@
     const dispose=controller.dispose;controller.dispose=()=>{window.removeEventListener('beforeunload',beforeUnload);dispose();};
     function syncToolbar(){
       if(!config||disposed)return;
-      root.querySelector('[data-save]').disabled=busy||!dirty();root.querySelector('[data-publish]').disabled=busy||dirty()||unavailable();root.querySelector('[data-preview-check]').disabled=busy;
+      root.querySelector('[data-save]').disabled=busy||!dirty();root.querySelector('[data-publish]').disabled=busy;root.querySelector('[data-publish]').textContent=dirty()?'儲存並發布卡片':'發布卡片';root.querySelector('[data-preview-check]').disabled=busy;
       root.querySelector('[data-reload]').disabled=busy;root.querySelector('[data-reload]').textContent=dirty()?'重新載入（捨棄本機修改）':'重新載入';
       root.querySelector('[data-dirty]').textContent=dirty()?'尚有未儲存修改':saved===published?(publishedRevision?'目前草稿已發布':'目前使用預設版本'):'草稿尚未發布';
       root.querySelector('[data-revisions]').textContent=`草稿版本 ${draftRevision} · 已發布版本 ${publishedRevision}`;
@@ -66,7 +71,7 @@
       root.querySelectorAll('input,textarea,select,[data-add-page],[data-open-picker],[data-replace-product],[data-move-page],[data-remove-page],[data-add-button],[data-button-action]').forEach(node=>{if(!node.closest('[data-product-picker]'))node.disabled=busy||node.dataset.locked==='true';});
     }
     function shell(){
-      root.innerHTML=`<header class="ccd-top"><div><h2>LINE 會員打卡卡片</h2><p>編輯多頁卡片，先存草稿，再發布給後續打卡使用。</p></div><div class="ccd-actions"><button type="button" data-preview-check>檢查 LINE 格式</button><button type="button" data-save>儲存草稿</button><button type="button" class="ccd-primary" data-publish>發布卡片</button></div></header><div class="ccd-versions"><span class="ccd-badge" data-dirty></span><span data-revisions></span><button type="button" data-reload>重新載入${dirty()?'（捨棄本機修改）':''}</button></div><p class="ccd-status" data-status role="status" aria-live="polite"></p><div class="ccd-conflict" data-conflict hidden>內容已由其他管理員更新；你的編輯仍保留。要捨棄本機修改時，再按「重新載入」。</div><nav class="ccd-mobile-tabs" aria-label="編輯區域"><button type="button" data-mobile="pages">頁面</button><button type="button" data-mobile="preview">預覽</button><button type="button" data-mobile="properties">屬性</button></nav><div class="ccd-workbench"><aside class="ccd-panel" data-panel="pages"><h3 class="ccd-panel-heading">頁面與順序</h3><div class="ccd-pages" data-pages></div></aside><section class="ccd-panel" data-panel="preview"><header class="ccd-preview-heading"><h3>即時預覽</h3><div class="ccd-preview-nav"><button type="button" data-previous aria-label="預覽上一頁">‹</button><output data-position aria-live="polite"></output><button type="button" data-next aria-label="預覽下一頁">›</button></div></header><div class="ccd-preview-space"><div class="ccd-carousel" data-carousel tabindex="0" role="region" aria-label="LINE 多頁卡片橫向預覽"></div><p class="ccd-preview-caption">左右滑看整組卡片。點文字或按鈕選取編輯；預覽不會開連結、發訊或記錄點擊。</p></div></section><aside class="ccd-panel" data-panel="properties"><h3 class="ccd-panel-heading">內容與按鈕</h3><div class="ccd-properties" data-properties></div></aside></div><p class="ccd-note">發布只更新之後的打卡卡片，不會立即發訊、執行打卡或變更點數。實際打卡結果仍以母站文字回覆為準。</p>`;
+      root.innerHTML=`<header class="ccd-top"><div><h2>LINE 會員打卡卡片</h2><p>編輯完成可直接儲存並發布，也可先單獨儲存草稿。</p></div><div class="ccd-actions"><button type="button" data-preview-check>檢查 LINE 格式</button><button type="button" data-save>儲存草稿</button><button type="button" class="ccd-primary" data-publish>發布卡片</button></div></header><div class="ccd-versions"><span class="ccd-badge" data-dirty></span><span data-revisions></span><button type="button" data-reload>重新載入${dirty()?'（捨棄本機修改）':''}</button></div><p class="ccd-status" data-status role="status" aria-live="polite"></p><div class="ccd-conflict" data-conflict hidden>內容已由其他管理員更新；你的編輯仍保留。要捨棄本機修改時，再按「重新載入」。</div><nav class="ccd-mobile-tabs" aria-label="編輯區域"><button type="button" data-mobile="pages">頁面</button><button type="button" data-mobile="preview">預覽</button><button type="button" data-mobile="properties">屬性</button></nav><div class="ccd-workbench"><aside class="ccd-panel" data-panel="pages"><h3 class="ccd-panel-heading">頁面與順序</h3><div class="ccd-pages" data-pages></div></aside><section class="ccd-panel" data-panel="preview"><header class="ccd-preview-heading"><h3>即時預覽</h3><div class="ccd-preview-nav"><button type="button" data-previous aria-label="預覽上一頁">‹</button><output data-position aria-live="polite"></output><button type="button" data-next aria-label="預覽下一頁">›</button></div></header><div class="ccd-preview-space"><div class="ccd-carousel" data-carousel tabindex="0" role="region" aria-label="LINE 多頁卡片橫向預覽"></div><p class="ccd-preview-caption">左右滑看整組卡片。點文字或按鈕選取編輯；預覽不會開連結、發訊或記錄點擊。</p></div></section><aside class="ccd-panel" data-panel="properties"><h3 class="ccd-panel-heading">內容與按鈕</h3><div class="ccd-properties" data-properties></div></aside></div><p class="ccd-note">發布只更新之後的打卡卡片，不會立即發訊、執行打卡或變更點數。實際打卡結果仍以母站文字回覆為準。</p>`;
       root.querySelector('.ccd-actions').insertAdjacentHTML('afterbegin','<button type="button" data-open-picker>挑選店家商品</button>');
       root.querySelector('[data-carousel]').addEventListener('scroll',()=>{if(aligning||picker)return;const track=root.querySelector('[data-carousel]');const cards=[...track.children];if(!cards.length)return;const center=track.getBoundingClientRect().left+track.clientWidth/2;const distance=card=>Math.abs(card.getBoundingClientRect().left+card.offsetWidth/2-center);const nearest=cards.reduce((a,b)=>distance(b)<distance(a)?b:a);if(nearest.dataset.pageId!==pageId){pageId=nearest.dataset.pageId;selection=selected().kind==='product'?'product':'title';renderPageList();renderProperties();syncSelection();}});
       renderPageList();renderPreview();renderProperties();syncMobile();syncToolbar();
@@ -200,12 +205,25 @@
     async function operation(kind){
       if(busy||!current()||!config)return;let snapshot;
       try{snapshot=clone(validate(config));}catch(error){status(error.message,true);return;}
-      if(kind==='publish'&&dirty()){status('請先儲存草稿，再發布。',true);return;}
-      const body=kind==='draft'?{expectedDraftRevision:draftRevision,config:snapshot}:kind==='publish'?{expectedDraftRevision:draftRevision,expectedPublishedRevision:publishedRevision}:{config:snapshot};
-      if(kind!=='preview'){const fingerprint=kind+JSON.stringify(body);if(!requestKeys.has(fingerprint))requestKeys.set(fingerprint,crypto.randomUUID());body.requestKey=requestKeys.get(fingerprint);}
+      if(kind==='publish'&&unavailable()){const page=config.pages.find(page=>page.kind==='product'&&!resolved(page));selectPage(page.id,'product',true);status(`第 ${config.pages.indexOf(page)+1} 頁商品無法發布：${productReason(page)} 可更換或移除這頁，再按發布；若商品已恢復上架，請按「檢查 LINE 格式」重新核對。`,true);return;}
+      const saveFirst=kind==='publish'&&dirty();
+      const expectedSavedRevision=draftRevision+1,expectedPublishedRevision=publishedRevision;
+      const submit=phase=>{
+        const body=phase==='draft'?{expectedDraftRevision:draftRevision,config:snapshot}:phase==='publish'?{expectedDraftRevision:draftRevision,expectedPublishedRevision:publishedRevision}:{config:snapshot};
+        if(phase!=='preview'){const fingerprint=phase+JSON.stringify(body);if(!requestKeys.has(fingerprint))requestKeys.set(fingerprint,crypto.randomUUID());body.requestKey=requestKeys.get(fingerprint);}
+        return api('/'+phase,{method:'POST',body});
+      };
       const ticket=++sequence;busy=true;syncToolbar();status(kind==='draft'?'草稿儲存中…':kind==='publish'?'發布中…':'LINE格式檢查中…');
       try{
-        const result=await api('/'+kind,{method:'POST',body});if(!current()||ticket!==sequence)return;
+        if(saveFirst){
+          status('正在儲存草稿（1/2），成功後將自動發布…');
+          const draft=await submit('draft');if(!current()||ticket!==sequence)return;
+          if(draft?.success!==true||draft.template?.draftRevision!==expectedSavedRevision||draft.template?.publishedRevision!==expectedPublishedRevision||configFingerprint(draft.template?.draftConfig)!==configFingerprint(snapshot)){const error=new Error('儲存回覆中的內容或版本已變更');error.code='REVISION_CONFLICT';throw error;}
+          accept(draft);requestKeys.clear();renderPageList();renderPreview();renderProperties();syncToolbar();
+          if(unavailable()){const page=config.pages.find(page=>page.kind==='product'&&!resolved(page));selectPage(page.id,'product',true);status(`草稿已儲存，但第 ${config.pages.indexOf(page)+1} 頁商品無法發布：${productReason(page)} 請更換或移除後再發布。`,true);return;}
+          status('草稿已儲存，正在發布卡片（2/2）…');
+        }
+        const result=await submit(kind);if(!current()||ticket!==sequence)return;
         if(kind==='preview'){if(result?.success!==true||!result.message)throw Error('LINE格式檢查尚未完成');readProducts(result,true);renderPageList();renderPreview();renderProperties();status(unavailable()?'LINE格式已檢查；部分商品目前不可用，請移除或更換後再發布。':'LINE格式檢查通過，未儲存或發送訊息。',unavailable());}
         else {accept(result);requestKeys.clear();renderPageList();renderPreview();renderProperties();status(kind==='draft'?'草稿已儲存，尚未發布。':'卡片已發布；後續會員打卡將使用此版本。');}
       }catch(error){
