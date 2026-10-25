@@ -71,7 +71,7 @@ window.openExchangeZone=async options=>{window.__fixtureEvents.push({kind:'excha
 window.openExchangeZonePost=async handle=>{window.__fixtureEvents.push({kind:'post',handle});const popup=document.createElement('dialog');popup.className='fixture-post';popup.innerHTML='<h2>原交流詳情合成入口</h2><p>已刊登合作內容</p><button>關閉</button>';popup.querySelector('button').onclick=()=>{popup.close();popup.remove();};document.body.append(popup);popup.showModal();};
 window.openStoreShop=async(...args)=>{window.__fixtureEvents.push({kind:'store',id:args[4]});window.goPage('store-shop',true);const root=document.getElementById('page-store-shop');root.innerHTML='<h2>原商城合成入口</h2><button id="fixture-store-back">返回棋盤</button>';root.querySelector('button').onclick=()=>args[5]?.onBack?.();};
 </script>
-<script src="/js/navigation.js?v=8.04"></script><script src="/js/modules/business-richman.js?v=1.4"></script><script src="/js/modules/store-richman.js?v=1"></script><script src="/js/modules/business-island.js?v=4"></script>
+<script src="/js/navigation.js?v=8.04"></script><script src="/js/modules/business-richman.js?v=1.4"></script><script src="/js/modules/store-richman.js?v=1"></script><script src="/js/modules/business-island.js?v=5"></script>
 </body></html>`;
 
 const server = createServer(async (req,res) => {
@@ -98,6 +98,7 @@ const server = createServer(async (req,res) => {
         pending.set(key,()=>ok(res,{items:[{...allMembers[0],handle:'stale-'+key,name:'舊骰子回應不得呈現 '+key}],next:'',industries:['餐飲食品','科技資訊','零售電商']}));return;
       }
       if(url.searchParams.get('sort')==='random'&&failNextRandom) {failNextRandom=false;respond(res,{success:false,error:'合成骰子暫時失敗'},503);return;}
+      if(q==='遠航'||q==='同島') {const far={...manyMembers[6],handle:'far-manufacturer',name:'遠航製造夥伴'};ok(res,{items:q==='遠航'?[far]:[far,{...far,handle:'near-manufacturer',name:'同島製造夥伴'}],next:'',industries:['製造']});return;}
       if(q==='多名單') {ok(res,{items:manyMembers,next:'',industries:['科技資訊']});return;}
       if(q.startsWith('late-')) {pending.set(q,()=>ok(res,{items:[{...allMembers[0],name:'舊回應不得呈現 '+q}],next:'',industries:['餐飲食品','科技資訊','零售電商']}));return;}
       let rows=allMembers.filter(row=>(!q||[row.name,row.company,row.title].join(' ').toLowerCase().includes(q.toLowerCase()))&&(!industry||row.industry===industry));
@@ -169,6 +170,45 @@ const assertWorldState=(actual,expected,label)=>{
   assert.ok(Math.abs(actual.x-expected.x)<=.05&&Math.abs(actual.y-expected.y)<=.05,label+' preserves the character transform: '+JSON.stringify({actual,expected}));
   assert.equal(actual.width,expected.width);assert.equal(actual.height,expected.height);
 };
+// Delegate every operation to Chrome's real Web Audio graph, observing its output and cleanup.
+function installAudioProbe() {
+  const Native=window.AudioContext||window.webkitAudioContext;
+  window.__audioProbe={contexts:[],sources:[],events:[],analysers:[]};
+  if(!Native)return;
+  const probe=window.__audioProbe,connect=AudioNode.prototype.connect;
+  AudioNode.prototype.connect=function(target,...args){
+    if(probe.contexts.some(context=>target===context.destination)&&!(this instanceof AnalyserNode)) {
+      const analyser=this.context.createAnalyser();analyser.fftSize=2048;probe.analysers.push(analyser);
+      connect.call(this,analyser,...args);connect.call(analyser,target);return target;
+    }
+    return connect.call(this,target,...args);
+  };
+  const realState=Object.getOwnPropertyDescriptor(BaseAudioContext.prototype,'state').get;
+  window.AudioContext=class extends Native {
+    constructor(...args) {
+      super(...args);const context=this;probe.contexts.push(context);probe.events.push({kind:'create',at:performance.now(),gesture:navigator.userActivation.isActive});
+      if(window.__rejectAudioResume)Object.defineProperty(context,'state',{get:()=>window.__rejectAudioResume?'suspended':realState.call(context)});
+      for(const method of ['resume','suspend','close']) {
+        const original=context[method].bind(context);
+        context[method]=(...values)=>{probe.events.push({kind:method,at:performance.now(),gesture:navigator.userActivation.isActive});if(method==='resume'&&window.__rejectAudioResume)return Promise.reject(new DOMException('Synthetic audio policy rejection','NotAllowedError'));return original(...values);};
+      }
+      for(const method of ['createOscillator','createBufferSource']) {
+        const original=context[method].bind(context);
+        context[method]=(...values)=>{
+          const node=original(...values),source={kind:method,context,started:false,ended:false,startAt:0,stopAt:Infinity};probe.sources.push(source);
+          const start=node.start.bind(node),stop=node.stop.bind(node);
+          node.start=(at=0)=>{source.started=true;source.startAt=at;probe.events.push({kind:'start',type:method,at:performance.now()});return start(at);};
+          node.stop=at=>{source.stopAt=at??context.currentTime;probe.events.push({kind:'stop',type:method,at:performance.now(),immediate:at===undefined||at<=context.currentTime+.01});return at===undefined?stop():stop(at);};
+          node.addEventListener('ended',()=>{source.ended=true;});return node;
+        };
+      }
+    }
+  };
+}
+const audioRms=audioPage=>audioPage.evaluate(()=>Math.max(0,...window.__audioProbe.analysers.map(analyser=>{const samples=new Float32Array(analyser.fftSize);analyser.getFloatTimeDomainData(samples);return Math.sqrt(samples.reduce((sum,sample)=>sum+sample*sample,0)/samples.length);})));
+const audioChannels=audioPage=>audioPage.evaluate(()=>window.__audioProbe.analysers.map(analyser=>{const samples=new Float32Array(analyser.fftSize);analyser.getFloatTimeDomainData(samples);return Math.sqrt(samples.reduce((sum,sample)=>sum+sample*sample,0)/samples.length);}));
+const peakAudio=async(audioPage,milliseconds=700)=>{let peak=0;const until=Date.now()+milliseconds;while(Date.now()<until){peak=Math.max(peak,await audioRms(audioPage));await audioPage.waitForTimeout(50);}return peak;};
+const audioSnapshot=audioPage=>audioPage.evaluate(()=>({states:window.__audioProbe.contexts.map(context=>context.state),events:window.__audioProbe.events,started:window.__audioProbe.sources.filter(source=>source.started).length,active:window.__audioProbe.sources.filter(source=>source.started&&!source.ended&&source.stopAt>source.context.currentTime+.05).length}));
 let failure, diagnosticPage=page;
 try {
   await mkdir(output,{recursive:true});
@@ -412,6 +452,7 @@ try {
 
   const motionPage=await context.newPage();diagnosticPage=motionPage;motionPage.on('pageerror',error=>errors.push(error.message));
   await motionPage.emulateMedia({reducedMotion:'no-preference'});
+  await motionPage.addInitScript(installAudioProbe);
   await motionPage.addInitScript(()=>{window.crypto.getRandomValues=values=>values.fill(0);});
   const enterMotion=async()=>{
     await motionPage.goto(base);await motionPage.locator('#fixture-open').click();
@@ -438,25 +479,39 @@ try {
   await motionPage.locator('#main').evaluate(element=>element.scrollTop=0);
   record('real CSS boats, pool ripples and residents animate only on visible islands, pause offscreen and stop for reduced motion');
 
+  await motionPage.locator('#bi-query').fill('遠航');await motionPage.locator('.bi-search button[type=submit]').click();
+  await motionPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===1&&!document.querySelector('[data-bi-action="more"]').disabled);
+  await motionPage.locator('#main').evaluate(element=>element.scrollTop=0);
   await motionPage.evaluate(()=>{
-    window.__walkTrace={start:performance.now(),steps:[]};window.__walkPlayer=document.querySelector('.bi-world-player');
-    window.__walkObserver=new MutationObserver(()=>{const step=Number(window.__walkPlayer.dataset.step);if(!window.__walkTrace.steps.length||window.__walkTrace.steps.at(-1).step!==step)window.__walkTrace.steps.push({step,at:performance.now()-window.__walkTrace.start,scroll:document.querySelector('#main').scrollTop});});
-    window.__walkObserver.observe(window.__walkPlayer,{attributes:true,attributeFilter:['data-step']});
+    window.__walkTrace={start:performance.now(),steps:[],phases:[],samples:[]};window.__walkPlayer=document.querySelector('.bi-world-player');
+    window.__walkObserver=new MutationObserver(()=>{const step=Number(window.__walkPlayer.dataset.step),phase=window.__walkPlayer.dataset.phase;if(!window.__walkTrace.steps.length||window.__walkTrace.steps.at(-1).step!==step)window.__walkTrace.steps.push({step,at:performance.now()-window.__walkTrace.start,scroll:document.querySelector('#main').scrollTop});if(phase&&window.__walkTrace.phases.at(-1)!==phase)window.__walkTrace.phases.push(phase);});
+    window.__walkObserver.observe(window.__walkPlayer,{attributes:true,attributeFilter:['data-step','data-phase']});
+    window.__sailTimer=setInterval(()=>{const matrix=new DOMMatrix(getComputedStyle(window.__walkPlayer).transform);window.__walkTrace.samples.push({at:performance.now()-window.__walkTrace.start,x:matrix.m41,y:matrix.m42,scroll:document.querySelector('#main').scrollTop,phase:window.__walkPlayer.dataset.phase});},100);
   });
   await motionPage.locator('[data-bi-action="roll"]').click();
   await motionPage.waitForFunction(()=>document.querySelector('.bi-3d-dice-box').dataset.rolling==='true');
   const shake=await motionPage.locator('.bi-3d-die').evaluateAll(cubes=>cubes.map(cube=>({running:cube.classList.contains('rolling'),duration:cube.getAnimations()[0]?.effect.getTiming().duration})));
   assert.ok(shake.every(cube=>cube.running&&cube.duration===1100),'both cubes shake for the original 1100ms');
-  await motionPage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.step==='1',{},{timeout:10000});
-  assert.ok(await motionPage.locator('.bi-world-player').evaluate(player=>player.getAnimations().some(animation=>animation.effect.getTiming().duration===650)),'walking uses the original 650ms transitions');
-  await motionPage.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&document.querySelector('.bi-world-player').dataset.moving==='false',{},{timeout:10000});
+  await motionPage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.phase==='sailing',{},{timeout:10000});
+  assert.equal(await motionPage.locator('.bi-world-player').getAttribute('data-travel'),'sailing');
+  assert.equal(await motionPage.locator('.bi-player-ferry').isVisible(),true);
+  assert.ok(await motionPage.locator('.bi-player-ferry [class*="hull"],.bi-player-ferry [class*="cabin"],.bi-player-ferry [class*="wake"]').count()>=3,'the travelling ferry has a hull, cabin and wake');
+  await motionPage.waitForTimeout(800);await motionPage.screenshot({path:join(output,'business-island-ferry-sailing-390.png'),fullPage:true});
+  const voyageAudio={peak:await peakAudio(motionPage,400),probe:await audioSnapshot(motionPage)};
+  assert.ok(voyageAudio.peak>1e-5,'the voyage includes real, quiet synthesized audio');
+  assert.ok(await motionPage.evaluate(()=>window.__audioProbe.sources.some(source=>source.kind==='createBufferSource'&&source.started)),'departure includes an actual locally generated water cue');
+  await motionPage.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&document.querySelector('.bi-world-player').dataset.moving==='false',{},{timeout:30000});
   const landed=await motionPage.evaluate(()=>{
-    window.__walkObserver.disconnect();const player=document.querySelector('.bi-world-player'),pin=[...document.querySelectorAll('.bi-world .bi-pin')].find(element=>element.dataset.biMember===player.dataset.target),p=player.getBoundingClientRect(),target=pin.getBoundingClientRect(),dice=document.querySelector('.bi-3d-dice-box');
-    return {steps:window.__walkTrace.steps.filter(item=>item.step>0),first:Number(dice.dataset.dice1),second:Number(dice.dataset.dice2),total:Number(dice.dataset.total),step:Number(player.dataset.step),handle:player.dataset.target,selected:document.querySelector('.bi-list .bi-member-select[aria-pressed="true"]').dataset.biMember,pinSelected:pin.getAttribute('aria-pressed'),samePlayer:window.__walkPlayer===player,sideDistance:Math.abs(p.right-(target.left+target.width/2)),verticalDistance:Math.abs(p.top+p.height/2-target.top-target.height/2),scroll:document.querySelector('#main').scrollTop};
+    window.__walkObserver.disconnect();clearInterval(window.__sailTimer);const player=document.querySelector('.bi-world-player'),pin=[...document.querySelectorAll('.bi-world .bi-pin')].find(element=>element.dataset.biMember===player.dataset.target),p=player.getBoundingClientRect(),target=pin.getBoundingClientRect(),dice=document.querySelector('.bi-3d-dice-box');
+    return {steps:window.__walkTrace.steps.filter(item=>item.step>0),phases:window.__walkTrace.phases,samples:window.__walkTrace.samples,duration:Number(player.dataset.duration),distance:Number(player.dataset.distance),speed:Number(player.dataset.speed),first:Number(dice.dataset.dice1),second:Number(dice.dataset.dice2),total:Number(dice.dataset.total),step:Number(player.dataset.step),handle:player.dataset.target,selected:document.querySelector('.bi-list .bi-member-select[aria-pressed="true"]').dataset.biMember,pinSelected:pin.getAttribute('aria-pressed'),samePlayer:window.__walkPlayer===player,sideDistance:Math.abs(p.right-(target.left+target.width/2)),verticalDistance:Math.abs(p.top+p.height/2-target.top-target.height/2),scroll:document.querySelector('#main').scrollTop};
   });
   assert.equal(landed.first,1);assert.equal(landed.second,1);assert.equal(landed.total,2);assert.equal(landed.step,2);
-  assert.deepEqual(landed.steps.map(item=>item.step),[1,2]);assert.ok(landed.steps[0].at>=1600,'the first completed step follows the shake and one full movement interval');
-  assert.ok(landed.steps[1].at-landed.steps[0].at>=550&&landed.steps[1].at-landed.steps[0].at<1600,'completed steps retain the 650ms cadence');
+  assert.deepEqual(landed.steps.map(item=>item.step),[1,2]);assert.ok(landed.duration>=12000&&landed.duration<25000,'two dice points cannot teleport through all seven islands');
+  assert.ok(landed.distance>2400&&landed.speed>80&&landed.speed<=220,'long-distance travel retains a measured, human-readable speed');
+  assert.deepEqual(landed.phases.filter(phase=>phase!=='cancelled'),['dice','walking','boarding','sailing','docking','walking','arrived']);
+  const deltas=landed.samples.slice(1).map((sample,index)=>{const previous=landed.samples[index],dt=sample.at-previous.at;return {cameraPer100:Math.abs(sample.scroll-previous.scroll)*100/dt,playerSpeed:Math.hypot(sample.x-previous.x,sample.y-previous.y)*1000/dt};});
+  assert.ok(deltas.length>100);assert.ok(Math.max(...deltas.map(sample=>sample.cameraPer100))<=80,'camera movement stays continuous rather than jumping whole islands');
+  assert.ok(Math.max(...deltas.map(sample=>sample.playerSpeed))<=300,'the ferry never skips a large section of the sea route');
   assert.ok(landed.samePlayer);assert.equal(landed.handle,landed.selected);assert.equal(landed.pinSelected,'true');
   assert.ok(landed.sideDistance<=2&&landed.verticalDistance<=2,'the character arrives beside the selected member pin');assert.ok(landed.scroll>500,'the camera follows the walk into the long world');
   assertDiceGeometry(await diceGeometry(motionPage));
@@ -464,15 +519,25 @@ try {
   await motionPage.locator('.bi-world-arrival [data-bi-action="card"]').click();await motionPage.locator('.bi-card-dialog[open]').waitFor();
   assert.equal(calls.at(-1).path,'/v1/member-chat/members/'+encodeURIComponent(landed.handle)+'/card');
   await motionPage.locator('.bi-card-dialog header button').click();assert.equal(await motionPage.evaluate(()=>window.currentPage),'business-island');
-  await writeFile(join(output,'world-motion-metrics.json'),JSON.stringify({shake,landed,movingBefore,movingAfter,pausedBefore},null,2));
+  await writeFile(join(output,'world-motion-metrics.json'),JSON.stringify({shake,landed,voyageAudio,movingBefore,movingAfter,pausedBefore},null,2));
   await motionPage.screenshot({path:join(output,'business-island-world-arrival-390.png'),fullPage:true});
-  record('two true six-face dice shake for 1100ms, their sum drives exactly two 650ms steps, and the character reaches the selected pin with an explicit public-card action');
+  record('two real dice drive an unhurried ferry voyage across seven islands with continuous camera motion and exact final progress, member and card action');
 
   const cancellationMetrics=[];
-  for(const kind of ['query','zone','exit','account','background']) {
+  for(const kind of ['query','zone','exit','account','background','cache']) {
     await enterMotion();await motionPage.locator('[data-bi-action="roll"]').click();
-    await motionPage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.step==='1',{},{timeout:10000});
-    if(kind==='query') {await motionPage.locator('#bi-query').fill('陳');await motionPage.locator('.bi-search button[type=submit]').click();await motionPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===1);}
+    await motionPage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.phase==='sailing',{},{timeout:10000});
+    if(kind==='cache') {
+      const {beforeCache,travel}=await motionPage.evaluate(()=>{
+        const dice=document.querySelector('.bi-3d-dice-box'),player=document.querySelector('.bi-world-player'),world=document.querySelector('.bi-world'),matrix=new DOMMatrix(getComputedStyle(player).transform);
+        const beforeCache={metadata:{first:dice.dataset.dice1,second:dice.dataset.dice2,total:dice.dataset.total,step:player.dataset.step,steps:player.dataset.total,target:player.dataset.target??''},x:matrix.m41,y:matrix.m42,width:world.clientWidth,height:world.clientHeight},travel=player.dataset.travel;
+        window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));return {beforeCache,travel};
+      });
+      await motionPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===18&&!document.querySelector('[data-bi-action="roll"]').disabled);
+      assertWorldState(await readWorldState(motionPage),beforeCache,'mid-sailing BFCache restoration');
+      assert.equal(await motionPage.locator('.bi-world-player').getAttribute('data-travel'),travel,'the frozen ferry is restored as a ferry');
+    }
+    else if(kind==='query') {await motionPage.locator('#bi-query').fill('陳');await motionPage.locator('.bi-search button[type=submit]').click();await motionPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===1);}
     else if(kind==='zone') await motionPage.evaluate(()=>document.querySelector('.bi-tabs [data-bi-zone="home"]').click());
     else if(kind==='exit') await motionPage.evaluate(()=>window.goPage('home',true));
     else if(kind==='account') await motionPage.evaluate(()=>window.fixtureSwitchAccount());
@@ -488,7 +553,7 @@ try {
   }
   assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);
   await writeFile(join(output,'world-cancellation-metrics.json'),JSON.stringify(cancellationMetrics,null,2));
-  await motionPage.close();diagnosticPage=page;record('search, zone, explicit exit, account changes and backgrounding cancel real walking without late selection, dialogs or camera jumps');
+  await motionPage.close();diagnosticPage=page;record('search, zone, exit, account, background and mid-voyage BFCache cancel motion without late selection, dialogs or camera jumps');
 
   const racePage=await context.newPage();diagnosticPage=racePage;racePage.on('pageerror',error=>errors.push(error.message));
   const raceReady=async(count=3)=>racePage.waitForFunction(count=>document.querySelectorAll('.bi-list .bi-member').length===count&&!document.querySelector('[data-bi-action="roll"]').disabled&&!document.querySelector('[data-bi-action="more"]').disabled,count);
@@ -520,6 +585,84 @@ try {
   assert.equal(await racePage.evaluate(()=>window.currentPage),'business-island');
   assert.equal(threadWrites().length,1);assert.equal(messageWrites().length,1);
   await racePage.close();diagnosticPage=page;record('delayed dice responses cannot overwrite a new zone, query or exited page, and failed dice requests leave the control retryable');
+
+  const AUDIO_KEY='business-island-audio-v1',audioPage=await context.newPage();diagnosticPage=audioPage;audioPage.on('pageerror',error=>errors.push(error.message));
+  await audioPage.addInitScript(installAudioProbe);
+  const audioReady=()=>audioPage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length>=3&&!document.querySelector('[data-bi-action="roll"]').disabled);
+  await audioPage.goto(base);await audioPage.evaluate(key=>localStorage.removeItem(key),AUDIO_KEY);
+  const otherStorage=await audioPage.evaluate(key=>Object.fromEntries(Object.entries(localStorage).filter(([name])=>name!==key)),AUDIO_KEY);
+  await audioPage.locator('#fixture-open').click();await audioReady();
+  assert.equal(await audioPage.locator('[data-bi-action="music"]').getAttribute('aria-pressed'),'true');assert.equal(await audioPage.locator('[data-bi-action="sound"]').getAttribute('aria-pressed'),'true');
+  assert.equal((await audioSnapshot(audioPage)).states.length,0,'entering the island never creates or starts an audio context');
+  assert.equal(await peakAudio(audioPage,200),0);
+  await audioPage.locator('[data-bi-action="sound"]').click();await audioPage.locator('[data-bi-action="sound"]').click();
+  assert.equal(await audioPage.locator('[data-bi-action="sound"]').getAttribute('aria-pressed'),'true');
+  assert.equal((await audioSnapshot(audioPage)).states.length,0,'turning effects off and on before the first roll does not unlock background music');
+  assert.equal(await peakAudio(audioPage,150),0);
+  const audioHit=await audioPage.locator('[data-bi-action="music"],[data-bi-action="sound"]').evaluateAll(buttons=>buttons.map(button=>{const rect=button.getBoundingClientRect();return {width:rect.width,height:rect.height};}));
+  assert.ok(audioHit.length===2&&audioHit.every(button=>button.width>=44&&button.height>=44));
+  await audioPage.locator('[data-bi-action="roll"]').click();await audioReady();
+  const defaultPeak=await peakAudio(audioPage);assert.ok(defaultPeak>1e-5);
+  const unlocked=await audioSnapshot(audioPage);assert.equal(unlocked.states.length,1);assert.ok(unlocked.events.find(event=>event.kind==='create').gesture,'the first roll unlocks native audio in a real user gesture');
+  await audioPage.locator('[data-bi-action="sound"]').click();await audioPage.locator('[data-bi-action="music"]').click();
+  await audioPage.waitForTimeout(150);const mutedPeak=await peakAudio(audioPage,250);assert.ok(mutedPeak<1e-7,'both controls off produce actual silence');
+  await audioPage.locator('[data-bi-action="music"]').click();const musicOnlyPeak=await peakAudio(audioPage,800);assert.ok(musicOnlyPeak>1e-5,'music plays while sound effects remain disabled');
+  assert.equal(await audioPage.locator('[data-bi-action="sound"]').getAttribute('aria-pressed'),'false');
+  await audioPage.locator('[data-bi-action="music"]').click();await audioPage.waitForTimeout(150);assert.ok(await peakAudio(audioPage,250)<1e-7);
+  await audioPage.locator('[data-bi-action="sound"]').click();const effectsBefore=(await audioSnapshot(audioPage)).started;
+  await audioPage.locator('[data-bi-action="roll"]').click();await audioReady();const soundOnlyPeak=await peakAudio(audioPage,650);
+  assert.ok(soundOnlyPeak>1e-5&&(await audioSnapshot(audioPage)).started>effectsBefore,'effects produce native PCM with music disabled');
+  assert.deepEqual(await audioPage.evaluate(key=>JSON.parse(localStorage.getItem(key)),AUDIO_KEY),{music:false,sound:true});
+  assert.deepEqual(await audioPage.evaluate(key=>Object.fromEntries(Object.entries(localStorage).filter(([name])=>name!==key)),AUDIO_KEY),otherStorage,'island preferences do not write other games or application storage');
+  await audioPage.goto(base);await audioPage.locator('#fixture-open').click();await audioReady();
+  assert.equal(await audioPage.locator('[data-bi-action="music"]').getAttribute('aria-pressed'),'false');assert.equal(await audioPage.locator('[data-bi-action="sound"]').getAttribute('aria-pressed'),'true');
+  assert.equal((await audioSnapshot(audioPage)).states.length,0,'persisted enabled effects still wait for a fresh gesture after reload');
+  await audioPage.locator('[data-bi-action="music"]').click();assert.ok(await peakAudio(audioPage,700)>1e-5);
+  await audioPage.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
+  await audioPage.waitForFunction(()=>window.__audioProbe.contexts.every(context=>context.state==='suspended'||context.state==='closed'));
+  const hiddenAudio=await audioSnapshot(audioPage);assert.equal(hiddenAudio.active,0);await audioPage.waitForTimeout(350);assert.equal((await audioSnapshot(audioPage)).started,hiddenAudio.started,'hidden islands stop the music scheduler and sources');
+  await audioPage.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});assert.ok(await peakAudio(audioPage,700)>1e-5);
+  const resumedAudio=await audioSnapshot(audioPage);assert.ok(resumedAudio.states.every(state=>state==='running')&&resumedAudio.started>hiddenAudio.started,'visible return actually resumes the context and schedules new music');
+  await audioPage.evaluate(()=>window.goPage('home',true));await audioPage.waitForFunction(()=>window.__audioProbe.contexts.every(context=>context.state==='closed'));
+  const closedAudio=await audioSnapshot(audioPage);assert.equal(closedAudio.active,0);await audioPage.waitForTimeout(350);assert.equal((await audioSnapshot(audioPage)).started,closedAudio.started,'leaving closes audio and does not schedule new notes');
+  await writeFile(join(output,'island-audio-metrics.json'),JSON.stringify({defaultPeak,mutedPeak,musicOnlyPeak,soundOnlyPeak,unlocked,hiddenAudio,resumedAudio,closedAudio},null,2));
+  await audioPage.close();diagnosticPage=page;record('real Web Audio RMS proves gesture-only music and effects, independent persistent mute controls, background pause and full leave cleanup');
+
+  const rejectedAudio=await context.newPage();diagnosticPage=rejectedAudio;rejectedAudio.on('pageerror',error=>errors.push(error.message));
+  await rejectedAudio.addInitScript(installAudioProbe);await rejectedAudio.addInitScript(()=>{window.__rejectAudioResume=true;});
+  await rejectedAudio.goto(base);await rejectedAudio.locator('#fixture-open').click();
+  await rejectedAudio.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===3&&!document.querySelector('[data-bi-action="roll"]').disabled);
+  const blockedBefore=await rejectedAudio.locator('.bi-list .bi-member-select[aria-pressed="true"]').getAttribute('data-bi-member');
+  await rejectedAudio.locator('[data-bi-action="roll"]').click();
+  await rejectedAudio.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled&&Number(document.querySelector('.bi-world-player').dataset.step)>0);
+  const rejectedProbe=await audioSnapshot(rejectedAudio);assert.ok(rejectedProbe.events.some(event=>event.kind==='resume'));assert.equal(rejectedProbe.started,0);
+  assert.notEqual(await rejectedAudio.locator('.bi-list .bi-member-select[aria-pressed="true"]').getAttribute('data-bi-member'),blockedBefore,'browser audio rejection cannot block member discovery');
+  await rejectedAudio.evaluate(()=>{window.__rejectAudioResume=false;});await rejectedAudio.locator('[data-bi-action="roll"]').click();
+  await rejectedAudio.waitForFunction(()=>!document.querySelector('[data-bi-action="roll"]').disabled);assert.ok(await peakAudio(rejectedAudio,700)>1e-5,'a later permitted gesture recovers audio');
+  await rejectedAudio.evaluate(()=>window.goPage('home',true));await rejectedAudio.waitForFunction(()=>window.__audioProbe.contexts.every(context=>context.state==='closed'));
+  await rejectedAudio.close();diagnosticPage=page;record('native AudioContext resume rejection leaves dice and member selection usable and a later gesture can recover sound');
+
+  const cuePage=await context.newPage();diagnosticPage=cuePage;cuePage.on('pageerror',error=>errors.push(error.message));
+  await cuePage.addInitScript(installAudioProbe);await cuePage.addInitScript(()=>{window.crypto.getRandomValues=values=>values.fill(0);});await cuePage.emulateMedia({reducedMotion:'no-preference'});
+  await cuePage.goto(base);await cuePage.evaluate(key=>localStorage.setItem(key,JSON.stringify({music:true,sound:true})),AUDIO_KEY);
+  await cuePage.locator('#fixture-open').click();await cuePage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===3&&!document.querySelector('[data-bi-action="roll"]').disabled);
+  await cuePage.locator('#bi-query').fill('遠航');await cuePage.locator('.bi-search button[type=submit]').click();
+  await cuePage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===1&&!document.querySelector('[data-bi-action="more"]').disabled);
+  await cuePage.locator('[data-bi-action="roll"]').click();await cuePage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.phase==='boarding',{},{timeout:10000});
+  const cueBefore=[0,0];for(let sample=0;sample<4;sample++){const channels=await audioChannels(cuePage);channels.forEach((value,index)=>cueBefore[index]=Math.max(cueBefore[index]||0,value));await cuePage.waitForTimeout(40);}
+  assert.equal(cueBefore.length,2);assert.ok(cueBefore[0]>1e-5&&cueBefore[1]>1e-5,'boarding plays actual music and departure effects on separate native audio buses');
+  const immediateStopsBefore=(await audioSnapshot(cuePage)).events.filter(event=>event.kind==='stop'&&event.immediate).length;
+  // Submit the real form immediately; scrolling to the offscreen field could outlast the short cue.
+  await cuePage.evaluate(()=>{document.querySelector('#bi-query').value='陳';document.querySelector('.bi-search').requestSubmit();});
+  await cuePage.waitForFunction(()=>document.querySelectorAll('.bi-list .bi-member').length===1&&!document.querySelector('[data-bi-action="roll"]').disabled);
+  await cuePage.waitForTimeout(150);const cueAfter=[0,0];for(let sample=0;sample<8;sample++){const channels=await audioChannels(cuePage);channels.forEach((value,index)=>cueAfter[index]=Math.max(cueAfter[index]||0,value));await cuePage.waitForTimeout(40);}
+  const cancelledAudio=await audioSnapshot(cuePage);assert.ok(cancelledAudio.states.every(state=>state==='running'));
+  assert.ok(cueAfter[0]>1e-5&&cueAfter[1]<1e-7,'cancelling a voyage stops its queued effects while the music keeps playing');
+  assert.ok(cancelledAudio.events.filter(event=>event.kind==='stop'&&event.immediate).length>immediateStopsBefore,'the real query-cancel path immediately stops native scheduled sources');
+  assert.equal(await cuePage.locator('.bi-world-player').getAttribute('data-phase'),'cancelled');
+  await cuePage.evaluate(()=>window.goPage('home',true));await cuePage.waitForFunction(()=>window.__audioProbe.contexts.every(context=>context.state==='closed'));
+  await writeFile(join(output,'island-cancel-audio-metrics.json'),JSON.stringify({cueBefore,cueAfter,immediateStopsBefore,cancelledAudio},null,2));
+  await cuePage.close();diagnosticPage=page;record('first effects toggles stay locked and cancelling departure stops native sound-effect sources without muting the music');
 
   await page.locator('[data-bi-action="exit"]').click();assert.equal(await page.evaluate(()=>window.currentPage),'home');
   assert.equal(await page.locator('#app').evaluate(element=>element.getBoundingClientRect().width),448);
