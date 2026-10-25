@@ -2,7 +2,7 @@
 import { ExchangeZoneModule } from './exchange-zone.mjs';
 import { normalizeLineContact } from '../js/modules/member-chat-line-contact.js';
 import { notificationPreference, saveNotificationPreference, deliverChatNotifications } from './member-chat-notifications.mjs';
-import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from './member-chat-industry.mjs';
+import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER, memberIndustryLabel } from './member-chat-industry.mjs';
 import { peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat-extras.mjs';
 import { directoryScoresSql, registerDirectoryMatching, directoryMatchState, runDirectoryMatchJobs } from './member-chat-matching.mjs';
 import {isMemberNumber} from './member-number.mjs';
@@ -161,6 +161,50 @@ function directorySql() {
     `;
 }
 const directoryArgs = (actor, after = '', q = '', industry = '') => [actor.memberId, after, q.toLowerCase().replace(/ /g, ''), industry, JSON.stringify(actor.ids), actor.user.line_id];
+const PUBLIC_CURSOR = 'public-v1:';
+const registeredAlias = alias => REGISTERED.replaceAll('u.', alias + '.');
+const canonicalAlias = alias => CURRENT_MEMBER.replaceAll('u.', alias + '.');
+const uniqueCardMember = card => `(SELECT COUNT(*) FROM users recipient WHERE ${registeredAlias('recipient')} AND ${canonicalAlias('recipient')} AND ${cardMemberJoin(card, 'recipient')})=1`;
+function publicDirectorySql() {
+  const validUid = column => `COALESCE((length(${column})=33 AND substr(${column},1,1) IN ('U','u') AND substr(${column},2) NOT GLOB '*[^0-9a-fA-F]*'),0)`;
+  // Keep current handles for the original card/thread endpoints, but display only a public version.
+  return `WITH current_directory AS (${directorySql()})
+    SELECT d.handle,d.peer,d.avatar_line_id,d.member_number,
+      COALESCE(NULLIF(TRIM(p.name),''),NULLIF(TRIM(p.english_name),''),'會員') AS name,
+      p.company_name,p.title,p.custom_config,p.tags,p.services
+    FROM current_directory d JOIN users u ON u.row_id=d.peer JOIN card_contacts c ON c.row_id=d.handle
+    JOIN card_contacts p ON p.row_id=(SELECT p2.row_id FROM card_contacts p2 WHERE ${ownCard('p2')} AND p2.visibility='public'
+      AND ${cardMemberJoin('p2', 'u')} ORDER BY p2.updated_at DESC,p2.row_id DESC LIMIT 1)
+    WHERE ${uniqueCardMember('c')} AND ${uniqueCardMember('p')}
+      AND (SELECT COUNT(*) FROM users same_uid WHERE same_uid.line_id=u.line_id)=1
+      AND NOT EXISTS(SELECT 1 FROM user_identity_links l WHERE l.status='active' AND u.line_id IN (l.old_line_id,l.new_line_id)
+        AND (NOT (${validUid('l.old_line_id')}) OR NOT (${validUid('l.new_line_id')}) OR l.old_line_id=l.new_line_id
+          OR (SELECT COUNT(*) FROM user_identity_links other WHERE other.status='active'
+            AND (other.old_line_id IN (l.old_line_id,l.new_line_id) OR other.new_line_id IN (l.old_line_id,l.new_line_id)))<>1
+          OR EXISTS(SELECT 1 FROM users linked WHERE linked.line_id IN (l.old_line_id,l.new_line_id) GROUP BY linked.line_id HAVING COUNT(*)>1)))`;
+}
+async function listPublicMembers(db, actor, params, env, fetcher) {
+  if ([...params.keys()].some(key => !['scope', 'after'].includes(key))) fail('INVALID_QUERY', '公開會員名單不支援此搜尋條件');
+  const after = text(params.get('after'));
+  let anchor = '';
+  if (after) {
+    let decoded;
+    try { if (!after.startsWith(PUBLIC_CURSOR) || after.length > 800) throw Error(); decoded = JSON.parse(decodeURIComponent(atob(after.slice(PUBLIC_CURSOR.length)))); }
+    catch { fail('INVALID_CURSOR', '請重新載入公開會員名單'); }
+    if (!Array.isArray(decoded) || decoded.length !== 3 || decoded[0] !== 1 || decoded[1] !== 'public' || typeof decoded[2] !== 'string' || !decoded[2] || decoded[2].length > 180 || /[/\\\u0000-\u001f\u007f]/.test(decoded[2])) fail('INVALID_CURSOR', '請重新載入公開會員名單');
+    try { anchor = (await cardTarget(db, decoded[2])).memberId; }
+    catch (error) { if (error instanceof ChatError) fail('INVALID_CURSOR', '會員名單已變更，請重新載入'); throw error; }
+    // An old but still active handle may anchor the same canonical member after a private edit.
+    const eligible = await statement(db, `SELECT handle FROM (${publicDirectorySql()}) WHERE peer=?7 LIMIT 1`, ...directoryArgs(actor), anchor).first();
+    if (!eligible) fail('INVALID_CURSOR', '會員名單已變更，請重新載入');
+  }
+  const result = await rows(db, `SELECT * FROM (${publicDirectorySql()}) WHERE peer>?7 ORDER BY peer LIMIT ${PAGE + 1}`, ...directoryArgs(actor), anchor);
+  const page = result.slice(0, PAGE), last = page.at(-1);
+  const avatars = await hydrateMemberAvatars(db, env, actor, page, fetcher);
+  const items = page.map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), avatarUrl: avatars.get(text(row.avatar_line_id)) || '',
+    company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), memberNumber: isMemberNumber(row.member_number) ? text(row.member_number) : '', industry: memberIndustryLabel(row) }));
+  return { items, next: result.length > PAGE ? PUBLIC_CURSOR + btoa(encodeURIComponent(JSON.stringify([1, 'public', last.handle]))) : '' };
+}
 async function directoryCard(db, actor, encodedHandle) {
   if (encodedHandle.length > 1620) fail('INVALID_MEMBER', '請重新選擇會員');
   let handle;
@@ -178,7 +222,12 @@ async function directoryCard(db, actor, encodedHandle) {
   return { card };
 }
 async function listMembers(db, actor, params, env, fetcher) {
+  if (params.has('scope')) {
+    if (params.get('scope') !== 'public') fail('INVALID_QUERY', '會員名單範圍不正確');
+    return listPublicMembers(db, actor, params, env, fetcher);
+  }
   const q = text(params.get('q')), after = text(params.get('after')), industry = text(params.get('industry')), sort = text(params.get('sort'));
+  if (after.startsWith(PUBLIC_CURSOR)) fail('INVALID_CURSOR', '請重新載入會員名單');
   if (q.length > 60 || after.length > 800 || !['', 'latest', 'match', 'random'].includes(sort) || (sort === 'random' && params.has('after'))) fail('INVALID_QUERY', '搜尋條件不正確');
   if (industry && !CHAT_INDUSTRIES.includes(industry)) fail('INVALID_QUERY', '請選擇有效的業種');
   let anchor = [-1, '', ''];
@@ -261,7 +310,7 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
     const actor = await authenticate(request, db, env, fetcher);
     const path = url.pathname.slice(BASE.length), params = url.searchParams;
-    const allowedParams = path === '/members' ? ['q', 'industry', 'after', 'sort'] : path === '/coupons' ? ['after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/coupon$/.test(path) ? ['seq'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
+    const allowedParams = path === '/members' ? ['q', 'industry', 'after', 'sort', 'scope'] : path === '/coupons' ? ['after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/coupon$/.test(path) ? ['seq'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
     for (const key of params.keys()) if (!allowedParams.includes(key) || params.getAll(key).length !== 1) fail('INVALID_QUERY', '查詢條件不正確');
     const body = request.method === 'POST' ? await jsonBody(request) : {};
     let data;

@@ -345,6 +345,163 @@ test('random directory requires authentication and rejects any pagination cursor
   assert.equal(f.writes.length, 0);
 });
 
+test('public island directory enumerates every canonical public member with stable keyset pages and no AI dependency', async t => {
+  const f = fixture(t);
+  for (let index = 0; index < 46; index++) {
+    const id = 'public-member-' + String(index).padStart(2, '0'), uid = 'U' + (index + 256).toString(16).padStart(32, '0');
+    f.sql.prepare('INSERT INTO users(row_id,line_id,name) VALUES(?,?,?)').run(id, uid, '帳號名稱不得代替公開卡');
+    f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,pool_eligible,ai_review_status,name,company_name,title,updated_at) VALUES(?,?,'self_profile','public',0,? ,?,'公開科技工作室','工程師',?)")
+      .run('public-card-' + String(45 - index).padStart(2, '0'), uid, index % 2 ? 'pending' : 'failed', '公開會員' + index, '2026-10-' + String(index % 20 + 1).padStart(2, '0'));
+  }
+  f.sql.exec('DROP TABLE ai_match_pair_cache; DROP TABLE member_chat_match_jobs');
+  const first = await f.api('/members?scope=public');
+  assert.equal(first.status, 200); assert.equal(first.items.length, 30); assert.ok(first.next);
+  const last = first.items.at(-1), cursorValue = JSON.parse(decodeURIComponent(atob(first.next.slice('public-v1:'.length))));
+  assert.deepEqual(cursorValue, [1, 'public', last.handle]);
+  assert.doesNotMatch(JSON.stringify(cursorValue), /U[0-9a-f]{32}|public-member-/);
+  const anchorUid = f.sql.prepare('SELECT line_id FROM card_contacts WHERE row_id=?').get(last.handle).line_id;
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,name,company_name,updated_at) VALUES('new-private-anchor',?,'self_profile','private','私人成員摘要','私人資料','2099-12-31')").run(anchorUid);
+  f.sql.exec("UPDATE card_contacts SET updated_at='2100-01-01' WHERE row_id='public-card-45'");
+  const second = await f.api('/members?' + new URLSearchParams({ scope:'public', after:first.next }));
+  assert.equal(second.status, 200); assert.equal(second.items.length, 18); assert.equal(second.next, '');
+  const all = [...first.items, ...second.items];
+  assert.equal(new Set(all.map(row => row.handle)).size, 48);
+  assert.equal(all.filter(row => row.name.startsWith('公開會員')).length, 46);
+  assert.ok(!second.items.some(row => row.handle === 'new-private-anchor'), 'editing the previous page anchor must not repeat its canonical member');
+  assert.doesNotMatch(JSON.stringify(all), /私人成員|私人資料|帳號名稱|line_id|peer|row_id|custom_config|U[0-9a-f]{32}/);
+  assert.equal(f.writes.length, 0);
+});
+
+test('public island summaries and industries use the newest public version while current handles retain card and thread safety', async t => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE card_contacts SET name='舊公開版',company_name='舊公開公司',ai_review_status='failed',pool_eligible=0 WHERE row_id='card-b'");
+  const add = f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,ai_review_status,name,company_name,title,custom_config,tags,services,updated_at) VALUES(?,?,'self_profile',?,?,?,?,?,?,?,?,?)");
+  add.run('public-a', B, 'public', 'pending', '同時公開甲', '公開科技公司', '公開顧問', '{}', '', '', '2026-10-24');
+  add.run('public-z', B, 'public', 'failed', '最新公開乙', '公開咖啡工作室', '公開店長', JSON.stringify({ industryClassification:{ primary:'餐飲食品' }, secret:'raw-config-not-returned' }), 'raw-tag-not-returned', 'raw-services-not-returned', '2026-10-24');
+  add.run('private-current', B, 'private', 'pending', '私人草稿姓名', '私人製造公司', '私人成本職稱', JSON.stringify({ industryClassification:{ primary:'製造批發貿易' } }), '製造批發貿易', 'private-services', '2026-10-25');
+  const cardsBefore = JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all());
+  const listed = await f.api('/members?scope=public'), member = listed.items.find(row => row.handle === 'private-current');
+  assert.equal(listed.status, 200); assert.ok(member);
+  assert.deepEqual(Object.keys(member).sort(), ['avatarUrl', 'company', 'handle', 'industry', 'memberNumber', 'name', 'title']);
+  assert.deepEqual({name:member.name,company:member.company,title:member.title,industry:member.industry,number:member.memberNumber},
+    {name:'最新公開乙',company:'公開咖啡工作室',title:'公開店長',industry:'餐飲食品',number:'20261021002'});
+  assert.doesNotMatch(JSON.stringify(listed), /私人|raw-config|raw-tag|raw-services|private-services|matchWork|line_id|custom_config|pool_eligible|ai_review/);
+  assert.equal((await f.api('/members/private-current/card')).card.name, '最新公開乙');
+  assert.equal((await f.api('/members/public-z/card')).status, 403, 'the original card endpoint still rejects a stale handle');
+  assert.equal((await f.api('/members?sort=latest&q=' + encodeURIComponent('私人草稿姓名'))).items[0].name, '私人草稿姓名', 'general directory behavior is unchanged');
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all()), cardsBefore);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM member_chat_threads').get().n, 0); assert.equal(f.writes.length, 0);
+  const room = await f.api('/threads', { data:{cardHandle:member.handle} });
+  assert.equal(room.success, true);
+  assert.equal((await f.api('/threads', { data:{cardHandle:member.handle} })).id, room.id);
+  assert.deepEqual({...f.sql.prepare('SELECT member_a,member_b FROM member_chat_threads WHERE id=?').get(room.id)}, {member_a:'a',member_b:'b'});
+});
+
+test('public island industry is a whitelisted public label and never exports raw metadata', async t => {
+  const f = fixture(t);
+  const update = f.sql.prepare("UPDATE card_contacts SET custom_config=?,tags=?,services=?,company_name=?,title='公開專員' WHERE row_id='card-b'");
+  const cases = [
+    [JSON.stringify({industryClassification:{primary:'科技資訊'}}), '餐飲食品', '', '公開咖啡公司', '科技資訊'],
+    [JSON.stringify({industryClassification:{primary:'not-a-category',secondary:['not-a-category','教育培訓']}}), '', '', '公開公司', '教育培訓'],
+    ['{broken-json', JSON.stringify(['零售電商','unknown-sensitive-tag']), '', '公開公司', '零售電商'],
+    ['{}', 'unknown-sensitive-tag', '公開旅行服務', '公開公司', '旅遊交通服務'],
+    ['{}', '<script>secret-tag</script>', '', '未分類公司', '其他行業']
+  ];
+  for (const [config,tags,services,company,expected] of cases) {
+    update.run(config,tags,services,company);
+    const result = await f.api('/members?scope=public'), row = result.items.find(item=>item.handle==='card-b');
+    assert.equal(result.status,200); assert.equal(row.industry,expected); assert.ok(CHAT_INDUSTRIES.includes(row.industry));
+    assert.doesNotMatch(JSON.stringify(row), /not-a-category|secret-tag|unknown-sensitive-tag|custom_config|services|tags/);
+  }
+  assert.equal(f.writes.length,0);
+});
+
+test('public island directory excludes inactive or unregistered cards and retains self, access, opt-out and bilateral blocks', async t => {
+  const f = fixture(t), handles = async () => (await f.api('/members?scope=public')).items.map(row=>row.handle);
+  assert.deepEqual(await handles(), ['card-b','card-c']);
+  for (const [field,value] of [['visibility','private'],['source_type','private_import'],['source_type','video_profile'],['archived_at','archived'],['merged_into_row_id','merged']]) {
+    f.sql.prepare(`UPDATE card_contacts SET ${field}=? WHERE row_id='card-b'`).run(value);
+    assert.ok(!(await handles()).includes('card-b'));
+    f.sql.exec("UPDATE card_contacts SET visibility='public',source_type='self_profile',archived_at='',merged_into_row_id='' WHERE row_id='card-b'");
+  }
+  f.sql.exec("UPDATE users SET line_id='invalid-uid' WHERE row_id='b'"); assert.ok(!(await handles()).includes('card-b'));
+  f.sql.prepare("UPDATE users SET line_id=? WHERE row_id='b'").run(B);
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,name) VALUES('orphan-public',?,'self_profile','public','無註冊帳號')").run('U'+'1'.repeat(32));
+  assert.ok(!(await handles()).includes('orphan-public'));
+  for (const [member,blocked] of [['a','b'],['b','a']]) {
+    f.sql.prepare('INSERT INTO member_chat_blocks VALUES(?,?,CURRENT_TIMESTAMP)').run(member,blocked);
+    assert.ok(!(await handles()).includes('card-b'));
+    assert.equal((await f.api('/members/card-b/card')).code,'CONTACT_CLOSED');
+    assert.equal((await f.api('/threads',{data:{cardHandle:'card-b'}})).code,'CONTACT_CLOSED');
+    f.sql.exec('DELETE FROM member_chat_blocks');
+  }
+  f.sql.exec("INSERT INTO member_chat_preferences(member_id,accepting) VALUES('b',0)");
+  assert.ok(!(await handles()).includes('card-b'));
+  assert.equal((await f.api('/members/card-b/card')).code,'CONTACT_CLOSED');
+  assert.equal((await f.api('/threads',{data:{cardHandle:'card-b'}})).code,'CONTACT_CLOSED');
+  assert.equal((await f.api('/members?scope=public',{token:''})).status,401);
+  f.env.EXCHANGE_ZONE_ACCESS_MODE='private'; assert.equal((await f.api('/members?scope=public')).status,403);
+  f.env.EXCHANGE_ZONE_ACCESS_MODE='open';f.sql.exec("UPDATE card_contacts SET source_type='private_import' WHERE row_id='card-a'");
+  assert.equal((await f.api('/members?scope=public')).code,'OWN_CARD_REQUIRED');
+  assert.equal(f.writes.length,0);
+});
+
+test('public island identity follows the confirmed canonical account and omits ambiguous recipients without hiding other members', async t => {
+  const f = fixture(t);
+  const other = 'U'+'1'.repeat(32);
+  f.sql.prepare("INSERT INTO users(row_id,line_id,name) VALUES('d',?,'其他正常會員')").run(other);
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,name) VALUES('card-d',?,'self_profile','public','正常公開會員')").run(other);
+  f.sql.prepare("INSERT INTO users(row_id,line_id,name,member_number) VALUES('old-a',?,'舊帳號','20200101001')").run(OLD);
+  f.sql.prepare("UPDATE card_contacts SET line_id=?,profile_user_id=?,owner_user_id=? WHERE row_id='card-a'").run(OLD,OLD,OLD);
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,name,updated_at) VALUES('canonical-current',?,'self_profile','private','不能顯示的私人草稿','2099-01-01')").run(OLD);
+  const listed = await f.api('/members?scope=public',{token:'b'}), canonical = listed.items.find(row=>row.handle==='canonical-current');
+  assert.equal(listed.status,200); assert.equal(canonical.name,'會員a'); assert.equal(canonical.memberNumber,'20261021001');
+  assert.equal(listed.items.filter(row=>row.name==='會員a').length,1);
+  assert.equal((await f.api('/members/canonical-current/card',{token:'b'})).card.name,'會員a');
+  f.sql.exec("INSERT INTO member_chat_preferences(member_id,accepting) VALUES('a',0),('old-a',1)");
+  assert.ok(!(await f.api('/members?scope=public',{token:'b'})).items.some(row=>row.handle==='canonical-current'));
+  f.sql.exec("UPDATE member_chat_preferences SET accepting=1 WHERE member_id='a'");
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(OLD,C);
+  const ambiguous = await f.api('/members?scope=public',{token:'b'});
+  assert.equal(ambiguous.status,200); assert.deepEqual(ambiguous.items.map(row=>row.handle),['card-d']);
+  assert.equal((await f.api('/members/canonical-current/card',{token:'b'})).code,'IDENTITY_CONFLICT');
+  assert.equal((await f.api('/threads',{token:'b',data:{cardHandle:'canonical-current'}})).code,'IDENTITY_CONFLICT');
+  f.sql.prepare('DELETE FROM user_identity_links WHERE new_line_id=?').run(C);
+  f.sql.prepare("INSERT INTO users(row_id,line_id,name) VALUES('duplicate-a',?,'不明重複帳號')").run(A);
+  assert.deepEqual((await f.api('/members?scope=public',{token:'b'})).items.map(row=>row.handle),['card-c','card-d']);
+  f.sql.exec("DELETE FROM users WHERE row_id='duplicate-a'");
+  for (const invalidOld of [null,'not-a-line-uid',C]) {
+    f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(invalidOld,C);
+    const result = await f.api('/members?scope=public',{token:'b'});
+    assert.equal(result.status,200); assert.deepEqual(result.items.map(row=>row.handle),['canonical-current','card-d']);
+    assert.equal((await f.api('/members/card-c/card',{token:'b'})).code,'IDENTITY_CONFLICT');
+    f.sql.prepare('DELETE FROM user_identity_links WHERE new_line_id=?').run(C);
+  }
+  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'inactive')").run(OLD,C);
+  assert.deepEqual((await f.api('/members?scope=public',{token:'b'})).items.map(row=>row.handle),['canonical-current','card-c','card-d']);
+  assert.equal(f.writes.length,0);
+});
+
+test('public island cursors validate their scope and current anchor without changing ordered or random directory modes', async t => {
+  const f = fixture(t), encode = value => 'public-v1:'+btoa(encodeURIComponent(JSON.stringify(value)));
+  for (const query of ['scope=','scope=private','scope=all','scope=Public','scope=public&scope=public','scope=public&sort=random','scope=public&sort=','scope=public&q=','scope=public&industry=科技資訊']) {
+    assert.equal((await f.api('/members?'+query)).code,'INVALID_QUERY',query);
+  }
+  for (const after of ['card-b','bad','public-v1:not-base64',encode([2,'public','card-b']),encode([1,'private','card-b']),encode([1,'public','']),encode([1,'public','x'.repeat(181)]),encode([1,'public','card-b\n']),encode([1,'public','card-a']),encode([1,'public','not-a-card'])]) {
+    assert.equal((await f.api('/members?'+new URLSearchParams({scope:'public',after}))).code,'INVALID_CURSOR',after);
+  }
+  const after = encode([1,'public','card-b']);
+  assert.deepEqual((await f.api('/members?'+new URLSearchParams({scope:'public',after}))).items.map(row=>row.handle),['card-c']);
+  for (const sort of ['', 'latest','match','random']) {
+    const params = new URLSearchParams({after});if(sort)params.set('sort',sort);
+    assert.equal((await f.api('/members?'+params)).code,'INVALID_CURSOR');
+    assert.equal((await f.api('/members'+(sort?'?sort='+sort:''))).status,200);
+  }
+  f.sql.exec("UPDATE card_contacts SET archived_at='gone' WHERE row_id='card-b'");
+  assert.equal((await f.api('/members?'+new URLSearchParams({scope:'public',after}))).code,'INVALID_CURSOR');
+  assert.equal(f.writes.length,0);
+});
+
 test('directory matching stays bounded, recovers expired leases and never accepts a stale worker write', async t => {
   const f = fixture(t); await f.api('/matches', { data: {} });
   for (let i = 0; i < 25; i++) {
