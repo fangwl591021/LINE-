@@ -18,6 +18,12 @@
     }
     .left-collapsed { width:84px !important; }
     .left-collapsed .collapse-hide { display:none !important; }
+    .checkin-record{width:min(350px,100%);border:1px solid #b7dfd1;border-radius:16px;overflow:hidden;background:#fff}
+    .checkin-record-header{background:#078655;color:white;padding:15px 17px;font-weight:700}
+    .checkin-record-body{padding:16px 17px;line-height:1.65;overflow-wrap:anywhere}
+    .checkin-record-balance{font-size:25px;font-weight:800;color:#174f3c}
+    .checkin-record-note{font-size:12px;color:#62746b;margin-top:9px}
+    .checkin-record button{display:block;width:100%;margin-top:9px;padding:9px;border:1px solid #cfe2d8;border-radius:10px;color:#63766a;background:#eef5f1;cursor:default}
   </style>
 </head>
 <body class="h-screen overflow-hidden text-slate-900">
@@ -332,6 +338,8 @@
     let activeThreadId = new URLSearchParams(location.search).get('thread') || '';
     let replyToolMode = '';
     let replyContentMode = 'text';
+    let monitorSequence = 0, monitorRequest = null, monitorTimer = null, monitorAuthorizedIdentity = '', monitorPageHidden = false, monitorMutations = 0;
+    const MONITOR_REFRESH_MS = 12000;
 
     const el = id => document.getElementById(id);
     function captureTokenFromHash() {
@@ -355,6 +363,7 @@
       return '';
     }
     const monitorUid = readMonitorUid();
+    const monitorIdentity = () => JSON.stringify([token(), readMonitorUid()]);
     const safe = value => String(value ?? '');
     const esc = value => safe(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
@@ -366,16 +375,22 @@
       setTimeout(() => { node.hidden = true; }, 2400);
     }
 
-    async function api(action, payload = {}) {
+    async function api(action, payload = {}, options = {}) {
       const body = { action, payload: { ...payload } };
       if (token()) body.payload.lineAccessToken = token();
       if (monitorUid) {
         body.payload.pt_uid = monitorUid;
         body.payload.userId = body.payload.userId || monitorUid;
       }
-      const res = await fetch(WORKER_URL, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(WORKER_URL, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body), ...(options.signal ? { signal: options.signal } : {}) });
       const data = await res.json().catch(() => null);
-      if (!res.ok || !data || data.success === false) throw new Error(data?.error || `HTTP ${res.status}`);
+      if (!res.ok || !data || data.success === false) {
+        const error = new Error(data?.error || `HTTP ${res.status}`);
+        // The legacy dispatcher can return logical authorization failures in
+        // HTTP 200. Treat these exact server errors like a forbidden response.
+        error.status = /^Access Denied:\s*(Missing or invalid LINE Token|Admin only action)\s*$/i.test(safe(data?.error)) ? 403 : res.status;
+        throw error;
+      }
       return data.data || data;
     }
 
@@ -556,15 +571,47 @@
       };
     }
 
+    function checkinRecordPreview(row) {
+      const preview = row.card_preview;
+      if (row.direction !== 'outbound' || row.message_type !== 'flex' || row.event_type !== 'checkin_mall_card'
+          || row.delivery_status !== 'accepted' || row.record_source !== 'checkin_mall_cards'
+          || !/^CHECKIN_MALL:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(safe(row.message_id))
+          || !/^U[0-9a-f]{32}$/i.test(safe(row.user_id)) || row.thread_id !== 'line:' + row.user_id
+          || !preview || preview.title !== '會員購物金' || preview.mother_reply_available !== false
+          || !(preview.balance === null || (Number.isSafeInteger(preview.balance) && preview.balance >= 0))
+          || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(safe(preview.queried_at)) || !Number.isFinite(Date.parse(preview.queried_at))) return null;
+      return { balance: preview.balance, queriedAt: preview.queried_at };
+    }
+
     function normalizeMessage(row = {}) {
+      const preview = checkinRecordPreview(row);
       return {
         id: row.message_id || row.id || '',
         type: row.message_type || row.event_type || 'text',
         senderRole: row.direction === 'outbound' ? 'guide' : 'user',
-        senderName: row.direction === 'outbound' ? '客服' : '用戶',
+        senderName: preview ? '系統' : row.direction === 'outbound' ? '客服' : '用戶',
         text: row.text_content || `[${row.message_type || row.event_type || 'event'}]`,
-        createdAt: row.created_at || ''
+        createdAt: row.created_at || '',
+        checkinPreview: preview
       };
+    }
+
+    function messageBody(msg) {
+      const preview = msg.checkinPreview;
+      if (!preview) return `<p class="text-sm font-medium leading-6 whitespace-pre-wrap">${esc(readableMessageText(msg))}</p>`;
+      const queriedAt = new Date(preview.queriedAt).toLocaleString('zh-TW', { timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+      return `<section class="checkin-record" aria-label="會員購物金發送紀錄摘要">
+        <div class="checkin-record-header">會員購物金<br><small>發送紀錄摘要</small></div>
+        <div class="checkin-record-body"><p>當次查詢購物金</p>
+          <p class="checkin-record-balance">${preview.balance === null ? '暫時無法取得' : esc(preview.balance.toLocaleString('zh-TW')) + ' 元'}</p>
+          ${preview.balance === null ? '<p class="checkin-record-note">尚未取得餘額，不代表餘額為零。</p>' : ''}
+          <p class="checkin-record-note">查詢時間：${esc(queriedAt)}（台北時間）</p>
+          <p class="checkin-record-note">LINE API 已接受；不代表已送達或已讀。</p>
+          <p class="checkin-record-note">母站原文字回覆未取得；此處僅顯示本系統的卡片摘要。</p>
+          <button type="button" disabled aria-disabled="true">前往商城（僅預覽）</button>
+          <button type="button" disabled aria-disabled="true">查看點數與購物金明細（僅預覽）</button>
+          <p class="checkin-record-note">預覽不開啟商城，也不記錄點擊。</p>
+        </div></section>`;
     }
 
     function statusLabel(status) {
@@ -737,7 +784,9 @@
     }
 
     async function loadAudience() {
+      const identity = monitorIdentity();
       const data = await api('getLineOAChatAudience', { limit: 500 });
+      if (identity !== monitorIdentity() || monitorPageHidden) return;
       audience = data.data || data;
       renderAudience();
     }
@@ -752,7 +801,7 @@
       return suggestions.slice(0, 3);
     }
 
-    function renderSuggestions(thread) {
+    function renderSuggestions(thread, { preserveDraft = false } = {}) {
       const suggestions = buildSuggestions(thread);
       el('suggestion-count').textContent = suggestions.length;
       el('suggestion-list').innerHTML = suggestions.map((text, idx) => `
@@ -771,7 +820,7 @@
           showToast('已帶入建議回覆');
         });
       });
-      el('draft-reply').value = suggestions[0] || '';
+      if (!preserveDraft) el('draft-reply').value = suggestions[0] || '';
     }
 
     function renderTags(thread) {
@@ -827,6 +876,38 @@
         : '這裡做監看、標記、建議回覆與人工送出；不自動接管真人客服流程。';
     }
 
+    function renderChatMessages(thread, { preserveScroll = false } = {}) {
+      if (!thread) return;
+      const box = el('chat-messages'), previousTop = box.scrollTop;
+      const atBottom = box.scrollHeight - box.clientHeight - previousTop < 48;
+      const boxTop = box.getBoundingClientRect().top;
+      const anchor = [...box.children].find(node => node.getBoundingClientRect().bottom >= boxTop);
+      const anchorId = anchor?.dataset.monitorMessage, anchorOffset = anchor?.getBoundingClientRect().top - boxTop;
+      const existing = new Map([...box.children].map(node => [node.dataset.monitorMessage, node]));
+      const desired = new Set();
+      messages.forEach((msg, index) => {
+        const key = safe(msg.id || 'message:' + index); if (desired.has(key)) return; desired.add(key);
+        const right = msg.senderRole !== 'user';
+        const html = `<div class="max-w-[82%] bg-white text-slate-900 border ${right ? 'border-emerald-200' : 'border-slate-200'} rounded-[22px] px-4 py-3 shadow-sm">
+          <p class="font-semibold text-xs text-slate-400 mb-2">${esc(msg.senderName)}</p>
+          ${messageBody(msg)}
+          <p class="text-xs text-slate-500 mt-3">${esc(fmt(msg.createdAt))}</p></div>`;
+        let node = existing.get(key);
+        if (!node) { node = document.createElement('div'); node.dataset.monitorMessage = key; }
+        node.className = `flex ${right ? 'justify-end' : 'justify-start'}`;
+        if (node.monitorContent !== html) { node.innerHTML = html; node.monitorContent = html; }
+        if (box.children[index] !== node) box.insertBefore(node, box.children[index] || null);
+      });
+      [...box.children].forEach(node => { if (!desired.has(node.dataset.monitorMessage)) node.remove(); });
+      if (!messages.length) { const empty = document.createElement('div'); empty.className = 'text-slate-400 font-bold'; empty.textContent = '尚無訊息'; box.append(empty); }
+      el('chat-meta').textContent = `共 ${messages.length} 則訊息・用戶 ID ${thread.userId || ''}`;
+      if (!preserveScroll || atBottom) box.scrollTop = box.scrollHeight;
+      else if (anchorId && [...box.children].some(node => node.dataset.monitorMessage === anchorId)) {
+        const nextAnchor = [...box.children].find(node => node.dataset.monitorMessage === anchorId);
+        box.scrollTop += nextAnchor.getBoundingClientRect().top - boxTop - anchorOffset;
+      } else box.scrollTop = previousTop;
+    }
+
     function renderActiveThread(thread) {
       if (!thread) {
         el('chat-view').hidden = true;
@@ -849,19 +930,9 @@
       el('chat-empty').hidden = true;
       renderAvatar(el('chat-avatar'), thread, false);
       el('chat-name').textContent = thread.name;
-      el('chat-meta').textContent = `共 ${messages.length} 則訊息・用戶 ID ${thread.userId || ''}`;
       el('chat-risk-pill').className = `px-3 py-1 rounded-full text-xs font-semibold ${riskClass(thread.risk)}`;
       el('chat-risk-pill').textContent = riskLabel(thread.risk);
-      el('chat-messages').innerHTML = messages.map(msg => {
-        const right = msg.senderRole !== 'user';
-        return `<div class="flex ${right ? 'justify-end' : 'justify-start'}">
-          <div class="max-w-[72%] bg-white text-slate-900 border ${right ? 'border-emerald-200' : 'border-slate-200'} rounded-[22px] px-4 py-3 shadow-sm">
-            <p class="font-semibold text-xs text-slate-400 mb-2">${esc(msg.senderName)}</p>
-            <p class="text-sm font-medium leading-6 whitespace-pre-wrap">${esc(readableMessageText(msg))}</p>
-            <p class="text-xs text-slate-500 mt-3">${fmt(msg.createdAt)}</p>
-          </div>
-        </div>`;
-      }).join('') || '<div class="text-slate-400 font-bold">尚無訊息</div>';
+      renderChatMessages(thread);
       renderSuggestions(thread);
       renderTags(thread);
       renderRecords(thread);
@@ -875,22 +946,95 @@
         ? `偵測到關鍵字：${hits.join('、')}，建議優先查看並補上內部備註。`
         : '目前未偵測到高風險關鍵字。';
       el('internal-note').value = thread.note || '';
-      el('chat-messages').scrollTop = el('chat-messages').scrollHeight;
     }
 
-    async function loadMonitor(threadId = activeThreadId) {
-      const data = await api('getLineOAChatMonitor', { threadId, limit: 100 });
-      threads = (data.threads || []).map(normalizeThread);
-      messages = (data.messages || []).map(normalizeMessage);
-      activeThreadId = data.selectedThreadId || threadId || threads[0]?.id || '';
-      renderThreadList();
-      renderActiveThread(getActiveThread());
+    const savedEditIds = ['internal-note', 'opportunity-stage', 'opportunity-value', 'opportunity-note'];
+    const currentSavedEdits = () => Object.fromEntries(savedEditIds.map(id => [id, el(id).value]));
+    function renderReadOnlyThreadState(thread) {
+      if (!thread) return;
+      renderTags(thread); renderRecords(thread);
+      syncStatusButtons(thread.status || 'open'); syncAiPauseControls(thread);
+      el('chat-risk-pill').className = `px-3 py-1 rounded-full text-xs font-semibold ${riskClass(thread.risk)}`;
+      el('chat-risk-pill').textContent = riskLabel(thread.risk);
+      const stage = thread.opportunityStage || 'new';
+      el('opportunity-stage-pill').className = `px-3 py-1 rounded-full text-xs font-semibold ${opportunityClass(stage)}`;
+      el('opportunity-stage-pill').textContent = opportunityLabel(stage);
+    }
+    function renderSavedThreadState(thread, submitted) {
+      if (!thread) return;
+      const current = currentSavedEdits();
+      const focused = document.activeElement;
+      const cursor = savedEditIds.includes(focused?.id) && typeof focused.selectionStart === 'number'
+        ? { start: focused.selectionStart, end: focused.selectionEnd, direction: focused.selectionDirection } : null;
+      renderReadOnlyThreadState(thread); renderOpportunity(thread);
+      renderSuggestions(thread, { preserveDraft: true });
+      el('internal-note').value = thread.note || '';
+      // A user can continue editing while a save is in flight. Only replace
+      // values that still equal the snapshot submitted by that save.
+      savedEditIds.forEach(id => { if (current[id] !== submitted[id]) el(id).value = current[id]; });
+      if (cursor) focused.setSelectionRange(cursor.start, cursor.end, cursor.direction);
+    }
+
+    function stopMonitorRefresh(cancelRequest = false) {
+      clearTimeout(monitorTimer); monitorTimer = null;
+      if (cancelRequest) { monitorSequence++; monitorRequest?.controller.abort(); monitorRequest = null; }
+    }
+    function canRefreshMonitor() {
+      return !monitorPageHidden && !document.hidden && !monitorMutations && !!(token() || monitorUid) && !!activeThreadId
+        && !activeThreadId.startsWith('manual:') && monitorAuthorizedIdentity === monitorIdentity();
+    }
+    function scheduleMonitorRefresh() {
+      stopMonitorRefresh();
+      if (!canRefreshMonitor() || monitorRequest) return;
+      monitorTimer = setTimeout(() => {
+        monitorTimer = null;
+        if (!canRefreshMonitor()) { stopMonitorRefresh(true); return; }
+        void loadMonitor(activeThreadId, { background: true }).catch(() => {});
+      }, MONITOR_REFRESH_MS);
+    }
+    async function loadMonitor(threadId = activeThreadId, { background = false, afterMutation = null } = {}) {
+      if (background && (!canRefreshMonitor() || monitorRequest)) return;
+      stopMonitorRefresh(true);
+      const request = { sequence: monitorSequence, identity: monitorIdentity(), threadId, controller: new AbortController() };
+      monitorRequest = request;
+      const timeout = setTimeout(() => request.controller.abort(), 12000);
+      try {
+        const data = await api('getLineOAChatMonitor', { threadId, limit: 100 }, { signal: request.controller.signal });
+        if (request.sequence !== monitorSequence || request.identity !== monitorIdentity() || request.controller.signal.aborted || monitorPageHidden || document.hidden) return;
+        const selected = data.selectedThreadId || threadId || data.threads?.[0]?.thread_id || '';
+        if (threadId && selected !== threadId) throw new Error('聊天室回覆不符，已保留目前對話');
+        const previous = getActiveThread(), preserveEdits = !!previous && activeThreadId === selected && !el('chat-view').hidden;
+        const nextThreads = (data.threads || []).map(normalizeThread);
+        if (preserveEdits && !nextThreads.some(row => row.id === selected)) nextThreads.push(previous);
+        threads = nextThreads;
+        messages = (data.messages || []).filter(row => !row.thread_id || row.thread_id === selected).map(normalizeMessage);
+        activeThreadId = selected;
+        monitorAuthorizedIdentity = request.identity;
+        if (!background) renderThreadList();
+        if (preserveEdits) {
+          renderChatMessages(getActiveThread(), { preserveScroll: true });
+          if (afterMutation) renderSavedThreadState(getActiveThread(), afterMutation);
+          else renderReadOnlyThreadState(getActiveThread());
+        }
+        else renderActiveThread(getActiveThread());
+      } catch (error) {
+        if (request.sequence !== monitorSequence || request.identity !== monitorIdentity() || monitorPageHidden || document.hidden) return;
+        if ([401, 403].includes(error.status)) { monitorAuthorizedIdentity = ''; el('status-chip').textContent = '請重新登入'; }
+        if (!background) throw error;
+      } finally {
+        clearTimeout(timeout);
+        if (monitorRequest === request) { monitorRequest = null; scheduleMonitorRefresh(); }
+      }
     }
 
     async function updateThreadMeta(patch = {}) {
       const thread = getActiveThread();
       if (!thread) return showToast('請先選擇聊天室', 'error');
-      const data = await api('updateLineOAChatThread', {
+      const identity = monitorIdentity();
+      const submittedEdits = currentSavedEdits();
+      stopMonitorRefresh(true); monitorMutations++;
+      try {
+      await api('updateLineOAChatThread', {
         threadId: thread.id,
         status: patch.status ?? thread.status,
         tags: patch.tags ?? thread.tags,
@@ -900,24 +1044,27 @@
         opportunityNote: patch.opportunityNote ?? el('opportunity-note').value,
         aiPaused: patch.aiPaused ?? thread.aiPaused
       });
-      threads = (data.threads || []).map(normalizeThread);
-      messages = (data.messages || []).map(normalizeMessage);
-      activeThreadId = data.selectedThreadId || thread.id;
-      renderThreadList();
-      renderActiveThread(getActiveThread());
+      if (identity !== monitorIdentity() || activeThreadId !== thread.id) return;
+      // Read the authoritative projection after saving. A mutation response or
+      // a read started before the save must not restore an older conversation.
+      await loadMonitor(thread.id, { afterMutation: submittedEdits });
       showToast('聊天室狀態已更新');
+      } finally { monitorMutations--; scheduleMonitorRefresh(); }
     }
 
     async function sendReply() {
       const thread = getActiveThread();
       const text = el('draft-reply').value.trim();
       if (!thread) return showToast('請先選擇聊天室', 'error');
+      const identity = monitorIdentity();
       const button = el('send-reply');
       button.disabled = true;
       button.classList.add('opacity-60');
+      stopMonitorRefresh(true); monitorMutations++;
       try {
         const outboundMessages = await buildReplyMessages(text);
         await api('sendLineOAChatReply', { threadId: thread.id, messages: outboundMessages });
+        if (identity !== monitorIdentity() || activeThreadId !== thread.id) return;
         el('draft-reply').value = '';
         el('reply-image-file').value = '';
         el('reply-image-url').value = '';
@@ -928,6 +1075,7 @@
         await loadMonitor(thread.id);
         showToast('已送出 LINE 回覆');
       } finally {
+        monitorMutations--; scheduleMonitorRefresh();
         button.disabled = false;
         button.classList.remove('opacity-60');
       }
@@ -964,6 +1112,7 @@
     function saveImportedThread() {
       const text = el('import-text').value.trim();
       if (!text) return showToast('請先貼上或讀入聊天內容', 'error');
+      stopMonitorRefresh(true);
       const title = el('import-title').value.trim() || `手動匯入 ${new Date().toLocaleString('zh-TW')}`;
       const imported = {
         id: `manual:${Date.now()}`,
@@ -1008,8 +1157,8 @@
     el('thread-search').addEventListener('input', renderThreadList);
     el('refresh-audience').addEventListener('click', () => {
       el('refresh-audience').disabled = true;
-      loadAudience()
-        .then(() => showToast('AI 監控已更新'))
+      Promise.all([loadAudience(), loadMonitor(activeThreadId)])
+        .then(() => showToast('對話與監控已更新'))
         .catch(err => showToast(err.message, 'error'))
         .finally(() => { el('refresh-audience').disabled = false; });
     });
@@ -1083,6 +1232,22 @@
     el('open-crm').addEventListener('click', () => {
       const query = monitorUid ? `?pt_uid=${encodeURIComponent(monitorUid)}` : '';
       location.href = `https://line-engine.fangwl591021.workers.dev/crm${query}`;
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopMonitorRefresh(true);
+      else if (canRefreshMonitor()) void loadMonitor(activeThreadId, { background: true }).catch(() => {});
+    });
+    window.addEventListener('pagehide', () => { monitorPageHidden = true; stopMonitorRefresh(true); });
+    window.addEventListener('pageshow', () => {
+      const resume = monitorPageHidden;
+      monitorPageHidden = false;
+      if (resume && canRefreshMonitor()) void loadMonitor(activeThreadId, { background: true }).catch(() => {});
+    });
+    window.addEventListener('storage', event => {
+      if ((!event.key || event.key === 'lineoa_access_token') && monitorAuthorizedIdentity !== monitorIdentity()) {
+        monitorAuthorizedIdentity = ''; stopMonitorRefresh(true); el('status-chip').textContent = '登入已變更，請重新整理';
+      }
     });
 
     async function initMonitor() {
