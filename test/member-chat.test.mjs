@@ -283,7 +283,7 @@ test('directory matching stays bounded, recovers expired leases and never accept
   assert.equal(f.sql.prepare('SELECT lease_key FROM member_chat_match_jobs').get().lease_key, 'replacement');
 });
 
-test('directory AI adapter uses the existing server model, key, daily quota and bounded timeout', async t => {
+test('directory AI adapter keeps the existing server model, key and timeout without daily quota reads or writes', async t => {
   const { scoreMemberDirectoryBatch } = await import('../workerbackup.js');
   const calls = [], quota = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -292,16 +292,13 @@ test('directory AI adapter uses the existing server model, key, daily quota and 
     assert.ok(options.signal); calls.push(JSON.parse(options.body));
     return Response.json({ choices: [{ message: { content: '{"scores":[{"index":0,"score":72,"reason":"公司與職務具有業務互補機會"}]}' } }] });
   });
-  const env = { OPENAI_API_KEY: 'synthetic-test-key', OPENAI_TEXT_MODEL: 'synthetic-model', ACTMASTER_KV: { get: async () => '0', put: async (...args) => quota.push(args) } };
+  const env = { OPENAI_API_KEY: 'synthetic-test-key', OPENAI_TEXT_MODEL: 'synthetic-model', ACTMASTER_KV: { get: async (...args) => {quota.push(args);return '1000';}, put: async (...args) => quota.push(args),delete:async()=>{throw Error('must not clear quota');} } };
   const actor = { user: { line_id: A, role: 'user' } };
   assert.equal((await scoreMemberDirectoryBatch(env, actor, { company: '合成甲', title: '經理' }, [{ company: '合成乙', title: '業務' }])).scores[0].score, 72);
   assert.equal(calls[0].model, 'synthetic-model'); assert.equal(calls[0].max_tokens, 3200);
   assert.equal(calls[0].response_format.type,'json_object'); assert.match(calls[0].messages[0].content,/\bJSON\b/i);
-  assert.equal(quota.length, 2);
-  assert.ok(quota[0][0].startsWith('RL_matchmakeContacts_'+A+'_')); // The shared twenty-call authority is still consumed.
-  assert.ok(quota[1][0].startsWith('RL_matchmakeContacts_directory_'+A+'_')); // Background discovery also has its own twelve-batch ceiling.
-  env.ACTMASTER_KV.get = async () => '20';
-  assert.deepEqual(await scoreMemberDirectoryBatch(env, actor, {}, []), { limited: true }); assert.equal(calls.length, 1);
+  assert.equal(quota.length, 0);
+  assert.equal((await scoreMemberDirectoryBatch(env, actor, {company:'合成甲'}, [{company:'合成乙'}])).scores[0].score,72);assert.equal(calls.length,2);assert.equal(quota.length,0);
 });
 
 test('attachments list only own valid published coupons; conditional send and retries include coupon identity', async t => {

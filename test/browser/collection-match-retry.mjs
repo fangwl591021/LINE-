@@ -16,17 +16,19 @@ async function fixture(options={}){
   window.currentUserProfile={userId:'TEST'};window.currentUser={userId:'TEST'};window.currentUserCard={自訂名片設定:'{}'};window.testToken='token-a';window.liff={isLoggedIn:()=>true,getAccessToken:()=>window.testToken};window.__reads=0;window.__refreshes=0;window.mode=options.mode||'recover';window.status=options.status||'failed';window.__delay=!!options.delay;
   const base={sourceType:'private_import',scannerUserId:'TEST',公司名稱:'合成公司',職稱:'合成業務'};
   window.harvestCards=Array.from({length:41},(_,i)=>({...base,rowId:'SYNTHETIC_'+i,姓名:'合成名片'+i,created_at:new Date(Date.now()-i*1000).toISOString(),aiMatch:i<5||options.allNew?{status:'pending',score:null,autoEligible:true}:{status:'completed',score:i===5?0:82,source:'ai',intentKey:'',basis:'previous',reason:'原本真實合成分數必須永久沿用'}}));window.allCards=window.harvestCards;
+  if(options.seedLegacy)window.harvestCards.forEach(c=>{if(c.aiMatch.score===null)c.aiMatch={status:options.legacyStatus||'limited',failureCode:'quota',score:null,autoEligible:false,retryAt:new Date(Date.now()+86400000).toISOString(),reason:'今日額度已用完，明早08:00再試'};});
   window.showToast=()=>{};window.syncUserCardMatch=()=>{};
   window.fetchAPI=async(action)=>{
    if(action==='getCardHarvestContacts'){
     window.__reads++;
+    if(options.readFailureCount&&window.__reads<=options.readFailureCount)throw Error('synthetic read unavailable');
     if(window.__delayRead)await new Promise(r=>window.__completeRead=r);
-    return window.harvestCards.map((c,i)=>i<5&&c.aiMatch.score===null&&Date.parse(c.aiMatch.retryAt||'')<=Date.now()?{...c,aiMatch:{status:'pending',score:null,autoEligible:true}}:c);
+    return window.harvestCards.map(c=>c.aiMatch.score===null&&((!options.oldBackend&&(c.aiMatch.status==='limited'||c.aiMatch.failureCode==='quota'))||Date.parse(c.aiMatch.retryAt||'')<=Date.now())?{...c,aiMatch:{status:'pending',score:null,autoEligible:true}}:c);
    }
    if(action!=='refreshCardHarvestMatches')throw Error(action);window.__refreshes++;
    if(window.__delay)await new Promise(r=>window.__complete=r);
    if(window.mode==='transport')throw Error('synthetic offline');
-   const fail=window.mode==='always_fail'||window.__refreshes===1;
+   const fail=window.mode==='always_fail'||(window.mode!=='success'&&window.__refreshes===1);
    const targets=new Set(window.harvestCards.filter(c=>c.aiMatch.score===null&&c.aiMatch.autoEligible===true).slice(0,5).map(c=>c.rowId));
    const failureCode=window.status==='limited'?'quota':window.status==='processing'?'':window.failureCode;
    const cards=window.harvestCards.map(c=>targets.has(c.rowId)?{...c,aiMatch:fail?{status:window.status,score:null,autoEligible:false,failureCode,reason:'合成暫時失敗提示',retryAt:new Date(Date.now()+(window.status==='limited'?3600000:window.status==='processing'?120000:300000)).toISOString()}:{status:'completed',score:71,source:'ai',basis:'profile'}}:c.aiMatch.score===null?c:{...c,aiMatch:{status:'completed',score:99,source:'ai'}});
@@ -34,7 +36,7 @@ async function fixture(options={}){
   };
  },options);
  for(const name of ['modules/cards.js','modules/collection-match-auto.js'])await page.addScriptTag({content:script(name)});await page.addScriptTag({content:core.slice(start,end)});
- await page.evaluate(()=>window.renderCardList(window.harvestCards));
+ if(!options.skipInitialRender)await page.evaluate(()=>window.renderCardList(window.harvestCards));
  return {page,close:()=>context.close()};
 }
 const state=page=>page.evaluate(()=>({reads:window.__reads,refreshes:window.__refreshes,status:window.harvestCards[0].aiMatch.status,score:window.harvestCards[0].aiMatch.score,zero:window.harvestCards[5].aiMatch.score,old:window.harvestCards[6].aiMatch.score,notice:document.getElementById('collection-match-retry-status')?.textContent}));
@@ -84,12 +86,24 @@ try{
   const f=await fixture({mode:'transport'});await f.page.waitForFunction(()=>document.getElementById('collection-match-retry-status').textContent.includes('暫時無法讀取'));
   for(let i=0;i<4;i++){await f.page.clock.fastForward(61000);await f.page.waitForTimeout(1);}assert.equal((await state(f.page)).refreshes,4);assert.match((await state(f.page)).notice,/自動重試已暫停/);await f.page.clock.fastForward(3600000);assert.equal((await state(f.page)).refreshes,4);await f.close();console.log('PASS network errors have bounded one-minute backoff and no infinite loop');
  }
- // Quota has a separate label and honors its server reset time.
- {
-  const f=await fixture({status:'limited'});await failReady(f.page);assert.match(await f.page.locator('#card-list').innerText(),/今日額度已用完/);await f.page.clock.fastForward(3599000);assert.equal((await state(f.page)).refreshes,1);await f.page.clock.fastForward(2000);await complete(f.page);assert.equal((await state(f.page)).reads,1);await f.close();console.log('PASS limited status uses server retryAt and makes no early AI request');
+ // Retired local daily limits never wait for their cached tomorrow deadline.
+ for(const legacyStatus of ['limited','failed']){
+  const f=await fixture({seedLegacy:true,legacyStatus,allNew:true,mode:'success'});await f.page.waitForFunction(()=>window.harvestCards.every(c=>c.aiMatch.status==='completed'));assert.equal((await state(f.page)).reads,1);assert.equal((await state(f.page)).refreshes,9);assert.doesNotMatch(await f.page.locator('#card-list').innerText(),/今日額度|08:00|明早/);await f.close();console.log('PASS 41 cached '+legacyStatus+'/quota states recover immediately through one authoritative read');
  }
  {
-  const f=await fixture({status:'limited',allNew:true});await failReady(f.page);await f.page.clock.fastForward(3599000);assert.equal((await state(f.page)).refreshes,1,'quota must also stop the other 36 pending cards');await f.page.clock.fastForward(2000);await f.page.waitForFunction(()=>window.harvestCards.every(c=>c.aiMatch.status==='completed'));assert.equal((await state(f.page)).reads,1);assert.equal((await state(f.page)).refreshes,10);await f.close();console.log('PASS whole-collection quota cooldown covers all 41 unscored cards and then drains bounded batches');
+  const f=await fixture({seedLegacy:true,mode:'success'});await complete(f.page);assert.equal((await state(f.page)).reads,1);assert.equal((await state(f.page)).zero,0);assert.equal((await state(f.page)).old,82);await f.close();console.log('PASS old quota recovery never recomputes existing zero or historical scores');
+ }
+ {
+  const f=await fixture({seedLegacy:true,allNew:true,oldBackend:true,mode:'success'});await f.page.waitForFunction(()=>window.__reads===1);await f.page.waitForTimeout(1);for(let i=0;i<10;i++)await f.page.evaluate(()=>window.renderCardList(window.harvestCards));await f.page.clock.fastForward(86400001);assert.equal((await state(f.page)).reads,1);assert.equal((await state(f.page)).refreshes,0);assert.equal(await f.page.evaluate(()=>window.harvestCards[0].aiMatch.autoEligible),false);assert.match(await f.page.locator('#card-list').innerText(),/配對狀態更新中/);assert.doesNotMatch(await f.page.locator('#card-list').innerText(),/今日額度|08:00|明早/);await f.close();console.log('PASS a legacy server still returning limited causes no retry loop or invented eligibility');
+ }
+ {
+  const f=await fixture({seedLegacy:true,allNew:true,oldBackend:true,skipInitialRender:true,mode:'success'});await f.page.evaluate(()=>window.loadCardData({harvest:true,initPanels:false}));await f.page.clock.fastForward(86400001);assert.equal((await state(f.page)).reads,1);assert.equal((await state(f.page)).refreshes,0);await f.close();console.log('PASS a core-first fresh read counts once when the legacy server still returns limited');
+ }
+ {
+  const f=await fixture({seedLegacy:true,allNew:true,readFailureCount:1,mode:'success'});await f.page.waitForFunction(()=>window.__reads===1);await f.page.waitForTimeout(1);await f.page.clock.fastForward(59000);assert.equal((await state(f.page)).reads,1);assert.equal((await state(f.page)).refreshes,0);await f.page.clock.fastForward(2000);await f.page.waitForFunction(()=>window.harvestCards.every(c=>c.aiMatch.status==='completed'));assert.equal((await state(f.page)).reads,2);assert.equal((await state(f.page)).refreshes,9);await f.close();console.log('PASS failed legacy recovery read backs off one minute before rechecking server eligibility');
+ }
+ {
+  const f=await fixture({status:'limited',allNew:true});await failReady(f.page);assert.match(await f.page.locator('#card-list').innerText(),/配對狀態更新中/);await f.page.clock.fastForward(1001);await f.page.waitForFunction(()=>window.harvestCards.every(c=>c.aiMatch.status==='completed'));assert.equal((await state(f.page)).reads,1);assert.equal((await state(f.page)).refreshes,10);await f.close();console.log('PASS an old quota response is refreshed immediately instead of blocking the collection until tomorrow');
  }
  for(const failureCode of ['provider','timeout','invalid_response']){
   const f=await fixture({allNew:true,failureCode});await failReady(f.page);await f.page.clock.fastForward(299000);assert.equal((await state(f.page)).refreshes,1,'a failed batch must not spend AI on the other 36 cards during backoff');assert.equal((await state(f.page)).reads,0);await f.page.clock.fastForward(2000);await f.page.waitForFunction(()=>window.harvestCards.every(c=>c.aiMatch.status==='completed'));assert.equal((await state(f.page)).reads,1);assert.equal((await state(f.page)).refreshes,10);await f.close();console.log('PASS whole-collection five-minute '+failureCode+' backoff covers all 41 unscored cards');

@@ -20,18 +20,24 @@ const { build } = require(process.env.LISTING_ESBUILD_MODULE);
   const quotaMethod = source.match(/^  async checkRateLimit\([\s\S]*?^  }/m)?.[0];assert.ok(bridge && quotaMethod);
   const bundle = await build({ entryPoints: ['test/fixtures/collection-match-provider-runtime.mjs'], bundle: true, format: 'esm', platform: 'browser', write: false, plugins: [{ name: 'actual-ai-wrapper', setup(build) {
     build.onResolve({ filter: /^actual-(?:ai-wrapper|collection-scorer)$/ }, args => ({ path: args.path, namespace: 'isolated' }));
-    build.onLoad({ filter: /.*/, namespace: 'isolated' }, args => ({ contents: args.path === 'actual-collection-scorer' ? collectionSource : "import { allowDirectoryMatchBatch } from './matchmaking-quota.mjs';\nconst SecurityModule={" + quotaMethod + "};\n" + actual + '\n' + bridge + '\nexport { AIModule };', resolveDir: resolve('worker'), loader: 'js' }));
+    build.onLoad({ filter: /.*/, namespace: 'isolated' }, args => ({ contents: args.path === 'actual-collection-scorer' ? collectionSource : "const SecurityModule={" + quotaMethod + "};\n" + actual + '\n' + bridge + '\nexport { AIModule, SecurityModule };', resolveDir: resolve('worker'), loader: 'js' }));
   } }] });
-  for (const mode of version === 'baseline' ? ['success', 'directory-json'] : ['success', 'directory-json', 'fallback', 'provider', 'timeout', 'invalid', 'quota', 'existing-race']) {
-    const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0].text, compatibilityDate: '2026-04-23', compatibilityFlags: [], d1Databases: { ACTMASTER_DB: 'isolated-ai-wrapper' }, bindings: { OPENAI_API_KEY: 'sk-synthetic-primary-NOT_REAL', OPENAI_API_KEY_2: 'sk-synthetic-backup-NOT_REAL' }, port: 0 });
+  for (const mode of version === 'baseline' ? ['success', 'directory-json'] : ['success', 'directory-json', 'fallback', 'provider', 'timeout', 'invalid', 'quota-unlimited', 'directory-quota-unlimited', 'legacy-limited', 'legacy-quota-failed', 'existing-race']) {
+    const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0].text, compatibilityDate: '2026-04-23', compatibilityFlags: [], d1Databases: { ACTMASTER_DB: 'isolated-ai-wrapper' }, kvNamespaces: ['ACTMASTER_KV'], bindings: { OPENAI_API_KEY: 'sk-synthetic-primary-NOT_REAL', OPENAI_API_KEY_2: 'sk-synthetic-backup-NOT_REAL' }, port: 0 });
     try {
       const db = await mf.getD1Database('ACTMASTER_DB'), owner = 'U' + 'a'.repeat(32);
       for (const stmt of readFileSync('migrations/0027_incremental_matchmaking_cache.sql', 'utf8').split(';').map(s => s.replace(/--[^\n]*/g, '').trim()).filter(Boolean)) await db.exec(stmt.replace(/\s+/g, ' ') + ';');
       await db.exec("CREATE TABLE card_contacts(row_id TEXT,line_id TEXT,profile_user_id TEXT,owner_user_id TEXT,creator_id TEXT,source_type TEXT,archived_at TEXT,company_name TEXT,title TEXT,services TEXT,personality TEXT,hobbies TEXT,career TEXT,updated_at TEXT,created_at TEXT)");
       await db.prepare("INSERT INTO card_contacts VALUES('SELF',?,?,?,?,'self_profile','','合成本人公司','顧問','通路服務','謹慎','閱讀','商務','2026-10-25','2026-10-25')").bind(owner, owner, owner, owner).run();
       await db.prepare("INSERT INTO ai_match_pair_cache(requester_user_id,pool_scope,intent_hash,candidate_card_row_id,candidate_version,score,reason,result_source) VALUES(?,'own','existing-intent','OLD','old-version',82,'既有有效理由，不得覆寫。','ai')").bind(owner).run();
+      await db.prepare("INSERT INTO ai_match_pair_cache(requester_user_id,pool_scope,intent_hash,candidate_card_row_id,candidate_version,score,reason,result_source) VALUES(?,'own','existing-zero','ZERO','old-version',0,'既有真實零分及理由，不得覆寫。','rules')").bind(owner).run();
+      const kv = await mf.getKVNamespace('ACTMASTER_KV'), day = new Date().toISOString().slice(0, 10), historical = { [`RL_matchmakeContacts_${owner}_${day}`]: '25', [`RL_matchmakeContacts_directory_${owner}_${day}`]: '12' };
+      for (const [key, value] of Object.entries(historical)) await kv.put(key, value);
+      if (['legacy-limited', 'legacy-quota-failed'].includes(mode)) await db.prepare("INSERT INTO ai_match_pair_cache(requester_user_id,pool_scope,intent_hash,candidate_card_row_id,candidate_version,score,reason,result_source) VALUES(?,'own','collection-partner-v1','NEW','old-version',0,?,?)").bind(owner, JSON.stringify({ version: 1, failureCode: 'quota', retryAt: new Date(Date.now() + 86400000).toISOString() }), mode === 'legacy-limited' ? 'partner_limited' : 'partner_failed').run();
       const response = await mf.dispatchFetch('https://isolated.test/audit', { method: 'POST', body: JSON.stringify({ mode }) }), data = await response.json();
       assert.equal(response.status, 200, JSON.stringify(data));
+      for (const [key, value] of Object.entries(historical)) assert.equal(await kv.get(key), value, 'Historical quota values must not be cleared or changed');
+      if (['quota-unlimited', 'directory-quota-unlimited', 'legacy-limited', 'legacy-quota-failed'].includes(mode)) { assert.equal(data.allowed.length, 60); assert.ok(data.allowed.every(Boolean), 'matching must not fall through to the default 50/day limit'); assert.deepEqual(data.kvCalls, [], 'matching must not read, reset, or increment quota KV'); }
       if (version === 'baseline') {
         assert.equal(data.observed.length, 2);
         assert.ok(data.observed.every(c => !/json/i.test(JSON.stringify(c.body.messages))));
@@ -39,14 +45,15 @@ const { build } = require(process.env.LISTING_ESBUILD_MODULE);
         else { assert.equal(data.result.data.processed, 0); assert.equal(data.rows.find(r => r.candidate_card_row_id === 'NEW').result_source, 'partner_failed'); assert.equal(data.result.data.cards[1].aiMatch.score, null); }
         console.log('WORKERD baseline ' + mode + ' REPRODUCED provider JSON-mode rejection');continue;
       }
-      if (mode === 'directory-json') { assert.equal(data.observed.length, 1); assert.equal(data.directory.scores[0].score, 78); console.log('WORKERD fixed directory JSON mode PASS');continue; }
+      if (['directory-json', 'directory-quota-unlimited'].includes(mode)) { assert.equal(data.observed.length, 1); assert.equal(data.directory.scores[0].score, 78); console.log('WORKERD fixed ' + mode + ' PASS');continue; }
       if (mode === 'existing-race') { assert.equal(data.result.data.cards[1].aiMatch.score, 91, 'a valid score arriving during AI must win');assert.equal(data.result.data.cards[1].aiMatch.reason, '另一處已完成的有效分數及理由，必須保留。');assert.equal(data.result.data.processed, 0);console.log('WORKERD existing valid-score race PASS');continue; }
       const old = data.rows.find(r => r.candidate_card_row_id === 'OLD'), fresh = data.rows.find(r => r.candidate_card_row_id === 'NEW');
       assert.equal(old.score, 82); assert.equal(old.reason, '既有有效理由，不得覆寫。');
+      const zero = data.rows.find(r => r.candidate_card_row_id === 'ZERO');assert.equal(zero.score, 0);assert.equal(zero.reason, '既有真實零分及理由，不得覆寫。');assert.equal(zero.result_source, 'rules');
       assert.ok(!JSON.stringify(data.observed).match(/PRIVATE_NAME|PRIVATE_PHONE|PRIVATE_HEALTH|PRIVATE_WEALTH/));
       for (const call of data.observed) { assert.equal(call.body.model, 'gpt-4o'); assert.equal(call.hasSignal, true); assert.equal(call.method, 'POST'); }
-      if (['success', 'fallback'].includes(mode)) { assert.equal(data.result.data.processed, 1); assert.equal(fresh.score, 78); assert.equal(fresh.result_source, 'ai'); assert.equal(data.observed.length, mode === 'fallback' ? 2 : 1); }
-      else { assert.equal(data.result.data.processed, 0); assert.equal(data.result.data.cards[1].aiMatch.score, null); assert.equal(data.result.data.failureCode, mode === 'invalid' ? 'invalid_response' : mode); assert.doesNotMatch(fresh.reason, /NEVER_SAVE/); assert.equal(fresh.result_source, mode === 'quota' ? 'partner_limited' : 'partner_failed'); assert.equal(data.observed.length, mode === 'quota' ? 0 : ['invalid','timeout'].includes(mode) ? 1 : 2); }
+      if (['success', 'fallback', 'quota-unlimited', 'legacy-limited', 'legacy-quota-failed'].includes(mode)) { assert.equal(data.result.data.processed, 1); assert.equal(fresh.score, 78); assert.equal(fresh.result_source, 'ai'); assert.equal(data.observed.length, mode === 'fallback' ? 2 : 1); }
+      else { assert.equal(data.result.data.processed, 0); assert.equal(data.result.data.cards[1].aiMatch.score, null); assert.equal(data.result.data.failureCode, mode === 'invalid' ? 'invalid_response' : mode); assert.doesNotMatch(fresh.reason, /NEVER_SAVE/); assert.equal(fresh.result_source, 'partner_failed'); assert.equal(data.observed.length, ['invalid','timeout'].includes(mode) ? 1 : 2); }
       console.log('WORKERD actual-wrapper ' + mode + ' PASS');
     } finally { await mf.dispose(); }
   }

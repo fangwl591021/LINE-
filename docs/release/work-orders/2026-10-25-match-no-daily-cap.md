@@ -1,0 +1,13 @@
+# 取消未確認的配對每日次數上限
+
+- User objects to「今日AI配對額度已用完，明日08:00」and asks when thisrestriction was authorized. Root acknowledged retaining an unconfirmedbusinesscap and will remove it frommatching.
+- Verifiedhistory:87b3e6c04b0046cf3b833fff1d426d9c35c56f0b,2026-05-04 oldworkerbackup introducedmatchmakeContacts20;05/10 copiedtoworkerbackup.js;09/21 collectionand09/25 directory reusedit. PR246 added12directorysubcap and UI explanation. Git history does not establish userconsent.
+- CheckoutLINE- isolatedcleanmain d7a68ce78830eddf1d178bda3bc5c78235b4b8ae; branchcodex/automatic-match-no-daily-cap-20261025. BeforefullguardPASS: TEMP/line-match-no-daycap-before-20261025.log.
+- Scope: removeallmatchingdailycaps, includinggenericfallback; removecollectionquota dependency anddirectory12gate; legacy limited/quota immediatelyrecover through authoritativeGET+normallease. Preserve realprovider failurebackoff and finitebatch/retries.
+- Must preserve: existing validAI/rules scores/reasons including0, auth/identity/ownership/privacy, membernumbers/partnerfinancial/points/messages, currentmodel/keys/bindings/cron. Do not clearrealKV counters or bulkmodifycache.
+- Expected: collection history, minimalworkerbackup quota/dispatch/bridge edits, obsoletequotahelper cleanup, frontendcards/auto recovery/tests, runtimeproviderfixture, docs/indexcachebust. OtherAIactioncaps not changed.
+- No migration or productiontestrecords. Capturevalidscoredigests and settingsbefore/after; compile/deployexacttestedcommit --keep-vars --strict thenpublishfrontend.
+- AfterfullguardPASS: TEMP/line-match-no-daycap-after-final-20261025.log; beforeguardPASS asabove. Workerdactualwrapper13cases PASS including60 matchingquota calls beyond20/50 with zeroKVreads/writes, oldcountersunchanged, collection/directorysuccess and oldfuturelimited rows recover. JSONinstruction/fallback/provider/timeout/invalidresponse/91pointrace preserved.
+- Focusedbackend/API/UI/member-chat108/108 PASS. Chromium22scenarios and existingmobile/desktopcollectionhistory PASS:41oldlimited/quotafailedcardscanreadonceanddrain, oldserverstilllimitedneverloopsorfakeseligibility, core-firstreadreused, failedrecoveryreadshortbackoff, completed0/82unchanged and lifecycleguardspreserved. Worker dry-runPASS.
+- Productionpreflight2493validscoredigests captured; currentusercounter20 and2partner_limited rows confirmed byread-onlydiagnostics. No reset or bulkrepair; readsandordinarynewleasesreleaseoldquota state. Directoryexistingjobtimingremainsordinaryscheduler, no broadjobreset.
+- Backend andfrontend sourcefrozen; publishexacttestedcommit, preservebindings/secrets/cron, compareoldvalidscorehashesafterdeploy. Live deploymentpending.

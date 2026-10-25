@@ -1,10 +1,22 @@
 // Isolated test only: every network request is replaced before the actual wrapper runs.
-import { AIModule, scoreMemberDirectoryBatch } from 'actual-ai-wrapper';
+import { AIModule, SecurityModule, scoreMemberDirectoryBatch } from 'actual-ai-wrapper';
 import { scoreNewCollectionMatches, restoreCollectionHistory } from 'actual-collection-scorer';
 
 export default { async fetch(request, env) {
   const { mode = 'success' } = await request.json(), db = env.ACTMASTER_DB;
-  const owner = 'U' + 'a'.repeat(32), observed = [], warnings = [];
+  const owner = 'U' + 'a'.repeat(32), observed = [], warnings = [], kvCalls = [];
+  const quotaMode = ['quota-unlimited', 'directory-quota-unlimited', 'legacy-limited', 'legacy-quota-failed'].includes(mode);
+  let allowed = [];
+  if (quotaMode) {
+    const namespace = env.ACTMASTER_KV;
+    env.ACTMASTER_KV = {
+      get: async (...args) => { kvCalls.push('get'); return await namespace.get(...args); },
+      put: async (...args) => { kvCalls.push('put'); return await namespace.put(...args); },
+      delete: async (...args) => { kvCalls.push('delete'); return await namespace.delete(...args); }
+    };
+    // More than the generic default 50 proves matching cannot fall through to it.
+    allowed = await Promise.all(Array.from({ length: 60 }, () => SecurityModule.checkRateLimit(owner, 'matchmakeContacts', env, 'user')));
+  }
   const oldWarn = console.warn, oldFetch = globalThis.fetch, oldTimeout = AbortSignal.timeout;
   if (mode === 'timeout') AbortSignal.timeout = () => oldTimeout(5);
   console.warn = (...args) => { warnings.push(args.map(String).join(' ')); };
@@ -23,20 +35,21 @@ export default { async fetch(request, env) {
     return Response.json({ choices: [{ message: { content: mode === 'invalid' ? 'invalid JSON' : JSON.stringify({ scores }) } }] });
   };
   try {
-    if (mode === 'directory-json') {
+    if (['directory-json', 'directory-quota-unlimited'].includes(mode)) {
       let directory;
       try { directory = await scoreMemberDirectoryBatch(env, { user: { line_id: owner, role: 'user' } }, { company: '合成本人公司', title: '顧問' }, [{ company: '合成候選公司', title: '通路顧問' }]); }
       catch { directory = { failed: true }; }
-      return Response.json({ directory, observed, warningCount: warnings.length });
+      return Response.json({ directory, observed, kvCalls, allowed, warningCount: warnings.length });
     }
     const cards = [
       { rowId: 'OLD', aiMatch: { status: 'pending', score: null } },
-      { rowId: 'NEW', 公司名稱: '合成候選公司', 職稱: '通路顧問', 服務項目: '商務服務', 姓名: 'PRIVATE_NAME', 電話: 'PRIVATE_PHONE', health: 'PRIVATE_HEALTH', wealth: 'PRIVATE_WEALTH', aiMatch: { status: 'pending', score: null } }
+      { rowId: 'NEW', 公司名稱: '合成候選公司', 職稱: '通路顧問', 服務項目: '商務服務', 姓名: 'PRIVATE_NAME', 電話: 'PRIVATE_PHONE', health: 'PRIVATE_HEALTH', wealth: 'PRIVATE_WEALTH', aiMatch: { status: 'pending', score: null } },
+      { rowId: 'ZERO', aiMatch: { status: 'pending', score: null } }
     ];
     const read = { identityIdsForUser: async () => [owner], getCardHarvestContacts: async () => ({ success: true, data: await restoreCollectionHistory(cards, db, owner) }) };
-    const result = await scoreNewCollectionMatches({ env, actor: { userId: owner, token: 'synthetic-line-token', role: 'user' }, read, match: AIModule, rateLimit: async () => mode !== 'quota' });
+    const result = await scoreNewCollectionMatches({ env, actor: { userId: owner, token: 'synthetic-line-token', role: 'user' }, read, match: AIModule, rateLimit: async () => { throw Error('Collection must not consult daily quota'); } });
     const rows = (await db.prepare('SELECT candidate_card_row_id,score,reason,result_source FROM ai_match_pair_cache ORDER BY candidate_card_row_id').all()).results;
-    return Response.json({ result, rows, observed, warningCount: warnings.length });
+    return Response.json({ result, rows, observed, kvCalls, allowed, warningCount: warnings.length });
   } finally {
     globalThis.fetch = oldFetch;
     AbortSignal.timeout = oldTimeout;

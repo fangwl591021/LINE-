@@ -384,20 +384,20 @@
       && match.score >= 0 && match.score <= 100 && ["ai", "rules"].includes(match.source)) {
       return { ...match, score: Math.round(match.score), label: match.source === "rules" ? "規則評估" : match.basis === "previous" ? "既有 AI 配對" : "AI 配對" };
     }
-    const labels = { needs_intent: "待配對", stale: "待更新", unavailable: "暫無結果", needs_login: "請重新登入", processing: "AI 配對中", failed: "稍後重試", limited: "今日額度已用完" };
+    const legacyQuota = match.status === 'limited' || match.failureCode === 'quota';
+    const labels = { needs_intent: "待配對", stale: "待更新", unavailable: "暫無結果", needs_login: "請重新登入", processing: "AI 配對中", failed: "稍後重試" };
     const reasons = {
       needs_intent: "系統會優先沿用既有分數；沒有結果的名片依本人商務資料自動配對，不必先填業務需求。",
       stale: "名片資料或需求已更新，舊分數不再適用，等待新的配對結果。",
       unavailable: "目前無法讀取配對結果，請稍後重新整理；收藏名片仍可正常查看。",
       needs_login: "請重新登入以驗證身份，再查看您的配對結果。",
       processing: "這張名片正在分析，可見名單會在等待時間到期後自動確認結果；既有分數仍保留。",
-      failed: "AI 配對暫時未完成，可見名單會稍後重試；既有分數仍保留。",
-      limited: "今日 AI 配對額度已用完；額度於每日台北時間 08:00 更新，請於下次更新後重試。既有分數仍保留。"
+      failed: "AI 配對暫時未完成，可見名單會稍後重試；既有分數仍保留。"
     };
     const status = match.status === "completed" ? "unavailable" : (match.status || "pending");
     const retryAt = Date.parse(match.retryAt || '');
-    const retryNote = Number.isFinite(retryAt) ? ' 下次確認時間：' + new Date(retryAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) + '（台北時間）。' : '';
-    return { ...match, status, score: null, label: labels[status] || "待配對", reason: (safeText(match.reason).trim() || reasons[status] || "這張名片尚無配對分數；系統將依本人商務資料補算，可稍後重新整理查看。") + retryNote };
+    const retryNote = !legacyQuota && Number.isFinite(retryAt) ? ' 下次確認時間：' + new Date(retryAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) + '（台北時間）。' : '';
+    return { ...match, status, score: null, label: legacyQuota ? '配對狀態更新中' : labels[status] || "待配對", reason: legacyQuota ? '正在更新這張名片的配對狀態，稍後自動確認結果；既有分數仍保留。' : (safeText(match.reason).trim() || reasons[status] || "這張名片尚無配對分數；系統將依本人商務資料補算，可稍後重新整理查看。") + retryNote };
   }
 
   function ensureCollectionMatchStyles() {
@@ -430,7 +430,9 @@
     return Array.isArray(cards) && cards.every(card => {
       const match = card && card.aiMatch;
       if (!match || (intentKey !== null && match.intentKey && match.intentKey !== intentKey)) return false;
-      if (['failed', 'processing', 'limited'].includes(match.status)) {
+      const completed = match.status === 'completed' && typeof match.score === 'number' && Number.isFinite(match.score) && match.score >= 0 && match.score <= 100 && ['ai', 'rules'].includes(match.source);
+      if (!completed && (match.status === 'limited' || match.failureCode === 'quota')) return false;
+      if (['failed', 'processing'].includes(match.status)) {
         const retryAt = Date.parse(match.retryAt || '');
         // Old rows without a deadline need one authoritative read on return.
         if (!Number.isFinite(retryAt) || retryAt <= Date.now()) return false;
@@ -570,6 +572,8 @@
     }).join("");
 
     const hasMore = visibleCards.length < displayCards.length;
+    const retryMessage = visibleSource.some(card => (card.aiMatch?.status === 'limited' || card.aiMatch?.failureCode === 'quota') && collectionMatch(card).score === null)
+      ? '配對狀態更新中，請稍後重新整理。' : window.collectionMatchRetryMessage || '';
     const footerHtml = `
       <div class="text-center py-2">
         <div class="text-[12px] font-bold text-slate-400 mb-3">顯示 ${visibleCards.length} / ${displayCards.length} 位名單</div>
@@ -596,7 +600,7 @@
           <span>沿用既有配對，新名片自動分析；點百分比可看理由。</span>
           <button type="button" onclick="window.refreshCollectedCardMatches()" ${window.cardMatchRefreshing ? "disabled" : ""} class="shrink-0 text-emerald-700 font-bold py-2">${window.cardMatchRefreshing ? "讀取中…" : "重新整理"}</button>
         </div>
-        <p id="collection-match-retry-status" role="status" aria-live="polite" class="px-4 text-[11px] text-slate-500">${escapeHTML(window.collectionMatchRetryMessage || '')}</p>
+        <p id="collection-match-retry-status" role="status" aria-live="polite" class="px-4 text-[11px] text-slate-500">${escapeHTML(retryMessage)}</p>
         ${html}
       </div>
       ${footerHtml}
