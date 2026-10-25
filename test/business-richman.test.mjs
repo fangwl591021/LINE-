@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -11,9 +12,59 @@ const worker = fs.readFileSync(path.join(root, 'workerbackup.js'), 'utf8');
 
 assert.match(indexHtml, /openBusinessRichman/);
 assert.match(indexHtml, /id="page-business-richman"/);
-assert.match(indexHtml, /js\/modules\/business-richman\.js\?v=1\.2/);
-assert.match(indexHtml, /js\/navigation\.js\?v=8\.03/);
+assert.match(indexHtml, /js\/modules\/business-richman\.js\?v=1\.3/);
+assert.match(indexHtml, /js\/navigation\.js\?v=8\.04/);
 assert.match(navigation, /page === 'business-richman'.*initBusinessRichman/);
+assert.match(indexHtml, /id="page-business-island"/);
+assert.match(indexHtml, /aria-label="開啟商務交流島"/);
+assert.match(indexHtml, /travel_explore/);
+assert.ok(indexHtml.indexOf('js/modules/business-island.js?v=1') > indexHtml.indexOf('js/modules/store-richman.js?v=1'));
+assert.match(navigation, /page === 'business-island'.*initBusinessIsland/);
+
+// Exercise compatibility entry points without mounting either product UI.
+const entryCalls = [];
+const entryWindow = {
+  openBusinessIsland(options) { entryCalls.push(['island', options]); return 'island'; },
+  goPage(...args) { entryCalls.push(['page', ...args]); }
+};
+vm.runInNewContext(source, { window: entryWindow, document: { getElementById: () => null } });
+const islandOptions = { mode: 'card', onExit() {} };
+assert.equal(entryWindow.openBusinessRichman(islandOptions), 'island');
+assert.equal(entryWindow.initBusinessRichman(islandOptions), 'island');
+assert.equal(entryCalls.length, 2);
+assert.ok(entryCalls.every(call => call[0] === 'island' && call[1] === islandOptions));
+entryCalls.length = 0;
+const storeOptions = { mode: 'store', resume: true, onExit() {} };
+const legacyInit = entryWindow.initBusinessRichman;
+entryWindow.initBusinessRichman = options => entryCalls.push(['store-init', options]);
+entryWindow.openBusinessRichman(storeOptions);
+assert.deepEqual(entryCalls[0], ['page', 'business-richman', true]);
+assert.equal(entryCalls[1][1], storeOptions);
+assert.equal(entryCalls[1][0], 'store-init');
+entryWindow.initBusinessRichman = legacyInit;
+entryCalls.length = 0;
+await entryWindow.initBusinessRichman(storeOptions);
+entryWindow.leaveBusinessRichman();
+assert.equal(entryCalls.length, 0, 'store init and cleanup must not redirect to the island or run an exit route');
+
+const routeCalls = [];
+const router = {
+  currentPage: 'home', currentViewMode: 'user',
+  initBusinessIsland() { routeCalls.push('island-init'); },
+  leaveBusinessIsland() { routeCalls.push('island-leave'); },
+  leaveBusinessRichman() { routeCalls.push('store-leave'); },
+  document: { body: { classList: { toggle() {} } }, getElementById: () => null, querySelectorAll: () => [] }
+};
+router.window = router;
+vm.runInNewContext(navigation, router);
+router.goPage('business-island');
+assert.deepEqual(routeCalls, ['island-init']);
+router.goPage('business-island', true);
+assert.deepEqual(routeCalls, ['island-init'], 'same-page navigation does not cancel or initialize twice');
+router.goPage('business-richman', true);
+assert.deepEqual(routeCalls, ['island-init', 'island-leave']);
+router.goPage('store-shop', true);
+assert.deepEqual(routeCalls, ['island-init', 'island-leave'], 'normal storefront navigation must preserve the store board generation');
 
 assert.match(source, /loadCardData\(\{ render: false, harvest: true, initPanels: false \}\)/);
 assert.match(source, /window\.harvestCards/);
