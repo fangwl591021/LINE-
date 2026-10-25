@@ -353,7 +353,7 @@
     presenceStatus='checking';
     exitAction = typeof options.onExit === 'function' ? options.onExit : null;
     if (!document.querySelector('link[data-business-island]')) {
-      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=7');style.dataset.businessIsland='';
+      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=8');style.dataset.businessIsland='';
       styleReady = new Promise((resolve,reject) => {
         style.addEventListener('load',resolve,{once:true});
         style.addEventListener('error',()=>{style.remove();styleReady=null;reject(Error('人脈島樣式載入失敗，請重試。'));},{once:true});
@@ -368,7 +368,7 @@
     const ticket = generation;
     note('正在連接人脈島…');
     try {
-      const [module,scene,sound,pulse] = await Promise.all([import(new URL('member-chat.js?v=16',scriptUrl).href),import(new URL('business-island-world.mjs?v=5',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),import(new URL('business-island-presence.mjs?v=1',scriptUrl).href),styleReady]);
+      const [module,scene,sound,pulse] = await Promise.all([import(new URL('member-chat.js?v=16',scriptUrl).href),import(new URL('business-island-world.mjs?v=6',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),import(new URL('business-island-presence.mjs?v=1',scriptUrl).href),styleReady]);
       if (!active(ticket)) return;
       client=module.createChatClient({base:window.Config?.WORKER_URL||window.WORKER_URL,isCurrent:()=>active(ticket)});
       audio=sound.createIslandAudio({isCurrent:()=>valid(ticket),onState:state=>{if(active(ticket))renderAudioState(state);}});
