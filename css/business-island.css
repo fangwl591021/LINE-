@@ -53,28 +53,37 @@ body.business-island-page #page-business-island {margin:0!important}
 #page-business-island button.bi-world-category {display:block;min-height:44px;max-width:100%;padding:8px 23px;border:0;border-radius:999px;background:transparent;color:inherit;font-size:inherit;font-weight:inherit;line-height:1.4}
 #page-business-island button.bi-world-category:hover {background:#fffdf5}
 #page-business-island .bi-world-caption {position:relative;z-index:5;margin:20px 20px 0;color:#245561;font-size:13px;font-weight:650;line-height:1.5;text-align:center;text-wrap:balance}
-#page-business-island .bi-world-art {position:absolute;z-index:0;top:96px;left:50%;width:100%;max-width:900px;height:calc(100% - 110px);object-fit:contain;object-position:center;transform:translateX(-50%);filter:drop-shadow(0 17px 11px #225e7333);user-select:none;pointer-events:none}
-#page-business-island .bi-world-members {position:absolute;top:0;left:50%;width:var(--bi-art-size);max-width:100%;height:100%;z-index:5;pointer-events:none;transform:translateX(-50%)}
-#page-business-island .bi-ring-route,#page-business-island .bi-ring-stations {position:absolute;z-index:2;inset:0 auto auto 50%;width:var(--bi-art-size);max-width:100%;height:100%;transform:translateX(-50%);pointer-events:none}
-#page-business-island .bi-ring-route polyline {fill:none;stroke:#fff6d3;stroke-width:3;stroke-linecap:round;stroke-dasharray:3 5;vector-effect:non-scaling-stroke;filter:drop-shadow(0 1px 1px #215d674d)}
-#page-business-island .bi-ring-stop {position:absolute;display:grid;place-items:center;width:18px;height:18px;transform:translate(-50%,-50%);border:1px solid #fff4d0;border-radius:50%;background:#f8f2d7c9;color:#355d4c;font-size:9px;font-weight:700}
-#page-business-island .bi-ring-stop[data-current=true] {background:#23624c;color:white;box-shadow:0 0 0 4px #fff2cc66}
+#page-business-island .bi-world-art {position:absolute;z-index:0;top:var(--bi-art-top);left:50%;width:var(--bi-art-size);max-width:100%;height:var(--bi-art-size);object-fit:contain;object-position:center;transform:translateX(-50%);filter:drop-shadow(0 17px 11px #225e7333);user-select:none;pointer-events:none}
+#page-business-island .bi-world-members {position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none}
 #page-business-island .bi-island-member-bank {display:contents}
 #page-business-island .bi-island-member-summary {position:absolute;z-index:6;top:88px;left:12px;right:12px;margin:0;text-align:center;font-size:11px;line-height:1.5;color:#245661}
 #page-business-island .bi-island-members-more,#page-business-island .bi-island-sail {position:absolute;z-index:7;bottom:7px;min-height:44px;width:calc(var(--bi-art-size) / 2 - 6px);max-width:calc(50% - 14px);padding:8px;font-size:12px;font-weight:650;background:#fffaf0ed;box-shadow:0 3px 10px #245b6220}
 #page-business-island .bi-island-members-more {left:max(8px,calc(50% - var(--bi-art-size) / 2))}
 #page-business-island .bi-island-sail {right:max(8px,calc(50% - var(--bi-art-size) / 2))}
 #page-business-island .bi-world-island[data-current=true] .bi-world-title {box-shadow:0 0 0 3px #f7e2a880,0 7px 20px #23646d22}
-#page-business-island .bi-pin {position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px;width:56px;min-width:44px;max-width:56px;min-height:58px;padding:2px;border:0;border-radius:14px;background:transparent;transform:translate(-50%,-50%);pointer-events:auto;filter:drop-shadow(0 3px 4px #183f3655)}
-#page-business-island .bi-pin:hover {background:#fffdf54d;border-color:transparent}
-#page-business-island .bi-pin>img,#page-business-island .bi-pin>.bi-avatar {display:grid;place-items:center;flex:none;width:34px;height:34px;border:3px solid #fffdf5;border-radius:50%;background:#e0eee1;color:var(--bi-green-deep);object-fit:cover;overflow:hidden;font-size:18px;font-weight:800}
-#page-business-island .bi-pin>span:not(.bi-avatar) {display:block;max-width:100%;padding:2px 7px;border-radius:999px;background:#214f40ed;color:#fffdf5;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:650;line-height:1.5}
-#page-business-island .bi-pin[aria-pressed=true]>img,#page-business-island .bi-pin[aria-pressed=true]>.bi-avatar {border-color:#f6d881;box-shadow:0 0 0 3px #fffdf580}
-#page-business-island .bi-world-arrival {position:absolute;z-index:9;right:4%;top:60%;display:grid;grid-template-columns:36px minmax(0,1fr);align-items:start;gap:9px;width:62%;max-width:360px;min-width:0;padding:12px;border:1px solid #f4e3b8;border-radius:18px;background:linear-gradient(145deg,#fffdf5f5,#f2f8eaf2);box-shadow:0 9px 25px #194f4938;backdrop-filter:blur(10px);overflow-wrap:anywhere}
+/* Public members are real RPG residents. The translated outer hit area is never scaled. */
+#page-business-island button.bi-pin.bi-npc {position:absolute;left:0;top:0;display:block;width:44px;min-width:44px;max-width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:16px;overflow:visible;background:transparent;pointer-events:auto;touch-action:manipulation;box-shadow:none;filter:drop-shadow(0 2px 2px #183f3644);will-change:transform}
+#page-business-island button.bi-pin.bi-npc:hover {background:#fff9df33}
+#page-business-island .bi-npc * {pointer-events:none}
+#page-business-island .bi-npc-person {position:absolute;display:block;left:9px;top:0;width:26px;height:54px;padding:0;background:none;border:0}
+#page-business-island .bi-npc-head.bi-avatar {position:absolute;z-index:4;left:1px;top:0;width:24px;height:24px;min-width:0;flex:none;border:2px solid #fff8dd;border-radius:50%;background:#e6efdb;font-size:14px;line-height:1;box-shadow:0 1px 2px #254c3933}
+#page-business-island .bi-npc-shadow {position:absolute;left:3px;top:48px;width:23px;height:6px;border-radius:50%;background:#294a4433;filter:blur(1px)}
+#page-business-island .bi-npc-body {position:absolute;z-index:2;left:6px;top:22px;width:16px;height:19px;border-radius:7px 7px 4px 4px;background:linear-gradient(100deg,var(--bi-npc-shirt,#d98c59),var(--bi-npc-shirt,#d98c59) 70%,#62574544);box-shadow:inset -3px 0 3px #34503c22}
+#page-business-island .bi-npc-arm {position:absolute;z-index:1;left:1px;top:25px;width:6px;height:16px;border-radius:5px;background:linear-gradient(var(--bi-npc-shirt,#d98c59) 0 65%,#edbd91 67%);transform-origin:50% 3px;animation:bi-arm-swing .55s ease-in-out infinite alternate;animation-play-state:paused}
+#page-business-island .bi-npc-arm.is-right {left:21px;animation-direction:alternate-reverse}
+#page-business-island .bi-npc-leg {position:absolute;z-index:1;left:7px;top:39px;width:6px;height:13px;border-radius:2px 2px 3px 3px;background:linear-gradient(#617582 0 78%,#e9e4cf 80%);transform-origin:50% 2px;animation:bi-leg-stride .55s ease-in-out infinite alternate;animation-play-state:paused}
+#page-business-island .bi-npc-leg.is-right {left:17px;animation-direction:alternate-reverse}
+#page-business-island .bi-npc-name {position:absolute;z-index:5;top:54px;left:50%;display:block;max-width:78px;padding:1px 5px;border:1px solid #fff8de99;border-radius:8px;background:#24563fdf;color:#fffdf4;font-size:9px;font-weight:650;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transform:translateX(-50%)}
+#page-business-island .bi-npc-online {position:absolute;z-index:6;right:5px;top:16px;width:9px;height:9px;border:2px solid #fffdf4;border-radius:50%;background:#8f9c91;box-shadow:0 1px 3px #21493844}
+#page-business-island .bi-npc[data-online=true] .bi-npc-online {background:#1abb78;box-shadow:0 0 0 2px #a3f5bf66}
+#page-business-island .bi-npc[data-online=true] .bi-npc-body {--bi-npc-shirt:#5c9680}
+#page-business-island .bi-world-island[data-visible=true] .bi-npc[data-moving=true]:not([data-frozen=true]) :is(.bi-npc-arm,.bi-npc-leg) {animation-play-state:running}
+#page-business-island .bi-npc[aria-pressed=true] .bi-npc-head {border-color:#f6d27b;box-shadow:0 0 0 2px #fff5cc99}
+#page-business-island .bi-world-arrival {position:absolute;z-index:180;left:50%;right:auto;top:calc(var(--bi-art-top) + var(--bi-art-size) * .75);display:grid;grid-template-columns:28px minmax(0,1fr);align-items:start;gap:4px 8px;width:90%;max-width:380px;min-width:0;padding:7px;border:1px solid #f4e3b8;border-radius:14px;background:linear-gradient(145deg,#fffdf5f5,#f2f8eaf2);box-shadow:0 5px 16px #194f492b;backdrop-filter:blur(10px);overflow-wrap:anywhere;transform:translateX(-50%)}
 #page-business-island .bi-world-arrival>.bi-avatar {width:36px;height:36px;flex-basis:36px;font-size:18px;border:2px solid #fff4cd}
 #page-business-island .bi-world-arrival-copy {min-width:0}
-#page-business-island .bi-world-arrival h4 {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:0;color:var(--bi-green-deep);font-size:16px;font-weight:800;line-height:1.4}
-#page-business-island .bi-world-arrival p {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:3px 0 0;color:#5a7162;font-size:12px;line-height:1.45}
+#page-business-island .bi-world-arrival h4 {display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;margin:0;color:var(--bi-green-deep);font-size:16px;font-weight:800;line-height:1.4}
+#page-business-island .bi-world-arrival p {display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;margin:3px 0 0;color:#5a7162;font-size:12px;line-height:1.45}
 #page-business-island .bi-world-arrival-actions {grid-column:1/-1;display:flex;gap:7px;min-width:0}
 #page-business-island .bi-world-arrival-actions button {flex:1;min-width:0;min-height:44px;padding:8px 6px;font-size:13px;font-weight:700;line-height:1.4}
 #page-business-island .bi-world-arrival-actions button:first-child {flex:1.25}
@@ -108,9 +117,10 @@ body.business-island-page #page-business-island {margin:0!important}
 #page-business-island .bi-walker-arm.is-right {left:26px;animation-direction:alternate-reverse}
 #page-business-island .bi-walker-leg {position:absolute;z-index:1;left:6px;top:42px;width:9px;height:17px;border-radius:3px 3px 4px 4px;background:linear-gradient(#667886 0 74%,#eae5cc 76%);box-shadow:inset -2px 0 2px #354b5833;transform-origin:50% 2px;animation:bi-leg-stride .56s ease-in-out infinite alternate;animation-play-state:paused}
 #page-business-island .bi-walker-leg.is-right {left:19px;animation-direction:alternate-reverse}
-#page-business-island .bi-world-player {position:absolute;z-index:8;left:0;top:0;width:44px;height:68px;pointer-events:none;will-change:transform}
+#page-business-island .bi-world-player {position:absolute;z-index:150;left:0;top:0;width:44px;height:68px;pointer-events:none;will-change:transform}
 #page-business-island .bi-world-player[data-travel=walking] .bi-player-person {left:-13px}
 #page-business-island .bi-world-player[data-travel=walking] .bi-player-label {left:calc(50% - 18px)}
+#page-business-island .bi-player-shadow {bottom:8px}
 #page-business-island .bi-player-person {position:absolute;left:5px;top:0;width:34px;height:60px;--bi-shirt:#327c69;filter:drop-shadow(0 2px 1px #183f3633)}
 #page-business-island .bi-player-label {position:absolute;z-index:4;top:59px;left:50%;min-width:29px;padding:1px 6px;border:1px solid #f9eac4;border-radius:9px;background:#194f40;color:#fff6d9;font-size:10px;font-weight:800;line-height:1.4;text-align:center;transform:translateX(-50%)}
 #page-business-island .bi-player-avatar {position:absolute;z-index:5;top:-2px;left:4px;width:25px;height:25px;border:2px solid #fff1c4;border-radius:50%;object-fit:cover;overflow:hidden;background:#e5efda}
@@ -251,21 +261,18 @@ body.business-island-page #page-business-island {margin:0!important}
 .bi-card-dialog .bi-card-links a:hover {background:#194b3b}
 @media(max-width:700px) {
   #page-business-island .bi-list {grid-template-columns:minmax(0,1fr)}
-  #page-business-island .bi-world-island {--bi-art-size:min(100vw,330px);--bi-art-top:calc(96px + (450px - var(--bi-art-size)) / 2);height:560px}
+  #page-business-island .bi-world-island {--bi-art-size:min(calc(100vw - 12px),390px);--bi-art-top:110px;height:560px}
   #page-business-island .bi-world-title {font-size:20px}
   #page-business-island .bi-world-caption {margin-top:20px;font-size:12px}
-  #page-business-island .bi-world-art {top:96px;height:calc(100% - 110px)}
-  #page-business-island .bi-world-arrival {grid-template-columns:30px minmax(0,1fr);gap:7px;padding:10px;border-radius:15px}
-  #page-business-island .bi-world-arrival>.bi-avatar {width:30px;height:30px;flex-basis:30px;font-size:15px}
+  #page-business-island .bi-world-art {top:var(--bi-art-top);height:var(--bi-art-size)}
+  #page-business-island .bi-world-arrival {grid-template-columns:28px minmax(0,1fr);gap:4px 7px;padding:7px;border-radius:14px}
+  #page-business-island .bi-world-arrival>.bi-avatar {width:28px;height:28px;flex-basis:28px;font-size:14px}
   #page-business-island .bi-world-arrival h4 {font-size:14px}
   #page-business-island .bi-world-arrival p {font-size:11px;line-height:1.4}
   #page-business-island .bi-world-arrival-actions {gap:6px}
   #page-business-island .bi-world-arrival-actions button {padding:8px 4px;font-size:12px}
   #page-business-island .bi-world-boat {left:8%;bottom:4px;width:94px;transform-origin:left bottom;scale:.78}
   #page-business-island .bi-walker {--bi-person-scale:.55}
-  #page-business-island .bi-pin {width:46px;min-width:44px;max-width:46px;min-height:50px;padding:2px}
-  #page-business-island .bi-pin>.bi-avatar {width:28px;height:28px;font-size:15px;border-width:2px}
-  #page-business-island .bi-pin>span:not(.bi-avatar) {font-size:9px;padding:1px 3px;max-width:44px}
 }
 @media(max-width:540px) {
   #page-business-island {padding-bottom:env(safe-area-inset-bottom);font-size:15px}
@@ -308,4 +315,4 @@ body.business-island-page #page-business-island {margin:0!important}
   .bi-card-dialog .bi-dialog-header h2 {font-size:20px}
   .bi-card-dialog .bi-card-body {padding:18px 15px}
 }
-@media(prefers-reduced-motion:reduce) {#page-business-island button,.bi-card-dialog button {transition:none}#page-business-island :is(.bi-world-boat,.bi-boat-wake,.bi-ferry-wake,.bi-swimmer,.bi-pool-ripple,.bi-walker,.bi-walker-arm,.bi-walker-leg,.bi-3d-die.rolling) {animation:none!important}#page-business-island .bi-world-player {will-change:auto}}
+@media(prefers-reduced-motion:reduce) {#page-business-island button,.bi-card-dialog button {transition:none}#page-business-island :is(.bi-world-boat,.bi-boat-wake,.bi-ferry-wake,.bi-swimmer,.bi-pool-ripple,.bi-walker,.bi-walker-arm,.bi-walker-leg,.bi-3d-die.rolling,.bi-npc-arm,.bi-npc-leg) {animation:none!important}#page-business-island .bi-world-player {will-change:auto}}

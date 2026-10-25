@@ -7,6 +7,7 @@ import { peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat
 import { directoryScoresSql, registerDirectoryMatching, directoryMatchState, runDirectoryMatchJobs } from './member-chat-matching.mjs';
 import {isMemberNumber} from './member-number.mjs';
 import { hydrateMemberAvatars } from './member-chat-avatar.mjs';
+import { readIslandPresence, recordIslandPresence } from './member-chat-presence.mjs';
 const BASE = '/v1/member-chat';
 // Shared verified membership only; AI navigation does not inherit private-chat feature/card gates.
 export { identity as resolveMemberIdentity, jsonBody as boundedJson };
@@ -201,9 +202,21 @@ async function listPublicMembers(db, actor, params, env, fetcher) {
   const result = await rows(db, `SELECT * FROM (${publicDirectorySql()}) WHERE peer>?7 ORDER BY peer LIMIT ${PAGE + 1}`, ...directoryArgs(actor), anchor);
   const page = result.slice(0, PAGE), last = page.at(-1);
   const avatars = await hydrateMemberAvatars(db, env, actor, page, fetcher);
+  const presence = await readIslandPresence(env, page);
   const items = page.map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), avatarUrl: avatars.get(text(row.avatar_line_id)) || '',
-    company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), memberNumber: isMemberNumber(row.member_number) ? text(row.member_number) : '', industry: memberIndustryLabel(row) }));
-  return { items, next: result.length > PAGE ? PUBLIC_CURSOR + btoa(encodeURIComponent(JSON.stringify([1, 'public', last.handle]))) : '' };
+    company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), memberNumber: isMemberNumber(row.member_number) ? text(row.member_number) : '', industry: memberIndustryLabel(row),
+    ...(presence.states.get(text(row.peer)) || { online: false, onlineKnown: false }) }));
+  return { items, next: result.length > PAGE ? PUBLIC_CURSOR + btoa(encodeURIComponent(JSON.stringify([1, 'public', last.handle]))) : '', presenceAvailable: presence.available };
+}
+async function memberPresence(db, actor, params, env) {
+  const raw = params.get('handles');
+  if (typeof raw !== 'string' || raw.length > 20000) fail('INVALID_QUERY', '請重新載入島上狀態');
+  let handles;
+  try { handles = JSON.parse(raw); } catch { fail('INVALID_QUERY', '請重新選擇公開會員'); }
+  if (!Array.isArray(handles) || !handles.length || handles.length > 100 || handles.some(handle => typeof handle !== 'string' || !handle || handle.length > 180 || /[/\\\u0000-\u001f\u007f]/.test(handle)) || new Set(handles).size !== handles.length) fail('INVALID_QUERY', '請選擇1至100位公開會員');
+  const eligible = await rows(db, `SELECT handle,peer FROM (${publicDirectorySql()}) WHERE handle IN (SELECT value FROM json_each(?7))`, ...directoryArgs(actor), JSON.stringify(handles));
+  const presence = await readIslandPresence(env, eligible), found = new Map(eligible.map(row => [text(row.handle), row]));
+  return { items: handles.filter(handle => found.has(handle)).map(handle => ({ handle, ...(presence.states.get(text(found.get(handle).peer)) || { online: false, onlineKnown: false }) })), presenceAvailable: presence.available };
 }
 async function directoryCard(db, actor, encodedHandle) {
   if (encodedHandle.length > 1620) fail('INVALID_MEMBER', '請重新選擇會員');
@@ -321,11 +334,21 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     const actor = await authenticate(request, db, env, fetcher);
     const path = url.pathname.slice(BASE.length), params = url.searchParams;
     if (path === '/unread' && request.method !== 'GET') fail('METHOD_NOT_ALLOWED', '未讀數量僅提供查詢', 405);
-    const allowedParams = path === '/members' ? ['q', 'industry', 'after', 'sort', 'scope'] : path === '/coupons' ? ['after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/coupon$/.test(path) ? ['seq'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
+    const allowedParams = path === '/members' ? ['q', 'industry', 'after', 'sort', 'scope'] : path === '/presence' && request.method === 'GET' ? ['handles'] : path === '/coupons' ? ['after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/coupon$/.test(path) ? ['seq'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
     for (const key of params.keys()) if (!allowedParams.includes(key) || params.getAll(key).length !== 1) fail('INVALID_QUERY', '查詢條件不正確');
     const body = request.method === 'POST' ? await jsonBody(request) : {};
     let data;
-    if (path === '/unread' && request.method === 'GET') {
+    if (path === '/presence') {
+      if (request.method === 'POST') {
+        keys(body, []);
+        const presence = await recordIslandPresence(env, actor);
+        if (!presence.available) fail('PRESENCE_UNAVAILABLE', '島上狀態暫時無法更新，仍可繼續交流', 503);
+        data = { heartbeat: true, retryAfterSeconds: presence.retryAfterSeconds };
+      } else {
+        if (request.body !== null) fail('INVALID_BODY', '島上狀態查詢不接受資料內容');
+        data = await memberPresence(db, actor, params, env);
+      }
+    } else if (path === '/unread' && request.method === 'GET') {
       if (request.body !== null) fail('INVALID_BODY', '未讀數量查詢不接受資料內容');
       data = await unreadCount(db, actor);
     } else if (path === '/me' && request.method === 'GET') {
