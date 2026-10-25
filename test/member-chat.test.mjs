@@ -71,7 +71,7 @@ function fixture(t) {
   sql.exec(readFileSync(new URL('../migrations/0047_member_chat_notifications.sql', import.meta.url), 'utf8'));
   chatExtraSchema(sql);
   let failWrites = false, authStatus = 200, botStatus = 200, pushStatus = 200, failFinalize = false, beforeWrite = null;
-  const pushes = [], botLookups = [];
+  const pushes = [], botLookups = [], lineProfiles = new Map();
   const writes = [];
   function prepare(query, args = []) {
     return {
@@ -102,7 +102,7 @@ function fixture(t) {
     }
     assert.equal(url, 'https://api.line.me/v2/profile'); assert.equal(options.redirect, 'manual');
     const uid = { a: A, b: B, c: C, old: OLD }[options.headers.Authorization.slice(7)];
-    return new Response(JSON.stringify({ userId: uid }), { status: uid ? authStatus : 401 });
+    return new Response(JSON.stringify({ userId: uid, ...lineProfiles.get(uid) }), { status: uid ? authStatus : 401 });
   };
   async function api(path, { token = 'a', data, method = data === undefined ? 'GET' : 'POST' } = {}) {
     const response = await handleMemberChat(new Request(BASE + path, { method, headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), 'Content-Type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data) }), env, fetcher);
@@ -114,9 +114,33 @@ function fixture(t) {
   const due = () => sql.exec("UPDATE member_chat_notification_jobs SET due_at=0,lease_until=0 WHERE status='pending'");
   const enable = (token = 'b') => { env.LINE_CHANNEL_ACCESS_TOKEN = 'test-bot-token'; return api('/notifications', { token, data: { enabled: true } }); };
   return { sql, env, api, room, send, writes, migration, drain, due, enable, pushes, botLookups,
+    setPicture: (uid, pictureUrl) => lineProfiles.set(uid, { pictureUrl }),
     setBot: value => { botStatus = value; }, setPush: value => { pushStatus = value; }, failFinalize: () => { failFinalize = true; }, beforeWrite: value => { beforeWrite = value; },
     setFail: value => { failWrites = value; }, setAuth: value => { authStatus = value; } };
 }
+test('directory pictures follow canonical LINE identity and stay inside the authorized page projection', async t => {
+  const f = fixture(t), values = new Map(), reads = [], writes = [];
+  f.env.ACTMASTER_KV = {
+    get: async key => { reads.push(key); return values.get(key) || null; },
+    put: async (key, value) => { writes.push(key); values.set(key, JSON.parse(value)); }
+  };
+  const image = 'https://profile.line-scdn.net/member-b', selfImage = 'https://profile.line-scdn.net/member-a';
+  f.sql.exec('CREATE TABLE line_oa_threads(thread_id TEXT,user_id TEXT,source_type TEXT,picture_url TEXT,updated_at TEXT)');
+  f.sql.prepare('INSERT INTO line_oa_threads VALUES(?,?,?,?,?)').run('line-b', B, 'user', image, '2026-10-25');
+  f.setPicture(OLD, selfImage);
+  const before = JSON.stringify(['users', 'user_identity_links', 'card_contacts', 'line_oa_threads'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all()));
+  assert.equal((await f.api('/me', { token: 'old' })).success, true); assert.equal(writes.length, 0, 'other chat endpoints do not cache pictures');
+  const result = await f.api('/members?q=' + encodeURIComponent('會員b'), { token: 'old' });
+  assert.equal(result.success, true); assert.equal(result.items.length, 1); assert.equal(result.items[0].avatarUrl, image);
+  assert.deepEqual(writes.sort(), ['MEMBER_CHAT_LINE_AVATAR_' + A, 'MEMBER_CHAT_LINE_AVATAR_' + B].sort());
+  assert.equal(values.get('MEMBER_CHAT_LINE_AVATAR_' + A).pictureUrl, selfImage);
+  assert.doesNotMatch(JSON.stringify(result), /avatar_line_id|line_id|row_id|picture_url|userId|090000000|U[abcd]{32}/);
+  assert.equal(JSON.stringify(['users', 'user_identity_links', 'card_contacts', 'line_oa_threads'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all())), before);
+  const id = await f.room(); await f.api(`/threads/${id}/block`, { token: 'b', data: { blocked: true } }); reads.length = 0;
+  const blocked = await f.api('/members?q=' + encodeURIComponent('會員b'));
+  assert.equal(blocked.items.length, 0); assert.ok(!reads.includes('MEMBER_CHAT_LINE_AVATAR_' + B), 'blocked peers are never hydrated');
+});
+
 test('directory exposes permanent member numbers with minimal public fields and no read-side writes', async t => {
   const f = fixture(t);
   const protectedBefore = JSON.stringify(['users', 'user_identity_links', 'card_contacts'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all()));
@@ -125,7 +149,7 @@ test('directory exposes permanent member numbers with minimal public fields and 
     assert.equal(result.success, true, JSON.stringify(result));
     const member = result.items.find(item => item.handle === 'card-b');
     assert.equal(member.memberNumber, '20261021002');
-    assert.deepEqual(Object.keys(member).sort(), ['company', 'handle', 'match', 'memberNumber', 'name', 'title']);
+    assert.deepEqual(Object.keys(member).sort(), ['avatarUrl', 'company', 'handle', 'match', 'memberNumber', 'name', 'title']);
     assert.doesNotMatch(JSON.stringify(result), /"(?:line_id|row_id|phone|memberJoinedAt|memberDateSource|member_joined_at|member_date_source)"|090000000[123]|U[abc]{32}|2026-10-21T00:00:00Z/);
   }
   assert.equal(JSON.stringify(['users', 'user_identity_links', 'card_contacts'].map(table => f.sql.prepare(`SELECT * FROM ${table}`).all())), protectedBefore);

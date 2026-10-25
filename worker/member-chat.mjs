@@ -6,6 +6,7 @@ import { CHAT_INDUSTRIES, CHAT_INDUSTRY_FILTER } from './member-chat-industry.mj
 import { peerCard, ownCoupons, chatCoupon, SENDABLE_COUPON } from './member-chat-extras.mjs';
 import { directoryScoresSql, registerDirectoryMatching, directoryMatchState, runDirectoryMatchJobs } from './member-chat-matching.mjs';
 import {isMemberNumber} from './member-number.mjs';
+import { hydrateMemberAvatars } from './member-chat-avatar.mjs';
 const BASE = '/v1/member-chat';
 // Shared verified membership only; AI navigation does not inherit private-chat feature/card gates.
 export { identity as resolveMemberIdentity, jsonBody as boundedJson };
@@ -106,7 +107,7 @@ async function authenticate(request, db, env, fetcher) {
   const card = await statement(db, `SELECT c.row_id FROM card_contacts c WHERE ${ownCard('c')}
     AND COALESCE(NULLIF(c.profile_user_id,''),NULLIF(c.line_id,''),c.owner_user_id) IN (SELECT value FROM json_each(?)) LIMIT 1`, JSON.stringify(actor.ids)).first();
   if (!card) fail('OWN_CARD_REQUIRED', '請先建立或認領本人的名片，收藏他人名片不適用', 403);
-  return actor;
+  return { ...actor, pictureUrl: profile.pictureUrl };
 }
 // Only the private-chat directory uses this rule; public card/matchmaking rules stay unchanged.
 const ownCard = alias => `${alias}.source_type='self_profile' AND COALESCE(${alias}.archived_at,'')='' AND COALESCE(${alias}.merged_into_row_id,'')=''`;
@@ -149,7 +150,7 @@ async function peerInfo(db, id) {
   return { name: text(row?.name).slice(0, 80) || '會員' };
 }
 function directorySql() {
-  return `SELECT c.row_id AS handle,u.row_id AS peer,u.member_number,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title,COALESCE(c.updated_at,'') AS latest FROM card_contacts c JOIN users u ON ${CARD_JOIN}
+  return `SELECT c.row_id AS handle,u.row_id AS peer,u.line_id AS avatar_line_id,u.member_number,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title,COALESCE(c.updated_at,'') AS latest FROM card_contacts c JOIN users u ON ${CARD_JOIN}
     WHERE ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} AND CAST(u.row_id AS TEXT)<>?1 AND ?2 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL
     AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=CAST(u.row_id AS TEXT)),1)=1
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
@@ -160,7 +161,7 @@ function directorySql() {
     `;
 }
 const directoryArgs = (actor, after = '', q = '', industry = '') => [actor.memberId, after, q.toLowerCase().replace(/ /g, ''), industry, JSON.stringify(actor.ids), actor.user.line_id];
-async function listMembers(db, actor, params) {
+async function listMembers(db, actor, params, env, fetcher) {
   const q = text(params.get('q')), after = text(params.get('after')), industry = text(params.get('industry')), sort = text(params.get('sort'));
   if (q.length > 60 || after.length > 800 || !['', 'latest', 'match'].includes(sort)) fail('INVALID_QUERY', '搜尋條件不正確');
   if (industry && !CHAT_INDUSTRIES.includes(industry)) fail('INVALID_QUERY', '請選擇有效的業種');
@@ -178,7 +179,8 @@ async function listMembers(db, actor, params) {
   try { result = await query(true); }
   catch { result = await query(false); } // A cache outage never hides the authorized directory.
   const page = result.slice(0, PAGE), last = page.at(-1);
-  const items = page.map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), memberNumber:isMemberNumber(row.member_number)?text(row.member_number):'', match: row.score == null ? null : { score: row.score, source: row.source, basis: row.basis } }));
+  const avatars = await hydrateMemberAvatars(db, env, actor, page, fetcher);
+  const items = page.map(row => ({ handle: text(row.handle), name: text(row.name).slice(0, 80), avatarUrl: avatars.get(text(row.avatar_line_id)) || '', company: text(row.company_name).slice(0, 100), title: text(row.title).slice(0, 80), memberNumber:isMemberNumber(row.member_number)?text(row.member_number):'', match: row.score == null ? null : { score: row.score, source: row.source, basis: row.basis } }));
   return { items, next: result.length > PAGE ? (sort ? btoa(encodeURIComponent(JSON.stringify([last.score ?? -1, last.latest, last.handle]))) : text(last.handle)) : '', industries: CHAT_INDUSTRIES,
     matchWork: { pending: Number(result[0]?.pending || 0), status: await directoryMatchState(db, actor.memberId) } };
 }
@@ -283,7 +285,7 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
       data = { accepting: body.accepting };
     } else if (path === '/matches' && request.method === 'POST') {
       keys(body, []); data = await registerDirectoryMatching(db, actor);
-    } else if (path === '/members' && request.method === 'GET') data = await listMembers(db, actor, params);
+    } else if (path === '/members' && request.method === 'GET') data = await listMembers(db, actor, params, env, fetcher);
     else if (path === '/coupons' && request.method === 'GET') {
       const after = text(params.get('after')); if (after.length > 120) fail('INVALID_QUERY', '分頁位置不正確');
       data = await ownCoupons(db, actor, after);

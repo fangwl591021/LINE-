@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createChatClient, chatMessageHtml, chatMatchHtml } from '../js/modules/member-chat.js';
+import { createChatClient, chatMessageHtml, chatMatchHtml, chatAvatarHtml, bindChatAvatarImages } from '../js/modules/member-chat.js';
 import { memberChatRoute } from '../js/modules/member-chat-route.js';
 import { normalizeLineContact } from '../js/modules/member-chat-line-contact.js';
 import vm from 'node:vm';
@@ -40,6 +40,35 @@ test('score presentation preserves zero, distinguishes rules, and never invents 
   for (const match of [null, { score: null }, { score: -1 }, { score: 101 }, { score: NaN }, { score: '<script>' }]) {
     assert.equal(chatMatchHtml(match), '<span class="mc-match-empty">尚無配對</span>');
   }
+});
+
+test('member avatars accept HTTPS only, escape markup and keep initials before loading', () => {
+  const fallback = '<span class="mc-avatar" aria-hidden="true">陳</span>';
+  for (const avatarUrl of ['', null, 'javascript:alert(1)', 'data:image/png;base64,abc', 'http://example.test/avatar', 'https://user:pass@example.test/avatar', 'https://' + 'a'.repeat(2048)]) assert.equal(chatAvatarHtml({ name: '陳先生', avatarUrl }), fallback);
+  const html = chatAvatarHtml({ name: '<script>', avatarUrl: 'https://profile.line-scdn.net/avatar?x=" onerror="alert(1)&y=1' });
+  assert.match(html, /<span>&lt;<\/span><img data-mc-avatar/);
+  assert.match(html, /referrerpolicy="no-referrer" hidden/);
+  assert.doesNotMatch(html, /<script| onerror=| onload=/);
+  assert.equal(chatAvatarHtml({}), '<span class="mc-avatar" aria-hidden="true">會</span>');
+});
+
+test('member avatar load/error and cached images preserve the initials fallback', () => {
+  function image(complete = false, naturalWidth = 0) {
+    const node = new EventTarget();
+    Object.assign(node, { dataset: {}, previousElementSibling: { hidden: false }, hidden: true, complete, naturalWidth, removed: false, remove() { this.removed = true; } });
+    return node;
+  }
+  const pending = image(), broken = image(), cached = image(true, 48), cachedBroken = image(true, 0);
+  const root = { querySelectorAll() { return [pending, broken, cached, cachedBroken].filter(node => !node.removed && !('mcAvatarBound' in node.dataset)); } };
+  bindChatAvatarImages(root);
+  assert.equal(pending.hidden, true); assert.equal(pending.previousElementSibling.hidden, false);
+  assert.equal(cached.hidden, false); assert.equal(cached.previousElementSibling.hidden, true);
+  assert.equal(cachedBroken.removed, true); assert.equal(cachedBroken.previousElementSibling.hidden, false);
+  pending.dispatchEvent(new Event('load')); broken.dispatchEvent(new Event('error'));
+  assert.equal(pending.hidden, false); assert.equal(pending.previousElementSibling.hidden, true);
+  assert.equal(broken.removed, true); assert.equal(broken.previousElementSibling.hidden, false);
+  bindChatAvatarImages(root);
+  assert.equal(pending.hidden, false, 'binding another page must not reset an existing successful image');
 });
 
 test('attachment references stay in the authorized conversation; opening a popup is not a send or redemption', () => {
@@ -94,9 +123,9 @@ test('member industry selection is below text search, resets paging and versions
   assert.match(ui, /params.set\('industry', memberIndustry\)/);
   assert.match(ui, /industry.addEventListener\('change', searchMembers\)/);
   assert.match(ui, /generation\+\+; busy = false; next = ''; list.replaceChildren\(\)/);
-  assert.match(ui, /member-chat.css\?v=10/);
-  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=13/g) || []).length, 1, 'both entry points share the same lazy chat loader');
-  assert.match(read('index.html'), /exchange-zone.js\?v=1.24/);
+  assert.match(ui, /member-chat.css\?v=11/);
+  assert.equal((read('js/modules/exchange-zone.js').match(/member-chat.js\?v=14/g) || []).length, 1, 'both entry points share the same lazy chat loader');
+  assert.match(read('index.html'), /exchange-zone.js\?v=1.25/);
 });
 
 test('exchange navigation is a single fixed top tablist with an optional embedded private-chat container', () => {
