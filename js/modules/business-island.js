@@ -10,8 +10,8 @@
     if (contact && (/^tel:\+?[0-9#*(),. -]{5,40}$/.test(raw) || /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw))) return raw;
     try { const url = new URL(raw); return url.protocol === 'https:' && !url.username && !url.password ? url.href : ''; } catch { return ''; }
   };
-  let root, client, generation = 0, activeOwner = '', zone = 'people', query = '', industry = '', sort = 'random';
-  let members = [], industries = [], next = '', selected = '', posts = null, listView = false, exitAction = null;
+  let root, client, world, worldModule, generation = 0, activeOwner = '', zone = 'people', query = '', industry = '', sort = 'random';
+  let members = [], industries = [], next = '', selected = '', posts = null, listView = false, exitAction = null, worldState = null, savedScrollTop = 0;
   let memberTicket = 0, selectionTicket = 0, boardTicket = 0, rollTicket = 0, busy = false, actionBusy = false, initializing = false, rolling = false, rollMessage = '', dialog, styleReady;
   const $ = selector => root.querySelector(selector);
   const active = ticket => ticket === generation && activeOwner === owner() && window.currentPage === 'business-island' && root && !root.classList.contains('hidden');
@@ -46,15 +46,15 @@
     if (valid(generation)) return true;
     const message = activeOwner !== owner() ? '登入身分已變更，請重新進入交流島。' : '請重新進入 LINE 登入，再重試。';
     window.leaveBusinessIsland();
-    if (root) { $('.bi-list').replaceChildren(); $('.bi-selection').replaceChildren(); $('.bi-people-pins').replaceChildren(); note(message, true); }
+    if (root) { $('.bi-list').replaceChildren(); $('.bi-selection').replaceChildren(); note(message, true); }
     return false;
   }
   function markup() {
     return `<section class="bi-shell" aria-label="商務交流島">
       <header class="bi-header"><div class="bi-brand"><span class="bi-brand-mark" aria-hidden="true">島</span><div><h1>商務交流島</h1><p>探索人脈，讓合作從交流開始</p></div></div><div class="bi-toolbar"><button type="button" data-bi-action="exit">返回首頁</button><button type="button" data-bi-action="list" aria-pressed="false">快速清單</button></div></header>
       <nav class="bi-tabs" aria-label="交流島分區"><button type="button" data-bi-zone="people" aria-pressed="true">人脈廣場</button><button type="button" data-bi-zone="board" aria-pressed="false">合作告示板</button><button type="button" data-bi-zone="home" aria-pressed="false">我的小屋</button></nav>
-      <div class="bi-layout"><div class="bi-map" aria-label="交流島場景"><div class="bi-stage"><img class="bi-backdrop" src="${esc(asset('assets/business-island/island-v1.webp'))}" alt="島嶼上的人脈廣場、合作亭與水岸小屋" decoding="async" fetchpriority="high"><button type="button" class="bi-hotspot" data-zone="people" data-bi-zone="people" aria-pressed="true">人脈廣場</button><button type="button" class="bi-hotspot" data-zone="board" data-bi-zone="board" aria-pressed="false">合作告示板</button><button type="button" class="bi-hotspot" data-zone="home" data-bi-zone="home" aria-pressed="false">我的小屋</button><div class="bi-people-pins"></div></div></div>
-      <section class="bi-explore" aria-label="骰子隨機探索"><div class="bi-dice" aria-hidden="true"><span data-bi-dice>⚀</span></div><div class="bi-explore-copy"><h2>擲骰，遇見新夥伴</h2><p class="bi-roll-result" role="status" aria-live="polite">${esc(rollMessage || '隨機探索會員，喜歡再查看名片或開始交流。')}</p></div><button type="button" class="bi-roll" data-bi-action="roll">擲骰找會員</button></section>
+      <div class="bi-layout"><section class="bi-explore" aria-label="骰子隨機探索"><div class="bi-dice"></div><div class="bi-explore-copy"><h2>擲骰，啟程探索群島</h2><p class="bi-roll-result" role="status" aria-live="polite">${esc(rollMessage || '雙骰決定步數，走向這次遇見的夥伴。')}</p></div><button type="button" class="bi-roll" data-bi-action="roll">擲骰啟程</button></section>
+      <div class="bi-map" aria-label="七座商務交流群島，由上到下探索"><div class="bi-stage"></div></div>
       <section class="bi-panel" aria-label="交流島資訊"><div class="bi-panel-header"><h2 data-bi-title>人脈廣場</h2><p class="bi-caption" data-bi-caption>選擇會員，查看公開名片或開始交流</p></div><div class="bi-selection" aria-live="polite"></div>
       <form class="bi-search"><label for="bi-query">找會員</label><div><input id="bi-query" type="search" maxlength="60" placeholder="姓名、英文名、公司或職稱" autocomplete="off"><button type="submit">搜尋</button></div><label for="bi-industry">業種</label><select id="bi-industry"><option value="">全部業種</option></select><label for="bi-sort">排序</label><select id="bi-sort"><option value="random">骰子隨機探索</option><option value="latest">最新名單</option><option value="match">配對排名</option></select></form>
       <p class="bi-status" data-bi-status role="status" aria-live="polite"></p><button type="button" data-bi-retry data-bi-action="retry" hidden>重新載入</button>
@@ -72,9 +72,7 @@
     $('[data-bi-action="more"]').hidden = sort === 'random' ? !members.length : !next;
     $('[data-bi-action="more"]').textContent = sort === 'random' ? '再探索一批會員' : '載入更多會員';
     $('[data-bi-action="more"]').disabled = busy;
-    const positions = [[18,39],[40,39],[62,39],[84,39],[18,79],[40,79],[62,79],[84,79],[18,59],[40,59],[62,59],[84,59]];
-    const mapMembers = row ? [row,...members.filter(item => item.handle !== selected)] : members;
-    $('.bi-people-pins').innerHTML = mapMembers.slice(0,positions.length).map((item,i) => `<button type="button" class="bi-pin" data-bi-member="${esc(item.handle)}" style="left:${positions[i][0]}%;top:${positions[i][1]}%" aria-label="查看會員 ${esc(item.name || '會員')}" aria-pressed="${item.handle === selected}">${avatar(item)}<span>${esc(item.name || '會員')}</span></button>`).join('');
+    world?.renderMembers(members,{selected});
     bindAvatars();
   }
   async function loadMembers(append = false) {
@@ -109,28 +107,38 @@
     if (!live() || rolling || !members.some(row => row.handle === handle)) return;
     selectionTicket++; selected = handle;
     if (zone !== 'people') chooseZone('people');
-    renderMembers(); note();
+    renderMembers(); world?.showArrival(handle); note();
   }
   async function rollDice() {
     if (!live() || rolling || busy || actionBusy || zone !== 'people') return;
-    const ticket = generation, request = ++rollTicket, previous = selected, append = sort === 'random', dice = randomIndex(6) + 1;
+    const ticket = generation, request = ++rollTicket, previous = selected, append = sort === 'random', dice1 = randomIndex(6) + 1, dice2 = randomIndex(6) + 1;
+    if (!world) { note('群島場景尚未載入，請重試。',true); return; }
+    if (listView) {
+      listView=false;root.dataset.view='map';const toggle=$('[data-bi-action="list"]');toggle.textContent='快速清單';toggle.setAttribute('aria-pressed','false');
+    }
+    world.pause(false);
     rolling = true; selectionTicket++; closeCard(); sort = 'random'; $('#bi-sort').value = sort;
     const button = $('[data-bi-action="roll"]');
-    button.disabled = true; button.textContent = '正在擲骰…'; $('.bi-dice').classList.add('is-rolling');
-    $('[data-bi-dice]').textContent = ['⚀','⚁','⚂','⚃','⚄','⚅'][dice - 1];
+    button.disabled = true; button.textContent = '準備啟程…';
+    $('.bi-roll-result').textContent='正在尋找這次遇見的夥伴…';
     try {
-      const [incoming] = await Promise.all([loadMembers(append), new Promise(resolve => setTimeout(resolve, 450))]);
+      const incoming = await loadMembers(append);
       if (!valid(ticket) || request !== rollTicket || zone !== 'people' || !incoming) return;
-      const candidates = incoming.filter(row => row.handle !== previous);
-      if (candidates.length) {
-        // The server samples the entire authorized directory; never restrict a roll to the newest page.
-        selected = candidates[randomIndex(candidates.length)].handle; selectionTicket++; renderMembers();
-        rollMessage = `擲出 ${dice} 點 · 這次遇見 ${clean(members.find(row => row.handle === selected)?.name) || '會員'}`;
-      } else rollMessage = incoming.length ? '目前只有這位符合的會員，可以調整搜尋再探索。' : '沒有符合的會員，請調整搜尋或業種。';
+      if (!incoming.length) { $('.bi-roll-result').textContent='沒有符合的會員，請調整搜尋或業種。';return; }
+      button.textContent='正在擲骰…';
+      const result = await world.roll({dice1,dice2,rows:incoming,lastHandle:previous,
+        valid:()=>valid(ticket)&&request===rollTicket&&zone==='people'&&!listView,
+        onStep:({step,total})=>{if(valid(ticket)&&request===rollTicket){button.textContent='前進中…';$('.bi-roll-result').textContent=`${dice1} + ${dice2} = ${total} 點 · 前進 ${step} / ${total} 步`;}}
+      });
+      if (!result || !valid(ticket) || request !== rollTicket || zone !== 'people') return;
+      selected=result.handle;selectionTicket++;renderMembers();world.showArrival(selected);
+      rollMessage=`${dice1} + ${dice2} = ${result.total} 點 · 已抵達 ${clean(members.find(row=>row.handle===selected)?.name)||'會員'} 身旁`;
       $('.bi-roll-result').textContent = rollMessage;
+    } catch (error) {
+      if(active(ticket)&&request===rollTicket)note(error.message||'探索暫時中斷，可以重新擲骰。',true);
     } finally {
       if (active(ticket) && request === rollTicket) {
-        rolling = false; button.disabled = false; button.textContent = '再擲一次，找會員'; $('.bi-dice').classList.remove('is-rolling');
+        rolling = false; button.disabled = false; button.textContent = '再擲骰啟程';
       }
     }
   }
@@ -154,8 +162,8 @@
     bindAvatars();
   }
   function cancelRoll() {
-    rollTicket++; rolling = false;
-    $('[data-bi-action="roll"]').disabled = false; $('[data-bi-action="roll"]').textContent = '擲骰找會員'; $('.bi-dice').classList.remove('is-rolling');
+    rollTicket++; rolling = false; world?.cancel(); world?.clearArrival();
+    $('[data-bi-action="roll"]').disabled = false; $('[data-bi-action="roll"]').textContent = '擲骰啟程';
   }
   function chooseZone(value) {
     if (!['people','board','home'].includes(value) || !live()) return;
@@ -165,11 +173,11 @@
     $('[data-bi-action="more"]').hidden = zone !== 'people' || (sort === 'random' ? !members.length : !next);
     $('.bi-explore').hidden = zone !== 'people';
     $('.bi-post-list').hidden = zone !== 'board'; $('.bi-home-card').hidden = zone !== 'home';
-    $('.bi-people-pins').hidden = zone !== 'people';
+    $('.bi-map').hidden = zone !== 'people';world?.pause(zone!=='people'||listView);
     $('[data-bi-title]').textContent = {people:'人脈廣場',board:'合作告示板',home:'我的小屋'}[zone];
     $('[data-bi-caption]').textContent = {people:'選擇會員，查看公開名片或開始交流',board:'看看大家正在分享的服務與合作方向',home:'維護自己的介紹，接續每一次交流'}[zone];
     note();
-    if (zone === 'people') { if (!members.length) void loadMembers(); else renderMembers(); }
+    if (zone === 'people') { if (!members.length) void loadMembers(); else {renderMembers();if(!listView&&selected)world?.showArrival(selected);} }
     else if (zone === 'board') void loadPosts();
     else renderHome();
   }
@@ -222,7 +230,7 @@
       if (action === 'exit') { const exit = exitAction; window.leaveBusinessIsland(); if (exit) exit(); else window.goPage('home'); return; }
       if (action === 'retry') { if (!valid(generation)) await window.initBusinessIsland(); else if (zone === 'people') await loadMembers(); else if (zone === 'board') await loadPosts(); return; }
       if (!live()) return;
-      if (action === 'list') { listView = !listView; root.dataset.view = listView ? 'list' : 'map'; button.textContent=listView?'回到島嶼':'快速清單';button.setAttribute('aria-pressed',String(listView)); }
+      if (action === 'list') { cancelRoll();listView = !listView; root.dataset.view = listView ? 'list' : 'map'; button.textContent=listView?'回到島嶼':'快速清單';button.setAttribute('aria-pressed',String(listView));world?.pause(listView);if(!listView&&selected)world?.showArrival(selected); }
       else if (action === 'roll') await rollDice();
       else if (action === 'more' && !busy && !rolling && (next || sort === 'random')) await loadMembers(true);
       else if (action === 'card' || action === 'chat') { if (button.dataset.biHandle) chooseMember(button.dataset.biHandle); await memberAction(action); }
@@ -240,7 +248,8 @@
   }
   window.leaveBusinessIsland = function () {
     generation++; memberTicket++; selectionTicket++; boardTicket++; rollTicket++;
-    client?.close(); client = null; busy = false; actionBusy = false; initializing = false; rolling = false; closeCard();
+    if(world){savedScrollTop=document.getElementById('main')?.scrollTop||0;world.cancel();worldState=world.snapshot();}
+    client?.close(); client = null; world?.destroy();world=null;busy = false; actionBusy = false; initializing = false; rolling = false; closeCard();
   };
   window.addEventListener('pagehide', window.leaveBusinessIsland);
   window.addEventListener('pageshow', event => {
@@ -256,11 +265,11 @@
     root = document.getElementById('page-business-island'); if (!root) return;
     initializing = true;
     const changedOwner = activeOwner !== owner(); activeOwner = owner();
-    const main = document.getElementById('main'), scrollTop = changedOwner ? 0 : main?.scrollTop || 0;
-    if (changedOwner) { members=[];industries=[];next='';selected='';posts=null;query='';industry='';sort='random';zone='people';listView=false;rollMessage=''; }
+    const main = document.getElementById('main'), scrollTop = changedOwner ? 0 : worldState ? savedScrollTop : main?.scrollTop || 0;
+    if (changedOwner) { members=[];industries=[];next='';selected='';posts=null;query='';industry='';sort='random';zone='people';listView=false;rollMessage='';worldState=null;savedScrollTop=0; }
     exitAction = typeof options.onExit === 'function' ? options.onExit : null;
     if (!document.querySelector('link[data-business-island]')) {
-      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=2');style.dataset.businessIsland='';
+      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=3');style.dataset.businessIsland='';
       styleReady = new Promise((resolve,reject) => {
         style.addEventListener('load',resolve,{once:true});
         style.addEventListener('error',()=>{style.remove();styleReady=null;reject(Error('交流島樣式載入失敗，請重試。'));},{once:true});
@@ -275,11 +284,18 @@
     const ticket = generation;
     note('正在連接交流島…');
     try {
-      const [module] = await Promise.all([import(new URL('member-chat.js?v=14',scriptUrl).href),styleReady]);
+      const [module,scene] = await Promise.all([import(new URL('member-chat.js?v=14',scriptUrl).href),import(new URL('business-island-world.mjs?v=1',scriptUrl).href),styleReady]);
       if (!active(ticket)) return;
       client=module.createChatClient({base:window.Config?.WORKER_URL||window.WORKER_URL,isCurrent:()=>active(ticket)});
+      worldModule=scene;
+      world=scene.createIslandWorld({host:$('.bi-stage'),diceHost:$('.bi-dice'),asset,avatar,profile:window.currentUserProfile,
+        isCurrent:()=>valid(ticket),onMember:chooseMember,
+        onCategory:id=>{if(!live()||rolling)return;const row=members.find(item=>worldModule.classifyMember(item)===id);if(row)chooseMember(row.handle);else $('.bi-roll-result').textContent='這批名單尚未遇見此島夥伴，可以再擲骰探索。';}
+      });
       initializing = false;
+      world.renderMembers(members,{selected});
       chooseZone(zone);
+      if(worldState){world.restore(worldState);if(selected)world.showArrival(selected);}
       if (main) main.scrollTop = scrollTop;
     } catch (error) { if (active(ticket)) note(error.message||'交流島載入失敗，請重試。',true); }
     finally { if (active(ticket)) initializing = false; }
