@@ -16,6 +16,22 @@ const RULES = [
   ['社團協會公益', '協會|社團|公益|基金會|商會|公會|非營利']
 ];
 export const CHAT_INDUSTRIES = [...RULES.map(([label]) => label), '其他行業', '待分類'];
+// Display one normalized label from an already authorized public card, never its raw metadata.
+export function memberIndustryLabel(card = {}) {
+  let classification;
+  try { classification = JSON.parse(card.custom_config || '{}')?.industryClassification; } catch { /* Legacy malformed metadata uses the same keyword fallback. */ }
+  const primary = typeof classification?.primary === 'string' ? classification.primary.trim() : '';
+  if (CHAT_INDUSTRIES.includes(primary)) return primary;
+  const secondary = Array.isArray(classification?.secondary) ? classification.secondary : [classification?.secondary];
+  for (const value of secondary) if (typeof value === 'string' && CHAT_INDUSTRIES.includes(value.trim())) return value.trim();
+  let tags = card.tags;
+  try { tags = JSON.parse(tags); } catch { /* Plain tags are supported too. */ }
+  const tokens = (Array.isArray(tags) ? tags : [tags]).flatMap(value => typeof value === 'string' ? value.split(/[|，、,\s]+/) : []);
+  const tagged = CHAT_INDUSTRIES.find(label => tokens.includes(label));
+  if (tagged) return tagged;
+  const summary = [card.services, card.tags, card.company_name, card.title].map(value => String(value ?? '')).join(' ').toLowerCase();
+  return RULES.find(([, words]) => words.split('|').some(word => summary.includes(word.toLowerCase())))?.[0] || '其他行業';
+}
 // Only code-owned constants are interpolated; the selected industry is always bound as ?4.
 const literal = value => "'" + value.replace(/'/g, "''") + "'";
 const config = "(CASE WHEN json_valid(c.custom_config) THEN c.custom_config ELSE '{}' END)";
