@@ -49,6 +49,7 @@ export async function supplementCheckinMallCards(events,env,forwardResult,points
     if(!Number.isSafeInteger(time)||time<now-86400000||time>now+300000||day(time)!==day(now)||!eventId||eventId.length>180)return;
     try {
       const id=crypto.randomUUID(),key=crypto.randomUUID();
+      // Migration 0073 keeps event/retry uniqueness while allowing a fresh card per new message, even on the same Taipei day.
       const claim=await db.prepare(`INSERT OR IGNORE INTO checkin_mall_cards(id,event_id,recipient_uid,taipei_day,created_at,state,retry_key) VALUES(?,?,?,?,?,'preparing',?)`).bind(id,eventId,event.source.userId,day(time),now,key).run();
       if(Number(claim.meta?.changes)!==1)return;
       let balance=null;

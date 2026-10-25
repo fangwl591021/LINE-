@@ -14,6 +14,7 @@ function fixture(t){
  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
  sql.exec("PRAGMA foreign_keys=ON;CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '');CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);CREATE TABLE protected_points(balance INTEGER);INSERT INTO protected_points VALUES(999);");
  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0063_checkin_mall_cards.sql','0071_checkin_chat_dashboard.sql','0072_checkin_dashboard_products.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ sql.exec('BEGIN');try{sql.exec(readFileSync(new URL('../migrations/0073_checkin_mall_event_cards.sql',import.meta.url),'utf8'));sql.exec('COMMIT');}catch(error){sql.exec('ROLLBACK');throw error;}
  for(const [uid,role] of [[ADMIN,'admin'],[MEMBER,'user']])sql.prepare('INSERT INTO users(row_id,line_id,role) VALUES(?,?,?)').run(uid,uid,role);
  for(const [i,role,status] of [[1,'store','active'],[2,'reward','active'],[3,'store','draft'],[4,'staff','active']]){
   const uid='U'+String(i).padStart(32,'0');sql.prepare('INSERT INTO users(row_id,line_id,role) VALUES(?,?,?)').run(uid,uid,role);
@@ -35,7 +36,8 @@ function fixture(t){
  const call=async(path='',body,uid=ADMIN)=>{const request=new Request('https://worker.test/v1/checkin-chat-dashboard'+path,{method:body?'POST':'GET',headers:{...(uid?{Authorization:'Bearer '+uid}:{}),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const response=await handleCheckinChatDashboard(request,env,row=>({role:row.role}),fetcher,NOW);return{status:response.status,...await response.json()};};
  const save=(value=config(),revision=0)=>call('/draft',{expectedDraftRevision:revision,config:value,requestKey:crypto.randomUUID()});
  const publish=(revision=1,published=0)=>call('/publish',{expectedDraftRevision:revision,expectedPublishedRevision:published,requestKey:crypto.randomUUID()});
- const send=(uid=MEMBER)=>supplementCheckinMallCards([{type:'message',source:{type:'user',userId:uid},timestamp:NOW,webhookEventId:crypto.randomUUID(),message:{type:'text',text:'會員打卡'}}],env,{success:true},{async read(userId){pointReads++;return{identity:userId,balance:12867};}},fetcher,NOW);
+ // Repeating the default call models redelivery of the same message, not a new daily claim.
+ const send=(uid=MEMBER,eventId='product-fixture-'+uid)=>supplementCheckinMallCards([{type:'message',source:{type:'user',userId:uid},timestamp:NOW,webhookEventId:eventId,message:{type:'text',text:'會員打卡'}}],env,{success:true},{async read(userId){pointReads++;return{identity:userId,balance:12867};}},fetcher,NOW);
  return{sql,db,env,put,queries,writes,pushes,call,save,publish,send,get pointReads(){return pointReads;},get mainAttempts(){return mainAttempts;},setRaces(value){races=value;},setFailChild(value){failChild=value;},setWriteHook(value){writeHook=value;}};
 }
 test('product-page config is a reference-only additive union with unique products and protected wallet',()=>{
@@ -98,4 +100,5 @@ test('unpublished products keep their original page position as neutral without 
 test('child snapshot write failure rolls back the main snapshot and sends nothing',async t=>{
  const f=fixture(t);await f.save();await f.publish();f.setFailChild(true);await f.send();assert.equal(f.pushes.length,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM checkin_chat_dashboard_snapshots').get().n,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM checkin_chat_dashboard_product_snapshots').get().n,0);assert.equal(f.sql.prepare('SELECT state FROM checkin_mall_cards').get().state,'preparing');
  f.setFailChild(false);await f.send();assert.equal(f.pointReads,1);assert.equal(f.pushes.length,0);
+ await f.send(MEMBER,'product-recovered-event');assert.equal(f.pointReads,2);assert.equal(f.pushes.length,1);assert.equal(f.sql.prepare('SELECT count(*) n FROM checkin_chat_dashboard_snapshots').get().n,1);
 });

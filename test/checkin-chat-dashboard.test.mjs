@@ -12,6 +12,7 @@ function fixture(t) {
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
   sql.exec(`PRAGMA foreign_keys=ON; CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT ''); CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT); CREATE TABLE protected_points(id INTEGER,balance INTEGER); INSERT INTO protected_points VALUES(1,999);`);
   for (const file of ['0063_checkin_mall_cards.sql', '0071_checkin_chat_dashboard.sql']) sql.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
+  sql.exec('BEGIN');try{sql.exec(readFileSync(new URL('../migrations/0073_checkin_mall_event_cards.sql',import.meta.url),'utf8'));sql.exec('COMMIT');}catch(error){sql.exec('ROLLBACK');throw error;}
   for (const [uid, role] of [[A, 'user'], [B, 'store'], [ADMIN, 'admin']]) sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(uid, uid, role, '測試會員');
   const writes = [], fetches = [], pushes = []; let hook = null, pointReads = 0, balance = 12867, failSnapshot = false;
   const prepare = (query, args = []) => ({ bind(...values) { return prepare(query, values); }, async first() { return sql.prepare(query).get(...args) || null; }, async all() { return { success: true, results: sql.prepare(query).all(...args) }; }, async run() {
@@ -35,7 +36,7 @@ function fixture(t) {
   };
   const save = (config = defaultConfig(), expectedDraftRevision = 0, requestKey = crypto.randomUUID(), uid = ADMIN) => call('/draft', { expectedDraftRevision, config, requestKey }, uid);
   const publish = (expectedDraftRevision, expectedPublishedRevision = 0, requestKey = crypto.randomUUID(), uid = ADMIN) => call('/publish', { expectedDraftRevision, expectedPublishedRevision, requestKey }, uid);
-  const send = async (uid = A, dayOffset = 0) => supplementCheckinMallCards([{ type: 'message', source: { type: 'user', userId: uid }, webhookEventId: crypto.randomUUID(), timestamp: NOW + dayOffset, message: { type: 'text', text: '會員打卡' } }], env, { success: true }, { async read(userId) { pointReads++; return { identity: userId, balance }; } }, fetcher, NOW + dayOffset);
+  const send = async (uid = A, dayOffset = 0, eventId = crypto.randomUUID(), forward = { success: true }) => supplementCheckinMallCards([{ type: 'message', source: { type: 'user', userId: uid }, webhookEventId: eventId, timestamp: NOW + dayOffset, message: { type: 'text', text: '會員打卡' } }], env, forward, { async read(userId) { pointReads++; return { identity: userId, balance }; } }, fetcher, NOW + dayOffset);
   return { sql, db, env, call, save, publish, send, writes, fetches, pushes, get pointReads() { return pointReads; }, setBalance(value) { balance = value; }, setHook(value) { hook = value; }, setFailSnapshot(value) { failSnapshot = value; } };
 }
 test('additive schema seeds the two-page shopping-money-first default without modifying protected data', async t => {
@@ -104,17 +105,17 @@ test('published read failures fall back safely without touching either draft or 
   assert.deepEqual(await readPublishedCheckinDashboard(f.db), { revision: 0, config: defaultCheckinDashboardConfig() });
   f.sql.exec('DROP TABLE checkin_chat_dashboard_templates'); assert.deepEqual(await readPublishedCheckinDashboard(f.db), { revision: 0, config: defaultCheckinDashboardConfig() }); assert.equal(f.writes.length, 0);
 });
-test('one carousel snapshot precedes one push and remains immutable after later draft/publish edits', async t => {
-  const f = fixture(t); await f.send(); assert.equal(f.pushes.length, 1); assert.equal(f.pushes[0].messages.length, 1); assert.equal(f.pushes[0].messages[0].contents.type, 'carousel'); assert.equal(f.pointReads, 1);
+test('each new event sends one fresh balance/latest-published snapshot while same-event retry preserves immutable history', async t => {
+  const f = fixture(t); await f.send(A,0,'first-event'); assert.equal(f.pushes.length, 1); assert.equal(f.pushes[0].messages.length, 1); assert.equal(f.pushes[0].messages[0].contents.type, 'carousel'); assert.equal(f.pointReads, 1);
   const first = f.sql.prepare('SELECT * FROM checkin_chat_dashboard_snapshots').get(), firstJson = first.message_json; assert.equal(first.template_revision, 0); assert.deepEqual(JSON.parse(firstJson), f.pushes[0].messages[0]);
-  const c = defaultConfig(); c.pages[1].title = '新發佈的說明'; await f.save(c); await f.publish(1); await f.send(); assert.equal(f.pushes.length, 1); await f.send(B); assert.equal(f.pushes.length, 2);
+  const c = defaultConfig(); c.pages[1].title = '新發佈的說明'; await f.save(c); await f.publish(1);f.setBalance(25432);await f.send(A,1000,'second-event',{success:true,already:true});assert.equal(f.pushes.length,2);assert.equal(f.pointReads,2);const second=f.sql.prepare('SELECT s.* FROM checkin_chat_dashboard_snapshots s JOIN checkin_mall_cards c ON c.id=s.card_id WHERE c.event_id=?').get('second-event');assert.notEqual(second.card_id,first.card_id);assert.equal(second.template_revision,1);assert.match(second.message_json,/新發佈的說明/);assert.match(second.message_json,/25,432 元/);assert.equal(second.created_at,NOW+1000);f.setBalance(50000);await f.send(A,2000,'first-event');assert.equal(f.pushes.length,2);assert.equal(f.pointReads,2);await f.send(B);assert.equal(f.pushes.length,3);
   assert.equal(f.sql.prepare('SELECT message_json FROM checkin_chat_dashboard_snapshots WHERE card_id=?').get(first.card_id).message_json, firstJson);
   const map = await readCheckinDashboardSnapshots(f.db, [first.card_id]); assert.equal(map.get(first.card_id).config.pages[1].title, '購物金怎麼用'); assert.equal(map.get(first.card_id).createdAt, NOW);
   assert.equal(f.sql.prepare('SELECT balance FROM protected_points').get().balance, 999);
 });
-test('snapshot failure closes sending without clearing daily dedup or causing another wallet read', async t => {
-  const f = fixture(t); f.setFailSnapshot(true); await f.send(); assert.equal(f.pushes.length, 0); assert.equal(f.pointReads, 1); assert.equal(f.sql.prepare('SELECT state FROM checkin_mall_cards').get().state, 'preparing');
-  f.setFailSnapshot(false); await f.send(); assert.equal(f.pushes.length, 0); assert.equal(f.pointReads, 1);
+test('snapshot failure retains same-event claim without wallet retry but does not block a new same-day event', async t => {
+  const f = fixture(t); f.setFailSnapshot(true); await f.send(A,0,'failed-snapshot'); assert.equal(f.pushes.length, 0); assert.equal(f.pointReads, 1); assert.equal(f.sql.prepare('SELECT state FROM checkin_mall_cards').get().state, 'preparing');
+  f.setFailSnapshot(false); await f.send(A,0,'failed-snapshot'); assert.equal(f.pushes.length, 0); assert.equal(f.pointReads, 1);await f.send(A,1000,'fresh-after-snapshot-failure');assert.equal(f.pushes.length,1);assert.equal(f.pointReads,2);assert.equal(f.sql.prepare('SELECT state FROM checkin_mall_cards WHERE event_id=?').get('failed-snapshot').state,'preparing');assert.equal(f.sql.prepare('SELECT count(*) n FROM checkin_mall_cards').get().n,2);assert.equal(f.sql.prepare('SELECT count(*) n FROM checkin_chat_dashboard_snapshots').get().n,1);
 });
 test('bulk snapshot read is bounded, read-only and rejects mismatched time, corrupt data and absent table gracefully', async t => {
   const f = fixture(t); await f.send(); const card = f.sql.prepare('SELECT id FROM checkin_mall_cards').get().id, n = f.writes.length;
