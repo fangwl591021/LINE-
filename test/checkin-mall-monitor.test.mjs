@@ -141,3 +141,20 @@ test('a mismatched snapshot timestamp keeps the original legacy summary availabl
   const result=await projectCheckinMallMonitor(f.db,f.data()),preview=result.messages.find(row=>row.message_id==='CHECKIN_MALL:'+id).card_preview;
   assert.equal(preview.balance,12867);assert.equal(Object.hasOwn(preview,'pages'),false);
 });
+
+test('historical product pages use frozen product data and never current catalog values',async t=>{
+  const f=fixture(t);f.thread(A);f.physical(A);const id=f.card(A);
+  for(const file of ['0071_checkin_chat_dashboard.sql','0072_checkin_dashboard_products.sql'])f.sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+  const product={shopId:'22222222-2222-4222-8222-222222222222',productId:'selected-product',title:'發送時商品',shopName:'發送時店家',imageUrl:'',priceCents:1180000,purchaseMode:'online',merchantEnabled:true,redeemType:'percent',redeemValue:50,version:1,shopVersion:1};
+  const config=defaultCheckinDashboardConfig();config.pages[1]={id:'selected',kind:'product',shopId:product.shopId,productId:product.productId};
+  const target={pageId:'selected',shopId:product.shopId,productId:product.productId,product,available:true,createdAt:NOW};
+  const message=buildCheckinDashboardMessage({},id,12867,NOW,config,[target]);
+  f.sql.prepare('INSERT INTO checkin_chat_dashboard_snapshots VALUES(?,?,?,?,?)').run(id,3,JSON.stringify(config),JSON.stringify(message),NOW);
+  f.sql.prepare('INSERT INTO checkin_chat_dashboard_product_snapshots VALUES(?,?,?,?,?,?,?)').run(id,'selected',product.productId,product.shopId,JSON.stringify(product),1,NOW);
+  const saved=JSON.stringify(f.sql.prepare('SELECT * FROM checkin_chat_dashboard_product_snapshots').all());
+  const result=await projectCheckinMallMonitor(f.db,f.data()),preview=result.messages.find(row=>row.message_id==='CHECKIN_MALL:'+id).card_preview;
+  assert.equal(preview.pages[1].kind,'product');assert.equal(preview.pages[1].title,'發送時商品');assert.match(preview.pages[1].body,/11,800/);
+  assert.deepEqual(preview.pages[1].buttons,[{label:'查看商品',target:'product'}]);
+  assert.ok(!f.queries.some(row=>/FROM store_shop_products/i.test(row.query)),'old product pages cannot query the current catalog');
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM checkin_chat_dashboard_product_snapshots').all()),saved);
+});

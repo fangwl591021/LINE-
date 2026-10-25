@@ -7,7 +7,7 @@ const entry=readFileSync(new URL('../js/modules/store-shop-entry.js',import.meta
 const card='11111111-1111-4111-8111-111111111111';
 class Element {
   constructor(tag){this.tagName=tag;this.children=[];this.dataset={};this.attrs={};this.isConnected=true;this.value='';this.hidden=false;this.disabled=false;this._text='';}
-  append(...nodes){this.children.push(...nodes);}replaceChildren(...nodes){this.children=[];this._text='';this.append(...nodes);}
+  append(...nodes){this.children.push(...nodes);}appendChild(node){this.append(node);return node;}replaceChildren(...nodes){this.children=[];this._text='';this.append(...nodes);}
   set textContent(value){this.replaceChildren();this._text=String(value);}get textContent(){return this._text+this.children.map(c=>c.textContent).join('');}
   setAttribute(k,v){this.attrs[k]=String(v);}find(tag){return this.children.flatMap(c=>[...(c.tagName===tag?[c]:[]),...c.find(tag)]);}
 }
@@ -33,10 +33,40 @@ test('report distinguishes failure/empty results and discards data when leaving 
 });
 function entryFixture(params={},fetchImpl=async()=>Response.json({success:true})){
   const root=new Element('div'),p=new Element('p');root.querySelector=()=>p;root.prepend=()=>{};
-  const calls=[],mounts=[];const window={currentUserProfile:{userId:'user-a'},liff:{isLoggedIn:()=>true,getAccessToken:()=>'token-a'},WORKER_URL:'https://worker.test/',readActmasterInitialParams:()=>new URLSearchParams(params),StoreShop:{mount:(...args)=>mounts.push(args)},goPage:name=>window.currentPage=name};
+  const calls=[],mounts=[];const window={currentUserProfile:{userId:'user-a'},liff:{isLoggedIn:()=>true,getAccessToken:()=>'token-a'},WORKER_URL:'https://worker.test/',readActmasterInitialParams:()=>new URLSearchParams(params),StoreShop:{supportsPublicProductTarget:true,mount:(...args)=>mounts.push(args)},goPage:name=>window.currentPage=name};
   const context={window,document:{getElementById:()=>root,createElement:tag=>new Element(tag)},location:{search:''},URL,URLSearchParams,AbortSignal,setTimeout,clearTimeout,fetch:async(url,options)=>{calls.push({url,options});return fetchImpl(url,options);}};
-  vm.runInNewContext(entry,context);return {window,calls,mounts,root};
+  vm.runInNewContext(entry,context);return {window,calls,mounts,root,status:p};
 }
+
+test('a verified product card opens only its resolved public detail, even if analytics is unconfirmed',async()=>{
+  const shopId='22222222-2222-4222-8222-222222222222',productId='selected-second-product';
+  const f=entryFixture({shopSection:'list',checkinCard:card,checkinAction:'product',checkinPage:'selected'},async()=>Response.json({success:true,destination:{shopId,productId},recorded:null,recordStatus:'unconfirmed'}));
+  await f.window.openStoreShop('','','','list');
+  assert.equal(f.calls.length,1);assert.deepEqual(JSON.parse(f.calls[0].options.body),{cardId:card,action:'product',pageId:'selected'});
+  assert.deepEqual(f.mounts[0].slice(2),['','','','store',shopId,productId]);
+});
+
+test('invalid, mixed, logged-out, unavailable or malformed product targets never mount a different product or generic fallback',async()=>{
+  const valid={shopSection:'list',checkinCard:card,checkinAction:'product',checkinPage:'selected'};
+  for(const params of [{...valid,productId:'forged'},{...valid,shopId:'forged'},{...valid,checkinPage:'../other'},{...valid,checkinCard:'bad'}]){
+    const f=entryFixture(params);await f.window.openStoreShop('','','','list');assert.equal(f.calls.length,0);assert.equal(f.mounts.length,0);assert.match(f.status.textContent,/格式/);
+  }
+  const loggedOut=entryFixture(valid);loggedOut.window.liff.isLoggedIn=()=>false;await loggedOut.window.openStoreShop('','','','list');assert.equal(loggedOut.mounts.length,0);assert.equal(loggedOut.calls.length,0);
+  for(const result of [Response.json({success:false,error:'商品已下架'},{status:404}),Response.json({success:true,destination:{shopId:'bad',productId:'other'}})]){
+    const f=entryFixture(valid,async()=>result);await f.window.openStoreShop('','','','list');assert.equal(f.mounts.length,0);assert.match(f.status.textContent,/下架|不完整/);
+  }
+});
+
+test('late product entry errors cannot replace another shop view or a changed login',async()=>{
+  const params={shopSection:'list',checkinCard:card,checkinAction:'product',checkinPage:'selected'};
+  for(const change of ['shop','token']){
+    const pending=deferred(),f=entryFixture(params,()=>pending.promise),run=f.window.openStoreShop('','','','list');
+    if(change==='shop'){f.window.readActmasterInitialParams=()=>new URLSearchParams({});await f.window.openStoreShop('','','','list');}
+    else f.window.liff.getAccessToken=()=>'new-token';
+    pending.resolve(Response.json({success:false,error:'舊商品錯誤不應顯示'},{status:404}));await run;
+    assert.doesNotMatch(f.status.textContent,/舊商品/);assert.equal(f.root.children.length,0);assert.equal(f.mounts.length,change==='shop'?1:0);
+  }
+});
 for(const action of ['mall','details'])test('verified '+action+' entry preserves destination on analytics failure and sends no client UID/name',async()=>{
   const f=entryFixture({shopSection:'list',checkinCard:card,checkinAction:action},async()=>{throw Error('offline');});
   await f.window.openStoreShop('','','','list');assert.equal(f.calls.length,1);assert.equal(f.mounts[0][5],action==='mall'?'discovery':'point-history');
@@ -54,7 +84,7 @@ test('identity/page changes while entry request is pending cannot mount a stale 
 });
 test('served index/admin surfaces wire only the dedicated entry/report, both destinations retain return controls',()=>{
   const index=readFileSync(new URL('../index.html',import.meta.url),'utf8'),admin=readFileSync(new URL('../admin.html',import.meta.url),'utf8'),shop=readFileSync(new URL('../js/modules/store-shop.js',import.meta.url),'utf8');
-  assert.match(index,/store-shop-entry\.js\?v=72/);assert.match(admin,/nav-checkin-mall-report/);assert.match(admin,/checkin-mall-report\.js\?v=1/);assert.match(admin,/loadAdminCheckinMallReport/);
+  assert.match(index,/store-shop-entry\.js\?v=73/);assert.match(admin,/nav-checkin-mall-report/);assert.match(admin,/checkin-mall-report\.js\?v=2/);assert.match(admin,/loadAdminCheckinMallReport/);
   assert.match(admin,/switchTab\('users'\).*返回會員管理/);assert.match(shop,/section==='discovery'\)await discover/);assert.match(shop,/section==='point-history'/);assert.match(shop,/spending-history/);
   assert.doesNotMatch(report,/\.innerHTML|point_line_id|gift_money|\/message\/push/);
 });

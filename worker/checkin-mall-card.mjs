@@ -1,7 +1,9 @@
 // Display/analytics sidecar only. The mother remains the only check-in/reply owner.
 import { authorizeStoreAdmin } from './store-admin.mjs';
+import { recordCheckinProductEntry, parseCheckinReportCursor, readCheckinMallCombinedReport } from './checkin-product-entry.mjs';
 import { defaultCheckinDashboardConfig, buildCheckinDashboardMessage } from './checkin-chat-dashboard-render.mjs';
 import { readPublishedCheckinDashboard } from './checkin-chat-dashboard.mjs';
+import { resolveDashboardProductPages, dashboardProductVisibilityGate } from './checkin-dashboard-products.mjs';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const ROOT = '/v1/checkin-mall';
@@ -13,8 +15,30 @@ export function isCheckinMallEvent(event) {
   return event?.type==='message' && event.mode!=='standby' && event.source?.type==='user' && UID.test(event.source.userId||'') &&
     event.message?.type==='text' && String(event.message.text||'').normalize('NFKC').trim()==='會員打卡';
 }
-export function buildCheckinMallCard(env,id,balance,now=Date.now(),config=defaultCheckinDashboardConfig()) {
-  return buildCheckinDashboardMessage(env,id,balance,now,config);
+export function buildCheckinMallCard(env,id,balance,now=Date.now(),config=defaultCheckinDashboardConfig(),productSnapshots=[]) {
+  return buildCheckinDashboardMessage(env,id,balance,now,config,productSnapshots);
+}
+const neutralProductPages=config=>config.pages.filter(page=>page.kind==='product').map(page=>({pageId:page.id,shopId:page.shopId,productId:page.productId,available:false,product:null}));
+async function snapshotMessage(db,id,published,balance,env,now) {
+  for(let attempt=0;attempt<3;attempt++){
+    let targets=neutralProductPages(published.config);
+    if(attempt<2)try{targets=(await resolveDashboardProductPages(db,published.config)).productSnapshots;}catch{/* Public data unavailable: preserve the wallet with neutral product pages. */}
+    let message;
+    try{message=buildCheckinMallCard(env,id,balance,now,published.config,targets);}
+    catch(error){if(error.code!=='FLEX_TOO_LARGE')throw error;targets=neutralProductPages(published.config);message=buildCheckinMallCard(env,id,balance,now,published.config,targets);}
+    const gate=dashboardProductVisibilityGate(targets);
+    const insert=db.prepare(`INSERT INTO checkin_chat_dashboard_snapshots(card_id,template_revision,config_json,message_json,created_at)
+      SELECT id,?,?,?,created_at FROM checkin_mall_cards WHERE id=? AND state='preparing' AND ${gate.sql}`)
+      .bind(published.revision,JSON.stringify(published.config),JSON.stringify(message),id,...gate.args);
+    if(!targets.length){const result=await insert.run();return Number(result.meta?.changes)===1?message:null;}
+    const results=await db.batch([insert,...targets.map(target=>db.prepare(`INSERT INTO checkin_chat_dashboard_product_snapshots(card_id,page_id,product_id,shop_id,product_json,available,created_at)
+      SELECT card_id,?,?,?,?,?,created_at FROM checkin_chat_dashboard_snapshots WHERE card_id=?`)
+      .bind(target.pageId,target.productId,target.shopId,target.available?JSON.stringify(target.product):null,target.available?1:0,id))]);
+    if(results.some(result=>result.success===false))throw Error('Snapshot unavailable');
+    if(Number(results[0]?.meta?.changes)===1){if(results.slice(1).some(result=>Number(result.meta?.changes)!==1))throw Error('Target snapshot unavailable');return message;}
+    // A public/version race has no snapshot and no side effects; resolve once, then use neutral pages.
+  }
+  return null;
 }
 
 export async function supplementCheckinMallCards(events,env,forwardResult,points,fetcher=fetch,now=Date.now()) {
@@ -31,13 +55,9 @@ export async function supplementCheckinMallCards(events,env,forwardResult,points
       try { const wallet=await points.read(event.source.userId,env);if(UID.test(wallet?.identity||'')&&Number.isSafeInteger(wallet.balance)&&wallet.balance>=0)balance=wallet.balance; }
       catch { /* Never use a local fallback or invent a successful check-in. */ }
       const published=await readPublishedCheckinDashboard(db);
-      const message=buildCheckinMallCard(env,id,balance,now,published.config);
-      // Persist the exact compiled message before sending. Later edits never rewrite it.
-      // Failure closes this attempt without sending or changing the daily claim/retry key.
-      const snapshot=await db.prepare(`INSERT INTO checkin_chat_dashboard_snapshots(card_id,template_revision,config_json,message_json,created_at)
-        SELECT id,?,?,?,created_at FROM checkin_mall_cards WHERE id=? AND state='preparing'`)
-        .bind(published.revision,JSON.stringify(published.config),JSON.stringify(message),id).run();
-      if(Number(snapshot.meta?.changes)!==1)return;
+      // Exact message and frozen targets commit before sending; retries never reread the wallet.
+      const message=await snapshotMessage(db,id,published,balance,env,now);
+      if(!message)return;
       const sending=await db.prepare("UPDATE checkin_mall_cards SET state='sending',balance=? WHERE id=? AND state='preparing'").bind(balance,id).run();
       if(Number(sending.meta?.changes)!==1)return;
       let state='unknown';
@@ -78,10 +98,11 @@ async function clickActor(request,env,fetcher) {
 function reportRange(params,now) {
   for(const key of params.keys())if(!['from','to','after'].includes(key)||params.getAll(key).length!==1)error('報告篩選格式不正確');
   const to=params.get('to')||day(now),from=params.get('from')||day(now-6*86400000),after=params.get('after')||'';
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||after&&!/^[1-9]\d{0,14}$/.test(after))error('報告篩選格式不正確');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to))error('報告篩選格式不正確');
+  parseCheckinReportCursor(after);
   const start=Date.parse(from+'T00:00:00+08:00'),end=Date.parse(to+'T00:00:00+08:00')+86400000;
   if(!Number.isFinite(start)||!Number.isFinite(end)||day(start)!==from||day(end-1)!==to||end<=start||end-start>31*86400000)error('報告範圍須為1至31日');
-  return {from,to,start,end,after:Number(after)||Number.MAX_SAFE_INTEGER};
+  return {from,to,start,end,after};
 }
 export async function handleCheckinMall(request,env,profileMapper,fetcher=fetch,now=Date.now()) {
   const url=new URL(request.url);if(!url.pathname.startsWith(ROOT+'/'))return null;
@@ -95,6 +116,7 @@ export async function handleCheckinMall(request,env,profileMapper,fetcher=fetch,
     const db=env.ACTMASTER_DB.withSession?env.ACTMASTER_DB.withSession('first-primary'):env.ACTMASTER_DB;
     if(url.pathname.endsWith('/entry')) {
       const input=await boundedJson(request);
+      if(input.action==='product')return reply(await recordCheckinProductEntry(db,actor,input,now));
       if(Object.keys(input).some(k=>!['cardId','action'].includes(k))||!UUID.test(input.cardId||'')||!['mall','details'].includes(input.action))error('卡片入口格式不正確');
       const result=await db.prepare(`INSERT OR IGNORE INTO checkin_mall_clicks(card_id,actor_uid,actor_name,action,clicked_at,minute_bucket)
         SELECT id,?,?,?,?,? FROM checkin_mall_cards WHERE id=? AND state IN ('sending','accepted','unknown')`).bind(actor.uid,actor.name,input.action,now,Math.floor(now/60000),input.cardId).run();
@@ -108,15 +130,8 @@ export async function handleCheckinMall(request,env,profileMapper,fetcher=fetch,
     // Reuse established canonical/hard-admin policy, not role/UID supplied by caller.
     const authFetcher=(target,options)=>target==='https://api.line.me/v2/profile'&&options?.headers?.Authorization==='Bearer '+actor.token?Promise.resolve(Response.json(actor.profile)):fetcher(target,options);
     await authorizeStoreAdmin(request,env,profileMapper,authFetcher);
-    const range=reportRange(url.searchParams,now),args=[range.start,range.end];
-    const [summary,cards,list]=await Promise.all([
-      db.prepare('SELECT COUNT(*) entries,COUNT(DISTINCT actor_uid) people,COALESCE(SUM(action=\'mall\'),0) mall,COALESCE(SUM(action=\'details\'),0) details FROM checkin_mall_clicks WHERE clicked_at>=? AND clicked_at<?').bind(...args).first(),
-      db.prepare('SELECT COUNT(*) total,COALESCE(SUM(state=\'accepted\'),0) accepted,COALESCE(SUM(state IN (\'unknown\',\'sending\')),0) unknown,COALESCE(SUM(state=\'preparing\'),0) preparing,COALESCE(SUM(state=\'failed\'),0) failed FROM checkin_mall_cards WHERE created_at>=? AND created_at<?').bind(...args).first(),
-      db.prepare(`SELECT c.id,c.actor_name,c.action,c.clicked_at,c.card_id FROM checkin_mall_clicks c WHERE clicked_at>=? AND clicked_at<? AND id<? ORDER BY id DESC LIMIT 51`).bind(...args,range.after).all()
-    ]);
-    if(!summary||!cards||!Array.isArray(list.results)||list.success===false)error('報告暫時無法取得',503);
-    const rows=list.results.slice(0,50);
-    return reply({success:true,range:{from:range.from,to:range.to},summary,cards,rows,next:list.results.length>50?String(rows.at(-1).id):''});
+    const range=reportRange(url.searchParams,now),report=await readCheckinMallCombinedReport(db,range);
+    return reply({success:true,range:{from:range.from,to:range.to},...report});
   } catch(e) {
     const status=e.status||503;
     if(status>=500)console.error(JSON.stringify({event:'checkin_mall_service_failed'}));

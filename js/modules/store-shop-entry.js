@@ -1,7 +1,7 @@
 (function() {
   let pending, opening = 0;
-  function load() {
-    if (window.StoreShop) return Promise.resolve();
+  function load(requirePublicProduct = false) {
+    if (window.StoreShop && (!requirePublicProduct || window.StoreShop.supportsPublicProductTarget === true)) return Promise.resolve();
     if (pending) return pending;
     pending = new Promise((resolve, reject) => {
       if (!document.getElementById('store-shop-css')) {
@@ -10,7 +10,7 @@
         document.head.appendChild(css);
       }
       const script = document.createElement('script');
-      script.src = 'js/modules/store-shop.js?v=69&game=2';
+      script.src = 'js/modules/store-shop.js?v=70&game=2';
       const timer = setTimeout(() => finish(new Error('商城載入逾時，請重試')), 15000);
       function finish(error) {
         clearTimeout(timer); script.onload = script.onerror = null;
@@ -44,18 +44,31 @@
   async function checkinEntry(section) {
     if (section !== 'list') return '';
     const params = window.readActmasterInitialParams?.() || new URLSearchParams(location.search);
-    const allowed = new Set(['shopSection','checkinCard','checkinAction','liff.state','code','state','liffClientId','liffRedirectUri','friendship_status_changed']);
+    const allowed = new Set(['shopSection','checkinCard','checkinAction','checkinPage','liff.state','code','state','liffClientId','liffRedirectUri','friendship_status_changed']);
     const id = params.get('checkinCard'), action = params.get('checkinAction');
-    if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id || '') || !['mall','details'].includes(action) ||
-        ['checkinCard','checkinAction','shopSection'].some(key => params.getAll(key).length !== 1) || [...params.keys()].some(key => !allowed.has(key))) return '';
+    const productEntry = action === 'product';
+    const invalid = !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id || '') || !['mall','details','product'].includes(action) ||
+      ['checkinCard','checkinAction','shopSection'].some(key => params.getAll(key).length !== 1) || [...params.keys()].some(key => !allowed.has(key)) ||
+      (productEntry ? params.getAll('checkinPage').length !== 1 || !/^[a-z][a-z0-9_-]{0,39}$/.test(params.get('checkinPage') || '') : params.has('checkinPage'));
+    if (invalid) { if (productEntry) throw new Error('商品卡片連結格式不正確，請重新開啟原卡片。'); return ''; }
     const token = window.liff?.isLoggedIn?.() ? window.liff.getAccessToken() : '';
-    if (!token) return '';
+    if (!token) { if (productEntry) throw new Error('請先使用 LINE 登入，再重新開啟商品卡片。'); return ''; }
     try {
       const base = String(window.WORKER_URL || '').replace(/\/+$/, '');
-      if (new URL(base).protocol !== 'https:') return '';
-      await fetch(base + '/v1/checkin-mall/entry', { method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-        body:JSON.stringify({cardId:id,action}),cache:'no-store',signal:AbortSignal.timeout(6000) });
-    } catch { /* Analytics failure must never block shopping or points history. */ }
+      if (new URL(base).protocol !== 'https:') { if (productEntry) throw new Error('商城連結設定不正確，請稍後再試。'); return ''; }
+      const response = await fetch(base + '/v1/checkin-mall/entry', { method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({cardId:id,action,...(productEntry ? {pageId:params.get('checkinPage')} : {})}),cache:'no-store',signal:AbortSignal.timeout(6000) });
+      if (productEntry) {
+        const result = await response.json();
+        if (!response.ok || result?.success !== true) throw new Error(result?.error || '商品連結暫時無法確認，請稍後重試。');
+        const target = result.destination;
+        if (!target || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(target.shopId || '') || typeof target.productId !== 'string' || !/^[A-Za-z0-9-]{1,80}$/.test(target.productId)) throw new Error('商品目標不完整，未改選其他商品。');
+        return {kind:'product',shopId:target.shopId,productId:target.productId};
+      }
+    } catch (error) {
+      if (productEntry) throw new Error(error?.name === 'TimeoutError' || error?.name === 'AbortError' ? '商品連結確認逾時，請重新開啟原卡片。' : error.message || '商品連結暫時無法確認，請稍後重試。');
+      // Existing mall/history navigation remains usable if analytics fails.
+    }
     return action;
   }
   window.openStoreShop = async function(productId = '', qrToken = '', memberProduct = '', section = '', shopId = '', options = {}) {
@@ -73,18 +86,24 @@
       back.onclick = () => { returned = true; options.onBack(); }; root.prepend(back);
     }
     addReturn();
+    const owner = window.currentUserProfile?.userId, token = window.liff?.getAccessToken?.();
     try {
       if (section === 'store' && !(window.StoreInviteRoute?.isShopId?.(shopId) ?? (typeof shopId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shopId)))) throw new Error('商城連結格式不正確，請向店家取得新的邀請網址');
-      const owner = window.currentUserProfile?.userId, token = window.liff?.getAccessToken?.();
-      const [, entry] = await Promise.all([load(), checkinEntry(section)]);
+      const params = window.readActmasterInitialParams?.() || new URLSearchParams(location.search);
+      const productEntry = section === 'list' && params.get('checkinAction') === 'product';
+      const [, entry] = await Promise.all([load(productEntry), checkinEntry(section)]);
       if (ticket !== opening || owner !== window.currentUserProfile?.userId || token !== window.liff?.getAccessToken?.()) return;
       if (!returned && window.currentPage === 'store-shop') {
-        window.StoreShop.mount(root, false, productId, qrToken, memberProduct, entry === 'mall' ? 'discovery' : entry === 'details' ? 'point-history' : section, shopId);
+        if (entry?.kind === 'product') {
+          if (window.StoreShop.supportsPublicProductTarget !== true) throw new Error('商城正在更新，請重新開啟原商品卡片。');
+          window.StoreShop.mount(root, false, '', '', '', 'store', entry.shopId, entry.productId);
+        } else window.StoreShop.mount(root, false, productId, qrToken, memberProduct, entry === 'mall' ? 'discovery' : entry === 'details' ? 'point-history' : section, shopId);
         addReturn();
       }
     } catch(error) {
-      if (returned || window.currentPage !== 'store-shop') return;
-      root.querySelector('p').textContent = error.message;
+      if (returned || window.currentPage !== 'store-shop' || root.isConnected === false || ticket !== opening || owner !== window.currentUserProfile?.userId || token !== window.liff?.getAccessToken?.()) return;
+      const status = root.querySelector('p'); if (!status) return;
+      status.textContent = error.message;
       const retry = document.createElement('button');
       retry.textContent = '重新載入'; retry.onclick = () => window.openStoreShop(productId, qrToken, memberProduct, section, shopId, options); root.appendChild(retry);
     }

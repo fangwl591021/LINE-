@@ -57,8 +57,9 @@
     if(result.release_enabled!==true)return '全站網購交易尚未開放，顧客目前無法下單。店家收款設定已完成，請聯絡管理員確認。';
     return '';
   }
-  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='') {
+  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='', initialPublicProductId='') {
     let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
+    const initialProductSession=initialPublicProductId?{owner:window.currentUserProfile?.userId,role:window.userRole,token:window.liff?.getAccessToken?.()}:null;
     // New visit, new shuffle. Keep it for category/search/pagination in this mount.
     const discoverySeed=Array.from(crypto.getRandomValues(new Uint32Array(2)),n=>n.toString(16).padStart(8,'0')).join('');
     const sourceParams = () => new URLSearchParams(location.search);
@@ -117,6 +118,7 @@
     root.classList.add('store-shop');
     root.innerHTML = `<nav class="shop-bar" aria-label="商城導覽"><button type="button" data-do="exit">返回首頁</button><button type="button" data-do="discover">找商品</button><button type="button" data-do="list">店家列表</button>${canManage()?'<button type="button" data-do="manage">商店設定</button>':''}</nav><h1>店家商城</h1><p class="shop-notice">店家可掃商品 QR 進入共用點數扣抵；須登入、確認顧客與折抵點數，才會送出交易。</p><p role="alert" aria-live="polite"></p><section class="shop-content"></section>`;
     const content=root.querySelector('.shop-content'), alert=root.querySelector('[role=alert]');
+    const initialProductCurrent=()=>!initialProductSession||(root.isConnected&&content.isConnected&&root.contains(content)&&window.currentPage==='store-shop'&&initialProductSession.owner===window.currentUserProfile?.userId&&initialProductSession.role===window.userRole&&initialProductSession.token===window.liff?.getAccessToken?.());
     root.classList.add('shop-lifestyle','shop-points-theme');
     root.querySelector('h1').textContent='生活好店';
     root.insertAdjacentHTML('afterbegin','<nav class="shop-home-return" aria-label="返回主首頁"><button type="button" data-do="exit"><span aria-hidden="true">‹</span>回主首頁</button></nav><header class="shop-brand"><button type="button" class="shop-brand-entry" data-do="point-operation" aria-label="點數通：開啟會員點數操作" aria-haspopup="dialog"><span aria-hidden="true" class="shop-brand-mark"><img src="assets/points-logo-transparent-20260916.png" width="1254" height="1254" alt="" decoding="async"></span><strong>點數通<small>讓點數流動，讓美好持續發生</small></strong></button><button data-do="points-view" class="points-view-switch" hidden></button></header>');
@@ -334,7 +336,7 @@
     async function view(id) {
       pageKind('store');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">載入店面中…</p>';
-      const result=await api(`?shop=${encodeURIComponent(id)}`); if(version!==epoch) return;
+      const result=await api(`?shop=${encodeURIComponent(id)}`); if(version!==epoch||!initialProductCurrent()) return;
       const s=result.shop;
       viewedShop=s;viewedProducts=result.products;
       if(s.merchant_enabled===0)root.querySelector('.shop-notice').hidden=true;
@@ -445,7 +447,8 @@
       }
     }
     async function run(job) {
-      try { await job(); } catch(error) { alert.textContent=error.name==='TimeoutError'?'連線逾時；若剛儲存，請重新載入確認結果，勿連續重送。':error.message; }
+      let requestVersion;
+      try { const pending=job();requestVersion=epoch;await pending; } catch(error) { if(initialProductSession&&(!initialProductCurrent()||(requestVersion!==undefined&&requestVersion!==epoch)))return;alert.textContent=error.name==='TimeoutError'?'連線逾時；若剛儲存，請重新載入確認結果，勿連續重送。':error.message; }
     }
     root.onclick=event=>{
       const button=event.target.closest('[data-do]'); if(!button||!root.contains(button)||busy) return;
@@ -689,12 +692,13 @@
         await adminStores();
       }else if(!standalone&&section==='store') {
         await view(id);
+        if(!initialProductCurrent())return;
         const params=window.readActmasterInitialParams?.()||sourceParams();
-        if(params.has('shopItem')){
-          const selected=params.get('shopItem');
-          if(params.getAll('shopItem').length!==1||!isShopId(selected))throw new Error('所選商品連結格式不正確，請返回店家重新選擇。');
+        if(initialPublicProductId||params.has('shopItem')){
+          const selected=initialPublicProductId||params.get('shopItem');
+          if(initialPublicProductId?typeof selected!=='string'||!/^[A-Za-z0-9-]{1,80}$/.test(selected):params.getAll('shopItem').length!==1||!isShopId(selected))throw new Error('所選商品連結格式不正確，請返回店家重新選擇。');
           const version=epoch,result=await api('/products?id='+encodeURIComponent(selected)),p=result.products?.[0];
-          if(version!==epoch)return;
+          if(version!==epoch||!initialProductCurrent())return;
           if(!p||p.id!==selected||p.shop?.id!==id)throw new Error('所選商品不存在或不屬於本店，未改選其他商品。');
           viewedShop=p.shop;viewedProducts=[p];detail(p.id);
         }
@@ -729,6 +733,6 @@
       }
     });
   }
-  window.StoreShop={mount};
+  window.StoreShop={mount,supportsPublicProductTarget:true};
   const root=document.getElementById('public-store-shop'); if(root) mount(root,true);
 })();
