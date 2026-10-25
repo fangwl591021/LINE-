@@ -10,7 +10,7 @@
     if (contact && (/^tel:\+?[0-9#*(),. -]{5,40}$/.test(raw) || /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw))) return raw;
     try { const url = new URL(raw); return url.protocol === 'https:' && !url.username && !url.password ? url.href : ''; } catch { return ''; }
   };
-  let root, client, world, worldModule, generation = 0, activeOwner = '', zone = 'people', query = '', industry = '', sort = 'random';
+  let root, client, world, worldModule, audio, generation = 0, activeOwner = '', zone = 'people', query = '', industry = '', sort = 'random';
   let members = [], industries = [], next = '', selected = '', posts = null, listView = false, exitAction = null, worldState = null, savedScrollTop = 0;
   let memberTicket = 0, selectionTicket = 0, boardTicket = 0, rollTicket = 0, busy = false, actionBusy = false, initializing = false, rolling = false, rollMessage = '', dialog, styleReady;
   const $ = selector => root.querySelector(selector);
@@ -41,6 +41,14 @@
     $('[data-bi-retry]').hidden = !retry;
   }
   function closeCard() { if (dialog) { dialog.close(); dialog.remove(); dialog = null; } }
+  function renderAudioState(state) {
+    const music=$('[data-bi-action="music"]'),sound=$('[data-bi-action="sound"]');
+    if(!music||!sound)return;
+    root.dataset.audioState=state.status;
+    music.textContent=state.music?'音樂開':'音樂關';music.setAttribute('aria-pressed',String(state.music));
+    sound.textContent=state.sound?'音效開':'音效關';sound.setAttribute('aria-pressed',String(state.sound));
+    $('[data-bi-audio-status]').textContent={locked:'首次擲骰後播放，可隨時關閉',playing:'輕柔音樂播放中',muted:state.sound?'背景音樂已關閉':'聲音已關閉',paused:'聲音已暫停',blocked:'聲音尚未啟動，可再點擲骰重試',unsupported:'此裝置暫不支援聲音'}[state.status]||'';
+  }
   function live() {
     if (initializing && active(generation)) { note('正在連接交流島…'); return false; }
     if (valid(generation)) return true;
@@ -53,7 +61,7 @@
     return `<section class="bi-shell" aria-label="商務交流島">
       <header class="bi-header"><div class="bi-brand"><span class="bi-brand-mark" aria-hidden="true">島</span><div><h1>商務交流島</h1><p>探索人脈，讓合作從交流開始</p></div></div><div class="bi-toolbar"><button type="button" data-bi-action="exit">返回首頁</button><button type="button" data-bi-action="list" aria-pressed="false">快速清單</button></div></header>
       <nav class="bi-tabs" aria-label="交流島分區"><button type="button" data-bi-zone="people" aria-pressed="true">人脈廣場</button><button type="button" data-bi-zone="board" aria-pressed="false">合作告示板</button><button type="button" data-bi-zone="home" aria-pressed="false">我的小屋</button></nav>
-      <div class="bi-layout"><section class="bi-explore" aria-label="骰子隨機探索"><div class="bi-dice"></div><div class="bi-explore-copy"><h2>擲骰，啟程探索群島</h2><p class="bi-roll-result" role="status" aria-live="polite">${esc(rollMessage || '雙骰決定步數，走向這次遇見的夥伴。')}</p></div><button type="button" class="bi-roll" data-bi-action="roll">擲骰啟程</button></section>
+      <div class="bi-layout"><section class="bi-explore" aria-label="骰子隨機探索"><div class="bi-dice"></div><div class="bi-explore-copy"><h2>擲骰，搭船探索群島</h2><p class="bi-roll-result" role="status" aria-live="polite">${esc(rollMessage || '跨島搭船慢遊，靠岸認識新夥伴。')}</p><small class="bi-audio-status" data-bi-audio-status></small></div><div class="bi-play-controls"><button type="button" class="bi-roll" data-bi-action="roll">擲骰啟程</button><button type="button" data-bi-action="music" aria-label="開關背景音樂" aria-pressed="true">音樂開</button><button type="button" data-bi-action="sound" aria-label="開關音效" aria-pressed="true">音效開</button></div></section>
       <div class="bi-map" aria-label="七座商務交流群島，由上到下探索"><div class="bi-stage"></div></div>
       <section class="bi-panel" aria-label="交流島資訊"><div class="bi-panel-header"><h2 data-bi-title>人脈廣場</h2><p class="bi-caption" data-bi-caption>選擇會員，查看公開名片或開始交流</p></div><div class="bi-selection" aria-live="polite"></div>
       <form class="bi-search"><label for="bi-query">找會員</label><div><input id="bi-query" type="search" maxlength="60" placeholder="姓名、英文名、公司或職稱" autocomplete="off"><button type="submit">搜尋</button></div><label for="bi-industry">業種</label><select id="bi-industry"><option value="">全部業種</option></select><label for="bi-sort">排序</label><select id="bi-sort"><option value="random">骰子隨機探索</option><option value="latest">最新名單</option><option value="match">配對排名</option></select></form>
@@ -111,6 +119,7 @@
   }
   async function rollDice() {
     if (!live() || rolling || busy || actionBusy || zone !== 'people') return;
+    void audio?.unlock();
     const ticket = generation, request = ++rollTicket, previous = selected, append = sort === 'random', dice1 = randomIndex(6) + 1, dice2 = randomIndex(6) + 1;
     if (!world) { note('群島場景尚未載入，請重試。',true); return; }
     if (listView) {
@@ -126,9 +135,22 @@
       if (!valid(ticket) || request !== rollTicket || zone !== 'people' || !incoming) return;
       if (!incoming.length) { $('.bi-roll-result').textContent='沒有符合的會員，請調整搜尋或業種。';return; }
       button.textContent='正在擲骰…';
+      let phase='dice';
       const result = await world.roll({dice1,dice2,rows:incoming,lastHandle:previous,
         valid:()=>valid(ticket)&&request===rollTicket&&zone==='people'&&!listView,
-        onStep:({step,total})=>{if(valid(ticket)&&request===rollTicket){button.textContent='前進中…';$('.bi-roll-result').textContent=`${dice1} + ${dice2} = ${total} 點 · 前進 ${step} / ${total} 步`;}}
+        onPhase:info=>{
+          if(!valid(ticket)||request!==rollTicket)return;
+          phase=info.phase;
+          if(phase==='cancelled')audio?.stopEffects();
+          if(phase==='dice')audio?.play('dice');
+          else if(phase==='boarding')audio?.play('depart');
+          else if(phase==='arrived')audio?.play('arrive');
+          const labels={dice:'正在擲骰…',boarding:'正在登船…',sailing:'搭船航行中…',docking:'正在靠岸…',walking:'步行前往夥伴…',arrived:'已到站',cancelled:'旅程已暫停，可重新啟程'};
+          button.textContent=labels[phase]||'探索中…';
+          const destination=worldModule.CATEGORIES.find(item=>item.id===info.category)?.label||'下一座島';
+          $('.bi-roll-result').textContent=phase==='sailing'?`沿水道慢遊，前往${destination}`:labels[phase]||'探索中…';
+        },
+        onStep:({step,total})=>{if(valid(ticket)&&request===rollTicket){$('.bi-roll-result').textContent=`${dice1} + ${dice2} = ${total} 點 · ${phase==='sailing'?'航程':'探索進度'} ${step} / ${total}`;}}
       });
       if (!result || !valid(ticket) || request !== rollTicket || zone !== 'people') return;
       selected=result.handle;selectionTicket++;renderMembers();world.showArrival(selected);
@@ -162,7 +184,7 @@
     bindAvatars();
   }
   function cancelRoll() {
-    rollTicket++; rolling = false; world?.cancel(); world?.clearArrival();
+    rollTicket++; rolling = false; world?.cancel(); world?.clearArrival();audio?.stopEffects();
     $('[data-bi-action="roll"]').disabled = false; $('[data-bi-action="roll"]').textContent = '擲骰啟程';
   }
   function chooseZone(value) {
@@ -174,6 +196,7 @@
     $('.bi-explore').hidden = zone !== 'people';
     $('.bi-post-list').hidden = zone !== 'board'; $('.bi-home-card').hidden = zone !== 'home';
     $('.bi-map').hidden = zone !== 'people';world?.pause(zone!=='people'||listView);
+    if(zone==='people')void audio?.resume();else audio?.pause();
     $('[data-bi-title]').textContent = {people:'人脈廣場',board:'合作告示板',home:'我的小屋'}[zone];
     $('[data-bi-caption]').textContent = {people:'選擇會員，查看公開名片或開始交流',board:'看看大家正在分享的服務與合作方向',home:'維護自己的介紹，接續每一次交流'}[zone];
     note();
@@ -231,6 +254,8 @@
       if (action === 'retry') { if (!valid(generation)) await window.initBusinessIsland(); else if (zone === 'people') await loadMembers(); else if (zone === 'board') await loadPosts(); return; }
       if (!live()) return;
       if (action === 'list') { cancelRoll();listView = !listView; root.dataset.view = listView ? 'list' : 'map'; button.textContent=listView?'回到島嶼':'快速清單';button.setAttribute('aria-pressed',String(listView));world?.pause(listView);if(!listView&&selected)world?.showArrival(selected); }
+      else if(action==='music'&&audio){const enabled=!audio.settings.music;audio.setMusicEnabled(enabled);if(enabled)void audio.unlock();}
+      else if(action==='sound'&&audio){const enabled=!audio.settings.sound;audio.setSoundEnabled(enabled);if(enabled)void audio.resume();}
       else if (action === 'roll') await rollDice();
       else if (action === 'more' && !busy && !rolling && (next || sort === 'random')) await loadMembers(true);
       else if (action === 'card' || action === 'chat') { if (button.dataset.biHandle) chooseMember(button.dataset.biHandle); await memberAction(action); }
@@ -249,6 +274,7 @@
   window.leaveBusinessIsland = function () {
     generation++; memberTicket++; selectionTicket++; boardTicket++; rollTicket++;
     if(world){savedScrollTop=document.getElementById('main')?.scrollTop||0;world.cancel();worldState=world.snapshot();}
+    audio?.destroy();audio=null;
     client?.close(); client = null; world?.destroy();world=null;busy = false; actionBusy = false; initializing = false; rolling = false; closeCard();
   };
   window.addEventListener('pagehide', window.leaveBusinessIsland);
@@ -269,7 +295,7 @@
     if (changedOwner) { members=[];industries=[];next='';selected='';posts=null;query='';industry='';sort='random';zone='people';listView=false;rollMessage='';worldState=null;savedScrollTop=0; }
     exitAction = typeof options.onExit === 'function' ? options.onExit : null;
     if (!document.querySelector('link[data-business-island]')) {
-      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=3');style.dataset.businessIsland='';
+      const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=4');style.dataset.businessIsland='';
       styleReady = new Promise((resolve,reject) => {
         style.addEventListener('load',resolve,{once:true});
         style.addEventListener('error',()=>{style.remove();styleReady=null;reject(Error('交流島樣式載入失敗，請重試。'));},{once:true});
@@ -284,9 +310,10 @@
     const ticket = generation;
     note('正在連接交流島…');
     try {
-      const [module,scene] = await Promise.all([import(new URL('member-chat.js?v=14',scriptUrl).href),import(new URL('business-island-world.mjs?v=1',scriptUrl).href),styleReady]);
+      const [module,scene,sound] = await Promise.all([import(new URL('member-chat.js?v=14',scriptUrl).href),import(new URL('business-island-world.mjs?v=2',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),styleReady]);
       if (!active(ticket)) return;
       client=module.createChatClient({base:window.Config?.WORKER_URL||window.WORKER_URL,isCurrent:()=>active(ticket)});
+      audio=sound.createIslandAudio({isCurrent:()=>valid(ticket),onState:state=>{if(active(ticket))renderAudioState(state);}});
       worldModule=scene;
       world=scene.createIslandWorld({host:$('.bi-stage'),diceHost:$('.bi-dice'),asset,avatar,profile:window.currentUserProfile,
         isCurrent:()=>valid(ticket),onMember:chooseMember,
