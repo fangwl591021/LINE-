@@ -74,7 +74,7 @@ window.openExchangeZone=async options=>{window.__fixtureEvents.push({kind:'excha
 window.openExchangeZonePost=async handle=>{window.__fixtureEvents.push({kind:'post',handle});const popup=document.createElement('dialog');popup.className='fixture-post';popup.innerHTML='<h2>原交流詳情合成入口</h2><p>已刊登合作內容</p><button>關閉</button>';popup.querySelector('button').onclick=()=>{popup.close();popup.remove();};document.body.append(popup);popup.showModal();};
 window.openStoreShop=async(...args)=>{window.__fixtureEvents.push({kind:'store',id:args[4]});window.goPage('store-shop',true);const root=document.getElementById('page-store-shop');root.innerHTML='<h2>原商城合成入口</h2><button id="fixture-store-back">返回棋盤</button>';root.querySelector('button').onclick=()=>args[5]?.onBack?.();};
 </script>
-<script src="/js/navigation.js?v=8.04"></script><script src="/js/modules/business-richman.js?v=1.4"></script><script src="/js/modules/store-richman.js?v=1"></script><script src="/js/modules/business-island.js?v=6"></script>
+<script src="/js/navigation.js?v=8.04"></script><script src="/js/modules/business-richman.js?v=1.4"></script><script src="/js/modules/store-richman.js?v=1"></script><script src="/js/modules/business-island.js?v=9"></script>
 </body></html>`;
 
 const server = createServer(async (req,res) => {
@@ -84,7 +84,7 @@ const server = createServer(async (req,res) => {
     if (url.pathname === '/favicon.ico') {res.writeHead(204);res.end();return;}
     if (url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/') || url.pathname.startsWith('/assets/')) {
       const file=resolve(repo,'.'+url.pathname);assert.ok(file.startsWith(repo.endsWith(sep)?repo:repo+sep));
-      const types={js:'text/javascript',mjs:'text/javascript',css:'text/css',webp:'image/webp',png:'image/png'};
+      const types={js:'text/javascript',mjs:'text/javascript',css:'text/css',webp:'image/webp',png:'image/png',svg:'image/svg+xml'};
       const body=await readFile(file);res.writeHead(200,{'Content-Type':types[file.split('.').at(-1)]||'application/octet-stream','Cache-Control':'no-store'});res.end(body);return;
     }
     let raw='';for await(const part of req)raw+=part;const body=raw?JSON.parse(raw):null;
@@ -596,7 +596,7 @@ try {
   const shipDiceBefore=await motionPage.locator('.bi-3d-dice-box').evaluate(box=>({first:box.dataset.dice1,second:box.dataset.dice2,total:box.dataset.total}));
   await motionPage.evaluate(()=>{window.__shipTrace={phases:[],samples:[]};const player=document.querySelector('.bi-world-player');window.__shipObserver=new MutationObserver(()=>{const phase=player.dataset.phase;if(window.__shipTrace.phases.at(-1)!==phase)window.__shipTrace.phases.push(phase);});window.__shipObserver.observe(player,{attributes:true,attributeFilter:['data-phase']});window.__shipTimer=setInterval(()=>{const matrix=new DOMMatrix(getComputedStyle(player).transform);window.__shipTrace.samples.push({at:performance.now(),x:matrix.m41,y:matrix.m42,scroll:document.querySelector('#main').scrollTop});},100);document.querySelector('[data-bi-sail="manufacturing"]').click();});
   await motionPage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.phase==='sailing',{},{timeout:10000});
-  assert.equal(await motionPage.locator('.bi-player-ferry').isVisible(),true);assert.ok(await motionPage.locator('.bi-player-ferry [class*="hull"],.bi-player-ferry [class*="cabin"],.bi-player-ferry [class*="wake"]').count()>=3);
+  assert.equal(await motionPage.locator('.bi-player-ferry').isVisible(),true);assert.ok(await motionPage.locator('.bi-player-ferry img.bi-vessel-art').evaluate(image=>image.complete&&image.naturalWidth>0));assert.equal(await motionPage.locator('.bi-player-ferry .bi-ferry-wake').count(),1);
   const voyageAudio={peak:await peakAudio(motionPage,400),probe:await audioSnapshot(motionPage)};assert.ok(voyageAudio.peak>1e-5);assert.ok(await motionPage.evaluate(()=>window.__audioProbe.sources.some(source=>source.kind==='createBufferSource'&&source.started)));
   await motionPage.screenshot({path:join(output,'business-island-ferry-sailing-390.png'),fullPage:true});
   await motionPage.waitForFunction(()=>document.querySelector('.bi-world-player').dataset.phase==='arrived'&&document.querySelector('.bi-world-player').dataset.currentCategory==='manufacturing',{},{timeout:30000});

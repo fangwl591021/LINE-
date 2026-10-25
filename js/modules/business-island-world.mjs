@@ -14,6 +14,17 @@ export const CATEGORIES = Object.freeze([
   { id:'manufacturing', label:'製造產業島', caption:'從工坊到產業聚落，串接技術、供應與創新。' }
 ].map(Object.freeze));
 
+// Local artwork only; categories cannot provide arbitrary image paths.
+export const VESSELS = Object.freeze({
+  food:'food-fishing.svg',
+  lodging:'lodging-yacht.svg',
+  leisure:'leisure-sailboat.svg',
+  shopping:'shopping-market.svg',
+  mobility:'mobility-catamaran.svg',
+  services:'services-launch.svg',
+  manufacturing:'manufacturing-tug.svg'
+});
+
 // Public presentation metadata is authoritative when present. Ambiguous tourism /
 // transport classification is split using only the public company/title summary.
 export function classifyMember(row = {}) {
@@ -205,14 +216,22 @@ world.className='bi-world';
 world.dataset.rolling='false';
 world.dataset.paused=String(!!doc.hidden);
 world.dataset.phase='idle';
+const vesselArt=category=>`<img class="bi-vessel-art" src="${esc(asset(`assets/business-island/boats/${VESSELS[category]}`))}" alt="" width="200" height="140" decoding="async" draggable="false">`;
 
-world.innerHTML=CATEGORIES.map((category,index)=>`<section class="bi-world-island" data-island="${category.id}" data-visible="false" style="--bi-island-index:${index}" aria-labelledby="bi-world-${category.id}-title"><h3 class="bi-world-title" id="bi-world-${category.id}-title"><button type="button" class="bi-world-category" data-category="${category.id}">${esc(category.label)}</button></h3><p class="bi-world-caption">${esc(category.caption)}</p><img class="bi-world-art" src="${esc(asset(`assets/business-island/${category.id}-v1.webp`))}" alt="${esc(category.label)}的立體島嶼場景" loading="${index?'lazy':'eager'}" decoding="async"><div class="bi-world-members"></div><div class="bi-island-member-bank"><p class="bi-island-member-summary" role="status"></p><button type="button" class="bi-island-members-more" data-bi-members-more="${category.id}" hidden>更多本島會員</button><button type="button" class="bi-island-sail" data-bi-sail="${category.id}">搭船前往${esc(category.label)}</button></div><span class="bi-pool" aria-hidden="true"><span class="bi-pool-water"></span><span class="bi-swimmer"></span><span class="bi-swimmer"></span><span class="bi-pool-ripple"></span><span class="bi-pool-ripple"></span></span><span class="bi-world-boat" aria-hidden="true"><span class="bi-boat-hull"></span><span class="bi-boat-cabin"></span><span class="bi-boat-wake"></span></span></section>`).join('');
+world.innerHTML=CATEGORIES.map((category,index)=>`<section class="bi-world-island" data-island="${category.id}" data-visible="false" style="--bi-island-index:${index}" aria-labelledby="bi-world-${category.id}-title"><h3 class="bi-world-title" id="bi-world-${category.id}-title"><button type="button" class="bi-world-category" data-category="${category.id}">${esc(category.label)}</button></h3><p class="bi-world-caption">${esc(category.caption)}</p><img class="bi-world-art" src="${esc(asset(`assets/business-island/${category.id}-v1.webp`))}" alt="${esc(category.label)}的立體島嶼場景" loading="${index?'lazy':'eager'}" decoding="async"><div class="bi-world-members"></div><div class="bi-island-member-bank"><p class="bi-island-member-summary" role="status"></p><button type="button" class="bi-island-members-more" data-bi-members-more="${category.id}" hidden>更多本島會員</button><button type="button" class="bi-island-sail" data-bi-sail="${category.id}">搭船前往${esc(category.label)}</button></div><span class="bi-pool" aria-hidden="true"><span class="bi-pool-water"></span><span class="bi-swimmer"></span><span class="bi-swimmer"></span><span class="bi-pool-ripple"></span><span class="bi-pool-ripple"></span></span><span class="bi-world-boat" data-vessel="${category.id}" aria-hidden="true">${vesselArt(category.id)}<span class="bi-boat-wake"></span></span></section>`).join('');
 
 const player=doc.createElement('span');
 player.className='bi-world-player';
-Object.assign(player.dataset,{moving:'false',step:'0',total:'0',travel:'walking',phase:'idle'});
+Object.assign(player.dataset,{moving:'false',step:'0',total:'0',travel:'walking',phase:'idle',boatStyle:'food'});
 player.setAttribute('aria-label','我的探索位置');
-player.innerHTML=`<span class="bi-player-shadow"></span><span class="bi-player-person">${walker()}${profile?`<span class="bi-player-avatar">${avatar(profile)}</span>`:''}</span><span class="bi-player-ferry" aria-hidden="true"><span class="bi-ferry-hull"></span><span class="bi-ferry-cabin"></span><span class="bi-ferry-wake"></span></span><span class="bi-player-label">我</span>`;
+player.innerHTML=`<span class="bi-player-shadow"></span><span class="bi-player-person">${walker()}${profile?`<span class="bi-player-avatar">${avatar(profile)}</span>`:''}</span><span class="bi-player-ferry" data-vessel="food" aria-hidden="true">${vesselArt('food')}<span class="bi-ferry-wake"></span></span><span class="bi-player-label">我</span>`;
+function setBoatStyle(category){
+const id=Object.hasOwn(VESSELS,category)?category:'food',ferry=player.querySelector('.bi-player-ferry'),image=ferry.querySelector('.bi-vessel-art'),src=asset(`assets/business-island/boats/${VESSELS[id]}`);
+player.dataset.boatStyle=id;
+ferry.dataset.vessel=id;
+if(image.getAttribute('src')!==src)image.setAttribute('src',src);
+}
+setBoatStyle('food');
 world.append(player);
 host.replaceChildren(world);
 
@@ -766,6 +785,7 @@ if(category===currentCategory&&!afloat)return{mode:'sail',category,currentCatego
 clearArrival();
 cancel();
 const ticket=generation,end={x:NAV[category].spawn[0],y:NAV[category].spawn[1]},targetPoint=landToWorld(category,end),route=voyageRoute(targetPoint,category),total=Math.max(1,Math.abs(CATEGORIES.findIndex(item=>item.id===category)-CATEGORIES.findIndex(item=>item.id===currentCategory))),duration=Math.max(1300,route.length/(world.clientWidth>700?240:200)*1000),info={mode:'sail',handle:'',category,fromCategory:currentCategory,total,duration,distance:route.length,speed:route.length/duration*1000},stepInfo=step=>({...info,step});
+if(!afloat)setBoatStyle(currentCategory);
 journeyInfo(info,onPhase,valid);
 player.dataset.target='';
 player.dataset.direction=targetPoint.y>=playerPoint.y?'south':'north';
@@ -820,6 +840,7 @@ Object.assign(diceBox.dataset,{dice1:String(dice1),dice2:String(dice2),total:Str
 diceBox.setAttribute('aria-label',`${dice1} 加 ${dice2} 等於 ${dice1+dice2} 點`);
 diceTotal.textContent=`${dice1} + ${dice2} = ${dice1+dice2} 點`;
 Object.assign(player.dataset,{step:String(step),total:String(total),target:targetHandle,travel,direction,phase,fromCategory:state.fromCategory||category,category:state.category||category});
+setBoatStyle(['boarding','sailing'].includes(travel)&&Object.hasOwn(VESSELS,state.fromCategory)?state.fromCategory:category);
 world.dataset.phase=phase;
 
 for(const[key,value]of Object.entries({duration:state.duration??0,distance:state.distance??0,speed:state.speed??0})){
