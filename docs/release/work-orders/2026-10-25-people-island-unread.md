@@ -1,0 +1,10 @@
+# People Island name and home unread message badge
+
+- Request: rename business island to 人脈島 and show a red unread number on the home exchange-zone entry for incoming private messages.
+- Baseline: exact LINE- checkout reward-application-src, branch codex/people-island-unread-20261025 from current main b1502ed (PR259), clean before edits. Before full guard PASS: TEMP/line-people-island-unread-before-20261025.log.
+- Contracts read: feature-change-protocol, business-island, exchange-top-tabs and original member-private-chat work order. New member-chat-unread contract documents the read-only count and client lifecycle.
+- Scope: visible island names and asset pins; one authenticated read-only aggregate endpoint covering all threads; separate home red badge module and markup; refresh after the existing successful read-through action; synthetic backend/browser tests. Keep old routes/IDs, store dice/provider names, private-message ownership/access/read cursors, inbox, notifications, schema, identity, points and mother reply flows.
+- Backend: count only other-sender NULL read_at messages in the canonical actor's existing visible threads, with peer users joined as in the thread list. No pagination undercount, contents or identity projection, query/UID override, schema or writes. Reuse fresh auth, feature and own-card gates.
+- Frontend: 0 hidden, 99+ cap, accessible count; home/access/login-gated polling about20s, no overlap, 8s abort, local1s session check, navigation/visibility/BFCache cancellation and session fence. Failed fetches retain only same-session last confirmed count as stale; 401/403 clear even without JSON. Existing read-through success asks for count refresh; badge does not mark or send messages.
+- Required: full guard before/after, backend SQLite regression, synthetic Chromium lifecycle/read-hook/rename tests, exact release archive and read-only live assets/auth smoke. No real messages or test point operations. Test then deploy under standing authorization, preserve Worker settings/bindings/secrets/cron; no migration.
+- Checks/release pending.

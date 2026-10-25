@@ -166,7 +166,7 @@ export function openMemberChat({ base, tab = 'threads', threadId = '', container
     if (document.hidden || !valid(ticket) || !newest || newest <= readThrough) return;
     const through = newest;
     await client.request(`/threads/${room}/read`, { through });
-    if (valid(ticket)) readThrough = Math.max(readThrough, through);
+    if (valid(ticket)) { readThrough = Math.max(readThrough, through); window.refreshMemberChatUnread?.(); }
   }
   function addMessages(items, prepend = false) {
     const fresh = items.filter(item => !seen.has(item.seq));

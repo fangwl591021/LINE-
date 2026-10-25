@@ -14,3 +14,5 @@
 - 真Chrome最終28/28 PASS：正常6+6完整12步、7800ms移動、初末矩陣完全相等、全程目前food島範圍且x/y雙向轉圈；骰子不refetch一般目錄或自動跨島。明確船抵新島station0、骰面不變；48公池完整、30個food三頁全部可達、公開人物即使不在一般頁亦可操作、空島仍走完。
 - 公開refresh在途卡片／晚回分區／換帳號／503與未公開一般會員清舊摘要等race均PASS；原聲音RMS、取消、BFCache、私訊與商城保持。110次合成API，建聊1／送訊1僅明確合成，外部請求0、pageerror0。
 - 最新main e33436e之隔離Worker bundle已與正式版本c0613bdb完整SHA相同，部署前會整合並保留PR261人脈島命名及首頁未讀數。
+- 已整合main e33436e，保留人脈島命名、首頁未讀模組及GET-only安全限制；JS/CSS升v6、world升v4以避免兩分支快取碰撞，chat維持v15單一模組。
+- 整合後完整guard:after PASS、Node/SQLite相關118/118 PASS、Worker dry-run PASS。首頁未讀Chrome回歸PASS；環島28項Chrome回歸完成前不部署。前後獨立審查無阻擋，部署前正式仍c0613bdb，bindings/排程/相容日期及旗標一致。
