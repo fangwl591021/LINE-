@@ -50,20 +50,20 @@
     $('[data-bi-audio-status]').textContent={locked:'首次擲骰後播放，可隨時關閉',playing:'輕柔音樂播放中',muted:state.sound?'背景音樂已關閉':'聲音已關閉',paused:'聲音已暫停',blocked:'聲音尚未啟動，可再點擲骰重試',unsupported:'此裝置暫不支援聲音'}[state.status]||'';
   }
   function live() {
-    if (initializing && active(generation)) { note('正在連接交流島…'); return false; }
+    if (initializing && active(generation)) { note('正在連接人脈島…'); return false; }
     if (valid(generation)) return true;
-    const message = activeOwner !== owner() ? '登入身分已變更，請重新進入交流島。' : '請重新進入 LINE 登入，再重試。';
+    const message = activeOwner !== owner() ? '登入身分已變更，請重新進入人脈島。' : '請重新進入 LINE 登入，再重試。';
     window.leaveBusinessIsland();
     if (root) { $('.bi-list').replaceChildren(); $('.bi-selection').replaceChildren(); note(message, true); }
     return false;
   }
   function markup() {
-    return `<section class="bi-shell" aria-label="商務交流島">
-      <header class="bi-header"><div class="bi-brand"><span class="bi-brand-mark" aria-hidden="true">島</span><div><h1>商務交流島</h1><p>探索人脈，讓合作從交流開始</p></div></div><div class="bi-toolbar"><button type="button" data-bi-action="exit">返回首頁</button><button type="button" data-bi-action="list" aria-pressed="false">快速清單</button></div></header>
-      <nav class="bi-tabs" aria-label="交流島分區"><button type="button" data-bi-zone="people" aria-pressed="true">人脈廣場</button><button type="button" data-bi-zone="board" aria-pressed="false">合作告示板</button><button type="button" data-bi-zone="home" aria-pressed="false">我的小屋</button></nav>
+    return `<section class="bi-shell" aria-label="人脈島">
+      <header class="bi-header"><div class="bi-brand"><span class="bi-brand-mark" aria-hidden="true">島</span><div><h1>人脈島</h1><p>探索人脈，讓合作從交流開始</p></div></div><div class="bi-toolbar"><button type="button" data-bi-action="exit">返回首頁</button><button type="button" data-bi-action="list" aria-pressed="false">快速清單</button></div></header>
+      <nav class="bi-tabs" aria-label="人脈島分區"><button type="button" data-bi-zone="people" aria-pressed="true">人脈廣場</button><button type="button" data-bi-zone="board" aria-pressed="false">合作告示板</button><button type="button" data-bi-zone="home" aria-pressed="false">我的小屋</button></nav>
       <div class="bi-layout"><section class="bi-explore" aria-label="骰子隨機探索"><div class="bi-dice"></div><div class="bi-explore-copy"><h2>擲骰，搭船探索群島</h2><p class="bi-roll-result" role="status" aria-live="polite">${esc(rollMessage || '跨島搭船慢遊，靠岸認識新夥伴。')}</p><small class="bi-audio-status" data-bi-audio-status></small></div><div class="bi-play-controls"><button type="button" class="bi-roll" data-bi-action="roll">擲骰啟程</button><button type="button" data-bi-action="music" aria-label="開關背景音樂" aria-pressed="true">音樂開</button><button type="button" data-bi-action="sound" aria-label="開關音效" aria-pressed="true">音效開</button></div></section>
-      <div class="bi-map" aria-label="七座商務交流群島，由上到下探索"><div class="bi-stage"></div></div>
-      <section class="bi-panel" aria-label="交流島資訊"><div class="bi-panel-header"><h2 data-bi-title>人脈廣場</h2><p class="bi-caption" data-bi-caption>選擇會員，查看公開名片或開始交流</p></div><div class="bi-selection" aria-live="polite"></div>
+      <div class="bi-map" aria-label="七座人脈群島，由上到下探索"><div class="bi-stage"></div></div>
+      <section class="bi-panel" aria-label="人脈島資訊"><div class="bi-panel-header"><h2 data-bi-title>人脈廣場</h2><p class="bi-caption" data-bi-caption>選擇會員，查看公開名片或開始交流</p></div><div class="bi-selection" aria-live="polite"></div>
       <form class="bi-search"><label for="bi-query">找會員</label><div><input id="bi-query" type="search" maxlength="60" placeholder="姓名、英文名、公司或職稱" autocomplete="off"><button type="submit">搜尋</button></div><label for="bi-industry">業種</label><select id="bi-industry"><option value="">全部業種</option></select><label for="bi-sort">排序</label><select id="bi-sort"><option value="random">骰子隨機探索</option><option value="latest">最新名單</option><option value="match">配對排名</option></select></form>
       <p class="bi-status" data-bi-status role="status" aria-live="polite"></p><button type="button" data-bi-retry data-bi-action="retry" hidden>重新載入</button>
       <div class="bi-list"></div><button type="button" class="bi-more" data-bi-action="more" hidden>載入更多會員</button>
@@ -298,7 +298,7 @@
       const style = document.createElement('link');style.rel='stylesheet';style.href=asset('css/business-island.css?v=4');style.dataset.businessIsland='';
       styleReady = new Promise((resolve,reject) => {
         style.addEventListener('load',resolve,{once:true});
-        style.addEventListener('error',()=>{style.remove();styleReady=null;reject(Error('交流島樣式載入失敗，請重試。'));},{once:true});
+        style.addEventListener('error',()=>{style.remove();styleReady=null;reject(Error('人脈島樣式載入失敗，請重試。'));},{once:true});
       });
       document.head.append(style);
     }
@@ -308,9 +308,9 @@
     $('#bi-query').value=query;$('#bi-sort').value=sort;
     $('#bi-industry').innerHTML = '<option value="">全部業種</option>' + industries.map(value => `<option value="${esc(value)}">${esc(value)}</option>`).join(''); $('#bi-industry').value=industry;
     const ticket = generation;
-    note('正在連接交流島…');
+    note('正在連接人脈島…');
     try {
-      const [module,scene,sound] = await Promise.all([import(new URL('member-chat.js?v=14',scriptUrl).href),import(new URL('business-island-world.mjs?v=2',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),styleReady]);
+      const [module,scene,sound] = await Promise.all([import(new URL('member-chat.js?v=15',scriptUrl).href),import(new URL('business-island-world.mjs?v=3',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),styleReady]);
       if (!active(ticket)) return;
       client=module.createChatClient({base:window.Config?.WORKER_URL||window.WORKER_URL,isCurrent:()=>active(ticket)});
       audio=sound.createIslandAudio({isCurrent:()=>valid(ticket),onState:state=>{if(active(ticket))renderAudioState(state);}});
@@ -324,7 +324,7 @@
       chooseZone(zone);
       if(worldState){world.restore(worldState);if(selected)world.showArrival(selected);}
       if (main) main.scrollTop = scrollTop;
-    } catch (error) { if (active(ticket)) note(error.message||'交流島載入失敗，請重試。',true); }
+    } catch (error) { if (active(ticket)) note(error.message||'人脈島載入失敗，請重試。',true); }
     finally { if (active(ticket)) initializing = false; }
   };
 })();

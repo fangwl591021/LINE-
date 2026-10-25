@@ -211,6 +211,16 @@ async function listThreads(db, actor, params) {
   const items = result.slice(0, PAGE).map(row => ({ id: row.id, name: text(row.name).slice(0, 80), preview: row.body.slice(0, 80), createdAt: row.created_at, unread: row.unread }));
   return { items, next: result.length > PAGE ? String(result[PAGE - 1].seq) : '' };
 }
+async function unreadCount(db, actor) {
+  // Match listThreads visibility across every page without returning any conversation contents.
+  const row = await statement(db, `SELECT COUNT(*) AS unread
+    FROM member_chat_threads t
+    JOIN users u ON CAST(u.row_id AS TEXT)=CASE WHEN t.member_a=?1 THEN t.member_b ELSE t.member_a END
+    JOIN member_chat_messages m ON m.thread_id=t.id
+    WHERE (t.member_a=?1 OR t.member_b=?1) AND m.sender_id<>?1 AND m.read_at IS NULL`, actor.memberId).first();
+  if (!Number.isSafeInteger(row?.unread) || row.unread < 0) throw Error('CHAT_UNREAD_UNAVAILABLE');
+  return { unread: row.unread };
+}
 async function openThread(db, actor, body) {
   keys(body, ['cardHandle']);
   const peer = await cardTarget(db, body.cardHandle);
@@ -261,11 +271,15 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
     const actor = await authenticate(request, db, env, fetcher);
     const path = url.pathname.slice(BASE.length), params = url.searchParams;
+    if (path === '/unread' && request.method !== 'GET') fail('METHOD_NOT_ALLOWED', '未讀數量僅提供查詢', 405);
     const allowedParams = path === '/members' ? ['q', 'industry', 'after', 'sort'] : path === '/coupons' ? ['after'] : path === '/threads' ? ['before'] : /^\/threads\/.+\/coupon$/.test(path) ? ['seq'] : /^\/threads\/.+\/messages$/.test(path) ? ['before', 'after'] : [];
     for (const key of params.keys()) if (!allowedParams.includes(key) || params.getAll(key).length !== 1) fail('INVALID_QUERY', '查詢條件不正確');
     const body = request.method === 'POST' ? await jsonBody(request) : {};
     let data;
-    if (path === '/me' && request.method === 'GET') {
+    if (path === '/unread' && request.method === 'GET') {
+      if (request.body !== null) fail('INVALID_BODY', '未讀數量查詢不接受資料內容');
+      data = await unreadCount(db, actor);
+    } else if (path === '/me' && request.method === 'GET') {
       const pref = await statement(db, 'SELECT accepting FROM member_chat_preferences WHERE member_id=?', actor.memberId).first();
       data = { accepting: pref?.accepting !== 0, notifications: await notificationPreference(db, actor.memberId) };
     } else if (path === '/notifications' && request.method === 'POST') {
