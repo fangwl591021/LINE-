@@ -1,6 +1,13 @@
 {
   "schemaVersion": "change_risk_map_v1",
   "areas": {
+    "island-video-card": {
+      "label": "人脈島影片名片 / 本人文案 / 關鍵字",
+      "keywords": ["人脈島", "影片名片", "人脈島關鍵字", "人脈島標題"],
+      "docs": ["docs/contracts/people-island-onboarding.md", "docs/contracts/line-keywords.md", "docs/contracts/card-resolvers.md"],
+      "checks": ["test/island-video-card.test.mjs", "test/island-video-keyword-route.test.mjs", "test/people-island-flex.test.mjs", "test/island-entry.test.mjs"],
+      "regressionIds": ["ISLAND-VIDEO-01", "ISLAND-VIDEO-02", "ISLAND-VIDEO-03"]
+    },
     "partner-policy": {
       "label": "共創夥伴 / 115.10制度 / 獎金與請款",
       "keywords": ["共創夥伴", "共創制度", "115.10", "對帳", "獎金", "請款"],

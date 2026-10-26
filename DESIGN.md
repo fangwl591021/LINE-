@@ -55,6 +55,7 @@
 - **人脈島推廣影音 Flex**：[people-island-flex.mjs](js/modules/people-island-flex.mjs)目前為單張 `bubble`、`size: 'mega'`，影片 hero、封面與 fallback 均為 `9:16`。加入按鈕及「分享好友」保留，分享連結沿用本人專屬 `ref/net` 流程。
 - 上述 MEGA 是這張推廣卡的目前選擇，不代表個人名片全部改成 MEGA。原加入／註冊／AI 審核資格依 [人脈島契約](docs/contracts/people-island-onboarding.md)，不能靠隱藏或新增按鈕變更權限。
 - **人脈島網頁播放器**：`.pic-video` 使用 `aspect-ratio:9/16`、`object-fit:contain`、寬 `min(100%,360px)`、圓角 `22px`；保留 `playsinline`、控制列與不能播放時的文字入口。
+- **人脈島個人文案**：推廣頁「編輯我的影音名片・標題與說明」與聊天室quick reply共用原影片名片WYSIWYG文字欄位；標題80字、說明800字。預覽仍為9:16，影片／縮圖／固定按鈕唯讀；每人的title／desc獨立，不改既有個人影片版。
 - **本人名片**：保留標準、滿版／海報、正方、影音四種呈現；依 [名片版本資料規格](docs/data/card-ownership-and-versioning.md)及 [resolver 契約](docs/contracts/card-resolvers.md)讀取正確版本，不能互相覆蓋圖片或裁切設定。
 - [mycard.js](js/modules/mycard.js) 的圖片預設為橫式 `20:13`、直式 `400:600`、正方 `1:1`；已儲存的個別裁切／版型須保留。不要把推廣影片 `9:16` 套到靜態名片。
 - 教學播放器使用 `object-fit:contain` 及高度限制；依原始影片比例顯示，不為填滿容器而裁掉字幕或操作按鈕。

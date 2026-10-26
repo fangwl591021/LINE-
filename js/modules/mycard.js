@@ -29,6 +29,9 @@
   var myEcardImgs = { landscape: '', portrait: '', square: '' };
   var myEcardRatios = { landscape: '20:13', portrait: '400:600', square: '1:1' };
   var wysiwygState = { cfg: null, field: '', buttonIndex: -1, recordMode: false };
+  // A text-only campaign session reuses the video canvas and field editor, but
+  // never resolves, selects or saves a member's personal card record.
+  var videoCardTextSession = null;
   var cardBusinessRequest = null;
   var cardBusinessDraft = null;
   var cardLinksEditingV2 = false;
@@ -1408,6 +1411,7 @@
   }
 
   function updatePreview() {
+    if (videoCardTextSession) return;
     var preview = $('#my-ecard-preview-area');
     if (!preview) return;
 
@@ -1641,6 +1645,7 @@
   }
 
   function writeCurrentCardConfig(cfg) {
+    if (videoCardTextSession) return;
     if (!currentCardData || !cfg) return;
     var raw = JSON.stringify(cfg);
     currentCardData.customConfig = raw;
@@ -1957,7 +1962,112 @@
     return modal;
   }
 
+  function videoCardTextCurrent(session) {
+    try { return videoCardTextSession === session && !session.closed && session.isCurrent() === true; }
+    catch (error) { return false; }
+  }
+
+  function videoCardTextStatus(message) {
+    var status = document.getElementById('my-video-card-text-status');
+    if (status) status.textContent = message || '';
+  }
+
+  function closeVideoCardTextSession(session, force) {
+    if (videoCardTextSession !== session || session.closed || (session.busy && !force)) return false;
+    session.closed = true;
+    clearInterval(session.timer);
+    closeMyCardWysiwygEditor();
+    videoCardTextSession = null;
+    wysiwygState = session.previousState;
+    session.modal.classList.add('hidden');
+    var preview = document.getElementById('my-card-wysiwyg-preview');
+    if (preview) preview.innerHTML = session.previousPreview;
+    var heading = session.modal.querySelector('h3');
+    if (heading) heading.textContent = session.previousHeading;
+    if (session.hint) session.hint.textContent = session.previousHint;
+    var panel = document.getElementById('my-card-wysiwyg-editor-body');
+    if (panel) panel.replaceChildren();
+    if (typeof session.onClose === 'function') session.onClose();
+    return true;
+  }
+
+  function renderVideoCardTextCanvas() {
+    var session = videoCardTextSession;
+    if (!session || !videoCardTextCurrent(session)) return;
+    var cfg = session.cfg, preview = document.getElementById('my-card-wysiwyg-preview');
+    if (!preview) return;
+    preview.innerHTML = '<div class="my-wysiwyg-card-shell" data-video-card-text-canvas>' +
+      '<video class="w-full bg-slate-100" style="display:block;width:100%;aspect-ratio:9/16;object-fit:contain" src="' + escapeAttr(cfg.videoUrl) + '" poster="' + escapeAttr(cfg.thumbnailUrl) + '" controls playsinline></video>' +
+      '<div class="p-5 text-center"><button type="button" data-video-card-text-title onclick="window.editMyCardWysiwygField(\'title\')" class="my-wysiwyg-target block w-full rounded-xl px-3 py-3 font-black text-[22px] text-slate-800" style="overflow-wrap:anywhere">' + escapeHTML(cfg.title) + '</button>' +
+      '<button type="button" data-video-card-text-desc onclick="window.editMyCardWysiwygField(\'desc\')" class="my-wysiwyg-target block w-full mt-3 rounded-xl px-3 py-3 text-[15px] leading-relaxed whitespace-pre-wrap text-slate-600" style="white-space:pre-wrap;overflow-wrap:anywhere;text-align:left">' + escapeHTML(cfg.desc) + '</button></div>' +
+      '<div class="px-5 pb-5">' + cfg.buttons.map(function(button) { return '<div class="rounded-xl py-3 mb-2 text-center text-white font-black" style="background:' + escapeAttr(safeCssColor(button.c, '#087657')) + '">' + escapeHTML(button.l || button.label || '') + '</div>'; }).join('') + '</div></div>' +
+      '<p class="text-center text-[12px] text-slate-300">點標題或說明修改；影片、加入與分享流程維持原設定。儲存後才會更新。</p>' +
+      (typeof session.onShare === 'function' ? '<button type="button" data-video-card-text-share onclick="window.shareVideoCardTextEditor(this)" class="block mx-auto mt-3 rounded-xl bg-[#087657] text-white font-black px-5 py-3">分享已儲存的影音名片</button>' : '') +
+      '<p id="my-video-card-text-status" role="status" aria-live="polite" class="text-center text-[13px] text-slate-200 mt-3" style="white-space:pre-wrap"></p>';
+  }
+
+  function openVideoCardTextEditor(options) {
+    options = options || {};
+    if (typeof options.isCurrent !== 'function' || typeof options.onSave !== 'function' || options.isCurrent() !== true) throw new Error('登入或編輯頁面已變更，請重新開啟');
+    if (videoCardTextSession) {
+      if (videoCardTextSession.busy) throw new Error('資料正在儲存，請稍候');
+      closeVideoCardTextSession(videoCardTextSession, true);
+    }
+    var modal = ensureWysiwygModal();
+    if (!modal.classList.contains('hidden')) throw new Error('請先關閉目前的名片編輯器');
+    var heading = modal.querySelector('h3'), hint = modal.firstElementChild && modal.firstElementChild.lastElementChild;
+    var session = {
+      cfg: {title:String(options.title || ''),desc:String(options.desc || ''),videoUrl:String(options.videoUrl || ''),thumbnailUrl:String(options.thumbnailUrl || ''),buttons:(Array.isArray(options.buttons)?options.buttons:[]).map(function(button) { return {l:String(button.l || button.label || ''),c:safeCssColor(button.c || button.color, '#087657')}; })},
+      modal:modal, previousState:wysiwygState, previousPreview:document.getElementById('my-card-wysiwyg-preview').innerHTML,
+      previousHeading:heading && heading.textContent || '',hint:hint,previousHint:hint && hint.textContent || '',
+      isCurrent:options.isCurrent,onSave:options.onSave,onShare:options.onShare,onClose:options.onClose,busy:false,closed:false
+    };
+    videoCardTextSession = session;
+    wysiwygState = {cfg:session.cfg,field:'',buttonIndex:-1,recordMode:false};
+    if (heading) heading.textContent = '人脈島影音名片';
+    if (hint) hint.textContent = '只修改標題與說明，使用原影片名片編輯方式。';
+    modal.classList.remove('hidden');
+    renderVideoCardTextCanvas();
+    session.timer = setInterval(function() { if (!videoCardTextCurrent(session)) closeVideoCardTextSession(session, true); }, 500);
+    return {close:function() { return closeVideoCardTextSession(session, true); }};
+  }
+
+  async function saveVideoCardTextSession(session, button) {
+    if (!videoCardTextCurrent(session) || session.busy) return false;
+    var data = {title:session.cfg.title.trim(),desc:session.cfg.desc.trim()};
+    if (!data.title || data.title.length > 80 || !data.desc || data.desc.length > 800) {
+      videoCardTextStatus('標題請填1～80字，說明請填1～800字。'); return false;
+    }
+    session.busy = true;
+    if (button) button.disabled = true;
+    videoCardTextStatus('儲存中…');
+    try {
+      await session.onSave(data);
+      if (!videoCardTextCurrent(session)) return false;
+      session.busy = false;
+      closeVideoCardTextSession(session, true);
+      return true;
+    } catch (error) {
+      if (videoCardTextCurrent(session)) videoCardTextStatus((error && error.message || '儲存失敗') + ' 草稿仍保留，請核對後再試。');
+      return false;
+    } finally {
+      session.busy = false;
+      if (button && button.isConnected) button.disabled = false;
+    }
+  }
+
+  window.shareVideoCardTextEditor = async function(button) {
+    var session = videoCardTextSession;
+    if (!session || !videoCardTextCurrent(session) || session.busy || typeof session.onShare !== 'function') return false;
+    session.busy = true;
+    if (button) button.disabled = true;
+    try { await session.onShare(); return videoCardTextCurrent(session); }
+    catch (error) { if (videoCardTextCurrent(session)) videoCardTextStatus(error && error.message || '分享暫時無法完成'); return false; }
+    finally { session.busy = false; if (button && button.isConnected) button.disabled = false; }
+  };
+
   function renderMyCardWysiwyg() {
+    if (videoCardTextSession) return renderVideoCardTextCanvas();
     var preview = document.getElementById('my-card-wysiwyg-preview');
     if (!preview || !wysiwygState.cfg) return;
     var cfg = wysiwygState.cfg;
@@ -2111,6 +2221,8 @@
   }
 
   function renderWysiwygEditor(type, index) {
+    var textOnlySession = typeof videoCardTextSession !== 'undefined' ? videoCardTextSession : null;
+    if (textOnlySession && (!videoCardTextCurrent(textOnlySession) || textOnlySession.busy || !['title', 'desc'].includes(type))) return;
     cardBusinessRequest = null; cardBusinessDraft = null;
     var modal = document.getElementById('my-card-wysiwyg-editor-modal');
     var title = document.getElementById('my-card-wysiwyg-editor-title');
@@ -2138,12 +2250,18 @@
       panel.innerHTML =
         '<div class="space-y-3">' +
           '<label class="block text-[13px] font-black text-slate-600">姓名或標題</label>' +
-          '<input id="my-wysiwyg-title-input" value="' + escapeAttr(cfg.title || '') + '" class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[16px] font-black outline-none focus:ring-2 focus:ring-blue-500">' +
+          '<input id="my-wysiwyg-title-input" value="' + escapeAttr(cfg.title || '') + '"' + (textOnlySession ? ' maxlength="80"' : '') + ' class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[16px] font-black outline-none focus:ring-2 focus:ring-blue-500">' +
           '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="w-full py-3 rounded-xl bg-blue-600 text-white font-black active:scale-95">套用</button>' +
         '</div>';
     } else if (type === 'desc') {
       if (title) title.textContent = '修改名片說明';
       var descAlign = cfg.descAlign || 'start';
+      if (textOnlySession) {
+        panel.innerHTML = '<div class="space-y-3"><label class="block text-[13px] font-black text-slate-600">說明文字（最多800字）</label>' +
+          '<textarea id="my-wysiwyg-desc-input" rows="5" maxlength="800" class="w-full rounded-xl border border-blue-300 px-4 py-3 text-[15px] leading-relaxed outline-none focus:ring-2 focus:ring-blue-500">' + escapeHTML(cfg.desc || '') + '</textarea>' +
+          '<button type="button" onclick="window.applyMyCardWysiwygEditor()" class="w-full py-3 rounded-xl bg-blue-600 text-white font-black">套用</button></div>';
+        return;
+      }
       panel.innerHTML =
         '<div class="space-y-3">' +
           '<label class="block text-[13px] font-black text-slate-600">說明文字</label>' +
@@ -2186,6 +2304,7 @@
   }
 
   function closeMyCardWysiwyg() {
+    if (videoCardTextSession) return closeVideoCardTextSession(videoCardTextSession, false);
     var modal = document.getElementById('my-card-wysiwyg-modal');
     if (modal) modal.classList.add('hidden');
     closeMyCardWysiwygEditor();
@@ -2213,6 +2332,14 @@
   }
 
   function applyMyCardWysiwygEditor() {
+    if (videoCardTextSession) {
+      var session = videoCardTextSession;
+      if (!videoCardTextCurrent(session) || session.busy || !['title', 'desc'].includes(wysiwygState.field)) return;
+      var input = document.getElementById('my-wysiwyg-' + wysiwygState.field + '-input');
+      if (input) session.cfg[wysiwygState.field] = String(input.value || '').trim();
+      renderVideoCardTextCanvas();
+      return closeMyCardWysiwygEditor();
+    }
     var cfg = wysiwygState.cfg;
     if (!cfg) return;
     if (wysiwygState.field === 'image') {
@@ -2258,6 +2385,7 @@
   }
 
   function addMyCardWysiwygButton() {
+    if (videoCardTextSession) return;
     var cfg = wysiwygState.cfg;
     if (!cfg) return;
     if (!Array.isArray(cfg.buttons)) cfg.buttons = [];
@@ -2275,6 +2403,7 @@
   }
 
   function removeMyCardWysiwygButton() {
+    if (videoCardTextSession) return;
     var cfg = wysiwygState.cfg;
     var index = wysiwygState.buttonIndex;
     if (!cfg || !Array.isArray(cfg.buttons) || index < 0) return;
@@ -2288,6 +2417,7 @@
   }
 
   window.completeMyCardLinks = function() {
+    if (videoCardTextSession) return;
     if (!cardLinksEditingV2 || !wysiwygState.cfg) return;
     var cfg = wysiwygState.cfg;
     cfg.buttons = window.CardLinks.mergeRecognized(cfg.buttons, currentCardData);
@@ -2296,6 +2426,7 @@
     renderButtons(); updatePreview(); renderMyCardWysiwyg();
   };
   window.moveMyCardWysiwygButton = function(direction) {
+    if (videoCardTextSession) return;
     var cfg = wysiwygState.cfg, index = wysiwygState.buttonIndex, next = index + direction;
     if (!cfg || next < 0 || next >= cfg.buttons.length) return;
     applyMyCardWysiwygEditor();
@@ -2376,6 +2507,7 @@
   }
 
   async function saveMyCardWysiwyg(btn) {
+    if (videoCardTextSession) return saveVideoCardTextSession(videoCardTextSession, btn);
     if (wysiwygState.cfg) {
       writeCurrentCardConfig(wysiwygState.cfg);
       myEcardButtons = normalizeMyCardButtons(wysiwygState.cfg.buttons);
@@ -2705,6 +2837,7 @@
   }
 
   var api = {
+    openVideoCardTextEditor: openVideoCardTextEditor,
     createIslandCardFromProfile: createIslandCardFromProfile,
     prepareIslandCardUpload: prepareIslandCardUpload,
     selectIslandCardUpload: selectIslandCardUpload,
@@ -2760,6 +2893,20 @@
   window.applyMyCardTemplate = applyMyCardTemplate;
   window.showMyQRCode = showMyQRCode;
   window.shareMyCard = shareMyCard;
+  // While the shared canvas is showing an independent campaign, older global
+  // personal-card controls cannot redirect it into a resolver/save/share path.
+  function personalCardAction(action) {
+    return function() { if (videoCardTextSession) return false; return action.apply(this, arguments); };
+  }
+  Object.keys(api).forEach(function(name) {
+    if (name !== 'openVideoCardTextEditor') api[name] = personalCardAction(api[name]);
+  });
+  ['openMyCardEntry','openMyCardDetail','openQuicklyMyCard','openMyCardWysiwyg','generateMyCardBusinessCopy','openCardRecordWysiwyg','openMyCardVideoFlow',
+    'updateMyCardVideoButtonState','setMyCardWysiwygLayout','setMyCardWysiwygAlign','copyMyCardUrlVariant','openMyCardWysiwygImageUpload','changeMyLayout',
+    'focusMyECardSection','addMyV1Button','updateMyV1Button','removeMyV1Button','moveMyV1Button','setMyUploadImage','saveMyECardConfig',
+    'applyMyVideoCardMedia','generateCardFromProfile','applyMyCardTemplate','showMyQRCode','shareMyCard','startMyCardBusinessCopy'].forEach(function(name) {
+    if (typeof window[name] === 'function') window[name] = personalCardAction(window[name]);
+  });
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', scheduleQuicklyMyCardOpen);
   } else {

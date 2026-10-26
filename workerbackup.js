@@ -11,6 +11,8 @@ import { handleCrmCardPhoneLink } from './worker/crm-card-phone-link.mjs';
 import { handleDailyTank } from './worker/daily-tank-challenge.mjs';
 import { handleGameCenter } from './worker/game-center.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from './worker/store-line-keywords.mjs';
+import { consumeIslandVideoKeywords } from './worker/island-video-card.mjs';
+import { personalShareLink } from './worker/island-entry.mjs';
 import { isCheckinMallEvent, supplementCheckinMallCards } from './worker/checkin-mall-card.mjs';
 import { projectCheckinMallMonitor } from './worker/checkin-mall-monitor.mjs';
 import { runCashierRequest, getCashierRequest, getRedemptionProduct, resolveMemberProductQr } from './worker/store-cashier-requests.mjs';
@@ -2574,6 +2576,17 @@ const LineOAChatModule = {
     const remaining = await consumeShopKeywords(events, env, (payload, config) => this.replyLine(payload, config));
     if (remaining.length !== events.length) {
       events = remaining;
+      if (!events.length) {
+        if (ctx && typeof ctx.waitUntil === 'function') { ctx.waitUntil(saveJob); ctx.waitUntil(followPointJob); }
+        else { await saveJob; await followPointJob; }
+        return new Response('OK', { status: 200 });
+      }
+      rawBody = JSON.stringify({ ...body, events });
+      signature = await signRemainingShopEvents(rawBody, this.text(env.LINE_CHANNEL_SECRET));
+    }
+    const islandRemaining = await consumeIslandVideoKeywords(events, env, (payload, config) => this.replyLine(payload, config), {personalShareLink});
+    if (islandRemaining.length !== events.length) {
+      events = islandRemaining;
       if (!events.length) {
         if (ctx && typeof ctx.waitUntil === 'function') { ctx.waitUntil(saveJob); ctx.waitUntil(followPointJob); }
         else { await saveJob; await followPointJob; }

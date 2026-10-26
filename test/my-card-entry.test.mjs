@@ -19,9 +19,9 @@ test('home My Card opens the tabbed card-detail page', () => {
   assert.match(home, /window\.openMyCardSettings = function\(evt\)[\s\S]*return window\.openMyCardEntry\(evt\)/);
   assert.match(index, /id="home-my-card-button" onclick="window\.openMyCardEntry \? window\.openMyCardEntry\(event\)/);
   assert.match(index, /<details id="details-my-ecard"[\s\S]*?<summary onclick="window\.openMyCardEntry\(event\)"/);
-  assert.match(index, /js\/modules\/mycard\.js\?v=8\.96/);
+  assert.match(index, /js\/modules\/mycard\.js\?v=8\.99/);
   assert.match(index, /js\/modules\/home\.js\?v=8\.27/);
-  assert.match(mycard, /await load\(\);\s*await openMyCardDetail\(\);/);
+  assert.match(mycard, /await load\(\);\s*(?:if \(!scopedCurrent\(\)\) return false;\s*)?await openMyCardDetail\(\);/);
 });
 
 test('editable current card can open record-scoped WYSIWYG without becoming the personal card', () => {

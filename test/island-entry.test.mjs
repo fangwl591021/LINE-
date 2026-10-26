@@ -15,6 +15,7 @@ function fixture(t) {
     CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,line_id TEXT DEFAULT '',profile_user_id TEXT DEFAULT '',owner_user_id TEXT DEFAULT '',source_type TEXT,visibility TEXT,pool_eligible INTEGER DEFAULT 0,ai_review_status TEXT,name TEXT,company_name TEXT,title TEXT,updated_at TEXT,english_name TEXT DEFAULT '',archived_at TEXT DEFAULT '',merged_into_row_id TEXT DEFAULT '',custom_config TEXT DEFAULT '{}',tags TEXT DEFAULT '',services TEXT DEFAULT '');`);
   for (const file of ['0046_member_private_chat.sql','0047_member_chat_notifications.sql']) sql.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
   chatExtraSchema(sql);
+  sql.exec(readFileSync(new URL('../migrations/0076_island_video_card_copies.sql',import.meta.url),'utf8'));
   const reads = [], writes = [], requests = [];
   let beforeWrite = null, joined = true, profileStatus = 200, friendshipStatus = 200, friendshipValue;
   function prepare(query, args = []) {
@@ -183,7 +184,8 @@ test('personal share link always uses the verified current sharer instead of an 
     assert.equal((await f.entry('/share-link?' + query, { token: 'b' })).code, 'INVALID_QUERY');
   }
   const result = await f.entry('/share-link', { token: 'b' });
-  assert.equal(result.status, 200); assert.deepEqual(Object.keys(result).sort(), ['entryUrl','status','success']);
+  assert.equal(result.status, 200); assert.deepEqual(Object.keys(result).sort(), ['card','entryUrl','status','success']);
+  assert.deepEqual(Object.keys(result.card).sort(),['desc','revision','title']);assert.equal(result.card.revision,0);
   const url = new URL(result.entryUrl);
   assert.equal(url.origin, 'https://liff.line.me'); assert.equal(url.pathname, '/1660923784-vViMTZ1y');
   assert.deepEqual([...url.searchParams], [['peopleIslandCard', '1'], ['ref', B], ['net', 'admin']]);

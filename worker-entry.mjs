@@ -24,6 +24,7 @@ import { handleRewardUnits } from './worker/reward-unit-directory.mjs';
 import { handleRewardApplications } from './worker/reward-applications.mjs';
 import { handlePartnerContracts } from './worker/partner-bonus-v2.mjs';
 import { handleIslandEntry } from './worker/island-entry.mjs';
+import { handleIslandVideoCard } from './worker/island-video-card.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -400,6 +401,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const islandVideoResponse = await handleIslandVideoCard(request, env);
+    if (islandVideoResponse) return islandVideoResponse;
     const islandEntryResponse = await handleIslandEntry(request, env);
     if (islandEntryResponse) return islandEntryResponse;
     const partnerContractResponse = await handlePartnerContracts(request, env, storeInviteProfileView);
