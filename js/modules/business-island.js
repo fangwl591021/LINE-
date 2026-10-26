@@ -20,6 +20,7 @@
   const findMember = handle => {const published=publicMembers.find(row=>row.handle===handle),ordinary=members.find(row=>row.handle===handle);return published?{...published,match:ordinary?.match??published.match}:ordinary;};
   function updateRollControl(){const button=$('[data-bi-action="roll"]');button.disabled=rolling||publicBusy||!publicReady;}
   function exchangeOpen(){const exchange=document.getElementById('page-exchange-zone');return !!exchange&&!exchange.classList.contains('hidden');}
+  function interactionOpen(){const focused=document.activeElement;return busy||publicBusy||actionBusy||!!dialog?.open||exchangeOpen()||$('.bi-encounter-host')?.hidden===false||!!(!rolling&&root?.contains(focused)&&(focused.matches('input,textarea,select')||focused.isContentEditable));}
   function dismissArrival(){selectionTicket++;selected='';arrivalWanted='';encounters?.dismiss();world?.clearArrival();renderMembers();note();}
   function selfIntroduction(){
     const profile=window.currentUserProfile||{},uid=owner();
@@ -390,7 +391,7 @@
     const ticket = generation;
     note('正在連接人脈島…');
     try {
-      const [module,scene,sound,pulse,greetings] = await Promise.all([import(new URL('member-chat.js?v=16',scriptUrl).href),import(new URL('business-island-world.mjs?v=8',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),import(new URL('business-island-presence.mjs?v=1',scriptUrl).href),import(new URL('business-island-encounters.mjs?v=2',scriptUrl).href),styleReady]);
+      const [module,scene,sound,pulse,greetings] = await Promise.all([import(new URL('member-chat.js?v=16',scriptUrl).href),import(new URL('business-island-world.mjs?v=9',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),import(new URL('business-island-presence.mjs?v=1',scriptUrl).href),import(new URL('business-island-encounters.mjs?v=2',scriptUrl).href),styleReady]);
       if (!active(ticket)) return;
       client=module.createChatClient({base:window.Config?.WORKER_URL||window.WORKER_URL,isCurrent:()=>active(ticket)});
       audio=sound.createIslandAudio({isCurrent:()=>valid(ticket),onState:state=>{if(active(ticket))renderAudioState(state);}});
@@ -403,7 +404,7 @@
       });
       world=scene.createIslandWorld({host:$('.bi-stage'),diceHost:$('.bi-dice'),asset,avatar,profile:window.currentUserProfile,
         isCurrent:()=>valid(ticket),onMember:chooseMember,onChat:chatWithMember,onSail:sailToIsland,
-        isInteractionOpen:()=>actionBusy||!!dialog?.open||exchangeOpen()||$('.bi-encounter-host')?.hidden===false,onArrivalDismiss:dismissArrival,
+        isInteractionOpen:interactionOpen,onArrivalDismiss:dismissArrival,
         onEncounter:event=>encounters?.show(event),
         onCategory:id=>{if(!live()||rolling)return;const row=world.residents(id)[0];if(row)chooseMember(row.handle);else $('.bi-roll-result').textContent='這座島目前沒有公開會員，仍可自由散步。';}
       });
