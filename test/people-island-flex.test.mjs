@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPeopleIslandVideoFlex,peopleIslandCardEntryUrl,PEOPLE_ISLAND_VIDEO,PEOPLE_ISLAND_POSTER} from '../js/modules/people-island-flex.mjs';
 
-test('campaign is one GIGA native 9:16 video bubble with matching poster and an equivalent fallback',()=>{
+test('campaign is one MEGA native 9:16 video bubble with matching poster and an equivalent fallback',()=>{
   const card=buildPeopleIslandVideoFlex();
-  assert.equal(card.type,'flex');assert.equal(card.contents.type,'bubble');assert.equal(card.contents.size,'giga');
+  assert.equal(card.type,'flex');assert.equal(card.contents.type,'bubble');assert.equal(card.contents.size,'mega');
   const hero=card.contents.hero;
-  assert.match(PEOPLE_ISLAND_VIDEO,/\/people-island\/video-card-v2\.mp4$/);
-  assert.match(PEOPLE_ISLAND_POSTER,/\/people-island\/video-card-v2\.jpg$/);
+  assert.match(PEOPLE_ISLAND_VIDEO,/\/people-island\/video-card-v3\.mp4$/);
+  assert.match(PEOPLE_ISLAND_POSTER,/\/people-island\/video-card-v3\.jpg$/);
   assert.equal(hero.type,'video');assert.equal(hero.aspectRatio,'9:16');assert.equal(hero.url,PEOPLE_ISLAND_VIDEO);assert.equal(hero.previewUrl,PEOPLE_ISLAND_POSTER);
   assert.equal(hero.altContent.aspectRatio,'9:16');assert.equal(hero.altContent.url,hero.previewUrl);
   assert.deepEqual(hero.action,hero.altContent.action);assert.deepEqual(card.contents.footer.contents[0].action,hero.action);

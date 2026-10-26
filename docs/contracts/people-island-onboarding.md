@@ -14,7 +14,7 @@
 
 - people-island-card.html 為不需登入的影片預覽；所有實際加入／分享／參觀使用既有 LIFF index 入口 peopleIslandCard=1，保留 ref/net；不在可能超出 LIFF endpoint 範圍的獨立預覽頁初始化 LIFF。
 - peopleIsland=1&islandSetup=register|card 只接既有註冊或本人名片設定；提供返回人脈島重新查核，審核通過後 peopleIsland=1 才開原完整島嶼。
-- Flex 為獨立 giga 單泡泡、hero video 9:16、同比例封面與 altContent、純 URI 按鈕；不包 carousel，不覆寫會員 video_profile。分享只由使用者明確點擊並確認收件者，取消不顯示已傳送。
+- Flex 為獨立 mega 單泡泡、hero video 9:16、同比例封面與 altContent、純 URI 按鈕；不包 carousel，不覆寫會員 video_profile。分享只由使用者明確點擊並確認收件者，取消不顯示已傳送。
 - LINE 官方規格核對： https://developers.line.biz/en/reference/line-login/#get-friendship-status 、https://developers.line.biz/en/docs/messaging-api/create-flex-message-including-video/ 、https://developers.line.biz/en/docs/liff/developing-liff-apps/ 、https://developers.line.biz/en/reference/liff/#share-target-picker 。
 
 ## 審核結果的伺服器權限

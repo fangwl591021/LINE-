@@ -13,7 +13,7 @@ const browser=await chromium.launch({channel:'chrome',headless:true});let cases=
 
 function checkMessage(message,uid){
   assert.equal(message.type,'flex');assert.equal(message.contents.type,'bubble');
-  assert.equal(message.contents.size,'giga','newly shared island cards use the requested GIGA size');
+  assert.equal(message.contents.size,'mega','newly shared island cards use the requested MEGA size');
   assert.equal(message.contents.hero.type,'video');assert.equal(message.contents.hero.aspectRatio,'9:16');
   const footer=message.contents.footer.contents;
   assert.equal(footer.length,2,'native card has join and share actions');
