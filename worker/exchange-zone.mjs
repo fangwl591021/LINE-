@@ -1,4 +1,5 @@
 import { getExchangeZoneLikeState, hydrateExchangeZoneLikes, toggleExchangeZoneLike } from './exchange-zone-likes.mjs';
+import { hydrateMemberAvatars, lineAvatarUrl } from './member-chat-avatar.mjs';
 
 const MAX_POSTS = 50;
 const PUBLISH_COST = 10;
@@ -170,7 +171,7 @@ function publicPost(row, detail = false, actor = null) {
     publishedAt: text(row?.published_at || row?.created_at, 40),
     author: {
       name: text(row?.author_name, 80) || '會員',
-      avatarUrl: avatarUrl(row?.author_avatar_url)
+      avatarUrl: lineAvatarUrl(row?.author_avatar_url)
     },
     cardAvailable,
     isHidden: row?.status === 'hidden',
@@ -196,18 +197,18 @@ function selectColumns() {
 }
 
 async function withAuthor(db, row) {
-  const fallback = { ...row, author_name: '會員' };
+  const fallback = { ...row, author_name: '會員', avatar_line_id: '', author_avatar_url: '' };
   const authorUserId = text(row?.author_user_id, 180);
   if (!authorUserId) return fallback;
   try {
     const author = await db.prepare(`
-      SELECT u.name
+      SELECT u.name, u.line_id AS avatar_line_id
       FROM users u
       WHERE u.line_id = ?1 OR u.row_id = ?1
       ORDER BY CASE WHEN u.line_id = ?1 THEN 0 ELSE 1 END
       LIMIT 1
     `).bind(authorUserId).first();
-    return { ...row, author_name: text(author?.name, 80) || '會員' };
+    return { ...fallback, author_name: text(author?.name, 80) || '會員', avatar_line_id: text(author?.avatar_line_id, 180) };
   } catch (error) {
     console.warn('Exchange zone author hydration skipped:', String(error?.message || error).slice(0, 240));
     return fallback;
@@ -217,7 +218,6 @@ async function withAuthor(db, row) {
 function withoutCard(row) {
   return {
     ...row,
-    author_avatar_url: '',
     card_available: 0,
     card_name: '',
     card_company_name: '',
@@ -259,7 +259,6 @@ async function withPublicCard(db, row) {
     if (!card) return fallback;
     return {
       ...row,
-      author_avatar_url: card.image_url || '',
       card_available: 1,
       card_name: card.name || '',
       card_company_name: card.company_name || '',
@@ -283,6 +282,18 @@ async function withPublicCard(db, row) {
 
 async function hydratedPost(db, row) {
   return withPublicCard(db, await withAuthor(db, row));
+}
+
+async function withAuthorAvatars(env, rows, fetcher) {
+  const authors = [...new Set(rows.map(row => row.avatar_line_id).filter(Boolean))];
+  const pictures = new Map();
+  for (let offset = 0; offset < authors.length; offset += 30) {
+    const page = authors.slice(offset, offset + 30).map(avatar_line_id => ({ avatar_line_id }));
+    // This legacy actor has no verified pictureUrl; never cache an assumed empty own picture.
+    const batch = await hydrateMemberAvatars(env.ACTMASTER_DB, env, {}, page, fetcher);
+    for (const [uid, url] of batch) pictures.set(uid, url);
+  }
+  return rows.map(row => ({ ...row, author_avatar_url: pictures.get(row.avatar_line_id) || '' }));
 }
 
 function isPublishSchemaError(error) {
@@ -423,7 +434,7 @@ export const ExchangeZoneModule = {
     return { success: true, access };
   },
 
-  async list(payload, env, actor) {
+  async list(payload, env, actor, fetcher = fetch) {
     const access = accessFor(actor, env);
     if (!access.allowed) return denied(access);
     if (!env?.ACTMASTER_DB) return { success: false, error: '交流專區資料庫尚未設定' };
@@ -456,7 +467,8 @@ export const ExchangeZoneModule = {
         LIMIT ?1
       `).bind(limit).all();
     }
-    const hydrated = await Promise.all((result?.results || []).map((row) => hydratedPost(env.ACTMASTER_DB, row)));
+    const hydrated = await withAuthorAvatars(env,
+      await Promise.all((result?.results || []).map((row) => hydratedPost(env.ACTMASTER_DB, row))), fetcher);
     let likeHydrated = hydrated;
     try {
       likeHydrated = await hydrateExchangeZoneLikes(env.ACTMASTER_DB, hydrated, actor?.userId);
@@ -467,7 +479,7 @@ export const ExchangeZoneModule = {
     return { success: true, access, posts, count: posts.length };
   },
 
-  async get(payload, env, actor) {
+  async get(payload, env, actor, fetcher = fetch) {
     const access = accessFor(actor, env);
     if (!access.allowed) return denied(access);
     if (!env?.ACTMASTER_DB) return { success: false, error: '交流專區資料庫尚未設定' };
@@ -500,6 +512,7 @@ export const ExchangeZoneModule = {
     }
     let hydrated = row ? await hydratedPost(env.ACTMASTER_DB, row) : null;
     if (hydrated) {
+      [hydrated] = await withAuthorAvatars(env, [hydrated], fetcher);
       try {
         hydrated = { ...hydrated, ...(await getExchangeZoneLikeState(env.ACTMASTER_DB, postHandle, actor?.userId)) };
       } catch (error) {
