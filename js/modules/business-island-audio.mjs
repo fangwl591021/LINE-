@@ -1,7 +1,23 @@
-// Original, quiet Web Audio music and cues. No remote files, media capture or shared game settings.
+// Original, upbeat Web Audio organ music and cues. No remote files, media capture or shared game settings.
 const STORAGE_KEY = 'business-island-audio-v1';
-const MELODY = [60, null, 64, 67, 69, null, 67, 64, 62, null, 64, 67, 72, 69, 67, null];
-const CHORDS = [[48, 55, 64], [45, 52, 60], [43, 50, 59], [48, 55, 62]];
+const MUSIC_VOLUME = .40;
+const STEP_SECONDS = 60 / 126 / 2;
+// Two answering four-bar phrases in C major; each entry is one eighth note.
+const MELODY = [
+  72, 76, 79, null, 76, 79, 81, 79,
+  77, 81, 84, 81, 79, 76, 77, null,
+  79, 83, 86, 83, 81, 79, 77, 74,
+  76, 79, 84, 79, 76, 74, 72, null,
+  79, 81, 84, 81, 79, 76, 74, 76,
+  77, 81, 84, 81, 79, 77, 76, 72,
+  74, 79, 83, 81, 79, 77, 74, 71,
+  76, 79, 84, 76, 74, 72, 67, null
+];
+const CHORDS = [[60, 64, 67], [60, 65, 69], [59, 62, 67], [60, 64, 67]];
+const BASS = [48, 53, 55, 48];
+const LEAD_PARTIALS = [[1, 1], [2, .33], [3, .18], [4, .10]];
+const CHORD_PARTIALS = [[1, 1], [2, .25]];
+const BASS_PARTIALS = [[1, 1], [2, .18]];
 const hz = midi => 440 * 2 ** ((midi - 69) / 12);
 
 export function createIslandAudio({ isCurrent = () => true, onState = () => {} } = {}) {
@@ -56,6 +72,18 @@ export function createIslandAudio({ isCurrent = () => true, onState = () => {} }
     source.connect(envelope); envelope.connect(group === 'music' ? musicBus : soundBus);
     remember(source, [source, envelope], group); source.start(at); source.stop(at + duration + .025);
   }
+  function organ(note, at, duration, volume, partials) {
+    for (const [multiple, level] of partials) {
+      const source = context.createOscillator(), envelope = context.createGain();
+      source.type = 'sine'; source.frequency.setValueAtTime(hz(note) * multiple, at);
+      envelope.gain.setValueAtTime(.0001, at);
+      envelope.gain.linearRampToValueAtTime(volume * level, at + .006);
+      envelope.gain.linearRampToValueAtTime(volume * level * .84, at + duration - .025);
+      envelope.gain.linearRampToValueAtTime(.0001, at + duration);
+      source.connect(envelope); envelope.connect(musicBus);
+      remember(source, [source, envelope], 'music'); source.start(at); source.stop(at + duration + .015);
+    }
+  }
   function water(at, duration = .65, volume = .045) {
     if (!noiseBuffer) {
       noiseBuffer = context.createBuffer(1, Math.ceil(context.sampleRate * .5), context.sampleRate);
@@ -81,16 +109,15 @@ export function createIslandAudio({ isCurrent = () => true, onState = () => {} }
     try {
       const now = context.currentTime;
       if (!nextBeat || nextBeat < now - .2) nextBeat = now + .04;
-      while (nextBeat < now + .8) {
+      while (nextBeat < now + .45) {
         const note = MELODY[beat % MELODY.length];
-        if (note !== null) {
-          tone('music', hz(note), nextBeat, 1.65, .075);
-          tone('music', hz(note) * 2, nextBeat + .003, .8, .009);
-        }
-        if (beat % 8 === 0) for (const note of CHORDS[Math.floor(beat / 8) % CHORDS.length]) tone('music', hz(note), nextBeat, 5.8, .022, 'sine', .9);
-        beat++; nextBeat += .8;
+        const bar = Math.floor(beat / 8) % CHORDS.length, step = beat % 8;
+        if (note !== null) organ(note, nextBeat, MELODY[(beat + 1) % MELODY.length] === null ? .31 : .18, step === 0 || step === 4 ? .055 : .050, LEAD_PARTIALS);
+        if (step % 2 === 0) organ(BASS[bar] + (step % 4 === 2 ? 7 : 0), nextBeat, .20, .036, BASS_PARTIALS);
+        else for (const note of CHORDS[bar]) organ(note, nextBeat, .10, .0125, CHORD_PARTIALS);
+        beat++; nextBeat += STEP_SECONDS;
       }
-      musicTimer = setTimeout(tick, 180);
+      musicTimer = setTimeout(tick, 80);
     } catch { blocked = true; stopAll(); report(); }
   }
   function startMusic() {
@@ -110,7 +137,7 @@ export function createIslandAudio({ isCurrent = () => true, onState = () => {} }
       if (!context || context.state === 'closed') {
         if (!gesture) { report(); return Promise.resolve(false); }
         context = new Audio(); musicBus = context.createGain(); soundBus = context.createGain();
-        musicBus.gain.value = music ? .18 : 0; soundBus.gain.value = sound ? .28 : 0;
+        musicBus.gain.value = music ? MUSIC_VOLUME : 0; soundBus.gain.value = sound ? .28 : 0;
         musicBus.connect(context.destination); soundBus.connect(context.destination);
         const created = context;
         context.onstatechange = () => {
@@ -160,7 +187,7 @@ export function createIslandAudio({ isCurrent = () => true, onState = () => {} }
   }
   function setMusicEnabled(enabled) {
     music = !!enabled; persist();
-    if (musicBus) musicBus.gain.value = music ? .18 : 0;
+    if (musicBus) musicBus.gain.value = music ? MUSIC_VOLUME : 0;
     if (!music) stopMusic(); else if (unlocked && available()) void startContext(false);
     report();
   }
