@@ -25,14 +25,31 @@ async function lineJson(fetcher, path, token, limit) {
   try { return await boundedJson(response, limit); }
   catch { fail('AUTH_UNAVAILABLE', 'LINE 驗證資料暫時無法確認，請稍後重試', 503); }
 }
-async function joinedIdentity(request, fetcher) {
+async function lineIdentity(request, fetcher) {
   const token = request.headers.get('Authorization')?.match(/^Bearer (\S+)$/i)?.[1];
   if (!token || token.length > 4096) fail('AUTH_REQUIRED', '請先使用 LINE 登入', 401);
   const profile = await lineJson(fetcher, '/v2/profile', token, 8192);
   if (!UID.test(profile.userId || '')) fail('AUTH_INVALID', '無法確認 LINE 身分', 401);
-  const friendship = await lineJson(fetcher, '/friendship/v1/status', token, 1024);
+  return { uid: profile.userId, token };
+}
+async function joinedIdentity(request, fetcher) {
+  const verified = await lineIdentity(request, fetcher);
+  const friendship = await lineJson(fetcher, '/friendship/v1/status', verified.token, 1024);
   if (typeof friendship.friendFlag !== 'boolean') fail('AUTH_UNAVAILABLE', '暫時無法確認點數通加入狀態，請稍後重試', 503);
-  return { uid: profile.userId, joined: friendship.friendFlag };
+  return { uid: verified.uid, joined: friendship.friendFlag };
+}
+async function personalShareLink(db, uid) {
+  const actor = await resolveIslandMember(db, uid), ownId = actor?.user.line_id || uid;
+  let network = 'admin';
+  if (actor) {
+    const scope = await statement(db, 'SELECT role,network_id,referrer_id FROM users WHERE row_id=? AND line_id=? LIMIT 1', actor.memberId, ownId).first();
+    if (!scope) fail('SHARE_CONTEXT_CHANGED', '會員資料剛更新，請重新產生分享卡片', 409);
+    const role = text(scope.role).toLowerCase();
+    network = role === 'admin' ? 'admin' : ['store', 'tenant'].includes(role) ? ownId : text(scope.network_id || scope.referrer_id) || 'admin';
+  }
+  const entry = new URL('https://liff.line.me/1660923784-vViMTZ1y');
+  entry.searchParams.set('peopleIslandCard', '1'); entry.searchParams.set('ref', ownId); entry.searchParams.set('net', network);
+  return { success: true, entryUrl: entry.href };
 }
 const publicState = (stage, reviewStatus = '') => ({ success: true, stage, canVisit: stage !== 'join', canInteract: stage === 'ready', reviewStatus });
 function anchorHandle(after) {
@@ -51,8 +68,14 @@ export async function handleIslandEntry(request, env, fetcher = fetch) {
   try {
     if (request.method !== 'GET') fail('METHOD_NOT_ALLOWED', '參觀入口只提供讀取', 405);
     const path = url.pathname.slice(BASE.length);
-    if (!['/status', '/members'].includes(path)) fail('NOT_FOUND', '找不到人脈島入口', 404);
+    if (!['/status', '/members', '/share-link'].includes(path)) fail('NOT_FOUND', '找不到人脈島入口', 404);
     if ([...url.searchParams.keys()].some(key => path !== '/members' || key !== 'after' || url.searchParams.getAll(key).length !== 1)) fail('INVALID_QUERY', '參觀查詢條件不正確');
+    if (path === '/share-link') {
+      const verified = await lineIdentity(request, fetcher);
+      const db = env.ACTMASTER_DB?.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
+      if (!db) throw Error('ISLAND_DB_UNAVAILABLE');
+      return reply(await personalShareLink(db, verified.uid));
+    }
     const verified = await joinedIdentity(request, fetcher);
     if (!verified.joined) {
       if (path === '/members') fail('FOLLOW_REQUIRED', '請先加入點數通官方帳號，再進入人脈島參觀', 403);

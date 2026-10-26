@@ -20,6 +20,7 @@ try{
           return route.fulfill({json:{success:true,stage:await page.evaluate(()=>window.testStage)}});
         }
         if(path.endsWith('/members'))return route.fulfill({json:{success:true,items:[{handle:url.search?'peer-two':'peer-one',name:url.search?'合成會員二':'合成會員一',company:'合成品牌設計',title:'設計師',avatarUrl:'https://images.test/avatar.svg',email:'must-not-render@example.test',website:'https://must-not-render.test'}],next:url.search?'':'next-cursor'}});
+        if(path.endsWith('/share-link'))return route.fulfill({json:{success:true,entryUrl:'https://liff.line.me/1660923784-vViMTZ1y?peopleIslandCard=1&ref=U'+('b'.repeat(32))+'&net=synthetic-network'}});
         throw Error('unexpected entry request');
       }
       if(path==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"><main id="main"><div id="page-business-island"></div></main></div></body></html>'});

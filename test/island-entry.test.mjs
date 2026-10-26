@@ -10,7 +10,7 @@ const uid = n => 'U' + n.toString(16).padStart(32, '0');
 const A = uid(100), B = uid(101), OLD = uid(99), NEW = uid(98), GUEST = uid(97);
 function fixture(t) {
   const sql = new DatabaseSync(':memory:'); t.after(() => sql.close());
-  sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,name TEXT,role TEXT,phone TEXT,member_number TEXT DEFAULT '');
+  sql.exec(`CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT,name TEXT,role TEXT,phone TEXT,member_number TEXT DEFAULT '',network_id TEXT DEFAULT '',referrer_id TEXT DEFAULT '');
     CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);
     CREATE TABLE card_contacts(row_id TEXT PRIMARY KEY,line_id TEXT DEFAULT '',profile_user_id TEXT DEFAULT '',owner_user_id TEXT DEFAULT '',source_type TEXT,visibility TEXT,pool_eligible INTEGER DEFAULT 0,ai_review_status TEXT,name TEXT,company_name TEXT,title TEXT,updated_at TEXT,english_name TEXT DEFAULT '',archived_at TEXT DEFAULT '',merged_into_row_id TEXT DEFAULT '',custom_config TEXT DEFAULT '{}',tags TEXT DEFAULT '',services TEXT DEFAULT '');`);
   for (const file of ['0046_member_private_chat.sql','0047_member_chat_notifications.sql']) sql.exec(readFileSync(new URL('../migrations/' + file, import.meta.url), 'utf8'));
@@ -175,4 +175,61 @@ test('unreviewed social publish/edit/like is blocked before side effects but own
   assert.equal(archived.archived, true);
   assert.equal(f.sql.prepare('SELECT count(*) AS n FROM exchange_zone_post_likes').get().n, 0);
   assert.ok(f.writes.at(-1).includes("SET status = 'archived'"));
+});
+
+test('personal share link always uses the verified current sharer instead of an incoming ref or net', async t => {
+  const f = fixture(t), before = f.snapshot();
+  for (const query of ['ref=' + A, 'net=incoming-a', 'userId=' + A, 'ref=' + A + '&net=incoming-a', 'ref=&ref=']) {
+    assert.equal((await f.entry('/share-link?' + query, { token: 'b' })).code, 'INVALID_QUERY');
+  }
+  const result = await f.entry('/share-link', { token: 'b' });
+  assert.equal(result.status, 200); assert.deepEqual(Object.keys(result).sort(), ['entryUrl','status','success']);
+  const url = new URL(result.entryUrl);
+  assert.equal(url.origin, 'https://liff.line.me'); assert.equal(url.pathname, '/1660923784-vViMTZ1y');
+  assert.deepEqual([...url.searchParams], [['peopleIslandCard', '1'], ['ref', B], ['net', 'admin']]);
+  assert.equal(result.entryUrl.includes(A), false);
+  assert.equal(f.snapshot(), before); assert.equal(f.writes.length, 0);
+  assert.deepEqual(f.requests.map(request => request.url), ['https://api.line.me/v2/profile']);
+});
+
+test('personal share canonical aliases and own stored scope follow admin/store/tenant/member rules', async t => {
+  const f = fixture(t);
+  f.sql.exec(`INSERT INTO user_identity_links VALUES('${OLD}','${A}','active')`);
+  for (const [role, network, referrer, expected] of [
+    ['user', 'own-network', 'old-referrer', 'own-network'], ['user', '', 'own-referrer', 'own-referrer'], ['user', '', '', 'admin'],
+    ['admin', 'other-network', 'old-referrer', 'admin'], ['store', 'other-network', 'old-referrer', A], ['tenant', 'other-network', 'old-referrer', A]
+  ]) {
+    f.sql.prepare("UPDATE users SET role=?,network_id=?,referrer_id=? WHERE row_id='a'").run(role, network, referrer);
+    const result = await f.entry('/share-link', { token: 'old' }), url = new URL(result.entryUrl);
+    assert.equal(url.searchParams.get('ref'), A); assert.equal(url.searchParams.get('net'), expected);
+    assert.equal(result.entryUrl.includes(OLD), false);
+  }
+  f.sql.prepare('INSERT INTO users(row_id,line_id,name,role,network_id) VALUES(?,?,?,?,?)').run('old-row', OLD, '舊會員', 'store', 'old-network');
+  f.sql.exec("UPDATE users SET role='user',network_id='canonical-network' WHERE row_id='a'");
+  const migrated = new URL((await f.entry('/share-link', { token: 'old' })).entryUrl);
+  assert.equal(migrated.searchParams.get('ref'), A); assert.equal(migrated.searchParams.get('net'), 'canonical-network');
+  assert.equal(f.writes.length, 0);
+});
+
+test('verified unregistered or non-friend sharers can share without acquiring viewing or interaction authority', async t => {
+  const f = fixture(t), before = f.snapshot();
+  f.setJoined(false); f.setFriendshipStatus(503);
+  const guest = await f.entry('/share-link', { token: 'guest' }), user = await f.entry('/share-link');
+  assert.equal(guest.status, 200); assert.equal(new URL(guest.entryUrl).searchParams.get('ref'), GUEST); assert.equal(new URL(guest.entryUrl).searchParams.get('net'), 'admin');
+  assert.equal(user.status, 200); assert.equal(new URL(user.entryUrl).searchParams.get('ref'), A);
+  assert.ok(f.requests.every(request => request.url === 'https://api.line.me/v2/profile'));
+  f.setFriendshipStatus(200);
+  assert.equal((await f.entry('/status')).stage, 'join'); assert.equal((await f.entry('/members')).code, 'FOLLOW_REQUIRED');
+  assert.equal(f.snapshot(), before); assert.equal(f.writes.length, 0);
+});
+
+test('personal share rejects invalid identity, method, query, ambiguous aliases and auth outages without writes', async t => {
+  const f = fixture(t);
+  for (const token of ['', 'forged']) assert.equal((await f.entry('/share-link', { token })).status, 401);
+  for (const method of ['POST','PUT','DELETE']) assert.equal((await f.entry('/share-link', { method, data: { ref: B, net: B } })).status, 405);
+  for (const query of ['after=x', 'point_friend=1', 'x=1']) assert.equal((await f.entry('/share-link?' + query)).status, 400);
+  f.setProfileStatus(503); assert.equal((await f.entry('/share-link')).status, 503); f.setProfileStatus(200);
+  f.sql.exec(`INSERT INTO user_identity_links VALUES('${OLD}','${A}','active'),('${OLD}','${B}','active')`);
+  assert.equal((await f.entry('/share-link', { token: 'old' })).code, 'IDENTITY_CONFLICT');
+  assert.equal(f.writes.length, 0);
 });
