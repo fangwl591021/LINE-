@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { ExchangeZoneModule } from '../worker/exchange-zone.mjs';
+import { approvedInteractionDb } from './island-approved-fixture.mjs';
 
 function fakeEnv(options = {}) {
   const calls = [];
@@ -54,9 +55,9 @@ function fakeEnv(options = {}) {
   };
 }
 
-const admin = { userId: 'U_OWNER', role: 'admin' };
-const otherAdmin = { userId: 'U_OTHER_ADMIN', role: 'admin' };
-const member = { userId: 'U_MEMBER', role: 'user' };
+const admin = { userId: 'Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', role: 'admin' };
+const otherAdmin = { userId: 'Ucccccccccccccccccccccccccccccccc', role: 'admin' };
+const member = { userId: 'Ubbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', role: 'user' };
 
 assert.deepEqual(ExchangeZoneModule.access({}, {}, member).access, {
   mode: 'private',
@@ -69,16 +70,16 @@ assert.deepEqual(ExchangeZoneModule.access({}, {}, member).access, {
 });
 assert.equal(ExchangeZoneModule.access({}, {
   EXCHANGE_ZONE_ACCESS_MODE: 'private',
-  EXCHANGE_ZONE_PRIVATE_TESTER_IDS: 'U_OWNER'
+  EXCHANGE_ZONE_PRIVATE_TESTER_IDS: 'Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 }, admin).access.allowed, true);
 assert.equal(ExchangeZoneModule.access({}, {
   EXCHANGE_ZONE_ACCESS_MODE: 'private',
-  EXCHANGE_ZONE_PRIVATE_TESTER_IDS: 'U_OWNER'
+  EXCHANGE_ZONE_PRIVATE_TESTER_IDS: 'Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 }, otherAdmin).access.allowed, false);
 assert.equal(ExchangeZoneModule.access({}, { EXCHANGE_ZONE_ACCESS_MODE: 'open' }, member).access.allowed, true);
 assert.equal(ExchangeZoneModule.access({}, {
   EXCHANGE_ZONE_ACCESS_MODE: 'pilot',
-  EXCHANGE_ZONE_PILOT_USER_IDS: 'U_OTHER,U_MEMBER'
+  EXCHANGE_ZONE_PILOT_USER_IDS: 'U_OTHER,Ubbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 }, member).access.allowed, true);
 
 {
@@ -122,7 +123,7 @@ const row = {
 };
 
 {
-  const env = fakeEnv({ mode: 'private', privateTesterIds: 'U_OWNER', rows: [row] });
+  const env = fakeEnv({ mode: 'private', privateTesterIds: 'Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', rows: [row] });
   const result = await ExchangeZoneModule.list({ limit: 999 }, env, admin);
   assert.equal(result.success, true);
   assert.equal(result.count, 1);
@@ -174,7 +175,7 @@ const row = {
 
 function updateEnv(owned = true) {
   const calls = [];
-  return {
+  const env = {
     calls,
     EXCHANGE_ZONE_ACCESS_MODE: 'open',
     ACTMASTER_DB: {
@@ -196,6 +197,8 @@ function updateEnv(owned = true) {
       }
     }
   };
+  env.ACTMASTER_DB = approvedInteractionDb(env.ACTMASTER_DB);
+  return env;
 }
 
 {
@@ -217,7 +220,7 @@ function updateEnv(owned = true) {
   assert.doesNotMatch(env.calls[1].sql, /expires_at\s*=/);
   assert.doesNotMatch(env.calls[1].sql, /published_at\s*=/);
   assert.doesNotMatch(env.calls[1].sql, /point_cost\s*=/);
-  assert.deepEqual(env.calls[1].bindings.slice(-2), ['U_MEMBER', 'post_opaque_demo']);
+  assert.deepEqual(env.calls[1].bindings.slice(-2), ['Ubbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'post_opaque_demo']);
 }
 
 {
@@ -242,7 +245,7 @@ function updateEnv(owned = true) {
 }
 
 {
-  const env = fakeEnv({ mode: 'private', privateTesterIds: 'U_OWNER', rows: [row], failExpires: true });
+  const env = fakeEnv({ mode: 'private', privateTesterIds: 'Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', rows: [row], failExpires: true });
   const result = await ExchangeZoneModule.list({ limit: 10 }, env, admin);
   assert.equal(result.success, true);
   assert.equal(result.count, 1);
@@ -328,8 +331,8 @@ function publishEnv(options = {}) {
   };
   return {
     EXCHANGE_ZONE_ACCESS_MODE: 'private',
-    EXCHANGE_ZONE_PRIVATE_TESTER_IDS: 'U_OWNER',
-    ACTMASTER_DB: db,
+    EXCHANGE_ZONE_PRIVATE_TESTER_IDS: 'Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    ACTMASTER_DB: approvedInteractionDb(db),
     operations,
     posts,
     calls

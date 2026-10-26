@@ -2872,6 +2872,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
+    if (initialUrlParams.get('peopleIslandCard') === '1') {
+      const island = await import('./modules/people-island-card.js?v=1');
+      await island.mountPeopleIslandCard({ params: initialUrlParams, embedded: true });
+      document.getElementById('loading-screen')?.classList.add('hidden');
+      return;
+    }
+
     const earlyLineoaKeywordShareId = initialUrlParams.get('lineoaKeywordShare') || initialUrlParams.get('keywordShareRuleId') || '';
     if (earlyLineoaKeywordShareId) {
       await handleLineOAKeywordShareEntry(earlyLineoaKeywordShareId);
@@ -3055,6 +3062,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.LoginBootstrap?.stage('member');
     const activityEntryCurrent = directActivity ? window.ActivityEntry.sessionGuard(activityEntryRequest) : null;
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
+    if (urlParams.get('peopleIsland') === '1') {
+      const island = await import('./modules/people-island-card.js?v=1');
+      if (await island.routePeopleIslandSetup({ params: urlParams, checkRes, refId, netId })) return;
+    }
     if (directActivity) {
       if (!activityEntryCurrent()) return;
       const confirmed = checkRes && !checkRes.error && checkRes.success !== false &&

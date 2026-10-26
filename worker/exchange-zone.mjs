@@ -1,5 +1,6 @@
 import { getExchangeZoneLikeState, hydrateExchangeZoneLikes, toggleExchangeZoneLike } from './exchange-zone-likes.mjs';
 import { hydrateMemberAvatars, lineAvatarUrl } from './member-chat-avatar.mjs';
+import { exchangeInteractionError } from './island-interaction-access.mjs';
 
 const MAX_POSTS = 50;
 const PUBLISH_COST = 10;
@@ -552,6 +553,10 @@ export const ExchangeZoneModule = {
     }
 
     if (payload?.toggleLike === true) {
+      if (payload.archivePost !== true) {
+        const interactionError = await exchangeInteractionError(env.ACTMASTER_DB, actor?.userId);
+        if (interactionError) return interactionError;
+      }
       return toggleExchangeZoneLike(env.ACTMASTER_DB, payload, actor);
     }
 
@@ -569,6 +574,8 @@ export const ExchangeZoneModule = {
       LIMIT 1
     `).bind(postHandle, authorUserId).first();
     if (!owned) return { success: false, error: '找不到可編輯的交流內容', code: 'EXCHANGE_UPDATE_NOT_ALLOWED' };
+    const interactionError = await exchangeInteractionError(env.ACTMASTER_DB, actor?.userId);
+    if (interactionError) return interactionError;
 
     const review = await reviewPost(input, reviewer);
     if (!review.success) return review;
@@ -619,6 +626,8 @@ export const ExchangeZoneModule = {
       throw error;
     }
     if (prior) return duplicateResult(prior, access);
+    const interactionError = await exchangeInteractionError(env.ACTMASTER_DB, actor?.userId);
+    if (interactionError) return interactionError;
 
     const review = await reviewPost(input, reviewer);
     if (!review.success) return review;

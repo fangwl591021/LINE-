@@ -26,6 +26,7 @@ import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
 import { enrichCardHarvestMatches } from './worker/card-harvest-match.mjs';
 import { restoreCollectionHistory, scoreNewCollectionMatches } from './worker/collection-match-history.mjs';
 import { prepareCardSafetyReview, cardSafetyReviewPrompt, normalizeCardSafetyReview, cardSafetyReviewError } from './worker/card-safety-review.mjs';
+import { applyVerifiedCardReview, reviewCardWithReceipt } from './worker/card-review-receipt.mjs';
 
 /**
  * ACTMASTER v6.0 - 企業安全防護版 (Edge Auth & Security)
@@ -11357,6 +11358,14 @@ const D1WriteModule = {
     card.visibility = access.visibility;
     card.pool_eligible = access.poolEligible ? 1 : 0;
     card.ai_review_status = access.aiReviewStatus;
+    if (card.source_type === 'self_profile') {
+      const verifiedReview = await applyVerifiedCardReview(env, card, existing, payload[SecurityModule.aiAdvanceVerifiedActor]);
+      if (verifiedReview.rejectApproval) return { success: false, code: 'AI_REVIEW_RECEIPT_REQUIRED', error: 'AI 體檢結果尚未經伺服器驗證，請重新執行體檢後再儲存；本次未開放交流。' };
+      card.ai_review_status = verifiedReview.status;
+      card.custom_config = verifiedReview.customConfig;
+      if (verifiedReview.status !== 'passed') card.pool_eligible = 0;
+      else if (verifiedReview.preserved && access.visibility === 'public' && Number(existing?.pool_eligible) === 1) card.pool_eligible = 1;
+    }
     if (card.source_type === 'private_import' && !this.text(card.scanner_user_id)) {
       card.scanner_user_id = this.text(payload.scannerUserId || payload.scannerId || sourceData.scannerUserId || sourceData.scannerId || card.creator_id || awardUserId);
     }
@@ -17715,7 +17724,7 @@ async function dispatchAction(action, payload, request, env) {
     case 'recognizeCardWithGPT4o': return await AIModule.recognize(payload, env);
     case 'matchmakeContacts':      return await AIModule.matchmaking(payload, env);
     case 'calculateFateTags':      return await AIModule.fateTags(payload, env);
-    case 'reviewCardSafety':       return await AIModule.reviewCardSafety(payload, env);
+    case 'reviewCardSafety':       return await reviewCardWithReceipt(payload, env, actor, (...args) => AIModule.reviewCardSafety(...args));
     case 'generateCardCopy':       return await AIModule.generateCardCopy(payload, env, actor);
     case 'getSubsiteHome':         return await SubsiteHomeModule.get(payload || {}, env);
     case 'getMotherRegistrationUrl': return await PointModule.getMotherRegistrationUrl(payload || {}, env);

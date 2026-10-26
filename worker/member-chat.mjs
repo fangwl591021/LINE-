@@ -8,9 +8,11 @@ import { directoryScoresSql, registerDirectoryMatching, directoryMatchState, run
 import {isMemberNumber} from './member-number.mjs';
 import { hydrateMemberAvatars } from './member-chat-avatar.mjs';
 import { readIslandPresence, recordIslandPresence } from './member-chat-presence.mjs';
+import { IslandAccessError, requireIslandInteraction, approvedIslandCardSql } from './island-interaction-access.mjs';
 const BASE = '/v1/member-chat';
 // Shared verified membership only; AI navigation does not inherit private-chat feature/card gates.
 export { identity as resolveMemberIdentity, jsonBody as boundedJson };
+export { publicDirectorySql as islandVisitorDirectorySql, directoryArgs as islandVisitorDirectoryArgs };
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const PAGE = 30;
@@ -285,6 +287,7 @@ async function unreadCount(db, actor) {
 }
 async function openThread(db, actor, body) {
   keys(body, ['cardHandle']);
+  await requireIslandInteraction(db, actor);
   const peer = await cardTarget(db, body.cardHandle);
   if (peer.memberId === actor.memberId) fail('SELF_CHAT', '不能傳訊給自己');
   const state = await contactState(db, actor.memberId, peer.memberId);
@@ -293,13 +296,15 @@ async function openThread(db, actor, body) {
   if (state.blocked || (!state.accepting && !existing)) fail('CONTACT_CLOSED', '對方目前未開放聯絡', 403);
   if (!existing) await run(db, `INSERT INTO member_chat_threads(id,member_a,member_b)
     SELECT ?3,?4,?5 WHERE ${NO_BLOCK} AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=?2),1)=1
-    ON CONFLICT(member_a,member_b) DO NOTHING`, actor.memberId, peer.memberId, crypto.randomUUID(), a, b);
+    AND ${approvedIslandCardSql('?6')}
+    ON CONFLICT(member_a,member_b) DO NOTHING`, actor.memberId, peer.memberId, crypto.randomUUID(), a, b, JSON.stringify(actor.ids));
   const row = await statement(db, 'SELECT id FROM member_chat_threads WHERE member_a=? AND member_b=?', a, b).first();
   if (!row) fail('CONTACT_CLOSED', '對方目前未開放聯絡', 403);
   return { id: row.id, peer: await peerInfo(db, peer.memberId) };
 }
 async function send(db, actor, room, body) {
   keys(body, ['body', 'clientId', 'couponHandle']);
+  await requireIslandInteraction(db, actor);
   const coupon = body.couponHandle ?? '';
   if (typeof coupon !== 'string' || (coupon && !/^exc_[0-9a-f-]{36}$/i.test(coupon))) fail('INVALID_COUPON', '請重新選擇優惠券');
   if (typeof body.body !== 'string' || !body.body.trim() || [...body.body].length > 2000 || !UUID.test(body.clientId || '')) fail('INVALID_MESSAGE', '請輸入 1–2000 字的文字訊息');
@@ -314,11 +319,12 @@ async function send(db, actor, room, body) {
   // One conditional write enforces block, first-contact preference and rate limits atomically.
   await run(db, `INSERT INTO member_chat_messages(thread_id,sender_id,client_id,body,coupon_handle)
     SELECT ?3,?1,?4,?5,?6 WHERE ${NO_BLOCK}
+    AND ${approvedIslandCardSql('?8')}
     AND (?6='' OR ${SENDABLE_COUPON})
     AND (COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=?2),1)=1 OR EXISTS(SELECT 1 FROM member_chat_messages WHERE thread_id=?3))
     AND (SELECT count(*) FROM member_chat_messages WHERE sender_id=?1 AND created_at>=datetime('now','-1 minute'))<20
     AND (SELECT count(*) FROM member_chat_messages WHERE sender_id=?1 AND created_at>=datetime('now','-1 day'))<500
-    ON CONFLICT(sender_id,client_id) DO NOTHING`, actor.memberId, room.peer, room.id, body.clientId, content, coupon, actor.uid);
+    ON CONFLICT(sender_id,client_id) DO NOTHING`, actor.memberId, room.peer, room.id, body.clientId, content, coupon, actor.uid, JSON.stringify(actor.ids));
   const saved = await statement(db, 'SELECT * FROM member_chat_messages WHERE sender_id=? AND client_id=?', actor.memberId, body.clientId).first();
   if (!saved) fail('SEND_LIMITED', '目前無法傳送：請確認聯絡狀態、優惠券是否仍有效，或稍後再試', 429);
   if (saved.thread_id !== room.id || saved.body !== content || (saved.coupon_handle || '') !== coupon) fail('RETRY_CONFLICT', '這次重送的內容不一致', 409);
@@ -341,6 +347,7 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     if (path === '/presence') {
       if (request.method === 'POST') {
         keys(body, []);
+        await requireIslandInteraction(db, actor);
         const presence = await recordIslandPresence(env, actor);
         if (!presence.available) fail('PRESENCE_UNAVAILABLE', '島上狀態暫時無法更新，仍可繼續交流', 503);
         data = { heartbeat: true, retryAfterSeconds: presence.retryAfterSeconds };
@@ -450,6 +457,7 @@ export async function handleMemberChat(request, env, fetcher = fetch) {
     }
     return reply({ success: true, ...data });
   } catch (error) {
+    if (error instanceof IslandAccessError) return reply({ success: false, code: error.code, error: error.message }, error.status);
     if (error instanceof ChatError) return reply({ success: false, code: error.code, error: error.message }, error.status);
     // Do not log tokens, recipient IDs, message bodies or raw SQL errors.
     console.error('member_chat_unavailable');

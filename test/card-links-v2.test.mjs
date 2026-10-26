@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DatabaseSync } from 'node:sqlite';
 import { CardLinks as links, cardLinksEnabled, cardLinksConfigResponse } from '../worker/card-links.mjs';
+import { applyVerifiedCardReview } from '../worker/card-review-receipt.mjs';
 const read = file => readFileSync(new URL('../' + file, import.meta.url), 'utf8');
 const buttons = count => Array.from({length:count}, (_,i) => ({l:'連結 '+i,u:'https://example.com/'+i,c:'#06C755'}));
 const legacy = {title:'舊版',desc:'舊版說明',buttons:buttons(2),imgUrl:'https://example.com/image.jpg',unknown:{keep:true}};
@@ -100,10 +101,10 @@ function writerFixture() {
   const extra=['source_event_id','claimed_from_row_id','claimed_by_uid','claimed_at','merged_into_row_id','archived_at'];
   const sql=new DatabaseSync(':memory:');
   sql.exec('CREATE TABLE card_contacts ('+[...columns,...extra].map(c=>c+' TEXT'+(c==='row_id'?' PRIMARY KEY':'')).join(',')+')');
-  sql.prepare('INSERT INTO card_contacts(row_id,line_id,custom_config,source_type) VALUES(?,?,?,?)').run('card','owner',JSON.stringify(legacy),'self_profile');
+  sql.prepare('INSERT INTO card_contacts(row_id,line_id,custom_config,source_type,ai_review_status) VALUES(?,?,?,?,?)').run('card','owner',JSON.stringify(legacy),'self_profile','passed');
   const env={ACTMASTER_DB:{prepare(query){const build=args=>({bind:(...values)=>build(values),first:async()=>sql.prepare(query).get(...args),run:async()=>({meta:{changes:Number(sql.prepare(query).run(...args).changes)}})});return build([]);}}};
   const effects=[];
-  const context=vm.createContext({CardLinks:links,cardLinksEnabled:async()=>true,console,
+  const context=vm.createContext({CardLinks:links,cardLinksEnabled:async()=>true,console,applyVerifiedCardReview,SecurityModule:{aiAdvanceVerifiedActor:Symbol('fixture-verified-actor')},
     D1ReadModule:{ensureCardAccessColumns:async()=>{},first:async(_env,q,args)=>sql.prepare(q).get(...args),cardRow:row=>({...row,customConfig:row.custom_config}),inferCrmType:()=>'',inferCrmNextAction:()=>'',inferCrmSuggestion:()=>'',inferCardAccess:()=>({ownerUserId:'owner',profileUserId:'owner',sourceType:'self_profile',visibility:'private',poolEligible:false,aiReviewStatus:'passed',isSelfProfile:true})},
     CardFateTagAnalysisModule:{enqueueCard:async()=>{}},CardUploaderMatchModule:{enqueueCard:async()=>{}}
   });
