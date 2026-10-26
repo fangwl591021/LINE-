@@ -1,8 +1,10 @@
 # Deployment Runbook
 
-Use this before changing production Worker or GitHub Pages files.
+Historical deployment notes retained for reference. For current functional changes use [the change protocol](release/feature-change-protocol.md); for publishing use [the release verification skill](../.agents/skills/line-release-verification/SKILL.md).
 
-## Current production baseline
+The baseline, commands and checks below record an earlier setup. Verify the current Git commit, live Worker version and `wrangler.toml` entry before any deployment or rollback; do not treat this historical tag as today's rollback target.
+
+## Historical production baseline (2026-05-30)
 
 Tag:
 
@@ -16,7 +18,7 @@ Commit:
 c1ac80e Add third party point webhook
 ```
 
-This tag is the rollback target for the current known baseline before the stability foundation branch is merged.
+This tag records the baseline before the stability foundation branch was merged.
 
 ## Branch rule
 
