@@ -248,7 +248,7 @@ function npcLandPath(category,start,end){
   return [{...start},...path,{...end}];
 }
 
-export function createIslandWorld({host,asset,avatar,onMember,onChat,onCategory,onSail,onEncounter,isCurrent=()=>true,diceHost,profile}={}){
+export function createIslandWorld({host,asset,avatar,onMember,onChat,onCategory,onSail,onEncounter,onArrivalDismiss,isInteractionOpen=()=>false,isCurrent=()=>true,diceHost,profile}={}){
 
 if(!host?.ownerDocument||typeof asset!=='function'||typeof avatar!=='function')throw Error('人脈島場景缺少必要設定');
 
@@ -259,7 +259,7 @@ world.dataset.paused=String(!!doc.hidden);
 world.dataset.phase='idle';
 const vesselArt=category=>`<img class="bi-vessel-art" src="${esc(asset(`assets/business-island/boats/${VESSELS[category]}`))}" alt="" width="200" height="140" decoding="async" draggable="false">`;
 
-world.innerHTML=CATEGORIES.map((category,index)=>`<section class="bi-world-island" data-island="${category.id}" data-visible="false" style="--bi-island-index:${index}" aria-labelledby="bi-world-${category.id}-title"><h3 class="bi-world-title" id="bi-world-${category.id}-title"><button type="button" class="bi-world-category" data-category="${category.id}">${esc(category.label)}</button></h3><p class="bi-world-caption">${esc(category.caption)}</p><img class="bi-world-art" src="${esc(asset(`assets/business-island/${category.id}-v1.webp`))}" alt="${esc(category.label)}的立體島嶼場景" loading="${index?'lazy':'eager'}" decoding="async"><div class="bi-world-members"></div><div class="bi-island-member-bank"><p class="bi-island-member-summary" role="status"></p><button type="button" class="bi-island-members-more" data-bi-members-more="${category.id}" hidden>更多本島會員</button><button type="button" class="bi-island-sail" data-bi-sail="${category.id}">搭船前往${esc(category.label)}</button></div><span class="bi-pool" aria-hidden="true"><span class="bi-pool-water"></span><span class="bi-swimmer"></span><span class="bi-swimmer"></span><span class="bi-pool-ripple"></span><span class="bi-pool-ripple"></span></span><span class="bi-world-boat" data-vessel="${category.id}" aria-hidden="true">${vesselArt(category.id)}<span class="bi-boat-wake"></span></span></section>`).join('');
+world.innerHTML=CATEGORIES.map((category,index)=>`<section class="bi-world-island" data-island="${category.id}" data-visible="false" style="--bi-island-index:${index}" aria-labelledby="bi-world-${category.id}-title"><div class="bi-world-meta"><h3 class="bi-world-title" id="bi-world-${category.id}-title"><button type="button" class="bi-world-category" data-category="${category.id}">${esc(category.label)}</button></h3><p class="bi-world-caption">${esc(category.caption)}</p><p class="bi-island-member-summary" role="status"></p></div><img class="bi-world-art" src="${esc(asset(`assets/business-island/${category.id}-v1.webp`))}" alt="${esc(category.label)}的立體島嶼場景" loading="${index?'lazy':'eager'}" decoding="async"><div class="bi-world-members"></div><div class="bi-island-member-bank"><button type="button" class="bi-island-members-more" data-bi-members-more="${category.id}" hidden>更多本島會員</button><button type="button" class="bi-island-sail" data-bi-sail="${category.id}">搭船前往${esc(category.label)}</button></div><span class="bi-pool" aria-hidden="true"><span class="bi-pool-water"></span><span class="bi-swimmer"></span><span class="bi-swimmer"></span><span class="bi-pool-ripple"></span><span class="bi-pool-ripple"></span></span><span class="bi-world-boat" data-vessel="${category.id}" aria-hidden="true">${vesselArt(category.id)}<span class="bi-boat-wake"></span></span></section>`).join('');
 
 const travellers=doc.createElement('div');
 travellers.className='bi-world-voyagers';
@@ -291,6 +291,8 @@ const diceBox=diceHost.querySelector('.bi-3d-dice-box'),diceTotal=diceHost.query
 let generation=0,destroyed=false,paused=!!doc.hidden,rowsCache=[],selectedHandle='',arrivalHandle='',position=0,currentCategory='food',memberPages=new Map(),heroLand={x:NAV.food.spawn[0],y:NAV.food.spawn[1]},playerPoint={x:0,y:0},worldSize={width:0,height:0},pendingState=null,frameId=null,frameFinish=null,roamFrame=null,frozenHandle='',phaseListener=null,phaseDetails=null,phaseValid=null;
 let logicTimer=null,simClock=0,simAt=null,nextDeparture=6000,nextBankRotation=18000,tripCursor=0,visitCount=0,nextEncounter=2000,preferResidentEncounter=true;
 const encounterTimes=new Map();
+const heroIdle={route:[],wait:800,at:null};
+let metadataWidth=null,metadataHeight=0;
 
 const reduced=()=>!!media?.matches,current=(ticket,valid=()=>true)=>!destroyed&&!paused&&!doc.hidden&&ticket===generation&&isCurrent()&&valid();
 
@@ -318,7 +320,18 @@ player.dataset.y=heroLand.y.toFixed(6);
 delete player.dataset.x;
 delete player.dataset.y;
 }}
+function measureMetadata(){
+// Passive roster/presence reflow cannot move the waterway during a journey.
+if(world.dataset.rolling==='true')return false;
+const width=world.clientWidth,natural=Math.ceil(Math.max(0,...sections.map(section=>section.querySelector('.bi-world-meta').offsetHeight)));
+const height=width===metadataWidth?Math.max(metadataHeight,natural):natural,value=`${height}px`;
+metadataWidth=width;metadataHeight=height;
+if(world.style.getPropertyValue('--bi-meta-height')===value)return false;
+world.style.setProperty('--bi-meta-height',value);
+return true;
+}
 function measureWorld(){
+measureMetadata();
 const width=world.clientWidth,height=world.clientHeight;
 if(width<=0||height<=0)return worldSize;
 const base=world.getBoundingClientRect();
@@ -478,15 +491,45 @@ function paintMembers(ensure=''){
   for(const state of npcStates.values())if(state.element?.isConnected&&!wanted.has(state.handle))state.element.remove();
   bindPictures();syncLocation();startRoam();
 }
-function canInteract(){return !destroyed&&!paused&&!doc.hidden&&isCurrent()&&world.clientWidth>0&&rowsCache.length>0;}
-function canSimulate(){return canInteract()&&!reduced();}
+function sceneActive(){return !destroyed&&!paused&&!doc.hidden&&isCurrent()&&world.clientWidth>0;}
+function canInteract(){return sceneActive()&&rowsCache.length>0;}
+function canSimulate(){return sceneActive()&&!reduced()&&(rowsCache.length>0||!!heroLand);}
+function canHeroIdle(){return sceneActive()&&!reduced()&&heroLand&&player.dataset.travel==='walking'&&world.dataset.rolling!=='true'&&visible.has(currentCategory)&&!arrivalHandle&&!isInteractionOpen();}
+function holdHeroIdle(){
+  heroIdle.at=null;player.dataset.idleWalking='false';
+  if(world.dataset.rolling!=='true')player.dataset.moving='false';
+}
+function resetHeroIdle(){heroIdle.route=[];heroIdle.wait=800;holdHeroIdle();}
+function advanceHeroIdle(now){
+  if(!canHeroIdle()){holdHeroIdle();return;}
+  const elapsed=heroIdle.at===null?0:Math.min(64,Math.max(0,now-heroIdle.at));
+  heroIdle.at=now;heroIdle.wait=Math.max(0,heroIdle.wait-elapsed);
+  if(heroIdle.wait>0){player.dataset.idleWalking='false';player.dataset.moving='false';return;}
+  if(!heroIdle.route.length){
+    const peers=[...npcStates.values()].filter(state=>state.row&&!state.trip&&state.category===currentCategory);
+    const goal=peers.length&&random()<.45?pick(peers).point:randomLandPoint(currentCategory);
+    heroIdle.route=npcLandPath(currentCategory,heroLand,goal).slice(1);
+  }
+  let budget=30*elapsed/1000/(box(currentCategory).size||330);
+  const before={...heroLand};
+  while(budget>0&&heroIdle.route.length){
+    const target=heroIdle.route[0],length=distance(heroLand,target);
+    if(length<=budget){heroLand={...target};heroIdle.route.shift();budget-=length;}
+    else{heroLand=interpolate(heroLand,target,budget/(length||1));budget=0;}
+  }
+  const moving=distance(before,heroLand)>0;
+  if(moving){playerPoint=landToWorld(currentCategory,heroLand);player.dataset.direction=heroLand.y>=before.y?'south':'north';drawPlayer();}
+  player.dataset.idleWalking=String(moving);player.dataset.moving=String(moving);
+  if(!heroIdle.route.length)heroIdle.wait=400+random()*800;
+}
 function stopRoam(){
   if(roamFrame!==null)view.cancelAnimationFrame(roamFrame);
   if(logicTimer!==null)view.clearTimeout(logicTimer);
   roamFrame=null;logicTimer=null;simAt=null;
+  holdHeroIdle();
   for(const state of npcStates.values()){state.moving=false;drawNpc(state);}
 }
-function canRoam(){return canSimulate()&&!reduced()&&[...npcStates.values()].some(state=>state.row&&state.element?.isConnected&&actorVisible(state)&&!state.frozen);}
+function canRoam(){return canSimulate()&&(canHeroIdle()||[...npcStates.values()].some(state=>state.row&&state.element?.isConnected&&actorVisible(state)&&!state.frozen));}
 function nextGoal(state){
   const neighbours=[...npcStates.values()].filter(other=>other!==state&&other.row&&!other.trip&&other.category===state.category);
   state.goal=neighbours.length&&random()<.45?{...pick(neighbours).point}:randomLandPoint(state.category);
@@ -593,6 +636,7 @@ function advanceSimulation(visibleOnly=false){
   const now=view.performance.now();
   if(simAt!==null)simClock+=Math.max(0,Math.min(1000,now-simAt));
   simAt=now;
+  advanceHeroIdle(now);
   let changed=false;
   for(const state of npcStates.values())if(state.row&&(!visibleOnly||state.element?.isConnected&&actorVisible(state))){changed=advanceNpc(state)||changed;drawNpc(state);}
   if(!visibleOnly){
@@ -655,6 +699,14 @@ function renderMembers(rows,{selected=''}={}){
 function clearArrival(){
 world.querySelectorAll('.bi-world-arrival').forEach(element=>element.remove());
 arrivalHandle='';
+startRoam();
+}
+function dismissArrival(){
+if(!arrivalHandle)return false;
+const handle=arrivalHandle,focused=world.querySelector('.bi-world-arrival')?.contains(doc.activeElement);
+clearArrival();resetHeroIdle();onArrivalDismiss?.(handle);
+if(focused)host.closest('.bi-layout')?.querySelector('[data-bi-action="roll"]')?.focus({preventScroll:true});
+return true;
 }
 function showArrival(handle){
 if(destroyed||paused||!isCurrent())return false;
@@ -667,8 +719,9 @@ paintMembers(row.handle);
 const location=memberLocation(handle),section=sections.find(item=>item.dataset.island===(location?.category||currentCategory)),aside=doc.createElement('aside');
 aside.className='bi-world-arrival';
 aside.setAttribute('aria-label','目前遇見的會員');
-aside.innerHTML=`${avatar(row)}<div class="bi-world-arrival-copy"><h4>${esc(row.name||'會員')}${isOnline(row)?' · 在線':''}</h4><p>${esc([row.company,row.title].filter(Boolean).join(' · '))}</p></div><div class="bi-world-arrival-actions"><button type="button" data-bi-action="card" data-bi-handle="${esc(row.handle)}">查看公開名片</button><button type="button" data-bi-action="chat" data-bi-handle="${esc(row.handle)}"${row.canChat===false?' disabled':''}>${row.canChat===false?'未開放新聯絡':'開始交流'}</button></div>`;
+aside.innerHTML=`${avatar(row)}<div class="bi-world-arrival-copy"><h4>${esc(row.name||'會員')}${isOnline(row)?' · 在線':''}</h4><p>${esc([row.company,row.title].filter(Boolean).join(' · '))}</p></div><button type="button" class="bi-world-arrival-close" data-bi-arrival-close aria-label="關閉會員交流">×</button><div class="bi-world-arrival-actions"><button type="button" data-bi-action="card" data-bi-handle="${esc(row.handle)}">查看公開名片</button><button type="button" data-bi-action="chat" data-bi-handle="${esc(row.handle)}"${row.canChat===false?' disabled':''}>${row.canChat===false?'未開放新聯絡':'開始交流'}</button></div>`;
 section.insertBefore(aside,section.querySelector('.bi-pool'));
+holdHeroIdle();
 bindPictures();
 return true;
 }
@@ -728,11 +781,13 @@ const was=world.dataset.rolling==='true',notify=was&&current(generation,phaseVal
 generation++;
 stopMotion();
 stopRoam();
+resetHeroIdle();
 releaseTarget();
 if(was)setPhase('cancelled',notify);
 phaseListener=null;
 phaseDetails=null;
 phaseValid=null;
+measureWorld();
 }
 function follow(point,ms=16,instant=false){
 if(!main?.isConnected)return;
@@ -817,6 +872,7 @@ phaseListener=null;
 phaseDetails=null;
 phaseValid=null;
 releaseTarget(player.dataset.phase==='arrived'?1200:0);
+measureWorld();
 syncLocation();
 startRoam();
 }}
@@ -1067,7 +1123,9 @@ return true;
 const click=event=>{
 const button=event.target.closest('button');
 if(!button||!world.contains(button)||destroyed||paused||!isCurrent())return;
-if(button.dataset.biSail){
+if(button.hasAttribute('data-bi-arrival-close')){
+event.stopPropagation();dismissArrival();
+}else if(button.dataset.biSail){
 event.stopPropagation();
 if(world.dataset.rolling!=='true')onSail?.(button.dataset.biSail);
 }else if(button.dataset.biMembersMore){
@@ -1090,13 +1148,19 @@ event.stopPropagation();
 onCategory?.(button.dataset.category);
 }};
 world.addEventListener('click',click);
+const keydown=event=>{
+if(event.key!=='Escape'||event.defaultPrevented||!sceneActive()||isInteractionOpen()||doc.querySelector('dialog[open]')||event.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+if(dismissArrival()){event.preventDefault();event.stopPropagation();}
+};
+doc.addEventListener('keydown',keydown);
 
 const observer=typeof view.IntersectionObserver==='function'?new view.IntersectionObserver(entries=>{
 for(const entry of entries){
 entry.target.dataset.visible=String(entry.isIntersecting&&!paused&&!destroyed);
 if(entry.isIntersecting)visible.add(entry.target.dataset.island);
 else visible.delete(entry.target.dataset.island);
-}if(canSimulate())startRoam();
+}if(!visible.has(currentCategory))holdHeroIdle();
+if(canSimulate())startRoam();
 else stopRoam();
 },{root:main||null,rootMargin:'0px',threshold:0}):null;
 if(observer)sections.forEach(section=>observer.observe(section));
@@ -1136,6 +1200,10 @@ else startRoam();
 doc.addEventListener('visibilitychange',visibility);
 view.addEventListener('resize',resize);
 media?.addEventListener?.('change',motion);
+const metadataObserver=typeof view.ResizeObserver==='function'?new view.ResizeObserver(()=>{
+if(!destroyed&&measureMetadata()){stopRoam();measureWorld();paintMembers();}
+}):null;
+if(metadataObserver)sections.forEach(section=>metadataObserver.observe(section.querySelector('.bi-world-meta')));
 
 function destroy(){
 if(destroyed)return;
@@ -1143,10 +1211,12 @@ clearArrival();
 cancel();
 destroyed=true;
 observer?.disconnect();
+metadataObserver?.disconnect();
 doc.removeEventListener('visibilitychange',visibility);
 view.removeEventListener('resize',resize);
 media?.removeEventListener?.('change',motion);
 world.removeEventListener('click',click);
+doc.removeEventListener('keydown',keydown);
 world.remove();
 if(ownsDice)diceHost.remove();
 else diceHost.replaceChildren();
@@ -1155,6 +1225,7 @@ npcStates.clear();
 measureWorld();
 syncLocation();
 bindPictures();
+startRoam();
 
 return{renderMembers,showArrival,clearArrival,snapshot,restore,roll,sailTo,residents,memberLocation,currentIsland:()=>currentCategory,cancel,destroy,pause,categories:CATEGORIES};
 
