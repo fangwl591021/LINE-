@@ -72,7 +72,7 @@
     root.dataset.audioState=state.status;
     music.textContent=state.music?'音樂開':'音樂關';music.setAttribute('aria-pressed',String(state.music));
     sound.textContent=state.sound?'音效開':'音效關';sound.setAttribute('aria-pressed',String(state.sound));
-    $('[data-bi-audio-status]').textContent={locked:'首次擲骰後播放，可隨時關閉',playing:'輕柔音樂播放中',muted:state.sound?'背景音樂已關閉':'聲音已關閉',paused:'聲音已暫停',blocked:'聲音尚未啟動，可再點擲骰重試',unsupported:'此裝置暫不支援聲音'}[state.status]||'';
+    $('[data-bi-audio-status]').textContent={locked:'首次擲骰後播放，可隨時關閉',playing:'輕快風琴播放中',muted:state.sound?'背景音樂已關閉':'聲音已關閉',paused:'聲音已暫停',blocked:'聲音尚未啟動，可再點擲骰重試',unsupported:'此裝置暫不支援聲音'}[state.status]||'';
   }
   function live() {
     if (initializing && active(generation)) { note('正在連接人脈島…'); return false; }
@@ -391,7 +391,7 @@
     const ticket = generation;
     note('正在連接人脈島…');
     try {
-      const [module,scene,sound,pulse,greetings] = await Promise.all([import(new URL('member-chat.js?v=16',scriptUrl).href),import(new URL('business-island-world.mjs?v=9',scriptUrl).href),import(new URL('business-island-audio.mjs?v=1',scriptUrl).href),import(new URL('business-island-presence.mjs?v=1',scriptUrl).href),import(new URL('business-island-encounters.mjs?v=2',scriptUrl).href),styleReady]);
+      const [module,scene,sound,pulse,greetings] = await Promise.all([import(new URL('member-chat.js?v=16',scriptUrl).href),import(new URL('business-island-world.mjs?v=9',scriptUrl).href),import(new URL('business-island-audio.mjs?v=2',scriptUrl).href),import(new URL('business-island-presence.mjs?v=1',scriptUrl).href),import(new URL('business-island-encounters.mjs?v=2',scriptUrl).href),styleReady]);
       if (!active(ticket)) return;
       client=module.createChatClient({base:window.Config?.WORKER_URL||window.WORKER_URL,isCurrent:()=>active(ticket)});
       audio=sound.createIslandAudio({isCurrent:()=>valid(ticket),onState:state=>{if(active(ticket))renderAudioState(state);}});
