@@ -77,8 +77,17 @@ body.business-island-page #page-business-island {margin:0!important}
 #page-business-island .bi-npc-online {position:absolute;z-index:6;right:5px;top:16px;width:9px;height:9px;border:2px solid #fffdf4;border-radius:50%;background:#8f9c91;box-shadow:0 1px 3px #21493844}
 #page-business-island .bi-npc[data-online=true] .bi-npc-online {background:#1abb78;box-shadow:0 0 0 2px #a3f5bf66}
 #page-business-island .bi-npc[data-online=true] .bi-npc-body {--bi-npc-shirt:#5c9680}
-#page-business-island .bi-world-island[data-visible=true] .bi-npc[data-moving=true]:not([data-frozen=true]) :is(.bi-npc-arm,.bi-npc-leg) {animation-play-state:running}
+#page-business-island .bi-npc[data-visible=true][data-moving=true]:not([data-frozen=true]) :is(.bi-npc-arm,.bi-npc-leg) {animation-play-state:running}
 #page-business-island .bi-npc[aria-pressed=true] .bi-npc-head {border-color:#f6d27b;box-shadow:0 0 0 2px #fff5cc99}
+/* Visitors keep the same public avatar while walking to a dock and sailing. */
+#page-business-island .bi-world-voyagers {position:absolute;inset:0;z-index:100;pointer-events:none}
+#page-business-island .bi-npc-ferry {position:absolute;z-index:1;left:-20px;top:4px;width:84px;height:58.8px;display:none;filter:drop-shadow(0 4px 2px #205a7044);pointer-events:none}
+#page-business-island .bi-npc-wake {position:absolute;z-index:0;left:16px;top:47px;width:27px;height:10px;border-block:1.5px solid #f6ffebbd;border-radius:50%;opacity:.65;animation:bi-wake 1.1s ease-out infinite;animation-play-state:paused}
+#page-business-island .bi-npc:is([data-travel=boarding],[data-travel=sailing],[data-travel=docking]) .bi-npc-ferry {display:block}
+#page-business-island .bi-npc:is([data-travel=boarding],[data-travel=sailing],[data-travel=docking]) .bi-npc-person {z-index:2;transform:translateY(15px) scale(.7);transform-origin:center top;clip-path:inset(0 -6px 30% -6px)}
+#page-business-island .bi-npc:is([data-travel=boarding],[data-travel=sailing],[data-travel=docking]) .bi-npc-name {top:60px}
+#page-business-island .bi-npc:is([data-travel=boarding],[data-travel=sailing],[data-travel=docking]) :is(.bi-npc-arm,.bi-npc-leg) {animation-play-state:paused!important}
+#page-business-island .bi-npc[data-visible=true][data-moving=true]:is([data-travel=boarding],[data-travel=sailing],[data-travel=docking]) .bi-vessel-art,#page-business-island .bi-npc[data-visible=true][data-moving=true][data-travel=sailing] .bi-npc-wake {animation-play-state:running}
 #page-business-island .bi-world-arrival {position:absolute;z-index:180;left:50%;right:auto;top:calc(var(--bi-art-top) + var(--bi-art-size) * .75);display:grid;grid-template-columns:28px minmax(0,1fr);align-items:start;gap:4px 8px;width:90%;max-width:380px;min-width:0;padding:7px;border:1px solid #f4e3b8;border-radius:14px;background:linear-gradient(145deg,#fffdf5f5,#f2f8eaf2);box-shadow:0 5px 16px #194f492b;backdrop-filter:blur(10px);overflow-wrap:anywhere;transform:translateX(-50%)}
 #page-business-island .bi-world-arrival>.bi-avatar {width:36px;height:36px;flex-basis:36px;font-size:18px;border:2px solid #fff4cd}
 #page-business-island .bi-world-arrival-copy {min-width:0}
@@ -311,4 +320,4 @@ body.business-island-page #page-business-island {margin:0!important}
   .bi-card-dialog .bi-dialog-header h2 {font-size:20px}
   .bi-card-dialog .bi-card-body {padding:18px 15px}
 }
-@media(prefers-reduced-motion:reduce) {#page-business-island button,.bi-card-dialog button {transition:none}#page-business-island :is(.bi-world-boat,.bi-vessel-art,.bi-boat-wake,.bi-ferry-wake,.bi-swimmer,.bi-pool-ripple,.bi-walker,.bi-walker-arm,.bi-walker-leg,.bi-3d-die.rolling,.bi-npc-arm,.bi-npc-leg) {animation:none!important}#page-business-island .bi-world-player {will-change:auto}}
+@media(prefers-reduced-motion:reduce) {#page-business-island button,.bi-card-dialog button {transition:none}#page-business-island :is(.bi-world-boat,.bi-vessel-art,.bi-boat-wake,.bi-ferry-wake,.bi-npc-wake,.bi-swimmer,.bi-pool-ripple,.bi-walker,.bi-walker-arm,.bi-walker-leg,.bi-3d-die.rolling,.bi-npc-arm,.bi-npc-leg) {animation:none!important}#page-business-island .bi-world-player {will-change:auto}}

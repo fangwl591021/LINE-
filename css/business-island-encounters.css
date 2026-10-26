@@ -1,0 +1,21 @@
+#page-business-island .bi-encounter-host{position:sticky;top:var(--bi-encounter-top,132px);height:0;min-height:0;z-index:210;pointer-events:none}
+#page-business-island .bi-encounter-host[hidden]{display:none!important}
+#page-business-island .bi-encounter-card{position:absolute;top:0;right:10px;width:min(350px,calc(100% - 20px));max-height:min(430px,calc(100dvh - var(--bi-encounter-top,132px) - 28px));overflow:auto;overscroll-behavior:contain;border:1px solid #e2dbbe;border-radius:20px;background:#fffdf5f5;color:#183f36;box-shadow:0 14px 35px #183f3633;backdrop-filter:blur(12px);pointer-events:auto;animation:bi-encounter-enter .2s ease-out}
+#page-business-island .bi-encounter-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 6px 5px 14px;border-bottom:1px solid #e6e7d9;background:#f2f5e9}
+#page-business-island .bi-encounter-heading>strong{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+#page-business-island .bi-encounter-heading>button{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border:0;background:transparent;border-radius:50%;font-size:25px;color:#335c4d;box-shadow:none}
+#page-business-island .bi-encounter-conversation{display:grid;gap:9px;padding:11px}
+#page-business-island .bi-encounter-person{display:grid;grid-template-columns:32px minmax(0,1fr);align-items:start;gap:5px 8px;padding:10px;border:1px solid #e3e7d6;border-radius:6px 15px 15px 15px;background:#fffef9;min-width:0}
+#page-business-island .bi-encounter-person[data-self=true]{margin-left:20px;border-radius:15px 6px 15px 15px;background:#eaf3e4;border-color:#d5e3c9}
+#page-business-island .bi-encounter-avatar>.bi-avatar{width:30px;height:30px;font-size:15px;border:2px solid #fff}
+#page-business-island .bi-encounter-copy{min-width:0}
+#page-business-island .bi-encounter-label{display:block;font-size:10px;color:#7b836d;line-height:1.4}
+#page-business-island .bi-encounter-copy>strong{display:block;font-size:13px;line-height:1.5;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+#page-business-island .bi-encounter-copy>p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:3px 0 0;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+#page-business-island .bi-encounter-actions{display:grid;grid-template-columns:1fr 1fr;grid-column:1/-1;gap:6px;margin-top:4px}
+#page-business-island .bi-encounter-actions>button{min-width:0;min-height:44px;padding:6px 4px;border:1px solid #d6dfcb;border-radius:10px;background:#fffdf5;color:#245a46;font-size:12px;font-weight:650;line-height:1.4}
+#page-business-island .bi-encounter-actions>button:last-child{background:#23624c;border-color:#23624c;color:#fffdf5}
+#page-business-island .bi-encounter-actions>button:focus-visible,#page-business-island .bi-encounter-heading>button:focus-visible{outline:3px solid #dfaa50;outline-offset:2px}
+@keyframes bi-encounter-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:360px){#page-business-island .bi-encounter-card{right:6px;width:calc(100% - 12px)}#page-business-island .bi-encounter-conversation{padding:8px}#page-business-island .bi-encounter-person{padding:8px}}
+@media(prefers-reduced-motion:reduce){#page-business-island .bi-encounter-card{animation:none}}
