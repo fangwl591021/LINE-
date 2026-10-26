@@ -967,7 +967,8 @@ test('English and account names are searchable, ignoring case and spaces, withou
     assert.doesNotMatch(JSON.stringify(result), /english_name|line_id|profile_user_id|phone|visibility|pool_eligible/);
   }
   assert.equal((await f.api('/me', { token: 'b' })).success, true);
-  const id = await f.room(); assert.equal((await f.send(id)).success, true); assert.equal((await f.send(id, '收到', 'b')).success, true);
+  const id = await f.room(); assert.equal((await f.send(id)).success, true);
+  assert.equal((await f.send(id, '收到', 'b')).code, 'REVIEW_REQUIRED', 'search remains available while an unreviewed actor cannot send');
   assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all()), original);
   f.sql.exec("UPDATE card_contacts SET name='' WHERE row_id='card-b'");
   assert.equal((await f.api('/members?q=tonyfang')).items[0].name, 'Tony Fang');

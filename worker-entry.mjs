@@ -23,6 +23,7 @@ import { handleCheckinChatDashboard } from './worker/checkin-chat-dashboard.mjs'
 import { handleRewardUnits } from './worker/reward-unit-directory.mjs';
 import { handleRewardApplications } from './worker/reward-applications.mjs';
 import { handlePartnerContracts } from './worker/partner-bonus-v2.mjs';
+import { handleIslandEntry } from './worker/island-entry.mjs';
 
 const TAG_ACTIONS = new Map([
   ['listCustomerTagProfiles', 'listProfiles'],
@@ -399,6 +400,8 @@ async function handleAkaffitCardImageRoute(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    const islandEntryResponse = await handleIslandEntry(request, env);
+    if (islandEntryResponse) return islandEntryResponse;
     const partnerContractResponse = await handlePartnerContracts(request, env, storeInviteProfileView);
     if (partnerContractResponse) return partnerContractResponse;
     const applicationResponse = await handleRewardApplications(request, env, storeInviteProfileView);
