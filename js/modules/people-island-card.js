@@ -11,6 +11,7 @@ const explanations = {
   ready:'本人名片已通過審核，可以進入人脈島開始交流。'
 };
 let activeController;
+let autoShareConsumed = false;
 
 export function islandEntryParams(input) {
   const source = input || window.readActmasterInitialParams?.() || new URLSearchParams(location.search);
@@ -59,7 +60,9 @@ function bindImages(root) {
 
 export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
   activeController?.destroy();
-  params=islandEntryParams(params);
+  const incomingParams=params||window.readActmasterInitialParams?.()||new URLSearchParams(location.search);
+  const shareOnOpen=embedded&&incomingParams.get('islandShare')==='1';
+  params=islandEntryParams(incomingParams);
   const root=document.getElementById('page-business-island');
   if(!root)throw Error('人脈島入口尚未準備好，請重新開啟');
   if(embedded)window.goPage?.('business-island',true);
@@ -133,12 +136,16 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
     location.href=islandLiffUrl(params,{peopleIsland:'1',...(stage==='register'?{islandSetup:'register'}:stage!=='ready'?{islandSetup:'card'}:{})});
   }
   async function share(){
-    if(!embedded){location.href=islandLiffUrl(params);return;}
+    if(!embedded){location.href=islandLiffUrl(params,{peopleIslandCard:'1',islandShare:'1'});return;}
     const button=$('[data-pic-share]');button.disabled=true;
     try{
-      const module=await import('./people-island-flex.mjs?v=1');if(!current())return;
-      const message=module.buildPeopleIslandVideoFlex({entryUrl:islandLiffUrl(params)});
       if(typeof window.liff?.shareTargetPicker!=='function'||window.liff.isApiAvailable?.('shareTargetPicker')!==true)throw Error('請在支援分享的 LINE 中開啟影音名片。');
+      const ticket=generation;
+      const personal=await request('share-link',ticket);
+      if(!personal||!current()||ticket!==generation)return;
+      if(typeof personal.entryUrl!=='string'||!personal.entryUrl.trim())throw Error('專屬分享連結暫時無法取得，請重試。');
+      const module=await import('./people-island-flex.mjs?v=2');if(!current()||ticket!==generation)return;
+      const message=module.buildPeopleIslandVideoFlex({entryUrl:personal.entryUrl});
       const result=await window.liff.shareTargetPicker([message]);
       if(current())status(result?.status==='success'?'影音名片已分享。':'分享視窗已關閉，未確認送出。');
     }catch(error){if(!closed)status(safeError(error));}finally{if(button.isConnected)button.disabled=false;}
@@ -162,8 +169,13 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
   root.addEventListener('click',click);document.addEventListener('visibilitychange',visibility);window.addEventListener('pagehide',pagehide);window.addEventListener('pageshow',pageshow);
   activeController={destroy,check};
   if(embedded){
-    if(!window.currentUserProfile){const identityToken=token(),profile=await window.liff.getProfile();if(identityToken!==token()){status('登入身分已變更，請重新開啟。');return activeController;}window.currentUserProfile=profile;}
+    const identityToken=token(),profile=await window.liff.getProfile();if(identityToken!==token()){status('登入身分已變更，請重新開啟。');return activeController;}window.currentUserProfile=profile;
+    if(params.get('ref')&&typeof window.writeFirstReferral==='function')window.writeFirstReferral(text(profile.userId),params.get('ref'),params.get('net')||'admin');
     if(!closed)await check();
+    if(shareOnOpen&&!autoShareConsumed&&current()){
+      autoShareConsumed=true;
+      await share();
+    }
   }
   return activeController;
 }

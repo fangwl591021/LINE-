@@ -29,6 +29,8 @@ function validEntry(value) {
 
 export function buildPeopleIslandVideoFlex({entryUrl} = {}) {
   const uri = validEntry(entryUrl);
+  const shareUri = new URL(uri);
+  shareUri.searchParams.set('islandShare', '1');
   return {
     type:'flex', altText:'人脈島｜探索產業，認識合作夥伴；加入後可參觀，完成註冊與名片審核後開啟交流。',
     contents:{
@@ -40,7 +42,10 @@ export function buildPeopleIslandVideoFlex({entryUrl} = {}) {
         {type:'text',text:'人脈島',weight:'bold',size:'xl',color:'#07594F'},
         {type:'text',text:'探索不同產業，認識新的合作夥伴。\n加入點數通後，先來島上看看。\n建立本人名片，完成註冊與 AI 審核後開啟交流。',wrap:true,size:'sm',color:'#48635E'}
       ]},
-      footer:{type:'box',layout:'vertical',contents:[{type:'button',style:'primary',color:'#00846B',action:{type:'uri',label,uri}}]}
+      footer:{type:'box',layout:'vertical',spacing:'sm',contents:[
+        {type:'button',style:'primary',color:'#00846B',action:{type:'uri',label,uri}},
+        {type:'button',style:'secondary',action:{type:'uri',label:'分享好友',uri:shareUri.href}}
+      ]}
     }
   };
 }

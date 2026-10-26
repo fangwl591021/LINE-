@@ -2873,7 +2873,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (initialUrlParams.get('peopleIslandCard') === '1') {
-      const island = await import('./modules/people-island-card.js?v=1');
+      const island = await import('./modules/people-island-card.js?v=2');
       await island.mountPeopleIslandCard({ params: initialUrlParams, embedded: true });
       document.getElementById('loading-screen')?.classList.add('hidden');
       return;
@@ -3063,7 +3063,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const activityEntryCurrent = directActivity ? window.ActivityEntry.sessionGuard(activityEntryRequest) : null;
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
     if (urlParams.get('peopleIsland') === '1') {
-      const island = await import('./modules/people-island-card.js?v=1');
+      const island = await import('./modules/people-island-card.js?v=2');
       if (await island.routePeopleIslandSetup({ params: urlParams, checkRes, refId, netId })) return;
     }
     if (directActivity) {
