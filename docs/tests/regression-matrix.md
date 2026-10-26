@@ -168,6 +168,8 @@
 
 ## 人脈島影片名片
 
+交流姓名資格：MEMBER-NAME-01＝空白／佔位姓名、有效英文／暱稱 fallback、當下版本與公開版本分別檢查；MEMBER-NAME-02＝分頁前過濾、各排序／隨機／訪客／presence 名冊一致，舊handle不得建立新聯絡，補正恢復且歷史可讀；MEMBER-NAME-03＝公開動態在LIMIT前排除無效作者，自己的貼文管理保留，讀取零寫入。
+
 人脈島影片名片：ISLAND-VIDEO-01＝精準關鍵字／簽章／群組／standby／混合批次只一個reply owner；ISLAND-VIDEO-02＝本人文案A/B隔離、CAS與重試、原個人名片和影音不動；ISLAND-VIDEO-03＝共用編輯器改字→儲存→重開、取消與切帳號、分享最新本人文案和ref/net、320／390／1280。
 
 ## 共創 115.10 制度

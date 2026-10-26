@@ -9,6 +9,117 @@ import { ExchangeZoneModule } from '../worker/exchange-zone.mjs';
 const A = 'U' + 'a'.repeat(32), B = 'U' + 'b'.repeat(32), C = 'U' + 'c'.repeat(32), OLD = 'U' + 'd'.repeat(32);
 const BASE = 'https://chat.test/v1/member-chat';
 
+test('unnamed members are absent from discovery, while genuine English/account fallbacks and corrected names remain usable', async t => {
+  const f = fixture(t);
+  const updateCard = f.sql.prepare("UPDATE card_contacts SET name=?,english_name=? WHERE row_id='card-b'");
+  f.sql.exec("UPDATE users SET name='有效 LINE 暱稱' WHERE row_id='b'");
+  const placeholders = ['未命名', ' 未命名 ', '未 命名', '\t未命名\r\n', '\u200b未命名\u200b', '未命名會員', '未命名用戶', '未命名用户', '未命名使用者', 'UNNAMED', 'Unknown'];
+  for (const name of placeholders) {
+    updateCard.run(name, 'Valid English Backup');
+    const before = f.sql.prepare('SELECT total_changes() AS n').get().n;
+    for (const suffix of ['', '?sort=latest', '?sort=match', '?sort=random', '?scope=public']) {
+      const result = await f.api('/members' + suffix);
+      assert.equal(result.status, 200, name + suffix);
+      assert.ok(!result.items.some(row => row.handle === 'card-b'), name + suffix);
+      assert.ok(result.items.some(row => row.handle === 'card-c'), 'other members remain visible');
+    }
+    assert.equal(f.sql.prepare('SELECT total_changes() AS n').get().n, before, 'discovery never repairs or rewrites a member');
+  }
+  updateCard.run('', 'Grace Chen');
+  assert.equal((await f.api('/members?q=gracechen')).items[0].name, 'Grace Chen');
+  assert.equal((await f.api('/members?scope=public')).items.find(row => row.handle === 'card-b').name, 'Grace Chen');
+  updateCard.run('', '');
+  assert.equal((await f.api('/members')).items.find(row => row.handle === 'card-b').name, '有效 LINE 暱稱');
+  assert.ok(!(await f.api('/members?scope=public')).items.some(row => row.handle === 'card-b'), 'a public version cannot borrow an account/private name');
+  for (const name of ['', ' \t\r\n\u200b', '未命名', 'unnamed']) {
+    f.sql.prepare("UPDATE users SET name=? WHERE row_id='b'").run(name);
+    assert.ok(!(await f.api('/members')).items.some(row => row.handle === 'card-b'), 'the final account fallback must also be a real display name');
+  }
+  updateCard.run('小陳', '');
+  assert.equal((await f.api('/members')).items.find(row => row.handle === 'card-b').name, '小陳', 'genuine nicknames do not require a legal-name heuristic');
+  assert.equal((await f.api('/members?scope=public')).items.find(row => row.handle === 'card-b').name, '小陳');
+  assert.equal(f.writes.length, 0); assert.equal(f.pushes.length, 0);
+});
+
+test('the current unnamed card cannot revive an older named version or open a new conversation through old handles', async t => {
+  const f = fixture(t);
+  f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,ai_review_status,name,updated_at) VALUES('card-b-new',?,'self_profile','public','passed','未命名','2099-01-01')").run(B);
+  for (const suffix of ['', '?sort=latest', '?sort=match', '?sort=random', '?scope=public']) {
+    const result = await f.api('/members' + suffix);
+    assert.equal(result.status, 200); assert.ok(!result.items.some(row => row.handle.startsWith('card-b')));
+  }
+  for (const handle of ['card-b', 'card-b-new']) {
+    const result = await f.api('/threads', { data: { cardHandle: handle } });
+    assert.equal(result.status, 403, handle); assert.equal(result.success, false);
+  }
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM member_chat_threads').get().n, 0);
+  assert.equal(f.writes.length, 0);
+  f.sql.exec("UPDATE card_contacts SET name='補正後姓名' WHERE row_id='card-b-new'");
+  assert.deepEqual((await f.api('/members')).items.filter(row => row.handle.startsWith('card-b')).map(row => row.handle), ['card-b-new']);
+  assert.equal((await f.api('/threads', { data: { cardHandle: 'card-b-new' } })).success, true, 'correction restores ordinary new-contact behavior');
+});
+
+test('unnamed filtering happens before every discovery page and random selection', async t => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE card_contacts SET name='未命名' WHERE row_id IN ('card-b','card-c')");
+  for (let n = 0; n < 70; n++) {
+    const bad = n < 35, id = (bad ? 'bad-' : 'good-') + String(n).padStart(2, '0'), lineId = 'U' + (1000 + n).toString(16).padStart(32, '0');
+    f.sql.prepare('INSERT INTO users(row_id,line_id,name) VALUES(?,?,?)').run(id, lineId, '有效會員帳號');
+    f.sql.prepare("INSERT INTO card_contacts(row_id,line_id,source_type,visibility,ai_review_status,name,company_name,title,updated_at) VALUES(?,?,'self_profile','public','passed',?,'分頁科技公司','工程師',?)").run(id, lineId, bad ? '未命名' : '分頁會員' + n, bad ? '2099-01-01' : '2026-10-27');
+  }
+  const before = f.sql.prepare('SELECT total_changes() AS n').get().n;
+  for (const sort of ['', 'latest', 'match']) {
+    const query = sort ? '?sort=' + sort : '';
+    const first = await f.api('/members' + query);
+    assert.equal(first.status, 200); assert.equal(first.items.length, 30); assert.ok(first.next);
+    const second = await f.api('/members' + (query ? query + '&' : '?') + 'after=' + encodeURIComponent(first.next));
+    assert.equal(second.status, 200); assert.equal(second.items.length, 5); assert.equal(second.next, '');
+    const all = [...first.items, ...second.items];
+    assert.equal(new Set(all.map(row => row.handle)).size, 35);
+    assert.ok(all.every(row => row.handle.startsWith('good-')), sort);
+  }
+  const firstPublic = await f.api('/members?scope=public');
+  const secondPublic = await f.api('/members?scope=public&after=' + encodeURIComponent(firstPublic.next));
+  assert.equal(firstPublic.items.length, 30); assert.equal(secondPublic.items.length, 5); assert.equal(secondPublic.next, '');
+  assert.ok([...firstPublic.items, ...secondPublic.items].every(row => row.handle.startsWith('good-')));
+  const random = await f.api('/members?sort=random');
+  assert.equal(random.items.length, 30); assert.equal(random.next, ''); assert.ok(random.items.every(row => row.handle.startsWith('good-')));
+  assert.equal(f.sql.prepare('SELECT total_changes() AS n').get().n, before); assert.equal(f.writes.length, 0);
+});
+
+test('a name revoked between contact lookup and insertion cannot create a new thread', async t => {
+  const f = fixture(t);
+  f.beforeWrite(query => {
+    if (query.includes('INSERT INTO member_chat_threads')) f.sql.exec("UPDATE card_contacts SET name='未命名' WHERE row_id='card-b'");
+  });
+  const result = await f.api('/threads', { data: { cardHandle: 'card-b' } });
+  assert.equal(result.status, 403); assert.equal(result.success, false);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM member_chat_threads').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM member_chat_messages').get().n, 0);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM points_ledger').get().n, 0);
+  f.beforeWrite(null);
+});
+
+test('an existing unnamed peer retains conversation history, unread/read and blocking controls', async t => {
+  const f = fixture(t), id = await f.room();
+  await f.send(id, '既有本人訊息'); const received = await f.send(id, '既有對方訊息', 'b');
+  f.sql.exec("UPDATE users SET name='未命名' WHERE row_id='b'; UPDATE card_contacts SET name='未命名' WHERE row_id='card-b'");
+  const beforeCards = JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all());
+  assert.ok(!(await f.api('/members')).items.some(row => row.handle === 'card-b'));
+  assert.equal((await f.api('/threads')).items[0].id, id);
+  assert.equal((await f.api('/unread')).unread, 1);
+  const history = await f.api(`/threads/${id}/messages`);
+  assert.equal(history.status, 200); assert.deepEqual(history.items.map(row => row.body), ['既有本人訊息', '既有對方訊息']);
+  assert.equal((await f.api(`/threads/${id}/read`, { data: { through: received.item.seq } })).success, true);
+  assert.equal((await f.api('/unread')).unread, 0);
+  assert.equal((await f.api(`/threads/${id}/block`, { data: { blocked: true } })).success, true);
+  assert.equal((await f.api(`/threads/${id}/messages`)).blocked, true);
+  assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM card_contacts ORDER BY row_id').all()), beforeCards);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM member_chat_threads').get().n, 1);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM member_chat_messages').get().n, 2);
+  assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM points_ledger').get().n, 0); assert.equal(f.pushes.length, 0);
+});
+
 test('unread aggregate spans all thread pages, follows canonical identity and is read-only', async t => {
   const f = fixture(t);
   for (let i = 0; i < 37; i++) {
