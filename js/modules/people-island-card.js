@@ -12,6 +12,23 @@ const explanations = {
 };
 let activeController;
 let autoShareConsumed = false;
+let myCardModuleRequest;
+
+async function loadIslandMyCardModule() {
+  if (window.MyCardModule?.createIslandCardFromProfile && window.MyCardModule?.selectIslandCardUpload) return window.MyCardModule;
+  if (!myCardModuleRequest) myCardModuleRequest=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');script.src=new URL('mycard.js?v=8.98&island=1',import.meta.url).href;
+    script.onload=()=>window.MyCardModule?.createIslandCardFromProfile?resolve(window.MyCardModule):reject(Error('名片設定尚未載入，請重試。'));
+    script.onerror=()=>reject(Error('名片設定載入失敗，請重試。'));document.head.append(script);
+  }).catch(error=>{myCardModuleRequest=null;throw error;});
+  return myCardModuleRequest;
+}
+
+function cardChoicePair() {
+  const pair=document.createElement('div');pair.className='pic-card-choices';pair.hidden=true;
+  pair.innerHTML='<button type="button" class="pic-primary" data-pic-create="upload">上傳名片</button><button type="button" data-pic-create="line">用 LINE 生成<span class="pic-choice-note">需填寫個資</span></button>';
+  return pair;
+}
 
 export function islandEntryParams(input) {
   const source = input || window.readActmasterInitialParams?.() || new URLSearchParams(location.search);
@@ -66,13 +83,17 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
   const root=document.getElementById('page-business-island');
   if(!root)throw Error('人脈島入口尚未準備好，請重新開啟');
   if(embedded)window.goPage?.('business-island',true);
-  await stylesheet('css/people-island-card.css?v=1','people-island-card');
+  await stylesheet('css/people-island-card.css?v=2','people-island-card');
   let world,rows=[],next='',stage='',generation=0,flight,closed=false,suspended=false,loading=false,session='',owner='';
   const current=()=>!closed&&!suspended&&!document.hidden&&shell.isConnected&&root.contains(shell)&&(!embedded||window.currentPage==='business-island')&&session===token()&&owner===text(window.currentUserProfile?.userId);
   const token=()=>{try{return window.liff?.isLoggedIn?.()?text(window.liff.getAccessToken?.()):'';}catch{return '';}};
   root.innerHTML=`<article class="pic-shell"><section class="pic-intro"><p class="pic-eyebrow">點數通 × 人脈島</p><h1>讓名片走進人脈</h1><p class="pic-lead">探索不同產業，認識新的合作夥伴。<br>先來參觀，再讓大家認識你的專長。</p><video class="pic-video" controls playsinline preload="metadata" poster="${MEDIA}video-card-v1.jpg" aria-label="人脈島介紹影片，含繁體中文字幕"><source src="${MEDIA}video-card-v1.mp4" type="video/mp4">您的裝置無法播放此影片，仍可點下方按鈕參觀人脈島。</video><div class="pic-actions"><button class="pic-primary" type="button" data-pic-primary>${labels.join}</button><button type="button" data-pic-share>分享人脈島影音名片</button></div><p class="pic-note">加入後可參觀；完成註冊及本人名片 AI 審核後開啟交流。</p><a data-pic-home href="${esc(islandLiffUrl(params,{}))}">回到點數通首頁</a></section><p class="pic-status" data-pic-status role="status" aria-live="polite"></p><div class="pic-actions"><button type="button" data-pic-retry hidden>重新確認</button><a class="pic-button" data-pic-add href="${esc(window.POINT_OA_URL||'https://lin.ee/sDW7u4T')}" target="_blank" rel="noopener noreferrer" hidden>加入點數通官方帳號</a></div><section class="pic-visit" data-pic-visit hidden><div class="pic-visit-head"><div><h2>歡迎來到人脈島</h2><p class="pic-warning" data-pic-explanation></p><p class="pic-note">想讓別人認識你的專長？上傳自己的名片，也可以自行填寫。</p></div><div class="pic-actions"><button type="button" class="pic-primary" data-pic-setup></button><button type="button" data-pic-roll>擲骰探索</button></div></div><div class="pic-selected" data-pic-selected hidden></div><div class="pic-scene"><div data-pic-dice></div><div class="bi-stage pic-stage" data-pic-stage></div></div><p class="pic-note" data-pic-count></p><div class="pic-roster" data-pic-roster></div><div class="pic-actions"><button type="button" data-pic-more hidden>更多公開會員</button></div></section></article>`;
   const shell=root.querySelector('.pic-shell');
   const $=selector=>shell.querySelector(selector);
+  const topChoice=cardChoicePair(),visitChoice=cardChoicePair(),shareRow=document.createElement('div');
+  $('[data-pic-primary]').parentElement.append(topChoice);$('[data-pic-setup]').parentElement.append(visitChoice);
+  shareRow.className='pic-actions pic-share-row';$('[data-pic-primary]').parentElement.after(shareRow);shareRow.append($('[data-pic-share]'));
+  function showCardChoices(){const shown=stage==='card'||stage==='review';topChoice.hidden=!shown;visitChoice.hidden=!shown;$('[data-pic-primary]').hidden=shown;$('[data-pic-setup]').hidden=shown;}
   function status(message){$('[data-pic-status]').textContent=message;}
   function clearVisitor(){world?.destroy();world=null;rows=[];next='';$('[data-pic-roster]').replaceChildren();$('[data-pic-visit]').hidden=true;$('[data-pic-selected]').hidden=true;}
   function invalidate(){generation++;flight?.abort();flight=null;loading=false;clearVisitor();}
@@ -120,7 +141,7 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
     try{
       const data=await request('status',ticket);if(!data||!current()||ticket!==generation)return;
       if(!stages.has(data.stage))throw Error('資格狀態暫時無法確認，請重試。');
-      stage=data.stage;$('[data-pic-primary]').textContent=labels[stage];status(explanations[stage]);
+      stage=data.stage;$('[data-pic-primary]').textContent=labels[stage];showCardChoices();status(explanations[stage]);
       if(stage==='join'){$('[data-pic-add]').hidden=false;$('[data-pic-retry]').textContent='已加入，重新確認';$('[data-pic-retry]').hidden=false;}
       else await visitor(ticket);
     }catch(error){if(ticket===generation&&!closed){status(safeError(error));$('[data-pic-retry]').hidden=false;}}
@@ -152,7 +173,8 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
   }
   function click(event){
     const button=event.target.closest('button');if(!button||!root.contains(button))return;
-    if(button.hasAttribute('data-pic-primary')||button.hasAttribute('data-pic-setup'))void primary();
+    if(['upload','line'].includes(button.dataset.picCreate)){location.href=islandLiffUrl(params,{peopleIsland:'1',islandSetup:button.dataset.picCreate});}
+    else if(button.hasAttribute('data-pic-primary')||button.hasAttribute('data-pic-setup'))void primary();
     else if(button.hasAttribute('data-pic-retry'))void check();
     else if(button.hasAttribute('data-pic-share'))void share();
     else if(button.dataset.picMember)showSummary(button.dataset.picMember);
@@ -196,9 +218,42 @@ export async function routePeopleIslandSetup({params,checkRes,refId='',netId='ad
     }catch{}finally{clearTimeout(timeout);}
     await mountPeopleIslandCard({params,embedded:true});return true;
   }
-  await stylesheet('css/people-island-card.css?v=1','people-island-card');
+  await stylesheet('css/people-island-card.css?v=2','people-island-card');
+  const method=setup==='line'?'line':setup==='upload'?'upload':'';
+  let cardModule;
+  if(method&&checkRes.isRegistered)cardModule=await loadIslandMyCardModule();
   window.goPage?.(checkRes.isRegistered?'admin-settings':'register');
-  if(checkRes.isRegistered){window.focusMyECardSection?.();window.showToast?.('上傳自己的名片或自行填寫，確認資料後完成 AI 審核。');}
+  if(checkRes.isRegistered&&method){
+    const details=document.getElementById(method==='line'?'details-profile-registration':'details-my-ecard');
+    if(details){
+      details.open=true;details.querySelector('[data-pic-creation-panel]')?.remove();
+      const panel=document.createElement('section');panel.className='pic-creation-panel';panel.dataset.picCreationPanel='';
+      panel.innerHTML=method==='line'?'<p>請確認真實姓名、手機與個資同意，再用 LINE 資料建立私人名片草稿。已有本人名片時會開啟原名片，不會重做或覆蓋。</p><button type="button" data-pic-confirm-line>確認個資並用 LINE 生成</button><p data-pic-creation-status role="status"></p>':'<p>新名片會使用原本的名片辨識流程。已有本人名片時，只在您選擇圖片後更新圖片草稿，也可直接編輯原名片。</p><button type="button" data-pic-select-upload>選擇名片圖片</button><button type="button" data-pic-edit-existing>編輯現有名片</button><p data-pic-creation-status role="status"></p>';
+      if(method==='upload')details.querySelector('summary')?.after(panel);else details.append(panel);
+      const privacy=document.getElementById('profile-privacy-agree');if(method==='line'&&privacy)privacy.checked=false;
+      if(method==='upload'){
+        const buttons=[...panel.querySelectorAll('button')];buttons.forEach(button=>button.disabled=true);
+        const prepareActor={uid:text(window.currentUserProfile?.userId),token:window.liff?.getAccessToken?.()||''};
+        await cardModule.prepareIslandCardUpload({isCurrent:()=>panel.isConnected&&window.currentPage==='admin-settings'&&prepareActor.uid===text(window.currentUserProfile?.userId)&&prepareActor.token===(window.liff?.getAccessToken?.()||'')});
+        buttons.forEach(button=>button.disabled=false);
+      }
+      let busy=false;const capture=()=>({uid:text(window.currentUserProfile?.userId),token:window.liff?.getAccessToken?.()||''});
+      panel.addEventListener('click',async event=>{
+        const button=event.target.closest('button');if(!button||!panel.contains(button)||busy)return;
+        const actor=capture(),current=()=>actor.uid&&actor.token&&actor.uid===capture().uid&&actor.token===capture().token&&panel.isConnected&&window.currentPage==='admin-settings';
+        if(!current())return;busy=true;button.disabled=true;const status=panel.querySelector('[data-pic-creation-status]');status.textContent='';
+        try{
+          if(button.hasAttribute('data-pic-confirm-line')){
+            const saved=await window.saveProfileRegistration?.({currentTarget:button},{island:true,isCurrent:current});
+            if(saved!==true||!current()){if(current())status.textContent='請確認個資已成功儲存，再按一次生成。';return;}
+            await cardModule.createIslandCardFromProfile({currentTarget:button},{isCurrent:current});
+          }else await cardModule.selectIslandCardUpload({currentTarget:button},{isCurrent:current,editOnly:button.hasAttribute('data-pic-edit-existing')});
+        }catch(error){if(current())status.textContent=error?.message||'名片操作尚未完成，請重試。';}
+        finally{busy=false;if(button.isConnected)button.disabled=false;}
+      });
+      (method==='upload'?panel:details).scrollIntoView({block:'start',behavior:'smooth'});
+    }
+  }else if(checkRes.isRegistered){window.focusMyECardSection?.();window.showToast?.('上傳自己的名片或自行填寫，確認資料後完成 AI 審核。');}
   document.body.classList.add('people-island-setup');document.querySelector('[data-pic-return]')?.remove();
   const button=document.createElement('button');button.type='button';button.className='pic-setup-return';button.dataset.picReturn='';button.textContent='返回人脈島・確認審核進度';button.addEventListener('click',()=>{location.href=islandLiffUrl(params);});document.body.append(button);
   return true;
