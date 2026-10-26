@@ -2,6 +2,15 @@
 
 本目錄是 AI工坊專案的工程約束文件。目的不是補說明文字，而是讓後續每一次修改都能先確認邊界，避免 UID、名片、點數、LIFF、Webhook 互相污染。
 
+## 代理、設計與工作技能
+
+專案共通入口：[AGENTS.md](../AGENTS.md)。介面工作按需讀取 [DESIGN.md](../DESIGN.md)，再核對該元件的現有樣式及契約。
+
+- [影音製作技能](../.agents/skills/line-media-production/SKILL.md)：人物與業務來源核對、教學／宣傳影片製作及媒體 QA。
+- [發布驗證技能](../.agents/skills/line-release-verification/SKILL.md)：依修改範圍完成測試、發布、正式版本讀回與驗證。
+
+這些入口引用本目錄原有契約；詳細業務規則與測試流程仍在各自來源維護，避免複製後失去同步。
+
 ## 使用原則
 
 修改程式前，先判斷本次修改屬於哪一類：
