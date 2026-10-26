@@ -4,6 +4,8 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {shopKeyword,buildShopKeywordMessage,readMallSummary,consumeShopKeywords,signRemainingShopEvents} from '../worker/store-line-keywords.mjs';
+import {consumeIslandVideoKeywords} from '../worker/island-video-card.mjs';
+import {personalShareLink} from '../worker/island-entry.mjs';
 const A='U'+'a'.repeat(32),B='U'+'b'.repeat(32),C='U'+'c'.repeat(32),D='U'+'d'.repeat(32);
 const event=(message='儀錶板',uid=A,extra={})=>({type:'message',mode:'active',source:{type:'user',userId:uid},message:{type:'text',text:message},replyToken:'reply-'+uid,...extra});
 const bubbles=message=>message.contents?.type==='carousel'?message.contents.contents:[message.contents];
@@ -292,7 +294,7 @@ test('new chat data commands retain single reply ownership in mixed webhooks',as
 });
 function webhookHarness(f){
  const replies=[],forward=[],gas=[],saved=[];
- const noop={reply:async()=>false},scope={Response,JSON,console,consumeShopKeywords,signRemainingShopEvents,LineOAMyVideoKeywordModule:noop,LineOACardCoolKeywordModule:noop,ReferralFriendKeywordModule:noop,LineOAStoreSearchKeywordModule:noop,LineOAKeywordRuleModule:{replyPayload:async()=>null}};
+ const noop={reply:async()=>false},scope={Response,JSON,console,consumeShopKeywords,signRemainingShopEvents,consumeIslandVideoKeywords,personalShareLink,LineOAMyVideoKeywordModule:noop,LineOACardCoolKeywordModule:noop,ReferralFriendKeywordModule:noop,LineOAStoreSearchKeywordModule:noop,LineOAKeywordRuleModule:{replyPayload:async()=>null}};
  const method=legacy.slice(legacy.indexOf('  async handleWebhook(request, env, ctx) {'),legacy.indexOf('  async isAiPaused(env, threadId) {'));
  const handler=vm.runInNewContext('({'+method+'})',scope);
  handler.consumeMyCardEvents=async events=>events;

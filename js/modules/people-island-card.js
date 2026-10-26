@@ -12,12 +12,13 @@ const explanations = {
 };
 let activeController;
 let autoShareConsumed = false;
+let autoEditConsumed = false;
 let myCardModuleRequest;
 
 async function loadIslandMyCardModule() {
   if (window.MyCardModule?.createIslandCardFromProfile && window.MyCardModule?.selectIslandCardUpload) return window.MyCardModule;
   if (!myCardModuleRequest) myCardModuleRequest=new Promise((resolve,reject)=>{
-    const script=document.createElement('script');script.src=new URL('mycard.js?v=8.98&island=1',import.meta.url).href;
+    const script=document.createElement('script');script.src=new URL('mycard.js?v=8.99&island=2',import.meta.url).href;
     script.onload=()=>window.MyCardModule?.createIslandCardFromProfile?resolve(window.MyCardModule):reject(Error('名片設定尚未載入，請重試。'));
     script.onerror=()=>reject(Error('名片設定載入失敗，請重試。'));document.head.append(script);
   }).catch(error=>{myCardModuleRequest=null;throw error;});
@@ -79,12 +80,13 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
   activeController?.destroy();
   const incomingParams=params||window.readActmasterInitialParams?.()||new URLSearchParams(location.search);
   const shareOnOpen=embedded&&incomingParams.get('islandShare')==='1';
+  const editOnOpen=embedded&&incomingParams.get('islandVideoEdit')==='1';
   params=islandEntryParams(incomingParams);
   const root=document.getElementById('page-business-island');
   if(!root)throw Error('人脈島入口尚未準備好，請重新開啟');
   if(embedded)window.goPage?.('business-island',true);
   await stylesheet('css/people-island-card.css?v=2','people-island-card');
-  let world,rows=[],next='',stage='',generation=0,flight,closed=false,suspended=false,loading=false,session='',owner='';
+  let world,rows=[],next='',stage='',generation=0,flight,copyFlight,textEditor,editing=false,closed=false,suspended=false,loading=false,session='',owner='';
   const current=()=>!closed&&!suspended&&!document.hidden&&shell.isConnected&&root.contains(shell)&&(!embedded||window.currentPage==='business-island')&&session===token()&&owner===text(window.currentUserProfile?.userId);
   const token=()=>{try{return window.liff?.isLoggedIn?.()?text(window.liff.getAccessToken?.()):'';}catch{return '';}};
   root.innerHTML=`<article class="pic-shell"><section class="pic-intro"><p class="pic-eyebrow">點數通 × 人脈島</p><h1>讓名片走進人脈</h1><p class="pic-lead">探索不同產業，認識新的合作夥伴。<br>先來參觀，再讓大家認識你的專長。</p><video class="pic-video" controls playsinline preload="metadata" poster="${MEDIA}video-card-v3.jpg" aria-label="人脈島介紹影片，含繁體中文字幕"><source src="${MEDIA}video-card-v3.mp4" type="video/mp4">您的裝置無法播放此影片，仍可點下方按鈕參觀人脈島。</video><div class="pic-actions"><button class="pic-primary" type="button" data-pic-primary>${labels.join}</button><button type="button" data-pic-share>分享人脈島影音名片</button></div><p class="pic-note">加入後可參觀；完成註冊及本人名片 AI 審核後開啟交流。</p><a data-pic-home href="${esc(islandLiffUrl(params,{}))}">回到點數通首頁</a></section><p class="pic-status" data-pic-status role="status" aria-live="polite"></p><div class="pic-actions"><button type="button" data-pic-retry hidden>重新確認</button><a class="pic-button" data-pic-add href="${esc(window.POINT_OA_URL||'https://lin.ee/sDW7u4T')}" target="_blank" rel="noopener noreferrer" hidden>加入點數通官方帳號</a></div><section class="pic-visit" data-pic-visit hidden><div class="pic-visit-head"><div><h2>歡迎來到人脈島</h2><p class="pic-warning" data-pic-explanation></p><p class="pic-note">想讓別人認識你的專長？上傳自己的名片，也可以自行填寫。</p></div><div class="pic-actions"><button type="button" class="pic-primary" data-pic-setup></button><button type="button" data-pic-roll>擲骰探索</button></div></div><div class="pic-selected" data-pic-selected hidden></div><div class="pic-scene"><div data-pic-dice></div><div class="bi-stage pic-stage" data-pic-stage></div></div><p class="pic-note" data-pic-count></p><div class="pic-roster" data-pic-roster></div><div class="pic-actions"><button type="button" data-pic-more hidden>更多公開會員</button></div></section></article>`;
@@ -93,10 +95,13 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
   const topChoice=cardChoicePair(),visitChoice=cardChoicePair(),shareRow=document.createElement('div');
   $('[data-pic-primary]').parentElement.append(topChoice);$('[data-pic-setup]').parentElement.append(visitChoice);
   shareRow.className='pic-actions pic-share-row';$('[data-pic-primary]').parentElement.after(shareRow);shareRow.append($('[data-pic-share]'));
+  const editRow=document.createElement('div');editRow.className='pic-actions pic-share-row';
+  editRow.innerHTML='<button type="button" data-pic-edit-video>編輯我的影音名片・標題與說明</button>';
+  shareRow.after(editRow);
   function showCardChoices(){const shown=stage==='card'||stage==='review';topChoice.hidden=!shown;visitChoice.hidden=!shown;$('[data-pic-primary]').hidden=shown;$('[data-pic-setup]').hidden=shown;}
   function status(message){$('[data-pic-status]').textContent=message;}
   function clearVisitor(){world?.destroy();world=null;rows=[];next='';$('[data-pic-roster]').replaceChildren();$('[data-pic-visit]').hidden=true;$('[data-pic-selected]').hidden=true;}
-  function invalidate(){generation++;flight?.abort();flight=null;loading=false;clearVisitor();}
+  function invalidate(){generation++;flight?.abort();flight=null;copyFlight?.abort();copyFlight=null;textEditor?.close();textEditor=null;loading=false;clearVisitor();}
   function safeError(error){return error?.name==='AbortError'?'連線暫停，請重新確認。':error?.message||'目前無法確認資格，請稍後重試。';}
   async function request(path,ticket) {
     const base=new URL(window.Config?.WORKER_URL||window.WORKER_URL||'');
@@ -156,6 +161,52 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
     }
     location.href=islandLiffUrl(params,{peopleIsland:'1',...(stage==='register'?{islandSetup:'register'}:stage!=='ready'?{islandSetup:'card'}:{})});
   }
+  async function copyRequest(method,ticket,data){
+    if(!current()||ticket!==generation)throw Error('登入或頁面已變更，請重新開啟。');
+    const base=new URL(window.Config?.WORKER_URL||window.WORKER_URL||'');
+    if(base.protocol!=='https:')throw Error('人脈島設定服務暫時無法使用。');
+    const controller=new AbortController();copyFlight=controller;
+    const timeout=setTimeout(()=>controller.abort(),10000);
+    try{
+      const response=await fetch(new URL('v1/island-video-card',base.href.replace(/\/?$/,'/')),{method,headers:{Authorization:'Bearer '+session,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,cache:'no-store',signal:controller.signal});
+      const result=await response.json();
+      if(!current()||ticket!==generation)throw Error('登入或頁面已變更，未套用過期結果。');
+      if(!response.ok||result?.success!==true)throw Error(text(result?.error)||'影音名片儲存失敗，草稿仍保留。');
+      const card=result.card;
+      if(!card||typeof card.title!=='string'||typeof card.desc!=='string'||!Number.isSafeInteger(card.revision))throw Error('影音名片資料不完整，請重新開啟。');
+      return card;
+    }finally{clearTimeout(timeout);if(copyFlight===controller)copyFlight=null;}
+  }
+  function displayCopy(card){
+    $('.pic-intro h1').textContent=card.title;
+    $('.pic-lead').textContent=card.desc;$('.pic-lead').style.whiteSpace='pre-line';
+  }
+  async function editVideoText(){
+    if(!embedded){location.href=islandLiffUrl(params,{peopleIslandCard:'1',islandVideoEdit:'1'});return;}
+    if(editing||textEditor)return;
+    const ticket=generation,button=$('[data-pic-edit-video]');editing=true;button.disabled=true;
+    try{
+      let copy=await copyRequest('GET',ticket);
+      const module=await loadIslandMyCardModule();
+      if(!current()||ticket!==generation)return;
+      if(typeof module?.openVideoCardTextEditor!=='function')throw Error('請重新整理頁面，載入新版影片名片編輯器。');
+      displayCopy(copy);let attempt;
+      textEditor=await module.openVideoCardTextEditor({
+        title:copy.title,desc:copy.desc,videoUrl:MEDIA+'video-card-v3.mp4',thumbnailUrl:MEDIA+'video-card-v3.jpg',
+        buttons:[{l:labels.join},{l:'分享好友'}],isCurrent:()=>current()&&ticket===generation,
+        onSave:async draft=>{
+          if(!current()||ticket!==generation)throw Error('登入身分已變更，請重新開啟。');
+          const facts=JSON.stringify({title:draft.title,desc:draft.desc,revision:copy.revision});
+          if(attempt?.facts!==facts)attempt={facts,requestKey:crypto.randomUUID()};
+          copy=await copyRequest('PUT',ticket,{...JSON.parse(facts),requestKey:attempt.requestKey});
+          displayCopy(copy);status('我的人脈島影音名片已儲存；重新輸入「人脈島」或分享會使用新版文案。');
+          return true;
+        },
+        onShare:share,onClose:()=>{textEditor=null;}
+      });
+    }catch(error){if(!closed&&ticket===generation)status(safeError(error));}
+    finally{editing=false;if(button.isConnected)button.disabled=false;}
+  }
   async function share(){
     if(!embedded){location.href=islandLiffUrl(params,{peopleIslandCard:'1',islandShare:'1'});return;}
     const button=$('[data-pic-share]');button.disabled=true;
@@ -165,8 +216,8 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
       const personal=await request('share-link',ticket);
       if(!personal||!current()||ticket!==generation)return;
       if(typeof personal.entryUrl!=='string'||!personal.entryUrl.trim())throw Error('專屬分享連結暫時無法取得，請重試。');
-      const module=await import('./people-island-flex.mjs?v=4');if(!current()||ticket!==generation)return;
-      const message=module.buildPeopleIslandVideoFlex({entryUrl:personal.entryUrl});
+      const module=await import('./people-island-flex.mjs?v=5');if(!current()||ticket!==generation)return;
+      const message=module.buildPeopleIslandVideoFlex({entryUrl:personal.entryUrl,...(personal.card?{title:personal.card.title,desc:personal.card.desc}:{})});
       const result=await window.liff.shareTargetPicker([message]);
       if(current())status(result?.status==='success'?'影音名片已分享。':'分享視窗已關閉，未確認送出。');
     }catch(error){if(!closed)status(safeError(error));}finally{if(button.isConnected)button.disabled=false;}
@@ -177,12 +228,13 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
     else if(button.hasAttribute('data-pic-primary')||button.hasAttribute('data-pic-setup'))void primary();
     else if(button.hasAttribute('data-pic-retry'))void check();
     else if(button.hasAttribute('data-pic-share'))void share();
+    else if(button.hasAttribute('data-pic-edit-video'))void editVideoText();
     else if(button.dataset.picMember)showSummary(button.dataset.picMember);
     else if(button.hasAttribute('data-pic-close-summary'))$('[data-pic-selected]').hidden=true;
     else if(button.hasAttribute('data-pic-more')&&!loading){loading=true;button.disabled=true;loadMembers(generation,true).catch(error=>{if(current())status(safeError(error));}).finally(()=>{loading=false;if(button.isConnected)button.disabled=false;});}
     else if(button.hasAttribute('data-pic-roll')&&world&&current()&&!loading){loading=true;button.disabled=true;const dice=new Uint32Array(2);crypto.getRandomValues(dice);world.roll({dice1:1+dice[0]%6,dice2:1+dice[1]%6,rows,valid:current}).then(result=>{if(result?.handle)showSummary(result.handle);}).catch(error=>{if(current())status(safeError(error));}).finally(()=>{loading=false;if(button.isConnected)button.disabled=false;});}
   }
-  const visibility=()=>{if(document.hidden){generation++;flight?.abort();world?.pause(true);}else if(embedded)void check();};
+  const visibility=()=>{if(document.hidden){generation++;flight?.abort();copyFlight?.abort();textEditor?.close();textEditor=null;world?.pause(true);}else if(embedded)void check();};
   const pagehide=()=>{suspended=true;invalidate();root.querySelector('video')?.pause();};
   const pageshow=event=>{if(event.persisted){suspended=false;if(embedded)void check();}};
   const sessionCheck=()=>{if(!closed&&(!shell.isConnected||!root.contains(shell)||(embedded&&window.currentPage!=='business-island'))){destroy();return;}if(embedded&&!closed&&!suspended&&(token()!==session||owner!==text(window.currentUserProfile?.userId))){invalidate();stage='';status('登入身分已變更，請重新確認。');$('[data-pic-retry]').hidden=false;}};
@@ -194,6 +246,9 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
     const identityToken=token(),profile=await window.liff.getProfile();if(identityToken!==token()){status('登入身分已變更，請重新開啟。');return activeController;}window.currentUserProfile=profile;
     if(params.get('ref')&&typeof window.writeFirstReferral==='function')window.writeFirstReferral(text(profile.userId),params.get('ref'),params.get('net')||'admin');
     if(!closed)await check();
+    if(editOnOpen&&!autoEditConsumed&&current()){
+      autoEditConsumed=true;await editVideoText();
+    }
     if(shareOnOpen&&!autoShareConsumed&&current()){
       autoShareConsumed=true;
       await share();

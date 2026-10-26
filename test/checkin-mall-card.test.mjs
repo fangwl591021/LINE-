@@ -5,6 +5,8 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {buildCheckinMallCard,isCheckinMallEvent,supplementCheckinMallCards,handleCheckinMall} from '../worker/checkin-mall-card.mjs';
 import {storeInviteProfileView} from '../workerbackup.js';
+import {consumeIslandVideoKeywords} from '../worker/island-video-card.mjs';
+import {personalShareLink} from '../worker/island-entry.mjs';
 const A='U'+'1'.repeat(32),B='U'+'2'.repeat(32),ADMIN='Uf729764dbb5b652a5a90a467320bea29';
 const NOW=Date.parse('2026-10-19T04:00:00Z');
 const event=(extra={})=>({type:'message',mode:'active',source:{type:'user',userId:A},timestamp:NOW,webhookEventId:'evt-1',replyToken:'mother-only',message:{type:'text',text:'會員打卡',id:'msg-1'},...extra});
@@ -97,7 +99,7 @@ test('real webhook integration preserves mother bytes/signature, waits for forwa
   const f=fixture(t),source=readFileSync(new URL('../workerbackup.js',import.meta.url),'utf8');
   const start=source.indexOf('  queueCheckinMallCards(events, env, ctx, forwardJob) {'),end=source.indexOf('  async isAiPaused(env, threadId) {',start);
   const noop={reply:async()=>false},scope={Response,JSON,console,isCheckinMallEvent,supplementCheckinMallCards:(events,env,result,points)=>supplementCheckinMallCards(events,env,result,points,f.fetcher,NOW),storeCommercePointService:f.points,
-    consumeShopKeywords:async e=>e,signRemainingShopEvents:async()=>{throw Error('must preserve signature');},LineOAMyVideoKeywordModule:noop,LineOACardCoolKeywordModule:noop,ReferralFriendKeywordModule:noop,LineOAStoreSearchKeywordModule:noop,LineOAKeywordRuleModule:{replyPayload:async()=>null}};
+    consumeShopKeywords:async e=>e,consumeIslandVideoKeywords,personalShareLink,signRemainingShopEvents:async()=>{throw Error('must preserve signature');},LineOAMyVideoKeywordModule:noop,LineOACardCoolKeywordModule:noop,ReferralFriendKeywordModule:noop,LineOAStoreSearchKeywordModule:noop,LineOAKeywordRuleModule:{replyPayload:async()=>null}};
   const handler=vm.runInNewContext('({'+source.slice(start,end)+'})',scope),forward=[],jobs=[];let release;
   Object.assign(handler,{text:v=>String(v||''),verifySignature:async(_,s)=>s==='valid',consumeMyCardEvents:async e=>e,ensure:async()=>{},saveEvent:async()=>{},followPointOnboardingJob:async()=>{},forwardToSecondSystem:async(raw,sig)=>{forward.push({raw,sig});return new Promise(r=>release=r);},replySimpleMyCard:async()=>false,filterAutoReplyPayload:async r=>r,forwardToGas:async()=>({skipped:true}),replyLine:async()=>{throw Error('child cannot reply');}});
   const raw=JSON.stringify({destination:'channel',events:[event()]},null,2),request=sig=>new Request('https://worker.test/line-webhook',{method:'POST',headers:{'x-line-signature':sig},body:raw});

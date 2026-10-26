@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { CardLinks } from '../worker/card-links.mjs';
 import { consumeShopKeywords, signRemainingShopEvents } from '../worker/store-line-keywords.mjs';
+import { consumeIslandVideoKeywords } from '../worker/island-video-card.mjs';
+import { personalShareLink } from '../worker/island-entry.mjs';
 
 const source = readFileSync(new URL('../workerbackup.js', import.meta.url), 'utf8');
 const pending = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
@@ -24,7 +26,7 @@ function harness({ fastTimers = false, fetchImpl } = {}) {
     setTimeout: fastTimers ? (fn, ms) => setTimeout(fn, Math.min(ms, 15)) : setTimeout, clearTimeout,
     console: { log: s => logs.push(JSON.parse(s)), error: s => logs.push(JSON.parse(s)) },
     fetch: fetchImpl || (() => { throw Error('unexpected external fetch'); }), CardLinks,
-    cardLinksEnabled: async () => true, consumeShopKeywords, signRemainingShopEvents,
+    cardLinksEnabled: async () => true, consumeShopKeywords, signRemainingShopEvents,consumeIslandVideoKeywords,personalShareLink,
     LineOAMyVideoKeywordModule: { ...noop, buildExistingVideoCardFlex: async () => ({ type: 'flex', altText: 'video' }) },
     LineOACardCoolKeywordModule: noop, ReferralFriendKeywordModule: noop, LineOAStoreSearchKeywordModule: noop,
     LineOAKeywordRuleModule: { replyPayload: async () => null }

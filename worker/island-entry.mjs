@@ -4,6 +4,7 @@ import { ExchangeZoneModule } from './exchange-zone.mjs';
 import { resolveIslandMember, islandInteractionState, IslandAccessError } from './island-interaction-access.mjs';
 import { hydrateMemberAvatars } from './member-chat-avatar.mjs';
 import { memberIndustryLabel } from './member-chat-industry.mjs';
+import { readIslandVideoCardCopy } from './island-video-card.mjs';
 const BASE = '/v1/island-entry';
 const UID = /^U[0-9a-f]{32}$/i;
 const text = value => String(value ?? '').trim();
@@ -38,7 +39,7 @@ async function joinedIdentity(request, fetcher) {
   if (typeof friendship.friendFlag !== 'boolean') fail('AUTH_UNAVAILABLE', '暫時無法確認點數通加入狀態，請稍後重試', 503);
   return { uid: verified.uid, joined: friendship.friendFlag };
 }
-async function personalShareLink(db, uid) {
+export async function personalShareLink(db, uid) {
   const actor = await resolveIslandMember(db, uid), ownId = actor?.user.line_id || uid;
   let network = 'admin';
   if (actor) {
@@ -74,7 +75,7 @@ export async function handleIslandEntry(request, env, fetcher = fetch) {
       const verified = await lineIdentity(request, fetcher);
       const db = env.ACTMASTER_DB?.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
       if (!db) throw Error('ISLAND_DB_UNAVAILABLE');
-      return reply(await personalShareLink(db, verified.uid));
+      return reply({...await personalShareLink(db, verified.uid),card:await readIslandVideoCardCopy(db,verified.uid)});
     }
     const verified = await joinedIdentity(request, fetcher);
     if (!verified.joined) {

@@ -12,6 +12,17 @@
 
 ## 入口與平台規格
 
+### 本人可編輯影片名片關鍵字（2026-10-26）
+
+- 精準文字「人脈島」在原LINE簽章核對後、母站／GAS轉送前逐事件認領；回覆一則既有MEGA、9:16影片Flex，另附「編輯標題與說明」quick reply。群組只給私聊提示；standby、無token及同批重複token不回覆，不將已認領事件轉給其他reply owner。混合批次只重簽轉送剩餘事件，自然語句維持原路徑。
+- 每位用戶只編輯自己的 `title / desc`，沿用原影片名片WYSIWYG畫布及文字欄位。固定影片、縮圖、加入及分享動作不開放修改，不因此開放全域個人影片上傳權限；原video_profile及三種靜態名片保持不變。
+- 「編輯我的影音名片・標題與說明」在推廣頁可找到；quick reply 的 `islandVideoEdit=1` 只是開編輯器，沒有自動儲存或交流資格。原標題、說明可以取消；儲存錯誤或409保持草稿，切帳號／token／頁面時忽略舊結果並關閉編輯器。
+- GET／PUT `/v1/island-video-card` 每次以LINE profile重新驗證登入，僅存本人設定。PUT白名單只有title、desc、revision、UUID requestKey；不能用URL或payload指定其他會員，標題1–80字、說明1–800字、拒絕控制字元。版本CAS防止兩分頁覆蓋，nonce與重試UUID分開。GET及關鍵字讀取不建立資料。
+- additive migration0076只新增本人文案及儲存重試紀錄，不變動原個人名片、會員、角色、推薦來源或點數。canonical身分僅採LINE UID及明確有效old/new連結，不能把member row_id當成另一人UID；移轉兩端若各有文案，回409核對，不猜測覆寫。
+- 分享仍取得fresh `/share-link`，現在並回傳當下分享者已儲存的title／desc／revision；不接收外來UID、ref或net來選文案。A分享給B後，B重新分享用B自己的連結及文案；不使用未儲存草稿或改寫最初推薦來源。
+- 未加入或未註冊的已登入LINE用戶可編輯自己的宣傳文案，不會因此註冊會員、公開本人名片或通過交流審核。既有加入→只讀參觀→註冊及本人AI審核流程維持。
+
+
 - people-island-card.html 為不需登入的影片預覽；所有實際加入／分享／參觀使用既有 LIFF index 入口 peopleIslandCard=1，保留 ref/net；不在可能超出 LIFF endpoint 範圍的獨立預覽頁初始化 LIFF。
 - peopleIsland=1&islandSetup=register|card 只接既有註冊或本人名片設定；提供返回人脈島重新查核，審核通過後 peopleIsland=1 才開原完整島嶼。
 - Flex 為獨立 mega 單泡泡、hero video 9:16、同比例封面與 altContent、純 URI 按鈕；不包 carousel，不覆寫會員 video_profile。分享只由使用者明確點擊並確認收件者，取消不顯示已傳送。

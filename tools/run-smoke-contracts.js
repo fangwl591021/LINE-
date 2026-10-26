@@ -231,6 +231,8 @@ const fullChecks = [
   'test/exchange-zone-avatar.test.mjs',
   'test/island-entry.test.mjs',
   'test/people-island-flex.test.mjs',
+  'test/island-video-card.test.mjs',
+  'test/island-video-keyword-route.test.mjs',
   'test/island-card-creation.test.mjs',
   'test/card-review-receipt.test.mjs',
   'tools/check-personal-task-recurrence-schema-contract.js',
