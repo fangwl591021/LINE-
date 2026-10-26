@@ -16,3 +16,9 @@
 - peopleIsland=1&islandSetup=register|card 只接既有註冊或本人名片設定；提供返回人脈島重新查核，審核通過後 peopleIsland=1 才開原完整島嶼。
 - Flex 為獨立 mega 單泡泡、hero video 9:16、同比例封面與 altContent、純 URI 按鈕；不包 carousel，不覆寫會員 video_profile。分享只由使用者明確點擊並確認收件者，取消不顯示已傳送。
 - LINE 官方規格核對： https://developers.line.biz/en/reference/line-login/#get-friendship-status 、https://developers.line.biz/en/docs/messaging-api/create-flex-message-including-video/ 、https://developers.line.biz/en/docs/liff/developing-liff-apps/ 、https://developers.line.biz/en/reference/liff/#share-target-picker 。
+
+## 審核結果的伺服器權限
+
+- 客戶端 aiReviewStatus 或 safetyReview.pass 不得提升資格。真實 reviewCardSafety 先核對登入與名片管理權限，再以實際 AI 結果寫入一小時 KV 憑據；綁定驗證會員、名片列及完整審核內容雜湊，包含模型輸入限制之外的文字／按鈕尾段。
+- 最終合併後 self_profile 儲存只能採用相符憑據；舊的有效、未封存、未合併 self_profile 僅在審核內容未變時保留明確既有結果。其他來源的 passed 不得藉轉換來源繼承；改內容且無有效憑據回到 pending，不改私人／公開選擇。
+- 新的通過報告無有效憑據時回傳 AI_REVIEW_RECEIPT_REQUIRED，不能讓前端誤報審核成功。KV／服務失敗不提升權限，未改內容的既有通過資格保留。參觀者或待審者不得寫入人脈島在線心跳。

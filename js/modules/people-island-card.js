@@ -103,7 +103,7 @@ export async function mountPeopleIslandCard({ params, embedded=false } = {}) {
   }
   async function visitor(ticket){
     await stylesheet('css/business-island.css?v=10','people-island-scene');
-    const scene=await import('./business-island-world.mjs?v=8');if(!current()||ticket!==generation)return;
+    const scene=await import('./business-island-world.mjs?v=9');if(!current()||ticket!==generation)return;
     $('[data-pic-visit]').hidden=false;$('[data-pic-explanation]').textContent=explanations[stage];$('[data-pic-setup]').textContent=labels[stage];
     world=scene.createIslandWorld({host:$('[data-pic-stage]'),diceHost:$('[data-pic-dice]'),asset:name=>new URL('../../'+name,import.meta.url).href,avatar,profile:window.currentUserProfile,isCurrent:current,onMember:showSummary,onCategory:()=>{},onSail:async category=>{
       if(!current()||loading)return;loading=true;try{await world?.sailTo(category,{valid:current});}catch(error){if(current())status(safeError(error));}finally{loading=false;}
