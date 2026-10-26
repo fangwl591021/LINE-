@@ -1,6 +1,6 @@
 // A separate campaign card; never reads or overwrites a member's video_profile.
-export const PEOPLE_ISLAND_VIDEO = 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/people-island/video-card-v1.mp4';
-export const PEOPLE_ISLAND_POSTER = 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/people-island/video-card-v1.jpg';
+export const PEOPLE_ISLAND_VIDEO = 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/people-island/video-card-v2.mp4';
+export const PEOPLE_ISLAND_POSTER = 'https://pub-1e42b8765b1e4675bfb7be60f0e785ca.r2.dev/people-island/video-card-v2.jpg';
 const DEFAULT_LIFF = '1660923784-vViMTZ1y';
 const label = '加入點數通・探索人脈島';
 
@@ -34,7 +34,7 @@ export function buildPeopleIslandVideoFlex({entryUrl} = {}) {
   return {
     type:'flex', altText:'人脈島｜探索產業，認識合作夥伴；加入後可參觀，完成註冊與名片審核後開啟交流。',
     contents:{
-      type:'bubble',size:'mega',
+      type:'bubble',size:'giga',
       hero:{type:'video',url:PEOPLE_ISLAND_VIDEO,previewUrl:PEOPLE_ISLAND_POSTER,aspectRatio:'9:16',
         action:{type:'uri',label,uri},
         altContent:{type:'image',url:PEOPLE_ISLAND_POSTER,size:'full',aspectRatio:'9:16',aspectMode:'cover',action:{type:'uri',label,uri}}},
