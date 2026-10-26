@@ -87,6 +87,40 @@ test('visitor roster is a safe public projection and accepts joined users withou
   assert.equal(f.snapshot(), before); assert.equal(f.writes.length, 0);
 });
 
+test('visitor roster excludes unnamed current/public versions without borrowing private names or writing member data', async t => {
+  const f = fixture(t);
+  f.add(102); f.add(103); f.add(104);
+  f.sql.exec("UPDATE card_contacts SET name='未命名' WHERE row_id='card-101'; UPDATE card_contacts SET name='',english_name='' WHERE row_id='card-102'; UPDATE card_contacts SET name='',english_name='Public English Name' WHERE row_id='card-103'");
+  f.add(105, { lineId: uid(104), rowId: 'member-104', visibility: 'private', updated: '2099-01-01' });
+  f.sql.exec("UPDATE card_contacts SET name='未命名' WHERE row_id='card-104'; UPDATE card_contacts SET name='私人真實姓名' WHERE row_id='card-105'");
+  const before = f.snapshot();
+  const guest = await f.entry('/members', { token: 'guest' });
+  assert.equal(guest.status, 200);
+  assert.deepEqual(guest.items.map(row => row.handle).sort(), ['card-100', 'card-103']);
+  assert.equal(guest.items.find(row => row.handle === 'card-103').name, 'Public English Name');
+  assert.doesNotMatch(JSON.stringify(guest), /未命名|私人真實姓名|private-|line_id|row_id|phone/);
+  assert.equal(f.snapshot(), before); assert.equal(f.writes.length, 0);
+  f.sql.exec("UPDATE card_contacts SET name='補正公開姓名' WHERE row_id='card-101'");
+  assert.ok((await f.entry('/members', { token: 'guest' })).items.some(row => row.handle === 'card-101'));
+});
+
+test('visitor pagination fills from eligible names even when more than one page of unnamed members sorts first', async t => {
+  const f = fixture(t);
+  f.sql.exec("UPDATE card_contacts SET name='未命名'");
+  for (let n = 0; n < 70; n++) {
+    f.add(1000 + n, { rowId: (n < 35 ? 'bad-' : 'good-') + String(n).padStart(2, '0') });
+    if (n < 35) f.sql.prepare('UPDATE card_contacts SET name=? WHERE row_id=?').run('未命名', 'card-' + (1000 + n));
+  }
+  const before = f.snapshot();
+  const first = await f.entry('/members', { token: 'guest' });
+  assert.equal(first.status, 200); assert.equal(first.items.length, 30); assert.ok(first.next);
+  const second = await f.entry('/members?after=' + encodeURIComponent(first.next), { token: 'guest' });
+  assert.equal(second.status, 200); assert.equal(second.items.length, 5); assert.equal(second.next, '');
+  assert.equal(new Set([...first.items, ...second.items].map(row => row.handle)).size, 35);
+  assert.ok([...first.items, ...second.items].every(row => Number(row.handle.slice(5)) >= 1035));
+  assert.equal(f.snapshot(), before); assert.equal(f.writes.length, 0);
+});
+
 test('public roster preserves blocks, opt-out, canonical members and private-version exclusion', async t => {
   const f = fixture(t);
   f.add(102, { status: 'pending' });

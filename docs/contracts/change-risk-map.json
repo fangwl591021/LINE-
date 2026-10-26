@@ -1,6 +1,13 @@
 {
   "schemaVersion": "change_risk_map_v1",
   "areas": {
+    "member-discovery": {
+      "label": "交流會員名冊 / 人脈島 / 有效姓名",
+      "keywords": ["找會員", "交流", "未命名", "人脈島名冊"],
+      "docs": ["docs/contracts/member-discovery-name.md", "docs/rules/core-invariants.md", "docs/contracts/people-island-onboarding.md"],
+      "checks": ["test/member-chat.test.mjs", "test/island-entry.test.mjs", "test/member-display-feed.test.mjs"],
+      "regressionIds": ["MEMBER-NAME-01", "MEMBER-NAME-02", "MEMBER-NAME-03"]
+    },
     "island-video-card": {
       "label": "人脈島影片名片 / 本人文案 / 關鍵字",
       "keywords": ["人脈島", "影片名片", "人脈島關鍵字", "人脈島標題"],

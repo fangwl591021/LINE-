@@ -1,6 +1,7 @@
 import { getExchangeZoneLikeState, hydrateExchangeZoneLikes, toggleExchangeZoneLike } from './exchange-zone-likes.mjs';
 import { hydrateMemberAvatars, lineAvatarUrl } from './member-chat-avatar.mjs';
 import { exchangeInteractionError } from './island-interaction-access.mjs';
+import { validMemberNameSql } from './member-display-name.mjs';
 
 const MAX_POSTS = 50;
 const PUBLISH_COST = 10;
@@ -196,6 +197,13 @@ function selectColumns() {
     FROM exchange_zone_posts p
   `;
 }
+
+// Use the same account-name priority as withAuthor. Public discovery must not
+// expose a placeholder author or substitute names from a private card.
+const PUBLIC_AUTHOR_NAME = validMemberNameSql(`(SELECT name FROM (
+  SELECT public_author.name,CASE WHEN public_author.line_id=p.author_user_id THEN 0 ELSE 1 END AS priority
+  FROM users public_author WHERE public_author.line_id=p.author_user_id OR public_author.row_id=p.author_user_id
+  ) ORDER BY priority LIMIT 1)`);
 
 async function withAuthor(db, row) {
   const fallback = { ...row, author_name: '會員', avatar_line_id: '', author_avatar_url: '' };
@@ -454,7 +462,7 @@ export const ExchangeZoneModule = {
     } else try {
       result = await env.ACTMASTER_DB.prepare(`
         ${selectColumns()}
-        WHERE p.status = 'published'
+        WHERE p.status = 'published' AND ${PUBLIC_AUTHOR_NAME}
 
         ORDER BY COALESCE(NULLIF(p.published_at, ''), p.created_at) DESC, p.post_id DESC
         LIMIT ?1
@@ -463,7 +471,7 @@ export const ExchangeZoneModule = {
       if (!isPublishSchemaError(error)) throw error;
       result = await env.ACTMASTER_DB.prepare(`
         ${selectColumns()}
-        WHERE p.status = 'published'
+        WHERE p.status = 'published' AND ${PUBLIC_AUTHOR_NAME}
         ORDER BY COALESCE(NULLIF(p.published_at, ''), p.created_at) DESC, p.post_id DESC
         LIMIT ?1
       `).bind(limit).all();
@@ -499,7 +507,7 @@ export const ExchangeZoneModule = {
     } else try {
       row = await env.ACTMASTER_DB.prepare(`
         ${selectColumns()}
-        WHERE p.post_handle = ?1 AND p.status = 'published'
+        WHERE p.post_handle = ?1 AND p.status = 'published' AND ${PUBLIC_AUTHOR_NAME}
 
         LIMIT 1
       `).bind(postHandle).first();
@@ -507,7 +515,7 @@ export const ExchangeZoneModule = {
       if (!isPublishSchemaError(error)) throw error;
       row = await env.ACTMASTER_DB.prepare(`
         ${selectColumns()}
-        WHERE p.post_handle = ?1 AND p.status = 'published'
+        WHERE p.post_handle = ?1 AND p.status = 'published' AND ${PUBLIC_AUTHOR_NAME}
         LIMIT 1
       `).bind(postHandle).first();
     }

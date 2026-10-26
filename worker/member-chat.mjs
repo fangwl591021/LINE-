@@ -9,6 +9,7 @@ import {isMemberNumber} from './member-number.mjs';
 import { hydrateMemberAvatars } from './member-chat-avatar.mjs';
 import { readIslandPresence, recordIslandPresence } from './member-chat-presence.mjs';
 import { IslandAccessError, requireIslandInteraction, approvedIslandCardSql } from './island-interaction-access.mjs';
+import { memberDisplayNameSql, validMemberNameSql } from './member-display-name.mjs';
 const BASE = '/v1/member-chat';
 // Shared verified membership only; AI navigation does not inherit private-chat feature/card gates.
 export { identity as resolveMemberIdentity, jsonBody as boundedJson };
@@ -152,15 +153,22 @@ async function peerInfo(db, id) {
   const row = await statement(db, 'SELECT name FROM users WHERE row_id=?', id).first();
   return { name: text(row?.name).slice(0, 80) || '會員' };
 }
+const directoryName = (card = 'c', user = 'u') => memberDisplayNameSql(`${card}.name`, `${card}.english_name`, `${user}.name`);
+const currentOwnCard = (card = 'c', user = 'u') => `${card}.row_id=(SELECT c2.row_id FROM card_contacts c2 WHERE ${ownCard('c2')}
+  AND ${cardMemberJoin('c2', user)} ORDER BY c2.updated_at DESC,c2.row_id DESC LIMIT 1)`;
+// Also checked by the conditional new-thread insert so a stale handle cannot reintroduce an unnamed account.
+const namedContactSql = `EXISTS(SELECT 1 FROM users u JOIN card_contacts c ON ${CARD_JOIN}
+  WHERE CAST(u.row_id AS TEXT)=?2 AND ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER}
+  AND ${currentOwnCard()} AND ${validMemberNameSql(directoryName())})`;
 function directorySql() {
-  return `SELECT c.row_id AS handle,u.row_id AS peer,u.line_id AS avatar_line_id,u.member_number,COALESCE(NULLIF(TRIM(c.name),''),NULLIF(TRIM(c.english_name),''),u.name) AS name,c.company_name,c.title,COALESCE(c.updated_at,'') AS latest FROM card_contacts c JOIN users u ON ${CARD_JOIN}
+  return `SELECT c.row_id AS handle,u.row_id AS peer,u.line_id AS avatar_line_id,u.member_number,${directoryName()} AS name,c.company_name,c.title,COALESCE(c.updated_at,'') AS latest FROM card_contacts c JOIN users u ON ${CARD_JOIN}
     WHERE ${ownCard('c')} AND ${REGISTERED} AND ${CURRENT_MEMBER} AND CAST(u.row_id AS TEXT)<>?1 AND ?2 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL
+    AND ${validMemberNameSql(directoryName())}
     AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=CAST(u.row_id AS TEXT)),1)=1
     AND NOT EXISTS(SELECT 1 FROM member_chat_blocks b WHERE (b.member_id=?1 AND b.blocked_id=CAST(u.row_id AS TEXT)) OR (b.member_id=CAST(u.row_id AS TEXT) AND b.blocked_id=?1))
     AND (${['c.name', 'c.english_name', 'u.name', 'c.company_name', 'c.title'].map(field => `instr(replace(lower(COALESCE(${field},'')),' ',''),?3)>0`).join(' OR ')})
     AND ${CHAT_INDUSTRY_FILTER}
-    AND c.row_id=(SELECT c2.row_id FROM card_contacts c2 WHERE ${ownCard('c2')}
-      AND ${cardMemberJoin('c2', 'u')} ORDER BY c2.updated_at DESC,c2.row_id DESC LIMIT 1)
+    AND ${currentOwnCard()}
     `;
 }
 const directoryArgs = (actor, after = '', q = '', industry = '') => [actor.memberId, after, q.toLowerCase().replace(/ /g, ''), industry, JSON.stringify(actor.ids), actor.user.line_id];
@@ -173,12 +181,13 @@ function publicDirectorySql() {
   // Keep current handles for the original card/thread endpoints, but display only a public version.
   return `WITH current_directory AS (${directorySql()})
     SELECT d.handle,d.peer,d.avatar_line_id,d.member_number,
-      COALESCE(NULLIF(TRIM(p.name),''),NULLIF(TRIM(p.english_name),''),'會員') AS name,
+      ${memberDisplayNameSql('p.name', 'p.english_name')} AS name,
       p.company_name,p.title,p.custom_config,p.tags,p.services
     FROM current_directory d JOIN users u ON u.row_id=d.peer JOIN card_contacts c ON c.row_id=d.handle
     JOIN card_contacts p ON p.row_id=(SELECT p2.row_id FROM card_contacts p2 WHERE ${ownCard('p2')} AND p2.visibility='public'
       AND ${cardMemberJoin('p2', 'u')} ORDER BY p2.updated_at DESC,p2.row_id DESC LIMIT 1)
     WHERE ${uniqueCardMember('c')} AND ${uniqueCardMember('p')}
+      AND ${validMemberNameSql(memberDisplayNameSql('p.name', 'p.english_name'))}
       AND (SELECT COUNT(*) FROM users same_uid WHERE same_uid.line_id=u.line_id)=1
       AND NOT EXISTS(SELECT 1 FROM user_identity_links l WHERE l.status='active' AND u.line_id IN (l.old_line_id,l.new_line_id)
         AND (NOT (${validUid('l.old_line_id')}) OR NOT (${validUid('l.new_line_id')}) OR l.old_line_id=l.new_line_id
@@ -294,9 +303,14 @@ async function openThread(db, actor, body) {
   const [a, b] = [actor.memberId, peer.memberId].sort();
   const existing = await statement(db, 'SELECT id FROM member_chat_threads WHERE member_a=? AND member_b=?', a, b).first();
   if (state.blocked || (!state.accepting && !existing)) fail('CONTACT_CLOSED', '對方目前未開放聯絡', 403);
+  if (!existing) {
+    const named = await statement(db, `SELECT ${namedContactSql} AS valid`, actor.memberId, peer.memberId).first();
+    if (!named?.valid) fail('MEMBER_UNAVAILABLE', '對方尚未設定有效姓名，請重新選擇會員', 403);
+  }
   if (!existing) await run(db, `INSERT INTO member_chat_threads(id,member_a,member_b)
     SELECT ?3,?4,?5 WHERE ${NO_BLOCK} AND COALESCE((SELECT accepting FROM member_chat_preferences WHERE member_id=?2),1)=1
     AND ${approvedIslandCardSql('?6')}
+    AND ${namedContactSql}
     ON CONFLICT(member_a,member_b) DO NOTHING`, actor.memberId, peer.memberId, crypto.randomUUID(), a, b, JSON.stringify(actor.ids));
   const row = await statement(db, 'SELECT id FROM member_chat_threads WHERE member_a=? AND member_b=?', a, b).first();
   if (!row) fail('CONTACT_CLOSED', '對方目前未開放聯絡', 403);
