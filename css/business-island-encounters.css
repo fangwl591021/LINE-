@@ -1,7 +1,7 @@
 #page-business-island .bi-encounter-host{position:sticky;top:var(--bi-encounter-top,132px);height:0;min-height:0;z-index:210;pointer-events:none}
 #page-business-island .bi-encounter-host[hidden]{display:none!important}
 #page-business-island .bi-encounter-card{position:absolute;top:0;right:10px;width:min(350px,calc(100% - 20px));max-height:min(430px,calc(100dvh - var(--bi-encounter-top,132px) - 28px));overflow:auto;overscroll-behavior:contain;border:1px solid #e2dbbe;border-radius:20px;background:#fffdf5f5;color:#183f36;box-shadow:0 14px 35px #183f3633;backdrop-filter:blur(12px);pointer-events:auto;animation:bi-encounter-enter .2s ease-out}
-#page-business-island .bi-encounter-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 6px 5px 14px;border-bottom:1px solid #e6e7d9;background:#f2f5e9}
+#page-business-island .bi-encounter-heading{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 6px 5px 14px;border-bottom:1px solid #e6e7d9;background:#f2f5e9}
 #page-business-island .bi-encounter-heading>strong{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 #page-business-island .bi-encounter-heading>button{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;border:0;background:transparent;border-radius:50%;font-size:25px;color:#335c4d;box-shadow:none}
 #page-business-island .bi-encounter-conversation{display:grid;gap:9px;padding:11px}

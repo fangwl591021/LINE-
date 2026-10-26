@@ -1,6 +1,6 @@
 // Scripted island greetings from the current public-card projection. No chat API calls.
 const clean=(value,max=100)=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,max);
-const stylesheet=new URL('../../css/business-island-encounters.css?v=1',import.meta.url).href;
+const stylesheet=new URL('../../css/business-island-encounters.css?v=2',import.meta.url).href;
 
 export function createIslandEncounters({host,isCurrent,getMember,getSelf=()=>({name:'我'}),onChat,onCard,avatar=()=>'',bindAvatars=()=>{},categoryLabel=id=>id}={}){
   if(!host?.ownerDocument||typeof isCurrent!=='function'||typeof getMember!=='function')throw Error('島上招呼缺少必要設定');
@@ -93,11 +93,11 @@ export function createIslandEncounters({host,isCurrent,getMember,getSelf=()=>({n
     if(!handle||!current?.handles.includes(handle)||!member||(action==='chat'&&member.canChat===false)){clear();return;}
     clear();if(action==='chat')onChat?.(handle);else onCard?.(handle);
   };
-  const keydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();dismiss();}};
+  const keydown=event=>{if(event.key==='Escape'&&current&&usable()&&!event.defaultPrevented&&!doc.querySelector('dialog[open]')){event.preventDefault();event.stopPropagation();dismiss();}};
   const visibility=()=>{if(doc.hidden||!isCurrent())clear();};
-  host.addEventListener('click',click);host.addEventListener('keydown',keydown);
+  host.addEventListener('click',click);doc.addEventListener('keydown',keydown);
   host.addEventListener('pointerenter',stop);host.addEventListener('pointerleave',arm);
   host.addEventListener('focusin',stop);host.addEventListener('focusout',arm);
   doc.addEventListener('visibilitychange',visibility);
-  return {show,clear,destroy(){if(destroyed)return;clear();destroyed=true;history.clear();host.removeEventListener('click',click);host.removeEventListener('keydown',keydown);host.removeEventListener('pointerenter',stop);host.removeEventListener('pointerleave',arm);host.removeEventListener('focusin',stop);host.removeEventListener('focusout',arm);doc.removeEventListener('visibilitychange',visibility);host.remove();}};
+  return {show,clear,dismiss,destroy(){if(destroyed)return;clear();destroyed=true;history.clear();host.removeEventListener('click',click);doc.removeEventListener('keydown',keydown);host.removeEventListener('pointerenter',stop);host.removeEventListener('pointerleave',arm);host.removeEventListener('focusin',stop);host.removeEventListener('focusout',arm);doc.removeEventListener('visibilitychange',visibility);host.remove();}};
 }

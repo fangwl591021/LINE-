@@ -632,9 +632,10 @@ try {
     else if(kind==='account') await motionPage.evaluate(()=>window.fixtureSwitchAccount());
     else await motionPage.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
     await motionPage.waitForTimeout(kind==='account'?750:100);
-    const snapshot=()=>motionPage.evaluate(()=>{const player=document.querySelector('.bi-world-player');return {page:window.currentPage,scroll:document.querySelector('#main').scrollTop,step:player?.dataset.step??null,moving:player?.dataset.moving??null,target:player?.dataset.target??null,result:document.querySelector('.bi-roll-result')?.textContent??null,selected:document.querySelector('.bi-list .bi-member-select[aria-pressed="true"]')?.dataset.biMember??null,arrival:document.querySelector('.bi-world-arrival h4')?.textContent??null};});
+    // Authorized idle strolling may resume after search; cancelled dice/voyage motion must stay cancelled.
+    const snapshot=()=>motionPage.evaluate(()=>{const player=document.querySelector('.bi-world-player');return {page:window.currentPage,scroll:document.querySelector('#main').scrollTop,step:player?.dataset.step??null,moving:player?.dataset.idleWalking==='true'?'false':player?.dataset.moving??null,rolling:document.querySelector('.bi-world')?.dataset.rolling??null,target:player?.dataset.target??null,result:document.querySelector('.bi-roll-result')?.textContent??null,selected:document.querySelector('.bi-list .bi-member-select[aria-pressed="true"]')?.dataset.biMember??null,arrival:document.querySelector('.bi-world-arrival h4')?.textContent??null};});
     const frozen=await snapshot();await motionPage.waitForTimeout(900);const after=await snapshot();assert.deepEqual(after,frozen,'cancelled '+kind+' walking must not resume, select a member or move the camera later');
-    assert.notEqual(after.moving,'true');assert.equal(await motionPage.locator('.bi-card-dialog[open]').count(),0);
+    assert.notEqual(after.moving,'true');assert.notEqual(after.rolling,'true');assert.equal(await motionPage.locator('.bi-card-dialog[open]').count(),0);
     if(kind==='exit')assert.equal(after.page,'home');
     if(kind==='query')assert.equal(after.selected,'card-b');
     if(kind==='background') {assert.equal(await motionPage.locator('.bi-world').getAttribute('data-paused'),'true');await motionPage.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});}
