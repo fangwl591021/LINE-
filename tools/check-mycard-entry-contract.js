@@ -56,7 +56,7 @@ if (!/if \(!wysiwygState\.recordMode\) window\.currentUserCard = currentCardData
 if (!/wysiwygState\.recordMode\s*\?\s*await saveCardRecordWysiwyg\(\)/.test(mycard)) {
   fail('record-scoped WYSIWYG must use the current-record save path');
 }
-if (!/await load\(\);\s*await openMyCardDetail\(\);/.test(mycard)) {
+if (!/await load\(\);\s*(?:if \(!scopedCurrent\(\)\) return false;\s*)?await openMyCardDetail\(\);/.test(mycard)) {
   fail('newly generated personal card must continue directly into detail editor');
 }
 if (/bindOnce\(document,\s*['"]click['"],\s*['"]#btn-save-my-ecard['"]/.test(mycard)) {

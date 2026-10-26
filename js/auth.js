@@ -870,24 +870,26 @@ window.submitRegistration = async function() {
   }
 };
 
-window.saveProfileRegistration = async function(event) {
+window.saveProfileRegistration = async function(event, options = {}) {
   const btn = event?.currentTarget || document.getElementById('btn-save-profile-registration');
   const userId = window.getSocialLikeActorId();
   const name = (document.getElementById('profile-name')?.value || '').trim();
   const phone = (document.getElementById('profile-phone')?.value || '').trim();
   const industry = (document.getElementById('profile-industry')?.value || '').trim();
 
-  if (!userId) return window.showToast('請先重新登入後再補完資料', true);
-  if (!name || !phone) return window.showToast('真實姓名與手機號碼必填', true);
+  if (!userId) { window.showToast('請先重新登入後再補完資料', true); return false; }
+  if (!name || !phone) { window.showToast('真實姓名與手機號碼必填', true); return false; }
   let birthday;
   try {
     birthday = registrationBirthdayToISO(document.getElementById('profile-birthday')?.value || '');
   } catch (error) {
     window.showToast(error.message, true);
     document.getElementById('profile-birthday')?.focus();
-    return;
+    return false;
   }
-  if (!window.requirePrivacyTermsAgreement('profile-privacy-agree')) return;
+  if (!window.requirePrivacyTermsAgreement('profile-privacy-agree')) return false;
+  const isCurrent = typeof options.isCurrent === 'function' ? options.isCurrent : () => true;
+  if (!isCurrent()) return false;
 
   const originalHtml = btn ? btn.innerHTML : '';
   if (btn) {
@@ -911,11 +913,22 @@ window.saveProfileRegistration = async function(event) {
     };
 
     const check = await window.fetchAPI('checkUser', { userId }, true);
+    if (!isCurrent()) return false;
+    if (options.island && (!check || check.success === false || check.error || typeof check.isRegistered !== 'boolean')) throw new Error('會員狀態未確認，請稍後重試。');
     const action = check && check.isRegistered ? 'updateUserProfile' : 'registerUser';
     const saved = await window.fetchAPI(action, payload, true);
-    if (!saved || saved.error) throw new Error(saved?.error || '儲存失敗');
+    if (!saved || saved.success === false || saved.error) throw new Error(saved?.error || '儲存失敗');
+    if (!isCurrent()) return false;
 
     const refreshed = await window.fetchAPI('checkUser', { userId }, true);
+    if (!isCurrent()) return false;
+    const confirmed = !!(refreshed && refreshed.success !== false && !refreshed.error && refreshed.isRegistered === true && refreshed.info && typeof refreshed.info === 'object' && !Array.isArray(refreshed.info));
+    if (options.island && !confirmed) throw new Error('會員資料已送出，但尚未取得確認；請重新整理後再試。');
+    if (options.island) {
+      const knownIds = [userId,window.currentUserProfile?.userId,window.currentUserProfile?.lineId,window.currentUser?.userId,window.currentUser?.lineId,window.currentUser?.pointLineId,window.currentUser?.point_line_id].map(value=>String(value||'').trim()).filter(Boolean);
+      const confirmedIds = [refreshed.info.userId,refreshed.info.lineId,refreshed.info.line_id,refreshed.info.requestedUserId,refreshed.info.canonicalUserId].map(value=>String(value||'').trim()).filter(Boolean);
+      if (!confirmedIds.some(id=>knownIds.includes(id))) throw new Error('無法確認目前會員的資料，請重新登入後再試。');
+    }
     const info = refreshed && refreshed.isRegistered && refreshed.info
       ? refreshed.info
       : { ...(window.currentUser || {}), ...payload, role: window.userRole || 'user' };
@@ -924,8 +937,10 @@ window.saveProfileRegistration = async function(event) {
       localStorage.setItem('ACTMASTER_USER_' + userId, JSON.stringify({ info, savedAt: Date.now() }));
     } catch (e) {}
     window.showToast(action === 'registerUser' ? '會員資料已建立' : '會員資料已更新');
+    return confirmed;
   } catch (e) {
     window.showToast(e.message || '會員資料儲存失敗', true);
+    return false;
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -2873,7 +2888,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (initialUrlParams.get('peopleIslandCard') === '1') {
-      const island = await import('./modules/people-island-card.js?v=2');
+      const island = await import('./modules/people-island-card.js?v=3');
       await island.mountPeopleIslandCard({ params: initialUrlParams, embedded: true });
       document.getElementById('loading-screen')?.classList.add('hidden');
       return;
@@ -3063,7 +3078,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const activityEntryCurrent = directActivity ? window.ActivityEntry.sessionGuard(activityEntryRequest) : null;
     const checkRes = await window.fetchAPI('checkUser', { userId: window.currentUserProfile.userId }, true);
     if (urlParams.get('peopleIsland') === '1') {
-      const island = await import('./modules/people-island-card.js?v=2');
+      const island = await import('./modules/people-island-card.js?v=3');
       if (await island.routePeopleIslandSetup({ params: urlParams, checkRes, refId, netId })) return;
     }
     if (directActivity) {

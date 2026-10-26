@@ -1819,7 +1819,9 @@
     return openMyCardWysiwyg(evt);
   }
 
-  async function openMyCardWysiwyg(evt, resolvedCard) {
+  async function openMyCardWysiwyg(evt, resolvedCard, options) {
+    var editorCurrent=options && typeof options.isCurrent==='function'?options.isCurrent:function(){return true;};
+    if(!editorCurrent())return;
     if (evt && evt.preventDefault) evt.preventDefault();
     wysiwygState.recordMode = false;
     var directWysiwyg = isWysiwygMyCardRequest();
@@ -1827,7 +1829,9 @@
     else moduleCore.showLoading(true);
     try {
       await refreshCardLinksMode();
+      if(!editorCurrent())return;
       currentCardData = resolvedCard || await resolveCurrentUserCard(true);
+      if(!editorCurrent())return;
       if (!currentCardData) {
         var preview = document.getElementById('my-card-wysiwyg-preview');
         if (directWysiwyg && preview) {
@@ -1839,6 +1843,7 @@
       myEcardStateLoaded = false;
       hydrateMyECardStateFromCurrentCard();
       wysiwygState.cfg = await applyMyVideoDraftToWysiwyg(getWysiwygConfig());
+      if(!editorCurrent())return;
       writeCurrentCardConfig(wysiwygState.cfg);
       ensureWysiwygModal().classList.remove('hidden');
       renderMyCardWysiwyg();
@@ -2395,7 +2400,9 @@
     }
   }
 
-  async function generateCardFromProfile(evt) {
+  async function generateCardFromProfile(evt, options) {
+    var scopedCurrent = options && typeof options.isCurrent === 'function' ? options.isCurrent : function() { return true; };
+    if (!scopedCurrent()) return false;
     var btn = evt && (evt.currentTarget || evt.target);
     var originalHtml = btn ? btn.innerHTML : '';
     var profile = moduleAuth.getUserProfile() || {};
@@ -2439,7 +2446,7 @@
         descAlign: 'start',
         descColor: '#666666',
         buttons: getTemplateButtons(phone),
-        isPrivate: false,
+        isPrivate: !!(options && options.island),
         templateDraft: true,
         templateVersion: 'rental-intro-1'
       };
@@ -2463,8 +2470,10 @@
         aiReviewStatus: 'pending'
       };
 
+      if (!scopedCurrent()) return false;
       var saveRes = await window.fetchAPI('saveCard', cardPayload, true);
-      if (!saveRes || saveRes.error) throw new Error((saveRes && saveRes.error) || '建立名片失敗');
+      if (!saveRes || saveRes.success === false || saveRes.error) throw new Error((saveRes && saveRes.error) || '建立名片失敗');
+      if (!scopedCurrent()) return false;
 
       cardPayload.rowId = saveRes.rowId || saveRes.id || saveRes.RowID || '';
       window.currentUserCard = cardPayload;
@@ -2472,18 +2481,75 @@
       myEcardStateLoaded = true;
       if (Array.isArray(window.allCards)) window.allCards.unshift(cardPayload);
       if (window.showToast) window.showToast('✅ 已使用 LINE 資料建立專屬名片');
+      if (options && options.island) { await openMyCardWysiwyg(evt,cardPayload,{isCurrent:scopedCurrent}); return scopedCurrent(); }
       if (typeof window.loadAllData === 'function') await window.loadAllData({ render: false });
+      if (!scopedCurrent()) return false;
       await load();
+      if (!scopedCurrent()) return false;
       await openMyCardDetail();
+      if (!scopedCurrent()) return false;
       if (typeof window.renderCardList === 'function') window.renderCardList(window.allCards || []);
+      return true;
     } catch (e) {
       if (window.showToast) window.showToast('生成名片失敗：' + (e.message || '請稍後再試'), true);
+      return false;
     } finally {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
       }
     }
+  }
+
+  var islandCardFlight = null;
+  var islandUploadPrepared = null;
+  function islandCardFence(options) {
+    var uid=normalizeId(moduleAuth.getUserId()),token=window.liff && window.liff.getAccessToken ? window.liff.getAccessToken() : '';
+    return function() { return !!uid && !!token && uid===normalizeId(moduleAuth.getUserId()) && token===(window.liff && window.liff.getAccessToken ? window.liff.getAccessToken() : '') && (!options || typeof options.isCurrent!=='function' || options.isCurrent()); };
+  }
+  async function resolveIslandOwnStaticCard(valid) {
+    if (!valid() || typeof window.fetchAPI!=='function') throw new Error('請重新登入後再試。');
+    var ids=getCurrentUserIdCandidates(),res=await window.fetchAPI('resolveMyCardVersion',{userId:moduleAuth.getUserId(),lineUserId:moduleAuth.getUserId(),version:'standard',layout:'landscape',createIfMissing:false},true);
+    if (!valid()) return undefined;
+    if (res && res.success===false && res.error==='Card not found') return null;
+    var data=res && (res.data || res),card=data && data.card;
+    if (!res || res.success===false || res.error || !card || !getCardRowId(card)) throw new Error('尚未確認本人名片，請重新整理後再試。');
+    var owners=[card.profileUserId,card.profile_user_id,card.profileId,card.lineId,card.line_id,card['LINE ID'],card.ownerUserId,card.owner_user_id].map(normalizeId).filter(Boolean);
+    var owned=owners.some(function(id){return ids.indexOf(id)!==-1;}) || (!owners.length && ids.indexOf(normalizeId(card.creatorId || card.creator_id))!==-1);
+    if (getCardSourceType(card)!=='self_profile' || cardVersionFromCard(card)==='video' || card.archivedAt || card.archived_at || card.mergedIntoRowId || card.merged_into_row_id || !owned) throw new Error('無法確認可編輯的本人靜態名片，請重新整理。');
+    return card;
+  }
+  function createIslandCardFromProfile(evt, options) {
+    if (islandCardFlight) return islandCardFlight;
+    var valid=islandCardFence(options);
+    islandCardFlight=(async function(){
+      var card=await resolveIslandOwnStaticCard(valid);
+      if (!valid() || card===undefined) return false;
+      if (card) { setActiveMyCard(card); await openMyCardWysiwyg(evt,card,{isCurrent:valid}); return valid(); }
+      var user=window.currentUser || {};
+      if (!String(user.name || '').trim() || !String(user.phone || user.mobile || '').trim()) throw new Error('請先確認並儲存真實姓名與手機號碼。');
+      return await generateCardFromProfile(evt,{island:true,isCurrent:valid});
+    })().finally(function(){islandCardFlight=null;});
+    return islandCardFlight;
+  }
+  async function prepareIslandCardUpload(options) {
+    var valid=islandCardFence(options),card=await resolveIslandOwnStaticCard(valid);
+    if (!valid() || card===undefined) return false;
+    if (card) { setActiveMyCard(card); hydrateMyECardStateFromCurrentCard();show($('#my-ecard-empty-state'),false);show($('#my-ecard-edit-state'),true); }
+    else { show($('#my-ecard-empty-state'),true);show($('#my-ecard-edit-state'),false); }
+    islandUploadPrepared={valid:valid,card:card,input:document.getElementById(card?'file-my-v1-img':'myGalleryInput')};
+    if (!islandUploadPrepared.input) throw new Error('名片圖片上傳入口尚未載入，請重試。');
+    return true;
+  }
+  function selectIslandCardUpload(evt, options) {
+    var prepared=islandUploadPrepared;
+    if (!prepared || !prepared.valid() || (options && typeof options.isCurrent==='function' && !options.isCurrent()) || !prepared.input.isConnected) throw new Error('上傳目標已變更，請重新進入上傳名片。');
+    if (options && options.editOnly) {
+      if (!prepared.card) throw new Error('請先上傳自己的名片，或用 LINE 資料生成。');
+      return openMyCardWysiwyg(evt,prepared.card,{isCurrent:prepared.valid});
+    }
+    prepared.input.click(); // Keep the picker in the direct user gesture, including iPhone Safari.
+    return true;
   }
 
   async function applyMyCardTemplate(evt) {
@@ -2639,6 +2705,9 @@
   }
 
   var api = {
+    createIslandCardFromProfile: createIslandCardFromProfile,
+    prepareIslandCardUpload: prepareIslandCardUpload,
+    selectIslandCardUpload: selectIslandCardUpload,
     init: init,
     load: load,
     openMyCardEntry: openMyCardEntry,
