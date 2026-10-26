@@ -248,7 +248,7 @@ function npcLandPath(category,start,end){
   return [{...start},...path,{...end}];
 }
 
-export function createIslandWorld({host,asset,avatar,onMember,onChat,onCategory,onSail,onEncounter,onArrivalDismiss,isInteractionOpen=()=>false,isCurrent=()=>true,diceHost,profile}={}){
+export function createIslandWorld({host,asset,avatar,onMember,onChat,onCategory,onSail,onEncounter,onArrivalDismiss,onAutoVisit,isInteractionOpen=()=>false,isCurrent=()=>true,diceHost,profile}={}){
 
 if(!host?.ownerDocument||typeof asset!=='function'||typeof avatar!=='function')throw Error('人脈島場景缺少必要設定');
 
@@ -292,7 +292,8 @@ let generation=0,destroyed=false,paused=!!doc.hidden,rowsCache=[],selectedHandle
 let logicTimer=null,simClock=0,simAt=null,nextDeparture=6000,nextBankRotation=18000,tripCursor=0,visitCount=0,nextEncounter=2000,preferResidentEncounter=true;
 const encounterTimes=new Map();
 const heroIdle={route:[],wait:800,at:null};
-let metadataWidth=null,metadataHeight=0;
+const heroAuto={trip:null,at:null,visitIn:18000,previous:'',visits:new Map(),dock:null,status:''};
+let metadataWidth=null,metadataHeight=0,metadataMetrics='';
 
 const reduced=()=>!!media?.matches,current=(ticket,valid=()=>true)=>!destroyed&&!paused&&!doc.hidden&&ticket===generation&&isCurrent()&&valid();
 
@@ -323,9 +324,13 @@ delete player.dataset.y;
 function measureMetadata(){
 // Passive roster/presence reflow cannot move the waterway during a journey.
 if(world.dataset.rolling==='true')return false;
-const width=world.clientWidth,natural=Math.ceil(Math.max(0,...sections.map(section=>section.querySelector('.bi-world-meta').offsetHeight)));
+const width=world.clientWidth,metrics=['.bi-world-category','.bi-world-caption','.bi-island-member-summary'].map(selector=>{
+const style=view.getComputedStyle(sections[0].querySelector(selector));return [style.fontSize,style.lineHeight,style.fontFamily].join('/');
+}).join('|');
+if(heroAuto.trip&&width===metadataWidth&&metrics===metadataMetrics)return false;
+const natural=Math.ceil(Math.max(0,...sections.map(section=>section.querySelector('.bi-world-meta').offsetHeight)));
 const height=width===metadataWidth?Math.max(metadataHeight,natural):natural,value=`${height}px`;
-metadataWidth=width;metadataHeight=height;
+metadataWidth=width;metadataHeight=height;metadataMetrics=metrics;
 if(world.style.getPropertyValue('--bi-meta-height')===value)return false;
 world.style.setProperty('--bi-meta-height',value);
 return true;
@@ -343,6 +348,7 @@ else if(worldSize.width>0&&worldSize.height>0&&(width!==worldSize.width||height!
 worldSize={width,height};
 drawPlayer();
 for(const state of npcStates.values()){if(state.trip)buildTripRoute(state);drawNpc(state);}
+if(heroAuto.trip){buildTripRoute(heroAuto);placeAutoHero();}
 return worldSize;
 }
 function syncLocation(){
@@ -493,16 +499,17 @@ function paintMembers(ensure=''){
 }
 function sceneActive(){return !destroyed&&!paused&&!doc.hidden&&isCurrent()&&world.clientWidth>0;}
 function canInteract(){return sceneActive()&&rowsCache.length>0;}
-function canSimulate(){return sceneActive()&&!reduced()&&(rowsCache.length>0||!!heroLand);}
-function canHeroIdle(){return sceneActive()&&!reduced()&&heroLand&&player.dataset.travel==='walking'&&world.dataset.rolling!=='true'&&visible.has(currentCategory)&&!arrivalHandle&&!isInteractionOpen();}
+function canSimulate(){return sceneActive()&&!reduced()&&(rowsCache.length>0||!!heroLand||!!heroAuto.trip);}
+function canHeroAct(){return sceneActive()&&!reduced()&&(world.dataset.rolling!=='true'||!!heroAuto.dock)&&!arrivalHandle&&!isInteractionOpen();}
+function canHeroIdle(){return canHeroAct()&&!heroAuto.trip&&heroLand&&player.dataset.travel==='walking'&&world.dataset.rolling!=='true';}
 function holdHeroIdle(){
   heroIdle.at=null;player.dataset.idleWalking='false';
-  if(world.dataset.rolling!=='true')player.dataset.moving='false';
+  if(world.dataset.rolling!=='true'&&!heroAuto.trip)player.dataset.moving='false';
 }
 function resetHeroIdle(){heroIdle.route=[];heroIdle.wait=800;holdHeroIdle();}
 function advanceHeroIdle(now){
   if(!canHeroIdle()){holdHeroIdle();return;}
-  const elapsed=heroIdle.at===null?0:Math.min(64,Math.max(0,now-heroIdle.at));
+  const elapsed=heroIdle.at===null?0:Math.min(visible.has(currentCategory)?64:1000,Math.max(0,now-heroIdle.at));
   heroIdle.at=now;heroIdle.wait=Math.max(0,heroIdle.wait-elapsed);
   if(heroIdle.wait>0){player.dataset.idleWalking='false';player.dataset.moving='false';return;}
   if(!heroIdle.route.length){
@@ -519,7 +526,7 @@ function advanceHeroIdle(now){
   }
   const moving=distance(before,heroLand)>0;
   if(moving){playerPoint=landToWorld(currentCategory,heroLand);player.dataset.direction=heroLand.y>=before.y?'south':'north';drawPlayer();}
-  player.dataset.idleWalking=String(moving);player.dataset.moving=String(moving);
+  player.dataset.idleWalking=String(moving&&visible.has(currentCategory));player.dataset.moving=String(moving&&visible.has(currentCategory));
   if(!heroIdle.route.length)heroIdle.wait=400+random()*800;
 }
 function stopRoam(){
@@ -527,9 +534,11 @@ function stopRoam(){
   if(logicTimer!==null)view.clearTimeout(logicTimer);
   roamFrame=null;logicTimer=null;simAt=null;
   holdHeroIdle();
+  heroAuto.at=null;
+  if(world.dataset.rolling!=='true')player.dataset.moving='false';
   for(const state of npcStates.values()){state.moving=false;drawNpc(state);}
 }
-function canRoam(){return canSimulate()&&(canHeroIdle()||[...npcStates.values()].some(state=>state.row&&state.element?.isConnected&&actorVisible(state)&&!state.frozen));}
+function canRoam(){return canSimulate()&&(canHeroIdle()&&visible.has(currentCategory)||heroAuto.trip&&canHeroAct()&&actorVisible(heroAuto)||[...npcStates.values()].some(state=>state.row&&state.element?.isConnected&&actorVisible(state)&&!state.frozen));}
 function nextGoal(state){
   const neighbours=[...npcStates.values()].filter(other=>other!==state&&other.row&&!other.trip&&other.category===state.category);
   state.goal=neighbours.length&&random()<.45?{...pick(neighbours).point}:randomLandPoint(state.category);
@@ -574,6 +583,83 @@ function buildTripRoute(state){
   }
   trip.duration=trip.legs.reduce((sum,leg)=>sum+leg.duration,0);trip.elapsed=Math.max(0,Math.min(1,previous))*trip.duration;
   delete trip.progress;
+}
+function autoStatus(active,phase=player.dataset.phase){
+  const trip=heroAuto.trip,from=trip?.from||currentCategory,to=trip?.to||currentCategory;
+  for(const element of [world,player])Object.assign(element.dataset,{autoVoyage:String(active),autoFromCategory:from,autoToCategory:to,autoPhase:phase,autoDocking:String(!!heroAuto.dock)});
+  const status=[active,phase,from,to,!!heroAuto.dock].join('|');
+  if(status!==heroAuto.status){
+    heroAuto.status=status;
+    try{onAutoVisit?.({active,phase,fromCategory:from,category:to});}catch{}
+  }
+}
+function placeAutoHero(){
+  if(!heroAuto.trip)return;
+  const sample=tripSample(heroAuto),before=playerPoint;
+  const phase=heroAuto.dock?.direction===-1&&sample.phase==='boarding'?'docking':sample.phase;
+  currentCategory=sample.category;playerPoint={...sample.point};
+  heroLand=phase==='walking'?worldToLand(currentCategory,playerPoint):null;
+  player.dataset.direction=playerPoint.y>=before.y?'south':'north';
+  setPhase(phase,false);drawPlayer();autoStatus(true,phase);syncLocation();
+}
+function consumeAutoVisit(){
+  heroAuto.trip=null;heroAuto.at=null;heroAuto.visitIn=18000+random()*8000;
+  resetHeroIdle();autoStatus(false);
+}
+function beginAutoVisit(){
+  const choices=CATEGORIES.filter(category=>category.id!==currentCategory&&category.id!==heroAuto.previous);
+  const weighted=choices.map(category=>{
+    const people=membersFor(category.id),online=people.filter(isOnline);
+    return {category:category.id,people:online.length?online:people,weight:(online.length?8:people.length?3:1)/(1+(heroAuto.visits.get(category.id)||0))};
+  });
+  let amount=random()*weighted.reduce((sum,item)=>sum+item.weight,0),destination=weighted.at(-1);
+  for(const item of weighted){amount-=item.weight;if(amount<=0){destination=item;break;}}
+  const host=destination.people.length?npcStates.get(pick(destination.people).handle):null;
+  heroAuto.trip={from:currentCategory,to:destination.category,start:{...heroLand},end:host?{...host.point}:randomLandPoint(destination.category),elapsed:0,duration:0};
+  heroAuto.at=simClock;heroIdle.route=[];setBoatStyle(currentCategory);buildTripRoute(heroAuto);
+  if(host)host.visitAfter=Math.max(host.visitAfter||0,simClock+heroAuto.trip.duration+12000);
+  placeAutoHero();
+}
+function completeAutoDock(){
+  const request=heroAuto.dock;if(!request)return;
+  heroAuto.dock=null;
+  currentCategory=request.category;heroLand={x:NAV[currentCategory].dock[0],y:NAV[currentCategory].dock[1]};
+  playerPoint=landToWorld(currentCategory,heroLand);world.dataset.rolling='false';
+  setPhase('walking',false);drawPlayer();consumeAutoVisit();syncLocation();
+  request.resolve(true);
+}
+function advanceHeroAuto(){
+  const elapsed=heroAuto.at===null?0:Math.max(0,Math.min(1000,simClock-heroAuto.at));heroAuto.at=simClock;
+  const request=heroAuto.dock;
+  if(request&&(request.ticket!==generation||!request.valid())){cancel();return;}
+  if(!canHeroAct()){if(heroAuto.trip)player.dataset.moving='false';return;}
+  if(!heroAuto.trip){
+    if(canHeroIdle()){heroAuto.visitIn=Math.max(0,heroAuto.visitIn-elapsed);if(heroAuto.visitIn<=0)beginAutoVisit();}
+    return;
+  }
+  const trip=heroAuto.trip;
+  trip.elapsed=request?Math.max(0,Math.min(trip.duration,trip.elapsed+elapsed*request.direction)):Math.min(trip.duration,trip.elapsed+elapsed);
+  if(request&&(request.direction<0?trip.elapsed<=request.at:trip.elapsed>=request.at)){trip.elapsed=request.at;completeAutoDock();return;}
+  placeAutoHero();player.dataset.moving=String(elapsed>0&&actorVisible(heroAuto));
+  if(trip.elapsed>=trip.duration){
+    currentCategory=trip.to;heroLand={...trip.end};playerPoint=landToWorld(currentCategory,heroLand);
+    heroAuto.previous=trip.from;heroAuto.visits.set(trip.to,(heroAuto.visits.get(trip.to)||0)+1);
+    setPhase('walking',false);drawPlayer();consumeAutoVisit();measureWorld();syncLocation();
+  }
+}
+function dockAutoForRoll(valid){
+  if(!heroAuto.trip)return Promise.resolve(true);
+  if(heroLand&&player.dataset.travel==='walking'){consumeAutoVisit();return Promise.resolve(true);}
+  const trip=heroAuto.trip;
+  let start=0,end=0;
+  for(const leg of trip.legs){if(leg.phase==='walking'&&end===start)start+=leg.duration;end+=leg.duration;if(leg.phase==='docking')break;}
+  const direction=trip.elapsed-start<=end-trip.elapsed?-1:1,at=direction<0?start:end,category=direction<0?trip.from:trip.to;
+  cancel();world.dataset.rolling='true';
+  return new Promise(resolve=>{
+    heroAuto.dock={direction,at,category,ticket:generation,valid,resolve};autoStatus(true);
+    if(reduced()){completeAutoDock();return;}
+    startRoam();
+  });
 }
 function beginVisit(state){
   const counts=CATEGORIES.filter(category=>category.id!==state.category).map(category=>[category.id,[...npcStates.values()].filter(other=>other.row&&(other.trip?other.trip.to===category.id:other.category===category.id)).length]);
@@ -636,6 +722,7 @@ function advanceSimulation(visibleOnly=false){
   const now=view.performance.now();
   if(simAt!==null)simClock+=Math.max(0,Math.min(1000,now-simAt));
   simAt=now;
+  advanceHeroAuto();
   advanceHeroIdle(now);
   let changed=false;
   for(const state of npcStates.values())if(state.row&&(!visibleOnly||state.element?.isConnected&&actorVisible(state))){changed=advanceNpc(state)||changed;drawNpc(state);}
@@ -778,6 +865,7 @@ phaseListener({...phaseDetails,phase});
 }catch{}}}
 function cancel(){
 const was=world.dataset.rolling==='true',notify=was&&current(generation,phaseValid||(()=>true));
+if(heroAuto.dock){const request=heroAuto.dock;heroAuto.dock=null;request.resolve(false);}
 generation++;
 stopMotion();
 stopRoam();
@@ -911,9 +999,10 @@ async function roll({dice1,dice2,rows,valid=()=>true,onStep=()=>{
 
 if(!Number.isInteger(dice1)||dice1<1||dice1>6||!Number.isInteger(dice2)||dice2<1||dice2>6)throw Error('骰子點數必須介於1至6');
 if(!prepareJourney(valid))return null;
+clearArrival();
+if(heroAuto.trip&&(!await dockAutoForRoll(valid)||!prepareJourney(valid)))return null;
 if(['sailing','boarding'].includes(player.dataset.travel))throw Error('目前停在航道，請先明確搭船靠岸後再擲骰。');
 
-clearArrival();
 cancel();
 const ticket=generation,total=dice1+dice2,category=currentCategory,allowed=new Set(uniqueRows(rows===undefined?rowsCache:rows).map(row=>row.handle)),group=membersFor(category).filter(row=>allowed.has(row.handle)),online=group.filter(row=>isOnline(row)),target=pick(online.length?online:group),start=heroLand&&isWalkable(category,heroLand)?{...heroLand}:nearestLand(category,worldToLand(category,playerPoint));
 
@@ -1011,6 +1100,7 @@ async function sailTo(category,{valid=()=>true,onPhase=()=>{
 
 if(!CATEGORIES.some(item=>item.id===category))throw Error('請選擇有效的目的島嶼');
 if(!prepareJourney(valid))return null;
+if(heroAuto.trip)consumeAutoVisit();
 const afloat=['sailing','boarding'].includes(player.dataset.travel);
 if(category===currentCategory&&!afloat)return{mode:'sail',category,currentCategory,noop:true,total:0,steps:0,duration:0,distance:0,speed:0};
 clearArrival();
@@ -1046,9 +1136,9 @@ return{...info,steps:total,currentCategory};
 }finally{finishJourney(ticket);
 }}
 function snapshot(){
-if(pendingState)return{...pendingState,point:{...pendingState.point},pages:{...pendingState.pages},npcPositions:pendingState.npcPositions?.map(point=>({...point}))};
+if(pendingState)return{...pendingState,point:{...pendingState.point},pages:{...pendingState.pages},heroVoyage:pendingState.heroVoyage?{...pendingState.heroVoyage,start:{...pendingState.heroVoyage.start},end:{...pendingState.heroVoyage.end}}:null,npcPositions:pendingState.npcPositions?.map(point=>({...point}))};
 measureWorld();
-return{version:2,anchor:'feet-v1',position,currentCategory,pages:Object.fromEntries(memberPages),dice1:Number(dice[0].dataset.value),dice2:Number(dice[1].dataset.value),step:Number(player.dataset.step)||0,total:Number(player.dataset.total)||0,targetHandle:player.dataset.target||'',point:{x:Math.max(0,Math.min(1,playerPoint.x/(worldSize.width||1))),y:Math.max(0,Math.min(1,playerPoint.y/(worldSize.height||1)))},heroLand:heroLand?{...heroLand}:null,npcPositions:[...npcStates.values()].map(state=>({handle:state.handle,category:state.category,x:state.point.x,y:state.point.y,restFor:Math.max(0,(state.visitAfter||0)-simClock),...(state.trip?{trip:{from:state.trip.from,to:state.trip.to,start:{...state.trip.start},end:{...state.trip.end},progress:state.trip.duration?state.trip.elapsed/state.trip.duration:0}}:{})})),travel:player.dataset.travel||'walking',direction:player.dataset.direction||'south',phase:player.dataset.phase||'idle',fromCategory:player.dataset.fromCategory||currentCategory,category:player.dataset.category||currentCategory,duration:Number(player.dataset.duration)||0,distance:Number(player.dataset.distance)||0,speed:Number(player.dataset.speed)||0};
+return{version:2,anchor:'feet-v1',position,currentCategory,pages:Object.fromEntries(memberPages),dice1:Number(dice[0].dataset.value),dice2:Number(dice[1].dataset.value),step:Number(player.dataset.step)||0,total:Number(player.dataset.total)||0,targetHandle:player.dataset.target||'',point:{x:Math.max(0,Math.min(1,playerPoint.x/(worldSize.width||1))),y:Math.max(0,Math.min(1,playerPoint.y/(worldSize.height||1)))},heroLand:heroLand?{...heroLand}:null,heroVoyage:heroAuto.trip?{from:heroAuto.trip.from,to:heroAuto.trip.to,start:{...heroAuto.trip.start},end:{...heroAuto.trip.end},progress:heroAuto.trip.duration?heroAuto.trip.elapsed/heroAuto.trip.duration:0}:null,heroVisitIn:heroAuto.visitIn,npcPositions:[...npcStates.values()].map(state=>({handle:state.handle,category:state.category,x:state.point.x,y:state.point.y,restFor:Math.max(0,(state.visitAfter||0)-simClock),...(state.trip?{trip:{from:state.trip.from,to:state.trip.to,start:{...state.trip.start},end:{...state.trip.end},progress:state.trip.duration?state.trip.elapsed/state.trip.duration:0}}:{})})),travel:player.dataset.travel||'walking',direction:player.dataset.direction||'south',phase:player.dataset.phase||'idle',fromCategory:player.dataset.fromCategory||currentCategory,category:player.dataset.category||currentCategory,duration:Number(player.dataset.duration)||0,distance:Number(player.dataset.distance)||0,speed:Number(player.dataset.speed)||0};
 }
 function validNpcTrip(trip){
   const category=id=>CATEGORIES.some(item=>item.id===id),point=value=>value&&[value.x,value.y].every(number=>Number.isFinite(number)&&number>=0&&number<=1);
@@ -1059,9 +1149,10 @@ function restore(state){
 if(destroyed||!state||typeof state!=='object'||!isCurrent())return false;
 const{dice1,dice2,step,total,targetHandle,point}=state,category=state.currentCategory??CATEGORIES[Math.max(0,Math.min(6,Math.floor((point?.y||0)*7)))].id,pages=state.pages??{},travel=state.travel??'walking',direction=state.direction??'south',phase=state.phase??'idle',npcPositions=state.npcPositions??[];
 
-if(!CATEGORIES.some(item=>item.id===category)||!Number.isSafeInteger(state.position)||state.position<0||![dice1,dice2].every(value=>Number.isInteger(value)&&value>=1&&value<=6)||!Number.isInteger(total)||total<0||total>12||!Number.isInteger(step)||step<0||step>total||typeof targetHandle!=='string'||targetHandle.length>180||!point||![point.x,point.y].every(value=>Number.isFinite(value)&&value>=0&&value<=1)||!pages||typeof pages!=='object'||Array.isArray(pages)||Object.entries(pages).some(([key,value])=>!CATEGORIES.some(item=>item.id===key)||!Number.isSafeInteger(value)||value<0)||!['walking','boarding','sailing','stopped'].includes(travel)||!['north','south'].includes(direction)||!['idle','dice','boarding','sailing','docking','walking','arrived','cancelled'].includes(phase)||!Array.isArray(npcPositions)||npcPositions.some(value=>!value||typeof value.handle!=='string'||value.handle.length>180||!CATEGORIES.some(item=>item.id===value.category)||![value.x,value.y].every(number=>Number.isFinite(number)&&number>=0&&number<=1)||!validNpcTrip(value.trip)||value.restFor!==undefined&&(!Number.isFinite(value.restFor)||value.restFor<0||value.restFor>180000)))return false;
+if(!CATEGORIES.some(item=>item.id===category)||!Number.isSafeInteger(state.position)||state.position<0||![dice1,dice2].every(value=>Number.isInteger(value)&&value>=1&&value<=6)||!Number.isInteger(total)||total<0||total>12||!Number.isInteger(step)||step<0||step>total||typeof targetHandle!=='string'||targetHandle.length>180||!point||![point.x,point.y].every(value=>Number.isFinite(value)&&value>=0&&value<=1)||!pages||typeof pages!=='object'||Array.isArray(pages)||Object.entries(pages).some(([key,value])=>!CATEGORIES.some(item=>item.id===key)||!Number.isSafeInteger(value)||value<0)||!['walking','boarding','sailing','stopped'].includes(travel)||!['north','south'].includes(direction)||!['idle','dice','boarding','sailing','docking','walking','arrived','cancelled'].includes(phase)||!validNpcTrip(state.heroVoyage)||state.heroVisitIn!==undefined&&(!Number.isFinite(state.heroVisitIn)||state.heroVisitIn<0||state.heroVisitIn>180000)||!Array.isArray(npcPositions)||npcPositions.some(value=>!value||typeof value.handle!=='string'||value.handle.length>180||!CATEGORIES.some(item=>item.id===value.category)||![value.x,value.y].every(number=>Number.isFinite(number)&&number>=0&&number<=1)||!validNpcTrip(value.trip)||value.restFor!==undefined&&(!Number.isFinite(value.restFor)||value.restFor<0||value.restFor>180000)))return false;
 
 cancel();
+heroAuto.trip=null;heroAuto.visitIn=state.heroVisitIn??18000;
 position=state.position;
 currentCategory=category;
 memberPages=new Map(Object.entries(pages));
@@ -1114,7 +1205,12 @@ if(!['boarding','sailing'].includes(travel)){
 const proposed=state.heroLand&&Number.isFinite(state.heroLand.x)&&Number.isFinite(state.heroLand.y)?state.heroLand:worldToLand(category,playerPoint);
 heroLand=isWalkable(category,proposed)?{...proposed}:nearestLand(category,proposed);
 playerPoint=landToWorld(category,heroLand);
-}drawPlayer();
+}if(state.heroVoyage){
+const saved=state.heroVoyage;
+heroAuto.trip={...saved,start:isWalkable(saved.from,saved.start)?{...saved.start}:nearestLand(saved.from,saved.start),end:isWalkable(saved.to,saved.end)?{...saved.end}:nearestLand(saved.to,saved.end),elapsed:0,duration:0};
+buildTripRoute(heroAuto);setBoatStyle(heroAuto.trip.from);placeAutoHero();
+}else autoStatus(false);
+drawPlayer();
 paintMembers(targetHandle);
 syncLocation();
 return true;
@@ -1159,7 +1255,7 @@ for(const entry of entries){
 entry.target.dataset.visible=String(entry.isIntersecting&&!paused&&!destroyed);
 if(entry.isIntersecting)visible.add(entry.target.dataset.island);
 else visible.delete(entry.target.dataset.island);
-}if(!visible.has(currentCategory))holdHeroIdle();
+}if(visible.has(currentCategory))heroIdle.at=null;
 if(canSimulate())startRoam();
 else stopRoam();
 },{root:main||null,rootMargin:'0px',threshold:0}):null;

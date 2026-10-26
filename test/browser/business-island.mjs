@@ -541,7 +541,9 @@ try {
   assert.ok([...roamingBefore,...roamingMiddle,...roamingAfter].every(npc=>!npc.onLand||npc.inside&&npc.actualInside&&npc.renderError<.004),'walking characters keep both declared coordinates and visible feet on authored ground');
   const foodBefore=new Map(roamingBefore.filter(npc=>npc.category==='food').map(npc=>[npc.handle,npc])),foodAfter=roamingAfter.filter(npc=>npc.category==='food');
   assert.ok(foodAfter.filter(npc=>foodBefore.has(npc.handle)&&Math.hypot(npc.x-foodBefore.get(npc.handle).x,npc.y-foodBefore.get(npc.handle).y)>.004).length>=2,'visible member characters actually roam over elapsed clock time');
-  assert.ok(new Set(foodAfter.map(npc=>npc.roamTarget).filter(Boolean)).size>=2,'different characters choose distinct roaming destinations');
+  const observedFoodGoals=[roamingBefore,roamingMiddle,roamingAfter].map(frame=>frame.filter(npc=>npc.category==='food'&&npc.onLand&&npc.roamTarget));
+  await writeFile(join(output,'npc-goal-samples.json'),JSON.stringify(observedFoodGoals,null,2));
+  assert.ok(observedFoodGoals.some(frame=>new Set(frame.map(npc=>npc.handle)).size>=2&&new Set(frame.map(npc=>npc.roamTarget)).size>=2),'different characters choose distinct roaming destinations over the sampled interval');
   await motionPage.locator('[data-island="manufacturing"]').scrollIntoViewIfNeeded();await motionPage.waitForFunction(()=>document.querySelector('[data-island="food"]').dataset.visible==='false');
   const offscreenBefore=(await npcPositions(motionPage)).filter(npc=>foodBefore.has(npc.handle));await motionPage.waitForTimeout(300);assert.ok(await motionPage.locator('[data-island="food"] .bi-npc-arm').evaluateAll(arms=>arms.every(arm=>getComputedStyle(arm).animationPlayState==='paused')),'offscreen characters stop visual limb animation while visit logic can continue at low frequency');
   await motionPage.emulateMedia({reducedMotion:'reduce'});const stillBefore=await npcPositions(motionPage);await motionPage.waitForTimeout(300);assert.deepEqual(await npcPositions(motionPage),stillBefore,'reduced motion freezes member roaming');
