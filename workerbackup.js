@@ -16365,6 +16365,7 @@ const D1FinanceModule = {
       LEFT JOIN users u ON u.line_id = bt.beneficiary_id OR u.row_id = bt.beneficiary_id
       LEFT JOIN settlement_items si ON si.tx_id = bt.tx_id
       WHERE bt.status IN ('frozen','payable')
+        AND NOT EXISTS (SELECT 1 FROM orders po WHERE po.order_id=bt.order_id AND po.bonus_policy_type='cocreator-115.10-v3')
         AND (bt.freeze_until = '' OR bt.freeze_until IS NULL OR bt.freeze_until <= ?)
         AND (bt.created_at = '' OR bt.created_at IS NULL OR bt.created_at <= ?)
         AND (? = 'all' OR ? = '' OR bt.network_id = ?)
@@ -16733,7 +16734,7 @@ const PaymentModule = {
           if (order) {
             await MLMModule.markOrderPaid({
               orderId: order.order_id,
-              ...(order.bonus_policy_type === 'cocreator-2026-10-25-v2' ? { grossAmount: Number(result.Amt) } : {}),
+              ...(['cocreator-2026-10-25-v2','cocreator-115.10-v3'].includes(order.bonus_policy_type) ? { grossAmount: Number(result.Amt) } : {}),
               paymentProvider: 'newebpay',
               paymentNo: result.TradeNo || merchantOrderNo,
               paidAt: result.PayTime || new Date().toISOString(),

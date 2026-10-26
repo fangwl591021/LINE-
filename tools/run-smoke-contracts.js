@@ -40,6 +40,9 @@ const foundationChecks = [
 
 const fullChecks = [
   'test/partner-bonus-v2.test.mjs',
+  'test/partner-policy-11510.test.mjs',
+  'test/partner-settlement-11510.test.mjs',
+  'test/taiwan-working-days.test.mjs',
   'test/reward-applications.test.mjs',
   'test/discount-applications.test.mjs',
   'test/redeem-catalog.test.mjs',

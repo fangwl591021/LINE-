@@ -1,6 +1,13 @@
 {
   "schemaVersion": "change_risk_map_v1",
   "areas": {
+    "partner-policy": {
+      "label": "共創夥伴 / 115.10制度 / 獎金與請款",
+      "keywords": ["共創夥伴", "共創制度", "115.10", "對帳", "獎金", "請款"],
+      "docs": ["docs/contracts/partner-bonus-v2.md", "docs/rules/core-invariants.md"],
+      "checks": ["test/partner-bonus-v2.test.mjs", "test/partner-policy-11510.test.mjs", "test/partner-settlement-11510.test.mjs", "test/taiwan-working-days.test.mjs"],
+      "regressionIds": ["PARTNER-POLICY-01", "PARTNER-POLICY-02", "PARTNER-POLICY-03"]
+    },
     "my-card": {
       "label": "我的名片 / 個人專屬名片",
       "keywords": ["我的名片", "個人專屬名片", "LINE生成", "自建名片"],

@@ -11,10 +11,11 @@ function fixture(t){
  const schema=readFileSync(new URL('../migrations/0001_core_schema.sql',import.meta.url),'utf8');
  for(const name of ['orders','bonus_transactions'])f.sql.exec(schema.match(new RegExp('CREATE TABLE IF NOT EXISTS '+name+' \\([\\s\\S]*?\\);'))[0]);
  f.sql.exec(readFileSync(new URL('../migrations/0070_partner_bonus_v2.sql',import.meta.url),'utf8'));
+ f.sql.exec(readFileSync(new URL('../migrations/0074_partner_policy_11510.sql',import.meta.url),'utf8'));
  for(const id of [D,E,G])f.sql.prepare("INSERT INTO users(row_id,line_id,role) VALUES(?,?,'user')").run(id,id);
  f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(A,B);for(const id of [C,D,E])f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(B,id);
  f.call=async(path='',data,token='admin')=>{const r=await handlePartnerContracts(new Request('https://test/v1/partner-contracts'+path,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined}),f.env,mapper,async(url,opts)=>{assert.equal(url,'https://api.line.me/v2/profile');const id={admin:A,user:C,reward:B}[opts.headers.Authorization.slice(7)];return id?Response.json({userId:id}):new Response('',{status:401});});return {http:r.status,...await r.json()};};
- f.enroll=async(uid,status='not_purchased',extra={})=>{const r=await f.call('',{target_uid:uid,signedAt:then(),effectiveAt:then(),documentSha256:'a'.repeat(64),evidenceRef:'合成已簽文件保管編號',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:status,...extra});assert.equal(r.http,200,JSON.stringify(r));return r.contract;};
+ f.enroll=async(uid,status='not_purchased',extra={})=>{const r=await f.call('',{target_uid:uid,templateVersion:VERSION,signedAt:'2026-10-24T00:00:00.000Z',effectiveAt:'2026-10-24T00:00:00.000Z',documentSha256:'a'.repeat(64),evidenceRef:'合成已簽文件保管編號',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:status,...extra});assert.equal(r.http,200,JSON.stringify(r));return r.contract;};
  f.legacyOrder=(id,buyer=B)=>f.sql.prepare("INSERT INTO orders(order_id,buyer_id,recruiter_id,order_type,gross_amount,net_amount,tax_amount,tax_rate,payment_status,paid_at,bonus_policy_type) VALUES(?,?,?,'tenant_annual_fee',6300,6000,300,5,'paid',?,'left_right_independent_split')").run(id,buyer,A,then());
  f.newOrder=async(id,buyer=C,type='tenant_annual_fee')=>{const order={orderId:id,orderType:type,buyerId:buyer,buyerName:'合成會員',recruiterId:B,sponsorId:B,grossAmount:6300,netAmount:6000,taxAmount:300,taxRate:5,bv:3000};const result=await createPartnerV2Order(f.env,order);assert.equal(result?.success,true,JSON.stringify(result));return order;};
  f.pay=async id=>{const r=await markPartnerV2OrderPaid(f.env,{orderId:id,paymentNo:'SYNTHETIC-'+id});assert.equal(r?.success,true,JSON.stringify(r));return r;};
@@ -39,7 +40,7 @@ test('renewals split original/current 25+25 even same member or changed purchase
 test('only authenticated admin enrolls real member with immutable signed proof; role/points/referral unchanged',async t=>{
  const f=fixture(t),before=f.sql.prepare('SELECT * FROM users').all();
  assert.equal((await f.call('?target='+B,undefined,'user')).http,403);assert.equal((await f.call('?target='+B,undefined,'bad')).http,401);
- const data={target_uid:B,signedAt:then(),effectiveAt:then(),documentSha256:'a'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:'not_purchased'};
+ const data={target_uid:B,templateVersion:VERSION,signedAt:'2026-10-24T00:00:00.000Z',effectiveAt:'2026-10-24T00:00:00.000Z',documentSha256:'a'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:'not_purchased'};
  const r=await f.call('',data);assert.equal(r.http,200,JSON.stringify(r));assert.equal(r.contract.policy_version,VERSION);assert.equal((await f.call('',data)).contract.id,r.contract.id);assert.equal((await f.call('',{...data,evidenceRef:'改寫'})).http,409);assert.deepEqual(f.sql.prepare('SELECT * FROM users').all(),before);
  assert.equal((await f.call('',{...data,requestKey:crypto.randomUUID(),documentSha256:'invalid'})).http,400);
  assert.equal((await f.call('',{...data,requestKey:crypto.randomUUID(),purchaseStatus:'purchased',purchaseOrderId:'missing'})).http,409);
@@ -72,7 +73,7 @@ test('payment and deal confirmation replay cannot rewrite ledger, paid/settled r
 test('unknown purchase, missing parent and revoked admin hold without bonus writes',async t=>{
  const f=fixture(t);await f.enroll(B,'unknown');await f.newOrder('hold');await f.pay('hold');const r=await f.call('/deals/confirm',f.confirmData('hold'));assert.equal(r.http,409);assert.match(r.reviewReasons.join(','),/purchase_status/);assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n,0);
  const original=f.db.prepare.bind(f.db);f.db.prepare=query=>{const st=original(query);if(!query.startsWith('UPDATE partner_bonus_v2_clock'))return st;const bind=st.bind.bind(st);st.bind=(...args)=>{const bound=bind(...args);f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A);return bound;};return st;};
- const r2=await f.call('',{target_uid:D,signedAt:then(),effectiveAt:then(),documentSha256:'b'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:'not_purchased'});assert.equal(r2.http,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_contract_enrollments WHERE member_uid=?').get(D).n,0);
+ const r2=await f.call('',{target_uid:D,templateVersion:VERSION,signedAt:'2026-10-24T00:00:00.000Z',effectiveAt:'2026-10-24T00:00:00.000Z',documentSha256:'b'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:'not_purchased'});assert.equal(r2.http,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_contract_enrollments WHERE member_uid=?').get(D).n,0);
 });
 test('consented current manager is separate; renewal freezes original and current identities',async t=>{
  const f=fixture(t);await f.enroll(A);await f.seedAdvanced(A);await f.enroll(B);await f.newOrder('first');await f.pay('first');assert.equal((await f.call('/deals/confirm',f.confirmData('first'))).http,200);
@@ -101,7 +102,7 @@ test('v2 money is TWD and cents-safe; derived BV ignores caller value and purcha
 test('independent clock nonce prevents same request-key cross-endpoint phantom write',async t=>{
  const f=fixture(t),key=crypto.randomUUID();
  f.onBatch(()=>{f.sql.prepare('UPDATE partner_bonus_v2_clock SET revision=revision+1,last_key=? WHERE id=1').run(key);});
- const r=await f.call('',{target_uid:B,signedAt:then(),effectiveAt:then(),documentSha256:'a'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:key,purchaseStatus:'not_purchased'});
+ const r=await f.call('',{target_uid:B,templateVersion:VERSION,signedAt:'2026-10-24T00:00:00.000Z',effectiveAt:'2026-10-24T00:00:00.000Z',documentSha256:'a'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:key,purchaseStatus:'not_purchased'});
  assert.equal(r.http,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_contract_enrollments').get().n,0);
 });
 test('concurrent enrollment forces order creation to retry policy classification, never legacy upsert',async t=>{
@@ -114,11 +115,11 @@ test('migrated member, self-referral, and revoked alias authority cannot create 
  f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(G,B);await assert.rejects(()=>createPartnerV2Order(f.env,order),/移轉/);assert.equal(f.sql.prepare('SELECT count(*) n FROM orders').get().n,0);f.sql.exec('DELETE FROM user_identity_links');
  f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(B,B);await assert.rejects(()=>createPartnerV2Order(f.env,{...order,buyerId:B}),/本人/);
  f.onBatch(()=>{f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(G,A);});
- const r=await f.call('',{target_uid:D,signedAt:then(),effectiveAt:then(),documentSha256:'b'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:'not_purchased'});assert.equal(r.http,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_contract_enrollments WHERE member_uid=?').get(D).n,0);
+ const r=await f.call('',{target_uid:D,templateVersion:VERSION,signedAt:'2026-10-24T00:00:00.000Z',effectiveAt:'2026-10-24T00:00:00.000Z',documentSha256:'b'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:'not_purchased'});assert.equal(r.http,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_contract_enrollments WHERE member_uid=?').get(D).n,0);
 });
 test('target referral changed during enrollment and legacy qualification unknown hold without guessed awards',async t=>{
  const f=fixture(t);await f.enroll(A);await f.seedAdvanced(A);f.onBatch(()=>f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(G,B));
- const r=await f.call('',{target_uid:B,signedAt:then(),effectiveAt:then(),documentSha256:'b'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:'not_purchased'});assert.equal(r.http,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_contract_enrollments WHERE member_uid=?').get(B).n,0);f.onBatch(()=>{});f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(A,B);await f.enroll(B);
+ const r=await f.call('',{target_uid:B,templateVersion:VERSION,signedAt:'2026-10-24T00:00:00.000Z',effectiveAt:'2026-10-24T00:00:00.000Z',documentSha256:'b'.repeat(64),evidenceRef:'合成',confirmed:true,requestKey:crypto.randomUUID(),purchaseStatus:'not_purchased'});assert.equal(r.http,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_contract_enrollments WHERE member_uid=?').get(B).n,0);f.onBatch(()=>{});f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(A,B);await f.enroll(B);
  f.legacyOrder('legacy-seniority',G);f.sql.prepare("UPDATE orders SET recruiter_id=? WHERE order_id='legacy-seniority'").run(B);await f.newOrder('qualification-hold');await f.pay('qualification-hold');const hold=await f.call('/deals/confirm',f.confirmData('qualification-hold'));assert.equal(hold.http,409);assert.match(hold.reviewReasons.join(','),/historical_qualification/);assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n,0);
 });
 test('creation keeps existing store manager scope but rechecks its role during the atomic write',async t=>{
