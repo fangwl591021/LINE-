@@ -1,6 +1,6 @@
 (function() {
   const current = document.currentScript?.src || location.href;
-  const base = new URL('exchange-zone-core.js?v=20260924-top-tabs', current).href;
+  const base = new URL('exchange-zone-core.js?v=20261026-line-avatar', current).href;
   const overlay = new URL('exchange-zone-delete-overlay.js?v=20260814-youtube-poster', current).href;
   const coupon = new URL('exchange-zone-coupon.js?v=20260814-coupon-phase1', current).href;
   let chatModule, chatRequest = 0;

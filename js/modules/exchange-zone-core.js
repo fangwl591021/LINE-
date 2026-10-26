@@ -65,9 +65,20 @@
     const url = safeHttpsUrl(author?.avatarUrl);
     const classes = sizeClass || 'w-12 h-12';
     if (url) {
-      return `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="${classes} rounded-full object-cover border border-slate-100 bg-slate-100 shrink-0">`;
+      return `<span class="${classes} relative overflow-hidden rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-[16px] font-black shrink-0" aria-hidden="true"><span>${initials(name)}</span><img data-exchange-avatar src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer" class="absolute inset-0 w-full h-full object-cover" hidden></span>`;
     }
     return `<span class="${classes} rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-[16px] font-black shrink-0" aria-hidden="true">${initials(name)}</span>`;
+  }
+
+  function bindAvatarImages(root) {
+    for (const image of root.querySelectorAll('img[data-exchange-avatar]')) {
+      const initial = image.previousElementSibling;
+      const loaded = () => { initial.hidden = true; image.hidden = false; };
+      const failed = () => { initial.hidden = false; image.remove(); };
+      image.addEventListener('load', loaded, { once: true });
+      image.addEventListener('error', failed, { once: true });
+      if (image.complete) { if (image.naturalWidth > 0) loaded(); else failed(); }
+    }
   }
 
   function tagsHtml(items) {
@@ -229,6 +240,7 @@
           </div>
         </div>`;
     }).join('');
+    bindAvatarImages(list);
   }
 
   window.loadExchangeZone = async function() {
@@ -359,6 +371,7 @@
       ${post?.canEdit ? `<button id="exchange-zone-edit-button" type="button" ${post.isHidden ? 'disabled title="請先重新顯示貼文，再編輯內容"' : ''} class="mt-6 w-full min-h-13 rounded-2xl border border-blue-200 bg-blue-50 px-4 text-[15px] font-black text-blue-700 flex items-center justify-center gap-2 active:scale-[0.98]"><span class="material-symbols-outlined text-[20px]">edit</span>${post.isHidden ? '隱藏中・暫停編輯' : '編輯這則內容'}</button>
       <button id="exchange-zone-visibility-button" type="button" aria-pressed="${post.isHidden ? 'true' : 'false'}" class="mt-3 w-full min-h-14 rounded-2xl border border-amber-200 bg-amber-50 px-4 text-[16px] font-black text-amber-800 flex items-center justify-center gap-2 disabled:opacity-50"><span class="material-symbols-outlined text-[22px]">${post.isHidden ? 'visibility' : 'visibility_off'}</span>${post.isHidden ? '重新顯示貼文' : '隱藏貼文'}</button>` : ''}`;
 
+    bindAvatarImages(content);
     document.getElementById('exchange-zone-visibility-button')?.addEventListener('click', async (event) => {
       const button = event.currentTarget;
       const owner = window.currentUserProfile?.userId;

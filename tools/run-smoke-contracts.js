@@ -225,6 +225,7 @@ const fullChecks = [
   'tools/check-partner-directory-contract.js',
   'test/partner-directory.test.mjs',
   'test/exchange-zone.test.mjs',
+  'test/exchange-zone-avatar.test.mjs',
   'tools/check-personal-task-recurrence-schema-contract.js',
   'tools/check-personal-task-recurrence-worker-contract.js',
   'tools/check-personal-agenda-voice-contract.js',
