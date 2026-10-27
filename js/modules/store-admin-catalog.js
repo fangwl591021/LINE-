@@ -81,7 +81,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
         for(const [value,text]of [['in_store','限店內'],['online','網購']]){const option=make('option',text);option.value=value;purchaseMode.append(option);}
         purchaseMode.value=record.purchase_mode||'in_store';
         form.append(make('p','網購仍需店家完成收款設定，並以結帳查核為準；修改後請重新確認訂單。'));
-      }else form.append(make('p','此店家未具網購資格；銷售方式保持原值，一般會員限店內展示。'));
+      }else form.append(make('p','此帳號未具店家商品管理資格，請先核對合作方案。'));
       form.append(make('p','原折抵政策保持不變；不修改既有訂單或發放點數。'));
     }
     let manualConfirmation=null;

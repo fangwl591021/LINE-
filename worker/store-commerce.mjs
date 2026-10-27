@@ -1,8 +1,8 @@
 // Isolated online remittance orders; online points use a separate state machine.
 import {BuyerProfileError,readBuyerProfile,saveBuyerProfile} from './store-buyer-profile.mjs';
 import {CommercePointError,commercePointsEnabled,requireCommercePointService,commerceWallet,pointLockStatements,pointLockError,executePointOperation,reconcilePointOrder} from './store-commerce-points.mjs';
+import {storePlanForRole,retailRoleSql,pickupRoleSql} from '../js/modules/store-cooperation-plans.mjs';
 const root='/v1/store-commerce';
-const roles=['store','店長','admin','總管'];
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
 class CommerceError extends Error {constructor(message,status=400){super(message);this.status=status;}}
 const fail=(message,status)=>{throw new CommerceError(message,status);};
@@ -32,7 +32,7 @@ async function actor(request,db,fetcher) {
   if(!user)fail('請先完成會員註冊',403);return user;
 }
 async function ownShop(db,user) {
-  if(!roles.includes(String(user.role).toLowerCase()))fail('僅店家可管理本人商城',403);
+  if(!storePlanForRole(user.role).canOnline)fail('目前合作方案未開放商城管理',403);
   const shop=await q(db,'SELECT * FROM store_shop_stores WHERE owner_uid=?',user.line_id).first();if(!shop)fail('請先建立店面',404);return shop;
 }
 const defaults={enabled:0,bank_name:'',bank_code:'',bank_account:'',bank_holder:'',shipping_fee_cents:0,free_shipping_cents:0,version:0};
@@ -58,29 +58,34 @@ function checkoutInput(data) {
   const buyer={...contact(data.buyer,'購買人'),email:str(data.buyer,'email',254,false)};
   if(buyer.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyer.email))fail('購買人 Email 格式錯誤');
   const customer=data.customer;if(!customer||typeof customer!=='object'||Array.isArray(customer))fail('缺少收件資料');
-  const carrier=str(customer,'carrier',10);if(!['POST','FAMILY','SEVEN'].includes(carrier))fail('寄送方式無效');
-  const recipient={...contact(customer,'收件人'),carrier,postal_code:str(customer,'postal_code',6,false),city:str(customer,'city',20,carrier==='POST'),district:str(customer,'district',20,carrier==='POST'),address:str(customer,'address',200,carrier==='POST'),store_info:str(customer,'store_info',120,carrier!=='POST'),note:str(customer,'note',300,false)};
+  const carrier=str(customer,'carrier',10);if(!['POST','FAMILY','SEVEN','PICKUP'].includes(carrier))fail('寄送方式無效');
+  const pickup=carrier==='PICKUP';
+  const recipient={...contact(customer,pickup?'取貨人':'收件人'),carrier,postal_code:pickup?'':str(customer,'postal_code',6,false),city:pickup?'':str(customer,'city',20,carrier==='POST'),district:pickup?'':str(customer,'district',20,carrier==='POST'),address:pickup?'':str(customer,'address',200,carrier==='POST'),store_info:pickup?'':str(customer,'store_info',120,carrier!=='POST'),note:str(customer,'note',300,false)};
   if(recipient.postal_code&&!/^\d{3,6}$/.test(recipient.postal_code))fail('郵遞區號須為 3 至 6 碼數字');
   return {shop_id:str(data,'shop_id',80),items,buyer,customer:recipient,payment_method:'REMITTANCE',points_used:points};
 }
 async function quote(db,user,input,env,pointService) {
   if(input.points_used&&!commercePointsEnabled(env,pointService))fail('線上點數折抵尚未完成開放，本次不會扣點');
-  const shop=await q(db,`SELECT s.* FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管'))`,input.shop_id).first();
+  const shop=await q(db,`SELECT s.*,(EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND ${pickupRoleSql()})) AS can_pickup FROM store_shop_stores s WHERE s.id=? AND s.status='active' AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND ${retailRoleSql()})`,input.shop_id).first();
   if(!shop)fail('店家尚未開放',404);const config=await settings(db,shop.id);if(!config?.enabled)fail('店家尚未開放線上匯款下單',409);
+  const pickup=input.customer.carrier==='PICKUP';
+  if(pickup&&!shop.can_pickup)fail('折抵店家的到店取貨尚待確認，目前請選擇寄送方式',403);
+  if(pickup&&(!String(shop.address||'').trim()||!String(shop.phone||'').trim()))fail('店家尚未完整設定自取地址與電話，請先選擇寄送方式',409);
   const products=(await q(db,`SELECT id,title,price_cents,version,redeem_type,redeem_value,shipping_fee_cents FROM store_shop_products WHERE shop_id=? AND status='active' AND purchase_mode='online' AND id IN (${input.items.map(()=>'?').join(',')})`,shop.id,...input.items.map(i=>i.id)).all()).results;
   if(products.length!==input.items.length)fail('商品限店內、已下架或不屬於此店，請重新選購',409);
   const items=input.items.map(item=>{const product=products.find(p=>p.id===item.id),unit=Math.floor(product.price_cents/100);
     const max=product.redeem_type==='full'?unit:product.redeem_type==='fixed'?Math.min(unit,product.redeem_value):product.redeem_type==='percent'?Math.min(unit,Math.floor(product.price_cents*product.redeem_value/10000)):0;
-    return {...product,quantity:item.quantity,line_total_cents:product.price_cents*item.quantity,max_points:max*item.quantity,line_shipping_fee_cents:product.shipping_fee_cents==null?null:integer(product.shipping_fee_cents,1000000,'商品運費')*item.quantity};});
+    return {...product,shipping_fee_cents:pickup?0:product.shipping_fee_cents,quantity:item.quantity,line_total_cents:product.price_cents*item.quantity,max_points:max*item.quantity,line_shipping_fee_cents:pickup?0:product.shipping_fee_cents==null?null:integer(product.shipping_fee_cents,1000000,'商品運費')*item.quantity};});
   const subtotal=items.reduce((sum,i)=>sum+i.line_total_cents,0);
-  const legacyFee=items.some(i=>i.shipping_fee_cents==null)?(config.free_shipping_cents>0&&subtotal>=config.free_shipping_cents?0:config.shipping_fee_cents):0;
+  const legacyFee=!pickup&&items.some(i=>i.shipping_fee_cents==null)?(config.free_shipping_cents>0&&subtotal>=config.free_shipping_cents?0:config.shipping_fee_cents):0;
   const fee=legacyFee+items.reduce((sum,i)=>sum+(i.line_shipping_fee_cents??0),0);
   integer(subtotal+fee,100000000,'訂單金額',1);
   const maxPoints=items.reduce((sum,i)=>sum+i.max_points,0);
   if(input.points_used>maxPoints)fail('折抵點數超過商品上限，運費不可折抵');
   const wallet=input.points_used?await commerceWallet(pointService,user.line_id,env):null;
   if(wallet&&input.points_used>wallet.balance)fail('購物金不足，請減少折抵點數');
-  const snapshot={shop_id:shop.id,shop_name:shop.name,shop_version:shop.version,settings_version:config.version,buyer_name:input.buyer.name,buyer:input.buyer,items,customer:input.customer,payment_method:'REMITTANCE',points_used:input.points_used,max_points:maxPoints,discount_cents:input.points_used*100,subtotal_cents:subtotal,shipping_fee_cents:fee,legacy_shipping_fee_cents:legacyFee,total_cents:subtotal+fee-input.points_used*100,bank:{name:config.bank_name,code:config.bank_code,account:config.bank_account,holder:config.bank_holder}};
+  const customer=pickup?{...input.customer,store_info:[shop.name,shop.address,shop.phone].join('｜'),pickup_shop_name:shop.name,pickup_address:shop.address,pickup_phone:shop.phone}:input.customer;
+  const snapshot={shop_id:shop.id,shop_name:shop.name,shop_version:shop.version,settings_version:config.version,buyer_name:input.buyer.name,buyer:input.buyer,items,customer,payment_method:'REMITTANCE',points_used:input.points_used,max_points:maxPoints,discount_cents:input.points_used*100,subtotal_cents:subtotal,shipping_fee_cents:fee,legacy_shipping_fee_cents:legacyFee,total_cents:subtotal+fee-input.points_used*100,bank:{name:config.bank_name,code:config.bank_code,account:config.bank_account,holder:config.bank_holder}};
   return {snapshot,wallet,merchant_uid:shop.owner_uid,quote_hash:await hash({buyer:user.line_id,pointIdentity:wallet?.identity||'',snapshot})};
 }
 function publicOrder(row) {const {buyer_uid,request_hash,request_key,...order}=row;const snapshot=JSON.parse(order.snapshot_json);delete order.snapshot_json;return {...order,snapshot};}
@@ -97,7 +102,7 @@ async function createOrder(db,user,data,now,env,pointService) {
   // One conditional insert closes the race with product/settings updates.
   const guards=s.items.map(()=>"EXISTS(SELECT 1 FROM store_shop_products WHERE id=? AND shop_id=? AND version=? AND status='active' AND purchase_mode='online')").join(' AND ');
   const insert=q(db,`INSERT INTO store_commerce_orders(id,shop_id,buyer_uid,request_key,request_hash,snapshot_json,total_cents,created_at,updated_at,points_status)
-    SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? AND s.version=? AND s.status='active' AND lower(u.role) IN ('store','店長','admin','總管'))
+    SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? AND s.version=? AND s.status='active' AND ${retailRoleSql()}${s.customer.carrier==='PICKUP'?' AND '+pickupRoleSql():''})
     AND EXISTS(SELECT 1 FROM store_commerce_settings WHERE shop_id=? AND version=? AND enabled=1) AND ${guards}
     ON CONFLICT(buyer_uid,request_key) DO NOTHING`,id,s.shop_id,user.line_id,key,requestHash,JSON.stringify(s),s.total_cents,now,now,s.points_used?'pending':'none',s.shop_id,s.shop_version,s.shop_id,s.settings_version,...s.items.flatMap(i=>[i.id,s.shop_id,i.version]));
   if(s.points_used){try{await db.batch([insert,...pointLockStatements(db,{id,order_id:id,kind:'debit',buyer_uid:user.line_id,merchant_uid:priced.merchant_uid,operator_uid:user.line_id,point_identity:priced.wallet.identity,points:-s.points_used,now})]);}catch(error){pointLockError(error);}}
@@ -130,7 +135,9 @@ async function transition(db,user,data,now,env,pointService) {
   const input={order_id:order.id,action,version};let set='',args=[];
   if(action==='report_remittance'){input.last5=str(data,'last5',5);if(!/^\d{5}$/.test(input.last5))fail('請填寫匯款帳號末五碼');}
   if(action==='verify_remittance'){input.received_cents=integer(data.received_cents,100000000,'實際入帳金額',1);if(data.confirmed!==true)fail('請確認已查核銀行實際入帳');input.confirmed=true;}
-  if(action==='ship')input.tracking_number=str(data,'tracking_number',100);
+  const pickup=JSON.parse(order.snapshot_json).customer?.carrier==='PICKUP';
+  if(action==='ship')input.tracking_number=pickup?'':str(data,'tracking_number',100);
+  if(action==='complete'&&pickup){if(data.confirmed_pickup!==true)fail('請確認取貨人已領取本筆商品');input.confirmed_pickup=true;}
   if(action==='refund'){input.returned_cash_cents=integer(data.returned_cash_cents,100000000,'已退款金額');if(data.confirmed!==true)fail('請先確認已退還買家款項');input.confirmed=true;}
   const requestHash=await hash(input),previous=await q(db,'SELECT * FROM store_commerce_events WHERE actor_uid=? AND request_key=?',user.line_id,key).first();
   if(previous){if(previous.request_hash!==requestHash)fail('同一操作編號不可變更內容',409);return publicOrder(order);}
@@ -151,10 +158,10 @@ async function transition(db,user,data,now,env,pointService) {
     if(input.received_cents!==order.total_cents)fail('入帳金額不符，請人工核對；不可標記已付款',409);
     set="payment_status='paid',received_cents=?,paid_at=?";args=[input.received_cents,now];
   } else if(action==='ship') {
-    if(order.payment_status!=='paid'||order.fulfillment_status!=='unfulfilled')fail('僅已付款且未出貨的訂單可出貨',409);
+    if(order.payment_status!=='paid'||order.fulfillment_status!=='unfulfilled')fail(pickup?'僅已付款且未備妥的訂單可通知取貨':'僅已付款且未出貨的訂單可出貨',409);
     set="fulfillment_status='shipped',tracking_number=?,shipped_at=?";args=[input.tracking_number,now];
   } else {
-    if(order.payment_status!=='paid'||order.fulfillment_status!=='shipped')fail('僅已出貨訂單可標記完成',409);
+    if(order.payment_status!=='paid'||order.fulfillment_status!=='shipped')fail(pickup?'僅已備妥待取貨訂單可確認已取貨':'僅已出貨訂單可標記完成',409);
     set="fulfillment_status='completed',completed_at=?";args=[now];
   }
   const eventId=crypto.randomUUID();
@@ -185,13 +192,14 @@ export async function handleStoreCommerce(request,env,fetcher=fetch,pointService
       return reply({success:true,profile:await saveBuyerProfile(db,user.line_id,await json(request))});
     }
     if(path==='/settings') {
-      const shop=await ownShop(db,user);if(request.method==='GET')return reply({success:true,release_enabled:enabled,settings:(await settings(db,shop.id))||defaults});
+      const shop=await ownShop(db,user);if(request.method==='GET')return reply({success:true,release_enabled:enabled,cooperation_plan:storePlanForRole(user.role),settings:(await settings(db,shop.id))||defaults});
       if(request.method!=='POST')fail('不支援的操作',405);
       const data=await json(request),value=settingsInput(data),version=integer(data.version,1000000000,'版本'),now=new Date().toISOString();let result;
-      if(version===0)result=await q(db,`INSERT INTO store_commerce_settings(shop_id,enabled,bank_name,bank_code,bank_account,bank_holder,shipping_fee_cents,free_shipping_cents,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(shop_id) DO NOTHING`,shop.id,...Object.values(value),now).run();
-      else result=await q(db,`UPDATE store_commerce_settings SET enabled=?,bank_name=?,bank_code=?,bank_account=?,bank_holder=?,shipping_fee_cents=?,free_shipping_cents=?,version=version+1,updated_at=? WHERE shop_id=? AND version=?`,...Object.values(value),now,shop.id,version).run();
+      const gate=`EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? AND s.owner_uid=? AND u.role IS ? AND ${retailRoleSql()})`;
+      if(version===0)result=await q(db,`INSERT INTO store_commerce_settings(shop_id,enabled,bank_name,bank_code,bank_account,bank_holder,shipping_fee_cents,free_shipping_cents,updated_at) SELECT ?,?,?,?,?,?,?,?,? WHERE ${gate} ON CONFLICT(shop_id) DO NOTHING`,shop.id,...Object.values(value),now,shop.id,user.line_id,user.role).run();
+      else result=await q(db,`UPDATE store_commerce_settings SET enabled=?,bank_name=?,bank_code=?,bank_account=?,bank_holder=?,shipping_fee_cents=?,free_shipping_cents=?,version=version+1,updated_at=? WHERE shop_id=? AND version=? AND ${gate}`,...Object.values(value),now,shop.id,version,shop.id,user.line_id,user.role).run();
       if(!result.meta.changes)fail('收款設定已更新，請重新載入後再編輯',409);
-      return reply({success:true,release_enabled:enabled,settings:await settings(db,shop.id)});
+      return reply({success:true,release_enabled:enabled,cooperation_plan:storePlanForRole(user.role),settings:await settings(db,shop.id)});
     }
     // Keep order history available when checkout is paused.
     if(request.method==='GET'&&path==='/orders/lookup') {

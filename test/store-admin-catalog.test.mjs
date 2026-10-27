@@ -42,7 +42,7 @@ function fixture(){
   const sql=new DatabaseSync(':memory:');
   sql.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '',points INTEGER DEFAULT 500); CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);");
   for(const name of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0045_store_catalog_admin_audit.sql'])sql.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
-  for(const [user,role]of [[ADMIN,'admin'],[OWNER,'store'],[MEMBER,'user']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(user,user,role,user===ADMIN?'方萬隆':'合成會員');
+  for(const [user,role]of [[ADMIN,'admin'],[OWNER,'store'],[MEMBER,'redeem']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(user,user,role,user===ADMIN?'方萬隆':'合成會員');
   for(const [n,owner]of [[1,OWNER],[2,MEMBER]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','now')").run(id(n),owner,'店家'+n);
   for(const [n,shop]of [[10,1],[11,2]])sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key,category) VALUES(?,?,'原商品',100,'now',?,'食')").run(id(n),id(shop),id(n));
   let beforeBatch=null,failUpdate=false,queue=Promise.resolve();
@@ -119,7 +119,7 @@ test('strict fields, cross-shop ids, bounds and archived restoration rejected',a
   assert.equal((await f.call(payload({changes:{status:'archived'}}))).http,200);
   assert.equal((await f.call(payload({version:2,request_key:id(98),changes:{status:'active'}}))).http,409);
 });
-test('member product capacity and existing policy restrictions survive admin editing',async t=>{
+test('redeem product capacity survives administrator editing',async t=>{
   const f=fixture();t.after(()=>f.sql.close());const data=payload({shop_id:id(2),id:id(11)});
   f.sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key) VALUES(?,?,'另一件',100,'now',?)").run(id(12),id(2),id(12));
   assert.equal((await f.call(data)).http,409);
@@ -142,17 +142,18 @@ test('merchant sales channel switches with one audited version and preserves pri
   assert.equal(f.product().purchase_mode,'in_store');assert.equal(f.product().redeem_value,50);
 });
 
-test('ordinary member cannot newly enable online even for drafts or archives, legacy fields stay compatible',async t=>{
+test('redeem owners can enable online and retain their existing redemption policy',async t=>{
   const f=fixture();t.after(()=>f.sql.close());
-  assert.equal((await f.call(null,ADMIN,'shop='+id(2))).online_product_allowed,false);
-  const data=payload({shop_id:id(2),id:id(11)});
-  for(const status of ['draft','active','archived']){
-    assert.equal((await f.call({...data,changes:{purchase_mode:'online',status}})).http,403);
-    assert.equal(f.audit().length,0);assert.equal(f.sql.prepare('SELECT purchase_mode FROM store_shop_products WHERE id=?').get(id(11)).purchase_mode,'in_store');
-  }
-  f.sql.prepare("UPDATE store_shop_products SET purchase_mode='online' WHERE id=?").run(id(11));
-  assert.equal((await f.call({...data,changes:{status:'archived'}})).http,200);
-  assert.equal(f.sql.prepare('SELECT purchase_mode FROM store_shop_products WHERE id=?').get(id(11)).purchase_mode,'online');
+  assert.equal((await f.call(null,ADMIN,'shop='+id(2))).online_product_allowed,true);
+  f.sql.prepare("UPDATE store_shop_products SET redeem_type='percent',redeem_value=50 WHERE id=?").run(id(11));
+  const data=payload({shop_id:id(2),id:id(11),changes:{purchase_mode:'online',status:'active'}});
+  assert.equal((await f.call(data)).http,200);
+  const saved=f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(11));assert.equal(saved.purchase_mode,'online');assert.equal(saved.redeem_value,50);
+});
+for(const role of ['user','reward','贈點用戶'])test(role+' cannot receive retail catalog edits through administrator',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,MEMBER);
+  assert.equal((await f.call(null,ADMIN,'shop='+id(2))).http,403);
+  assert.equal((await f.call(payload({shop_id:id(2),id:id(11)}))).http,403);assert.equal(f.audit().length,0);
 });
 
 test('sales mode save still fails closed on lost merchant eligibility',async t=>{
@@ -168,4 +169,18 @@ test('paged catalog includes drafts and archived without exposing owner identifi
   const second=await f.call(null,ADMIN,'shop='+id(1)+'&after='+first.next);assert.equal(second.products.length,5);assert.equal(second.next,'');
   assert.equal((await f.call(null,ADMIN,'shop='+id(1)+'&status=active')).products.length,0);
   for(const query of ['shop='+id(1)+'&shop='+id(2),'shop='+id(1)+'&status=bad','shop='+id(1)+'&owner='+ADMIN])assert.equal((await f.call(null,ADMIN,query)).http,400);
+});
+
+test('administrator cannot activate or edit a full-plan product over 20; archiving restores allowance',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());
+  for(let n=20;n<40;n++)f.sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key) VALUES(?,?,'既有商品',100,'now',?)").run(id(n),id(1),id(n));
+  assert.equal((await f.call(payload())).http,409);assert.equal(f.audit().length,0);
+  assert.equal((await f.call(payload({changes:{status:'archived'}}))).http,200);
+  assert.equal(f.sql.prepare("SELECT count(*) n FROM store_shop_products WHERE shop_id=? AND status!='archived'").get(id(1)).n,20);
+});
+test('full-plan final-slot occupancy is rechecked inside audited activation',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());
+  for(let n=20;n<39;n++)f.sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key) VALUES(?,?,'既有商品',100,'now',?)").run(id(n),id(1),id(n));
+  f.before(()=>f.sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key) VALUES(?,?,'剛建立',100,'now',?)").run(id(90),id(1),id(90)));
+  assert.equal((await f.call(payload())).http,409);assert.equal(f.audit().length,0);assert.equal(f.product().status,'draft');
 });

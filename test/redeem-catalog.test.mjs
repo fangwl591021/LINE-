@@ -9,7 +9,7 @@ const product=extra=>({title:'生活展示商品',description:'一般生活用�
 const role=(f,value='redeem')=>f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(value,OWNER);
 const rejection=(decision='reject')=>({decision,checked_categories:listingCategories,image_count:0,issues:[{category:'other',field:'description',evidence:'待核對的展示內容',reason:'合成審核：需確認此內容'}]});
 
-for(const value of ['redeem','扣點用戶'])test(value+' owner isolation, no implicit store promotion or new cashier permissions',async t=>{
+for(const value of ['redeem','扣點用戶'])test(value+' owner isolation and product redemption do not grant gifts or store promotion',async t=>{
  const f=createListingFixture();t.after(f.close);role(f,value);
  const created=await f.call('/store',store({owner_uid:ADMIN,role:'store'}));assert.equal(created.http,200);
  assert.equal(f.sql.prepare('SELECT owner_uid FROM store_shop_stores').get().owner_uid,OWNER);
@@ -20,7 +20,9 @@ for(const value of ['redeem','扣點用戶'])test(value+' owner isolation, no im
  assert.equal((await f.call('/manage',undefined,null)).http,401);
  assert.equal(f.sql.prepare('SELECT role FROM users WHERE line_id=?').get(OWNER).role,value);
  assert.equal(checkRedeemOnlyAction('storeAdjustCustomerPoints',{mode:'redeem'}),'');
- for(const payload of [{mode:'reward'},{mode:'redeem',rewardPoints:100},{mode:'redeem',productId:PRODUCT}])assert.ok(checkRedeemOnlyAction('storeAdjustCustomerPoints',payload));
+ for(const payload of [{mode:'reward'},{mode:'redeem',rewardPoints:100},{mode:'redeem',autoBindPointAccount:true}])assert.ok(checkRedeemOnlyAction('storeAdjustCustomerPoints',payload));
+ assert.equal(checkRedeemOnlyAction('storeAdjustCustomerPoints',{mode:'redeem',productId:PRODUCT,qrToken:'qr-safe'}),'');
+ for(const action of ['getStoreShopRedemptionProduct','resolveStoreMemberProductQr'])assert.equal(checkRedeemOnlyAction(action,{}),'');
 });
 
 for(const mode of ['reject','manual','error'])test('redeem catalog '+mode+' review never publishes or overwrites a product',async t=>{
@@ -49,16 +51,16 @@ test('an in-flight store request cannot retain unlimited online privilege after 
  assert.equal(f.sql.prepare("SELECT count(*) n FROM store_shop_products WHERE status!='archived'").get().n,0);
 });
 
-test('existing administrator catalog supports redeem owners but keeps one-item, no-online and audit guards',async t=>{
+test('existing administrator catalog supports redeem online products while preserving one-item and audit guards',async t=>{
  const f=createListingFixture({existing:true});t.after(f.close);role(f);f.sql.prepare("UPDATE store_shop_products SET status='draft'").run();
- const view=await f.call('/admin/catalog?shop='+SHOP,undefined,ADMIN);assert.equal(view.http,200);assert.equal(view.online_product_allowed,false);
+ const view=await f.call('/admin/catalog?shop='+SHOP,undefined,ADMIN);assert.equal(view.http,200);assert.equal(view.online_product_allowed,true);
  assert.equal((await f.call('/admin/catalog?queue=draft',undefined,ADMIN)).products[0].id,PRODUCT);
  const edit=changes=>({type:'product',id:PRODUCT,shop_id:SHOP,shop_version:1,version:1,request_key:crypto.randomUUID(),changes});
- assert.equal((await f.call('/admin/catalog',edit({purchase_mode:'online'}),ADMIN)).http,403);
+ assert.equal((await f.call('/admin/catalog',edit({purchase_mode:'online'}),ADMIN)).http,200);
  assert.equal((await f.call('/admin/products',{...product(),shop_id:SHOP,shop_version:1},ADMIN)).http,409);
- assert.equal((await f.call('/admin/catalog',edit({status:'archived'}),ADMIN)).http,200);
+ assert.equal((await f.call('/admin/catalog',{...edit({status:'archived'}),version:2},ADMIN)).http,200);
  const saved=await f.call('/admin/products',{...product({status:'draft'}),shop_id:SHOP,shop_version:1},ADMIN);assert.equal(saved.http,200);
  assert.equal(f.sql.prepare("SELECT count(*) n FROM store_shop_products WHERE status!='archived'").get().n,1);
- assert.equal(f.count('store_admin_product_audit'),1);assert.equal(f.count('store_catalog_admin_audit'),1);
+ assert.equal(f.count('store_admin_product_audit'),1);assert.equal(f.count('store_catalog_admin_audit'),2);
  assert.equal(f.sql.prepare('SELECT role FROM users WHERE line_id=?').get(OWNER).role,'redeem');
 });

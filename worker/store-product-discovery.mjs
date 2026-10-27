@@ -1,5 +1,6 @@
 // Read-only cross-store discovery. Uses the existing public-store eligibility.
 // Never reads bank settings or creates QR, order, point, review or identity data.
+import {retailRoleSql} from '../js/modules/store-cooperation-plans.mjs';
 export class ProductDiscoveryError extends Error {
   constructor(message,status=400){super(message);this.status=status;}
 }
@@ -10,7 +11,7 @@ export async function readPublicProducts(db,params,eligible) {
   const category=text(params,'category',20),mode=text(params,'purchase_mode',20),redeem=text(params,'redeem',10);
   if(!categories.includes(category)||!['','online','in_store'].includes(mode)||!['','1'].includes(redeem))throw new ProductDiscoveryError('商品篩選條件不正確');
   if((id&&!/^[A-Za-z0-9-]{1,80}$/.test(id))||(after&&!/^[A-Za-z0-9-]{1,80}$/.test(after))||(id&&after))throw new ProductDiscoveryError('商品編號或分頁不正確');
-  const merchant="EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管'))";
+  const merchant=`EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND ${retailRoleSql()})`;
   const columns='p.id,p.shop_id,p.title,p.description,p.image_url,p.price_cents,p.redeem_type,p.redeem_value,p.category,p.purchase_mode,p.shipping_fee_cents,p.version,p.updated_at,s.name AS shop_name,s.category AS shop_category,s.address AS shop_address';
   const where=id?'p.id=?':`p.id>? AND (instr(lower(p.title),lower(?))>0 OR instr(lower(p.description),lower(?))>0 OR instr(lower(s.name),lower(?))>0) AND (?='' OR p.category=?) AND (?='' OR p.purchase_mode=?) AND (?='' OR (${merchant} AND p.redeem_type!='none'))`;
   const categoryValue=category==='unclassified'?'':category;

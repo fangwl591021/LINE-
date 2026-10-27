@@ -16,7 +16,7 @@ function fixture(t){
  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0063_checkin_mall_cards.sql','0071_checkin_chat_dashboard.sql','0072_checkin_dashboard_products.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  sql.exec('BEGIN');try{sql.exec(readFileSync(new URL('../migrations/0073_checkin_mall_event_cards.sql',import.meta.url),'utf8'));sql.exec('COMMIT');}catch(error){sql.exec('ROLLBACK');throw error;}
  for(const [uid,role] of [[ADMIN,'admin'],[MEMBER,'user']])sql.prepare('INSERT INTO users(row_id,line_id,role) VALUES(?,?,?)').run(uid,uid,role);
- for(const [i,role,status] of [[1,'store','active'],[2,'reward','active'],[3,'store','draft'],[4,'staff','active']]){
+ for(const [i,role,status] of [[1,'store','active'],[2,'redeem','active'],[3,'store','draft'],[4,'staff','active']]){
   const uid='U'+String(i).padStart(32,'0');sql.prepare('INSERT INTO users(row_id,line_id,role) VALUES(?,?,?)').run(uid,uid,role);
   sql.prepare('INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,?,?)').run(shopId(i),uid,'公開店家'+i,status,'now');
  }
@@ -61,9 +61,13 @@ test('catalog shop filter is server-side, pages are complete and query attacks c
  for(const query of ['view=products&role=admin','view=products&view=shops','view=unknown','view=products&shop=bad','view=products&q='+'x'.repeat(81),'view=products&after=../bad'])assert.equal((await f.call('/catalog?'+query)).status,400);
  assert.equal((await f.call('/catalog?view=products&q='+encodeURIComponent("' OR 1=1 --"))).products.length,0);
 });
-test('display-only owners cannot acquire online/points claims and invalid long image URLs are safely omitted',async t=>{
- const f=fixture(t),display=await readPublicDashboardProduct(f.db,shopId(2),'display');assert.equal(display.merchantEnabled,false);assert.equal(display.redeemValue,50);
- assert.match(display.display.body,/店面展示，未開放交易/);assert.doesNotMatch(display.display.body,/50%|網購|可折抵|預設最高/);
+test('redeem products support online/points claims while reward-only stores are excluded without deleting snapshots',async t=>{
+ const f=fixture(t),display=await readPublicDashboardProduct(f.db,shopId(2),'display');assert.equal(display.merchantEnabled,true);assert.equal(display.redeemValue,50);
+ assert.match(display.display.body,/網購商品/);assert.match(display.display.body,/最高折抵 50%/);
+ f.sql.prepare("UPDATE users SET role='reward' WHERE line_id=?").run('U'+String(2).padStart(32,'0'));
+ assert.equal(await readPublicDashboardProduct(f.db,shopId(2),'display'),null);
+ assert.deepEqual((await f.call('/catalog?view=products')).products.map(product=>product.productId),['p1']);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM store_shop_products WHERE id='display'").get().n,1);
  f.sql.prepare("UPDATE store_shop_products SET image_url=? WHERE id='p1'").run('https://images.test/'+'a'.repeat(2050));const product=await readPublicDashboardProduct(f.db,shopId(1),'p1');assert(product);assert.equal(product.imageUrl,'');
  assert.equal(await readPublicDashboardProduct(f.db,shopId(1),'hidden'),null);assert.equal(await readPublicDashboardProduct(f.db,shopId(1),'draft'),null);
 });

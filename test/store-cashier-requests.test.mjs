@@ -1,9 +1,30 @@
 import {test} from 'node:test';
-test('product QR and redemption reject owners outside admin or store roles before point execution',async()=>{
+test('redemption merchants support owned product QR and exactly-once product redemption',async t=>{
+ for(const role of ['redeem','扣點用戶','REDEEM']){
+  const {sql,env}=fixture();t.after(()=>sql.close());sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+  const qr=await issueMemberProductQr({authenticatedUserId:C,productId:P},env,resolve);assert.equal(qr.success,true);
+  const product=(await getRedemptionProduct({authenticatedUserId:A,productId:P},env)).data;assert.equal(product.maxPoints,800);
+  assert.equal((await resolveMemberProductQr({authenticatedUserId:A,qrToken:qr.data.qrToken},env,resolve)).success,true);
+  const request=payload({...product,qrToken:qr.data.qrToken});let writes=0;
+  const execute=async(...args)=>{writes++;return success(...args);};
+  assert.equal((await runCashierRequest(request,env,resolve,execute)).success,true);assert.equal((await runCashierRequest(request,env,resolve,execute)).success,true);assert.equal(writes,1);
+ }
+});
+
+test('product QR issuance rechecks merchant permission after customer resolution',async t=>{
+ const {sql,env}=fixture();t.after(()=>sql.close());sql.prepare("UPDATE users SET role='redeem' WHERE line_id=?").run(A);
+ const first=await issueMemberProductQr({authenticatedUserId:C,productId:P},env,resolve);assert.equal(first.success,true);
+ const before=sql.prepare('SELECT * FROM store_member_product_qr').get();
+ const result=await issueMemberProductQr({authenticatedUserId:C,productId:P},env,async()=>{sql.prepare("UPDATE users SET role='reward' WHERE line_id=?").run(A);return resolve();});
+ assert.equal(result.success,false);assert.deepEqual(sql.prepare('SELECT * FROM store_member_product_qr').get(),before);
+ assert.equal((await resolveMemberProductQr({authenticatedUserId:A,qrToken:first.data.qrToken},env,resolve)).success,false);
+});
+
+test('product QR and redemption reject owners outside retail roles before point execution',async()=>{
  const {sql,env}=fixture();
  try{
   const qr=(await issueMemberProductQr({authenticatedUserId:C,productId:P},env,resolve)).data;
-  for(const role of ['tenant','租戶','user','staff','manager','',null]){
+  for(const role of ['tenant','租戶','user','reward','贈點用戶','staff','manager','',null]){
    sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
    assert.equal((await getRedemptionProduct({authenticatedUserId:A,productId:P},env)).success,false);
    assert.equal((await issueMemberProductQr({authenticatedUserId:C,productId:P},env,resolve)).success,false);

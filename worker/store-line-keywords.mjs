@@ -1,6 +1,7 @@
 // Child-owned, display-only LINE keywords. Called only after signature verification.
-const merchantRoles=['admin','總管','store','店長'];
-const memberRoles=[...merchantRoles,'user','用戶'];
+import {RETAIL_ROLES,storePlanForRole} from '../js/modules/store-cooperation-plans.mjs';
+const merchantRoles=RETAIL_ROLES;
+const memberRoles=RETAIL_ROLES;
 const admins=['admin','總管'];
 export function shopKeyword(event){
  if(event?.type!=='message'||event.message?.type!=='text')return '';
@@ -78,7 +79,7 @@ export async function buildShopKeywordMessage(event,env,now){
  const uid=event.source.userId,db=env.ACTMASTER_DB;
  const rows=(await db.prepare('SELECT role FROM users WHERE line_id=? LIMIT 2').bind(uid).all()).results;
  if(rows?.length!==1)return card('商城登入／註冊',['請先使用此 LINE 帳號完成會員註冊，再回聊天室操作。'],[action('開啟商城',link(env,'mine'))]);
- const role=String(rows[0].role||'').toLowerCase(),merchant=merchantRoles.includes(role),platformAdmin=admins.includes(role);
+ const role=String(rows[0].role||'').toLowerCase(),merchant=merchantRoles.includes(role),platformAdmin=admins.includes(role),plan=storePlanForRole(role);
  if(!memberRoles.includes(role))return {type:'text',text:'目前此帳號未開放商城管理，請聯絡管理員確認。'};
  const kind=shopKeyword(event);
  if(['portal','products','orders'].includes(kind)){
@@ -88,7 +89,7 @@ export async function buildShopKeywordMessage(event,env,now){
   if(kind!=='portal'&&(!match||page>1000))return {type:'text',text:'請使用卡片的翻頁按鈕，或輸入「商城商品」「商城訂單」（頁碼 1–1000）。'};
   const result=await readChatPage(db,uid,kind==='orders'?'orders':'products',page);
   if(kind==='portal'){
-   const introduction=merchant?'自己的商品預覽。左右滑動即可使用店家操作。':'一般會員可管理 1 個商品；左右滑動查看自己的商品操作。';
+   const introduction=`${plan.label}：${plan.productLimit===null?'管理員商品名額不限':`最多 ${plan.productLimit} 項商品（含草稿）`}。左右滑動即可使用店家操作。`;
    const products=card('我的商品',[introduction,...result.lines],[command('查看完整商品清單','商城商品'),action('新增／編輯商品（網頁）',link(env,'manage'))]);
    return carousel('店家專區',[
     ...(platformAdmin?[checkinSettingsPage()]:[]),products,storeOperationsPage(env,merchant,[],true)
@@ -110,7 +111,7 @@ export async function buildShopKeywordMessage(event,env,now){
  const title=kind==='sales'?'我的店家業績':admin?'全商城營運儀錶板':'我的店家儀錶板';
  const summary=card(title,[
   `店家：${n(s.shops.active)} 家上架／共 ${n(s.shops.total)} 家\n商品：${n(s.products.active)} 項上架／${n(s.products.draft)} 項草稿`,
-  `網購訂單：共 ${n(s.orders.total)} 筆\n待匯款 ${n(s.orders.pending)}／待核帳 ${n(s.orders.reported)}\n已付款待出貨 ${n(s.orders.unfulfilled)}／已出貨待完成 ${n(s.orders.shipped)}\n網購累計已核帳 NT$ ${n(s.orders.received/100)}`,
+  `網購訂單：共 ${n(s.orders.total)} 筆\n待匯款 ${n(s.orders.pending)}／待核帳 ${n(s.orders.reported)}\n已付款待出貨／備妥 ${n(s.orders.unfulfilled)}／已出貨／待取貨 ${n(s.orders.shipped)}\n網購累計已核帳 NT$ ${n(s.orders.received/100)}`,
   `${s.today}（台灣時間）商品 QR 折抵：${n(s.redemptions.total)} 筆\n商品金額 NT$ ${n(s.redemptions.amount)}／折抵 ${n(s.redemptions.points)} 點\n折抵後應收 NT$ ${n(s.redemptions.amount-s.redemptions.points)}（非銀行實收）`,
   '網購與現場 QR 分開統計；不包含未經本商城商品 QR 確認的交易。'+(String(env.STORE_COMMERCE_ENABLED)==='true'?'':'線上交易仍未開放。')
  ],[command('更新摘要',kind==='sales'?'商城業績':'儀錶板'),...(kind==='sales'?[command('店家操作','店家專區')]:[])]);
@@ -132,7 +133,8 @@ async function readChatPage(db,uid,kind,page){
  const query=kind==='orders'
   ?`SELECT id,total_cents,payment_status,fulfillment_status,created_at,
     substr(json_extract(snapshot_json,'$.items[0].title'),1,80) first_title,
-    json_array_length(snapshot_json,'$.items') item_count
+    json_array_length(snapshot_json,'$.items') item_count,
+    (json_extract(snapshot_json,'$.customer.carrier')='PICKUP') AS pickup
     FROM store_commerce_orders WHERE shop_id=? ORDER BY created_at DESC,id DESC LIMIT 6 OFFSET ?`
   :`SELECT title,price_cents,status,purchase_mode,redeem_type,redeem_value FROM store_shop_products
     WHERE shop_id=? AND status!='archived' ORDER BY updated_at DESC,id DESC LIMIT 6 OFFSET ?`;
@@ -142,7 +144,7 @@ async function readChatPage(db,uid,kind,page){
  for(const row of result.results.slice(0,5)){
   if(kind==='orders'){
    const paid={pending:'待匯款',reported:'已回報匯款・待核帳',paid:'已核帳',cancelled:'已取消'}[row.payment_status]||'狀態待確認';
-   const shipped={unfulfilled:'未出貨',shipped:'已出貨',completed:'已完成'}[row.fulfillment_status]||'狀態待確認';
+   const shipped=(row.pickup?{unfulfilled:'待備貨',shipped:'待取貨',completed:'已取貨'}:{unfulfilled:'未出貨',shipped:'已出貨',completed:'已完成'})[row.fulfillment_status]||'狀態待確認';
    lines.push(`訂單 ${short(row.id,64)}\n${orderTime(row.created_at)}（台灣時間）\n${short(row.first_title)||'商品名稱未提供'}${row.item_count>1?` 等 ${row.item_count} 項商品`:''}\nNT$ ${money(row.total_cents/100)}｜${paid}／${shipped}`);
   }else{
    const redeem=row.redeem_type==='fixed'?`最多折抵 ${row.redeem_value} 點`:row.redeem_type==='percent'?`最多折抵 ${row.redeem_value}%`:row.redeem_type==='full'?'可全額折抵':'不折抵';

@@ -7,10 +7,18 @@ const fixture=t=>{const f=createFixture();t.after(f.close);return f;};
 test('store draft reuses actor: no unregistered/expired/forged identity; no existing shop required',async t=>{
   const f=fixture(t);for(const [uid,status]of [[null,401],['expired',401],['U'+'c'.repeat(32),403]])assert.equal((await f.call(undefined,uid)).status,status);
   assert.equal((await f.call({name:sampleFields.name,uid:OTHER})).status,400);assert.equal(f.writes.length,0);
-  for(const role of ['user','store','admin','用戶','店長','總管']){f.resetQuota();f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,UID);assert.equal((await f.call()).status,200);}
+  for(const role of ['redeem','扣點用戶','store','admin','店長','總管']){f.resetQuota();f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,UID);assert.equal((await f.call()).status,200);}
   assert.ok(f.writes.every(q=>q.startsWith('INSERT INTO partner_onboarding_ai_usage')));
   assert.equal(f.sql.prepare('SELECT count(*) n FROM store_shop_stores').get().n,0);assert.equal(f.metrics.saves,0);
 });
+for(const role of ['user','用戶','reward','贈點用戶','REWARD'])test(role+' cannot consume seller draft AI or registry quota without a retail plan',async t=>{
+  const f=fixture(t);f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,UID);
+  for(const data of [{name:sampleFields.name},{taxId:REGISTRY_TAX,mode:'registry'}])assert.equal((await f.call(data)).status,403);
+  assert.equal(f.metrics.analyses,0);assert.equal(f.metrics.saves,0);assert.equal(f.writes.length,0);
+  assert(f.calls.every(call=>call.url==='https://api.line.me/v2/profile'),'no source, registry or AI call before seller authority');
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_onboarding_ai_usage').get().n,0);
+});
+
 test('bounded allowlisted inputs, content type and server-only key/model',async t=>{
   const f=fixture(t);
   for(const data of [{name:' '},{name:'a'},{name:'x'.repeat(81)},{name:'測試',hint:'x'.repeat(121)},{name:'測試',websiteUrl:'https://127.0.0.1'},{name:'測試',role:'admin'},{name:'測試',key:'evil'},{name:'測試',model:'evil'},{name:'測試',status:'active'}])assert.equal((await f.call(data)).status,400);

@@ -12,7 +12,7 @@ function fixture(){
   const sql=new DatabaseSync(':memory:');
   sql.exec("PRAGMA foreign_keys=ON; CREATE TABLE users(row_id TEXT PRIMARY KEY,line_id TEXT UNIQUE,legacy_line_id TEXT DEFAULT '',point_line_id TEXT DEFAULT '',role TEXT,name TEXT DEFAULT '',phone TEXT DEFAULT '',points INTEGER DEFAULT 500); CREATE TABLE user_identity_links(old_line_id TEXT,new_line_id TEXT,status TEXT);");
   for(const name of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0040_store_admin_product_audit.sql'])sql.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
-  for(const [user,role]of [[ADMIN,'admin'],[OWNER,'store'],[MEMBER,'user'],[REWARD,'reward']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(user,user,role,user===ADMIN?'方萬隆':'會員'+role);
+  for(const [user,role]of [[ADMIN,'admin'],[OWNER,'store'],[MEMBER,'redeem'],[REWARD,'reward']])sql.prepare('INSERT INTO users(row_id,line_id,role,name) VALUES(?,?,?,?)').run(user,user,role,user===ADMIN?'方萬隆':'會員'+role);
   for(const [n,owner]of [[1,OWNER],[2,MEMBER],[3,REWARD],[4,uid(9)]])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','2026-09-19')").run(id(n),owner,'店家'+n);
   let beforeBatch=null,failAudit=false;
   const db={withSession(value){assert.equal(value,'first-primary');return this;},prepare(query){
@@ -43,7 +43,7 @@ function fixture(){
 }
 test('private preview is scoped and create belongs to target, with atomic administrator provenance',async t=>{
   const f=fixture();t.after(()=>f.sql.close());const users=f.identities(),stores=f.stores();
-  const preview=await f.call();assert.equal(preview.status,200);assert.equal(preview.shop.id,id(1));assert.equal(preview.shop.product_limit,null);assert.equal('owner_uid'in preview.shop,false);
+  const preview=await f.call();assert.equal(preview.status,200);assert.equal(preview.shop.id,id(1));assert.equal(preview.shop.product_limit,20);assert.equal('owner_uid'in preview.shop,false);
   const result=await f.call(product());assert.equal(result.status,200);assert.equal(result.replayed,false);
   const saved=f.sql.prepare('SELECT * FROM store_shop_products').get(),audit=f.sql.prepare('SELECT * FROM store_admin_product_audit').get();
   assert.equal(saved.shop_id,id(1));assert.equal(saved.price_cents,12345);assert.equal(saved.status,'draft');assert.equal(audit.actor_uid,ADMIN);assert.equal(audit.owner_uid,OWNER);assert.equal(audit.product_id,saved.id);
@@ -71,15 +71,24 @@ test('unregistered, missing and arbitrary targets cannot receive products',async
   assert.equal((await f.call(product({id:id(100)}))).status,400);
   assert.equal(f.count('store_shop_products'),0);
 });
-test('normal-member target keeps one-product limit and in-store/no-redemption restrictions',async t=>{
+test('redeem target keeps one-product limit while online and redemption are permitted',async t=>{
   const f=fixture();t.after(()=>f.sql.close());
   assert.equal((await f.call(null,ADMIN,'shop='+id(2))).shop.product_limit,1);
-  assert.equal((await f.call(product({shop_id:id(2),purchase_mode:'online'}))).status,403);
-  assert.equal((await f.call(product({shop_id:id(2),redeem_type:'fixed',redeem_value:10}))).status,403);
-  assert.equal((await f.call(product({shop_id:id(2)}))).status,200);
-  assert.equal((await f.call(product({shop_id:id(2),request_key:id(98)}))).status,409);
-  assert.equal((await f.call(product({shop_id:id(2)}))).status,200);
+  const online=product({shop_id:id(2),purchase_mode:'online',redeem_type:'fixed',redeem_value:10,shipping_fee_cents:0});
+  assert.equal((await f.call(online)).status,200);
+  assert.equal((await f.call({...online,request_key:id(98)})).status,409);
+  assert.equal((await f.call(online)).status,200);
+  assert.equal(f.sql.prepare('SELECT purchase_mode FROM store_shop_products').get().purchase_mode,'online');
+  assert.equal(f.sql.prepare('SELECT redeem_value FROM store_shop_products').get().redeem_value,10);
 });
+
+for(const role of ['user','reward','贈點用戶'])test('administrator cannot grant retail product rights to '+role,async t=>{
+  const f=fixture();t.after(()=>f.sql.close());f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,MEMBER);
+  assert.equal((await f.call(null,ADMIN,'shop='+id(2))).status,403);
+  assert.equal((await f.call(product({shop_id:id(2)}))).status,403);
+  assert.equal(f.count('store_shop_products'),0);assert.equal(f.count('store_admin_product_audit'),0);
+});
+
 test('retry returns original product even after owner edits; changed payload or actor conflicts',async t=>{
   const f=fixture();t.after(()=>f.sql.close());const created=await f.call(product());
   f.sql.prepare("UPDATE store_shop_products SET title='店家修改',version=2 WHERE id=?").run(created.product_id);
@@ -129,4 +138,22 @@ test('explicit active/online creation does not change draft store publication',a
   f.sql.prepare("UPDATE store_shop_stores SET status='draft' WHERE id=?").run(id(1));
   assert.equal((await f.call(product({status:'active',purchase_mode:'online',redeem_type:'fixed',redeem_value:10}))).status,200);
   assert.equal(f.sql.prepare('SELECT status FROM store_shop_stores WHERE id=?').get(id(1)).status,'draft');
+});
+
+function seedProducts(f,shop,count,offset=200){
+  for(let n=0;n<count;n++)f.sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,status,updated_at,request_key) VALUES(?,?,'既有草稿',100,'draft','now',?)").run(id(offset+n),shop,id(offset+n));
+}
+test('administrator follows target full-plan 20-product cap and cannot bypass concurrent final-slot occupancy',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());seedProducts(f,id(1),19);
+  f.setBeforeBatch(()=>seedProducts(f,id(1),1,900));
+  assert.equal((await f.call(product())).status,409);assert.equal(f.count('store_shop_products'),20);assert.equal(f.count('store_admin_product_audit'),0);
+  assert.equal((await f.call(product({request_key:id(98)}))).status,409);
+  f.sql.prepare("UPDATE store_shop_products SET status='archived' WHERE id=?").run(id(200));
+  assert.equal((await f.call(product({request_key:id(97)}))).status,200);
+});
+test('operational admin target remains unlimited while a target role change revokes its exemption atomically',async t=>{
+  const f=fixture();t.after(()=>f.sql.close());f.sql.prepare("UPDATE users SET role='admin' WHERE line_id=?").run(OWNER);seedProducts(f,id(1),22);
+  assert.equal((await f.call(null)).shop.product_limit,null);assert.equal((await f.call(product())).status,200);
+  f.setBeforeBatch(()=>f.sql.prepare("UPDATE users SET role='store' WHERE line_id=?").run(OWNER));
+  assert.equal((await f.call(product({request_key:id(98)}))).status,409);assert.equal(f.count('store_shop_products'),23);
 });

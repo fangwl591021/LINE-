@@ -1,9 +1,10 @@
 // Public catalog projection only. Selection never publishes products or changes transaction rights.
+import {retailRoleSql} from '../js/modules/store-cooperation-plans.mjs';
 class CheckinDashboardError extends Error { constructor(code,message,status=400) { super(message); this.code=code; this.status=status; } }
 const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const PID = /^[A-Za-z0-9-]{1,80}$/;
-export const DASHBOARD_PUBLIC_ELIGIBILITY = "EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'))";
-const MERCHANT = "EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管'))";
+export const DASHBOARD_PUBLIC_ELIGIBILITY = `EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND ${retailRoleSql()})`;
+const MERCHANT = DASHBOARD_PUBLIC_ELIGIBILITY;
 const UUID_SQL = "length(s.id)=36 AND substr(s.id,9,1)='-' AND substr(s.id,14,1)='-' AND substr(s.id,19,1)='-' AND substr(s.id,24,1)='-' AND length(replace(s.id,'-',''))=32 AND lower(replace(s.id,'-','')) NOT GLOB '*[^0-9a-f]*'";
 const VISIBLE = `p.status='active' AND s.status='active' AND ${DASHBOARD_PUBLIC_ELIGIBILITY}`;
 const COLUMNS = `p.id AS product_id,p.shop_id,p.title,p.image_url,p.price_cents,p.purchase_mode,p.redeem_type,p.redeem_value,p.version,s.name AS shop_name,s.version AS shop_version,(${MERCHANT}) AS merchant_enabled`;

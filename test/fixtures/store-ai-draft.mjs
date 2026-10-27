@@ -10,7 +10,7 @@ export const sampleDraft=()=>({match:'matched',identity:{companyName:sampleField
 export const providerResult=draft=>({status:'completed',output:[{type:'web_search_call',status:'completed',action:{sources:[{type:'url',url:SOURCE,title:'測試咖啡公司官網'}]}},{type:'message',content:[{type:'output_text',text:JSON.stringify(draft)}]}]});
 export function createFixture(){
   const sql=new DatabaseSync(':memory:');sql.exec('CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT,name TEXT);');
-  for(const [uid,role]of [[UID,'user'],[OTHER,'store']])sql.prepare('INSERT INTO users VALUES(?,?,?)').run(uid,role,'合成測試會員');
+  for(const [uid,role]of [[UID,'redeem'],[OTHER,'store']])sql.prepare('INSERT INTO users VALUES(?,?,?)').run(uid,role,'合成測試會員');
   for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0041_partner_onboarding_ai_usage.sql'])sql.exec(readFileSync(new URL('../../migrations/'+file,import.meta.url),'utf8'));
   const writes=[],calls=[],metrics={analyses:0,saves:0};let output=providerResult(sampleDraft()),upstream=200,noKey=false,websitePrivate=false,html='<h1>'+sampleFields.name+'</h1><p>'+Object.values(sampleFields).join(' ')+'</p>',throwProvider=false,delay=0;
   let registryData={company:[registryCompany],business:[],items:[]},registryStatus=200,registryType='application/json';

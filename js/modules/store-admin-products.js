@@ -19,16 +19,17 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
     if(!active())return;
     if(report?.success!==true||report.shop?.id!==shopId||!Number.isSafeInteger(report.shop.version)||!Array.isArray(report.products))throw new Error('店家回傳資料不完整');
   }catch(error){if(active())status.textContent=error.message||'無法確認店家，請返回列表重試';return;}
-  const shop=report.shop,limited=shop.product_limit===1;
+  const shop=report.shop,limit=shop.product_limit,canOnline=shop.cooperation_plan?shop.cooperation_plan.canOnline===true:['store','店長','admin','總管','redeem','扣點用戶'].includes(String(shop.owner_role||'').toLowerCase());
   title.textContent='代上傳商品｜'+shop.name;
   panel.append(make('p','負責人：'+(shop.owner_name||'未填姓名')+'。新商品歸此店家，店家之後可自行維護。'));
-  panel.append(make('p','本次新增前商品 '+shop.product_count+' 件'+(limited?'／上限 1 件':'')+'。'+(shop.status==='draft'?'此店面仍為草稿，商品上架也不會自動公開店面。':'')));
+  panel.append(make('p','本次新增前商品 '+shop.product_count+' 件'+(limit===null?'／管理員不設上限':'／上限 '+limit+' 件')+'。'+(shop.status==='draft'?'此店面仍為草稿，商品上架也不會自動公開店面。':'')));
   if(report.products.length){
     const recent=make('details'),summary=make('summary','最近新增／更新商品（最多 10 件）');recent.append(summary);
     for(const p of report.products)recent.append(make('p',p.title+' · NT$ '+(p.price_cents/100).toLocaleString('zh-TW')+' · '+(p.status==='active'?'已上架':'草稿')));
     panel.append(recent);
   }
-  if(limited&&shop.product_count>=1){status.textContent='此店家已達商品件數上限，請由店家先整理原有商品。';return;}
+  if(limit!==null&&shop.product_count>=limit){status.textContent='此店家已達商品件數上限，請由店家先整理原有商品。';return;}
+  if(!canOnline){status.textContent='此帳號目前沒有店家商品上架權限，請返回列表確認合作方案。';return;}
   const form=make('form');form.setAttribute('data-admin-product-form','');
   const fields={};
   const field=(name,label,tag='input',options={})=>{
@@ -49,9 +50,9 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
   const picker=field('image_file','商品圖片（JPG／PNG／WebP，最大 10 MB）','input',{type:'file',accept:'image/jpeg,image/png,image/webp'});
   const preview=make('img');preview.alt='商品圖片預覽';preview.hidden=true;form.append(preview);
   form.append(make('p','圖片會上傳為公開素材；請勿上傳個資或無權使用的圖片。'));
-  select('purchase_mode','銷售方式',limited?[['in_store','店內展示']]:[['in_store','店內購買'],['online','網路選購']]);
-  if(!limited)form.append(make('p','網購使用本商品運費與店家收款設定；店家尚未完成收款設定或交易未開放時，上架不代表顧客可下單。'));
-  select('redeem_type','折抵規則',limited?[['none','不折抵']]:[['none','不折抵'],['fixed','固定點數上限'],['percent','百分比上限'],['full','全額上限']]);
+  select('purchase_mode','銷售方式',[['in_store','店內購買'],['online','網路選購']]);
+  form.append(make('p','折抵店家與雙向完整版均可設定網購及購物金折抵。網購使用本商品運費與店家收款設定；尚未完成收款設定或交易未開放時，上架不代表顧客可下單。'));
+  select('redeem_type','折抵規則',[['none','不折抵'],['fixed','固定點數上限'],['percent','百分比上限'],['full','全額上限']]);
   const value=field('redeem_value','折抵上限（固定填點數／百分比填 1–100）','input',{type:'number',min:'0',max:'1000000',step:'1',value:'0'});
   value.disabled=true;
   fields.redeem_type.addEventListener('change',()=>{value.disabled=['none','full'].includes(fields.redeem_type.value);if(value.disabled)value.value='0';});
@@ -64,7 +65,7 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
   let busy=false,imageUrl='',pending=null,complete=false;
   function lock(){
     for(const input of Object.values(fields))input.disabled=busy||!!pending||complete;
-    if(!busy&&!pending&&!complete){value.disabled=['none','full'].includes(fields.redeem_type.value);if(limited){fields.purchase_mode.disabled=true;fields.redeem_type.disabled=true;}}
+    if(!busy&&!pending&&!complete)value.disabled=['none','full'].includes(fields.redeem_type.value);
     save.disabled=busy||complete;save.textContent=pending&&!complete?'重試同一筆新增':'確認新增商品';
   }
   lock();

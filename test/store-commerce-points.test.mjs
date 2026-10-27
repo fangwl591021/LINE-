@@ -13,7 +13,7 @@ function fixture(t){
  sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES('shop',?,'測試商店','active','now')").run(A);
  sql.exec("INSERT INTO store_shop_products(id,shop_id,title,price_cents,redeem_type,redeem_value,status,purchase_mode,updated_at,request_key) VALUES('p','shop','測試商品',10000,'full',0,'active','online','now','p');INSERT INTO store_commerce_settings(shop_id,enabled,bank_name,bank_code,bank_account,bank_holder,shipping_fee_cents,free_shipping_cents,updated_at) VALUES('shop',1,'測試','004','123456','測試',6000,0,'now');");
  const state={balance:500,identity:P,reads:0,writes:[],ledger:new Map(),failure:'',failFinalize:false};
- const db={prepare(s){return {bind(...args){return {sync(){if(state.failFinalize&&s.startsWith('UPDATE store_commerce_point_operations SET status=')){state.failFinalize=false;throw Error('simulated finalize failure');}return {meta:{changes:Number(sql.prepare(s).run(...args).changes)}};},async run(){return this.sync();},async first(){return sql.prepare(s).get(...args)||null;},async all(){return {results:sql.prepare(s).all(...args)};}};}};},async batch(items){sql.exec('BEGIN');try{const out=items.map(x=>x.sync());sql.exec('COMMIT');return out;}catch(e){sql.exec('ROLLBACK');throw e;}}};
+ const db={prepare(s){return {bind(...args){return {sync(){if(state.claimHook&&s.startsWith("UPDATE store_commerce_point_operations SET status='sending'"))state.claimHook();if(state.failFinalize&&s.startsWith('UPDATE store_commerce_point_operations SET status=')){state.failFinalize=false;throw Error('simulated finalize failure');}return {meta:{changes:Number(sql.prepare(s).run(...args).changes)}};},async run(){return this.sync();},async first(){return sql.prepare(s).get(...args)||null;},async all(){return {results:sql.prepare(s).all(...args)};}};}};},async batch(items){sql.exec('BEGIN');try{const out=items.map(x=>x.sync());sql.exec('COMMIT');return out;}catch(e){sql.exec('ROLLBACK');throw e;}}};
  const env={ACTMASTER_DB:db,STORE_COMMERCE_ENABLED:'true',STORE_COMMERCE_POINTS_ENABLED:'true'};
  const points={contract:{version:'commerce-ledger-v1',rawLedgerVerification:true,atMostOnceCallerRequired:true},async read(uid){assert.equal(uid,B);state.reads++;if(state.readHook)await state.readHook();if(state.failure==='read')throw Error('offline');return {identity:state.identity,balance:state.balance};},async lookup(o){return state.ledger.get(o.id)||null;},async adjust(o){state.writes.push(o);if(state.adjustHook)await state.adjustHook();if(state.failure==='throw')throw Error('lost response');if(state.failure==='false')return {success:false};const before=state.balance;state.balance+=o.points;const receipt={success:true,source:'mother',mother_receipt_id:String(1000+state.writes.length),event_content:commerceMarker(o),operation_id:o.id,order_id:o.order_id,point_identity:o.point_identity,point_type:'gift_money',kind:o.kind,points:o.points,balance_before:before,balance_after:state.balance,...(o.kind==='refund'?{original_operation_id:o.original_operation_id}:{})};state.ledger.set(o.id,receipt);return state.receiptHook?state.receiptHook(receipt):receipt;}};
  async function call(path,data,uid=B){const r=await handleStoreCommerce(new Request('https://test.invalid/v1/store-commerce'+path,{method:data?'POST':'GET',headers:uid?{Authorization:'Bearer '+uid}:{},body:data?JSON.stringify(data):undefined}),env,async()=>Response.json({userId:uid}),points);return {status:r.status,...await r.json()};}
@@ -23,6 +23,42 @@ function fixture(t){
  const action=(o,a,extra={},uid=B)=>call('/orders/action',{order_id:o.id,version:o.version,action:a,request_key:crypto.randomUUID(),...extra},uid);
  return {sql,db,state,env,points,call,cart,data,order,action};
 }
+test('redemption-only merchants use the existing debit and cancellation refund exactly once',async t=>{
+ for(const role of ['redeem','扣點用戶','REDEEM']){
+  const f=fixture(t);f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+  const {order,input}=await f.order();assert.equal(order.points_status,'debited');assert.equal(f.state.balance,450);
+  assert.equal((await f.call('/orders',input)).order.id,order.id);assert.equal(f.state.writes.length,1);
+  const cancelled=await f.action(order,'cancel');assert.equal(cancelled.order.points_status,'refunded');assert.equal(f.state.balance,500);
+  assert.deepEqual(f.state.writes.map(o=>o.points),[-50,50]);
+ }
+});
+
+test('pickup zero shipping and point cancellation preserve original immutable amounts',async t=>{
+ const f=fixture(t);f.sql.exec("UPDATE store_shop_stores SET address='新北市測試路1號',phone='0223456789'; UPDATE store_shop_products SET shipping_fee_cents=8000");
+ const {order}=await f.order({customer:{name:'甲',phone:'0912345678',carrier:'PICKUP',store_info:'偽造自取地點'}});
+ assert.equal(order.snapshot.shipping_fee_cents,0);assert.equal(order.total_cents,5000);assert.equal(order.points_status,'debited');assert.equal(f.state.balance,450);
+ assert.equal(order.snapshot.customer.pickup_address,'新北市測試路1號');
+ assert.equal((await f.action(order,'cancel')).order.points_status,'refunded');assert.equal(f.state.balance,500);assert.equal(f.state.writes.length,2);
+});
+
+test('pickup merchant downgrade after order lock prevents any external debit',async t=>{
+ const f=fixture(t);f.sql.exec("UPDATE store_shop_stores SET address='新北市測試路1號',phone='0223456789'");
+ const input=await f.data({customer:{name:'甲',phone:'0912345678',carrier:'PICKUP'}});let reads=0;
+ f.state.readHook=()=>{if(++reads===2)f.sql.prepare("UPDATE users SET role='redeem' WHERE line_id=?").run(A);};
+ const result=await f.call('/orders',input);assert.equal(result.order.points_status,'failed');assert.equal(result.order.payment_status,'cancelled');assert.equal(f.state.writes.length,0);
+});
+
+test('permission revoked at the durable sending claim never calls the point provider',async t=>{
+ for(const pickup of [false,true]){
+  const f=fixture(t);f.sql.exec("UPDATE store_shop_stores SET address='真實取貨地址',phone='0223456789'");
+  const data=await f.data(pickup?{customer:{name:'甲',phone:'0912345678',carrier:'PICKUP'}}:{});
+  f.state.claimHook=()=>{delete f.state.claimHook;f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(pickup?'redeem':'reward',A);};
+  const result=await f.call('/orders',data);assert.equal(result.status,200);assert.equal(result.order.points_status,'pending');assert.equal(f.state.writes.length,0);
+  assert.equal(f.sql.prepare('SELECT status FROM store_commerce_point_operations').get().status,'pending');
+  assert.equal(f.sql.prepare('SELECT status FROM store_cashier_requests').get().status,'pending');
+ }
+});
+
 test('explicit product shipping is cash-only and cancellation returns only original points',async t=>{
  const f=fixture(t);f.sql.exec('UPDATE store_shop_products SET shipping_fee_cents=8000');
  const q=await f.call('/quote',f.cart({points_used:101,shipping_fee_cents:0}));assert.equal(q.status,400);

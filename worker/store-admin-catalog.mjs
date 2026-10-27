@@ -3,10 +3,10 @@ import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {normalizeStore,normalizeProduct,isShippingOnlyUpdate,readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 import {manualOnlineReleaseOffer,manualReleaseConsent,verifySingleProductRelease} from './store-single-product-release.mjs';
+import {RETAIL_ROLES,storePlanForRole,retailRoleSql,productQuotaSql} from '../js/modules/store-cooperation-plans.mjs';
 const PATH='/v1/store-shop/admin/catalog';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ROLES=['store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'];
-const UNLIMITED=['store','店長','admin','總管'];
+const ROLES=RETAIL_ROLES;
 const STORE=['name','description','category','address','phone','hours','image_url','status'];
 const PRODUCT=['title','description','category','image_url','price_cents','status','purchase_mode','shipping_fee_cents'];
 const ACTOR=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
@@ -45,7 +45,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
         if([...params.keys()].some(key=>!['queue','after'].includes(key)||params.getAll(key).length!==1)||params.get('queue')!=='draft'||(after&&!validId(after)))fail('INVALID_QUERY','草稿查詢條件不正確');
         const products=await rows(db,`SELECT p.id,p.shop_id,p.title,p.price_cents,p.category,p.status,p.version,p.updated_at,s.name AS shop_name,s.status AS shop_status
           FROM store_shop_products p JOIN store_shop_stores s ON s.id=p.shop_id
-          WHERE p.status='draft' AND p.id>? AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND lower(u.role) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'))
+          WHERE p.status='draft' AND p.id>? AND EXISTS(SELECT 1 FROM users u WHERE u.line_id=s.owner_uid AND ${retailRoleSql()})
           ORDER BY p.id LIMIT 21`,[after]);
         return reply({success:true,products:products.slice(0,20),next:products.length>20?products[19].id:''});
       }
@@ -53,8 +53,8 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
       const shop=await shopRow(db,shopId);
       const products=await rows(db,`SELECT ${PRODUCT_SELECT} FROM store_shop_products WHERE shop_id=? AND id>? AND (?='' OR status=?) ORDER BY id LIMIT 21`,[shop.id,after,status,status]);
       const summary=(await rows(db,"SELECT count(*) AS total,COALESCE(sum(status='active'),0) AS active,COALESCE(sum(status='draft'),0) AS draft FROM store_shop_products WHERE shop_id=?",[shop.id]))[0];
-      const onlineAllowed=UNLIMITED.includes(String(shop.owner_role).toLowerCase());
-      return reply({success:true,shop:publicShop(shop),online_product_allowed:onlineAllowed,products:products.slice(0,20).map(p=>{
+      const plan=storePlanForRole(shop.owner_role),onlineAllowed=plan.canOnline;
+      return reply({success:true,shop:publicShop(shop),cooperation_plan:plan,online_product_allowed:onlineAllowed,products:products.slice(0,20).map(p=>{
         const offer=onlineAllowed?manualOnlineReleaseOffer(p,shop):null;
         return offer?{...p,manual_online_release:offer}:p;
       }),next:products.length>20?products[19].id:'',summary});
@@ -75,8 +75,6 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     if(original.version!==data.version||shop.version!==data.shop_version||original.status==='archived')fail('VERSION_CONFLICT','資料已更新或封存，請重新載入後再修改',409);
     const normalized=data.type==='store'?normalizeStore({...original,...changes}):normalizeProduct({...original,...changes});
     const updated=Object.fromEntries(fields.map(key=>[key,normalized[key]]));
-    const limited=!UNLIMITED.includes(String(shop.owner_role).toLowerCase());
-    if(data.type==='product'&&limited&&((Object.hasOwn(changes,'purchase_mode')&&normalized.purchase_mode==='online')||(updated.status!=='archived'&&(normalized.purchase_mode!=='in_store'||original.redeem_type!=='none'))))fail('OWNER_LIMIT','一般會員商品限店內且不折抵，可封存後由店家整理',403);
     const releaseProof=release?await releaseVerifier({data,original,shop,db,fetcher}):null;
     if(!release&&!(data.type==='product'&&isShippingOnlyUpdate(normalized,original)))await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
     const auditId=crypto.randomUUID(),now=new Date().toISOString();
@@ -86,8 +84,9 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     const args=[data.id,data.version,...ACTOR.map(key=>actor[key]??null),shop.id,shop.owner_uid,shop.version,shop.status,shop.owner_role];
     if(data.type==='product'){
       gate+=" AND t.shop_id=? AND t.status!='archived'";args.push(shop.id);
-      if(limited&&updated.status!=='archived'){
-        gate+=" AND NOT EXISTS(SELECT 1 FROM store_shop_products other WHERE other.shop_id=t.shop_id AND other.id!=t.id AND other.status!='archived')";
+      if(updated.status!=='archived'){
+        gate+=` AND EXISTS(SELECT 1 FROM users quota_owner WHERE quota_owner.line_id=? AND quota_owner.role IS ? AND ${productQuotaSql('quota_owner.role',"SELECT count(*) FROM store_shop_products other WHERE other.shop_id=t.shop_id AND other.id!=t.id AND other.status!='archived'")})`;
+        args.push(shop.owner_uid,shop.owner_role);
       }
     }
     if(releaseProof){

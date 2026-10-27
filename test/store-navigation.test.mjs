@@ -39,6 +39,6 @@ test('settings remains an independent non-submit action with the existing role b
  assert.doesNotMatch(source,/<button[^>]*data-do="manage"[^>]*class="primary">我的商城管理/);
  const gate=source.match(/const canManage=\(\)=>(.*);/)[1];
  for(const role of ['user','store','admin','tenant','reward','贈點用戶','redeem','扣點用戶','unknown'])for(const standalone of [true,false]){
-  assert.equal(vm.runInNewContext(gate,{window:{userRole:role},standalone}),!standalone&&['user','store','admin','redeem','扣點用戶','reward','贈點用戶'].includes(role));
+  assert.equal(vm.runInNewContext(gate,{window:{userRole:role},standalone}),!standalone&&['store','admin','redeem','扣點用戶'].includes(role));
  }
 });

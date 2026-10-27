@@ -25,22 +25,31 @@ const {buildSync}=require(process.env.LISTING_ESBUILD_MODULE);
   const p={title:'折抵單位展示商品',description:'一般生活商品',price_cents:10000,redeem_type:'none',redeem_value:0,purchase_mode:'in_store',status:'draft',request_key:crypto.randomUUID()};
   const draft=await api('/product',p);assert.equal(draft.http,200,JSON.stringify(draft));assert.equal(draft.product_limit,1);
   assert.equal((await api('/product',{...p,request_key:crypto.randomUUID()})).http,400);
-  assert.equal((await api('/product',{...draft.products[0],purchase_mode:'online'})).http,400);
-  await db.exec('DELETE FROM store_listing_review_usage;');const published=await api('/product',{...draft.products[0],status:'active'});assert.equal(published.http,200,JSON.stringify(published));
-  const pub=await api('?shop='+shop.id);assert.equal(pub.shop.merchant_enabled,0);assert.equal(pub.shop.phone,'0223456789');assert.equal(pub.products.length,1);
+  const online=await api('/product',{...draft.products[0],purchase_mode:'online',shipping_fee_cents:100,redeem_type:'percent',redeem_value:50});assert.equal(online.http,200,JSON.stringify(online));
+  await db.exec('DELETE FROM store_listing_review_usage;');const published=await api('/product',{...online.products[0],status:'active'});assert.equal(published.http,200,JSON.stringify(published));
+  const pub=await api('?shop='+shop.id);assert.equal(pub.shop.merchant_enabled,1);assert.equal(pub.shop.phone,'0223456789');assert.equal(pub.products.length,1);
   assert.equal((await api('/products?q='+encodeURIComponent(p.title))).products.length,1);
   await api('/product',{...published.products[0],status:'archived'});
   const concurrent=await Promise.all([1,2].map(n=>api('/product',{...p,title:'替換商品'+n,request_key:crypto.randomUUID()})));assert.equal(concurrent.filter(r=>r.http===200).length,1);
   assert.equal((await api('/manage')).product_count,1);
-  for(const role of ['reward','贈點用戶']){
-   await db.prepare('UPDATE users SET role=?').bind(role).run();await db.exec('DELETE FROM store_listing_review_usage;');
-   const current=await api('/manage');assert.equal(current.http,200);assert.equal(current.product_limit,1);
-   const company=await call({...input,name:'贈點展示公司',version:current.shop.version,phone:'0223456789',address:'贈點合成路1號'});assert.equal(company.http,200);
-   await db.exec('DELETE FROM store_listing_review_usage;');assert.equal((await api('/product',{...current.products[0],status:'active'})).http,200);
-   const pub=await api('?shop='+shop.id);assert.equal(pub.shop.merchant_enabled,0);assert.equal(pub.shop.address,'贈點合成路1號');assert.equal(pub.products.length,1);
-   assert.equal((await api('/product',{...p,purchase_mode:'online'})).http,400);assert.equal((await api('/products?redeem=1')).products.length,0);
+  await db.prepare("UPDATE users SET role='store'").run();
+  for(let n=0;n<18;n++)assert.equal((await api('/product',{...p,title:'完整版草稿'+n,request_key:crypto.randomUUID()})).http,200);
+  assert.equal((await api('/manage')).product_count,19);
+  const fullRace=await Promise.all([1,2].map(n=>api('/product',{...p,title:'最後名額'+n,request_key:crypto.randomUUID()})));
+  assert.deepEqual(fullRace.map(r=>r.http).sort(),[200,400]);
+  assert.equal((await api('/manage')).product_limit,20);assert.equal((await api('/manage')).product_count,20);
+  assert.equal((await api('/product',{...p,title:'第二十一項',request_key:crypto.randomUUID()})).http,400);
+  for(const role of ['reward','贈點用戶','user']){
+   await db.prepare('UPDATE users SET role=?').bind(role).run();
+   const before=await db.prepare('SELECT * FROM store_shop_products ORDER BY id').all();
+   assert.equal((await api('/manage')).http,403);
+   assert.equal((await call({...input,name:'不可上架',version:4})).http,403);
+   assert.equal((await api('/product',{...p,request_key:crypto.randomUUID()})).http,403);
+   assert.equal((await api('?shop='+shop.id)).http,404);
+   assert.equal((await api('/products')).products.length,0);
+   assert.deepEqual((await db.prepare('SELECT * FROM store_shop_products ORDER BY id').all()).results,before.results);
   }
   await db.prepare("UPDATE users SET role='tenant'").run();assert.equal((await api('/manage')).http,403);
-  console.log('WORKERD PASS: compatibility 2026-04-23 flags=[], D1 AI review/audit, redeem catalog/one item/concurrent quota/public phone/address/discovery/no-online/revocation; no external calls');
+  console.log('WORKERD PASS: compatibility 2026-04-23 flags=[], D1 AI review/audit, redeem online+redemption/one item/concurrent quota/public phone/address, full-plan20/final-slot race, reward/user denied while historical data retained, revocation; no external calls');
  }finally{await mf.dispose();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

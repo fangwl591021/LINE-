@@ -1,11 +1,11 @@
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {normalizeProduct,readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
+import {RETAIL_ROLES,storePlanForRole,productQuotaSql} from '../js/modules/store-cooperation-plans.mjs';
 
 const PATH='/v1/store-shop/admin/products';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ROLES=['store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶'];
-const UNLIMITED=['store','店長','admin','總管'];
+const ROLES=RETAIL_ROLES;
 const HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:HEADERS});
 const fail=(code,message,status=400)=>{throw new DirectoryError(code,message,status);};
@@ -21,7 +21,8 @@ async function target(db,id){
     (SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status!='archived') AS product_count
     FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid WHERE s.id=? LIMIT 2`,[id]);
   if(found.length!==1||!found[0].owner_uid||!ROLES.includes(String(found[0].owner_role).toLowerCase()))fail('REGISTERED_STORE_REQUIRED','僅能替已註冊且仍具商城資格的店家新增商品',403);
-  return {...found[0],product_limit:UNLIMITED.includes(String(found[0].owner_role).toLowerCase())?null:1};
+  const plan=storePlanForRole(found[0].owner_role);
+  return {...found[0],product_limit:plan.productLimit,cooperation_plan:plan};
 }
 async function existing(db,shop,key,uid,payload){
   const audit=(await rows(db,'SELECT product_id,actor_uid,owner_uid,payload_json FROM store_admin_product_audit WHERE shop_id=? AND request_key=?',[shop.id,key]))[0];
@@ -58,7 +59,6 @@ export async function handleStoreAdminProducts(request,env,profileMapper,fetcher
     const payload=JSON.stringify(product),prior=await existing(db,shop,data.request_key,uid,payload);
     if(prior)return reply(prior);
     if(shop.version!==data.shop_version)fail('STORE_CHANGED','店家資料已變更，請返回列表重新確認',409);
-    if(shop.product_limit===1&&(product.purchase_mode!=='in_store'||product.redeem_type!=='none'))fail('OWNER_LIMIT','一般會員商品僅能店內展示，不能設定折抵或網購',403);
     if(shop.product_limit!==null&&shop.product_count>=shop.product_limit)fail('PRODUCT_LIMIT','此店家已達商品件數上限',409);
     await requireListingReview({value:product,parent:shop,scope:'product:'+shop.id+':'+data.request_key,uid,env,fetcher});
     const id=crypto.randomUUID(),now=new Date().toISOString();
@@ -67,8 +67,7 @@ export async function handleStoreAdminProducts(request,env,profileMapper,fetcher
     const gate=`EXISTS(SELECT 1 FROM users a WHERE ${ACTOR_FIELDS.map(field=>'a.'+field+' IS ?').join(' AND ')})
       AND EXISTS(SELECT 1 FROM store_shop_stores s JOIN users u ON u.line_id=s.owner_uid
         WHERE s.id=? AND s.owner_uid=? AND s.version=? AND s.status=? AND u.role IS ?
-        AND (lower(u.role) IN ('store','店長','admin','總管') OR NOT EXISTS(
-          SELECT 1 FROM store_shop_products p WHERE p.shop_id=s.id AND p.status!='archived')))`;
+        AND ${productQuotaSql('u.role',"SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status!='archived'")})`;
     const results=await db.batch([
       db.prepare(`INSERT INTO store_shop_products(id,shop_id,${PRODUCT_FIELDS.join(',')},version,updated_at,request_key)
         SELECT ?,?,${PRODUCT_FIELDS.map(()=>'?').join(',')},1,?,? WHERE ${gate}
