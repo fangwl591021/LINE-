@@ -78,7 +78,7 @@ export async function mountStoreAdmin(container,{api,isCurrent,onView,onBack,onM
       const view=button('查看店面','view');view.setAttribute('data-admin-shop',String(shop.id));
       view.addEventListener('click',()=>{void navigate(onView,shop.id);});card.append(view);
     }else card.append(make('span','store-admin-unavailable','無公開店面'));
-    if(onUploadProducts&&shop.listing_only!==1&&shop.owner_uid&&uuid.test(String(shop.id))&&['store','店長','admin','總管','user','用戶'].includes(String(shop.owner_role).toLowerCase())){
+    if(onUploadProducts&&shop.listing_only!==1&&shop.owner_uid&&uuid.test(String(shop.id))&&['store','店長','admin','總管','redeem','扣點用戶'].includes(String(shop.owner_role).toLowerCase())){
       const upload=button(onManageCatalog?'店家／商品管理':'代上傳商品','upload-products');upload.setAttribute('data-admin-shop',String(shop.id));
       upload.addEventListener('click',()=>{void navigate(onManageCatalog||onUploadProducts,shop.id);});card.append(upload);
     }

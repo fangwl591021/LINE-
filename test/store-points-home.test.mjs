@@ -30,19 +30,17 @@ test('redeem operator home shows redemption only and no management or gift contr
  assert.match(html,/不能贈點/);
 });
 
-test('redeem catalog capability adds own company entry without gifts, sales or payment management',()=>{
+test('redeem plan adds own store, one product, sales and payment management without gifts',()=>{
  const html=renderPointsHome({merchant:true,redeemOnly:true,canManage:true});
- assert.match(html,/data-do="manage"/);assert.match(html,/一件展示商品/);assert.match(html,/data-do="point-redeem"/);
- assert.doesNotMatch(html,/data-do="(?:point-reward|sales|online-manage)"/);
- assert.match(html,/原會員扣點功能不變/);assert.match(html,/不能贈點/);
+ for(const action of ['manage','point-redeem','sales','online-manage'])assert.match(html,new RegExp('data-do="'+action+'"'));
+ assert.doesNotMatch(html,/data-do="point-reward"/);assert.match(html,/1 件商品/);assert.match(html,/不能贈點/);assert.match(html,/到店取貨尚待確認/);
 });
 
-test('reward catalog adds own company entry and preserves gift-only cashier controls',()=>{
+test('reward plan preserves gift-only controls and cannot expose retail management',()=>{
  const html=renderPointsHome({merchant:true,rewardOnly:true,canManage:true});
- assert.match(html,/data-do="manage"/);assert.match(html,/公司與商品/);assert.match(html,/一件展示商品/);
- assert.match(html,/data-do="point-reward"/);assert.match(html,/原會員贈點功能不變/);
- assert.doesNotMatch(html,/data-do="(?:point-redeem|sales|online-manage)"/);
- assert.match(html,/不能扣點、網購收款或管理其他店家/);
+ assert.match(html,/data-do="point-reward"/);
+ assert.doesNotMatch(html,/data-do="(?:point-redeem|sales|online-manage|manage)"/);
+ assert.match(html,/不開放店家資訊、商品上架、扣點或網購收款/);
 });
 
 test('shared brand uses supplied logo without replacing it on role changes; image stays contained',()=>{
@@ -55,7 +53,7 @@ test('shared brand uses supplied logo without replacing it on role changes; imag
  assert.match(css,/\.shop-points-theme \.shop-brand-mark img\{[^}]*object-fit:contain/);
  for(const file of ['store-shop.html','js/modules/store-shop-entry.js']){
   const source=readFileSync(new URL('../'+file,import.meta.url),'utf8');
-  assert.match(source,/store-shop\.css\?v=34/);assert.match(source,/store-shop\.js\?v=70/);
+  assert.match(source,/store-shop\.css\?v=34/);assert.match(source,/store-shop\.js\?v=71/);
  }
 });
 test('shared storefront places an accessible main-home return before the brand for every role',()=>{
@@ -117,13 +115,19 @@ test('reward unit gets merchant presentation with scan-gift only, no debit or co
  const html=renderPointsHome({merchant:true,rewardOnly:true});
  assert.match(html,/贈點工作台/);assert.match(html,/data-do="point-reward"/);
  assert.doesNotMatch(html,/data-do="(?:point-redeem|online-manage|manage|sales)"/);
- assert.match(html,/不提供扣點或店家收款管理/);
+ assert.match(html,/不開放店家資訊、商品上架、扣點或網購收款/);
 });
 test('store/admin cover reuses existing functions and never fabricates budget, repeat rates or activity data',()=>{
  const html=renderPointsHome({merchant:true,canManage:true});
  for(const action of ['point-reward','point-redeem','sales','online-manage','manage'])assert.ok(html.includes(`data-do="${action}"`));
  assert.doesNotMatch(html,/13,260|50,000|回購率|新增會員|本月贈點|1 點.*1 元/);
  assert.match(html,/我的共用點數/);assert.match(html,/商品 QR 折抵/);
+});
+
+test('administrator quota presentation stays separate from the paid twenty-product plan',()=>{
+ const html=renderPointsHome({merchant:true,canManage:true,role:'admin'});
+ assert.match(html,/商品不設總數上限/);assert.doesNotMatch(html,/6,000|6,300|可上架 20 件/);
+ assert.equal(merchantRole('tenant'),'');assert.equal(merchantRole('租戶'),'');
 });
 test('untrusted shop text is escaped, list limited to three without invented distance',()=>{
  const html=renderRecommendedShops(Array.from({length:6},()=>({name:'<script>x</script>',id:'" onclick="x',address:'<img>'})),()=> '');

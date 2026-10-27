@@ -1,6 +1,7 @@
 // Online-only state machine; never calls or changes the cashier/session handler.
 // Shared unique customer lock prevents parallel LINE- cashier/online writes.
 import {commerceMarker} from './store-commerce-mother.mjs';
+import {storePlanForRole,retailRoleSql,pickupRoleSql} from '../js/modules/store-cooperation-plans.mjs';
 const q=(db,sql,...args)=>db.prepare(sql).bind(...args);
 export class CommercePointError extends Error {constructor(message,status=409){super(message);this.status=status;}}
 export const commercePointServiceReady=service=>service?.contract?.version==='commerce-ledger-v1'
@@ -68,13 +69,15 @@ async function finish(db,o,status,now,balance=null,receipt=null) {
 export async function executePointOperation(db,id,service,env) {
   const o=await q(db,'SELECT * FROM store_commerce_point_operations WHERE id=?',id).first();
   if(!o||o.status!=='pending')return; // no retry of pending in a different request or any external write
-  let wallet;
+  let wallet,pickupDebit=false;
   try {
     wallet=await commerceWallet(service,o.buyer_uid,env);
     if(wallet.identity!==o.point_identity)reject('會員購物金身分已變更');
     if(o.points<0&&wallet.balance<-o.points)reject('購物金不足');
-    const owner=await q(db,`SELECT s.owner_uid,u.role FROM store_commerce_orders c JOIN store_shop_stores s ON s.id=c.shop_id JOIN users u ON u.line_id=s.owner_uid WHERE c.id=?`,o.order_id).first();
-    if(owner?.owner_uid!==o.merchant_uid||!['store','admin','店長','總管'].includes(String(owner.role).toLowerCase()))reject('店家權限已變更');
+    const owner=await q(db,`SELECT s.owner_uid,u.role,c.snapshot_json FROM store_commerce_orders c JOIN store_shop_stores s ON s.id=c.shop_id JOIN users u ON u.line_id=s.owner_uid WHERE c.id=?`,o.order_id).first();
+    if(owner?.owner_uid!==o.merchant_uid||!storePlanForRole(owner.role).canOnline)reject('店家權限已變更');
+    pickupDebit=o.kind==='debit'&&JSON.parse(owner.snapshot_json).customer?.carrier==='PICKUP';
+    if(pickupDebit&&!storePlanForRole(owner.role).canPickup)reject('到店取貨資格已變更');
     if(o.kind==='refund'){
       const debit=await q(db,"SELECT * FROM store_commerce_point_operations WHERE order_id=? AND kind='debit' AND status='succeeded'",o.order_id).first();
       if(!debit||debit.id!==o.original_operation_id||debit.buyer_uid!==o.buyer_uid||debit.point_identity!==o.point_identity||debit.points!==-o.points
@@ -88,7 +91,9 @@ export async function executePointOperation(db,id,service,env) {
   const sendingAt=new Date().toISOString();
   const claimed=await db.batch([
     q(db,`UPDATE store_commerce_point_operations SET status='sending',balance_before=?,updated_at=? WHERE id=? AND status='pending'
-      AND EXISTS(SELECT 1 FROM store_cashier_requests WHERE actor_id=? AND request_id=? AND customer_id=? AND status='pending')`,wallet.balance,sendingAt,id,o.merchant_uid,id,o.point_identity),
+      AND EXISTS(SELECT 1 FROM store_cashier_requests WHERE actor_id=? AND request_id=? AND customer_id=? AND status='pending')
+      AND EXISTS(SELECT 1 FROM store_commerce_orders c JOIN store_shop_stores s ON s.id=c.shop_id JOIN users u ON u.line_id=s.owner_uid
+        WHERE c.id=? AND s.owner_uid=? AND ${retailRoleSql()}${pickupDebit?' AND '+pickupRoleSql():''})`,wallet.balance,sendingAt,id,o.merchant_uid,id,o.point_identity,o.order_id,o.merchant_uid),
     q(db,`UPDATE store_cashier_requests SET status='sending',updated_at=? WHERE actor_id=? AND request_id=? AND customer_id=? AND status='pending'
       AND EXISTS(SELECT 1 FROM store_commerce_point_operations WHERE id=? AND status='sending' AND updated_at=?)`,sendingAt,o.merchant_uid,id,o.point_identity,id,sendingAt)
   ]);

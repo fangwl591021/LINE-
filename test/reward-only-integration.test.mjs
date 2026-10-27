@@ -127,17 +127,18 @@ test('redeem role normalizers, CRM save and profile preservation do not grant ma
 
 test('redeem authority allows only authenticated customer redemption and own logs, denies gifts and management', async t => {
   const s=setup(t,'redeem'),p=()=>reward({mode:'redeem',deductPoints:10,authenticatedRole:'admin'});
-  for(const action of ['getStorePointCustomer','prepareStorePointCashierSession','storeAdjustCustomerPoints','getStoreCashierRequest','listStorePointCashierLogs']) {
+  for(const action of ['getStorePointCustomer','prepareStorePointCashierSession','storeAdjustCustomerPoints','getStoreCashierRequest','listStorePointCashierLogs','getStoreShopRedemptionProduct','resolveStoreMemberProductQr']) {
     const body=p();assert.equal((await s.security.authorizeAction(action,body,request,s.env)).allowed,true,action);
     assert.equal(body.authenticatedRole,'redeem');
     assert.equal((await s.security.authorizeAction(action,{...p(),lineAccessToken:''},new Request('https://local.invalid/'),s.env)).allowed,false,action);
   }
-  for(const action of ['updateUserRole','adminAdjustCustomerPoints','saveStoreSettings','getStoreKnowledgeBase','getActivities','getStoreShopRedemptionProduct','resolveStoreMemberProductQr']) {
+  for(const action of ['updateUserRole','adminAdjustCustomerPoints','saveStoreSettings','getStoreKnowledgeBase','getActivities']) {
     assert.equal((await s.security.authorizeAction(action,p(),request,s.env)).allowed,false,action);
   }
-  for(const extra of [{mode:'reward'},{mode:'add'},{mode:'earn'},{rewardPoints:10},{rewardPoints:0},{autoBindPointAccount:true},{productId:crypto.randomUUID()}]) {
+  for(const extra of [{mode:'reward'},{mode:'add'},{mode:'earn'},{rewardPoints:10},{rewardPoints:0},{autoBindPointAccount:true}]) {
     assert.equal((await s.security.authorizeAction('storeAdjustCustomerPoints',{...p(),...extra},request,s.env)).allowed,false,JSON.stringify(extra));
   }
+  assert.equal((await s.security.authorizeAction('storeAdjustCustomerPoints',{...p(),productId:crypto.randomUUID(),qrToken:'product-token'},request,s.env)).allowed,true,'product redemption keeps the same verified redeem-only authority');
 });
 
 test('redeem dispatch executes once through existing cashier guard and blocks revoked role', async t => {

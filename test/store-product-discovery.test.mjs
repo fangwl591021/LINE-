@@ -6,7 +6,7 @@ import {handleStoreShop} from '../worker/store-shop.mjs';
 function fixture(){
   const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON;CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);');
   for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
-  for(const [id,role,status] of [['service','store','active'],['retail','admin','active'],['normal','user','active'],['hidden','store','draft'],['ineligible','tenant','active']]){
+  for(const [id,role,status] of [['service','store','active'],['retail','admin','active'],['normal','redeem','active'],['hidden','store','draft'],['ineligible','tenant','active']]){
     sql.prepare('INSERT INTO users VALUES(?,?)').run('private-owner-'+id,role);
     sql.prepare('INSERT INTO store_shop_stores(id,owner_uid,name,category,address,status,updated_at) VALUES(?,?,?,?,?,?,?)').run(id,'private-owner-'+id,id==='service'?'數位服務公司':id,'服務','公開地址',status,'2026-10-11');
   }
@@ -32,9 +32,9 @@ test('unclassified is explicit, sales channel and redeem filters preserve produc
     assert.equal((await f.call()).products.length,4);
     assert.deepEqual((await f.call('?category=unclassified')).products.map(p=>p.id),['p2']);
     assert.deepEqual((await f.call('?purchase_mode=online')).products.map(p=>p.id),['p2','p3']);
-    assert.deepEqual((await f.call('?redeem=1')).products.map(p=>p.id),['p1','p3']);
+    assert.deepEqual((await f.call('?redeem=1')).products.map(p=>p.id),['p1','p3','p4']);
     assert.deepEqual((await f.call('?redeem=1&purchase_mode=online')).products.map(p=>p.id),['p3']);
-    assert.equal((await f.call('?id=p4')).products[0].shop.merchant_enabled,0);
+    assert.equal((await f.call('?id=p4')).products[0].shop.merchant_enabled,1);
   }finally{f.sql.close();}
 });
 test('public allowlist, hidden shops/products/owners, late removal and zero writes/external calls',async()=>{

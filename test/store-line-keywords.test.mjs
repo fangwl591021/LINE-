@@ -27,7 +27,7 @@ function assertAdminEditorFirst(message){
 function fixture(t){
  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
  sql.exec('CREATE TABLE users(line_id TEXT,role TEXT)');
- for(const [id,role] of [[A,'store'],[B,'admin'],[C,'user']])sql.prepare('INSERT INTO users VALUES(?,?)').run(id,role);
+ for(const [id,role] of [[A,'store'],[B,'admin'],[C,'redeem']])sql.prepare('INSERT INTO users VALUES(?,?)').run(id,role);
  for(const file of ['0029_store_shop_catalog.sql','0030_store_cashier_requests.sql','0034_store_commerce.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  for(const [id,owner] of [['s-a',A],['s-b',B]]){
   sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','now')").run(id,owner,id);
@@ -64,13 +64,17 @@ test('ledger summary excludes malformed, unconfirmed, other-actor and outside-Ta
  ])f.sql.prepare('INSERT INTO store_cashier_requests(actor_id,request_id,customer_id,fingerprint,status,updated_at) VALUES(?,?,?,?,?,?)').run(actor,id,id,fingerprint,status,time);
  const s=await readMallSummary(f.db,A,false,new Date('2026-09-11T01:00:00Z'));assert.equal(s.redemptions.amount,1000);assert.equal(s.redemptions.points,100);
 });
-test('ordinary member menu preserves one-product rights but denies dashboard and transaction buttons',async t=>{
+test('redeem menu exposes one-product merchant operations without granting platform administration',async t=>{
  const f=fixture(t),p=await buildShopKeywordMessage(event('店家專區',C),f.env);
  assertCarousel(p,2);
- assert(JSON.stringify(p).includes('1 個商品'));assert(!JSON.stringify(p).includes('shopSection=sales'));assert(!JSON.stringify(p).includes('shopSection=online-manage'));
- const d=await buildShopKeywordMessage(event('儀錶板',C),f.env);assert.match(d.text,/僅開放/);
- assert(!f.queries.some(q=>q.includes('FROM store_commerce_orders')||q.includes('FROM store_cashier_requests')));
+ assert(JSON.stringify(p).includes('最多 1 項商品'));assert(JSON.stringify(p).includes('折抵店家'));
+ const commands=actions(p).filter(action=>action.type==='message').map(action=>action.text);
+ for(const keyword of ['商城商品','商城業績','商城訂單','儀錶板'])assert(commands.includes(keyword));
+ assert(!JSON.stringify(p).includes('checkin-chat-dashboard'));
+ const d=await buildShopKeywordMessage(event('儀錶板',C),f.env);assertCarousel(d,2);assert.equal(d.altText,'我的店家儀錶板');
+ assert(!JSON.stringify(d).includes('s-a'));assert(!JSON.stringify(d).includes('s-b'));
 });
+
 test('groups, unknown and ambiguous identity never expose dashboard; links carry no UID/token',async t=>{
  const f=fixture(t);
  const g=await buildShopKeywordMessage(event('儀錶板',A,{source:{type:'group',userId:A,groupId:'group'}}),f.env);assert.match(g.text,/一對一/);assert.equal(f.queries.length,0);
@@ -153,7 +157,7 @@ test('all store cards use giga and large text while preserving every action and 
  }
  const member=await buildShopKeywordMessage(event('店家專區',C),f.env);assertCarousel(member,2);
  assert(bubbles(member).every(bubble=>bubble.body.contents.every(node=>node.size==='lg')));
- assert.deepEqual(bubbles(member)[1].footer.contents.map(node=>node.action.label),['我的商品','新增／編輯商品（網頁）']);
+ assert.deepEqual(bubbles(member)[1].footer.contents.map(node=>node.action.label),['我的商品','我的業績','我的網購訂單','商城儀錶板','新增／編輯商品（網頁）']);
 });
 
 test('product pagination stays owner scoped and has stable bounded pages',async t=>{
@@ -173,6 +177,15 @@ test('product pagination stays owner scoped and has stable bounded pages',async 
  assert(!pages[0].contents.footer.contents.some(b=>b.action.label==='上一頁'));
  assert(!pages[2].contents.footer.contents.some(b=>b.action.label==='下一頁'));
  assert(f.queries.filter(q=>q.includes('FROM store_shop_products')).every(q=>q.includes("shop_id=?")&&q.includes('LIMIT 6 OFFSET ?')));
+});
+
+test('pickup chat status uses fulfillment language without leaking pickup contacts',async t=>{
+ const f=fixture(t),snapshot={items:[{title:'自取商品',quantity:1}],customer:{carrier:'PICKUP',pickup_address:'PRIVATE-PICKUP-ADDRESS',pickup_phone:'0912345678'},bank:{account:'PRIVATEBANK'}};
+ f.sql.prepare("UPDATE store_commerce_orders SET snapshot_json=?,payment_status='paid',fulfillment_status='shipped' WHERE shop_id='s-a'").run(JSON.stringify(snapshot));
+ const message=await buildShopKeywordMessage(event('商城訂單'),f.env),body=JSON.stringify(message);
+ assert.match(body,/待取貨/);assert.doesNotMatch(body,/已出貨|PRIVATE-PICKUP-ADDRESS|PRIVATEBANK|0912345678/);
+ f.sql.prepare("UPDATE store_commerce_orders SET fulfillment_status='completed' WHERE shop_id='s-a'").run();
+ assert.match(JSON.stringify(await buildShopKeywordMessage(event('商城訂單'),f.env)),/已取貨/);
 });
 
 test('orders show status and product snapshots without customer or bank data',async t=>{
@@ -220,7 +233,7 @@ test('admin dashboard and portal put the check-in editor first while operational
  }
 });
 
-test('store and ordinary-member carousels never acquire admin editor or extra transaction privileges',async t=>{
+test('merchant carousels never acquire admin editor while nonmerchant plans get no retail menu',async t=>{
  const f=fixture(t);
  f.sql.prepare("UPDATE store_shop_products SET title='OTHER-OWNER-SECRET' WHERE shop_id='s-b'").run();
  for(const role of ['store','店長']){
@@ -231,14 +244,14 @@ test('store and ordinary-member carousels never acquire admin editor or extra tr
    if(keyword==='儀錶板'){assert.equal(message.altText,'我的店家儀錶板');assert(JSON.stringify(bubbles(message)[0]).includes('共 1 筆'));}
   }
  }
- for(const role of ['user','用戶']){
+ for(const role of ['user','用戶','reward','贈點用戶']){
   f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,C);
-  const message=await buildShopKeywordMessage(event('店家專區',C),f.env);assertCarousel(message,2);
-  const routes=actions(message).filter(action=>action.type==='uri').map(action=>new URL(action.uri).searchParams.get('shopSection'));
-  assert(routes.length>0);assert(routes.every(route=>route==='manage'));
-  assert.equal(bubbles(message)[1].footer.contents.filter(node=>node.action.type==='uri'&&new URL(node.action.uri).searchParams.get('shopSection')==='manage').length,1);
-  for(const action of actions(message))assert(!['商城業績','商城訂單','儀錶板','儀表板'].includes(action.text));
-  assert(!JSON.stringify(message).includes('checkin-chat-dashboard'));assert.match((await buildShopKeywordMessage(event('儀錶板',C),f.env)).text,/僅開放/);
+  const before=f.queries.length;
+  for(const keyword of ['店家專區','商城商品','商城訂單','商城業績','儀錶板']){
+   const message=await buildShopKeywordMessage(event(keyword,C),f.env);assert.equal(message.type,'text');assert.match(message.text,/未開放/);
+   assert(!JSON.stringify(message).includes('checkin-chat-dashboard'));assert(!JSON.stringify(message).includes('OTHER-OWNER-SECRET'));
+  }
+  assert(f.queries.slice(before).every(q=>q.startsWith('SELECT role')),'denied plans do not read store, order or ledger data');
  }
  f.sql.prepare("UPDATE users SET role='總管' WHERE line_id=?").run(B);assertAdminEditorFirst(await buildShopKeywordMessage(event('儀表板',B),f.env));
 });
@@ -261,7 +274,8 @@ test('new chat commands recheck roles, reject groups and validate page bounds',a
   const group=await buildShopKeywordMessage(event(keyword,A,{source:{type:'group',userId:A}}),f.env);assert.match(group.text,/一對一/);
  }
  assert.equal(f.queries.length,0);
- for(const keyword of ['商城訂單','商城業績'])assert.match((await buildShopKeywordMessage(event(keyword,C),f.env)).text,/僅開放/);
+ f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(C);
+ for(const keyword of ['商城訂單','商城業績'])assert.match((await buildShopKeywordMessage(event(keyword,C),f.env)).text,/未開放/);
  const queriesBefore=f.queries.length;
  for(const keyword of ['商城商品 0','商城訂單 -1','商城商品 1001','商城商品 1 OR 1=1','商城訂單 2 '+B]){
   assert(shopKeyword(event(keyword)));const result=await buildShopKeywordMessage(event(keyword),f.env);assert.match(result.text,/翻頁/);
@@ -269,7 +283,7 @@ test('new chat commands recheck roles, reject groups and validate page bounds',a
  assert(f.queries.slice(queriesBefore).every(q=>q.startsWith('SELECT role')));
  for(const keyword of ['我的商城商品','商城商品查詢','想看商城訂單','商城業績分析'])assert.equal(shopKeyword(event(keyword)),'');
  f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A);
- assert.match((await buildShopKeywordMessage(event('商城訂單'),f.env)).text,/僅開放/);
+ assert.match((await buildShopKeywordMessage(event('商城訂單'),f.env)).text,/未開放/);
 });
 
 test('no store and no results are explicit, and read failure never becomes an empty success',async t=>{

@@ -1,5 +1,5 @@
 import {test} from 'node:test';
-test('normal member may recognize DM only for own saved shop, without creating a product',async t=>{
+test('redeem merchant may recognize DM only for own saved shop, without creating a product',async t=>{
  const f=fixture(t);
  assert.equal((await f.call(undefined,'b')).status,400);
  f.sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,updated_at) VALUES(?,?,?,'now')").run('shop-b','U'+'b'.repeat(32),'本人店面');
@@ -16,7 +16,7 @@ const IMAGE='data:image/jpeg;base64,'+btoa('\xff\xd8\xff\xe0TEST');
 const product=(extra={})=>({title:'測試茶葉',description:'100g\n台灣茶',category:'食',price_cents:35000,price_note:'單包售價',...extra});
 function fixture(t){
  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());sql.exec('PRAGMA foreign_keys=ON; CREATE TABLE users(line_id TEXT PRIMARY KEY,role TEXT);');
- for(const [token,role]of [['a','store'],['b','user'],['c','admin'],['d','store']])sql.prepare('INSERT INTO users VALUES(?,?)').run('U'+token.repeat(32),role);
+ for(const [token,role]of [['a','store'],['b','redeem'],['c','admin'],['d','store']])sql.prepare('INSERT INTO users VALUES(?,?)').run('U'+token.repeat(32),role);
  for(const file of ['0029_store_shop_catalog.sql','0031_store_product_category.sql','0035_store_product_purchase_mode.sql','0064_store_product_shipping.sql','0036_store_product_ocr_usage.sql'])sql.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  for(const token of ['a','c'])sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,updated_at) VALUES(?,?,?,'now')").run('shop-'+token,'U'+token.repeat(32),'店 '+token);
  const db={prepare(query){return {bind(...args){return {async first(){return sql.prepare(query).get(...args)||null;},async all(){return {results:sql.prepare(query).all(...args)};},async run(){return {meta:{changes:Number(sql.prepare(query).run(...args).changes)}};}};}};}};
@@ -50,6 +50,15 @@ test('DM OCR authenticates stored role and own shop before image or AI calls',as
  assert.equal(f.state.calls.length,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM store_product_ocr_usage').get().n,0);
  f.sql.exec("UPDATE users SET role='staff' WHERE line_id='Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'");assert.equal((await f.call()).status,403);
 });
+for(const role of ['user','用戶','reward','贈點用戶'])test(role+' cannot consume product OCR allowance even with a historical shop',async t=>{
+ const f=fixture(t),uid='U'+'b'.repeat(32);f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,uid);
+ f.sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,updated_at) VALUES(?,?,'歷史店面','now')").run('historical-b',uid);
+ const before=f.sql.prepare('SELECT total_changes() n').get().n;
+ assert.equal((await f.call({base64Image:IMAGE,role:'admin',shop_id:'shop-a'},'b')).status,403);
+ assert.equal(f.state.calls.length,0);assert.equal(f.sql.prepare('SELECT count(*) n FROM store_product_ocr_usage').get().n,0);
+ assert.equal(f.sql.prepare('SELECT total_changes() n').get().n,before);
+});
+
 test('DM image validation rejects arbitrary URLs, PDF, invalid base64, mismatch and large bodies',async t=>{
  const f=fixture(t);
  for(const base64Image of ['https://evil.test/a.jpg','data:application/pdf;base64,AAAA','data:image/jpeg;base64,AAAA','data:image/png;base64,/9j/','data:image/jpeg;base64,***',null])assert.equal((await f.call({base64Image})).status,400);

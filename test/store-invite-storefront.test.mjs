@@ -33,8 +33,8 @@ function setup({standalone=true,section='',selected=shopId,products=true,status=
  const context={window,document,location,fetch,URL,URLSearchParams,AbortSignal,crypto,navigator:{clipboard:{writeText:async value=>copies.push(value)}},setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout(){},console};
  vm.runInNewContext(routeSource,context);
  // Isolate only the lazy checkout module boundary; execute the actual storefront event routing.
- assert.ok(source.includes("await import('./store-commerce.js?v=7')"));
- vm.runInNewContext(source.replace("await import('./store-commerce.js?v=7')",'await window.__testLoadCommerce()'),context);
+ assert.ok(source.includes("await import('./store-commerce.js?v=8')"));
+ vm.runInNewContext(source.replace("await import('./store-commerce.js?v=8')",'await window.__testLoadCommerce()'),context);
  const mount=(extraProduct='',extraQr='',extraMember='')=>window.StoreShop.mount(root,standalone,extraProduct,extraQr,extraMember,section,selected);
  const click=async(action,data={})=>{const button=node();button.dataset={do:action,...data};button.closest=()=>button;root.onclick({target:{closest:()=>button}});await flush();};
  return {window,context,root,content:root.querySelector('.shop-content'),alert:root.querySelector('[role=alert]'),calls,redirects,copies,shares,commerce,shop,mount,click};
@@ -104,7 +104,7 @@ test('cashier and member-product QR keep their original LIFF intent while forwar
 });
 test('management exposes explicit share action only after shop is active, without creating a shop',async()=>{
  for(const status of ['active','draft']){
-  const s=setup({standalone:false,section:'manage',products:false,status});s.window.liff.getAccessToken=()=> 'test-only';s.mount();await flush();
+  const s=setup({standalone:false,section:'manage',products:false,status});s.window.userRole='redeem';s.window.liff.getAccessToken=()=> 'test-only';s.mount();await flush();
   const button=s.content.appended.find(html=>typeof html==='string'&&html.includes('data-do="share-store"'));assert.ok(button);assert.equal(button.includes('disabled'),status==='draft');
   await s.click('share-store');assert.deepEqual(s.shares,status==='active'?['store']:[]);assert.equal(s.calls.length,1);assert.equal(s.calls[0].options.method,'GET');assert.match(s.calls[0].url,/\/manage$/);
  }

@@ -1,5 +1,6 @@
 // Administrator directory: bounded reads only, with no catalog/points/order mutations.
 import {adminPartnerShops,mergeShopPages} from './store-partner-catalog.mjs';
+import {retailRoleSql} from '../js/modules/store-cooperation-plans.mjs';
 const PATH = '/v1/store-shop/admin/stores';
 const UID = /^U[0-9a-f]{32}$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -109,7 +110,7 @@ async function directory(db, filter) {
     (SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status!='archived') AS product_count,
     (SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status='active') AS active_product_count,
     (SELECT count(*) FROM store_shop_products p WHERE p.shop_id=s.id AND p.status='active' AND p.purchase_mode='online') AS online_product_count,
-    (s.status='active' AND lower(COALESCE(o.role,'')) IN ('store','店長','admin','總管','user','用戶','redeem','扣點用戶','reward','贈點用戶')) AS public_visible`;
+    (s.status='active' AND ${retailRoleSql('o.role')}) AS public_visible`;
   // A read-only batch keeps the displayed totals and current page on the same snapshot.
   const results = await db.batch([
     db.prepare("SELECT count(*) AS total,COALESCE(sum(status='active'),0) AS active,COALESCE(sum(status='draft'),0) AS draft FROM store_shop_stores"),

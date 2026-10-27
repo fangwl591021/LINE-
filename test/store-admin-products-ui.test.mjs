@@ -20,7 +20,7 @@ function fixture(extra={}){
   const doc={createElement:tag=>new Element(doc,tag),getElementById:id=>doc.head.children.find(node=>node.id===id)};doc.head=doc.createElement('head');
   const root=doc.createElement('main'),calls=[],uploads=[],preparations=[];let valid=true,uuidCount=0;
   const options={shopId:ID,isCurrent:()=>valid,onBack:async()=>{},prepareImage:async file=>{preparations.push(file);return 'data:image/jpeg;base64,eA==';},uploadImage:async data=>{uploads.push(data);return {success:true,url:'https://img.test/item.jpg'};},
-    api:async(path,data,privateRead)=>{calls.push({path,data,privateRead});if(data)return {success:true,product_id:'created',shop_id:ID};return {success:true,shop:{id:ID,name:'選定店家',owner_name:'店主',version:3,product_count:0,product_limit:null,status:'active'},products:[]};},...extra};
+    api:async(path,data,privateRead)=>{calls.push({path,data,privateRead});if(data)return {success:true,product_id:'created',shop_id:ID};return {success:true,shop:{id:ID,name:'選定店家',owner_name:'店主',version:3,product_count:0,product_limit:null,owner_role:'admin',status:'active'},products:[]};},...extra};
   const context=vm.createContext({URL,crypto:{randomUUID:()=>{uuidCount++;return '99999999-1111-4111-8111-'+String(uuidCount).padStart(12,'0');}}});
   vm.runInContext(source.replace('export async function','async function').replaceAll('import.meta.url',JSON.stringify('https://test.invalid/js/modules/store-admin-products.js'))+'\nthis.mount=mountAdminProducts;',context);
   return {root,calls,options,uploads,preparations,mount:()=>context.mount(root,options),setValid:value=>{valid=value;},
@@ -50,7 +50,7 @@ test('uploads then creates exactly once with selected shop and original image',a
 test('double click is suppressed and uncertain retry keeps identical frozen request',async()=>{
   const wait=deferred();let writes=0;const sent=[];
   const g=await loaded({api:async(path,data)=>{
-    if(!data)return {success:true,shop:{id:ID,name:'測試',version:1,product_count:0,product_limit:null,status:'active'},products:[]};
+    if(!data)return {success:true,shop:{id:ID,name:'測試',version:1,product_count:0,product_limit:null,owner_role:'admin',status:'active'},products:[]};
     writes++;sent.push(JSON.stringify(data));if(writes===1)return wait.promise;
     return {success:true,shop_id:ID,product_id:'same'};
   }});fill(g);
@@ -61,7 +61,7 @@ test('double click is suppressed and uncertain retry keeps identical frozen requ
 test('known review failure preserves fields and permits editing or explicit draft retry',async()=>{
   let attempt=0;const sent=[];
   const f=await loaded({api:async(_path,data)=>{
-    if(!data)return {success:true,shop:{id:ID,name:'測試店',version:1,product_count:0,product_limit:null,status:'active'},products:[]};
+    if(!data)return {success:true,shop:{id:ID,name:'測試店',version:1,product_count:0,product_limit:null,owner_role:'admin',status:'active'},products:[]};
     sent.push({...data});if(++attempt===1){const error=new Error('內容需人工核對，未公開');error.code='LISTING_REVIEW_REQUIRED';throw error;}
     return {success:true,shop_id:ID,product_id:'draft'};
   }});fill(f);f.field('status').value='active';await f.form().fire('submit');
@@ -83,14 +83,29 @@ test('stale account while preparing image prevents upload and stale response can
 test('late private data is ignored after navigation',async()=>{
   const wait=deferred(),f=fixture({api:()=>wait.promise});const pending=f.mount();f.root.replaceChildren();wait.resolve({success:true,shop:{id:ID,name:'私人店名',version:1},products:[]});await pending;assert.equal(f.text(),'');
 });
-test('user limit and unpublished store are accurately explained',async()=>{
-  const f=await loaded({api:async()=>({success:true,shop:{id:ID,name:'草稿店',version:1,product_limit:1,product_count:0,status:'draft'},products:[]})});
-  assert.match(f.text(),/不會自動公開店面/);assert.equal(f.field('purchase_mode').disabled,true);assert.equal(f.field('redeem_type').disabled,true);
-  const full=await loaded({api:async()=>({success:true,shop:{id:ID,name:'滿額店',version:1,product_limit:1,product_count:1,status:'active'},products:[]})});
+test('redeem quota and unpublished store keep online and redemption options available',async()=>{
+  const f=await loaded({api:async()=>({success:true,shop:{id:ID,name:'草稿店',version:1,product_limit:1,owner_role:'redeem',product_count:0,status:'draft'},products:[]})});
+  assert.match(f.text(),/不會自動公開店面/);assert.equal(f.field('purchase_mode').disabled,false);assert.equal(f.field('redeem_type').disabled,false);
+  const full=await loaded({api:async()=>({success:true,shop:{id:ID,name:'滿額店',version:1,product_limit:1,owner_role:'redeem',product_count:1,status:'active'},products:[]})});
   assert.equal(full.form(),undefined);assert.match(full.text(),/已達商品件數上限/);
 });
 test('untrusted names use textContent and image scheme is validated',async()=>{
   const f=await loaded({uploadImage:async()=>({success:true,url:'javascript:alert(1)'})});
   f.field('image_file').files=[{}];await f.field('image_file').fire('change');assert.match(f.text(),/圖片未更新/);
   assert.doesNotMatch(source,/innerHTML|insertAdjacentHTML/);
+});
+
+test('full plan twenty-product quota does not disable online or point policy controls',async()=>{
+  const report=count=>({success:true,shop:{id:ID,name:'完整版店家',version:1,product_limit:20,product_count:count,status:'active',cooperation_plan:{id:'full',canOnline:true}},products:[]});
+  const f=await loaded({api:async()=>report(19)});
+  assert.match(f.text(),/上限 20 件/);assert.ok(f.form());
+  assert.equal(f.field('purchase_mode').disabled,false);assert.equal(f.field('redeem_type').disabled,false);
+  assert.deepEqual(f.field('purchase_mode').children.map(option=>option.value),['in_store','online']);
+  assert.deepEqual(f.field('redeem_type').children.map(option=>option.value),['none','fixed','percent','full']);
+  const full=await loaded({api:async()=>report(20)});assert.equal(full.form(),undefined);assert.match(full.text(),/已達商品件數上限/);
+});
+
+test('gift-only target cannot be given a product editor by an old catalog response',async()=>{
+  const f=await loaded({api:async()=>({success:true,shop:{id:ID,name:'贈點單位',version:1,product_limit:1,product_count:0,status:'active',owner_role:'reward',cooperation_plan:{canOnline:false}},products:[]})});
+  assert.equal(f.form(),undefined);assert.match(f.text(),/沒有店家商品上架權限/);
 });

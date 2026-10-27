@@ -127,6 +127,70 @@ function fixture(t) {
 const config=(extra={})=>({version:0,enabled:true,bank_name:'測試銀行',bank_code:'004',bank_holder:'測試店',bank_account:'123456789012',shipping_fee_cents:6000,free_shipping_cents:1000000,...extra});
 const cart=(extra={})=>({shop_id:'shop-a',items:[{id:'p-a',quantity:1}],payment_method:'REMITTANCE',points_used:0,buyer:{name:'購買小陳',phone:'0912345678',email:''},customer:{postal_code:'100',city:'台北市',district:'中正區',name:'收件小林',phone:'0912345678',carrier:'POST',address:'100 台北市測試路1號',store_info:'',note:''},...extra});
 
+test('free redemption merchants manage remittance orders while gift-only and ordinary accounts cannot sell',async t=>{
+  for(const role of ['redeem','扣點用戶','REDEEM']){
+    const f=fixture(t);f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+    const settings=await f.call('/settings',config(),'a');assert.equal(settings.status,200);assert.equal(settings.cooperation_plan.productLimit,1);assert.equal(settings.cooperation_plan.canPickup,false);
+    let {order}=await f.order();assert.equal((await f.call('/orders?scope=merchant',null,'a')).orders[0].id,order.id);
+    order=(await f.act(order,'report_remittance',{last5:'12345'})).order;
+    order=(await f.act(order,'verify_remittance',{received_cents:order.total_cents,confirmed:true},'a')).order;
+    order=(await f.act(order,'ship',{tracking_number:'POST-REDEEM'},'a')).order;
+    order=(await f.act(order,'complete',{},'a')).order;assert.equal(order.fulfillment_status,'completed');
+    f.sql.exec("UPDATE users SET role='reward' WHERE role!='user' AND line_id='"+A+"'");
+    assert.equal((await f.call('/settings',null,'a')).status,403);assert.equal((await f.call('/quote',cart())).status,404);
+    assert.equal((await f.call('/orders')).orders[0].snapshot.customer.carrier,'POST','historical buyer snapshots remain available');
+  }
+  for(const role of ['reward','贈點用戶','user','用戶']){
+    const f=fixture(t);f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);
+    assert.equal((await f.call('/settings',config(),'a')).status,403);assert.equal((await f.call('/quote',cart())).status,404);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM store_commerce_settings').get().n,0);
+  }
+});
+
+const pickupCustomer=()=>({name:'取貨小林',phone:'0912345678',carrier:'PICKUP',city:'偽造城市',district:'偽造行政區',address:'偽造地址',store_info:'偽造門市',note:'下班後領取'});
+test('full-plan pickup snapshots authoritative shop contacts and charges no shipping',async t=>{
+  const f=fixture(t);await f.setup();
+  f.sql.exec("UPDATE store_shop_stores SET name='真實店名',address='新北市板橋區測試路1號',phone='0223456789' WHERE id='shop-a'; UPDATE store_shop_products SET shipping_fee_cents=8000");
+  const input=cart({customer:pickupCustomer(),items:[{id:'p-a',quantity:2}]}),quote=await f.call('/quote',input);
+  assert.equal(quote.status,200);assert.equal(quote.snapshot.shipping_fee_cents,0);assert.equal(quote.snapshot.legacy_shipping_fee_cents,0);
+  assert.equal(quote.snapshot.items[0].line_shipping_fee_cents,0);assert.equal(quote.snapshot.items[0].shipping_fee_cents,0);
+  assert.equal(quote.snapshot.total_cents,1760000);assert.equal(quote.snapshot.customer.address,'');
+  assert.equal(quote.snapshot.customer.store_info,'真實店名｜新北市板橋區測試路1號｜0223456789');
+  assert.equal(quote.snapshot.customer.pickup_address,'新北市板橋區測試路1號');assert.doesNotMatch(JSON.stringify(quote.snapshot),/偽造/);
+  const created=await f.call('/orders',{...input,quote_hash:quote.quote_hash,request_key:crypto.randomUUID()});assert.equal(created.status,200);let order=created.order;
+  assert.equal((await f.act(order,'ship',{},'a')).status,409);
+  order=(await f.act(order,'report_remittance',{last5:'12345'})).order;
+  order=(await f.act(order,'verify_remittance',{received_cents:order.total_cents,confirmed:true},'a')).order;
+  order=(await f.act(order,'ship',{},'a')).order;assert.equal(order.fulfillment_status,'shipped');assert.equal(order.tracking_number,'');
+  assert.equal((await f.act(order,'complete',{},'a')).status,400);
+  order=(await f.act(order,'complete',{confirmed_pickup:true},'a')).order;assert.equal(order.fulfillment_status,'completed');
+  f.sql.exec("UPDATE store_shop_stores SET name='已修改店名',address='新地址',phone='0200000000',version=version+1 WHERE id='shop-a'");
+  assert.equal((await f.call('/orders')).orders[0].snapshot.customer.pickup_address,'新北市板橋區測試路1號');
+});
+
+test('pickup is not a redemption-store promise and role or contact changes block new orders',async t=>{
+  const f=fixture(t);await f.setup();const input=cart({customer:pickupCustomer()});
+  assert.equal((await f.call('/quote',input)).status,409,'pickup needs a real store address and phone');
+  f.sql.exec("UPDATE store_shop_stores SET address='真實地址',phone='0223456789' WHERE id='shop-a'");
+  for(const role of ['redeem','扣點用戶','REDEEM']){
+    f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,A);assert.equal((await f.call('/quote',input)).status,403);
+  }
+  f.sql.prepare("UPDATE users SET role='store' WHERE line_id=?").run(A);const quote=await f.call('/quote',input);assert.equal(quote.status,200);
+  f.hooks.beforeRun=query=>{if(query.startsWith('INSERT INTO store_commerce_orders')){delete f.hooks.beforeRun;f.sql.prepare("UPDATE users SET role='redeem' WHERE line_id=?").run(A);}};
+  assert.equal((await f.call('/orders',{...input,quote_hash:quote.quote_hash,request_key:crypto.randomUUID()})).status,409);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM store_commerce_orders').get().n,0);
+});
+
+test('settings and online order inserts recheck retail permission at the write boundary',async t=>{
+  const f=fixture(t);f.sql.prepare("UPDATE users SET role='redeem' WHERE line_id=?").run(A);
+  f.hooks.beforeRun=query=>{if(query.startsWith('INSERT INTO store_commerce_settings')){delete f.hooks.beforeRun;f.sql.prepare("UPDATE users SET role='reward' WHERE line_id=?").run(A);}};
+  assert.equal((await f.call('/settings',config(),'a')).status,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM store_commerce_settings').get().n,0);
+  f.sql.prepare("UPDATE users SET role='redeem' WHERE line_id=?").run(A);await f.call('/settings',config(),'a');const quote=await f.call('/quote',cart());
+  f.hooks.beforeRun=query=>{if(query.startsWith('INSERT INTO store_commerce_orders')){delete f.hooks.beforeRun;f.sql.prepare("UPDATE users SET role='reward' WHERE line_id=?").run(A);}};
+  assert.equal((await f.call('/orders',{...cart(),quote_hash:quote.quote_hash,request_key:crypto.randomUUID()})).status,409);
+  assert.equal(f.sql.prepare('SELECT count(*) n FROM store_commerce_orders').get().n,0);
+});
+
 test('default release gate blocks transactions, settings prep and old receipts remain available',async t=>{
   const f=fixture(t);delete f.env.STORE_COMMERCE_ENABLED;
   assert.equal((await f.call('/capabilities',null,null)).enabled,false);

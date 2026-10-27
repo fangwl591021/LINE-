@@ -1,3 +1,4 @@
+import {retailRoleSql} from '../js/modules/store-cooperation-plans.mjs';
 const uid=v=>/^U[0-9a-fA-F]{20,64}$/.test(v||'');
 const uuid=v=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v||'');
 const fail=error=>({success:false,error});
@@ -10,14 +11,17 @@ export async function issueMemberProductQr(p,env,resolveCustomer) {
  const issuer=p.authenticatedUserId;
  if(!uid(issuer)||!uuid(p.productId))return fail('請先登入並選擇有效商品');
  const product=await env.ACTMASTER_DB.prepare(`SELECT p.id FROM store_shop_products p JOIN store_shop_stores s ON s.id=p.shop_id JOIN users u ON u.line_id=s.owner_uid
- WHERE p.id=? AND p.status='active' AND s.status='active' AND lower(u.role) IN ('store','admin','店長','總管')`).bind(p.productId).first();
+ WHERE p.id=? AND p.status='active' AND s.status='active' AND ${retailRoleSql()}`).bind(p.productId).first();
  if(!product)return fail('商品或店面尚未開放');
  const customer=await resolveCustomer(issuer);
  if(customer?.error||customer?.needsBinding||!uid(customer?.customerPointUserId))return fail('無法確認本人點數帳戶，請先完成會員綁定');
  const token=Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
  const expiresAt=Date.now()+300000;
- await env.ACTMASTER_DB.prepare(`INSERT INTO store_member_product_qr(token_hash,issuer_id,customer_id,product_id,expires_at) VALUES(?,?,?,?,?)
- ON CONFLICT(issuer_id,product_id) DO UPDATE SET token_hash=excluded.token_hash,customer_id=excluded.customer_id,expires_at=excluded.expires_at,used_request=NULL`).bind(await qrTokenHash(token),issuer,customer.customerPointUserId,p.productId,expiresAt).run();
+ const issued=await env.ACTMASTER_DB.prepare(`INSERT INTO store_member_product_qr(token_hash,issuer_id,customer_id,product_id,expires_at)
+ SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM store_shop_products p JOIN store_shop_stores s ON s.id=p.shop_id JOIN users u ON u.line_id=s.owner_uid
+ WHERE p.id=? AND p.status='active' AND s.status='active' AND ${retailRoleSql()})
+ ON CONFLICT(issuer_id,product_id) DO UPDATE SET token_hash=excluded.token_hash,customer_id=excluded.customer_id,expires_at=excluded.expires_at,used_request=NULL`).bind(await qrTokenHash(token),issuer,customer.customerPointUserId,p.productId,expiresAt,p.productId).run();
+ if(issued.meta.changes!==1)return fail('商品或店家權限已變更，請重新選擇商品');
  return {success:true,data:{qrToken:token,productId:p.productId,expiresAt}};
 }
 export async function readMemberProductQr(token,env) {
