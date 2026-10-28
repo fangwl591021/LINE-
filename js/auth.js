@@ -3271,6 +3271,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.applyRegisteredUserSession(checkRes.info, { skipHome: directStoreManage });
     if (await window.openMemberChatNotification?.(urlParams)) return;
     const shopSection = urlParams.get('shopSection');
+    if(['applicationReview','applicationKind','applicationId'].some(key=>urlParams.has(key))){
+      const reviewEntry=window.readSignedApplicationReviewEntry?.(urlParams);
+      if(!reviewEntry){window.showToast?.('申請通知連結格式不正確，請從合作申請清單開啟',true);return;}
+      if(!['admin','總管'].includes(String(window.userRole||'').toLowerCase())){window.showToast?.('請使用平台管理員帳號登入後查看此申請',true);return;}
+      const clean=new URL(location.href);for(const key of ['applicationReview','applicationKind','applicationId'])clean.searchParams.delete(key);history.replaceState(null,'',clean.href);
+      await window.openStoreShop('', '', '', 'mine', '', {applicationReview:reviewEntry});return;
+    }
     const cashierEntryConflict = shopSection === 'cashier' && ['checkin','nfcAct','nfcCheckin','verifyCheckin','checkinRowId','registrationId'].some(key => urlParams.get(key));
     if (['list','mine','manage','sales','online-manage','cashier'].includes(shopSection) && !cashierEntryConflict && !shareCardId && !claimCardId && !likeCardId && !urlParams.get('shopQr') && !urlParams.get('memberProduct') && !urlParams.get('shopProduct')) {
       await window.openStoreShop('', '', '', shopSection);

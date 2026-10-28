@@ -1,6 +1,13 @@
 {
   "schemaVersion": "change_risk_map_v1",
   "areas": {
+    "hand-sign-contracts": {
+      "label": "合作申請手簽 / 私有完整條款 / 管理員通知",
+      "keywords": ["手簽", "線上合約", "合作申請", "申請通知", "簽名"],
+      "docs": ["docs/contracts/reward-applications.md", "docs/contracts/partner-bonus-v2.md", "docs/rules/core-invariants.md"],
+      "checks": ["test/reward-applications.test.mjs", "test/discount-applications.test.mjs", "test/hand-sign-applications.test.mjs", "test/hand-sign-ui.test.mjs", "test/application-admin-notifications.test.mjs"],
+      "regressionIds": ["SIGN-01", "SIGN-02", "SIGN-03"]
+    },
     "store-cooperation-plans": {
       "label": "商城合作方案 / 贈點與折抵權限 / 商品名額",
       "keywords": ["商城規則", "合作方案", "贈點單位", "折抵店家", "雙向完整版", "到店取貨"],

@@ -62,7 +62,7 @@ async function rows(db, sql, args = []) {
 
 // Only database aliases and a single active old/new link can identify the actor.
 // Detect conflicting rows/links before asking the canonical role mapper for authority.
-async function adminActor(db, uid, profileMapper) {
+async function adminActor(db, uid, profileMapper, includeIdentityProof = false) {
   const ids = new Set([uid]);
   for (let pass = 0; pass < 4; pass++) {
     const before = ids.size, values = [...ids], placeholders = values.map(() => '?').join(',');
@@ -79,19 +79,24 @@ async function adminActor(db, uid, profileMapper) {
     if (ids.size > 8) identityConflict();
     if (ids.size === before) {
       if (!found[0] || profileMapper(found[0])?.role !== 'admin') fail('ADMIN_REQUIRED', '店家列表僅限管理員查詢', 403);
-      return found[0];
+      // The optional proof lets a caller atomically preserve this same identity
+      // boundary at a later write, including aliases/links outside the actor row.
+      return includeIdentityProof ? { actor: found[0], identityProof: { ids: [...ids], links } } : found[0];
     }
   }
   identityConflict();
 }
+
+// Server-side notification reuse; this is the same canonical authority as the admin UI.
+export { adminActor as resolveStoreAdminActor };
 
 // Shared verified authority; directory remains read-only. Callers must scope writes separately.
 export async function authorizeStoreAdmin(request, env, profileMapper, fetcher = fetch) {
   const uid = await authenticatedUid(request, fetcher);
   if (!env.ACTMASTER_DB || typeof profileMapper !== 'function') throw new Error('Directory unavailable');
   const db = env.ACTMASTER_DB.withSession ? env.ACTMASTER_DB.withSession('first-primary') : env.ACTMASTER_DB;
-  const actor = await adminActor(db, uid, profileMapper);
-  return { uid, db, actor };
+  const { actor, identityProof } = await adminActor(db, uid, profileMapper, true);
+  return { uid, db, actor, identityProof };
 }
 
 function filters(params) {
