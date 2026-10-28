@@ -22,7 +22,7 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
  const actor=()=>window.liff?.getContext?.()?.userId||'';
  const originalActor=actor();
  if(!document.querySelector('[data-reward-application-style]')){
-  const link=document.createElement('link');link.rel='stylesheet';link.href=new URL('../../css/reward-applications.css?v=1',import.meta.url).href;
+  const link=document.createElement('link');link.rel='stylesheet';link.href=new URL('../../css/reward-applications.css?v=2',import.meta.url).href;
   link.dataset.rewardApplicationStyle='';document.head.append(link);
  }
  const dialog=document.createElement('dialog');dialog.className='reward-application-dialog';dialog.setAttribute('aria-label','共創夥伴契約與獎金核對');
@@ -81,7 +81,7 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
   latest=result;chosenManager='';chosenReferrer='';chosenBeneficiary='';
   const records=result.contracts||[],pending=result.pendingDeals||[];
   const currentContracts=records.filter(record=>value(record,'policy_version','policyVersion')===POLICY);
-  shell(`<p class="ra-note">本頁由管理員核對外部已簽文件後登錄，並非線上手簽。新登錄使用115.10版；新簽後的新訂單才適用，舊訂單維持原規則。</p>
+  shell(`<p class="ra-note">本頁供管理員核對已簽契約後登錄；線上手簽請至商城「我的 → 合作申請／我的合約」。線上簽署紀錄仍須審核及契約登錄，不會自動開通資格。新登錄使用115.10版；新簽後的新訂單才適用，舊訂單維持原規則。</p>
    <button type="button" data-refresh>重新整理</button><h3>115.10 制度</h3>
    <p>甲方：智點通股份有限公司（54852701）／代表人：楊滄棋。共創夥伴免費加入，無須先購買完整版；一般夥伴累計兩筆有效直接新成交後晉升，第三筆起直接成交50%。續約由原推薦人25%＋當下歸屬人25%，各份可分別待核。</p>
    <p>簽署日生效、每期一年；未於期滿30日前通知不續約，依契約自動延長一年。終止依第12條取消已成立但未支付的獎勵，已支付流水保留，不自動追回銀行款。</p>

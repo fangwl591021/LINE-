@@ -1,4 +1,4 @@
-import legacyWorker, { runAutomatedUploaderMatch, storeInviteProfileView, scoreMemberDirectoryBatch, storeCommercePointService } from './workerbackup.js';
+import legacyWorker, { runAutomatedUploaderMatch, storeInviteProfileView, scoreMemberDirectoryBatch, storeCommercePointService, getContractAdminNotificationIds, getContractAdminNotificationNames } from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
@@ -22,6 +22,7 @@ import { handleCheckinMall } from './worker/checkin-mall-card.mjs';
 import { handleCheckinChatDashboard } from './worker/checkin-chat-dashboard.mjs';
 import { handleRewardUnits } from './worker/reward-unit-directory.mjs';
 import { handleRewardApplications } from './worker/reward-applications.mjs';
+import { processApplicationAdminNotifications } from './worker/application-admin-notifications.mjs';
 import { handlePartnerContracts } from './worker/partner-bonus-v2.mjs';
 import { handleIslandEntry } from './worker/island-entry.mjs';
 import { handleIslandVideoCard } from './worker/island-video-card.mjs';
@@ -528,6 +529,10 @@ export default {
       const run = processMemberChatNotifications(env).catch(() => console.error('member_chat_notification_cron_failed'));
       if (ctx?.waitUntil) ctx.waitUntil(run);
       else await run;
+      const applications = processApplicationAdminNotifications(env, { profileMapper: storeInviteProfileView, hardAdminIds: getContractAdminNotificationIds(), hardAdminNames: getContractAdminNotificationNames() })
+        .catch(() => console.error('application_admin_notification_cron_failed'));
+      if (ctx?.waitUntil) ctx.waitUntil(applications);
+      else await applications;
       return;
     }
     if (controller?.cron === '*/15 18-20 * * *') {

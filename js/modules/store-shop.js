@@ -57,7 +57,7 @@
     if(result.release_enabled!==true)return '全站網購交易尚未開放，顧客目前無法下單。店家收款設定已完成，請聯絡管理員確認。';
     return '';
   }
-  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='', initialPublicProductId='') {
+  function mount(root, standalone, productId='', qrToken='', memberProduct='', section='', shopId='', initialPublicProductId='', applicationReview=null) {
     let shop=null, items=[], epoch=0, busy=false, productLimit=1, productCount=0, productNext='';
     const initialProductSession=initialPublicProductId?{owner:window.currentUserProfile?.userId,role:window.userRole,token:window.liff?.getAccessToken?.()}:null;
     // New visit, new shuffle. Keep it for category/search/pagination in this mount.
@@ -477,7 +477,7 @@
             if(standalone){location.assign(loginLink());break;}
             const version=epoch,owner=window.currentUserProfile?.userId;
             const isCurrent=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId;
-            const module=await import('./reward-applications.js?v=2');
+            const module=await import('./reward-applications.js?v=3');
             if(isCurrent())await module.openRewardApplications({base,isCurrent});
             break;
           }
@@ -720,7 +720,16 @@
           if(button)button.click();else alert.textContent='請先建立自己的店家資料。';
         }
       }else if(!standalone&&section==='cashier'){memberHome();await openPointOperations();}
-      else if(!standalone&&section==='mine')memberHome();
+      else if(!standalone&&section==='mine'){
+        memberHome();
+        if(applicationReview){
+          if(!canAdmin())throw new Error('請使用平台管理員帳號登入後查看此申請');
+          const version=epoch,owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
+          const isCurrent=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&token===window.liff?.getAccessToken?.();
+          const module=await import('./reward-applications.js?v=3');
+          if(isCurrent())await module.openRewardApplications({base,admin:true,kind:applicationReview.kind,applicationId:applicationReview.applicationId,isCurrent});
+        }
+      }
       else if(!standalone&&section==='discovery')await discover();
       else if(!standalone&&['partners','list'].includes(section))await list();
       else if(!standalone&&section==='point-history'){

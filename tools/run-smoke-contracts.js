@@ -39,12 +39,15 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/hand-sign-applications.test.mjs',
+  'test/application-admin-notifications.test.mjs',
   'test/member-display-feed.test.mjs',
   'test/partner-bonus-v2.test.mjs',
   'test/partner-policy-11510.test.mjs',
   'test/partner-settlement-11510.test.mjs',
   'test/taiwan-working-days.test.mjs',
   'test/reward-applications.test.mjs',
+  'test/hand-sign-ui.test.mjs',
   'test/discount-applications.test.mjs',
   'test/redeem-catalog.test.mjs',
   'test/reward-catalog.test.mjs',

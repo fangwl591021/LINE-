@@ -1,6 +1,7 @@
 import {authorizeStoreAdmin, DirectoryError} from './store-admin.mjs';
 import {readJson, ShopError} from './store-shop.mjs';
 import {discountTerms,discountOptions,discountConfirmations,normalizeDiscountApplication} from './discount-application-definition.mjs';
+import {readHandSignTemplate,normalizeHandSignApplication,handSignConfirmations,handSignReferral,publicHandSignReferral,handSignReferralGate,handSignTemplateGate} from './hand-sign-application-definition.mjs';
 const PATH='/v1/reward-applications';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UID=/^U[0-9a-f]{32}$/i;
@@ -65,28 +66,44 @@ async function member(request,env,fetcher){
  const db=env.ACTMASTER_DB.withSession?env.ACTMASTER_DB.withSession('first-primary'):env.ACTMASTER_DB;
  const rows=(await db.prepare('SELECT line_id,referrer_id FROM users WHERE line_id=? LIMIT 2').bind(profile.userId).all()).results;
  if(rows?.length!==1)fail('請先完成會員註冊或聯絡管理員確認身分',403);
- return {uid:profile.userId,db,referrer:rows[0].referrer_id||''};
+ return {uid:profile.userId,db,referrer:rows[0].referrer_id||'',referrerRaw:rows[0].referrer_id??null};
 }
 const sha=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),x=>x.toString(16).padStart(2,'0')).join('');
 async function record(db,id){return db.prepare('SELECT a.*,r.decision,r.note,r.reviewed_at FROM reward_applications a LEFT JOIN reward_application_reviews r ON r.application_id=a.id WHERE a.id=?').bind(id).first();}
 function view(row){return {id:row.id,snapshot:JSON.parse(row.snapshot_json),content_sha256:row.content_sha256,signed_at:row.signed_at,status:row.decision||'pending',review_note:row.note||'',reviewed_at:row.reviewed_at||''};}
+function reviewIdentityGate(proof){
+ if(!Array.isArray(proof?.ids)||!proof.ids.length||proof.ids.length>8||!Array.isArray(proof.links)||proof.links.length>1)throw Error('Administrator identity proof unavailable');
+ const ids="SELECT value FROM json_each(p.value,'$.ids')";
+ const touches=`(l.old_line_id IN(${ids}) OR l.new_line_id IN(${ids}))`;
+ return {sql:`EXISTS(SELECT 1 FROM json_each(?) p
+  WHERE (SELECT COUNT(*) FROM users a WHERE ${['line_id','row_id','legacy_line_id','point_line_id'].map(field=>`a.${field} IN(${ids})`).join(' OR ')})=1
+  AND (SELECT COUNT(*) FROM user_identity_links l WHERE l.status='active' AND ${touches})=json_array_length(p.value,'$.links')
+  AND NOT EXISTS(SELECT 1 FROM user_identity_links l WHERE l.status='active' AND ${touches}
+   AND NOT EXISTS(SELECT 1 FROM json_each(p.value,'$.links') known
+    WHERE l.old_line_id=json_extract(known.value,'$.old_line_id') AND l.new_line_id=json_extract(known.value,'$.new_line_id'))))`,args:[JSON.stringify([proof])]};
+}
 export async function handleRewardApplications(request,env,profileMapper,fetcher=fetch){
- const url=new URL(request.url),discountPath='/v1/discount-applications';
- const discount=url.pathname===discountPath||url.pathname.startsWith(discountPath+'/');
- const path=discount?discountPath:PATH;if(url.pathname!==path&&!url.pathname.startsWith(path+'/'))return null;
- const terms=discount?discountTerms:rewardTerms,consent=discount?discountConfirmations:confirmations,options=discount?discountOptions:applicationOptions;
+ const url=new URL(request.url),paths={reward:PATH,discount:'/v1/discount-applications',partner:'/v1/partner-applications',full:'/v1/full-applications'};
+ const kind=Object.keys(paths).find(kind=>url.pathname===paths[kind]||url.pathname.startsWith(paths[kind]+'/'));
+ if(!kind)return null;
+ const path=paths[kind],discount=kind==='discount',extended=kind==='partner'||kind==='full';
+ const terms=discount?discountTerms:rewardTerms,consent=extended?handSignConfirmations[kind]:discount?discountConfirmations:confirmations,options=discount?discountOptions:applicationOptions;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
   const route=url.pathname.slice(path.length),admin=route==='/admin'||route==='/review';
   if(!['','/template','/preview','/submit','/admin','/review'].includes(route))fail('查無申請功能',404);
   if(!['GET','POST'].includes(request.method))fail('不支援此操作',405);
-  const {uid,db:authenticatedDb,actor,referrer}=admin?await authorizeStoreAdmin(request,env,profileMapper,fetcher):await member(request,env,fetcher);
-  // Map only these three fixed identifiers. No request value can choose an SQL table.
-  const db=discount?{prepare:sql=>authenticatedDb.prepare(sql.replace(/\breward_application(s|_previews|_reviews)\b/g,'discount_application$1'))}:authenticatedDb;
+  const {uid,db:authenticatedDb,actor,identityProof,referrer,referrerRaw}=admin?await authorizeStoreAdmin(request,env,profileMapper,fetcher):await member(request,env,fetcher);
+  // Map only these three fixed identifiers to one of four server-owned table sets.
+  // No request value or query selector can choose an SQL table.
+  const db=kind==='reward'?authenticatedDb:{prepare:sql=>authenticatedDb.prepare(sql.replace(/\breward_application(s|_previews|_reviews)\b/g,kind+'_application$1'))};
   const allowed=route==='/admin'?['id','target','after']:route===''?['id','after']:[];
   for(const key of url.searchParams.keys())if(!allowed.includes(key)||url.searchParams.getAll(key).length!==1)fail('查詢條件不正確');
   if(request.method==='GET'){
-   if(route==='/template')return reply({success:true,terms,confirmations:consent,options});
+   if(route==='/template'){
+    if(extended){const definition=await readHandSignTemplate(authenticatedDb,kind);return reply({success:true,...definition,...(kind==='partner'?{referral:publicHandSignReferral(await handSignReferral(authenticatedDb,referrer))}:{})});}
+    return reply({success:true,terms,confirmations:consent,options});
+   }
    if(!['','/admin'].includes(route))fail('不支援此操作',405);
    const id=url.searchParams.get('id'),target=url.searchParams.get('target')||'',after=url.searchParams.get('after')||'';
    if((id&&!UUID.test(id))||(after&&!UUID.test(after))||(target&&!UID.test(target)))fail('查詢編號不正確');
@@ -100,10 +117,20 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
   if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')||''))fail('請使用 JSON 資料',415);
   const data=await readJson(request,100000),now=new Date().toISOString();
   if(route==='/preview'){
-   keys(data,['fields']);const fields=(discount?normalizeDiscountApplication:normalizeApplication)(data.fields),id=crypto.randomUUID();
-   const snapshot={...(discount?{form_kind:'discount'}:{}),terms,confirmations:consent,fields,referrer_uid:referrer||'',assurance:'LINE 帳號驗證；非實名或憑證式數位簽章'};
+   keys(data,['fields']);const fields=extended?normalizeHandSignApplication(kind,data.fields):(discount?normalizeDiscountApplication:normalizeApplication)(data.fields),id=crypto.randomUUID();
+   const definition=extended?await readHandSignTemplate(authenticatedDb,kind):null;
+   const referral=kind==='partner'?await handSignReferral(authenticatedDb,referrer):null;
+   if(referral&&(fields.referrer_name!==referral.name||fields.referrer_member_number!==referral.memberNumber))fail('推薦人資料與CRM紀錄不符，請重新載入後核對',409);
+   const snapshot={...(kind!=='reward'?{form_kind:kind}:{}),terms:definition?.terms||terms,confirmations:consent,fields,referrer_uid:referrer||'',...(definition?{template:definition.template,field_labels:definition.field_labels}:{}),...(referral?{referral:publicHandSignReferral(referral),referral_proof:referral.proof}:{}),assurance:'LINE 帳號驗證；非實名或憑證式數位簽章'};
    const expires=new Date(Date.now()+30*60*1000).toISOString();
-   await db.prepare('INSERT INTO reward_application_previews(owner_uid,id,snapshot_json,expires_at) VALUES(?,?,?,?) ON CONFLICT(owner_uid) DO UPDATE SET id=excluded.id,snapshot_json=excluded.snapshot_json,expires_at=excluded.expires_at').bind(uid,id,JSON.stringify(snapshot),expires).run();
+   if(extended){
+    const gate=handSignTemplateGate(definition.template),referralGate=handSignReferralGate(referral,referrer);
+    const result=await db.prepare(`INSERT INTO reward_application_previews(owner_uid,id,snapshot_json,expires_at)
+     SELECT ?,?,?,? WHERE ${gate.sql} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?) AND ${referralGate.sql}
+     ON CONFLICT(owner_uid) DO UPDATE SET id=excluded.id,snapshot_json=excluded.snapshot_json,expires_at=excluded.expires_at`).bind(uid,id,JSON.stringify(snapshot),expires,...gate.args,uid,referrerRaw,...referralGate.args).run();
+    if(result.success===false)throw Error('preview unavailable');
+    if(!result.meta?.changes)fail('簽署範本或推薦資料已變更，請重新載入',409);
+   }else await db.prepare('INSERT INTO reward_application_previews(owner_uid,id,snapshot_json,expires_at) VALUES(?,?,?,?) ON CONFLICT(owner_uid) DO UPDATE SET id=excluded.id,snapshot_json=excluded.snapshot_json,expires_at=excluded.expires_at').bind(uid,id,JSON.stringify(snapshot),expires).run();
    return reply({success:true,preview_id:id,snapshot,expires_at:expires});
   }
   if(route==='/submit'){
@@ -111,10 +138,22 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
    if(old){if(old.owner_uid!==uid||old.request_json!==serialized)fail('此編號已送出不同內容，請重新開啟申請',409);return reply({success:true,application:view(old),replayed:true});}
    const draft=await db.prepare('SELECT * FROM reward_application_previews WHERE owner_uid=? AND id=? AND expires_at>?').bind(uid,signing.preview_id,now).first();
    if(!draft)fail('預覽已失效或資料已變更，請重新預覽並簽名',409);
-   const snapshot={...JSON.parse(draft.snapshot_json),signing,signer_uid:uid,signed_at:now};
+   const originalSnapshot=JSON.parse(draft.snapshot_json);
+   let extraSql='',extraArgs=[];
+   if(extended){
+    const currentTemplate=await readHandSignTemplate(authenticatedDb,kind),template=originalSnapshot.template;
+    if(originalSnapshot.form_kind!==kind||!template||JSON.stringify(template)!==JSON.stringify(currentTemplate.template)||originalSnapshot.referrer_uid!==(referrer||''))fail('簽署範本或推薦資料已變更，請重新預覽',409);
+    const gate=handSignTemplateGate(template);extraSql=` AND ${gate.sql} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?)`;extraArgs=[...gate.args,uid,referrerRaw];
+    if(kind==='partner'){
+     const referral=await handSignReferral(authenticatedDb,referrer);
+     if(JSON.stringify(publicHandSignReferral(referral))!==JSON.stringify(originalSnapshot.referral)||JSON.stringify(referral.proof)!==JSON.stringify(originalSnapshot.referral_proof))fail('推薦人姓名、會員編號或身分對應已變更，請重新預覽',409);
+     const referralGate=handSignReferralGate(referral,referrer);extraSql+=' AND '+referralGate.sql;extraArgs.push(...referralGate.args);
+    }
+   }
+   const snapshot={...originalSnapshot,signing,signer_uid:uid,signed_at:now};
    const json=JSON.stringify(snapshot),hash=await sha(json);
    const result=await db.prepare(`INSERT INTO reward_applications(id,owner_uid,unit_name,applicant_name,snapshot_json,request_json,content_sha256,signed_at)
-    SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM reward_application_previews WHERE owner_uid=? AND id=? AND expires_at>?) ON CONFLICT(id) DO NOTHING`).bind(signing.preview_id,uid,snapshot.fields.unit_name,snapshot.fields.applicant_name,json,serialized,hash,now,uid,signing.preview_id,now).run();
+    SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM reward_application_previews WHERE owner_uid=? AND id=? AND expires_at>?)${extraSql} ON CONFLICT(id) DO NOTHING`).bind(signing.preview_id,uid,snapshot.fields.unit_name,snapshot.fields.applicant_name,json,serialized,hash,now,uid,signing.preview_id,now,...extraArgs).run();
    if(result.success===false)throw Error('write unavailable');
    const saved=await record(db,signing.preview_id);if(!saved||saved.owner_uid!==uid||saved.request_json!==serialized)fail('申請內容已變更，請重新核對',409);
    return reply({success:true,application:view(saved),replayed:!(result.meta?.changes>0)});
@@ -122,15 +161,16 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
   keys(data,['id','decision','note']);
   if(!UUID.test(data.id||'')||!['accepted','rejected'].includes(data.decision)||typeof data.note!=='string'||!data.note.trim()||data.note.length>1000)fail('請選擇審核結果並填寫說明');
   if(!await record(db,data.id))fail('查無申請',404);
-  const authFields=['row_id','line_id','legacy_line_id','point_line_id','role'];
+  const authFields=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
+  const identityGate=reviewIdentityGate(identityProof);
   const result=await db.prepare(`INSERT INTO reward_application_reviews(application_id,reviewer_uid,decision,note,reviewed_at)
-    SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE ${authFields.map(k=>k+' IS ?').join(' AND ')}) ON CONFLICT(application_id) DO NOTHING`).bind(data.id,uid,data.decision,data.note.trim(),now,...authFields.map(k=>actor[k]??null)).run();
+    SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE ${authFields.map(k=>k+' IS ?').join(' AND ')}) AND ${identityGate.sql} ON CONFLICT(application_id) DO NOTHING`).bind(data.id,uid,data.decision,data.note.trim(),now,...authFields.map(k=>actor[k]??null),...identityGate.args).run();
   if(result.success===false)throw Error('review unavailable');
   const review=await db.prepare('SELECT * FROM reward_application_reviews WHERE application_id=?').bind(data.id).first();
   if(!review||review.reviewer_uid!==uid||review.decision!==data.decision||review.note!==data.note.trim())fail('審核狀態或管理員權限已變更，請重新載入',409);
   return reply({success:true,application:view(await record(db,data.id))});
  }catch(error){
   if(error instanceof ShopError||error instanceof DirectoryError)return reply({success:false,error:error.message},error.status||400);
-  console.error(JSON.stringify({event:discount?'discount_application_unavailable':'reward_application_unavailable'}));return reply({success:false,error:'申請服務暫時無法完成，請重試或重新開啟確認結果'},503);
+  console.error(JSON.stringify({event:kind+'_application_unavailable'}));return reply({success:false,error:'申請服務暫時無法完成，請重試或重新開啟確認結果'},503);
  }
 }

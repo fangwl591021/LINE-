@@ -8723,6 +8723,10 @@ export async function scoreMemberDirectoryBatch(env, actor, member, candidates) 
 // Thin bridge only; cashier, PointModule, identity and LINE reply ownership stay unchanged.
 export const storeCommercePointService = createCommercePointService(PointModule);
 
+// Reuse the existing protected administrator identities for contract-review notifications.
+export function getContractAdminNotificationIds() { return [...SecurityModule.hardAdminIds]; }
+export function getContractAdminNotificationNames() { return SecurityModule.hardAdminAccounts.flatMap(account => account.names); }
+
 export function storeInviteProfileView(row) {
   return D1ReadModule.userRow(row, 'store_invite');
 }

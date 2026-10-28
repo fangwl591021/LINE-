@@ -1,7 +1,17 @@
 // Dependency-free readable PDF export. Authoritative evidence remains the private server snapshot.
 export const fieldLabels={unit_name:'申請單位',applicant_name:'負責人／申請人',phone:'行動電話',line_contact:'LINE ID（選填）',unit_types:'單位類型',unit_types_other:'單位類型補充',recipients:'預計發送對象',recipients_other:'發送對象補充',scenarios:'預計使用情境',scenarios_other:'使用情境補充'};
 export const discountFieldLabels={unit_name:'店家／品牌／單位名稱',services:'主要商品／服務',business_types:'經營類型',business_types_other:'經營類型補充',applicant_name:'負責人／申請人',phone:'行動電話',line_contact:'LINE ID（選填）',assisted_partner:'協助申請之共好夥伴（申報資訊，非 CRM 歸屬）'};
-export const labelsFor=s=>s.form_kind==='discount'?discountFieldLabels:fieldLabels;
+export const partnerFieldLabels={unit_name:'乙方姓名／公司名稱',party_type:'簽約身分',representative_name:'代表人（公司／法人）',applicant_name:'簽署人姓名',phone:'行動電話',address:'聯絡地址',referrer_name:'CRM 推薦人姓名',referrer_member_number:'CRM 推薦人會員編號',bank_name:'銀行名稱',bank_code:'銀行代碼',bank_branch:'分行名稱',bank_account_holder:'獎金收款戶名',bank_account:'獎金收款帳號'};
+export const fullFieldLabels={unit_name:'公司／店家名稱',applicant_name:'負責人／申請人',address:'地址',services:'主要商品／服務',phone:'行動電話',line_contact:'LINE ID（選填）',assisted_partner:'協助申請之共好夥伴（申報資訊）'};
+const fallbackLabels={reward:fieldLabels,discount:discountFieldLabels,partner:partnerFieldLabels,full:fullFieldLabels};
+export function labelsFor(s){
+ const supplied=s?.field_labels;
+ const fallback=fallbackLabels[s?.form_kind]||fieldLabels;
+ return supplied&&typeof supplied==='object'&&!Array.isArray(supplied)?{...fallback,...Object.fromEntries(Object.entries(supplied).filter(([key,label])=>Object.hasOwn(s.fields||{},key)&&typeof label==='string'&&label.trim()&&label.length<=160))}:fallback;
+}
+export const displayFieldValue=(key,value)=>key==='party_type'?({natural_person:'自然人',company:'公司／行號／法人團體'}[value]||value):Array.isArray(value)?value.join('、'):value;
+export const sourceHashFor=s=>s?.template?.source_sha256||s?.terms?.source_sha256||s?.terms?.sourceSha256||s?.source_sha256||'';
+export const policyNotesFor=s=>Array.isArray(s?.terms?.clarifications)?s.terms.clarifications:Array.isArray(s?.terms?.policy_annotations)?s.terms.policy_annotations:Array.isArray(s?.policy_annotations)?s.policy_annotations:[];
 export function drawSignature(ctx,strokes,x=0,y=0,w=1000,h=400){
  ctx.save();ctx.translate(x,y);ctx.scale(w/1000,h/400);ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#122b35';
  for(const stroke of strokes){ctx.beginPath();stroke.forEach(([a,b],i)=>i?ctx.lineTo(a,b):ctx.moveTo(a,b));ctx.stroke();}ctx.restore();
@@ -26,9 +36,12 @@ export async function applicationPdf(record){
  const line=text=>{if(y>bottom)newPage();ctx.fillText(text,margin,y);y+=40;};
  const paragraph=text=>{let current='';for(const c of String(text)){if(c==='\n'||ctx.measureText(current+c).width>width-2*margin){line(current);current=c==='\n'?'':c;}else current+=c;}if(current)line(current);y+=12;};
  await document.fonts?.ready;newPage();const s=record.snapshot;
- paragraph(s.terms.title);paragraph('申請編號：'+record.id);
- for(const [key,label]of Object.entries(labelsFor(s))){const value=s.fields[key];if(value?.length)paragraph(label+'：'+(Array.isArray(value)?value.join('、'):value));}
+ paragraph(s.terms.title);paragraph('簽署申請編號：'+record.id);
+ for(const [key,label]of Object.entries(labelsFor(s))){const value=s.fields[key];if(value?.length)paragraph(label+'：'+displayFieldValue(key,value));}
+ if(policyNotesFor(s).length){paragraph('本次簽署的制度確認');for(const text of policyNotesFor(s))paragraph(text);}
  paragraph('合作條款（版本 '+s.terms.version+'）');for(const text of s.terms.paragraphs)paragraph(text);
+ if(sourceHashFor(s))paragraph('原始範本 SHA-256：'+sourceHashFor(s));
+ if(s.template?.content_sha256)paragraph('本次條款內容 SHA-256：'+s.template.content_sha256);
  paragraph('本次電子簽署確認');for(const text of Object.values(s.confirmations))paragraph('已確認：'+text);
  if(y+300>bottom)newPage();paragraph('申請人手寫簽名：'+s.fields.applicant_name);drawSignature(ctx,s.signing.strokes,margin,y,700,280);y+=300;
  paragraph('簽署時間（台灣）：'+new Date(record.signed_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}));
