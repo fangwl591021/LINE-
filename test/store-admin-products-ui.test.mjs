@@ -109,3 +109,20 @@ test('gift-only target cannot be given a product editor by an old catalog respon
   const f=await loaded({api:async()=>({success:true,shop:{id:ID,name:'贈點單位',version:1,product_limit:1,product_count:0,status:'active',owner_role:'reward',cooperation_plan:{canOnline:false}},products:[]})});
   assert.equal(f.form(),undefined);assert.match(f.text(),/沒有店家商品上架權限/);
 });
+
+test('new redemption product requires explicit channel and policy without assuming a discount amount',async()=>{
+  const f=await loaded({api:async()=>({success:true,shop:{id:ID,name:'折抵測試店',version:1,product_limit:1,product_count:0,status:'active',cooperation_plan:{id:'redeem',canOnline:true}},products:[]})});
+  fill(f);assert.equal(f.field('purchase_mode').value,'');assert.equal(f.field('redeem_type').value,'');assert.equal(f.field('redeem_value').disabled,true);
+  await f.form().fire('submit');assert.equal(f.uuidCount(),0);assert.match(f.text(),/明確選擇銷售方式/);
+  f.field('purchase_mode').value='online';f.field('shipping_fee').value='0';f.field('redeem_type').value='none';f.field('status').value='active';
+  await f.form().fire('submit');assert.equal(f.uuidCount(),0);assert.match(f.text(),/上架商品必須提供購物金折抵/);
+});
+
+test('redemption seller may explicitly keep an unconfigured draft or choose a positive policy for publication',async()=>{
+  for(const draft of [true,false]){
+    const sent=[],f=await loaded({api:async(_path,data)=>{if(data){sent.push(data);return {success:true,product_id:'created',shop_id:ID};}return {success:true,shop:{id:ID,name:'折抵測試店',version:1,product_limit:1,product_count:0,status:'active',owner_role:'redeem'},products:[]};}});
+    fill(f);f.field('purchase_mode').value='online';f.field('shipping_fee').value='60';f.field('redeem_type').value=draft?'none':'percent';f.field('status').value=draft?'draft':'active';
+    if(!draft){await f.field('redeem_type').fire('change');assert.equal(f.field('redeem_value').disabled,false);f.field('redeem_value').value='25';}
+    await f.form().fire('submit');assert.equal(sent.length,1);assert.equal(sent[0].purchase_mode,'online');assert.equal(sent[0].redeem_type,draft?'none':'percent');assert.equal(sent[0].redeem_value,draft?0:25);assert.equal(sent[0].shipping_fee_cents,6000);
+  }
+});

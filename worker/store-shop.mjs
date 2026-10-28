@@ -39,6 +39,11 @@ export function normalizeProduct(data) {
   if(['fixed','percent'].includes(type)&&value===0) fail('折抵上限必須大於 0');
   return {title:field(data,'title',100,true),description:field(data,'description',3000),image_url:imageUrl(data),price_cents:integer(data.price_cents,100000000,'價格'),redeem_type:type,redeem_value:value,status:choice(data.status,['draft','active','archived'],'商品狀態'),category:choice(data.category ?? '',categories,'商品分類'),purchase_mode:choice(data.purchase_mode===undefined?'in_store':data.purchase_mode,['in_store','online'],'銷售方式'),shipping_fee_cents:data.shipping_fee_cents==null?null:integer(data.shipping_fee_cents,1000000,'單件運費')};
 }
+// A free redemption merchant's published product must actually accept shopping money.
+// Drafts/archives and the full/admin plans retain their existing independent policies.
+export function requireProductRedemption(product,role){
+  if(storePlanForRole(role).id==='redeem'&&product.status==='active'&&product.redeem_type==='none')fail('折抵店家上架商品須設定購物金折抵政策；請選擇指定點數、百分比或全額折抵，或先存草稿');
+}
 // Numeric delivery metadata only: never publish, change content or bypass review.
 export function isShippingOnlyUpdate(value,previous){
   return !!previous&&previous.status!=='archived'&&value.shipping_fee_cents!==(previous.shipping_fee_cents??null)&&Object.entries(value).every(([key,v])=>key==='shipping_fee_cents'||v===previous[key]);
@@ -172,6 +177,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
         return reply(await management(db,shop,role));
       }
     }
+    requireProductRedemption(value,role);
     if(limit!==null&&value.status!=='archived'){
       const other=await db.prepare("SELECT count(*) AS total FROM store_shop_products WHERE shop_id=? AND id!=? AND status!='archived'").bind(shop.id,id).first();
       if(other.total>=limit)fail(`此合作方案最多 ${limit} 件商品（含草稿）；請先封存多餘商品後重試`,id?409:400);

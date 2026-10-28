@@ -24,6 +24,8 @@ const {buildSync}=require(process.env.LISTING_ESBUILD_MODULE);
   const shop=(await call({...input,name:'折抵展示公司',version:3,phone:'0223456789',address:'合成路1號'})).shop;
   const p={title:'折抵單位展示商品',description:'一般生活商品',price_cents:10000,redeem_type:'none',redeem_value:0,purchase_mode:'in_store',status:'draft',request_key:crypto.randomUUID()};
   const draft=await api('/product',p);assert.equal(draft.http,200,JSON.stringify(draft));assert.equal(draft.product_limit,1);
+  const unredeemable=await api('/product',{...draft.products[0],status:'active'});assert.equal(unredeemable.http,400);assert.match(unredeemable.error,/折抵政策/);
+  assert.equal((await db.prepare('SELECT status FROM store_shop_products WHERE id=?').bind(draft.products[0].id).first()).status,'draft');
   assert.equal((await api('/product',{...p,request_key:crypto.randomUUID()})).http,400);
   const online=await api('/product',{...draft.products[0],purchase_mode:'online',shipping_fee_cents:100,redeem_type:'percent',redeem_value:50});assert.equal(online.http,200,JSON.stringify(online));
   await db.exec('DELETE FROM store_listing_review_usage;');const published=await api('/product',{...online.products[0],status:'active'});assert.equal(published.http,200,JSON.stringify(published));

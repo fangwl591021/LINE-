@@ -12,11 +12,11 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
   const bar=make('nav'),back=make('button','← 返回店家列表'),refresh=make('button','重新載入'),add=make('button','新增商品／優惠');
   for(const button of [back,refresh,add])button.type='button';bar.append(back,refresh,add);
   const title=make('h2','商城管理'),message=make('p','讀取中…');message.setAttribute('role','status');message.setAttribute('aria-live','polite');
-  const note=make('p','與手機商城共用資料。草稿待確認不代表已送審；此處不變更會員權限、點數規則或收款設定。');
+  const note=make('p','與手機商城共用資料，可設定商品折抵方式與上限。草稿待確認不代表已送審；此處不變更會員權限、點數帳本、既有交易或收款設定。');
   const tabs=make('nav'),store=make('button','店家資料'),products=make('button','商品／優惠'),drafts=make('button','草稿待確認');
   for(const button of [store,products,drafts])button.type='button';tabs.append(store,products,drafts);
   const body=make('div');panel.append(bar,title,note,tabs,message,body);
-  let epoch=0,shop=null,onlineAllowed=false,mode=initialMode==='draft'?'draft':'products',cursor='',next='',busy=false,dirty=false;
+  let epoch=0,shop=null,onlineAllowed=false,cooperationPlan=null,mode=initialMode==='draft'?'draft':'products',cursor='',next='',busy=false,dirty=false;
   const lockNavigation=()=>{for(const button of [back,refresh,add,store,products,drafts])button.disabled=busy;};
   const ask=text=>doc.defaultView.confirm(text);
   const safeLeave=()=>!dirty||ask('尚有未儲存或待確認的資料，確定離開？');
@@ -78,11 +78,18 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       form.append(make('p','各商品獨立，單件運費 × 數量加總；不折抵、不套用舊店家滿額免運。不修改舊訂單。'));
       if(onlineAllowed){
         const purchaseMode=label('purchase_mode','銷售方式','select');
-        for(const [value,text]of [['in_store','限店內'],['online','網購']]){const option=make('option',text);option.value=value;purchaseMode.append(option);}
+        for(const [value,text]of [['in_store','店內消費折抵'],['online','線上購買與折抵']]){const option=make('option',text);option.value=value;purchaseMode.append(option);}
         purchaseMode.value=record.purchase_mode||'in_store';
+        const redeemType=label('redeem_type','購物金折抵方式','select');
+        for(const [value,text]of [['none',cooperationPlan?.id==='redeem'?'尚未設定折抵（僅限草稿）':'不折抵'],['fixed','最多折抵指定點數'],['percent','最高折抵商品金額百分比'],['full','可全額折抵']]){const option=make('option',text);option.value=value;redeemType.append(option);}
+        redeemType.value=record.redeem_type||'none';
+        const redeemValue=label('redeem_value','折抵上限（固定填點數／百分比填 1–100）','input',{type:'number',min:'0',max:'1000000',step:'1'});redeemValue.value=String(record.redeem_value||0);
+        const refreshRedeem=()=>{redeemValue.disabled=!['fixed','percent'].includes(redeemType.value);redeemValue.max=redeemType.value==='percent'?'100':'1000000';if(redeemValue.disabled)redeemValue.value='0';};
+        redeemType.addEventListener('change',refreshRedeem);refreshRedeem();
+        if(cooperationPlan?.id==='redeem')form.append(make('p','折抵店家上架商品必須提供購物金折抵；原設定'+(record.redeem_type==='none'?'尚未提供折抵':'已提供折抵')+'、'+(record.purchase_mode==='online'?'可網購':'限店內')+'。請自行確認銷售方式、折抵額度並儲存，不會自動替換舊設定。'));
         form.append(make('p','網購仍需店家完成收款設定，並以結帳查核為準；修改後請重新確認訂單。'));
       }else form.append(make('p','此帳號未具店家商品管理資格，請先核對合作方案。'));
-      form.append(make('p','原折抵政策保持不變；不修改既有訂單或發放點數。'));
+      form.append(make('p','商品折抵方式與上限儲存後才生效，不修改既有訂單、點數帳本或發放點數。'));
     }
     let manualConfirmation=null;
     if(type==='product'&&onlineAllowed&&record.manual_online_release?.reference){
@@ -98,17 +105,23 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
     let pending=null,finished=false;
     const saveLabel=()=>manualConfirmation?.checked?'確認人工放行網購':'確認儲存';
     form.oninput=()=>{dirty=true;if(!pending&&!finished)save.textContent=saveLabel();};
-    const lock=()=>{lockNavigation();for(const input of Object.values(fields))input.disabled=busy||!!pending||finished;if(manualConfirmation)manualConfirmation.disabled=busy||!!pending||finished;if(imageFile)imageFile.disabled=busy||!!pending||finished;cancel.disabled=busy;save.disabled=busy||finished;save.textContent=pending&&!finished?'重新確認同一筆儲存':saveLabel();};
+    const lock=()=>{lockNavigation();for(const input of Object.values(fields))input.disabled=busy||!!pending||finished;if(fields.redeem_value&&!busy&&!pending&&!finished)fields.redeem_value.disabled=!['fixed','percent'].includes(fields.redeem_type.value);if(manualConfirmation)manualConfirmation.disabled=busy||!!pending||finished;if(imageFile)imageFile.disabled=busy||!!pending||finished;cancel.disabled=busy;save.disabled=busy||finished;save.textContent=pending&&!finished?'重新確認同一筆儲存':saveLabel();};
     form.onsubmit=async event=>{
       event.preventDefault();event.stopPropagation();if(!active()||busy||finished)return;
       if(!pending){
-        const changes=Object.fromEntries(Object.entries(fields).filter(([key])=>!['price','shipping_fee'].includes(key)).map(([key,input])=>[key,input.value.trim()]));
+        const changes=Object.fromEntries(Object.entries(fields).filter(([key])=>!['price','shipping_fee','redeem_value'].includes(key)).map(([key,input])=>[key,input.value.trim()]));
         if(type==='product'){
           if(!/^\d+(?:\.\d{1,2})?$/.test(fields.price.value)||Number(fields.price.value)>1000000){message.textContent='請填寫有效售價';return;}
           const fee=fields.shipping_fee.value;
           if(fee!==''&&(!/^\d+(?:\.\d{1,2})?$/.test(fee)||Number(fee)>10000)){message.textContent='請填寫有效單件運費（0 至 10,000 元），0 表示免運';return;}
           changes.shipping_fee_cents=fee===''?null:Math.round(Number(fee)*100);
           changes.price_cents=Math.round(Number(fields.price.value)*100);
+          if(fields.redeem_type){
+            const type=fields.redeem_type.value,amount=['none','full'].includes(type)?0:Number(fields.redeem_value.value);
+            if(!['none','fixed','percent','full'].includes(type)||!Number.isSafeInteger(amount)||amount<0||amount>(type==='percent'?100:1000000)||(['fixed','percent'].includes(type)&&amount===0)){message.textContent='請填寫有效的購物金折抵方式與上限。';return;}
+            if(cooperationPlan?.id==='redeem'&&changes.status==='active'&&type==='none'){message.textContent='折抵店家上架商品必須提供購物金折抵；請設定折抵方式與上限，尚未設定請先存草稿。';return;}
+            changes.redeem_value=amount;
+          }
         }
         const manual=manualConfirmation?.checked===true;
         if(manual&&(changes.purchase_mode!=='online'||Object.entries(changes).some(([key,value])=>key!=='purchase_mode'&&value!==(key==='shipping_fee_cents'?(record[key]??null):(record[key]??''))))){message.textContent='單品人工放行只能切換網購，請還原其他欄位修改，價格、文案、圖片與狀態必須保持原值。';return;}
@@ -135,7 +148,7 @@ export async function mountAdminCatalog(container,{shopId,api,isCurrent,onBack,o
       const result=await api('/admin/catalog?'+params,null,true);
       if(!active()||sequence!==epoch)return;
       if(!result?.success||result.shop?.id!==shopId||!Array.isArray(result.products))throw new Error('商城回傳格式不正確');
-      shop=result.shop;onlineAllowed=result.online_product_allowed===true;cursor=after;next=result.next||'';title.textContent=shop.name+'｜商城管理';add.disabled=false;
+      shop=result.shop;onlineAllowed=result.online_product_allowed===true;cooperationPlan=result.cooperation_plan||shop.cooperation_plan||null;cursor=after;next=result.next||'';title.textContent=shop.name+'｜商城管理';add.disabled=false;
       for(const [button,key]of [[store,'store'],[products,'products'],[drafts,'draft']])button.setAttribute('aria-pressed',String(mode===key));
       message.textContent=`店面：${statusName(shop.status)} · 商品 ${result.summary.total} 件 · 草稿 ${result.summary.draft} 件。`;
       if(mode==='store'){editor('store',shop);return;}

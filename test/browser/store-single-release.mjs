@@ -29,6 +29,9 @@ try{
   await page.locator('[name=title]').fill('不應變更的商品');await page.getByRole('button',{name:'確認人工放行網購',exact:true}).click();
   await page.getByRole('status').filter({hasText:'請還原其他欄位修改'}).waitFor();assert.equal(writes.length,0);
   await page.locator('[name=title]').fill('光動能按摩機');
+  await page.locator('[name=redeem_value]').fill('40');await page.getByRole('button',{name:'確認人工放行網購',exact:true}).click();
+  await page.getByRole('status').filter({hasText:'請還原其他欄位修改'}).waitFor();assert.equal(writes.length,0);
+  await page.locator('[name=redeem_value]').fill('50');
   await page.screenshot({path:join(out,`approval-${width}.png`),fullPage:true});
   await page.getByRole('button',{name:'確認人工放行網購',exact:true}).click();await page.getByRole('button',{name:'重新確認同一筆儲存'}).waitFor();
   assert.equal(await page.locator('[name=manual_release_confirm]').isEnabled(),false);

@@ -1,5 +1,5 @@
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
-import {normalizeProduct,readJson,ShopError} from './store-shop.mjs';
+import {normalizeProduct,requireProductRedemption,readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 import {RETAIL_ROLES,storePlanForRole,productQuotaSql} from '../js/modules/store-cooperation-plans.mjs';
 
@@ -58,6 +58,7 @@ export async function handleStoreAdminProducts(request,env,profileMapper,fetcher
     if(!['draft','active'].includes(product.status))fail('INVALID_STATUS','新商品只能存草稿或上架');
     const payload=JSON.stringify(product),prior=await existing(db,shop,data.request_key,uid,payload);
     if(prior)return reply(prior);
+    requireProductRedemption(product,shop.owner_role);
     if(shop.version!==data.shop_version)fail('STORE_CHANGED','店家資料已變更，請返回列表重新確認',409);
     if(shop.product_limit!==null&&shop.product_count>=shop.product_limit)fail('PRODUCT_LIMIT','此店家已達商品件數上限',409);
     await requireListingReview({value:product,parent:shop,scope:'product:'+shop.id+':'+data.request_key,uid,env,fetcher});

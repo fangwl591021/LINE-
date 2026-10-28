@@ -82,6 +82,16 @@ test('redeem target keeps one-product limit while online and redemption are perm
   assert.equal(f.sql.prepare('SELECT redeem_value FROM store_shop_products').get().redeem_value,10);
 });
 
+for(const role of ['redeem','扣點用戶'])test('administrator must choose a redemption policy before publishing for '+role,async t=>{
+ const f=fixture();t.after(()=>f.sql.close());f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,MEMBER);
+ const none=product({shop_id:id(2),purchase_mode:'online',status:'active',shipping_fee_cents:0});
+ const rejected=await f.call(none);assert.equal(rejected.status,400);assert.match(rejected.error,/折抵政策/);
+ assert.equal(f.count('store_shop_products'),0);assert.equal(f.count('store_admin_product_audit'),0);
+ const draft=await f.call({...none,status:'draft'});assert.equal(draft.status,200);assert.equal((await f.call({...none,status:'draft'})).replayed,true);
+ assert.equal(f.sql.prepare('SELECT status,redeem_type FROM store_shop_products').get().status,'draft');
+ assert.equal(f.count('store_admin_product_audit'),1);
+});
+
 for(const role of ['user','reward','贈點用戶'])test('administrator cannot grant retail product rights to '+role,async t=>{
   const f=fixture();t.after(()=>f.sql.close());f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,MEMBER);
   assert.equal((await f.call(null,ADMIN,'shop='+id(2))).status,403);

@@ -112,7 +112,7 @@ test('failed write rolls back audit and hides internal errors',async t=>{
 });
 test('strict fields, cross-shop ids, bounds and archived restoration rejected',async t=>{
   const f=fixture();t.after(()=>f.sql.close());
-  for(const changes of [{owner_uid:ADMIN},{redeem_type:'full'},{redeem_value:100},{purchase_mode:'invalid'},{price_cents:-1},{image_url:'javascript:alert(1)'},{status:'approved'},{description:'a'.repeat(3001)}])assert.equal((await f.call(payload({changes}))).http,400);
+  for(const changes of [{owner_uid:ADMIN},{redeem_type:'full',redeem_value:1},{redeem_value:-1},{purchase_mode:'invalid'},{price_cents:-1},{image_url:'javascript:alert(1)'},{status:'approved'},{description:'a'.repeat(3001)}])assert.equal((await f.call(payload({changes}))).http,400);
   assert.equal((await f.call(payload({id:id(11)}))).http,404);
   assert.equal((await f.call(payload({shop_id:id(3)}))).http,403);
   assert.equal((await f.call('x'.repeat(17000))).http,413);
@@ -120,7 +120,7 @@ test('strict fields, cross-shop ids, bounds and archived restoration rejected',a
   assert.equal((await f.call(payload({version:2,request_key:id(98),changes:{status:'active'}}))).http,409);
 });
 test('redeem product capacity survives administrator editing',async t=>{
-  const f=fixture();t.after(()=>f.sql.close());const data=payload({shop_id:id(2),id:id(11)});
+  const f=fixture();t.after(()=>f.sql.close());const data=payload({shop_id:id(2),id:id(11),changes:{title:'更新商品',status:'active',redeem_type:'fixed',redeem_value:10}});
   f.sql.prepare("INSERT INTO store_shop_products(id,shop_id,title,price_cents,updated_at,request_key) VALUES(?,?,'另一件',100,'now',?)").run(id(12),id(2),id(12));
   assert.equal((await f.call(data)).http,409);
   assert.equal((await f.call({...data,changes:{status:'archived'}})).http,200);
@@ -149,6 +149,44 @@ test('redeem owners can enable online and retain their existing redemption polic
   const data=payload({shop_id:id(2),id:id(11),changes:{purchase_mode:'online',status:'active'}});
   assert.equal((await f.call(data)).http,200);
   const saved=f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(11));assert.equal(saved.purchase_mode,'online');assert.equal(saved.redeem_value,50);
+});
+
+test('administrator explicitly replaces a legacy none policy while enabling redeem online with one audited version',async t=>{
+ const f=fixture();t.after(()=>f.sql.close());const users=JSON.stringify(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all());
+ const before=f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(11));assert.equal(before.redeem_type,'none');
+ const data=payload({shop_id:id(2),id:id(11),changes:{purchase_mode:'online',status:'active',redeem_type:'percent',redeem_value:25}});
+ const result=await f.call(data);assert.equal(result.http,200);assert.equal(result.version,2);
+ const saved=f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(11));
+ assert.equal(saved.purchase_mode,'online');assert.equal(saved.redeem_type,'percent');assert.equal(saved.redeem_value,25);
+ assert.equal(saved.price_cents,before.price_cents);assert.equal(saved.shop_id,before.shop_id);
+ assert.equal(f.audit().length,1);assert.equal(JSON.parse(f.audit()[0].before_json).redeem_type,'none');assert.equal(JSON.parse(f.audit()[0].after_json).redeem_value,25);
+ assert.equal((await f.call(data)).replayed,true);assert.equal(f.audit().length,1);
+ const publicResponse=await handleStoreShop(new Request('https://test.invalid/v1/store-shop?shop='+id(2)),{ACTMASTER_DB:f.db},f.fetcher);
+ const visible=(await publicResponse.json()).products[0];assert.equal(visible.purchase_mode,'online');assert.equal(visible.redeem_value,25);
+ assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all()),users);
+ const rename=await f.call({...data,version:2,request_key:id(98),changes:{title:'保留新折抵政策'}});assert.equal(rename.http,200);
+ assert.equal(f.sql.prepare('SELECT redeem_value FROM store_shop_products WHERE id=?').get(id(11)).redeem_value,25,'omitted policy preserves latest saved value');
+});
+
+test('administrator may store a redeem none draft but cannot publish it or silently choose a ratio',async t=>{
+ const f=fixture();t.after(()=>f.sql.close());
+ const edit=(changes,extra={})=>payload({shop_id:id(2),id:id(11),changes,...extra});
+ const before=JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(11)));
+ assert.equal((await f.call(edit({status:'active'}))).http,400);assert.equal(f.audit().length,0);
+ assert.equal(JSON.stringify(f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(11))),before);
+ assert.equal((await f.call(edit({status:'draft'}))).http,200);
+ for(const [index,changes] of [{status:'active'},{status:'active',redeem_type:'fixed',redeem_value:0},{status:'active',redeem_type:'percent',redeem_value:0},{status:'active',redeem_type:'percent',redeem_value:101}].entries()){
+  assert.equal((await f.call(edit(changes,{version:2,request_key:id(90+index)}))).http,400);
+ }
+ assert.equal(f.audit().length,1);assert.equal(f.sql.prepare('SELECT status FROM store_shop_products WHERE id=?').get(id(11)).status,'draft');
+ assert.equal((await f.call(edit({status:'active',redeem_type:'full',redeem_value:0},{version:2,request_key:id(89)}))).http,200);
+});
+
+test('policy editing retains owner-role and version race checks and never invokes point changes',async t=>{
+ const f=fixture();t.after(()=>f.sql.close());const before=f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(11));
+ f.before(()=>f.sql.prepare("UPDATE users SET role='reward' WHERE line_id=?").run(MEMBER));
+ assert.equal((await f.call(payload({shop_id:id(2),id:id(11),changes:{redeem_type:'fixed',redeem_value:10,status:'active'}}))).http,409);
+ assert.deepEqual(f.sql.prepare('SELECT * FROM store_shop_products WHERE id=?').get(id(11)),before);assert.equal(f.audit().length,0);
 });
 for(const role of ['user','reward','贈點用戶'])test(role+' cannot receive retail catalog edits through administrator',async t=>{
   const f=fixture();t.after(()=>f.sql.close());f.sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,MEMBER);

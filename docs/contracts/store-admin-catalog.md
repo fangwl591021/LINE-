@@ -15,11 +15,11 @@
 - 參照福委會管理分區，不搬資料或帳號。現行 admin.html 提供商城管理入口，與手機共用 catalog 模組及 store_shop_*；舊 admin-v2.html 不在本次範圍。
 - 沿用合作店家、管理員目錄與新增商品，不更動原會員店家管理 API。
 - 獨立 /v1/store-shop/admin/catalog GET 查單店及游標分頁商品；POST 更新既有店家／商品的展示欄位與狀態。
-- 所有讀寫需經 authorizeStoreAdmin，非管理員不得跨店。請求不得指定 owner、role、點數規則、支付／訂單欄位。
+- 所有讀寫需經 authorizeStoreAdmin，非管理員不得跨店。請求不得指定owner、role、點數帳本、支付／訂單欄位。2026-10-28使用者要求補齊折抵商品設定：可修改商品redeem_type／redeem_value折抵上限，須經原正規化、目標方案、AI審核、版本及audit，不代表發出扣點交易。
 - 草稿待確認是現有 draft 篩選，不宣稱草稿已送審，不新增所有店家強制審核門檻。
 - 合作店家未綁帳號仍沿用 partner 編輯器，不替其偽造註冊或建立商品。
 - 店面只允許 draft / active。商品只允許 draft / active / archived；封存保留歷史，管理員此入口不恢復封存品。
-- CAS 比較店面／商品版本，寫入時再核對管理員與店家角色快照。2026-10-19 使用者要求：允許管理員修改合資格店家既有商品的 purchase_mode（in_store / online），GET 只提供 online_product_allowed 能力布林，不新增身份資訊；一般會員仍一件、店內、不折抵，不能以封存繞過新設網購限制。未指定銷售方式的舊請求保留原值；redeem_type、redeem_value 仍保留且拒絕由此入口修改。
+- CAS比較店面／商品版本，寫入時再核對管理員與店家角色快照。合資格店家既有商品可修改purchase_mode（in_store／online）及商品折抵上限；未指定欄位保留原值。依現行方案，折抵店家僅一項且上架須正向折抵政策，完整版20項；一般會員無賣家資格，不可藉封存繞過資格。早期禁止從此入口調整redeem_type／redeem_value的限制由本次補充取代；原點數帳本與交易不受此編輯入口影響。
 - 0045 僅新增商城操作稽核表。request_key 唯一；payload 與操作者一致重試回原成功，異動 key 使用衝突回 409。
 - 快照稽核 INSERT 與 version+1 UPDATE 同一原子 batch；沒有稽核或任一 SQL 失敗不得更新。
 - 修改後公開目錄依原有 active／角色規則顯示，手機管理讀到同一 version。不呼叫收銀或點數服務，不異動舊訂單快照。
