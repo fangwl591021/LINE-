@@ -26,11 +26,11 @@ async function loadAdminMall(){
       }});
   }
   async function drafts(){
-    const module=await import('./store-admin-catalog.js?v=8');if(!current())return;
+    const module=await import('./store-admin-catalog.js?v=9');if(!current())return;
     await module.mountAdminDrafts(container,{api,isCurrent:current,onBack:directory,onManageCatalog:id=>catalog(id,'draft')});
   }
   async function catalog(shopId,initialMode='products'){
-    const module=await import('./store-admin-catalog.js?v=8');if(!current())return;
+    const module=await import('./store-admin-catalog.js?v=9');if(!current())return;
     await module.mountAdminCatalog(container,{shopId,initialMode,api,isCurrent:current,onBack:directory,onUploadProducts:upload,prepareImage:prepareAdminMallImage,
       uploadImage:async base64Image=>{
         await api('/admin/catalog?shop='+encodeURIComponent(shopId));
@@ -39,7 +39,7 @@ async function loadAdminMall(){
       }});
   }
   async function upload(shopId){
-    const module=await import('./store-admin-products.js?v=4');if(!current())return;
+    const module=await import('./store-admin-products.js?v=5');if(!current())return;
     await module.mountAdminProducts(container,{shopId,api,isCurrent:current,onBack:()=>catalog(shopId),prepareImage:prepareAdminMallImage,
       uploadImage:async base64Image=>{
         await api('/admin/products?shop='+encodeURIComponent(shopId));

@@ -1,6 +1,6 @@
 // Shared admin/mobile catalog editing. No identity, payment, reward or order mutations.
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
-import {normalizeStore,normalizeProduct,isShippingOnlyUpdate,readJson,ShopError} from './store-shop.mjs';
+import {normalizeStore,normalizeProduct,requireProductRedemption,isShippingOnlyUpdate,readJson,ShopError} from './store-shop.mjs';
 import {requireListingReview,ListingReviewError,listingReviewFailure} from './store-listing-review.mjs';
 import {manualOnlineReleaseOffer,manualReleaseConsent,verifySingleProductRelease} from './store-single-product-release.mjs';
 import {RETAIL_ROLES,storePlanForRole,retailRoleSql,productQuotaSql} from '../js/modules/store-cooperation-plans.mjs';
@@ -8,7 +8,7 @@ const PATH='/v1/store-shop/admin/catalog';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ROLES=RETAIL_ROLES;
 const STORE=['name','description','category','address','phone','hours','image_url','status'];
-const PRODUCT=['title','description','category','image_url','price_cents','status','purchase_mode','shipping_fee_cents'];
+const PRODUCT=['title','description','category','image_url','price_cents','status','purchase_mode','shipping_fee_cents','redeem_type','redeem_value'];
 const ACTOR=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
 const PRODUCT_SELECT='id,shop_id,title,description,category,image_url,price_cents,status,version,purchase_mode,redeem_type,redeem_value,shipping_fee_cents,updated_at';
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
@@ -64,7 +64,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     if(Object.keys(data).some(key=>!['type','id','shop_id','version','shop_version','request_key','changes','manual_release'].includes(key))||!['store','product'].includes(data.type)||!validId(data.id)||!validId(data.shop_id)||!validId(data.request_key))fail('INVALID_REQUEST','商城儲存資料不正確');
     if(!Number.isSafeInteger(data.version)||data.version<1||data.version>1e9||!Number.isSafeInteger(data.shop_version)||data.shop_version<1||data.shop_version>1e9)fail('INVALID_VERSION','請重新載入後再修改');
     const fields=data.type==='store'?STORE:PRODUCT,changes=data.changes;
-    if(!changes||typeof changes!=='object'||Array.isArray(changes)||!Object.keys(changes).length||Object.keys(changes).some(key=>!fields.includes(key)))fail('INVALID_FIELD','僅能修改商城展示欄位，不得變更歸屬或點數規則');
+    if(!changes||typeof changes!=='object'||Array.isArray(changes)||!Object.keys(changes).length||Object.keys(changes).some(key=>!fields.includes(key)))fail('INVALID_FIELD','僅能修改商城展示及商品折抵設定，不得變更歸屬、會員點數或訂單');
     const sorted=Object.fromEntries(fields.filter(key=>Object.hasOwn(changes,key)).map(key=>[key,changes[key]]));
     const release=Object.hasOwn(data,'manual_release')?manualReleaseConsent(data.manual_release):null;
     const payload=JSON.stringify({type:data.type,id:data.id,shop_id:data.shop_id,version:data.version,shop_version:data.shop_version,changes:sorted,...(release?{manual_release:release}:{})});
@@ -74,6 +74,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
     if(!original||original.id!==data.id)fail('NOT_FOUND','查無此店家的商品／店面',404);
     if(original.version!==data.version||shop.version!==data.shop_version||original.status==='archived')fail('VERSION_CONFLICT','資料已更新或封存，請重新載入後再修改',409);
     const normalized=data.type==='store'?normalizeStore({...original,...changes}):normalizeProduct({...original,...changes});
+    if(data.type==='product')requireProductRedemption(normalized,shop.owner_role);
     const updated=Object.fromEntries(fields.map(key=>[key,normalized[key]]));
     const releaseProof=release?await releaseVerifier({data,original,shop,db,fetcher}):null;
     if(!release&&!(data.type==='product'&&isShippingOnlyUpdate(normalized,original)))await requireListingReview({value:normalized,parent:data.type==='product'?shop:null,scope:data.type==='store'?'store:'+shop.owner_uid:'product:'+shop.id+':'+data.id,uid,env,fetcher});
@@ -90,7 +91,7 @@ export async function handleStoreAdminCatalog(request,env,profileMapper,fetcher=
       }
     }
     if(releaseProof){
-      const pinned=[...PRODUCT,'redeem_type','redeem_value'];
+      const pinned=PRODUCT;
       gate+=` AND ${pinned.map(key=>'t.'+key+' IS ?').join(' AND ')} AND EXISTS(SELECT 1 FROM store_listing_reviews r WHERE r.scope=? AND r.content_hash=? AND r.policy_version=? AND r.decision='manual' AND r.review_json=?)`;
       args.push(...pinned.map(key=>original[key]),releaseProof.scope,releaseProof.hash,releaseProof.policy,releaseProof.reviewJson);
     }

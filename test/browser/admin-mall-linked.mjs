@@ -63,7 +63,7 @@ try{
   await page.getByRole('button',{name:'重新確認同一筆儲存',exact:true}).click();await page.getByRole('status').filter({hasText:'已儲存'}).waitFor();
   assert.equal(writes.length,2);assert.deepEqual(writes[0],writes[1]);
   assert.equal(writes[0].changes.image_url,'https://localhost/test-image.png');assert.equal('image_file' in writes[0].changes,false);
-  assert.equal(writes[0].changes.purchase_mode,'online');assert.equal('redeem_type' in writes[0].changes,false);assert.equal('redeem_value' in writes[0].changes,false);
+  assert.equal(writes[0].changes.purchase_mode,'online');assert.equal(writes[0].changes.redeem_type,'percent');assert.equal(writes[0].changes.redeem_value,50);
   assert.equal(product.redeem_type,'percent');assert.equal(product.redeem_value,50);
   await page.getByRole('button',{name:'重新載入',exact:true}).click();await page.getByText('目前沒有待確認的商品草稿。').waitFor();
   await page.getByRole('button',{name:'商品／優惠',exact:true}).click();await page.getByRole('button',{name:'編輯／上下架',exact:true}).waitFor();
@@ -80,7 +80,7 @@ try{
   }
   for(const capability of [false,undefined]){
     onlineAllowed=capability;await page.getByRole('button',{name:'商品／優惠',exact:true}).click();await page.getByRole('button',{name:'編輯／上下架',exact:true}).click();
-    assert.equal(await page.locator('select[name=purchase_mode]').count(),0);await page.getByText('此店家未具網購資格；銷售方式保持原值，一般會員限店內展示。',{exact:true}).waitFor();
+    assert.equal(await page.locator('select[name=purchase_mode]').count(),0);await page.getByText('此帳號未具店家商品管理資格，請先核對合作方案。',{exact:true}).waitFor();
   }
   await page.getByRole('button',{name:'新增商品／優惠',exact:true}).click();await page.locator('[data-admin-product-form]').waitFor();
   await page.getByRole('button',{name:'← 返回店家列表',exact:true}).click();await page.getByRole('button',{name:'商品／優惠',exact:true}).waitFor();

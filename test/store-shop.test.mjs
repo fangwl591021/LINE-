@@ -25,9 +25,40 @@ for(const role of ['redeem','扣點用戶'])test(role+' concurrent inserts canno
  const {call,sql}=fixture();try{
   sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,USER);
   await call('/store',store(),'c');
-  const results=await Promise.all([1,2].map(i=>call('/product',product({title:'商品'+i,redeem_type:'none',redeem_value:0}),'c')));
+  const results=await Promise.all([1,2].map(i=>call('/product',product({title:'商品'+i,redeem_type:'none',redeem_value:0,status:'draft'}),'c')));
   assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);
   assert.equal(sql.prepare("SELECT count(*) n FROM store_shop_products WHERE status!='archived'").get().n,1);
+ }finally{sql.close();}
+});
+
+for(const role of ['redeem','扣點用戶','REDEEM'])test(role+' permits an undecided draft but requires an explicit positive policy before publication',async()=>{
+ const {call,sql}=fixture();try{
+  sql.prepare('UPDATE users SET role=? WHERE line_id=?').run(role,USER);
+  const storeResult=await call('/store',store(),'c');
+  const none=product({redeem_type:'none',redeem_value:0,purchase_mode:'online',shipping_fee_cents:0});
+  assert.equal((await call('/product',none,'c')).status,400);assert.equal(sql.prepare('SELECT count(*) n FROM store_shop_products').get().n,0);
+  const draft=await call('/product',{...none,status:'draft'},'c');assert.equal(draft.status,200);assert.equal(draft.products[0].redeem_type,'none');
+  assert.equal((await call('?shop='+storeResult.shop.id)).products.length,0);
+  const blocked=await call('/product',{...draft.products[0],status:'active'},'c');assert.equal(blocked.status,400);assert.match(blocked.error,/折抵政策/);
+  const published=await call('/product',{...draft.products[0],status:'active',redeem_type:'percent',redeem_value:25},'c');assert.equal(published.status,200);
+  const visible=(await call('?shop='+storeResult.shop.id)).products[0];assert.equal(visible.purchase_mode,'online');assert.equal(visible.redeem_type,'percent');assert.equal(visible.redeem_value,25);
+  assert.equal((await call('/product',{...published.products[0],redeem_type:'none',redeem_value:0},'c')).status,400);
+  assert.equal(sql.prepare('SELECT redeem_value FROM store_shop_products').get().redeem_value,25);
+  assert.equal((await call('/product',{...published.products[0],status:'archived',redeem_type:'none',redeem_value:0},'c')).status,200);
+  assert.equal(sql.prepare('SELECT role FROM users WHERE line_id=?').get(USER).role,role);
+ }finally{sql.close();}
+});
+
+test('legacy active nonredeeming products are read unchanged and need explicit policy or draft when edited',async()=>{
+ const {call,sql}=fixture();try{
+  const s=await call('/store',store(),'a'),p=await call('/product',product({redeem_type:'none',redeem_value:0}),'a');
+  sql.prepare("UPDATE users SET role='redeem' WHERE line_id=?").run(A);
+  const before=JSON.stringify(sql.prepare('SELECT * FROM store_shop_products').get());
+  assert.equal((await call('/manage',null,'a')).products[0].redeem_type,'none');assert.equal((await call('?shop='+s.shop.id)).products[0].redeem_type,'none');
+  assert.equal(JSON.stringify(sql.prepare('SELECT * FROM store_shop_products').get()),before);
+  assert.equal((await call('/product',{...p.products[0],title:'未設定折抵'},'a')).status,400);
+  assert.equal(JSON.stringify(sql.prepare('SELECT * FROM store_shop_products').get()),before);
+  assert.equal((await call('/product',{...p.products[0],status:'draft'},'a')).status,200);
  }finally{sql.close();}
 });
 
@@ -152,7 +183,7 @@ test('company introduction, phone, address and one product persist through the e
   const company={name:'合成品牌有限公司',description:'提供手作禮盒與包裝設計服務。',phone:'02-2345-6789',address:'台北市合成路 1 號'};
   const saved=await call('/store',store(company),'c');assert.equal(saved.status,200);
   for(const [key,value]of Object.entries(company))assert.equal((await call('/manage',null,'c')).shop[key],value);
-  const item=product({title:'手作禮盒',redeem_type:'none',redeem_value:0});assert.equal((await call('/product',item,'c')).status,200);
+  const item=product({title:'手作禮盒',redeem_type:'percent',redeem_value:10});assert.equal((await call('/product',item,'c')).status,200);
   assert.equal((await call('/product',{...item,request_key:crypto.randomUUID()},'c')).status,400);
   assert.equal((await call('/store',{...store(company),version:saved.shop.version})).status,401);
   const before=sql.prepare('SELECT total_changes() n').get().n;

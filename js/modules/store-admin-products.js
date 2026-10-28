@@ -20,6 +20,7 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
     if(report?.success!==true||report.shop?.id!==shopId||!Number.isSafeInteger(report.shop.version)||!Array.isArray(report.products))throw new Error('店家回傳資料不完整');
   }catch(error){if(active())status.textContent=error.message||'無法確認店家，請返回列表重試';return;}
   const shop=report.shop,limit=shop.product_limit,canOnline=shop.cooperation_plan?shop.cooperation_plan.canOnline===true:['store','店長','admin','總管','redeem','扣點用戶'].includes(String(shop.owner_role||'').toLowerCase());
+  const redeemTarget=(shop.cooperation_plan||report.cooperation_plan)?.id==='redeem'||['redeem','扣點用戶'].includes(String(shop.owner_role||'').trim().toLowerCase());
   title.textContent='代上傳商品｜'+shop.name;
   panel.append(make('p','負責人：'+(shop.owner_name||'未填姓名')+'。新商品歸此店家，店家之後可自行維護。'));
   panel.append(make('p','本次新增前商品 '+shop.product_count+' 件'+(limit===null?'／管理員不設上限':'／上限 '+limit+' 件')+'。'+(shop.status==='draft'?'此店面仍為草稿，商品上架也不會自動公開店面。':'')));
@@ -50,12 +51,13 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
   const picker=field('image_file','商品圖片（JPG／PNG／WebP，最大 10 MB）','input',{type:'file',accept:'image/jpeg,image/png,image/webp'});
   const preview=make('img');preview.alt='商品圖片預覽';preview.hidden=true;form.append(preview);
   form.append(make('p','圖片會上傳為公開素材；請勿上傳個資或無權使用的圖片。'));
-  select('purchase_mode','銷售方式',[['in_store','店內購買'],['online','網路選購']]);
+  select('purchase_mode','銷售方式',[...(redeemTarget?[['','請選擇銷售方式'],['in_store','店內消費折抵']]:[['in_store','店內購買']]),['online',redeemTarget?'線上購買與折抵':'網路選購']]).required=true;
   form.append(make('p','折抵店家與雙向完整版均可設定網購及購物金折抵。網購使用本商品運費與店家收款設定；尚未完成收款設定或交易未開放時，上架不代表顧客可下單。'));
-  select('redeem_type','折抵規則',[['none','不折抵'],['fixed','固定點數上限'],['percent','百分比上限'],['full','全額上限']]);
+  select('redeem_type','折抵規則',[...(redeemTarget?[['','請選擇折抵方式']]:[]),['none',redeemTarget?'尚未設定折抵（僅限草稿）':'不折抵'],['fixed','固定點數上限'],['percent','百分比上限'],['full','全額上限']]).required=true;
+  if(redeemTarget)form.append(make('p','折抵店家上架商品必須提供購物金折抵。請自行選擇方式與上限；尚未設定只能存草稿，不會替店家決定比例。'));
   const value=field('redeem_value','折抵上限（固定填點數／百分比填 1–100）','input',{type:'number',min:'0',max:'1000000',step:'1',value:'0'});
   value.disabled=true;
-  fields.redeem_type.addEventListener('change',()=>{value.disabled=['none','full'].includes(fields.redeem_type.value);if(value.disabled)value.value='0';});
+  fields.redeem_type.addEventListener('change',()=>{value.disabled=!['fixed','percent'].includes(fields.redeem_type.value);if(value.disabled)value.value='0';});
   select('status','建立後狀態',[['draft','先存草稿'],['active','立即上架']]);
   form.append(make('p','上架需經平台 AI 審核文案與圖片。八大行業、詐騙、菸酒、醫療用品、犯罪、色情與賭博禁止上架；疑似或服務未完成不公開，可先存草稿。'));
   const confirm=field('confirm','我已確認資料與目標店家：'+shop.name,'input',{type:'checkbox',required:true});
@@ -65,7 +67,7 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
   let busy=false,imageUrl='',pending=null,complete=false;
   function lock(){
     for(const input of Object.values(fields))input.disabled=busy||!!pending||complete;
-    if(!busy&&!pending&&!complete)value.disabled=['none','full'].includes(fields.redeem_type.value);
+    if(!busy&&!pending&&!complete)value.disabled=!['fixed','percent'].includes(fields.redeem_type.value);
     save.disabled=busy||complete;save.textContent=pending&&!complete?'重試同一筆新增':'確認新增商品';
   }
   lock();
@@ -86,6 +88,8 @@ export async function mountAdminProducts(container,{shopId,api,isCurrent,onBack,
     if(!pending){
       const price=fields.price.value.trim();
       const fee=fields.shipping_fee.value.trim();
+      if(!['in_store','online'].includes(fields.purchase_mode.value)||!['none','fixed','percent','full'].includes(fields.redeem_type.value)){status.textContent='請明確選擇銷售方式與購物金折抵方式。';return;}
+      if(redeemTarget&&fields.status.value==='active'&&fields.redeem_type.value==='none'){status.textContent='折抵店家上架商品必須提供購物金折抵，請設定折抵方式與上限；尚未設定請先存草稿。';return;}
       if((fields.purchase_mode.value==='online'&&fee==='')||(fee!==''&&(!/^\d+(?:\.\d{1,2})?$/.test(fee)||Number(fee)>10000))){status.textContent='請填寫有效單件運費（0 至 10,000 元），0 表示免運。';return;}
       if(!confirm.checked||!fields.title.value.trim()||!fields.category.value||!/^\d+(?:\.\d{1,2})?$/.test(price)||Number(price)>1000000){status.textContent='請確認店家並完整填寫名稱、分類與有效售價。';return;}
       const type=fields.redeem_type.value,amount=['none','full'].includes(type)?0:Number(value.value);
