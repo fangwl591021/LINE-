@@ -8,6 +8,7 @@
 - Review accepts or rejects once; concurrent review cannot overwrite. Review never grants roles, awards points or publishes the unit.
 - UI has visible close/back, account/lifecycle guards and stable retry payloads. PDF is a client-rendered copy of the immutable server snapshot, not a client-uploaded authoritative document.
 - Tests: auth/ownership/admin denial, expiry, idempotency, invalid input/strokes, review concurrency, mobile signing and full PDF rendering.
+- Member settings offer a visible 「合作申請」 button beside the registration section. The homepage member avatar opens that section with the button in view; it opens the same four-kind personal signing UI as the mall, with the current page, LINE token and user snapshot guarding asynchronous loading and dialog lifetime. Existing authentication and registered-member checks still apply.
 
 ## Discount-store application (2026-10-23)
 
