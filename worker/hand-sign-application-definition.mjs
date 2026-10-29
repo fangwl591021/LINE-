@@ -4,9 +4,11 @@ import {resolveIslandMember,IslandAccessError} from './island-interaction-access
 // The actual source documents and legal text are provisioned privately into D1.
 // No request can upload, choose another template version or change these source pins.
 export const handSignTemplates=Object.freeze({
- partner:Object.freeze({version:'partner-115.10-hand-sign-2026-10-28-v1',sourceSha256:'224dac420aba1f0990f5de713e7125c4d9699a6a11f84ee6aed6f8ddee7da4aa',title:'點數通「共創夥伴」合作推展合約書'}),
+ partner:Object.freeze({version:'partner-115.10-hand-sign-2026-10-29-v2',sourceSha256:'1fa48f76ed888e656a5e1efac84c670b1132f8f1cf6a62fa8c8c76b48ba7f42c',title:'點數通「共創夥伴」合作推展合約書'}),
  full:Object.freeze({version:'full-2026-10-28-v1',sourceSha256:'27fcbe65095b3a5fd06e2ec51b312d44b5e8ae5f60a241a880d1e03613cf1821',title:'雙向完整版申請書'})
 });
+// Keep the previous pin while the private D1 row is switched after Worker rollout.
+const previousPartnerTemplate=Object.freeze({version:'partner-115.10-hand-sign-2026-10-28-v1',sourceSha256:'224dac420aba1f0990f5de713e7125c4d9699a6a11f84ee6aed6f8ddee7da4aa',title:'點數通「共創夥伴」合作推展合約書'});
 const fail=(message,status=400)=>{throw new ShopError(message,status);};
 export const sha256Text=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),byte=>byte.toString(16).padStart(2,'0')).join('');
 const descriptor=(name,label,maxLength,required=false,type='text',extra={})=>Object.freeze({name,label,type,maxLength,required,...extra});
@@ -41,9 +43,11 @@ export const handSignConfirmations=Object.freeze({
 });
 
 export async function readHandSignTemplate(db,kind){
- const pin=handSignTemplates[kind];if(!pin)fail('申請類型不正確');
+ if(!handSignTemplates[kind])fail('申請類型不正確');
  const row=await db.prepare('SELECT kind,version,title,terms_json,source_sha256,content_sha256,active FROM signing_application_templates WHERE kind=?').bind(kind).first();
- if(!row||row.active!==1||row.version!==pin.version||row.source_sha256!==pin.sourceSha256||row.title!==pin.title||typeof row.terms_json!=='string'||row.terms_json.length>150000||!/^[a-f0-9]{64}$/.test(row.content_sha256||''))fail('簽署範本尚未核對或已停止使用，請聯絡管理員',503);
+ const pins=kind==='partner'?[handSignTemplates.partner,previousPartnerTemplate]:[handSignTemplates[kind]];
+ const pin=row&&pins.find(candidate=>row.version===candidate.version&&row.source_sha256===candidate.sourceSha256&&row.title===candidate.title);
+ if(!pin||row.active!==1||typeof row.terms_json!=='string'||row.terms_json.length>150000||!/^[a-f0-9]{64}$/.test(row.content_sha256||''))fail('簽署範本尚未核對或已停止使用，請聯絡管理員',503);
  if(await sha256Text(row.terms_json)!==row.content_sha256)fail('簽署範本內容校驗不符，請聯絡管理員',503);
  let terms;try{terms=JSON.parse(row.terms_json);}catch{fail('簽署範本格式不正確，請聯絡管理員',503);}
  if(!terms||terms.version!==pin.version||terms.title!==pin.title||!Array.isArray(terms.paragraphs)||!terms.paragraphs.length||terms.paragraphs.some(p=>typeof p!=='string'||!p.trim()||p.length>10000)||!Array.isArray(terms.clarifications)||terms.clarifications.some(p=>typeof p!=='string'||!p.trim()||p.length>3000))fail('簽署範本格式不正確，請聯絡管理員',503);

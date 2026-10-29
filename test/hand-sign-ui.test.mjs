@@ -43,7 +43,7 @@ test('four-kind form and notification navigation retain account, review and retr
 });
 
 test('every affected served entry uses the new signing/editor cache versions',()=>{
- for(const file of ['index.html','admin.html','admin-v2.html']){assert.match(read(file),/reward-applications-entry\.js\?v=3/);assert.match(read(file),/partner-contracts-entry\.js\?v=11510-2/);}
+ for(const file of ['index.html','admin.html','admin-v2.html']){assert.match(read(file),/reward-applications-entry\.js\?v=3/);assert.match(read(file),/partner-contracts-entry\.js\?v=11510-3/);}
  assert.match(read('index.html'),/js\/auth\.js\?v=11\.09/);assert.match(read('index.html'),/store-shop-entry\.js\?v=76/);
  for(const file of ['js/modules/store-shop-entry.js','store-shop.html'])assert.match(read(file),/store-shop\.js\?v=73/);
  assert.match(read('js/modules/reward-applications.js'),/reward-application-pdf\.mjs\?v=3/);assert.match(read('js/modules/reward-applications.js'),/reward-applications\.css\?v=2/);

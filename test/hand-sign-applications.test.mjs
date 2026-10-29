@@ -1,7 +1,68 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {handSignFixture,partnerFields,fullFields,signing,syntheticTerms,ADMIN,REWARD,OTHER} from './fixtures/hand-sign-applications.mjs';
-import {handSignFields,handSignConfirmations,normalizeHandSignApplication,sha256Text} from '../worker/hand-sign-application-definition.mjs';
+import {handSignFixture,partnerFields,fullFields,signing,syntheticTerms,replaceHandSignTemplate,ADMIN,REWARD,OTHER} from './fixtures/hand-sign-applications.mjs';
+import {handSignFields,handSignConfirmations,handSignTemplates,normalizeHandSignApplication,sha256Text} from '../worker/hand-sign-application-definition.mjs';
+
+const previousPartnerPin={version:'partner-115.10-hand-sign-2026-10-28-v1',sourceSha256:'224dac420aba1f0990f5de713e7125c4d9699a6a11f84ee6aed6f8ddee7da4aa',title:'點數通「共創夥伴」合作推展合約書'};
+const currentPartnerPin={version:'partner-115.10-hand-sign-2026-10-29-v2',sourceSha256:'1fa48f76ed888e656a5e1efac84c670b1132f8f1cf6a62fa8c8c76b48ba7f42c',title:'點數通「共創夥伴」合作推展合約書'};
+
+test('partner pin cutover requires a fresh preview while signed old snapshots and exact retries remain intact',async t=>{
+ const f=await handSignFixture(t);assert.deepEqual(handSignTemplates.partner,currentPartnerPin);
+ const oldTerms=await replaceHandSignTemplate(f.sql,'partner',previousPartnerPin);
+ const oldTemplate=await f.call('partner','/template');assert.equal(oldTemplate.http,200);assert.deepEqual(oldTemplate.terms,oldTerms);assert.equal(oldTemplate.template.source_sha256,previousPartnerPin.sourceSha256);
+ const signed=await f.submit('partner');assert.equal(signed.result.http,200);const original=signed.result.application;
+ const pending=await f.call('partner','/preview',{fields:partnerFields()});assert.equal(pending.http,200);
+ const newTerms=await replaceHandSignTemplate(f.sql,'partner',currentPartnerPin);
+ const current=await f.call('partner','/template');assert.equal(current.http,200);assert.deepEqual(current.terms,newTerms);assert.equal(current.template.source_sha256,currentPartnerPin.sourceSha256);
+ assert.equal((await f.call('partner','/submit',signing(pending.preview_id,'partner'))).http,409);
+ const loaded=await f.call('partner','?id='+original.id);assert.deepEqual(loaded.application,original);
+ const replay=await f.call('partner','/submit',signed.payload);assert.equal(replay.http,200);assert.equal(replay.replayed,true);assert.deepEqual(replay.application,original);
+ const fresh=await f.submit('partner');assert.equal(fresh.result.http,200);assert.deepEqual(fresh.result.application.snapshot.terms,newTerms);assert.equal(fresh.result.application.snapshot.terms.clarifications.length,4);
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_applications').get().n,2);
+ const full=await f.submit('full');assert.equal(full.result.http,200);assert.equal(full.result.application.snapshot.template.version,'full-2026-10-28-v1');
+});
+
+test('partner pins are exact version and source pairs and reject malformed or unverified template content',async t=>{
+ const f=await handSignFixture(t);
+ for(const bad of [
+  {...previousPartnerPin,sourceSha256:currentPartnerPin.sourceSha256},
+  {...currentPartnerPin,sourceSha256:previousPartnerPin.sourceSha256},
+  {...currentPartnerPin,version:'partner-115.10-hand-sign-unknown'},
+  {...currentPartnerPin,title:'合成錯誤標題'}
+ ]){
+  await replaceHandSignTemplate(f.sql,'partner',bad);
+  assert.equal((await f.call('partner','/template')).http,503);
+  assert.equal((await f.call('partner','/preview',{fields:partnerFields()})).http,503);
+ }
+ await replaceHandSignTemplate(f.sql,'partner',currentPartnerPin);
+ f.sql.prepare("UPDATE signing_application_templates SET content_sha256=? WHERE kind='partner'").run('0'.repeat(64));
+ assert.equal((await f.call('partner','/template')).http,503);
+ const valid=syntheticTerms('partner');valid.version=previousPartnerPin.version;const json=JSON.stringify(valid);
+ f.sql.prepare("UPDATE signing_application_templates SET terms_json=?,content_sha256=? WHERE kind='partner'").run(json,await sha256Text(json));
+ assert.equal((await f.call('partner','/template')).http,503);
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_applications').get().n,0);
+});
+
+test('partner template switch at the signing INSERT cannot sign the old preview',async t=>{
+ const f=await handSignFixture(t);await replaceHandSignTemplate(f.sql,'partner',previousPartnerPin);
+ const preview=await f.call('partner','/preview',{fields:partnerFields()}),original=f.db.prepare.bind(f.db);let switched=false;
+ const terms=syntheticTerms('partner',currentPartnerPin),json=JSON.stringify(terms),contentHash=await sha256Text(json);
+ f.db.prepare=query=>{const statement=original(query);if(!query.includes('INSERT INTO partner_applications('))return statement;const bind=statement.bind.bind(statement);statement.bind=(...args)=>{const bound=bind(...args),run=bound.run.bind(bound);bound.run=async()=>{
+  switched=true;f.sql.prepare("UPDATE signing_application_templates SET version=?,title=?,terms_json=?,source_sha256=?,content_sha256=? WHERE kind='partner'").run(currentPartnerPin.version,currentPartnerPin.title,json,currentPartnerPin.sourceSha256,contentHash);return run();
+ };return bound;};return statement;};
+ assert.equal((await f.call('partner','/submit',signing(preview.preview_id,'partner'))).http,409);assert.equal(switched,true);
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_applications').get().n,0);
+});
+
+test('partner template switch at the preview INSERT rejects the stale template atomically',async t=>{
+ const f=await handSignFixture(t);await replaceHandSignTemplate(f.sql,'partner',previousPartnerPin);
+ const original=f.db.prepare.bind(f.db),terms=syntheticTerms('partner',currentPartnerPin),json=JSON.stringify(terms),contentHash=await sha256Text(json);let switched=false;
+ f.db.prepare=query=>{const statement=original(query);if(!query.includes('INSERT INTO partner_application_previews('))return statement;const bind=statement.bind.bind(statement);statement.bind=(...args)=>{const bound=bind(...args),run=bound.run.bind(bound);bound.run=async()=>{
+  switched=true;f.sql.prepare("UPDATE signing_application_templates SET version=?,title=?,terms_json=?,source_sha256=?,content_sha256=? WHERE kind='partner'").run(currentPartnerPin.version,currentPartnerPin.title,json,currentPartnerPin.sourceSha256,contentHash);return run();
+ };return bound;};return statement;};
+ assert.equal((await f.call('partner','/preview',{fields:partnerFields()})).http,409);assert.equal(switched,true);
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_application_previews').get().n,0);
+});
 
 for(const kind of ['partner','full']){
  test(kind+' private template, immutable handwritten snapshot and owner/admin reads never grant roles or create transactions',async t=>{

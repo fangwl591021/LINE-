@@ -70,7 +70,7 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
    ${version===POLICY?`<p>目前有效性：${esc(contractStatus.active?'有效':statusText(contractStatus.reason))}<br>本期：${esc(contractStatus.periodStart||'待核')} ～ ${esc(contractStatus.periodEnd||'待核')}</p>
    <p>簽約方：${esc(terms.partyType==='company'?'公司／商號／法人':'自然人')} · ${esc(terms.partyName)}${terms.representativeName?`<br>代表人：${esc(terms.representativeName)}`:''}<br>推薦人：${esc(terms.referrerName)} · ${esc(terms.referrerMemberNumber)}<br>收款帳戶：${esc(terms.bankName)} ${esc(terms.bankCode)} · ${esc(mask(terms.bankAccount))}</p>`:'<p>歷史版本保留，既有契約與訂單不覆寫。</p>'}
    <small class="ra-copy">實際已簽文件 SHA-256：${esc(value(record,'document_sha256','documentSha256'))}</small>
-   ${version===POLICY?`<small class="ra-copy">115.10 空白範本 SHA-256：${esc(record.templateSha256||terms.templateSha256||latest.templateSha256||'待核')}</small>`:''}
+   ${version===POLICY?`<small class="ra-copy">115.10 空白範本 SHA-256：${esc(record.templateSha256||terms.templateSha256||'未記錄')}</small>`:''}
    ${lifecycle.length?`<p>契約事件（保留沿革）：</p><ul>${lifecycle.map(event=>`<li class="ra-copy">${esc(event.action==='nonrenewal'?'不續約通知':'終止')} · ${esc(value(event,'effective_at','effectiveAt'))} · ${esc(event.reason)}</li>`).join('')}</ul>`:''}</article>`;
  }
  function quotaMarkup(quota){
@@ -89,7 +89,6 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
    <h3>已登錄契約</h3>${records.length?records.map(recordMarkup).join(''):'<p>尚未登錄已簽契約。</p>'}
    ${action('contract','登錄已核對的115.10新簽契約',`
     ${select('templateVersion','已簽文件制度版本',[[TEMPLATE,'115.10（本次指定版）']])}
-    <small class="ra-copy">空白範本 SHA-256：${esc(result.templateSha256||'待伺服器核對')}</small>
     ${input('signedAt','實際簽署時間（亦為契約生效時間）','datetime-local')}
     ${select('partyType','乙方簽約身分',[['natural_person','自然人'],['company','公司／商號／法人']])}
     ${input('partyName','姓名／公司或法人名稱')}${input('representativeName','公司／法人代表人（法人必填）','text',false)}
