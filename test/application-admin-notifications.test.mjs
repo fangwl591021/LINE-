@@ -164,3 +164,42 @@ test('an alias collision introduced at the sending claim is rechecked by the exa
  const f=fixture(t);f.sign('partner');f.state.hook=query=>{if(query.includes('SET attempts=attempts+1')){f.state.hook=null;f.sql.prepare("UPDATE users SET legacy_line_id=? WHERE row_id='ordinary'").run(A);}};
  await f.run();assert.equal(f.pushes.length,0);assert.equal(all(f,'application_admin_notice_batches')[0].status,'cancelled');
 });
+
+test('explicit notice-only LINE ID receives one multi-page Flex despite linked account conflict without becoming an admin',async t=>{
+ const {resolveStoreAdminActor}=await import('../worker/store-admin.mjs');
+ const f=fixture(t);f.user('target',B,'user');f.user('old',OLD,'user');
+ f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(OLD,B);
+ f.options.additionalRecipientIds=[B,B,'invalid'];f.sign('reward');f.sign('partner');
+ await assert.rejects(()=>resolveStoreAdminActor(f.db,B,f.options.profileMapper));
+ await f.run();await f.run();await f.run();
+ assert.deepEqual(new Set(f.pushes.map(p=>p.body.to)),new Set([A,B]));
+ assert.equal(f.pushes.length,2);const target=f.pushes.find(p=>p.body.to===B);
+ assert.equal(target.body.messages.length,1);assert.equal(target.body.messages[0].contents.type,'carousel');
+ assert.equal(target.body.messages[0].contents.contents.length,2);
+ assert.doesNotMatch(JSON.stringify(target.body),/PRIVATE|private-signature-bank|0912345678/i);
+ await assert.rejects(()=>resolveStoreAdminActor(f.db,B,f.options.profileMapper));
+ assert.equal(f.sql.prepare("SELECT role FROM users WHERE row_id='target'").get().role,'user');
+});
+
+test('exact notice recipient is never redirected to an alias and duplicates remain fail closed',async t=>{
+ const f=fixture(t,{seed:false});f.user('old',OLD,'user');f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE row_id=?').run(B,'old');
+ f.options.additionalRecipientIds=[B];f.sign();await f.run();assert.equal(f.pushes.length,0);
+ const g=fixture(t,{seed:false});g.user('one',B,'user');g.user('two',B,'user');g.options.additionalRecipientIds=[B];g.sign();await g.run();await g.run();
+ assert.equal(g.pushes.length,0);assert(all(g,'application_admin_notice_deliveries').every(d=>d.status==='cancelled'));
+});
+
+test('notice-only recipient is deduplicated when already an administrator and removal cancels unsent batch',async t=>{
+ const f=fixture(t);f.options.additionalRecipientIds=[A];f.sign();await f.run();await f.run();assert.equal(f.pushes.length,1);
+ const g=fixture(t,{seed:false});g.user('target',B,'user');g.options.additionalRecipientIds=[B];g.sign();g.state.status=500;await g.run();
+ assert.equal(g.pushes.length,1);g.options.additionalRecipientIds=[];g.state.clock=NOW+70;await g.run();
+ assert.equal(g.pushes.length,1);assert.equal(all(g,'application_admin_notice_batches')[0].status,'cancelled');
+});
+
+test('notice-only retry keeps frozen destination and LINE key, while a new exact duplicate blocks sending',async t=>{
+ const f=fixture(t,{seed:false});f.user('target',B,'user');f.options.additionalRecipientIds=[B];f.sign();f.state.mode='throw';await f.run();
+ f.state.mode='ok';f.state.clock=NOW+70;await f.run();
+ assert.equal(f.pushes.length,2);assert.equal(f.physical.length,1);assert.equal(f.pushes[1].raw,f.pushes[0].raw);assert.equal(f.pushes[1].key,f.pushes[0].key);
+ const g=fixture(t,{seed:false});g.user('target',B,'user');g.options.additionalRecipientIds=[B];g.sign();
+ g.state.hook=query=>{if(query.includes('SET attempts=attempts+1')){g.state.hook=null;g.user('duplicate',B,'user');}};
+ await g.run();assert.equal(g.pushes.length,0);assert.equal(all(g,'application_admin_notice_batches')[0].status,'cancelled');
+});

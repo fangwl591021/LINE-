@@ -529,7 +529,7 @@ export default {
       const run = processMemberChatNotifications(env).catch(() => console.error('member_chat_notification_cron_failed'));
       if (ctx?.waitUntil) ctx.waitUntil(run);
       else await run;
-      const applications = processApplicationAdminNotifications(env, { profileMapper: storeInviteProfileView, hardAdminIds: getContractAdminNotificationIds(), hardAdminNames: getContractAdminNotificationNames() })
+      const applications = processApplicationAdminNotifications(env, { profileMapper: storeInviteProfileView, hardAdminIds: getContractAdminNotificationIds(), hardAdminNames: getContractAdminNotificationNames(), additionalRecipientIds: ['Ue9a59cf9b2969ec78b6bfdc2a4cfca08'] })
         .catch(() => console.error('application_admin_notification_cron_failed'));
       if (ctx?.waitUntil) ctx.waitUntil(applications);
       else await applications;

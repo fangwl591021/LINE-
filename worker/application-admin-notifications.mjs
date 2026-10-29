@@ -1,5 +1,5 @@
 // Signed applications remain authoritative even when notification delivery fails.
-// This runner uses only existing registered administrators and never reads signatures/bank fields.
+// Additional exact LINE recipients are notification-only; they gain no review authority.
 import {resolveStoreAdminActor,DirectoryError} from './store-admin.mjs';
 const UID=/^U[0-9a-f]{32}$/i,UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const AUTH_FIELDS=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
@@ -20,18 +20,27 @@ const validUid="length(u.line_id)=33 AND substr(u.line_id,1,1) IN('U','u') AND s
 const candidate=`${validUid} AND ${canonical} AND (lower(trim(u.role)) IN('admin','總管')
  OR EXISTS(SELECT 1 FROM json_each(?1,'$.ids') configured_id WHERE configured_id.value IN(u.line_id,u.row_id,u.legacy_line_id,u.point_line_id))
  OR EXISTS(SELECT 1 FROM json_each(?1,'$.names') configured_name WHERE length(configured_name.value)>0 AND instr(COALESCE(u.name,''),configured_name.value)>0))`;
+// An explicitly configured notice recipient is selected by exact LINE ID only.
+// Unlike the admin route, this does not resolve aliases or grant access to review APIs.
+const noticeCandidate=`((${candidate}) OR (${validUid} AND EXISTS(SELECT 1 FROM json_each(?1,'$.noticeIds') n WHERE n.value=u.line_id)))`;
 function snapshotGate(prefix='u',json='j.value'){
  return AUTH_FIELDS.map(field=>`${prefix}.${field} IS json_extract(${json},'$.${field}')`).join(' AND ');
 }
-const eligibleRecipient=`EXISTS(SELECT 1 FROM users u WHERE ${candidate} AND ${AUTH_FIELDS.map(field=>'u.'+field+' IS ?').join(' AND ')})`;
-function existingAdmins(hardAdminIds,hardAdminNames){
+const eligibleRecipient=`EXISTS(SELECT 1 FROM users u WHERE ${noticeCandidate} AND ${AUTH_FIELDS.map(field=>'u.'+field+' IS ?').join(' AND ')})`;
+function existingAdmins(hardAdminIds,hardAdminNames,additionalRecipientIds){
  // Names are only a necessary candidate clue for the existing phone+name authority.
  // The original mapper must still verify the entire stored account; a name alone grants nothing.
- return JSON.stringify({ids:[...new Set((Array.isArray(hardAdminIds)?hardAdminIds:[]).filter(id=>UID.test(id)))],names:[...new Set((Array.isArray(hardAdminNames)?hardAdminNames:[]).filter(name=>typeof name==='string'&&name.trim()&&name.length<=100))]});
+ return JSON.stringify({ids:[...new Set((Array.isArray(hardAdminIds)?hardAdminIds:[]).filter(id=>UID.test(id)))],names:[...new Set((Array.isArray(hardAdminNames)?hardAdminNames:[]).filter(name=>typeof name==='string'&&name.trim()&&name.length<=100))],noticeIds:[...new Set((Array.isArray(additionalRecipientIds)?additionalRecipientIds:[]).filter(id=>typeof id==='string'&&UID.test(id)))]});
 }
 async function recipient(db,memberId,lineId,profileMapper,ids){
- const found=await rows(db,`SELECT ${AUTH_FIELDS.map(field=>'u.'+field).join(',')} FROM users u WHERE ${candidate} AND CAST(u.row_id AS TEXT)=?2 AND u.line_id=?3 LIMIT 2`,ids,memberId,lineId);
- if(found.length!==1||profileMapper(found[0])?.role!=='admin')return null;
+ const found=await rows(db,`SELECT ${AUTH_FIELDS.map(field=>'u.'+field).join(',')} FROM users u WHERE ${noticeCandidate} AND CAST(u.row_id AS TEXT)=?2 AND u.line_id=?3 LIMIT 2`,ids,memberId,lineId);
+ if(found.length!==1)return null;
+ if(JSON.parse(ids).noticeIds.includes(lineId)){
+  // A duplicated exact LINE ID is ambiguous; never send to an inferred alias.
+  const exact=await rows(db,'SELECT row_id FROM users WHERE line_id=? LIMIT 2',lineId);
+  return exact.length===1&&String(exact[0].row_id)===memberId?found[0]:null;
+ }
+ if(profileMapper(found[0])?.role!=='admin')return null;
  try{
   // Reuse the exact admin-page identity resolver. Candidate clues are not authority.
   const verified=await resolveStoreAdminActor(db,lineId,profileMapper);
@@ -57,9 +66,9 @@ export function buildApplicationAdminNoticeFlex(items,liffId){
  return {type:'flex',altText:'點數通：收到 '+items.length+' 份已簽合作申請，請審核',contents:pages.length===1?pages[0]:{type:'carousel',contents:pages}};
 }
 async function fanout(db,profileMapper,ids,now){
- const candidates=await rows(db,`SELECT ${AUTH_FIELDS.map(field=>'u.'+field).join(',')} FROM users u WHERE ${candidate} ORDER BY CAST(u.row_id AS TEXT) LIMIT ${MAX_ADMINS+1}`,ids);
+ const candidates=await rows(db,`SELECT ${AUTH_FIELDS.map(field=>'u.'+field).join(',')} FROM users u WHERE ${noticeCandidate} ORDER BY CAST(u.row_id AS TEXT) LIMIT ${MAX_ADMINS+1}`,ids);
  if(candidates.length>MAX_ADMINS)throw Error('Application administrator list requires review');
- const admins=candidates.filter(row=>profileMapper(row)?.role==='admin');
+ const direct=new Set(JSON.parse(ids).noticeIds),admins=candidates.filter(row=>direct.has(row.line_id)||profileMapper(row)?.role==='admin');
  if(!admins.length)return;
  const events=await rows(db,'SELECT kind,application_id FROM application_admin_notice_events WHERE fanout_at=0 ORDER BY created_at,kind,application_id LIMIT 20');
  if(!events.length)return;
@@ -69,7 +78,7 @@ async function fanout(db,profileMapper,ids,now){
    SELECT e.kind,e.application_id,CAST(json_extract(j.value,'$.row_id') AS TEXT),json_extract(j.value,'$.line_id'),?
    FROM application_admin_notice_events e CROSS JOIN json_each(?) j WHERE e.fanout_at=0
    AND e.kind||':'||e.application_id IN(SELECT value FROM json_each(?))
-   AND EXISTS(SELECT 1 FROM users u WHERE ${candidate.replaceAll('?1','?4')} AND ${snapshotGate()} )`,now,targets,keys,ids),
+   AND EXISTS(SELECT 1 FROM users u WHERE ${noticeCandidate.replaceAll('?1','?4')} AND ${snapshotGate()} )`,now,targets,keys,ids),
   stmt(db,`UPDATE application_admin_notice_events SET fanout_at=? WHERE fanout_at=0 AND kind||':'||application_id IN(SELECT value FROM json_each(?))
    AND EXISTS(SELECT 1 FROM application_admin_notice_deliveries d WHERE d.kind=application_admin_notice_events.kind AND d.application_id=application_admin_notice_events.application_id)`,now,keys)
  ]);
@@ -102,9 +111,9 @@ async function createBatches(db,env,profileMapper,ids,now){
   ]);
  }
 }
-export async function processApplicationAdminNotifications(env,{profileMapper,hardAdminIds=[],hardAdminNames=[],fetcher=fetch,now=Math.floor(Date.now()/1000)}={}){
+export async function processApplicationAdminNotifications(env,{profileMapper,hardAdminIds=[],hardAdminNames=[],additionalRecipientIds=[],fetcher=fetch,now=Math.floor(Date.now()/1000)}={}){
  if(!env?.LINE_CHANNEL_ACCESS_TOKEN||!env?.ACTMASTER_DB||typeof profileMapper!=='function')return;
- const db=env.ACTMASTER_DB.withSession?env.ACTMASTER_DB.withSession('first-primary'):env.ACTMASTER_DB,ids=existingAdmins(hardAdminIds,hardAdminNames);
+ const db=env.ACTMASTER_DB.withSession?env.ACTMASTER_DB.withSession('first-primary'):env.ACTMASTER_DB,ids=existingAdmins(hardAdminIds,hardAdminNames,additionalRecipientIds);
  await fanout(db,profileMapper,ids,now);
  await createBatches(db,env,profileMapper,ids,now);
  const batches=await rows(db,`SELECT * FROM application_admin_notice_batches WHERE status='pending' AND lease_until<=? AND (retry_at<=? OR attempts>=5 OR created_at<?) ORDER BY created_at,id LIMIT ${MAX_BATCHES}`,now,now,now-23*3600);
