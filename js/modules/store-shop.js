@@ -491,7 +491,7 @@
             if(standalone){location.assign(loginLink());break;}
             const version=epoch,owner=window.currentUserProfile?.userId;
             const isCurrent=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&owner===window.currentUserProfile?.userId;
-            const module=await import('./reward-applications.js?v=5');
+            const module=await import('./reward-applications.js?v=6');
             if(isCurrent())await module.openRewardApplications({base,isCurrent});
             break;
           }
@@ -751,7 +751,7 @@
           if(!canAdmin())throw new Error('請使用平台管理員帳號登入後查看此申請');
           const version=epoch,owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
           const isCurrent=()=>version===epoch&&root.isConnected&&window.currentPage==='store-shop'&&canAdmin()&&owner===window.currentUserProfile?.userId&&token===window.liff?.getAccessToken?.();
-          const module=await import('./reward-applications.js?v=5');
+          const module=await import('./reward-applications.js?v=6');
           if(isCurrent())await module.openRewardApplications({base,admin:true,kind:applicationReview.kind,applicationId:applicationReview.applicationId,isCurrent});
         }
       }
