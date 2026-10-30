@@ -108,19 +108,22 @@ for(const kind of ['partner','full']){
  });
 }
 
-test('partner referrer is server-sourced, cannot be reassigned, and changes require a fresh signature preview',async t=>{
- const f=await handSignFixture(t);f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(REWARD,OTHER);f.sql.prepare('UPDATE users SET name=?,member_number=? WHERE line_id=?').run('核對推薦人','20261021001',REWARD);
- const template=await f.call('partner','/template');assert.deepEqual(template.referral,{required:true,name:'核對推薦人',memberNumber:'20261021001'});
- assert.equal((await f.call('partner','/preview',{fields:partnerFields()})).http,409);
- const fields={...partnerFields(),referrer_name:template.referral.name,referrer_member_number:template.referral.memberNumber},preview=await f.call('partner','/preview',{fields});assert.equal(preview.http,200);
- f.sql.prepare('UPDATE users SET member_number=? WHERE line_id=?').run('20261021002',REWARD);assert.equal((await f.call('partner','/submit',signing(preview.preview_id,'partner'))).http,409);
- assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_applications').get().n,0);
- const fresh=await f.call('partner','/preview',{fields:{...fields,referrer_member_number:'20261021002'}});assert.equal(fresh.http,200);assert.equal((await f.call('partner','/submit',signing(fresh.preview_id,'partner'))).http,200);
- assert.equal(f.sql.prepare('SELECT referrer_id FROM users WHERE line_id=?').get(OTHER).referrer_id,REWARD);
+test('partner attribution is applicant editable and independent of CRM joining referral',async t=>{
+ const f=await handSignFixture(t);f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(REWARD,OTHER);
+ const before=f.sql.prepare('SELECT * FROM users ORDER BY line_id').all();
+ const template=await f.call('partner','/template');assert.equal(template.http,200);assert.equal(template.referral,undefined);
+ for(const key of ['performance_owner_name','performance_owner_member_number'])assert.equal(Boolean(template.fields.find(field=>field.name===key).readonly),false);
+ const fields={...partnerFields(),performance_owner_name:'業績協助人',performance_owner_member_number:'20261021009'};
+ const preview=await f.call('partner','/preview',{fields});assert.equal(preview.http,200);
+ assert.deepEqual(preview.snapshot.fields,fields);assert.equal(preview.snapshot.referrer_uid,REWARD);
+ assert.equal(preview.snapshot.attribution_mode,'applicant_performance_v1');
+ const result=await f.call('partner','/submit',signing(preview.preview_id,'partner'));assert.equal(result.http,200);assert.deepEqual(result.application.snapshot.fields,fields);
+ assert.deepEqual(f.sql.prepare('SELECT * FROM users ORDER BY line_id').all(),before);
+ const read=await f.call('partner','?id='+result.application.id);assert.deepEqual(read.application.snapshot,result.application.snapshot);
 });
 
 test('full and partner forms reject unknown fields, wrong parties and invalid banking without business writes',()=>{
- for(const fields of [{...partnerFields(),party_type:'admin'},{...partnerFields(),representative_name:''},{...partnerFields(),bank_account:'evil'},{...partnerFields(),bank_code:'abc'},{...partnerFields(),bank_code:'1234'},{...partnerFields(),role:'admin'},{...partnerFields(),phone:'02-12345678'}])assert.throws(()=>normalizeHandSignApplication('partner',fields));
+ for(const fields of [{...partnerFields(),performance_owner_name:'只有姓名'},{...partnerFields(),performance_owner_member_number:'20261021001'},{...partnerFields(),performance_owner_name:'測試',performance_owner_member_number:'abc'},{...partnerFields(),referrer_name:'舊欄位'},{...partnerFields(),party_type:'admin'},{...partnerFields(),representative_name:''},{...partnerFields(),bank_account:'evil'},{...partnerFields(),bank_code:'abc'},{...partnerFields(),bank_code:'1234'},{...partnerFields(),role:'admin'},{...partnerFields(),phone:'02-12345678'}])assert.throws(()=>normalizeHandSignApplication('partner',fields));
  for(const fields of [{...fullFields(),address:''},{...fullFields(),services:''},{...fullFields(),payment_status:'paid'},{...fullFields(),phone:'invalid'},{...fullFields(),unit_name:'bad\n'}])assert.throws(()=>normalizeHandSignApplication('full',fields));
  assert.equal(normalizeHandSignApplication('partner',{...partnerFields(),party_type:'natural_person',representative_name:'',bank_account:'123 456-7890'}).bank_account,'1234567890');
 });
@@ -130,24 +133,29 @@ test('NULL CRM referral remains unassigned and valid without manufacturing a spo
  for(const kind of ['full','partner']){const {result}=await f.submit(kind);assert.equal(result.http,200);assert.equal(result.application.snapshot.referrer_uid,'');}
 });
 
-test('partner CRM row references follow only a unique explicit canonical identity and preserve the original relationship',async t=>{
- const f=await handSignFixture(t),old='U'+'d'.repeat(32);
- f.sql.prepare('INSERT INTO users(row_id,line_id,role,name,member_number) VALUES(?,?,?,?,?)').run('retired-referrer-row',old,'user','退休舊姓名','20261019001');
- f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(old,REWARD);
- f.sql.prepare('UPDATE users SET name=?,member_number=? WHERE line_id=?').run('目前推薦人','202610211000',REWARD);
- f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run('retired-referrer-row',OTHER);
- const template=await f.call('partner','/template');assert.equal(template.http,200);assert.deepEqual(template.referral,{required:true,name:'目前推薦人',memberNumber:'202610211000'});assert.equal(template.referral.proof,undefined);
- const fields={...partnerFields(),referrer_name:template.referral.name,referrer_member_number:template.referral.memberNumber},preview=await f.call('partner','/preview',{fields});assert.equal(preview.http,200);
- const snapshot=preview.snapshot;assert.equal(snapshot.referrer_uid,'retired-referrer-row');assert.equal(snapshot.referral_proof.memberUid,REWARD);assert.equal(snapshot.fields.referrer_name,'目前推薦人');
- assert.equal((await f.call('partner','/submit',signing(preview.preview_id,'partner'))).http,200);
- assert.equal(f.sql.prepare('SELECT referrer_id FROM users WHERE line_id=?').get(OTHER).referrer_id,'retired-referrer-row');
+test('unrelated CRM changes do not overwrite or invalidate applicant performance attribution',async t=>{
+ const f=await handSignFixture(t);f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run('retired-referrer-row',OTHER);
+ const fields={...partnerFields(),performance_owner_name:'本次業績人',performance_owner_member_number:'20261021001'},preview=await f.call('partner','/preview',{fields});assert.equal(preview.http,200);
+ f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(REWARD,OTHER);
+ f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(REWARD,ADMIN);
+ const result=await f.call('partner','/submit',signing(preview.preview_id,'partner'));assert.equal(result.http,200);assert.deepEqual(result.application.snapshot.fields,fields);
+ assert.equal(result.application.snapshot.referrer_uid,'retired-referrer-row');
+ assert.equal(f.sql.prepare('SELECT referrer_id FROM users WHERE line_id=?').get(OTHER).referrer_id,REWARD);
 });
 
-test('a CRM referrer identity link changed at the signing INSERT is rejected atomically',async t=>{
- const f=await handSignFixture(t);f.sql.prepare('UPDATE users SET name=?,member_number=? WHERE line_id=?').run('目前推薦人','20261021001',REWARD);f.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(REWARD,OTHER);
- const fields={...partnerFields(),referrer_name:'目前推薦人',referrer_member_number:'20261021001'},preview=await f.call('partner','/preview',{fields}),original=f.db.prepare.bind(f.db);assert.equal(preview.http,200);
- f.db.prepare=query=>{const statement=original(query);if(!query.includes('INSERT INTO partner_applications('))return statement;const bind=statement.bind.bind(statement);statement.bind=(...args)=>{const bound=bind(...args),run=bound.run.bind(bound);bound.run=async()=>{f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(REWARD,ADMIN);return run();};return bound;};return statement;};
- assert.equal((await f.call('partner','/submit',signing(preview.preview_id,'partner'))).http,409);assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_applications').get().n,0);
+test('legacy unsigned partner previews must be recreated while signed legacy records and retries remain unchanged',async t=>{
+ const f=await handSignFixture(t),{result,payload}=await f.submit('partner');
+ const legacy={...result.application.snapshot,fields:{...partnerFields(),referrer_name:'舊推薦人',referrer_member_number:'20261021001'}};
+ delete legacy.attribution_mode;delete legacy.fields.performance_owner_name;delete legacy.fields.performance_owner_member_number;
+ const json=JSON.stringify(legacy),hash=await sha256Text(json);
+ f.sql.prepare('UPDATE partner_applications SET snapshot_json=?,content_sha256=? WHERE id=?').run(json,hash,result.application.id);
+ const old=await f.call('partner','?id='+result.application.id);assert.deepEqual(old.application.snapshot,legacy);
+ const retry=await f.call('partner','/submit',payload);assert.equal(retry.replayed,true);assert.deepEqual(retry.application,old.application);
+ const preview=await f.call('partner','/preview',{fields:partnerFields()});
+ f.sql.prepare('UPDATE partner_application_previews SET snapshot_json=? WHERE id=?').run(json,preview.preview_id);
+ const rejected=await f.call('partner','/submit',signing(preview.preview_id,'partner'));assert.equal(rejected.http,409);assert.match(rejected.message||rejected.error,/重新/);
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM partner_applications').get().n,1);
+ assert.equal((await f.submit('partner')).result.http,200);
 });
 
 for(const kind of ['partner','full'])test(kind+' admin name/phone authority snapshot cannot change before a review write',async t=>{

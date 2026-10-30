@@ -1,7 +1,7 @@
 import {authorizeStoreAdmin, DirectoryError} from './store-admin.mjs';
 import {readJson, ShopError} from './store-shop.mjs';
 import {discountTerms,discountOptions,discountConfirmations,normalizeDiscountApplication} from './discount-application-definition.mjs';
-import {readHandSignTemplate,normalizeHandSignApplication,handSignConfirmations,handSignReferral,publicHandSignReferral,handSignReferralGate,handSignTemplateGate} from './hand-sign-application-definition.mjs';
+import {readHandSignTemplate,normalizeHandSignApplication,handSignConfirmations,handSignTemplateGate} from './hand-sign-application-definition.mjs';
 const PATH='/v1/reward-applications';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UID=/^U[0-9a-f]{32}$/i;
@@ -101,7 +101,7 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
   for(const key of url.searchParams.keys())if(!allowed.includes(key)||url.searchParams.getAll(key).length!==1)fail('查詢條件不正確');
   if(request.method==='GET'){
    if(route==='/template'){
-    if(extended){const definition=await readHandSignTemplate(authenticatedDb,kind);return reply({success:true,...definition,...(kind==='partner'?{referral:publicHandSignReferral(await handSignReferral(authenticatedDb,referrer))}:{})});}
+    if(extended){const definition=await readHandSignTemplate(authenticatedDb,kind);return reply({success:true,...definition,...(kind==='partner'?{attribution_mode:'applicant_performance_v1'}:{})});}
     return reply({success:true,terms,confirmations:consent,options});
    }
    if(!['','/admin'].includes(route))fail('不支援此操作',405);
@@ -119,15 +119,15 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
   if(route==='/preview'){
    keys(data,['fields']);const fields=extended?normalizeHandSignApplication(kind,data.fields):(discount?normalizeDiscountApplication:normalizeApplication)(data.fields),id=crypto.randomUUID();
    const definition=extended?await readHandSignTemplate(authenticatedDb,kind):null;
-   const referral=kind==='partner'?await handSignReferral(authenticatedDb,referrer):null;
-   if(referral&&(fields.referrer_name!==referral.name||fields.referrer_member_number!==referral.memberNumber))fail('推薦人資料與CRM紀錄不符，請重新載入後核對',409);
-   const snapshot={...(kind!=='reward'?{form_kind:kind}:{}),terms:definition?.terms||terms,confirmations:consent,fields,referrer_uid:referrer||'',...(definition?{template:definition.template,field_labels:definition.field_labels}:{}),...(referral?{referral:publicHandSignReferral(referral),referral_proof:referral.proof}:{}),assurance:'LINE 帳號驗證；非實名或憑證式數位簽章'};
+   const snapshot={...(kind!=='reward'?{form_kind:kind}:{}),terms:definition?.terms||terms,confirmations:consent,fields,referrer_uid:referrer||'',...(definition?{template:definition.template,field_labels:definition.field_labels}:{}),...(kind==='partner'?{attribution_mode:'applicant_performance_v1'}:{}),assurance:'LINE 帳號驗證；非實名或憑證式數位簽章'};
    const expires=new Date(Date.now()+30*60*1000).toISOString();
    if(extended){
-    const gate=handSignTemplateGate(definition.template),referralGate=handSignReferralGate(referral,referrer);
+    const gate=handSignTemplateGate(definition.template);
+    const memberGate=kind==='partner'?'EXISTS(SELECT 1 FROM users WHERE line_id=?)':'EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?)';
+    const memberArgs=kind==='partner'?[uid]:[uid,referrerRaw];
     const result=await db.prepare(`INSERT INTO reward_application_previews(owner_uid,id,snapshot_json,expires_at)
-     SELECT ?,?,?,? WHERE ${gate.sql} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?) AND ${referralGate.sql}
-     ON CONFLICT(owner_uid) DO UPDATE SET id=excluded.id,snapshot_json=excluded.snapshot_json,expires_at=excluded.expires_at`).bind(uid,id,JSON.stringify(snapshot),expires,...gate.args,uid,referrerRaw,...referralGate.args).run();
+     SELECT ?,?,?,? WHERE ${gate.sql} AND ${memberGate}
+     ON CONFLICT(owner_uid) DO UPDATE SET id=excluded.id,snapshot_json=excluded.snapshot_json,expires_at=excluded.expires_at`).bind(uid,id,JSON.stringify(snapshot),expires,...gate.args,...memberArgs).run();
     if(result.success===false)throw Error('preview unavailable');
     if(!result.meta?.changes)fail('簽署範本或推薦資料已變更，請重新載入',409);
    }else await db.prepare('INSERT INTO reward_application_previews(owner_uid,id,snapshot_json,expires_at) VALUES(?,?,?,?) ON CONFLICT(owner_uid) DO UPDATE SET id=excluded.id,snapshot_json=excluded.snapshot_json,expires_at=excluded.expires_at').bind(uid,id,JSON.stringify(snapshot),expires).run();
@@ -142,12 +142,14 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
    let extraSql='',extraArgs=[];
    if(extended){
     const currentTemplate=await readHandSignTemplate(authenticatedDb,kind),template=originalSnapshot.template;
-    if(originalSnapshot.form_kind!==kind||!template||JSON.stringify(template)!==JSON.stringify(currentTemplate.template)||originalSnapshot.referrer_uid!==(referrer||''))fail('簽署範本或推薦資料已變更，請重新預覽',409);
-    const gate=handSignTemplateGate(template);extraSql=` AND ${gate.sql} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?)`;extraArgs=[...gate.args,uid,referrerRaw];
+    if(originalSnapshot.form_kind!==kind||!template||JSON.stringify(template)!==JSON.stringify(currentTemplate.template)||(kind!=='partner'&&originalSnapshot.referrer_uid!==(referrer||'')))fail('簽署範本或推薦資料已變更，請重新預覽',409);
+    const gate=handSignTemplateGate(template);extraSql=` AND ${gate.sql}`;extraArgs=[...gate.args];
     if(kind==='partner'){
-     const referral=await handSignReferral(authenticatedDb,referrer);
-     if(JSON.stringify(publicHandSignReferral(referral))!==JSON.stringify(originalSnapshot.referral)||JSON.stringify(referral.proof)!==JSON.stringify(originalSnapshot.referral_proof))fail('推薦人姓名、會員編號或身分對應已變更，請重新預覽',409);
-     const referralGate=handSignReferralGate(referral,referrer);extraSql+=' AND '+referralGate.sql;extraArgs.push(...referralGate.args);
+     if(originalSnapshot.attribution_mode!=='applicant_performance_v1')fail('業績歸屬欄位已更新，請重新填寫、預覽並簽名',409);
+     normalizeHandSignApplication(kind,originalSnapshot.fields);
+     extraSql+=' AND EXISTS(SELECT 1 FROM users WHERE line_id=?)';extraArgs.push(uid);
+    }else{
+     extraSql+=' AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?)';extraArgs.push(uid,referrerRaw);
     }
    }
    const snapshot={...originalSnapshot,signing,signer_uid:uid,signed_at:now};
