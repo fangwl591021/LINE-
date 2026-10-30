@@ -51,3 +51,28 @@ test('admin authority changed between read and review write prevents review',asy
 test('malformed, unsupported and oversized requests fail without writes',async t=>{
  const s=fixture(t);assert.equal((await s.call('/preview',{fields:{...fields(),unit_name:'x'.repeat(100001)}})).http,413);assert.equal((await s.call('?id=x')).http,400);assert.equal((await s.call('?after=x')).http,400);assert.equal((await s.call('?id=a&id=b')).http,400);assert.equal((await s.call('/submit')).http,405);
 });
+
+
+test('reward declared referrer survives preview, signing, admin read and retry without changing CRM',async t=>{
+ const s=fixture(t);s.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(REWARD,OTHER);
+ const before=s.sql.prepare('SELECT * FROM users').all();
+ const declared={...fields(),performance_owner_name:'合成合作推薦人',performance_owner_member_number:'20261030001'};
+ const preview=await s.call('/preview',{fields:declared});assert.equal(preview.http,200);assert.equal(preview.snapshot.fields.performance_owner_name,declared.performance_owner_name);assert.equal(preview.snapshot.referrer_uid,REWARD);
+ const payload=signature(preview.preview_id),signed=await s.call('/submit',payload);assert.equal(signed.http,200);
+ assert.equal(signed.application.snapshot.fields.performance_owner_member_number,'20261030001');assert.equal(signed.application.snapshot.field_labels.performance_owner_name,'推薦人姓名');
+ assert.deepEqual((await s.call('/admin?id='+signed.application.id,undefined,'admin')).application,signed.application);
+ assert.deepEqual((await s.call('/submit',payload)).application,signed.application);assert.deepEqual(s.sql.prepare('SELECT * FROM users').all(),before);
+ const {labelsFor}=await import('../js/modules/reward-application-pdf.mjs');assert.equal(labelsFor(signed.application.snapshot).performance_owner_member_number,'推薦人會員編號');
+});
+
+test('reward optional referrer requires a complete valid pair; prior signed snapshots remain unchanged',async t=>{
+ const s=fixture(t);
+ for(const extra of [{performance_owner_name:'只有姓名'},{performance_owner_member_number:'20261030001'},{performance_owner_name:'測試',performance_owner_member_number:'abc'},{performance_owner_name:'x'.repeat(151),performance_owner_member_number:'20261030001'}])assert.equal((await s.call('/preview',{fields:{...fields(),...extra}})).http,400);
+ assert.equal(s.sql.prepare('SELECT count(*) n FROM reward_application_previews').get().n,0);
+ const {payload,result}=await submit(s),legacy=structuredClone(result.application.snapshot);
+ delete legacy.fields.performance_owner_name;delete legacy.fields.performance_owner_member_number;delete legacy.field_labels;
+ const json=JSON.stringify(legacy),hash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(json))).toString('hex');
+ s.sql.prepare('UPDATE reward_applications SET snapshot_json=?,content_sha256=? WHERE id=?').run(json,hash,result.application.id);
+ const read=await s.call('?id='+result.application.id);assert.deepEqual(read.application.snapshot,legacy);
+ assert.deepEqual((await s.call('/submit',payload)).application,read.application);
+});

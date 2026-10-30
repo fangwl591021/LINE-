@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import {handSignFixture,partnerFields,OTHER,REWARD,mapper} from '../fixtures/hand-sign-applications.mjs';
 import {handleRewardApplications} from '../../worker/reward-applications.mjs';
 const {chromium}=createRequire(import.meta.url)('playwright');
-const root=process.cwd(),output=resolve('../attribution-browser');mkdirSync(output,{recursive:true});
+const kind=process.argv[2]||'partner';assert(['partner','reward'].includes(kind));
+const root=process.cwd(),output=resolve('../'+kind+'-attribution-browser');mkdirSync(output,{recursive:true});
 let cleanup;const fixture=await handSignFixture({after:fn=>cleanup=fn});
 fixture.sql.prepare('UPDATE users SET referrer_id=? WHERE line_id=?').run(REWARD,OTHER);
 const usersBefore=fixture.sql.prepare('SELECT * FROM users ORDER BY line_id').all();
@@ -20,7 +21,7 @@ const server=createServer(async(req,res)=>{try{
   res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return;
  }
  if(url.pathname==='/'){
-  res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<meta name="viewport" content="width=device-width,initial-scale=1"><script type="module">import {openRewardApplications} from "/js/modules/reward-applications.js";window.liff={isLoggedIn:()=>true,getAccessToken:()=>"synthetic"};await openRewardApplications({base:location.origin,kind:"partner"});</script>');return;
+  res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<meta name="viewport" content="width=device-width,initial-scale=1"><script type="module">import {openRewardApplications} from "/js/modules/reward-applications.js";window.liff={isLoggedIn:()=>true,getAccessToken:()=>"synthetic"};await openRewardApplications({base:location.origin,kind:"'+kind+'"});</script>');return;
  }
  const file=resolve(root,'.'+url.pathname);if(!file.startsWith(root+sep)||!['.js','.mjs','.css'].includes(extname(file))){res.writeHead(404);res.end();return;}
  res.setHeader('Content-Type',file.endsWith('.css')?'text/css':'text/javascript');res.end(readFileSync(file));
@@ -32,8 +33,8 @@ try{
  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('[data-action=new]').click();
  const name=page.locator('[name=performance_owner_name]'),number=page.locator('[name=performance_owner_member_number]');
  await name.waitFor();assert.equal(await name.inputValue(),'');assert.equal(await number.inputValue(),'');assert(await name.isEditable());assert(await number.isEditable());
- const fields={...partnerFields(),performance_owner_name:'合成業績人甲',performance_owner_member_number:'20261021009'};
- for(const [key,value]of Object.entries(fields)){const control=page.locator('[name='+key+']');if(key==='party_type')await control.selectOption(value);else await control.fill(value);}
+ const fields={...(kind==='partner'?partnerFields():{unit_name:'合成贈點單位',applicant_name:'測試申請人',phone:'0912345678',line_contact:'',unit_types:['企業'],unit_types_other:'',recipients:['員工'],recipients_other:'',scenarios:['員工福利'],scenarios_other:''}),performance_owner_name:'合成業績人甲',performance_owner_member_number:'20261021009'};
+ for(const [key,value]of Object.entries(fields)){const control=page.locator('[name='+key+']');if(Array.isArray(value)){for(const item of value)await page.locator('[name='+key+'][value="'+item+'"]').check();}else if(key==='party_type')await control.selectOption(value);else await control.fill(value);}
  await name.scrollIntoViewIfNeeded();await page.screenshot({path:output+'/editable-mobile.png'});
  await page.locator('[data-form=application] button[type=submit]').click();await page.locator('[data-form=sign]').waitFor();
  assert((await page.locator('dialog').innerText()).includes('推薦人姓名：合成業績人甲'));
@@ -45,11 +46,11 @@ try{
  await page.mouse.move(box.x+20,box.y+20);await page.mouse.down();for(let i=1;i<=16;i++)await page.mouse.move(box.x+20+i*12,box.y+20+(i%2)*45);await page.mouse.up();
  await page.locator('[data-form=sign] button[type=submit]').click();await page.getByRole('heading',{name:'申請紀錄',exact:true}).waitFor();
  assert((await page.locator('dialog').innerText()).includes('推薦人姓名：合成業績人乙'));
- const rows=fixture.sql.prepare('SELECT snapshot_json FROM partner_applications').all();assert.equal(rows.length,1);
+ const rows=fixture.sql.prepare('SELECT snapshot_json FROM '+kind+'_applications').all();assert.equal(rows.length,1);
  const snapshot=JSON.parse(rows[0].snapshot_json);assert.equal(snapshot.fields.performance_owner_name,'合成業績人乙');assert.equal(snapshot.fields.performance_owner_member_number,'20261021010');assert.equal(snapshot.referrer_uid,REWARD);
  // PDF consumes the same saved fields and snapshot labels; its renderer is covered by the unit suite.
  assert.equal(snapshot.field_labels.performance_owner_name,'推薦人姓名');
  assert.deepEqual(fixture.sql.prepare('SELECT * FROM users ORDER BY line_id').all(),usersBefore);assert.deepEqual(errors,[]);
  assert(await page.evaluate(()=>document.querySelector('dialog').scrollWidth<=document.querySelector('dialog').clientWidth+1));
- console.log('PASS mobile: editable independent attribution, preview, back-edit retention, corrected signed snapshot, CRM unchanged, no page errors');
+ console.log('PASS '+kind+' mobile: editable independent attribution, preview, back-edit retention, corrected signed snapshot, CRM unchanged, no page errors');
 }finally{await browser.close();await new Promise(r=>server.close(r));cleanup();}

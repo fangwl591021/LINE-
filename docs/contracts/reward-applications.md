@@ -8,6 +8,7 @@
 - Review accepts or rejects once; concurrent review cannot overwrite. Review never grants roles, awards points or publishes the unit.
 - UI has visible close/back, account/lifecycle guards and stable retry payloads. PDF is a client-rendered copy of the immutable server snapshot, not a client-uploaded authoritative document.
 - Tests: auth/ownership/admin denial, expiry, idempotency, invalid input/strokes, review concurrency, mobile signing and full PDF rendering.
+- Reward applications include optional editable 「推薦人姓名／推薦人會員編號」 as `performance_owner_name` / `performance_owner_member_number`: fill both or neither, number must be 11–20 digits. They are independently declared for this cooperation and frozen with their labels in preview/signing/PDF; CRM joining referral stays unchanged. Historical signed snapshots and retries are preserved.
 - Member settings offer a visible 「合作申請」 button beside the registration section. The homepage member avatar opens that section with the button in view; it opens the same four-kind personal signing UI as the mall, with the current page, LINE token and user snapshot guarding asynchronous loading and dialog lifetime. Existing authentication and registered-member checks still apply.
 
 ## Discount-store application (2026-10-23)

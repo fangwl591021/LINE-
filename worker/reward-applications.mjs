@@ -32,11 +32,13 @@ export const applicationOptions=Object.freeze({
  recipients:['員工','會員','住戶','學員','客戶','活動參與者','來賓','其他'],
  scenarios:['員工福利','會員回饋','活動獎勵','繳費回饋','課程／活動參與','節慶回饋','客戶回饋','公益活動','其他']
 });
-const limits={unit_name:120,applicant_name:80,phone:30,line_contact:80,unit_types_other:100,recipients_other:100,scenarios_other:200};
+const limits={unit_name:120,applicant_name:80,phone:30,line_contact:80,unit_types_other:100,recipients_other:100,scenarios_other:200,performance_owner_name:150,performance_owner_member_number:20};
 function keys(value,allowed){if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!allowed.includes(k)))fail('申請資料格式不正確');}
 export function normalizeApplication(value){
  keys(value,[...Object.keys(limits),...Object.keys(applicationOptions)]);const out={};
  for(const [key,max]of Object.entries(limits)){const v=value[key]??'';if(typeof v!=='string'||v.length>max||/[\x00-\x1f]/.test(v))fail('欄位格式或長度不正確');out[key]=v.trim();}
+ if(Boolean(out.performance_owner_name)!==Boolean(out.performance_owner_member_number))fail('請一併填寫推薦人姓名與會員編號');
+ if(out.performance_owner_member_number&&!/^\d{11,20}$/.test(out.performance_owner_member_number))fail('推薦人會員編號格式不正確');
  if(!out.unit_name||!out.applicant_name||!out.phone)fail('請填寫單位、申請人與行動電話');
  if(!/^(?:09\d{8}|\+8869\d{8})$/.test(out.phone.replace(/[ -]/g,'')))fail('請填寫正確的台灣行動電話');
  for(const [key,options]of Object.entries(applicationOptions)){
@@ -119,7 +121,7 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
   if(route==='/preview'){
    keys(data,['fields']);const fields=extended?normalizeHandSignApplication(kind,data.fields):(discount?normalizeDiscountApplication:normalizeApplication)(data.fields),id=crypto.randomUUID();
    const definition=extended?await readHandSignTemplate(authenticatedDb,kind):null;
-   const snapshot={...(kind!=='reward'?{form_kind:kind}:{}),terms:definition?.terms||terms,confirmations:consent,fields,referrer_uid:referrer||'',...(definition?{template:definition.template,field_labels:definition.field_labels}:{}),...(kind==='partner'?{attribution_mode:'applicant_performance_v1'}:{}),assurance:'LINE 帳號驗證；非實名或憑證式數位簽章'};
+   const snapshot={...(kind!=='reward'?{form_kind:kind}:{}),terms:definition?.terms||terms,confirmations:consent,fields,referrer_uid:referrer||'',...(definition?{template:definition.template,field_labels:definition.field_labels}:{}),...(kind==='partner'?{attribution_mode:'applicant_performance_v1'}:kind==='reward'?{field_labels:{performance_owner_name:'推薦人姓名',performance_owner_member_number:'推薦人會員編號'}}:{}),assurance:'LINE 帳號驗證；非實名或憑證式數位簽章'};
    const expires=new Date(Date.now()+30*60*1000).toISOString();
    if(extended){
     const gate=handSignTemplateGate(definition.template);
