@@ -1,4 +1,4 @@
-import {fieldLabels,discountFieldLabels,partnerFieldLabels,fullFieldLabels,labelsFor,displayFieldValue,sourceHashFor,policyNotesFor,drawSignature,applicationPdf} from './reward-application-pdf.mjs?v=4';
+import {fieldLabels,discountFieldLabels,partnerFieldLabels,fullFieldLabels,labelsFor,displayFieldValue,sourceHashFor,policyNotesFor,drawSignature,applicationPdf} from './reward-application-pdf.mjs?v=5';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const status=v=>({pending:'已簽署・待審核',accepted:'審核通過・開通另行處理',rejected:'審核未通過'}[v]||v);
 let active;
@@ -47,7 +47,7 @@ export async function openRewardApplications({base,admin=false,target='',kind='r
     if(field.type==='select')return `<label>${esc(field.label)}${field.required?' *':''}<select name="${esc(field.name)}" ${field.required?'required':''}>${(field.options||[]).map(option=>`<option value="${esc(option.value)}" ${value===option.value?'selected':''}>${esc(option.label)}</option>`).join('')}</select></label>`;
     return `<label>${esc(field.label)}${field.required?' *':''}<input name="${esc(field.name)}" type="${field.type}" maxlength="${Number(field.maxLength)||200}" ${field.required?'required':''} ${field.readonly?'readonly aria-readonly="true"':''} value="${esc(value)}" ${field.type==='tel'?'autocomplete="tel"':''}></label>`;
    };
-   shell('1／3 填寫申請資料',`<h3>${esc(template.terms?.title||title())}</h3><p class="ra-note">${kind==='partner'?'共創夥伴免費加入；與購買雙向完整版分開。請自行填寫本次業績歸屬人姓名與會員編號，供平台審核核對。':'雙向完整版一年期服務申請，未稅 6,000 元、含稅 6,300 元；付款及功能開通另行核對。'}資料與簽名只用於本次申請及審核，不會自動開通權限或改變會員歸屬。</p><form data-form="application">${fieldDescriptors.map(control).join('')}${kind==='partner'?`<p class="ra-note">業績歸屬與加入平台時的推薦人分開；如有業績歸屬人，請完整填寫姓名及會員編號。返回修改時會保留已填資料。</p><p>請選擇自然人或公司／法人身分；公司／法人須填代表人。獎金帳號僅供後續審核核對，不代表簽署後自動給付。</p>`:'<p>協助申請者僅作申報，不會因此改變 CRM 推薦歸屬。共創夥伴合作須另外簽署契約。</p>'}<button type="button" data-action="refresh">返回我的申請</button><button class="primary" type="submit">下一步：預覽完整申請書</button></form>`);
+   shell('1／3 填寫申請資料',`<h3>${esc(template.terms?.title||title())}</h3><p class="ra-note">${kind==='partner'?'共創夥伴免費加入；與購買雙向完整版分開。請自行填寫推薦人姓名與會員編號，供平台審核核對。':'雙向完整版一年期服務申請，未稅 6,000 元、含稅 6,300 元；付款及功能開通另行核對。'}資料與簽名只用於本次申請及審核，不會自動開通權限或改變會員歸屬。</p><form data-form="application">${fieldDescriptors.map(control).join('')}${kind==='partner'?`<p class="ra-note">請填寫本次合作的推薦人姓名及會員編號。返回修改時會保留已填資料。</p><p>請選擇自然人或公司／法人身分；公司／法人須填代表人。獎金帳號僅供後續審核核對，不代表簽署後自動給付。</p>`:'<p>協助申請者僅作申報，不會因此改變 CRM 推薦歸屬。共創夥伴合作須另外簽署契約。</p>'}<button type="button" data-action="refresh">返回我的申請</button><button class="primary" type="submit">下一步：預覽完整申請書</button></form>`);
    updatePartyRequirement();return;
   }
   const input=(name,label,max,required=false)=>`<label>${label}<input name="${name}" maxlength="${max}" ${required?'required':''} value="${esc(formDraft[name]||'')}" ${name==='phone'?'type="tel" autocomplete="tel"':''}></label>`;

@@ -1,5 +1,5 @@
 (function(){
-  const moduleUrl=new URL('./reward-applications.js?v=4',document.currentScript.src).href;
+  const moduleUrl=new URL('./reward-applications.js?v=5',document.currentScript.src).href;
   let opening=false;
   const notify=message=>{
     if(typeof window.showToast==='function')window.showToast(message,true);

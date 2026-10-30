@@ -145,7 +145,7 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
     if(originalSnapshot.form_kind!==kind||!template||JSON.stringify(template)!==JSON.stringify(currentTemplate.template)||(kind!=='partner'&&originalSnapshot.referrer_uid!==(referrer||'')))fail('簽署範本或推薦資料已變更，請重新預覽',409);
     const gate=handSignTemplateGate(template);extraSql=` AND ${gate.sql}`;extraArgs=[...gate.args];
     if(kind==='partner'){
-     if(originalSnapshot.attribution_mode!=='applicant_performance_v1')fail('業績歸屬欄位已更新，請重新填寫、預覽並簽名',409);
+     if(originalSnapshot.attribution_mode!=='applicant_performance_v1')fail('推薦人欄位已更新，請重新填寫、預覽並簽名',409);
      normalizeHandSignApplication(kind,originalSnapshot.fields);
      extraSql+=' AND EXISTS(SELECT 1 FROM users WHERE line_id=?)';extraArgs.push(uid);
     }else{

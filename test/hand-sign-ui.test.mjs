@@ -34,7 +34,7 @@ test('signed snapshot labels and metadata preserve all new kind fields and old P
 test('four-kind form and notification navigation retain account, review and retry boundaries',()=>{
  const ui=read('js/modules/reward-applications.js'),auth=read('js/auth.js'),shop=read('js/modules/store-shop.js'),entrySource=read('js/modules/store-shop-entry.js');
  assert.match(ui,/const kinds=\['reward','discount','partner','full'\]/);assert.match(ui,/class="ra-kind-tabs"/);assert.match(ui,/fieldDescriptors=Array\.isArray\(template\.fields\)/);
- assert.doesNotMatch(ui,/formDraft\.referrer_name=template\.referral/);assert.match(ui,/請自行填寫本次業績歸屬人姓名與會員編號/);assert.match(ui,/field\.readonly\?'readonly aria-readonly/);
+ assert.doesNotMatch(ui,/formDraft\.referrer_name=template\.referral/);assert.match(ui,/請自行填寫推薦人姓名與會員編號/);assert.match(ui,/field\.readonly\?'readonly aria-readonly/);
  assert.match(ui,/strokes:JSON\.parse\(JSON\.stringify\(strokes\)\)/);assert.match(ui,/用原簽署內容重試送出/);assert.match(ui,/getAccessToken\(\)===token/);
  assert(auth.indexOf('readSignedApplicationReviewEntry')<auth.indexOf("const cashierEntryConflict = shopSection === 'cashier'"));
  assert.match(auth,/請使用平台管理員帳號登入後查看此申請/);assert.match(auth,/applicationReview:reviewEntry/);
@@ -43,13 +43,13 @@ test('four-kind form and notification navigation retain account, review and retr
 });
 
 test('every affected served entry uses the new signing/editor cache versions',()=>{
- for(const file of ['index.html','admin.html','admin-v2.html']){assert.match(read(file),/reward-applications-entry\.js\?v=4/);assert.match(read(file),/partner-contracts-entry\.js\?v=11510-3/);}
- assert.match(read('index.html'),/js\/auth\.js\?v=11\.09/);assert.match(read('index.html'),/store-shop-entry\.js\?v=77/);
- for(const file of ['js/modules/store-shop-entry.js','store-shop.html'])assert.match(read(file),/store-shop\.js\?v=74/);
- assert.match(read('js/modules/reward-applications.js'),/reward-application-pdf\.mjs\?v=4/);assert.match(read('js/modules/reward-applications.js'),/reward-applications\.css\?v=2/);
+ for(const file of ['index.html','admin.html','admin-v2.html']){assert.match(read(file),/reward-applications-entry\.js\?v=5/);assert.match(read(file),/partner-contracts-entry\.js\?v=11510-3/);}
+ assert.match(read('index.html'),/js\/auth\.js\?v=11\.09/);assert.match(read('index.html'),/store-shop-entry\.js\?v=78/);
+ for(const file of ['js/modules/store-shop-entry.js','store-shop.html'])assert.match(read(file),/store-shop\.js\?v=75/);
+ assert.match(read('js/modules/reward-applications.js'),/reward-application-pdf\.mjs\?v=5/);assert.match(read('js/modules/reward-applications.js'),/reward-applications\.css\?v=2/);
 });
 
 test('PDF labels distinguish current attribution from historical CRM referral',()=>{
- assert.equal(labelsFor({form_kind:'partner',fields:{performance_owner_name:'測試',performance_owner_member_number:'20261021001'}}).performance_owner_name,'本次業績歸屬人姓名');
+ assert.equal(labelsFor({form_kind:'partner',fields:{performance_owner_name:'測試',performance_owner_member_number:'20261021001'}}).performance_owner_name,'推薦人姓名');
  assert.equal(labelsFor({form_kind:'partner',fields:{referrer_name:'舊姓名'}}).referrer_name,'CRM 推薦人姓名');
 });
