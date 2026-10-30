@@ -1,7 +1,7 @@
 // Dependency-free readable PDF export. Authoritative evidence remains the private server snapshot.
 export const fieldLabels={unit_name:'申請單位',applicant_name:'負責人／申請人',phone:'行動電話',line_contact:'LINE ID（選填）',unit_types:'單位類型',unit_types_other:'單位類型補充',recipients:'預計發送對象',recipients_other:'發送對象補充',scenarios:'預計使用情境',scenarios_other:'使用情境補充'};
 export const discountFieldLabels={unit_name:'店家／品牌／單位名稱',services:'主要商品／服務',business_types:'經營類型',business_types_other:'經營類型補充',applicant_name:'負責人／申請人',phone:'行動電話',line_contact:'LINE ID（選填）',assisted_partner:'協助申請之共好夥伴（申報資訊，非 CRM 歸屬）'};
-export const partnerFieldLabels={unit_name:'乙方姓名／公司名稱',party_type:'簽約身分',representative_name:'代表人（公司／法人）',applicant_name:'簽署人姓名',phone:'行動電話',address:'聯絡地址',referrer_name:'CRM 推薦人姓名',referrer_member_number:'CRM 推薦人會員編號',bank_name:'銀行名稱',bank_code:'銀行代碼',bank_branch:'分行名稱',bank_account_holder:'獎金收款戶名',bank_account:'獎金收款帳號'};
+export const partnerFieldLabels={unit_name:'乙方姓名／公司名稱',party_type:'簽約身分',representative_name:'代表人（公司／法人）',applicant_name:'簽署人姓名',phone:'行動電話',address:'聯絡地址',performance_owner_name:'本次業績歸屬人姓名',performance_owner_member_number:'本次業績歸屬人會員編號',referrer_name:'CRM 推薦人姓名',referrer_member_number:'CRM 推薦人會員編號',bank_name:'銀行名稱',bank_code:'銀行代碼',bank_branch:'分行名稱',bank_account_holder:'獎金收款戶名',bank_account:'獎金收款帳號'};
 export const fullFieldLabels={unit_name:'公司／店家名稱',applicant_name:'負責人／申請人',address:'地址',services:'主要商品／服務',phone:'行動電話',line_contact:'LINE ID（選填）',assisted_partner:'協助申請之共好夥伴（申報資訊）'};
 const fallbackLabels={reward:fieldLabels,discount:discountFieldLabels,partner:partnerFieldLabels,full:fullFieldLabels};
 export function labelsFor(s){

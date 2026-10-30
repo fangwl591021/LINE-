@@ -32,5 +32,5 @@ test('entry reuses owner forms, preserves role/quota rules and does not warm QR 
  assert.match(shop,/上架公司／商品/);assert.match(shop,/公司與商品上架步驟/);assert.match(shop,/折抵店家免費，可上架 1 件商品/);assert.match(shop,/雙向完整版年費未稅 NT\$ 6,000/);assert.match(shop,/可上架 20 件商品/);
  assert.match(shop,/api\('\/store',data\)/);assert.match(shop,/api\('\/product',data\)/);
  assert.ok(read('index.html').includes('home.js?v=8.27'));
- for(const file of ['js/modules/store-shop-entry.js','store-shop.html']){assert.ok(read(file).includes('store-shop.js?v=73'));assert.ok(read(file).includes('store-shop.css?v=35'));}
+ for(const file of ['js/modules/store-shop-entry.js','store-shop.html']){assert.ok(read(file).includes('store-shop.js?v=74'));assert.ok(read(file).includes('store-shop.css?v=35'));}
 });
