@@ -66,7 +66,7 @@ try{
  // 1. A legacy in-memory StoreShop must load the new capability and use the
  // exact destination's eighth mount argument, not the first product or scanner.
  {
-  const f=await fixture({legacy:true});try{await f.open();await expectExact(f);assert(f.assets.some(url=>url.includes('/store-shop.js?v=74')));console.log('PASS legacy capability upgrade opens the exact second product, not scan checkout');}finally{await f.close();}
+  const f=await fixture({legacy:true});try{await f.open();await expectExact(f);assert(f.assets.some(url=>url.includes('/store-shop.js?v=75')));console.log('PASS legacy capability upgrade opens the exact second product, not scan checkout');}finally{await f.close();}
  }
  // 2. Analytics uncertainty does not turn a known destination into the mall
  // root or another product. Only the mocked entry records an attempted click.

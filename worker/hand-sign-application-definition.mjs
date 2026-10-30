@@ -19,8 +19,8 @@ export const handSignFields=Object.freeze({
   descriptor('representative_name','代表人（公司／商號／法人必填）',150),
   descriptor('applicant_name','本人／代表簽署人姓名',80,true),
   descriptor('phone','行動電話',30,true,'tel'),descriptor('address','聯絡地址',300,true),
-  descriptor('performance_owner_name','本次業績歸屬人姓名',150),
-  descriptor('performance_owner_member_number','本次業績歸屬人會員編號',20),
+  descriptor('performance_owner_name','推薦人姓名',150),
+  descriptor('performance_owner_member_number','推薦人會員編號',20),
   descriptor('bank_name','獎金匯款銀行名稱',100,true),descriptor('bank_code','銀行代碼（三碼）',3,true),
   descriptor('bank_branch','分行名稱',100,true),descriptor('bank_account_holder','獎金收款戶名',150,true),
   descriptor('bank_account','銀行帳號',40,true)
@@ -68,8 +68,8 @@ export function normalizeHandSignApplication(kind,value){
   if(!['natural_person','company'].includes(out.party_type)||out.party_type==='company'&&!out.representative_name)fail('請完整填寫簽約身分及公司代表人');
   if(!/^\d{3}$/.test(out.bank_code)||!/^\d{5,30}$/.test(out.bank_account.replace(/[ -]/g,'')))fail('請填寫正確的三碼銀行代碼與帳號');
   out.bank_account=out.bank_account.replace(/[ -]/g,'');
-  if(Boolean(out.performance_owner_name)!==Boolean(out.performance_owner_member_number))fail('請一併填寫業績歸屬人姓名與會員編號');
-  if(out.performance_owner_member_number&&!/^\d{11,20}$/.test(out.performance_owner_member_number))fail('業績歸屬人會員編號格式不正確');
+  if(Boolean(out.performance_owner_name)!==Boolean(out.performance_owner_member_number))fail('請一併填寫推薦人姓名與會員編號');
+  if(out.performance_owner_member_number&&!/^\d{11,20}$/.test(out.performance_owner_member_number))fail('推薦人會員編號格式不正確');
  }
  return out;
 }

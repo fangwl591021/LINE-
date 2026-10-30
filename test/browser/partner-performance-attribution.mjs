@@ -36,7 +36,7 @@ try{
  for(const [key,value]of Object.entries(fields)){const control=page.locator('[name='+key+']');if(key==='party_type')await control.selectOption(value);else await control.fill(value);}
  await name.scrollIntoViewIfNeeded();await page.screenshot({path:output+'/editable-mobile.png'});
  await page.locator('[data-form=application] button[type=submit]').click();await page.locator('[data-form=sign]').waitFor();
- assert((await page.locator('dialog').innerText()).includes('本次業績歸屬人姓名：合成業績人甲'));
+ assert((await page.locator('dialog').innerText()).includes('推薦人姓名：合成業績人甲'));
  await page.locator('[data-action=edit]').click();await name.waitFor();assert.equal(await name.inputValue(),fields.performance_owner_name);assert.equal(await number.inputValue(),fields.performance_owner_member_number);
  await name.fill('合成業績人乙');await number.fill('20261021010');
  await page.locator('[data-form=application] button[type=submit]').click();await page.locator('[data-form=sign]').waitFor();
@@ -44,11 +44,11 @@ try{
  const canvas=page.locator('canvas');await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox();
  await page.mouse.move(box.x+20,box.y+20);await page.mouse.down();for(let i=1;i<=16;i++)await page.mouse.move(box.x+20+i*12,box.y+20+(i%2)*45);await page.mouse.up();
  await page.locator('[data-form=sign] button[type=submit]').click();await page.getByRole('heading',{name:'申請紀錄',exact:true}).waitFor();
- assert((await page.locator('dialog').innerText()).includes('本次業績歸屬人姓名：合成業績人乙'));
+ assert((await page.locator('dialog').innerText()).includes('推薦人姓名：合成業績人乙'));
  const rows=fixture.sql.prepare('SELECT snapshot_json FROM partner_applications').all();assert.equal(rows.length,1);
  const snapshot=JSON.parse(rows[0].snapshot_json);assert.equal(snapshot.fields.performance_owner_name,'合成業績人乙');assert.equal(snapshot.fields.performance_owner_member_number,'20261021010');assert.equal(snapshot.referrer_uid,REWARD);
  // PDF consumes the same saved fields and snapshot labels; its renderer is covered by the unit suite.
- assert.equal(snapshot.field_labels.performance_owner_name,'本次業績歸屬人姓名');
+ assert.equal(snapshot.field_labels.performance_owner_name,'推薦人姓名');
  assert.deepEqual(fixture.sql.prepare('SELECT * FROM users ORDER BY line_id').all(),usersBefore);assert.deepEqual(errors,[]);
  assert(await page.evaluate(()=>document.querySelector('dialog').scrollWidth<=document.querySelector('dialog').clientWidth+1));
  console.log('PASS mobile: editable independent attribution, preview, back-edit retention, corrected signed snapshot, CRM unchanged, no page errors');
