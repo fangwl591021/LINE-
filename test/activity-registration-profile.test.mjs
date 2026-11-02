@@ -22,7 +22,7 @@ function fixture(){
  vm.runInContext(section('const D1WriteModule = {','\n};')+'\n};\nglobalThis.writer=D1WriteModule;',context);
  context.writer.clearUserCache=async()=>{};
  context.writer.ensureReferralPlaceholderCard=async(_env,user)=>{calls.push(['placeholder',user.line_id]);return {};};
- vm.runInContext('globalThis.register=async function(payload,request,env){switch("registerUser"){'+section("    case 'registerUser': {","    case 'updateUserProfile': {")+'}}',context);
+ vm.runInContext('globalThis.register=async function(payload,request,env){const rewardActor=undefined;switch("registerUser"){'+section("    case 'registerUser': {","    case 'updateUserProfile': {")+'}}',context);
  return {sql,calls,context,env,call:p=>context.register({...input,...p},{},env)};
 }
 test('activity registration reuses users and existing join effects; token identity wins over supplied UID/role/nested profile',async()=>{

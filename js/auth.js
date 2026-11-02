@@ -836,6 +836,7 @@ window.submitRegistration = async function() {
 
     const payload = {
       userId: window.currentUserProfile.userId,
+      memberRegistrationForm: true,
       name: name,
       phone: phone,
       industry: document.getElementById('reg-industry').value.trim(),
@@ -904,6 +905,7 @@ window.saveProfileRegistration = async function(event, options = {}) {
     const referral = resolveReferralForRegistration(urlParams.get('ref') || '', urlParams.get('net') || window.currentNetworkId || 'admin');
     const payload = {
       userId,
+      memberRegistrationForm: true,
       name,
       phone,
       industry,
