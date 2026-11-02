@@ -68,3 +68,23 @@ test('actual follow and daily paths award 300 and 10 gift money only once on sim
  assert.deepEqual(credits.map(p=>[p.points,p.pointType]),[[300,'gift_money'],[10,'gift_money']]);f.sql.close();
 });
 
+test('verified profile save uses the actual registration writer and persists the effective sponsor',async()=>{
+ const f=fixture();f.seed(sponsor);f.seed(other);f.seed(buyer,'',sponsor);
+ for(const column of ['row_id','industry','gender','birthday','region','address','socials','role','store_id','network_id','tg_token','tg_chat_id'])
+   f.sql.exec('ALTER TABLE users ADD COLUMN '+column+' TEXT');
+ const start=source.indexOf('const D1WriteModule = {');
+ const writer=vm.runInNewContext(source.slice(start,source.indexOf('\n};',start))+'\n};D1WriteModule',{
+   writeRegistrationWithCredits,isRewardOnlyRole:()=>false,
+   SecurityModule:{cleanPhone:p=>p,normalizeRole:r=>r,hasHardAdminId:()=>false,isHardAdmin:()=>false,sanitizeRole:()=> 'user'},
+   D1ReadModule:{first:async(env,q,args)=>env.ACTMASTER_DB.prepare(q).bind(...args).first(),userRow:r=>r}
+ });
+ writer.clearUserCache=async()=>{};writer.ensureReferralPlaceholderCard=async()=>null;
+ const payload={userId:buyer,name:'新會員',phone:'0912345678',referrerId:other};
+ const env={ACTMASTER_DB:f.db};
+ assert.equal((await writer.upsertUser(payload,env,{rewardActor:other})).success,false);
+ assert.equal(f.rows().length,0);
+ for(let i=0;i<2;i++)assert.equal((await writer.upsertUser(payload,env,{rewardActor:buyer})).success,true);
+ assert.equal(f.sql.prepare('SELECT referrer_id FROM users WHERE line_id=?').get(buyer).referrer_id,sponsor);
+ assert.equal(f.rows().find(r=>r.award_type==='member_inviter_bonus').user_id,sponsor);
+ assert.equal(f.rows().length,3);f.sql.close();
+});
