@@ -1,4 +1,4 @@
-import legacyWorker, { runAutomatedUploaderMatch, storeInviteProfileView, scoreMemberDirectoryBatch, storeCommercePointService, getContractAdminNotificationIds, getContractAdminNotificationNames } from './workerbackup.js';
+import legacyWorker, { runAutomatedUploaderMatch, deliverRegistrationShoppingCredits, storeInviteProfileView, scoreMemberDirectoryBatch, storeCommercePointService, getContractAdminNotificationIds, getContractAdminNotificationNames } from './workerbackup.js';
 import { CustomerTagAnalysisModule } from './worker/customer-tag-analysis.mjs';
 import { CardFateTagAnalysisModule } from './worker/card-fate-tag-analysis.mjs';
 import { CardUploaderMatchModule } from './worker/card-uploader-match.mjs';
@@ -520,6 +520,9 @@ export default {
 
   async scheduled(controller, env, ctx) {
     if (controller?.cron === '* * * * *') {
+      const credits = deliverRegistrationShoppingCredits(env).catch(() => console.error('member_shopping_credit_delivery_failed'));
+      if (ctx?.waitUntil) ctx.waitUntil(credits);
+      else await credits;
       const advance = processAiAdvanceReminders(env).catch(() => console.error('ai_advance_reminder_cron_failed'));
       if (ctx?.waitUntil) ctx.waitUntil(advance);
       else await advance;

@@ -1,4 +1,5 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
+import { deliverMemberCredits, verifyRegistrationActor, writeRegistrationWithCredits } from './worker/member-shopping-credit.mjs';
 import { findMemberReferrer } from './worker/member-number.mjs';
 import { createPartnerV2Order, markPartnerV2OrderPaid, updatePartnerV2OrderStatus } from './worker/partner-bonus-v2.mjs';
 import { generateCardBusinessCopy } from './worker/card-business-copy.mjs';
@@ -2387,8 +2388,8 @@ const LineOAChatModule = {
       WHERE user_id = ? AND card_id = ? AND award_type = ?
       LIMIT 1
     `, [pointUserId, cardId, awardType]).catch(() => null);
-    if (existing && ['sent', 'local_sent'].includes(this.text(existing.status))) {
-      return { awarded: false, reason: 'already_awarded', pointUserId };
+    if (existing) {
+      return { awarded: false, reason: ['sent','local_sent'].includes(existing.status) ? 'already_awarded' : 'already_recorded', pointUserId };
     }
     if (!existing) {
       const inserted = await env.ACTMASTER_DB.prepare(`
@@ -2414,11 +2415,12 @@ const LineOAChatModule = {
         pointType: 'gift_money',
         eventName,
         eventContent,
-        shop_remark: ['line_oa_follow', createdAt || new Date().toISOString()].join(';')
+        shop_remark: ['line_oa_follow', createdAt || new Date().toISOString()].join(';'),
+        skipMotherMemberSetup:true, requireConfirmedResult:true
       }, env).catch(e => ({ success: false, error: e.message || 'Point API failed' }));
       result.motherMember = motherMember;
     }
-    let status = result && result.success ? 'sent' : 'pending_sync';
+    let status = result && result.success ? 'sent' : motherMember?.success === false ? 'pending_sync' : 'review';
     let syncJob = null;
     if (status === 'pending_sync') {
       syncJob = await PointSyncModule.enqueue({
@@ -2515,7 +2517,6 @@ const LineOAChatModule = {
        ON a.user_id = m.user_id
        AND a.card_id = 'line_oa_follow'
        AND a.award_type = 'line_oa_follow'
-       AND a.status IN ('sent', 'local_sent')
       WHERE m.event_type = 'follow'
         AND m.user_id <> ''
         AND a.award_id IS NULL
@@ -5643,7 +5644,7 @@ const PointModule = {
       networkId,
       sourceRef,
       pointWallet,
-      message: '子站加入只同步會員與點數錢包索引；300 點由 LINE 加好友流程發放。'
+      message: '加入會員的 300 購物金由加好友流程發放，註冊及受邀獎勵由首次完成會員資料時另行記錄。'
     };
   },
   async dailyCheckin(payload, env) {
@@ -5651,8 +5652,7 @@ const PointModule = {
     await this.ensureAwardTable(env);
 
     const rawUserId = String(payload.authenticatedUserId || payload.userId || '').trim();
-    const rawPointUserId = String(payload.pointUserId || payload.pt_uid || rawUserId || '').trim();
-    const pointUserId = await this.resolvePointUserId(env, rawPointUserId).catch(() => rawPointUserId);
+    const pointUserId = await this.resolvePointUserId(env, rawUserId);
     if (!pointUserId) return { success: false, error: 'Missing userId' };
 
     const today = this.taipeiDate();
@@ -5664,7 +5664,8 @@ const PointModule = {
          OR (user_id = ? AND card_id = ? AND award_type = 'daily_checkin')
       LIMIT 1
     `, [awardId, pointUserId, today]).catch(() => null);
-    if (existingAward && String(existingAward.status || '').trim() !== 'failed') {
+    if (existingAward && ['review','pending','failed'].includes(existingAward.status)) return {success:false,error:'今日簽到已受理，入帳結果待確認'};
+    if (existingAward) {
       const localBalance = await AdminPointModule.localBalance(env, pointUserId).catch(() => 0);
       return {
         success: true,
@@ -5680,6 +5681,12 @@ const PointModule = {
         }
       };
     }
+    const reserved = await env.ACTMASTER_DB.prepare(`
+      INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
+      VALUES (?, ?, ?, 'daily_checkin', 10, 'gift_money', 'pending', '{}', CURRENT_TIMESTAMP)
+    `).bind(awardId, pointUserId, today).run();
+
+    if (reserved.meta.changes !== 1) return {success:true,data:{awarded:false,alreadyChecked:true,points:0,date:today,pointUserId,message:'今日簽到已受理'}};
     const beforeWallet = await this.queryUserPoints({
       pointUserId,
       point_type: 'gift_money',
@@ -5700,69 +5707,6 @@ const PointModule = {
         reason: beforeWallet && beforeWallet.error ? beforeWallet.error : 'mother_wallet_unavailable',
         mother: beforeWallet || null
       });
-      await this.ensureLocalPointWallet(env, pointUserId, {
-        displayName: payload.displayName || payload.name || '',
-        pictureUrl: payload.pictureUrl || ''
-      }).catch(() => null);
-      await AdminPointModule.ensure(env);
-      const balanceBefore = await AdminPointModule.localBalance(env, pointUserId).catch(() => 0);
-      const balanceAfter = Number(balanceBefore || 0) + 10;
-      const localLedgerId = `APL_DAILY_${pointUserId}_${today}`;
-      await env.ACTMASTER_DB.prepare(`
-        INSERT OR IGNORE INTO admin_point_ledger (row_id,user_id,actor_user_id,mode,points,balance_after,note,source)
-        VALUES (?, ?, ?, 'grant', 10, ?, ?, 'daily_checkin_local_wallet')
-      `).bind(
-        localLedgerId,
-        pointUserId,
-        rawUserId || pointUserId,
-        balanceAfter,
-        `daily_checkin=${today}; mother_error=${String(beforeWallet && beforeWallet.error || 'mother_wallet_unavailable').slice(0, 180)}`
-      ).run();
-      await env.ACTMASTER_DB.prepare(`
-        INSERT OR REPLACE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
-        VALUES (?, ?, ?, 'daily_checkin', 10, 'gift_money', 'local_sent', ?, CURRENT_TIMESTAMP)
-      `).bind(
-        awardId,
-        pointUserId,
-        today,
-        JSON.stringify({ source: 'local_fallback', beforeWallet, balanceBefore, balanceAfter, localLedgerId })
-      ).run();
-      const syncJob = await PointSyncModule.enqueue({
-        jobId: `PSJ_DAILY_${pointUserId}_${today}`,
-        lineUserId: pointUserId,
-        source: 'daily_checkin_local_wallet',
-        sourceRef: awardId,
-        points: 10,
-        pointType: 'gift_money',
-        createdBy: rawUserId || pointUserId,
-        payload: {
-          userId: rawUserId || pointUserId,
-          pointUserId,
-          date: today,
-          localLedgerId,
-          motherError: beforeWallet && beforeWallet.error || ''
-        }
-      }, env).catch(e => ({ success: false, error: e.message || String(e) }));
-      return {
-        success: true,
-        data: {
-          awarded: true,
-          alreadyChecked: false,
-          points: 10,
-          date: today,
-          balanceBefore,
-          balance: balanceAfter,
-          pointUserId,
-          source: 'local_fallback',
-          syncJob,
-          message: 'Daily check-in recorded locally.'
-        }
-      };
-      return {
-        success: false,
-        error: beforeWallet && beforeWallet.error ? beforeWallet.error : '無法讀取母站點數',
-        data: { pointUserId, date: today, stage: 'before_query', beforeWallet }
-      };
     }
 
     const balanceBefore = Number(beforeWallet.data?.balance || 0) || 0;
@@ -5786,6 +5730,7 @@ const PointModule = {
     };
 
     if (dailyAwardExists(beforeWallet)) {
+      await env.ACTMASTER_DB.prepare("UPDATE point_awards SET status='sent',updated_at=CURRENT_TIMESTAMP WHERE award_id=?").bind(awardId).run();
       return {
         success: true,
         data: {
@@ -5800,18 +5745,14 @@ const PointModule = {
       };
     }
 
-    await env.ACTMASTER_DB.prepare(`
-      INSERT OR IGNORE INTO point_awards (award_id,user_id,card_id,award_type,points,point_type,status,response_json,updated_at)
-      VALUES (?, ?, ?, 'daily_checkin', 10, 'gift_money', 'pending', '{}', CURRENT_TIMESTAMP)
-    `).bind(awardId, pointUserId, today).run();
-
     const result = await this.insertUserPoint({
       userId: pointUserId,
       points: 10,
       pointType: 'gift_money',
       eventName: '點數家族每日簽到',
       eventContent: `點數家族 ${today} 每日簽到贈點`,
-      shop_remark: `daily_checkin=${today}`
+      shop_remark: `daily_checkin=${today}`,
+      requireConfirmedResult:true
     }, env).catch(e => ({ success: false, error: e && e.message ? e.message : String(e) }));
 
     let afterWallet = null;
@@ -5835,21 +5776,12 @@ const PointModule = {
       SET status = ?, response_json = ?, updated_at = CURRENT_TIMESTAMP
       WHERE award_id = ?
     `).bind(
-      verified ? 'sent' : 'failed',
+      verified ? 'sent' : 'review',
       JSON.stringify({ result, before: balanceBefore, after: balanceAfter, afterWallet }),
       awardId
     ).run();
 
     if (!verified) {
-      return await this.dailyCheckinLocalFallback({
-        env,
-        pointUserId,
-        rawUserId,
-        today,
-        awardId,
-        reason: result && result.error ? result.error : 'mother_verify_failed',
-        mother: { result, before: balanceBefore, after: balanceAfter, afterWallet }
-      });
       return {
         success: false,
         error: result && result.error ? result.error : '母站尚未確認點數入帳，請重新整理後再試',
@@ -7211,7 +7143,9 @@ const PointSyncModule = {
       });
       return { success: false, error: 'Missing line user id or points', jobId: job.jobId };
     }
+    const memberReward = source === 'line_oa_follow' || source === 'daily_checkin_local_wallet';
     const result = await PointModule.insertUserPoint({
+      ...(memberReward ? {requireConfirmedResult:true} : {}),
       userId: job.lineUserId,
       points,
       pointType: job.pointType || 'gift_money',
@@ -7231,7 +7165,7 @@ const PointSyncModule = {
     }
     const error = this.text(result && result.error, 'Point sync failed');
     await this.updateJob(env, job.jobId, {
-      status: 'failed',
+      status: memberReward ? 'review' : 'failed',
       incrementRetry: true,
       lastError: error,
       result: result || {}
@@ -8721,6 +8655,10 @@ export async function scoreMemberDirectoryBatch(env, actor, member, candidates) 
 }
 
 // Thin bridge only; cashier, PointModule, identity and LINE reply ownership stay unchanged.
+export function deliverRegistrationShoppingCredits(env) {
+  return deliverMemberCredits(env.ACTMASTER_DB, payload => PointModule.insertUserPoint(payload, env));
+}
+
 export const storeCommercePointService = createCommercePointService(PointModule);
 
 // Reuse the existing protected administrator identities for contract-review notifications.
@@ -10778,6 +10716,7 @@ const D1WriteModule = {
     if (!this.hasD1(env)) return null;
     const user = this.normalizeUser(payload);
     if (!user) return { success: false, error: 'Missing userId' };
+    if (options.rewardActor && options.rewardActor !== user.line_id) return {success:false,error:'會員身分不符'};
     const data = payload.data || payload.profile || payload;
     const existing = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? OR row_id = ? LIMIT 1', [user.line_id, user.line_id]);
     if (options.createOnly && existing) {
@@ -10832,7 +10771,7 @@ const D1WriteModule = {
       user.role = existing ? this.role(existing.role) : 'user';
     }
     user.role = SecurityModule.sanitizeRole(user.line_id, user.role, user);
-    const userWrite = await env.ACTMASTER_DB.prepare(`
+    const profileWrite = env.ACTMASTER_DB.prepare(`
       INSERT INTO users (row_id,line_id,name,industry,gender,phone,birthday,region,address,socials,role,store_id,referrer_id,network_id,tg_token,tg_chat_id)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(line_id) DO UPDATE SET
@@ -10846,9 +10785,14 @@ const D1WriteModule = {
           ELSE excluded.role
         END,
         store_id=excluded.store_id,
-        referrer_id=excluded.referrer_id,network_id=excluded.network_id,tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
+        referrer_id=CASE WHEN ${options.rewardActor ? '1' : '0'} AND COALESCE(users.referrer_id,'')<>'' THEN users.referrer_id ELSE excluded.referrer_id END,
+        network_id=CASE WHEN ${options.rewardActor ? '1' : '0'} AND COALESCE(users.referrer_id,'')<>'' THEN users.network_id ELSE excluded.network_id END,
+        tg_token=excluded.tg_token,tg_chat_id=excluded.tg_chat_id
       WHERE ${options.createOnly ? '0' : '1'}
-    `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id).run();
+    `).bind(user.row_id,user.line_id,user.name,user.industry,user.gender,user.phone,user.birthday,user.region,user.address,user.socials,user.role,user.store_id,user.referrer_id,user.network_id,user.tg_token,user.tg_chat_id);
+    const userWrite = options.rewardActor && options.rewardActor === user.line_id
+      ? await writeRegistrationWithCredits(env.ACTMASTER_DB, user, profileWrite)
+      : await profileWrite.run();
     if (options.createOnly && Number(userWrite.meta?.changes) === 0) {
       const concurrent = await D1ReadModule.first(env, 'SELECT * FROM users WHERE line_id = ? LIMIT 1', [user.line_id]);
       if (!concurrent) throw new Error('Activity member result unavailable');
@@ -17155,6 +17099,12 @@ async function dispatchAction(action, payload, request, env) {
     return { success: false, error: authz.error || 'Access Denied' };
   }
   const actor = authz.actor;
+  let rewardActor;
+  if (['registerUser', 'updateUserProfile'].includes(action) && (payload.memberRegistrationForm === true || payload.activityRegistration === true)) {
+    const token = payload.lineAccessToken || request.headers.get('Authorization')?.replace(/^Bearer /, '');
+    rewardActor = payload.userId;
+    if (!await verifyRegistrationActor(token, rewardActor).catch(() => false)) return {success:false,error:'請重新登入 LINE 後送出會員資料'};
+  }
   // 1. 資安防護：LIFF Token 驗證 (過渡相容模式)
   const legacyAuthSkipActions = SecurityModule.legacyAuthSkipActions();
   if (payload.userId && !actor && !legacyAuthSkipActions.has(action)) {
@@ -17320,7 +17270,7 @@ async function dispatchAction(action, payload, request, env) {
             networkId: String(payload.networkId || 'admin').trim()
           };
         }
-        const d1Result = await D1WriteModule.upsertUser(payload || {}, env, { createOnly: activityRegistration });
+        const d1Result = await D1WriteModule.upsertUser(payload || {}, env, { createOnly: activityRegistration, rewardActor });
         if (d1Result?.success === false) return d1Result;
         if (activityRegistration && (d1Result?.success === false || d1Result?.data?.existed)) return d1Result;
         if (d1Result) {
@@ -17343,10 +17293,11 @@ async function dispatchAction(action, payload, request, env) {
     }
     case 'updateUserProfile': {
       try {
-        const d1Result = await D1WriteModule.upsertUser(payload || {}, env);
+        const d1Result = await D1WriteModule.upsertUser(payload || {}, env, {rewardActor});
         if (d1Result?.code === 'MEMBER_REFERRER_INVALID') return d1Result;
         if (d1Result && d1Result.success !== false) return d1Result;
       } catch (e) {
+        if (rewardActor) return {success:false,error:'會員資料與購物金紀錄未完成，請重新送出'};
         console.error("D1 upsertUser fallback", e);
       }
       if (isRewardOnlyRole(payload.authenticatedRole) || payload.authenticatedRole === 'redeem' ||

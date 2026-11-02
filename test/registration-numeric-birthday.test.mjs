@@ -48,7 +48,7 @@ test('actual registration submits converted birthday with identity/referral/othe
     assert.equal(f.calls.length, 1);
     assert.equal(f.calls[0][0], 'registerUser');
     assert.equal(f.calls[0][2], true);
-    assert.deepEqual(JSON.parse(JSON.stringify(f.calls[0][1])), { userId: 'user-test', name: '測試會員',
+    assert.deepEqual(JSON.parse(JSON.stringify(f.calls[0][1])), { userId: 'user-test', memberRegistrationForm:true, name: '測試會員',
       phone: '0912345678', industry: '測試業種', birthday: expected, '推薦人': 'ref-test', referrerId: 'ref-test', networkId: 'net-test' });
     assert.equal(f.sessions[0].birthday, expected);
   }

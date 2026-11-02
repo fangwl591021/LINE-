@@ -39,6 +39,7 @@ const foundationChecks = [
 ];
 
 const fullChecks = [
+  'test/member-shopping-credit.test.mjs',
   'test/hand-sign-applications.test.mjs',
   'test/application-admin-notifications.test.mjs',
   'test/member-display-feed.test.mjs',
