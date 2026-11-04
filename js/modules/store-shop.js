@@ -26,7 +26,7 @@
     if(!maps&&address.trim())maps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(address);
     return `<section class="shop-company-info" aria-label="公司聯絡資訊"><h3>公司／店家資訊</h3><dl><div><dt>電話</dt><dd>${esc(phone||'尚未提供')}</dd></div><div><dt>地址</dt><dd>${esc(address||'尚未提供')}</dd></div>${s.hours?`<div><dt>營業時間</dt><dd>${esc(s.hours)}</dd></div>`:''}</dl><div class="shop-row">${/^\+?\d{8,15}$/.test(dial)?`<a class="shop-link" href="tel:${dial}">撥打電話</a>`:''}${maps?`<a class="shop-link" href="${esc(maps)}" target="_blank" rel="noopener noreferrer">開啟地圖</a>`:''}</div></section>`;
   }
-  async function prepareImage(file) {
+  async function prepareImage(file, productPhoto = false) {
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error('請選擇 JPG、PNG 或 WebP 圖片；HEIC 請先轉成 JPG');
     if(!file.size || file.size>10*1024*1024) throw new Error('圖片須小於 10MB，且不可為空檔案');
     const url=URL.createObjectURL(file), image=new Image();
@@ -44,7 +44,15 @@
       const context=canvas.getContext('2d'); if(!context) throw new Error('裝置無法處理圖片，請改用圖片網址');
       context.fillStyle='#fff'; context.fillRect(0,0,canvas.width,canvas.height);
       context.drawImage(image,0,0,canvas.width,canvas.height);
-      const data=canvas.toDataURL('image/jpeg',0.9);
+      const data = productPhoto ? await new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (!blob) return reject(new Error('圖片處理失敗，請重新選擇'));
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error('圖片讀取失敗，請再試一次'));
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        }, 'image/jpeg', 0.82);
+      }) : canvas.toDataURL('image/jpeg',0.9);
       if(!data.startsWith('data:image/jpeg;base64,')||data.length>Math.ceil(4*1024*1024*4/3)+32) throw new Error('圖片處理後仍過大，請縮小後再上傳');
       return data;
     } finally { URL.revokeObjectURL(url); }
@@ -627,6 +635,7 @@
         }
       });
     };
+    let productUpload = null;
     root.onchange=event=>{
       const picker=event.target;
       if(picker.closest('[data-form="product-search"]')&&['purchase_mode','redeem'].includes(picker.name)){void run(()=>discover(discoveryValues()));return;}
@@ -636,34 +645,59 @@
       const file=picker.files?.[0]; if(!file) return;
       const field=picker.closest('.shop-image-field'),form=picker.closest('form');
       const status=field.querySelector('.shop-image-status');
-      const controls=[...root.querySelectorAll('button,input,select,textarea')];
+      const productPhoto = form.dataset.form === 'product';
+      const upload = productPhoto ? { form, token: window.liff?.getAccessToken?.(), submitter: null } : null;
+      const currentProductForm = () => !upload || (root.isConnected && root.contains(form) &&
+        window.liff?.isLoggedIn?.() && upload.token && window.liff.getAccessToken() === upload.token);
+      productUpload = upload;
+      const saveButton = form.querySelector('.shop-row button.primary');
+      const controls = [...root.querySelectorAll('button,input,select,textarea')].filter(control => {
+        if (!productPhoto || !form.contains(control)) return true;
+        if (control === saveButton) return false;
+        return control.matches('button, input[type=file], [name=image_url]');
+      });
       const disabled=controls.map(control=>control.disabled);
       busy=true; controls.forEach(control=>control.disabled=true); alert.textContent=''; status.textContent='處理圖片中…';
       void run(async()=>{
         try {
-          const data=await prepareImage(file);
-          await api('/manage',null,true);
+          const [data] = await Promise.all([prepareImage(file, productPhoto), api('/manage',null,true)]);
+          if (!currentProductForm()) throw new Error('登入或頁面已變更，請重新開啟商品');
           if(typeof window.fetchAPI!=='function') throw new Error('上傳服務尚未就緒，請重新開啟商城');
-          status.textContent='上傳圖片中…';
+          status.textContent=productPhoto?'圖片上傳中，可繼續填寫商品資料。':'上傳圖片中…';
           const result=await window.fetchAPI('uploadImageToR2',{base64Image:data},true);
           if(!result?.success||!result.url) throw new Error(result?.error||'圖片上傳失敗，原圖保持不變，請重試');
           const uploaded=new URL(result.url);
           if(uploaded.protocol!=='https:'||uploaded.username||uploaded.password) throw new Error('上傳服務回傳的圖片網址無效');
+          if (!currentProductForm()) throw new Error('登入或頁面已變更，請重新開啟商品');
           if(!root.contains(form)) return;
           form.elements.image_url.value=uploaded.href;
           field.querySelector('.shop-upload-preview').innerHTML=photo(uploaded.href);
           pendingImage(form,'圖片已上傳，尚未儲存。請按下方「儲存'+(form.dataset.form==='store'?'店面':'商品')+'並更新圖片」才會更新。');
-          field.querySelector('[data-image-save]').scrollIntoView({block:'center'});
+          if (!productPhoto) field.querySelector('[data-image-save]').scrollIntoView({block:'center'});
         } catch(error) {
+          if (upload) upload.submitter = null;
           status.textContent='未更新圖片：'+error.message;
           throw error;
         } finally {
+          if (upload) saveButton.textContent = '儲存商品';
+          productUpload = null;
           busy=false; picker.value=''; controls.forEach((control,i)=>control.disabled=disabled[i]);
+          if (upload?.submitter && currentProductForm()) {
+            form.requestSubmit(upload.submitter);
+          }
         }
       });
     };
     root.onsubmit=event=>{
-      const form=event.target.closest('[data-form]'); if(!form) return; event.preventDefault(); if(busy) return;
+      const form=event.target.closest('[data-form]'); if(!form) return; event.preventDefault();
+      if (busy) {
+        if (productUpload?.form === form) {
+          productUpload.submitter = event.submitter || form.querySelector('.shop-row button.primary');
+          form.querySelector('.shop-image-status').textContent = '已收到儲存要求，圖片上傳完成後會自動送出。';
+          productUpload.submitter.textContent = '等待圖片上傳…';
+        }
+        return;
+      }
       const data=Object.fromEntries(new FormData(form));
       if(form.dataset.form==='product-search'){void run(()=>discover(discoveryValues()));return;}
       if(form.dataset.form==='search') { void run(()=>list('',data.q,listCategory)); return; }
