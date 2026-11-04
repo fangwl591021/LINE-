@@ -27,6 +27,11 @@ const server=createServer(async(req,res)=>{try{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin='http://127.0.0.1:'+server.address().port,browser=await chromium.launch({channel:'chrome',headless:true}),results=[];
 try{
+ if(process.argv.includes('--product-speed')){
+  reset();
+  const {verifyProductUpload}=await import('./store-product-publish-speed.mjs');
+  console.log(await verifyProductUpload({browser,origin,root,fixture}));
+ }else{
  for(const width of [320,390,1280]){
   reset();const page=await browser.newPage({viewport:{width,height:900}}),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
@@ -41,4 +46,5 @@ try{
  }
  writeFileSync(join(output,'result.json'),JSON.stringify({pass:true,results,productionWrites:0,realExternalRequests:0},null,2));
  console.log(JSON.stringify({pass:true,results,productionWrites:0,realExternalRequests:0}));
+ }
 }finally{fixture?.close();await browser.close();await new Promise(resolve=>server.close(resolve));}
