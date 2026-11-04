@@ -11,7 +11,7 @@ import {sha256Text} from '../../worker/hand-sign-application-definition.mjs';
 const require=createRequire(import.meta.url),{chromium}=require('playwright');
 const root=fileURLToPath(new URL('../../',import.meta.url)).replace(/[\\/]$/,'');
 const kind=['reward','discount','partner','full'].includes(process.env.APPLICATION_TEST_KIND)?process.env.APPLICATION_TEST_KIND:'reward',discount=kind==='discount',extended=['partner','full'].includes(kind);
-const names={reward:'贈點單位',discount:'特約折抵店家',partner:'共創夥伴115.10契約',full:'雙向完整版'};
+const names={reward:'贈點單位',discount:'特約折抵店家',partner:'共創夥伴合作契約',full:'雙向完整版'};
 const output=resolve(process.env.REWARD_TEST_OUTPUT||'../contract-review/'+kind+'-application-tests');mkdirSync(output,{recursive:true});
 const s=rewardFixture();s.sql.exec("ALTER TABLE users ADD COLUMN referrer_id TEXT DEFAULT '';ALTER TABLE users ADD COLUMN member_number TEXT DEFAULT '';"+['0068_reward_applications.sql','0069_discount_applications.sql','0077_hand_sign_contracts.sql','0078_application_admin_notifications.sql'].map(f=>readFileSync(join(root,'migrations',f),'utf8')).join('\n'));
 for(const candidate of ['partner','full']){
@@ -42,7 +42,7 @@ try{
   if(extended){
    const data=kind==='partner'?partnerFields():fullFields();
    for(const [name,value]of Object.entries(data)){const field=page.locator('[name="'+name+'"]');if(await field.getAttribute('readonly')!==null){assert.equal(await field.inputValue(),'');continue;}if(await field.evaluate(node=>node.tagName)==='SELECT')await field.selectOption(value);else await field.fill(value);}
-   if(kind==='partner'){assert.equal(await page.locator('[name=representative_name]').getAttribute('required'),'');assert.equal(await page.locator('[name=referrer_name]').getAttribute('readonly'),'');}
+   if(kind==='partner'){assert.equal(await page.locator('[name=representative_name]').getAttribute('required'),'');assert.equal(await page.locator('[name=performance_owner_name]').isEditable(),true);}
   }
   if(discount){await page.locator('[name=services]').fill('提供生活用品、居家設備與專業維修服務，協助消費者依實際需求選購，並說明商品使用與售後服務。');await page.locator('[name=assisted_partner]').fill('合成協助者');}
   for(const [name,value]of extended?[]:discount?[['business_types','實體店面'],['business_types','專業服務']]:[['unit_types','企業'],['recipients','員工'],['scenarios','員工福利']])await page.locator(`[name=${name}][value="${value}"]`).check();

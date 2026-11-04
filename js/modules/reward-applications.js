@@ -3,7 +3,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const status=v=>({pending:'已簽署・待審核',accepted:'審核通過・開通另行處理',rejected:'審核未通過'}[v]||v);
 let active;
 const kinds=['reward','discount','partner','full'];
-const kindNames={reward:'贈點單位',discount:'特約折抵店家',partner:'共創夥伴115.10契約',full:'雙向完整版'};
+const kindNames={reward:'贈點單位',discount:'特約折抵店家',partner:'共創夥伴合作契約',full:'雙向完整版'};
 const kindLabels={reward:fieldLabels,discount:discountFieldLabels,partner:partnerFieldLabels,full:fullFieldLabels};
 function snapshotHtml(s){return `<h3>${esc(s.terms.title)}</h3>${Object.entries(labelsFor(s)).filter(([k])=>s.fields[k]?.length).map(([k,label])=>`<p class="ra-copy"><strong>${esc(label)}：</strong>${esc(displayFieldValue(k,s.fields[k]))}</p>`).join('')}${policyNotesFor(s).length?`<section class="ra-note" aria-label="本次簽署制度確認"><h3>本次簽署制度確認</h3>${policyNotesFor(s).map(p=>`<p class="ra-copy">${esc(p)}</p>`).join('')}</section>`:''}<h3>完整合作條款</h3><small>版本：${esc(s.terms.version)}</small>${s.terms.paragraphs.map(p=>`<p class="ra-copy">${esc(p)}</p>`).join('')}${sourceHashFor(s)?`<small class="ra-copy">原始範本 SHA-256：${esc(sourceHashFor(s))}</small>`:''}`;}
 export async function openRewardApplications({base,admin=false,target='',kind='reward',applicationId='',isCurrent=()=>true,fetcher=fetch}={}){

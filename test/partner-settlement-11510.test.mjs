@@ -119,3 +119,30 @@ test('mixed historical statement holds terminated portion while claiming and pay
  const view=await readPartnerSettlement11510(f.ctx(),REWARD);assert.equal(view.statements[0].items.find(x=>x.tx_id==='known-tx').effectiveStatus,'cancelled_by_contract');
  const p=await f.post('payments',{statementId:s.id,paidAt:'2026-10-20T01:00:00.000Z',paymentRef:'部分有效合成憑證'});assert.equal(p.payment.amount,1500);assert.equal(f.sql.prepare("SELECT status FROM bonus_transactions WHERE tx_id='known-tx'").get().status,'review_required');
 });
+
+test('115.11 November uses November only, freezes the tier for late supplements, charges each share once',async t=>{
+ const {POLICY_11511:version,performanceWindow,renewalPercent,entitledPortion}=await import('../worker/partner-renewal-11511.mjs');
+ assert.deepEqual([0,1,2,3,4,5,6,12].map(renewalPercent),[20,20,40,40,60,60,100,100]);
+ assert.equal(performanceWindow('2026-11').start,'2026-10-31T16:00:00.000Z');assert.equal(performanceWindow('2027-11').start,'2026-11-30T16:00:00.000Z');
+ assert.equal(entitledPortion('renewal_referral',{ground:'notice',effective_at:'2026-11-03'},'2026-11-01'),'retained');
+ assert.equal(entitledPortion('renewal_placement',{ground:'nonrenewal',effective_at:'2026-11-03'},'2026-11-01'),'ended_owner');
+ const f=fixture(t);f.time('2026-12-05T02:00:00.000Z');
+ function deal(id,at,admission='new',status='paid'){
+  f.seed(id);f.sql.prepare('UPDATE orders SET buyer_id=?,payment_status=?,order_type=? WHERE order_id=?').run(id,status,'tenant_annual_fee',id);
+  f.sql.prepare('UPDATE partner_bonus_deal_confirmations SET confirmed_at=?,deal_type=? WHERE order_id=?').run(at,'tenant_annual_fee',id);
+  f.sql.prepare('INSERT INTO partner_service_year_claims VALUES(?,?,?,?,?,?)').run(id,id,at,'2028-11-01',admission,at);
+  f.sql.prepare('DELETE FROM bonus_transactions WHERE order_id=?').run(id);
+ }
+ function portion(id,mode,kind='renewal_referral'){
+  f.seed(id,version,1500,'2026-11');
+  f.sql.prepare('UPDATE bonus_transactions SET bonus_type=?,raw_json=? WHERE order_id=?').run(kind,JSON.stringify({beneficiaryPolicyVersion:version,baseAmount:1500,renewalMode:mode}),id);
+ }
+ deal('oct','2026-10-31T15:59:59.999Z');deal('nov1','2026-10-31T16:00:00.000Z');deal('nov2','2026-11-30T15:59:59.999Z');deal('react','2026-11-01','reactivation');deal('refund','2026-11-02','new','refunded');deal('dec','2026-11-30T16:00:00.000Z');
+ portion('nov','tier');portion('owner','tier','renewal_placement');portion('retained','retained');
+ const terms={month:'2026-11',deliveredAt:'2026-12-02T02:00:00.000Z'};
+ const r=await f.statement(terms);assert.equal(r.statement.total_amount,1500);
+ const log=()=>JSON.parse(f.sql.prepare("SELECT raw_json FROM bonus_transactions WHERE order_id='nov'").get().raw_json);
+ assert.equal(log().monthlyPerformance.count,2);assert.equal(log().appliedPercent,40);assert.equal(log().companyRetained,900);
+ deal('late3','2026-11-03');deal('late4','2026-11-04');portion('late','tier');
+ assert.equal((await f.statement(terms)).statement.total_amount,600);assert.equal(log().amount,600);
+});

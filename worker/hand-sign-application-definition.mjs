@@ -4,7 +4,7 @@ import {resolveIslandMember,IslandAccessError} from './island-interaction-access
 // The actual source documents and legal text are provisioned privately into D1.
 // No request can upload, choose another template version or change these source pins.
 export const handSignTemplates=Object.freeze({
- partner:Object.freeze({version:'partner-115.10-hand-sign-2026-10-29-v2',sourceSha256:'1fa48f76ed888e656a5e1efac84c670b1132f8f1cf6a62fa8c8c76b48ba7f42c',title:'點數通「共創夥伴」合作推展合約書'}),
+ partner:Object.freeze({version:'partner-115.11-hand-sign-2026-11-04-v1',sourceSha256:'91fa4438661132222d0f5a77f54e10ab76d7c8eb3338ebd0f11175b7be4aabef',title:'點數通「共創夥伴」合作推展合約書'}),
  full:Object.freeze({version:'full-2026-10-28-v1',sourceSha256:'27fcbe65095b3a5fd06e2ec51b312d44b5e8ae5f60a241a880d1e03613cf1821',title:'雙向完整版申請書'})
 });
 // Keep the previous pin while the private D1 row is switched after Worker rollout.
@@ -38,14 +38,14 @@ const baseConfirmations={
  authority:'我是本人或有權代表本單位簽署的人員，所填資料及收款資料正確。我了解目前驗證 LINE 帳號，仍須平台核對。'
 };
 export const handSignConfirmations=Object.freeze({
- partner:Object.freeze({...baseConfirmations,policy:'我已核對115.10版共創夥伴契約及本次列明的制度決議；本次送出由平台審核，不會直接建立獎金資格。'}),
+ partner:Object.freeze({...baseConfirmations,policy:'我已核對預覽所列版本的共創夥伴契約及本次列明的制度決議；本次送出由平台審核，不會直接建立獎金資格。'}),
  full:Object.freeze({...baseConfirmations,fees:'我確認雙向完整版為一年期，未稅6,000元、營業稅300元、含稅6,300元；公司確認款項後另行開通。',discount:'我同意依完整申請書提供購物金折抵優惠，實際商品與折抵設定另行核對。',separate_partner:'我了解完整版使用申請不等同共創夥伴契約，若申請共創夥伴須另行簽署該份契約。'})
 });
 
 export async function readHandSignTemplate(db,kind){
  if(!handSignTemplates[kind])fail('申請類型不正確');
  const row=await db.prepare('SELECT kind,version,title,terms_json,source_sha256,content_sha256,active FROM signing_application_templates WHERE kind=?').bind(kind).first();
- const pins=kind==='partner'?[handSignTemplates.partner,previousPartnerTemplate]:[handSignTemplates[kind]];
+ const pins=kind==='partner'?[handSignTemplates.partner,{version:'partner-115.10-hand-sign-2026-10-29-v2',sourceSha256:'1fa48f76ed888e656a5e1efac84c670b1132f8f1cf6a62fa8c8c76b48ba7f42c',title:'點數通「共創夥伴」合作推展合約書'},previousPartnerTemplate]:[handSignTemplates[kind]];
  const pin=row&&pins.find(candidate=>row.version===candidate.version&&row.source_sha256===candidate.sourceSha256&&row.title===candidate.title);
  if(!pin||row.active!==1||typeof row.terms_json!=='string'||row.terms_json.length>150000||!/^[a-f0-9]{64}$/.test(row.content_sha256||''))fail('簽署範本尚未核對或已停止使用，請聯絡管理員',503);
  if(await sha256Text(row.terms_json)!==row.content_sha256)fail('簽署範本內容校驗不符，請聯絡管理員',503);
