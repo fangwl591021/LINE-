@@ -1302,7 +1302,7 @@
           <div class="px-5 py-3 border-b border-slate-100 bg-slate-50/70 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div class="flex items-center gap-2">
               <span class="text-[12px] text-slate-500 font-bold">訂單狀態</span>
-              <select id="bonus-order-status-filter" onchange="bonusOrderPage=1; renderBonusOrders()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
+              <select id="bonus-order-status-filter" onchange="bonusOrderPage=1; if (bonusOrderListReady) renderBonusOrders()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="all">全部</option>
                 <option value="pending_payment">待收款</option>
                 <option value="paid">已收款</option>
@@ -2027,6 +2027,7 @@
         return data.data || data;
       } catch (err) {
         const message = err && err.name === 'AbortError' ? '連線逾時，請重新整理後再試' : err.message;
+        if (options.throwOnError) throw new Error(message);
         if (!options.silent) showToast(message, true);
         return null;
       } finally {
@@ -3007,68 +3008,46 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       };
     }
 
-    async function fetchTenantOrdersDirect(status) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
-      try {
-        const res = await fetch(WORKER_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            action: 'mlmListOrders',
-            payload: {
-              orderType: 'tenant_annual_fee',
-              page: 1,
-              pageSize: 100,
-              status: status || 'all',
-              networkId: 'admin',
-              role: 'admin'
-            }
-          })
-        });
-        const data = await res.json();
-        if (!data || data.success === false) throw new Error(data?.error || '訂單 API 回傳失敗');
-        return data.data || data.orders || data;
-      } finally {
-        clearTimeout(timer);
-      }
-    }
+    let bonusOrderRequest = 0;
+    let bonusOrderListReady = false;
 
     async function loadBonusOrders() {
+      const requestId = ++bonusOrderRequest;
       const body = document.getElementById('bonus-orders-body');
-      if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-slate-400">載入訂單中...</td></tr>';
-      const status = document.getElementById('bonus-order-status-filter')?.value || 'all';
-      let res = null;
+      const pager = document.getElementById('bonus-order-pager');
+      if (!body || !pager) return;
+      bonusOrderListReady = false;
+      body.innerHTML = '<tr><td colspan="8" class="text-center py-8">載入訂單中…</td></tr>';
+      pager.textContent = '';
+      const actor = adminProfile?.userId;
+      const token = liff.isLoggedIn() && liff.getAccessToken();
+      const sameLogin = () => actor && token && adminProfile?.userId === actor && liff.isLoggedIn() && liff.getAccessToken() === token;
       try {
-        res = await fetchTenantOrdersDirect(status);
-      } catch (e) {
-        console.warn('[bonus orders] direct D1 list failed', e);
-      }
-
-      if (!res) {
-        res = await fetchAPI('getTenantBonusOrders', {
-          networkId: 'admin',
-          role: 'admin'
-        }, { silent: true, omitDefaultUserId: true, omitAuthToken: true, timeoutMs: 12000 });
-      }
-
-      if (!res) {
-        allBonusOrdersData = [];
-        if (body) body.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-500">訂單紀錄讀取失敗，請重新整理或稍後再試。</td></tr>';
-        renderBonusOrderPager(0);
-        return;
-      }
-
-      const list = Array.isArray(res) ? res : (Array.isArray(res?.orders) ? res.orders : (Array.isArray(res?.data) ? res.data : []));
-      allBonusOrdersData = list.map(normalizeBonusOrder);
-      bonusOrderPage = 1;
-      try {
+        if (!sameLogin()) throw new Error('login');
+        const orders = [];
+        for (let page = 1; ; page++) {
+          const rows = await fetchAPI('mlmListOrders', {
+            orderType: 'tenant_annual_fee', status: 'all', page, pageSize: 100
+          }, { silent: true, throwOnError: true });
+          if (requestId !== bonusOrderRequest) return;
+          if (!sameLogin()) throw new Error('login');
+          if (!Array.isArray(rows)) throw new Error('invalid order list');
+          orders.push(...rows.map(normalizeBonusOrder));
+          if (rows.length < 100) break;
+        }
+        allBonusOrdersData = orders;
+        bonusOrderListReady = true;
+        bonusOrderPage = 1;
         renderBonusOrders();
-      } catch (e) {
-        console.error('[bonus orders] render failed', e);
-        if (body) body.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-red-500">訂單已讀取，但畫面渲染失敗：${escapeHTML(e.message || e)}</td></tr>`;
-        renderBonusOrderPager(0);
+      } catch (error) {
+        if (requestId !== bonusOrderRequest) return;
+        allBonusOrdersData = [];
+        bonusOrderListReady = false;
+        pager.textContent = '';
+        const loginRequired = !sameLogin() || /access denied|token|登入|授權/i.test(error.message);
+        const message = loginRequired ? '請重新登入有權限的 LINE 帳號後再查看訂單。' : '未能取得訂單紀錄，請重新讀取。';
+        body.innerHTML = '<tr><td colspan="8" class="text-center py-8">' + message +
+          ' <button type="button" class="text-blue-700 underline" onclick="loadBonusOrders()">重新讀取</button></td></tr>';
       }
     }
 
