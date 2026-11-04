@@ -1,7 +1,7 @@
 import { CustomerImportModule } from './worker/customer-import.mjs';
 import { deliverMemberCredits, verifyRegistrationActor, writeRegistrationWithCredits } from './worker/member-shopping-credit.mjs';
 import { findMemberReferrer } from './worker/member-number.mjs';
-import { createPartnerV2Order, markPartnerV2OrderPaid, updatePartnerV2OrderStatus } from './worker/partner-bonus-v2.mjs';
+import { createTenantReceivable, markPartnerV2OrderPaid, updatePartnerV2OrderStatus } from './worker/partner-bonus-v2.mjs';
 import { generateCardBusinessCopy } from './worker/card-business-copy.mjs';
 import { createCommercePointService } from './worker/store-commerce-mother.mjs';
 import { CardLinks, cardLinksEnabled, cardLinksConfigResponse } from './worker/card-links.mjs';
@@ -16025,11 +16025,12 @@ const D1FinanceModule = {
   },
 
   async createOrder(payload, env) {
+    if (!this.hasD1(env) && ['tenant_annual_fee','tenant_renewal_fee'].includes(payload.orderType || 'tenant_annual_fee')) return {success:false,error:'制度資料庫暫時無法使用'};
     if (!this.hasD1(env)) return null;
     const order = MLMModule.normalizeOrder(payload || {});
     if (!order.buyerId) return { success: false, error: 'Missing buyerId' };
     if (order.grossAmount <= 0 || order.bv < 0) return { success: false, error: 'Invalid order amount or BV' };
-    const signedPartnerOrder = await createPartnerV2Order(env, order, legacy => ({ ...legacy, bonusPlanPreview: BonusPolicyModule.buildPlan(legacy) }), payload.authenticatedUserId);
+    const signedPartnerOrder = await createTenantReceivable(env, order, payload.authenticatedUserId);
     if (signedPartnerOrder) return signedPartnerOrder;
     order.bonusPlanPreview = BonusPolicyModule.buildPlan(order);
     await this.upsertOrder(order, env);
@@ -16037,7 +16038,7 @@ const D1FinanceModule = {
   },
 
   async markOrderPaid(payload, env) {
-    if (!this.hasD1(env)) return null;
+    if (!this.hasD1(env)) return {success:false,error:'無法查核訂單制度，請稍後再試'};
     const orderId = this.pick(payload, ['orderId']);
     if (!orderId) return { success: false, error: 'Missing orderId' };
     const signedPartnerPayment = await markPartnerV2OrderPaid(env, payload);
@@ -16832,6 +16833,7 @@ const MLMModule = {
     if (d1Result) return d1Result;
 
     const order = this.normalizeOrder(payload);
+    if (['tenant_annual_fee','tenant_renewal_fee'].includes(order.orderType)) return {success:false,error:'制度資料庫暫時無法使用'};
     if (!order.buyerId) return { success: false, error: 'Missing buyerId' };
     if (order.grossAmount <= 0 || order.bv < 0) return { success: false, error: 'Invalid order amount or BV' };
 

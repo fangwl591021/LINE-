@@ -107,3 +107,27 @@ test('an existing pending v2 order keeps its original eligibility rules after v3
  const upgraded=await f.enroll(A);assert.equal((await f.call('/lifecycle',{contractId:upgraded.id,action:'termination',terminationGround:'breach',effectiveAt:now(),evidenceSha256:'c'.repeat(64),evidenceRef:'ISOLATED_V3_STOP',reason:'合成新版終止不溯及舊制訂單',confirmed:true,requestKey:crypto.randomUUID()})).http,200);
  const captured=f.sql.prepare("SELECT captured_at FROM partner_bonus_order_snapshots WHERE order_id='pending-v2'").get().captured_at,r=await f.call('/deals/confirm',{orderId:'pending-v2',receiptRef:'ISOLATED_V2_OPEN',serviceOpenedAt:captured,confirmed:true,requestKey:crypto.randomUUID()});assert.equal(r.http,200,JSON.stringify(r));assert.deepEqual(r.plan.transactions.map(x=>[x.memberId,x.amount]),[[A,1500],[A,1500]]);
 });
+
+test('a QR introduction never earns a sale: money may arrive before signed proof is verified',async t=>{
+ const f=fixture(t),proof=crypto.randomUUID(),orderId='signed-sale';
+ await f.enroll(A);await f.seedAdvanced(A);
+ const {createTenantReceivable}=await import('../worker/partner-bonus-v2.mjs');
+ const order={orderId,orderType:'tenant_annual_fee',buyerId:C,recruiterId:B,placementParentId:B,bonusPlanPreview:{beneficiaryId:B},grossAmount:6300,netAmount:6000,taxAmount:300,taxRate:5,currency:'TWD'};
+ await createTenantReceivable(f.env,order,A);
+ await markPartnerV2OrderPaid(f.env,{orderId,authenticatedUserId:A,recruiterId:B});
+ const read=()=>f.sql.prepare('SELECT * FROM orders WHERE order_id=?').get(orderId);
+ assert.equal(read().payment_status,'paid');assert.equal(read().recruiter_id,'');assert.equal(read().placement_parent_id,'');
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n,0);
+ const review={orderId,target_uid:C,memberNumber:'20261026001',applicationId:proof,note:'signed document cross-checked',confirmed:true,requestKey:crypto.randomUUID()};
+ f.sql.exec('CREATE TABLE reward_applications(id TEXT PRIMARY KEY,owner_uid TEXT,snapshot_json TEXT,content_sha256 TEXT,signed_at TEXT);CREATE TABLE reward_application_reviews(application_id TEXT PRIMARY KEY,decision TEXT);');
+ assert.equal((await f.call('/order-referral',review)).http,409);
+ f.sql.prepare('INSERT INTO reward_applications VALUES(?,?,?,?,?)').run(proof,C,JSON.stringify({form_kind:'full',signer_uid:C,fields:{assisted_partner:'合成業務',performance_owner_member_number:'20261026001'}}),'a'.repeat(64),now());
+ f.sql.prepare('INSERT INTO reward_application_reviews VALUES(?,?)').run(proof,'accepted');
+ assert.equal((await f.call('/order-referral',{...review,memberNumber:'20261026002'})).http,409);
+ assert.equal((await f.call('/order-referral',review,'user')).http,403);
+ const verified=await f.call('/order-referral',review);assert.equal(verified.http,200,JSON.stringify(verified));assert.equal(read().recruiter_id,A);
+ assert.equal(f.sql.prepare('SELECT referrer_id FROM users WHERE line_id=?').get(C).referrer_id,B);
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n,0);
+ const result=await f.confirm(orderId);
+ assert.equal(result.http,200,JSON.stringify(result));assert.equal(f.sql.prepare('SELECT beneficiary_id FROM bonus_transactions WHERE order_id=?').get(orderId)?.beneficiary_id,A);
+});

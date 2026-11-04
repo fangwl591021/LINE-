@@ -60,13 +60,13 @@ export function createPartnerPolicy11510(ctx){
   if(signed>at||signed!==effective)fail('115.10契約自簽署日起生效，簽署與生效時間必須相同');
   const terms={templateVersion:PARTNER_TEMPLATE_11510,partyType:data.partyType,partyName:text(data.partyName,150),representativeName:text(data.representativeName||'',150,false),referrerName:text(data.referrerName||'',150,false),referrerMemberNumber:text(data.referrerMemberNumber||'',20,false),bankName:text(data.bankName,100),bankCode:text(data.bankCode,10),bankBranch:text(data.bankBranch,100),bankAccountHolder:text(data.bankAccountHolder,150),bankAccount:text(data.bankAccount,40)};
   if(!['natural_person','company'].includes(terms.partyType)||terms.partyType==='company'&&!terms.representativeName||!/^\d{3,7}$/.test(terms.bankCode)||!/^\d{5,30}$/.test(terms.bankAccount.replace(/[ -]/g,'')))fail('請完整填寫簽約身分、代表人及銀行資料');
-  const sponsor=target.referrer_id||'';if(sponsor&&sponsor!=='admin'&&!UID.test(sponsor))fail('CRM推薦來源需先核對',409);
-  if(UID.test(sponsor)&&(!terms.referrerMemberNumber||!terms.referrerName))fail('請核對CRM推薦人的姓名與會員編號',409);
-  if(!UID.test(sponsor)&&(terms.referrerMemberNumber||terms.referrerName))fail('CRM無推薦人時不可自行新增推薦來源',409);
+  let sponsor='';
+  if(Boolean(terms.referrerName)!==Boolean(terms.referrerMemberNumber))fail('契約推薦人姓名與會員編號須一併核對',409);
   if(terms.referrerMemberNumber){
+   const matches=await all(db,'SELECT line_id FROM users WHERE member_number=? LIMIT 2',terms.referrerMemberNumber);
+   if(matches.length!==1||!UID.test(matches[0].line_id)||matches[0].line_id===target.line_id)fail('契約推薦人會員編號無法唯一核對或為本人',409);
+   sponsor=matches[0].line_id;
    await member(db,sponsor);
-   const rows=await all(db,'SELECT line_id,name,member_number FROM users WHERE member_number=? LIMIT 2',terms.referrerMemberNumber);
-   if(rows.length!==1||rows[0].line_id!==sponsor)fail('簽約推薦會員編號與CRM推薦來源不符',409);
   }
   const purchaseStatus=data.purchaseStatus||'unknown',purchaseOrderId=text(data.purchaseOrderId||'',100,false);
   if(!['unknown','purchased','not_purchased'].includes(purchaseStatus))fail('購買狀態不正確');
@@ -80,7 +80,7 @@ export function createPartnerPolicy11510(ctx){
   if(previous){const previousState=await state(previous,at);if(previousState.active||!previousState.endedAt||signed<previousState.endedAt)fail('既有115.10契約尚未停止，或新簽日期早於原終止日；不可重疊登錄',409);}
   if(await first(db,'SELECT id FROM partner_contract_enrollments WHERE member_uid=? AND document_sha256=? AND effective_at=?',target.line_id,request.documentSha256,effective))fail('這份契約與生效日已登錄',409);
   const id=crypto.randomUUID(),nonce=crypto.randomUUID(),next=c.revision+1;
-  const result=await db.batch([clockClaim(db,c.revision,nonce,actor),db.prepare(`INSERT INTO partner_contract_enrollments(id,member_uid,policy_version,signed_at,effective_at,expires_at,document_sha256,evidence_ref,sponsor_uid,purchase_status,purchase_order_id,verified_by,verified_at,verified_revision,request_key,request_json) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?) AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (?,?) OR new_line_id IN (?,?)))${UID.test(sponsor)?' AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND member_number=?)':''}`).bind(id,target.line_id,PARTNER_POLICY_11510,signed,effective,anniversary(signed),request.documentSha256,request.evidenceRef,sponsor==='admin'?'':sponsor,purchaseStatus,purchaseOrderId,uid,at,next,request.requestKey,json,next,nonce,target.line_id,target.referrer_id,target.line_id,sponsor,target.line_id,sponsor,...(UID.test(sponsor)?[sponsor,terms.referrerMemberNumber]:[])),db.prepare(`INSERT INTO partner_contract_11510_terms(contract_id,template_version,terms_json) SELECT ?,'115.10',? WHERE ${gate} AND EXISTS(SELECT 1 FROM partner_contract_enrollments WHERE id=? AND request_key=?)`).bind(id,JSON.stringify(terms),next,nonce,id,request.requestKey)]);
+  const result=await db.batch([clockClaim(db,c.revision,nonce,actor),db.prepare(`INSERT INTO partner_contract_enrollments(id,member_uid,policy_version,signed_at,effective_at,expires_at,document_sha256,evidence_ref,sponsor_uid,purchase_status,purchase_order_id,verified_by,verified_at,verified_revision,request_key,request_json) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=?) AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (?,?) OR new_line_id IN (?,?)))${UID.test(sponsor)?' AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND member_number=?)':''}`).bind(id,target.line_id,PARTNER_POLICY_11510,signed,effective,anniversary(signed),request.documentSha256,request.evidenceRef,sponsor==='admin'?'':sponsor,purchaseStatus,purchaseOrderId,uid,at,next,request.requestKey,json,next,nonce,target.line_id,target.line_id,sponsor,target.line_id,sponsor,...(UID.test(sponsor)?[sponsor,terms.referrerMemberNumber]:[])),db.prepare(`INSERT INTO partner_contract_11510_terms(contract_id,template_version,terms_json) SELECT ?,'115.10',? WHERE ${gate} AND EXISTS(SELECT 1 FROM partner_contract_enrollments WHERE id=? AND request_key=?)`).bind(id,JSON.stringify(terms),next,nonce,id,request.requestKey)]);
   if(result[0].meta?.changes!==1||result[1].meta?.changes!==1||result[2].meta?.changes!==1)fail('管理員權限或制度資料已變更，請重新載入',409);
   return {success:true,contract:await decorate(await first(db,'SELECT * FROM partner_contract_enrollments WHERE id=?',id))};
  }

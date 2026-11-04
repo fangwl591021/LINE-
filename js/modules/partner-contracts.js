@@ -13,7 +13,7 @@ const mask=account=>account?`末 ${String(account).slice(-4)} 碼`:'未登錄';
 const statusText=status=>({review_required:'待核對',frozen:'待請款',payable:'可給付',paid:'已付款',reversed:'已取消',cancelled_by_contract:'依契約取消未付款獎勵',contract_inactive:'契約目前無效，待核對',active:'有效',not_effective:'尚未生效',termination:'已終止',nonrenewal:'已到期不續約'}[status]||status||'待核對');
 let active;
 
-export async function openPartnerContracts({base,target,isCurrent=()=>true,fetcher=fetch}={}){
+export async function openPartnerContracts({base,target,orderId='',isCurrent=()=>true,fetcher=fetch}={}){
  if(!/^U[0-9a-f]{32}$/i.test(target||''))throw Error('請從 CRM 選擇會員');
  if(active?.busy)throw Error('資料正在送出，請稍候');
  active?.close();
@@ -61,7 +61,7 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
   const key=crypto.randomUUID();keys.set(name,{facts,key});return key;
  };
  async function write(name,path,data){const result=await api(path,{...data,requestKey:requestKey(name,data)});keys.delete(name);return result;}
- const lookupControls=(prefix,label)=>input(prefix+'Number',label)+`<button type="button" data-lookup="${prefix}">核對${prefix==='referrer'?'推薦人':prefix==='manager'?'管理人':'受領人'}</button><p data-member="${prefix}" aria-live="polite"></p>`;
+ const lookupControls=(prefix,label)=>input(prefix+'Number',label)+`<button type="button" data-lookup="${prefix}">核對${(prefix==='referrer'||prefix==='business')?'推薦人':prefix==='manager'?'管理人':'受領人'}</button><p data-member="${prefix}" aria-live="polite"></p>`;
  function recordMarkup(record){
   const terms=record.terms||{},contractStatus=record.contractStatus||{},version=value(record,'policy_version','policyVersion');
   const lifecycle=record.lifecycle||[];
@@ -86,6 +86,7 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
    <p>甲方：智點通股份有限公司（54852701）／代表人：楊滄棋。共創夥伴免費加入，無須先購買完整版；一般夥伴累計兩筆有效直接新成交後晉升，第三筆起直接成交50%。續約由原推薦人25%＋當下歸屬人25%，各份可分別待核。</p>
    <p>簽署日生效、每期一年；未於期滿30日前通知不續約，依契約自動延長一年。終止依第12條取消已成立但未支付的獎勵，已支付流水保留，不自動追回銀行款。</p>
    <h3>最近12個月新約檢核</h3>${quotaMarkup(currentContracts[0]?.quota||result.quota)}
+   ${result.heldOrders?.length?action('orderReferral','待核業績・核對簽署資料',select('orderId','待核訂單',result.heldOrders.map(o=>[o.orderId,o.orderId+' · '+(o.status==='paid'?'已收款':'待收款')]))+select('applicationId','該筆已受理完整版申請書',[['','請選擇已簽署且審核通過的申請書'],...(result.referralProofs||[]).map(p=>[p.id,[p.signed_at,p.namedPartner||'未列協助夥伴',p.id].join(' · ')])])+lookupControls('business','業務推薦人會員編號')+input('note','核對依據（同名或只填姓名時，請記錄如何確認本人）')+agreement('已核對此訂單的簽署資料及業務推薦人身分')+submit('確認業務歸屬')):''}
    <h3>已登錄契約</h3>${records.length?records.map(recordMarkup).join(''):'<p>尚未登錄已簽契約。</p>'}
    ${action('contract','登錄已核對的115.10新簽契約',`
     ${select('templateVersion','已簽文件制度版本',[[TEMPLATE,'115.10（本次指定版）']])}
@@ -93,7 +94,7 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
     ${select('partyType','乙方簽約身分',[['natural_person','自然人'],['company','公司／商號／法人']])}
     ${input('partyName','姓名／公司或法人名稱')}${input('representativeName','公司／法人代表人（法人必填）','text',false)}
     ${lookupControls('referrer','契約推薦人的會員編號')}${input('referrerName','契約推薦人姓名')}
-    <small>${result.referrer?.required===false?'CRM核對結果為無推薦人／admin歸入；將保留原始紀錄，不新增推薦人。':result.referrer?.required&&!result.referrer.memberNumber?'CRM原推薦人尚無會員編號，請先補齊該會員編號，再重新開啟並核對；不任意填入其他人。':'須與CRM既有原始推薦人一致；核對不會改寫推薦關係。'}</small>
+    <small>依手簽契約核對業務推薦人姓名與會員編號，未列可留白。</small>
     <fieldset><legend>收款銀行資料</legend>${input('bankName','銀行名稱')}${input('bankCode','銀行代碼','text',true,'inputmode="numeric"')}${input('bankBranch','分行')}${input('bankAccountHolder','帳戶戶名')}${input('bankAccount','帳號','text',true,'inputmode="numeric" autocomplete="off"')}</fieldset>
     <label>選取實際已簽文件，計算校驗碼<input type="file" data-file accept=".pdf,.docx"></label>
     <small>僅在本機計算已簽檔案SHA-256，不會上傳文件。簽署後檔案與空白範本校驗碼應分開保留，請保管原始已簽文件。</small>
@@ -127,21 +128,23 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
    if(valid())dialog.querySelector('[name=documentSha256]').value=Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
    status('已簽文件校驗碼已計算，尚未登錄。');
   });
+  const reviewForm=dialog.querySelector('[data-form=orderReferral]');
+  if(reviewForm && orderId && [...reviewForm.elements.orderId.options].some(option=>option.value===orderId)){
+   reviewForm.elements.orderId.value=orderId;
+   reviewForm.closest('details').open=true;
+  }
   const partyType=dialog.querySelector('[name=partyType]'),representative=dialog.querySelector('[name=representativeName]');
   partyType.onchange=()=>{representative.required=partyType.value==='company';};
-  const noReferrer=result.referrer?.required===false;
-  for(const [field,text] of [['referrerNumber',result.referrer?.memberNumber],['referrerName',result.referrer?.name]]){
-   const control=dialog.querySelector(`[name=${field}]`);control.value=noReferrer?'':text||'';control.required=!noReferrer;control.disabled=noReferrer;
-  }
-  dialog.querySelector('[data-lookup=referrer]').disabled=noReferrer;
-  for(const prefix of ['referrer','manager','beneficiary']){
+  for(const name of ['referrerNumber','referrerName']) dialog.querySelector('[name='+name+']').required=false;
+  for(const prefix of ['referrer','manager','beneficiary','business']){
    const field=dialog.querySelector(`[name=${prefix}Number]`),output=dialog.querySelector(`[data-member=${prefix}]`);
-   field.oninput=()=>{if(prefix==='referrer')chosenReferrer='';else if(prefix==='manager')chosenManager='';else chosenBeneficiary='';output.textContent='';};
+   if(!field)continue;
+   field.oninput=()=>{if(prefix==='referrer')chosenReferrer='';else if(prefix==='manager')chosenManager='';else if(prefix==='business')field.dataset.verified='';else chosenBeneficiary='';output.textContent='';};
    dialog.querySelector(`[data-lookup=${prefix}]`).onclick=()=>run(async()=>{
     const number=field.value.trim(),result=await api('/lookup?'+new URLSearchParams({memberNumber:number})),member=result.member||result.data;
     if(!member?.userId)throw Error('查無可核對的會員');
     if(prefix==='referrer'){chosenReferrer=number;dialog.querySelector('[name=referrerName]').value=member.name||'';}
-    else if(prefix==='manager')chosenManager=member.userId;else chosenBeneficiary=member.userId;
+    else if(prefix==='manager')chosenManager=member.userId;else if(prefix==='business')field.dataset.verified=number;else chosenBeneficiary=member.userId;
     output.textContent=[member.name,member.memberNumber].filter(Boolean).join(' · ');status('會員編號已核對，尚未登錄。');
    });
   }
@@ -172,12 +175,16 @@ export async function openPartnerContracts({base,target,isCurrent=()=>true,fetch
    if(!confirmed)throw Error('請先核對並勾選確認事項');
    if(name==='contract'){
     if(get('templateVersion')!==TEMPLATE)throw Error('請使用115.10版已簽契約');
-    if(latest.referrer?.required!==false&&(!chosenReferrer||chosenReferrer!==get('referrerNumber')))throw Error('請先核對契約推薦人的會員編號');
+    if((get('referrerNumber')||get('referrerName'))&&(!chosenReferrer||chosenReferrer!==get('referrerNumber')))throw Error('請先核對契約推薦人的會員編號');
     if(get('partyType')==='company'&&!get('representativeName'))throw Error('公司／法人請填寫代表人');
     if(get('purchaseStatus')==='purchased'&&!get('purchaseOrderId'))throw Error('已購買者請填寫本人購買訂單編號');
     const signedAt=iso(get('signedAt'));
     await write(name,'',{target_uid:target,templateVersion:TEMPLATE,signedAt,effectiveAt:signedAt,partyType:get('partyType'),partyName:get('partyName'),representativeName:get('representativeName'),referrerName:get('referrerName'),referrerMemberNumber:get('referrerNumber'),bankName:get('bankName'),bankCode:get('bankCode'),bankBranch:get('bankBranch'),bankAccountHolder:get('bankAccountHolder'),bankAccount:get('bankAccount'),documentSha256:hash(get('documentSha256')),evidenceRef:get('evidenceRef'),purchaseStatus:get('purchaseStatus'),...(get('purchaseOrderId')?{purchaseOrderId:get('purchaseOrderId')} : {}),confirmed});
     await load();status('115.10已簽契約已登錄；歷史契約與舊訂單維持原規則。');
+   }else if(name==='orderReferral'){
+    if(!get('applicationId')||form.elements.businessNumber.dataset.verified!==get('businessNumber'))throw Error('請選擇該筆簽署資料，並查核業務推薦人的會員編號');
+    await write(name,'/order-referral',{target_uid:target,orderId:get('orderId'),applicationId:get('applicationId'),memberNumber:get('businessNumber'),note:get('note'),confirmed});
+    await load();status('業務推薦人已核對，可至該夥伴的共創制度確認有效成交。');
    }else if(name==='attribution'){
     if(!chosenManager)throw Error('請先核對管理人的會員編號');
     await write(name,'/attribution',{target_uid:target,manager_uid:chosenManager,effectiveAt:iso(get('effectiveAt')),consentSha256:hash(get('consentSha256')),evidenceRef:get('evidenceRef'),confirmed});

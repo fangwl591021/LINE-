@@ -45,3 +45,34 @@ test('contract template hashes come only from each record while signed hashes re
   await browser?.close();
  }
 });
+
+test('admin opens the selected unpaid sale and verifies a signed application and business member number',async()=>{
+ const source=await readFile(new URL('../js/modules/partner-contracts.js',import.meta.url),'utf8');
+ const browser=await chromium.launch({channel:'chrome',headless:true});
+ try{
+  const page=await browser.newPage();
+  await page.route('https://fixture.invalid/',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><link data-reward-application-style></head><body></body></html>'}));
+  await page.goto('https://fixture.invalid/');
+  await page.addScriptTag({type:'module',content:source+'\nwindow.openContracts=openPartnerContracts;'});
+  await page.evaluate(async()=>{
+   const buyer='U'+'b'.repeat(32);window.posted=[];
+   window.liff={isLoggedIn:()=>true,getAccessToken:()=>'synthetic',getContext:()=>({userId:'U'+'a'.repeat(32)})};
+   await window.openContracts({base:'https://fixture.invalid',target:buyer,orderId:'S2',fetcher:async(url,init)=>{
+    let data={contracts:[],heldOrders:[{orderId:'S1'},{orderId:'S2'}],referralProofs:[{id:'PROOF',signed_at:'2026-11-04',namedPartner:'合成業務'}]};
+    if(url.includes('/lookup?')) data={member:{userId:'U'+'c'.repeat(32),memberNumber:'20261021003',name:'合成業務'}};
+    if(init.method==='POST'){window.posted.push(JSON.parse(init.body));data={};}
+    return {ok:true,json:async()=>({success:true,...data})};
+   }});
+  });
+  const form=page.locator('[data-form=orderReferral]');
+  assert.equal(await form.isVisible(),true);assert.equal(await form.locator('[name=orderId]').inputValue(),'S2');
+  await form.locator('[name=applicationId]').selectOption('PROOF');
+  await form.locator('[name=businessNumber]').fill('20261021003');
+  await form.locator('[data-lookup=business]').click();
+  await form.locator('[data-member=business]').getByText(/合成業務/).waitFor();
+  await form.locator('[name=note]').fill('核對該筆簽署資料');await form.locator('[name=confirmed]').check();await form.locator('[type=submit]').click();
+  await page.waitForFunction(()=>window.posted.length===1);
+  const [verified]=await page.evaluate(()=>window.posted);
+  assert.equal(verified.orderId,'S2');assert.equal(verified.applicationId,'PROOF');assert.equal(verified.memberNumber,'20261021003');
+ }finally{await browser.close();}
+});

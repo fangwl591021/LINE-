@@ -917,7 +917,7 @@
           <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
             <div>
               <h3 class="font-semibold text-slate-800">租戶年費訂單紀錄表</h3>
-              <p class="text-[12px] text-slate-500 mt-1">建立訂單後先待收款；確認收款或未來金流回調成功後，才產生獎金流水。</p>
+              <p class="text-[12px] text-slate-500 mt-1">建立新訂單後可先收款。業績待管理員依簽署資料核對推薦人，再確認有效成交。</p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-[minmax(260px,1fr)_120px_120px_auto] gap-2 w-full xl:w-[760px]">
               <div class="relative">
@@ -927,7 +927,7 @@
               </div>
               <input id="bonus-order-fee" type="number" value="6300" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="訂單金額">
               <input id="bonus-order-bv" type="number" value="3000" class="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500" title="獎金 BV">
-              <button type="button" onclick="createTenantBonusOrder()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-transform">
+              <button type="button" id="bonus-order-create" onclick="createTenantBonusOrder()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-transform">
                 <span class="material-symbols-outlined text-[17px]">add_card</span> 建立訂單
               </button>
             </div>
@@ -1129,7 +1129,7 @@
               </label>
               <label class="text-sm font-bold text-slate-500">個人編號（系統配發）<input id="crm-member-number" readonly class="mt-1 w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono"></label>
               <label class="text-sm font-bold text-slate-500">加入／建檔日期（系統紀錄）<input id="crm-joined-at" type="date" readonly class="mt-1 w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800"><span id="crm-member-date-source" class="block mt-1 text-xs font-normal"></span></label>
-              <label class="md:col-span-2 text-sm font-bold text-slate-500">推薦人（個人編號／UID）<input id="crm-referrer-id" list="crm-member-number-options" autocomplete="off" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono outline-none focus:border-blue-500" placeholder="例如 20261021001 或 LINE UID"><datalist id="crm-member-number-options"></datalist><span id="crm-referrer-preview" role="status" aria-live="polite" class="block mt-2 text-xs text-emerald-700 break-words"></span></label>
+              <label class="md:col-span-2 text-sm font-bold text-slate-500">結緣人（加入來源・個人編號／UID）<input id="crm-referrer-id" list="crm-member-number-options" autocomplete="off" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono outline-none focus:border-blue-500" placeholder="例如 20261021001 或 LINE UID"><datalist id="crm-member-number-options"></datalist><span id="crm-referrer-preview" role="status" aria-live="polite" class="block mt-2 text-xs text-emerald-700 break-words"></span></label>
               <label class="text-sm font-bold text-slate-500">年費到期日<input id="crm-expire-at" type="date" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500"></label>
               <label class="md:col-span-2 text-sm font-bold text-slate-500">標籤<input id="crm-tags" class="mt-1 w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-blue-600 font-bold outline-none focus:border-blue-500" placeholder="#待跟進 #租戶 #講師"></label>
             </div>
@@ -2380,7 +2380,7 @@
           <tr>
             <td class="text-[12px] text-slate-500 font-mono">${escapeHTML(createdAt)}</td>
             <td class="font-mono text-[12px] text-blue-600">${escapeHTML(order.orderId || '-')}</td>
-            <td class="font-bold text-slate-700">${escapeHTML(order.tenantName || order.tenantId || '-')}</td>
+            <td class="font-bold text-slate-700">${escapeHTML(order.tenantName || order.tenantId || '-')}${order.bonusPolicyType==='signed_referral_pending' && !cancelled && /^U[0-9a-f]{32}$/i.test(order.tenantId)?'<br><button type="button" class="text-blue-700 underline" data-order-id="'+escapeHTML(order.orderId)+'" onclick="window.openPartnerContracts(\''+order.tenantId+'\',this.dataset.orderId)">業績待核・核對推薦人</button>':''}</td>
             <td>${formatCurrency(fee)}</td>
             <td class="font-black text-emerald-600">${formatCurrency(bv)}</td>
             <td><span class="status-pill ${statusClass}">${statusText}</span></td>
@@ -2410,7 +2410,10 @@
       renderBonusOrders();
     }
 
+    let pendingOrderAttempt;
+    let creatingTenantOrder = false;
     async function createTenantBonusOrder() {
+      if (creatingTenantOrder) return;
       const tenant = resolveBonusTenantFromInput();
       if (!tenant) return showToast('請先選擇租戶，或輸入完整姓名/電話/LINE ID', true);
       const tenantId = tenant.userId || tenant.memberId || '';
@@ -2421,9 +2424,18 @@
       const fee = Number(document.getElementById('bonus-order-fee')?.value || 6300);
       const bv = Number(document.getElementById('bonus-order-bv')?.value || 3000);
       if (fee <= 0 || bv <= 0) return showToast('訂單金額與 BV 必須大於 0', true);
-      const relation = buildBonusRelationshipPayload(tenant);
-
+      const taxRate=Number(document.getElementById('bonus-tax-rate')?.value || 5);
+      const signature=JSON.stringify([adminProfile.userId,tenantId,fee,bv,taxRate]);
+      if (!pendingOrderAttempt || pendingOrderAttempt.signature!==signature) {
+        const alreadyPending=allBonusOrdersData.some(o=>o.tenantId===tenantId && o.status==='pending_payment');
+        if(alreadyPending && !confirm('這位租戶已有待收款訂單。確定要另外建立一筆年費訂單嗎？')) return;
+        pendingOrderAttempt={signature,id:'ORD-'+crypto.randomUUID()};
+      }
+      creatingTenantOrder=true;
+      const button=document.getElementById('bonus-order-create');button.disabled=true;
+      try {
       const res = await fetchAPI('mlmCreateOrder', {
+        orderId:pendingOrderAttempt.id,
         buyerId: tenantId,
         buyerName: tenant.name || tenant.companyName || tenantId,
         tenantId,
@@ -2435,7 +2447,6 @@
         grossAmount: fee,
         bv,
         bonusPolicyType: BONUS_POLICY_TYPE,
-        ...relation,
         taxIncluded: true,
         taxRate: Number(document.getElementById('bonus-tax-rate')?.value || 5),
         paymentStatus: 'pending_payment',
@@ -2444,15 +2455,22 @@
         paymentLabel: '匯款付款'
       });
       if (res) {
+        pendingOrderAttempt=null;
         showToast('租戶年費訂單已建立，等待收款');
         await loadBonusOrders();
       }
+      } finally { creatingTenantOrder=false;button.disabled=false; }
     }
 
     async function markTenantOrderPaid(orderId) {
       const order = allBonusOrdersData.find(o => String(o.orderId) === String(orderId));
       if (!order) return showToast('找不到訂單', true);
-      if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n確認後會開通租戶資格，並依制度產生獎金流水。`)) return;
+      if (!confirm(`確認已收到 ${order.tenantName || order.tenantId} 的年費 ${formatCurrency(order.fee)}？\n\n請核對實際收款。業務推薦與獎金另依訂單制度核對。`)) return;
+      if (order.bonusPolicyType === 'signed_referral_pending' || order.raw?.signedReviewKey) {
+        const result = await fetchAPI('mlmMarkOrderPaid', {orderId, paymentProvider:'bank_transfer'});
+        if(result){showToast('已確認收款；業績請至共創制度核對');await loadBonusOrders();}
+        return;
+      }
       const tenant = findAdminUser(order.tenantId) || order.raw || {};
       const baseRelation = buildBonusRelationshipPayload(tenant);
       const relation = {
@@ -4605,7 +4623,7 @@
   <link rel="stylesheet" href="css/reward-unit-editor.css?v=1">
   <script src="js/modules/reward-unit-editor.js?v=1"></script>
   <script src="js/modules/reward-applications-entry.js?v=6"></script>
-<script src="js/modules/partner-contracts-entry.js?v=11510-3"></script>
+<script src="js/modules/partner-contracts-entry.js?v=11510-3&signed=1"></script>
 </body>
 </html>
 

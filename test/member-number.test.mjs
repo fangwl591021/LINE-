@@ -84,5 +84,5 @@ test('CRM dates use Taipei, unknown history never claims seniority, and both CRM
  const context={Intl,Date,document:{addEventListener(){}}};vm.createContext(context);vm.runInContext(readFileSync(new URL('../js/shared/member-number.js',import.meta.url),'utf8'),context);
  assert.equal(context.MemberNumber.day('2026-10-20T16:00:00Z'),'2026-10-21');assert.match(context.MemberNumber.summary({memberJoinedAt:'2026-10-18T16:00:00Z',memberDateSource:'joined'},new Date('2026-10-20T16:00:00Z')),/2 天/);
  assert.match(context.MemberNumber.summary({memberDateSource:'legacy_unknown'}),/待確認/);
- for(const file of ['admin.html','admin-v2.html']){const html=readFileSync(new URL('../'+file,import.meta.url),'utf8');assert.match(html,/id="crm-member-number" readonly/);assert.match(html,/u\.memberNumber/);assert.match(html,/window\.MemberNumber\.fill\(user, allUsersData\)/);assert.match(html,/推薦人（個人編號／UID）/)}
+ for(const file of ['admin.html','admin-v2.html']){const html=readFileSync(new URL('../'+file,import.meta.url),'utf8');assert.match(html,/id="crm-member-number" readonly/);assert.match(html,/u\.memberNumber/);assert.match(html,/window\.MemberNumber\.fill\(user, allUsersData\)/);assert.match(html,/結緣人（加入來源・個人編號／UID）/)}
 });
