@@ -3,7 +3,7 @@
 import {resolveStoreAdminActor,DirectoryError} from './store-admin.mjs';
 const UID=/^U[0-9a-f]{32}$/i,UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const AUTH_FIELDS=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
-const LABELS={reward:'贈點單位申請',discount:'特約折抵店家申請',partner:'共創夥伴115.10契約',full:'雙向完整版申請'};
+const LABELS={reward:'贈點單位申請',discount:'特約折抵店家申請',partner:'共創夥伴合作契約',full:'雙向完整版申請'};
 const WAIT_SECONDS=30,MAX_ITEMS=10,MAX_ADMINS=20,MAX_BATCHES=1;
 const stmt=(db,sql,...args)=>db.prepare(sql).bind(...args);
 async function rows(db,sql,...args){const r=await stmt(db,sql,...args).all();if(r.success===false||!Array.isArray(r.results))throw Error('Application notice read unavailable');return r.results;}

@@ -119,10 +119,10 @@ test('a QR introduction never earns a sale: money may arrive before signed proof
  assert.equal(read().payment_status,'paid');assert.equal(read().recruiter_id,'');assert.equal(read().placement_parent_id,'');
  assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n,0);
  const review={orderId,target_uid:C,memberNumber:'20261026001',applicationId:proof,note:'signed document cross-checked',confirmed:true,requestKey:crypto.randomUUID()};
- f.sql.exec('CREATE TABLE reward_applications(id TEXT PRIMARY KEY,owner_uid TEXT,snapshot_json TEXT,content_sha256 TEXT,signed_at TEXT);CREATE TABLE reward_application_reviews(application_id TEXT PRIMARY KEY,decision TEXT);');
+ f.sql.exec('CREATE TABLE full_applications(id TEXT PRIMARY KEY,owner_uid TEXT,snapshot_json TEXT,content_sha256 TEXT,signed_at TEXT);CREATE TABLE full_application_reviews(application_id TEXT PRIMARY KEY,decision TEXT);');
  assert.equal((await f.call('/order-referral',review)).http,409);
- f.sql.prepare('INSERT INTO reward_applications VALUES(?,?,?,?,?)').run(proof,C,JSON.stringify({form_kind:'full',signer_uid:C,fields:{assisted_partner:'合成業務',performance_owner_member_number:'20261026001'}}),'a'.repeat(64),now());
- f.sql.prepare('INSERT INTO reward_application_reviews VALUES(?,?)').run(proof,'accepted');
+ f.sql.prepare('INSERT INTO full_applications VALUES(?,?,?,?,?)').run(proof,C,JSON.stringify({form_kind:'full',signer_uid:C,fields:{assisted_partner:'合成業務',performance_owner_member_number:'20261026001'}}),'a'.repeat(64),now());
+ f.sql.prepare('INSERT INTO full_application_reviews VALUES(?,?)').run(proof,'accepted');
  assert.equal((await f.call('/order-referral',{...review,memberNumber:'20261026002'})).http,409);
  assert.equal((await f.call('/order-referral',review,'user')).http,403);
  const verified=await f.call('/order-referral',review);assert.equal(verified.http,200,JSON.stringify(verified));assert.equal(read().recruiter_id,A);
@@ -130,4 +130,27 @@ test('a QR introduction never earns a sale: money may arrive before signed proof
  assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n,0);
  const result=await f.confirm(orderId);
  assert.equal(result.http,200,JSON.stringify(result));assert.equal(f.sql.prepare('SELECT beneficiary_id FROM bonus_transactions WHERE order_id=?').get(orderId)?.beneficiary_id,A);
+});
+
+test('115.11 upgrade records written consent, mixed signers, earned rights and breach review separately',async t=>{
+ const f=fixture(t);
+ f.sql.exec(readFileSync(new URL('../migrations/0075_partner_settlement_11510.sql',import.meta.url),'utf8'));
+ await f.ready();
+ await f.order('origin');assert.equal((await f.confirm('origin')).http,200);
+ const signed=new Date(Date.now()-1000).toISOString();
+ const modern=await f.enroll(B,{templateVersion:'115.11',signedAt:signed,documentSha256:'e'.repeat(64)});
+ assert.equal(modern.policy_version,'cocreator-115.11-v4');
+ assert.equal(modern.terms.templateVersion,'115.11');assert.equal(modern.quota.percent,20);
+ const attr=await f.call('/attribution',{target_uid:C,manager_uid:A,effectiveAt:past(),consentSha256:'b'.repeat(64),evidenceRef:'signed',confirmed:true,requestKey:crypto.randomUUID()});assert.equal(attr.http,200,JSON.stringify(attr));
+ const next=()=>f.sql.prepare('SELECT MAX(service_year_end) e FROM partner_service_year_claims WHERE buyer_uid=?').get(C).e;
+ async function renew(id){await f.order(id,C,'tenant_renewal_fee');const start=next();const r=await f.confirm(id,{serviceAdmission:'renewal',serviceYearStart:start,serviceYearEnd:anniversary(start)});assert.equal(r.http,200,JSON.stringify(r));return r.plan;}
+ let plan=await renew('mixed');
+ assert.deepEqual(plan.transactions.map(v=>[v.memberId,v.beneficiaryPolicyVersion,v.renewalMode]),[[B,'cocreator-115.11-v4','tier'],[A,V3,undefined]]);
+ const end={contractId:modern.id,action:'termination',effectiveAt:now(),terminationGround:'annual_quota',evidenceSha256:'b'.repeat(64),evidenceRef:'signed evidence',reason:'isolated',confirmed:true,requestKey:crypto.randomUUID()};
+ assert.equal((await f.call('/lifecycle',end)).http,409);assert.equal((await f.call('/lifecycle',{...end,terminationGround:'breach',requestKey:crypto.randomUUID()})).http,200);
+ assert.equal(f.sql.prepare("SELECT status FROM bonus_transactions WHERE order_id='mixed' AND beneficiary_id=?").get(B).status,'review_required');
+ plan=await renew('breach');assert.deepEqual(plan.transactions.map(v=>v.memberId),[A]);assert.deepEqual(plan.holds.map(h=>h.portion),['renewal_referral']);
+ const review={orderId:'breach',portion:'renewal_referral',beneficiaryUid:B,consentSha256:'b'.repeat(64),evidenceRef:'written resolution',reason:'verified',confirmed:true,requestKey:crypto.randomUUID()};
+ assert.equal((await f.call('/renewals/resolve',review)).http,409);
+ assert.equal((await f.call('/renewals/resolve',{...review,writtenPercent:20})).http,200);
 });

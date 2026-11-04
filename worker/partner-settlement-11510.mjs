@@ -1,3 +1,4 @@
+import {POLICY_11511,monthlyPerformance,prorate} from './partner-renewal-11511.mjs';
 // Evidence-based manual settlement only. No bank, points or LINE side effects.
 import {addTaiwanWorkingDays,TAIWAN_WORKING_CALENDAR as calendarProvenance} from './taiwan-working-days.mjs';
 const VERSION='cocreator-115.10-v3',UUID=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
@@ -10,22 +11,23 @@ function plusCalendarDays(iso,days){const d=new Date(localDay(iso)+'T00:00:00Z')
 export function statementDeadline11510(month){const [y,m]=month.split('-').map(Number);return new Date(Date.UTC(y,m,5,16)-1).toISOString();}
 // Matches policy11510.awardEligibility's historical termination fence. Filtering
 // before LIMIT prevents cancelled old awards from starving valid re-signed work.
-const endedRightsSql=`EXISTS(SELECT 1 FROM partner_contract_lifecycle_events l
+const protectedRight="coalesce(json_extract(b.raw_json,'$.beneficiaryPolicyVersion'),'')='cocreator-115.11-v4'";
+const endedRightsSql=`(NOT (${protectedRight}) AND EXISTS(SELECT 1 FROM partner_contract_lifecycle_events l
  JOIN partner_contract_enrollments e ON e.id=l.contract_id
  WHERE e.member_uid=b.beneficiary_id AND e.policy_version='${VERSION}'
- AND l.verified_at<=? AND l.effective_at<=? AND c.confirmed_at<=l.effective_at)`;
-const candidateSql=`SELECT b.tx_id,b.order_id,b.bonus_type,b.amount,b.status,b.created_at AS award_created_at,c.confirmed_at
+ AND l.verified_at<=? AND l.effective_at<=? AND c.confirmed_at<=l.effective_at))`;
+const candidateSql=`SELECT b.tx_id,b.order_id,b.bonus_type,b.amount,b.status,b.raw_json,b.created_at AS award_created_at,c.confirmed_at
  FROM bonus_transactions b JOIN orders o ON o.order_id=b.order_id
  JOIN partner_bonus_order_snapshots s ON s.order_id=b.order_id
  JOIN partner_bonus_deal_confirmations c ON c.order_id=b.order_id
- WHERE b.beneficiary_id=? AND s.policy_version=? AND o.payment_status='paid'
+ WHERE b.beneficiary_id=? AND s.policy_version IN (?, 'cocreator-115.11-v4') AND o.payment_status='paid'
  AND b.status IN ('review_required','frozen','payable')
  AND NOT ${endedRightsSql}
  AND NOT EXISTS(SELECT 1 FROM partner_11510_statement_items i WHERE i.tx_id=b.tx_id)`;
 const cents=rows=>rows.reduce((n,r)=>n+Math.round(Number(r.amount)*100),0);
-async function eligibility(c,uid,at){await c.member(c.db,uid);if(!await c.activeContract(c.db,uid,at))c.fail('受領人目前無有效契約，未將獎金改為可支付或已支付',409);}
+async function eligibility(c,uid,at){await c.member(c.db,uid);if(!await c.activeContract(c.db,uid,at) && !await c.first(c.db,"SELECT 1 FROM partner_contract_enrollments WHERE member_uid=? AND policy_version=? LIMIT 1",uid,POLICY_11511))c.fail('受領人目前無有效契約，未將獎金改為可支付或已支付',409);}
 async function statement(c,id){const s=await c.first(c.db,'SELECT * FROM partner_11510_statements WHERE id=?',c.text(id,100));if(!s)c.fail('找不到本版對帳單',404);await c.member(c.db,s.target_uid);return s;}
-async function items(c,id,at=c.stamp()){return c.all(c.db,`SELECT i.*,b.status,o.payment_status,
+async function items(c,id,at=c.stamp()){return c.all(c.db,`SELECT i.*,b.status,o.payment_status,json_extract(b.raw_json,'$.baseAmount') AS baseAmount,json_extract(b.raw_json,'$.appliedPercent') AS percent,json_extract(b.raw_json,'$.monthlyPerformance.count') AS deals,${protectedRight} AS protected_right,
  ${endedRightsSql} AS rights_terminated,
  EXISTS(SELECT 1 FROM partner_11510_disputes d WHERE d.tx_id=i.tx_id AND d.resolution='') AS disputed
  FROM partner_11510_statement_items i JOIN bonus_transactions b ON b.tx_id=i.tx_id
@@ -55,9 +57,9 @@ export async function readPartnerSettlement11510(c,target){
  await c.member(c.db,target);
  const at=c.stamp(),active=!!await c.activeContract(c.db,target,at);
  const statements=await c.all(c.db,'SELECT * FROM partner_11510_statements WHERE target_uid=? ORDER BY month DESC LIMIT 20',target);
- for(const s of statements){s.items=await items(c,s.id,at);checkLimit(c,s.items);s.items=s.items.map(i=>({...i,disputed:!!i.disputed,effectiveStatus:['review_required','frozen','payable'].includes(i.status)?i.rights_terminated?'cancelled_by_contract':active?i.status:'contract_inactive':i.status}));s.claim=await c.first(c.db,'SELECT * FROM partner_11510_claims WHERE statement_id=?',s.id);}
+ for(const s of statements){s.items=await items(c,s.id,at);checkLimit(c,s.items);s.items=s.items.map(i=>({...i,disputed:!!i.disputed,effectiveStatus:['review_required','frozen','payable'].includes(i.status)?i.rights_terminated?'cancelled_by_contract':(active||i.protected_right)?i.status:'contract_inactive':i.status}));s.claim=await c.first(c.db,'SELECT * FROM partner_11510_claims WHERE statement_id=?',s.id);}
  const claims=statements.map(s=>s.claim).filter(Boolean),disputes=await c.all(c.db,`SELECT d.* FROM partner_11510_disputes d JOIN partner_11510_statements s ON s.id=d.statement_id WHERE s.target_uid=? ORDER BY d.created_at DESC LIMIT 100`,target);
- const outstanding=active?await c.all(c.db,candidateSql+' ORDER BY c.confirmed_at,b.tx_id LIMIT 11',target,VERSION,at,at):[];
+ const outstanding=await c.all(c.db,candidateSql+(active?'':' AND '+protectedRight)+' ORDER BY c.confirmed_at,b.tx_id LIMIT 11',target,VERSION,at,at);
  const payments=await c.all(c.db,`SELECT p.* FROM partner_11510_payments p JOIN partner_11510_statements s ON s.id=p.statement_id WHERE s.target_uid=? ORDER BY p.recorded_at DESC LIMIT 100`,target);
  return {success:true,policyVersion:VERSION,statements,claims,disputes,outstanding:outstanding.slice(0,MAX_ITEMS),hasMoreOutstanding:outstanding.length>MAX_ITEMS,batchLimit:MAX_ITEMS,payments,calendarReview:claims.some(x=>x.calendar_status!=='verified')};
 }
@@ -78,9 +80,19 @@ export async function handlePartnerSettlement11510(route,input,c){
   if(rows.some(x=>!Number.isFinite(x.amount)||x.amount<=0))c.fail('獎金金額需先核對',409);
   if(rows.some(x=>{const created=Date.parse(x.award_created_at.includes('T')?x.award_created_at:x.award_created_at.replace(' ','T')+'Z');return !Number.isFinite(created)||created>Date.parse(delivered);}))c.fail('送達時間不可早於本次獎金成立時間；補充對帳單須以實際補送時間登錄',409);
   await awardChecks(c,data.target_uid,rows,at);
+  let monthly;
+  for(const row of rows){
+   const award=JSON.parse(row.raw_json||'{}');
+   if(award.beneficiaryPolicyVersion!==POLICY_11511||!award.renewalMode)continue;
+   monthly ||= await monthlyPerformance(c.db,data.target_uid,data.month);
+   const percent=award.renewalMode==='written'?award.writtenPercent:award.renewalMode==='retained'?20:monthly.percent;
+   row.amount=prorate(award.baseAmount,percent);
+   row.finalAward={...award,amount:row.amount,monthlyPerformance:monthly,appliedPercent:percent,companyRetained:Math.round((award.baseAmount-row.amount)*100)/100};
+  }
   const s={id:crypto.randomUUID(),target_uid:data.target_uid,month:data.month,created_at:at,delivered_at:delivered,evidence_ref:evidenceRef,statement_due_at:due,objection_due_at:plusCalendarDays(delivered,5),late:at>due?1:0,total_amount:cents(rows)/100};
   return commit(c,route,data,{success:true,statement:s,hasMore:candidates.length>MAX_ITEMS},({revision,nonce,guard})=>[
    c.db.prepare(`INSERT INTO partner_11510_statements(id,target_uid,month,created_at,delivered_at,evidence_ref,statement_due_at,objection_due_at,late,total_amount,created_by) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${guard}`).bind(s.id,s.target_uid,s.month,at,delivered,evidenceRef,due,s.objection_due_at,s.late,s.total_amount,c.uid,revision,nonce),
+   ...rows.filter(r=>r.finalAward).map(r=>c.db.prepare(`UPDATE bonus_transactions SET amount=?,raw_json=? WHERE tx_id=? AND ${guard}`).bind(r.amount,JSON.stringify(r.finalAward),r.tx_id,revision,nonce)),
    ...rows.map(r=>c.db.prepare(`INSERT INTO partner_11510_statement_items(tx_id,statement_id,amount,order_id,bonus_type) SELECT ?,?,?,?,? WHERE ${guard}`).bind(r.tx_id,s.id,r.amount,r.order_id,r.bonus_type,revision,nonce))]);
  }
  if(route==='/settlement/claims'){

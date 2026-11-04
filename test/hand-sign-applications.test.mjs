@@ -4,7 +4,7 @@ import {handSignFixture,partnerFields,fullFields,signing,syntheticTerms,replaceH
 import {handSignFields,handSignConfirmations,handSignTemplates,normalizeHandSignApplication,sha256Text} from '../worker/hand-sign-application-definition.mjs';
 
 const previousPartnerPin={version:'partner-115.10-hand-sign-2026-10-28-v1',sourceSha256:'224dac420aba1f0990f5de713e7125c4d9699a6a11f84ee6aed6f8ddee7da4aa',title:'點數通「共創夥伴」合作推展合約書'};
-const currentPartnerPin={version:'partner-115.10-hand-sign-2026-10-29-v2',sourceSha256:'1fa48f76ed888e656a5e1efac84c670b1132f8f1cf6a62fa8c8c76b48ba7f42c',title:'點數通「共創夥伴」合作推展合約書'};
+const currentPartnerPin={version:'partner-115.11-hand-sign-2026-11-04-v1',sourceSha256:'91fa4438661132222d0f5a77f54e10ab76d7c8eb3338ebd0f11175b7be4aabef',title:'點數通「共創夥伴」合作推展合約書'};
 
 test('partner pin cutover requires a fresh preview while signed old snapshots and exact retries remain intact',async t=>{
  const f=await handSignFixture(t);assert.deepEqual(handSignTemplates.partner,currentPartnerPin);
