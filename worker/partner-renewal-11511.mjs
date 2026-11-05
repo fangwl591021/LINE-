@@ -10,7 +10,7 @@ export function performanceWindow(month){
 export function renewalPercent(n){return n>=6?100:n>=4?60:n>=2?40:20;}
 export async function monthlyPerformance(db,uid,month){
  const window=performanceWindow(month);
- const prior=await db.prepare(`SELECT json_extract(b.raw_json,'$.monthlyPerformance') AS result FROM partner_11510_statement_items i JOIN partner_11510_statements s ON s.id=i.statement_id JOIN bonus_transactions b ON b.tx_id=i.tx_id WHERE s.target_uid=? AND s.month=? AND json_type(b.raw_json,'$.monthlyPerformance')='object' LIMIT 1`).bind(uid,month).first();
+ const prior=await db.prepare(`SELECT json_extract(b.raw_json,'$.monthlyPerformance') AS result FROM partner_11510_statements s JOIN bonus_transactions b ON b.beneficiary_id=s.target_uid LEFT JOIN partner_11510_statement_items i ON i.tx_id=b.tx_id WHERE s.target_uid=? AND s.month=? AND (s.id=i.statement_id OR s.id=json_extract(b.raw_json,'$.statementId')) AND json_type(b.raw_json,'$.monthlyPerformance')='object' LIMIT 1`).bind(uid,month).first();
  if(prior?.result)return JSON.parse(prior.result);
  const row=await db.prepare(`SELECT count(DISTINCT o.buyer_id) n FROM partner_bonus_deal_confirmations c JOIN orders o ON o.order_id=c.order_id JOIN partner_service_year_claims y ON y.order_id=o.order_id WHERE c.recruiter_uid=? AND c.deal_type='tenant_annual_fee' AND y.admission='new' AND o.payment_status='paid' AND c.confirmed_at>=? AND c.confirmed_at<?`).bind(uid,window.start,window.end).first();
  return {...window,count:row.n,percent:renewalPercent(row.n)};

@@ -154,3 +154,45 @@ test('115.11 upgrade records written consent, mixed signers, earned rights and b
  assert.equal((await f.call('/renewals/resolve',review)).http,409);
  assert.equal((await f.call('/renewals/resolve',{...review,writtenPercent:20})).http,200);
 });
+
+test('revised contract checks each recipient independently and a later service restoration cannot revive missed renewals',async t=>{
+ const f=fixture(t);
+ for(const file of ['0075_partner_settlement_11510','0079_partner_full_service_evidence'])f.sql.exec(readFileSync(new URL('../migrations/'+file+'.sql',import.meta.url),'utf8'));
+ await f.ready();await f.order('origin');assert.equal((await f.confirm('origin')).http,200);
+ const signed=new Date(Date.now()-100).toISOString();
+ const r2=await f.enroll(B,{templateVersion:'115.11-R2',signedAt:signed,documentSha256:'e'.repeat(64)});
+ assert.equal(r2.terms.templateVersion,'115.11-R2');
+ await f.call('/attribution',{target_uid:C,manager_uid:A,effectiveAt:past(),consentSha256:'b'.repeat(64),evidenceRef:'consent',confirmed:true,requestKey:crypto.randomUUID()});
+ const renew=async id=>{
+  await f.order(id,C,'tenant_renewal_fee');
+  const next=f.sql.prepare('SELECT MAX(service_year_end) e FROM partner_service_year_claims WHERE buyer_uid=?').get(C).e;
+  const result=await f.confirm(id,{serviceAdmission:'renewal',serviceYearStart:next,serviceYearEnd:anniversary(next)});
+  assert.equal(result.http,200,JSON.stringify(result));return result.plan.transactions;
+ };
+ const unpaid=await renew('blocked');assert.deepEqual(unpaid.map(x=>[x.memberId,x.amount]),[[B,0],[A,1500]]);
+ assert.equal(f.sql.prepare("SELECT status FROM bonus_transactions WHERE order_id='blocked' AND beneficiary_id=?").get(B).status,'service_ineligible');
+ const start=now(),end=anniversary(start);
+ f.sql.prepare("INSERT INTO orders(order_id,buyer_id,order_type,payment_status,paid_at) VALUES(?,?,'tenant_annual_fee','paid',?)").run('my-full',B,start);
+ const record=(action,extra={})=>f.call('/full-service',{target_uid:B,action,effectiveAt:now(),evidenceRef:'receipt and opening proof',confirmed:true,requestKey:crypto.randomUUID(),...extra});
+ assert.equal((await record('open',{orderId:'my-full',effectiveAt:start,expiresAt:end})).http,200);
+ assert.deepEqual((await renew('allowed')).map(x=>x.amount),[1500,1500]);
+ assert.equal((await record('suspend')).http,200);assert.equal((await renew('paused'))[0].amount,0);
+ assert.equal((await record('resume')).http,200);assert.equal((await renew('restored'))[0].amount,1500);
+ assert.equal(f.sql.prepare("SELECT amount FROM bonus_transactions WHERE order_id='paused' AND beneficiary_id=?").get(B).amount,0);
+});
+
+test('service years are exclusive at expiry, allow adjacent renewal years and require a paid personal order',async t=>{
+ const {fullServiceCheck}=await import('../worker/partner-full-service.mjs');
+ const f=fixture(t);
+ f.sql.exec(readFileSync(new URL('../migrations/0079_partner_full_service_evidence.sql',import.meta.url),'utf8'));
+ function year(id,buyer,start,end){
+  f.sql.prepare("INSERT INTO orders(order_id,buyer_id,order_type,payment_status,paid_at) VALUES(?,?,'tenant_annual_fee','paid',?)").run(id,buyer,start);
+  f.sql.prepare("INSERT INTO partner_full_service_evidence VALUES(?,?, 'open',?,?,?,?,?,?,?,?)").run(id,buyer,id,start,end,'proof',start,A,crypto.randomUUID(),'{}');
+ }
+ const start='2025-11-01T00:00:00.000Z',boundary='2026-11-01T00:00:00.000Z',end='2027-11-01T00:00:00.000Z';
+ year('owned',B,start,boundary);year('other',C,boundary,end);
+ assert.equal((await fullServiceCheck(f.db,B,start,boundary)).valid,false);
+ year('continued',B,boundary,end);assert.equal((await fullServiceCheck(f.db,B,start,boundary)).valid,true);
+ f.sql.prepare("UPDATE orders SET payment_status='refunded' WHERE order_id='continued'").run();
+ assert.equal((await fullServiceCheck(f.db,B,boundary,boundary)).valid,false);
+});

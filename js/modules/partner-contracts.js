@@ -1,5 +1,5 @@
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const POLICY='cocreator-115.10-v3',NEW_POLICY='cocreator-115.11-v4',TEMPLATE='115.11';
+const POLICY='cocreator-115.10-v3',NEW_POLICY='cocreator-115.11-v4',TEMPLATE='115.11-R2';
 const input=(name,label,type='text',required=true,attributes='')=>`<label>${esc(label)}<input name="${esc(name)}" type="${type}" ${required?'required':''} ${type==='datetime-local'?'step="0.001"':''} maxlength="${name.includes('Ref')?500:120}" ${attributes}></label>`;
 const select=(name,label,options)=>`<label>${esc(label)}<select name="${name}" style="display:block;width:100%;max-width:100%;padding:12px;font:inherit">${options.map(([value,text])=>`<option value="${esc(value)}">${esc(text)}</option>`).join('')}</select></label>`;
 const agreement=label=>`<label><input type="checkbox" name="confirmed" required>${esc(label)}</label>`;
@@ -65,12 +65,12 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
  function recordMarkup(record){
   const terms=record.terms||{},contractStatus=record.contractStatus||{},version=value(record,'policy_version','policyVersion');
   const lifecycle=record.lifecycle||[];
-  return `<article class="ra-record"><strong>${esc(version===NEW_POLICY?'115.11 版':version===POLICY?'115.10 版':version||'歷史契約')}</strong>
+  return `<article class="ra-record"><strong>${esc(version===NEW_POLICY?(terms.templateVersion===TEMPLATE?'115.11 完整版資格修正版':'115.11 版'):version===POLICY?'115.10 版':version||'歷史契約')}</strong>
    <p class="ra-copy">登錄編號：${esc(record.id)}<br>簽署：${esc(value(record,'signed_at','signedAt'))}<br>生效：${esc(value(record,'effective_at','effectiveAt'))}<br>原契約到期：${esc(value(record,'expires_at','expiresAt'))}</p>
    ${[POLICY,NEW_POLICY].includes(version)?`<p>目前有效性：${esc(contractStatus.active?'有效':statusText(contractStatus.reason))}<br>本期：${esc(contractStatus.periodStart||'待核')} ～ ${esc(contractStatus.periodEnd||'待核')}</p>
    <p>簽約方：${esc(terms.partyType==='company'?'公司／商號／法人':'自然人')} · ${esc(terms.partyName)}${terms.representativeName?`<br>代表人：${esc(terms.representativeName)}`:''}<br>推薦人：${esc(terms.referrerName)} · ${esc(terms.referrerMemberNumber)}<br>收款帳戶：${esc(terms.bankName)} ${esc(terms.bankCode)} · ${esc(mask(terms.bankAccount))}</p>`:'<p>歷史版本保留，既有契約與訂單不覆寫。</p>'}
    <small class="ra-copy">實際已簽文件 SHA-256：${esc(value(record,'document_sha256','documentSha256'))}</small>
-   ${[POLICY,NEW_POLICY].includes(version)?`<small class="ra-copy">${version===NEW_POLICY?TEMPLATE:'115.10'} 空白範本 SHA-256：${esc(record.templateSha256||terms.templateSha256||'未記錄')}</small>`:''}
+   ${[POLICY,NEW_POLICY].includes(version)?`<small class="ra-copy">${version===NEW_POLICY?(terms.templateVersion||'115.11'):'115.10'} 空白範本 SHA-256：${esc(record.templateSha256||terms.templateSha256||'未記錄')}</small>`:''}
    ${lifecycle.length?`<p>契約事件（保留沿革）：</p><ul>${lifecycle.map(event=>`<li class="ra-copy">${esc(event.action==='nonrenewal'?'不續約通知':'終止')} · ${esc(value(event,'effective_at','effectiveAt'))} · ${esc(event.reason)}</li>`).join('')}</ul>`:''}</article>`;
  }
  function quotaMarkup(quota){
@@ -82,15 +82,20 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
   latest=result;chosenManager='';chosenReferrer='';chosenBeneficiary='';
   const records=result.contracts||[],pending=result.pendingDeals||[];
   const currentContracts=records.filter(record=>[POLICY,NEW_POLICY].includes(value(record,'policy_version','policyVersion')));
-  shell(`<p class="ra-note">本頁供管理員核對已簽契約後登錄；線上手簽請至商城「我的 → 合作申請／我的合約」。線上簽署紀錄仍須審核及契約登錄，不會自動開通資格。新簽請核對115.11版；新簽後的新訂單才適用，舊訂單維持原規則。</p>
+  shell(`<p class="ra-note">本頁供管理員核對已簽契約後登錄；線上手簽請至商城「我的 → 合作申請／我的合約」。線上簽署紀錄仍須審核及契約登錄，不會自動開通資格。新簽請核對115.11持續收益與完整版資格修正版；新簽後的新訂單才適用，舊訂單維持原規則。</p>
    <button type="button" data-refresh>重新整理</button><h3>115.11 制度</h3>
    <p>甲方：智點通股份有限公司（54852701）／代表人：楊滄棋。共創夥伴免費加入，無須先購買完整版；一般夥伴累計兩筆有效直接新成交後晉升，第三筆起直接成交50%。續約各以未稅實收的25%為基準，兩位受領人各依已簽版本結算。115.11 版依有效新約件數實領：0～1 件 20%、2～3 件 40%、4～5 件 60%、6 件以上 100%。</p>
-   <p>簽署日生效、每期一年；未於期滿30日前通知不續約，依契約自動延長一年。績效自 2026 年 11 月起含業績當月計算，最多回看十二個月。一般終止／不續約後，既有原推薦案件保留基準的 20%；當下歸屬人新生份額依書面約定處理。重大違約爭議部分先待核。</p>
+   <p>簽署日生效、每期一年；未於期滿30日前通知不續約，依契約自動延長一年。績效自 2026 年 11 月起含業績當月計算，最多回看十二個月。一般終止／不續約後，既有原推薦案件保留基準的 20%；當下歸屬人新生份額依書面約定處理。重大違約爭議部分先待核。修正版另須在認列、結算時具備本人有效完整版，資格中斷期間不補發。</p>
    <h3>最近12個月新約檢核</h3>${quotaMarkup(currentContracts[0]?.quota||result.quota)}
    ${result.heldOrders?.length?action('orderReferral','待核業績・核對簽署資料',select('orderId','待核訂單',result.heldOrders.map(o=>[o.orderId,o.orderId+' · '+(o.status==='paid'?'已收款':'待收款')]))+select('applicationId','該筆已受理完整版申請書',[['','請選擇已簽署且審核通過的申請書'],...(result.referralProofs||[]).map(p=>[p.id,[p.signed_at,p.namedPartner||'未列協助夥伴',p.id].join(' · ')])])+lookupControls('business','業務推薦人會員編號')+input('note','核對依據（同名或只填姓名時，請記錄如何確認本人）')+agreement('已核對此訂單的簽署資料及業務推薦人身分')+submit('確認業務歸屬')):''}
+   ${records.some(record=>record.terms?.templateVersion===TEMPLATE)?action('fullService','本人完整版服務紀錄',
+     select('serviceAction','操作',[['open','登錄已付款完整版開通'],['suspend','登錄合法停用'],['resume','登錄恢復服務']])+input('orderId','本人完整版訂單編號（開通必填）','text',false)+input('effectiveAt','生效時間','datetime-local')+input('expiresAt','服務期滿時間（開通必填）','datetime-local',false)+input('evidenceRef','付款／開通／停復用憑證參照')+agreement('已核對本人服務身分、有效期間及書面憑證')+submit('登錄服務紀錄')):''}
+   ${result.serviceNow?`<p>本人完整版 · ${result.serviceNow.valid?'目前有效':result.serviceNow.reason==='service_suspended'?'目前停用':'查無有效服務期間'} · 核對時間 ${esc(result.serviceNow.to)}</p>`:''}
+   ${result.serviceEvents?.length?`<ul>${result.serviceEvents.map(e=>`<li>服務${esc(({open:'開通',resume:'恢復',suspend:'停用'})[e.action])} · ${esc(e.effective_at)} · ${esc(e.order_id||e.evidence_ref)}</li>`).join('')}</ul>`:''}
+   ${result.excluded?.length?`<h3>本人資格未符合的續約份額</h3><ul>${result.excluded.map(e=>`<li>${esc(e.order_id)} · ${esc(e.bonus_type==='renewal_referral'?'原推薦人':'當下歸屬人')} · ${esc(e.checkedAt)} · ${e.reason==='service_suspended'?'服務停用':'未取得連續有效的本人完整版服務紀錄'} · 實領 NT$ 0</li>`).join('')}</ul>`:''}
    <h3>已登錄契約</h3>${records.length?records.map(recordMarkup).join(''):'<p>尚未登錄已簽契約。</p>'}
    ${action('contract','登錄已核對的已簽契約',`
-    ${select('templateVersion','已簽文件制度版本',[[TEMPLATE,'115.11（新版）'],['115.10','115.10（仍以該版簽署的文件）']])}
+    ${select('templateVersion','已簽文件制度版本',[[TEMPLATE,'115.11（持續收益與完整版資格修正版）'],['115.11','115.11（原版）'],['115.10','115.10（仍以該版簽署的文件）']])}
     ${input('signedAt','實際簽署時間（亦為契約生效時間）','datetime-local')}
     ${select('partyType','乙方簽約身分',[['natural_person','自然人'],['company','公司／商號／法人']])}
     ${input('partyName','姓名／公司或法人名稱')}${input('representativeName','公司／法人代表人（法人必填）','text',false)}
@@ -181,13 +186,17 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
   void run(async()=>{
    if(!confirmed)throw Error('請先核對並勾選確認事項');
    if(name==='contract'){
-    if(![TEMPLATE,'115.10'].includes(get('templateVersion')))throw Error('請選擇實際簽署的契約版本');
+    if(![TEMPLATE,'115.11','115.10'].includes(get('templateVersion')))throw Error('請選擇實際簽署的契約版本');
     if((get('referrerNumber')||get('referrerName'))&&(!chosenReferrer||chosenReferrer!==get('referrerNumber')))throw Error('請先核對契約推薦人的會員編號');
     if(get('partyType')==='company'&&!get('representativeName'))throw Error('公司／法人請填寫代表人');
     if(get('purchaseStatus')==='purchased'&&!get('purchaseOrderId'))throw Error('已購買者請填寫本人購買訂單編號');
     const signedAt=iso(get('signedAt'));
     await write(name,'',{target_uid:target,templateVersion:get('templateVersion'),signedAt,effectiveAt:signedAt,partyType:get('partyType'),partyName:get('partyName'),representativeName:get('representativeName'),referrerName:get('referrerName'),referrerMemberNumber:get('referrerNumber'),bankName:get('bankName'),bankCode:get('bankCode'),bankBranch:get('bankBranch'),bankAccountHolder:get('bankAccountHolder'),bankAccount:get('bankAccount'),documentSha256:hash(get('documentSha256')),evidenceRef:get('evidenceRef'),purchaseStatus:get('purchaseStatus'),...(get('purchaseOrderId')?{purchaseOrderId:get('purchaseOrderId')} : {}),confirmed});
     await load();status(get('templateVersion')+'已簽契約已登錄；歷史契約與舊訂單維持原規則。');
+   }else if(name==='fullService'){
+    const action=get('serviceAction');
+    await write(name,'/full-service',{target_uid:target,action,effectiveAt:iso(get('effectiveAt')),evidenceRef:get('evidenceRef'),...(action==='open'?{orderId:get('orderId'),expiresAt:iso(get('expiresAt'))}:{}),confirmed});
+    await load();status('本人服務紀錄已登錄。');
    }else if(name==='orderReferral'){
     if(!get('applicationId')||form.elements.businessNumber.dataset.verified!==get('businessNumber'))throw Error('請選擇該筆簽署資料，並查核業務推薦人的會員編號');
     await write(name,'/order-referral',{target_uid:target,orderId:get('orderId'),applicationId:get('applicationId'),memberNumber:get('businessNumber'),note:get('note'),confirmed});
