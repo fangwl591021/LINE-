@@ -1,3 +1,4 @@
+import {fullServiceCheck} from './partner-full-service.mjs';
 import {POLICY_11511,monthlyPerformance,prorate} from './partner-renewal-11511.mjs';
 // Evidence-based manual settlement only. No bank, points or LINE side effects.
 import {addTaiwanWorkingDays,TAIWAN_WORKING_CALENDAR as calendarProvenance} from './taiwan-working-days.mjs';
@@ -85,15 +86,16 @@ export async function handlePartnerSettlement11510(route,input,c){
    const award=JSON.parse(row.raw_json||'{}');
    if(award.beneficiaryPolicyVersion!==POLICY_11511||!award.renewalMode)continue;
    monthly ||= await monthlyPerformance(c.db,data.target_uid,data.month);
-   const percent=award.renewalMode==='written'?award.writtenPercent:award.renewalMode==='retained'?20:monthly.percent;
+   const fullService=award.fullService?await fullServiceCheck(c.db,data.target_uid,row.confirmed_at,at):null;
+   const percent=fullService && !fullService.valid?0:award.renewalMode==='written'?award.writtenPercent:award.renewalMode==='retained'?20:monthly.percent;
    row.amount=prorate(award.baseAmount,percent);
-   row.finalAward={...award,amount:row.amount,monthlyPerformance:monthly,appliedPercent:percent,companyRetained:Math.round((award.baseAmount-row.amount)*100)/100};
+   row.finalAward={...award,...(fullService?{fullService,recognitionService:award.fullService}:{}),amount:row.amount,monthlyPerformance:monthly,appliedPercent:percent,companyRetained:Math.round((award.baseAmount-row.amount)*100)/100};
   }
   const s={id:crypto.randomUUID(),target_uid:data.target_uid,month:data.month,created_at:at,delivered_at:delivered,evidence_ref:evidenceRef,statement_due_at:due,objection_due_at:plusCalendarDays(delivered,5),late:at>due?1:0,total_amount:cents(rows)/100};
   return commit(c,route,data,{success:true,statement:s,hasMore:candidates.length>MAX_ITEMS},({revision,nonce,guard})=>[
    c.db.prepare(`INSERT INTO partner_11510_statements(id,target_uid,month,created_at,delivered_at,evidence_ref,statement_due_at,objection_due_at,late,total_amount,created_by) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${guard}`).bind(s.id,s.target_uid,s.month,at,delivered,evidenceRef,due,s.objection_due_at,s.late,s.total_amount,c.uid,revision,nonce),
-   ...rows.filter(r=>r.finalAward).map(r=>c.db.prepare(`UPDATE bonus_transactions SET amount=?,raw_json=? WHERE tx_id=? AND ${guard}`).bind(r.amount,JSON.stringify(r.finalAward),r.tx_id,revision,nonce)),
-   ...rows.map(r=>c.db.prepare(`INSERT INTO partner_11510_statement_items(tx_id,statement_id,amount,order_id,bonus_type) SELECT ?,?,?,?,? WHERE ${guard}`).bind(r.tx_id,s.id,r.amount,r.order_id,r.bonus_type,revision,nonce))]);
+   ...rows.filter(r=>r.finalAward).map(r=>c.db.prepare(`UPDATE bonus_transactions SET amount=?,raw_json=?,status=CASE WHEN ?=1 THEN 'service_ineligible' ELSE status END WHERE tx_id=? AND ${guard}`).bind(r.amount,JSON.stringify({...r.finalAward,statementId:s.id}),r.finalAward.fullService?.valid===false?1:0,r.tx_id,revision,nonce)),
+   ...rows.filter(r=>r.amount>0).map(r=>c.db.prepare(`INSERT INTO partner_11510_statement_items(tx_id,statement_id,amount,order_id,bonus_type) SELECT ?,?,?,?,? WHERE ${guard}`).bind(r.tx_id,s.id,r.amount,r.order_id,r.bonus_type,revision,nonce))]);
  }
  if(route==='/settlement/claims'){
   data=request(c,input,['statementId','completedAt','evidenceRef']);const old=await replay(c,route,data);if(old)return old;

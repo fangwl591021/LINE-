@@ -146,3 +146,21 @@ test('115.11 November uses November only, freezes the tier for late supplements,
  deal('late3','2026-11-03');deal('late4','2026-11-04');portion('late','tier');
  assert.equal((await f.statement(terms)).statement.total_amount,600);assert.equal(log().amount,600);
 });
+
+test('settlement gives zero only to the revised renewal with a gap; resolution after restoration cannot backpay it',async t=>{
+ const f=fixture(t),version='cocreator-115.11-v4';
+ f.sql.exec(readFileSync(new URL('../migrations/0079_partner_full_service_evidence.sql',import.meta.url),'utf8'));
+ f.time('2026-12-05T02:00:00.000Z');
+ f.seed('gap',version,1500,'2026-11');f.seed('old',version,1500,'2026-11');
+ const recognized='2026-11-18T02:00:00.000Z';
+ const meta={baseAmount:1500,beneficiaryPolicyVersion:version,renewalMode:'tier',fullService:{valid:true,from:recognized,to:recognized,orders:['my-full']}};
+ f.sql.prepare("UPDATE bonus_transactions SET raw_json=? WHERE order_id='gap'").run(JSON.stringify(meta));
+ f.sql.prepare("INSERT INTO orders(order_id,buyer_id,order_type,payment_status,paid_at) VALUES('my-full',?,'tenant_annual_fee','paid','2026-11-01T00:00:00.000Z')").run(REWARD);
+ for(const [i,action,at] of [[1,'open','2026-11-01'],[2,'suspend','2026-11-25'],[3,'resume','2026-12-01']]){
+  f.sql.prepare('INSERT INTO partner_full_service_evidence VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('event'+i,REWARD,action,action==='open'?'my-full':'',at+'T00:00:00.000Z','2027-11-01T00:00:00.000Z','proof',at+'T00:00:00.000Z',ADMIN,crypto.randomUUID(),'{}');
+ }
+ const s=await f.statement({month:'2026-11',deliveredAt:'2026-12-02T02:00:00.000Z'});assert.equal(s.statement.total_amount,1500);
+ const excluded=f.sql.prepare("SELECT status,amount,raw_json FROM bonus_transactions WHERE order_id='gap'").get();
+ assert.equal(excluded.amount,0);assert.equal(excluded.status,'service_ineligible');assert.equal(JSON.parse(excluded.raw_json).fullService.reason,'service_suspended');
+ assert.equal(f.sql.prepare("SELECT count(*) n FROM partner_11510_statement_items WHERE order_id='gap'").get().n,0);
+});

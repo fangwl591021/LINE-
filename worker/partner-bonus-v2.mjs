@@ -1,3 +1,4 @@
+import {REVISED_TEMPLATE,REVISED_SOURCE,recordFullService,revisedAgreement,fullServiceCheck} from './partner-full-service.mjs';
 import {POLICY_11511,TEMPLATE_11511,SOURCE_11511} from './partner-renewal-11511.mjs';
 import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {readJson,ShopError} from './store-shop.mjs';
@@ -154,7 +155,7 @@ async function verifyOrderReferral(db, actor, data) {
  }
  if(!contract)fail('訂單建立時無可核對的有效夥伴契約，保留待核',409);
  if(row.currency!=='TWD'||!Number.isSafeInteger(row.gross_amount)||row.gross_amount<=0||row.gross_amount>MAX_MONEY||row.tax_rate!==5||row.net_amount!==Math.round(row.gross_amount/1.05)||row.tax_amount!==row.gross_amount-row.net_amount)fail('訂單幣別或稅額待核',409);
- const snapshot={policyVersion:contract.policy_version,contractId:contract.id,recruiterUid:recruiter,buyerUid:row.buyer_id,capturedAt:row.created_at,policyRevision:next,originalReferrerUid:row.order_type==='tenant_annual_fee'?recruiter:'',policyBasisMemberUid:contract.member_uid,templateVersion:contract.policy_version===POLICY_11511?TEMPLATE_11511:contract.policy_version===PARTNER_POLICY_11510?'115.10':'',classificationSource:'signed_order_review',verifiedMemberNumber:data.memberNumber,applicationId:data.applicationId,documentSha256:proof.content_sha256,verifiedBy:actor.line_id,verifiedAt:at,note};
+ const snapshot={policyVersion:contract.policy_version,contractId:contract.id,recruiterUid:recruiter,buyerUid:row.buyer_id,capturedAt:row.created_at,policyRevision:next,originalReferrerUid:row.order_type==='tenant_annual_fee'?recruiter:'',policyBasisMemberUid:contract.member_uid,templateVersion:contract.policy_version===POLICY_11511?(revisedAgreement(contract)?REVISED_TEMPLATE:TEMPLATE_11511):contract.policy_version===PARTNER_POLICY_11510?'115.10':'',classificationSource:'signed_order_review',verifiedMemberNumber:data.memberNumber,applicationId:data.applicationId,documentSha256:proof.content_sha256,verifiedBy:actor.line_id,verifiedAt:at,note};
  const result=await db.batch([clockClaim(db,revision,nonce,actor),db.prepare(`UPDATE orders SET recruiter_id=?,sponsor_id=?,bonus_policy_type=?,bv=net_amount/2.0,raw_json=json_set(raw_json,'$.signedReviewKey',?),updated_at=? WHERE order_id=? AND buyer_id=? AND bonus_policy_type=? AND payment_status IN ('pending_payment','paid') AND ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND member_number=?) AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (?,?) OR new_line_id IN (?,?)))`).bind(recruiter,recruiter,contract.policy_version,nonce,at,orderId,row.buyer_id,REFERRAL_PENDING,next,nonce,recruiter,data.memberNumber,recruiter,row.buyer_id,recruiter,row.buyer_id),
  db.prepare(`INSERT INTO partner_bonus_order_snapshots(order_id,contract_id,policy_version,recruiter_uid,buyer_uid,captured_at,snapshot_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE order_id=? AND json_extract(raw_json,'$.signedReviewKey')=?) AND ${gate}`).bind(orderId,contract.id,contract.policy_version,recruiter,row.buyer_id,row.created_at,JSON.stringify(snapshot),orderId,nonce,next,nonce)]);
  if(result[2].meta.changes!==1)fail('訂單或權限已變動，請重新載入核對',409);
@@ -283,7 +284,7 @@ async function buildFacts(db,snapshot,row,at){
 }
 
 async function enroll(db,uid,actor,data){
- if([PARTNER_TEMPLATE_11510,TEMPLATE_11511].includes(data?.templateVersion))return partnerContractContext11510(db,uid,actor).policy11510.enroll(data);
+ if([PARTNER_TEMPLATE_11510,TEMPLATE_11511,REVISED_TEMPLATE].includes(data?.templateVersion))return partnerContractContext11510(db,uid,actor).policy11510.enroll(data);
  if(data?.templateVersion!==PARTNER_POLICY_VERSION||!data.signedAt||date(data.signedAt)>=PARTNER_POLICY_CUTOVER)fail('請使用115.10版登錄新簽契約；舊版僅可核對切換前已簽文件',409);
  keys(data,['target_uid','signedAt','effectiveAt','documentSha256','evidenceRef','confirmed','requestKey','purchaseStatus','purchaseOrderId','templateVersion']);
  if(data.confirmed!==true||!UUID.test(data.requestKey||''))fail('請確認已核對簽約文件並重新送出');
@@ -392,14 +393,18 @@ export async function handlePartnerContracts(request,env,profileMapper,fetcher=f
    const contracts=await Promise.all((await all(db,'SELECT * FROM partner_contract_enrollments WHERE member_uid=? ORDER BY verified_at DESC,id DESC LIMIT 20',target)).map(c=>policy.decorate(c)));
    const pendingDeals=await all(db,`SELECT o.order_id AS orderId,o.payment_status AS status,o.gross_amount AS amount,o.bonus_status AS bonusStatus,s.policy_version AS policyVersion FROM orders o JOIN partner_bonus_order_snapshots s ON s.order_id=o.order_id WHERE s.recruiter_uid=? AND NOT EXISTS(SELECT 1 FROM partner_bonus_deal_confirmations c WHERE c.order_id=o.order_id) ORDER BY s.captured_at DESC LIMIT 20`,target);
    const renewalHolds=await all(db,`SELECT h.*,s.buyer_uid AS buyerUid FROM partner_bonus_11510_holds h JOIN partner_bonus_order_snapshots s ON s.order_id=h.order_id WHERE s.recruiter_uid=? AND h.status='pending' ORDER BY h.created_at DESC LIMIT 40`,target);
-   return reply({success:true,policyVersion:POLICY_11511,templateVersion:TEMPLATE_11511,templateSha256:SOURCE_11511,contracts,referrer,heldOrders,referralProofs,attribution:await currentAttribution(db,target,stamp()),validDealCount:await countDeals(db,target,stamp()),pendingDeals,renewalHolds});
+   const revised=contracts.some(revisedAgreement);
+   const checkedAt=stamp(),serviceNow=revised?await fullServiceCheck(db,target,checkedAt,checkedAt):null;
+   const serviceEvents=revised?await all(db,'SELECT action,order_id,effective_at,expires_at,evidence_ref FROM partner_full_service_evidence WHERE member_uid=? ORDER BY effective_at DESC LIMIT 20',target):[];
+   const excluded=revised?await all(db,"SELECT order_id,bonus_type,json_extract(raw_json,'$.baseAmount') AS baseAmount,json_extract(raw_json,'$.fullService.reason') AS reason,json_extract(raw_json,'$.fullService.to') AS checkedAt FROM bonus_transactions WHERE beneficiary_id=? AND status='service_ineligible' ORDER BY updated_at DESC LIMIT 50",target):[];
+   return reply({success:true,serviceNow,serviceEvents,excluded,policyVersion:POLICY_11511,templateVersion:REVISED_TEMPLATE,templateSha256:REVISED_SOURCE,contracts,referrer,heldOrders,referralProofs,attribution:await currentAttribution(db,target,stamp()),validDealCount:await countDeals(db,target,stamp()),pendingDeals,renewalHolds});
   }
   const financeRoutes=['/settlement/statements','/settlement/claims','/settlement/disputes','/settlement/resolve','/settlement/payments'];
-  if(request.method!=='POST'||url.search||!['','/order-referral','/attribution','/deals/confirm','/lifecycle','/renewals/resolve',...financeRoutes].includes(route))fail('不支援此操作',405);
+  if(request.method!=='POST'||url.search||!['','/full-service','/order-referral','/attribution','/deals/confirm','/lifecycle','/renewals/resolve',...financeRoutes].includes(route))fail('不支援此操作',405);
   if(uid!==actor.line_id)fail('請使用 CRM 正式管理員 LINE 身分重新登入',409);
   await policyIdentity(db,uid);
   if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')||''))fail('請使用 JSON 資料',415);
-  const data=await readJson(request,10000),context=partnerContractContext11510(db,uid,actor),policy=context.policy11510,result=await(route==='/order-referral'?verifyOrderReferral(db,actor,data):financeRoutes.includes(route)?handlePartnerSettlement11510(route,data,context):route==='/attribution'?attribute(db,uid,actor,data):route==='/deals/confirm'?confirmDeal(db,uid,actor,data):route==='/lifecycle'?policy.lifecycle(data):route==='/renewals/resolve'?policy.resolve(data):enroll(db,uid,actor,data));
+  const data=await readJson(request,10000),context=partnerContractContext11510(db,uid,actor),policy=context.policy11510,result=await(route==='/full-service'?recordFullService(context,data):route==='/order-referral'?verifyOrderReferral(db,actor,data):financeRoutes.includes(route)?handlePartnerSettlement11510(route,data,context):route==='/attribution'?attribute(db,uid,actor,data):route==='/deals/confirm'?confirmDeal(db,uid,actor,data):route==='/lifecycle'?policy.lifecycle(data):route==='/renewals/resolve'?policy.resolve(data):enroll(db,uid,actor,data));
   return reply(result,result.success?200:409);
  }catch(e){if(e instanceof ShopError||e instanceof DirectoryError)return reply({success:false,error:e.message},e.status||400);console.error('partner_contract_operation_unavailable');return reply({success:false,error:'共創制度資料暫時無法完成，請重新載入確認'},503);}
 }

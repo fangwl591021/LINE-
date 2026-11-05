@@ -4,7 +4,7 @@ import {handSignFixture,partnerFields,fullFields,signing,syntheticTerms,replaceH
 import {handSignFields,handSignConfirmations,handSignTemplates,normalizeHandSignApplication,sha256Text} from '../worker/hand-sign-application-definition.mjs';
 
 const previousPartnerPin={version:'partner-115.10-hand-sign-2026-10-28-v1',sourceSha256:'224dac420aba1f0990f5de713e7125c4d9699a6a11f84ee6aed6f8ddee7da4aa',title:'點數通「共創夥伴」合作推展合約書'};
-const currentPartnerPin={version:'partner-115.11-hand-sign-2026-11-04-v1',sourceSha256:'91fa4438661132222d0f5a77f54e10ab76d7c8eb3338ebd0f11175b7be4aabef',title:'點數通「共創夥伴」合作推展合約書'};
+const currentPartnerPin={version:'partner-115.11-hand-sign-2026-11-05-r2',sourceSha256:'4126be459a0ea6a48c7b755e814d700e7fa1f98941b7a013a3bfc40678cacaf2',title:'點數通「共創夥伴」合作推展合約書'};
 
 test('partner pin cutover requires a fresh preview while signed old snapshots and exact retries remain intact',async t=>{
  const f=await handSignFixture(t);assert.deepEqual(handSignTemplates.partner,currentPartnerPin);
@@ -201,3 +201,15 @@ for(const kind of ['reward','discount','partner','full']){
   assert.equal(f.sql.prepare('SELECT count(*) n FROM '+kind+'_application_reviews').get().n,1);
  });
 }
+
+test('115.11 original signatures retain their terms when the revised full-service template replaces an open preview',async t=>{
+ const f=await handSignFixture(t);
+ const originalPin={version:'partner-115.11-hand-sign-2026-11-04-v1',sourceSha256:'91fa4438661132222d0f5a77f54e10ab76d7c8eb3338ebd0f11175b7be4aabef',title:handSignTemplates.partner.title};
+ await replaceHandSignTemplate(f.sql,'partner',originalPin);
+ const old=(await f.submit('partner')).result.application;
+ const pending=await f.call('partner','/preview',{fields:partnerFields()});
+ await replaceHandSignTemplate(f.sql,'partner',handSignTemplates.partner);
+ assert.equal((await f.call('partner','/submit',signing(pending.preview_id,'partner'))).http,409);
+ assert.deepEqual((await f.call('partner','?id='+old.id)).application,old);
+ assert.equal((await f.submit('partner')).result.application.snapshot.template.source_sha256,handSignTemplates.partner.sourceSha256);
+});

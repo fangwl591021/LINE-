@@ -1,3 +1,4 @@
+import {REVISED_TEMPLATE,REVISED_SOURCE,revisedAgreement,fullServiceCheck} from './partner-full-service.mjs';
 import {POLICY_11511,TEMPLATE_11511,SOURCE_11511,entitledPortion,monthlyPerformance} from './partner-renewal-11511.mjs';
 // Versioned contract rules; no online signature or external payment is implied.
 export const PARTNER_POLICY_11510='cocreator-115.10-v3';
@@ -27,9 +28,11 @@ export function calculatePartnerBonus11510(facts,legacyCalculator){
  for(const [portion,memberId,eligible,terminated]of [['renewal_referral',facts.originalReferrer,facts.originalEligible,facts.originalTerminated],['renewal_placement',facts.currentOwner,facts.ownerEligible,facts.ownerTerminated]]){
   const right=facts.portionPolicies?.[portion];
   if(right){
-   if(right.mode==='disputed')plan.holds.push({portion,amount,reason:'written_evidence_required'});
+   if(right.fullService && !right.fullService.valid){
+    plan.transactions.push({memberId,bonusType:portion,amount:0,baseAmount:amount,renewalMode:right.mode,fullService:right.fullService,beneficiaryPolicyVersion:POLICY_11511,beneficiaryContractId:right.contractId});
+   }else if(right.mode==='disputed')plan.holds.push({portion,amount,reason:'written_evidence_required'});
    else if(right.mode==='ended_owner')plan.cancellations.push({portion,amount,reason:'owner_right_ended'});
-   else plan.transactions.push({memberId,bonusType:portion,amount,baseAmount:amount,renewalMode:right.mode,beneficiaryPolicyVersion:POLICY_11511,beneficiaryContractId:right.contractId});
+   else plan.transactions.push({memberId,bonusType:portion,amount,baseAmount:amount,renewalMode:right.mode,...(right.fullService?{fullService:right.fullService}:{}),beneficiaryPolicyVersion:POLICY_11511,beneficiaryContractId:right.contractId});
   }else if(UID.test(memberId||'')&&eligible)plan.transactions.push({memberId,bonusType:portion,amount});
   else if(terminated)plan.cancellations.push({portion,amount,reason:'recipient_contract_terminated'});
   else plan.holds.push({portion,amount,reason:portion+'_requires_review'});
@@ -65,12 +68,12 @@ export function createPartnerPolicy11510(ctx){
  async function enroll(data){
   const c=await clock(db);
   keys(data,['target_uid','signedAt','effectiveAt','documentSha256','evidenceRef','confirmed','requestKey','purchaseStatus','purchaseOrderId','templateVersion','partyType','partyName','representativeName','referrerName','referrerMemberNumber','bankName','bankCode','bankBranch','bankAccountHolder','bankAccount']);
-  const modern=data.templateVersion===TEMPLATE_11511,version=modern?POLICY_11511:PARTNER_POLICY_11510;
+  const revised=data.templateVersion===REVISED_TEMPLATE,modern=revised || data.templateVersion===TEMPLATE_11511,version=modern?POLICY_11511:PARTNER_POLICY_11510;
   if(!modern && data.templateVersion!==PARTNER_TEMPLATE_11510||data.confirmed!==true||!UUID.test(data.requestKey||''))fail('請選擇115.10版，並確認已核對實際簽署文件');
   const target=await member(db,data.target_uid),signed=date(data.signedAt),effective=date(data.effectiveAt),at=stamp();
   if(modern && signed<'2026-10-31T16:00:00.000Z')fail('115.11 自 2026 年 11 月起適用');
   if(signed>at||signed!==effective)fail('115.10契約自簽署日起生效，簽署與生效時間必須相同');
-  const terms={templateVersion:data.templateVersion,...(modern?{templateSha256:SOURCE_11511}:{}),partyType:data.partyType,partyName:text(data.partyName,150),representativeName:text(data.representativeName||'',150,false),referrerName:text(data.referrerName||'',150,false),referrerMemberNumber:text(data.referrerMemberNumber||'',20,false),bankName:text(data.bankName,100),bankCode:text(data.bankCode,10),bankBranch:text(data.bankBranch,100),bankAccountHolder:text(data.bankAccountHolder,150),bankAccount:text(data.bankAccount,40)};
+  const terms={templateVersion:data.templateVersion,...(modern?{templateSha256:revised?REVISED_SOURCE:SOURCE_11511}:{}),partyType:data.partyType,partyName:text(data.partyName,150),representativeName:text(data.representativeName||'',150,false),referrerName:text(data.referrerName||'',150,false),referrerMemberNumber:text(data.referrerMemberNumber||'',20,false),bankName:text(data.bankName,100),bankCode:text(data.bankCode,10),bankBranch:text(data.bankBranch,100),bankAccountHolder:text(data.bankAccountHolder,150),bankAccount:text(data.bankAccount,40)};
   if(!['natural_person','company'].includes(terms.partyType)||terms.partyType==='company'&&!terms.representativeName||!/^\d{3,7}$/.test(terms.bankCode)||!/^\d{5,30}$/.test(terms.bankAccount.replace(/[ -]/g,'')))fail('請完整填寫簽約身分、代表人及銀行資料');
   let sponsor='';
   if(Boolean(terms.referrerName)!==Boolean(terms.referrerMemberNumber))fail('契約推薦人姓名與會員編號須一併核對',409);
@@ -89,7 +92,7 @@ export function createPartnerPolicy11510(ctx){
   const old=await first(db,'SELECT * FROM partner_contract_enrollments WHERE request_key=?',request.requestKey);
   if(old){if(old.request_json!==json)fail('同一次登錄已送出不同內容',409);return {success:true,contract:await decorate(old),replayed:true};}
   const previous=await latest(target.line_id,at);
-  if(previous){const previousState=await state(previous,at);if(!(modern && previousState.active && previous.policy_version===PARTNER_POLICY_11510 && signed>=previous.effective_at) && (previousState.active||!previousState.endedAt||signed<previousState.endedAt))fail('既有115.10契約尚未停止，或新簽日期早於原終止日；不可重疊登錄',409);}
+  if(previous){const previousState=await state(previous,at);if(!(modern && previousState.active && (previous.policy_version===PARTNER_POLICY_11510 || (revised && !revisedAgreement(previous))) && signed>=previous.effective_at) && (previousState.active||!previousState.endedAt||signed<previousState.endedAt))fail('既有115.10契約尚未停止，或新簽日期早於原終止日；不可重疊登錄',409);}
   if(await first(db,'SELECT id FROM partner_contract_enrollments WHERE member_uid=? AND document_sha256=? AND effective_at=?',target.line_id,request.documentSha256,effective))fail('這份契約與生效日已登錄',409);
   const id=crypto.randomUUID(),nonce=crypto.randomUUID(),next=c.revision+1;
   const result=await db.batch([clockClaim(db,c.revision,nonce,actor),db.prepare(`INSERT INTO partner_contract_enrollments(id,member_uid,policy_version,signed_at,effective_at,expires_at,document_sha256,evidence_ref,sponsor_uid,purchase_status,purchase_order_id,verified_by,verified_at,verified_revision,request_key,request_json) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=?) AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (?,?) OR new_line_id IN (?,?)))${UID.test(sponsor)?' AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND member_number=?)':''}`).bind(id,target.line_id,version,signed,effective,anniversary(signed),request.documentSha256,request.evidenceRef,sponsor==='admin'?'':sponsor,purchaseStatus,purchaseOrderId,uid,at,next,request.requestKey,json,next,nonce,target.line_id,target.line_id,sponsor,target.line_id,sponsor,...(UID.test(sponsor)?[sponsor,terms.referrerMemberNumber]:[])),...(modern?[]:[db.prepare(`INSERT INTO partner_contract_11510_terms(contract_id,template_version,terms_json) SELECT ?,'115.10',? WHERE ${gate} AND EXISTS(SELECT 1 FROM partner_contract_enrollments WHERE id=? AND request_key=?)`).bind(id,JSON.stringify(terms),next,nonce,id,request.requestKey)])]);
@@ -142,6 +145,7 @@ export function createPartnerPolicy11510(ctx){
    await policyIdentity(db,id);
    const end=(await events(contract.id)).find(e=>e.verified_at<=at&&e.effective_at<=at);
    facts.portionPolicies[portion]={contractId:contract.id,mode:entitledPortion(portion,end,origin?.confirmed_at)};
+   if(revisedAgreement(contract))facts.portionPolicies[portion].fullService=await fullServiceCheck(db,id,at,at);
   }
   return facts;
  }
@@ -192,7 +196,7 @@ export function createPartnerPolicy11510(ctx){
   fail('成交正在更新，請重新核對',409);
  }
  function awardStatement(row,snapshot,tx,at,where,args){
-  return db.prepare(`INSERT INTO bonus_transactions(tx_id,order_id,beneficiary_id,source_user_id,network_id,bonus_type,amount,bv,status,freeze_until,note,raw_json,updated_at) SELECT ?,?,?,?,?,?,?,?,'review_required','',?,?,? WHERE ${where}`).bind(row.order_id+'-P11510-'+tx.bonusType,row.order_id,tx.memberId,row.buyer_id,row.network_id,tx.bonusType,tx.amount,row.net_amount/2,'115.10共創契約：'+tx.bonusType,JSON.stringify({...tx,policyVersion:snapshot.policy_version,contractId:snapshot.contract_id}),at,...args);
+  return db.prepare(`INSERT INTO bonus_transactions(tx_id,order_id,beneficiary_id,source_user_id,network_id,bonus_type,amount,bv,status,freeze_until,note,raw_json,updated_at) SELECT ?,?,?,?,?,?,?,?,?,'',?,?,? WHERE ${where}`).bind(row.order_id+'-P11510-'+tx.bonusType,row.order_id,tx.memberId,row.buyer_id,row.network_id,tx.bonusType,tx.amount,row.net_amount/2,tx.fullService && !tx.fullService.valid?'service_ineligible':'review_required','共創契約：'+tx.bonusType,JSON.stringify({...tx,policyVersion:snapshot.policy_version,contractId:snapshot.contract_id}),at,...args);
  }
  async function resolve(data){
   keys(data,['orderId','portion','writtenPercent','beneficiaryUid','consentSha256','evidenceRef','reason','confirmed','requestKey']);
@@ -216,6 +220,7 @@ export function createPartnerPolicy11510(ctx){
     if(version?.policy_version===POLICY_11511){
      const end=(await events(version.id)).find(e=>e.verified_at<=at&&e.effective_at<=confirmation.confirmed_at);
      right={contractId:version.id,mode:entitledPortion(request.portion,end,original.originConfirmedAt)};
+     if(revisedAgreement(version))right.fullService=await fullServiceCheck(db,expected,confirmation.confirmed_at,confirmation.confirmed_at);
     }
    }
    if(right){
@@ -223,6 +228,7 @@ export function createPartnerPolicy11510(ctx){
     if(contested && (!Number.isInteger(request.writtenPercent)||request.writtenPercent<0||request.writtenPercent>100))fail('請依個案書面證據明確填寫 0 至 100 的核准比例，0 表示不發放',409);
     if(!contested && request.writtenPercent!==undefined)fail('本份額應按契約級距計算',409);
     Object.assign(tx,{baseAmount:hold.amount,renewalMode:contested?'written':right.mode,beneficiaryPolicyVersion:POLICY_11511,beneficiaryContractId:right.contractId,...(contested?{writtenPercent:request.writtenPercent}:{})});
+    if(right.fullService){tx.fullService=right.fullService;if(!right.fullService.valid)tx.amount=0;}
    }else if(request.writtenPercent!==undefined||!await awardEligibility(expected,row.order_id,at))fail('受領人必須符合可稽核原推薦／當下歸屬，且權利未因終止消滅，禁止改付他人',409);
    const id=crypto.randomUUID(),nonce=crypto.randomUUID(),next=c.revision+1,where=`${gate} AND EXISTS(SELECT 1 FROM partner_bonus_11510_resolutions WHERE id=?)`,args=[next,nonce,id];
    const result=await db.batch([clockClaim(db,c.revision,nonce,actor),db.prepare(`INSERT INTO partner_bonus_11510_resolutions(id,order_id,portion,beneficiary_uid,consent_sha256,evidence_ref,reason,verified_by,verified_at,request_key,request_json) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${gate} AND EXISTS(SELECT 1 FROM orders WHERE order_id=? AND payment_status='paid') AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (?,?) OR new_line_id IN (?,?)))`).bind(id,row.order_id,request.portion,request.beneficiaryUid,request.consentSha256,request.evidenceRef,request.reason,uid,at,request.requestKey,json,next,nonce,row.order_id,row.buyer_id,request.beneficiaryUid,row.buyer_id,request.beneficiaryUid),...(tx.writtenPercent===0?[]:[awardStatement(row,snapshot,tx,at,where,args)]),db.prepare(`UPDATE partner_bonus_11510_holds SET status='resolved',resolved_at=? WHERE order_id=? AND portion=? AND (status='pending' OR (status='cancelled' AND reason='owner_right_ended')) AND ${where}`).bind(at,row.order_id,request.portion,...args)]);
