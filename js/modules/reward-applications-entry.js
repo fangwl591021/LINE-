@@ -1,5 +1,5 @@
 (function(){
- const moduleUrl=new URL('./reward-applications.js?v=6&contract=11511',document.currentScript.src).href;
+ const moduleUrl=new URL('./reward-applications.js?v=6&contract=11511&tabs=1',document.currentScript.src).href;
  const kinds=['reward','discount','partner','full'];
  const uuid=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
  // This is a navigation hint only; the API independently verifies current admin authority.
