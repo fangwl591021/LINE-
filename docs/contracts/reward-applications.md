@@ -38,3 +38,6 @@
 - A frozen recipient/payload and stable LINE retry UUID are private and persistent. Timeout/unknown responses use the same key, bounded attempts and less than24hours; accepted409 responses finalize without duplicate push. Permanent failure does not delete a signed record or grant a new signing request.
 - Deep link carries only fixed kind and opaque application ID. Fresh LINE/admin validation is required to open the specific review; a nonadmin link holder cannot read the contract.
 - No new cron schedule, bindings/secrets or message-reply owner; no real test submissions or pushes. Notification events begin only with future real successful submissions.
+
+## List navigation stability
+- During category/refresh/pagination reads, retain four category buttons and current selected kind; update only results. Keep the list dialog anchored, including empty/error states. Failed reads retain refresh and category navigation; account changes invalidate the dialog. CRM target UID remains attached to each category request.
