@@ -6,9 +6,14 @@ const kinds=['reward','discount','partner','full'];
 const kindNames={reward:'贈點單位',discount:'特約折抵店家',partner:'共創夥伴合作契約',full:'雙向完整版'};
 const kindLabels={reward:fieldLabels,discount:discountFieldLabels,partner:partnerFieldLabels,full:fullFieldLabels};
 function snapshotHtml(s){return `<h3>${esc(s.terms.title)}</h3>${Object.entries(labelsFor(s)).filter(([k])=>s.fields[k]?.length).map(([k,label])=>`<p class="ra-copy"><strong>${esc(label)}：</strong>${esc(displayFieldValue(k,s.fields[k]))}</p>`).join('')}${policyNotesFor(s).length?`<section class="ra-note" aria-label="本次簽署制度確認"><h3>本次簽署制度確認</h3>${policyNotesFor(s).map(p=>`<p class="ra-copy">${esc(p)}</p>`).join('')}</section>`:''}<h3>完整合作條款</h3><small>版本：${esc(s.terms.version)}</small>${s.terms.paragraphs.map(p=>`<p class="ra-copy">${esc(p)}</p>`).join('')}${sourceHashFor(s)?`<small class="ra-copy">原始範本 SHA-256：${esc(sourceHashFor(s))}</small>`:''}`;}
-export async function openRewardApplications({base,admin=false,target='',kind='reward',applicationId='',isCurrent=()=>true,fetcher=fetch}={}){
+export async function openRewardApplications({base,admin=false,target='',kind='reward',applicationId='',isCurrent=()=>true,fetcher=fetch,planControl=null}={}){
  if(!kinds.includes(kind))throw Error('申請類型不正確');
  if(applicationId&&!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(applicationId))throw Error('申請連結格式不正確');
+ const planNames={user:'一般會員',reward:'贈點單位',redeem:'特約折抵店家',store:'雙向完整版'};
+ const planEnabled=admin&&!!target&&typeof planControl?.get==='function'&&typeof planControl?.save==='function';
+ const planSection=()=>{if(!planEnabled)return '';const member=planControl.get();if(!member?.editable)return '';
+  return `<section class="ra-note" aria-label="會員合作方案"><h3>會員合作方案｜${esc(member.name)}</h3><p>CRM 已儲存：<strong data-saved-plan>${esc(planNames[member.role]||member.role)}</strong></p><label>變更合作方案<select data-member-plan>${Object.entries(planNames).map(([role,label])=>`<option value="${role}" ${role===member.role?'selected':''}>${label}</option>`).join('')}</select></label><button type="button" class="primary" data-action="save-plan">儲存方案</button><p data-plan-status role="status">選好後請按「儲存方案」，關閉再開仍會保留。</p><small>此操作會變更會員的商城、贈點及折抵角色權限；不代表已收款、通過合約審核或取得獎金資格。</small></section>`;
+ };
  const title=()=>kindNames[kind];
  const labels=()=>kindLabels[kind];
  if(active?.busy)throw Error('申請正在送出，請先等候結果');active?.close();
@@ -33,7 +38,7 @@ export async function openRewardApplications({base,admin=false,target='',kind='r
  const adminPath=()=>admin?'/admin':'';
  async function list(after=''){
   const gen=++generation;const params=new URLSearchParams();if(admin&&target)params.set('target',target);if(after)params.set('after',after);
-  shell(admin?'CRM 合作申請審核':'合作申請／我的合約',`<nav class="ra-kind-tabs" aria-label="申請種類">${kinds.map(value=>`<button data-action="kind" data-kind="${value}" aria-pressed="${kind===value}" class="${kind===value?'primary':''}">${kindNames[value]}</button>`).join('')}</nav><h3>${title()}${kind==='partner'?'':'申請'}</h3><p class="ra-note">${admin?'本頁只記錄審核結果，不會自動改變會員角色、贈點或折抵權限、商品設定或公開單位資料。':kind==='partner'?'共創夥伴免費加入，與雙向完整版購買分開。簽署後送平台審核，契約登錄與資格開通另行核對。':kind==='full'?'一年期雙向完整版使用申請，費用與匯款資訊以完整申請書為準。簽署不等於付款或開通。':'免費申請'+title()+'。簽署後送平台審核，審核與權限開通分開處理。'}</p>${!admin?`<button class="primary" data-action="new">${kind==='partner'?'＋ 簽署共創夥伴契約':'＋ '+title()+'申請'}</button>`:''}<button data-action="refresh">重新整理</button><div data-list-results aria-live="polite"><p>讀取中…</p></div>`);
+  shell(admin?'CRM 合作申請審核':'合作申請／我的合約',`${planSection()}${planEnabled?'<p>查看申請類型（不變更會員角色）</p>':''}<nav class="ra-kind-tabs" aria-label="申請種類">${kinds.map(value=>`<button data-action="kind" data-kind="${value}" aria-pressed="${kind===value}" class="${kind===value?'primary':''}">${kindNames[value]}</button>`).join('')}</nav><h3>${title()}${kind==='partner'?'':'申請'}</h3><p class="ra-note">${admin?(planEnabled?'下方為申請查詢與審核；會員角色請使用上方「儲存方案」。':'本頁只記錄審核結果，不會自動改變會員角色、贈點或折抵權限、商品設定或公開單位資料。'):kind==='partner'?'共創夥伴免費加入，與雙向完整版購買分開。簽署後送平台審核，契約登錄與資格開通另行核對。':kind==='full'?'一年期雙向完整版使用申請，費用與匯款資訊以完整申請書為準。簽署不等於付款或開通。':'免費申請'+title()+'。簽署後送平台審核，審核與權限開通分開處理。'}</p>${!admin?`<button class="primary" data-action="new">${kind==='partner'?'＋ 簽署共創夥伴契約':'＋ '+title()+'申請'}</button>`:''}<button data-action="refresh">重新整理</button><div data-list-results aria-live="polite"><p>讀取中…</p></div>`);
   dialog.classList.add('ra-list-view');
   dialog.querySelectorAll('button:not([data-action=close])').forEach(b=>b.disabled=true);
   const result=await api(adminPath()+'?'+params);if(gen!==generation)return;
@@ -76,7 +81,15 @@ export async function openRewardApplications({base,admin=false,target='',kind='r
  dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
  dialog.onclick=e=>{const button=e.target.closest('[data-action]');if(!button)return;const action=button.dataset.action;
   if(action==='close'){close();return;}if(busy||!current())return;if(action==='clear'){if(attempt)return;strokes=[];stroke=null;pointer=null;dialog.querySelector('canvas').getContext('2d').clearRect(0,0,1000,400);return;}
+  const nextPlan=action==='save-plan'?dialog.querySelector('[data-member-plan]')?.value:null;
   void run(async()=>{
+   if(action==='save-plan'){
+    if(!planEnabled||!Object.hasOwn(planNames,nextPlan))throw Error('請從 CRM 會員開啟方案設定');
+    await planControl.save(nextPlan);if(!current())return;
+    const saved=planControl.get();if(saved?.role!==nextPlan)throw Error('未確認方案儲存，請重新開啟 CRM 核對');
+    dialog.querySelector('[data-saved-plan]').textContent=planNames[saved.role];
+    dialog.querySelector('[data-plan-status]').textContent='已儲存：'+planNames[saved.role]+'。關閉後再開啟會保留。';
+   }
    if(action==='kind'&&kinds.includes(button.dataset.kind)){kind=button.dataset.kind;formDraft={};attempt=null;record=null;fieldDescriptors=[];await list();}
    if(action==='refresh')await list();if(action==='next')await list(button.dataset.id);if(action==='new'||action==='edit')await form();if(action==='detail')await detail(button.dataset.id);
    if(action==='pdf'){const blob=await applicationPdf(record);if(!current())return;const url=URL.createObjectURL(blob);urls.push(url);const slot=dialog.querySelector('[data-download]');slot.innerHTML=`<a class="ra-download" download="${title()}申請-${esc(record.id)}.pdf" href="${url}">PDF 已備妥，點此儲存／開啟</a><small>若 LINE 未顯示下載，請在外部瀏覽器開啟後下載。本副本不是憑證式數位簽章。</small>`;slot.querySelector('a').click();}
