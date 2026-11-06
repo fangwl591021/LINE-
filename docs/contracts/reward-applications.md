@@ -41,3 +41,7 @@
 
 ## List navigation stability
 - During category/refresh/pagination reads, retain four category buttons and current selected kind; update only results. Keep the list dialog anchored, including empty/error states. Failed reads retain refresh and category navigation; account changes invalidate the dialog. CRM target UID remains attached to each category request.
+
+## Explicit CRM plan action (2026-11-06)
+- The targeted CRM application dialog exposes a separate member plan selector/save action to authorized CRM administrators. It delegates to the existing CRM updateUserRole handler and role API; store is labeled 雙向完整版. Reward/redeem/user preserve their capabilities. Protected/noneditable accounts and untargeted/member signing dialogs do not offer this action.
+- Category navigation, signature submission and review still never change roles. Only explicit plan save may change the selected member role. Show success only after the existing handler updates the saved CRM state; failures/cancel retain the prior saved state. Reopening reads CRM state, not last selected application kind. Payments, qualification evidence, contract enrollment, settlement and signed snapshots stay separate.

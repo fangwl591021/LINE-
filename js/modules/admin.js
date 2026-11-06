@@ -763,7 +763,7 @@ window.renderStoreManagement = function() {
         '<select onchange="window.changeUserRole(\'' + window.escapeJS(u.userId) + '\', this.value, event)" ' + (roleLocked ? 'disabled' : '') + ' class="bg-white border border-slate-200 rounded-lg p-2 text-[12px] font-bold text-slate-700 shadow-sm focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer w-[120px] shrink-0 text-center" style="-webkit-appearance:none;appearance:none;" data-original-role="' + window.escapeJS(role) + '">' +
           (role === 'admin' ? '<option value="admin" selected>總管</option>' : '') +
           '<option value="user" ' + (role === 'user' ? 'selected' : '') + '>一般 User</option>' +
-          '<option value="store" ' + (role === 'store' ? 'selected' : '') + '>商家 Store</option>' +
+          '<option value="store" ' + (role === 'store' ? 'selected' : '') + '>雙向完整版</option>' +
           '<option value="reward" ' + (role === 'reward' ? 'selected' : '') + '>贈點用戶</option>' +
           '<option value="redeem" ' + (role === 'redeem' ? 'selected' : '') + '>扣點用戶</option>' +
         '</select>' +
@@ -813,7 +813,7 @@ window.changeUserRole = async function(userId, newRole, evt) {
     if (data && !data.error && data.success !== false && (data.success || data.userId || data.role)) {
       if (user) user.role = newRole;
       if (selectEl?.dataset) selectEl.dataset.originalRole = newRole;
-      window.showToast('已更新 ' + ((user && user.name) || '用戶') + ' 身分：' + ({ user: '一般', store: '店長', reward: '贈點用戶', redeem: '扣點用戶' }[newRole]));
+      window.showToast('已更新 ' + ((user && user.name) || '用戶') + ' 身分：' + ({ user: '一般', store: '雙向完整版', reward: '贈點用戶', redeem: '扣點用戶' }[newRole]));
     } else {
       throw new Error((data && data.error) || '更新失敗');
     }
