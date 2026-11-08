@@ -35,7 +35,7 @@ function fixture(t,{seed=true}={}){
   return new Response('',{status:state.status});
  }};
  function sign(kind='reward',id=crypto.randomUUID(),at=NOW-60){
-  sql.prepare(`INSERT OR IGNORE INTO ${kind}_applications VALUES(?,?,?,?,?,?)`).run(id,'PRIVATE-OWNER-UID','PRIVATE-UNIT','PRIVATE-SIGNER',new Date(at*1000).toISOString(),'PRIVATE-SIGNATURE-BANK');
+  sql.prepare(`INSERT OR IGNORE INTO ${kind}_applications VALUES(?,?,?,?,?,?)`).run(id,'PRIVATE-OWNER-UID','PRIVATE-UNIT',kind+'測試簽署人',new Date(at*1000).toISOString(),'PRIVATE-SIGNATURE-BANK');
   sql.prepare('UPDATE application_admin_notice_events SET created_at=? WHERE kind=? AND application_id=?').run(at,kind,id);return id;
  }
  return{sql,db,env,options,state,user,sign,pushes,physical,queries,run:()=>processApplicationAdminNotifications(env,{...options,now:state.clock})};
@@ -53,13 +53,14 @@ test('migration enqueues only future successful signatures for all four types an
  assert.equal(f.sql.prepare("SELECT snapshot_json FROM reward_applications WHERE id='old'").get().snapshot_json,'private-signature-bank');
 });
 
-test('two or more applications are one multi-page Flex per existing admin with opaque review links and no private details',async t=>{
- const f=fixture(t);f.user('b',B,'總管');f.sign('reward');f.sign('partner');
+test('two or more applications are one multi-page Flex per existing admin with opaque review links and only the corresponding signer name',async t=>{
+ const f=fixture(t);f.user('b',B,'總管');const sharedId=crypto.randomUUID();
+ for(const kind of ['reward','discount','partner','full'])f.sign(kind,sharedId);
  const originals=JSON.stringify(['users','reward_applications','partner_applications','protected_points'].map(table=>all(f,table)));
  await f.run();await f.run();assert.equal(f.pushes.length,2);assert.equal(f.physical.length,2);
  assert.deepEqual(new Set(f.pushes.map(p=>p.body.to)),new Set([A,B]));
- for(const p of f.pushes){assert.equal(p.body.messages.length,1);const message=p.body.messages[0];assert.equal(message.contents.type,'carousel');assert.equal(message.contents.contents.length,2);
-  for(const bubble of message.contents.contents){const url=new URL(bubble.footer.contents[0].action.uri);assert.equal(url.host,'liff.line.me');assert.equal(url.searchParams.get('shopSection'),'mine');assert.equal(url.searchParams.get('applicationReview'),'1');assert(UUID.test(url.searchParams.get('applicationId')));assert(['reward','partner'].includes(url.searchParams.get('applicationKind')));assert.deepEqual([...url.searchParams.keys()],['shopSection','applicationReview','applicationKind','applicationId']);}
+ for(const p of f.pushes){assert.equal(p.body.messages.length,1);const message=p.body.messages[0];assert.equal(message.contents.type,'carousel');assert.equal(message.contents.contents.length,4);
+  for(const bubble of message.contents.contents){const url=new URL(bubble.footer.contents[0].action.uri);assert.equal(url.host,'liff.line.me');assert.equal(url.searchParams.get('shopSection'),'mine');assert.equal(url.searchParams.get('applicationReview'),'1');assert(UUID.test(url.searchParams.get('applicationId')));const kind=url.searchParams.get('applicationKind');assert.equal(url.searchParams.get('applicationId'),sharedId);assert.equal(bubble.body.contents[0].text,'簽署人：'+kind+'測試簽署人');assert(!message.altText.includes('測試簽署人'));assert.deepEqual([...url.searchParams.keys()],['shopSection','applicationReview','applicationKind','applicationId']);}
   assert.doesNotMatch(JSON.stringify(message),/PRIVATE|0912345678|private-admin-name|owner_uid|signer_uid|snapshot_json|token/i);
  }
  await f.run();assert.equal(f.pushes.length,2);assert(all(f,'application_admin_notice_batches').every(b=>b.status==='sent'));
@@ -69,7 +70,7 @@ test('two or more applications are one multi-page Flex per existing admin with o
 test('single signatures use a single bubble; short batching delay coalesces later signed documents',async t=>{
  const f=fixture(t);f.sign('discount',undefined,NOW-10);await f.run();assert.equal(f.pushes.length,0);
  f.sign('full',undefined,NOW-5);f.state.clock=NOW+30;await f.run();assert.equal(f.pushes.length,1);assert.equal(f.pushes[0].body.messages[0].contents.contents.length,2);
- f.sign('reward',undefined,NOW+40);f.state.clock=NOW+80;await f.run();assert.equal(f.pushes.length,2);assert.equal(f.pushes[1].body.messages[0].contents.type,'bubble');
+ f.sign('reward',undefined,NOW+40);f.state.clock=NOW+80;await f.run();assert.equal(f.pushes.length,2);const bubble=f.pushes[1].body.messages[0].contents;assert.equal(bubble.type,'bubble');assert.equal(bubble.body.contents[0].text,'簽署人：reward測試簽署人');
 });
 
 test('missing token or no registered admins cannot consume the pending event or guess recipients',async t=>{

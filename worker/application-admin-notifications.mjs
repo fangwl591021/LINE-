@@ -59,6 +59,7 @@ export function buildApplicationAdminNoticeFlex(items,liffId){
   {type:'text',text:'點數通｜合作申請待審核',color:'#FFFFFF',size:'sm',weight:'bold'},
   {type:'text',text:LABELS[item.kind]||'合作申請',color:'#FFFFFF',size:'xl',weight:'bold',wrap:true,margin:'md'}]},
   body:{type:'box',layout:'vertical',paddingAll:'20px',spacing:'md',contents:[
+   {type:'text',text:'簽署人：'+(item.applicant_name?.trim()||'請查看申請書'),wrap:true,size:'md',weight:'bold'},
    {type:'text',text:'已收到完整資料與手寫簽名，請管理員登入核對。',wrap:true,size:'md'},
    {type:'text',text:'簽署時間（台北）：'+stamp(item.signed_at),wrap:true,size:'sm',color:'#475569'},
    {type:'text',text:(index+1)+' / '+items.length+' 份'+(items.length>1?'・左右滑動查看':''),size:'xs',color:'#64748B'}]},
@@ -97,7 +98,14 @@ async function createBatches(db,env,profileMapper,ids,now){
  for(const cohort of cohorts){
   const admin=await recipient(db,cohort.member_id,cohort.line_id,profileMapper,ids);
   if(!admin){await stmt(db,"UPDATE application_admin_notice_deliveries SET status='cancelled' WHERE member_id=? AND line_id=? AND status='pending' AND batch_id=''",cohort.member_id,cohort.line_id).run();continue;}
-  const items=await rows(db,`SELECT d.kind,d.application_id,e.signed_at FROM application_admin_notice_deliveries d JOIN application_admin_notice_events e ON e.kind=d.kind AND e.application_id=d.application_id
+  const items=await rows(db,`SELECT d.kind,d.application_id,e.signed_at,
+   CASE d.kind
+    WHEN 'reward' THEN (SELECT applicant_name FROM reward_applications WHERE id=d.application_id)
+    WHEN 'discount' THEN (SELECT applicant_name FROM discount_applications WHERE id=d.application_id)
+    WHEN 'partner' THEN (SELECT applicant_name FROM partner_applications WHERE id=d.application_id)
+    WHEN 'full' THEN (SELECT applicant_name FROM full_applications WHERE id=d.application_id)
+   END AS applicant_name
+   FROM application_admin_notice_deliveries d JOIN application_admin_notice_events e ON e.kind=d.kind AND e.application_id=d.application_id
    WHERE d.member_id=? AND d.line_id=? AND d.status='pending' AND d.batch_id='' ORDER BY e.created_at,d.kind,d.application_id LIMIT ${MAX_ITEMS}`,cohort.member_id,cohort.line_id);
   if(!items.length)continue;
   const key=crypto.randomUUID(),keys=JSON.stringify(items.map(item=>item.kind+':'+item.application_id)),payload=JSON.stringify({to:cohort.line_id,notificationDisabled:false,messages:[buildApplicationAdminNoticeFlex(items,liffId)]});
