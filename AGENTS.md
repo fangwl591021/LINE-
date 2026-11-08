@@ -11,6 +11,8 @@
 
 ## 修改與驗證
 
+每次撰寫、修改與除錯皆依[開發手冊的 RTK 操作流程](docs/release/feature-change-protocol.md#rtk)閱讀命令輸出，依既有契約執行完整檢查。
+
 功能修改遵守[變更流程](docs/release/feature-change-protocol.md)，使用既有[工作單](docs/release/change-work-order-template.md)記錄範圍與證據：
 
 ```powershell
