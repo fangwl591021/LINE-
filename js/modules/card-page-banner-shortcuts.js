@@ -108,6 +108,15 @@
     const p = getBannerParts();
     if (!p) return;
 
+    const row = p.home.parentElement;
+    const profile = row.querySelector('[data-home-top-action="profile"]');
+    if (profile) {
+      const first = isHomePage ? profile : p.home;
+      const last = isHomePage ? p.home : profile;
+      if (row.firstElementChild !== first) row.prepend(first);
+      if (row.lastElementChild !== last) row.append(last);
+    }
+
     if (isHomePage) {
       p.home.setAttribute('data-home-runtime-mode', 'share');
       p.home.setAttribute('onclick', 'window.showInviteLink?.()');
