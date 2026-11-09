@@ -77,6 +77,11 @@ async function actor(request,db,fetcher) {
   return {uid:profile.userId,role:row.role,limit:storePlanForRole(row.role).productLimit};
 }
 const own=(db,uid)=>db.prepare('SELECT * FROM store_shop_stores WHERE owner_uid=?').bind(uid).first();
+async function canImportOwnCard(db,uid,role) {
+  const plan=storePlanForRole(role).id;
+  if(plan!=='admin')return plan==='full';
+  return !!await db.prepare("SELECT 1 AS allowed FROM app_meta WHERE key=? AND value='enabled'").bind('store_shop_card_import:'+uid).first();
+}
 async function ownShopCard(db,uid) {
   const card=await db.prepare(`SELECT c.company_name,c.address,c.mobile,c.office_phone,c.fax,c.services,c.custom_config,c.image_url,c.tax_id
     FROM card_contacts c JOIN users u ON u.line_id=?
@@ -153,7 +158,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       return reply(await generateStoreDraft(await readJson(request,4096),env,uid,fetcher));
     }
     if(importCard||polish){
-      if(storePlanForRole(role).id!=='full')fail('此功能限雙向完整版店家使用',403);
+      if(!await canImportOwnCard(db,uid,role))fail('此帳號尚未開通名片匯入',403);
       if(importCard)return reply({success:true,card:await ownShopCard(db,uid)});
       return reply(await polishStoreIntro(await readJson(request),env,uid,fetcher));
     }
@@ -170,7 +175,8 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     }
     if(manage) {
       const result=await management(db,shop,role,url.searchParams.get('product_after')||'');
-      if(!shop&&result.cooperation_plan.id==='full'&&url.searchParams.get('card_prefill')==='1'){
+      if(url.searchParams.get('card_prefill')==='1')result.can_import_own_card=await canImportOwnCard(db,uid,role);
+      if(!shop&&result.can_import_own_card){
         try {result.card_prefill=await ownShopCard(db,uid);}
         catch {result.card_prefill_unavailable=true;}
       }

@@ -10,7 +10,7 @@
         document.head.appendChild(css);
       }
       const script = document.createElement('script');
-      script.src = 'js/modules/store-shop.js?v=76&org=1&publish=2&game=2&contract=11511&tabs=2&reviewNote=2&cardPrefill=1&cardImport=1';
+      script.src = 'js/modules/store-shop.js?v=76&org=1&publish=2&game=2&contract=11511&tabs=2&reviewNote=2&cardPrefill=1&cardImport=2';
       const timer = setTimeout(() => finish(new Error('商城載入逾時，請重試')), 15000);
       function finish(error) {
         clearTimeout(timer); script.onload = script.onerror = null;

@@ -80,7 +80,7 @@
     const canMerchantHome=()=>!standalone&&!!window.currentUserProfile?.userId&&!!window.liff?.isLoggedIn?.()&&['admin','store','reward','redeem','扣點用戶','總管','店長','贈點用戶'].includes(String(window.userRole||'').toLowerCase());
     const rewardOnly=()=>['reward','贈點用戶'].includes(String(window.userRole||'').toLowerCase())||!!window.isRewardOnlyPointCashier?.();
     const redeemOnly=()=>['redeem','扣點用戶'].includes(String(window.userRole||'').toLowerCase())||!!window.isRedeemOnlyPointCashier?.();
-    let merchantView,clearHomeWallet,cooperationPlan;
+    let merchantView,clearHomeWallet,cooperationPlan,cardImportAdminOwner;
     const redeemProductPlan=()=>cooperationPlan?.id?cooperationPlan.id==='redeem':redeemOnly();
     const atCapacity=()=>productLimit!==null&&productCount>=productLimit;
     function setManagement(result) {
@@ -504,7 +504,7 @@
       nameRow.insertAdjacentHTML('beforeend','<button type="button" data-do="store-ai-draft">✨ AI 產生店家草稿</button>');
       nameRow.insertAdjacentHTML('afterend','<p class="shop-meta">統編／公司名稱用來找到正確商家；AI 自行搜尋官網、品牌與公開社群的營業內容，不用登記項目作介紹。網址非必填；先預覽、核對來源，勾選帶入後再儲存。</p><div data-store-ai-draft></div>');
       content.querySelector('[data-form="store"] .shop-image-field>p')?.insertAdjacentHTML('afterend','<p class="shop-meta" data-shop-cover-guide>建議尺寸：800 × 533 px（約 3:2 橫式）。前台依版位滿版置中裁切，重要文字與主體請置中並預留四周邊界；上傳原圖仍完整保留。</p>');
-      if(cooperationPlan?.id==='full'){
+      if(cooperationPlan?.id==='full'||(canAdmin()&&cardImportAdminOwner&&cardImportAdminOwner===window.currentUserProfile?.userId)){
         const form=content.querySelector('[data-form="store"]');
         if(shop)existingStoreImport(form);else applyStoreCard(form,card,unavailable);
       }
@@ -521,9 +521,11 @@
       pageKind('manage');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
       const owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
-      const firstSetup=['store','店長'].includes(String(window.userRole||'').toLowerCase());
+      cardImportAdminOwner=null;
+      const firstSetup=canAdmin()||['store','店長'].includes(String(window.userRole||'').toLowerCase());
       const result=await api(firstSetup?'/manage?card_prefill=1':'/manage',null,true);
       if(version!==epoch||!root.isConnected||owner!==window.currentUserProfile?.userId||token!==window.liff?.getAccessToken?.())return;
+      cardImportAdminOwner=result.can_import_own_card===true&&canAdmin()?owner:null;
       setManagement(result); renderManage(result.card_prefill,result.card_prefill_unavailable);
     }
     function edit(p={}) {
