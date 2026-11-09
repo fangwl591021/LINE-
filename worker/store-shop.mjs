@@ -1,7 +1,8 @@
 // Catalog and read-only sales. No point writes or cashier execution calls.
 import {readShopSales} from './store-shop-sales.mjs';
 import {recognizeProductDm,ProductDmError} from './store-product-ocr.mjs';
-import {generateStoreDraft,StoreDraftError} from './store-ai-draft.mjs';
+import {CardLinks} from './card-links.mjs';
+import {generateStoreDraft,polishStoreIntro,StoreDraftError} from './store-ai-draft.mjs';
 import {publicPartnerShops} from './store-partner-catalog.mjs';
 import {catalogOrder,CatalogOrderError} from './store-catalog-order.mjs';
 import {readPublicProducts,ProductDiscoveryError} from './store-product-discovery.mjs';
@@ -76,6 +77,27 @@ async function actor(request,db,fetcher) {
   return {uid:profile.userId,role:row.role,limit:storePlanForRole(row.role).productLimit};
 }
 const own=(db,uid)=>db.prepare('SELECT * FROM store_shop_stores WHERE owner_uid=?').bind(uid).first();
+async function firstShopCard(db,uid) {
+  const card=await db.prepare(`SELECT c.company_name,c.address,c.mobile,c.office_phone,c.fax,c.services,c.custom_config,c.image_url,c.tax_id
+    FROM card_contacts c JOIN users u ON u.line_id=?
+    WHERE c.source_type='self_profile' AND COALESCE(c.archived_at,'')='' AND COALESCE(c.merged_into_row_id,'')=''
+      AND COALESCE(NULLIF(c.profile_user_id,''),NULLIF(c.line_id,''),c.owner_user_id) IN (u.line_id,NULLIF(u.row_id,''))
+      AND c.row_id NOT GLOB 'CARD_VIDEO_*'
+    AND lower(coalesce(c.custom_config,'')) NOT LIKE '%"cardversion":"video"%'
+    ORDER BY CASE WHEN c.row_id GLOB 'CARD_STD_*' THEN 0 WHEN c.row_id GLOB 'CARD_POSTER_*' OR c.row_id GLOB 'CARD_SQUARE_*' THEN 2 ELSE 1 END,c.updated_at DESC,c.row_id DESC LIMIT 1`).bind(uid).first();
+  if(!card)return null;
+  const value=(text,max)=>typeof text==='string'?text.trim().slice(0,max):'';
+  const phones=CardLinks.recognized(card);
+  const phone=phones.find(link=>link.l==='公司電話')||phones.find(link=>link.l==='行動電話');
+  const config=CardLinks.parse(card.custom_config);
+  let cover='';
+  for(const url of [config.imgUrl,config.imgUrlLandscape,card.image_url,config.imgUrlPortrait,config.imgUrlSquare]){
+    try {cover=imageUrl({image_url:url});} catch {continue;}
+    if(cover)break;
+  }
+  return {name:value(card.company_name,80),description:value(card.services,2000)||value(config.desc,2000),
+    address:value(card.address,200),phone:phone?.u.slice(4)||'',tax_id:/^\d{8}$/.test(card.tax_id)?card.tax_id:'',image_url:cover};
+}
 async function productPage(db,id,privateView,after='') {
   if(after.length>80)fail('商品分頁格式不正確');
   const rows=(await db.prepare(`SELECT id,shop_id,title,description,image_url,price_cents,redeem_type,redeem_value,status,category,purchase_mode,shipping_fee_cents,version,updated_at FROM store_shop_products WHERE shop_id=? AND status ${privateView?"!= 'archived'":"= 'active'"} AND id>? ORDER BY id LIMIT 101`).bind(id,after).all()).results;
@@ -122,13 +144,18 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     const writeProduct=request.method==='POST'&&url.pathname==='/v1/store-shop/product';
     const recognizeDm=request.method==='POST'&&url.pathname==='/v1/store-shop/product-ocr';
     const storeDraft=request.method==='POST'&&url.pathname==='/v1/store-shop/store-ai-draft';
-    if(!manage&&!sales&&!writeStore&&!writeProduct&&!recognizeDm&&!storeDraft) fail('不支援此商城操作',404);
+    const polish=request.method==='POST'&&url.pathname==='/v1/store-shop/polish-intro';
+    if(!polish&&!manage&&!sales&&!writeStore&&!writeProduct&&!recognizeDm&&!storeDraft) fail('不支援此商城操作',404);
     const {uid,role,limit}=await actor(request,db,fetcher);
     if(storeDraft){
       if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))fail('請使用 JSON 草稿資料',415);
       return reply(await generateStoreDraft(await readJson(request,4096),env,uid,fetcher));
     }
     const shop=await own(db,uid);
+    if(polish){
+      if(shop||storePlanForRole(role).id!=='full')fail('此功能限雙向店家首次設定使用',403);
+      return reply(await polishStoreIntro(await readJson(request),env,uid,fetcher));
+    }
     if(recognizeDm){
       if(!shop)fail('請先儲存店面，再辨識 DM',400);
       const data=await readJson(request,Math.ceil(4*1024*1024*4/3)+1024);
@@ -139,7 +166,14 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
       const result=await readShopSales(db,uid,url.searchParams);
       return reply(result,result.success?200:400);
     }
-    if(manage) return reply(await management(db,shop,role,url.searchParams.get('product_after')||''));
+    if(manage) {
+      const result=await management(db,shop,role,url.searchParams.get('product_after')||'');
+      if(!shop&&result.cooperation_plan.id==='full'&&url.searchParams.get('card_prefill')==='1'){
+        try {result.card_prefill=await firstShopCard(db,uid);}
+        catch {result.card_prefill_unavailable=true;}
+      }
+      return reply(result);
+    }
     const data=await readJson(request); const now=new Date().toISOString();
     if(writeStore) {
       const value=normalizeStore(data),vals=Object.values(value);
