@@ -3611,7 +3611,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
 
     function getAnnualFeeStatus(user = {}) {
       const order = getLatestBonusOrder(user);
-      const expire = user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '';
+      const expire = user.annualFeeExpireAt ?? user.membershipExpireAt ?? user.tenantExpireAt ?? '';
       if (order) {
         const paid = order.status === 'paid' || order.status === 'completed';
         return {
@@ -3792,7 +3792,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       setInputValue('crm-joined-at', String(user.joinedAt || user.createdAt || '').slice(0, 10));
       setInputValue('crm-referrer-id', readSponsorId(user));
       window.MemberNumber.fill(user, allUsersData);
-      setInputValue('crm-expire-at', String(user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '').slice(0, 10));
+      setInputValue('crm-expire-at', String(user.annualFeeExpireAt ?? user.membershipExpireAt ?? user.tenantExpireAt ?? '').slice(0, 10));
       setInputValue('crm-tags', user.tags || user.crmTags || '');
       setInputValue('crm-kyc-status', dealerProfile.kycStatus || 'draft');
       setInputValue('crm-dealer-type', dealerProfile.dealerType || 'individual');
@@ -3944,6 +3944,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         targetUserId: userId,
         profile: payload
       });
+      if (res && (res.info || res.data?.info)?.annualFeeExpireAt !== payload.annualFeeExpireAt) return showToast('年費到期日尚未確認儲存，請重新載入後確認', true);
       if (res) {
         const idx = allUsersData.findIndex(u => normalizeLineId(getUserId(u)) === normalizeLineId(userId));
         if (idx >= 0) allUsersData[idx] = { ...allUsersData[idx], ...payload, ...(res.info || res.data?.info || {}) };
@@ -3996,7 +3997,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
 
     function hasAnnualFeeActive(user = {}) {
       const order = getLatestBonusOrder(user);
-      const expire = user.annualFeeExpireAt || user.membershipExpireAt || user.tenantExpireAt || '';
+      const expire = user.annualFeeExpireAt ?? user.membershipExpireAt ?? user.tenantExpireAt ?? '';
       return Boolean((order && (order.status === 'paid' || order.status === 'completed')) || expire);
     }
 

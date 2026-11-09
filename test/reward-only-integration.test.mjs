@@ -616,3 +616,23 @@ test('actual cashier log handler restricts reward scope to verified actor despit
   assert.match(captured.query, /WHERE actor_user_id = \?/);
   assert.deepEqual(captured.binds, [A, 50]);
 });
+
+test('CRM fee date survives reloading the admin roster, edits, unrelated member saves and explicit clearing',async t=>{
+  const {env,sql,context,read,write}=setup(t,'admin');
+  sql.exec(readFileSync(new URL('../migrations/0081_dealer_crm_annual_fee_expiry.sql',import.meta.url),'utf8'));
+  sql.exec("ALTER TABLE users ADD COLUMN created_at TEXT;CREATE TABLE card_contacts (row_id TEXT,line_id TEXT, created_at TEXT);UPDATE users SET name=line_id;UPDATE users SET referrer_id='original-referrer' WHERE line_id='"+B+"'");
+  const start=source.indexOf("    case 'adminSyncBoundCardUser': {"),end=source.indexOf("    case 'getStoreSettings':",start);
+  vm.runInContext("globalThis.saveExpiry=async function(payload,env){switch('adminSyncBoundCardUser'){"+source.slice(start,end)+"}}",context);
+  const save=fields=>context.saveExpiry({targetUserId:B,authenticatedRole:'admin',authenticatedUserId:A,profile:{name:B,...fields}},env);
+  const reopen=async()=>(await read.getAllUsers({authenticatedRole:'admin'},env)).data.find(row=>row.userId===B);
+  for(const date of ['2027-11-09','2028-02-29']){
+    assert.equal((await save({annualFeeExpireAt:date})).data.info.annualFeeExpireAt,date);
+    assert.equal((await reopen()).annualFeeExpireAt,date);
+  }
+  assert.equal((await save({annualFeeExpireAt:'2027-02-29'})).success,false);
+  await save({});await write.upsertUser({userId:B,annualFeeExpireAt:'2099-01-01'},env);
+  assert.equal((await reopen()).annualFeeExpireAt,'2028-02-29');
+  assert.equal((await save({annualFeeExpireAt:''})).data.info.annualFeeExpireAt,'');
+  const row=await reopen();assert.equal(row.annualFeeExpireAt,'');assert.equal(row.referrerId,'original-referrer');
+  assert.equal(sql.prepare('SELECT crm_annual_fee_expire_at v FROM users WHERE line_id=?').get(A).v,null);
+});
