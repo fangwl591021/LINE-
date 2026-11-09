@@ -251,3 +251,34 @@ test('current migrated admin can confirm receipt once while attribution remains 
  await assert.rejects(() => pay(A));
  assert.equal(f.sql.prepare("SELECT payment_status FROM orders WHERE order_id='race'").get().payment_status,'pending_payment');
 });
+
+test('paid order review authenticates the exact current admin despite a shared historical alias',async t=>{
+ const f=fixture(t),proof=crypto.randomUUID(),old='U'+'7'.repeat(32),orderId='review-paid';
+ await f.enroll(B);
+ const {createTenantReceivable}=await import('../worker/partner-bonus-v2.mjs');
+ await createTenantReceivable(f.env,{orderId,orderType:'tenant_annual_fee',buyerId:C,grossAmount:6300,netAmount:6000,taxAmount:300,taxRate:5},A);
+ await markPartnerV2OrderPaid(f.env,{orderId,authenticatedUserId:A});
+ f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(old,A);
+ f.sql.prepare('UPDATE users SET legacy_line_id=? WHERE line_id IN (?,?)').run(old,A,D);
+ f.sql.exec('CREATE TABLE full_applications(id TEXT PRIMARY KEY,owner_uid TEXT,snapshot_json TEXT,content_sha256 TEXT,signed_at TEXT); CREATE TABLE full_application_reviews(application_id TEXT PRIMARY KEY,decision TEXT); CREATE TABLE member_number_registry(member_number TEXT,user_row_id TEXT,line_id TEXT);');
+ f.sql.prepare('INSERT INTO member_number_registry VALUES(?,?,?)').run('20261026002',B,B);
+ const read=()=>f.call('?target='+C);
+ const empty=await read();assert.equal(empty.http,200,JSON.stringify(empty));
+ assert.deepEqual(empty.heldOrders,[{orderId,status:'paid'}]);assert.deepEqual(empty.referralProofs,[]);
+ assert.equal((await f.call('?target='+C,null,'user')).http,403);
+ assert.equal((await f.call('/lookup?memberNumber=20261026002')).member.userId,B);
+ const review={orderId,target_uid:C,memberNumber:'20261026002',applicationId:proof,note:'核對已簽資料',confirmed:true,requestKey:crypto.randomUUID()};
+ assert.equal((await f.call('/order-referral',review)).http,409);
+ f.sql.prepare('INSERT INTO full_applications VALUES(?,?,?,?,?)').run(proof,C,JSON.stringify({form_kind:'full',signer_uid:C,fields:{performance_owner_member_number:'20261026002'}}),'a'.repeat(64),now());
+ f.sql.prepare("INSERT INTO full_application_reviews VALUES(?,'accepted')").run(proof);
+ assert.equal((await read()).referralProofs[0].id,proof);
+ f.onBatch(()=>f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A));
+ assert.equal((await f.call('/order-referral',review)).http,409);
+ f.onBatch(null);f.sql.prepare("UPDATE users SET role='admin' WHERE line_id=?").run(A);
+ assert.equal((await f.call('/order-referral',review)).http,200);
+ assert.equal((await f.call('/order-referral',review)).replayed,true);
+ assert.equal(f.sql.prepare('SELECT recruiter_id FROM orders WHERE order_id=?').get(orderId).recruiter_id,B);
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n,0);
+ f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')").run(A,E);
+ assert.equal((await read()).http,409);
+});

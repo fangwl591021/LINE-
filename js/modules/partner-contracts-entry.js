@@ -1,5 +1,5 @@
 (function(){
- const url=new URL('./partner-contracts.js?v=11510-3&signed=1&contract=11511r2',document.currentScript.src).href;
+ const url=new URL('./partner-contracts.js?v=11510-3&signed=1&contract=11511r2&review=2',document.currentScript.src).href;
  window.openPartnerContracts=async function(target='',orderId=''){
   const role=()=>typeof adminRole!=='undefined'?adminRole:window.userRole;
   if(role()!=='admin')return window.showToast?.('請使用平台管理員帳號登入',true);

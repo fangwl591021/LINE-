@@ -82,12 +82,15 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
   latest=result;chosenManager='';chosenReferrer='';chosenBeneficiary='';
   const records=result.contracts||[],pending=result.pendingDeals||[];
   const currentContracts=records.filter(record=>[POLICY,NEW_POLICY].includes(value(record,'policy_version','policyVersion')));
+  const proofFields=result.referralProofs?.length
+   ? select('applicationId','該筆已受理完整版申請書',[['','請選擇已簽署且審核通過的申請書'],...result.referralProofs.map(p=>[p.id,[p.signed_at,p.namedPartner||'未列協助夥伴',p.id].join(' · ')])])+lookupControls('business','業務推薦人會員編號')+input('note','核對依據（同名或只填姓名時，請記錄如何確認本人）')+agreement('已核對此訂單的簽署資料及業務推薦人身分')+submit('確認業務歸屬')
+   : '<p class="ra-note">目前沒有已受理的雙向完整版申請書。請確認購買人已從「會員專區 → 合作申請」送出雙向完整版申請，並在 CRM 合作申請審核通過後，按「重新整理」繼續核對推薦人。</p>';
   shell(`<p class="ra-note">本頁供管理員核對已簽契約後登錄；線上手簽請至商城「我的 → 合作申請／我的合約」。線上簽署紀錄仍須審核及契約登錄，不會自動開通資格。新簽請核對115.11持續收益與完整版資格修正版；新簽後的新訂單才適用，舊訂單維持原規則。</p>
    <button type="button" data-refresh>重新整理</button><h3>115.11 制度</h3>
    <p>甲方：智點通股份有限公司（54852701）／代表人：楊滄棋。共創夥伴免費加入，無須先購買完整版；一般夥伴累計兩筆有效直接新成交後晉升，第三筆起直接成交50%。續約各以未稅實收的25%為基準，兩位受領人各依已簽版本結算。115.11 版依有效新約件數實領：0～1 件 20%、2～3 件 40%、4～5 件 60%、6 件以上 100%。</p>
    <p>簽署日生效、每期一年；未於期滿30日前通知不續約，依契約自動延長一年。績效自 2026 年 11 月起含業績當月計算，最多回看十二個月。一般終止／不續約後，既有原推薦案件保留基準的 20%；當下歸屬人新生份額依書面約定處理。重大違約爭議部分先待核。修正版另須在認列、結算時具備本人有效完整版，資格中斷期間不補發。</p>
    <h3>最近12個月新約檢核</h3>${quotaMarkup(currentContracts[0]?.quota||result.quota)}
-   ${result.heldOrders?.length?action('orderReferral','待核業績・核對簽署資料',select('orderId','待核訂單',result.heldOrders.map(o=>[o.orderId,o.orderId+' · '+(o.status==='paid'?'已收款':'待收款')]))+select('applicationId','該筆已受理完整版申請書',[['','請選擇已簽署且審核通過的申請書'],...(result.referralProofs||[]).map(p=>[p.id,[p.signed_at,p.namedPartner||'未列協助夥伴',p.id].join(' · ')])])+lookupControls('business','業務推薦人會員編號')+input('note','核對依據（同名或只填姓名時，請記錄如何確認本人）')+agreement('已核對此訂單的簽署資料及業務推薦人身分')+submit('確認業務歸屬')):''}
+   ${result.heldOrders?.length?action('orderReferral','待核業績・核對簽署資料',select('orderId','待核訂單',result.heldOrders.map(o=>[o.orderId,o.orderId+' · '+(o.status==='paid'?'已收款':'待收款')]))+proofFields):''}
    ${records.some(record=>record.terms?.templateVersion===TEMPLATE)?action('fullService','本人完整版服務紀錄',
      select('serviceAction','操作',[['open','登錄已付款完整版開通'],['suspend','登錄合法停用'],['resume','登錄恢復服務']])+input('orderId','本人完整版訂單編號（開通必填）','text',false)+input('effectiveAt','生效時間','datetime-local')+input('expiresAt','服務期滿時間（開通必填）','datetime-local',false)+input('evidenceRef','付款／開通／停復用憑證參照')+agreement('已核對本人服務身分、有效期間及書面憑證')+submit('登錄服務紀錄')):''}
    ${result.serviceNow?`<p>本人完整版 · ${result.serviceNow.valid?'目前有效':result.serviceNow.reason==='service_suspended'?'目前停用':'查無有效服務期間'} · 核對時間 ${esc(result.serviceNow.to)}</p>`:''}
@@ -235,5 +238,14 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
    }
   });
  });
- shell('<p>讀取中…</p>');await run(load);return {close};
+ async function openReview(){
+  shell('<p>讀取中…</p>');
+  try{await load();}catch(error){
+   if(!valid())return;
+   shell('<button type="button" data-retry>重新讀取</button>');
+   dialog.querySelector('[data-retry]').onclick=()=>run(openReview);
+   throw error;
+  }
+ }
+ await run(openReview);return {close};
 }
