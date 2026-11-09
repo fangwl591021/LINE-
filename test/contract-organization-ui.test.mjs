@@ -18,7 +18,7 @@ test('手機會員入口與後台呈現同代並排、上下連線，可收合�
   const n=(name,children=[])=>({name,children,hasChildren:children.length>0});
   const urls=[];
   await page.route('**/v1/partner-applications/**',route=>{
-   urls.push(new URL(route.request().url()));return route.fulfill({json:{success:true,organization:{unplaced:['丙'],root:n('本人',[n('甲',[n('孫')]),{...n('乙'),status:'reported',number:'20261101003'}])}}});
+   urls.push(new URL(route.request().url()));return route.fulfill({json:{success:true,organization:{reportedUpline:'上線甲',unplaced:['丙'],root:n('本人',[n('甲',[n('孫')]),{...n('乙'),status:'reported',number:'20261101003'}])}}});
   });
   await page.locator('#member-organization-entry').click();
   const boxes=page.locator('dialog .org-person');
@@ -26,12 +26,13 @@ test('手機會員入口與後台呈現同代並排、上下連線，可收合�
   assert.equal(await page.getByText('名冊推薦・待核對').count(),1);assert.equal(await page.getByText('推薦方向待核對：丙').count(),1);
   const rect=async(name)=>boxes.filter({has:page.getByText(name,{exact:true})}).boundingBox();
   const [root,a,b,grand]=await Promise.all(['本人','甲','乙','孫'].map(rect));
+  assert.ok((await page.locator('dialog .org-upline').boundingBox()).y<root.y);
   assert.ok(a.y>root.y && a.y===b.y && b.x>a.x && grand.y>a.y);
   assert.equal(await page.locator('.org-chart-scroll').evaluate(s=>s.clientWidth<=390),true);
   await boxes.filter({has:page.getByText('甲',{exact:true})}).getByRole('button').click();
   assert.equal(await page.getByText('孫',{exact:true}).isVisible(),false);
   await page.locator('dialog select').selectOption('5');
-  await page.waitForFunction(()=>document.querySelector('dialog .org-chart strong')?.textContent==='本人');
+  await page.waitForFunction(()=>document.querySelector('dialog .org-person strong')?.textContent==='本人');
   assert.equal(urls.at(-1).searchParams.get('depth'),'5');assert.equal(urls.at(-1).searchParams.has('target'),false);
   await page.getByText('關閉 ×').click();await page.locator('dialog').waitFor({state:'detached'});
   await page.evaluate(()=>window.ContractOrganization.render(document.querySelector('main'),{target:'fixture',depth:2}));
