@@ -179,7 +179,7 @@ export function createPartnerPolicy11510(ctx){
    if(plan.holds.length&&(!request.reviewReason||!request.reviewHandlingDueAt||request.reviewHandlingDueAt<=at))fail('待核份額須填具體原因、憑證及未來處理期限');
    const nonce=crypto.randomUUID(),next=c.revision+1,parties=[...new Set([row.buyer_id,snapshot.recruiter_uid,...plan.transactions.map(t=>t.memberId)])],marks=parties.map(()=>'?').join(',');
    let purchaseGate='',purchaseArgs=[];
-   if(row.order_type==='tenant_annual_fee'&&facts.priorValidDeals<2){
+   if(row.order_type==='tenant_annual_fee'&&!facts.projectIndependentAt&&facts.priorValidDeals<2){
     if(facts.selfPurchased){purchaseGate=" AND EXISTS(SELECT 1 FROM orders WHERE order_id=? AND buyer_id=? AND payment_status='paid' AND paid_at=?)";purchaseArgs=[facts.purchaseEvidence.orderId,snapshot.recruiter_uid,facts.purchaseEvidence.paidAt];}
     else {purchaseGate=" AND NOT EXISTS(SELECT 1 FROM orders WHERE buyer_id=? AND payment_status='paid' AND order_type IN ('tenant_annual_fee','tenant_renewal_fee') AND paid_at!='' AND paid_at<=?)";purchaseArgs=[snapshot.recruiter_uid,at];}
    }

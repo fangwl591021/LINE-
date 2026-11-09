@@ -1306,6 +1306,7 @@
               <select id="bonus-order-status-filter" onchange="bonusOrderPage=1; if (bonusOrderListReady) renderBonusOrders()" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="all">全部</option>
                 <option value="pending_payment">待收款</option>
+                <option value="project_waived">專案免收</option>
                 <option value="paid">已收款</option>
                 <option value="cancelled">已取消</option>
               </select>
@@ -2982,8 +2983,8 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         orderId: order.orderId || order.id || order.rowId || '',
         tenantId: order.tenantId || order.buyerId || order.userId || '',
         tenantName: order.tenantName || order.buyerName || order.name || '',
-        fee: Number(order.fee || order.price || order.amount || 0),
-        bv: Number(order.bv || order.bonusBV || order.bonusAmount || 0),
+        fee: order.bonusPolicyType === 'project_exception' ? 0 : Number(order.fee || order.price || order.amount || 0),
+        bv: order.bonusPolicyType === 'project_exception' ? 0 : Number(order.bv || order.bonusBV || order.bonusAmount || 0),
         status: order.status || 'pending_payment',
         paymentProvider: order.paymentProvider || order.paymentMethod || order.gateway || 'manual',
         paymentNo: order.paymentNo || order.tradeNo || '',
@@ -3069,12 +3070,12 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
         const paid = order.status === 'paid' || order.status === 'completed';
         const cancelled = order.status === 'cancelled' || order.status === 'void';
         const statusClass = paid ? 'status-green' : (cancelled ? 'status-red' : 'status-amber');
-        const statusText = paid ? '已收款' : (cancelled ? '已取消' : '待收款');
+        const statusText = order.status === 'project_waived' ? '專案免收' : paid ? '已收款' : (cancelled ? '已取消' : '待收款');
         const fee = Number(order.fee || order.price || order.grossAmount || 0);
         const bv = Number(order.bv || order.bonusBV || 0);
         const createdAt = formatDisplayTime(order.createdAt) || '-';
         const paymentProvider = order.paymentProvider || order.paymentMethod || 'bank_transfer';
-        const action = paid || cancelled
+        const action = order.status === 'project_waived' || paid || cancelled
           ? '<span class="text-slate-300 text-xs font-bold">無操作</span>'
           : `<button type="button" onclick="markTenantOrderPaid('${escapeHTML(order.orderId)}')" class="px-3 py-1.5 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 text-xs font-bold">確認收款</button>
              <button type="button" onclick="cancelTenantOrder('${escapeHTML(order.orderId)}')" class="ml-2 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 text-xs font-bold">取消</button>`;
@@ -3595,7 +3596,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       const count = Math.min(2, Number(user.qualificationCount || user.qualifiedCount || 0) || (left ? 1 : 0) + (right ? 1 : 0));
       return {
         count,
-        text: isUserIndependent(user) ? '2/2 已獨立' : `${count}/2`,
+        text: user.projectIndependentAt ? '專案獨立' : isUserIndependent(user) ? '2/2 已獨立' : `${count}/2`,
         left,
         right
       };
@@ -3615,11 +3616,12 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
       if (order) {
         const paid = order.status === 'paid' || order.status === 'completed';
         return {
-          text: paid ? '已收款' : (order.status === 'cancelled' || order.status === 'void' ? '已取消' : '待收款'),
+          text: order.status === 'project_waived' ? '專案免收' : paid ? '已收款' : (order.status === 'cancelled' || order.status === 'void' ? '已取消' : '待收款'),
           detail: expire ? `到期 ${formatDisplayTime(expire)}` : (order.orderId || ''),
           className: paid ? 'crm-pill-green' : 'crm-pill-amber'
         };
       }
+      if (user.projectFeeWaivedAt) return { text: '專案免收', detail: '實收 NT$0', className: 'crm-pill-blue' };
       if (expire) return { text: '有到期日', detail: formatDisplayTime(expire), className: 'crm-pill-blue' };
       return { text: '未建立', detail: '尚無年費訂單', className: 'crm-pill-gray' };
     }
@@ -5797,7 +5799,7 @@ async function deleteSystemCheckinContent(id) { if (!confirm('確定刪除此簽
   <link rel="stylesheet" href="css/reward-unit-editor.css?v=1">
   <script src="js/modules/reward-unit-editor.js?v=1"></script>
   <script src="js/modules/reward-applications-entry.js?v=6&contract=11511&tabs=2&reviewNote=2"></script>
-<script src="js/modules/partner-contracts-entry.js?v=11510-3&signed=1&contract=11511r2&review=2"></script>
+<script src="js/modules/partner-contracts-entry.js?v=11510-3&signed=1&contract=11511r2&review=2&project=1"></script>
   <link rel="stylesheet" href="css/admin-activity-registration.css?v=5">
     <link rel="stylesheet" href="css/activity-visibility.css?v=1">
     <script src="js/modules/activity-visibility.js?v=1"></script>

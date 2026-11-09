@@ -1,3 +1,4 @@
+import {grantPartnerProject} from './partner-project.mjs';
 import {REVISED_TEMPLATE,REVISED_SOURCE,recordFullService,revisedAgreement,fullServiceCheck} from './partner-full-service.mjs';
 import {POLICY_11511,TEMPLATE_11511,SOURCE_11511} from './partner-renewal-11511.mjs';
 import {authenticatedUid,authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
@@ -103,8 +104,8 @@ export function calculatePartnerBonusV2(facts){
  }else{
   if(facts.invalidatedQualification)return hold('qualification_requires_review');
   if(!UID.test(facts.recruiterUid||'')||!Number.isSafeInteger(facts.priorValidDeals)||facts.priorValidDeals<0)return hold('qualification_requires_review');
-  if(facts.priorValidDeals<2&&facts.historicalQualificationUnknown)return hold('historical_qualification_requires_review');
-  if(facts.priorValidDeals>=2)add(facts.recruiterUid,'direct_full',half);
+  if(!facts.projectIndependentAt&&facts.priorValidDeals<2&&facts.historicalQualificationUnknown)return hold('historical_qualification_requires_review');
+  if(facts.projectIndependentAt||facts.priorValidDeals>=2)add(facts.recruiterUid,'direct_full',half);
   else{
    if(typeof facts.selfPurchased!=='boolean')return hold('purchase_status_requires_review');
    if(facts.selfPurchased)add(facts.recruiterUid,'direct_split',quarter);
@@ -227,7 +228,8 @@ export async function createPartnerV2Order(env,order,legacyPreview=value=>value,
 }
 
 export async function markPartnerV2OrderPaid(env,payload){
- const db=dbFor(env),tracked=await trackedOrder(db,payload.orderId||'');if(!tracked?.captured && tracked?.bonus_policy_type!==REFERRAL_PENDING)return null;
+ const db=dbFor(env),tracked=await trackedOrder(db,payload.orderId||'');if(tracked?.bonus_policy_type==='project_exception')fail('專案免收或已更正的重複單不能收款或退款',409);
+ if(!tracked?.captured && tracked?.bonus_policy_type!==REFERRAL_PENDING)return null;
  const actor=await financeActor(db,payload,{confirmReceipt:true});
  for(let attempt=0;attempt<5;attempt++){
   const c=await clock(db),row=await first(db,'SELECT * FROM orders WHERE order_id=?',payload.orderId),paymentNo=String(payload.paymentNo||payload.tradeNo||'').trim();
@@ -244,7 +246,8 @@ export async function markPartnerV2OrderPaid(env,payload){
 }
 
 export async function updatePartnerV2OrderStatus(env,payload,status){
- const db=dbFor(env),tracked=await trackedOrder(db,payload.orderId||'');if(!tracked?.captured && tracked?.bonus_policy_type!==REFERRAL_PENDING)return null;
+ const db=dbFor(env),tracked=await trackedOrder(db,payload.orderId||'');if(tracked?.bonus_policy_type==='project_exception')fail('專案免收或已更正的重複單不能收款或退款',409);
+ if(!tracked?.captured && tracked?.bonus_policy_type!==REFERRAL_PENDING)return null;
  if(!['cancelled','refunded'].includes(status))fail('新制訂單狀態不正確');
  const actor=await financeActor(db,payload);
  for(let attempt=0;attempt<5;attempt++){
@@ -287,6 +290,11 @@ async function buildFacts(db,snapshot,row,at){
   const owner=await currentAttribution(db,row.buyer_id,at);
   facts.originalReferrer=origin?.recruiter_uid||'';facts.originalOrderId=origin?.order_id||'';facts.currentOwner=owner?.manager_uid||'';facts.attributionId=owner?.id||'';
   facts.originalEligible=!!(facts.originalReferrer&&await recipientContract(db,facts.originalReferrer,at));facts.ownerEligible=!!(facts.currentOwner&&await recipientContract(db,facts.currentOwner,at));return facts;
+ }
+ const recruiter=await memberRecord(db,snapshot.recruiter_uid);
+ if(recruiter.crm_project_independent_at && recruiter.crm_project_independent_at<=snapshot.captured_at){
+  facts.projectIndependentAt=recruiter.crm_project_independent_at;
+  return facts;
  }
  const historical=await first(db,`SELECT o.order_id FROM orders o WHERE o.order_type='tenant_annual_fee' AND o.payment_status='paid' AND o.recruiter_id=? AND NOT EXISTS(SELECT 1 FROM partner_bonus_order_snapshots s WHERE s.order_id=o.order_id) LIMIT 1`,snapshot.recruiter_uid);
  facts.historicalQualificationUnknown=!!historical;
@@ -369,8 +377,8 @@ async function confirmDeal(db,uid,actor,data){
   let factsGate=` AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (${markers}) OR new_line_id IN (${markers})))`,factsArgs=[...parties,...parties];
   if(row.order_type==='tenant_annual_fee'){
    factsGate+=" AND NOT EXISTS(SELECT 1 FROM orders WHERE buyer_id=? AND order_type='tenant_annual_fee' AND payment_status='paid' AND order_id!=?)";factsArgs.push(row.buyer_id,row.order_id);
-   if(facts.priorValidDeals<2&&facts.selfPurchased){factsGate+=" AND EXISTS(SELECT 1 FROM orders WHERE order_id=? AND buyer_id=? AND payment_status='paid' AND paid_at=?)";factsArgs.push(facts.purchaseEvidence.orderId,snapshot.recruiter_uid,facts.purchaseEvidence.paidAt);}
-   else if(facts.priorValidDeals<2){factsGate+=" AND NOT EXISTS(SELECT 1 FROM orders WHERE buyer_id=? AND payment_status='paid' AND order_type IN ('tenant_annual_fee','tenant_renewal_fee') AND paid_at<=? AND datetime(paid_at,'+1 year')>datetime(?))";factsArgs.push(snapshot.recruiter_uid,at,at);}
+   if(!facts.projectIndependentAt&&facts.priorValidDeals<2&&facts.selfPurchased){factsGate+=" AND EXISTS(SELECT 1 FROM orders WHERE order_id=? AND buyer_id=? AND payment_status='paid' AND paid_at=?)";factsArgs.push(facts.purchaseEvidence.orderId,snapshot.recruiter_uid,facts.purchaseEvidence.paidAt);}
+   else if(!facts.projectIndependentAt&&facts.priorValidDeals<2){factsGate+=" AND NOT EXISTS(SELECT 1 FROM orders WHERE buyer_id=? AND payment_status='paid' AND order_type IN ('tenant_annual_fee','tenant_renewal_fee') AND paid_at<=? AND datetime(paid_at,'+1 year')>datetime(?))";factsArgs.push(snapshot.recruiter_uid,at,at);}
   }
   const statements=[clockClaim(db,c.revision,nonce,actor),db.prepare(`INSERT INTO partner_bonus_deal_confirmations(order_id,recruiter_uid,buyer_uid,deal_type,receipt_ref,service_opened_at,confirmed_at,confirmed_by,ordinal,facts_json,plan_json,request_key,request_json)
    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${gate} AND EXISTS(SELECT 1 FROM orders WHERE order_id=? AND payment_status='paid' AND bonus_status='review_required')${factsGate}`).bind(confirmedId,snapshot.recruiter_uid,row.buyer_id,row.order_type,request.receiptRef,request.serviceOpenedAt,at,uid,plan.ordinal,JSON.stringify(facts),JSON.stringify(plan),key,json,next,nonce,confirmedId,...factsArgs)];
@@ -430,14 +438,14 @@ export async function handlePartnerContracts(request,env,profileMapper,fetcher=f
    const checkedAt=stamp(),serviceNow=revised?await fullServiceCheck(db,target,checkedAt,checkedAt):null;
    const serviceEvents=revised?await all(db,'SELECT action,order_id,effective_at,expires_at,evidence_ref FROM partner_full_service_evidence WHERE member_uid=? ORDER BY effective_at DESC LIMIT 20',target):[];
    const excluded=revised?await all(db,"SELECT order_id,bonus_type,json_extract(raw_json,'$.baseAmount') AS baseAmount,json_extract(raw_json,'$.fullService.reason') AS reason,json_extract(raw_json,'$.fullService.to') AS checkedAt FROM bonus_transactions WHERE beneficiary_id=? AND status='service_ineligible' ORDER BY updated_at DESC LIMIT 50",target):[];
-   return reply({success:true,serviceNow,serviceEvents,excluded,policyVersion:POLICY_11511,templateVersion:REVISED_TEMPLATE,templateSha256:REVISED_SOURCE,contracts,referrer,heldOrders,referralProofs,attribution:await currentAttribution(db,target,stamp()),validDealCount:await countDeals(db,target,stamp()),pendingDeals,renewalHolds});
+   return reply({success:true,projectIndependentAt:targetMember.crm_project_independent_at||'',projectFeeWaivedAt:targetMember.crm_project_fee_waived_at||'',serviceNow,serviceEvents,excluded,policyVersion:POLICY_11511,templateVersion:REVISED_TEMPLATE,templateSha256:REVISED_SOURCE,contracts,referrer,heldOrders,referralProofs,attribution:await currentAttribution(db,target,stamp()),validDealCount:await countDeals(db,target,stamp()),pendingDeals,renewalHolds});
   }
   const financeRoutes=['/settlement/statements','/settlement/claims','/settlement/disputes','/settlement/resolve','/settlement/payments'];
-  if(request.method!=='POST'||url.search||!['','/full-service','/order-referral','/attribution','/deals/confirm','/lifecycle','/renewals/resolve',...financeRoutes].includes(route))fail('不支援此操作',405);
+  if(request.method!=='POST'||url.search||!['','/project','/full-service','/order-referral','/attribution','/deals/confirm','/lifecycle','/renewals/resolve',...financeRoutes].includes(route))fail('不支援此操作',405);
   if(uid!==actor.line_id)fail('請使用 CRM 正式管理員 LINE 身分重新登入',409);
   if(!orderReview)await policyIdentity(db,uid);
   if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')||''))fail('請使用 JSON 資料',415);
-  const data=await readJson(request,10000),context=partnerContractContext11510(db,uid,actor),policy=context.policy11510,result=await(route==='/full-service'?recordFullService(context,data):route==='/order-referral'?verifyOrderReferral(db,actor,data):financeRoutes.includes(route)?handlePartnerSettlement11510(route,data,context):route==='/attribution'?attribute(db,uid,actor,data):route==='/deals/confirm'?confirmDeal(db,uid,actor,data):route==='/lifecycle'?policy.lifecycle(data):route==='/renewals/resolve'?policy.resolve(data):enroll(db,uid,actor,data));
+  const data=await readJson(request,10000),context=partnerContractContext11510(db,uid,actor),policy=context.policy11510,result=await(route==='/project'?grantPartnerProject(context,data):route==='/full-service'?recordFullService(context,data):route==='/order-referral'?verifyOrderReferral(db,actor,data):financeRoutes.includes(route)?handlePartnerSettlement11510(route,data,context):route==='/attribution'?attribute(db,uid,actor,data):route==='/deals/confirm'?confirmDeal(db,uid,actor,data):route==='/lifecycle'?policy.lifecycle(data):route==='/renewals/resolve'?policy.resolve(data):enroll(db,uid,actor,data));
   return reply(result,result.success?200:409);
  }catch(e){if(e instanceof ShopError||e instanceof DirectoryError)return reply({success:false,error:e.message},e.status||400);console.error('partner_contract_operation_unavailable');return reply({success:false,error:'共創制度資料暫時無法完成，請重新載入確認'},503);}
 }

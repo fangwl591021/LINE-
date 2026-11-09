@@ -89,6 +89,8 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
    <button type="button" data-refresh>重新整理</button><h3>115.11 制度</h3>
    <p>甲方：智點通股份有限公司（54852701）／代表人：楊滄棋。共創夥伴免費加入，無須先購買完整版；一般夥伴累計兩筆有效直接新成交後晉升，第三筆起直接成交50%。續約各以未稅實收的25%為基準，兩位受領人各依已簽版本結算。115.11 版依有效新約件數實領：0～1 件 20%、2～3 件 40%、4～5 件 60%、6 件以上 100%。</p>
    <p>簽署日生效、每期一年；未於期滿30日前通知不續約，依契約自動延長一年。績效自 2026 年 11 月起含業績當月計算，最多回看十二個月。一般終止／不續約後，既有原推薦案件保留基準的 20%；當下歸屬人新生份額依書面約定處理。重大違約爭議部分先待核。修正版另須在認列、結算時具備本人有效完整版，資格中斷期間不補發。</p>
+   <h3>專案資格</h3><p>${result.projectFeeWaivedAt?"年費專案免收":"尚無專案免收紀錄"} · ${result.projectIndependentAt?"已核准專案獨立":"依一般條件取得獨立資格"}</p>
+   ${result.projectFeeWaivedAt&&result.projectIndependentAt?"":action("project","登錄專案資格",`<label><input type="checkbox" name="waiveFee" ${result.projectFeeWaivedAt?"disabled":""}> 本次年費專案免收，實收 NT$0</label><label><input type="checkbox" name="independent" ${result.projectIndependentAt?"disabled":""}> 核准後首筆有效推薦新約即按獨立夥伴計算</label>`+input("reason","專案名稱或核准原因")+agreement("已核對本次專案資格及適用對象")+submit("儲存專案資格"))}
    <h3>最近12個月新約檢核</h3>${quotaMarkup(currentContracts[0]?.quota||result.quota)}
    ${result.heldOrders?.length?action('orderReferral','待核業績・核對簽署資料',select('orderId','待核訂單',result.heldOrders.map(o=>[o.orderId,o.orderId+' · '+(o.status==='paid'?'已收款':'待收款')]))+proofFields):''}
    ${records.some(record=>record.terms?.templateVersion===TEMPLATE)?action('fullService','本人完整版服務紀錄',
@@ -188,7 +190,10 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
   const fields=new FormData(form),get=name=>String(fields.get(name)||'').trim(),confirmed=fields.get('confirmed')==='on',name=form.dataset.form;
   void run(async()=>{
    if(!confirmed)throw Error('請先核對並勾選確認事項');
-   if(name==='contract'){
+   if(name==='project'){
+    if(!fields.has('waiveFee')&&!fields.has('independent'))throw Error('請選擇專案資格');
+    await write(name,'/project',{target_uid:target,waiveFee:fields.has('waiveFee'),independent:fields.has('independent'),reason:get('reason'),confirmed});await load();status('專案資格已登錄');
+   }else if(name==='contract'){
     if(![TEMPLATE,'115.11','115.10'].includes(get('templateVersion')))throw Error('請選擇實際簽署的契約版本');
     if((get('referrerNumber')||get('referrerName'))&&(!chosenReferrer||chosenReferrer!==get('referrerNumber')))throw Error('請先核對契約推薦人的會員編號');
     if(get('partyType')==='company'&&!get('representativeName'))throw Error('公司／法人請填寫代表人');
