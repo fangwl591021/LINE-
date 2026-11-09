@@ -25,7 +25,7 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
   const link=document.createElement('link');link.rel='stylesheet';link.href=new URL('../../css/reward-applications.css?v=2',import.meta.url).href;
   link.dataset.rewardApplicationStyle='';document.head.append(link);
  }
- const dialog=document.createElement('dialog');dialog.className='reward-application-dialog';dialog.setAttribute('aria-label','共創夥伴契約與獎金核對');
+ const dialog=document.createElement('dialog');dialog.className='reward-application-dialog partner-contract-dialog';dialog.setAttribute('aria-label','共創夥伴契約與獎金核對');
  const opener=document.activeElement,keys=new Map();
  let busy=false,closed=false,timer,chosenManager='',chosenReferrer='',chosenBeneficiary='',latest={};
  const valid=()=>!closed&&dialog.isConnected&&isCurrent()&&window.liff?.isLoggedIn?.()&&window.liff.getAccessToken()===token&&actor()===originalActor;
@@ -85,21 +85,23 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
   const proofFields=result.referralProofs?.length
    ? select('applicationId','該筆已受理完整版申請書',[['','請選擇已簽署且審核通過的申請書'],...result.referralProofs.map(p=>[p.id,[p.signed_at,p.namedPartner||'未列協助夥伴',p.id].join(' · ')])])+lookupControls('business','業務推薦人會員編號')+input('note','核對依據（同名或只填姓名時，請記錄如何確認本人）')+agreement('已核對此訂單的簽署資料及業務推薦人身分')+submit('確認業務歸屬')
    : '<p class="ra-note">目前沒有已受理的雙向完整版申請書。請確認購買人已從「會員專區 → 合作申請」送出雙向完整版申請，並在 CRM 合作申請審核通過後，按「重新整理」繼續核對推薦人。</p>';
-  shell(`<p class="ra-note">本頁供管理員核對已簽契約後登錄；線上手簽請至商城「我的 → 合作申請／我的合約」。線上簽署紀錄仍須審核及契約登錄，不會自動開通資格。新簽請核對115.11持續收益與完整版資格修正版；新簽後的新訂單才適用，舊訂單維持原規則。</p>
-   <button type="button" data-refresh>重新整理</button><h3>115.11 制度</h3>
-   <p>甲方：智點通股份有限公司（54852701）／代表人：楊滄棋。共創夥伴免費加入，無須先購買完整版；一般夥伴累計兩筆有效直接新成交後晉升，第三筆起直接成交50%。續約各以未稅實收的25%為基準，兩位受領人各依已簽版本結算。115.11 版依有效新約件數實領：0～1 件 20%、2～3 件 40%、4～5 件 60%、6 件以上 100%。</p>
-   <p>簽署日生效、每期一年；未於期滿30日前通知不續約，依契約自動延長一年。績效自 2026 年 11 月起含業績當月計算，最多回看十二個月。一般終止／不續約後，既有原推薦案件保留基準的 20%；當下歸屬人新生份額依書面約定處理。重大違約爭議部分先待核。修正版另須在認列、結算時具備本人有效完整版，資格中斷期間不補發。</p>
-   <h3>專案資格</h3><p>${result.projectFeeWaivedAt?"年費專案免收":"尚無專案免收紀錄"} · ${result.projectIndependentAt?"已核准專案獨立":"依一般條件取得獨立資格"}</p>
-   ${result.projectFeeWaivedAt&&result.projectIndependentAt?"":action("project","登錄專案資格",`<label><input type="checkbox" name="waiveFee" ${result.projectFeeWaivedAt?"disabled":""}> 本次年費專案免收，實收 NT$0</label><label><input type="checkbox" name="independent" ${result.projectIndependentAt?"disabled":""}> 核准後首筆有效推薦新約即按獨立夥伴計算</label>`+input("reason","專案名稱或核准原因")+agreement("已核對本次專案資格及適用對象")+submit("儲存專案資格"))}
-   <h3>最近12個月新約檢核</h3>${quotaMarkup(currentContracts[0]?.quota||result.quota)}
-   ${result.heldOrders?.length?action('orderReferral','待核業績・核對簽署資料',select('orderId','待核訂單',result.heldOrders.map(o=>[o.orderId,o.orderId+' · '+(o.status==='paid'?'已收款':'待收款')]))+proofFields):''}
-   ${records.some(record=>record.terms?.templateVersion===TEMPLATE)?action('fullService','本人完整版服務紀錄',
-     select('serviceAction','操作',[['open','登錄已付款完整版開通'],['suspend','登錄合法停用'],['resume','登錄恢復服務']])+input('orderId','本人完整版訂單編號（開通必填）','text',false)+input('effectiveAt','生效時間','datetime-local')+input('expiresAt','服務期滿時間（開通必填）','datetime-local',false)+input('evidenceRef','付款／開通／停復用憑證參照')+agreement('已核對本人服務身分、有效期間及書面憑證')+submit('登錄服務紀錄')):''}
-   ${result.serviceNow?`<p>本人完整版 · ${result.serviceNow.valid?'目前有效':result.serviceNow.reason==='service_suspended'?'目前停用':'查無有效服務期間'} · 核對時間 ${esc(result.serviceNow.to)}</p>`:''}
-   ${result.serviceEvents?.length?`<ul>${result.serviceEvents.map(e=>`<li>服務${esc(({open:'開通',resume:'恢復',suspend:'停用'})[e.action])} · ${esc(e.effective_at)} · ${esc(e.order_id||e.evidence_ref)}</li>`).join('')}</ul>`:''}
-   ${result.excluded?.length?`<h3>本人資格未符合的續約份額</h3><ul>${result.excluded.map(e=>`<li>${esc(e.order_id)} · ${esc(e.bonus_type==='renewal_referral'?'原推薦人':'當下歸屬人')} · ${esc(e.checkedAt)} · ${e.reason==='service_suspended'?'服務停用':'未取得連續有效的本人完整版服務紀錄'} · 實領 NT$ 0</li>`).join('')}</ul>`:''}
-   <h3>已登錄契約</h3>${records.length?records.map(recordMarkup).join(''):'<p>尚未登錄已簽契約。</p>'}
-   ${action('contract','登錄已核對的已簽契約',`
+  const dealAction=action('deal',pending.length?'確認有效成交（'+pending.length+' 筆）':'確認有效成交',`
+    ${pending.length?`<p>此會員的新制待核訂單：</p><ul>${pending.map(order=>`<li class="ra-copy">${esc(order.orderId||order.order_id)} · ${esc(order.policyVersion||order.policy_version||'版本待核')} · ${esc(order.status||'待核')}</li>`).join('')}</ul>`:''}
+    <p>先核對已收款、審核與服務開通，且沒有撤銷或退費。115.10／115.11 另須登錄此次服務年度及加入類型；不由前端指定獎金金額。</p>
+    ${input('orderId','新制訂單編號')}${input('receiptRef','收款及審核開通憑證參照')}${input('serviceOpenedAt','實際服務開通時間','datetime-local')}
+    ${select('serviceAdmission','服務加入類型',[['new','新加入首年'],['renewal','正常續約'],['reactivation','停止後重新加入（不計6件）']])}
+    ${input('serviceYearStart','此次服務年度起日','datetime-local',false)}${input('serviceYearEnd','此次服務年度迄日','datetime-local',false)}
+    ${input('reviewReason','如有待核份額：具體待核原因（必填）','text',false)}${input('reviewHandlingDueAt','如有待核份額：預定處理期限（必填）','datetime-local',false)}
+    ${agreement('我已核對本筆收款、審核與開通證據、服務年度及加入類型，且沒有撤銷、退費或異常。')}${submit('確認有效成交並核算新制獎金')}`);
+  const renewalAction=action('renewal',result.renewalHolds?.length?'核對續約獎金（'+result.renewalHolds.length+' 筆）':'核對續約獎金',`<p>原推薦人及當下管理歸屬各25%分別核對；只能補足真實關係與同意證據，不能任意更換受領人。另一份已核對結果保留。</p>${(result.renewalHolds||[]).length?`<ul>${result.renewalHolds.map(held=>`<li class="ra-copy">${esc(held.order_id)} · ${esc(held.portion==='renewal_referral'?'原推薦人25%':'當下歸屬人25%')} · NT$ ${money(held.amount)} · ${esc(held.reason)} · 處理期限：${esc(held.handling_due_at||'待核')}</li>`).join('')}</ul>`:'<p>目前沒有待核續約份額。</p>'}${input('orderId','續約訂單編號')}${input('writtenPercent','115.11 爭議或另有書面約定時，核准之基準獎金比例（0～100%，其餘留白）','number',false,'min="0" max="100" step="1"')}${select('portion','本次核對份額',[['renewal_referral','原推薦人25%'],['renewal_placement','當下歸屬人25%']])}${lookupControls('beneficiary','真實受領人的會員編號')}${input('consentSha256','關係／同意證據 SHA-256 校驗碼')}${input('evidenceRef','證據保管編號／參照')}${input('reason','補足核對資料的原因')}${agreement('我已核對此份額的真實受領人、原始關係及有效同意證據，未任意改寫原推薦人或另一份額。')}${submit('確認核對此續約份額')}`);
+  shell(`<div class="ra-note"><strong>會員資格</strong>
+   <p>${records.length ? "已登錄契約 "+records.length+" 份" : "尚未登錄已簽契約"}</p>
+   <p>${result.projectFeeWaivedAt?"年費專案免收":"尚無專案免收紀錄"} · ${result.projectIndependentAt?"已核准專案獨立":"依一般條件取得獨立資格"}</p></div>
+   <section class="ra-record"><h3>常用操作</h3>
+   ${result.heldOrders?.length?action('orderReferral','核對推薦人（'+result.heldOrders.length+' 筆訂單）',select('orderId','待核訂單',result.heldOrders.map(o=>[o.orderId,o.orderId+' · '+(o.status==='paid'?'已收款':'待收款')]))+proofFields):''}
+   ${pending.length ? dealAction : ""}
+   ${result.renewalHolds?.length ? renewalAction : ""}
+   ${action('contract','登錄已簽契約',`
     ${select('templateVersion','已簽文件制度版本',[[TEMPLATE,'115.11（持續收益與完整版資格修正版）'],['115.11','115.11（原版）'],['115.10','115.10（仍以該版簽署的文件）']])}
     ${input('signedAt','實際簽署時間（亦為契約生效時間）','datetime-local')}
     ${select('partyType','乙方簽約身分',[['natural_person','自然人'],['company','公司／商號／法人']])}
@@ -113,15 +115,17 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
     ${select('purchaseStatus','本人完整版購買狀態',[['unknown','待確認'],['not_purchased','未購買'],['purchased','已購買']])}
     ${input('purchaseOrderId','本人完整版購買訂單編號（已購買時必填）','text',false)}
     ${agreement('我已核對所選版本與雙方實際簽署文件、簽署時間、簽約身分、原推薦人、銀行資料及購買狀態，並保管簽署證據。')}${submit('確認登錄已簽契約')}`)}
+   ${result.projectFeeWaivedAt&&result.projectIndependentAt?"":action("project","登錄專案資格",`<label><input type="checkbox" name="waiveFee" ${result.projectFeeWaivedAt?"disabled":""}> 本次年費專案免收，實收 NT$0</label><label><input type="checkbox" name="independent" ${result.projectIndependentAt?"disabled":""}> 核准後首筆有效推薦新約即按獨立夥伴計算</label>`+input("reason","專案名稱或核准原因")+agreement("已核對本次專案資格及適用對象")+submit("儲存專案資格"))}
+   </section>
+   <details class="ra-record"><summary>其他管理與紀錄</summary>
+   ${records.length?`<details><summary>查看已登錄契約（${records.length} 份）</summary>${records.map(recordMarkup).join("")}</details>`:""}
    ${action('attribution','登錄經同意的目前管理歸屬',`<p>只更新有證據的管理沿革；原始推薦人紀錄保留。</p>${lookupControls('manager','目前管理人的會員編號')}${input('effectiveAt','同意轉移生效時間','datetime-local')}${input('consentSha256','有效同意文件 SHA-256 校驗碼')}${input('evidenceRef','同意證據保管編號／參照')}${agreement('我已核對當事人有效同意、管理歸屬證據與生效時間。')}${submit('確認登錄管理歸屬')}`)}
-   ${action('deal','確認已收款並開通的新制成交',`
-    ${pending.length?`<p>此會員的新制待核訂單：</p><ul>${pending.map(order=>`<li class="ra-copy">${esc(order.orderId||order.order_id)} · ${esc(order.policyVersion||order.policy_version||'版本待核')} · ${esc(order.status||'待核')}</li>`).join('')}</ul>`:''}
-    <p>先核對已收款、審核與服務開通，且沒有撤銷或退費。115.10／115.11 另須登錄此次服務年度及加入類型；不由前端指定獎金金額。</p>
-    ${input('orderId','新制訂單編號')}${input('receiptRef','收款及審核開通憑證參照')}${input('serviceOpenedAt','實際服務開通時間','datetime-local')}
-    ${select('serviceAdmission','服務加入類型',[['new','新加入首年'],['renewal','正常續約'],['reactivation','停止後重新加入（不計6件）']])}
-    ${input('serviceYearStart','此次服務年度起日','datetime-local',false)}${input('serviceYearEnd','此次服務年度迄日','datetime-local',false)}
-    ${input('reviewReason','如有待核份額：具體待核原因（必填）','text',false)}${input('reviewHandlingDueAt','如有待核份額：預定處理期限（必填）','datetime-local',false)}
-    ${agreement('我已核對本筆收款、審核與開通證據、服務年度及加入類型，且沒有撤銷、退費或異常。')}${submit('確認有效成交並核算新制獎金')}`)}
+   ${pending.length ? "" : dealAction}
+   ${records.some(record=>record.terms?.templateVersion===TEMPLATE)?action('fullService','本人完整版服務紀錄',
+     select('serviceAction','操作',[['open','登錄已付款完整版開通'],['suspend','登錄合法停用'],['resume','登錄恢復服務']])+input('orderId','本人完整版訂單編號（開通必填）','text',false)+input('effectiveAt','生效時間','datetime-local')+input('expiresAt','服務期滿時間（開通必填）','datetime-local',false)+input('evidenceRef','付款／開通／停復用憑證參照')+agreement('已核對本人服務身分、有效期間及書面憑證')+submit('登錄服務紀錄')):''}
+   ${result.serviceNow?`<p>本人完整版 · ${result.serviceNow.valid?'目前有效':result.serviceNow.reason==='service_suspended'?'目前停用':'查無有效服務期間'} · 核對時間 ${esc(result.serviceNow.to)}</p>`:''}
+   ${result.serviceEvents?.length?`<ul>${result.serviceEvents.map(e=>`<li>服務${esc(({open:'開通',resume:'恢復',suspend:'停用'})[e.action])} · ${esc(e.effective_at)} · ${esc(e.order_id||e.evidence_ref)}</li>`).join('')}</ul>`:''}
+   ${result.excluded?.length?`<h3>本人資格未符合的續約份額</h3><ul>${result.excluded.map(e=>`<li>${esc(e.order_id)} · ${esc(e.bonus_type==='renewal_referral'?'原推薦人':'當下歸屬人')} · ${esc(e.checkedAt)} · ${e.reason==='service_suspended'?'服務停用':'未取得連續有效的本人完整版服務紀錄'} · 實領 NT$ 0</li>`).join('')}</ul>`:''}
    ${action('lifecycle','登錄不續約通知／契約終止',`
     <p class="ra-note">一般終止須提前30日通知。115.11 不得僅以年度新約不足終止，已成立且符合結算條件的獎金保留。歷史契約依各自版本核對。</p>
     ${select('contractId','契約',currentContracts.length?currentContracts.map(record=>[record.id,`${record.id} · ${value(record,'signed_at','signedAt')}`]):[['','尚無已登錄契約']])}
@@ -129,8 +133,15 @@ export async function openPartnerContracts({base,target,orderId='',isCurrent=()=
     ${select('terminationGround','終止依據（終止時必選）',[['notice','書面通知（提前30日）'],['breach','重大違約（核對證據）'],['annual_quota','年度新約不足（僅限115.10）']])}
     ${input('effectiveAt','預定不續約／終止生效時間','datetime-local')}${input('evidenceSha256','通知／決定證據 SHA-256 校驗碼')}${input('evidenceRef','證據保管編號／參照')}${input('reason','具體通知／終止原因')}
     ${agreement('我已核對通知時點、契約條件與證據，確認這是實際決定，並了解未支付獎勵與已付款流水的處理。')}${submit('確認登錄契約事件')}`)}
-   ${action('renewal','核對續約單一待核份額',`<p>原推薦人及當下管理歸屬各25%分別核對；只能補足真實關係與同意證據，不能任意更換受領人。另一份已核對結果保留。</p>${(result.renewalHolds||[]).length?`<ul>${result.renewalHolds.map(held=>`<li class="ra-copy">${esc(held.order_id)} · ${esc(held.portion==='renewal_referral'?'原推薦人25%':'當下歸屬人25%')} · NT$ ${money(held.amount)} · ${esc(held.reason)} · 處理期限：${esc(held.handling_due_at||'待核')}</li>`).join('')}</ul>`:'<p>目前沒有待核續約份額。</p>'}${input('orderId','續約訂單編號')}${input('writtenPercent','115.11 爭議或另有書面約定時，核准之基準獎金比例（0～100%，其餘留白）','number',false,'min="0" max="100" step="1"')}${select('portion','本次核對份額',[['renewal_referral','原推薦人25%'],['renewal_placement','當下歸屬人25%']])}${lookupControls('beneficiary','真實受領人的會員編號')}${input('consentSha256','關係／同意證據 SHA-256 校驗碼')}${input('evidenceRef','證據保管編號／參照')}${input('reason','補足核對資料的原因')}${agreement('我已核對此份額的真實受領人、原始關係及有效同意證據，未任意改寫原推薦人或另一份額。')}${submit('確認核對此續約份額')}`)}
-   <details data-settlement><summary>月結、請款與已付款登錄</summary><p>上月帳單應於次月5日前提供，帳單送達後5日內可異議；合法請款文件齊備後10個工作日付款。日期與工作日由伺服器核對；本頁只登錄實際證據，不執行轉帳。</p><button type="button" data-settlement-load>讀取月結紀錄</button><div data-settlement-body></div></details>`);
+   ${result.renewalHolds?.length ? "" : renewalAction}
+   <details data-settlement><summary>月結、請款與已付款登錄</summary><p>上月帳單應於次月5日前提供，帳單送達後5日內可異議；合法請款文件齊備後10個工作日付款。日期與工作日由伺服器核對；本頁只登錄實際證據，不執行轉帳。</p><button type="button" data-settlement-load>讀取月結紀錄</button><div data-settlement-body></div></details>
+   <details><summary>最近12個月新約檢核</summary>${quotaMarkup(currentContracts[0]?.quota||result.quota)}</details>
+   <details><summary>115.11 制度說明</summary>
+<p class="ra-note">本頁供管理員核對已簽契約後登錄；線上手簽請至商城「我的 → 合作申請／我的合約」。線上簽署紀錄仍須審核及契約登錄，不會自動開通資格。新簽請核對115.11持續收益與完整版資格修正版；新簽後的新訂單才適用，舊訂單維持原規則。</p>
+   <p>甲方：智點通股份有限公司（54852701）／代表人：楊滄棋。共創夥伴免費加入，無須先購買完整版；一般夥伴累計兩筆有效直接新成交後晉升，第三筆起直接成交50%。續約各以未稅實收的25%為基準，兩位受領人各依已簽版本結算。115.11 版依有效新約件數實領：0～1 件 20%、2～3 件 40%、4～5 件 60%、6 件以上 100%。</p>
+   <p>簽署日生效、每期一年；未於期滿30日前通知不續約，依契約自動延長一年。績效自 2026 年 11 月起含業績當月計算，最多回看十二個月。一般終止／不續約後，既有原推薦案件保留基準的 20%；當下歸屬人新生份額依書面約定處理。重大違約爭議部分先待核。修正版另須在認列、結算時具備本人有效完整版，資格中斷期間不補發。</p>
+   </details></details>
+   <button type="button" data-refresh>重新整理</button>`);
   dialog.querySelector('[data-refresh]').onclick=()=>run(load);
   dialog.querySelector('[data-file]').onchange=()=>run(async()=>{
    const file=dialog.querySelector('[data-file]').files[0];if(!file)return;

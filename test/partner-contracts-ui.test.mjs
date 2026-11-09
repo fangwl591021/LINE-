@@ -30,6 +30,9 @@ test('contract template hashes come only from each record while signed hashes re
    await window.openPartnerContractsForTest({base:'https://synthetic.invalid',target:'U'+'b'.repeat(32),fetcher:async()=>({ok:true,json:async()=>payload})});
   },{success:true,templateSha256:sharedHash,contracts:records});
   await page.locator('dialog [data-refresh]').waitFor();
+  assert.equal(await page.getByText('115.11 制度說明',{exact:true}).isVisible(),false);
+  await page.getByText('其他管理與紀錄',{exact:true}).click();
+  await page.getByText('查看已登錄契約（5 份）',{exact:true}).click();
   for(const [index,record] of records.entries()){
    const article=page.locator('article.ra-record').filter({hasText:record.id});
    assert.equal(await article.count(),1);
@@ -94,6 +97,10 @@ test('administrator grants a project, closes the dialog and sees both saved qual
    }});
    await window.showProject();
   });
+  await page.setViewportSize({width:375,height:667});
+  await page.addStyleTag({content:await readFile(new URL('../css/reward-applications.css',import.meta.url),'utf8')});
+  await page.addStyleTag({content:await readFile(new URL('../css/partner-contracts.css',import.meta.url),'utf8')});
+  assert.equal(await page.getByText('月結、請款與已付款登錄',{exact:true}).isVisible(),false);
   await page.getByText('登錄專案資格',{exact:true}).click();
   const form=page.locator('[data-form=project]');
   for(const field of ['independent','waiveFee','confirmed'])await form.locator('[name='+field+']').check();
