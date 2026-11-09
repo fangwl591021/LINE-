@@ -269,6 +269,8 @@
       white-space: nowrap;
     }
   </style>
+<link rel="stylesheet" href="css/contract-organization.css?v=1">
+<script src="js/modules/contract-organization.js?v=1" defer></script>
 </head>
 <body class="font-body text-text-main min-h-screen flex flex-col items-center">
 <script>
@@ -544,7 +546,7 @@
             </div>
           </div>
           <div class="rounded-2xl border border-slate-100 overflow-hidden">
-            <div class="px-4 py-3 bg-slate-50 text-[13px] text-slate-500 font-bold">我的組織圖</div>
+            <div class="px-4 py-3 bg-slate-50 text-[13px] text-slate-500 font-bold">舊制安置紀錄</div>
             <div id="dealer-org-tree" class="p-4 text-[14px] text-slate-600">
               尚未載入
             </div>
@@ -552,6 +554,9 @@
         </div>
       </details>
 
+      <button type="button" id="member-organization-entry" onclick="window.ContractOrganization.member()" class="w-full bg-white border border-emerald-300 text-emerald-800 py-4 rounded-2xl font-bold mb-4 flex justify-center items-center gap-2">
+        <span class="material-symbols-outlined" aria-hidden="true">account_tree</span> 我的組織圖
+      </button>
       <button id="member-cooperation-entry" type="button" onclick="window.openMemberCooperationApplications()" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold mb-4 shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
         <span class="material-symbols-outlined text-[22px]" aria-hidden="true">draw</span>
         合作申請
@@ -2957,7 +2962,7 @@
 <script src="js/modules/store-richman.js?v=1"></script>
 <script src="js/modules/business-island.js?v=13"></script>
 <script src="js/modules/store-invite-route.js?v=1"></script>
-<script src="js/modules/store-shop-entry.js?v=79&publish=2&game=2&manage=1&richman=1&contract=11511&tabs=2&reviewNote=2"></script>
+<script src="js/modules/store-shop-entry.js?v=79&org=1&publish=2&game=2&manage=1&richman=1&contract=11511&tabs=2&reviewNote=2"></script>
 <script src="js/modules/reward-applications-entry.js?v=6&contract=11511&tabs=2&reviewNote=2"></script>
 <script src="js/modules/member-cooperation-entry.js?v=4&contract=11511&tabs=2&reviewNote=2"></script>
 <script src="js/modules/partner-contracts-entry.js?v=11510-3&signed=1&contract=11511r2&review=2"></script>

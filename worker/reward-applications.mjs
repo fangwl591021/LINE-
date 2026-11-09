@@ -1,3 +1,4 @@
+import {contractOrganization} from './contract-organization.mjs';
 import {authorizeStoreAdmin, DirectoryError} from './store-admin.mjs';
 import {readJson, ShopError} from './store-shop.mjs';
 import {discountTerms,discountOptions,discountConfirmations,normalizeDiscountApplication} from './discount-application-definition.mjs';
@@ -92,7 +93,20 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
  const terms=discount?discountTerms:rewardTerms,consent=extended?handSignConfirmations[kind]:discount?discountConfirmations:confirmations,options=discount?discountOptions:applicationOptions;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  try{
-  const route=url.pathname.slice(path.length),admin=route==='/admin'||route==='/review';
+  const route=url.pathname.slice(path.length);
+  if(kind==='partner' && ['/organization','/admin/organization'].includes(route)){
+   if(request.method!=='GET') fail('僅提供組織查詢',405);
+   const isAdminRoute=route==='/admin/organization';
+   const allowed=isAdminRoute?['target','depth']:['depth'];
+   for(const key of url.searchParams.keys()) if(!allowed.includes(key)||url.searchParams.getAll(key).length!==1) fail('查詢條件不正確');
+   const depth=Number(url.searchParams.get('depth')??3);
+   if(![2,3,5,10].includes(depth)) fail('請選擇顯示代數');
+   const viewer=isAdminRoute?await authorizeStoreAdmin(request,env,profileMapper,fetcher):await member(request,env,fetcher);
+   const root=isAdminRoute?url.searchParams.get('target'):viewer.uid;
+   if(!UID.test(root||'')) fail('請選擇會員');
+   return reply({success:true,organization:await contractOrganization(viewer.db,root,depth)});
+  }
+  const admin=route==='/admin'||route==='/review';
   if(!['','/template','/preview','/submit','/admin','/review'].includes(route))fail('查無申請功能',404);
   if(!['GET','POST'].includes(request.method))fail('不支援此操作',405);
   const {uid,db:authenticatedDb,actor,identityProof,referrer,referrerRaw}=admin?await authorizeStoreAdmin(request,env,profileMapper,fetcher):await member(request,env,fetcher);
