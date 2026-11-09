@@ -469,6 +469,7 @@ test('store version conflicts preserve newer data',async()=>{
 
 test('initial full shop imports only own active standard card and keeps draft private after save',async t=>{
  const {call,sql}=fixture();t.after(()=>sql.close());
+ sql.exec("CREATE TABLE app_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
  sql.exec("CREATE TABLE card_contacts(row_id TEXT,line_id TEXT,owner_user_id TEXT,profile_user_id TEXT,source_type TEXT,company_name TEXT,address TEXT,mobile TEXT,office_phone TEXT,fax TEXT,services TEXT,custom_config TEXT,image_url TEXT,tax_id TEXT,archived_at TEXT,merged_into_row_id TEXT,updated_at TEXT)");
  const insert=sql.prepare("INSERT INTO card_contacts(row_id,profile_user_id,source_type,company_name,services,office_phone,tax_id,custom_config,archived_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)");
  for(const [id,owner,type,archived]of [['CARD_STD_other',B,'self_profile',''],['scan',A,'scan',''],['CARD_STD_archived',A,'self_profile','old'],['CARD_STD_empty','','self_profile',''],['CARD_POSTER_2',A,'self_profile','']]){
@@ -489,6 +490,15 @@ test('initial full shop imports only own active standard card and keeps draft pr
  assert.deepEqual(imported.card,draft.card_prefill);
  assert.equal((await call('/my-card')).status,401);assert.equal((await call('/my-card',null,'b')).status,403);
  assert.equal(sql.prepare('SELECT name FROM store_shop_stores WHERE owner_uid=?').get(A).name,'自訂店名');
+ sql.prepare("INSERT INTO app_meta VALUES(?,'enabled')").run('store_shop_card_import:'+B);
+ const granted=await call(path,null,'b');assert.equal(granted.can_import_own_card,true);assert.equal(granted.cooperation_plan.id,'admin');
+ assert.equal(granted.card_prefill.name,'無關店面');
+ assert.equal((await call('/my-card?owner_uid='+A,null,'b')).card.name,'無關店面');
+ sql.prepare("UPDATE users SET role='admin' WHERE line_id=?").run(USER);
+ assert.equal((await call(path+'&owner_uid='+B,null,'c')).can_import_own_card,false);
+ assert.equal((await call('/my-card?owner_uid='+B,null,'c')).status,403);
+ sql.prepare("UPDATE users SET role='redeem' WHERE line_id=?").run(B);
+ assert.equal((await call('/my-card',null,'b')).status,403);
  sql.prepare('UPDATE users SET role=? WHERE line_id=?').run('redeem',A);
  assert.equal((await call('/my-card',null,'a')).status,403);
 });

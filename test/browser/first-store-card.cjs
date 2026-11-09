@@ -10,7 +10,8 @@ const fs=require('node:fs');
     let cardReads=0,available=true;
     let saved=null,polishes=0,saves=0,hold=false,release;
     const polished='喜歡手作陶器嗎？歡迎來看看我們的作品。';
-    const management=()=>({success:true,cooperation_plan:{id:'full',label:'雙向完整版'},shop:saved,card_prefill:saved?undefined:card,products:[],product_limit:20,product_count:0});
+    let admin=false,grant=false;
+    const management=()=>({success:true,can_import_own_card:!admin||grant,cooperation_plan:admin?{id:'admin',label:'平台管理員'}:{id:'full',label:'雙向完整版'},shop:saved,card_prefill:saved?undefined:card,products:[],product_limit:20,product_count:0});
     await page.route('**/*',async route=>{
       const url=new URL(route.request().url());
       if(url.pathname==='/')return route.fulfill({contentType:'text/html;charset=utf-8',body:'<main id="root"></main>'});
@@ -72,6 +73,12 @@ const fs=require('node:fs');
     assert.equal(saved.image_url,'https://test.invalid/old-cover.jpg');assert.equal(await form.locator('.shop-upload-preview img').getAttribute('src'),card.image_url);
     await form.getByRole('button',{name:'儲存店面',exact:true}).click();await form.locator('[data-polish]').waitFor({state:'detached'});
     await page.evaluate(()=>openForm());await openImport.waitFor();assert.equal(await desc.inputValue(),polished);assert.equal(saves,2);assert.equal(saved.image_url,card.image_url);assert.equal(saved.status,'active');
+    admin=true;grant=true;
+    await page.evaluate(()=>{window.userRole='admin';openForm()});await openImport.waitFor();
+    await openImport.click();await panel.waitFor();assert.equal(await desc.inputValue(),saved.description);
+    await panel.getByRole('button',{name:'取消'}).click();
+    grant=false;await page.evaluate(()=>openForm());await form.waitFor();
+    assert.equal(await openImport.count(),0);assert.equal(saves,2);
     assert.deepEqual(errors,[]);console.log('PASS mobile first setup and existing shop opt-in, preview, cancellation, missing card, concurrent edits, photo and intro selection, explicit save and reopen');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

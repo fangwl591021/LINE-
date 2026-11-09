@@ -210,4 +210,9 @@ test('first shop polish uses supplied business text only and never searches or s
  f.sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','now')").run('existing',OTHER,'舊店面');
  assert.equal((await invoke(OTHER,data)).status,200);
  assert.equal(f.sql.prepare("SELECT name FROM store_shop_stores WHERE id='existing'").get().name,'舊店面');
+ f.sql.exec("CREATE TABLE app_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
+ f.sql.prepare("UPDATE users SET role='admin' WHERE line_id=?").run(UID);
+ assert.equal((await invoke(UID,data)).status,403);
+ f.sql.prepare("INSERT INTO app_meta VALUES(?,'enabled')").run('store_shop_card_import:'+UID);
+ f.resetQuota();assert.equal((await invoke(UID,data)).status,200);
 });
