@@ -36,7 +36,7 @@ async function profileJson(response) {
   return profile;
 }
 
-async function authenticatedUid(request, fetcher) {
+export async function authenticatedUid(request, fetcher) {
   const token = request.headers.get('Authorization')?.match(/^Bearer (\S+)$/i)?.[1];
   if (!token || token.length > 4096) fail('AUTH_REQUIRED', '請先使用 LINE 登入', 401);
   let response, profile;

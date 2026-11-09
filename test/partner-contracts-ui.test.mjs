@@ -76,3 +76,26 @@ test('admin opens the selected unpaid sale and verifies a signed application and
   assert.equal(verified.orderId,'S2');assert.equal(verified.applicationId,'PROOF');assert.equal(verified.memberNumber,'20261021003');
  }finally{await browser.close();}
 });
+
+test('paid order opens after a retry and explains the missing signed application',async()=>{
+ const source=await readFile(new URL('../js/modules/partner-contracts.js',import.meta.url),'utf8');
+ const browser=await chromium.launch({channel:'chrome',headless:true});
+ try{
+  const page=await browser.newPage();
+  await page.setContent('<html><head><link data-reward-application-style></head><body></body></html>');
+  await page.addScriptTag({type:'module',content:source+'\nwindow.openContracts=openPartnerContracts;'});
+  await page.waitForFunction(()=>!!window.openContracts);
+  await page.evaluate(async()=>{
+   window.liff={isLoggedIn:()=>true,getAccessToken:()=>'fixture',getContext:()=>({userId:'U'+'a'.repeat(32)})};
+   let calls=0;
+   await window.openContracts({base:'https://fixture.invalid',target:'U'+'b'.repeat(32),orderId:'PAID-2',
+    fetcher:async()=>{const ok=++calls>1;return {ok,json:async()=>ok?{success:true,contracts:[],heldOrders:[{orderId:'PAID-2',status:'paid'}],referralProofs:[]}:{error:'暫時無法連線'}};}});
+  });
+  assert.equal(await page.getByText('讀取中…').count(),0);
+  await page.getByRole('button',{name:'重新讀取'}).click();
+  const form=page.locator('[data-form=orderReferral]');
+  await form.getByText(/目前沒有已受理的雙向完整版申請書/).waitFor();
+  assert.equal(await form.locator('option:checked').textContent(),'PAID-2 · 已收款');
+  assert.equal(await form.getByRole('button',{name:'確認業務歸屬'}).count(),0);
+ }finally{await browser.close();}
+});

@@ -1,6 +1,6 @@
 import {REVISED_TEMPLATE,REVISED_SOURCE,recordFullService,revisedAgreement,fullServiceCheck} from './partner-full-service.mjs';
 import {POLICY_11511,TEMPLATE_11511,SOURCE_11511} from './partner-renewal-11511.mjs';
-import {authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
+import {authenticatedUid,authorizeStoreAdmin,DirectoryError} from './store-admin.mjs';
 import {readJson,ShopError} from './store-shop.mjs';
 import {findMemberReferrer} from './member-number.mjs';
 import {PARTNER_POLICY_11510,PARTNER_TEMPLATE_11510,PARTNER_POLICY_CUTOVER,createPartnerPolicy11510} from './partner-policy-11510.mjs';
@@ -71,8 +71,8 @@ async function financeActor(db,payload,{confirmReceipt=false}={}){
 }
 const gate='EXISTS(SELECT 1 FROM partner_bonus_v2_clock WHERE id=1 AND revision=? AND last_key=?)';
 const BOTH_LINK_IDS = ['old_line_id', 'new_line_id'];
-function clockClaim(db,revision,key,actor,blockedLinkIds=BOTH_LINK_IDS){
- const fields=['row_id','line_id','legacy_line_id','point_line_id','role'];
+function clockClaim(db,revision,key,actor,blockedLinkIds=BOTH_LINK_IDS,profileFields=[]){
+ const fields=['row_id','line_id','legacy_line_id','point_line_id','role',...profileFields];
  let sql='UPDATE partner_bonus_v2_clock SET revision=revision+1,last_key=? WHERE id=1 AND revision=?';
  const args=[key,revision];
  if(actor){
@@ -178,7 +178,7 @@ async function verifyOrderReferral(db, actor, data) {
  if(!contract)fail('訂單建立時無可核對的有效夥伴契約，保留待核',409);
  if(row.currency!=='TWD'||!Number.isSafeInteger(row.gross_amount)||row.gross_amount<=0||row.gross_amount>MAX_MONEY||row.tax_rate!==5||row.net_amount!==Math.round(row.gross_amount/1.05)||row.tax_amount!==row.gross_amount-row.net_amount)fail('訂單幣別或稅額待核',409);
  const snapshot={policyVersion:contract.policy_version,contractId:contract.id,recruiterUid:recruiter,buyerUid:row.buyer_id,capturedAt:row.created_at,policyRevision:next,originalReferrerUid:row.order_type==='tenant_annual_fee'?recruiter:'',policyBasisMemberUid:contract.member_uid,templateVersion:contract.policy_version===POLICY_11511?(revisedAgreement(contract)?REVISED_TEMPLATE:TEMPLATE_11511):contract.policy_version===PARTNER_POLICY_11510?'115.10':'',classificationSource:'signed_order_review',verifiedMemberNumber:data.memberNumber,applicationId:data.applicationId,documentSha256:proof.content_sha256,verifiedBy:actor.line_id,verifiedAt:at,note};
- const result=await db.batch([clockClaim(db,revision,nonce,actor),db.prepare(`UPDATE orders SET recruiter_id=?,sponsor_id=?,bonus_policy_type=?,bv=net_amount/2.0,raw_json=json_set(raw_json,'$.signedReviewKey',?),updated_at=? WHERE order_id=? AND buyer_id=? AND bonus_policy_type=? AND payment_status IN ('pending_payment','paid') AND ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND member_number=?) AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (?,?) OR new_line_id IN (?,?)))`).bind(recruiter,recruiter,contract.policy_version,nonce,at,orderId,row.buyer_id,REFERRAL_PENDING,next,nonce,recruiter,data.memberNumber,recruiter,row.buyer_id,recruiter,row.buyer_id),
+ const result=await db.batch([clockClaim(db,revision,nonce,actor,['old_line_id'],['name','phone']),db.prepare(`UPDATE orders SET recruiter_id=?,sponsor_id=?,bonus_policy_type=?,bv=net_amount/2.0,raw_json=json_set(raw_json,'$.signedReviewKey',?),updated_at=? WHERE order_id=? AND buyer_id=? AND bonus_policy_type=? AND payment_status IN ('pending_payment','paid') AND ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND member_number=?) AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (?,?) OR new_line_id IN (?,?)))`).bind(recruiter,recruiter,contract.policy_version,nonce,at,orderId,row.buyer_id,REFERRAL_PENDING,next,nonce,recruiter,data.memberNumber,recruiter,row.buyer_id,recruiter,row.buyer_id),
  db.prepare(`INSERT INTO partner_bonus_order_snapshots(order_id,contract_id,policy_version,recruiter_uid,buyer_uid,captured_at,snapshot_json) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE order_id=? AND json_extract(raw_json,'$.signedReviewKey')=?) AND ${gate}`).bind(orderId,contract.id,contract.policy_version,recruiter,row.buyer_id,row.created_at,JSON.stringify(snapshot),orderId,nonce,next,nonce)]);
  if(result[2].meta.changes!==1)fail('訂單或權限已變動，請重新載入核對',409);
  return {success:true,orderId};
@@ -390,11 +390,22 @@ export function partnerContractContext11510(db,uid='',actor=null){
  const ctx={db,uid,actor,all,first,fail,keys,text,date,evidence,stamp,clock,clockClaim,gate,member,policyIdentity,buildFacts,calculateV2:calculatePartnerBonusV2,currentAttribution,activeAny:activeContract,activeContract};
  ctx.policy11510=createPartnerPolicy11510(ctx);ctx.awardEligibility=ctx.policy11510.awardEligibility;return ctx;
 }
+async function authorizeOrderReviewAdmin(request,env,profileMapper,fetcher){
+ const uid=await authenticatedUid(request,fetcher), db=dbFor(env);
+ // A signed-in operator is identified by the current LINE ID on their own CRM record.
+ const actor=await memberRecord(db,uid);
+ if(!['admin','總管'].includes(actor.role)||profileMapper(actor)?.role!=='admin')fail('核對訂單推薦人僅限管理員',403);
+ if(await first(db,"SELECT 1 FROM user_identity_links WHERE status='active' AND old_line_id=? LIMIT 1",uid))fail('請使用移轉後的管理員 LINE 帳號登入',409);
+ return {uid,db,actor};
+}
 export async function handlePartnerContracts(request,env,profileMapper,fetcher=fetch){
  const url=new URL(request.url);if(url.pathname!==BASE&&!url.pathname.startsWith(BASE+'/'))return null;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:HEADERS});
  try{
-  const {uid,db,actor}=await authorizeStoreAdmin(request,env,profileMapper,fetcher),route=url.pathname.slice(BASE.length);
+  const route=url.pathname.slice(BASE.length);
+  const orderReview=(request.method==='GET' && (route==='' || route==='/lookup')) || (request.method==='POST' && route==='/order-referral');
+  const authorize=orderReview?authorizeOrderReviewAdmin:authorizeStoreAdmin;
+  const {uid,db,actor}=await authorize(request,env,profileMapper,fetcher);
   if(request.method==='GET'&&route==='/lookup'){
    if([...url.searchParams.keys()].some(k=>k!=='memberNumber')||url.searchParams.getAll('memberNumber').length!==1)fail('請輸入一組會員編號');
    const number=url.searchParams.get('memberNumber');if(!/^\d{11,20}$/.test(number||''))fail('會員編號格式不正確');
@@ -424,7 +435,7 @@ export async function handlePartnerContracts(request,env,profileMapper,fetcher=f
   const financeRoutes=['/settlement/statements','/settlement/claims','/settlement/disputes','/settlement/resolve','/settlement/payments'];
   if(request.method!=='POST'||url.search||!['','/full-service','/order-referral','/attribution','/deals/confirm','/lifecycle','/renewals/resolve',...financeRoutes].includes(route))fail('不支援此操作',405);
   if(uid!==actor.line_id)fail('請使用 CRM 正式管理員 LINE 身分重新登入',409);
-  await policyIdentity(db,uid);
+  if(!orderReview)await policyIdentity(db,uid);
   if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')||''))fail('請使用 JSON 資料',415);
   const data=await readJson(request,10000),context=partnerContractContext11510(db,uid,actor),policy=context.policy11510,result=await(route==='/full-service'?recordFullService(context,data):route==='/order-referral'?verifyOrderReferral(db,actor,data):financeRoutes.includes(route)?handlePartnerSettlement11510(route,data,context):route==='/attribution'?attribute(db,uid,actor,data):route==='/deals/confirm'?confirmDeal(db,uid,actor,data):route==='/lifecycle'?policy.lifecycle(data):route==='/renewals/resolve'?policy.resolve(data):enroll(db,uid,actor,data));
   return reply(result,result.success?200:409);
