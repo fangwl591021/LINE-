@@ -61,10 +61,20 @@ async function financeActor(db,payload){
  return actor;
 }
 const gate='EXISTS(SELECT 1 FROM partner_bonus_v2_clock WHERE id=1 AND revision=? AND last_key=?)';
-function clockClaim(db,revision,key,actor,strictIdentity=true){
+const BOTH_LINK_IDS = ['old_line_id', 'new_line_id'];
+function clockClaim(db,revision,key,actor,blockedLinkIds=BOTH_LINK_IDS){
  const fields=['row_id','line_id','legacy_line_id','point_line_id','role'];
- return db.prepare('UPDATE partner_bonus_v2_clock SET revision=revision+1,last_key=? WHERE id=1 AND revision=?'+(actor?' AND EXISTS(SELECT 1 FROM users WHERE '+fields.map(k=>k+' IS ?').join(' AND ')+')'+(strictIdentity?' AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status=\'active\' AND (old_line_id=? OR new_line_id=?))':''):''))
-  .bind(key,revision,...(actor?[...fields.map(k=>actor[k]??null),...(strictIdentity?[actor.line_id,actor.line_id]:[])]:[]));
+ let sql='UPDATE partner_bonus_v2_clock SET revision=revision+1,last_key=? WHERE id=1 AND revision=?';
+ const args=[key,revision];
+ if(actor){
+  sql+=' AND EXISTS(SELECT 1 FROM users WHERE '+fields.map(k=>k+' IS ?').join(' AND ')+')';
+  args.push(...fields.map(k=>actor[k]??null));
+  if(blockedLinkIds.length){
+   sql+=" AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND ("+blockedLinkIds.map(k=>k+'=?').join(' OR ')+'))';
+   args.push(...blockedLinkIds.map(()=>actor.line_id));
+  }
+ }
+ return db.prepare(sql).bind(...args);
 }
 async function currentAttribution(db,uid,at){return first(db,'SELECT * FROM partner_attribution_events WHERE target_uid=? AND effective_at<=? AND verified_at<=? ORDER BY effective_at DESC,verified_at DESC,id DESC LIMIT 1',uid,at,at);}
 async function countDeals(db,uid,at){const row=await first(db,`SELECT COUNT(*) n FROM partner_bonus_deal_confirmations c JOIN orders o ON o.order_id=c.order_id
@@ -119,7 +129,10 @@ export async function createTenantReceivable(env, order, actorUid) {
  if((order.currency||'TWD')!=='TWD'||!Number.isSafeInteger(order.grossAmount)||order.grossAmount<=0||order.grossAmount>MAX_MONEY||order.taxRate!==5||order.netAmount!==Math.round(order.grossAmount/1.05)||order.taxAmount!==order.grossAmount-order.netAmount)fail('請核對年費金額、稅額與幣別');
  const value={orderId:order.orderId,orderType:order.orderType,buyerId:order.buyerId,buyerName:order.buyerName,networkId:order.networkId,productCode:order.productCode,productName:order.productName,grossAmount:order.grossAmount,netAmount:order.netAmount,taxAmount:order.taxAmount,taxRate:order.taxRate,bv:order.bv,currency:order.currency,paymentProvider:order.paymentProvider,paymentStatus:'pending_payment',bonusStatus:'review_required',bonusPolicyType:REFERRAL_PENDING};
  const at=stamp(),key=crypto.randomUUID(),revision=(await clock(db)).revision;
- const result=await db.batch([clockClaim(db,revision,key,actor),db.prepare(`INSERT INTO orders(${ORDER_COLUMNS}) SELECT ${Array(26).fill('?').join(',')} WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=?) ON CONFLICT(order_id) DO NOTHING`).bind(...orderValues(value,JSON.stringify(value),at),revision+1,key,order.buyerId)]);
+ // A current admin can record a receivable after migration. Former identities still fail at write time.
+ const currentAdmin=actor && actor.line_id===actorUid && ['admin','總管'].includes(actor.role);
+ const claim=clockClaim(db,revision,key,actor,currentAdmin?['old_line_id']:BOTH_LINK_IDS);
+ const result=await db.batch([claim,db.prepare(`INSERT INTO orders(${ORDER_COLUMNS}) SELECT ${Array(26).fill('?').join(',')} WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=?) ON CONFLICT(order_id) DO NOTHING`).bind(...orderValues(value,JSON.stringify(value),at),revision+1,key,order.buyerId)]);
  if(!result[0].meta.changes)fail('權限或資料已更新，請重試',409);
  const row=await first(db,'SELECT * FROM orders WHERE order_id=?',order.orderId);
  if(!sameOrder(row,order))fail('訂單內容不一致',409);
@@ -193,7 +206,7 @@ export async function createPartnerV2Order(env,order,legacyPreview=value=>value,
   let identityGuard='',identityArgs=[];
   if(contract){identityGuard=" AND NOT EXISTS(SELECT 1 FROM user_identity_links WHERE status='active' AND (old_line_id IN (?,?,?) OR new_line_id IN (?,?,?)))";identityArgs=[order.buyerId,recruiter,contract.member_uid,order.buyerId,recruiter,contract.member_uid];}
   else if(classification.ids.length){const markers=classification.ids.map(()=>'?').join(',');identityGuard=` AND (SELECT COALESCE(group_concat(pair,'|'),'') FROM (SELECT old_line_id||'>'||new_line_id AS pair FROM user_identity_links WHERE status='active' AND (old_line_id IN (${markers}) OR new_line_id IN (${markers})) ORDER BY old_line_id,new_line_id))=?`;identityArgs=[...classification.ids,...classification.ids,classification.linkStamp];}
-  const statements=[clockClaim(db,c.revision,nonce,actor,!!contract),db.prepare(`INSERT INTO orders(${ORDER_COLUMNS}) SELECT ${Array(26).fill('?').join(',')} WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?)${identityGuard} ON CONFLICT(order_id) DO NOTHING`).bind(...orderValues(value,raw,at),next,nonce,order.buyerId,recruiter,...identityArgs)];
+  const statements=[clockClaim(db,c.revision,nonce,actor,contract?BOTH_LINK_IDS:[]),db.prepare(`INSERT INTO orders(${ORDER_COLUMNS}) SELECT ${Array(26).fill('?').join(',')} WHERE ${gate} AND EXISTS(SELECT 1 FROM users WHERE line_id=? AND referrer_id IS ?)${identityGuard} ON CONFLICT(order_id) DO NOTHING`).bind(...orderValues(value,raw,at),next,nonce,order.buyerId,recruiter,...identityArgs)];
   if(contract)statements.push(db.prepare(`INSERT INTO partner_bonus_order_snapshots(order_id,contract_id,policy_version,recruiter_uid,buyer_uid,captured_at,snapshot_json)
    SELECT ?,?,?,?,?,?,? WHERE ${gate} AND EXISTS(SELECT 1 FROM orders WHERE order_id=? AND json_extract(raw_json,'$.partnerPolicyCapture')=?) ON CONFLICT(order_id) DO NOTHING`).bind(order.orderId,contract.id,version,recruiter,order.buyerId,at,JSON.stringify(snapshot),next,nonce,order.orderId,nonce));
   const result=await db.batch(statements);if(result[0].meta?.changes!==1)continue;
