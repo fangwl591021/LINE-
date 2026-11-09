@@ -9,10 +9,12 @@ test('手繪名冊按本人隔離，未核對的分支僅列指定成員，契�
  put(OTHER,REWARD);put('alias:one',OTHER,'待核稱呼');put('alias:two','','方向待核');
  f.sql.prepare('INSERT INTO partner_contract_enrollments VALUES(?,?)').run(ADMIN,OTHER);
  const self=async()=>(await f.call('partner','/organization',undefined,'reward')).organization;
- let chart=await self();assert.deepEqual(chart.unplaced,['方向待核']);
+ put('alias:sponsor','@upline','指定上線');
+ let chart=await self();assert.equal(chart.reportedUpline,'指定上線');assert.deepEqual(chart.unplaced,['方向待核']);
  let branch=chart.root.children[0];assert.equal(branch.status,'reported');assert.equal(branch.credited,false);
  assert.deepEqual(branch.children.map(x=>x.name),['待核稱呼']);
- const outsider=(await f.call('partner','/organization')).organization;assert.deepEqual(outsider.unplaced,[]);assert.doesNotMatch(JSON.stringify(outsider),/待核稱呼/);
+ const outsider=(await f.call('partner','/organization')).organization;assert.equal(outsider.reportedUpline,null);assert.deepEqual(outsider.unplaced,[]);assert.doesNotMatch(JSON.stringify(outsider),/待核稱呼/);
  put(ADMIN,OTHER);chart=await self();branch=chart.root.children[0];assert.equal(branch.children.find(x=>x.name==='管理員').status,'verified');
  f.sql.prepare('INSERT INTO partner_contract_enrollments VALUES(?,?)').run(OTHER,ADMIN);assert.deepEqual((await self()).root.children,[]);
+ f.sql.prepare('INSERT INTO partner_contract_enrollments VALUES(?,?)').run(REWARD,OTHER);assert.equal((await self()).reportedUpline,null);
 });

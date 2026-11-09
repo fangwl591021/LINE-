@@ -36,10 +36,16 @@
     } else if (node.hasChildren) card.append(label('small','還有下一代'));
     return li;
   }
-  function draw(box,root,title,legacy=false){
+  function draw(box,root,title,legacy=false,upline=null){
     const scroll=document.createElement('div');
     scroll.className='org-chart-scroll';scroll.tabIndex=0;scroll.setAttribute('aria-label',title+'，可左右捲動');
-    const tree=document.createElement('ul');tree.className='org-chart';tree.append(branch(root,0,legacy));scroll.append(tree);
+    const tree=document.createElement('ul');tree.className='org-chart';const origin=branch(root,0,legacy);
+    if(upline){
+      const sponsor=document.createElement('div');sponsor.className='org-upline';
+      sponsor.append(label('small','名冊推薦人'),label('strong',upline),label('small','↓ 推薦'));
+      origin.prepend(sponsor);
+    }
+    tree.append(origin);scroll.append(tree);
     box.replaceChildren(label('p',title,'org-caption'),scroll);
     requestAnimationFrame(()=>{scroll.scrollLeft=(scroll.scrollWidth-scroll.clientWidth)/2;});
   }
@@ -70,7 +76,7 @@
       if (!current()) return;
       const org=data.organization, root=org.root;
       const title=root.hasChildren?'契約推薦組織':'目前沒有已確認的直推成員';
-      draw(box,root,title);
+      draw(box,root,title,false,org.reportedUpline);
       const pending=n=>n.status==='reported'||n.children.some(pending);
       if(pending(root)) box.prepend(label('p','虛線卡片是名冊上的關係，尚未核對，不計入業績。可左右滑動查看同代成員。','org-caption'));
       if(org.unplaced?.length) box.append(label('p','推薦方向待核對：'+org.unplaced.join('、'),'org-caption'));
