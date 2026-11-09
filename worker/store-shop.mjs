@@ -77,7 +77,7 @@ async function actor(request,db,fetcher) {
   return {uid:profile.userId,role:row.role,limit:storePlanForRole(row.role).productLimit};
 }
 const own=(db,uid)=>db.prepare('SELECT * FROM store_shop_stores WHERE owner_uid=?').bind(uid).first();
-async function firstShopCard(db,uid) {
+async function ownShopCard(db,uid) {
   const card=await db.prepare(`SELECT c.company_name,c.address,c.mobile,c.office_phone,c.fax,c.services,c.custom_config,c.image_url,c.tax_id
     FROM card_contacts c JOIN users u ON u.line_id=?
     WHERE c.source_type='self_profile' AND COALESCE(c.archived_at,'')='' AND COALESCE(c.merged_into_row_id,'')=''
@@ -145,17 +145,19 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     const recognizeDm=request.method==='POST'&&url.pathname==='/v1/store-shop/product-ocr';
     const storeDraft=request.method==='POST'&&url.pathname==='/v1/store-shop/store-ai-draft';
     const polish=request.method==='POST'&&url.pathname==='/v1/store-shop/polish-intro';
-    if(!polish&&!manage&&!sales&&!writeStore&&!writeProduct&&!recognizeDm&&!storeDraft) fail('不支援此商城操作',404);
+    const importCard=request.method==='GET'&&url.pathname==='/v1/store-shop/my-card';
+    if(!importCard&&!polish&&!manage&&!sales&&!writeStore&&!writeProduct&&!recognizeDm&&!storeDraft) fail('不支援此商城操作',404);
     const {uid,role,limit}=await actor(request,db,fetcher);
     if(storeDraft){
       if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get('Content-Type')||''))fail('請使用 JSON 草稿資料',415);
       return reply(await generateStoreDraft(await readJson(request,4096),env,uid,fetcher));
     }
-    const shop=await own(db,uid);
-    if(polish){
-      if(shop||storePlanForRole(role).id!=='full')fail('此功能限雙向店家首次設定使用',403);
+    if(importCard||polish){
+      if(storePlanForRole(role).id!=='full')fail('此功能限雙向完整版店家使用',403);
+      if(importCard)return reply({success:true,card:await ownShopCard(db,uid)});
       return reply(await polishStoreIntro(await readJson(request),env,uid,fetcher));
     }
+    const shop=await own(db,uid);
     if(recognizeDm){
       if(!shop)fail('請先儲存店面，再辨識 DM',400);
       const data=await readJson(request,Math.ceil(4*1024*1024*4/3)+1024);
@@ -169,7 +171,7 @@ export async function handleStoreShop(request,env,fetcher=fetch) {
     if(manage) {
       const result=await management(db,shop,role,url.searchParams.get('product_after')||'');
       if(!shop&&result.cooperation_plan.id==='full'&&url.searchParams.get('card_prefill')==='1'){
-        try {result.card_prefill=await firstShopCard(db,uid);}
+        try {result.card_prefill=await ownShopCard(db,uid);}
         catch {result.card_prefill_unavailable=true;}
       }
       return reply(result);

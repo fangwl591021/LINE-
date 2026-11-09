@@ -206,4 +206,8 @@ test('first shop polish uses supplied business text only and never searches or s
  const body=JSON.parse(provider[0].opts.body);assert.deepEqual(JSON.parse(body.input),data);assert.equal(body.store,false);assert.equal(body.tools,undefined);
  assert.ok(f.calls.every(c=>c.url.endsWith('/responses')||c.url.endsWith('/v2/profile')));
  assert.equal(f.metrics.saves,0);assert.equal((await invoke(OTHER,data)).status,429);
+ f.resetQuota();
+ f.sql.prepare("INSERT INTO store_shop_stores(id,owner_uid,name,status,updated_at) VALUES(?,?,?,'active','now')").run('existing',OTHER,'舊店面');
+ assert.equal((await invoke(OTHER,data)).status,200);
+ assert.equal(f.sql.prepare("SELECT name FROM store_shop_stores WHERE id='existing'").get().name,'舊店面');
 });

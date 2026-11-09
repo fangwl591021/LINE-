@@ -379,28 +379,76 @@
       field.querySelector('[data-image-pending]').hidden=false;
       field.querySelector('.shop-image-status').textContent=message;
     }
-    function setupFirstStore(form,card,unavailable) {
-      const labels={name:'店家名稱',description:'店家介紹',address:'地址',phone:'聯絡電話',tax_id:'統一編號'};
+    const cardFieldLabels={name:'店家名稱',description:'店家介紹',address:'地址',phone:'聯絡電話',tax_id:'統一編號',image_url:'封面照片'};
+    const cardField=(form,key)=>key==='tax_id'?form.querySelector('[data-store-tax-id]'):form.elements.namedItem(key);
+    function cardSession(form){
+      const session=window.liff?.getAccessToken?.(),owner=window.currentUserProfile?.userId,version=epoch;
+      return ()=>form.isConnected&&root.contains(form)&&window.currentPage==='store-shop'&&version===epoch&&
+        session===window.liff?.getAccessToken?.()&&owner===window.currentUserProfile?.userId;
+    }
+    function existingStoreImport(form){
+      const section=document.createElement('section');
+      section.innerHTML='<button type="button" class="primary" data-import-card aria-expanded="false">從我的名片匯入</button><div role="status" class="shop-meta"></div><div data-card-preview hidden></div>';
+      form.prepend(section);
+      const button=section.querySelector('button'),status=section.querySelector('[role=status]'),panel=section.querySelector('[data-card-preview]');
+      const current=cardSession(form);
+      const close=()=>{panel.replaceChildren();panel.hidden=true;button.setAttribute('aria-expanded','false');};
+      button.onclick=async()=>{
+        if(!current()||busy||button.disabled)return;
+        if(!panel.hidden){close();return;}
+        button.disabled=true;status.textContent='正在讀取我的名片…';
+        try{
+          const {card}=await api('/my-card',null,true);
+          if(!current())return;
+          const keys=Object.keys(cardFieldLabels).filter(key=>card?.[key]&&(key!=='image_url'||photo(card[key])));
+          if(!keys.length){status.textContent='本人名片目前沒有可匯入的資料，請先到「我的名片」補齊。';return;}
+          const before=Object.fromEntries(keys.map(key=>[key,cardField(form,key).value]));
+          panel.className='shop-ai-draft';panel.hidden=false;button.setAttribute('aria-expanded','true');status.textContent='';
+          const show=(key,value)=>key==='image_url'&&photo(value)?'<div class="shop-upload-preview">'+photo(value)+'</div>':esc(value||'尚未填寫');
+          panel.innerHTML='<h3>選擇要匯入的欄位</h3><p>空白欄位已勾選。想更新已有的內容，請勾選該欄。</p>'+
+            keys.map(key=>'<div class="shop-ai-field"><label><input type="checkbox" data-card-field="'+key+'" '+(!before[key].trim()?'checked':'')+'><strong>'+(key==='tax_id'?'統一編號（查公司用）':cardFieldLabels[key])+'</strong></label><small>店面目前內容</small><div class="shop-ai-value">'+show(key,before[key])+'</div><small>我的名片</small><div class="shop-ai-value">'+show(key,card[key])+'</div></div>').join('')+
+            '<div class="shop-row"><button type="button" class="primary" data-import-apply>套用勾選欄位</button><button type="button" data-import-cancel>取消</button></div>';
+          const apply=panel.querySelector('[data-import-apply]');
+          const selection=()=>Array.from(panel.querySelectorAll('[data-card-field]:checked'),el=>el.dataset.cardField);
+          const refresh=()=>{apply.disabled=!selection().length;};panel.onchange=refresh;refresh();
+          panel.querySelector('[data-import-cancel]').onclick=()=>{close();button.focus();};
+          apply.onclick=()=>{
+            if(!current()||busy)return;
+            const selected=selection();
+            if(selected.some(key=>cardField(form,key).value!==before[key])){
+              close();status.textContent='表單資料已變動，請重新開啟匯入預覽。';return;
+            }
+            close();
+            applyStoreCard(form,Object.fromEntries(selected.map(key=>[key,card[key]])),false,true);
+          };
+        }catch(error){if(current())status.textContent=error.message;}
+        finally{button.disabled=false;}
+      };
+    }
+    function applyStoreCard(form,card,unavailable,replace=false) {
       const filled=[];
-      for(const [key,label] of Object.entries(labels)){
-        const field=key==='tax_id'?form.querySelector('[data-store-tax-id]'):form.elements.namedItem(key);
-        if(card?.[key]&&field&&!field.value.trim()){field.value=card[key];filled.push(label);}
+      for(const [key,label] of Object.entries(cardFieldLabels)){
+        if(key==='image_url')continue;
+        const field=cardField(form,key);
+        if(card?.[key]&&field&&(replace||!field.value.trim())){field.value=card[key];filled.push(label);}
       }
       if(card?.image_url&&photo(card.image_url))filled.push('封面照片');
       if(filled.length||unavailable){
-        const note=document.createElement('p');note.className='shop-meta';
+        form.querySelector('[data-card-import-note]')?.remove();
+        const note=document.createElement('p');note.dataset.cardImportNote='';note.className='shop-meta';
         note.textContent=filled.length?'已從我的名片帶入'+filled.join('、')+'。請核對後按「儲存店面」。':'暫時無法讀取我的名片，可繼續填寫或重新開啟店家設定。';
         form.prepend(note);
       }
-      const session=window.liff?.getAccessToken?.(),owner=window.currentUserProfile?.userId;
-      const current=()=>form.isConnected&&root.contains(form)&&window.currentPage==='store-shop'&&
-        session===window.liff?.getAccessToken?.()&&owner===window.currentUserProfile?.userId;
       const cover=form.elements.namedItem('image_url');
-      if(card?.image_url&&photo(card.image_url)&&!cover.value){
+      if(card?.image_url&&photo(card.image_url)&&(replace||!cover.value)){
         cover.value=card.image_url;form.querySelector('.shop-upload-preview').innerHTML=photo(cover.value);
         form.querySelector('.shop-image-status').textContent='已帶入我的名片照片，可更換或清除。';
       }
+      if(replace&&!card?.description)return;
+      form.querySelector('[data-card-polisher]')?.remove();
       const original=form.elements.namedItem('description'),box=document.createElement('div');
+      box.dataset.cardPolisher='';
+      const inSession=cardSession(form),current=()=>box.isConnected&&inSession();
       box.innerHTML='<button type="button" data-polish>美化介紹</button><span role="status"></span><div hidden><p><strong>美化後預覽</strong></p><p style="white-space:pre-line" data-copy></p><button type="button" data-apply>套用介紹</button> <button type="button" data-discard>保留原文</button></div>';
       original.closest('label').after(box);
       const button=box.querySelector('[data-polish]'),status=box.querySelector('[role=status]'),preview=box.querySelector('div');
@@ -456,7 +504,10 @@
       nameRow.insertAdjacentHTML('beforeend','<button type="button" data-do="store-ai-draft">✨ AI 產生店家草稿</button>');
       nameRow.insertAdjacentHTML('afterend','<p class="shop-meta">統編／公司名稱用來找到正確商家；AI 自行搜尋官網、品牌與公開社群的營業內容，不用登記項目作介紹。網址非必填；先預覽、核對來源，勾選帶入後再儲存。</p><div data-store-ai-draft></div>');
       content.querySelector('[data-form="store"] .shop-image-field>p')?.insertAdjacentHTML('afterend','<p class="shop-meta" data-shop-cover-guide>建議尺寸：800 × 533 px（約 3:2 橫式）。前台依版位滿版置中裁切，重要文字與主體請置中並預留四周邊界；上傳原圖仍完整保留。</p>');
-      if(!shop&&cooperationPlan?.id==='full')setupFirstStore(content.querySelector('[data-form="store"]'),card,unavailable);
+      if(cooperationPlan?.id==='full'){
+        const form=content.querySelector('[data-form="store"]');
+        if(shop)existingStoreImport(form);else applyStoreCard(form,card,unavailable);
+      }
       addProductTags();
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
