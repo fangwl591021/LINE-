@@ -1053,16 +1053,16 @@
         <input type="hidden" id="crm-user-id">
         <div id="crm-summary-cards" class="grid grid-cols-1 md:grid-cols-4 gap-4"></div>
 
-        <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-emerald-600 text-[20px]">account_balance_wallet</span>
-              <h4 class="font-black text-slate-800">會員點數</h4>
+        <div class="grid grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)] items-start gap-5">
+          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-emerald-600 text-[20px]">account_balance_wallet</span>
+                <h4 class="font-black text-slate-800">會員點數</h4>
+              </div>
+              <span id="crm-point-source" class="text-[12px] font-bold text-slate-400">尚未載入</span>
             </div>
-            <span id="crm-point-source" class="text-[12px] font-bold text-slate-400">尚未載入</span>
-          </div>
-          <div class="p-5 grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-5">
-            <div class="rounded-2xl border border-slate-100 bg-slate-50 p-5 text-center">
+            <div class="bg-slate-50 p-4 sm:p-5 text-center">
               <p class="text-[13px] font-black text-slate-400">可用點數餘額</p>
               <div class="mt-2"><span id="crm-point-balance" class="text-5xl font-black text-red-600">-</span><span class="ml-2 text-lg font-black text-slate-400">點</span></div>
               <p id="crm-point-note" class="mt-2 text-[12px] font-bold text-slate-500">-</p>
@@ -1072,19 +1072,14 @@
                 <button type="button" onclick="adminCrmPointAdjust('backfill')" class="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 text-indigo-700 font-black active:scale-95">補登舊點數</button>
               </div>
             </div>
-            <div class="rounded-2xl border border-slate-100 overflow-hidden">
-              <div class="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-                <span class="material-symbols-outlined text-slate-500 text-[18px]">history</span>
-                <b class="text-sm text-slate-700">點數歷史紀錄</b>
-              </div>
-              <div id="crm-point-history" class="divide-y divide-slate-100 text-sm">
+            <details id="crm-point-details" class="border-t border-slate-200">
+              <summary class="cursor-pointer px-4 py-3 font-bold text-sm text-slate-700 focus-visible:outline-blue-600">點數明細</summary>
+              <div id="crm-point-history" class="max-h-96 overflow-y-auto divide-y divide-slate-100 border-t border-slate-100 text-sm">
                 <div class="p-4 text-slate-400 font-bold">尚未載入</div>
               </div>
-            </div>
-          </div>
-        </section>
+            </details>
+          </section>
 
-        <div class="grid grid-cols-1 xl:grid-cols-[1fr_1fr] gap-5">
           <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
               <span class="material-symbols-outlined text-blue-500 text-[20px]">badge</span>
@@ -1101,7 +1096,7 @@
             </div>
           </section>
 
-          <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <section class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
               <span class="material-symbols-outlined text-emerald-500 text-[20px]">groups</span>
               <h4 class="font-black text-slate-800">經銷商身份</h4>
@@ -3023,11 +3018,11 @@
           const positive = points >= 0;
           return `<div class="px-4 py-3 flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <div class="font-black text-slate-800 truncate">${escapeHTML(row.mode || '點數調整')}</div>
-              <div class="text-[12px] text-slate-400 mt-0.5 truncate">${escapeHTML(row.note || '-')}</div>
+              <div class="font-black text-slate-800 break-words">${escapeHTML(row.mode || '點數調整')}</div>
+              <div class="text-[12px] text-slate-400 mt-0.5 break-words">${escapeHTML(row.note || '-')}</div>
               <div class="text-[11px] text-slate-400 mt-0.5">${escapeHTML(row.createdAt || '')}</div>
             </div>
-            <div class="font-black ${positive ? 'text-emerald-600' : 'text-red-600'}">${positive ? '+' : ''}${points.toLocaleString('zh-TW')}</div>
+            <div class="shrink-0 font-black ${positive ? 'text-emerald-600' : 'text-red-600'}">${positive ? '+' : ''}${points.toLocaleString('zh-TW')}</div>
           </div>`;
         }).join('') : '<div class="p-4 text-slate-400 font-bold">尚無點數紀錄</div>';
       }
@@ -3177,6 +3172,7 @@
       const user = findAdminUser(userId);
       if (!user) return showToast('找不到 CRM 用戶', true);
       currentDistributorCrmUserId = getUserId(user);
+      document.getElementById('crm-point-details').open = false;
       fillDistributorCrm(user);
       const modal = document.getElementById('modal-distributor-crm');
       modal.classList.remove('hidden');
