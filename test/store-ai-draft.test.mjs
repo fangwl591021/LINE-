@@ -193,3 +193,17 @@ test('name-only exact query may preview indexed services, but cannot use it for 
   let r=await f.call({name:operatingFields.name});assert.equal(r.fields.description,operatingFields.description);assert.equal(r.fields.address,'');assert.deepEqual(r.reviewFields,['description','category']);
   f.resetQuota();r=await f.call({name:'另一家公司'});assert.equal(r.fields.description,'');assert.equal(r.reviewFields,undefined);assert.equal(f.metrics.saves,0);
 });
+
+test('first shop polish uses supplied business text only and never searches or saves the shop',async t=>{
+ const f=fixture(t);
+ const invoke=(uid,data)=>handleStoreShop(new Request('https://app.test/v1/store-shop/polish-intro',{method:'POST',headers:{Authorization:'Bearer '+uid,'Content-Type':'application/json'},body:JSON.stringify(data)}),f.env(),f.fetcher);
+ const data={name:'合成品牌',description:'手作陶器'};
+ assert.equal((await invoke(UID,data)).status,403);
+ assert.equal((await invoke(OTHER,{...data,owner_uid:UID})).status,400);
+ f.setOutput({status:'completed',output:[{type:'message',content:[{type:'output_text',text:'喜歡手作陶器嗎？歡迎來看看我們的作品。'}]}]});
+ const result=await (await invoke(OTHER,data)).json();assert.equal(result.description,'喜歡手作陶器嗎？歡迎來看看我們的作品。');
+ const provider=f.calls.filter(c=>c.url.endsWith('/responses'));assert.equal(provider.length,1);
+ const body=JSON.parse(provider[0].opts.body);assert.deepEqual(JSON.parse(body.input),data);assert.equal(body.store,false);assert.equal(body.tools,undefined);
+ assert.ok(f.calls.every(c=>c.url.endsWith('/responses')||c.url.endsWith('/v2/profile')));
+ assert.equal(f.metrics.saves,0);assert.equal((await invoke(OTHER,data)).status,429);
+});

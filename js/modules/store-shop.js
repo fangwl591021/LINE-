@@ -263,7 +263,7 @@
       }
       if(data) headers['Content-Type']='application/json';
       const reviewing=data&&['/store','/product','/admin/catalog','/admin/products'].includes(path);
-      const response=await fetch(`${base}/v1/store-shop${path}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(reviewing?65000:15000)});
+      const response=await fetch(`${base}/v1/store-shop${path}`,{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,signal:AbortSignal.timeout(reviewing?65000:path==='/polish-intro'?30000:15000)});
       const result=await response.json();
       if(!response.ok||!result.success){const error=new Error(result.error||'商城操作失敗');error.code=result.code;throw error;}
       return result;
@@ -379,7 +379,66 @@
       field.querySelector('[data-image-pending]').hidden=false;
       field.querySelector('.shop-image-status').textContent=message;
     }
-    function renderManage() {
+    function setupFirstStore(form,card,unavailable) {
+      const labels={name:'店家名稱',description:'店家介紹',address:'地址',phone:'聯絡電話',tax_id:'統一編號'};
+      const filled=[];
+      for(const [key,label] of Object.entries(labels)){
+        const field=key==='tax_id'?form.querySelector('[data-store-tax-id]'):form.elements.namedItem(key);
+        if(card?.[key]&&field&&!field.value.trim()){field.value=card[key];filled.push(label);}
+      }
+      if(card?.image_url&&photo(card.image_url))filled.push('封面照片');
+      if(filled.length||unavailable){
+        const note=document.createElement('p');note.className='shop-meta';
+        note.textContent=filled.length?'已從我的名片帶入'+filled.join('、')+'。請核對後按「儲存店面」。':'暫時無法讀取我的名片，可繼續填寫或重新開啟店家設定。';
+        form.prepend(note);
+      }
+      const session=window.liff?.getAccessToken?.(),owner=window.currentUserProfile?.userId;
+      const current=()=>form.isConnected&&root.contains(form)&&window.currentPage==='store-shop'&&
+        session===window.liff?.getAccessToken?.()&&owner===window.currentUserProfile?.userId;
+      const cover=form.elements.namedItem('image_url');
+      if(card?.image_url&&photo(card.image_url)&&!cover.value){
+        cover.value=card.image_url;form.querySelector('.shop-upload-preview').innerHTML=photo(cover.value);
+        form.querySelector('.shop-image-status').textContent='已帶入我的名片照片，可更換或清除。';
+      }
+      const original=form.elements.namedItem('description'),box=document.createElement('div');
+      box.innerHTML='<button type="button" data-polish>美化介紹</button><span role="status"></span><div hidden><p><strong>美化後預覽</strong></p><p style="white-space:pre-line" data-copy></p><button type="button" data-apply>套用介紹</button> <button type="button" data-discard>保留原文</button></div>';
+      original.closest('label').after(box);
+      const button=box.querySelector('[data-polish]'),status=box.querySelector('[role=status]'),preview=box.querySelector('div');
+      let source='',storeName='';
+      const matches=()=>source===original.value&&storeName===form.elements.namedItem('name').value;
+      const polish=async(automatic=false)=>{
+        if(!current()||button.disabled)return;
+        source=original.value;storeName=form.elements.namedItem('name').value;preview.hidden=true;
+        if(!source.trim()){status.textContent='請先寫下主要產品或服務，幾個關鍵字就可以。';original.focus();return;}
+        button.disabled=true;status.textContent='正在美化介紹…';
+        try {
+          const result=await api('/polish-intro',{name:storeName,description:source});
+          if(!current()||busy)return;
+          if(!matches()){status.textContent='內容已變更，可重新美化。';return;}
+          if(automatic){
+            original.value=result.description;
+            status.textContent='介紹已依名片服務美化，可直接修改。';
+            restore.hidden=false;
+          }else{
+            box.querySelector('[data-copy]').textContent=result.description;preview.hidden=false;status.textContent='';
+          }
+        } catch(error){if(current())status.textContent=error.message;}
+        finally {button.disabled=false;}
+      };
+      const restore=document.createElement('button');restore.type='button';restore.textContent='使用名片原文';restore.hidden=true;
+      button.after(restore);
+      restore.onclick=()=>{if(current()){original.value=card.description;preview.hidden=true;restore.hidden=true;status.textContent='已帶回名片原文。';}};
+      button.onclick=()=>polish();
+      if(card?.description&&filled.includes('店家介紹'))void polish(true);
+      box.querySelector('[data-apply]').onclick=()=>{
+        if(!current())return;
+        if(matches()){original.value=box.querySelector('[data-copy]').textContent;status.textContent='已套用，請核對後儲存店面。';}
+        else status.textContent='內容已變更，可重新美化。';
+        preview.hidden=true;
+      };
+      box.querySelector('[data-discard]').onclick=()=>{preview.hidden=true;status.textContent='已保留原文。';};
+    }
+    function renderManage(card=null,unavailable=false) {
       const s=shop||{};
       const quotaNotice=productLimit===null?'管理員不設商品總數上限，每頁載入 100 件。':redeemOnly()?'折抵店家免費，可上架 1 件商品，支援網購及購物金折抵、實體店家交易與到店消費；不能贈點，到店取貨尚待確認。草稿也計入名額，封存後可更換。':'雙向完整版年費未稅 NT$ 6,000（含稅 NT$ 6,300），可上架 20 件商品，支援網購、到店取貨、贈點與折抵。草稿也計入名額，封存後可更換。';
       content.innerHTML=`<h2>我的店面</h2><p>只有按「儲存店面」才會建立或更新。草稿不對外顯示。</p><form data-form="store" class="shop-box" data-version="${s.version||0}">${input('name','店家名稱 *',s.name,80)}${input('description','店家介紹',s.description,2000,true)}${storeCategorySelect(s.category)}${input('address','地址',s.address,200)}${input('phone','聯絡電話',s.phone,40)}${input('hours','營業時間',s.hours,200)}${imageInput('店面封面圖片',s.image_url,'store')}${select('status','公開狀態',[['draft','草稿／暫不公開'],['active','公開店面']],s.status||'draft')}<button class="primary">儲存店面</button></form>${shop?`<div class="shop-row"><button data-do="view" data-id="${esc(shop.id)}" ${shop.status!=='active'?'disabled':''}>查看公開店面</button><button data-do="copy" data-id="${esc(shop.id)}">複製商城網址</button><button data-do="new" class="primary" ${atCapacity()?'disabled':''}>新增商品</button></div><h2>商品管理（${productCount} 件${productLimit===null?'・不限件數':`／上限 ${productLimit} 件`}）</h2><p class="shop-meta">${quotaNotice}</p><div class="shop-editor"></div><div class="shop-grid">${items.map(p=>product(p,true)).join('')}</div>`:'<p>儲存店面後即可新增商品。</p>'}`;
@@ -397,6 +456,7 @@
       nameRow.insertAdjacentHTML('beforeend','<button type="button" data-do="store-ai-draft">✨ AI 產生店家草稿</button>');
       nameRow.insertAdjacentHTML('afterend','<p class="shop-meta">統編／公司名稱用來找到正確商家；AI 自行搜尋官網、品牌與公開社群的營業內容，不用登記項目作介紹。網址非必填；先預覽、核對來源，勾選帶入後再儲存。</p><div data-store-ai-draft></div>');
       content.querySelector('[data-form="store"] .shop-image-field>p')?.insertAdjacentHTML('afterend','<p class="shop-meta" data-shop-cover-guide>建議尺寸：800 × 533 px（約 3:2 橫式）。前台依版位滿版置中裁切，重要文字與主體請置中並預留四周邊界；上傳原圖仍完整保留。</p>');
+      if(!shop&&cooperationPlan?.id==='full')setupFirstStore(content.querySelector('[data-form="store"]'),card,unavailable);
       addProductTags();
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="sales" class="primary">業績查詢</button>');
       if(shop&&canTransact()) content.insertAdjacentHTML('afterbegin','<button type="button" data-do="online-manage">網路訂單／收款設定</button>');
@@ -409,8 +469,11 @@
       if(!canManage())throw new Error('商店設定僅開放折抵店家、雙向完整版與管理員；贈點單位請使用贈點工作台。');
       pageKind('manage');
       const version=++epoch; alert.textContent=''; content.innerHTML='<p role="status">驗證店家身分中…</p>';
-      const result=await api('/manage',null,true); if(version!==epoch) return;
-      setManagement(result); renderManage();
+      const owner=window.currentUserProfile?.userId,token=window.liff?.getAccessToken?.();
+      const firstSetup=['store','店長'].includes(String(window.userRole||'').toLowerCase());
+      const result=await api(firstSetup?'/manage?card_prefill=1':'/manage',null,true);
+      if(version!==epoch||!root.isConnected||owner!==window.currentUserProfile?.userId||token!==window.liff?.getAccessToken?.())return;
+      setManagement(result); renderManage(result.card_prefill,result.card_prefill_unavailable);
     }
     function edit(p={}) {
       if(!p.id&&atCapacity())throw new Error(`已達本方案 ${productLimit} 件商品上限，請先封存原商品再新增。`);

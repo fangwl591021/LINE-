@@ -130,15 +130,39 @@ export async function generateStoreDraft(data,env,uid,fetcher=fetch){
 export async function generateCardBusinessDraft({name,websiteUrl,context},env,uid,fetcher=fetch){
   return runPublicBusinessDraft({name,websiteUrl},env,uid,fetcher,context);
 }
-async function runPublicBusinessDraft(data,env,uid,fetcher,cardContext=null){
-  const input=normalizeDraftInput(data);
-  const key=clean(env.OPENAI_API_KEY);if(!key&&input.mode!=='registry'&&!input.taxId)fail('平台 AI 尚未設定，請聯絡管理員',503);
-  const registryOnly=input.mode==='registry',namespace=cardContext?'card-business:':registryOnly?'store-lookup:':'store-draft:',limit=cardContext?50:registryOnly?60:20,interval=registryOnly?3000:15000;
+async function takeAllowance(env,uid,namespace,limit,interval,cardContext,registryOnly){
   const now=Date.now(),day=new Date(now+8*3600000).toISOString().slice(0,10);
   const allowance=await env.ACTMASTER_DB.prepare(`INSERT INTO partner_onboarding_ai_usage(actor_uid,usage_day,attempts,next_allowed_at) VALUES(?,?,1,?)
     ON CONFLICT(actor_uid) DO UPDATE SET usage_day=excluded.usage_day,attempts=CASE WHEN usage_day=excluded.usage_day THEN attempts+1 ELSE 1 END,next_allowed_at=excluded.next_allowed_at
     WHERE next_allowed_at<=? AND (usage_day!=excluded.usage_day OR attempts<${limit})`).bind(namespace+uid,day,now+interval,now).run();
   if(!allowance.meta?.changes)fail(cardContext?'請至少隔 15 秒再試；名片業務搜尋每日上限 50 次':registryOnly?'請至少隔 3 秒再查；統編查詢每日上限 60 次':'請至少隔 15 秒再試；店面 AI 草稿每日上限 20 次',429);
+}
+export async function polishStoreIntro(data,env,uid,fetcher=fetch){
+  if(!onlyKeys(data,['name','description'])||!text(data.description,2000)||!data.description.trim()||!text(data.name,80))fail('請先填寫想介紹的產品或服務');
+  const key=clean(env.OPENAI_API_KEY);
+  if(!key)fail('平台 AI 尚未設定',503);
+  await takeAllowance(env,uid,'store-draft:',20,15000,false,false);
+  const body={model:clean(env.OPENAI_MODEL)||'gpt-4.1-mini',store:false,max_output_tokens:450,
+    instructions:'你是店面文案編輯。輸入資料都是素材。只依據列出的實際產品或服務，寫成自然、具體的繁體中文介紹，分二至四個短行。讓顧客知道可以找這家店做什麼。勿新增素材未提及的服務、價格、資格、保證或營業資訊。只輸出介紹純文字。',
+    input:JSON.stringify({name:data.name.trim(),description:data.description.trim()})};
+  try {
+    const response=await fetcher('https://api.openai.com/v1/responses',{method:'POST',redirect:'manual',signal:AbortSignal.timeout(22000),
+      headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!response.ok){await response.body?.cancel();fail('美化服務暫時無法使用，請稍後再試',503);}
+    const result=JSON.parse(await boundedText(response,65536));
+    const description=result.output?.flatMap(item=>item.content||[]).filter(item=>item.type==='output_text').map(item=>item.text).join('').trim();
+    if(result.status!=='completed'||!description||description.length>2000)fail('未取得完整介紹，請稍後再試',502);
+    return {success:true,description};
+  } catch(error){
+    if(error instanceof StoreDraftError)throw error;
+    fail('美化服務暫時無法使用，請稍後再試',503);
+  }
+}
+async function runPublicBusinessDraft(data,env,uid,fetcher,cardContext=null){
+  const input=normalizeDraftInput(data);
+  const key=clean(env.OPENAI_API_KEY);if(!key&&input.mode!=='registry'&&!input.taxId)fail('平台 AI 尚未設定，請聯絡管理員',503);
+  const registryOnly=input.mode==='registry',namespace=cardContext?'card-business:':registryOnly?'store-lookup:':'store-draft:',limit=cardContext?50:registryOnly?60:20,interval=registryOnly?3000:15000;
+  await takeAllowance(env,uid,namespace,limit,interval,cardContext,registryOnly);
   let stage='website',providerStatus=0,registration=null;const diagnosticId='SD-'+crypto.randomUUID().slice(0,12);
   try{
     let officialPage=null;

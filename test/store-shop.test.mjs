@@ -466,3 +466,23 @@ test('store version conflicts preserve newer data',async()=>{
   assert.equal((await call('/store',{...s,name:'stale'},'a')).status,409);
   assert.equal((await call('/manage',null,'a')).shop.name,'new'); sql.close();
 });
+
+test('initial full shop imports only own active standard card and keeps draft private after save',async t=>{
+ const {call,sql}=fixture();t.after(()=>sql.close());
+ sql.exec("CREATE TABLE card_contacts(row_id TEXT,line_id TEXT,owner_user_id TEXT,profile_user_id TEXT,source_type TEXT,company_name TEXT,address TEXT,mobile TEXT,office_phone TEXT,fax TEXT,services TEXT,custom_config TEXT,image_url TEXT,tax_id TEXT,archived_at TEXT,merged_into_row_id TEXT,updated_at TEXT)");
+ const insert=sql.prepare("INSERT INTO card_contacts(row_id,profile_user_id,source_type,company_name,services,office_phone,tax_id,custom_config,archived_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)");
+ for(const [id,owner,type,archived]of [['CARD_STD_other',B,'self_profile',''],['scan',A,'scan',''],['CARD_STD_archived',A,'self_profile','old'],['CARD_STD_empty','','self_profile',''],['CARD_POSTER_2',A,'self_profile','']]){
+   insert.run(id,owner,type,'無關店面','其他資料','','','{}',archived,'2');
+ }
+ insert.run('CARD_STD_1',A,'self_profile','合成商行','手作陶器','03-3151679 / FAX 03-3150997','12345678','{"imgUrl":"https://example.test/card.jpg"}','','1');
+ const path='/manage?card_prefill=1';
+ assert.equal((await call(path)).status,401);
+ assert.equal((await call(path,null,'b')).card_prefill,undefined);
+ const draft=await call(path+'&owner_uid='+B,null,'a');assert.equal(draft.shop,null);
+ assert.deepEqual(draft.card_prefill,{name:'合成商行',description:'手作陶器',address:'',phone:'033151679',tax_id:'12345678',image_url:'https://example.test/card.jpg'});
+ assert.equal((await call('/manage',null,'a')).card_prefill,undefined);
+ assert.equal(sql.prepare('SELECT count(*) n FROM store_shop_stores').get().n,0);
+ const saved=await call('/store',store({name:'自訂店名',status:'draft'}),'a');
+ assert.equal(saved.shop.status,'draft');assert.equal((await call('?shop='+saved.shop.id)).status,404);
+ const reopened=await call(path,null,'a');assert.equal(reopened.card_prefill,undefined);assert.equal(reopened.shop.name,'自訂店名');
+});
