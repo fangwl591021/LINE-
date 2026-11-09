@@ -9993,6 +9993,8 @@ const D1ReadModule = {
 
     users.forEach(row => {
       const profile = this.userRow(row);
+      if (profile && row.crm_project_independent_at) profile.projectIndependentAt = row.crm_project_independent_at;
+      if (profile && row.crm_project_fee_waived_at) profile.projectFeeWaivedAt = row.crm_project_fee_waived_at;
       if (profile && row.crm_annual_fee_expire_at != null) profile.annualFeeExpireAt = row.crm_annual_fee_expire_at;
       addProfile(profile);
     });

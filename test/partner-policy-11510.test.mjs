@@ -23,6 +23,24 @@ function fixture(t){
  f.ready=async()=>{await f.enroll(A);await f.seedAdvanced();return f.enroll(B);};
  return f;
 }
+test('project waiver has zero cash and BV; first verified new deal pays the independent recruiter',async t=>{
+ const f=fixture(t);
+ f.sql.exec(readFileSync(new URL('../migrations/0082_partner_project_qualification.sql',import.meta.url),'utf8'));
+ await f.enroll(A);await f.seedAdvanced();await f.enroll(B);
+ await f.order('before-project',D);
+ const grant={target_uid:B,waiveFee:true,independent:true,reason:'合成專案例外',confirmed:true,requestKey:crypto.randomUUID()};
+ assert.equal((await f.call('/project',grant,'user')).http,403);
+ const result=await f.call('/project',grant);assert.equal(result.http,200,JSON.stringify(result));
+ assert.equal((await f.call('/project',grant)).replayed,true);
+ const fee=f.sql.prepare("SELECT * FROM orders WHERE buyer_id=? AND payment_status='project_waived'").all(B);
+ assert.equal(fee.length,1);assert.deepEqual([fee[0].gross_amount,fee[0].bv,fee[0].paid_at],[0,0,'']);
+ await assert.rejects(markPartnerV2OrderPaid(f.env,{orderId:fee[0].order_id}),/不能收款/);
+ assert.equal(f.sql.prepare("SELECT count(*) n FROM bonus_transactions WHERE order_id=?").get(fee[0].order_id).n,0);
+ await f.order('project-first');const sale=await f.confirm('project-first');
+ assert.equal(sale.http,200,JSON.stringify(sale));assert.deepEqual(sale.plan.transactions.map(x=>[x.memberId,x.amount]),[[B,3000]]);
+ assert.equal(f.sql.prepare("SELECT ordinal FROM partner_bonus_deal_confirmations WHERE order_id='project-first'").get().ordinal,1);
+ const earlier=await f.confirm('before-project');assert.equal(earlier.http,200,JSON.stringify(earlier));assert.ok(earlier.plan.transactions.every(x=>x.memberId!==B));
+});
 test('115.10 renewal holds only disputed quarter; original v2 all-or-nothing is preserved',()=>{
  const facts={orderType:'tenant_renewal_fee',netAmount:6000,priorValidDeals:0,originalReferrer:B,currentOwner:'',originalEligible:true,ownerEligible:false};
  const plan=calculatePartnerBonus11510(facts,calculatePartnerBonusV2);assert.equal(plan.status,'partially_held');assert.deepEqual(plan.transactions.map(t=>[t.memberId,t.amount]),[[B,1500]]);assert.deepEqual(plan.holds.map(h=>[h.portion,h.amount]),[['renewal_placement',1500]]);assert.equal(calculatePartnerBonusV2(facts).transactions.length,0);
