@@ -18,11 +18,12 @@ test('手機會員入口與後台呈現同代並排、上下連線，可收合�
   const n=(name,children=[])=>({name,children,hasChildren:children.length>0});
   const urls=[];
   await page.route('**/v1/partner-applications/**',route=>{
-   urls.push(new URL(route.request().url()));return route.fulfill({json:{success:true,organization:{root:n('本人',[n('甲',[n('孫')]),n('乙')])}}});
+   urls.push(new URL(route.request().url()));return route.fulfill({json:{success:true,organization:{unplaced:['丙'],root:n('本人',[n('甲',[n('孫')]),{...n('乙'),status:'reported',number:'20261101003'}])}}});
   });
   await page.locator('#member-organization-entry').click();
   const boxes=page.locator('dialog .org-person');
   await boxes.filter({hasText:'本人'}).waitFor();
+  assert.equal(await page.getByText('名冊推薦・待核對').count(),1);assert.equal(await page.getByText('推薦方向待核對：丙').count(),1);
   const rect=async(name)=>boxes.filter({has:page.getByText(name,{exact:true})}).boundingBox();
   const [root,a,b,grand]=await Promise.all(['本人','甲','乙','孫'].map(rect));
   assert.ok(a.y>root.y && a.y===b.y && b.x>a.x && grand.y>a.y);

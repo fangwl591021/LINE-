@@ -13,7 +13,12 @@
     if (node.number) card.append(label('span', node.number));
     if (node.independent) card.append(label('span',legacy?'已獨立':'專案獨立','org-badge'));
     if (legacy && node.side) card.append(label('small',node.side));
-    if (!legacy && generation) card.append(label('small',node.credited ? '推薦成交已認列' : '契約推薦已確認'));
+    if (!legacy && generation) {
+      if(node.status==='reported') {
+        card.classList.add('org-reported');
+        card.append(label('small',node.number?'名冊推薦・待核對':'圖上稱呼・身分待核'));
+      } else card.append(label('small',node.credited ? '推薦成交已認列' : '契約推薦已確認'));
+    }
     li.append(card);
     if (node.children.length) {
       const group = document.createElement('ul');
@@ -66,6 +71,9 @@
       const org=data.organization, root=org.root;
       const title=root.hasChildren?'契約推薦組織':'目前沒有已確認的直推成員';
       draw(box,root,title);
+      const pending=n=>n.status==='reported'||n.children.some(pending);
+      if(pending(root)) box.prepend(label('p','虛線卡片是名冊上的關係，尚未核對，不計入業績。可左右滑動查看同代成員。','org-caption'));
+      if(org.unplaced?.length) box.append(label('p','推薦方向待核對：'+org.unplaced.join('、'),'org-caption'));
       if(org.limited) box.append(label('p','本圖最多顯示 240 位成員。'));
     } catch (err) {
       if (current()) box.replaceChildren(label('p',err.name==='TimeoutError'?'讀取逾時，請重新查詢。':err.message));
