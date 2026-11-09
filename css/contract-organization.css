@@ -1,0 +1,21 @@
+.contract-org-dialog{box-sizing:border-box;border:1px solid #c8ded7;border-radius:20px;width:min(95vw,64rem);max-height:88dvh;margin:auto;padding:1rem;color:#193e38;background:white;overflow:auto}
+.contract-org-dialog::backdrop{background:#102d2a88}
+.contract-org-dialog header,.org-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+.contract-org-dialog header{position:sticky;top:-1rem;background:white;z-index:2;padding:.6rem 0;border-bottom:1px solid #dbeae4}
+.contract-org-dialog h2{font-size:1.2rem;font-weight:750}
+.contract-org-dialog button,.contract-org-dialog select,.org-chart button{border:1px solid #afcfc4;border-radius:.55rem;background:white;padding:.45rem .7rem;color:#08765e;cursor:pointer}
+.org-toolbar{margin:1rem 0}.org-caption{margin:.5rem;color:#31584e;font-weight:bold}
+.org-chart-scroll{overflow:auto;background:#f4f9f6;border:1px solid #dcebe5;border-radius:1rem;padding:1rem .5rem;max-width:100%}
+.org-chart,.org-chart ul{display:flex;justify-content:center;list-style:none;margin:0;padding:0}.org-chart{width:max-content;min-width:100%}
+.org-chart li{position:relative;padding:1.3rem .35rem 0;display:flex;flex-direction:column;align-items:center}
+.org-chart>li{padding-top:0}.org-chart ul{position:relative;padding-top:1rem}
+.org-chart li::before,.org-chart li::after{content:'';position:absolute;top:0;width:50%;height:1.3rem;border-top:2px solid #85ae9e}
+.org-chart li::before{right:50%}.org-chart li::after{left:50%;border-left:2px solid #85ae9e}
+.org-chart li:first-child::before,.org-chart li:last-child::after,.org-chart>li::before,.org-chart>li::after{display:none}
+.org-chart li:last-child::before{border-right:2px solid #85ae9e}
+.org-chart li:only-child::before{display:block;width:0;border-top:0;border-right:2px solid #85ae9e}.org-chart>li:only-child::before{display:none}
+.org-chart ul::before{content:'';position:absolute;top:0;left:50%;height:1rem;border-left:2px solid #85ae9e}
+.org-person{min-width:8rem;max-width:13rem;background:#fff;border:1px solid #bdd8cd;border-radius:.8rem;padding:.55rem;display:grid;gap:.2rem;text-align:center;font-size:.84rem;color:#244b40}
+.org-person strong{font-size:1rem;overflow-wrap:anywhere}.org-chart>li>.org-person{background:#e2f4eb;border-color:#65a990}
+.org-badge{color:#087153;font-weight:bold}.org-chart button{font-size:.8rem}.org-chart [hidden]{display:none}
+

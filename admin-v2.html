@@ -389,6 +389,8 @@
   </style>
 <link rel="stylesheet" href="css/dealer-workspace.css?v=1">
 <link rel="stylesheet" href="css/partner-contracts.css?v=1">
+<link rel="stylesheet" href="css/contract-organization.css?v=1">
+<script src="js/modules/contract-organization.js?v=1" defer></script>
 </head>
 <body class="text-slate-800 h-screen flex overflow-hidden relative">
 
@@ -1009,7 +1011,7 @@
           <div class="p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-end justify-between gap-4">
             <div>
               <h3 class="font-black text-slate-800">組織圖生成與查詢</h3>
-              <p class="text-[12px] text-slate-500 mt-1">可用推薦關係或安置關係查詢，搭配獨立資格與左右位狀態檢查。</p>
+              <p class="text-[12px] text-slate-500 mt-1">以所選會員為起點，向下查看各代契約推薦成員。</p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-[minmax(240px,1fr)_130px_110px_auto] gap-2 w-full xl:w-[760px]">
               <div class="relative">
@@ -1018,8 +1020,9 @@
                 <div id="org-root-results" class="hidden absolute left-0 right-0 top-[42px] z-30 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto"></div>
               </div>
               <select id="org-tree-type" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
-                <option value="placement">安置樹</option>
-                <option value="sponsor">推薦樹</option>
+                <option value="contract" selected>契約推薦組織</option>
+                <option value="placement">舊制安置樹</option>
+                <option value="sponsor">舊制推薦與加入來源</option>
               </select>
               <select id="org-tree-depth" class="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="2">2 層</option>
@@ -2739,16 +2742,24 @@
       if (box) box.classList.add('hidden');
     }
 
+    let orgQueryVersion=0;
     async function loadOrganizationTree() {
+      const version=++orgQueryVersion;
       const body = document.getElementById('org-tree-body');
       const memberId = selectedOrgRootId || document.getElementById('org-root-member')?.value || '';
       if (!memberId) return showToast('請先選擇組織圖根節點', true);
+      if(document.getElementById('org-tree-type').value==='contract'){
+        return window.ContractOrganization.render(body,{target:memberId,depth:document.getElementById('org-tree-depth').value});
+      }
+      window.ContractOrganization.cancel(body);
       if (body) body.innerHTML = '<div class="py-8 text-center text-slate-400 font-bold">正在查詢組織圖...</div>';
       const res = await fetchAPI('mlmGetOrganizationTree', {
         memberId,
         treeType: document.getElementById('org-tree-type')?.value || 'placement',
         depth: Number(document.getElementById('org-tree-depth')?.value || 3)
       }, { silent: true });
+      if(version!==orgQueryVersion)return;
+      if(!res || res.success===false){body.textContent=res?.error||'組織圖讀取失敗，請重新查詢。';return;}
       organizationTreeData = res?.data || res?.tree || res || null;
       renderOrganizationTree();
     }
@@ -2762,35 +2773,6 @@
       return [tree];
     }
 
-    function getOrgChildren(node) {
-      return node.children || node.downlines || node.members || node.nodes || [];
-    }
-
-    function renderOrgNode(node, level = 0) {
-      const id = escapeHTML(node.memberId || node.userId || node.id || '');
-      const name = escapeHTML(node.name || node.displayName || node.memberName || id || '未命名');
-      const side = escapeHTML(node.placementSide || node.side || '');
-      const role = escapeHTML((node.role || node.memberRole || '').toString().toUpperCase());
-      const independent = isUserIndependent(node) ? '已獨立' : '未獨立';
-      const children = getOrgChildren(node);
-      const indent = Math.min(level * 18, 90);
-      return `
-        <div class="border border-slate-100 rounded-lg mb-2 overflow-hidden bg-white" style="margin-left:${indent}px">
-          <div class="p-3 flex flex-col md:flex-row md:items-center justify-between gap-2">
-            <div>
-              <div class="font-black text-slate-800">${name}</div>
-              <div class="font-mono text-[11px] text-slate-400 mt-0.5">${id}</div>
-            </div>
-            <div class="flex flex-wrap items-center gap-2 text-[12px] font-bold">
-              ${role ? `<span class="px-2 py-1 rounded bg-blue-50 text-blue-600">${role}</span>` : ''}
-              ${side ? `<span class="px-2 py-1 rounded bg-slate-100 text-slate-600">${side}</span>` : ''}
-              <span class="status-pill ${independent === '已獨立' ? 'status-green' : 'status-amber'}">${independent}</span>
-            </div>
-          </div>
-        </div>
-        ${children.map(child => renderOrgNode(child, level + 1)).join('')}`;
-    }
-
     function renderOrganizationTree() {
       const body = document.getElementById('org-tree-body');
       if (!body) return;
@@ -2799,7 +2781,7 @@
         body.innerHTML = '<div class="py-8 text-center text-slate-400 font-bold">查無組織圖資料</div>';
         return;
       }
-      body.innerHTML = nodes.map(node => renderOrgNode(node)).join('');
+      window.ContractOrganization.historical(body,nodes.length===1?nodes[0]:{name:'組織起點',children:nodes},document.getElementById('org-tree-type').value);
     }
 
     function getUserId(u = {}) {
