@@ -208,7 +208,7 @@ test('pending annual receivable accepts a migrated current admin and keeps attri
  assert.equal((await create(A)).replayed, false);
  assert.equal((await create(A)).replayed, true);
  await assert.rejects(() => create(D, 'unauthorized'), /不可建立其他會員/);
- await assert.rejects(() => markPartnerV2OrderPaid(f.env, {orderId:order.orderId, authenticatedUserId:A}), /移轉/);
+ await assert.rejects(() => updatePartnerV2OrderStatus(f.env, {orderId:order.orderId, authenticatedUserId:A}, 'cancelled'), /移轉/);
  f.onBatch(() => link(A, E));
  await assert.rejects(() => create(A, 'former-identity'), /更新/);
  f.sql.prepare('DELETE FROM user_identity_links WHERE old_line_id=?').run(A);
@@ -217,4 +217,37 @@ test('pending annual receivable accepts a migrated current admin and keeps attri
  const rows = f.sql.prepare('SELECT payment_status,bonus_status,recruiter_id,sponsor_id,placement_parent_id FROM orders').all();
  assert.deepEqual(rows.map(row => Object.values(row)), [['pending_payment','review_required','','','']]);
  assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n, 0);
+});
+
+test('current migrated admin can confirm receipt once while attribution remains pending', async t => {
+ const f = fixture(t);
+ const {createTenantReceivable} = await import('../worker/partner-bonus-v2.mjs');
+ const order = {orderId:'receipt', orderType:'tenant_annual_fee', buyerId:C, grossAmount:6300,
+  netAmount:6000, taxAmount:300, taxRate:5};
+ const link = f.sql.prepare("INSERT INTO user_identity_links VALUES(?,?,'active')");
+ link.run(D, A);
+ await createTenantReceivable(f.env, order, A);
+ await createTenantReceivable(f.env, {...order,orderId:'race'}, A);
+ const pay = (actor, orderId=order.orderId, extra={}) => markPartnerV2OrderPaid(f.env,
+  {orderId, paymentProvider:'bank_transfer', authenticatedUserId:actor, ...extra});
+ await assert.rejects(() => pay(C), /管理員/);
+ await assert.rejects(() => pay(A, order.orderId, {grossAmount:6000}), /金額/);
+ const result = await pay(A);
+ assert.equal(result.data.paymentStatus,'paid');
+ assert.equal(result.data.bonusStatus,'review_required');
+ const read = () => f.sql.prepare('SELECT * FROM orders WHERE order_id=?').get(order.orderId);
+ const receipt = read();
+ assert.ok(receipt.paid_at);
+ assert.equal((await pay(A)).replayed,true);
+ assert.deepEqual(read(),receipt);
+ assert.equal(receipt.recruiter_id,'');
+ assert.equal(receipt.sponsor_id,'');
+ assert.equal(f.sql.prepare('SELECT count(*) n FROM bonus_transactions').get().n,0);
+ f.onBatch(() => f.sql.prepare("UPDATE users SET role='user' WHERE line_id=?").run(A));
+ await assert.rejects(() => pay(A,'race'));
+ f.sql.prepare("UPDATE users SET role='admin' WHERE line_id=?").run(A);
+ f.onBatch(() => {f.onBatch(null); link.run(A,E);});
+ await assert.rejects(() => pay(A,'race'));
+ await assert.rejects(() => pay(A));
+ assert.equal(f.sql.prepare("SELECT payment_status FROM orders WHERE order_id='race'").get().payment_status,'pending_payment');
 });

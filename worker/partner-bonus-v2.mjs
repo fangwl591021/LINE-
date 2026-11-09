@@ -54,9 +54,18 @@ async function creationContract(db,uid,at,allowStopped=false){
  return {contract,ids:values,linkStamp:links.map(l=>l.old_line_id+'>'+l.new_line_id).join('|')};
 }
 const clock=db=>first(db,'SELECT revision FROM partner_bonus_v2_clock WHERE id=1');
-async function financeActor(db,payload){
- if(!payload.authenticatedUserId)return null; // Verified server payment callbacks have no browser actor.
- const actor=await member(db,payload.authenticatedUserId);
+async function financeActor(db,payload,{confirmReceipt=false}={}){
+ const uid=payload.authenticatedUserId;
+ if(!uid)return null; // Verified server payment callbacks have no browser actor.
+ if(confirmReceipt){
+  // Receipt records the operator's current authority, independently of contract attribution.
+  if(await first(db,"SELECT 1 FROM user_identity_links WHERE status='active' AND old_line_id=? LIMIT 1",uid)){
+   fail('請使用移轉後的管理員 LINE 帳號確認收款',409);
+  }
+ }else{
+  await policyIdentity(db,uid);
+ }
+ const actor=await memberRecord(db,uid);
  if(!['admin','總管'].includes(String(actor.role||'').toLowerCase()))fail('付款與撤銷登錄僅限管理員',403);
  return actor;
 }
@@ -219,7 +228,7 @@ export async function createPartnerV2Order(env,order,legacyPreview=value=>value,
 
 export async function markPartnerV2OrderPaid(env,payload){
  const db=dbFor(env),tracked=await trackedOrder(db,payload.orderId||'');if(!tracked?.captured && tracked?.bonus_policy_type!==REFERRAL_PENDING)return null;
- const actor=await financeActor(db,payload);
+ const actor=await financeActor(db,payload,{confirmReceipt:true});
  for(let attempt=0;attempt<5;attempt++){
   const c=await clock(db),row=await first(db,'SELECT * FROM orders WHERE order_id=?',payload.orderId),paymentNo=String(payload.paymentNo||payload.tradeNo||'').trim();
   if(!row||![PARTNER_POLICY_VERSION,PARTNER_POLICY_11510,POLICY_11511,REFERRAL_PENDING].includes(row.bonus_policy_type))fail('新制訂單證據不完整',409);
@@ -228,7 +237,7 @@ export async function markPartnerV2OrderPaid(env,payload){
   if(row.payment_status==='paid'){if(row.payment_no&&paymentNo&&row.payment_no!==paymentNo)fail('付款憑證與原紀錄不一致',409);return {success:true,data:{orderId:row.order_id,paymentStatus:'paid',bonusStatus:row.bonus_status},replayed:true};}
   if(row.payment_status!=='pending_payment')fail('訂單付款狀態需人工核對',409);
   const at=stamp(),key=crypto.randomUUID();
-  const results=await db.batch([clockClaim(db,c.revision,key,actor),db.prepare(`UPDATE orders SET payment_status='paid',paid_at=?,payment_no=?,bonus_status='review_required',updated_at=? WHERE order_id=? AND payment_status='pending_payment' AND ${gate}`).bind(at,paymentNo,at,row.order_id,c.revision+1,key)]);
+  const results=await db.batch([clockClaim(db,c.revision,key,actor,['old_line_id']),db.prepare(`UPDATE orders SET payment_status='paid',paid_at=?,payment_no=?,bonus_status='review_required',updated_at=? WHERE order_id=? AND payment_status='pending_payment' AND ${gate}`).bind(at,paymentNo,at,row.order_id,c.revision+1,key)]);
   if(results[0].meta?.changes===1&&results[1].meta?.changes===1)return {success:true,data:{orderId:row.order_id,paymentStatus:'paid',bonusStatus:'review_required',reviewReason:'請管理員核對收款及已開通服務，再確認新制有效成交'}};
  }
  fail('訂單正在更新，請重新載入確認',409);
