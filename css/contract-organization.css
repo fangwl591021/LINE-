@@ -19,3 +19,5 @@
 .org-person strong{font-size:1rem;overflow-wrap:anywhere}.org-chart>li>.org-person{background:#e2f4eb;border-color:#65a990}
 .org-badge{color:#087153;font-weight:bold}.org-chart button{font-size:.8rem}.org-chart [hidden]{display:none}
 
+
+.org-person.org-reported{background:#fffaf0;border:2px dashed #ae7719}.org-reported small:last-of-type{color:#785000}

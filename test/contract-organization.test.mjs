@@ -1,9 +1,11 @@
 import test from 'node:test';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {handSignFixture,ADMIN,REWARD,OTHER} from './fixtures/hand-sign-applications.mjs';
 
 test('本人及管理員可依審核通過的簽署關係逐代讀取，排除加入來源及未核對訂單', async t=>{
  const f=await handSignFixture(t);
+ f.sql.exec(readFileSync(new URL('../migrations/0083_partner_org_roster.sql',import.meta.url),'utf8'));
  f.sql.exec("ALTER TABLE users ADD COLUMN crm_project_independent_at TEXT; CREATE TABLE partner_contract_enrollments(member_uid,sponsor_uid); CREATE TABLE partner_bonus_deal_confirmations(buyer_uid,recruiter_uid)");
  f.sql.prepare('UPDATE users SET member_number=?,crm_project_independent_at=? WHERE line_id=?').run('20261001001','2026-11-09',REWARD);
  f.sql.prepare('UPDATE users SET member_number=? WHERE line_id=?').run('20261001002',OTHER);
