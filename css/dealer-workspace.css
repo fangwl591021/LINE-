@@ -1,0 +1,15 @@
+#modal-distributor-crm [hidden] { display:none !important }
+#modal-distributor-crm .dealer-nav {display:flex; gap:4px; border-bottom:1px solid #cfdae7}
+.dealer-nav button {padding:10px 16px; border-bottom:3px solid transparent; color:#475569; font-weight:700}
+.dealer-nav button[aria-pressed="true"] {color:#1d4ed8; border-color:#2563eb}
+.dealer-form {padding:16px; border:1px solid #cbd5e1; border-radius:12px}
+.dealer-form label {display:block; margin:8px 0; font-weight:600}
+.dealer-form input,.dealer-form textarea {display:block;width:100%;border:1px solid #94a3b8;border-radius:8px;padding:8px}
+#dealer-history li {border-left:3px solid #b3c9e8;padding:5px 12px;margin-top:12px;overflow-wrap:anywhere;white-space:pre-wrap}
+#dealer-history small {display:block;color:#475569}
+#dealer-status:empty {display:none}
+@media(max-width:640px) {
+  #modal-distributor-crm .flex-1.overflow-y-auto {padding:12px}
+  #modal-distributor-crm .dealer-nav {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0}
+  .dealer-nav button {padding:11px 1px;font-size:14px}
+}
