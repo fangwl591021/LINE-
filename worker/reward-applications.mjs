@@ -163,15 +163,19 @@ export async function handleRewardApplications(request,env,profileMapper,fetcher
    return reply({success:true,application:view(saved),replayed:!(result.meta?.changes>0)});
   }
   keys(data,['id','decision','note']);
-  if(!UUID.test(data.id||'')||!['accepted','rejected'].includes(data.decision)||typeof data.note!=='string'||!data.note.trim()||data.note.length>1000)fail('請選擇審核結果並填寫說明');
+  if(!UUID.test(data.id||'')||!['accepted','rejected'].includes(data.decision))fail('請選擇有效的審核結果');
+  const rawNote=data.note===undefined?'':data.note;
+  if(typeof rawNote!=='string'||rawNote.length>1000)fail('審核說明須為 1000 字以內的文字');
+  const note=rawNote.trim();
+  if(data.decision==='rejected'&&!note)fail('審核不通過時，請填寫原因');
   if(!await record(db,data.id))fail('查無申請',404);
   const authFields=['row_id','line_id','legacy_line_id','point_line_id','role','name','phone'];
   const identityGate=reviewIdentityGate(identityProof);
   const result=await db.prepare(`INSERT INTO reward_application_reviews(application_id,reviewer_uid,decision,note,reviewed_at)
-    SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE ${authFields.map(k=>k+' IS ?').join(' AND ')}) AND ${identityGate.sql} ON CONFLICT(application_id) DO NOTHING`).bind(data.id,uid,data.decision,data.note.trim(),now,...authFields.map(k=>actor[k]??null),...identityGate.args).run();
+    SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM users WHERE ${authFields.map(k=>k+' IS ?').join(' AND ')}) AND ${identityGate.sql} ON CONFLICT(application_id) DO NOTHING`).bind(data.id,uid,data.decision,note,now,...authFields.map(k=>actor[k]??null),...identityGate.args).run();
   if(result.success===false)throw Error('review unavailable');
   const review=await db.prepare('SELECT * FROM reward_application_reviews WHERE application_id=?').bind(data.id).first();
-  if(!review||review.reviewer_uid!==uid||review.decision!==data.decision||review.note!==data.note.trim())fail('審核狀態或管理員權限已變更，請重新載入',409);
+  if(!review||review.reviewer_uid!==uid||review.decision!==data.decision||review.note!==note)fail('審核狀態或管理員權限已變更，請重新載入',409);
   return reply({success:true,application:view(await record(db,data.id))});
  }catch(error){
   if(error instanceof ShopError||error instanceof DirectoryError)return reply({success:false,error:error.message},error.status||400);

@@ -40,7 +40,7 @@ test('unknown fields, consent, oversized or invalid signature are rejected',()=>
 });
 test('review is admin-only, immutable, idempotent and never changes authority or signed snapshot',async t=>{
  const s=fixture(t),{result}=await submit(s),id=result.application.id,before=s.sql.prepare('SELECT * FROM users').all(),json=s.sql.prepare('SELECT snapshot_json FROM reward_applications').get().snapshot_json;
- const proposal={id,decision:'accepted',note:'合成測試，確認資料'};assert.equal((await s.call('/review',proposal)).http,403);assert.equal((await s.call('/review',{...proposal,note:''},'admin')).http,400);
+ const proposal={id,decision:'accepted',note:'合成測試，確認資料'};assert.equal((await s.call('/review',proposal)).http,403);assert.equal((await s.call('/review',{...proposal,decision:'rejected',note:''},'admin')).http,400);
  assert.equal((await s.call('/review',proposal,'admin')).application.status,'accepted');assert.equal((await s.call('/review',proposal,'admin')).http,200);assert.equal((await s.call('/review',{...proposal,decision:'rejected'},'admin')).http,409);
  assert.equal(s.sql.prepare('SELECT COUNT(*) n FROM reward_application_reviews').get().n,1);assert.equal(s.sql.prepare('SELECT snapshot_json FROM reward_applications').get().snapshot_json,json);assert.deepEqual(s.sql.prepare('SELECT * FROM users').all(),before);
 });
